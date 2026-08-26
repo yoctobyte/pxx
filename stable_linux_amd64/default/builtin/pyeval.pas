@@ -1343,7 +1343,7 @@ begin
     Exit;
   end;
   if PPyRec(@container)^.VType <> 7 then
-  raise TypeError.Create(Chr(39) + PyVarTypeName(pyvartag(container)) + Chr(39) +
+  raise TypeError.Create(Chr(39) + PyVarTypeNameOf(container) + Chr(39) +
                            ' object is not subscriptable');
   o := TObject(Pointer(PPyRec(@container)^.Payload));
   if o is TPyList then
@@ -1376,7 +1376,7 @@ procedure PySubscriptSet(const container: Variant; const index: Variant;
 var o: TObject; li: TPyList; by: TPyBytes; di: TPyDict; i, n: Int64;
 begin
   if PPyRec(@container)^.VType <> 7 then
-  raise TypeError.Create(Chr(39) + PyVarTypeName(pyvartag(container)) + Chr(39) +
+  raise TypeError.Create(Chr(39) + PyVarTypeNameOf(container) + Chr(39) +
                            ' object does not support item assignment');
   o := TObject(Pointer(PPyRec(@container)^.Payload));
   if o is TPyList then
@@ -1410,7 +1410,7 @@ procedure PySliceSet(const container: Variant; lo, hi: Int64; const val: Variant
 var o: TObject;
 begin
   if PPyRec(@container)^.VType <> 7 then
-  raise TypeError.Create(Chr(39) + PyVarTypeName(pyvartag(container)) + Chr(39) +
+  raise TypeError.Create(Chr(39) + PyVarTypeNameOf(container) + Chr(39) +
                            ' object does not support slice assignment');
   o := TObject(Pointer(PPyRec(@container)^.Payload));
   if o is TPyBytes then
@@ -1427,7 +1427,7 @@ procedure PyDelSubscript(const container: Variant; const index: Variant);
 var o: TObject; li: TPyList; di: TPyDict; i, nn: Int64;
 begin
   if PPyRec(@container)^.VType <> 7 then
-  raise TypeError.Create(Chr(39) + PyVarTypeName(pyvartag(container)) + Chr(39) +
+  raise TypeError.Create(Chr(39) + PyVarTypeNameOf(container) + Chr(39) +
                            ' object does not support item deletion');
   o := TObject(Pointer(PPyRec(@container)^.Payload));
   if o is TPyList then
@@ -2682,7 +2682,7 @@ begin
   pyboundfn_callvn_mask(objptr, a0, a1, a2, nargs, -1, res);
 end;
 
-procedure pyboundfn_callvn_mask(objptr: Pointer; const a0, a1, a2: Variant;
+procedure PyBoundFnCallvnMaskBody(objptr: Pointer; const a0, a1, a2: Variant;
                                 nargs, suppliedMask: Int64; var res: Variant);
 { Call code(own..., bound...). The own arguments come first because that is the
   order the compiled body declares them in — its capture parameters were LIFTED
@@ -2812,6 +2812,47 @@ begin
     site gets: a body that KEEPS it has retained it by now }
   if star <> nil then PXXObjRelease(Pointer(star));
   res := rv;
+end;
+
+{ === THE INVOKER OWNS THE CALLABLE WHILE IT RUNS ===
+
+  A NilPy call through a function VALUE reaches the runtime with the callee
+  BORROWED: the bridges take `const cb: Variant` / a raw `objptr`, and the only
+  strong reference is wherever the value was read from -- usually an attribute.
+  So a body that reassigns THAT attribute drops the last reference to the
+  callable that is still on the stack, and everything the callable owns (its
+  captured values, its default-argument slots) is freed under the running frame.
+
+  CPython cannot hit this: `w.native(v)` pushes a strong reference before the
+  call and holds it until the call returns. These two wrappers are that
+  reference. They are the ONE place each road has -- pyboundfn_callvn_mask is
+  the funnel every lifted bound-fn (tag 10) invocation passes through, and
+  pybound_pair_call_kw the funnel for every {code, recv} pair (tag 8) -- so the
+  ownership is stated once per road rather than at the dozen call sites that
+  reach them (pyvar_callv0..4, pyvar_callv_kw, pybound_callv0..4,
+  pycallback_call0/1, the *_call_ptr field fast paths).
+
+  PXXObjRetain/PXXObjRelease are magic-guarded, so a plain compiled code address
+  or a static RTTI blob no-ops through both -- only a real refcounted block is
+  touched.
+
+  Found by uforth's ANS core word set: `: WEIRD: CREATE DOES> 1 + DOES> 2 + ;`
+  compiles a word whose does-part contains a SECOND DOES>, so running it
+  rewrites the very Word.native slot holding the closure that is running, and
+  the freed closure took its captured Word with it. It surfaced only when
+  fix(N) 293d70509 routed a bare def name in value position through
+  PyMakeFuncValueFor: the old road handed back an unmanaged tyPointer, whose
+  never-released reference had been masking this since the pair existed.
+  regression-test-uforth-core }
+procedure pyboundfn_callvn_mask(objptr: Pointer; const a0, a1, a2: Variant;
+                                nargs, suppliedMask: Int64; var res: Variant);
+begin
+  PXXObjRetain(objptr);
+  try
+    PyBoundFnCallvnMaskBody(objptr, a0, a1, a2, nargs, suppliedMask, res);
+  finally
+    PXXObjRelease(objptr);
+  end;
 end;
 
 procedure pyboundfn_callv(objptr: Pointer; const a0: Variant; var res: Variant);

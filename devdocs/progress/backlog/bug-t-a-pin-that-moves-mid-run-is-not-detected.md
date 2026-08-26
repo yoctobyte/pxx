@@ -60,3 +60,31 @@ No run in `runs-plexus.ndjson` is known to have straddled a pin — the field to
 detect it does not exist, which is the point. Do not write a repro into the
 ticket by pinning during a live run just to prove it; the code path is plain
 enough to read.
+
+## Measured: which tiers can actually straddle (2026-08-26)
+
+`PIN_BUILT_TARGETS` is a coarse target list and was misleading me; the
+authoritative per-job signal is `Job.pin_built` (`PINNED_INVOKE_RE` over the
+recipe body). Counted directly off `generate(tier)`:
+
+| tier | jobs | pin_built |
+| --- | --- | --- |
+| quick | 26 | 0 |
+| native | 1554 | 0 |
+| limited | 2323 | 0 |
+| full | 3057 | 191 (all `lib-test`) |
+
+So the exposure is **confined to the full tier's 191 `lib-test` jobs**. A pin
+taken while a quick/native/limited run is in flight cannot corrupt that run's
+verdict — nothing in those tiers builds against `stable_*/…/pinned`. That makes
+"pin during a native gap" a real, safe window rather than a guess, and it
+narrows this ticket's fix: the unattributable set is never more than 191 jobs.
+
+**Adjacent gap, worth folding into the same fix:** the `demos` job reports
+`pin_built=0` even though `make demos` builds against the pin — the regex sees
+the job's own recipe (`make demos`), and the pinned path only appears inside the
+Makefile target it shells out to. Harmless today because `demos` is `advisory`
+(reported and ticketed, never gates the verdict), but the flag is wrong and the
+next non-advisory shell-out job would inherit the same blind spot. Either mark
+`PIN_BUILT_TARGETS` members `pin_built` by name regardless of recipe text, or
+resolve one level into the Makefile.

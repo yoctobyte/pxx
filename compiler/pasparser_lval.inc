@@ -2443,6 +2443,7 @@ begin
                 end;
               end
               else begin ParseArgExpr; mexprNode := CurASTNode; end;
+              CoerceCharLitArg(mpi, mai, mexprNode);   { `o.M('-')` to a PChar param — see pasparser_name.inc }
               margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
               if mlastArg = -1 then ASTLeft[mcallNode] := margSeq
               else ASTRight[mlastArg] := margSeq;
@@ -2602,6 +2603,7 @@ begin
                 ParseArgExpr; mexprNode := CurASTNode;
               end;
               SetLitCheckArg(mexprNode, mpi, mslot);
+              CoerceCharLitArg(mpi, mslot, mexprNode);   { see pasparser_name.inc }
               margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
               ASTIVal[margSeq] := mkw;
               ASTRight[mlastArg] := margSeq; mlastArg := margSeq;
@@ -2860,6 +2862,7 @@ begin
       begin
         ParseArgExpr; mexprNode := CurASTNode;
       end;
+      CoerceCharLitArg(mpi, mai, mexprNode);   { see pasparser_name.inc }
       margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
       if mlastArg = -1 then ASTLeft[mcallNode] := margSeq
       else ASTRight[mlastArg] := margSeq;
@@ -4020,6 +4023,7 @@ begin
             while CurTok.Kind <> tkRParen do
             begin
               ParseArgExpr; aNode := CurASTNode;
+              CoerceCharLitArg(mpi, mai, aNode);   { see pasparser_name.inc }
               aSeq := AllocNode(AN_ARG); ASTLeft[aSeq] := aNode;
               if lastA = -1 then ASTLeft[callN] := aSeq else ASTRight[lastA] := aSeq;
               lastA := aSeq;
@@ -4097,6 +4101,7 @@ begin
             begin
               ParseArgExpr; aNode := CurASTNode;
             end;
+            CoerceCharLitArg(mpi, mai, aNode);   { see pasparser_name.inc }
             aSeq := AllocNode(AN_ARG); ASTLeft[aSeq] := aNode;
             ASTRight[lastA] := aSeq; lastA := aSeq;
             if (mai < Procs[mpi].ParamCount-1) and CanFillDefaultsFrom(mpi, mai+1) then

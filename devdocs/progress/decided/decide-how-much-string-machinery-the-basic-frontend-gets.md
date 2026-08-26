@@ -184,4 +184,4 @@ of A over "emit the shims to be safe."
   559-byte BASIC binary comes back on its own.
 
 ## Log
-- 2026-08-25 — decided, commit PENDING-COMMIT.
+- 2026-08-25 — decided, commit 28c19f214.

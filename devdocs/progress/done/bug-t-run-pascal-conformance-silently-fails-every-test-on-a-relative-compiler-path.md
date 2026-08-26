@@ -92,4 +92,4 @@ If a `cd` is ever added there, this is the trap to remember — which is why tha
 sentence is in this ticket rather than in a comment nobody will find.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit bc0ffebf9.

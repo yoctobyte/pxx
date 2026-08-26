@@ -90,6 +90,14 @@ procedure Val(const s: AnsiString; var v: Int64; var code: Integer);
 procedure ValQWord(const s: AnsiString; var v: QWord; var code: Integer);
 procedure ValFloat(const s: AnsiString; var v: Double; var code: Integer);
 function VariantToStr(const v: Variant): AnsiString;
+{ The PASCAL spelling of an empty variant, selected by name at the lowering
+  seam (IRLowerVariantAsScalar / the str() lowering) the way VariantToCharFPC
+  is -- so no frontend flag reaches the runtime. VT_EMPTY is the ONLY tag the
+  two spellings differ on: Python's word for it is None, Pascal's is nothing
+  at all (fpc 3.2.2 prints and casts an Unassigned as the empty string), and
+  VariantToStr must keep saying None because pylib routes f-strings, join and
+  startswith through it. bug-a-a-null-variant-renders-as-none-in-pascal }
+function VariantToStrPas(const v: Variant): AnsiString;
 function VariantTagName(t: Int64): AnsiString;
 { Variant -> SCALAR unboxing, the counterpart of IR_VAR_STORE/IR_VAR_BOX.
   Without these a variant reaching a scalar context (assignment, return,
@@ -207,6 +215,10 @@ function __pxxSqrDbl(d: Double): Double;
   shadows them at the call site. }
 function __pxxUpCase(c: Char): Char;
 function __pxxPos(const sub, s: AnsiString): Integer;
+
+{ Case-insensitive whole-string equality, on __pxxUpCase. Declared here because
+  VariantToBool needs it and is implemented far above the body. }
+function __pxxSameNameCI(const a, b: AnsiString): Boolean;
 
 { FPC System bit rotates (RolDWord/RorDWord/RolQWord/RorQWord), reached through
   a parser soft-alias like UpCase/Pos so no real proc of those names exists to
@@ -840,6 +852,17 @@ begin
 end;
 
 
+function VariantToStrPas(const v: Variant): AnsiString;
+{ See the interface note. Built ON TOP of VariantToStr so the two cannot drift
+  on any tag but the one they are meant to differ on. }
+var p: PVariantRecord;
+begin
+  p := @v;
+  if p^.VType = 0 then Result := ''
+  else Result := VariantToStr(v);
+end;
+
+
 function VariantTagName(t: Int64): AnsiString;
 begin
   if t = 0 then Result := 'None'
@@ -935,16 +958,69 @@ var
   la, ra: TVariantRecord;
   lp, rp: Pointer;
   lStr, rStr: Boolean;
+  dr: PVariantRecord;
 begin
   lp := left;
   rp := right;
+  { NULL PROPAGATION, ahead of everything else -- FPC's rule, inherited from OLE
+    and shared with SQL: an ARITHMETIC operator with a Null operand yields Null.
+    pxx read VT_EMPTY's payload as 0 and carried on, so `Null + 5` was 5 and
+    `Null * 5` was 0: a missing value silently became a real one, which is the
+    single failure mode Null exists to prevent. A Null column summed into a
+    total contributed 0 and the total looked plausible.
+
+    Ahead of the coercion below on purpose -- PXXVarNumCoerce would see a
+    non-stringy tag, return it untouched, and the numeric dispatch would then
+    read the 0 payload. Comparison is NOT affected and must not be: FPC answers
+    False for `Null = 5` and True for `Null <> 5`, which the raw dispatch
+    already does.
+
+    VT_EMPTY spells BOTH `Null` and `Unassigned` in this implementation, and
+    that is fine here rather than an approximation to apologise for: measured
+    against fpc 3.2.2, `Unassigned + 5` is not 5 either -- it is Unassigned. FPC
+    propagates both, each as itself, so one tag propagating gives the right
+    ANSWER for both. The residual difference is only which of
+    VarIsNull/VarIsEmpty says True afterwards, and that approximation is
+    pre-existing and already documented in lib/rtl/variants.pas' header.
+    bug-a-null-does-not-propagate-through-variant-arithmetic }
+  if (isCompare = 0) and
+     ((PVariantRecord(left)^.VType = 0) or (PVariantRecord(right)^.VType = 0)) then
+  begin
+    dr := PVariantRecord(dest);
+    dr^.VType := 0;                                   { VT_EMPTY }
+    dr^.Payload := 0;
+    Result := Int64(dest);
+    Exit;
+  end;
+  lStr := (PVariantRecord(left)^.VType = 5) or (PVariantRecord(left)^.VType = 6);
+  rStr := (PVariantRecord(right)^.VType = 5) or (PVariantRecord(right)^.VType = 6);
   if isCompare = 0 then
   begin
-    lStr := (PVariantRecord(left)^.VType = 5) or (PVariantRecord(left)^.VType = 6);
-    rStr := (PVariantRecord(right)^.VType = 5) or (PVariantRecord(right)^.VType = 6);
     { tkPlus = 70. Both stringy and `+` is the one case that stays a concat;
       hand the raw dispatch the ORIGINAL operands so its string arm fires. }
     if not ((opTk = 70) and lStr and rStr) then
+    begin
+      lp := PXXVarNumCoerce(left, @la);
+      rp := PXXVarNumCoerce(right, @ra);
+    end;
+  end
+  else
+  begin
+    { COMPARISON, third half of the same rule -- and the one this wrapper used to
+      skip outright, which made `v(1) = v('1')` answer FALSE where FPC answers
+      TRUE. Silent wrong boolean: the comparison does not fail, it answers, and
+      it answers the safe-looking False, so a filter over variants that arrived
+      from text simply matches nothing.
+
+      Coerce when EXACTLY ONE side is stringy. Both stringy is a genuine string
+      comparison ('ab' < 'ac') and must keep the raw dispatch's string arm;
+      neither stringy is already numeric and PXXVarNumCoerce would be a no-op on
+      both. Exactly one is the mixed case FPC converts -- and when the text does
+      not parse, PXXVarNumCoerce raises, which is also FPC's answer for
+      `v('ab') = v(2)`. Refusing to compare incomparables is a real answer;
+      silently saying "not equal" was not.
+      bug-a-a-variant-comparison-does-not-coerce-a-stringy-operand }
+    if lStr <> rStr then
     begin
       lp := PXXVarNumCoerce(left, @la);
       rp := PXXVarNumCoerce(right, @ra);
@@ -973,10 +1049,20 @@ begin
     begin
       if p^.Payload <> 0 then Result := -1 else Result := 0;
     end
-  else if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 5) then
+  else if (p^.VType = 1) or (p^.VType = 2) then
     Result := p^.Payload
   else if p^.VType = 3 then
-    Result := Trunc(PDouble(@p^.Payload)^)
+    { ROUND, not Trunc: FPC's variant conversion table rounds half-to-even, so
+      `i := v` with v = 2.75 is 3 and with v = 3.5 is 4. Truncating answered 2
+      and 3 -- a silent integer off by one, through every integer target, since
+      Byte/Word/SmallInt/Integer/Int64 all narrow from this one helper.
+
+      Same VARIANT-conversion scope as the VT_BOOL rule above: a plain
+      `Trunc(2.75)` on a Double variable is still 2. And NilPy still truncates,
+      because Python's int(2.75) is 2 -- it does not reach here, pylib routes to
+      pyvar_to_int.
+      bug-a-a-double-variant-converts-to-an-integer-by-truncating }
+    Result := Round(PDouble(@p^.Payload)^)
   else if p^.VType = 0 then
     Result := 0
   else if p^.VType = 8193 then
@@ -987,13 +1073,31 @@ begin
     PXXVariantError('promotable integer ' + PAnsiString(@p^.Payload)^ +
                     ' does not fit an Int64');
   end
-  else if p^.VType = 6 then
+  else if (p^.VType = 6) or (p^.VType = 5) then
   begin
     { VT_STRING. FPC PARSES it -- measured, not assumed: `i := v` with v='42'
       yields 42 and v='abc' raises EVariantError. NilPy does NOT come through
       here (it has pylib's pyvar_to_int, which raises a Python TypeError for
-      any string); this helper is the Pascal path and follows Pascal. }
-    Val(PAnsiString(@p^.Payload)^, Result, vcode);
+      any string); this helper is the Pascal path and follows Pascal.
+
+      VT_CHAR (5) parses TOO, and used to sit up in the integer branch above
+      answering its ORDINAL. That made one value convert two ways depending on
+      how it was written:
+
+        v := '7';          i := v;   { 55 -- the character code }
+        s := '7'; v := s;  i := v;   {  7 }
+
+      because a one-character string LITERAL is boxed as VT_CHAR and a string
+      VARIABLE as VT_STRING. FPC has no char variant at all — `v := c` with
+      c: Char gives VarType 256, varString — so it answers 7 for both, and
+      raises for v := 'a' exactly as the string branch does here.
+      Whatever the dialect decides about a char variant, the two spellings of
+      one value must agree; text is the reading that also matches FPC.
+      bug-a-a-char-variant-converts-to-its-ordinal-not-its-text }
+    if p^.VType = 5 then
+      Val(Chr(Byte(p^.Payload)), Result, vcode)
+    else
+      Val(PAnsiString(@p^.Payload)^, Result, vcode);
     if vcode <> 0 then
       PXXVariantError('cannot convert string to integer');
   end
@@ -1019,14 +1123,20 @@ begin
     begin
       if p^.Payload <> 0 then Result := -1.0 else Result := 0.0;
     end
-  else if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 5) then
+  else if (p^.VType = 1) or (p^.VType = 2) then
     Result := p^.Payload
   else if p^.VType = 0 then
     Result := 0.0
-  else if p^.VType = 6 then
+  else if (p^.VType = 6) or (p^.VType = 5) then
   begin
-    { FPC coerces a numeric string here too (v='2.5' -> 2.50, measured). }
-    ValFloat(PAnsiString(@p^.Payload)^, Result, vcode);
+    { FPC coerces a numeric string here too (v='2.5' -> 2.50, measured).
+      VT_CHAR joins it for the reason spelled out in VariantToInt64: the same
+      one-character value must not convert two ways depending on whether it was
+      written as a literal or through a variable. }
+    if p^.VType = 5 then
+      ValFloat(Chr(Byte(p^.Payload)), Result, vcode)
+    else
+      ValFloat(PAnsiString(@p^.Payload)^, Result, vcode);
     if vcode <> 0 then
     begin
       PXXVariantError('cannot convert string to float');
@@ -1042,6 +1152,10 @@ end;
 function VariantToBool(const v: Variant): Boolean;
 var
   p: PVariantRecord;
+  vbTxt: AnsiString;
+  vbInt: Int64;
+  vbDbl: Double;
+  vbCode: Integer;
 begin
   { PASCAL rules. This once carried Python's truthiness while NilPy was still
     routed through it; NilPy now has pylib's pyvar_to_bool. FPC RAISES for a
@@ -1052,7 +1166,55 @@ begin
     Result := PDouble(@p^.Payload)^ <> 0.0
   else if p^.VType = 0 then
     Result := False
-  else if (p^.VType = 6) or (p^.VType = 7) then
+  else if (p^.VType = 5) or (p^.VType = 6) then
+  begin
+    { STRINGY -> Boolean. This arm used to refuse every string outright, on the
+      strength of a measurement that only covered the EMPTY one: '' does raise
+      in FPC, and so does 'zz', but 'True' converts. A one-value measurement had
+      become a whole-tag rule, and it killed programs on the exact spelling a
+      Boolean arrives in from a config file or a query result.
+
+      FPC's rule, measured across 21 spellings: the two keywords
+      case-insensitively and WITHOUT trimming (' true' raises), else parse it as
+      a number and test against zero ('2.5' is True, '0.0' is False), else
+      raise. The number half is PXXVarNumCoerce's own Val -> ValFloat ladder, so
+      the two cannot disagree about what numeric text is.
+
+      VT_CHAR joins as its ONE-CHARACTER text: pxx has a char variant and FPC
+      does not (`v := c` gives FPC a varString), so there is no oracle, and
+      treating it as a 1-character string is both the coherent reading and what
+      PXXVarNumCoerce already does with the tag.
+
+      NilPy does not reach here -- pylib's pyvar_to_bool keeps Python's
+      truthiness, where '' is False and 'zz' is True.
+      bug-a-a-string-variant-never-converts-to-a-boolean }
+    if p^.VType = 5 then
+      vbTxt := Chr(Byte(p^.Payload))
+    else
+      vbTxt := PAnsiString(@p^.Payload)^;
+    if __pxxSameNameCI(vbTxt, 'true') then
+      Result := True
+    else if __pxxSameNameCI(vbTxt, 'false') then
+      Result := False
+    else
+    begin
+      Val(vbTxt, vbInt, vbCode);
+      if vbCode = 0 then
+        Result := vbInt <> 0
+      else
+      begin
+        ValFloat(vbTxt, vbDbl, vbCode);
+        if vbCode = 0 then
+          Result := vbDbl <> 0.0
+        else
+        begin
+          PXXVariantError('cannot convert a string to boolean');
+          Result := False;
+        end;
+      end;
+    end;
+  end
+  else if p^.VType = 7 then
   begin
     PXXVariantError('cannot convert ' + VariantTagName(p^.VType) +
                     ' to boolean');
@@ -1934,6 +2096,7 @@ const
   PXX_RTTI_METHSIZE  = 48;   { {name,code,arity,retKind,paramKinds,flags} }
   PXX_RTTI_METH_FLAGS = 40;
   PXX_RTTI_METH_PUBLISHED = 1;
+  PXX_RTTI_UNITNAME  = 96;   { the DECLARING unit's interned name — TObject.UnitName }
 
 function __pxxRttiOf(Instance: Pointer): Pointer;
 { The class RTTI blob of an instance: [[instance+0] - 8]. nil when the class
@@ -2009,6 +2172,18 @@ begin
   Result := '';
   if Rtti = nil then Exit;
   Result := __pxxRttiName(PPxxPtr_(Rtti)^);
+end;
+
+function __pxxUnitName(Rtti: Pointer): AnsiString;
+{ x.UnitName: the name of the unit that DECLARES the class -- FPC answers 'un'
+  for a class in `unit un`, the program's own name for one declared in the main
+  program, and 'System' for TObject itself. rtti_emit writes the pointer at
+  +96; this is the same one-field read as __pxxClassParent, through the same
+  interned-name deref __pxxClassName uses. }
+begin
+  Result := '';
+  if Rtti = nil then Exit;
+  Result := __pxxRttiName(PPxxPtr_(PtrUInt(Rtti) + PXX_RTTI_UNITNAME)^);
 end;
 
 function __pxxInstanceSize(Rtti: Pointer): PtrInt;

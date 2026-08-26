@@ -5752,11 +5752,7 @@ begin
           builtin's first param is a string, so promote it to a string literal —
           the same coercion a normal call applies. Without it the Char is passed
           where a string pointer is expected and Length(s)/s[i] segfault. }
-        if (ASTKind[exprNode] = AN_INT_LIT) and (IntToTypeKind(ASTTk[exprNode]) = tyChar) then
-        begin
-          ASTKind[exprNode] := AN_STR_LIT;
-          ASTTk[exprNode] := Ord(tyString);
-        end;
+        RetagCharLitAsStr(exprNode);
         { The integer `Val` writes an Int64 (8 bytes) through its `var v` param.
           A narrower destination (the common `var v: Integer`) would be overrun,
           clobbering the neighbouring `code`/stack and crashing. Marshal through a
@@ -6051,20 +6047,10 @@ begin
             Exit;
           end;
 
-          currArg := argsHead;
-          for i := 0 to nArgs - 1 do
-          begin
-            exprNode := ASTLeft[currArg];
-            if (TypeIsFrozenString(Procs[procIdx].Params[i].TypeKind)) and (IntToTypeKind(ASTTk[exprNode]) = tyChar) then
-            begin
-              if ASTKind[exprNode] = AN_INT_LIT then
-              begin
-                ASTKind[exprNode] := AN_STR_LIT;
-                ASTTk[exprNode] := Ord(tyString);
-              end;
-            end;
-            currArg := ASTRight[currArg];
-          end;
+          { see the twin in pasparser_expr.inc — one shared resolver now
+            (pasparser_name.inc), and it knows about PChar parameters.
+            bug-single-char-literal-as-pchar-argument-segfaults }
+          CoerceCharLitArgs(procIdx, argsHead);
 
           currArg := argsHead;
           for i := 0 to nArgs - 1 do

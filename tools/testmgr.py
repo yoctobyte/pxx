@@ -1286,8 +1286,16 @@ class Job:
         # Such a job is immune to compiler/** changes until the pin moves --
         # see the report JSON's pin_built and twatch.pin_immune().
         body = "\n".join(lines)
-        self.pin_built = bool(PINNED_INVOKE_RE.search(body)
-                              and not COMPILER_PATH_RE.search(body))
+        # Two ways to know: the recipe names the pinned path itself, or the
+        # target is one we know builds against $(PXX_STABLE). The second half
+        # is not redundant -- a job whose recipe is `make demos` shells out,
+        # so the pinned path lives one level down in the Makefile and the
+        # regex reads the WRAPPER rather than the work. Either way, an
+        # explicit HEAD-compiler invocation in the body still wins: that job
+        # is not pin-immune whatever its target is called.
+        self.pin_built = bool(
+            (PINNED_INVOKE_RE.search(body) or self.target in PIN_BUILT_TARGETS)
+            and not COMPILER_PATH_RE.search(body))
         # advisory: reported, ticketed by twatch, but NOT part of the gate —
         # its failure does not turn the run RED or change the exit code.  For
         # coverage of paths nothing day-to-day depends on (the FPC cold-start

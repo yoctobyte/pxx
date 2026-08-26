@@ -137,4 +137,4 @@ Track **B**: `feature-b-vartype-speaks-fpc-varxxx-codes`, prio 45 — export FPC
 updating the four internal call sites.
 
 ## Log
-- 2026-08-25 — decided, commit PENDING-COMMIT.
+- 2026-08-25 — decided, commit 28c19f214.

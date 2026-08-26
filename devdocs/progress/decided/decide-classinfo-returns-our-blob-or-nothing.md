@@ -126,4 +126,4 @@ arm, and unskip `tclassinfo1.pp`. Unblocks the ClassInfo rows of
 [[feature-p-tobject-api-classparent-instancesize-tostring]].
 
 ## Log
-- 2026-08-25 — decided, commit PENDING-COMMIT.
+- 2026-08-25 — decided, commit 28c19f214.

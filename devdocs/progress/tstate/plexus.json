@@ -1,34 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-22T15:51:19Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "89f35406be7fe2abfa0f91b59d22b1cffffa7a6a",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-22T16:53:59Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "29a518312e66f2ffccec849963d08590399f8e07",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-22T17:56:48Z",
-   "fixed": [
-    "test-core#src:test/test_classref.pas",
-    "test-core#src:test/test_fpc_compat_batch.pas",
-    "test-core#src:test/test_rtti.pas"
-   ],
-   "new_red": [],
-   "sha": "fc7ede94565a3ea17a42d889caa4baa363388c14",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-22T18:58:19Z",
    "fixed": [],
    "new_red": [],
@@ -463,15 +435,40 @@
    "sha": "8c20395cff31ae72452baaed86173a8a2984f104",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T01:27:17Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "43b46283325f668d6f2dfec5d07067a06c04dcc7",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T02:06:45Z",
+   "fixed": [
+    "test-nilpy#src:test/test_nilpy_type_name_of_a_big_int.npy",
+    "test-pascal-conformance#shard5/6",
+    "test-uforth#core"
+   ],
+   "new_red": [],
+   "sha": "43b46283325f668d6f2dfec5d07067a06c04dcc7",
+   "tier": "full",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-26T02:19:30Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "a13097c8e59cd4f417d29123a60b034fb2416edf",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2360557B  data=62137B  bss=51420B  procs=1794] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
-  "test-aarch64#src:test/test_forin_member_access.pas": "ok: $TMP  [code=152328B  data=3040B  bss=42368B  procs=130] | ok: $TMP  [code=65652B  data=3088B  bss=42504B  procs=130]",
-  "test-nilpy#src:test/test_nilpy_type_name_of_a_big_int.npy": "int float str bool | list dict tuple NoneType | K type | -function | +method | 1180591620717411303424 1180591620717411303424 1180591620717411303424 1180591620717411303424 1180591620717411303424",
-  "test-pascal-conformance#shard5/6": "SKIP tprocvar2.pp \u2014 gap: typed const procvar initialized with bare proc name (TP mode), procvar via move() | SKIP tsetsize.pp \u2014 wontfix: asserts FPC's exact set-size/packing layout (SizeOf(set of subrange)) | SKIP tstring10.pp \u2014 gap: punicodechar/pwidechar value casts + unicodestring/widestring conversions (Flush/Output landed) | SKIP tstring5.pp \u2014 gap: RTL `ExitCode` variable missing (needed by \u2026",
-  "test-uforth#core": "- !\"#$%&'()*+,-./0123456789:;<=>?@ | -ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_` | -abcdefghijklmnopqrstuvwxyz{|}~ | -YOU SHOULD SEE 0-9 SEPARATED BY A SPACE: | -0 1 2 3 4 5 6 7 8 9 | test-uforth: FAIL \u2014 1 of 1 corpora differ from CPython"
+  "test-aarch64#src:test/test_forin_member_access.pas": "ok: $TMP  [code=152328B  data=3040B  bss=42368B  procs=130] | ok: $TMP  [code=65652B  data=3088B  bss=42504B  procs=130]"
  },
  "job_tier": {
   "demos#00": "full",
@@ -1525,6 +1522,7 @@
   "test-core#src:test/test_channel.pas": "native",
   "test-core#src:test/test_char_arg_ansistring.pas": "native",
   "test-core#src:test/test_char_array_is_a_string.pas": "native",
+  "test-core#src:test/test_char_literal_to_pchar_param.pas": "native",
   "test-core#src:test/test_char_to_string.pas": "native",
   "test-core#src:test/test_char_variant_converts_as_text.pas": "native",
   "test-core#src:test/test_class.pas": "native",
@@ -1713,6 +1711,7 @@
   "test-core#src:test/test_forin_implicit_field.pas": "native",
   "test-core#src:test/test_forin_literal_sources.pas": "native",
   "test-core#src:test/test_forin_member_access.pas": "native",
+  "test-core#src:test/test_forin_member_temp_zeroinit.pas": "native",
   "test-core#src:test/test_forin_native.pas": "native",
   "test-core#src:test/test_forin_nonordinal_array_ctor.pas": "native",
   "test-core#src:test/test_forin_property_b295.pas": "native",
@@ -1763,6 +1762,7 @@
   "test-core#src:test/test_heap.pas@1": "native",
   "test-core#src:test/test_helper_const_not_global_fail.pas": "native",
   "test-core#src:test/test_hex_char_code.pas": "native",
+  "test-core#src:test/test_hidden_dynarray_temp_zeroinit.pas": "native",
   "test-core#src:test/test_high_and_low_of_a_string.pas": "native",
   "test-core#src:test/test_high_low_const_expr.pas": "native",
   "test-core#src:test/test_high_low_word_aliases.pas": "native",
@@ -2710,6 +2710,7 @@
   "test-nilpy#src:test/test_nilpy_callable_field_all_shapes.npy": "full",
   "test-nilpy#src:test/test_nilpy_callable_field_call_returns.npy": "full",
   "test-nilpy#src:test/test_nilpy_callable_param_heap_callable.npy": "full",
+  "test-nilpy#src:test/test_nilpy_callable_replaces_its_own_slot.npy": "full",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "full",
   "test-nilpy#src:test/test_nilpy_callable_value_defaults.npy": "full",
   "test-nilpy#src:test/test_nilpy_callable_value_defaults_with_star_args.npy": "full",
@@ -3280,6 +3281,7 @@
   "test-nilpy#src:test/test_nilpy_two_for_clauses_over_range.npy": "full",
   "test-nilpy#src:test/test_nilpy_type_as_default_arg.npy": "full",
   "test-nilpy#src:test/test_nilpy_type_name.npy": "full",
+  "test-nilpy#src:test/test_nilpy_type_name_function_vs_method.npy": "full",
   "test-nilpy#src:test/test_nilpy_type_name_of_a_big_int.npy": "full",
   "test-nilpy#src:test/test_nilpy_typed_const_import.npy": "full",
   "test-nilpy#src:test/test_nilpy_typeerror_is_catchable.npy": "full",
@@ -4621,6 +4623,7 @@
   "test-core#src:test/test_channel.pas": "pass",
   "test-core#src:test/test_char_arg_ansistring.pas": "pass",
   "test-core#src:test/test_char_array_is_a_string.pas": "pass",
+  "test-core#src:test/test_char_literal_to_pchar_param.pas": "pass",
   "test-core#src:test/test_char_to_string.pas": "pass",
   "test-core#src:test/test_char_variant_converts_as_text.pas": "pass",
   "test-core#src:test/test_class.pas": "pass",
@@ -4808,6 +4811,7 @@
   "test-core#src:test/test_forin_implicit_field.pas": "pass",
   "test-core#src:test/test_forin_literal_sources.pas": "pass",
   "test-core#src:test/test_forin_member_access.pas": "pass",
+  "test-core#src:test/test_forin_member_temp_zeroinit.pas": "pass",
   "test-core#src:test/test_forin_native.pas": "pass",
   "test-core#src:test/test_forin_nonordinal_array_ctor.pas": "pass",
   "test-core#src:test/test_forin_property_b295.pas": "pass",
@@ -4858,6 +4862,7 @@
   "test-core#src:test/test_heap.pas@1": "pass",
   "test-core#src:test/test_helper_const_not_global_fail.pas": "pass",
   "test-core#src:test/test_hex_char_code.pas": "pass",
+  "test-core#src:test/test_hidden_dynarray_temp_zeroinit.pas": "pass",
   "test-core#src:test/test_high_and_low_of_a_string.pas": "pass",
   "test-core#src:test/test_high_low_const_expr.pas": "pass",
   "test-core#src:test/test_high_low_word_aliases.pas": "pass",
@@ -5802,6 +5807,7 @@
   "test-nilpy#src:test/test_nilpy_callable_field_all_shapes.npy": "pass",
   "test-nilpy#src:test/test_nilpy_callable_field_call_returns.npy": "pass",
   "test-nilpy#src:test/test_nilpy_callable_param_heap_callable.npy": "pass",
+  "test-nilpy#src:test/test_nilpy_callable_replaces_its_own_slot.npy": "pass",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "pass",
   "test-nilpy#src:test/test_nilpy_callable_value_defaults.npy": "pass",
   "test-nilpy#src:test/test_nilpy_callable_value_defaults_with_star_args.npy": "pass",
@@ -6366,7 +6372,8 @@
   "test-nilpy#src:test/test_nilpy_two_for_clauses_over_range.npy": "pass",
   "test-nilpy#src:test/test_nilpy_type_as_default_arg.npy": "pass",
   "test-nilpy#src:test/test_nilpy_type_name.npy": "pass",
-  "test-nilpy#src:test/test_nilpy_type_name_of_a_big_int.npy": "fail",
+  "test-nilpy#src:test/test_nilpy_type_name_function_vs_method.npy": "pass",
+  "test-nilpy#src:test/test_nilpy_type_name_of_a_big_int.npy": "pass",
   "test-nilpy#src:test/test_nilpy_typed_const_import.npy": "pass",
   "test-nilpy#src:test/test_nilpy_typeerror_is_catchable.npy": "pass",
   "test-nilpy#src:test/test_nilpy_typevar_and_newtype.npy": "pass",
@@ -6446,7 +6453,7 @@
   "test-pascal-conformance#shard2/6": "pass",
   "test-pascal-conformance#shard3/6": "pass",
   "test-pascal-conformance#shard4/6": "pass",
-  "test-pascal-conformance#shard5/6": "fail",
+  "test-pascal-conformance#shard5/6": "pass",
   "test-riscv32#00": "pass",
   "test-riscv32#src:test/ccross_args.c@1": "pass",
   "test-riscv32#src:test/ccross_args.c@2": "pass",
@@ -6640,7 +6647,7 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "pass",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "pass",
   "test-uforth#blocktest": "pass",
-  "test-uforth#core": "fail",
+  "test-uforth#core": "pass",
   "test-uforth#coreexttest": "pass",
   "test-uforth#coreplustest": "pass",
   "test-uforth#corpus": "pass",
@@ -6657,14 +6664,14 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-26T01:17:57Z",
+  "date": "2026-08-26T02:19:30Z",
   "deadline": 7200.0,
-  "sha": "8c20395cff31ae72452baaed86173a8a2984f104",
+  "sha": "a13097c8e59cd4f417d29123a60b034fb2416edf",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 467.9
+  "wall": 488.7
  },
  "last_bench": {
   "conf_rows": 550,
@@ -6680,11 +6687,14 @@
   "sha": "44193e547f6d4ca77453770378b710d8af82f5df"
  },
  "last_full": {
-  "date": "2026-08-26T00:50:21Z",
-  "sha": "92f68eea3a90dfe9c4e9ab390421f28df01a902b",
+  "date": "2026-08-26T02:06:45Z",
+  "deadline": 7200.0,
+  "sha": "43b46283325f668d6f2dfec5d07067a06c04dcc7",
   "tier": "full",
+  "timed_out": false,
+  "unreached": 0,
   "verdict": "RED",
-  "wall": 2236.5
+  "wall": 2277.1
  },
  "last_opt": {
   "date": "2026-08-25T21:58:41Z",
@@ -6859,45 +6869,6 @@
    ],
    "src": "test/test_forin_member_access.pas tools/run_target.sh",
    "status": "fail"
-  },
-  {
-   "bad": "ab584382edcd4ecc1084e12b44b394fe0d744de9",
-   "good": "d2cb6721e17541fbb91eafc87992df0eca17c055",
-   "job": "test-nilpy#src:test/test_nilpy_type_name_of_a_big_int.npy",
-   "name": "test-nilpy#536",
-   "opened": "2026-08-25T20:32:11Z",
-   "pin_built": false,
-   "range": [
-    "ab584382edcd4ecc1084e12b44b394fe0d744de9"
-   ],
-   "src": "test/test_nilpy_type_name_of_a_big_int.npy test/test_nilpy_type_name_of_a_big_int.expected",
-   "status": "fail"
-  },
-  {
-   "bad": "ab584382edcd4ecc1084e12b44b394fe0d744de9",
-   "good": "d2cb6721e17541fbb91eafc87992df0eca17c055",
-   "job": "test-pascal-conformance#shard5/6",
-   "name": "test-pascal-conformance#shard5/6",
-   "opened": "2026-08-25T20:32:11Z",
-   "pin_built": false,
-   "range": [
-    "ab584382edcd4ecc1084e12b44b394fe0d744de9"
-   ],
-   "src": "tools/run_pascal_conformance.sh",
-   "status": "fail"
-  },
-  {
-   "bad": "ab584382edcd4ecc1084e12b44b394fe0d744de9",
-   "good": "d2cb6721e17541fbb91eafc87992df0eca17c055",
-   "job": "test-uforth#core",
-   "name": "test-uforth#core",
-   "opened": "2026-08-25T20:32:11Z",
-   "pin_built": false,
-   "range": [
-    "ab584382edcd4ecc1084e12b44b394fe0d744de9"
-   ],
-   "src": "",
-   "status": "fail"
   }
  ],
  "pin_baseline": {
@@ -6909,25 +6880,19 @@
   ]
  },
  "pin_shadow": {
-  "at": "2026-08-26T00:50:21Z",
+  "at": "2026-08-26T02:06:45Z",
   "inherited": 1,
   "pin": "v374",
   "qualifies": false,
   "red_set": [
    "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy",
-   "test-aarch64#src:test/test_forin_member_access.pas",
-   "test-nilpy#src:test/test_nilpy_type_name_of_a_big_int.npy",
-   "test-pascal-conformance#shard5/6",
-   "test-uforth#core"
+   "test-aarch64#src:test/test_forin_member_access.pas"
   ],
-  "reds": 5,
-  "sha": "92f68eea3a90dfe9c4e9ab390421f28df01a902b",
+  "reds": 2,
+  "sha": "43b46283325f668d6f2dfec5d07067a06c04dcc7",
   "streak": 0,
   "unexpected": [
-   "test-aarch64#src:test/test_forin_member_access.pas",
-   "test-nilpy#src:test/test_nilpy_type_name_of_a_big_int.npy",
-   "test-pascal-conformance#shard5/6",
-   "test-uforth#core"
+   "test-aarch64#src:test/test_forin_member_access.pas"
   ],
   "would_pin": false
  },

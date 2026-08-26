@@ -53,7 +53,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (288)
+## backlog (287)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -338,7 +338,6 @@ _none_
 | refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too | P | 55 | refactor | The parser carve-out is done, but Pascal still shares lexer.inc with Track A — so the A/P no-concurrent-edit rule still binds, now over 2,566 lines instead of 37,249. Carve the Pascal-specific lexing into paslexer.inc the way C, NilPy, Rust and Zig already have their own, and the A/P slot stops existing. | — |
 | refactor-p-three-hand-rolled-postfix-loops | P | 55 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
 | regression-lib-test-lib-mimic-xml-etree-elementtree-2 | N | 45 | regression | regression: lib-test#src:test/lib_mimic_xml_etree_elementtree.npy red at fd93e4a71c37 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-forin-member-access | P | 70 | regression | regression: test-aarch64#src:test/test_forin_member_access.pas red at 44193e547f6d (auto-filed by twatch) | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-d-document-own-language-first-in-the-language-reference | D | 15 | task | The user-facing half of the name-resolution rules: 'a name from your own language wins, and an explicit foreign import overrides it'. Internal map is devdocs/dev/name-resolution.md; the language reference says nothing. Blocked until the symbol rule is actually built — documenting behaviour the compiler does not have is worse than documenting nothing. | feature-a-own-language-first-symbol-resolution |
 | task-d-document-the-strict-overload-width-flag | D | 20 | task | `--strict-overload-width` shipped 2026-08-15 with no row in docs/reference/cli.md, modes.md or directives.md. One table row each, plus the one sentence that explains why it is standalone rather than part of the --strict-fpc umbrella. | — |
@@ -346,7 +345,7 @@ _none_
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enrol-the-fgl-corpus-rung | T | 70 | task | Enrol the new `test-fgl` corpus target in a testmgr tier and add `fpc-rtl` to twatch's CORPUS_EXPECTED. The rung is wired and green (3 pass / 4 skip) but nothing in the matrix runs it, and the watcher will not warn when the tree is unfetched. | — |
 
-## backlog_new (26)
+## backlog_new (28)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -359,12 +358,14 @@ _none_
 | bug-a-variant-shr-is-arithmetic-where-static-shr-is-logical | A | 50 | bug | Re-filed from decide-variant-bitwise-width, decided 2026-08-25 (option 2). pxx's static Pascal `shr` is a 64-bit LOGICAL shift on both Integer and Int64; its Variant `shr` is a 64-bit ARITHMETIC shift. Two different operators under one spelling inside one language. Fix: Pascal's Variant path emits a logical shift; NilPy keeps the arithmetic one (Python's >> sign-extends), split at the PyProgramMode seam that already exists. | — |
 | bug-dynarray-function-result-passed-directly-types-as-pointer | P | 55 | bug | A dynamic-array-returning function's result loses its type when passed DIRECTLY as an argument: overload resolution sees `Pointer` instead of the array type and rejects the call. Assigning the same call to a variable of that type first works, so the function and the parameter are both fine — only the un-assigned result's inferred type is wrong. FPC compiles it. | — |
 | bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable | N | 70 | bug | `import m` then `m.f(1)` compiles and runs, but `h = m.f` — the same member in VALUE position — is a COMPILE ERROR, `undefined variable (f)`, naming the attribute as if it were a bare name. Every value position fails the same way (assignment, dict value, `map(m.f, ...)`), so a module's functions cannot be used as callbacks at all. The import resolves; only the value position is broken. | — |
+| bug-p-a-char-value-is-accepted-where-a-pchar-is-wanted-and-segfaults | P | 60 | bug | A Char VALUE (a `c: Char` variable, or `Chr(45)`) is accepted where a PChar parameter is expected and its ordinal is passed as the pointer, so the callee dereferences address 45. FPC refuses the variable outright and const-folds `Chr(45)` into a character constant that converts. Two answers are defensible — refuse, or const-fold — and they are not the same answer for the two shapes. | — |
 | bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent | P | 60 | bug | `PG = ^TG` with `TG = array[0..1, 0..2] of LongWord`: `qg^[i, j]` prints `0 1 2 1 2 10` where FPC prints `0 1 2 10 11 12` — the comma subscript is not flattened against the pointee's dims — and `Length(qg^)` answers 6 (the flat extent) where FPC answers 2 (the first dimension). Predates and is not caused by the single-dim fix; the metadata it needs is now present. | — |
+| bug-p-a-string-literal-is-refused-as-a-pchar-parameter-default | P | 55 | bug | `procedure F(p: PChar = '-')` is refused outright — \"a string literal cannot be the default for a non-string parameter\" — at EVERY literal length, so it is not the one-char-literal bug. FPC accepts it and passes a pointer to the NUL-terminated data. A defaulted PChar parameter is ordinary C-binding shape. | — |
+| bug-p-a-typed-pchar-const-cannot-be-initialised-from-a-literal | P | 70 | bug | `const GP: PChar = '-'` COMPILES and segfaults (the ordinal is stored as the pointer); `const GP: PChar = '--'` is \"unexpected token\"; `const A: array[0..1] of PChar = ('-', '--')` is \"too many array constant elements\". A typed PChar const initialised from a literal is unimplemented in all three shapes, and the one-character shape fails SILENTLY. FPC gives the address of the NUL-terminated data. | — |
 | bug-p-a-variant-refuses-wide-chars-and-interfaces | P | 40 | bug | `v := wc` (WideChar), `v := u` (UCS4Char) and `v := ifc` (any interface) do not compile: `Variant := this type not yet supported`. fpc 3.2.2 accepts all three, and pxx already accepts every neighbouring kind — Char, ShortString, Single, Currency — so this is a hole in one enumeration, not a design position. Present on `pinned` as well as HEAD. | — |
 | bug-p-high-and-low-refuse-every-non-identifier-operand | P | 30 | bug | Both arms open with `if CurTok.Kind <> tkIdent then Error('High: expected array variable or ordinal type')`, so a string literal, a concat, or a parenthesised expression cannot be an operand at all. fpc takes all three — and gives each a DIFFERENT base, which is why widening the guard needs its own measured table rather than a one-line edit. | — |
 | bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one | P | 50 | bug | `PDyn = ^TDyn` with `TDyn = array of LongWord`: after `SetLength(d, 5)`, `Length(pdy^)` answers 1 and `High(pdy^)` answers 0 where FPC answers 5 and 4 — while `pdy^[1]` reads the right element. The pointee is a HANDLE, so the [data-8] header is one indirection further than the runtime path looks. | — |
 | bug-pchar-difference-in-writeln-arg-segfaults | A | 55 | bug | `Writeln(p - q)` where p, q are PChar segfaults: the pointer DIFFERENCE keeps pointer type in argument position, so Writeln renders the small integer as a PChar and dereferences it. Assigning the same expression to an Integer first works and gives the right value, so the arithmetic is fine — only the inferred type of the un-assigned result is wrong. | — |
-| bug-single-char-literal-as-pchar-argument-segfaults | P | 80 | bug | A ONE-character literal passed where a PChar parameter is expected segfaults: `StrCat(buf, '-')` faults, `StrCat(buf, '--')` works. The single-quoted literal types as Char rather than as a string, so its ORDINAL is passed as the pointer and the callee dereferences address 45. FPC converts it to a pointer to a NUL-terminated one-character string. Pre-existing — it hits StrCopy/StrCat/StrPos as much as anything new. | — |
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 55 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
 | chore-doc-pascal-dialect-divergences-pointer-difference | D | 25 | chore | Re-filed from decide-pointer-difference-unit and decide-should-a-null-variant-raise-like-fpc, both decided 2026-08-25. Two divergences from FPC are now CHOSEN rather than merely inherited, and a chosen divergence that is not written down is indistinguishable from a bug to the next reader. Both entries land in devdocs/dev/pascal-dialect-divergences.md. | — |
 | compat-pascal-strict-fpc-pointer-difference-bytes | P | 15 | compat | Re-filed from decide-pointer-difference-unit, decided 2026-08-25 (option 2 + parity behind the flag). The default dialect keeps the uniform element rule; FPC's byte answer for a difference involving an untyped Pointer is a BEHAVIOUR (deterministic, dependable) not a bug, so the dialect contract puts it in the strict family. Ranked 15 deliberately: no corpus target has asked for it. | — |
@@ -605,9 +606,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2368)
+## done (2370)
 
-2368 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2370 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -662,7 +663,6 @@ _none_
 - [p 80] [N] bug-n-a-class-base-that-is-an-expression-does-not-compile
 - [p 80] [N] bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - [p 80] [N] bug-n-hasattr-through-an-untyped-parameter-is-always-false
-- [p 80] [P] bug-single-char-literal-as-pchar-argument-segfaults
 - [p 78] [N] bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
 - [p 78] [N] bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
 - [p 78] [N] bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program
@@ -679,11 +679,11 @@ _none_
 - [p 70] [N] bug-n-an-augmented-subscript-on-a-dunder-class-is-refused
 - [p 70] [N] bug-nilpy-a-lambda-returned-directly-is-not-callable
 - [p 70] [N] bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
+- [p 70] [P] bug-p-a-typed-pchar-const-cannot-be-initialised-from-a-literal
 - [p 70] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - [p 70] [N] feature-nilpy-staticmethod-and-classmethod
 - [p 70] [P] feature-p-delphi-string-helpers
 - [p 70] [P] feature-pascal-typed-and-untyped-files
-- [p 70] [P] regression-test-aarch64-test-forin-member-access
 - [p 70] [T] task-t-enrol-the-fgl-corpus-rung
 - [p 68] [N] bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - [p 68] [E] feature-demo-songformatter-pxx-target
@@ -715,6 +715,7 @@ _none_
 - [p 60] [B] bug-b-sysutils-string-gaps-found-by-differential
 - [p 60] [C] bug-c-driver-misses-the-shared-runtime-finalisation-step
 - [p 60] [N] bug-nilpy-a-keyword-call-through-a-statically-unknown-callee-does-not-compile
+- [p 60] [P] bug-p-a-char-value-is-accepted-where-a-pchar-is-wanted-and-segfaults
 - [p 60] [P] bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent
 - [p 60] [P] compat-pascal-calling-convention-directives-uneven
 - [p 60] [P] compat-pascal-inline-generic-specialization
@@ -740,6 +741,7 @@ _none_
 - [p 55] [N] bug-n-inline-cast-deref-loses-a-pointer-fields-pointee
 - [p 55] [N] bug-n-super-as-an-expression-fails-with-a-misleading-diagnostic
 - [p 55] [N] bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only
+- [p 55] [P] bug-p-a-string-literal-is-refused-as-a-pchar-parameter-default
 - [p 55] [P] bug-p-a-string-typecast-is-a-conversion-and-not-a-cast
 - [p 55] [P] bug-p-a-typed-constant-of-pchar-type-is-a-parse-error
 - [p 55] [P] bug-p-a-typed-string-constant-cannot-be-assigned

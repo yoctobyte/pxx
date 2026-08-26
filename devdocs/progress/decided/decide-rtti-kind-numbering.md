@@ -130,4 +130,4 @@ then sweep the four in-tree readers, then fix the three doc comments in
 is introduced.
 
 ## Log
-- 2026-08-25 — decided, commit PENDING-COMMIT.
+- 2026-08-25 — decided, commit 28c19f214.

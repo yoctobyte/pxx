@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:22 blocked:7 backlog:288 backlog_new:26 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2368 rejected:40`
+`working:1 unfinished:22 blocked:7 backlog:287 backlog_new:28 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2370 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -46,7 +46,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 324, ranked
+## Ready — top 30 of 325, ranked
 
 - `[p 88] [N]` bug-n-inferred-return-type-of-true-division-is-int
 - `[p 82] [N]` bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
@@ -54,7 +54,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [N]` bug-n-a-class-base-that-is-an-expression-does-not-compile
 - `[p 80] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - `[p 80] [N]` bug-n-hasattr-through-an-untyped-parameter-is-always-false
-- `[p 80] [P]` bug-single-char-literal-as-pchar-argument-segfaults
 - `[p 78] [N]` bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
 - `[p 78] [N]` bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
 - `[p 78] [N]` bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program
@@ -71,12 +70,13 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-an-augmented-subscript-on-a-dunder-class-is-refused
 - `[p 70] [N]` bug-nilpy-a-lambda-returned-directly-is-not-callable
 - `[p 70] [N]` bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
+- `[p 70] [P]` bug-p-a-typed-pchar-const-cannot-be-initialised-from-a-literal
 - `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - `[p 70] [N]` feature-nilpy-staticmethod-and-classmethod
 - `[p 70] [P]` feature-p-delphi-string-helpers
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
-- `[p 70] [P]` regression-test-aarch64-test-forin-member-access
 - `[p 70] [T]` task-t-enrol-the-fgl-corpus-rung
 - `[p 68] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
+- `[p 68] [E]` feature-demo-songformatter-pxx-target
 
-_294 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_295 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

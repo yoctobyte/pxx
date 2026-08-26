@@ -950,6 +950,26 @@ function pyseq_kind_v(const v: Variant): Integer;
 function pylist_repr(l: TPyList): AnsiString;
 function pybytes_repr(b: TPyBytes): AnsiString;
 function pydict_repr(d: TPyDict): AnsiString;
+{ ONE place that knows how each callable tag stores what it calls.
+
+  A callable value wears four shapes here -- VT_BOUNDMETHOD (8, a {code,recv}
+  pair BLOCK), VT_PYCLOSURE (9), VT_BOUNDFN (10) and VT_CALLABLE (12), the last
+  three carrying a bare code address in the payload -- and a bare `def` name in
+  value position still escapes UNBOXED as VT_INT64, which is the leak tag 12 was
+  introduced to stop and has not yet closed.
+
+  Four shapes for one concept is why `a = f; a == f` answered False while
+  `d["k"] = f; d["k"] == f` answered True: the first compares the ADDRESS OF THE
+  PAIR BLOCK against a code address, and a fresh block is allocated per boxing,
+  so a function was not equal to itself. Comparing the pair this returns instead
+  of the payload bits makes every shape agree.
+
+  bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method }
+function PyCallableParts(const v: Variant; var code, recv: Pointer): Boolean;
+function PyCallablePartsP(p: PPyVarRec; var code, recv: Pointer): Boolean;
+function PyVarEqCallable(p, q: PPyVarRec; var res: Boolean): Boolean;
+function PyVarIsCallableRec(p: PPyVarRec): Boolean;
+
 function PyCallableStr(const v: Variant): AnsiString;
 function PyClassRefStr(const v: Variant): AnsiString;
 { `==`/`!=` TRY for two variant slots by address, in PXXPromoVarCmpTry's
@@ -1519,6 +1539,9 @@ function pybound_pair_call_kw(pair: Pointer; nPos: Integer;
                               kwNames, kwVals: TPyList): Variant;
 function pybound_code(const v: Variant): Pointer;
 function pybound_recv(const v: Variant): Pointer;
+{ The type name of a VALUE -- PyVarTypeName refined by the receiver for the one
+  tag (8) that is both a bound method and a plain def. See its definition. }
+function PyVarTypeNameOf(const v: Variant): AnsiString;
 { True when Code is a genuine Variant-returning FUNCTION (NilPy's default def
   ABI); False when Code is a real Pascal PROCEDURE (an explicit `-> None` def)
   that never sets up the hidden-destination-pointer return convention. Lets
@@ -4530,6 +4553,7 @@ begin
 end;
 
 function PyVarTypeName(t: Int64): AnsiString; forward;
+function PyVarTypeNameOf(const v: Variant): AnsiString; forward;
 
 function pydynattr_get_v(const v: Variant; const name: AnsiString): Variant;
 var obj: Pointer; tg: Int64; cn: AnsiString; declFound: Boolean; mi: PMethInfo;
@@ -4614,7 +4638,7 @@ begin
     if obj = nil then cn := 'NoneType' else cn := TObject(obj).ClassName;
   end
   else
-    cn := PyVarTypeName(tg);
+    cn := PyVarTypeNameOf(v);
   raise AttributeError.Create('''' + cn + ''' object has no attribute ''' + name + '''');
 end;
 
@@ -4709,7 +4733,7 @@ begin
   tg := pyvartag(v);
   if tg <> 7 then
   begin
-    Result := PyVarTypeName(tg);
+    Result := PyVarTypeNameOf(v);
     Exit;
   end;
   obj := pyvarobj(v);
@@ -4798,7 +4822,7 @@ begin
     if obj = nil then cn := 'NoneType' else cn := TObject(obj).ClassName;
   end
   else
-    cn := PyVarTypeName(tg);
+    cn := PyVarTypeNameOf(v);
   raise AttributeError.Create('''' + cn + ''' object has no attribute ''' + mname + '''');
 end;
 
@@ -5668,6 +5692,46 @@ function PyUserObjArith(pobj, qobj: TObject; const pv, qv: Variant;
                         const dunder, rdunder: AnsiString;
                         var res: Variant): Boolean; forward;
 
+function PyVarIsCallableRec(p: PPyVarRec): Boolean;
+begin
+  PyVarIsCallableRec := (p^.VType = 8) or (p^.VType = 9) or
+                        (p^.VType = 10) or (p^.VType = 12);
+end;
+
+{ Claims a comparison in which a CALLABLE is involved, answering into `res`.
+  Returns False when neither side is one, so every other pair falls through
+  untouched.
+
+  A callable opposite a NON-callable is simply unequal. There used to be an arm
+  here reading an INT as a code address in that position, because a bare `def`
+  name in value position escaped UNBOXED -- it reached a Variant parameter as a
+  tyPointer, which overload matching bound to the Int64 overload. That leak is
+  closed (the value-position arm now builds the same {code, recv} pair the
+  assignment path always did), so the compensating arm went with it.
+
+  Measured before removing, not reasoned: instrumented to report every time it
+  answered True, it answered True ZERO times across the uforth smoke and four
+  ANS word sets, lib_mimic_xml_etree_elementtree, and the eleven callable-value
+  tests -- with the leak open as well as closed. Dropping it also drops the
+  divergence it carried: CPython says a function is never equal to a number,
+  whatever that number is.
+  bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method }
+function PyVarEqCallable(p, q: PPyVarRec; var res: Boolean): Boolean;
+var cp, rp, cq, rq: Pointer; isp, isq: Boolean;
+begin
+  cp := nil; rp := nil; cq := nil; rq := nil;
+  isp := PyCallablePartsP(p, cp, rp);
+  isq := PyCallablePartsP(q, cq, rq);
+  PyVarEqCallable := isp or isq;
+  if not (isp or isq) then Exit;
+  if isp and isq then
+  begin
+    res := (cp = cq) and (rp = rq);
+    Exit;
+  end;
+  res := False;
+end;
+
 function PyVarEq(p, q: PPyVarRec): Boolean;
 var
   k: Integer;
@@ -5677,6 +5741,14 @@ var
   userEq: Boolean;
 begin
   Result := False;
+  { CALLABLES compare by WHAT THEY CALL. Four shapes carry one concept here (see
+    PyCallablePartsP), so comparing payload bits made a {code,recv} pair block
+    unequal to the very def it wraps -- and, because a fresh block is allocated
+    per boxing, unequal to itself. This is the dict/list/`in` path as well as
+    `==`, so the sentinel `Comment("x").tag == Comment` and `tag in table` both
+    depend on it.
+    bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method }
+  if PyVarEqCallable(p, q, Result) then Exit;
   { The int-family tags (VT_INT/VT_INT64/VT_BOOL) are ONE Python number and
     must compare CROSS-TAG: a masked cell comes back VT_INT64 while a
     define-time key is VT_INT, and the old tag-sensitive compare made
@@ -5842,7 +5914,14 @@ end;
 function pyvar_eqv(a, b: Pointer; neq: Int64): Int64;
 var eq: Boolean;
 begin
-  if (PPyVarRec(a)^.VType <> 7) and (PPyVarRec(b)^.VType <> 7) then
+  { A CALLABLE pair is ours too. Declining it left the compiler's own bitwise
+    variant compare to decide, which reads a pair-block ADDRESS against a code
+    address -- so `a = f; a == f` was False. Claim it here, or fixing PyVarEq
+    alone changes `in` and dict lookup while leaving `==` wrong: the two paths
+    are reached separately (normalise-dont-special-case). }
+  if (PPyVarRec(a)^.VType <> 7) and (PPyVarRec(b)^.VType <> 7) and
+     not PyVarIsCallableRec(PPyVarRec(a)) and
+     not PyVarIsCallableRec(PPyVarRec(b)) then
   begin
     Result := 0;                      { not ours — the caller's own compare stands }
     Exit;
@@ -7839,7 +7918,19 @@ begin
     consequences of the tag collision VT_CALLABLE closed; naming the tags here
     is what turns the new tag into the right ANSWER rather than just a
     different wrong one. CPython spells a bound method 'method' and everything
-    else callable 'function'. }
+    else callable 'function'.
+
+    TAG 8 IS BOTH. `pybound_new(code, recv)` carries a bound method when recv is
+    an instance and a PLAIN DEF when recv is nil -- "a plain def is the same pair
+    with a nil receiver" (PyMakeFuncValue). A tag alone therefore cannot answer
+    for it, and answering 'method' unconditionally made `type(some_def).__name__`
+    say 'method' the moment fix(N) 293d70509 routed a bare def name in value
+    position through the pair as well. PyVarTypeNameOf below is the answer that
+    sees the receiver; every caller holding the VALUE uses it, and this one stays
+    for PyTypeError, which is handed a bare tag. 'method' is the safe default of
+    the two here: a caller with only a tag cannot have a plain def in hand
+    without having lost the value first.
+    regression-test-nilpy-test-nilpy-type-name-of-a-big-int }
   else if t = 8 then Result := 'method'
   else if (t = 9) or (t = 10) or (t = 12) then Result := 'function'
   else if (t = 11) or (t = 13) then Result := 'type'   { a class object, and a builtin type object }
@@ -9234,13 +9325,51 @@ begin
 end;
 
 function pyeq_v(const a: Variant; const b: Variant): Boolean;
-var pa, pb: PPyVarRec;
+var pa, pb: PPyVarRec; ca, ra, cb, rb: Pointer; isca, iscb: Boolean;
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b);
   { None equals only None }
   if (pa^.VType = 0) or (pb^.VType = 0) then
   begin
     Result := (pa^.VType = 0) and (pb^.VType = 0);
+    Exit;
+  end;
+  { CALLABLES compare by WHAT THEY CALL, before the ordering path can read
+    their payloads as numbers. pycmp_v has no callable arm, so a {code,recv}
+    pair block was compared to a code address as two integers and a function
+    was not equal to itself -- which is what made html5lib's `node.tag ==
+    ElementTreeCommentType` sentinel test fail and walk a comment as an
+    element. Equality is the ONLY comparison Python defines on callables, so it
+    belongs here and not in pycmp_v: `f < g` stays the TypeError it already is.
+    bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method }
+  ca := nil; ra := nil; cb := nil; rb := nil;
+  isca := PyCallableParts(a, ca, ra);
+  iscb := PyCallableParts(b, cb, rb);
+  if isca or iscb then
+  begin
+    { A bare `def` name in value position still escapes UNBOXED as VT_INT64, so
+      one side is routinely a raw code address with no tag to identify it. Treat
+      an int as a code address ONLY opposite a real callable -- never int-vs-int
+      -- so `d["k"] == f` keeps working while the leak lasts. Closing the leak
+      (box every callable, tag 12) removes this arm; it is not a licence to
+      compare a function to a number. }
+    if isca and not iscb then
+    begin
+      if pyvar_is_inttag(b) then
+        Result := (ra = nil) and (Int64(NativeInt(ca)) = pb^.Payload)
+      else
+        Result := False;
+      Exit;
+    end;
+    if iscb and not isca then
+    begin
+      if pyvar_is_inttag(a) then
+        Result := (rb = nil) and (Int64(NativeInt(cb)) = pa^.Payload)
+      else
+        Result := False;
+      Exit;
+    end;
+    Result := (ca = cb) and (ra = rb);
     Exit;
   end;
   Result := pycmp_v(a, b) = 0;
@@ -13565,6 +13694,13 @@ type
     it did before signatures existed.
       ReqN  parameters with NO default, Self excluded
       TotN  declared parameters,        Self excluded
+            Both EXCLUDE a trailing `*args` collector -- it is never required
+            and never defaulted, so counting it made `def f(a, lo=7, *rest)`
+            report two required parameters and rejected a legal `f(1)`. A
+            `**kwargs` collector is still counted, deliberately: this bridge
+            cannot synthesize the empty dict such a body expects, and a slot
+            ReqN still guards is a TypeError where an uncounted one would be a
+            dispatch at the wrong arity. See EmitPySignatures in rtti_emit.inc.
       Star  the *args position PLUS ONE, 0 = none
       Dflts TotN variants, 16 bytes each, one per declared parameter; a slot
             whose VType is PYSIG_DFLT_UNSET (-1, an illegal tag) was never
@@ -13852,6 +13988,20 @@ begin
   pybound_recv := PPyBoundRec(NativeInt(PPyVarRec(@v)^.Payload))^.Recv;
 end;
 
+{ The type name of a VALUE. PyVarTypeName answers from the tag alone, which is
+  enough for every tag but 8: that one pair shape is a bound method when it
+  carries a receiver and a plain def when it does not, so only the value can
+  tell them apart. CPython spells them 'method' and 'function'. Everything else
+  defers to the tag-level answer unchanged -- this is the one refinement, not a
+  second table. }
+function PyVarTypeNameOf(const v: Variant): AnsiString;
+var t: Int64;
+begin
+  t := pyvartag(v);
+  if (t = 8) and (pybound_recv(v) = nil) then Result := 'function'
+  else Result := PyVarTypeName(t);
+end;
+
 function pybound_star(const v: Variant): Integer;
 begin
   pybound_star := PPyBoundRec(NativeInt(PPyVarRec(@v)^.Payload))^.StarIdx;
@@ -13984,7 +14134,7 @@ begin
                                             noNames, noVals);
 end;
 
-function pybound_pair_call_kw(pair: Pointer; nPos: Integer;
+function PyBoundPairCallKwBody(pair: Pointer; nPos: Integer;
                               const a0, a1, a2, a3: Variant;
                               kwNames, kwVals: TPyList): Variant;
 { The ONE dynamic-call bridge behind pybound_callv0..4.
@@ -14020,17 +14170,6 @@ begin
   for i := 0 to 3 do bound[i] := i < nPos;
   nkw := 0;
   if kwNames <> nil then nkw := kwNames.count;
-  { a COLLECTING callee packs its own surplus and has no omitted parameters to
-    fill -- that path predates this one and stays exactly as it was }
-  if b^.StarIdx >= 0 then
-  begin
-    if nkw > 0 then
-      raise TypeError.Create('a keyword argument through a callable value is '
-              + 'not supported yet for a callee that collects *args');
-    Result := PyBoundCallStar(code, recv, isFn, b^.StarIdx, nPos,
-                              av[0], av[1], av[2], av[3]);
-    Exit;
-  end;
   want := nPos;
   sg := b^.Sig;
   if sg = nil then
@@ -14101,6 +14240,32 @@ begin
       end;
     end;
   end;
+  { A COLLECTING callee dispatches differently -- its surplus arguments become
+    one TPyList where the caller wrote loose ones -- but it does NOT have a
+    different SIGNATURE story, and treating it as though it did is what this
+    early-out used to do. It sat ABOVE the block that has just run and said "a
+    collecting callee packs its own surplus and has no omitted parameters to
+    fill", which is simply untrue of `def f(a, lo=7, *rest)`: `lo` is omitted
+    and defaulted, and skipping the fill left it holding whatever the stack
+    had. One default silently became a wrong number, two dereferenced garbage,
+    and with a `**kwargs` on the end as well the process died at rc=139.
+
+    So the split now happens HERE, at dispatch, and only here: keyword
+    matching, the arity check and the default fill above are the ONE path every
+    callable value takes. Star-ness is a calling convention, not a second
+    notion of what a signature means.
+    bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
+
+    nPos, not `want`, bounds the packing: `want` counts the slots the BODY
+    takes (fixed parameters, defaults included), while only the arguments the
+    CALLER actually wrote past the star position belong in the tuple. Filling a
+    default never adds to the surplus. }
+  if b^.StarIdx >= 0 then
+  begin
+    Result := PyBoundCallStar(code, recv, isFn, b^.StarIdx, nPos,
+                              av[0], av[1], av[2], av[3]);
+    Exit;
+  end;
   if recv = nil then
   begin
     if isFn then
@@ -14138,6 +14303,22 @@ begin
         3: begin mp3 := TPyCbMP3(code); mp3(recv, av[0], av[1], av[2]); end;
       else  begin mp4 := TPyCbMP4(code); mp4(recv, av[0], av[1], av[2], av[3]); end;
       end;
+  end;
+end;
+
+{ The pair's half of the ownership rule stated at pyboundfn_callvn_mask in
+  pyeval.pas -- the {code, recv} pair (tag 8) is the other road a callable
+  value travels, and a body that reassigns the attribute it came from frees it
+  exactly the same way. Same shape, same reason, one site per road. }
+function pybound_pair_call_kw(pair: Pointer; nPos: Integer;
+                              const a0, a1, a2, a3: Variant;
+                              kwNames, kwVals: TPyList): Variant;
+begin
+  PXXObjRetain(pair);
+  try
+    Result := PyBoundPairCallKwBody(pair, nPos, a0, a1, a2, a3, kwNames, kwVals);
+  finally
+    PXXObjRelease(pair);
   end;
 end;
 
@@ -17468,11 +17649,58 @@ begin
                         (pyvartag(v) = 10) or (pyvartag(v) = 12);
 end;
 
+function PyCallableParts(const v: Variant; var code, recv: Pointer): Boolean;
+begin
+  PyCallableParts := PyCallablePartsP(PPyVarRec(@v), code, recv);
+end;
+
+function PyCallablePartsP(p: PPyVarRec; var code, recv: Pointer): Boolean;
+var b: PPyBoundRec;
+begin
+  code := nil;
+  recv := nil;
+  case p^.VType of
+    8: begin
+         b := PPyBoundRec(NativeInt(p^.Payload));
+         code := b^.Code;
+         { A plain def merely TRAVELS in a pair block: IsFunc set, receiver nil.
+           What makes something a bound method is being bound to something, so
+           the receiver is the answer and the tag is not. Reading the tag alone
+           is what made the same def boxed twice into two different values. }
+         recv := b^.Recv;
+         PyCallablePartsP := True;
+       end;
+    9, 10, 12:
+       begin
+         code := Pointer(NativeInt(p^.Payload));
+         PyCallablePartsP := True;
+       end;
+  else
+    PyCallablePartsP := False;
+  end;
+end;
+
 function PyCallableStr(const v: Variant): AnsiString;
 const HEXD = '0123456789abcdef';
 var a: Int64; i: Integer; hx: AnsiString; lead: Boolean;
+    isBound: Boolean; code, recv: Pointer;
 begin
-  a := PPyVarRec(@v)^.Payload;
+  { The TAG alone does not say bound-vs-plain: a plain def boxed into a pair
+    block wears tag 8 with IsFunc set and a nil receiver, and printed as
+    `<bound method ...>`. That is the text html5lib's tree walk got where it
+    expected a comment sentinel. Ask what it is bound TO, not which box it
+    arrived in -- and hex the CODE, so the same def renders the same address
+    however many times it has been boxed. }
+  if PyCallableParts(v, code, recv) then
+  begin
+    isBound := recv <> nil;
+    a := Int64(NativeInt(code));
+  end
+  else
+  begin
+    isBound := pyvartag(v) = 8;
+    a := PPyVarRec(@v)^.Payload;
+  end;
   hx := '';
   lead := True;
   i := (SizeOf(Pointer) * 8) - 4;
@@ -17483,7 +17711,7 @@ begin
     i := i - 4;
   end;
   if hx = '' then hx := '0';
-  if pyvartag(v) = 8 then
+  if isBound then
     Result := '<bound method at 0x' + hx + '>'
   else
     Result := '<function at 0x' + hx + '>';

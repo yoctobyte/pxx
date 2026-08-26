@@ -131,4 +131,4 @@ Two, both small:
   parity item with no dependent does not get promoted by its own existence.
 
 ## Log
-- 2026-08-25 — decided, commit PENDING-COMMIT.
+- 2026-08-25 — decided, commit 28c19f214.

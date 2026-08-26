@@ -1365,6 +1365,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-setlength-record-field-via-var-param | A | 50 | bug | SetLength on a record string/array field via a `var` parameter fails codegen | — |
 | bug-shl-signed-integer-width | A | 50 | bug | bug: `shl` on a 32-bit Integer does not wrap at 32-bit width | — |
 | bug-shr-signed-integer-width | A | 50 | bug | `shr` on a negative 32-bit Integer shifts at 64-bit width (miscompile) | — |
+| bug-single-char-literal-as-pchar-argument-segfaults | P | 80 | bug | A ONE-character literal passed where a PChar parameter is expected segfaults: `StrCat(buf, '-')` faults, `StrCat(buf, '--')` works. The single-quoted literal types as Char rather than as a string, so its ORDINAL is passed as the pointer and the callee dereferences address 45. FPC converts it to a pointer to a NUL-terminated one-character string. Pre-existing — it hits StrCopy/StrCat/StrPos as much as anything new. | — |
 | bug-sizeof-array-and-typename-wrong | A | 50 | bug | `SizeOf` wrong for static arrays, and rejects most named types | — |
 | bug-sizeof-variable-unsupported | A | 50 | bug | SizeOf intrinsic does not support variable or expression operands | — |
 | bug-stack-corruption-inline-string-concat | A | 50 | bug | Stack frame corruption on inline string concatenation assignments | — |
@@ -2133,6 +2134,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-optdiff-shard8-12 | T | 70 | regression | regression: optdiff#shard8/12 red at 28eb1a105ddb (auto-filed by twatch) | — |
 | regression-selfhost-fixedpoint-selfhost-fixedpoint | T | 70 | regression | regression: selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh red at 21117f415284 (auto-filed by twatch) | — |
 | regression-test-aarch64-test-asyncecho | T | 70 | regression | regression: test-aarch64#src:test/test_asyncecho.pas red at 88986014e07d (auto-filed by twatch) | — |
+| regression-test-aarch64-test-forin-member-access | A | 70 | regression | regression: test-aarch64#src:test/test_forin_member_access.pas red at 44193e547f6d (auto-filed by twatch) | — |
 | regression-test-aarch64-test-lfm | T | 70 | regression | regression: test-aarch64#src:test/test_lfm.pas red at adaecd1206f3 (auto-filed by twatch) | — |
 | regression-test-aarch64-test-set-runtime | P | 70 | regression | regression: test-aarch64#src:test/test_set_runtime.pas red at 61e2448bac6d (auto-filed by twatch) | — |
 | regression-test-aarch64-test-streaming-enumset | T | 70 | regression | regression: test-aarch64#src:test/test_streaming_enumset.pas red at adaecd1206f3 (auto-filed by twatch) | — |
