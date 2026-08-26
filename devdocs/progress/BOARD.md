@@ -120,8 +120,8 @@ _none_
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 55 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 12 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 70 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
+| bug-p-a-descendant-method-does-not-hide-the-inherited-one | P | 62 | bug | A method declared in a descendant WITHOUT `overload` must HIDE every inherited method of that name. pxx keeps the inherited ones as candidates, so a call can silently dispatch to the parent's differently-typed method — `l.Add(TFoo.Create(3))` on fgl's TFPGList<IFoo> reaches TFPSList.Add(Pointer), stores the object's VMT word, and the next read segfaults. | — |
 | bug-p-a-diagnostic-in-a-used-unit-names-the-wrong-source-file | P | 40 | bug | An error raised while compiling a unit pulled in by `uses` reports the correct LINE NUMBER for that unit but names an unrelated file in its `in:` line — every fgl.pp wall was reported as `in: stable_linux_amd64/default/builtin/builtinheap.pas`. Costs real time on corpus work, where the whole job is locating a wall in third-party source. | — |
-| bug-p-an-interface-retrieved-from-a-generic-container-segfaults | P | 52 | bug | `f := l[0]` where l is a `specialize TFPGList<IFoo>` segfaults — Add succeeds and Count is right, so the store works and reading an INTERFACE element back out does not. Blocks the last fgl driver, ifclist.pas. | — |
 | bug-p-stray-tokens-in-a-unit-declaration-section-are-silently-skipped | P | 50 | bug | A token that starts no declaration is silently skipped in a UNIT's interface/implementation section, while the identical token in a PROGRAM's declaration section is correctly rejected. A typo'd section header (`cosnt K = 5;`) therefore discards the declarations behind it with no diagnostic; the error surfaces later at the use site, or not at all. FPC rejects at the typo. | — |
 | bug-p-the-constant-evaluator-erases-an-ordinals-type | P | 42 | bug | the const evaluator represents every ordinal as a bare Int64, so `const X = eB` prints 1 instead of eB and `const C = Low(TC)` prints 97 instead of 'a' | — |
 | bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence | T | 40 | bug | file_cascade_ticket's Root-cause-suspects line falls back to 'likely a broken build or harness event' whenever no CASCADE_ROOT_JOBS entry is in the red set. That is a conclusion drawn from the absence of one narrow signal, printed with no hedge, and it is now directly contradicted by the Range section shipped in 8ec77190c — which on the live incident named the actual cause. Same defect class the Range work fixed for the sha: an auto-filed ticket asserting something it has no evidence for. | — |
@@ -682,6 +682,7 @@ _none_
 - [p 62] [N] bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name [parked — re-claim, do not duplicate]
 - [p 62] [N] bug-n-augmented-true-division-does-not-widen-an-annotated-int-parameter
 - [p 62] [N] bug-n-self-class-cannot-be-called-as-a-constructor
+- [p 62] [P] bug-p-a-descendant-method-does-not-hide-the-inherited-one
 - [p 62] [A] feature-a-typeref-migrate-consumers
 - [p 62] [B] feature-b-the-module-shim-batch-blocking-the-python-corpus [parked — re-claim, do not duplicate]
 - [p 62] [N] feature-nilpy-enum-class
@@ -741,7 +742,6 @@ _none_
 - [p 55] [P] refactor-p-one-lvalue-path-for-statements-and-expressions
 - [p 55] [P] refactor-p-three-hand-rolled-postfix-loops
 - [p 53] [A] feature-threadsafe-heap-optimize [parked — re-claim, do not duplicate]
-- [p 52] [P] bug-p-an-interface-retrieved-from-a-generic-container-segfaults
 - [p 50] [A] bug-a-variant-shr-is-arithmetic-where-static-shr-is-logical
 - [p 50] [N] bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising
 - [p 50] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder
