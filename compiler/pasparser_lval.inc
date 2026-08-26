@@ -2651,7 +2651,33 @@ begin
             mnArgs := 0;
             PyBindKwArgs(mpi, mselfArg, mlastArg, mnArgs);
             ASTLeft[mcallNode] := mselfArg;
-          end;
+          end
+          else if (Procs[mpi].ParamCount > 1) and (1 < MAX_PROC_PARAMS) and
+                  ProcParamHasDefault[mpi * MAX_PROC_PARAMS + 1] then
+            { NO parentheses at all on a method whose parameters are ALL
+              defaulted: `d.Foo;` against `procedure Foo(a: Integer = 3);`.
+              The empty-parens spelling `d.Foo()` two hundred lines up already
+              fills them; this arm did not exist, so the call went out carrying
+              only Self and the callee read an UNINITIALISED frame slot.
+
+              Measured: on a VIRTUAL method that SEGFAULTS (`d.Foo;` where fpc
+              prints n=3), and the non-virtual spelling of the same source is
+              fine — which is exactly why it survived: the shape that crashes is
+              the one whose sibling works.
+
+              Found while fixing
+              bug-p-inherited-ignores-the-parents-default-parameter-values, by
+              varying the CALL SITE rather than the inherited call. Unrelated to
+              `inherited`, unrelated to override, and older than both.
+
+              NOT CanFillDefaultsFrom, deliberately: that helper answers
+              `(CurTok.Kind = tkRParen) and <param has a default>`, so it is
+              really "the argument list ENDS HERE and the rest can default".
+              With no parentheses at all CurTok is `;`, and it answers False for
+              a method whose parameters plainly do have defaults. Two questions
+              wearing one name; this arm needs only the second half.
+              bug-p-a-parenless-call-to-an-all-defaulted-virtual-method-segfaults }
+            FillDefaultArgs(mpi, 1, mcallNode, mlastArg);
           { Continue the selector loop (not Exit) so trailing `.field` / `[i]` on
             the method result are parsed: obj.M(args).field, obj.M.field, chained
             obj.M1.M2. The result's record (ProcRetRecId) drives field
@@ -3675,6 +3701,28 @@ begin
         Error('expected comma or close parenthesis');
     end;
     Expect(tkRParen, ')');
+  end;
+  { Omitted trailing arguments take the PARENT's declared defaults, the same
+    way an ordinary call does. `inherited Create;` against
+    `constructor Create(AN: Integer = 8)` was `inherited call argument count
+    mismatch` — the arity check ran before anything filled defaults, so the
+    capability existed on the ordinary call path and was simply never reached
+    from here.
+
+    Reusing FillDefaultArgs rather than growing a second defaults mechanism is
+    the point (devdocs/dev/normalise-dont-special-case.md): `inherited` is a
+    call, and this is the step every other call already takes. Defaults are
+    trailing in Pascal, so a default on the first UNSUPPLIED parameter means
+    every one after it has one too — checked over the whole tail anyway, since
+    it is a handful of array reads and it keeps the arity error honest for a
+    genuinely short call.
+    bug-p-inherited-ignores-the-parents-default-parameter-values }
+  if (argNo < Procs[mpi].ParamCount) and (argNo >= 1) and
+     (argNo <= MAX_PROC_PARAMS - 1) and
+     ProcParamHasDefault[mpi * MAX_PROC_PARAMS + argNo] then
+  begin
+    FillDefaultArgs(mpi, argNo, node, lastArg);
+    argNo := Procs[mpi].ParamCount;
   end;
   if argNo <> Procs[mpi].ParamCount then
     Error('inherited call argument count mismatch');

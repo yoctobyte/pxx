@@ -7938,6 +7938,15 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_paramless_fn_as_const_variant_arg.pas $(TESTTMP)/test_plessarg26
 	test "$$($(TESTTMP)/test_plessarg26)" = "$$(cat test/test_paramless_fn_as_const_variant_arg.expected)"
+	# Two DEFAULTS bugs, found together: `inherited Create;` against a defaulted
+	# parent ctor was an arity mismatch (the check ran before defaults were
+	# filled), and a PARENLESS call to an all-defaulted method sent the call out
+	# with only Self -- a SEGFAULT on a virtual method. Every neighbour worked,
+	# which is what hid the second one: d.Foo(5), d.Foo(), a zero-param d.Z; and
+	# the NON-virtual spelling are all fine, so the rows are deliberately
+	# redundant. .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_inherited_and_parenless_defaults.pas $(TESTTMP)/test_inhdef26
+	test "$$($(TESTTMP)/test_inhdef26)" = "$$(cat test/test_inherited_and_parenless_defaults.expected)"
 	# ...and the guard: a genuine `var` parameter must still REFUSE the same
 	# argument. This is what stops the fix from being ungated -- tried, and it
 	# let a call RESULT bind to a var parameter and COMPILE, because the method

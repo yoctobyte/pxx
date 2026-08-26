@@ -4,7 +4,7 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "`inherited Create;` where the parent's constructor/method declares a defaulted parameter is rejected with `inherited call argument count mismatch`, while the identical *direct* call `TBase.Create` applies the default and compiles. Blocks `TFPGObjectList` in real FPC `fgl.pp` (Pascal corpus rung 2)."
-status: backlog
+status: done
 owner: —
 ---
 
@@ -80,3 +80,49 @@ Gate = `make compiler/pascal26` (self-host fixedpoint) + `tools/gate.sh quick`.
 Rung: [[feature-pascal-corpus-fgl]] · umbrella
 [[feature-pascal-corpus-expansion]] · method note
 [[devdocs/dev/normalise-dont-special-case.md]]
+
+## Log
+- 2026-08-26 — resolved, commit PENDING-COMMIT.
+
+---
+
+## RESOLVED 2026-08-26
+
+Fixed exactly as the ticket asked: `ParseInheritedCallAST` now reuses
+`FillDefaultArgs` — the same helper the direct-call path already used — before
+the arity check runs, instead of comparing `argNo` against `ParamCount` on an
+argument list nothing had finished building.
+
+```pascal
+if (argNo < Procs[mpi].ParamCount) and (argNo >= 1) and
+   (argNo <= MAX_PROC_PARAMS - 1) and
+   ProcParamHasDefault[mpi * MAX_PROC_PARAMS + argNo] then
+begin
+  FillDefaultArgs(mpi, argNo, node, lastArg);
+  argNo := Procs[mpi].ParamCount;
+end;
+if argNo <> Procs[mpi].ParamCount then
+  Error('inherited call argument count mismatch');
+```
+
+This covers `inherited Create;`, `inherited Foo;`, `inherited Bar` used as a
+function result, and the partial form `inherited Foo(7)` where later parameters
+default.
+
+### A second bug fell out of varying the call site
+
+Probing the same defect from the *outside* — `d.Foo;` rather than
+`inherited Foo;` — turned up a separate crash on the ordinary instance-method
+path: a **parenless** call to an **all-defaulted virtual** method segfaulted,
+while every neighbouring spelling (`d.Foo()`, `d.Foo(5)`, a zero-parameter
+virtual, and the same method non-virtual) was correct. Same missing step, other
+call path, so it landed in the same commit;
+[[bug-p-a-parenless-call-to-an-all-defaulted-virtual-method-segfaults]] records
+it, including the `CanFillDefaultsFrom` trap that made the first attempt at the
+fix compile, self-host, and change nothing.
+
+### Verified
+
+`test/test_inherited_and_parenless_defaults.pas` (Makefile `test_inhdef26`) —
+ten rows covering both bugs, byte-identical against fpc 3.2.2.
+`gate.sh quick` GREEN.

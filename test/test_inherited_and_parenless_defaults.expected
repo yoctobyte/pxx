@@ -1,0 +1,10 @@
+inh ctor : 8
+inh proc : 3 zz
+inh func : 10
+virt 0arg: 42
+virt bare: 3 zz
+virt (): 3 zz
+virt part: 7 zz
+virt full: 9 qq
+nonv bare: 4
+virt fn  : 10
