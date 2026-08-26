@@ -1,19 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-25T08:23:40Z",
-   "fixed": [
-    "test-core#src:test/test_length_dynarray_call.pas",
-    "test-core#src:test/test_nested_dynarray_field.pas",
-    "test-core#src:test/test_ptr_deref_vararg.pas",
-    "test-threads#src:test/test_parallel_for_capture_aggr.pas"
-   ],
-   "new_red": [],
-   "sha": "d2fb8211acb9366e5a26518b16c279da2c2fa83a",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-25T09:25:35Z",
    "fixed": [],
    "new_red": [],
@@ -446,6 +433,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "a28087d9f51e904232c80dbb0272c54f1e1e841d",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T06:15:50Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "cd5a3aaf8f5f69cf8c246671905398808d096d2f",
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
@@ -6665,14 +6661,14 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-26T06:08:57Z",
+  "date": "2026-08-26T06:15:50Z",
   "deadline": 7200.0,
-  "sha": "a28087d9f51e904232c80dbb0272c54f1e1e841d",
+  "sha": "cd5a3aaf8f5f69cf8c246671905398808d096d2f",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 371.6
+  "wall": 359.7
  },
  "last_bench": {
   "conf_rows": 550,
