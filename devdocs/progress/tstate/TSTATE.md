@@ -3,12 +3,9 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `43b46283325f` | 2026-08-26T01:27:17Z | GREEN (native) | 470.6s | `92f68eea3a90` RED |
+| plexus | `43b46283325f` | 2026-08-26T02:06:45Z | RED (full) | 2277.1s | `43b46283325f` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
 - **lib-test#src:test/lib_mimic_xml_etree_elementtree.npy** — test/lib_mimic_xml_etree_elementtree.npy (plexus): bad `fd93e4a71c37`, last good `98ed38202254`, 137 commit(s) in range
 - **test-aarch64#src:test/test_forin_member_access.pas** — test/test_forin_member_access.pas tools/run_target.sh (plexus): bad `ab584382edcd`, last good `d2cb6721e175`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_type_name_of_a_big_int.npy** — test/test_nilpy_type_name_of_a_big_int.npy test/test_nilpy_type_name_of_a_big_int.expected (plexus): bad `ab584382edcd`, last good `d2cb6721e175`, 1 commit(s) in range
-- **test-pascal-conformance#shard5/6** — tools/run_pascal_conformance.sh (plexus): bad `ab584382edcd`, last good `d2cb6721e175`, 1 commit(s) in range
-- **test-uforth#core** (plexus): bad `ab584382edcd`, last good `d2cb6721e175`, 1 commit(s) in range
