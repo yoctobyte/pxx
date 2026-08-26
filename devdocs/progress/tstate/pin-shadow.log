@@ -147,3 +147,4 @@
 2026-08-26T15:36:12Z	plexus	3fe59c874c351e9bd2c60bdfe1bd23c17fac348b	would NOT pin 3fe59c874c35 — 5 red(s) the current pin does not have: test-aarch64#src:test/test_parallel_for_capture_aggr.pas, test-arm32#src:test/test_parallel_for_capture_aggr.pas, test-core#src:test/test_char_array_is_a_string.pas, test-i386#src:test/test_parallel_for_capture_aggr.pas, test-threads#src:test/test_parallel_for_capture_aggr.pas
 2026-08-26T16:08:15Z	plexus	23e3ba7435cc240ee5824287f6d682714c625b22	would-pin PENDING 23e3ba7435cc — qualifies, streak 1/2
 2026-08-26T16:34:37Z	plexus	90892318c94c71922d879eddd89061bd22e9a7e8	WOULD PIN 90892318c94c — 0 red(s), none new, self-host clean, streak 2/2
+2026-08-26T17:07:14Z	plexus	b4d62b3dcfde3189556650457d574c72a975c90f	would NOT pin b4d62b3dcfde — 2 red(s) the current pin does not have: test-core#src:test/test_arrayofconst_to_method_b287.pas, test-nilpy#src:test/test_nilpy_star_unpack_into_a_collecting_callee.npy

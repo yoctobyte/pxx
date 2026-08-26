@@ -3,8 +3,9 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `b4d62b3dcfde` | 2026-08-26T16:47:28Z | RED (native) | 306.7s | `90892318c94c` GREEN |
+| plexus | `b4d62b3dcfde` | 2026-08-26T17:07:14Z | RED (full) | 1171.7s | `b4d62b3dcfde` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
 - **test-core#src:test/test_arrayofconst_to_method_b287.pas** — test/test_arrayofconst_to_method_b287.pas (plexus): bad `a195f67d754b`, last good `90892318c94c`, 1 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_star_unpack_into_a_collecting_callee.npy** — test/test_nilpy_star_unpack_into_a_collecting_callee.npy test/test_nilpy_star_unpack_into_a_collecting_callee.expected (plexus): bad `b4d62b3dcfde`, last good `90892318c94c`, 2 commit(s) in range
