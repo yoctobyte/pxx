@@ -5852,6 +5852,14 @@ test-core: $(COMPILER)
 	# Variant printed True/False on x86-64 and 1/0 everywhere else.
 	./$(COMPILER) -Fulib/rtl test/test_variant_writes_every_tag.pas $(TESTTMP)/test_varwrite26
 	test "$$($(TESTTMP)/test_varwrite26 | tr '\n' '|')" = "True|False|42|-7|1.25|q|hey|"
+	# An Int64 assigned to a Variant keeps all 64 bits, in every shape that does
+	# the assigning. The two 32-bit backends moved four bytes into the 8-byte
+	# payload and filled the high word from the TAG, so `v := l` with
+	# l = 5000000000 stored 705032704 and with l = -12 stored 4294967284 --
+	# nothing failed, every operator downstream just answered correctly for the
+	# wrong operand. The high word now comes from the payload's TYPE.
+	./$(COMPILER) -Fulib/rtl test/test_wide_int_boxes_into_a_variant.pas $(TESTTMP)/test_wideboxv26
+	test "$$($(TESTTMP)/test_wideboxv26 | tail -1)" = "ALL OK"
 	# A builtin type NAME means the same thing in a cast as in a declaration.
 	# The name->kind table used to exist twice; a dozen names that declared fine
 	# were "undefined variable" in a cast, and where the two overlapped they

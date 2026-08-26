@@ -17,6 +17,11 @@
 
 procedure EmitSetcc(opTk: Integer; signed: Boolean); forward;
 procedure EmitSetccFloat(opTk: Integer); forward;
+{ EmitVariantFill386 needs the 64-bit predicate and it is defined further down,
+  next to the pair emitters that use it most. pxx resolves the call anyway; the
+  FPC SEED does not, and that seed builds this include from the top of
+  compiler.pas. See bug-a-fpc-seed-drift-emitasmx64-forward. }
+function Is64Bit386(tk: TTypeKind): Boolean; forward;
 
 procedure IREmitNode386(node: Integer); forward;
 
@@ -638,9 +643,25 @@ end;
   backend boundary. See the note at its definition. }
 
 procedure EmitVariantFill386(tag: Integer; payloadTk: TTypeKind);
-{ eax = variant slot address; payload pushed on the stack: 8 bytes for a
-  double (spilled xmm0), else 4 bytes (eax pushed). Clears the old value,
-  stores tag + payload, leaves the slot address in eax. }
+{ eax = variant slot address; payload pushed on the stack: 8 bytes for a double
+  (spilled xmm0) or for an Int64/UInt64 (pushed hi-then-lo, so [esp] is the lo
+  dword), else 4 bytes (eax pushed). Clears the old value, stores tag +
+  payload, leaves the slot address in eax.
+
+  The high dword is chosen from the payload's TYPE, not from the tag. It used
+  to be `sign-extend iff tag = VT_INT, zero otherwise`, which got two cases
+  wrong and had no case at all for the third:
+
+    * an Int64 payload never had a high half to store — only four bytes were
+      ever pushed — so `v := l` with l: Int64 = 5000000000 stored 705032704,
+      and with l = -12 stored 4294967284. Every operator downstream then
+      answered correctly for the wrong operand.
+    * tyNativeInt maps to VT_INT64, so a NEGATIVE NativeInt was zero-filled and
+      came out as its unsigned reading.
+
+  A signed narrow payload sign-extends, an unsigned narrow payload (Boolean,
+  Char, Cardinal, a pointer) zero-fills, and a 64-bit payload carries its own
+  high dword. bug-a-an-int64-assigned-to-a-variant-truncates-to-32-bits-on-i386-and-arm32 }
 begin
   EmitVarHelperCall386('PXXVarClear');
   EmitB($C7); EmitB($00); EmitI32(tag);             { mov dword [eax], tag }
@@ -651,11 +672,18 @@ begin
     EmitB($83); EmitB($C4); EmitB($08);                          { add esp, 8 }
     EmitB($F2); EmitB($0F); EmitB($11); EmitB($40); EmitB($08);  { movsd [eax+8], xmm0 }
   end
+  else if Is64Bit386(payloadTk) then
+  begin
+    EmitB($59);                                     { pop ecx (payload lo) }
+    EmitB($89); EmitB($48); EmitB($08);             { mov [eax+8], ecx }
+    EmitB($59);                                     { pop ecx (payload hi) }
+    EmitB($89); EmitB($48); EmitB($0C);             { mov [eax+12], ecx }
+  end
   else
   begin
     EmitB($59);                                     { pop ecx (payload) }
     EmitB($89); EmitB($48); EmitB($08);             { mov [eax+8], ecx }
-    if tag = VT_INT then
+    if TypeSigned(payloadTk) then
     begin
       { sign-extend the 32-bit payload into the high dword }
       EmitB($50);                                   { push eax (slot addr) }
@@ -4772,11 +4800,28 @@ begin
           end
           else
           begin
-            IREmitNode386(IRB[node]);                { scalar -> eax / double -> xmm0 }
+            { An Int64 payload must reach the slot WHOLE: EmitNode64_386 is the
+              one routine that guarantees the full value in edx:eax (widening a
+              narrow source in place), and the pair is pushed hi-then-lo so the
+              8 bytes at [esp] are the payload in little-endian order, exactly
+              as the float spill leaves them.
+              bug-a-an-int64-assigned-to-a-variant-truncates-to-32-bits-on-i386-and-arm32 }
             if TypeIsFloat(tk) then
-              EmitFloatSpill386                      { 8-byte payload on the stack }
+            begin
+              IREmitNode386(IRB[node]);              { double -> xmm0 }
+              EmitFloatSpill386;                     { 8-byte payload on the stack }
+            end
+            else if Is64Bit386(tk) then
+            begin
+              EmitNode64_386(IRB[node]);             { full value -> edx:eax }
+              EmitB($52);                            { push edx (hi) }
+              EmitB($50);                            { push eax (lo) }
+            end
             else
+            begin
+              IREmitNode386(IRB[node]);              { scalar -> eax }
               EmitB($50);                            { push payload }
+            end;
           end;
           IREmitNode386(IRA[node]);                  { eax = dest addr }
           EmitVariantFill386(j, tk);
@@ -4827,11 +4872,23 @@ begin
         end
         else
         begin
-          IREmitNode386(IRB[node]);
+          { same 64-bit rule as the IR_VAR_STORE arm above }
           if TypeIsFloat(tk) then
-            EmitFloatSpill386
+          begin
+            IREmitNode386(IRB[node]);
+            EmitFloatSpill386;
+          end
+          else if Is64Bit386(tk) then
+          begin
+            EmitNode64_386(IRB[node]);               { full value -> edx:eax }
+            EmitB($52);                              { push edx (hi) }
+            EmitB($50);                              { push eax (lo) }
+          end
           else
+          begin
+            IREmitNode386(IRB[node]);
             EmitB($50);                              { push payload }
+          end;
         end;
         IREmitNode386(IRA[node]);                    { eax = temp addr }
         EmitVariantFill386(j, tk);                   { leaves addr in eax }

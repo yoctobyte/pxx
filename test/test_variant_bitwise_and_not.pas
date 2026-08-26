@@ -120,17 +120,15 @@ begin
     side and a plain integer literal, because the literal boxes through a
     different path.
 
-    The Variant is loaded from a LITERAL, not from `l`, on purpose: assigning
-    an Int64 VARIABLE to a Variant truncates to 32 bits on i386 and arm32 --
-    their backends move four bytes into the 8-byte payload and zero the rest,
-    so `a := l` with l = -12 makes a Variant holding 4294967284 and every row
-    below then answers correctly for the WRONG operand. That is the fat-slot
-    model's own gap, filed as
-    bug-a-an-int64-assigned-to-a-variant-truncates-to-32-bits-on-i386-and-arm32,
-    and it is not what these rows are about. A literal boxes correctly on all
-    four targets. }
+    The Variant is loaded from the Int64 VARIABLE `l`, not from a literal:
+    those are two different boxing paths, and the variable one used to truncate
+    to 32 bits on i386 and arm32 (`a := l` with l = -12 made a Variant holding
+    4294967284, so every row then answered correctly for the wrong operand).
+    Fixed in
+    bug-a-an-int64-assigned-to-a-variant-truncates-to-32-bits-on-i386-and-arm32;
+    keeping the rows on `l` is what stops it coming back. }
   l := -12;
-  a := -12; b := 1;
+  a := l; b := 1;
   ChkI('agree shr var', a shr b, l shr 1);
   ChkI('agree shr lit', a shr 1, l shr 1);
   ChkI('agree shl var', a shl b, l shl 1);
@@ -146,8 +144,14 @@ begin
     Measured 2026-08-26 on x86-64, i386, arm32 and aarch64: all four now agree
     with the static row below. }
   l := 1;
-  a := 1; b := 40;
+  a := l; b := 40;
   ChkI('wide shl', a shl b, l shl 40);
+
+  { A wide value BOXED, not computed -- the other half of the same defect. }
+  l := 5000000000;
+  a := l;
+  ChkI('wide box', a, l);
+  ChkI('wide box neg', -a, -l);
 
   if fails = 0 then writeln('ALL OK') else writeln(fails, ' FAILURES');
 end.

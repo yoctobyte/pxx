@@ -1075,9 +1075,17 @@ begin
 end;
 
 procedure EmitVariantFillArm32(tag: Integer; payloadTk: TTypeKind);
-{ r0 = variant slot address; payload on the stack: vpush'd d0 for a double,
-  else a pushed 4-byte word. Clears the old value, stores tag + payload,
-  leaves the slot address in r0. }
+{ r0 = variant slot address; payload on the stack: vpush'd d0 for a double, a
+  pushed {r0,r1} pair for an Int64/UInt64 (so [sp] is the lo word), else a
+  pushed 4-byte word. Clears the old value, stores tag + payload, leaves the
+  slot address in r0.
+
+  The high word is chosen from the payload's TYPE, not from the tag — see the
+  i386 twin EmitVariantFill386 for the full note. In short: an Int64 payload
+  never had a high half to store here, so `v := l` with l: Int64 = 5000000000
+  stored 705032704 and with l = -12 stored 4294967284; and tyNativeInt maps to
+  VT_INT64, so a negative NativeInt was zero-filled into its unsigned reading.
+  bug-a-an-int64-assigned-to-a-variant-truncates-to-32-bits-on-i386-and-arm32 }
 begin
   EmitVarHelperCallArm32('PXXVarClear');
   EmitLoadImmArm32(1, tag);
@@ -1089,11 +1097,17 @@ begin
     EmitI32($ECBD0B02);                { vpop {d0} }
     EmitI32($ED800B02);                { vstr d0, [r0, #8] }
   end
+  else if Is64BitArm32(payloadTk) then
+  begin
+    EmitI32($E8BD0006);                { pop {r1, r2} (lo, hi) }
+    EmitI32($E5801008);                { str r1, [r0, #8] }
+    EmitI32($E580200C);                { str r2, [r0, #12] }
+  end
   else
   begin
     EmitI32($E8BD0002);                { pop {r1} (payload) }
     EmitI32($E5801008);                { str r1, [r0, #8] }
-    if tag = VT_INT then
+    if TypeSigned(payloadTk) then
     begin
       EmitI32($E1A02FC1);              { asr r2, r1, #31 (sign) }
       EmitI32($E580200C);              { str r2, [r0, #12] }
@@ -4093,11 +4107,26 @@ begin
           end
           else
           begin
-            IREmitNodeArm32(IRB[node]);               { scalar -> r0 / double -> d0 }
+            { An Int64 payload must reach the slot WHOLE: EmitNode64Arm32 is the
+              one routine that guarantees the full value in r0:r1 (widening a
+              narrow source in place), and `push {r0, r1}` puts the lo word at
+              [sp], which is the order the fill reads.
+              bug-a-an-int64-assigned-to-a-variant-truncates-to-32-bits-on-i386-and-arm32 }
             if TypeIsFloat(tk) then
-              EmitI32($ED2D0B02)                      { vpush {d0} }
+            begin
+              IREmitNodeArm32(IRB[node]);             { double -> d0 }
+              EmitI32($ED2D0B02);                     { vpush {d0} }
+            end
+            else if Is64BitArm32(tk) then
+            begin
+              EmitNode64Arm32(IRB[node]);             { full value -> r0:r1 }
+              EmitI32($E92D0003);                     { push {r0, r1} (lo, hi) }
+            end
             else
+            begin
+              IREmitNodeArm32(IRB[node]);             { scalar -> r0 }
               EmitI32($E92D0001);                     { push {r0} }
+            end;
           end;
           IREmitNodeArm32(IRA[node]);                 { r0 = dest addr }
           EmitVariantFillArm32(j, tk);
@@ -4122,11 +4151,22 @@ begin
         end
         else
         begin
-          IREmitNodeArm32(IRB[node]);
+          { same 64-bit rule as the IR_VAR_STORE arm above }
           if TypeIsFloat(tk) then
-            EmitI32($ED2D0B02)                        { vpush {d0} }
+          begin
+            IREmitNodeArm32(IRB[node]);
+            EmitI32($ED2D0B02);                       { vpush {d0} }
+          end
+          else if Is64BitArm32(tk) then
+          begin
+            EmitNode64Arm32(IRB[node]);               { full value -> r0:r1 }
+            EmitI32($E92D0003);                       { push {r0, r1} (lo, hi) }
+          end
           else
+          begin
+            IREmitNodeArm32(IRB[node]);
             EmitI32($E92D0001);                       { push {r0} }
+          end;
         end;
         IREmitNodeArm32(IRA[node]);                   { r0 = temp addr }
         EmitVariantFillArm32(j, tk);                  { leaves addr in r0 }
