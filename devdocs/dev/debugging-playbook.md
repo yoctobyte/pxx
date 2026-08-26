@@ -50,8 +50,12 @@ order to read them in. Route by what you are holding:
 - `## Order` -- the tool per question, and the reason to reach for one at all
 - ``## `perf` being blocked is not "no profiler"`` -- FPC `-pg` + gprof, read call
   counts not percentages
+- ``## Profile the SHIPPING binary`` -- and `tools/pxxprof`, for when `perf` and
+  gdb-attach are both refused
 
 **A measurement or a verdict is telling you something and you are about to believe it**
+- ``## Profile the SHIPPING binary`` -- `-g` alone silently means `-O0`, so
+  `make pxx-debug` profiles a different program and says nothing about it
 - `## Two traps that produced confident wrong readings`
 - `## A bisect can name the RIGHT commit and still be wrong` -- the tell is that
   the named commit looks like an improvement
@@ -1031,3 +1035,71 @@ volume at a near-constant ~4 s/MB across a 150x range, which rules out a
 *superlinear* blowup and nothing else. A function costing a fixed 3 microseconds
 per emitted instruction plots as a perfectly straight line and is still 30% of
 the compile.
+
+## Profile the SHIPPING binary — `-g` alone silently means `-O0`
+
+The section above gets you call counts. When you want *shares* — where the time
+actually goes — the trap is one line of `compiler.pas`:
+
+```
+compiler.pas:739    OptLevel := 2;        { the default }
+compiler.pas:1536   if DebugInfo and not OptLevelExplicit then OptLevel := 0;
+```
+
+So **`make pxx-debug` builds a `-O0` compiler.** For gdb that is the point (1:1
+codegen keeps breakpoints on the lines you set them on). For a profile it is a
+different program from the one everyone runs, and *nothing in the output says
+so* — you get a plausible, well-shaped, confidently wrong weighting.
+
+Build the real one explicitly, and check you got it:
+
+```sh
+./compiler/pascal26 -O2 -g compiler/compiler.pas /tmp/p26-g-O2
+# its code=NNNN must match the plain default build's code=NNNN.
+# If it does not, -g changed the codegen and the profile is of something else.
+```
+
+Measured 2026-08-26 on the same zero-byte `.npy`: the `-O0` build put 53.5% of
+in-`.text` samples in the builtin runtime blob range, the real `-O2` build 48.1%,
+and the parser's share moved with it. The *ranking* happened to survive; the
+numbers did not, and there is no way to tell which you are holding from the
+report alone. **Record the `-O` level of the profiled binary the way you already
+record its sha.**
+
+### `tools/pxxprof` — when `perf` AND gdb-attach are both refused
+
+`perf_event_paranoid = 4` blocks `perf`; yama `ptrace_scope = 1` blocks
+attaching to a non-descendant. `tools/pxxprof` forks the target and
+`PTRACE_SEIZE`s its own child, so it needs neither:
+
+```sh
+cc -O2 -o /tmp/pxxprof tools/pxxprof.c
+/tmp/pxxprof /tmp/samples.txt 150 /tmp/p26-g-O2 /tmp/repro.npy /tmp/o
+python3 tools/pxxprof_symbolize.py /tmp/syms.txt /tmp/samples.txt | head -30
+```
+
+Two things it will not tell you, both of which have to be read around:
+
+- **The `<outside .text / vdso>` bucket is not time.** Its own header warns the
+  share swings 8-38%; measured, it was **70% in one run and 0.9% in the next of
+  the same binary**, with the address moving under ASLR
+  (`75522eaa642c` -> `73d5a58a642c`). Cross-check against `/usr/bin/time`: if
+  `user` is within a few percent of `wall`, the process is pure user CPU and the
+  bucket is sampling noise. **Exclude it and renormalise on in-`.text` samples**
+  — every percentage that includes it is deflated by an amount that changes per
+  run.
+- **The builtin runtime carries no DWARF**, so `PXXAlloc`, `PXXFree` and the
+  hand-emitted retain/release blobs all fall into the FIRST symbol's range and
+  show up under the *file* name. When that range is hot — it was 48% — read it
+  by histogramming the raw addresses and disassembling around the hot ones, not
+  by trusting the label. That is how three `idiv`s by the literal 8 turned out
+  to be 11.4% of the whole compile.
+
+**It did not compile as committed** (`open()` with no `<fcntl.h>`; fixed in
+`1202429f4`). Worth naming because of what it cost rather than what it was: a
+profiler that does not build is a profiler nobody reaches for, and the published
+figure it was committed with — 56% in the first 5 KB of `.text` — is closer to
+what the `-O0` debug build gives than the `-O2` one. **A tool that fails to
+build fails silently in the worst possible way: as an absence of measurements,
+which reads exactly like an absence of anything to measure.** Build it before
+you trust a number attributed to it.

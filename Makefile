@@ -99,9 +99,21 @@ print-%:
 #
 # -g here is the compiler's own DWARF (it is a pxx-built binary like any other),
 # which is why `break PyClassCreate` works. See devdocs/dev/debug-switches.md.
+#
+# THIS IS A -O0 BUILD, and deliberately so: compiler.pas:1536 drops OptLevel to
+# 0 when -g is passed without an explicit -O, because 1:1 codegen is what keeps
+# breakpoints on the lines you set them on. The DEFAULT is -O2 (compiler.pas:739).
+#
+# So this target is right for gdb and WRONG FOR A PROFILE -- it is a different
+# program from the one every track runs, and nothing in a profile of it says so.
+# To profile the shipping configuration, ask for both:
+#     ./compiler/pascal26 -O2 -g compiler/compiler.pas /tmp/p26-g-O2
+# and check its reported code=NNNN matches the plain build's. See the section
+# "Profile the SHIPPING binary" in devdocs/dev/debugging-playbook.md.
 pxx-debug: $(COMPILER)
 	$(COMPILER) -g $(COMPILER_SRC) $(COMPILER)-debug
-	@echo "built $(COMPILER)-debug  —  gdb --args $(COMPILER)-debug <in> <out>"
+	@echo "built $(COMPILER)-debug (-O0, for gdb — NOT for profiling; see debugging-playbook.md)"
+	@echo "  gdb --args $(COMPILER)-debug <in> <out>"
 
 # Regenerate SYMBOLS.md — concise routine index (universal-ctags). Navigation
 # aid for humans and agents; re-run after code changes.
