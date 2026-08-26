@@ -1,0 +1,11 @@
+is handle? FALSE
+is elem0?  FALSE
+len 5
+after grow 9
+after shrink 3
+read 10 20 30 40
+write 77
+bounds 0 3
+rebind 2 5 6
+str is handle? FALSE
+str after grow 8 abcdefgh

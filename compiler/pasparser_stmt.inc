@@ -5502,6 +5502,28 @@ begin
                               GetASTIdentName(valNode)) = tyAnsiString)
         else if ASTKind[valNode] = AN_INDEX then
           slIsArrTarget := True   { nested dynamic sub-array }
+        else if (ASTKind[valNode] = AN_DEREF) and (NodeDynDepth(valNode) > 0) then
+          { `SetLength(p^, n)` where p: ^TDyn. fpc accepts it and pxx does not.
+            Refused HERE, by name, because the alternative is worse: the
+            classifier used to fall through to `idx >= 0` -- where idx is the
+            POINTER symbol, neither array nor string -- so the target was classed
+            as a STRING and the failure surfaced from codegen as `SetLength
+            expects a string variable`, which describes neither the program nor
+            the limitation.
+
+            Not a lowering gap that a line would close: the dyn-array SetLength
+            codegen is symbol-based end to end (it emits [rbp+off] / a global ref
+            from the target's symbol index), so an address-based target means a
+            second variant in all six backends. That is its own piece of work,
+            not this ticket's.
+
+            Everything else through a ^TDyn works -- read, write, index, Length,
+            High/Low, whole-array assignment -- so the workaround is one line:
+            SetLength the variable, or take a `var` parameter, which is the
+            resizable-by-reference form pxx does support.
+            bug-p-address-of-a-dynamic-array-captures-the-handle-not-the-variable }
+          Error('SetLength: resizing through a pointer deref is not supported '
+                + '(SetLength the array variable itself, or pass it as a var parameter)')
         else if idx >= 0 then
         begin
           { An open `array of T` param (ArrLen=1000) or a fixed array (ArrLen>=0)

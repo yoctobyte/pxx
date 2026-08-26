@@ -34,12 +34,14 @@ program test_pointer_to_a_named_fixed_array;
   confident wrong answer derived from two fields nobody had set.
   bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one
 
-  NOT covered, and NOT a gap in this test: a pointer to a dyn array goes STALE
-  when the array is reallocated, because `@dy` in pxx yields the HANDLE rather
-  than the address of the dy variable. After `SetLength(dy, 9)` fpc's
-  `Length(pdy^)` is 9 and ours is 5 — off the old buffer, which SetLength may
-  already have freed. Deliberately not asserted here; that divergence is
-  bug-p-address-of-a-dynamic-array-captures-the-handle-not-the-variable.
+  FIXED since: a pointer to a dyn array used to go STALE when the array was
+  reallocated, because `@dy` yielded the HANDLE rather than the address of the dy
+  variable. `@` now yields the slot for a dynamic array exactly as it already did
+  for a managed string, so the pointer follows a reallocation. The staleness rows
+  live in test/test_pointer_to_a_dynamic_array.pas, which is that fix's own test;
+  this file keeps its BORROWED-ownership rows, which are a different question and
+  are what stops the fix from being paid for with a use-after-free here.
+  bug-p-address-of-a-dynamic-array-captures-the-handle-not-the-variable
 
   Still NOT covered: a FORWARD `PA = ^TA` written ahead of TA's own declaration,
   which cannot see an ArrType entry that does not exist yet.

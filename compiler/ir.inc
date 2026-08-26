@@ -1658,9 +1658,19 @@ begin
       writing through one alias never mutates another at any depth. Plain depth-1
       arrays keep the path below. }
     baseDynDepth := NodeDynDepth(baseNode);
+    { AN_DEREF joins them: `p^[i]` where p: ^TDyn. Its slot address is p's own
+      VALUE, which is what IRLowerAddress(AN_DEREF) already yields, so it needs
+      the IR_DYNUNIQUE base like every other non-ident handle slot rather than
+      the plain depth-1 path below -- that one addresses a variable's slot
+      directly and had nothing to address here, so `p^[0]` read a number off the
+      slot address and `p^[1] := 7` wrote past it.
+      Reachable only since `@dy` began yielding the slot; before that p held the
+      data pointer and the plain path landed on elements by accident.
+      bug-p-address-of-a-dynamic-array-captures-the-handle-not-the-variable }
     if (baseDynDepth >= 2) or
        ((baseDynDepth = 1) and ((ASTKind[baseNode] = AN_INDEX) or
-                                (ASTKind[baseNode] = AN_FIELD))) then
+                                (ASTKind[baseNode] = AN_FIELD) or
+                                (ASTKind[baseNode] = AN_DEREF))) then
     begin
       { Base element metadata, walking to the root symbol OR record/class field
         (a dynamic-array field is just another handle slot). }
@@ -7647,6 +7657,33 @@ begin
         Exit;
       end;
 
+      { ...and a DYNAMIC ARRAY, which is the same concept -- a managed handle in
+        a slot -- and had been left out of the correction above. IR_LEA
+        auto-loads the handle for it too (its own comment in the backends says
+        so), so `@dy` yielded the heap data pointer: `@dy`, `Pointer(dy)` and
+        `@dy[0]` were all one address, where fpc has the first differ from the
+        other two.
+
+        That is not a cosmetic difference. `p := @dy` captured the buffer that
+        existed at @-time, so a later SetLength that MOVED the block left p
+        pointing into freed memory -- a use-after-free that compiles clean and
+        reads plausible numbers. Measured before this change: after
+        `SetLength(dy, 9)`, `Length(p^)` still answered 5 off the old buffer,
+        `p^[0]` read 0, and `p^ := other` segfaulted.
+
+        One rule for what `@` means over a managed value, not one per managed
+        type -- devdocs/dev/normalise-dont-special-case.md, which the string
+        half of this already cited.
+        bug-p-address-of-a-dynamic-array-captures-the-handle-not-the-variable }
+      if (ASTKind[ASTLeft[node]] = AN_IDENT) and (ASTIVal[ASTLeft[node]] >= 0) and
+         (Integer(ASTIVal[ASTLeft[node]]) < SymCount) and
+         Syms[ASTIVal[ASTLeft[node]]].IsArray and
+         (Syms[ASTIVal[ASTLeft[node]]].ArrLen = -1) then
+      begin
+        Result := IRAppend(IR_SLOTADDR, Integer(ASTIVal[ASTLeft[node]]), -1, -1, 0, Ord(tyPointer));
+        Exit;
+      end;
+
       { `@fp` in DELPHI mode is the pointer the procvar HOLDS, not the address
         of the variable. Measured against FPC 3.2.2 with the variable's own
         address obtained independently (an untyped `var` parameter), so all
@@ -11022,14 +11059,20 @@ begin
           Syms[dynLenTmp].ElemRecName := NodeDynBaseRec(ASTLeft[item]);
           SymSyncTypeRef(dynLenTmp);
           if ASTKind[ASTLeft[item]] = AN_DEREF then
-            { `Length(p^)` where p: ^TDyn. MEASURED, because the obvious readings
-              are both wrong: `@dy` in pxx yields the HANDLE (the data pointer),
-              not the address of the dy variable — unlike `@s` on a managed
-              string, which was corrected to the slot address, and unlike fpc,
-              which gives the slot for both. So p already IS the handle: lowering
-              the DEREF derefs it once too often (segfault), and loading from p
-              likewise (segfault). The value of p is the handle, full stop. }
-            callVal := IRLowerAST(ASTLeft[ASTLeft[item]])
+            { `Length(p^)` where p: ^TDyn. This arm used to lower p's VALUE and
+              stop, with a comment explaining that `@dy` yielded the HANDLE, so p
+              already WAS the handle and any load or deref went one level too far.
+              That premise is gone: `@dy` now yields the address of the dy
+              VARIABLE, the same correction `@s` got for managed strings, so p is
+              a slot address and the handle must be LOADED out of it.
+
+              This is the lockstep the address-of ticket predicted: moving `@`
+              without moving this answered the length of whatever the slot
+              address happened to point at -- 0, in practice -- which is exactly
+              what the string arm's own comment records happening to it.
+              bug-p-address-of-a-dynamic-array-captures-the-handle-not-the-variable }
+            callVal := IRAppend(IR_LOAD_MEM,
+                         IRLowerAST(ASTLeft[ASTLeft[item]]), -1, -1, 0, Ord(tyPointer))
           else
             callVal := IRLowerAST(ASTLeft[item]);
           IRAppend(IR_STORE_SYM, dynLenTmp, callVal, -1, 0, Ord(tyPointer));

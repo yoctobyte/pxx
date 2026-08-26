@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:24 blocked:7 backlog:266 backlog_new:24 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2411 rejected:44`
+`unfinished:24 blocked:7 backlog:267 backlog_new:23 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2412 rejected:44`
 
 ## Held now (working/ — do not touch these files)
 
@@ -73,12 +73,12 @@ _none — no lane is locked._
 - `[p 70] [N]` feature-nilpy-staticmethod-and-classmethod
 - `[p 70] [P]` feature-p-delphi-string-helpers
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
+- `[p 70] [P]` regression-test-core-test-char-array-is-a-string
 - `[p 68] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [N]` bug-n-a-fields-type-is-fixed-by-its-first-assignment-and-never-widened
 - `[p 65] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 - `[p 65] [N]` bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members
-- `[p 65] [N]` bug-n-a-unicode-identifier-is-rejected-by-the-lexer
 
 _272 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

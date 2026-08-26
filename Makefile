@@ -8052,6 +8052,17 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_array_and_scalar_overload_binding.pas $(TESTTMP)/test_asob26
 	test "$$($(TESTTMP)/test_asob26)" = "$$(cat test/test_array_and_scalar_overload_binding.expected)"
+	# `@dy` on a dynamic array is the address of the VARIABLE, not its handle.
+	# It used to be the handle, so `@dy`, `Pointer(dy)` and `@dy[0]` were one
+	# address and `p := @dy` captured a buffer SetLength could later free --
+	# a silent use-after-free. Managed strings had already been corrected this
+	# way; dynamic arrays are the same concept and had been left out. The
+	# identity rows (`@dy = Pointer(dy)` is FALSE) are the load-bearing ones --
+	# they cannot come out right by accident. Length/index/rebind rows pin the
+	# lockstep the fix required: the deref path had to move with `@`.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_pointer_to_a_dynamic_array.pas $(TESTTMP)/test_ptda26
+	test "$$($(TESTTMP)/test_ptda26)" = "$$(cat test/test_pointer_to_a_dynamic_array.expected)"
 	# ...and the guard: a genuine `var` parameter must still REFUSE the same
 	# argument. This is what stops the fix from being ungated -- tried, and it
 	# let a call RESULT bind to a var parameter and COMPILE, because the method
