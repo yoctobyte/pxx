@@ -69,7 +69,7 @@ lands with an FPC-differential test — the probe above is the shape: call it,
 print it, diff against `fpc -O-`.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit f41c0c42f (the RTL work; write-up in 92f68eea3).
 
 ## Resolution (2026-08-26, frank1-B-rtl)
 
