@@ -301,6 +301,23 @@ failed. Text-shaped guards
 are especially prone to it, because writing one feels like verification and the
 grep is trivially satisfiable by the broken code.
 
+Three separate text-shaped guards failed this way in one night, which is enough
+to call it: **a grep-guard is the weakest guard shape available.** One asserted a
+call existed when the call was a scoping error; one matched a name form the
+consumer never keys by; and one -- nearly a joke, and the clearest possible
+demonstration -- **went red on its first run against the comment explaining the
+rule it checks**, because the author had written the forbidden string three lines
+above while saying why it was forbidden. A grep reads prose as eagerly as code.
+Prefer a guard that executes the path. Where only text will do, strip comments
+and match on the form the CONSUMER uses, not the form that reads naturally.
+
+A related recurrence worth naming: the same fix nearly died twice on **coarse
+predicate where a precise one exists** -- `target in PIN_BUILT_TARGETS` (a list
+that is sufficient, never necessary) standing in for `j.pin_built` (the measured
+fact). Same author, same file, same pair of predicates, twelve hours after the
+first instance. A wrong distinction does not get learned once; it gets learned
+per call site. When you correct one, grep for the predicate, not for the bug.
+
 It was found by running the path end to end against a live case rather than
 trusting that it looked right.
 
