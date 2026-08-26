@@ -6207,6 +6207,13 @@ test-core: $(COMPILER)
 	# evaluated exactly once. gcc -O0 oracle.
 	./$(COMPILER) test/cternary_callee.c $(TESTTMP)/cterncallee26
 	test "$$($(TESTTMP)/cterncallee26)" = "$$(printf '10 4\n10 4\n10\n21\n4\n1')"
+	# GNU omitted-middle conditional `x ?: y`. The value is x when x is true and
+	# x is evaluated EXACTLY ONCE, so the then-arm cannot be a copy of the
+	# condition node: it binds to a hidden temp. busybox editors/vi.c spells
+	# `col - ((col % tabstop) ?: tabstop)`. int/pointer(->field)/char-promotion/
+	# float arms, nesting, and the else arm's side effect. gcc -O0 oracle.
+	./$(COMPILER) test/cternary_elvis.c $(TESTTMP)/cternelvis26
+	test "$$($(TESTTMP)/cternelvis26)" = "$$(printf '7 7\n5\n1\n3\n2\n11 22\n90 90\n2.5 2.5\n7\n42\n-8 0 8 8 \n4\n0\n1\n1')"
 	# Unary `!` in a C constant expression, and the negative array bound the idiom
 	# it appears in EXISTS to produce. CEvalConstPrimary's unary chain had -, +, ~
 	# and & and not !, so `char[1 - 2*!!(cond)]` — BUILD_BUG_ON, as busybox and the

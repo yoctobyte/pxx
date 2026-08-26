@@ -4022,6 +4022,8 @@ end;
   conditional `?:` operator. The comma operator is handled at statement level. }
 function ParseCExpr: Integer;
 var left, rhs, node, cTok, baseOp, thenE, elseE, pair: Integer;
+    elvisSym, elvisAsn, elvisRd: Integer;
+    elvisTk: TTypeKind;
 begin
   left := ParseCBinExpr(1);
   { conditional `cond ? a : b` — sits between logical-or and assignment, and is
@@ -4030,7 +4032,35 @@ begin
   if CurTok.Kind = tkQuestion then
   begin
     Next;
-    thenE := ParseCCommaExpr();   { middle: C `expression`, so comma is allowed }
+    if CurTok.Kind = tkColon then
+    begin
+      { GNU omitted-middle conditional `x ?: y` — the value is x when x is
+        true, y otherwise, and x is evaluated EXACTLY ONCE (gcc: `side(3) ?: 5`
+        calls side once). So x cannot simply be duplicated into the then-arm:
+        bind it to a hidden temp, make the ASSIGNMENT the condition (an assign
+        yields the stored value, so the truth test sees it) and read the temp
+        back as the then-arm. Everything downstream then sees an ordinary
+        AN_TERNARY. }
+      elvisTk := IntToTypeKind(ASTTk[left]);
+      if elvisTk = tyUnknown then elvisTk := tyInteger;
+      if elvisTk = tyString then elvisTk := tyPointer;   { C: a literal is char* }
+      elvisSym := AllocVar('', elvisTk);
+      if elvisTk = tyPointer then
+        Syms[elvisSym].PtrElemRec := CNodePtrElemRec(left);
+      elvisRd := AllocNode(AN_IDENT);
+      ASTIVal[elvisRd] := elvisSym;
+      ASTTk[elvisRd] := Ord(elvisTk);
+      elvisAsn := AllocNode(AN_ASSIGN);
+      ASTLeft[elvisAsn] := elvisRd;
+      ASTRight[elvisAsn] := left;
+      ASTTk[elvisAsn] := Ord(elvisTk);
+      left := elvisAsn;
+      thenE := AllocNode(AN_IDENT);
+      ASTIVal[thenE] := elvisSym;
+      ASTTk[thenE] := Ord(elvisTk);
+    end
+    else
+      thenE := ParseCCommaExpr();   { middle: C `expression`, so comma is allowed }
     Expect(tkColon, ':');
     elseE := ParseCExpr();        { else: right-associative }
     { 6.5.15p4: when both arms are arithmetic the usual arithmetic conversions
