@@ -1,0 +1,40 @@
+# A REBOUND name must not be accepted as a class base.
+# bug-n-a-class-base-that-is-an-expression-does-not-compile
+#
+# This file must NOT compile, and the Makefile asserts exactly that.
+#
+# Under CPython it runs and prints "second", because `Base` means whatever it
+# was last bound to. The compile-time alias table that makes the sibling test
+# work is flat and global -- it has no notion of a program point -- so it
+# cannot represent "Base means First here and Second there". The alias pass
+# therefore registers a name only when the module binds it EXACTLY ONCE, and
+# this file is the witness for the other side of that rule.
+#
+# The failure this guards against is not the refusal: it is a future change
+# that makes "first binding wins" and silently compiles `class P(Base)` against
+# First -- a wrong base is a wrong layout and a wrong vtable, and nothing
+# downstream would say so.
+#
+# If someone later implements real point-of-use resolution, this test SHOULD
+# start failing: replace it with one that asserts the answer is "second".
+
+
+class First:
+    def who(self):
+        return "first"
+
+
+class Second:
+    def who(self):
+        return "second"
+
+
+Base = First
+Base = Second
+
+
+class P(Base):
+    pass
+
+
+print(P().who())

@@ -3703,6 +3703,21 @@ test-asm: $(COMPILER)
 	! grep -q "^    db " $(TESTTMP)/test_asm_dis_self26.s
 
 test-core: $(COMPILER)
+	# A class BASE that is a name bound to a class -- `Base = Animal` then
+	# `class Dog(Base)`. Here rather than in test-nilpy because test-core runs in
+	# the NATIVE tier (the fast watcher verdict) while test-nilpy is limited/full
+	# only, and this is a base-class/layout rule: the expensive way for it to
+	# regress is a WRONG base silently compiling, not a crash.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-a-class-base-that-is-an-expression-does-not-compile
+	./$(COMPILER) test/test_nilpy_class_base_is_an_alias.npy $(TESTTMP)/test_nilpy_clsbasealias26
+	$(TESTTMP)/test_nilpy_clsbasealias26 | diff -u test/test_nilpy_class_base_is_an_alias.expected -
+	# ...and the other side of the same rule: a REBOUND name is refused, never
+	# resolved to its first binding. CPython prints "second"; a compile-time
+	# alias table cannot say that, so it must decline rather than answer "first".
+	# Only this half catches a future "first binding wins" silent wrong base.
+	! ./$(COMPILER) test/test_nilpy_class_base_alias_rebound_refused.npy $(TESTTMP)/test_nilpy_clsbaserebound26 > $(TESTTMP)/test_nilpy_clsbaserebound.log 2>&1
+	grep -q "unknown base class Base" $(TESTTMP)/test_nilpy_clsbaserebound.log
 	# promotable int: arbitrary precision, exact against CPython (feature-a-promotable-int)
 	./$(COMPILER) test/test_promoint.pas $(TESTTMP)/test_promoint26
 	test "$$($(TESTTMP)/test_promoint26)" = "$$(printf '0\n12\n60\n7\n2\n2\n-5\n25\n7\nlt\ngt\neq\nsame\n265252859812191058636308480000000\n0\n265252859812191058636308480\n109361473\n-15511210043330985984000000\n15511210043330985984000000\n9223372036854775808\n18446744073709551614\n18446744073709551616\n-18446744073709551616\n18446744073709551616\n1\n42\n265252859812191058636308480000000\n265252859812191058636308480000000\n265252859812191058636308480000002\n530505719624382117272616960000000\nvgt\n10\n2\nogt\n1')"
