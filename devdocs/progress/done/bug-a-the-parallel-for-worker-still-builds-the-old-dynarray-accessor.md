@@ -9,7 +9,7 @@ status: done
 owner: opus5-frank1
 created: 2026-08-26
 resolved: 2026-08-26
-commit: PENDING-COMMIT
+commit: 7074e4e23
 summary: "REGRESSION, mine, same day. bug-p-address-of-a-dynamic-array-captures-the-handle-not-the-variable changed what a pointer-to-dyn-array holds — the variable's SLOT, not the handle. Three consumers were left on the old convention: the parallel-for worker's capture accessor and both dyn-array argument arms in ir.inc. test_parallel_for_capture_aggr segfaulted on x86-64, i386, arm32 and aarch64."
 ---
 

@@ -9,7 +9,7 @@ status: done
 owner: opus5-frank1
 created: 2026-08-26
 resolved: 2026-08-26
-commit: PENDING-COMMIT
+commit: 7074e4e23
 summary: "REGRESSION, mine, same day. The array-vs-scalar mismatch guard added for bug-p-overload-resolution-confuses-an-array-with-its-element-type refused an `array[..] of Char` argument to a `const q: string` parameter — a conversion the language defines. Caught by the Track T watcher as test-core#src:test/test_char_array_is_a_string.pas."
 ---
 
