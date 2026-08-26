@@ -127,6 +127,34 @@ Its author injected the mismatch into a scratch tree and watched the step return
 been seen to fail is not yet a canary** -- it is an assertion about one.
 
 
+## The coordinator sweeps worker files with `git add -A`. Stop doing that.
+
+Happened again on 2026-08-26, and the coordinator was the culprit: a worker ran
+`progress.sh claim` in the shared checkout before noticing it was
+worktree-isolated, and the coordinator next ran
+
+```
+git add -A devdocs/progress/
+```
+
+for an unrelated triage commit. That swept the worker's `working/` move into the
+coordinator's commit, so `origin/dev` carried a claim nobody had pushed and the
+worker had to untangle it during a rebase.
+
+**`git add -A <dir>` in a shared checkout is a claim on everything anyone else
+left there.** It is not a tidy-up; it is a merge of somebody's in-flight state
+into your commit, under your authorship, with no signal to either party. And it
+violates the standing rule in CLAUDE.md -- *do not push, commit, or rebase
+another track's in-flight work* -- while looking like ordinary hygiene.
+
+- **Stage by path, always.** `git add devdocs/progress/backlog/<slug>.md` names
+  what you meant. `-A` names what happens to be there.
+- **Tell workers to claim inside their own worktree.** Every brief that dispatches
+  into a worktree should say so, because `progress.sh claim` run from the wrong
+  directory is the specific way this starts.
+- **If you find a stray `working/` entry, ask before absorbing it.** A claim you
+  did not make is a live lock, not litter.
+
 ## Facts to get right when writing a worker brief
 
 The coordinator writes briefs from memory, and a wrong fact in a brief is copied
