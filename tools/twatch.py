@@ -5206,6 +5206,62 @@ def retire_host(repo, old, into=None, tdir=None, renamed=False):
 # fi`) treat 2 exactly like 1 and run their own gate -- the conservative
 # direction, and correct: when T's health is unknown you cover yourself.
 STATUS_UP, STATUS_DOWN, STATUS_UNKNOWN = 0, 1, 2
+# How fresh the daemon's heartbeat must be to count as ALIVE. It is rewritten
+# every 30s while a gate runs, so a minute is already several missed beats;
+# five is generous and still far below the 45-minute staleness grace this
+# qualifies.
+HEARTBEAT_FRESH_SECS = 300
+
+
+def local_daemon():
+    """(host, phase, age_secs) for a LIVE watcher daemon on this box, or None.
+
+    `status()` is a no-ping staleness heuristic -- "UP iff every commit older
+    than the grace window is tested by some host" -- and it cannot tell "nobody
+    is testing" from "the tester is busy with the commit before yours". Those
+    have opposite correct responses, and it was answering both with DOWN, whose
+    documented consequence in CLAUDE.md is that every dev agent runs a ten-minute
+    full gate instead of a thirty-second one. A productive night of pushes, or a
+    loaded box, manufactured it.
+
+    The information that settles it is already local and already read by the
+    sibling command: `trackt health` finds the clone and reads the heartbeat.
+    Same discovery order here (TRACKT_CLONE, ~/.config/trackt.path,
+    ~/trackt-watch), and the same two conditions -- a FRESH beat AND a live pid.
+    Neither alone is enough: a stale file outlives the process, and a pid can be
+    recycled.
+
+    Returns None when there is no clone on this box, which is the honest answer
+    for an agent on another machine: we genuinely cannot tell, so the existing
+    DOWN stands.
+    """
+    path = (os.environ.get("TRACKT_CLONE")
+            or _configured_clone()
+            or os.path.expanduser("~/trackt-watch"))
+    try:
+        with open(os.path.join(os.path.expanduser(path), WATCH_REL)) as f:
+            w = json.load(f)
+    except (OSError, ValueError):
+        return None
+    age = time.time() - float(w.get("ts") or 0)
+    if age > HEARTBEAT_FRESH_SECS:
+        return None
+    pid = w.get("pid")
+    try:
+        with open("/proc/%d/cmdline" % int(pid), "rb") as f:
+            if "twatch.py" not in f.read().decode(errors="replace"):
+                return None
+    except (OSError, ValueError, TypeError):
+        return None
+    return (w.get("host") or "?", w.get("phase") or "?", age)
+
+
+def _configured_clone():
+    try:
+        with open(os.path.expanduser("~/.config/trackt.path")) as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
 
 
 def adj(what):
@@ -5683,6 +5739,23 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
         return STATUS_UP
     if untested_old:
         age = int((now - untested_old[1]) / 60)
+        alive = local_daemon()
+        if alive:
+            # BEHIND, not DOWN. Same distinction the breadth case above draws,
+            # for the same reason: a reader told DOWN runs a ten-minute gate to
+            # replace work that is happening right now. The exit code is what
+            # CLAUDE.md and every agent branch on, so BEHIND exits 0 -- and it
+            # must still SAY why, or the agent reading UP with no verdict on its
+            # commit widens its gate anyway.
+            dhost, phase, hb = alive
+            print("tstate: %s daemon is ALIVE (phase=%s, heartbeat %s ago) but "
+                  "BEHIND — %s untested for %d min. The tree moved faster than "
+                  "one cycle; that is a busy tester, not a stalled one. Offload "
+                  "as usual and do NOT widen your gate."
+                  % (dhost, phase, fmt_age(hb), untested_old[0][:12], age))
+            print("tstate: UP (behind) — offload the matrix to T%s"
+                  % ("" if fetched else "  [UNFETCHED]"))
+            return STATUS_UP
         return verdict_down("%s untested for %d min (> %d min grace)"
                             % (untested_old[0][:12], age, grace_min))
     if live and degraded == live:
