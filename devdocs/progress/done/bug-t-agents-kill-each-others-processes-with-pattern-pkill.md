@@ -198,4 +198,4 @@ surviving evidence allows and `whokilled.sh` makes the next occurrence answerabl
 in one command instead of six days.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 7f2646d43.
