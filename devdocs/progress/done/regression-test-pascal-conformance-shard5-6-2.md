@@ -211,4 +211,4 @@ Plus the runtime probe that segfaulted under pinned now prints `f=0`.
 `make compiler/pascal26` (converged in 1 round — byte-identical self-host
 fixedpoint), the individual `tdefault*` cases (12 pass / 0 fail), the whole
 shard 5/6 (**55 pass / 1 fail -> 56 pass / 0 fail**), and `tools/gate.sh quick`.
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 8010d7729 (fix) + 44c28dc27 (SizeOf dedup).
