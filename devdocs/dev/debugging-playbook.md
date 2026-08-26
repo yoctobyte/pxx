@@ -299,6 +299,16 @@ nobody watches.
 This is the same failure as the `137 -> 2` measurement above: **a check that
 runs, passes, and asserts nothing about the thing at issue.**
 
+A third costume, since it recurs: **a close condition about the wrong subject.**
+The breadth ticket above closed on `carried_runs != 0` -- satisfied from the day
+the mechanism shipped, so it would have closed the ticket **six days early, on a
+mechanism recovering 0.33% of what it saves, in the middle of a 40-hour breadth
+gap.** `resume_health()`'s own docstring stated the right standard -- *"One line
+of RATES, not events"* -- and the ticket closed on an event anyway. **The
+instrument that answers "is breadth starved" is breadth staleness**, and nothing
+else. Write close conditions on the symptom the ticket is about, not on the
+mechanism you happened to build.
+
 The sharpest instance of the family is worth stating on its own, because it is
 the one that hides best: **the run that proved the least was the one that most
 effectively silenced the request for more.** Staleness asked *is there a record
@@ -342,6 +352,51 @@ synthetic one.
 Deliberately not general, for the reason this file keeps arriving at: **a checker
 that reports everything gets suppressed, and a suppressed checker asserts
 nothing.**
+
+## A ticket's prescription is a hypothesis, and it can rule out the answer
+
+Stronger than "distrust the ticket's where-to-look", and more expensive: a ticket
+can name the fix that works and **explicitly exclude it**.
+
+`bug-t-the-push-rate-starves-breadth-coverage-entirely` summarised itself as
+*"Fix is resumability plus bounding consecutive idle, NOT reserving a slot."*
+The dates say the opposite and they are not close. The two prescribed shapes
+landed 2026-08-19, after which full-to-full gaps went 12.8h, 9.4h, 21.6h, 19.2h,
+31.5h, **40.1h**. The ruled-out shape -- breadth reserves a slot when stale --
+landed 2026-08-25, and the next three gaps were **1.1h, 3.1h, 1.3h**. Median
+full-to-full over the following 24h: **1.3h**, from 3,828 run records.
+
+Six days of degradation after the prescribed fix; recovery within the hour of the
+excluded one.
+
+- **A prescription in a ticket carries the confidence of a decision and the
+  evidence of a guess.** It was written before the work, by someone reasoning
+  about a system they had not yet measured, and then it sits there in the
+  imperative for months looking settled.
+- **This is a triage hazard, not just an engineering one.** The prio and the plan
+  both inherit the wrong frame, so a ticket can be correctly ranked for work that
+  cannot fix it.
+- **When a fix does not take, re-read what the ticket ruled out.** That set was
+  never tested; it was reasoned. It is the cheapest unexplored space available.
+
+**State the confound rather than let someone find it.** Here, 08-20 is when this
+box became a shared workstation, so load rose almost exactly when the prescribed
+shapes landed -- the fair reading is that they were not harmful but insufficient.
+That does not rescue the headline, because *the confound never went away*: still
+a shared workstation, still throttled, same push cadence. **Load held constant,
+mechanism changed, outcome changed** -- as close to a controlled comparison as a
+live box will give, and worth saying in exactly that form.
+
+### And a structural ceiling, recorded so nobody tries to raise it
+
+The resume ledger reused **73 of 22,280 saved job-results, 0.33%**, and
+`superseded: 70` is the whole explanation. A partial is keyed on `(sha, tier)`,
+and on abort the watcher re-targets to the new HEAD -- so the partial it just
+saved is for a sha nobody will ask about again. **Resumability can only pay where
+the same `(sha, tier)` is retried, and a push-driven ladder almost never retries
+one.** That is a ceiling, not a defect. It does pay for the one phase that does
+retry a single sha -- pin verify, where the log shows 56 jobs already decided
+against that exact binary.
 
 ## A correct fix on an opportunistic path is inert, and nothing reports it
 
