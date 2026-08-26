@@ -112,4 +112,4 @@ canary still RUNS what it built (the half a later cleanup would drop as
 redundant) and that the pin check still `exit 1`s rather than warning.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 926b5819a.
