@@ -290,8 +290,15 @@ def cmd_status(clone, attach_ok=True):
         extra = " ".join("%s=%s" % (k, w[k]) for k in ("sha", "tier", "head")
                          if w.get(k)) if fresh else ""
         age = "%s ago" % fmt_age(w.get("ts")) if fresh else "no phase written yet"
-        print("  daemon : %sRUNNING%s pid %d — %s %s (%s)"
-              % (GRN, OFF, pid, phase, extra, age))
+        # The fingerprint is printed ALWAYS, not only when it is stale — the
+        # same rule twatch applies to breadth age, and for the same reason: a
+        # number the reader can see is what makes the boundary of a claim
+        # checkable. A check that is invisible when it passes is one the reader
+        # does not know happened, which is how "RUNNING" came to be read as
+        # "running the current code" in the first place.
+        print("  daemon : %sRUNNING%s pid %d — %s %s (%s)%s"
+              % (GRN, OFF, pid, phase, extra, age,
+                 "  [code %s]" % w.get("code_fp") if w.get("code_fp") else ""))
         # RUNNING says a process is alive. It does NOT say the process is
         # running the code on disk — a daemon holds what it loaded at start,
         # and the clone pulls underneath it all day. On 2026-08-26 three landed
