@@ -3663,34 +3663,13 @@ begin
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
 
-  { Nil-init hidden owning locals synthesised for materialised managed-string
-    arguments (and the TVarRec array temp behind `array of const`). They are
-    created during this body's IR lowering, after the parser's prologue
-    zero-init pass, so they otherwise hold stale stack bytes — a conditional
-    build / scope-exit cleanup would then read or DecRef garbage. skLocal only;
-    main-program temps are skGlobal (BSS). Mirrors x86-64/i386/ARM32. }
-  if CurProc >= 0 then
-    for i := Procs[CurProc].ScopeBase to SymCount - 1 do
-      if SymIsHiddenArgTemp[i] and (Syms[i].Kind = skLocal) then
-      begin
-        if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-           (RecSize(SymTR[i].RecId) > TARGET_PTR_SIZE) then
-        begin
-          { Managed-record temp: zero the full record (PXXMemZero) so every
-            managed field starts nil, not just the first pointer-sized slot. }
-          EmitLoadImmA64(9, Syms[i].Offset);
-          EmitI32($8B0903A0);    { add x0, x29, x9 (dest) }
-          EmitLoadImmA64(1, RecSize(SymTR[i].RecId));   { x1 = count }
-          procIdx := FindProc('PXXMemZero');
-          if procIdx < 0 then Error('compiler error: PXXMemZero not found');
-          EmitCallProc(procIdx);
-        end
-        else
-        begin
-          EmitI32($D2800000);    { movz x0, #0 }
-          EmitStoreVarA64(i);    { store 0 into the local slot }
-        end;
-      end;
+  { The hidden-arg-temp nil-init pass that stood here — one copy per backend,
+    six in all — is gone: CompileAST's late-mint pass now nils EVERY unnamed
+    managed skLocal through the shared ManagedLocalZeroBytes table, at the same
+    point in the body. Strict superset (this copy sized a flagged VARIANT temp
+    at one word when a variant is two, and never covered an unflagged temp),
+    so it is one owner replacing seven partial ones.
+    bug-a-a-for-in-container-temp-is-not-zero-initialised }
 
   for i := 0 to IRCount - 1 do
   begin
