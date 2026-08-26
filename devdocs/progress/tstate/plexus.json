@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-25T19:17:00Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "d2cb6721e17541fbb91eafc87992df0eca17c055",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-25T20:32:11Z",
    "fixed": [
     "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy"
@@ -446,6 +438,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "9a24e7dbc17fb92ff7fce8ebfb6d2d0f3acd094f",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T09:17:21Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "75a1c06bb1a1c6960b039efe4a96348fdeb27e7f",
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
@@ -3489,6 +3490,9 @@
   "test-smoke#21": "native",
   "test-smoke#22": "native",
   "test-smoke#23": "native",
+  "test-smoke#26": "native",
+  "test-smoke#27": "native",
+  "test-smoke#28": "native",
   "test-smoke#src:compiler/compiler.pas": "native",
   "test-smoke#src:test/csystem_libs_granular_math_b112.c": "native",
   "test-smoke#src:test/quick_canary_argv0.pas@2": "native",
@@ -6597,6 +6601,9 @@
   "test-smoke#21": "pass",
   "test-smoke#22": "pass",
   "test-smoke#23": "pass",
+  "test-smoke#26": "pass",
+  "test-smoke#27": "pass",
+  "test-smoke#28": "pass",
   "test-smoke#src:compiler/compiler.pas": "pass",
   "test-smoke#src:test/csystem_libs_granular_math_b112.c": "pass",
   "test-smoke#src:test/quick_canary_argv0.pas@2": "pass",
@@ -6691,14 +6698,14 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-26T08:57:28Z",
+  "date": "2026-08-26T09:17:21Z",
   "deadline": 7200.0,
-  "sha": "9a24e7dbc17fb92ff7fce8ebfb6d2d0f3acd094f",
+  "sha": "75a1c06bb1a1c6960b039efe4a96348fdeb27e7f",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 280.9
+  "wall": 279.1
  },
  "last_bench": {
   "conf_rows": 550,
