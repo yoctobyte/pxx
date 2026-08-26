@@ -1,0 +1,21 @@
+keys   dict/list/str: True False False
+get    dict/list/str: True False False
+append dict/list/str: False True False
+upper  str/dict/int/None: True False False False
+split  str/dict/int/None: True False False False
+is_integer float/int/str/dict: True True False False
+hex        float/bytes/int/dict: True True False False
+bit_length int/bool/float/str/dict/None: True True False False False False
+to_bytes   int/bool/str/dict/None: True True False False False
+__len__     dict/list/tuple/int: True True True False
+__getitem__ dict/list/tuple/int: True True True False
+nope dict/list/str/int/float/None: False False False False False False
+user x/m/nope: True True False
+derived x/m: True True
+user x on a dict/str: False False
+call keys  : ['a']
+call upper : STR
+call isint : False True
+call bitlen: 3
+call len   : 1 2
+describe: mapping text sequence scalar

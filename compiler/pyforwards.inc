@@ -147,7 +147,8 @@ function PyMakeDynAttrSetByExpr(recvNode, nameNode, valNode: Integer): Integer; 
 { getattr(o, "p") where p is a PROPERTY — the read `o.p` builds (pyparser.inc) }
 function PyMakePropRead(recvNode: Integer; const attr: AnsiString): Integer; forward;
 function PyAttrExists(recvNode: Integer; const attr: AnsiString): Boolean; forward; { Nil Python hasattr: field OR method OR str/int method (pyparser.inc) }
-function PyHasAttrClassChain(recvNode: Integer; const attr: AnsiString): Integer; forward; { Nil Python hasattr over a VARIANT receiver: run-time class test (pyparser.inc) }
+function PyHasAttrAnsweredBy(ci: Integer; const attr: AnsiString): Boolean; forward; { Nil Python: does class ci answer this Python attr name — field/property/method under either spelling (pyparser.inc) }
+function PyHasAttrRuntimeChain(recvNode: Integer; const attr: AnsiString): Integer; forward; { Nil Python hasattr over a VARIANT receiver: run-time class + scalar-tag tests (pyparser.inc) }
 function PyParseAttrName: AnsiString; forward; { Nil Python: the literal attr name in hasattr/getattr (pyparser.inc) }
 function PyMakeDynAttrByExpr(recvNode, nameNode, dfltNode: Integer; wantHas: Boolean): Integer; forward; { ...and the COMPUTED-name form, resolved at run time (pyparser.inc) }
 function PyTupleParenAhead: Boolean; forward; { Nil Python: is this '(' a tuple? (pyparser.inc) }

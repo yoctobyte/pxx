@@ -11564,44 +11564,128 @@ begin
     if PyStrMethodInfo(attr, pn, rt, wa) then begin PyAttrExists := True; Exit; end;
   { BOTH halves: PyIsIntMethodBaseTk answers "may an int method claim this
     RECEIVER", which is true of any name on an int — it is a dispatch question,
-    not an existence one. `hasattr(1, "nope")` must still be False. }
-  if PyIsIntMethodBaseTk(tk, attr) and PyIsIntMethodName(attr) then
+    not an existence one. `hasattr(1, "nope")` must still be False.
+
+    PyIsIntBaseTk, not PyIsIntMethodBaseTk: the latter's second arm is
+    `(tk = tyVariant) and not PyAnyClassDeclares(nm)`, which says nothing about
+    the RECEIVER and everything about the program — so it answered a
+    compile-time constant True for EVERY variant, and
+    `hasattr(a_dict, "bit_length")` / `hasattr(None, "to_bytes")` were True.
+    That is the same defect as the int arm's first half (a dispatch predicate
+    asked an existence question), one level out, and it is the wrong-TRUE twin
+    of the wrong-FALSE this ticket is named for. A variant receiver is now
+    answered where it can be answered — at RUN time, by the tag arms in
+    PyHasAttrRuntimeChain below.
+    bug-n-hasattr-through-an-untyped-parameter-is-always-false }
+  if PyIsIntBaseTk(tk) and PyIsIntMethodName(attr) then
     PyAttrExists := True;
 end;
 
 { `hasattr(<variant>, "name")` cannot be answered at compile time — the receiver's
-  class is a RUN-TIME fact — but the frontend still knows something decisive: the
-  set of user classes that DECLARE the name. So the answer is a run-time test of
-  the object's class against that set, which is bounded by what `hasattr` can
-  reach and needs no per-class metadata (`decide-nilpy-hasattr-per-instance-
-  semantics` step 2: an ambiguous target "falls back to tracking every class in
-  that ambiguity set").
+  TYPE is a RUN-TIME fact — but the frontend still knows something decisive: the
+  closed world of things that could answer the name. So the answer is a run-time
+  test of what the variant actually holds against that set, which is bounded by
+  what `hasattr` can reach and needs no per-value metadata
+  (`decide-nilpy-hasattr-per-instance-semantics` step 2: an ambiguous target
+  "falls back to tracking every class in that ambiguity set").
 
-  Returns `(pyvartag(recv) = VT_OBJECT) and ((obj is C1) or (obj is C2) ...)`, or
-  -1 when no class declares the name (caller keeps the dynamic-store answer).
+  This mirrors, arm for arm, how PyParseVariantMethod lowers the CALL on the same
+  receiver: an object-tag arm over the classes that answer the name, a
+  `pyvar_is_strtag`-shaped arm for the str methods, and float/int arms for the
+  scalar intrinsics. That correspondence is the whole point. Before, the CALL had
+  those arms and the PREDICATE did not, so every one of `x.upper()`,
+  `x.is_integer()` and `x.keys()` ran fine on an untyped parameter while
+  `hasattr(x, ...)` said the name did not exist — one question, two mechanisms,
+  and only one of them looking at the receiver
+  (bug-n-hasattr-through-an-untyped-parameter-is-always-false).
 
-  Only the class that INTRODUCES the field gets a test: `is` matches descendants
-  too, so testing a base covers every subclass, and FindUField already walks
-  ancestors — emitting one per declaring class would be correct but quadratic in
-  a deep hierarchy.
+  Returns the OR of the applicable arms, or -1 when nothing in the program could
+  answer the name (caller keeps the dynamic-store answer):
 
-  The tag guard is not optional: pyvarobj hands back the raw payload, so an `is`
-  test on an int-holding variant would dereference the integer. Same shape, same
-  reason, as PyParseIsinstance's variant arm.
+      (pyvartag(recv) = VT_OBJECT) and ((obj is C1) or (obj is C2) ...)
+   or (pyvartag(recv) = VT_STRING) or (pyvartag(recv) = VT_CHAR)   { str methods }
+   or (pyvartag(recv) = VT_DOUBLE)                                 { float methods }
+   or (pyvartag(recv) = VT_INT / VT_INT64 / VT_BOOL)               { int methods }
+
+  The class arm asks PyMethNameFor, not FindUField alone. A pylib container
+  reaches half its Python surface under a PASCAL name — `d.keys()` is
+  TPyDict.keylist — and the runtime predicate this ORs with does its lookup
+  through the RTTI, which knows only the Pascal spelling. So `keys`/`values`/
+  `items` and the `__len__`/`__getitem__` family answered False on a variant
+  while the identical call worked. PyMethNameFor is the same function the call's
+  candidate scan uses; a second copy of that table is what the drift was.
+
+  Only the class that INTRODUCES the name gets a test: `is` matches descendants
+  too, so testing a base covers every subclass, and FindUField/FindUMeth already
+  walk ancestors — emitting one per declaring class would be correct but
+  quadratic in a deep hierarchy.
+
+  The tag guard on the object arm is not optional: pyvarobj hands back the raw
+  payload, so an `is` test on an int-holding variant would dereference the
+  integer. Same shape, same reason, as PyParseIsinstance's variant arm.
 
   `recvNode` must already be an evaluate-ONCE value (a hidden temp): it is read
-  once per candidate class plus once for the tag. }
-function PyHasAttrClassChain(recvNode: Integer; const attr: AnsiString): Integer;
-var ci, argN, callN, isN, chain, tagArg, tagCall, lit, guard: Integer;
+  once per candidate class and once per tag test. }
+function PyHasAttrAnsweredBy(ci: Integer; const attr: AnsiString): Boolean;
+{ Does class ci answer this PYTHON attribute name at all — as a field, as a
+  property, or as a method under either its own or pylib's spelling. The one
+  predicate the chain below and its introducer check both ask, so the two cannot
+  disagree about what "answers it" means. }
+begin
+  PyHasAttrAnsweredBy := (ci >= 0) and (not UClsIsRecord[ci]) and
+                         ((FindUField(ci, attr) >= 0) or
+                          (FindUProp(ci, attr) >= 0) or
+                          (FindUMeth(ci, PyMethNameFor(ci, attr)) >= 0));
+end;
+
+function PyHasAttrRuntimeChain(recvNode: Integer; const attr: AnsiString): Integer;
+var ci, argN, callN, isN, chain, lit, guard: Integer;
+    lcAttr, smPName: AnsiString; smTk: TTypeKind; smArgs: Integer;
+
+  function OrIn(acc, n: Integer): Integer;
+  var b: Integer;
+  begin
+    if n < 0 then begin OrIn := acc; Exit; end;
+    if acc < 0 then begin OrIn := n; Exit; end;
+    b := AllocNode(AN_BINOP);
+    ASTIVal[b] := Ord(tkOr);
+    ASTLeft[b] := acc; ASTRight[b] := n;
+    ASTTk[b] := Ord(tyBoolean);
+    OrIn := b;
+  end;
+
+  { `pyvartag(recv) = tag` — -1 if pylib is absent, which leaves every arm off
+    and the old dynamic-store-only path alone. }
+  function TagIs(tag: Integer): Integer;
+  var pi, ta, tc, tl, eq: Integer;
+  begin
+    TagIs := -1;
+    pi := FindProc('pyvartag');
+    if pi < 0 then Exit;
+    ta := AllocNode(AN_ARG);
+    ASTLeft[ta] := recvNode;
+    tc := AllocNode(AN_CALL);
+    ASTIVal[tc] := pi;
+    ASTTk[tc] := Ord(tyInt64);
+    ASTLeft[tc] := ta;
+    tl := AllocNode(AN_INT_LIT);
+    ASTIVal[tl] := tag; ASTTk[tl] := Ord(tyInt64);
+    eq := AllocNode(AN_BINOP);
+    ASTIVal[eq] := Ord(tkEq);
+    ASTLeft[eq] := tc; ASTRight[eq] := tl;
+    ASTTk[eq] := Ord(tyBoolean);
+    TagIs := eq;
+  end;
+
 begin
   Result := -1;
   chain := -1;
   for ci := 0 to UClsCount - 1 do
   begin
     if UClsIsRecord[ci] then Continue;
-    if FindUField(ci, attr) < 0 then Continue;
-    { the INTRODUCER only — a parent that declares it already covers this class }
-    if (UClsParent[ci] >= 0) and (FindUField(UClsParent[ci], attr) >= 0) then Continue;
+    if not PyHasAttrAnsweredBy(ci, attr) then Continue;
+    { the INTRODUCER only — a parent that answers it already covers this class }
+    if PyHasAttrAnsweredBy(UClsParent[ci], attr) then Continue;
     argN := AllocNode(AN_ARG);
     ASTLeft[argN] := recvNode;
     callN := AllocNode(AN_CALL);
@@ -11613,35 +11697,44 @@ begin
     ASTLeft[isN] := callN;
     ASTIVal[isN] := ci;
     ASTTk[isN] := Ord(tyBoolean);
-    if chain < 0 then chain := isN
-    else
-    begin
-      lit := AllocNode(AN_BINOP);
-      ASTIVal[lit] := Ord(tkOr);
-      ASTLeft[lit] := chain; ASTRight[lit] := isN;
-      ASTTk[lit] := Ord(tyBoolean);
-      chain := lit;
-    end;
+    chain := OrIn(chain, isN);
   end;
-  if chain < 0 then Exit;
-  tagArg := AllocNode(AN_ARG);
-  ASTLeft[tagArg] := recvNode;
-  tagCall := AllocNode(AN_CALL);
-  ASTIVal[tagCall] := FindProc('pyvartag');
-  if ASTIVal[tagCall] < 0 then Exit;
-  ASTTk[tagCall] := Ord(tyInt64);
-  ASTLeft[tagCall] := tagArg;
-  lit := AllocNode(AN_INT_LIT);
-  ASTIVal[lit] := VT_OBJECT;
-  ASTTk[lit] := Ord(tyInt64);
-  guard := AllocNode(AN_BINOP);
-  ASTIVal[guard] := Ord(tkEq);
-  ASTLeft[guard] := tagCall; ASTRight[guard] := lit;
-  ASTTk[guard] := Ord(tyBoolean);
-  Result := AllocNode(AN_BINOP);
-  ASTIVal[Result] := Ord(tkAnd);
-  ASTLeft[Result] := guard; ASTRight[Result] := chain;
-  ASTTk[Result] := Ord(tyBoolean);
+  if chain >= 0 then
+  begin
+    guard := TagIs(VT_OBJECT);
+    if guard < 0 then Exit;
+    lit := AllocNode(AN_BINOP);
+    ASTIVal[lit] := Ord(tkAnd);
+    ASTLeft[lit] := guard; ASTRight[lit] := chain;
+    ASTTk[lit] := Ord(tyBoolean);
+    Result := lit;
+  end;
+  { The SCALAR arms, from the same tables PyParseVariantMethod dispatches on.
+    They are OR'ed rather than chosen: only the run-time tag knows which of them
+    the variant is, and one name may legitimately belong to several (`count` is
+    a str method AND a list method). }
+  lcAttr := LowerCase(attr);
+  if PyStrMethodInfo(attr, smPName, smTk, smArgs) then
+  begin
+    { both string tags, exactly what pyvar_is_strtag admits }
+    Result := OrIn(Result, TagIs(VT_STRING));
+    Result := OrIn(Result, TagIs(VT_CHAR));
+  end;
+  if PyIsFloatMethodName(lcAttr) then
+    Result := OrIn(Result, TagIs(VT_DOUBLE));
+  { The int family, VT_BOOL included: bool IS an int in Python and
+    `True.bit_length()` is 1 — which this compiler already evaluates correctly,
+    so the predicate must not disagree with its own call. (pyvar_is_inttag
+    deliberately excludes VT_BOOL because the CALL's shared-name arm has to pick
+    an int- or float-flavoured implementation, a question a presence check does
+    not have.) PyIsIntFloatSharedMethodName is the three names int shares with
+    float. }
+  if PyIsIntMethodName(attr) or PyIsIntFloatSharedMethodName(lcAttr) then
+  begin
+    Result := OrIn(Result, TagIs(VT_INT));
+    Result := OrIn(Result, TagIs(VT_INT64));
+    Result := OrIn(Result, TagIs(VT_BOOL));
+  end;
 end;
 
 { `getattr(o, name)` / `hasattr(o, name)` where the NAME IS COMPUTED — the only
@@ -40986,7 +41079,7 @@ begin
           if (not atIsGet) and (IntToTypeKind(ASTTk[atRecv]) = tyVariant) then
           begin
             atRecv := PyEvalOnce(atRecv);   { read once per candidate + once for the tag }
-            atDflt := PyHasAttrClassChain(atRecv, atName);
+            atDflt := PyHasAttrRuntimeChain(atRecv, atName);
           end
           else
             atDflt := -1;
