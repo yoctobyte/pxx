@@ -8759,14 +8759,27 @@ test-core: $(COMPILER)
 	# recorded: Base starts at 100 so Add(42)=142 and Bump leaves 101, and each
 	# `kind=` is checked against compiler/defs.inc's TTypeKind (1 tyInteger,
 	# 5 tyRecord, 6 tyClass, 13 tyInt64), which is what the RTTI blob carries.
-	# That last point is itself a trap, filed as
+	# That last point WAS a trap -- typinfo.pas documented these fields as its
+	# own FPC-ordered TTypeKind, where 13 means tkRecord. Settled 2026-08-26 by
 	# bug-a-rtti-kind-numbers-are-the-compilers-not-the-typinfo-enum-the-unit-documents:
-	# typinfo.pas documents these fields as its own FPC-ordered TTypeKind, where
-	# 13 means tkRecord. If that ticket is taken, these two rows change with it.
+	# the blob KEEPS the compiler's numbering (these rows do not change) because
+	# these fields select calling shapes and store widths that FPC's coarser
+	# kinds cannot express; typinfo now names it (`pxxTk*`) and bridges it
+	# (PxxKindToTypeKind). test_rtti_kind_numbering below pins both directions.
 	./$(COMPILER) -Fulib/rtl test/test_rtti_field_get_by_name.pas $(TESTTMP)/sweep_rtti_field26
 	test "$$($(TESTTMP)/sweep_rtti_field26)" = "$$(printf 'class=TThing\nCount=42 kind=1\nTag=99 kind=13\nTag(after set)=123\nBuddy=self kind=6\nInner.a=7 kind=5\nabsent=ok\nDONE')"
 	./$(COMPILER) -Fulib/rtl test/test_rtti_method_call_by_name.pas $(TESTTMP)/sweep_rtti_method26
 	test "$$($(TESTTMP)/sweep_rtti_method26)" = "$$(printf 'Add arity=2 retKind=13\nAdd param0kind=6 param1kind=13\nAdd(42)=142\nBump arity=1 retKind=0\nBase(after Bump)=101\nabsent=ok\nDONE')"
+	# The two numberings, pinned in both directions. Every row is derived from
+	# compiler/defs.inc's TTypeKind and lib/rtl/typinfo.pas's TTypeKind, not
+	# recorded: Int64 is 13 there and 19 here, Double 19 vs tkFloat 4, Byte 8 vs
+	# tkInteger 1. The last row is the whole reason the numbering is named
+	# rather than converted -- pxx 15 (NativeInt) and FPC 15 (tkClass) are both
+	# valid and mean different things, so a wrong comparison can be accidentally
+	# TRUE. If this ever diverges, read decide-rtti-kind-numbering before
+	# "fixing" either side.
+	./$(COMPILER) -Fulib/rtl test/test_rtti_kind_numbering.pas $(TESTTMP)/sweep_rtti_kindnum
+	test "$$($(TESTTMP)/sweep_rtti_kindnum)" = "$$(cat test/test_rtti_kind_numbering.expected)"
 	# -O3 residency across a COROUTINE switch: CoSwitch saves only the GPR
 	# callee-saved set, so the float pool has to be spilled around IR_COSWITCH
 	# or the generator's own float code corrupts the consumer's residents.

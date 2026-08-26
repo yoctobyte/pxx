@@ -830,6 +830,14 @@ end;
   devdocs/progress: FPC-faithful, lax behind --strict-*). Widening this table
   to Extended-precision floats or Unicode variants can wait for a real corpus
   need. }
+{ Read-side twin: `PxxKindToTypeKind` in lib/rtl/typinfo.pas, which every
+  compiled program links. Deliberately two copies -- this one runs in the
+  compiler, that one in the program, and there is no source they can share.
+  Change either and change both. NOTE this is used for the TypeInfo() HEADER's
+  Kind word only: PMethInfo.RetKind/ParamKinds, PFieldInfo.TypeKind and
+  PPropInfo.OrdType keep the compiler's own numbering, because they select
+  calling shapes and store widths that FPC's coarser kinds cannot express
+  (devdocs/progress/decided/decide-rtti-kind-numbering.md). }
 function PxxTkToFPCKind(tk: Integer): Integer;
 begin
   case tk of

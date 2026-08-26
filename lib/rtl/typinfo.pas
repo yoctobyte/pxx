@@ -42,9 +42,15 @@ type
     Code:    Pointer;
     {$ifdef CPU32} _pad_code: LongInt; {$endif}
     Arity:      Int64;    { param count, incl. Self at index 0 for a method }
-    RetKind:    Int64;    { Ord(TTypeKind) of the return type; 0 = a procedure }
-    ParamKinds: Pointer;  { ^block of 2*Arity words: `Arity` Int64 Ord(TTypeKind)
-                            words, THEN `Arity` param-NAME pointers. nil if
+    RetKind:    Int64;    { the COMPILER's kind tag for the return type -- a
+                            `pxxTk*` constant, NOT Ord(TTypeKind); 0 = a
+                            procedure. It selects the native-call trampoline's
+                            return shape, so it carries pxx's finer numbering
+                            on purpose. PxxKindToTypeKind() converts. }
+    ParamKinds: Pointer;  { ^block of 2*Arity words: `Arity` Int64 `pxxTk*`
+                            words (the COMPILER's numbering, not
+                            Ord(TTypeKind) -- same reason as RetKind above),
+                            THEN `Arity` param-NAME pointers. nil if
                             Arity is 0. Reading only the kinds is the original
                             contract and still correct; the names are what let a
                             reflected caller bind a KEYWORD argument by name. }
@@ -57,7 +63,8 @@ type
     NamePtr: PString;
     {$ifdef CPU32} _pad_name: LongInt; {$endif}
     Offset:   Int64;      { byte offset of the field within the instance }
-    TypeKind: Int64;      { Ord(TTypeKind) of the field }
+    TypeKind: Int64;      { the field's COMPILER kind tag -- a `pxxTk*`
+                            constant, NOT Ord(TTypeKind) }
     RecId:    Int64;      { record/class id for aggregates, else REC_NONE }
     Flags:    Int64;      { bit0 = published (RTTI_FIELD_FLAG_PUBLISHED) }
   end;
@@ -231,7 +238,12 @@ type
     GetRef:  Int64;      { field offset or method code ptr }
     SetKind: Int64;      { 0=field, 1=method }
     SetRef:  Int64;      { field offset or method code ptr }
-    OrdType: Int64;      { type kind hint (size/sign for ordinals) }
+    OrdType: Int64;      { the property's COMPILER kind tag -- a `pxxTk*`
+                           constant, NOT Ord(TTypeKind) and NOT a TOrdType
+                           despite the name. GetOrdProp/SetOrdProp read the
+                           ordinal's WIDTH and SIGN out of it (TypeKindSize /
+                           TypeKindSigned), which is why it cannot be FPC's
+                           coarser numbering: tkInteger spans 1, 2 and 4 bytes. }
   end;
   PPropInfo = ^TPropInfo;
 
@@ -261,6 +273,63 @@ type
   PInt64  = ^Int64;
   PPointer = ^Pointer;
 
+const
+  { ---- The COMPILER's OWN type-kind numbering, which is what the RTTI BLOB
+    carries, and which is NOT the TTypeKind declared above ----
+
+    Two numberings meet in this unit and they are not the same one:
+
+      * `TTypeKind` (above) is FPC's public enum, in FPC's order. It is the
+        numbering of the FACADE — `TypeInfo(T)^.Kind` and everything reached
+        through `GetTypeData`. FPC-written code comparing against `tkInt64` or
+        indexing `array[TTypeKind] of X` is talking about this one.
+
+      * `pxxTk*` below is `compiler/defs.inc`'s `TTypeKind`, the compiler's
+        private tag. It is what `TMethInfo.RetKind`, `TMethInfo.ParamKinds`,
+        `TFieldInfo.TypeKind` and `TPropInfo.OrdType` actually contain.
+
+    They OVERLAP with different meanings — 1, 2, 11, 15, 18 and 19 are all
+    valid in both and mean different things in each — so `mi^.RetKind =
+    Ord(tkInt64)` is not merely wrong, it is quietly wrong. Compare against a
+    `pxxTk*` constant, or convert with `PxxKindToTypeKind` below.
+
+    Why the blob does not simply carry FPC's numbering (decided twice, see
+    devdocs/progress/decided/decide-rtti-kind-numbering.md): these four fields
+    are not type-identity, they are ABI SELECTION. `RetKind`/`ParamKinds` pick
+    the native-call trampoline's calling shape, and `OrdType` decides how many
+    bytes `SetOrdProp` STORES. FPC's kind space is deliberately coarser — it
+    keeps width in `TOrdType` and float precision in `TFloatType`, so `tkFloat`
+    cannot separate Single from Double and `tkInteger` cannot separate Byte from
+    LongInt. Numbering these fields FPC's way would erase exactly the
+    distinctions they exist to make. }
+  pxxTkUnknown      = 0;
+  pxxTkInteger      = 1;    { Integer — 4-byte signed, the bootstrap ordinal }
+  pxxTkBoolean      = 2;
+  pxxTkChar         = 3;
+  pxxTkString       = 4;    { legacy alias, see defs.inc }
+  pxxTkRecord       = 5;    { also how a COM interface is spelled }
+  pxxTkClass        = 6;
+  pxxTkInt8         = 7;
+  pxxTkUInt8        = 8;
+  pxxTkInt16        = 9;
+  pxxTkUInt16       = 10;
+  pxxTkInt32        = 11;
+  pxxTkUInt32       = 12;
+  pxxTkInt64        = 13;
+  pxxTkUInt64       = 14;
+  pxxTkNativeInt    = 15;
+  pxxTkNativeUInt   = 16;
+  pxxTkPointer      = 17;
+  pxxTkSingle       = 18;
+  pxxTkDouble       = 19;
+  pxxTkExtended     = 20;
+  pxxTkSet          = 21;
+  pxxTkVariant      = 22;
+  pxxTkAnsiString   = 23;
+  pxxTkAuto         = 24;
+  pxxTkShortString  = 25;
+  pxxTkFixedString  = 26;
+
 function GetClass(const name: string): PClassRTTI;
 function GetClassName(cls: PClassRTTI): string;
 function CreateInstance(cls: PClassRTTI): Pointer;
@@ -278,15 +347,45 @@ function SetFieldByName(instance: Pointer; cls: PClassRTTI; const name: string; 
   the class hierarchy for the descriptor; GetInstanceRTTI recovers a live
   object's class RTTI from the VMT backlink ([[instance] - 8]); GetFieldPtr
   returns the field's address inside `instance` (nil if absent) and, via `kind`,
-  its Ord(TTypeKind). Foundation for the exec()/getattr host bridge. }
+  its `pxxTk*` kind tag (the compiler's numbering -- see the pxxTk block).
+  Foundation for the exec()/getattr host bridge. }
 function GetFieldInfoByName(cls: PClassRTTI; const name: string): PFieldInfo;
 function GetInstanceRTTI(instance: Pointer): PClassRTTI;
 function GetFieldPtr(instance: Pointer; cls: PClassRTTI; const name: string; var kind: Int64): Pointer;
 { Full method descriptor by name (any method, walks the hierarchy) — Code +
-  Arity + RetKind + ParamKinds, what the generic native-call trampoline needs. }
+  Arity + RetKind + ParamKinds, what the generic native-call trampoline needs.
+  RetKind and the ParamKinds words are `pxxTk*` tags, not Ord(TTypeKind): the
+  trampoline picks a CALLING SHAPE from them, which needs pxx's finer
+  numbering. See the pxxTk constant block. }
 function GetMethInfoByName(cls: PClassRTTI; const name: string): PMethInfo;
 function GetEnumValue(et: PEnumRTTI; const name: string): Integer;
 procedure SetSetProp(instance: Pointer; p: PPropInfo; ordinal: Integer);
+
+{ Bridge the two numberings this unit carries: take a `pxxTk*` value out of the
+  RTTI blob (`RetKind`, a `ParamKinds` word, `TFieldInfo.TypeKind`,
+  `TPropInfo.OrdType`) and return the matching `Ord(TTypeKind)` — FPC's public
+  numbering, the same one `TypeInfo(T)^.Kind` speaks. So the comparison the blob
+  invites but does not satisfy,
+
+      if mi^.RetKind = Ord(tkInt64) then          { WRONG: 13 vs 19 }
+
+  is spelled either of these instead:
+
+      if mi^.RetKind = pxxTkInt64 then                       { exact }
+      if PxxKindToTypeKind(mi^.RetKind) = Ord(tkInt64) then  { FPC-shaped }
+
+  MANY-TO-ONE, on purpose and irreversibly: Single/Double/Extended all answer
+  tkFloat, and the six sub-word integer kinds all answer tkInteger, because that
+  is what FPC's enum says. Use it to ASK WHAT FAMILY a kind is in; never to
+  re-derive a width or a calling shape — go back to the `pxxTk*` value for that.
+  Unmapped kinds answer tkUnknown (0), which is also what a procedure's RetKind
+  reads as, so test `RetKind = 0` BEFORE converting if that distinction matters.
+
+  This table is the read-side twin of `PxxTkToFPCKind` in
+  `compiler/rtti_emit.inc`; the two are deliberately separate copies because one
+  lives in the compiler binary and one in every compiled program, with no source
+  they can share. Change either and change both. }
+function PxxKindToTypeKind(tk: Int64): Int64;
 
 { ---- The FPC TypInfo enum surface, over the same blob ----
   `TypeInfo(TEnum)` is a compiler intrinsic yielding the enum's RTTI blob address -- which
@@ -332,6 +431,37 @@ begin
   else TiCompareText := 0;
 end;
 
+function PxxKindToTypeKind(tk: Int64): Int64;
+begin
+  if (tk = pxxTkInteger) or (tk = pxxTkInt8) or (tk = pxxTkUInt8) or
+     (tk = pxxTkInt16) or (tk = pxxTkUInt16) or (tk = pxxTkInt32) or
+     (tk = pxxTkUInt32) or (tk = pxxTkNativeInt) or (tk = pxxTkNativeUInt) then
+    PxxKindToTypeKind := Ord(tkInteger)
+  else if tk = pxxTkChar then PxxKindToTypeKind := Ord(tkChar)
+  else if (tk = pxxTkSingle) or (tk = pxxTkDouble) or (tk = pxxTkExtended) then
+    PxxKindToTypeKind := Ord(tkFloat)
+  else if tk = pxxTkSet then PxxKindToTypeKind := Ord(tkSet)
+  else if (tk = pxxTkShortString) or (tk = pxxTkFixedString) or
+          (tk = pxxTkString) then PxxKindToTypeKind := Ord(tkSString)
+  else if tk = pxxTkAnsiString then PxxKindToTypeKind := Ord(tkAString)
+  else if tk = pxxTkVariant then PxxKindToTypeKind := Ord(tkVariant)
+  else if tk = pxxTkRecord then PxxKindToTypeKind := Ord(tkRecord)
+  else if tk = pxxTkClass then PxxKindToTypeKind := Ord(tkClass)
+  else if tk = pxxTkBoolean then PxxKindToTypeKind := Ord(tkBool)
+  else if tk = pxxTkInt64 then PxxKindToTypeKind := Ord(tkInt64)
+  else if tk = pxxTkUInt64 then PxxKindToTypeKind := Ord(tkQWord)
+  else if tk = pxxTkPointer then PxxKindToTypeKind := Ord(tkPointer)
+  else PxxKindToTypeKind := Ord(tkUnknown);
+end;
+
+{ TypeKindSize and TypeKindSigned decode the COMPILER's numbering (`pxxTk*`),
+  not `TTypeKind`, and that is deliberate rather than an oversight: their whole
+  job is to answer a WIDTH and a SIGN, and only the compiler's numbering carries
+  those — FPC's `tkInteger` covers ShortInt through LongWord at once. Their
+  callers are GetOrdProp/SetOrdProp over `TPropInfo.OrdType`, which is a
+  `pxxTk*` value, and SetOrdProp uses the width to choose the STORE size, so
+  getting this wrong corrupts the fields next door. Do not "fix" these to
+  TTypeKind; see devdocs/progress/decided/decide-rtti-kind-numbering.md. }
 function TypeKindSize(tk: Int64): Integer;
 begin
   if (tk = 2) or (tk = 3) or (tk = 7) or (tk = 8) then TypeKindSize := 1
@@ -812,7 +942,7 @@ begin
 end;
 
 { Address of field `name` within `instance` (nil if absent); `kind` receives its
-  Ord(TTypeKind). The caller boxes/unboxes the pointed-to storage per kind. }
+  a `pxxTk*` tag. The caller boxes/unboxes the pointed-to storage per kind. }
 function GetFieldPtr(instance: Pointer; cls: PClassRTTI; const name: string; var kind: Int64): Pointer;
 var fi: PFieldInfo;
 begin

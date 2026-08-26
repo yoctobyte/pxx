@@ -131,3 +131,106 @@ is introduced.
 
 ## Log
 - 2026-08-25 — decided, commit 28c19f214.
+
+---
+
+# RE-DECIDED 2026-08-26 — **option 3: the blob keeps pxx numbering, the unit names it and bridges it**
+
+Decided by an agent under the same no-human-available rule. The 2026-08-25
+record above stands as written; it is superseded, not deleted, because its
+*derivation* was sound and only its *premise about the readers* was incomplete.
+
+## What the 2026-08-25 decision did not measure
+
+It priced the reader sweep as "`TypeKindSize`, `TypeKindSigned`, the pyexec
+bridge, both RTTI tests" — four mechanical edits. Measured, it is ~40 sites in
+`compiler/builtin/pylib.pas` and `compiler/builtin/pyeval.pas`, and, decisively,
+**they are not type-identity tests. They are ABI trampoline selection.**
+
+`lib/rtl/typinfo.pas:279` says so in the unit itself:
+
+> *"Code + Arity + RetKind + ParamKinds, what the generic native-call
+> trampoline needs."*
+
+- `pyeval.pas:294` `TK_DOUBLE = 19` = `Ord(tyDouble)`, and
+  `if (rk = TK_DOUBLE) and (n = 0)` casts `mi^.Code` to a **Double-returning**
+  proc pointer (`TFpopFn`) — an xmm-return ABI.
+- `pyeval.pas` `ptrFamily` accepts exactly `1, 2, 3, 13, 17, 6, 23`
+  (tyInteger, tyBoolean, tyChar, tyInt64, tyPointer, tyClass, tyAnsiString):
+  the **pointer-sized integer-register** class, and rejects everything else with
+  a named diagnostic.
+- `pylib.pas:4196` and `:18241-18260` pick between `TVarArgI` / `TVarArgD` /
+  `TVarArgS` / `TVarArgB` / `TVarArgV` / `TVarArgO` the same way.
+
+## Why option 1 cannot be implemented as instructed
+
+`PxxTkToFPCKind` is **lossy in exactly the distinctions the trampoline runs on**,
+because FPC's kind space is coarser than an ABI selector needs — FPC carries
+width and float precision in `TTypeData` (`TOrdType` / `TFloatType`), not in the
+kind word.
+
+1. `tySingle`, `tyDouble` and `tyExtended` all map to `4` (tkFloat). A
+   0-arg Single-returning host method would then be called through a
+   Double-returning pointer: the callee leaves 32 bits in xmm0, the caller reads
+   64. Today `rk = 19` means tyDouble and nothing else, and Single is correctly
+   declined. **No value of the FPC-numbered field can separate them.**
+2. `TypeKindSize` / `TypeKindSigned` answer *width and sign* from the kind word,
+   and `SetOrdProp` (`typinfo.pas:515`) uses that width to choose
+   `PUInt8^ / PUInt16^ / PInt32^ / PInt64^` **for the store**. FPC's `tkInteger`
+   (1) covers ShortInt, Byte, SmallInt, Word, LongInt and LongWord — 1, 2 and 4
+   bytes, signed and unsigned. Under option 1 a published `Byte` property is
+   written 4 or 8 bytes wide: adjacent-field corruption, silently.
+3. Everything not in the table maps to `0`, and `pylib.pas:4635` reads
+   `mi^.RetKind <> 0` as *"is a function"*. Any unmapped return type silently
+   becomes a procedure and its result is dropped.
+4. The two numbering spaces **overlap with different meanings** on 1, 2, 11, 15,
+   18 and 19 (pxx 15 = tyNativeInt vs FPC 15 = tkClass; pxx 2 = tyBoolean vs FPC
+   2 = tkChar; pxx 19 = tyDouble vs FPC 19 = tkInt64). A missed reader in a
+   ~40-site sweep does not fail loudly — it selects the wrong ABI.
+
+So option 1 buys a true doc comment at the price of the silent-wrong-value class
+the ticket was opened to remove, and it would need a width/precision sub-field
+added to `PMethInfo`, `PFieldInfo` **and** `PPropInfo` to be implementable at
+all — *adding* a mechanism where the 2026-08-25 derivation expected to delete one.
+
+## A fourth field the earlier passes missed
+
+`TPropInfo.OrdType` (`typinfo.pas:234`) is a *fourth* kind word in pxx numbering
+— it is what `GetOrdProp`/`SetOrdProp` feed to `TypeKindSize`. Neither the bug
+ticket nor the 2026-08-25 decision names it. Any "route the three words through
+`PxxTkToFPCKind`" edit would have left it behind, in a field that decides how
+many bytes a reflective store writes.
+
+## The line, restated so it actually holds
+
+The 2026-08-25 line was right and is kept: **the typinfo facade speaks FPC's
+public numbering; the compiler's internal tags stay ours and stay private.**
+What it got wrong is *where the seam sits*. `RetKind` / `ParamKinds` /
+`TypeKind` / `OrdType` are **not** facade — the unit's own comment says they are
+what the native-call trampoline needs. They are the private half. The facade is
+`TypeInfo()`'s `TTypeInfoHdr.Kind` and `GetTypeData`, which already speak FPC's
+numbering and are untouched.
+
+So the seam is a **converter at the read boundary**, not a conversion at emit.
+
+## The work
+
+1. `lib/rtl/typinfo.pas` — a named `pxxTk*` constant block declaring the
+   compiler's numbering as what it is, so the raw fields are spellable
+   (`mi^.RetKind = pxxTkInt64`) instead of only mis-spellable.
+2. `PxxKindToTypeKind()` — the read-side twin of `PxxTkToFPCKind`, so
+   `PxxKindToTypeKind(mi^.RetKind) = Ord(tkInt64)` is correct and the two halves
+   of the unit are relatable. The duplicated table is deliberate and
+   cross-referenced both ways: emit-side lives in the compiler binary, read-side
+   in every user program; they cannot share a source.
+3. Fix the doc comments that assert `Ord(TTypeKind)` — `:44`, `:45`, `:60`,
+   `:234`, `:279`, `:816` — and say, at `TypeKindSize`/`TypeKindSigned`, that
+   decoding the compiler's numbering there is deliberate and why.
+4. `TTypeKind` keeps its name and its FPC order, unchanged. No enum is added
+   (constants, not a second `array[TPxxTypeKind]`-shaped enum, so the
+   "two adjacent enums" smell the 2026-08-25 note objected to does not return).
+
+## Log
+- 2026-08-25 — decided option 1, commit 28c19f214.
+- 2026-08-26 — **re-decided option 3**; option 1 measured unimplementable
+  without new width fields, see above.

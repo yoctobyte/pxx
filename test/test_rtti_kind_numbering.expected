@@ -1,0 +1,17 @@
+RetI64 = Ord(tkInt64)?      FALSE
+RetI64 = pxxTkInt64?        TRUE
+RetI64 converted = tkInt64? TRUE
+RetI64  raw=13 asFPC=19
+RetBool raw=2 asFPC=18
+RetDbl  raw=19 asFPC=4
+RetStr  raw=23 asFPC=9
+NoRet raw=0 (0 = procedure)
+field B raw=8 asFPC=1
+  width=1 signed=FALSE
+field I raw=13 asFPC=19
+  width=8 signed=TRUE
+field S raw=23 asFPC=9
+Single/Double both tkFloat?   TRUE
+UInt8/Int32 both tkInteger?   TRUE
+...but widths still differ:   1 vs 4
+pxx 15 -> 1 (tkInteger=1), while Ord(tkClass)=15
