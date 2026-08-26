@@ -4758,7 +4758,33 @@ def make_preempted(clone, tested, commit_after=None):
     return preempted
 
 
-def bisect_step(clone, host, st, tier):
+def repair_regressions(clone, host, st):
+    """Bring every open regression's classification up to the CURRENT rules.
+
+    THIS USED TO LIVE IN bisect_step(), AND THAT WAS THE BUG. bisect_step is the
+    LAST arm of an elif chain of idle phases -- pin verify, breadth backfill,
+    opt, bench, then bisect -- so a repair placed there runs only when every
+    earlier phase has declined. On this box pin verify is preempted by pushes
+    round after round ("pin verify preempted by a push -- will resume", three
+    times in one hour), and the sibling ticket
+    bug-t-the-push-rate-starves-breadth-coverage-entirely measures idle work
+    starved for 40h at a stretch. So a CORRECTION to what the board publishes
+    was gated behind the busiest lock in the system, and the entry it was
+    written for -- the aarch64 red blamed on 253 lines of `prio:` frontmatter --
+    kept publishing the wrong attribution while the fix sat in the tree.
+
+    Same shape as the defects it repairs: the right answer existed and the
+    common path could not reach it. So it runs every cycle now, on the way past,
+    regardless of phase. The cost is one diff-tree and one rev-list per OPEN
+    regression -- there are two -- against a cycle that otherwise spends
+    minutes compiling.
+
+    Idempotent and cheap by construction: every field is recomputed from the
+    BOUNDS rather than cached behind an existence check, so a rule change
+    (NOTEST_PREFIXES, PIN_AXIS_RULE) corrects entries in both directions.
+    """
+    for reg in st.get("open_regressions") or []:
+        rng = reg.get("range", [])
     """Idle work: narrow one open regression range by testing its midpoint
     with ONLY the failing job."""
     for reg in st["open_regressions"]:
@@ -4855,6 +4881,18 @@ def bisect_step(clone, host, st, tier):
             reg["pin_axis"] = PIN_AXIS_RULE
             reg["range"] = rng = obs
             save_state(clone, host, st)
+
+
+def bisect_step(clone, host, st, tier):
+    """Idle work: narrow one open regression range by testing its midpoint
+    with ONLY the failing job."""
+    # The classification repairs used to be inline here; they now run every
+    # cycle (see repair_regressions). Called again rather than assumed: this
+    # function is also reached directly, and a repair that depends on its
+    # caller having been polite is not a repair.
+    repair_regressions(clone, host, st)
+    for reg in st["open_regressions"]:
+        rng = reg.get("range", [])
         if len(rng) <= 1:
             continue
         if reg.get("cascade"):
@@ -6165,6 +6203,12 @@ def main():
                 continue
             clone.fetch()
             st = load_state(clone, host)
+            # Every cycle, before any phase decision: what the board says about
+            # an open regression must reflect the CURRENT rules, and must not
+            # wait for an idle slot that a busy box never grants. Two diff-trees
+            # and two rev-lists against a cycle that otherwise spends minutes
+            # compiling. See repair_regressions() for why this moved.
+            repair_regressions(clone, host, st)
             head = clone.remote_head()
             tested = (st["last"] or {}).get("sha")
             fast = args.fast_tier if args.fast_tier not in ("none", args.tier) \
