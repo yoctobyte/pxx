@@ -6862,15 +6862,13 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-08-26T07:18:11Z",
+  "date": "2026-08-26T09:24:09Z",
   "red": [
-   "test-fpjson#src:tools/install_lib_candidates.sh",
-   "test-nilpy#src:test/test_nilpy_lowercase_name_vs_class.npy",
-   "test-nilpy#src:test/test_nilpy_isinstance_over_a_type_value.npy"
+   "test-fpjson#src:tools/install_lib_candidates.sh"
   ],
-  "sha": "b924d8b4ae326e7cc866cabd5ab9715519e65cb2",
+  "sha": "0a1acd15ff6e30c2108ffca92e143618066b6910",
   "tier": "full",
-  "ver": "v376",
+  "ver": "v377",
   "verdict": "RED"
  },
  "renamed_from": [
