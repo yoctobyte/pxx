@@ -80,3 +80,65 @@ time ./compiler/pascal26 /tmp/tiny.pas  /tmp/o     # ~0.24s
 Gate when fixed: `make compiler/pascal26` (byte-identical fixedpoint) + the two
 timings above re-measured in the resolve note, plus a byte-identical check of a
 program that DOES use whatever was made conditional.
+
+## Track T: what this costs the MATRIX (measured 2026-08-26, pxx-aa)
+
+Filed here rather than as a new ticket — T owns the tool, never the bug. The
+numbers are the tooling side of the same defect, and they are the reason this
+ticket's `prio: 45` understates it.
+
+### The tax is the whole job, not part of it
+
+Measured at HEAD, i.e. **after** the hotspot fixes, on this box:
+
+| compile | wall |
+| --- | --- |
+| `begin end.` (Pascal) | **0.25s** |
+| `int main(void){return 0;}` (C) | **0.44s** |
+| zero-byte `.npy` | **4.49s** |
+| `test/test_nil_python_core.npy` — a real test | **4.59s** |
+| `test/lib_mimic_xml_etree_elementtree.npy` — 288 lines, the biggest | **5.58s** |
+
+A real NilPy test costs 4.59s against an empty file's 4.49s. **The test content
+is free; the fixed tax is essentially the entire job.** One frontend pays ~4.2s
+that no other frontend pays, for an empty file.
+
+Isolating the units: a *Pascal* program whose whole body is `uses pylib;` costs
+**2.93s**. So ~2.7s of the tax is `pylib.pas` (18,996 lines) alone, before
+`pyeval.pas` (5,733) and the frontend's own setup.
+
+### It is the largest single block in the matrix
+
+`test-nilpy` is **719 of the full tier's 3,063 jobs (23%) and 70% of its CPU**,
+mean 15.2s per job in the watcher's learned metrics. Paying the ~4.2s tax
+**once** instead of 719 times removes **~3,016 CPU-seconds**. Against the
+pre-hotspot-fix matrix that is 24%; against what remains after those fixes it is
+a larger fraction still, because the fixes shrank the denominator too. The next
+full tier at HEAD gives the real figure and I will append it rather than
+extrapolate further.
+
+### The scheduler is NOT the problem — a deliberate negative result
+
+Same run: 12,319 CPU-seconds against 13,663 core-seconds available (2277s wall
+× 6 cores) = **90% utilisation**. There is no meaningful parallelism to reclaim,
+no serialisation to unpick, and ~1,343 idle core-seconds is close to the floor
+for a job graph with dependencies. **Anyone optimising the matrix should not
+start with the scheduler**, and I would rather record that than have the next
+person measure it again.
+
+### Why the tooling side cannot fix it
+
+`--help` offers no precompiled-unit or unit-cache facility: `-Fu` adds a *search
+root*, not a cache. So every invocation compiles those 24,729 lines from source
+and there is nothing testmgr can do about it — a test harness cannot share an
+artifact the compiler has no way to emit or consume. This ticket is the fix;
+there is no tooling workaround to build in the meantime.
+
+### The prio note
+
+The owner's loudest standing complaint is that testing overhead is ~95% of
+development time. This is the single largest identified block of pure repeated
+work in the matrix, it costs no coverage to remove, and it is 4.2 seconds on
+every NilPy user's hello-world as well. `prio: 45` looks low against that;
+raising it is the coordinator's call, not T's, so this is a flag rather than an
+edit.
