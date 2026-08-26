@@ -18,6 +18,54 @@ wrong value far from the cause.** Three from one week:
 So: **reach for the tool that makes a wrong VALUE visible, not the one that
 makes a crash easier to locate.** A crash was never the expensive case.
 
+## Find your section
+
+The sections below accumulated in the order they were learned, which is the wrong
+order to read them in. Route by what you are holding:
+
+**You have a failing thing and want the tool**
+- `## Order` -- the tool per question, and the reason to reach for one at all
+- ``## `perf` being blocked is not "no profiler"`` -- FPC `-pg` + gprof, read call
+  counts not percentages
+
+**A measurement or a verdict is telling you something and you are about to believe it**
+- `## Two traps that produced confident wrong readings`
+- `## A bisect can name the RIGHT commit and still be wrong` -- the tell is that
+  the named commit looks like an improvement
+- `## A number moving in the direction you hoped is not a check` -- the
+  confirmation may be the symptom
+- ``## "The pinned binary reproduces it" may be a claim about a MIXED compiler``
+- `## A silent assertion makes the harness report something else, confidently`
+- `## When you are about to conclude something`
+
+**A check exists, passes, and you are trusting it**
+- `## Assert the INVARIANT, not the current numbers` -- and assert the
+  CONSEQUENCE, not the number
+- `## A guard that greps the source can only catch what is visible in the text`
+- ``## "Ruled out" and "could not look" must never print the same`` -- the
+  strongest instance of the asserts-nothing family, plus close conditions about
+  the wrong subject and diffs against a missing operand
+- `## A correct fix on an opportunistic path is inert` -- the tests answer *does
+  it work*, never *does it run*
+
+**You are about to write the fix**
+- `## A blocklist costs one outage per symptom; an allowlist closes the class`
+  -- and key an exemption on what a thing DECLARES, not what it appears to BE
+- `## A one-way repair flag defeats the mechanism that would have corrected it`
+  -- store a rule version, re-derive from bounds, never filter in place
+- `## The design counterpart: choose an ILLEGAL sentinel, never a plausible one`
+
+**You are reading a ticket, or writing one**
+- ``## A ticket's prescription is a hypothesis, and it can rule out the answer``
+  -- when a fix does not take, re-read what the ticket EXCLUDED
+- `## A comment is an unverified claim, and tickets inherit it`
+- `## Record the negative result` -- and record the option you measured and
+  declined, with its number
+
+Its sibling `normalise-dont-special-case.md` carries the structural half: why the
+second path is the broken one, and why a special case gets the careful wording
+while the general case keeps the words from before anyone knew.
+
 ## Order
 
 **1. Does it disagree with CPython (NilPy) or gcc/FPC (C/Pascal)?**
@@ -605,6 +653,14 @@ Three things to carry:
   "nothing killed it" -- it is *every hypothesis that would have left evidence
   did not happen*, which leaves the one that never does. That is a real narrowing
   and it is the most the evidence supports.
+
+**The most literal instance: a diff against a missing operand.** The bench
+harness emits `CANARY-DIFF vs -O0` for each optimisation level -- and when the
+`-O0` build itself fails, `ref_out` stays `None`, so every other level dutifully
+reports a difference from a baseline that was never produced. Three red rows, one
+defect, and nothing in the output separates *the levels disagree* from *there was
+nothing to compare against*. Any comparison must state that its reference exists
+before reporting a difference from it.
 
 The design counterpart is now in `tools/whokilled.sh`: **three verdicts, and any
 blind probe forces a distinct exit code**, so a caller cannot mistake blindness
