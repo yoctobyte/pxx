@@ -100,8 +100,13 @@ check(r["dur"] == 1.2, "dur is rounded to 0.1s")
 print("\nthe extraction from main() dropped nothing")
 r = testmgr.report_job(job(status="fail", flaky=True, attempts=3,
                            advisory=True, pin_built=True))
+# "subject" joined 2026-08-26: what a FAILING test declares it is about, via a
+# PXX-SUBJECT: marker in its own source, so a red arrives carrying the priority
+# of its subject instead of only the priority of being red. "" for passing jobs
+# and for tests that declare nothing.
 expect = {"name", "cls", "src", "sel", "pin_built", "advisory", "status",
-          "flaky", "attempts", "dur", "exp_dur", "mem", "cpu", "reason", "log"}
+          "subject", "flaky", "attempts", "dur", "exp_dur", "mem", "cpu",
+          "reason", "log"}
 check(set(r) == expect,
       "the key set is exactly the documented one",
       "missing: %s / extra: %s" % (sorted(expect - set(r)), sorted(set(r) - expect)))

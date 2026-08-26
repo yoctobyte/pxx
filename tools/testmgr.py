@@ -1469,6 +1469,9 @@ def report_job(j):
             "pin_built": j.pin_built,
             "advisory": j.advisory,
             "status": j.status,
+            # Only for reds -- see job_subject(). "" for everything else, which
+            # reads as "undeclared", never as "not float".
+            "subject": job_subject(j) if j.status in ("fail", "timeout") else "",
             "flaky": j.flaky,
             "attempts": j.attempts,
             # `is not None`, not truthiness: the unset sentinel is None
@@ -1553,6 +1556,85 @@ def job_sources(job):
         if m.group(0) not in seen:
             seen.append(m.group(0))
     return seen
+
+
+# ---------------------------------------------------------------- subject --
+# WHY A JOB HAS A "SUBJECT" AT ALL
+#
+# The owner's standing rule is that float accuracy is LOW PRIO BY DEFINITION,
+# and `devdocs/progress/float/` implements that by hiding those tickets from
+# `ready`/`next`. That governs TICKETS. It does not govern REDS -- and a red job
+# is worked at the priority of BEING RED, not at the priority of its subject,
+# because nobody triaging a red first asks whether its topic was de-ranked. So a
+# last-digit move re-enters the queue at the top through a door the `prio:`
+# field cannot reach. Measured: 23 recorded red/fixed events on float-named
+# jobs, most recently math_log and pow_matches_cpython in the 2026-08-15/16
+# fulls, each worked within a day while their own tickets sat untouched.
+#
+# The ticket proposed fixing the TRIGGER -- tolerance comparisons, moving tests
+# off the gating tiers, or regenerating expectations from ourselves. All three
+# change what the tiers assert, and the first two risk the failure this repo has
+# spent two days removing: coverage that quietly stops being coverage. This
+# fixes the MECHANISM instead, and costs no coverage at all: the red still fires
+# at full strength, it just arrives CARRYING ITS SUBJECT, so the triager sees
+# "float accuracy, low prio by owner rule" in the same line as the failure.
+#
+# A wrong label costs a wrong label. A wrongly de-gated test costs a silent hole.
+# Those are not comparable, and it is why this shape was chosen over the three
+# in the ticket -- which remain available, and are now testable against whether
+# the labelling alone was enough.
+#
+# HOW A JOB DECLARES IT -- self-declaring, never inferred.
+#
+# A test says what it is about, in its own text:
+#
+#     # PXX-SUBJECT: float-accuracy        (.npy, .py, shell)
+#     { PXX-SUBJECT: float-accuracy }      (.pas)
+#     /* PXX-SUBJECT: float-accuracy */    (.c)
+#
+# Keyed on what the thing DECLARES, not on what it appears to be. An inferred
+# subject ("the filename contains 'float'") is the same mistake as exempting a
+# job because its recipe invokes xvfb-run: it reads the surface and gets the
+# motivating case backwards. test_nilpy_math_domain_errors.npy is the worked
+# example -- its name says float, its subject is NaN/Inf handling, and the
+# escape rule says a NaN fault must go red at FULL strength. Inference would
+# have mislabelled exactly the test that must not be quieted.
+SUBJECT_RE = re.compile(r"PXX-SUBJECT:\s*([a-z0-9][a-z0-9-]*)", re.I)
+# What a subject MEANS to a triager. The text is the whole point: a bare tag
+# would still leave the reader to know the owner's rule.
+SUBJECT_NOTE = {
+    "float-accuracy":
+        "last-digit float accuracy — LOW PRIO by the owner's standing rule "
+        "(devdocs/progress/float/README.md); do not let this outrank a "
+        "crash, a hang or a wrong-at-scale value. A NaN/Inf fault, a "
+        "saturation or a crash in the same file is NOT this and stays "
+        "full strength.",
+}
+
+
+def job_subject(job):
+    """The subject a job's own sources declare, or "" if none do.
+
+    Read lazily and only for jobs that FAIL: a passing job's subject changes
+    nothing, and 3000 file reads per run to label the handful that went red
+    would be paying the cost everywhere to get the benefit nowhere.
+
+    Never raises. This runs on the path that REPORTS a failure, so an exception
+    here converts one red job into no report at all — strictly worse than the
+    thing it was added to improve. A job with no `lines` (a partial stand-in
+    built by a caller that only cares about other fields) and an unreadable
+    source both degrade to "", which reads as "did not say".
+    """
+    for src in job_sources(job) if getattr(job, "lines", None) else []:
+        try:
+            with open(os.path.join(REPO, src), "rb") as f:
+                head = f.read(4096).decode("utf-8", "replace")
+        except OSError:
+            continue
+        m = SUBJECT_RE.search(head)
+        if m:
+            return m.group(1).lower()
+    return ""
 
 
 def job_selector(job):
@@ -4803,6 +4885,17 @@ def main():
             note += "  (flaked, passed on attempt %d)" % j.attempts
         print("  %-8s %-32s %-12s %6.1fs  %s%s" %
               (state, j.name, j.cls, dur, j.src, note))
+        # A red arrives carrying its subject, in the line the triager is
+        # already reading. Printing it elsewhere -- a summary, a separate
+        # section, another file -- is how the `prio:` field failed to reach
+        # reds in the first place.
+        if j.status in ("fail", "timeout"):
+            subj = job_subject(j)
+            if subj:
+                print("           ^ SUBJECT %s: %s"
+                      % (subj, SUBJECT_NOTE.get(
+                          subj, "declared by the test; no triage note "
+                                "registered for this subject")))
         if j.status in ("fail", "timeout") and not j.advisory \
                 and first_fail is None:
             first_fail = j

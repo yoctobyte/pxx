@@ -1585,6 +1585,20 @@ def update_job_reasons(st, report, jobs):
         st.pop("job_reason", None)
 
 
+# Mirrors testmgr.SUBJECT_NOTE. Duplicated deliberately: twatch does not import
+# testmgr (they run in different clones and at different shas), and a subject
+# with no note still renders -- the tag alone is the load-bearing part, the
+# prose is the courtesy.
+SUBJECT_NOTES = {
+    "float-accuracy":
+        "last-digit float accuracy is **LOW PRIO by the owner's standing "
+        "rule** (`devdocs/progress/float/README.md`). Do not let this "
+        "outrank a crash, a hang, or a wrong-at-scale value. A NaN/Inf "
+        "fault, a saturation or a crash in the same file is NOT this and "
+        "stays full strength.",
+}
+
+
 def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
                     st=None, not_reached=()):
     ts = utcnow().replace(":", "").replace("-", "")
@@ -1640,6 +1654,10 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
     srcmap = {job_key(j): j.get("src", "") for j in report["jobs"]}
     statmap = {job_key(j): j["status"] for j in report["jobs"]}
     reasonmap = {job_key(j): j.get("reason", "") for j in report["jobs"]}
+    # What the failing test SAYS it is about, from its own `PXX-SUBJECT:`
+    # marker. Absent for undeclared jobs, and "" never means "not float" -- it
+    # means the test did not say.
+    subjmap = {job_key(j): j.get("subject", "") for j in report["jobs"]}
     def label(n):
         return "%s — %s" % (n, srcmap[n]) if srcmap.get(n) else n
 
@@ -1662,7 +1680,16 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
         # bug-t-a-red-job-records-no-reason. Trimmed harder than tstate's copy
         # because this is a scannable list, not the durable record.
         why = (reasonmap.get(n) or "").strip()
-        return "%s\n  - `%s`" % (out, why[:160]) if why else out
+        if why:
+            out = "%s\n  - `%s`" % (out, why[:160])
+        # The de-ranking a `prio:` field cannot reach. A red is triaged at the
+        # priority of BEING RED unless the line itself says otherwise, so the
+        # note goes here, next to the failure, and not in a legend.
+        subj = subjmap.get(n) or ""
+        if subj:
+            out += "\n  - **subject: %s** — %s" % (subj, SUBJECT_NOTES.get(
+                subj, "declared by the test; no triage note registered here"))
+        return out
     for title, names in (("NEW-RED", new_red), ("FIXED", fixed),
                          ("STILL-RED", still_red),
                          # Last, and named as a question rather than a verdict:

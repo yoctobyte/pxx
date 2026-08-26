@@ -82,3 +82,98 @@ float digits. The line is *what is being asserted*, not *what type the bytes are
 And the second half of the owner's sentence is licence, not apology: **"it needs dark magic at
 times"** — shims, mimics and facades are how a real project is made to work, so a shim existing
 is evidence of the strategy running correctly, never a smell.
+
+---
+
+## 2026-08-26 — the mechanism is fixed; the three proposed shapes are NOT the
+## right ones, and the evidence says why
+
+**Status: partly addressed, deliberately still open.**
+
+### First, the premise checks out
+
+The ticket asserted a mechanism. It has fired: **23 recorded red/fixed events on
+float-named jobs** in the retained run log.
+
+| when | tier | jobs |
+| --- | --- | --- |
+| 2026-07-20 | full → native | `cmath_log_correct_round_b378.c`, `test_nilpy_str_float.npy`, `test_str_float_fpc_default_b327.pas`, `cmath_log2_expm1_family_b382.c` — red, all fixed 4h later |
+| 2026-08-15/16 | full | `test_nilpy_math_domain_errors.npy`, `test_nilpy_math_log.npy` — red, fixed next day |
+| 2026-08-15 | native | `test_nilpy_float_pow_oracle.npy` |
+| 2026-08-16 | full | `test_nilpy_pow_matches_cpython.npy` — red, fixed same day |
+
+Each was worked within a day, while the float tickets sat at p15-p30 untouched.
+That is the door the `prio:` field cannot reach, open and in use.
+
+### What was fixed: the MECHANISM, at zero coverage cost
+
+The three shapes proposed all change what the tiers *assert*. This changes what
+a red *says*. A red fires at full strength and now arrives **carrying its
+subject**, in the line the triager is already reading:
+
+```
+  FAIL     test-nilpy#23   unit   4.6s  test/x.npy
+           ^ SUBJECT float-accuracy: last-digit float accuracy — LOW PRIO by
+             the owner's standing rule (devdocs/progress/float/README.md); do
+             not let this outrank a crash, a hang or a wrong-at-scale value. A
+             NaN/Inf fault, a saturation or a crash in the same file is NOT
+             this and stays full strength.
+```
+
+Same in `tstate/reports/*.md`, per red rather than only the first.
+
+**A subject is DECLARED by the test, never inferred** — `# PXX-SUBJECT:
+float-accuracy` in `.npy`/`.py`, `{ … }` in `.pas`, `/* … */` in `.c`. Inference
+from a filename would have labelled `test_nilpy_math_domain_errors.npy` as
+float-accuracy when its subject is NaN/Inf handling, i.e. the exact test the
+escape rule says must stay full strength. Same error shape as exempting a job
+because its recipe invokes `xvfb-run`: reading the surface gets the motivating
+case backwards. An undeclared job reports `""`, which means *the test did not
+say* — never *not float*.
+
+Guard: `testmgr_job_subject_devtest.py` (12 cases, including the
+float-sounding-filename trap and the no-`lines` partial job, because
+`report_job` runs while reporting a failure and must never raise). 76 guards
+green.
+
+### Why no test was marked, and why that is the finding rather than a shortfall
+
+The intent was to ship a declared list alongside the mechanism. **Reading the
+five recurring offenders makes clear that no defensible file-level list exists**:
+
+| test | its actual subject |
+| --- | --- |
+| `math_domain_errors` | NaN / -Inf / exception behaviour. **The escape rule excludes it outright.** |
+| `math_log` | a *missing name* — `math.log` was `undefined variable (log)`. CLAUDE.md is explicit that a missing function a working CPython program calls is **NOT F**. |
+| `pow_matches_cpython` | precision — but it guards **84 ulp**, not one. Its own header: "78 exact before, worst error 84 ulp; 104 exact after, worst 1 ulp". |
+| `float_pow_oracle` | differential against CPython; same span. |
+| `str_float` | `str(3.14)`, `str(-1.25)` — short exact decimals, where a move is a formatting **bug**, not last-digit noise. |
+
+**Every candidate file mixes last-digit accuracy with something that must stay
+full strength.** That is a fact about the tests, and it decides the shape:
+
+- **Shape 2 (move them off the gating tiers) is wrong.** It operates on whole
+  files, so it cannot draw the line the ticket itself requires — de-gating
+  `pow_matches_cpython` de-gates an 84-ulp regression, and de-gating
+  `math_domain_errors` de-gates a NaN fault. The ticket's own test — *"if a
+  shape cannot draw that line, it is the wrong shape"* — rejects it.
+- **Shape 3 (regenerate from pxx) remains the worst**, unchanged.
+- **Shape 1 (tolerance) is the right granularity**, because the line runs
+  *through* these files rather than between them: per assertion, not per file.
+  It is also the most work, and it needs the owning lane — these are `.npy`
+  tests, Track N's files, and N knows which assertion is pinning a rendering and
+  which is pinning a contract.
+
+The labelling landed here is the part that was safe to do unilaterally and costs
+nothing. Whether it is *sufficient* is now an empirical question with a cheap
+answer: the next float red carries its note, and either it gets triaged at its
+subject's priority or it does not.
+
+### Still open
+
+1. Adoption — the marker is a one-line, reviewable change per test, by the lane
+   that owns it. **Track N** for the `.npy` set above.
+2. Shape 1, if labelling proves insufficient, at per-assertion granularity.
+
+Deliberately NOT done: no float behaviour touched, no test de-gated, no
+expectation regenerated, no coverage removed.
