@@ -108,7 +108,7 @@ owners, and the for-in container temp was covered by none:
    scoped `not IsArray` AnsiString/Variant, so a dyn ARRAY temp slipped past
    even the net, on the one target that had a net at all.
 
-**Fix (`50fac8e29`):** split the "which kinds are managed, and how far do they
+**Fix (`e871478ab`):** split the "which kinds are managed, and how far do they
 reach" table out of `EmitManagedLocalsZeroInit` as `ManagedLocalZeroBytes`, and
 give `CompileAST` a late-mint pass that asks it the same question for every
 unnamed managed `skLocal` the body's parse/lowering minted — replacing the
@@ -117,7 +117,7 @@ COM-interface-only scoping that stood there. One table, every kind, every target
 ### Follow-up left on the table
 
 Folding the six per-backend flagged walkers into that one pass was tried
-(`20afac6c6`) and **reverted** (`3dfc53cbb`): it self-hosted and passed this
+(`d549ce524`) and **reverted** (`4dd1fa397`): it self-hosted and passed this
 bug's cross-target repro, then segfaulted `quick_canary_nilpy` and every
 promo-int test. The two tables disagree in ways worth measuring before trying
 again — the walker zeroes a flagged temp of ANY kind while `ManagedLocalZeroBytes`
@@ -127,7 +127,7 @@ to `PXXMemZero`, which a promo slot (16 bytes) always crosses. The revert commit
 carries the full note.
 
 Cost of not doing it: none, in the end. The late-mint pass now SKIPS flagged
-temps (`50c4dd2dc`) rather than duplicating the backends' stores — leaving them
+temps (`4427e6855`) rather than duplicating the backends' stores — leaving them
 in doubled every such slot, +112 KB / +1.2% on the compiler's own code. With the
 skip the compiler comes out at 9123569 bytes against 9124696 before the fix, i.e.
 1127 bytes SMALLER, because the unnamed unflagged temps the x86-64 safety net
