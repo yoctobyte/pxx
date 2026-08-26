@@ -2684,6 +2684,14 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     st["history"] = (st["history"] +
                      [{"sha": sha, "date": st["last"]["date"],
                        "verdict": report["verdict"], "tier": report["tier"],
+                       # Carried so STALENESS can tell a complete run from a
+                       # torn-down one. The verdict already says TIMEOUT, but
+                       # the staleness consumers ask a different question and
+                       # never look at it (bug-t-a-timed-out-sha-still-counts-
+                       # as-tested). Absent on legacy entries, which therefore
+                       # read as complete -- the same migration order
+                       # run_is_incomplete() uses.
+                       "timed_out": bool(report.get("timed_out")),
                        "new_red": new_red, "fixed": fixed}])[-HISTORY_CAP:]
     # PRUNE keys this run PROVED do not exist. Same predicate gone_keys uses to
     # close a regression — "a run whose tier covers this job's tier did not
@@ -5333,11 +5341,28 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
                         hosts.append(doc)
                 except (OSError, ValueError):
                     pass
-    tested = set()
+    # A TIMED-OUT run is the one shape that proves the LEAST -- torn down with
+    # jobs undecided -- and it was the one that most effectively silenced the
+    # request for more, because staleness asked "is there a record for this
+    # sha?" and a timeout leaves one. The verdict has been honest since
+    # 2026-08-25; this is the separate mechanism that never looked at it.
+    #
+    # A sha is redeemed by ANY complete run, on any host, at any tier: the
+    # timeout says this attempt was torn down, not that the sha is untestable.
+    tested, incomplete = set(), set()
     for st in hosts:
+        recs = list(st.get("history") or [])
         if st.get("last"):
-            tested.add(st["last"]["sha"])
-        tested.update(h["sha"] for h in st.get("history", []))
+            recs.append(st["last"])
+        for r in recs:
+            sha_r = r.get("sha")
+            if not sha_r:
+                continue
+            if r.get("timed_out") or r.get("verdict") == "TIMEOUT":
+                incomplete.add(sha_r)
+            else:
+                tested.add(sha_r)
+    incomplete -= tested
     if not hosts:
         # Deliberately NOT routed through verdict_down: "no state at all" in a
         # checkout that could not fetch is overwhelmingly a reader problem (a
@@ -5359,6 +5384,14 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
         if sha in tested:
             newest_tested = (sha, int(ct))
             break
+        if sha in incomplete:
+            # Do NOT break: keep walking back for a sha with a complete run.
+            # Reporting this one as coverage is the bug; reporting it as
+            # nothing would hide that an attempt was made and torn down.
+            print("tstate: `%s` was TESTED BUT TORN DOWN (timeout, jobs left "
+                  "undecided) — it does not count as covered; looking further "
+                  "back for a complete run" % sha[:12])
+            continue
         if not needs_test(repo, sha):
             continue        # tickets/docs/tstate-only: no gate run owed
         if now - int(ct) > grace_min * 60:
@@ -5554,8 +5587,33 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
                       % (nred, nswept, r["bad"][:12],
                          len(r.get("range", []))))
             else:
-                print("tstate:   open regression: %s bad=%s (%d in range)"
-                      % (r["job"], r["bad"][:12], len(r.get("range", []))))
+                # `--status` is the path a human actually runs, so the two
+                # qualifiers that decide what "bad=" MEANS belong here and not
+                # only in the stub ticket's range note. Terse on purpose: the
+                # full sentences live in range_note(), this is the flag that
+                # stops someone opening the commit.
+                # DERIVED here, not read from the stamp. `--status` is a
+                # READER, and a reader that waits for a writer-side field is
+                # inert until the daemon happens to run its idle repair -- for
+                # the two regressions on the board right now, that is the
+                # difference between a human seeing the qualifier tonight and
+                # seeing it whenever the repo next goes quiet. The stamp is for
+                # the published report; this is one git call per regression.
+                bad_untestable = r.get("bad_untestable")
+                try:
+                    bad_untestable = not needs_test(repo, r["bad"])
+                except Exception:       # noqa: BLE001 - a sha we cannot read
+                    pass                #   just falls back to the stamp
+                why = ""
+                if bad_untestable:
+                    why = " — bad touches NO buildable file: it is the tested"\
+                          " upper bound, not a lead"
+                elif r.get("pin_axis"):
+                    why = " — pin-built: compiler/ commits cannot be causal"
+                elif r.get("first_seen"):
+                    why = " — job's FIRST-ever run; no earlier pass exists"
+                print("tstate:   open regression: %s bad=%s (%d in range)%s"
+                      % (r["job"], r["bad"][:12], len(r.get("range", [])), why))
         if len(regs) > STATUS_REG_CAP:
             print("tstate:   ... and %d more open regression(s) — see "
                   "devdocs/progress/tstate/TSTATE.md"
