@@ -2112,6 +2112,12 @@ var
     got depended on declaration order.
     bug-p-an-array-argument-binds-a-scalar-overload }
   MatchArgArray : array[0..MAX_PROC_PARAMS-1] of Boolean;
+  { For an ARRAY argument, its ELEMENT kind — an array symbol's TypeKind IS its
+    element kind in this symbol table. Read only by the array-vs-scalar mismatch
+    guard, which must let an `array[..] of Char` through to a string or PChar
+    parameter: that conversion is real Pascal and `test_char_array_is_a_string`
+    is built on it. tyUnknown when the argument is not an array. }
+  MatchArgArrayElemTk : array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   MatchArgArrayValid : Boolean;
   BuiltinUnitIdxCache : Integer;  { cached InternStr('builtin') idx; the builtin intrinsic unit is fallback-only in MatchProcCall (see BuiltinUnitIdx). }
   BuiltinUnitIdxSet   : Boolean;  { BSS -> False: the cache above is computed lazily once per process. }

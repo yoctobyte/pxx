@@ -7010,6 +7010,17 @@ begin
   if MatchArgArrayValid and (j < MAX_PROC_PARAMS) and MatchArgArray[j] and
      (not Procs[i].Params[j].IsArray) and
      (Procs[i].Params[j].TypeKind <> tyPointer) and
+     { An `array[..] of Char` IS a string in Pascal, and a PChar, and this guard
+       was refusing both: `Wrap(a)` with `Wrap(const q: string)` failed with "no
+       overload of Wrap matches these arguments — argument types: (Char)", which
+       is also how the diagnostic betrays the model (an array symbol's TypeKind
+       is its ELEMENT kind, so the array reported as Char). The guard exists to
+       stop an array binding a SCALAR parameter, and a char array reaching a
+       string parameter is not that — it is a conversion the language defines.
+       bug-p-a-char-array-argument-stopped-binding-a-string-parameter }
+     not ((MatchArgArrayElemTk[j] = tyChar) and
+          (Procs[i].Params[j].TypeKind in [tyString, tyAnsiString, tyShortString,
+                                           tyFixedString])) and
      not ProcParamUntyped[i * MAX_PROC_PARAMS + j] then
   begin
     Result := True;

@@ -5776,6 +5776,10 @@ begin
         ((ASTKind[node] = AN_CALL) and (ASTIVal[node] >= 0) and
          ((ProcRetFixedArrBytes[ASTIVal[node]] > 0) or
           ProcRetIsDynArray[ASTIVal[node]]));
+      MatchArgArrayElemTk[i] := tyUnknown;
+      if MatchArgArray[i] and (ASTKind[node] = AN_IDENT) and
+         (ASTIVal[node] >= 0) and (ASTIVal[node] < SymCount) then
+        MatchArgArrayElemTk[i] := Syms[ASTIVal[node]].TypeKind;
     end;
     currArg := ASTRight[currArg];
   end;

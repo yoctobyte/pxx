@@ -4166,21 +4166,31 @@ begin
     PFStash(tkSemicolon, 0, 0, ln);
   end;
   PFStash(tkBegin, 0, 0, ln);
-  { preamble per capture:
-      inline (scalar/fixed-array/record): capj := Pointer(NativeInt(__pfctx) +/- off);
-      handle (dyn array / ansistring):    capj := Pointer(PNativeInt(NativeInt(__pfctx) +/- off)^);
-    — a handle-typed slot holds a data POINTER, so the worker derefs it once more. }
+  { preamble per capture, ONE shape for every kind:
+      capj := Pointer(NativeInt(__pfctx) +/- off);
+
+    i.e. the accessor is the address of the capture's FRAME SLOT, and `capj^`
+    reads whatever that slot holds — inline data for a scalar, fixed array or
+    record, and the HANDLE for a dynamic array.
+
+    A dyn array used to get a second deref here
+    (`Pointer(PNativeInt(...)^)`), so capj held the array's DATA pointer. That
+    matched the old dialect convention, in which a pointer-to-dyn-array held the
+    handle and `p^[i]` landed on elements by treating p as the data pointer.
+    That convention changed when `@dy` began yielding the variable's slot
+    (bug-p-address-of-a-dynamic-array-captures-the-handle-not-the-variable), and
+    `p^[i]` with it — it now uniques through p's value as a handle SLOT address.
+    The worker kept synthesizing the old shape, so `capj^[i]` read the array's
+    first ELEMENT as a handle and the worker segfaulted on all four targets that
+    run `parallel for`. One convention, one accessor: dropping the extra deref
+    is what puts the worker back on it.
+    bug-a-the-parallel-for-worker-still-builds-the-old-dynarray-accessor }
   for ci := 0 to capCount - 1 do
   begin
     PFStash(tkIdent, capNmOff[ci], capNmLen[ci], ln);
     PFStash(tkAssign, 0, 0, ln);
     PFStash(tkIdent, ptrCastOff, 7, ln);      { Pointer( }
     PFStash(tkLParen, 0, 0, ln);
-    if capHandle[ci] then
-    begin
-      PFStash(tkIdent, pniOff, 10, ln);       { PNativeInt( }
-      PFStash(tkLParen, 0, 0, ln);
-    end;
     PFStash(tkIdent, niCastOff, 9, ln);       { NativeInt( }
     PFStash(tkLParen, 0, 0, ln);
     PFStash(tkIdent, ctxOff, 7, ln);          { __pfctx }
@@ -4197,11 +4207,6 @@ begin
     PendNestTok[PendNestCount].Kind := tkInteger; PendNestTok[PendNestCount].IVal := absOff;
     PendNestTok[PendNestCount].Line := ln; PendNestTok[PendNestCount].SOffset := 0; PendNestTok[PendNestCount].SLen := 0;
     Inc(PendNestCount);
-    if capHandle[ci] then
-    begin
-      PFStash(tkRParen, 0, 0, ln);            { ) closing PNativeInt( }
-      PFStash(tkCaret, 0, 0, ln);             { ^ deref the handle }
-    end;
     PFStash(tkRParen, 0, 0, ln);              { ) closing Pointer( }
     PFStash(tkSemicolon, 0, 0, ln);
   end;

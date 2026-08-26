@@ -3919,24 +3919,21 @@ begin
          (ProcParamDynDepth[cpi * MAX_PROC_PARAMS + pathIdx] > 0) and
          (ASTKind[argAST] = AN_DEREF) then
       begin
-        { `p^` (p: ^TArr) to a var/out named-dyn-array param. In this dialect a
-          pointer-to-dyn-array holds the HANDLE (the array convention: @la and
-          p^[i] both work on the data pointer), so there is no addressable
-          handle SLOT to pass — but the callee's convention is &slot (it derefs
-          once to reach the handle). IRLowerAddress handed it the handle
-          directly, so the callee read element 0 as the handle and crashed
-          (bug-parallel-for-captured-dynarray-var-arg-segfault: the parallel-for
-          worker's capture accessor is exactly such a p^). Materialise a hidden
-          slot: temp := handle, pass &temp. Element writes alias the shared
-          buffer, so they propagate; a SetLength through the param lands in the
-          temp only (resize-through-p^ has no home to publish to — same
-          copy-in-no-copy-out shape as an open-array temp). A plain tyPointer
-          temp on purpose: a dyn-array-typed local would DecRef the borrowed
-          handle at scope exit. }
-        tmpSym := AllocVar('', tyPointer);
+        { `p^` (p: ^TArr) to a var/out named-dyn-array param. The callee's
+          convention is &slot — it derefs once to reach the handle — and since
+          `@dy` began yielding the VARIABLE's slot, p's own value IS that slot
+          address. So pass it straight through.
+
+          It used to be the other way round: a pointer-to-dyn-array held the
+          HANDLE (`@la` and `p^[i]` both worked on the data pointer), there was
+          no addressable slot to pass, and this arm materialised a hidden one
+          (temp := handle, pass &temp) to give the callee something to deref
+          (bug-parallel-for-captured-dynarray-var-arg-segfault). With p already
+          holding the slot address that materialisation is one indirection too
+          many — the callee derefed to the slot ADDRESS and read that as the
+          handle — so it goes.
+          bug-a-the-parallel-for-worker-still-builds-the-old-dynarray-accessor }
         value := IRLowerAST(ASTLeft[argAST]);
-        IRAppend(IR_STORE_SYM, tmpSym, value, -1, 0, Ord(tyPointer));
-        value := IRAppend(IR_SLOTADDR, tmpSym, -1, -1, 0, Ord(tyPointer));
       end
       else if (cpi >= 0) and
          (ASTKind[argAST] = AN_IDENT) and
@@ -3955,15 +3952,20 @@ begin
     else
     begin
       { `p^` (p: ^TArr) to a BY-VALUE dyn-array param: the callee wants the
-        HANDLE, which is p's value — the mirror of the by-ref case above.
-        IRLowerAST over the deref would load [handle], i.e. element 0
-        (bug-parallel-for-captured-dynarray-var-arg-segfault, const/value arm). }
+        HANDLE, and p's value is the slot ADDRESS, so load through it — the
+        mirror of the by-ref case above, which passes that address unchanged.
+        Both arms moved together when `@dy` began yielding the slot; before
+        that p held the handle itself and this was a bare IRLowerAST of the
+        pointer (bug-parallel-for-captured-dynarray-var-arg-segfault, const/
+        value arm).
+        bug-a-the-parallel-for-worker-still-builds-the-old-dynarray-accessor }
       if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < MAX_PROC_PARAMS) and
          (pathIdx < Procs[cpi].ParamCount) and
          (ProcParamDynDepth[cpi * MAX_PROC_PARAMS + pathIdx] > 0) and
          (ASTKind[argAST] = AN_DEREF) then
       begin
-        Result := IRLowerAST(ASTLeft[argAST]);
+        Result := IRAppend(IR_LOAD_MEM, IRLowerAST(ASTLeft[argAST]), -1, -1, 0,
+                           Ord(tyPointer));
         Exit;
       end;
       value := IRLowerAST(argAST);
