@@ -1,21 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-22T21:01:34Z",
-   "fixed": [
-    "demos#00",
-    "lib-test#src:tools/crtl_reachability.py",
-    "test-pascal-conformance#shard0/6",
-    "test-pascal-conformance#shard4/6"
-   ],
-   "new_red": [
-    "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy"
-   ],
-   "sha": "fd93e4a71c37a7932b9ef73e4c9f8a7deceb3c34",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-22T21:07:18Z",
    "fixed": [],
    "new_red": [],
@@ -461,6 +446,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "1137c9192da4ab5db75e8fc4cdbc248a069afe80",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T02:47:00Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "80c5229fb60ad15aa79bbc847b2287b184430edf",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -6669,14 +6662,14 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-26T02:28:40Z",
+  "date": "2026-08-26T02:47:00Z",
   "deadline": 7200.0,
-  "sha": "1137c9192da4ab5db75e8fc4cdbc248a069afe80",
+  "sha": "80c5229fb60ad15aa79bbc847b2287b184430edf",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 455.8
+  "wall": 474.9
  },
  "last_bench": {
   "conf_rows": 550,
