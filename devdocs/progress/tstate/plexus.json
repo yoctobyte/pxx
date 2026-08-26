@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-26T06:08:57Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "a28087d9f51e904232c80dbb0272c54f1e1e841d",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-26T06:15:50Z",
    "fixed": [],
    "new_red": [],
@@ -484,6 +475,15 @@
    "tier": "full",
    "timed_out": false,
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-26T17:12:02Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "b4d62b3dcfde3189556650457d574c72a975c90f",
+   "tier": "slow",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
@@ -3637,7 +3637,6 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "full",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "full",
   "test-uforth#00": "full",
-  "test-uforth#blocktest": "slow",
   "test-uforth#core": "full",
   "test-uforth#coreexttest": "full",
   "test-uforth#coreplustest": "full",
@@ -3649,6 +3648,7 @@
   "test-uforth#localstest": "full",
   "test-uforth#memorytest": "full",
   "test-uforth#searchordertest": "full",
+  "test-uforth#src:compiler/.pascal26.fixedpoint": "slow",
   "test-uforth#src:compiler/.pascal26.fixedpoint@1": "full",
   "test-uforth#src:compiler/.pascal26.fixedpoint@10": "full",
   "test-uforth#src:compiler/.pascal26.fixedpoint@11": "full",
@@ -6789,7 +6789,7 @@
   "test-threads#src:test/threadsafe_define.pas@2": "pass",
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "pass",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "pass",
-  "test-uforth#blocktest": "pass",
+  "test-uforth#src:compiler/.pascal26.fixedpoint": "pass",
   "test-uforth#src:compiler/.pascal26.fixedpoint@1": "pass",
   "test-uforth#src:compiler/.pascal26.fixedpoint@10": "pass",
   "test-uforth#src:compiler/.pascal26.fixedpoint@11": "pass",
@@ -6808,14 +6808,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-26T17:07:14Z",
+  "date": "2026-08-26T17:12:02Z",
   "deadline": 7200.0,
   "sha": "b4d62b3dcfde3189556650457d574c72a975c90f",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "RED",
-  "wall": 1171.7
+  "verdict": "GREEN",
+  "wall": 271.8
  },
  "last_bench": {
   "conf_rows": 550,
