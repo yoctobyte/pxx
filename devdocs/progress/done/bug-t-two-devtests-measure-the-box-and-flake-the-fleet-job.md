@@ -183,3 +183,29 @@ load, with `case_probe_returns_a_plausible_number` reporting a 241ms real probe
 
 ## Log
 - 2026-08-26 — resolved, commit 4ab326451.
+
+### Addendum — the margin, measured
+
+A natural-reproduction run (300 trials of the old case's exact arithmetic, box
+at load 5-8 with a tier in flight) did **not** reproduce it: 0 failures on all
+three assertions. That is a useful negative rather than a refutation, because it
+came with the distance to the edge:
+
+```
+n=300 samples=3 iters=1000000
+  r1==1.0 failed: 0
+  r2>2.0  failed: 0   (needs t2 > t1/2)
+  r3==1.0 failed: 0
+  t2/t1  min=0.659 p01=0.728 med=1.000 max=1.750
+```
+
+The assertion fails at `t2/t1 <= 0.5`. The worst of 300 ordinary loaded samples
+was **0.659** — within 32% of firing, with no headroom left for the load-14 full
+tier under which it was actually observed red. A guard whose margin is 1.3x on a
+busy box is not "flaky under exceptional conditions"; it is correct by luck at
+the load it usually meets.
+
+It also confirms the `min()`-of-three explanation over a simpler one: a spike
+would have shown up as isolated low samples in 300 trials, and none appeared.
+The failure needs a sustained window, which is why it tracks tiers rather than
+noise.

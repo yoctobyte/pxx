@@ -26,15 +26,86 @@
 # missing intrinsic or an "expects a variable" gap) and is reported.
 #
 # Usage: tools/fpc_diff_probe.sh
+#
+#   FPC=<cmd>        the stable oracle (default: fpc). May carry flags.
+#   FPC_TRUNK=<cmd>  OPTIONAL third oracle: an FPC trunk build. May carry flags,
+#                    which it usually must -- a freshly built trunk compiler
+#                    needs its own RTL:
+#                      FPC_TRUNK="$PWD/compiler/ppcx64 -Fu$PWD/rtl/units/x86_64-linux"
+#
+# WHY A THIRD ORACLE (feature-t-fpc-probe-needs-a-trunk-oracle): the stable
+# oracle on this box is FPC 3.2.2, released 2021, so every verdict here is
+# "pxx vs a four-year-old FPC" and an FPC bug upstream has since fixed is
+# indistinguishable from a bug of ours. Not hypothetical: twice it produced a
+# false "pxx diverges from FPC", once costing a Track U decide ticket and a
+# "DELIBERATE DIVERGENCE" comment on a test that was not one.
+#
+# Trunk runs ONLY on untagged divergences -- the handful of rows that would
+# otherwise need a human -- never across the corpus, because the expected yield
+# is low and the fast path must stay fast (user, 2026-08-16).
+#
+# WHAT A THIRD ORACLE CAN AND CANNOT SETTLE. The ticket's table listed "pxx is
+# wrong" (B|A|A) and "FPC bug still live in both" (A|B|B) as separate rows, but
+# they are the same OBSERVATION -- pxx differs from two FPCs that agree --
+# separated only by a judgement about who is right, which no output can make. So
+# this reports what it can actually see: whether the two FPCs agree, and which
+# one pxx matches when they do not. FPC disagreeing with FPC is the fact worth
+# having, because it is proof the reference moved.
+#
+# ONE ROW THIS DESIGN CANNOT SEE, as a consequence of the cost constraint rather
+# than an oversight: "upstream changed and pxx matches the OLD stable" (A|A|B).
+# Running trunk only on cases that already diverge makes it structurally
+# invisible -- when pxx and stable agree, probe() returns before trunk is ever
+# consulted. Seeing it would mean a third oracle across the whole corpus, which
+# is exactly the cost that was ruled out. A clean run therefore means "no
+# divergence from STABLE, and what we found is classified", never "we agree with
+# trunk".
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 S="${PXX_STABLE:-"$ROOT/stable_linux_amd64/default/pinned"}"
-command -v fpc >/dev/null || { echo "fpc not found"; exit 2; }
+FPC="${FPC:-fpc}"
+FPC_TRUNK="${FPC_TRUNK:-}"
+# ${VAR%% *} takes the command word: an oracle may carry flags, and `command -v`
+# must be asked about the binary, not the whole line.
+command -v "${FPC%% *}" >/dev/null || { echo "fpc not found (FPC=$FPC)"; exit 2; }
+if [ -n "$FPC_TRUNK" ] && ! command -v "${FPC_TRUNK%% *}" >/dev/null; then
+  echo "FPC_TRUNK set but not executable: ${FPC_TRUNK%% *}"; exit 2
+fi
+
+# Per-run scratch. These paths were hardcoded /tmp/fdp*, so two copies of this
+# script running at once silently overwrote each other's source and binaries --
+# and the result was not a crash but a REPORT: measured 2026-08-26, a run
+# overlapping another printed `new divergences: 34` and `no-oracle skips: 90`
+# with rows reading `fpc=[]`. An oracle whose binary had been overwritten
+# mid-run reported as an oracle that DISAGREED. A differential tool that cannot
+# survive a second copy of itself also cannot be exercised by a devtest.
+#
+# RESIDUAL: the file-I/O probes further down still name fixed paths
+# (/tmp/fdp_io.txt and friends) inside their Pascal source. Those heredocs are
+# quoted so nothing expands in them, and unquoting them to inject $WORK would
+# let $ sequences in Pascal code expand instead. Two concurrent runs can still
+# race on those four files.
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/fdp.XXXXXX")"
+trap 'rm -rf "$WORK"' EXIT
 
 new=0
 known=0
 bydesign=0
 skipped=0
+stalebug=0     # stable is wrong, trunk agrees with us -- NOT our divergence
+threeway=0     # all three implementations differ
+
+# Compile and run the probe source with an arbitrary FPC command line.
+# $1 may carry flags, so it is deliberately unquoted.
+run_fpc() {
+  local out="$2"
+  # shellcheck disable=SC2086
+  if $1 -Mobjfpc -vw -o"$out" "$WORK/fdp.pas" >/dev/null 2>&1; then
+    "$out" 2>&1
+  else
+    echo "<fpc-compile-fail>"
+  fi
+}
 
 # Make invisible bytes visible. Applied to both sides of every reported
 # divergence so a whitespace-only difference cannot masquerade as agreement.
@@ -55,14 +126,12 @@ probe() {
     bydesign) tag="bydesign"; why="${3:-}"
               [ -n "$why" ] || { echo "probe $name: bydesign needs a reason" >&2; exit 2; } ;;
   esac
-  { echo 'program fdp;'; cat; } > /tmp/fdp.pas   # pxx requires a program header; FPC tolerates either
+  { echo 'program fdp;'; cat; } > "$WORK/fdp.pas"  # pxx requires a program header; FPC tolerates either
   local fr pr
-  if fpc -Mobjfpc -vw -o/tmp/fdp_f /tmp/fdp.pas >/dev/null 2>&1; then
-    fr="$(/tmp/fdp_f 2>&1)"
-  else fr="<fpc-compile-fail>"; fi
-  if "$S" /tmp/fdp.pas /tmp/fdp_p >/tmp/fdp_c.log 2>&1; then
-    pr="$(/tmp/fdp_p 2>&1)"
-  else pr="<pxx-compile-fail: $(grep -oE 'error[^(]*' /tmp/fdp_c.log | head -1)>"; fi
+  fr="$(run_fpc "$FPC" "$WORK/f")"
+  if "$S" "$WORK/fdp.pas" "$WORK/p" >"$WORK/c.log" 2>&1; then
+    pr="$("$WORK/p" 2>&1)"
+  else pr="<pxx-compile-fail: $(grep -oE 'error[^(]*' "$WORK/c.log" | head -1)>"; fi
   # The oracle check comes FIRST. A case FPC cannot build compared nothing, and
   # returning quietly is how such a case sits in this file for months looking
   # like coverage — one missing `uses` is enough to disarm it, which is exactly
@@ -79,11 +148,45 @@ probe() {
   frv="$(printf '%s' "$fr" | vis)"; prv="$(printf '%s' "$pr" | vis)"
   if [ "$tag" = "known" ]; then
     printf 'DIFF [known] %-22s fpc=[%s] pxx=[%s]\n' "$name" "$frv" "$prv"; known=$((known+1))
-  elif [ "$tag" = "bydesign" ]; then
+    return
+  fi
+  if [ "$tag" = "bydesign" ]; then
     printf 'DIFF [by design] %-22s fpc=[%s] pxx=[%s]\n           ^ %s\n' \
            "$name" "$frv" "$prv" "$why"; bydesign=$((bydesign+1))
-  else
+    return
+  fi
+  # Untagged divergences are the only rows a third opinion can help, and so the
+  # only ones that pay for a trunk compile. A known/bydesign row was already
+  # classified by a human; re-litigating it here would spend the expensive
+  # oracle on the rows that need it least.
+  if [ -z "$FPC_TRUNK" ]; then
     printf 'DIFF        %-22s fpc=[%s] pxx=[%s]\n' "$name" "$frv" "$prv"; new=$((new+1))
+    return
+  fi
+  local tr trv
+  tr="$(run_fpc "$FPC_TRUNK" "$WORK/t")"
+  trv="$(printf '%s' "$tr" | vis)"
+  if [ "$tr" = "<fpc-compile-fail>" ]; then
+    # Trunk cast no vote. This must NOT read as "trunk agrees with stable":
+    # an oracle that could not look and an oracle that found nothing must never
+    # print the same, so the row stays a divergence and says why.
+    printf 'DIFF        %-22s fpc=[%s] pxx=[%s]\n           ^ trunk cast no vote: it cannot compile this case\n' \
+           "$name" "$frv" "$prv"; new=$((new+1))
+  elif [ "$fr" = "$tr" ]; then
+    # Both FPCs agree and we differ. Whether pxx is wrong or FPC is wrong in
+    # BOTH versions is a judgement no output can make -- it is a real divergence
+    # either way, and ours to account for.
+    printf 'DIFF        %-22s fpc=[%s] pxx=[%s]  (trunk agrees with stable)\n' \
+           "$name" "$frv" "$prv"; new=$((new+1))
+  elif [ "$pr" = "$tr" ]; then
+    # The worked case (decide-forin-mixed-int-float-ctor-vs-fpc): stable is the
+    # odd one out and upstream already fixed it. A footnote about 3.2.2, NOT a
+    # divergence -- excluded from the count, and it does not fail the run.
+    printf 'FPC-STABLE-BUG %-19s stable=[%s] trunk=pxx=[%s]\n           ^ fixed upstream; not our divergence, and must not reach the deliberate-divergence index\n' \
+           "$name" "$frv" "$prv"; stalebug=$((stalebug+1))
+  else
+    printf '3-WAY       %-22s stable=[%s] trunk=[%s] pxx=[%s]\n           ^ every implementation disagrees; the reference moved AND we match neither\n' \
+           "$name" "$frv" "$trv" "$prv"; threeway=$((threeway+1))
   fi
 }
 
@@ -2126,4 +2229,23 @@ echo "new divergences: $new   known/filed: $known   by design: $bydesign   no-or
 # A skip is not a pass. It is a case that silently compared nothing, so it is
 # worth the same attention as a divergence until it is either fixed or removed.
 [ "$skipped" -gt 0 ] && echo "(a SKIP is not a pass -- fix the case or drop it)"
-[ "$new" -eq 0 ] && exit 0 || exit 1
+
+# State the oracle's REACH, always. A two-way run and a three-way run that found
+# nothing are different facts, and the summary is where a triager decides what a
+# clean result is worth. Unset must never be silent: that silence is what let
+# two findings be measured against 2021 FPC and read as ours.
+if [ -z "$FPC_TRUNK" ]; then
+  echo "oracle: STABLE ONLY ($FPC) -- no trunk oracle, so a divergence here cannot"
+  echo "        be told apart from an FPC bug already fixed upstream. Set FPC_TRUNK"
+  echo "        to classify them; see the header for the build recipe."
+else
+  echo "oracle: stable ($FPC) + trunk ($FPC_TRUNK), consulted on divergences only"
+  echo "        fpc-stable bugs (fixed upstream): $stalebug   three-way: $threeway"
+  [ "$stalebug" -gt 0 ] && echo "        ^ FPC-STABLE-BUG rows are NOT our divergences and do not fail this run"
+  [ "$threeway" -gt 0 ] && echo "        ^ 3-WAY rows need a human: the reference moved and we match neither side"
+fi
+
+# A 3-WAY row is at least as actionable as a DIFF -- we match neither FPC, and
+# the reference moved under us. Only FPC-STABLE-BUG is excluded from the
+# verdict, because that row is a fact about 3.2.2 rather than about pxx.
+[ $((new + threeway)) -eq 0 ] && exit 0 || exit 1
