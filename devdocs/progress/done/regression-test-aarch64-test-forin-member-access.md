@@ -157,4 +157,4 @@ cross lists, and both verified to fail against a self-hosted PRE-FIX build:
   there rather than in `ParseForInNodeAST`. Pre-fix this one SIGSEGVs on
   x86-64, i386, aarch64, arm32 AND riscv32, so it is a crash witness, not a
   wrong-answer one.
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit e871478ab (the fix) + 4427e6855 (no double zeroing); tests be728cc06, 1d91a37ab; refactor attempt d549ce524 reverted by 4dd1fa397.
