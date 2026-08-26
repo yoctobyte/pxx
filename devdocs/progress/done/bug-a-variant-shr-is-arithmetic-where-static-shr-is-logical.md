@@ -166,4 +166,4 @@ NilPy is untouched: `-12 >> 1` is -6, `-1 >> 3` is -1, `1 << 40` is
   six variant-equals-static rows and a wider-than-32-bit row.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 38295b530.
