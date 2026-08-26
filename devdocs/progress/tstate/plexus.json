@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-26T07:44:16Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "fffd29ea840d126f428af41a670b92779f89f4c3",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-26T08:03:11Z",
    "fixed": [],
    "new_red": [],
@@ -475,6 +466,15 @@
    "new_red": [],
    "sha": "8e78afd6e5cebfa3e0976e36ff716e37ff63efc4",
    "tier": "slow",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T18:30:49Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "8e78afd6e5cebfa3e0976e36ff716e37ff63efc4",
+   "tier": "opt",
    "timed_out": false,
    "verdict": "GREEN"
   }
@@ -3417,10 +3417,10 @@
   "test-nilpy#src:test/test_tobject_root_methods_compact_fail.pas": "full",
   "test-nilpy#src:test/test_uses_order_pylib_exception_a.pas": "full",
   "test-nilpy#src:test/test_uses_order_pylib_exception_b.pas": "full",
+  "test-opt#src:compiler/.pascal26.fixedpoint": "opt",
   "test-opt#src:compiler/compiler.pas@1": "opt",
   "test-opt#src:compiler/compiler.pas@2": "opt",
   "test-opt#src:compiler/compiler.pas@3": "opt",
-  "test-opt#src:test/c_inline_strlit_arg.c": "opt",
   "test-opt#src:test/test_atomic64.pas": "opt",
   "test-pascal-conformance#shard0/6": "full",
   "test-pascal-conformance#shard1/6": "full",
@@ -6579,10 +6579,10 @@
   "test-nilpy#src:test/test_tobject_root_methods_compact_fail.pas": "pass",
   "test-nilpy#src:test/test_uses_order_pylib_exception_a.pas": "pass",
   "test-nilpy#src:test/test_uses_order_pylib_exception_b.pas": "pass",
+  "test-opt#src:compiler/.pascal26.fixedpoint": "pass",
   "test-opt#src:compiler/compiler.pas@1": "pass",
   "test-opt#src:compiler/compiler.pas@2": "pass",
   "test-opt#src:compiler/compiler.pas@3": "pass",
-  "test-opt#src:test/c_inline_strlit_arg.c": "pass",
   "test-opt#src:test/test_atomic64.pas": "pass",
   "test-pascal-conformance#shard0/6": "pass",
   "test-pascal-conformance#shard1/6": "pass",
@@ -6807,14 +6807,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-26T18:23:06Z",
+  "date": "2026-08-26T18:30:49Z",
   "deadline": 7200.0,
   "sha": "8e78afd6e5cebfa3e0976e36ff716e37ff63efc4",
-  "tier": "slow",
+  "tier": "opt",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 263.0
+  "wall": 445.1
  },
  "last_bench": {
   "conf_rows": 550,
