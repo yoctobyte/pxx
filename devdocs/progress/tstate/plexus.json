@@ -1,21 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-25T20:32:11Z",
-   "fixed": [
-    "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy"
-   ],
-   "new_red": [
-    "test-aarch64#src:test/test_forin_member_access.pas",
-    "test-nilpy#src:test/test_nilpy_type_name_of_a_big_int.npy",
-    "test-pascal-conformance#shard5/6",
-    "test-uforth#core"
-   ],
-   "sha": "44193e547f6d4ca77453770378b710d8af82f5df",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-25T20:44:17Z",
    "fixed": [],
    "new_red": [],
@@ -447,6 +432,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "75a1c06bb1a1c6960b039efe4a96348fdeb27e7f",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T10:05:11Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "15f01d390e8039464ef5a4d3652f2ec836218389",
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
@@ -6698,14 +6692,14 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-26T09:17:21Z",
+  "date": "2026-08-26T10:05:11Z",
   "deadline": 7200.0,
-  "sha": "75a1c06bb1a1c6960b039efe4a96348fdeb27e7f",
+  "sha": "15f01d390e8039464ef5a4d3652f2ec836218389",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 279.1
+  "wall": 284.9
  },
  "last_bench": {
   "conf_rows": 550,
