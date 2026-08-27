@@ -3621,8 +3621,7 @@ def file_stub_tickets(clone, host, st, sha, new_red, report, parent=None):
         # bug-t-a-timeout-bisects-to-an-innocent-commit was filed to stop. A
         # timeout is Track T's until someone shows otherwise, and leaving the
         # track unset does exactly that.
-        guessed = (None if j.get("status") == "timeout"
-                   else guess_track(j.get("src")))
+        track, track_note = stub_track(j)
         refusals = refusal_markers(clone, j.get("src"))
         immune = pin_immune(clone, dict(reg or {}, pin_built=j.get("pin_built")))
         body = ("""---
@@ -3650,12 +3649,8 @@ prio: %d
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
 """ % (40 if job in advisory else 70,
-                "track: %s\n" % guessed if guessed else "",
-                (("> **Track guessed as %s** from the test source. The "
-                  "ranker reads frontmatter, so an unset track parks a stub in "
-                  "Track T's queue regardless of what the body says -- correct "
-                  "the `track:` line if this is wrong.\n\n" % guessed)
-                 if guessed else "")
+                "track: %s\n" % track,
+                track_note
                 + (("> **This commit CANNOT be the cause.** The job builds "
                     "only with `$(PXX_STABLE)`, and this commit moved no "
                     "`stable_linux_amd64/**` — so the bytes that compiled it "
@@ -3755,6 +3750,47 @@ def refusal_markers(clone, src):
             elif "{%FAIL}" in text:
                 out.add("{%FAIL}")
     return out
+
+
+def stub_track(j):
+    """(track letter, hedge note) for an auto-filed stub. Pure; devtested.
+
+    T is the DEFAULT OWNER of a stub nobody else can be shown to own, and that
+    is now WRITTEN DOWN rather than left blank. The routing is unchanged; only
+    the silence is gone. An absent `track:` and a deliberate `track: T` are the
+    same thing to the ranker and opposite things to a reader: the first arrives
+    in T's queue looking like every other T ticket, with nothing on its face to
+    say the lane was a fallback rather than a finding. That is how a mislaneled
+    auto-file gets worked by the wrong agent — `regression-tools-devtest-00-2`
+    carried no track line and no explanation, and happened to be T's for real.
+    The next one will not be.
+    """
+    if j.get("status") == "timeout":
+        # The source path says what a job COMPILES, not what went wrong, and a
+        # timed-out job did not fail in any of its sources — it ran out of
+        # budget. Guessing a lane from the path is the wrong turn
+        # bug-t-a-timeout-bisects-to-an-innocent-commit was filed to stop.
+        return "T", (
+            "> **Track T by default, because this job TIMED OUT.** The source "
+            "path says what a job compiles, not what went wrong, and a timeout "
+            "did not fail in any of its sources — it ran out of budget. "
+            "Guessing a lane from the path is the wrong turn "
+            "`bug-t-a-timeout-bisects-to-an-innocent-commit` was filed to stop, "
+            "so a timeout stays T's until someone shows otherwise. Re-lane it "
+            "if the budget was not the problem.\n\n")
+    guessed = guess_track(j.get("src"))
+    if guessed:
+        return guessed, (
+            "> **Track guessed as %s** from the test source. The ranker reads "
+            "frontmatter, so this line — not the body — decides who works it; "
+            "correct it if the guess is wrong.\n\n" % guessed)
+    where = (" (the job reported no test source)" if not j.get("src")
+             else " from `%s`" % str(j.get("src")).split()[0])
+    return "T", (
+        "> **Track T by default: no lane could be inferred**%s. This is a "
+        "FALLBACK, not a finding — nothing here says the defect is Track T's, "
+        "only that the test source did not name an owner. Re-lane it before "
+        "working it.\n\n" % where)
 
 
 def guess_track(src):
