@@ -4,7 +4,7 @@ track: A+S
 prio: 30
 type: bug
 blocked-by: []
-status: backlog
+status: done
 summary: "`var q: Int64; d: Double; d := q;` is refused outright on xtensa: `target xtensa: Int64-to-float conversion not yet supported`. riscv32 lowers the same source through __pxx_l2d / __pxx_ul2d and every hosted target handles it natively, so xtensa is the one target where a widening conversion between two types it fully supports has no path at all."
 ---
 
@@ -68,3 +68,53 @@ Track A's, plus the repro above compiling for `--target=xtensa
 `test/test_esp_bare_float.pas` and its expectation row in the Makefile updated.
 Values verified against the x86-64 oracle, on hardware or the Espressif
 qemu-system-xtensa fork (not installed on plexus — see the parent ticket).
+
+---
+
+## Fixed 2026-08-27
+
+`EmitFloatOperandXtensa` refused `tyInt64`/`tyUInt64` outright. It now emits the
+pair with `EmitNode64Xtensa` (a2:a3) and calls `__pxx_l2d` / `__pxx_ul2d`, then
+`EmitFloatConvXtensa` down to the wanted depth — the riscv32 arm with xtensa's
+register names.
+
+**The sibling found with it, and the worse of the two.** Grepping the same
+routine for other integer widths turned up unsigned 32-bit falling through to
+the *signed* path: `__pxx_i2s`/`__pxx_i2d` read a2 as signed, so a `Cardinal`
+>= 2^31 converted negative — `(double)$FFFFFFFF` answered **-1**. That one never
+refused; it silently produced a wrong number, which is why it goes in the same
+change rather than a follow-up ticket. Fixed by zero-extending into the pair
+(`movi a3, 0` *after* the node emits, since emitting it may clobber a3) and
+reusing the proven unsigned kernel instead of adding a `u2d`.
+
+### Verified by execution, not inspection
+
+`test/test_esp_bare_float.pas` carried an explicit note that it omitted an
+Int64 arm *because* xtensa could not lower one. That note is now three cases:
+
+```
+  q := 1234567;  d := q;   -> 1234567     { __pxx_l2d }
+  q := -8;       d := q;   -> -32         { signed, negative }
+  c := 4294967295; d := c; -> 65537       { 65535 * 65537 = 4294967295 exactly }
+```
+
+The last is a discriminator, not a rounding tweak: the old signed path printed
+**0**, the correct unsigned one prints **65537**.
+
+Run on the real Espressif emulators, both chips, diffed against the x86-64
+oracle:
+
+```
+  bare-float esp32c3  == x86-64 oracle
+  bare-float esp32s3  == x86-64 oracle
+```
+
+This is the first execution coverage these kernels have had on either ESP ISA —
+the rows silently skipped until ESP-IDF was installed on plexus the same day
+([[task-s-install-esp-idf-to-turn-on-the-skipped-esp-execution-rows]]).
+
+Gate: `tools/gate.sh quick` GREEN, self-host fixedpoint verified, all four bare
+spellings byte-identical per pair.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.

@@ -52,7 +52,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (272)
+## backlog (271)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -61,8 +61,8 @@ _none_
 | bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse | A | 40 | bug | `C(**d)` and `C(*lst)` on a class with an ordinary `__init__` fail with `expected expression` — on the PINNED compiler too, so this is not a regression. The ctor path in pyparser.inc:45097 builds its own AN_ARG chain and never consults the star-forwarding branch that plain calls use. Routing it there needs the receiver prepended, which PyStarForwardCall's signature does not take. | — |
 | bug-a-riscv32-sa-onstack-has-no-effect-under-qemu | A | 12 | bug | riscv32 registers a signal alt stack correctly — the sigaltstack syscall succeeds and the flags word assembles to $18000004 — but the handler still runs on the FAULTING stack under qemu-riscv32, so a stack-overflow SIGSEGV kills the process. The identical construction works under qemu-i386/arm/aarch64 of the same build, which points at qemu-user rather than at us. Unverifiable without hardware. | — |
 | bug-a-the-div-by-zero-check-is-still-missing-on-xtensa | A+S | 25 | bug | The last target without a pre-divide zero check. The other five landed 2026-08-23; xtensa was left out because it cannot be RUN on this box (bare profile emits an ESP image, not a Linux ELF), its branches carry only an 8-bit displacement, its windowed ABI rotates the register window on a call, and its divide is two shapes depending on XtensaSoftDivide. | — |
-| bug-a-xtensa-cannot-lower-an-int64-to-float-conversion | S | 30 | bug | `var q: Int64; d: Double; d := q;` is refused outright on xtensa: `target xtensa: Int64-to-float conversion not yet supported`. riscv32 lowers the same source through __pxx_l2d / __pxx_ul2d and every hosted target handles it natively, so xtensa is the one target where a widening conversion between two types it fully supports has no path at all. | — |
 | bug-a-xtensa-codegen-has-no-variant-support | S | 22 | bug | `var v: Variant; v := 1;` does not compile for --target=xtensa: `unsupported node in IR codegen: var_store`. The exact sibling of bug-a-riscv32-codegen-has-no-variant-support, which was fixed 2026-08-27 -- xtensa is the last backend with no IR_VAR_STORE / IR_VAR_BOX / IR_VAR_BINOP arm at all. | — |
+| bug-a-xtensa-entry-jump-cannot-reach-a-main-body-past-128kb | S | 55→60 | bug | The xtensa program entry stub ends in a bare `j` to the main body, which sits past every unit body. Xtensa's J reaches +-128 KiB, so any xtensa image with more than 128 KiB of unit code cannot be entered. It is now a hard compile error rather than a silent mis-jump; making it WORK needs a reach-independent entry jump. Blocks xtensa under ESP-IDF. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-format-percent-u-prints-a-signed-value | B | 55 | bug | `Format('%u', [q])` on a QWord prints -1: sysutils' formatter aliases 'u' to 'd' and runs both through the signed IntToStr. FPC prints 18446744073709551615. The same line makes `%u` of Integer(-1) print -1 where FPC prints 4294967295. Filed from Track A+C+P — B owns lib/rtl. | — |
 | bug-b-inttostr-of-a-qword-above-2-63-renders-negative | B | 55 | bug | `IntToStr` of a QWord above 2^63 renders it negative | — |
@@ -157,7 +157,7 @@ _none_
 | docs-toolchain-cli-flags | D | 35 | docs | Document the toolchain information flags (--help / --version / --where / --config / --list-targets / --list-libraries / --doctor, PXX_HOME, PXX_LIBPATH, pxx.cfg) | — |
 | feature-a-a-variant-has-no-null-tag | A | 45 | feature | pxx has one no-value variant tag (VT_EMPTY), so VarIsNull and VarIsEmpty are the same question and `v := Null; VarIsEmpty(v)` answers True where FPC says False. variants.pas states the approximation in its header and asks for a ticket rather than a silent guess — this is that ticket. A VT_NULL tag is a compiler change, and decide-variant-tag-space-is-a-language-wide-commitment already settled that the tag space is Track A\'s to renumber freely. | — |
 | feature-a-classinfo-returns-the-typinfo-header | A | 45 | feature | Re-filed from decide-classinfo-returns-our-blob-or-nothing / decide-tobject-classinfo-blob-or-refusal, both decided 2026-08-25. x.ClassInfo returns exactly what TypeInfo(TThatClass) returns -- the 24-byte {Kind; NamePtr; DataPtr} header whose DataPtr points at the class blob -- so o.ClassInfo = TypeInfo(TFoo) holds and a layout walker reads a real kind byte. One header word per declared class. | — |
-| feature-a-complete-the-builtin-unit-on-the-esp-class-targets | S | 60 | feature | Not \"builtin is unavailable on ESP\" but \"xtensa is hardcoded as bare-metal on both axes, whatever the profile\". Measured under --platform=esp (the IDF-linked route): esp32c3 compiles Variant + UpCase + Str with the FULL builtin unit; esp32s3 is refused. riscv32-under-IDF already proves the unit works on an ESP target — xtensa, the user's own S2/S3 hardware, is the one locked out, and it is locked out of the profile where FreeRTOS, VFS and sockets actually live. | — |
+| feature-a-complete-the-builtin-unit-on-the-esp-class-targets | S | 60 | feature | Not \"builtin is unavailable on ESP\" but \"xtensa is hardcoded as bare-metal on both axes, whatever the profile\". Measured under --platform=esp (the IDF-linked route): esp32c3 compiles Variant + UpCase + Str with the FULL builtin unit; esp32s3 is refused. riscv32-under-IDF already proves the unit works on an ESP target — xtensa, the user's own S2/S3 hardware, is the one locked out, and it is locked out of the profile where FreeRTOS, VFS and sockets actually live. | bug-a-xtensa-entry-jump-cannot-reach-a-main-body-past-128kb |
 | feature-a-declaration-phase | N | 60 | feature | A real declaration phase: all decls before any body is typed | — |
 | feature-a-dynamic-array-of-frozen-strings | A | 45 | feature | In the FROZEN-string model (-uPXX_MANAGED_STRING, the self-host build), `array of string` is refused from SetLength up: the element is an inline fixed-capacity buffer and no path knows its stride. Delete/Insert refuse it downstream of that, which is why they carry a frozen-string exclusion. | — |
 | feature-a-emit-obj-record-class-abi-mode | A | 40 | feature | --emit-obj objects built with and without --compact-classes disagree on VMT slot numbers, and nothing diagnoses it. Record the class-ABI mode in the object and refuse a mismatched link, the way --threadsafe's hazard is meant to be handled. | — |
@@ -327,7 +327,6 @@ _none_
 | task-d-document-the-strict-overload-width-flag | D | 20 | task | `--strict-overload-width` shipped 2026-08-15 with no row in docs/reference/cli.md, modes.md or directives.md. One table row each, plus the one sentence that explains why it is standalone rather than part of the --strict-fpc umbrella. | — |
 | task-d-document-warn-ignored-directives | D | 20 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
-| task-s-install-esp-idf-to-turn-on-the-skipped-esp-execution-rows | S | 40 | task | ESP-IDF is not installed on plexus, so every ESP EXECUTION row in `test-esp-bare` prints 'not installed; skipped' and passes. IDF ships the Espressif qemu fork the rows already look for; the wiring is done and waiting. A download, not a code change — but it is a NETWORK + INSTALL action and needs the user's go-ahead. | — |
 
 ## backlog_new (0)
 
@@ -561,9 +560,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2473)
+## done (2476)
 
-2473 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2476 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (45)
 
@@ -664,10 +663,10 @@ _none_
 - [p 62] [N] feature-nilpy-enum-class
 - [p 62] [N] feature-nilpy-list-sort-inplace-key-reverse
 - [p 62] [A] feature-unicodestring-model
+- [p 60] [S] bug-a-xtensa-entry-jump-cannot-reach-a-main-body-past-128kb (unblocks 1)
 - [p 60] [B] bug-b-sysutils-string-gaps-found-by-differential
 - [p 60] [N] bug-n-bytes-getitem-returns-empty-instead-of-the-byte-value
 - [p 60] [N] bug-nilpy-a-keyword-call-through-a-statically-unknown-callee-does-not-compile
-- [p 60] [S] feature-a-complete-the-builtin-unit-on-the-esp-class-targets
 - [p 60] [N] feature-a-declaration-phase
 - [p 60] [N] feature-nilpy-process-exec-binding
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application
@@ -784,7 +783,6 @@ _none_
 - [p 40] [C] refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag
 - [p 40] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
 - [p 40] [A] task-a-add-fu-to-the-compiler-usage-line
-- [p 40] [S] task-s-install-esp-idf-to-turn-on-the-skipped-esp-execution-rows
 - [p 35] [A] bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error
 - [p 35] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
 - [p 35] [N] bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds
@@ -803,7 +801,6 @@ _none_
 - [p 32] [O] feature-opt-rtti-emit-on-use
 - [p 30] [N] bug-b-reportlab-mimic-multi-font-heap-corruption (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 30] [A] bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce
-- [p 30] [S] bug-a-xtensa-cannot-lower-an-int64-to-float-conversion
 - [p 30] [S] bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file
 - [p 30] [N] bug-n-nilpy-carries-its-own-copies-of-the-float-type-table
 - [p 30] [N] bug-nilpy-an-extended-slice-cannot-be-assigned
@@ -906,6 +903,7 @@ _none_
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
+- **1** — bug-a-xtensa-entry-jump-cannot-reach-a-main-body-past-128kb
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — decide-how-a-compiled-def-carries-its-signature-when-boxed
 - **1** — decide-how-much-string-machinery-the-basic-frontend-gets

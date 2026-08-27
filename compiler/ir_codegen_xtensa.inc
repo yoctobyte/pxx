@@ -870,7 +870,37 @@ begin
   begin
     if (ntk = tyInt64) or (ntk = tyUInt64) then
     begin
-      Error('target xtensa: Int64-to-float conversion not yet supported');
+      { 64-bit int -> float. Was refused outright, which made `d := q` with
+        q: Int64 a compile error on the one target that could not say why —
+        and it is reached by ordinary code, not just an explicit cast: it is
+        what every `{$ifndef PXX_ESP}` body in builtinheap hits first once the
+        IDF profile stops pretending xtensa is bare metal.
+        EmitNode64Xtensa gives the pair in a2:a3 and the kernels take it there,
+        so this is the riscv32 arm with xtensa's register names.
+        bug-a-xtensa-cannot-lower-an-int64-to-float-conversion }
+      EmitNode64Xtensa(node);          { a2:a3 = 64-bit int }
+      if ntk = tyUInt64 then EmitFloatUnaryCallXtensa('__pxx_ul2d', True, True)
+      else EmitFloatUnaryCallXtensa('__pxx_l2d', True, True);
+      EmitFloatConvXtensa(tyDouble, wantTk);
+      Exit;
+    end;
+    if (ntk = tyUInt32) or (ntk = tyNativeUInt) then
+    begin
+      { UNSIGNED 32-bit: __pxx_i2s/i2d read a2 as SIGNED, so a Cardinal >= 2^31
+        converted NEGATIVE — `(double)4294967295u` answered -1. Zero-extend into
+        the 64-bit pair and reuse the proven unsigned kernel rather than adding
+        a u2d. a3 is cleared AFTER the node emits, because emitting it may
+        clobber a3.
+
+        The sibling of the arm above and found with it: riscv32 fixed exactly
+        this in bug-c-int64-to-double-cast-truncates-on-32bit and xtensa was
+        never given the same treatment, so it was silently wrong here while
+        merely refusing above. Silent beats loud to the wrong answer, which is
+        why it goes in the same change. }
+      IREmitNodeXtensa(node);          { a2 = value }
+      xtensa_movi(reg_xtensa_a3, 0);   { a3 = 0 (zero-extend) }
+      EmitFloatUnaryCallXtensa('__pxx_ul2d', True, True);
+      EmitFloatConvXtensa(tyDouble, wantTk);
       Exit;
     end;
     IREmitNodeXtensa(node);            { a2 = 32-bit int }

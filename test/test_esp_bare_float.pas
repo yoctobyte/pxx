@@ -60,6 +60,8 @@ var
   s: Single;
   d: Double;
   i: Integer;
+  q: Int64;
+  c: Cardinal;
 
 begin
   i := 3;
@@ -73,11 +75,24 @@ begin
   PutInt(Round(s * 4)); PutC(10);        { 32 }
   d := i / 4;                   { `/` is real division even on integers -> 0.75 }
   PutInt(Round(d * 100)); PutC(10);      { 75 }
-  { NO Int64->float arm here: xtensa cannot lower one at all
-    ("target xtensa: Int64-to-float conversion not yet supported"), which is a
-    BACKEND gap, not this bug, and is filed as
-    bug-a-xtensa-cannot-lower-an-int64-to-float-conversion. Adding a target
-    ifdef to route around it here would hide it. }
+  { Int64->float. xtensa REFUSED this outright until 2026-08-27 ("target xtensa:
+    Int64-to-float conversion not yet supported"); the arm now routes a2:a3
+    through __pxx_l2d exactly as riscv32 does.
+    bug-a-xtensa-cannot-lower-an-int64-to-float-conversion }
+  q := 1234567;
+  d := q;                       { __pxx_l2d }
+  PutInt(Trunc(d)); PutC(10);            { 1234567 }
+  q := -8;
+  d := q;                       { signed, negative }
+  PutInt(Trunc(d * 4)); PutC(10);        { -32 }
+  { UNSIGNED 32-bit->float, the sibling found with it and the more dangerous
+    half: this did not refuse, it answered WRONG. __pxx_i2s/i2d read a2 as
+    signed, so a Cardinal >= 2^31 converted negative and $FFFFFFFF became -1.
+    65535 * 65537 = 4294967295 exactly, so an unsigned conversion prints 65537
+    and the old signed one printed 0 -- a discriminator, not a rounding tweak. }
+  c := 4294967295;
+  d := c;                       { __pxx_ul2d via a zero-extended pair }
+  PutInt(Trunc(d / 65535)); PutC(10);    { 65537 }
   PutS('ESP BARE FLOAT OK'); PutC(10);
 {$ifdef PXX_ESP} while True do ; {$endif}
 end.

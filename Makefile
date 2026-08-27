@@ -4764,7 +4764,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) --esp-profile=bare --target=esp32s3 test/test_esp_bare_float.pas $(TESTTMP)/test_socf_s326
 	cmp $(TESTTMP)/test_socf_xt26 $(TESTTMP)/test_socf_s326
 	./$(COMPILER) test/test_esp_bare_float.pas $(TESTTMP)/test_socf_oracle26
-	test "$$($(TESTTMP)/test_socf_oracle26 | tr '\n' '|')" = "7|16|32|75|ESP BARE FLOAT OK|"
+	test "$$($(TESTTMP)/test_socf_oracle26 | tr '\n' '|')" = "7|16|32|75|1234567|-32|65537|ESP BARE FLOAT OK|"
 	# ...and a float-free bare program must still pay NOTHING for it: the pull is
 	# on demand precisely because softfloat is ~54-64KB of flash. If this ever
 	# starts linking the unit, the scan has become unconditional.

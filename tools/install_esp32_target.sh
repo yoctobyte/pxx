@@ -115,7 +115,17 @@ ensure_idf_checkout() {
 
   if [ -d "$ESP_IDF_DIR/.git" ]; then
     say "update: $ESP_IDF_DIR"
-    if [ "$ESP_IDF_ALLOW_DIRTY" != 1 ] && [ -n "$(git -C "$ESP_IDF_DIR" status --porcelain)" ]; then
+    # --untracked-files=no: the guard exists to protect LOCAL EDITS from being
+    # clobbered by the checkout/submodule-update below, and neither of those
+    # touches an untracked file. Counting untracked ones made the script
+    # non-idempotent after its OWN first run: it clones the default branch and
+    # then checks out $ESP_IDF_VERSION, which leaves behind submodule
+    # directories that exist on master and not on the tag (measured on plexus
+    # 2026-08-27 after a clean v6.0.1 install: components/bt/controller/
+    # lib_esp32h4, lib_esp32s31, esp_ble_audio). Re-running then refused with
+    # "checkout has local changes" and told the user to set ALLOW_DIRTY, for
+    # files nobody wrote.
+    if [ "$ESP_IDF_ALLOW_DIRTY" != 1 ] && [ -n "$(git -C "$ESP_IDF_DIR" status --porcelain --untracked-files=no)" ]; then
       say "error: ESP-IDF checkout has local changes: $ESP_IDF_DIR" >&2
       say "set ESP_IDF_ALLOW_DIRTY=1 to continue anyway" >&2
       exit 1
@@ -149,29 +159,38 @@ install_idf_tools() {
 
 validate_install() {
   say "validate: ESP-IDF environment"
-  (
-    # shellcheck disable=SC1091
-    . "$ESP_IDF_DIR/export.sh" >/dev/null
+  # THROUGH BASH, deliberately. ESP-IDF's export.sh is a bash/zsh script: it
+  # locates IDF_PATH from $BASH_SOURCE, and under dash it prints "Could not
+  # automatically detect IDF_PATH" and returns having exported nothing. This
+  # script is #!/usr/bin/env sh, so `set -e` then reported the WHOLE install as
+  # failed after it had in fact succeeded completely -- measured on plexus
+  # 2026-08-27, exit code 1 with IDF v6.0.1 and both qemu forks correctly in
+  # place. Exporting IDF_PATH first does NOT help; export.sh re-derives it and
+  # bails the same way. Upstream supports bash/zsh/fish here and nothing else,
+  # so asking for bash is the fix rather than a workaround.
+  bash -c '
+    set -eu
+    . "$1/export.sh" >/dev/null
     idf.py --version
-    for tool in $ESP_IDF_QEMU_TOOLS; do
+    for tool in $2; do
       case "$tool" in
         qemu-xtensa)
-          if have qemu-system-xtensa; then
+          if command -v qemu-system-xtensa >/dev/null 2>&1; then
             qemu-system-xtensa --version | head -n 1
           else
-            say "warn: qemu-system-xtensa not found after export"
+            echo "warn: qemu-system-xtensa not found after export"
           fi
           ;;
         qemu-riscv32)
-          if have qemu-system-riscv32; then
+          if command -v qemu-system-riscv32 >/dev/null 2>&1; then
             qemu-system-riscv32 --version | head -n 1
           else
-            say "warn: qemu-system-riscv32 not found after export"
+            echo "warn: qemu-system-riscv32 not found after export"
           fi
           ;;
       esac
     done
-  )
+  ' _ "$ESP_IDF_DIR" "$ESP_IDF_QEMU_TOOLS"
 }
 
 main() {

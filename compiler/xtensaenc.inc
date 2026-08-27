@@ -6,12 +6,45 @@ const
   reg_xtensa_a2 = 2; reg_xtensa_a3 = 3; reg_xtensa_a4 = 4; reg_xtensa_a5 = 5; reg_xtensa_a6 = 6; reg_xtensa_a7 = 7;
   reg_xtensa_a8 = 8; reg_xtensa_a9 = 9; reg_xtensa_a10 = 10; reg_xtensa_a11 = 11; reg_xtensa_a12 = 12; reg_xtensa_a13 = 13; reg_xtensa_a14 = 14; reg_xtensa_a15 = 15;
 
+procedure XtensaRelCheck(v, lo, hi: Integer; const what: AnsiString);
+{ THE range check every PC-relative xtensa field was missing. Each encoder below
+  ends in `and $3FFFF` / `and $FF`, and a mask is not a check: an offset past the
+  field silently wraps and the instruction targets a DIFFERENT, perfectly valid
+  address. There is no fault at encode time and no fault at link time -- the
+  program simply jumps somewhere else.
+
+  Measured 2026-08-27, and it is the reason this exists. An ESP-IDF esp32s3
+  image whose main body sat 262591 bytes past the entry stub encoded its entry
+  `j` as 262581 mod 262144 = 437, i.e. 0x4204ca4b became 0x4200ca4b -- one bit
+  of 2^18 dropped, landing MID-INSTRUCTION inside sShiftRightSticky. The chip
+  decoded three bytes of a `sub`, then hit an illegal opcode:
+
+    Guru Meditation Error: Core 0 panic'ed (IllegalInstruction)
+    PC: 0x4200ca51
+
+  A wrong PC three functions away from the cause, which is exactly the failure
+  shape devdocs/dev/debugging-playbook.md opens with. The offset was not close
+  to the boundary and no diagnostic mentioned a range, so nothing pointed at the
+  encoder; it took a disassembly and the arithmetic 262591-262144=437 to name it.
+
+  Masking is still correct for NEGATIVE offsets (two's complement is what the
+  field wants), so this checks the SIGNED range rather than "did the mask change
+  the value" -- the latter would reject every backward branch.
+  bug-a-xtensa-pc-relative-encoders-silently-truncate-an-out-of-range-offset }
+begin
+  if (v < lo) or (v > hi) then
+    Error('target xtensa: ' + what + ' displacement ' + AIntToStr(v) +
+          ' is outside the encodable range ' + AIntToStr(lo) + '..' +
+          AIntToStr(hi) + '; the code is too large for this branch form');
+end;
+
 function EncodeXtensaJ(offset: Integer): Integer;
 var
   imm: Integer;
 begin
   { J: target = PC + 4 + imm18; imm18 sits at insn bits [23:6]
     (op0=6 in bits [3:0], n=0 in bits [5:4]). }
+  XtensaRelCheck(offset - 4, -131072, 131071, 'j');
   imm := (offset - 4) and $3FFFF;
   Result := (imm shl 6) or 6;
 end;
@@ -421,6 +454,11 @@ begin
   { CALL0: target = align4(PC) + 4 + imm18*4, so the target must be
     4-aligned (proc entries are padded to 4 on this target).
     NB: PXX `not` is not a bitwise int op — use div/mul to mask. }
+  if (target mod 4) <> 0 then
+    Error('target xtensa: call0 target ' + AIntToStr(target) +
+          ' is not 4-aligned; CALL0/CALL8 encode a WORD offset and a stray ' +
+          'byte is silently truncated away by the div below');
+  XtensaRelCheck((target - (pc div 4) * 4 - 4) div 4, -131072, 131071, 'call0');
   imm18 := ((target - (pc div 4) * 4 - 4) div 4) and $3FFFF;
   Result := (imm18 shl 6) or 5;
 end;
@@ -429,6 +467,11 @@ function EncodeXtensaCall8(pc, target: Integer): Integer;
 var
   imm18: Integer;
 begin
+  if (target mod 4) <> 0 then
+    Error('target xtensa: call8 target ' + AIntToStr(target) +
+          ' is not 4-aligned; CALL0/CALL8 encode a WORD offset and a stray ' +
+          'byte is silently truncated away by the div below');
+  XtensaRelCheck((target - (pc div 4) * 4 - 4) div 4, -131072, 131071, 'call8');
   imm18 := ((target - (pc div 4) * 4 - 4) div 4) and $3FFFF;
   Result := (imm18 shl 6) or $25;
 end;
@@ -473,6 +516,7 @@ function EncodeXtensaBranch(r, s, t, offset: Integer): Integer;
 var
   imm8: Integer;
 begin
+  XtensaRelCheck(offset - 4, -128, 127, 'conditional branch');
   imm8 := (offset - 4) and $FF;
   Result := (imm8 shl 16) or (r shl 12) or (s shl 8) or (t shl 4) or 7;
 end;

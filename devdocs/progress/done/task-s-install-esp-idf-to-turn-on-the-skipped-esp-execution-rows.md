@@ -4,8 +4,9 @@ track: S
 prio: 40
 type: task
 blocked-by: []
-status: backlog
+status: done
 summary: "ESP-IDF is not installed on plexus, so every ESP EXECUTION row in `test-esp-bare` prints 'not installed; skipped' and passes. IDF ships the Espressif qemu fork the rows already look for; the wiring is done and waiting. A download, not a code change — but it is a NETWORK + INSTALL action and needs the user's go-ahead."
+owner: agent-A
 ---
 
 # Install ESP-IDF so the skipped ESP execution rows actually run
@@ -74,3 +75,62 @@ this is a ticket and not a fix.
 instead of `...skipped`, with the UART output matching the x86-64 oracle. Then
 consider whether a skipped ESP row should FAIL the target rather than pass it,
 once passing is actually achievable.
+
+---
+
+## Done — 2026-08-27, plexus
+
+Installed on the user's explicit go-ahead ("well, install IDF"):
+
+- **ESP-IDF v6.0.1** at `~/esp/esp-idf`
+- **both Espressif qemu forks**, 9.2.2 / `esp_develop_9.2.2_20250817`, at
+  `~/.espressif/tools/qemu-{xtensa,riscv32}/*/qemu/bin/` — exactly the paths the
+  Makefile rows probe, so no Makefile change was needed. The wiring really was
+  done and waiting.
+
+### The gate, measured
+
+Every bare execution row now runs instead of skipping, on **both** chips, with
+UART output diffed against the x86-64 oracle:
+
+```
+bare boot          esp32c3 UART == x86-64 oracle    esp32s3 UART == x86-64 oracle
+bare float         esp32c3 == oracle                esp32s3 == oracle
+softfloat probe    esp32c3 ok                       esp32s3 ok
+```
+
+The bare-float row is the one that mattered most: it is the first time the
+`__pxx_*` soft-float kernels from
+[[bug-a-esp32c3-bare-profile-cannot-find-the-softfloat-repack-helper]] have been
+*executed* on either ESP ISA rather than inspected. `7 16 32 75 ESP BARE FLOAT
+OK` on both chips, identical to the host.
+
+### The installer needed three fixes to get here
+
+It had never been run end-to-end on a current Ubuntu. All three are committed:
+
+1. `libglib2.0-0` has no candidate under Ubuntu's `t64` renames — `set -eu`
+   killed the install outright (`d273b67dd`).
+2. `validate_install` sourced `export.sh` from a `#!/usr/bin/env sh` script.
+   IDF's `export.sh` is bash/zsh-only and under dash prints "Could not
+   automatically detect IDF_PATH" and exports nothing — so the script reported
+   the whole install FAILED after it had succeeded completely. Exporting
+   `IDF_PATH` first does not help; it re-derives it.
+3. Not idempotent after its own first run: it clones the default branch then
+   checks out the tag, leaving untracked submodule dirs that exist on master and
+   not on v6.0.1, and the dirty check then refused for files nobody wrote.
+
+Fix 2 is the one worth remembering — a **successful** install that reports
+failure is the shape that wastes the most time.
+
+### Follow-on, deliberately not done here
+
+The ticket asked whether a skipped ESP row should FAIL rather than pass. It
+should not be decided unilaterally: making the skip fatal turns any box without
+a multi-gigabyte toolchain red, which is most of them, and the honest fix is a
+verdict that can distinguish "skipped" from "passed" rather than a louder skip.
+That is `bug-t-a-skip-that-cannot-say-why-is-a-pass-in-the-verdict`'s territory
+and belongs to Track T, so it is left there rather than duplicated.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.
