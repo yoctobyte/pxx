@@ -5926,7 +5926,38 @@ Prose restates; only the claim is invariant. And **sweep before editing, not
 after** — the cheap pass is worthless once you have fixed the instances you
 already knew about.
 
-### BOUND on Track D for `ianweb` — prose half only, and it is ARCHITECTURAL
+### BOUND on Track D for `ianweb` — **LIFTED 2026-08-27 via a qemu shim**
+
+**Superseded within hours of being recorded. D on `via` is NOT prose-only.**
+
+The bound assumed a *native* aarch64 stable was required. It never was. The
+shipped x86-64 stable runs under `qemu-x86_64`, so `PXX_STABLE` points at a shim:
+
+```sh
+#!/bin/sh
+exec qemu-x86_64 /home/ian/pxx/stable_linux_amd64/default/pinned "$@"
+```
+
+**Verified end to end rather than asserted:** a real snippet (dynamic array,
+`SetLength`, `High`, for-loop accumulation) compiled through the shim targeting
+aarch64, and the result ran **natively** on `via` — `sum of squares 0..4 = 30`.
+Compile emulated, run native, both real.
+
+**Standing caveat, and it is small:** verification is against the *pinned* stable
+under emulation, not a native build. That is the same oracle CI uses, reached
+differently.
+
+Note `ianweb` could *not* build a native aarch64 stable — that failure is
+`bug-a-cross-bootstrap-aarch64-overflows-max-code`, a genuine Track A bug, not a
+setup problem. The shim routes around it; it does not fix it.
+
+Incidental: the shim also makes `test -x` honest on `via`, since the thing tested
+is now a script the machine can run. **That does not close
+`bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture`** — the guard
+still checks the wrong property and still lies for anyone pointing `PXX_STABLE`
+at a raw foreign binary.
+
+### SUPERSEDED — the original bound, kept for the reasoning
 
 Measured by `ianweb` on `via` and verified in `/home/neo/frank2`.
 
