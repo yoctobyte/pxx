@@ -140,4 +140,4 @@ registered in the Makefile) — six rows: the parameter, the local, the field, t
 exact accumulator, each-binding-renders-as-itself, and floor-div keeping intness.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 3ea90919e.
