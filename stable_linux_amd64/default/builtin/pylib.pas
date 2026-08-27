@@ -624,7 +624,16 @@ type
       what CPython REJECTS and therefore laxity rather than a defect — see the
       ticket. bug-nilpy-bytearray-and-bytes-are-the-same-type }
     FIsByteArray: Boolean;
-    constructor Create(n: Integer);
+    { TWO spellings, because a SUBCLASS needs the parameterless one. `class
+      BA(bytearray)` with no __init__ of its own emits a call to the base's
+      no-argument Create, and TPyBytes had only Create(n) — so constructing any
+      subclass of bytes/bytearray SEGFAULTED, while `class L(list)` and
+      `class D(dict)` were fine because TPyList and TPyDict both declare a
+      parameterless Create. The asymmetry, not the subclassing, was the defect.
+      No bare-name hazard here: `Create` is not a name a NilPy program writes.
+      bug-n-bytearrays-zero-argument-overload-makes-the-bare-name-a-call }
+    constructor Create; overload;
+    constructor Create(n: Integer); overload;
     function count: Integer;
     { see TPyList.at — bytearrays have no Python .get either }
     function at(i: Integer): Integer;
@@ -1083,7 +1092,19 @@ function pyformat_v(const v: Variant; const spec: AnsiString): AnsiString;
   recognised by the frontend: neither name is a Pascal keyword, so both
   resolve through the normal call path with no parser hook. (`set()` needed a
   hook only because `set` IS a keyword.) }
-function bytearray: TPyBytes; overload;   { bytearray() — an EMPTY buffer }
+{ Stamp an existing TPyBytes as a bytearray rather than a bytes — the twin of
+  pylist_mark_list, and for the same reason: the empty `bytearray()` is built by
+  the ordinary literal path and needs the flag afterwards.
+
+  It replaces `function bytearray: TPyBytes; overload;`, which had to go. This
+  dialect lets a parameterless function be called by its BARE NAME, so that
+  overload made the bare word `bytearray` a complete call and
+  `bytearray.append(self, x)` — how a subclass of a builtin reaches the base it
+  just overrode — parsed as `bytearray().append(self, x)`. Same defect that
+  landed and was reverted for list/tuple/bytes on 2026-08-27; bytearray was the
+  original, and had carried it for as long as the overload existed.
+  bug-n-bytearrays-zero-argument-overload-makes-the-bare-name-a-call }
+function pybytes_mark_bytearray(b: TPyBytes): TPyBytes;
 function bytearray(n: Integer): TPyBytes; overload;
 { bytearray(b"abc") — a COPY of a bytes/bytearray, never an alias. The point of
   the call is almost always to get a MUTABLE copy of an immutable bytes, so
@@ -10002,6 +10023,11 @@ begin
   raise IndexError.Create('bytearray index out of range');
 end;
 
+constructor TPyBytes.Create;
+begin
+  Create(0);
+end;
+
 constructor TPyBytes.Create(n: Integer);
 var k: Integer; p: PByte;
 begin
@@ -10275,10 +10301,10 @@ begin
   if k < FLen then BadInput('utf-32', k);
 end;
 
-function bytearray: TPyBytes; overload;
+function pybytes_mark_bytearray(b: TPyBytes): TPyBytes;
 begin
-  Result := TPyBytes.Create(0);
-  Result.FIsByteArray := True;
+  Result := b;
+  if b <> nil then b.FIsByteArray := True;
 end;
 
 function bytearray(n: Integer): TPyBytes; overload;

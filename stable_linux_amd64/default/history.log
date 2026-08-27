@@ -383,3 +383,4 @@
 2026-08-27T14:01:12Z  v383  18392d1d31812d4e8d9fe278231b401788540cef39ba8ea3e02eeabfe259221c  c28e07a89f036f56d3bb860e62045b1103e22aae  tstate(plexus): publish uncommitted state (plexus.json)
 2026-08-27T15:31:09Z  v384  207a6a1da8e91d44b02b38fcabfccbffab875308714d4a1fc9bc496c48533e25  2bae398f57aa3945f64a5672e0fba00481bdb856  docs(progress): file the ManagedLocalZeroBytes per-kind audit
 2026-08-27T16:19:47Z  v385  dcc5945d5048b1d44aa215cc470e7728389a83c261cb3c8cf2128436f6346bc5  7212484e85050a19ee61d67d19a43af06d609af8  docs(progress): record the shas the resolves landed as
+2026-08-27T16:49:34Z  v386  22690b507548f42d1571311132409af6ce46d7868f107f07639c00339b1f602f  d826a543801a7dfbd827a750e137ddef4824f352  fix(nilpy): no builtin type name is a parameterless call any more
