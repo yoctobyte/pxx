@@ -9871,6 +9871,20 @@ test-core: $(COMPILER)
 	# bug-nilpy-a-lambda-returned-directly-is-not-callable
 	./$(COMPILER) test/test_nilpy_lambda_returned_directly.npy $(TESTTMP)/test_nilpy_lamret26
 	$(TESTTMP)/test_nilpy_lamret26 | diff -u test/test_nilpy_lambda_returned_directly.expected -
+	# `obj[k] = v` on a user class reached as a bare VARIANT handle — a list
+	# element, a dict value, an unannotated parameter. pyvar_setitem knew only
+	# TPyDict and TPyList, so the store raised "object does not support item
+	# assignment" for a class that declares __setitem__, while the same store
+	# through a NAMED receiver worked (the frontend dispatches that one on the
+	# static class). pyvar_getitem has carried the READ side of this arm for
+	# some time; only the write was missing. The container rows are controls
+	# for the new arm, and the string row is the tag guard: pyvar_getitem has
+	# always checked before casting and pyvar_setitem did not, so a string
+	# receiver had its character data dereferenced as an object.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-a-dunder-subscript-through-a-dynamically-typed-receiver-is-lost
+	./$(COMPILER) test/test_nilpy_setitem_through_a_variant_receiver.npy $(TESTTMP)/test_nilpy_varsetitem26
+	$(TESTTMP)/test_nilpy_varsetitem26 | diff -u test/test_nilpy_setitem_through_a_variant_receiver.expected -
 	./$(COMPILER) test/test_nilpy_ast_literal_eval.npy $(TESTTMP)/test_nilpy_ast_literal26
 	test "$$($(TESTTMP)/test_nilpy_ast_literal26)" = "$$(printf '0.7 0.7 0.5 3\n42 -3 hi\n2\nTrue None\n1 3')"
 	# atexit handlers run at exit (LIFO), io's in-memory buffers behave

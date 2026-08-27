@@ -1,0 +1,86 @@
+# `obj[k] = v` on a user class reached as a bare VARIANT handle — a list
+# ELEMENT, whose static class the frontend cannot know. pyvar_setitem knew only
+# TPyDict and TPyList, so the store raised "object does not support item
+# assignment" for a class that plainly declares __setitem__, while the identical
+# store through a NAMED receiver worked (the frontend dispatches that one on the
+# static class). pyvar_getitem has carried the READ side of this arm since
+# bug-nilpy-a-chained-subscript-does-not-see-getitem; only the write was missing.
+# bug-n-a-dunder-subscript-through-a-dynamically-typed-receiver-is-lost
+
+
+class Store:
+    def __init__(self):
+        self.d = {}
+
+    def __getitem__(self, k):
+        return self.d[k]
+
+    def __setitem__(self, k, v):
+        self.d[k] = v
+
+
+# named receiver — the control that always worked
+s = Store()
+s["k"] = 1
+s["k"] += 2
+print(s["k"])
+
+# a list ELEMENT: no static class for the frontend to key on
+stores = [Store(), Store()]
+stores[0]["k"] = 1
+stores[0]["k"] += 2
+stores[1]["k"] = 7
+print(stores[0]["k"], stores[1]["k"])
+
+# ...and through a dict value, and a nested list, for the same reason
+by_name = {"a": Store()}
+by_name["a"]["n"] = 3
+by_name["a"]["n"] *= 4
+print(by_name["a"]["n"])
+
+grid = [[Store()]]
+grid[0][0]["z"] = 8
+print(grid[0][0]["z"])
+
+
+# an unannotated PARAMETER is a variant too, so a helper can write into one
+def put(c, k, v):
+    c[k] = v
+
+
+t = Store()
+put(t, "p", 11)
+print(t["p"])
+
+# the CONTAINERS must be untouched by the new arm
+d = {}
+put(d, "a", 1)
+lst = [0, 0, 0]
+put(lst, 1, 9)
+print(d["a"], lst)
+
+nested = {"x": [1, 2]}
+put(nested, "y", [3])
+print(nested["x"][1], nested["y"][0])
+
+# a STRING receiver is a TypeError, not a dereference of its character data as
+# an object — pyvar_getitem has always checked the tag before casting and this
+# one did not, the same predicate written in two places.
+try:
+    put("abc", 0, "x")
+    print("no raise")
+except TypeError:
+    print("TypeError")
+
+
+# a class with no __setitem__ keeps its refusal
+class NoSet:
+    def __getitem__(self, k):
+        return 1
+
+
+try:
+    put(NoSet(), "k", 1)
+    print("no raise")
+except TypeError:
+    print("TypeError")
