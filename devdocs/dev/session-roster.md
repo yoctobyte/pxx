@@ -8829,3 +8829,29 @@ hypothetical collision.
 - **Stop varying the input; go after the mechanism**, when a passing probe is not
   evidence. frankB's `keys()` and overload findings; frankA credits it with saving real
   time on the pointer bug.
+
+### The symtab.inc grant: answered with REGION BOUNDS, not a yes — and that is the better answer
+
+frank-optimize cleared frankA for `symtab.inc:6963` and did it the right way: it
+checked and reported that W1 **does** put it in `symtab.inc` — at **4700-5030**
+(`ResidentRegOf` 4706, `LeafSymRcxLoadable` 4965, `ScratchSafeSubtree` 4998) — just
+1,900+ lines from frankA's site, in a different function, reading no residency state.
+
+**A bare "yes, it's free" would have been true and much less useful.** Bounds let me
+grant without re-asking next time, and let the next lane check for itself. It added two
+things nobody asked for:
+
+- **It has not opened the file yet** (playbook write-up finished, W1 editing not
+  started), so frankA landing promptly is in *before* it opens the file at all —
+  strictly the safest ordering — and it said explicitly not to wait on it.
+- **W1 may not touch `symtab.inc` at all.** The first transform is emitter-side —
+  use a resident sym's register directly as a binop/compare operand instead of copying
+  through rcx/rax — which is `ir_codegen.inc` work *reading* `ResidentRegOf`, not
+  changing it. It only edits 4965-5030 if the operand whitelist needs widening, known
+  within the hour.
+
+**Made binding for both lanes:** *if either hits a rebase conflict in `symtab.inc`
+today, report it rather than resolving it quietly.* At 1,900 lines of separation a
+conflict would mean one of them is not where they think they are — the same class as
+tonight's impossible `exc` result, where the impossibility is what saved the
+measurement. **A conflict that should not be possible is evidence, not a chore.**
