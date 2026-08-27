@@ -5794,10 +5794,10 @@ begin
           Exit;
         end;
 
-        { -O3 narrowing-cast fold: the three-binop, three-constant shape a
+        { -O2 narrowing-cast fold: the three-binop, three-constant shape a
           narrowing ordinal cast lowers to collapses to one movsx/movzx.
           See NarrowCastFold for the shapes and why they are value-identical. }
-        if (OptLevel >= 3) and
+        if (OptLevel >= 2) and
            (not TypeIsFloat(IntToTypeKind(IRTk[node]))) and
            NarrowCastFold(node, ncSrc, ncBytes, ncSigned) then
         begin
