@@ -3,7 +3,8 @@ track: N
 prio: 75
 type: bug
 blocked-by: [decide-nilpy-none-str-sentinel-vs-textstr-kind]   # re-asked 2026-08-15: the decided representation's prerequisite (a stamped block kind) turns out never to have been built
-summary: "`\"\" is None` answers TRUE for a NilPy str whose static type is plain `str`. Re-measured 2026-08-27: `Optional[str]` and every pylib-computed empty are ALREADY correct (a variant carries its own tag), so the surface is the ONE untagged slot, not the ~260 producers the decide ticket sized. A constant-fold is unsafe — `def f() -> str: return None` is legal CPython. The decided TEXTSTR design handles both rows unchanged."
+summary: "`\"\" is None` answers TRUE for any NilPy value whose static type is plain `str` — literal, local, parameter, `-> str` return, AND every pylib str-method result (`.replace()`, a slice, `.join()`, `*0`). Container-derived and `Optional[str]` values are correct, because they carry a variant TAG; the rule is tagged-vs-untagged, not literal-vs-computed. A CORRECTION at the bottom retracts the 2026-08-27 down-scoping, which claimed the pylib results were already right and was measured wrong (they answer True on v385, v386 and HEAD alike) — the original ~260-producer sizing, and the basis the decision was taken on, both stand. A constant-fold is unsafe: `def f() -> str: return None` is legal CPython."
+status: backlog
 ---
 
 # `""` and `None` are the same value for a NilPy str
@@ -327,3 +328,91 @@ Much smaller than "stamp every producer", and in this order:
 
 Also found while probing and filed separately: `str()` with no arguments is
 `expected expression` — [[bug-n-str-with-no-arguments-is-rejected]].
+
+---
+
+## CORRECTION 2026-08-27 (later, sha 28d72544b) — the down-scoping above is WRONG
+
+Re-measured at HEAD **and against the v385 / v386 pinned binaries**, which is
+what settles it: the section immediately above claims the surface is "~1
+mechanism, not 260 producers" because "every empty a computation produces is
+ALREADY correct". **It is not.** Its seven-row table lists shapes that answer
+`is None` **True** on the very binaries it was measured against.
+
+Nothing regressed — that was checked first, since this session had touched the
+`is` lowering (`IRPyVarEqTry` now routes `PY_BINOP_IDENTITY` to `pyvar_isv`).
+The two prior pinned binaries answer identically:
+
+| shape, as a BARE expression | v385 `dcc5945d5048` | v386 `22690b507548` | HEAD | CPython |
+| --- | --- | --- | --- | --- |
+| `"abc".replace("abc", "") is None` | True | True | True | **False** |
+| `"abc"[0:0] is None` | True | True | True | **False** |
+| `"".join([]) is None` | True | True | True | **False** |
+| `str("") is None` | True | True | True | **False** |
+| `"  ".strip() is None` | True | True | True | **False** |
+| `"x"[1:] is None` | True | True | True | **False** |
+| `"x" * 0 is None` | True | True | True | **False** |
+
+Same through a plain-`str` annotated local (`a: str = "abc".replace("abc","")`),
+same through a plain-`str` parameter, same for `-> str` defs returning a slice,
+a `.join`, or a `+` of two empties. Ten rows, all True, all should be False.
+
+### Why the earlier measurement read as correct
+
+Its premise is the load-bearing error: *"a pylib result reaches NilPy as a
+variant, and a variant carries its own tag"*. A pylib result reaches NilPy as an
+**`AnsiString`** — that is what the ~260 `: AnsiString` functions return — and an
+empty one is nil. The variant claim IS true for the 2026-08-09 table's rows,
+which is where it came from, and those rows are container-derived:
+
+| genuinely correct, re-verified at HEAD (7/7 match CPython) |
+| --- |
+| `["", "x"][0]` · `{"k": ""}["k"]` · `d.get("k")` · `d.get("nope")` → True · an element bound to a local · `Optional[str]` · a value through a lambda parameter |
+
+So the correct rule is not "literal vs computed" and not "producer vs consumer".
+It is **tagged vs untagged**: a value that reaches `is None` as a *runtime
+variant* is right, and a value whose static type is plain `str` is wrong —
+literal, local, parameter, `-> str` return, **and every pylib str-method result**,
+because none of those carries a tag and nil means both things.
+
+### What this restores
+
+The **original sizing**, and therefore the basis the user's 2026-08-16 decision
+was actually made on: the fix lands at the string-PRODUCING sites, and the pylib
+`: AnsiString` surface is in scope after all. The 2026-08-27 note's "step 1 alone
+closes every reported row" is false — it closes the literal rows and leaves every
+`.replace()` / slice / `.join()` row wrong, which is the partial-coverage failure
+shape `devdocs/dev/normalise-dont-special-case.md` describes.
+
+**The decision is NOT re-opened.** It was taken under the large sizing; this
+measurement restores that sizing rather than changing it, so there is nothing new
+to ask. `PXX_KIND_TEXTSTR` "may be zero length" remains the design.
+
+### One fear that IS smaller than recorded, measured
+
+The parked note's third cost — *"let a non-nil zero-length handle loose in a
+runtime with 208 `= nil` tests in `compiler/builtin/**`, several of which mean
+empty"* — counted every nil test, most of them on object and block pointers.
+Scoped to **string handles**:
+
+```
+grep -rn "Pointer([A-Za-z_][A-Za-z0-9_]*) *\(=\|<>\) *nil" compiler/builtin/*.pas
+  -> 1 hit, and it is pystr_is_none itself
+```
+
+and the two comparison kernels are length-first by construction, so a non-nil
+zero-length handle is already safe in both: `PXXStrEq` returns 0 on `lenA <>
+lenB` before touching either pointer, and `PXXStrCmp3`'s own comment states *"a
+nil handle arrives here as len 0, which is what makes '' the least element
+without a special case"* — which holds equally for a real length-0 block.
+
+So the risk is not "208 sites to audit". It is the ordinary work of making the
+producers stop collapsing, and the audit is bounded.
+
+### Parked back to the backlog, unclaimed
+
+Still a Track A string-representation project carrying the `stabilize-fast` +
+`make pin` obligation, and still too large to half-apply — but now correctly
+sized, with the wrong plan removed. Whoever takes it should start from
+`PXXStrFromLit`'s `if len <= 0 then Result := nil` (builtinheap.pas:1260) and the
+pylib producers, NOT from the empty literal alone.
