@@ -6993,13 +6993,15 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-08-26T10:24:49Z",
+  "date": "2026-08-27T12:29:27Z",
   "red": [
-   "test-fpjson#src:tools/install_lib_candidates.sh"
+   "test-emit-obj#src:test/cxtensa_obj.c@1",
+   "test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy",
+   "test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy"
   ],
-  "sha": "0a1acd15ff6e30c2108ffca92e143618066b6910",
+  "sha": "1e49e4c54252ac6d047a5901d82d9df3ed3d872e",
   "tier": "full",
-  "ver": "v377",
+  "ver": "v381",
   "verdict": "RED"
  },
  "renamed_from": [
