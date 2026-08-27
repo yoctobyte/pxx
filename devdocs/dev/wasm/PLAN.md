@@ -107,8 +107,37 @@ backends use `[rbp-N]`. Model on `ir_codegen_riscv32.inc` (3,891 lines) — same
 32-bit shape, and wasm locals make it *easier* (infinite typed registers, no
 allocator, no spills).
 
-- **Milestone:** a program with arithmetic, records and arrays, no control flow,
-  produces the same value as its native build.
+- **~~Milestone: a program with arithmetic, records and arrays, no control
+  flow, produces the same value as its native build.~~ Known-unreachable,
+  rewritten 2026-08-28.** It assumed a program could be compiled in isolation.
+  It cannot. Every `.pas` pulls `compiler/builtin/builtinheap.pas`
+  unconditionally (`-dPXX_NODEFAULTRTL` does not suppress it), and those bodies
+  use `IR_STORE_MEM`, calls and control flow. The backend's first ever run
+  stopped in builtinheap, not in the test program. "Implement the ops my test
+  needs" was never reachable; "implement the ops the builtins need" is most of
+  Phases 2-4 at once.
+- **Milestones are now properties of the COVERAGE REPORT**, because `5 of 125`
+  is a real metric and "Phase 2 complete" is not. `WasmReportCoverage` prints
+  before every module is written:
+
+  ```
+  wasm32: 5 of 125 bodies lowered; 120 emitted as `unreachable` (Phase 2 is incomplete):
+      PXXHdrInit — non-i32 parameter base
+  ```
+
+  Each stubbed body cites the *first* thing that stopped it, so the report is a
+  worklist ordered by what is actually blocking, not by what the plan guessed.
+
+  | phase | milestone, stated as a property of that report |
+  | --- | --- |
+  | **2 — values and slots** | no entry cites a *value* op, a non-i32 slot, or a non-i32 signature. Scalar i32/i64/f64 loads, stores, consts, binops, unaries all lower. |
+  | **3 — control flow** | no entry cites a control-flow op (`IR_JUMP`, `IR_JUMP_IF_FALSE`, `IR_LABEL` reachability). The `br_table` dispatch exists. |
+  | **4 — calls and code addresses** | no entry cites `IR_CALL`, `IR_VIRTUAL_CALL` or `IR_CALL_IND`; the report reads **N of N** for the builtin set. |
+
+  **The differential is unchanged and still the real gate**: `check_phase2.sh`
+  diffs the lowered bodies against the native build. Coverage says how much is
+  lowered; the differential says whether it is *right*. Neither substitutes for
+  the other, and a rising counter with a failing diff is worse than no counter.
 - **Design done 2026-08-27, ahead of the phase:**
   [`phase2-shadow-stack.md`](phase2-shadow-stack.md). It corrects the
   model-on-riscv32 advice above, which is right about the frame and **wrong
@@ -133,8 +162,9 @@ allocator, no spills).
 
 The `br_table` dispatch loop; the 5 control-flow IR ops.
 
-- **Milestone:** `if`/`while`/`for`/`case`/`goto` all correct. This is where the
-  differential probe starts earning its keep.
+- **Milestone:** `if`/`while`/`for`/`case`/`goto` all correct, *and* no coverage
+  entry cites a control-flow op. This is where the differential probe starts
+  earning its keep.
 - **Known cap, measured 2026-08-27:** the layout costs one nested `block` per
   basic block, and `wat2wasm` (wabt 1.0.36) SIGSEGVs at ~9000 nesting while V8
   accepts 9015 without complaint. The engine is not the limit; wabt's recursive
