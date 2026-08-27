@@ -1,19 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-26T13:28:09Z",
-   "fixed": [],
-   "new_red": [
-    "test-aarch64#src:test/test_parallel_for_capture_aggr.pas",
-    "test-arm32#src:test/test_parallel_for_capture_aggr.pas",
-    "test-i386#src:test/test_parallel_for_capture_aggr.pas"
-   ],
-   "sha": "70f6a360f47529f3a61454e92331d3138b1a9c4d",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-26T13:34:26Z",
    "fixed": [],
    "new_red": [],
@@ -463,6 +450,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "97dfa6e3fcb6fc991572b429f707d459dd719687",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T02:36:02Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "1fccd96974e72e90ab6a0bf2806a4cfc95188663",
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
@@ -1663,6 +1659,7 @@
   "test-core#src:test/test_dynarray_copy_managed_elems.pas@1": "native",
   "test-core#src:test/test_dynarray_copy_managed_elems.pas@2": "native",
   "test-core#src:test/test_dynarray_copy_nested.pas": "native",
+  "test-core#src:test/test_dynarray_copy_result_indexed.pas": "native",
   "test-core#src:test/test_dynarray_copy_uses_sysutils.pas": "native",
   "test-core#src:test/test_dynarray_delete_insert_copy_of_interfaces.pas": "native",
   "test-core#src:test/test_dynarray_field.pas": "native",
@@ -4859,6 +4856,7 @@
   "test-core#src:test/test_dynarray_copy_managed_elems.pas@1": "pass",
   "test-core#src:test/test_dynarray_copy_managed_elems.pas@2": "pass",
   "test-core#src:test/test_dynarray_copy_nested.pas": "pass",
+  "test-core#src:test/test_dynarray_copy_result_indexed.pas": "pass",
   "test-core#src:test/test_dynarray_copy_uses_sysutils.pas": "pass",
   "test-core#src:test/test_dynarray_delete_insert_copy_of_interfaces.pas": "pass",
   "test-core#src:test/test_dynarray_field.pas": "pass",
@@ -6836,14 +6834,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-27T02:29:41Z",
+  "date": "2026-08-27T02:36:02Z",
   "deadline": 7200.0,
-  "sha": "97dfa6e3fcb6fc991572b429f707d459dd719687",
+  "sha": "1fccd96974e72e90ab6a0bf2806a4cfc95188663",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 305.1
+  "wall": 307.7
  },
  "last_bench": {
   "conf_rows": 550,
