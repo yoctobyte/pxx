@@ -7114,3 +7114,106 @@ compiler). Worth pinning down before the first ticket, not after.
 The fleet is now **8 launchable roles**; `frank.sh`'s note updated to match.
 Dispatched remains **three** (frankA, frankT, coordinator). Building a tree costs
 nothing; staffing it does.
+
+## 2026-08-27 — THE 1.29x WAS STALE (it is 1.04x); O handed to `frank-optimize`, frankA to P
+
+Two things at once: the number my afternoon decision rested on was disconfirmed
+by the worker I gave the decision to, and the O/A collision resolved itself at a
+clean seam.
+
+### The coordinator ranked promotion above W1 on a number that no longer existed
+
+frankA re-measured after promoting. **1.29x → 1.04x.** Two independent reasons,
+either fatal:
+
+1. **It compared base `-O2` against new `-O3`** — so it always included `-O3`-only
+   passes that were never in the promotable set (residency, W1 scratch arms,
+   float-tree fusion). *No promotion of a `-O3`→`-O2` subset could ever have
+   delivered it.*
+2. **Its baseline no longer exists.** That row measured 3.65s for `empty.npy`;
+   the same workload is 2.27s today on the PRE-promotion binary, because
+   `13e196cc8` (variant clear/retain blobs emitted once instead of at 10,707 call
+   sites) landed afterwards and had already taken most of the headroom.
+
+**THE GENERAL LESSON, and it is the third costume of the same error this file has
+logged today: A BANKED SPEEDUP DECAYS AS THE TREE MOVES UNDERNEATH IT.** A figure
+quoted from a ticket weeks later is a claim about **a binary nobody still has**. I
+treated a written measurement as a fact when it was a fact about a tree that no
+longer exists. Alongside *verify a peer's claim* and *measure before escalating*:
+**re-measure anything you are about to justify work with, and name the sha of the
+binary every number came from.**
+
+The correction is trustworthy because of the method, not because it is newer:
+frankA rebuilt `552af4dcb` from the pinned binary to a fixedpoint and landed
+**byte-identically on `0b134438899d`** — the same sha as the morning's probe build
+— which proves the baseline was not constructed to agree with the conclusion.
+Real number is **1.04x** from the short workload; the self-compile's 1.02x is
+noise-floor (the same binary spanned 17.95-19.41s as watcher load moved 2→13) and
+is recorded as consistent-with, not as a second measurement.
+
+**The promotion still stands.** 1.04x on every compile on every track, for a
+gate-constant-only change backed by tens of millions of differential cases, is a
+good trade. **What was wrong was the ranking, not the action** — and W1 was never
+actually outbid.
+
+### The revertability hole, and why the separation is DEFERRED rather than cosmetic
+
+frankA's catch: T climbs to the newest testable commit, so it will sweep only
+`7767acc60`, and a green there is a verdict on all three passes together — leaving
+three separately-revertable commits and one undifferentiated verdict.
+
+**Correct, but the conclusion doesn't follow.** The commits are on master and
+independently revertable, so if HEAD comes back red, T can run `13d4bba0c` and
+`e4fe576eb` individually *then*. The per-pass evidence does not exist yet; the
+**ability to generate it cheaply does**, and it costs ~10 extra minutes only in
+the world where it is needed. Attribution is worthless while everything is green.
+So the separate commits buy a real **option**, not tidy history — they would only
+be cosmetic if the passes had landed as one commit and could not be picked apart.
+**Single cumulative run stands.**
+
+Also relayed: A/P/C/N agents on master pick up the new `-O2` the moment they
+build, so a bad pass surfaces in someone else's lane before any pin. An argument
+for landing this class of change early in a session rather than late.
+
+### Staffing: the collision resolved at the seam, not by a branch
+
+The owner staffed `~/frank-optimize` (session `frank-optimize-b4`), which checked
+in **idle and refused to claim an A/O ticket unasked** — the right instinct, and
+what made the handover clean.
+
+- **`frank-optimize-b4` → Track O**, takes the `feature-opt-o3-register-pressure`
+  umbrella, **first task W1**, with an explicit instruction to **size the prize
+  with a cheap experiment before building the scheduler** — the discipline that
+  has now paid twice in one day. Told the 1.29x story directly, because it is the
+  exact trap its ticket sets for it.
+- **frankA → Track P**, releasing the O umbrella to `unfinished/` with its
+  write-up intact (**released, not resolved**). Next from `--track P`
+  (`feature-pascal-corpus-expansion` p75).
+- **Boundary stated to both, because it is a convention and not a gate:** O owns
+  `ir_codegen.inc`, `symtab.inc`, the backends, `compiler/builtin/**`, the
+  allocator. P owns `pasparser_*.inc`. `lexer.inc` is shared A/P but O work does
+  not touch it — both told to report if that stops being true.
+
+**This is the sequencing option, and it worked because frankA finishing the
+promotion WAS the seam.** No topic branch, no 28 MB binary conflict, one agent in
+the shared codegen files at a time.
+
+**Concurrency is now FOUR sessions** (frankA, frankT, frank-optimize-b4,
+coordinator). That is the count that hit an account limit and died together on
+2026-08-25, and it is above `autonomy.md`'s stronger preference for one worker
+cycling lanes. The owner created and staffed the tree, so this is their call and
+it has been surfaced twice; recording it here so a successor does not read four as
+a target. **Do not add a fifth.**
+
+### Also filed by frankA, correctly not fixed
+
+`bug-p-qword-div-by-a-literal-above-2-63-is-signed` (`c4bb2dff9`, p55).
+`QWord div <literal ≥ 2^63>` returns 0 where fpc gives 1; the `mod` form prints a
+QWord as −1. **A silent wrong VALUE, so a `bug-` in any dialect and never a
+`compat` item** — being our own dialect licenses semantics chosen on purpose,
+never a wrong answer nobody chose. Wrong at `-O0` and identical at every `-O`
+level, so it predates today's work and blocks nothing. Root cause confirmed
+against the boundary: `NormalizeUnsignedLiteralOperand` bails on
+`ASTIVal[lit] < 0`, and 2^63 stored in an Int64 **is** negative, so the literal
+keeps its signed type and QWord(−1) enters a signed divide. Same value through a
+variable is correct, which is what makes it silent.
