@@ -8,19 +8,25 @@ prio: 85
   file-ownership **Track A** — edits the shared `ir_codegen.inc` / `symtab.inc` /
   backends, so it obeys A's no-concurrent-edit rule + self-host gate) — umbrella
   for the next optimization campaign.
-- **Status:** working
-  `-O3` (see the 2026-08-26 log at the bottom: **1.29x on the self-compile**,
-  gap to fpc 4.06x -> 3.24x). Nothing is half-applied; every commit passed the
-  `-O3` self-host fixedpoint and `gate.sh quick`. Parked because the umbrella's
-  core — W2, a real register allocator — is a multi-session project, and the
-  measurements plus the next slice are now banked below.
-  **Two things wait on someone else:** the `-O2` promotion of the four `-O3`
-  passes (coordinator's call — that is where most of the 1.29x still sits), and
-  Track T's sweep of `e7c0d1d2a`.
-  New passes still land behind **`-O3`** (see gating); `-O2` stays the proven
-  default and the stable fallback.
+- **Status:** UNFINISHED — released 2026-08-27 by frankA and handed to the
+  dedicated optimization checkout (`~/frank-optimize`), because Track O is
+  implicitly Track A and two agents in `ir_codegen.inc` at once is the hazard the
+  track letters exist to prevent. Nothing is half-applied; every commit passed
+  the self-host fixedpoint and `gate.sh quick`.
+  **Read the two 2026-08-27 sections at the bottom before the older ones — they
+  supersede two claims the older text still makes:**
+  1. The `-O2` promotion is **DONE** (`13d4bba0c`, `e4fe576eb`, `7767acc60`), and
+     it is worth **1.04x, not the 1.29x** quoted below. That figure compared base
+     `-O2` against new `-O3` and its baseline no longer exists. **A banked
+     speedup decays as the tree moves underneath it** — do not re-quote a number
+     from this ticket without rebuilding its baseline.
+  2. **W1 now ranks ahead of W2.** Both of W2's cheap experiments came back empty;
+     the gap on the hot loops is the operand model, not allocation.
+  **Next slice = W1** (emit-time operand scheduler), and it must be justified on
+  a *dynamic* profile — the static sweep understates it badly.
+  New passes still land behind **`-O3`**; `-O2` stays the proven default.
 - **Opened:** 2026-07-10 (post -O2-default flip, [[feature-optimization-levels]]).
-- **Owner:** frankA
+- **Owner:** — (frankA released it 2026-08-27; O moves to `~/frank-optimize`)
 
 ## Why — the measured opportunity
 
