@@ -9900,6 +9900,18 @@ test-core: $(COMPILER)
 	# bug-n-a-qualified-module-member-is-taken-by-a-case-folded-local-class
 	./$(COMPILER) test/test_nilpy_qualified_member_vs_case_folded_class.npy $(TESTTMP)/test_nilpy_qualfold26
 	$(TESTTMP)/test_nilpy_qualfold26 | diff -u test/test_nilpy_qualified_member_vs_case_folded_class.expected -
+	# A NilPy MAIN-PROGRAM class is stamped unit -1, which DeclVisible reads as
+	# System-ambient — so it was visible INSIDE every RTL unit. `Text` is also
+	# lib/rtl/textfile.pas's FILE record, so that unit's own `var Input, Output:
+	# Text` resolved to the PROGRAM's class and __init_textfile's `Input.Handle
+	# := 0` wrote through an uninitialised class pointer: declaring the class was
+	# enough, and the program SIGSEGV'd before its first statement. `Text` is a
+	# tkinter widget name. The file-I/O rows are the control that the RTL record
+	# the class was capturing still works IN THE SAME PROGRAM.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-a-class-named-text-still-segfaults-outside-the-qualified-construction-arm
+	./$(COMPILER) test/test_nilpy_class_named_like_an_rtl_record.npy $(TESTTMP)/test_nilpy_rtlrec26
+	$(TESTTMP)/test_nilpy_rtlrec26 | diff -u test/test_nilpy_class_named_like_an_rtl_record.expected -
 	# `return lambda ...` — a closure factory, and the returned value was not
 	# CALLABLE while the same lambda bound to a local first was. The return-type
 	# scan's TUPLE detector counted the LAMBDA'S OWN PARAMETER COMMAS, so the

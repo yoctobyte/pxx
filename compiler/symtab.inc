@@ -942,6 +942,54 @@ begin
       UsesRankOf := i;
 end;
 
+function ClassRowVisibleHere(ci: Integer; const lo: AnsiString): Boolean;
+{ May the scope being compiled see class ROW `ci`? The class-side twin of
+  DeclVisible, and it exists for the one case DeclVisible deliberately does not
+  separate.
+
+  `UClsUnitIdx < 0` means two different things: a class the COMPILER minted
+  (TObject, TGuid — System's, stamped with whatever CurrentUnitIdx was at
+  ParseProgram time) and a class the MAIN PROGRAM declared. DeclVisible answers
+  True for both, and its own note says separating them "would need a marker the
+  rows do not carry, and a unit reaching the program's own routine is not a case
+  the corpus shows". On the CLASS side it is — and it does not merely resolve
+  oddly, it SEGFAULTS:
+
+    class Text:      # a NilPy main-program class
+        pass
+
+  is enough. `Text` is also the RTL's FILE record (lib/rtl/textfile.pas), so
+  while that unit compiled, `var Input, Output: Text` resolved to the PROGRAM's
+  class, and `__init_textfile`'s `Input.Handle := 0` wrote through an
+  uninitialised class pointer. Every NilPy program declaring a class named Text
+  died before its first statement, and `Text` is a tkinter widget name.
+
+  bug-a-tkinters-text-class-captures-the-rtl-text-record-in-other-units fixed
+  the same capture for a class declared in a UNIT, by making this lookup obey
+  visibility. The program-declared row went through the `declUnit < 0`
+  shortcut and kept it.
+
+  MEASURED, not assumed: with a NilPy `class Text` loaded, the rows carrying -1
+  are exactly Text, TObject and TGuid — the last two being precisely what
+  ClassNameIsAmbientIntrinsic names, so the name filter is complete for classes
+  and this rule hides nothing else. A unit genuinely cannot see the program's
+  declarations in Pascal either; Python says the same about a module and its
+  importer.
+
+  DeclVisibilityProbe still wins, because it means "does this name exist
+  ANYWHERE" — a diagnostic question, never a resolving one.
+  bug-n-a-class-named-text-still-segfaults-outside-the-qualified-construction-arm }
+begin
+  ClassRowVisibleHere := True;
+  if ClassNameIsAmbientIntrinsic(lo) or DeclVisibilityProbe then Exit;
+  if (CurrentUnitIdx >= 0) and (UClsUnitIdx[ci] < 0) then
+  begin
+    ClassRowVisibleHere := False;
+    Exit;
+  end;
+  ClassRowVisibleHere := DeclVisible(UClsUnitIdx[ci]);
+end;
+
 function FindUClass(const name: AnsiString): Integer;
 var i, bestRank, r: Integer; lo, name2: AnsiString;
 begin
@@ -984,7 +1032,7 @@ begin
         scan continues to a visible one of the same name rather than stopping at
         the first row. ClassNameIsAmbientIntrinsic keeps TObject/TGuid reachable
         (they are System's, stamped with the program's index). }
-      if ClassNameIsAmbientIntrinsic(lo) or DeclVisible(UClsUnitIdx[i]) then
+      if ClassRowVisibleHere(i, lo) then
       begin
         { …and among the visible ones the LATEST-NAMED unit wins, rather than
           whichever registered first. `uses a, b` binds b's `Thing` exactly as
@@ -1732,7 +1780,7 @@ begin
   lo := ULower(name2);
   for i := 0 to UClsCount - 1 do
     if (not UClsIsRecord[i]) and UNameMatch(UClsNOff[i], UClsNLen[i], lo) and
-       (ClassNameIsAmbientIntrinsic(lo) or DeclVisible(UClsUnitIdx[i])) then
+       ClassRowVisibleHere(i, lo) then
     begin
       r := UsesRankOf(CurrentUnitIdx, UClsUnitIdx[i]);
       if (Result < 0) or (r > bestRank) then begin Result := i; bestRank := r; end;

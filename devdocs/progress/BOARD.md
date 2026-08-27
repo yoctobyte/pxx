@@ -52,7 +52,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (265)
+## backlog (266)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -70,7 +70,6 @@ _none_
 | bug-b-the-fpc-vartype-constants-are-missing | B | 55 | bug | `VarType(v) = varInteger` does not compile — varEmpty/varNull/varInteger/varDouble/varString/... are not declared anywhere, so the ONLY way to test a variant's type is against this RTL's private 0..6 tags, which are not FPC's numbers either (FPC: varString = 256, varInteger = 3). | — |
 | bug-b-varisstr-is-false-for-a-one-character-string | B | 45 | bug | VarIsStr answers FALSE for a ONE-CHARACTER string variant. It tests `VarType(V) = 6` (VT_STRING) and a single char is tagged VT_CHAR = 5, so `v := \'x\'; VarIsStr(v)` is False while `v := \'xy\'` and `v := \'\'` are both True. The same unit already has the right predicate three lines below — IsTextTag(t) = (t = VT_STRING) or (t = VT_CHAR) — and VarCompareValue uses it and gets the one-char case right. Two mechanisms for one concept, disagreeing. | — |
 | bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict | N | 40 | bug | pylib treats VT_CHAR and VT_STRING as ONE string type in ordering, repr, concat and text extraction — but `PyVarEq` bails on `p^.VType <> q^.VType` before it ever gets there, and `PyVarHashKey` has no VT_CHAR arm either. So a char-tagged key stores fine and then misses every lookup. No NilPy-reachable repro today (the pystr_ofchar boundary converts at every crossing), but this is the mechanism that turned Counter(str) into a SILENT 0 instead of a loud KeyError. | — |
-| bug-n-a-class-named-text-still-segfaults-outside-the-qualified-construction-arm | N | 65 | bug | A NilPy `class Text` still binds the RTL's `Text` file record everywhere except the qualified-construction arm that [[bug-nilpy-text-class-name-binds-the-rtl-file-record]] fixed: `self.f = t.up()` and even `self.f = t` on a `Text` instance SEGFAULT. Renaming the class to anything else makes all three shapes work. | — |
 | bug-n-a-field-assigned-from-a-module-global-expression-is-refused | N | 55 | bug | `G = 7 / 2` then `self.v = G` REFUSES to compile — \"cannot infer the type of field self.v - annotate it\". `G = 3.5` is accepted. PyModuleGlobalLiteralType reads a global's type off its initialiser token and can only see a bare LITERAL, so any global initialised by an expression is untypeable to the field pre-pass. | — |
 | bug-n-a-fields-type-is-fixed-by-its-first-assignment-and-never-widened | N | 65 | bug | `self.v = n` in the ctor then `self.v = 1.5` (or `self.v = self.v / 2`) in another method keeps the Int64 field and prints 4609434218613702656 — the double's bits. The field pre-pass only ADDS names; a second assignment of a different type is invisible, unlike a LOCAL, which widens across its rebinds. | — |
 | bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function | N | 65 | bug | `g = f` BOXES the function on the heap; every other path (a dict value, a return value, the bare name) keeps the raw code pointer. So `g == f` and `g is f` are False, two assignments of the same function are unequal to each other, and `id(g)` is a heap address while `id(f)` is the code address. CPython answers True to all of it. | — |
@@ -316,6 +315,8 @@ _none_
 | refactor-p-three-hand-rolled-postfix-loops | P | 55 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 | regression-test-emit-obj-cxtensa-obj | C | 70 | regression | regression: test-emit-obj#src:test/cxtensa_obj.c@1 red at 32fba2082684 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-star-operand-in-a-variant | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy red at 39d4afb022ce (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-variant-operand-arith-dunders | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy red at 39d4afb022ce (auto-filed by twatch) | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-d-document-own-language-first-in-the-language-reference | D | 15 | task | The user-facing half of the name-resolution rules: 'a name from your own language wins, and an explicit foreign import overrides it'. Internal map is devdocs/dev/name-resolution.md; the language reference says nothing. Blocked until the symbol rule is actually built — documenting behaviour the compiler does not have is worse than documenting nothing. | feature-a-own-language-first-symbol-resolution |
 | task-d-document-the-strict-overload-width-flag | D | 20 | task | `--strict-overload-width` shipped 2026-08-15 with no row in docs/reference/cli.md, modes.md or directives.md. One table row each, plus the one sentence that explains why it is standalone rather than part of the --strict-fpc umbrella. | — |
@@ -554,9 +555,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2492)
+## done (2493)
 
-2492 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2493 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (45)
 
@@ -623,9 +624,10 @@ _none_
 - [p 70] [P] feature-p-delphi-string-helpers
 - [p 70] [P] feature-pascal-typed-and-untyped-files
 - [p 70] [C] regression-test-emit-obj-cxtensa-obj
+- [p 70] [N] regression-test-nilpy-test-nilpy-star-operand-in-a-variant
+- [p 70] [N] regression-test-nilpy-test-nilpy-variant-operand-arith-dunders
 - [p 68] [E] feature-demo-songformatter-pxx-target
 - [p 68] [N] feature-nilpy-user-defined-decorators
-- [p 65] [N] bug-n-a-class-named-text-still-segfaults-outside-the-qualified-construction-arm
 - [p 65] [N] bug-n-a-fields-type-is-fixed-by-its-first-assignment-and-never-widened
 - [p 65] [N] bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 - [p 65] [N] bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members

@@ -1,0 +1,74 @@
+# A NilPy MAIN-PROGRAM class is stamped with unit index -1, which DeclVisible
+# reads as "System-ambient" — so it was visible INSIDE every RTL unit. `Text` is
+# also lib/rtl/textfile.pas's FILE record, so while that unit compiled its own
+# `var Input, Output: Text` resolved to the PROGRAM's class and
+# `__init_textfile`'s `Input.Handle := 0` wrote through an uninitialised class
+# pointer. Declaring the class was enough: every such program SIGSEGV'd before
+# its first statement.
+# bug-n-a-class-named-text-still-segfaults-outside-the-qualified-construction-arm
+
+
+class Text:
+    def __init__(self, s):
+        self.s = s
+
+    def up(self):
+        return self.s.upper()
+
+
+# declaring it, and nothing else, was the whole trigger
+print("declared")
+
+# constructing it
+t = Text("ab")
+print(t.s)
+print(t.up())
+
+
+# through another class's field — the shape the ticket was filed with, both with
+# and without the parameter shadowing the class name
+class Wrap:
+    def __init__(self, text):
+        self.text = text.up()
+
+
+class Wrap2:
+    def __init__(self, x):
+        self.text = x.up()
+
+
+class Wrap3:
+    def __init__(self, text):
+        self.text = text
+
+
+print(Wrap(Text("ab")).text)
+print(Wrap2(Text("cd")).text)
+print(Wrap3(Text("ef")).text.s)
+
+# ...and the RTL the class was capturing must still work IN THE SAME PROGRAM:
+# real text-file I/O through Input/Output's own record type
+f = open("/tmp/pxx_nilpy_rtlrec_probe.txt", "w")
+f.write(t.s + "\n")
+f.write("second\n")
+f.close()
+
+g = open("/tmp/pxx_nilpy_rtlrec_probe.txt", "r")
+for line in g:
+    print(line.rstrip())
+g.close()
+
+import os
+
+os.remove("/tmp/pxx_nilpy_rtlrec_probe.txt")
+
+# the renamed control, which always worked
+class Boxy:
+    def __init__(self, s):
+        self.s = s
+
+    def up(self):
+        return self.s.upper()
+
+
+print(Boxy("gh").up())
