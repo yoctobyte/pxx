@@ -2,7 +2,7 @@
 slug: bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 track: N
 prio: 70
-status: working
+status: done
 owner: frank1-72
 ---
 
@@ -178,3 +178,56 @@ divergence: CPython says a function is never equal to a number.
 
 `d37573c69` touches `compiler/builtin/pylib.pas`, so Track B's `lib-test` does
 not see the equality change until someone pins. Flagged to `frank1-72`.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.
+
+---
+
+## Closed by frank1 (2026-08-27) — the work was already done and already on master
+
+**No new code.** This ticket sat in `unfinished/` holding a live `working` lock
+for two days after its own fix landed. The session that did the work (frank1-N,
+2026-08-25) landed all three commits on the `dev` branch and ended before
+moving the ticket; `dev` was collapsed back into `master` on 2026-08-26
+(`8b2a6bae6`), so the fixes travelled with it and nobody noticed the ticket had
+been left behind.
+
+Verified on master rather than assumed — all three commits are ancestors of
+HEAD:
+
+```
+bf5a9ba61  on master   the pybound_new PREFIX match
+293d70509  on master   the bare-callable arm delegates instead of duplicating
+d37573c69  on master   PyVarEqCallable's dead int arm removed
+```
+
+Both repros from the ticket body, re-run at self-host fixedpoint
+`207a6a1da8e9`:
+
+```
+./compiler/pascal26 test/test_nilpy_callable_to_str_param_fails.npy /tmp/x
+  -> error: Nil Python: f expects text for parameter "s", but the argument
+     is a callable — call it, or declare the parameter as a Callable
+  exit 1                                                            GREEN
+
+./compiler/pascal26 -Fulib/rtl test/lib_mimic_xml_etree_elementtree.npy /tmp/m
+  -> full_walk=ok / MIMIC-XML-ETREE OK                              GREEN
+```
+
+plus `test_nilpy_function_value_repr` green, which is the test the leak half
+grew a case in.
+
+**The pin the note asked for has happened**, several times over: the flag to
+`frank1-72` said Track B's `lib-test` could not see the `pylib.pas` equality
+change until someone pinned. The pinned binary is now v384, and it runs the
+mimic job green on its own — checked directly, not inferred from the version
+number.
+
+**The lesson worth keeping is the parking, not the bug.** A `working/` entry is
+a live lock and this one outlived its session by two days on a ticket that was
+finished; a fix that lands without its ticket moving is invisible to `next` and
+to anyone reading the board, and the only reason it surfaced is that the ranker
+kept offering it. Per CLAUDE.md, work that halts incomplete moves to
+`unfinished/` — but work that COMPLETES has to be resolved in the same breath as
+the push, because nothing downstream can tell the two states apart.
