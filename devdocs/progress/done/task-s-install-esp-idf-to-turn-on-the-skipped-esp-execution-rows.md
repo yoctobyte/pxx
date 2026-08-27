@@ -133,4 +133,4 @@ That is `bug-t-a-skip-that-cannot-say-why-is-a-pass-in-the-verdict`'s territory
 and belongs to Track T, so it is left there rather than duplicated.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit f4301e3de.

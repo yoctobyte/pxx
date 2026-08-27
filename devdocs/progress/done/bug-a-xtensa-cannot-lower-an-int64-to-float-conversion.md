@@ -117,4 +117,4 @@ Gate: `tools/gate.sh quick` GREEN, self-host fixedpoint verified, all four bare
 spellings byte-identical per pair.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit f4301e3de.

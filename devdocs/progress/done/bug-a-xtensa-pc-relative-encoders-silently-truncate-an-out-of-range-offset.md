@@ -118,4 +118,4 @@ esp32c3 IDF esp_timer callback ok
 Nothing that fits its field changed encoding: no existing image moved.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit f4301e3de.
