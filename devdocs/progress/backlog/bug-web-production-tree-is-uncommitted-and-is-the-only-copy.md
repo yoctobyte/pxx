@@ -79,8 +79,37 @@ commit, and it does not put the six files anywhere the other four W tickets can
 build against. Closing this on the strength of the backup would leave four
 tickets blocked on a ticket marked done.
 
-Note for whoever picks it up: the backup is itself unreplicated. If the box it
-sits on is the box that fails, both copies go together.
+### The backup is same-PARTITION, and that ceiling cannot be raised locally
+
+Measured by `ianweb` on `via`, 2026-08-27: the host has **one** physical device,
+`nvme0n1` (465.8G), with two partitions — `/boot/firmware` and `/`.
+`df --output=source` on both the repo and the backup returns `/dev/nvme0n1p2`.
+
+So the backup is not merely on the same machine as the tree it protects; it is
+on the same partition of the same disk. There is no second device, therefore no
+local move that improves this. Three tiers, and only the operator can move past
+the second:
+
+| tier | covers | state |
+| --- | --- | --- |
+| in-repo only | nothing | where this sat for a week |
+| **same-partition** | `git checkout .`, `stash`, re-clone, deletion inside the repo | **where it is now — the ceiling for anything an agent can do unilaterally** |
+| off-box | disk failure, loss of the host | requires the push, or a copy to another host |
+
+**The event class this does NOT cover is the one that already happened.** `via`
+took an unclean power-down seven days ago, and that power-down is the entire
+origin of the six files — the self-healing pull and the zero-byte guard were
+written in response to it. A repeat takes the backup and the original together.
+
+`ianweb` declined to replicate to another tailnet host on its own initiative,
+which is correct: that moves the user's code between machines on a judgement
+call nobody asked for, and the candidate peers are not obviously sound anyway
+(`borg` has been offline seven days). **The push is the step that actually
+replicates**, and it is what this ticket is waiting on.
+
+Priority stays at 70 rather than being raised on this finding: the ticket
+already heads the W queue and blocks the other four, so a higher number would
+change nothing operationally and would only inflate the scale.
 
 ## What to do
 
