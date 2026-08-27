@@ -4,7 +4,7 @@ prio: 60
 type: bug
 owner: frank1-AN
 blocked-by: []
-resolved: PENDING-COMMIT
+resolved: 94a87f966
 summary: "`self.fn = named`, a class field assigned a module-level def, was `error: cannot infer the type of field self.fn - annotate it` — and once typed, `h.fn(1, 2)` was `H has no method .fn()`. Two compile refusals of the ordinary dispatch-table shape, each with its answer already written for the neighbouring spelling."
 ---
 
