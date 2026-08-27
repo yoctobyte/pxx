@@ -144,3 +144,76 @@ already scoped and only blocked on one Track B typinfo gap.
   `character.pas` is rejected at line 1 (`unexpected character`) and
   `fpwidestring` needs `rtl/inc` on the include path. Neither was pursued —
   low value next to the fgl walls.
+
+## 2026-08-27 (frankA) — re-survey #2: the recommendations were all stale, and rung 6's real wall is three defects deep
+
+The 2026-08-25 entry above corrected a re-triage that said the ladder did not
+exist. **Its own "recommended next rungs" list has since gone stale in exactly
+the same way** — every one of (a), (b) and (c) is now `done/`:
+
+| 2026-08-25 recommendation | state today |
+| --- | --- |
+| (a) the fpjson `data ptr fixup overflow` — "outranks everything else here" | **done** — `bug-a-…-4096-entry-data-ptr-fixup-table` is in `done/` |
+| (b) enrol what exists | **done** — `test-fgl` is in testmgr's `limited` + `full`, `fpc-rtl` is in twatch's `CORPUS_EXPECTED` |
+| (c) burn the three fgl walls | **done** — all three `bug-p-*` are in `done/` |
+| (d) then rung 6 (rtl-generics) | still the next rung, and now measured — see below |
+
+That is twice this table has aged into being actively misleading, which is the
+recurring defect rather than an accident. **The state belongs where it cannot
+rot: in the runner's own output.** Ticket prose is a snapshot; a rung either
+passes today or it does not.
+
+### Measured, not inferred — rung 2 is genuinely green
+
+`tools/run_fgl_corpus.sh` against the compiler at this commit: **7 pass / 0 fail
+/ 0 skip**, real FPC 3.2.2 `fgl.pp`, `pxx.skip` empty. The corpus tree was absent
+on this box and was fetched with `tools/install_lib_candidates.sh fpc-rtl`.
+
+**One caveat found and NOT filed, deliberately.** With the tree absent the runner
+prints `SKIP` and **exits 0** — the vacuous pass this ticket already records as
+defect #1. The 2026-08-25 fix moved which path it checks, not whether absence is
+silent, so a fresh clone still gets a green that asserts nothing. It is not filed
+because the enrolment work closed it one level up: twatch's `CORPUS_EXPECTED`
+warns when the tree is missing, which is the layer that can tell "absent because
+unprovisioned" from "absent because broken". Recorded here so the next reader who
+notices the exit 0 does not re-file it.
+
+### Rung 6 (rtl-generics) — most of the predicted walls are already gone
+
+The generics ticket predicts walls at "generic class header syntax, specialize,
+nested generic types, interface constraints, TArray<T>", and its own
+next-wall inventory names type-keyword method names and untyped `constref`.
+Probed individually against this compiler:
+
+| predicted wall | actual |
+| --- | --- |
+| methods named after type keywords (`class function Integer(...)`) | **works** |
+| untyped `constref` params | **works** |
+| generic class across UNITS, two specializations | **works**, matches FPC |
+| interface constraint `generic THolder<T: IThing>` | **works** |
+| class constraint `generic TWrap<T: TBase>` | **works** |
+| `generic TArr<T> = array of T` | **works** |
+| **nested type inside a generic (`TPair`)** | **three separate defects** |
+
+So the rung's remaining cost is not spread across the feature surface — it is
+concentrated in **nested types**, which is precisely what
+`TDictionary<K,V>.TPair` is:
+
+1. A nested type's field named after an enclosing type parameter — **fixed this
+   session** (`83468c546`), test + FPC oracle.
+2. [[bug-p-two-generic-templates-cannot-share-a-nested-type-name]] — the second
+   template's `TPair` resolves to the first's.
+3. [[bug-p-a-second-specialization-of-a-generic-with-a-nested-type-segfaults]] —
+   compiles clean, first specialization runs, second SIGSEGVs.
+
+2 and 3 are pre-existing (both reproduce on the pinned binary) and both look like
+one cause: **a nested type's identity is not per-specialization**. They should be
+taken together, and taking them is what unblocks rung 6 — more than any of the
+walls the ticket currently predicts.
+
+### Method note
+
+Every row above is a compile-and-run against `fpc -Mobjfpc` as oracle, one file
+at a time — the rung suites themselves (`make test-fgl`, `test-fpjson`) are
+hook-refused per CLAUDE.md and are Track T's to sweep. One file at a time is
+enough to survey a rung and is what found all three defects.
