@@ -471,7 +471,7 @@
  ],
  "host": "plexus",
  "idle_yield": {
-  "aborts": 1,
+  "aborts": 2,
   "phase": "pin-verify",
   "target": "2bae398f57aa3945f64a5672e0fba00481bdb856"
  },
