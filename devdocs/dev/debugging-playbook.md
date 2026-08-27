@@ -1285,3 +1285,45 @@ not the rows are separable. Two habits fix it:
 - **Calibrate the baseline against the real artifact** before trusting any row —
   the transcribed A above had to reproduce the shipping binary's 0.61 s. A model
   that does not reproduce the thing it models decomposes nothing.
+
+## Interleaving, repetition, amplification — three different fixes for three different lies
+
+One optimisation session produced three separate false readings in one night, on
+one box, with the same command. They are worth stating together because they
+look identical from the outside — a number that is wrong — and each needs a
+different fix. The two entries above cover the first two; this is the third,
+and it is the one that survives both of them.
+
+**Amplification: below ~2% of the workload, `/usr/bin/time` is quantisation, not
+measurement.** A boolean-heavy loop benchmark measured **0.49 vs 0.51**, and on
+a re-run **0.55 vs 0.56** — "2-4% slower", twice, interleaved, min-of-15 both
+times. That is exactly the shape of a real small regression: consistent sign,
+survives repetition, plausible mechanism available if you go looking for one.
+It was **one 10 ms tick** on a ~0.5 s workload. `%U` is reported to 10 ms, so at
+half a second the quantum *is* 2%, and the "consistent" sign was one tick
+landing the same way twice.
+
+The fix is to make the sample long enough that the timer's resolution is small
+against it — run the binary several times inside one timed command:
+
+```sh
+/usr/bin/time -f "%U" sh -c './bench >/dev/null; ./bench >/dev/null; ./bench >/dev/null'
+```
+
+At ~1.9 s per sample the same comparison resolved to **1.46 vs 1.45** — neutral,
+and the regression had never existed. The same correction turned a compile
+workload's "0.18 vs 0.19" into "0.64 vs 0.64" on a longer input.
+
+The three compose, and the order matters because each is invisible to the one
+before it:
+
+| | fixes | symptom when missing |
+| --- | --- | --- |
+| **Interleaving** | WHICH runs you may compare | the same binary measures 1.09 and 1.34 |
+| **Repetition** | HOW CONFIDENTLY | three under-powered runs share a bias and read as confirmation |
+| **Amplification** | WHETHER THE TIMER CAN SEE IT AT ALL | a one-tick difference reads as a consistent few-percent effect |
+
+So before believing any delta under ~5%: is it interleaved, is the rep count
+enough to resolve it, and **is the effect larger than one tick of the timer?**
+The last question is the cheapest of the three to ask and the easiest to skip,
+because the number already looks like a measurement.
