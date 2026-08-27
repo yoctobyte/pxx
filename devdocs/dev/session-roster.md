@@ -6052,3 +6052,103 @@ into frankA is the correct move, not a compromise — P shares `lexer.inc` with 
 and must never be edited concurrently with it, so putting them in *one* agent
 dissolves the sole-A hazard instead of managing it. Same for B+E, which is
 file-ownership by construction.
+
+## 2026-08-27 — PER-TOPIC TREE TOPOLOGY built, for the parallel restart
+
+Owner's call: a checkout per role/topic, so a human can tell at a glance which
+agent is which, and so destabilizing work sits in a topic tree that "only gets
+merged on occasion". Built on `frank1`'s host; agents are NOT yet restarted into
+them.
+
+### The trees
+
+| tree | lane | branch | needs a compiler? |
+| --- | --- | --- | --- |
+| `~/frank-user` | **the human's interface** — chats with the owner so the coordinator is never interrupted | master | no |
+| `~/frank-coordinator` | coordination only; holds no lane, writes no code | master | no |
+| `~/frankA` | A (+P +C +N) — core, IR, backends, frontends | master | **yes** (seeded) |
+| `~/frankB` | B (+E) — libs, demos, examples | master | no — builds with `$(PXX_STABLE)` |
+| `~/frank-rust` | R — Rust frontend | `rust` (topic) | **yes** (seeded) |
+| `~/frankwasm` | A+B — wasm target, holds `feature-target-wasm` | `wasm` (topic) | pre-existing |
+| `~/trackt-watch` | T watcher daemon, own dedicated clone | detached | pre-existing |
+| `~/pxx-website` | W — separate private repo | — | n/a |
+
+Pre-existing and NOT part of the scheme: `~/frank1` (live — holds
+`bug-b-sysutils-string-gaps-found-by-differential` with uncommitted edits),
+`~/frank2` (the coordinator's current tree, retire after the move), `~/pxx`
+(**stale, on the retired `dev` branch, 501 behind master** — this is the exact
+trap that produced four tickets filed to `dev` earlier today; retire it).
+
+### Why trunk vs topic, and not a branch per tree
+
+The topic-branch model applies where work is *destabilizing* (wasm, rust). It
+does **not** extend to A/B, for one mechanical reason: `stable_linux_amd64/**`
+is 28 MB of **committed binary** that Track A rewrites at every pin — 148 pins
+in the last 30 days. B's whole mode is "build with `$(PXX_STABLE)`, never
+rebuild the compiler", so B on its own branch cannot see a pin until someone
+merges, and every long-lived branch pays a binary conflict on that 28 MB at
+every merge. A is the integrator and pins move `master` by definition.
+
+So: **master is the trunk where A, B and the coordinator meet** — collisions
+there are handled by the existing `working/` ticket lock, not by branches —
+**and topic branches carry the destabilizing targets.**
+
+The sync discipline that keeps a topic branch alive is visible in `wasm`'s own
+history: `re-cut the branch from master`, then `merge: master@<sha>`. Merge
+master **into** the topic tree often; merge **out** on occasion. The failure
+mode when you don't is recorded below.
+
+### Evidence for that discipline: `origin/feature/rust-frontend-skeleton` is dead
+
+Last commit **2026-07-03**, **13,262 commits behind master**, 3 ahead. Its three
+commits (rlexer/rparser skeleton, enum tagged-union + match, impl blocks) are
+already **superseded on master** — `compiler/rlexer.inc`, `compiler/rparser.inc`
+and a full Rust suite under the test directory are all on the trunk. So
+`frank-rust`'s `rust` branch was cut from **current master**, not from that
+corpse. The stale branch is dead weight on origin and is a deletion candidate
+(owner's call — I did not delete it).
+
+### Setting up a new tree — two steps a fresh clone does NOT inherit
+
+1. **`git config merge.ours.driver true`** — `.gitattributes` declares
+   `devdocs/progress/BOARD.md merge=ours`, and that driver is per-checkout and
+   **not committable**. Without it every merge conflicts on the generated board.
+   It was **missing from `frankwasm`, `frank1` and `frank2`** — including the one
+   tree that actually merges master in regularly. Now set on all seven.
+2. **Seed the compiler** (only for trees that build one — A, rust, wasm):
+   `cp stable_linux_amd64/default/pinned compiler/pascal26` then
+   `make compiler/pascal26`. A clone has no `compiler/pascal26` (untracked) and
+   `make` refuses with `self-hosted compiler seed missing`. `make bootstrap` (via
+   FPC) also works and is slower. **Accept nothing but
+   `converged after N round(s)`.** This is now safe against the old
+   copied-in-seed no-op: the Makefile writes a stamp last, so a copied binary can
+   no longer forge convergence
+   (`bug-a-the-selfhost-rule-is-a-no-op-when-the-seed-is-newer-than-its-sources`).
+   Measured cold: 47s.
+
+### Disk: hardlinked clones, and the premise that didn't hold
+
+Clone with **`git clone --local <sibling-tree>`** — it hardlinks the object
+store, so a new tree costs only its working tree. Measured: the four new clones
+took **942 MB instead of 2,416 MB** (`links=5` on the 465 MB pack).
+
+The owner's worry — "the SSD is limited" — did not survive measurement: **98 GB
+free**, whole fleet 4.4 GB, packed growth **~150 MB/month/checkout** (449 MB pack
+over 95 days of history). Eight trees is ~9 years of headroom, so the `/data` HDD
+move was rejected: the per-fix loop is `make compiler/pascal26` over thousands of
+small files, dozens of times a day per agent, which is exactly the workload seek
+latency punishes.
+
+Reclaimable for free at any time, no topology change: **~690 MB of loose objects**
+(`git gc`: frank1 192 MB, pxx 294 MB, trackt-watch 104 MB + 97 MB actual garbage)
+plus **386 MB of ignored build output in frank1** (332 MB of it `examples/`,
+against 9 MB tracked).
+
+### Do not
+
+- **Do not move or rename a tree that has a live session in it.** `frank1` is live.
+- **Do not `git gc --prune` anything if the topology ever moves to `--reference`
+  alternates.** It has not: these are hardlinks, and hardlinked objects are safe
+  because git never rewrites an object in place. Clones simply diverge as each
+  one repacks, which at 98 GB free is fine.
+- **Do not work in `~/pxx`.** Retired `dev`, 501 behind.
