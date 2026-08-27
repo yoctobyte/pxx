@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:23 blocked:7 backlog:268 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2481 rejected:45`
+`unfinished:23 blocked:7 backlog:268 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2483 rejected:45`
 
 ## Held now (working/ — do not touch these files)
 
@@ -57,7 +57,6 @@ _none — no lane is locked._
 - `[p 72] [B]` feature-typinfo-facade-unit
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [N]` bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly
-- `[p 70] [N]` bug-n-a-field-takes-its-type-from-the-first-token-of-its-right-hand-side
 - `[p 70] [N]` bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through
 - `[p 70] [N]` bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable
 - `[p 70] [N]` bug-n-an-augmented-subscript-on-a-dunder-class-is-refused
@@ -71,6 +70,7 @@ _none — no lane is locked._
 - `[p 68] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
+- `[p 65] [N]` bug-n-a-class-named-text-still-segfaults-outside-the-qualified-construction-arm
 - `[p 65] [N]` bug-n-a-fields-type-is-fixed-by-its-first-assignment-and-never-widened
 - `[p 65] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 - `[p 65] [N]` bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members

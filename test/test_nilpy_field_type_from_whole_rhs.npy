@@ -1,0 +1,104 @@
+# A field's type must come from its WHOLE right-hand side.
+#
+# The `self.NAME = expr` pre-pass tried two FIRST-TOKEN readers before the
+# expression scanner, so `self.v = n / 2` was typed by `n` alone and stored
+# 2.5's IEEE bits in an Int64 field. The first-token readers exist for a real
+# reason — a parameter must beat a same-named class — so they are kept, and
+# only allowed to decide when that first token IS the whole right-hand side.
+#
+# bug-n-a-field-takes-its-type-from-the-first-token-of-its-right-hand-side
+# bug-n-a-field-typed-across-a-semicolon-takes-the-next-statements-type
+
+
+class A:
+    def __init__(self, n: int):
+        self.v = n / 2
+
+    def get(self):
+        return self.v
+
+
+class B:
+    def __init__(self):
+        self.v = 7 / 2
+
+    def get(self):
+        return self.v
+
+
+class F:
+    def __init__(self, n: int):
+        self.v = n + 1.5
+
+    def get(self):
+        return self.v
+
+
+print(A(5).get())
+print(B().get())
+print(F(5).get())
+
+
+# CONTROLS — single-token right-hand sides, where the first-token readers must
+# keep winning. `self.node = node` inside `class Node` is the one that matters:
+# the type scanner maps an identifier naming a class to that class,
+# case-insensitively, so without the parameter reader first the field became an
+# instance of its own class and str() of it segfaulted.
+class Node:
+    def __init__(self, node: int):
+        self.node = node
+
+    def show(self):
+        return str(self.node)
+
+
+print(Node(7).show())
+
+
+class P:
+    def __init__(self, param):
+        self.x = param
+        self.xs = [1, 2]
+
+    def get(self):
+        return self.x, self.xs
+
+
+print(P("hi").get())
+
+
+STATE = "new"
+
+
+class G:
+    def __init__(self):
+        self.state = STATE
+
+    def get(self):
+        return self.state
+
+
+print(G().get())
+
+
+# A right-hand side ended by a SEMICOLON, not a newline. The span scan ran to
+# end-of-LINE, so the field took its type from the NEXT statement's literal: a
+# list stored into an Int64 field, which died with "expected a number, got
+# object" on the first read.
+class S:
+    def __init__(self, items): self.items = items; self.i = 0
+
+
+s = S([1, 2])
+print(s.items, s.i)
+
+
+class S2:
+    def __init__(self, items):
+        self.items = items; self.i = 0; self.k = 1
+
+    def get(self):
+        return self.items, self.i, self.k
+
+
+print(S2([3, 4]).get())

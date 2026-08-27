@@ -70,9 +70,9 @@ _none_
 | bug-b-the-fpc-vartype-constants-are-missing | B | 55 | bug | `VarType(v) = varInteger` does not compile — varEmpty/varNull/varInteger/varDouble/varString/... are not declared anywhere, so the ONLY way to test a variant's type is against this RTL's private 0..6 tags, which are not FPC's numbers either (FPC: varString = 256, varInteger = 3). | — |
 | bug-b-varisstr-is-false-for-a-one-character-string | B | 45 | bug | VarIsStr answers FALSE for a ONE-CHARACTER string variant. It tests `VarType(V) = 6` (VT_STRING) and a single char is tagged VT_CHAR = 5, so `v := \'x\'; VarIsStr(v)` is False while `v := \'xy\'` and `v := \'\'` are both True. The same unit already has the right predicate three lines below — IsTextTag(t) = (t = VT_STRING) or (t = VT_CHAR) — and VarCompareValue uses it and gets the one-char case right. Two mechanisms for one concept, disagreeing. | — |
 | bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict | N | 40 | bug | pylib treats VT_CHAR and VT_STRING as ONE string type in ordering, repr, concat and text extraction — but `PyVarEq` bails on `p^.VType <> q^.VType` before it ever gets there, and `PyVarHashKey` has no VT_CHAR arm either. So a char-tagged key stores fine and then misses every lookup. No NilPy-reachable repro today (the pystr_ofchar boundary converts at every crossing), but this is the mechanism that turned Counter(str) into a SILENT 0 instead of a loud KeyError. | — |
+| bug-n-a-class-named-text-still-segfaults-outside-the-qualified-construction-arm | N | 65 | bug | A NilPy `class Text` still binds the RTL's `Text` file record everywhere except the qualified-construction arm that [[bug-nilpy-text-class-name-binds-the-rtl-file-record]] fixed: `self.f = t.up()` and even `self.f = t` on a `Text` instance SEGFAULT. Renaming the class to anything else makes all three shapes work. | — |
 | bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly | N | 70 | bug | `obj == 1` and `obj < 1` do not call the class's __eq__/__lt__ when the right operand is an INT — they answer False regardless of what the method returns. A __eq__ that returns True is simply not consulted, so an equality test silently answers the opposite of CPython, with no inheritance and no error. | — |
 | bug-n-a-field-assigned-from-a-module-global-expression-is-refused | N | 55 | bug | `G = 7 / 2` then `self.v = G` REFUSES to compile — \"cannot infer the type of field self.v - annotate it\". `G = 3.5` is accepted. PyModuleGlobalLiteralType reads a global's type off its initialiser token and can only see a bare LITERAL, so any global initialised by an expression is untypeable to the field pre-pass. | — |
-| bug-n-a-field-takes-its-type-from-the-first-token-of-its-right-hand-side | N | 70 | bug | `self.v = n / 2` with `n: int` declares an Int64 field and prints 4612811918334230528; `self.v = n + 1.5` prints the same class of garbage. The `self.NAME = expr` pre-pass types the field from the FIRST token of the right-hand side — the parameter, or the leading literal — and only reaches the expression scanner when that first token says nothing. | — |
 | bug-n-a-fields-type-is-fixed-by-its-first-assignment-and-never-widened | N | 65 | bug | `self.v = n` in the ctor then `self.v = 1.5` (or `self.v = self.v / 2`) in another method keeps the Int64 field and prints 4609434218613702656 — the double's bits. The field pre-pass only ADDS names; a second assignment of a different type is invisible, unlike a LOCAL, which widens across its rebinds. | — |
 | bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function | N | 65 | bug | `g = f` BOXES the function on the heap; every other path (a dict value, a return value, the bare name) keeps the raw code pointer. So `g == f` and `g is f` are False, two assignments of the same function are unequal to each other, and `id(g)` is a heap address while `id(f)` is the code address. CPython answers True to all of it. | — |
 | bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through | N | 70 | bug | sys.version_info throws at RUNTIME with a message admitting its own guard failed: 'the code guarding that (the flag its except-branch sets) let this call through anyway'. Two defects — the member is missing, and the compile-time guard meant to catch that does not fire. A guard that reports its own failure and continues is worse than no guard. | — |
@@ -557,9 +557,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2481)
+## done (2483)
 
-2481 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2483 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (45)
 
@@ -621,7 +621,6 @@ _none_
 - [p 72] [B] feature-typinfo-facade-unit
 - [p 70] [N] bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method [parked — re-claim, do not duplicate]
 - [p 70] [N] bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly
-- [p 70] [N] bug-n-a-field-takes-its-type-from-the-first-token-of-its-right-hand-side
 - [p 70] [N] bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through
 - [p 70] [N] bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable
 - [p 70] [N] bug-n-an-augmented-subscript-on-a-dunder-class-is-refused
@@ -635,6 +634,7 @@ _none_
 - [p 68] [N] bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - [p 68] [E] feature-demo-songformatter-pxx-target
 - [p 68] [N] feature-nilpy-user-defined-decorators
+- [p 65] [N] bug-n-a-class-named-text-still-segfaults-outside-the-qualified-construction-arm
 - [p 65] [N] bug-n-a-fields-type-is-fixed-by-its-first-assignment-and-never-widened
 - [p 65] [N] bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 - [p 65] [N] bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members

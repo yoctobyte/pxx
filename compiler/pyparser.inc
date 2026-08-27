@@ -31791,14 +31791,41 @@ begin
 
                 Order only: a right-hand side that is not a parameter still
                 falls through to exactly the scanners it used before. }
-              if (tk = tyUnknown) and (Tokens[rhsAt].Kind = tkIdent) then
+              { The end of the right-hand side, computed ONCE and used by every
+                arm below. `tkSemicolon` is in the terminator set because a
+                statement can end there: `def __init__(self, items):
+                self.items = items; self.i = 0` scanned to end-of-LINE, so the
+                expression scanner saw `items ; self . i = 0` and typed the
+                field from the `0`. A TPyList was then stored into an Int64
+                field and the first read died with "expected a number, got
+                object" — with the shape being as ordinary as a one-line
+                __init__ gets. PyBlkRhsEndsAt three functions up already knows
+                `;` ends a statement; this scan did not.
+                bug-n-a-field-typed-across-a-semicolon-takes-the-next-statements-type }
+              k2 := rhsAt;
+              while (k2 < bodyEnd) and
+                    not (Tokens[k2].Kind in [tkNewline, tkDedent, tkSemicolon, tkEOF]) do Inc(k2);
+              { The two FIRST-TOKEN readers decide only when that token IS the
+                whole right-hand side. A first-token answer is a claim about
+                that token, and making it about the expression is how
+                `self.v = n / 2` came out an Int64 holding 2.5's IEEE bits: the
+                parameter reader answered `int` from the `n` and the expression
+                scanner — which types true division correctly — never ran. Same
+                for `self.v = n + 1.5`, where no division is involved at all,
+                which is what shows the operator was never the subject.
+                They are NOT reordered away: they run again as the fallback
+                below, so a right-hand side the expression scanner cannot type
+                resolves exactly as it did before.
+                bug-n-a-field-takes-its-type-from-the-first-token-of-its-right-hand-side }
+              if (tk = tyUnknown) and PyBlkRhsEndsAt(rhsAt) and
+                 (Tokens[rhsAt].Kind = tkIdent) then
               begin
                 rhsName := GetTokenStr(rhsAt);
                 tk := PyHeaderParamType(methodStart, j, rhsName);
                 fldSig := PyAnnLastProcSig;
                 fldRec := PyHeaderParamRec(methodStart, j, rhsName);
               end;
-              if tk = tyUnknown then
+              if (tk = tyUnknown) and PyBlkRhsEndsAt(rhsAt) then
               begin
                 tk := PyTypeFromTokenIndex(rhsAt);
                 fldRec := PyRecFromTokenIndex(rhsAt);
@@ -31810,12 +31837,24 @@ begin
                   One scanner already knows how to type an expression; reuse
                   it rather than erroring or growing a second half-scanner
                   here. }
-                k2 := rhsAt;
-                while (k2 < bodyEnd) and
-                      not (Tokens[k2].Kind in [tkNewline, tkDedent]) do Inc(k2);
                 tk := PyInferExprType(rhsAt, k2);
                 if (tk = tyClass) and (PyInferLastCi >= 0) then
                   fldRec := REC_UCLASS_BASE + PyInferLastCi;
+              end;
+              { ...and the first-token readers as the FALLBACK, unguarded, for a
+                multi-token right-hand side the expression scanner declined.
+                Nothing that resolved before this change stops resolving. }
+              if (tk = tyUnknown) and (Tokens[rhsAt].Kind = tkIdent) then
+              begin
+                rhsName := GetTokenStr(rhsAt);
+                tk := PyHeaderParamType(methodStart, j, rhsName);
+                fldSig := PyAnnLastProcSig;
+                fldRec := PyHeaderParamRec(methodStart, j, rhsName);
+              end;
+              if tk = tyUnknown then
+              begin
+                tk := PyTypeFromTokenIndex(rhsAt);
+                fldRec := PyRecFromTokenIndex(rhsAt);
               end;
             end;
             { Assigned from a MODULE GLOBAL: `self.state = NEW`, the ordinary

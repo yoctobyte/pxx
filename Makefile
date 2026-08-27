@@ -3830,6 +3830,17 @@ test-core: $(COMPILER)
 	# bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop
 	./$(COMPILER) test/test_nilpy_getitem_iteration_protocol.npy $(TESTTMP)/test_nilpy_getitemiter26
 	$(TESTTMP)/test_nilpy_getitemiter26 | diff -u test/test_nilpy_getitem_iteration_protocol.expected -
+	# A field's type comes from its WHOLE right-hand side. Two FIRST-TOKEN readers
+	# ran before the expression scanner, so `self.v = n / 2` was typed by the `n`
+	# and stored 2.5's IEEE bits in an Int64 field; and the span ran to end-of-LINE
+	# rather than end-of-STATEMENT, so `self.items = items; self.i = 0` took the
+	# field's type from the `0`. The controls (a parameter shadowing a class name,
+	# a module global, a single-token RHS) are what keep the readers' real job.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-a-field-takes-its-type-from-the-first-token-of-its-right-hand-side
+	# bug-n-a-field-typed-across-a-semicolon-takes-the-next-statements-type
+	./$(COMPILER) test/test_nilpy_field_type_from_whole_rhs.npy $(TESTTMP)/test_nilpy_fieldrhs26
+	$(TESTTMP)/test_nilpy_fieldrhs26 | diff -u test/test_nilpy_field_type_from_whole_rhs.expected -
 	# ...and the other side of the same rule: a REBOUND name is refused, never
 	# resolved to its first binding. CPython prints "second"; a compile-time
 	# alias table cannot say that, so it must decline rather than answer "first".
