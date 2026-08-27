@@ -1,0 +1,77 @@
+# A selector on the result of a method call, where the method is dispatched
+# through the VMT because its class participates in a hierarchy.
+#
+# bug-n-an-attribute-off-a-call-returning-a-class-value-does-not-parse
+#
+# A call is TWO node kinds. A method on a class with a parent or a child is
+# built as AN_VIRTUAL_CALL; everything else is AN_CALL. The chain loops that
+# claim a suffix after a call knew only AN_CALL, so a bare attribute — and a
+# second `.method()` link — was claimed by nobody and the expression simply
+# ended:
+#
+#     print(P(7).mk().a)
+#     -> Expected: ), but got: a  ... pascal26: unexpected token
+#
+# The trigger is INHERITANCE, not a name collision: an unrelated class declaring
+# its own `mk` does not do it, and deleting `class Q(P): pass` from this file
+# made the identical program compile. That asymmetry is the whole bug — the
+# receiver's own class is unchanged, and something two lines away decides
+# whether the expression parses.
+#
+# A parse error is the good failure mode, but the diagnostic named neither the
+# subclass nor the class-valued return, so it read as a typo at the field name.
+# A factory method plus a subclass is the reason to write a factory method.
+#
+# The subscript guard a few lines further down already tested both node kinds,
+# which is what says these two loops had drifted rather than never known.
+
+class P:
+    def __init__(self, a):
+        self.a = a
+        self.d = {"k": 5}
+
+    def mk(self):
+        cls = P
+        return cls(self.a)      # a classref VALUE call -> variant
+
+    def txt(self):
+        return "hi"
+
+class Q(P):                     # the two lines that used to decide it
+    pass
+
+# a bare ATTRIBUTE off the virtual call
+print(P(7).mk().a)
+
+# ...and a SUBSCRIPT through that attribute, which failed only because the
+# attribute before it did
+print(P(7).mk().d["k"])
+
+# a SECOND link: the first `.mk()` result is itself a call node of the virtual
+# kind, so the chain stopped there too
+print(P(7).mk().mk().a)
+
+# ...and a method link after it
+print(P(7).mk().txt().upper())
+
+# CONTROL: a method whose result is a plain str, which never went through the
+# variant loops and worked all along
+print(P(7).txt().upper())
+
+# CONTROL: a STATIC construction types as a class, so the class-selector loop
+# claims it and none of this applies
+class R:
+    def __init__(self, v):
+        self.v = v
+    def make(self):
+        return R(self.v * 2)
+
+class S(R):
+    pass
+
+print(R(4).make().v)
+
+# the same shapes with the receiver bound to a name first, which was always
+# right and is what made the asymmetry visible
+o = P(7).mk()
+print(o.a, o.d["k"])

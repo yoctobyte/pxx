@@ -8394,10 +8394,18 @@ begin
     `(a if c else b).upper()` lands here too, which is the same rule Python
     has — a primary takes a suffix whatever produced it.
     bug-nilpy-a-chained-method-on-a-runtime-dispatched-result-is-refused }
+  { AN_VIRTUAL_CALL alongside AN_CALL for the reason spelled out at the bare-
+    ATTRIBUTE loop below: a call is two node kinds, and a method on a class that
+    participates in a hierarchy is built as the virtual one. Both loops had
+    drifted to knowing only AN_CALL while the subscript guard further down
+    already tested both, so `P(7).mk().mk().a` and `P(7).mk().txt().upper()`
+    stopped at the SECOND link — one subclass anywhere in the file was enough.
+    bug-n-an-attribute-off-a-call-returning-a-class-value-does-not-parse }
   while PyExprMode and (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
         (Tokens[TokPos].Kind = tkIdent) and
         (Tokens[TokPos + 1].Kind = tkLParen) and
         ((ASTKind[CurASTNode] = AN_CALL) or
+         (ASTKind[CurASTNode] = AN_VIRTUAL_CALL) or
          (ASTKind[CurASTNode] = AN_TERNARY)) and
         not (IntToTypeKind(ASTTk[CurASTNode]) in [tyClass, tyRecord]) do
   begin
@@ -8459,11 +8467,38 @@ begin
     bug-nilpy-a-bare-attribute-on-a-call-result-is-refused
 
     AN_TERNARY for the same reason as the '.method()' loop above — a
-    runtime-dispatched result is a ternary, so `x.split(",").foo` needs it too. }
+    runtime-dispatched result is a ternary, so `x.split(",").foo` needs it too.
+
+    AN_VIRTUAL_CALL because a call is one of TWO node kinds, and this loop knew
+    only one. A method reached on a class that participates in a hierarchy is
+    dispatched through the VMT and built as AN_VIRTUAL_CALL rather than AN_CALL
+    — so the identical program compiled or did not depending on whether the
+    receiver's class had a SUBCLASS anywhere in the file:
+
+        class P:
+            def __init__(self, a): self.a = a
+            def mk(self):
+                cls = P
+                return cls(self.a)      # a classref value call -> variant
+        class Q(P):                     # <-- delete these two lines and it compiles
+            pass
+        print(P(7).mk().a)              # pascal26: unexpected token
+
+    An unrelated class declaring its own `mk` does NOT trigger it, which is what
+    rules out the overload-set explanation the ticket opened with: it is
+    inheritance, not name collision. `P(self.a)` — a STATIC construction — is
+    unaffected because it types as tyClass and the class-selector loop above
+    claims it; only a call whose result is a variant reaches this loop at all.
+
+    The diagnostic named neither the subclass nor the class-valued return, so it
+    read as a typo at the field name. A factory method plus a subclass is the
+    reason to write a factory method in the first place.
+    bug-n-an-attribute-off-a-call-returning-a-class-value-does-not-parse }
   while PyExprMode and (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
         (Tokens[TokPos].Kind = tkIdent) and
         (Tokens[TokPos + 1].Kind <> tkLParen) and
         ((ASTKind[CurASTNode] = AN_CALL) or
+         (ASTKind[CurASTNode] = AN_VIRTUAL_CALL) or
          (ASTKind[CurASTNode] = AN_TERNARY)) and
         not (IntToTypeKind(ASTTk[CurASTNode]) in [tyClass, tyRecord]) do
   begin
