@@ -153,4 +153,4 @@ there is no dunder), so it is a sibling rather than part of this. The witness
 test names the two rows it deliberately does not assert.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit cf6494e08.
