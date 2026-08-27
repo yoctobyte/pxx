@@ -831,7 +831,7 @@ procedure EmitFloatUnaryCallXtensa(const nm: AnsiString; srcDouble, dstDouble: B
 var procIdx: Integer;
 begin
   procIdx := FindProc(nm);
-  if procIdx < 0 then Error('compiler error: ' + nm + ' not found (uses softfloat?)');
+  if procIdx < 0 then Error(SoftFloatMissing(nm));
   if XtensaABI = XTENSA_ABI_WINDOWED then
   begin
     xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
@@ -975,7 +975,7 @@ begin
   else begin Error('target xtensa: unsupported float operator'); Exit; end;
 
   procIdx := FindProc(nm);
-  if procIdx < 0 then Error('compiler error: ' + nm + ' not found (uses softfloat?)');
+  if procIdx < 0 then Error(SoftFloatMissing(nm));
   EmitCallProc(procIdx);
   if XtensaABI = XTENSA_ABI_WINDOWED then
   begin

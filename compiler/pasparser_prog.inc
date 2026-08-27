@@ -551,6 +551,7 @@ var jmpPatch, i, j, wdDepth: Integer; needsPromoInt: Boolean;
     doneUses, doneDecls, hasExceptions, needsBuiltin,
     needsHeap, needsAnsiRuntime, needsDivStub, needHeapUnit, hasCoroutine, needsTextfile: Boolean;
     usesMath, needsMath: Boolean;
+    needsSoftFloat: Boolean;
     needsThreads: Boolean;
     usesTextfile: Boolean; tnm: AnsiString;
     savedUnitIdx, afterDeclTok: Integer;
@@ -623,6 +624,7 @@ begin
   needsTextfile := False;
   usesMath := False;
   needsMath := False;
+  needsSoftFloat := False;
   needsThreads := False;
   needsPromoInt := False;
   { Default standard surface: textfile (classic Text/Assign/Reset/WriteLn) is
@@ -701,6 +703,34 @@ begin
         begin usesMath := True; Break; end;
       end;
     if usesMath then needsMath := True;
+  end;
+  { ESP-class targets (xtensa always, riscv32 under --esp-profile=bare) have no
+    FPU codegen at all: every float op lowers to a __pxx_* soft-float kernel that
+    lives in the `softfloat` unit. Hosted riscv32/arm32 pull that unit
+    unconditionally in the epilogue below; ESP-class was left out entirely, so a
+    bare program with a float in it died at CODEGEN with
+    `compiler error: softfloat repack helper not found (uses softfloat?)` — an
+    internal-fault-shaped diagnostic for an ordinary program, and the very thing
+    docs/targets/esp32.md tells people to build.
+    (bug-a-esp32c3-bare-profile-cannot-find-the-softfloat-repack-helper — filed as
+    an esp32c3+bare quirk; it is neither esp32c3-specific nor riscv-specific.)
+
+    Pulled ON DEMAND rather than unconditionally, exactly like `math` and
+    `textfile` above and for the same reason: softfloat costs ~64KB of code on
+    riscv32 and ~54KB on xtensa, which is real money in a flash image, and the
+    typical MCU program has no float in it at all. The signal is any token that
+    can only mean float — a real literal, one of the four float type keywords, or
+    `/` (Pascal's `/` is always real division; integer division is `div`).
+
+    A miss is still recoverable: an explicit `uses softfloat` works and is what
+    the codegen diagnostic now names. }
+  if TargetIsEspClass and (not NoDefaultRtl) then
+  begin
+    for i := 0 to TokCount - 1 do
+      if (Tokens[i].Kind = tkFloat) or (Tokens[i].Kind = tkSlash) or
+         (Tokens[i].Kind = tkReal_T) or (Tokens[i].Kind = tkSingle_T) or
+         (Tokens[i].Kind = tkDouble_T) or (Tokens[i].Kind = tkExtended_T) then
+      begin needsSoftFloat := True; Break; end;
   end;
   { FPC's LOW-LEVEL thread API lives in the System unit, so portable sources call
     BeginThread / EndThread / WaitForThreadTerminate / CloseThread and declare a
@@ -1233,8 +1263,10 @@ begin
   { arm32 has hardware VFP, but its double->int convert is 32-bit only; a 64-bit
     Trunc/Round of a large double routes to the soft-float __pxx_d2i64 kernel
     (mirrors the C-frontend pull in cparser), so arm32 pulls softfloat too. }
-  if ((((TargetArch = TARGET_RISCV32) and (not EspBareBoot))) or (TargetArch = TARGET_ARM32)) and
-     (needHeapUnit or needsBuiltin) then
+  if (((((TargetArch = TARGET_RISCV32) and (not EspBareBoot))) or (TargetArch = TARGET_ARM32)) and
+      (needHeapUnit or needsBuiltin)) or
+     { ESP-class: on demand, from the token scan above — see the comment there. }
+     needsSoftFloat then
     ParseUsesUnitAmbient('softfloat');
   { The promotable-int runtime is written in ordinary Pascal over managed
     strings and bignum, so it needs the heap allocator and the Str/Val

@@ -9424,6 +9424,8 @@ var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
     initPatch, initIdx: Integer;
     needInit: Boolean;
     cNeedsHeap, cNeedsAnsi, cNeedsDiv: Boolean;   { shared pre-scan; only cNeedsAnsi is read }
+    cWantsSoftFloat: Boolean;   { ESP-class on-demand softfloat pull }
+    cSfI: Integer;
 begin
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
 
@@ -9743,6 +9745,28 @@ begin
     through — it exit_group's), so the unit bodies sit after it, reached only via
     call. Guarded like the Pascal default-RTL pull: skip on bare-metal ESP and
     when default RTL is opted out. }
+  { ESP-class (xtensa always, riscv32 under --esp-profile=bare) gets no default
+    RTL at all, and until now got no softfloat either — so a bare C translation
+    unit with a float in it died at CODEGEN with
+    `compiler error: softfloat i2s/i2d not found (uses softfloat?)`, an
+    internal-fault-shaped diagnostic with no `uses` clause to add (this is C).
+    Same defect and same fix as the Pascal driver's — see the long comment on the
+    ESP-class scan in ParseProgram (pasparser_prog.inc). Pulled ON DEMAND from a
+    token scan for the same size reason: softfloat is ~54-64KB of flash.
+
+    The C signal set is NOT the Pascal one: `float`/`double` are their own
+    keyword tokens here, and C's `/` is integer division on integer operands, so
+    tkSlash is not a float tell the way Pascal's `/` is.
+    bug-a-esp32c3-bare-profile-cannot-find-the-softfloat-repack-helper }
+  if TargetIsEspClass and (not NoDefaultRtl) then
+  begin
+    cWantsSoftFloat := False;
+    for cSfI := 0 to TokCount - 1 do
+      if (Tokens[cSfI].Kind = tkFloat) or (Tokens[cSfI].Kind = tkCFloat) or
+         (Tokens[cSfI].Kind = tkCDouble) then
+      begin cWantsSoftFloat := True; Break; end;
+    if cWantsSoftFloat then ParseUsesUnitAmbient('softfloat');
+  end;
   if (not NoDefaultRtl) and (not TargetIsEspClass) then
   begin
     { builtinheap declares TInterfacedObject/IInterface (Pascal classes), whose

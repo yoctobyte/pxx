@@ -4748,6 +4748,34 @@ test-core: $(COMPILER)
 	./$(COMPILER) --esp-profile=bare --target=xtensa test/test_esp_bare.pas $(TESTTMP)/test_soc_xt26
 	./$(COMPILER) --esp-profile=bare --target=esp32s3 test/test_esp_bare.pas $(TESTTMP)/test_soc_s326
 	cmp $(TESTTMP)/test_soc_xt26 $(TESTTMP)/test_soc_s326
+	# ...and the same, for a bare program with a FLOAT in it. The ESP-class
+	# targets have no FPU, so every float op lowers to a __pxx_* kernel in the
+	# `softfloat` unit -- which was never pulled for them, so ANY float in a bare
+	# program died at codegen with `compiler error: softfloat ... not found`.
+	# Both frontends now pull it on demand from a token scan (ParseProgram /
+	# the C driver), so this row is the one that would have caught it: all four
+	# bare spellings BUILD, and each SoC name stays byte-identical to the generic
+	# arch it defaults from. The x86-64 oracle row proves the values.
+	# bug-a-esp32c3-bare-profile-cannot-find-the-softfloat-repack-helper
+	./$(COMPILER) --esp-profile=bare --target=riscv32 test/test_esp_bare_float.pas $(TESTTMP)/test_socf_rv26
+	./$(COMPILER) --esp-profile=bare --target=esp32c3 test/test_esp_bare_float.pas $(TESTTMP)/test_socf_c326
+	cmp $(TESTTMP)/test_socf_rv26 $(TESTTMP)/test_socf_c326
+	./$(COMPILER) --esp-profile=bare --target=xtensa test/test_esp_bare_float.pas $(TESTTMP)/test_socf_xt26
+	./$(COMPILER) --esp-profile=bare --target=esp32s3 test/test_esp_bare_float.pas $(TESTTMP)/test_socf_s326
+	cmp $(TESTTMP)/test_socf_xt26 $(TESTTMP)/test_socf_s326
+	./$(COMPILER) test/test_esp_bare_float.pas $(TESTTMP)/test_socf_oracle26
+	test "$$($(TESTTMP)/test_socf_oracle26 | tr '\n' '|')" = "7|16|32|75|ESP BARE FLOAT OK|"
+	# ...and a float-free bare program must still pay NOTHING for it: the pull is
+	# on demand precisely because softfloat is ~54-64KB of flash. If this ever
+	# starts linking the unit, the scan has become unconditional.
+	./$(COMPILER) --esp-profile=bare --target=esp32c3 test/test_esp_bare.pas $(TESTTMP)/test_socf_nofl26
+	test $$(stat -c%s $(TESTTMP)/test_socf_nofl26) -lt $$(stat -c%s $(TESTTMP)/test_socf_c326)
+	# The C frontend has the same wall and the same fix (its signal set differs:
+	# `float`/`double` are keyword tokens there, and C's `/` is integer division
+	# on integers, so it is not a float tell the way Pascal's is).
+	./$(COMPILER) --esp-profile=bare --target=esp32c3 test/test_esp_bare_float.c $(TESTTMP)/test_socf_c_c326
+	./$(COMPILER) --esp-profile=bare --target=riscv32 test/test_esp_bare_float.c $(TESTTMP)/test_socf_c_rv26
+	cmp $(TESTTMP)/test_socf_c_c326 $(TESTTMP)/test_socf_c_rv26
 	./$(COMPILER) test/test_esp_float_depth_from_target.pas $(TESTTMP)/test_espdepth26
 	test "$$($(TESTTMP)/test_espdepth26 | tail -1)" = "ESP FLOAT DEPTH OK"
 	test "$$($(TESTTMP)/test_espdepth26 | head -2 | tr '\n' '|')" = "0.33333333333333331483|0.33333334326744079590|"
@@ -12577,6 +12605,23 @@ test-esp-bare: $(COMPILER)
 	  ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare.pas > $(TESTTMP)/test_esp_bare.s3 2>/dev/null; \
 	  if diff -u $(TESTTMP)/test_esp_bare.oracle $(TESTTMP)/test_esp_bare.s3; then echo "esp32s3 bare-boot ok (UART output == x86-64 oracle)"; \
 	  else echo "esp32s3 bare-boot MISMATCH"; exit 1; fi; fi
+	# A float on bare metal. test_esp_bare.pas deliberately has none, so the
+	# whole softfloat-on-ESP path was unexercised by execution as well as by
+	# build: any float in a bare program died at codegen because the `softfloat`
+	# unit was never pulled for the ESP-class targets (they have no FPU, so every
+	# float op is a __pxx_* kernel call).
+	# bug-a-esp32c3-bare-profile-cannot-find-the-softfloat-repack-helper
+	@./$(COMPILER) test/test_esp_bare_float.pas $(TESTTMP)/test_esp_bare_float_oracle >/dev/null && $(TESTTMP)/test_esp_bare_float_oracle > $(TESTTMP)/test_esp_bare_float.oracle
+	@RV=$$(ls $$HOME/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 2>/dev/null | head -1); \
+	if [ -z "$$RV" ]; then echo "Espressif qemu-system-riscv32 not installed; esp32c3 bare-float run skipped"; else \
+	  ESP_RUN_TIMEOUT=10 tools/esp_run_bare.sh --chip esp32c3 test/test_esp_bare_float.pas > $(TESTTMP)/test_esp_bare_float.c3 2>/dev/null; \
+	  if diff -u $(TESTTMP)/test_esp_bare_float.oracle $(TESTTMP)/test_esp_bare_float.c3; then echo "esp32c3 bare-float ok (softfloat kernels == x86-64 oracle)"; \
+	  else echo "esp32c3 bare-float MISMATCH"; exit 1; fi; fi
+	@XT=$$(ls $$HOME/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa 2>/dev/null | head -1); \
+	if [ -z "$$XT" ]; then echo "Espressif qemu-system-xtensa not installed; esp32s3 bare-float run skipped"; else \
+	  ESP_RUN_TIMEOUT=10 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare_float.pas > $(TESTTMP)/test_esp_bare_float.s3 2>/dev/null; \
+	  if diff -u $(TESTTMP)/test_esp_bare_float.oracle $(TESTTMP)/test_esp_bare_float.s3; then echo "esp32s3 bare-float ok (softfloat kernels == x86-64 oracle)"; \
+	  else echo "esp32s3 bare-float MISMATCH"; exit 1; fi; fi
 	@./$(COMPILER) test/test_esp_bare_atomic.pas $(TESTTMP)/test_esp_bare_atomic_oracle >/dev/null && $(TESTTMP)/test_esp_bare_atomic_oracle > $(TESTTMP)/test_esp_bare_atomic.oracle
 	@RV=$$(ls $$HOME/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 2>/dev/null | head -1); \
 	if [ -z "$$RV" ]; then echo "Espressif qemu-system-riscv32 not installed; esp32c3 atomics run skipped"; else \

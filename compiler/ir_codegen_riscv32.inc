@@ -928,7 +928,7 @@ begin
     Error('target riscv32: unsupported float-to-float conversion');
     Exit;
   end;
-  if procIdx < 0 then Error('compiler error: softfloat repack helper not found (uses softfloat?)');
+  if procIdx < 0 then Error(SoftFloatMissing('__pxx_s2d/__pxx_d2s'));
   EmitCallProc(procIdx);
 end;
 
@@ -950,7 +950,7 @@ begin
       EmitNode64RISCV32(node);                 { a0:a1 = 64-bit int }
       if ntk = tyUInt64 then procIdx := FindProc('__pxx_ul2d')
       else procIdx := FindProc('__pxx_l2d');
-      if procIdx < 0 then Error('compiler error: __pxx_l2d not found (uses softfloat?)');
+      if procIdx < 0 then Error(SoftFloatMissing('__pxx_l2d'));
       EmitCallProc(procIdx);                   { a0:a1 = double bits }
       EmitFloatConvRISCV32(tyDouble, wantTk);
       Exit;
@@ -965,7 +965,7 @@ begin
       IREmitNodeRISCV32(node);                 { a0 = value }
       rv32_addi(reg_a1, reg_zero, 0);          { a1 = 0 (zero-extend) }
       procIdx := FindProc('__pxx_ul2d');
-      if procIdx < 0 then Error('compiler error: __pxx_ul2d not found (uses softfloat?)');
+      if procIdx < 0 then Error(SoftFloatMissing('__pxx_ul2d'));
       EmitCallProc(procIdx);                   { a0:a1 = double bits }
       EmitFloatConvRISCV32(tyDouble, wantTk);
       Exit;
@@ -973,7 +973,7 @@ begin
     IREmitNodeRISCV32(node);                   { a0 = 32-bit int }
     if wantTk = tySingle then procIdx := FindProc('__pxx_i2s')
     else procIdx := FindProc('__pxx_i2d');
-    if procIdx < 0 then Error('compiler error: softfloat i2s/i2d not found (uses softfloat?)');
+    if procIdx < 0 then Error(SoftFloatMissing('__pxx_i2s/__pxx_i2d'));
     EmitCallProc(procIdx);
   end;
 end;
@@ -1075,7 +1075,7 @@ begin
   else begin Error('target riscv32: unsupported float operator'); Exit; end;
 
   procIdx := FindProc(nm);
-  if procIdx < 0 then Error('compiler error: ' + nm + ' not found (uses softfloat?)');
+  if procIdx < 0 then Error(SoftFloatMissing(nm));
   EmitCallProc(procIdx);
 
   { comparison kernels return -1/0/1, or 2 for NaN (unordered). }
@@ -1316,7 +1316,7 @@ begin
         begin
           EmitNode64RISCV32(IRB[node]);                     { a0:a1 = double bits }
           procIdx := FindProc('__pxx_d2i64');
-          if procIdx < 0 then Error('compiler error: __pxx_d2i64 not found (uses softfloat?)');
+          if procIdx < 0 then Error(SoftFloatMissing('__pxx_d2i64'));
           EmitCallProc(procIdx);                            { a0:a1 = truncated int64 }
           if Is64BitRISCV32(Syms[IRA[node]].TypeKind) then
             EmitStoreVar64RISCV32(IRA[node])
@@ -1731,7 +1731,7 @@ begin
         begin
           EmitNode64RISCV32(IRB[node]);             { a0:a1 = double bits }
           procIdx := FindProc('__pxx_d2i64');
-          if procIdx < 0 then Error('compiler error: __pxx_d2i64 not found (uses softfloat?)');
+          if procIdx < 0 then Error(SoftFloatMissing('__pxx_d2i64'));
           EmitCallProc(procIdx);                    { a0 = truncated int (low word) }
           rv32_addi(reg_sp, reg_sp, -4);
           rv32_sw(reg_a0, reg_sp, 0);
@@ -2310,7 +2310,7 @@ begin
               EmitNode64RISCV32(IRA[argNode]);    { a0:a1 = double bits }
               if procIdx = -204 then sVal := '__pxx_d2i64_rne' else sVal := '__pxx_d2i64';
               procIdx := FindProc(sVal);
-              if procIdx < 0 then Error('compiler error: ' + sVal + ' not found (uses softfloat?)');
+              if procIdx < 0 then Error(SoftFloatMissing(sVal));
               EmitCallProc(procIdx);              { a0:a1 = full Int64 result }
               Exit;
             end
@@ -2326,7 +2326,7 @@ begin
               Exit;
             end;
             procIdx := FindProc(sVal);
-            if procIdx < 0 then Error('compiler error: ' + sVal + ' not found (uses softfloat?)');
+            if procIdx < 0 then Error(SoftFloatMissing(sVal));
             EmitCallProc(procIdx);
             rv32_srai(reg_a1, reg_a0, 31);         { sign-extend to Int64 a0:a1 }
             Exit;
@@ -2339,7 +2339,7 @@ begin
             EmitFloatOperandRISCV32(IRA[argNode], tyDouble);   { a0:a1 = double }
             if procIdx = -205 then sVal := '__pxx_dfrac' else sVal := '__pxx_dint';
             procIdx := FindProc(sVal);
-            if procIdx < 0 then Error('compiler error: ' + sVal + ' not found (uses softfloat?)');
+            if procIdx < 0 then Error(SoftFloatMissing(sVal));
             EmitCallProc(procIdx);                  { a0:a1 = double result }
             { The kernels always yield a DOUBLE, but this node's type is whatever
               the cast asked for — a C `(float)x` lowers to Int(x) with a tySingle

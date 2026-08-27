@@ -121,3 +121,21 @@ begin
   Result := (TargetArch = TARGET_XTENSA) or
             ((TargetArch = TARGET_RISCV32) and EspBareBoot);
 end;
+
+function SoftFloatMissing(const nm: AnsiString): AnsiString;
+{ The one wording for "a __pxx_* soft-float kernel was not registered". Twelve
+  sites across ir_codegen_riscv32.inc and ir_codegen_xtensa.inc raised this, all
+  spelled `compiler error: <nm> not found (uses softfloat?)` — which reads as an
+  INTERNAL FAULT for what is an ordinary user program on a target with no FPU,
+  and whose parenthesised hint is a question rather than an instruction.
+
+  It is now rare by construction: both frontends pull `softfloat` on demand when
+  they see a float in the source (ParseProgram / the C driver). What is left is
+  the scan's blind spot — a float that reaches codegen through a name the token
+  scan cannot see, e.g. `var x: TFloatAliasFromSomeUnit`. That case is fixable by
+  the person in front of the compiler, so say how instead of claiming a fault.
+  bug-a-esp32c3-bare-profile-cannot-find-the-softfloat-repack-helper }
+begin
+  Result := 'this target has no FPU and the soft-float kernel ' + nm +
+            ' is not linked; add `uses softfloat` to the program';
+end;
