@@ -166,6 +166,86 @@ begin
     end;
 end;
 
+{ Is the identifier at TemplateTokens[base + i] a DECLARATION NAME rather than a
+  use of a type? Substitution is token-based — it rewrites every tkIdent whose
+  text matches a type-parameter name — and that is correct only in TYPE
+  positions. A template may legally name a field, parameter, local, constant or
+  method with the same identifier as one of its own type parameters, and Pascal
+  is case-INSENSITIVE, so `record t: T; end` collides too. Rewriting the name
+  turned `record t: T` into `record String: String` and the matching `FR.t` into
+  `FR.String`, i.e. "no such member" — the declaration and its use were corrupted
+  in lockstep, which is why the error surfaced far from the cause.
+
+  Three name positions, each decided from adjacent tokens only (this runs over a
+  flat token stream, before any parse):
+
+  1. after `.` — a member selector (`FR.t`, `Self.T`). A type parameter never
+     legitimately follows a dot inside a template body.
+  2. after `procedure`/`function`/`property`/`constructor`/`destructor` — the
+     routine being named. Implementation headers (`procedure TG.T`) are already
+     covered by case 1.
+  3. a declaration-name list: the identifier is followed by `:`, or by a run of
+     `, ident` pairs that ends in `:` — `t: T`, `a, t: T`, `const t: T`. An
+     identifier followed by `:` is a name or a label in every Pascal form; a type
+     parameter in a genuine type position is followed by `;`, `)`, `of`, `=` or
+     `end`, never by `:`.
+
+  Knowing the name positions is only half of it: once a template DECLARES a
+  colliding name, its ordinary USES (`t := x`, `Writeln(t)`) are bare
+  identifiers that must not be substituted either. Those are indistinguishable
+  from a type use by adjacency alone, so SpecializeStream runs this in two
+  passes — pass 1 marks a type parameter SHADOWED if the template declares its
+  name anywhere, and for a shadowed parameter only pass 2 substitutes just the
+  unambiguous type positions (after `:` or `of`).
+
+  The two-pass split is what keeps this from regressing working code: a
+  parameter the template does not shadow behaves exactly as before, typecasts
+  `T(x)` included. Only a template that declares a colliding name — which was
+  broken outright — sees the narrower rule. A shadowed parameter used in a type
+  position this rule does not list (a bare `T(x)` cast) stays unsubstituted;
+  that is the residual, and it needs scope rather than adjacency. }
+{ An unambiguous TYPE position for a SHADOWED type parameter: directly after
+  `:` (`t: T`, `function F: T`) or after `of` (`array of T`, `set of T`). Kept
+  deliberately narrow — it only ever narrows behaviour for a parameter the
+  template shadows, and a false negative there costs an unsubstituted token in a
+  program that did not compile at all before. }
+function SpecTypePosition(base, i: Integer): Boolean;
+begin
+  SpecTypePosition := False;
+  if i <= 0 then Exit;
+  SpecTypePosition := (TemplateTokens[base + i - 1].Kind = tkColon) or
+                      (TemplateTokens[base + i - 1].Kind = tkOf);
+end;
+
+function SpecSubNamePosition(base, i, count: Integer): Boolean;
+var j: Integer; prev: AnsiString;
+begin
+  SpecSubNamePosition := True;
+  if i > 0 then
+  begin
+    if TemplateTokens[base + i - 1].Kind = tkDot then Exit;
+    if (TemplateTokens[base + i - 1].Kind = tkProcedure) or
+       (TemplateTokens[base + i - 1].Kind = tkFunction) or
+       (TemplateTokens[base + i - 1].Kind = tkProperty) then Exit;
+    { `constructor` / `destructor` are SOFT keywords here -- compared by text and
+      delivered as tkIdent (pasparser_class.inc), so there is no token kind to
+      match on. }
+    if TemplateTokens[base + i - 1].Kind = tkIdent then
+    begin
+      prev := GetTokenStrFromRaw(TemplateTokens[base + i - 1].SOffset,
+                                 TemplateTokens[base + i - 1].SLen);
+      if CaseEqual(prev, 'constructor') or CaseEqual(prev, 'destructor') then Exit;
+    end;
+  end;
+  { `ident :` and `ident , ident , ... :` }
+  j := i + 1;
+  while (j + 1 < count) and (TemplateTokens[base + j].Kind = tkComma) and
+        (TemplateTokens[base + j + 1].Kind = tkIdent) do
+    Inc(j, 2);
+  if (j < count) and (TemplateTokens[base + j].Kind = tkColon) then Exit;
+  SpecSubNamePosition := False;
+end;
+
 procedure SpecializeStream(tokStart, count: Integer; const specName: AnsiString);
 { Substitutions come from the SpecSub* globals (param name -> concrete
   name/kind), set by the caller — multi-param generics replace every type
@@ -176,6 +256,19 @@ var
   gEnd: Integer;
   s, aliasNm: AnsiString;
 begin
+  { PASS 1 — which type parameters does this template also declare as a name?
+    ACCUMULATES into SpecSubShadowed (reset per specialization in SetSpecSubs):
+    the class body and each method body arrive as separate calls, and a field
+    declared in the body is used in the methods. }
+  for i := 0 to count - 1 do
+    if (TemplateTokens[tokStart + i].Kind = tkIdent) and
+       SpecSubNamePosition(tokStart, i, count) then
+    begin
+      s := GetTokenStrFromRaw(TemplateTokens[tokStart + i].SOffset,
+                              TemplateTokens[tokStart + i].SLen);
+      for k := 0 to SpecSubCount - 1 do
+        if CaseEqual(s, SpecSubNames[k]) then SpecSubShadowed[k] := True;
+    end;
   subCount := 0;
   i := 0;
   while i < count do
@@ -240,9 +333,10 @@ begin
           Inc(j);
         end;
       end
-      else
+      else if not SpecSubNamePosition(tokStart, i, count) then
         for k := 0 to SpecSubCount - 1 do
-          if CaseEqual(s, SpecSubNames[k]) then
+          if CaseEqual(s, SpecSubNames[k]) and
+             ((not SpecSubShadowed[k]) or SpecTypePosition(tokStart, i)) then
           begin
             SpecializeTokens[subCount].Kind := SpecSubKinds[k];
             SpecializeTokens[subCount].SOffset := TokCharLen;
@@ -794,6 +888,17 @@ procedure SetSpecSubs(ti, si: Integer);
 var k: Integer;
 begin
   SpecSubCount := TemplateNParams[ti];
+  { Shadowing is a property of the TEMPLATE's own declarations, so it is
+    computed once per template and survives every stream of it. Resetting per
+    specialization cleared the class body's findings before the method bodies
+    streamed, which is exactly the case a field named after a type parameter
+    hits. }
+  if (not SpecSubShadowValid) or (ti <> SpecSubShadowTi) then
+  begin
+    for k := 0 to SpecSubCount - 1 do SpecSubShadowed[k] := False;
+    SpecSubShadowTi := ti;
+    SpecSubShadowValid := True;
+  end;
   for k := 0 to SpecSubCount - 1 do
   begin
     SpecSubNames[k]  := TemplateParamNames[ti * MAX_TEMPLATE_PARAMS + k];

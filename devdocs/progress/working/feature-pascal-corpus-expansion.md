@@ -7,9 +7,9 @@ prio: 75
 - **Type:** feature — umbrella (frontend stress corpus)
 - **Track:** P (Pascal frontend; shares `lexer.inc`/`parser.inc` with A, so bugs
   found land as Track P — A-gated — or Track A core)
-- **Status:** backlog — filed 2026-07-10 (C wound down to 2 open bugs; Pascal
+- **Status:** working
   neglected by comparison — user call).
-- **Owner:** —
+- **Owner:** frankA
 
 ## Why (the gap)
 The C frontend got a driven ladder (c-testsuite → zlib → cjson → lua → sqlite →
