@@ -206,7 +206,7 @@ begin
       { Anything not yet handled errors rather than being skipped. A skipped IR
         op is a program that compiles and computes the wrong answer, which is
         the failure class this target exists to make impossible. }
-      if IRTopLevelStmt(IRKind[i]) then
+      if IRTopLevelStmt(i) then
         Error('wasm32: IR op ' + WasmIntStr(IRKind[i])
               + ' not implemented yet (Phase 2 is straight-line codegen)');
     end;

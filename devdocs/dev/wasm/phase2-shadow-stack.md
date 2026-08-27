@@ -179,14 +179,23 @@ does not need. The honest summary is that Phase 2 is *smaller and differently
 shaped*, not simply smaller.
 
 **When you do measure this lane's runtime cost — Phase 7 is where it matters —
-interleave the runs.** Established on this box 2026-08-28 by Track O: min-of-N
-across *separate invocations* is not comparable, only binaries timed inside one
-interleaved run are. The proof was an unchanged binary measuring 1.09s and then
-1.34s, after a fix and a causal explanation had already been written down as
-fact for a 7% "regression" that was the box. The BSS figures above are static
-and unaffected; any *timing* claim is not. Related, same day: regenerate a
-baseline rather than reusing one from earlier in a session — a pin landing
-`lib/rtl` between two hash runs made six targets look changed.
+interleave the runs, and repeat them.** Two separate rules, established on this
+box 2026-08-28 by Track O:
+
+- **Interleaving fixes *which* runs you may compare.** min-of-N across separate
+  invocations is not comparable; only binaries timed inside one interleaved run
+  are. The proof was an unchanged binary measuring 1.09s and then 1.34s — after
+  a fix and a causal explanation for a 7% "regression" had already been written
+  down as fact.
+- **Repetition fixes *how confidently*.** Track O's own "6% self-compile
+  regression" turned out not to exist: three under-powered runs sharing a bias,
+  which reads exactly like three confirmations. On this box **a short workload
+  with many reps beats a long one with few.**
+
+The BSS figures above are static and unaffected by either. Any *timing* claim
+is subject to both. Related, same day: regenerate a baseline rather than
+reusing one from earlier in a session — a pin landing `lib/rtl` between two
+hash runs made six targets look changed.
 
 ## Open, and not to be assumed
 
