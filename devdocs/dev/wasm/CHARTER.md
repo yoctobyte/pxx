@@ -159,6 +159,36 @@ wasm work must not change the output of any existing target.** Until Phase 4
 that is guaranteed structurally (new files only). From Phase 4 on it is a claim
 that has to be tested.
 
+## What wasm is good for as a target — and it is not what you would guess
+
+Not portability. This project already has six targets; a seventh is not
+interesting on that axis alone. The property worth naming is that **wasm's
+validator converts a class of codegen error from a silent wrong value into a
+hard failure at emit time.**
+
+Measured, not argued (`devdocs/dev/wasm/phase5-exceptions.md`, finding 3): the
+exception design threads a pending flag and checks it after every call, and that
+check must dominate every use of the call's result. On a register target,
+getting that ordering wrong produces a plausible wrong value far from the cause
+— *the exact bug shape CLAUDE.md's debugging section calls the expensive one*.
+On wasm it cannot even be encoded: a `br` out of a block requires the operand
+stack to match the block's type, so a call result cannot survive the branch the
+check performs. Bad codegen fails `wasm-validate` instead of returning 4002 when
+it should return nothing.
+
+This was found by writing it wrong first — the prototype's draft printed garbage
+on the unwind path — which is the honest way to have learned it and the reason
+to trust it.
+
+The general form: wasm's type-checked operand stack, explicit block types and
+structured control flow make several whole categories of emitter bug
+*unrepresentable* rather than merely wrong. That makes this target useful as a
+**cross-check on the IR itself**, not only as a deployment story. An IR-level
+mistake that six register backends encode happily will often refuse to encode
+here, with a validator message and a byte offset. Budget for that being a
+source of real bugs found in shared code — and file them into the owning lane,
+never fix them here.
+
 ### External tools
 
 `wasmtime` (runtime) and `wabt` (`wasm-validate`, `wasm2wat`) are **dev-only**
