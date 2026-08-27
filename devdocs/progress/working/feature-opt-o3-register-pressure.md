@@ -575,3 +575,131 @@ a reload is redundant — the file says "MUST MOVE TOGETHER" and it means it.
 Each new arm was checked against the mirror: all of them evaluate the same node
 first as the arm they preempt (const-right -> left first), so the mirrors did
 not need to change. The next arm might not be so lucky.
+
+## 2026-08-27 (frankA) — next-slice item 1: both cheap experiments are NO-OPS, and the premise is wrong
+
+Dispatched to work item 1 only ("the three-local loop is still 3x off fpc …
+what remains is exactly W2"), running the two experiments the slice says to run
+before building anything bigger. **Both are no-ops, the third is near-moot, and
+the measurement does not support the premise: what remains on these loops is
+W1, not W2.** Nothing was built beyond the instrument.
+
+### The instrument — this time it is COMMITTED
+
+`bench-o/` was scratch and had to be re-created, as the slice warned. The half
+that is worth keeping is now a probe rather than a directory:
+
+**`PXXDBG=a.resid`** (`UnifiedResidencyAssign`, committed) prints one `TALLY`
+line per residency candidate — proc, sym, loop-access count, type, kind, whether
+it escapes, and how many GPRs were free — and one `ASSIGN` line per pick. It
+exists because *the eligibility thresholds are invisible in the emitted bytes*: a
+local that just missed the cut and one that was never a candidate emit identical
+frame traffic, so a disassembly cannot tell you which knob to turn. Reading the
+counts is what made both experiments below cheap, and items 2 and 3 of this slice
+will want it too.
+
+The timing half stays scratch (three lines of shell): A/B alternating,
+`%U` user time, reported as **min of 5** — the box was running Track T's watcher
+at load 13 throughout.
+
+**Every number below came from a self-hosted `make compiler/pascal26` fixedpoint
+build at this commit, binary sha256 `0b134438899d`.** Two benchmarks, both
+`LongInt`/`Int64` (FPC's default mode makes `Integer` 16-bit — the first draft
+silently measured a range-check-folded no-op):
+
+- `three.pas` — three locals: `i` (for counter), `j` (temp), `s` (accumulator).
+- `many.pas` — six candidates, three free registers: genuine pressure.
+
+Both agree with `fpc -O2` on output at every level tested.
+
+### (a) Lower the eligibility threshold — **no effect**
+
+`three.pas`, min of 5, user seconds:
+
+| threshold | `j` gets a register? | pxx `-O3` | `fpc -O2` |
+| --- | --- | --- | --- |
+| `> 3` (shipped) | no | 0.79 | 0.34 |
+| `> 2` | no | 0.77 | |
+| `> 1` | **yes, r15** | 0.78 | |
+| `> 0` | yes, r15 | 0.80 | |
+
+`many.pas`, where the pool actually runs out: `> 3` → 0.16, `> 1` → 0.17,
+`fpc -O2` → 0.05.
+
+The probe confirms the change *lands* — at `> 1`, `j` (count 2) is assigned r15
+next to `s` (5, r12) and `i` (4, r13). It buys nothing, at either threshold, on
+either shape.
+
+**Why, and this is the part worth keeping:** residency removes **loads, not
+stores** — `EmitStoreVar` dual-writes the frame slot *and* the register, because
+the slot stays authoritative. A local with roughly one load and one store per
+iteration therefore trades one removed memory read for one added register move
+and nets ~zero. `j` is exactly that local. The existing comment's rationale
+("plain L1 reloads measured as free — the regcall phase-2 rejection") is
+confirmed rather than overturned, so the threshold stays at `> 3`.
+
+The corollary is a better ranking metric for whenever W2 does get built: rank by
+**loads**, not by loads+stores. A store-heavy resident is close to free; a
+load-heavy one is the whole payoff.
+
+### (b) Use all four free callee-saved registers — **already landed; the slice is stale**
+
+`UnifiedResidencyAssign` already builds its pool as **r12..r15 minus whatever
+regcall param residency claimed**, and the probe reports `freegpr=2..4` per body.
+The "rather than two" in item 1 describes the pre-unified pass and was overtaken
+by the unified-residency work itself. No change; the item is struck.
+
+### (c) A `for` counter should be resident unconditionally — **near-moot**
+
+A `for` counter tallies **4** loop accesses on its own (entry test, bottom test,
+increment load, increment store), so it clears `> 3` unaided in the common case —
+in `three.pas` it takes r13 with count 4. It loses only when hotter locals
+exhaust the pool: in `many.pas`, `i` (4) is beaten by `a`/`b`/`c` (6 each) and
+spends the loop in the frame. But forcing it in means **evicting** one of those,
+and (a) says the marginal register is worth ~0 there. Not implemented: it would
+be policy churn with no measurable payoff behind it.
+
+### What the gap actually is — read off the disassembly
+
+`Run`'s loop body in `three.pas` at `-O3` is **21 instructions** on the common
+path. The waste is not allocation:
+
+| pattern | instances per iteration |
+| --- | --- |
+| `mov %rN,%rax` — operand staged through rax before every use | 5 |
+| `mov %rax,%r12` immediately followed by `mov %r12,%rax` | 1 (pure round trip) |
+| resident dual-write (`mov %rax,-0x20(%rbp)` + `mov %rax,%r12`) | 2 |
+| `j` stored then reloaded from the same slot | 1 |
+| for-limit temp reloaded from the frame | 1 |
+
+Every one of those is the **single-accumulator operand model** — that is W1's
+subject (the emit-time operand scheduler), not W2's. The register allocator
+cannot help a body that moves each value into rax before touching it.
+
+Two things that look like levers and are not, both measured:
+
+- Making the limit a **constant** (no limit temp at all) made `three.pas`
+  *slower*, 0.87 vs 0.79. Do not chase the limit temp on its own.
+- Across the whole `-O3`-built compiler these patterns are individually small.
+  Approximate linear decode of the 9.1 MB text segment, 1.93M instructions
+  (approximate because a pxx binary carries no section headers, so the sweep
+  decodes data as code in places — read the magnitudes, not the digits):
+  dead rax round trip **0.29%**, store-then-reload-same-slot **0.16%**, resident
+  dual-write **0.03%**, operand funnel `mov %rN,%rax` **1.21%**.
+
+### Verdict — do NOT start W2 on this evidence
+
+Item 1 asserts "what remains is exactly W2". On the measurement it is not. Both
+cheap experiments the slice itself proposed as the gate on that assertion came
+back empty, and the third is moot. The remaining gap on both loop shapes is the
+operand model, so **W1 (emit-time operand scheduler) should rank ahead of W2**,
+and W2's own ranking metric should be loads rather than accesses when it is
+built.
+
+Banked and handed back to the coordinator rather than starting W1 unilaterally —
+the dispatch was item 1 only. `-O2` promotion untouched (coordinator's call); no
+pin taken.
+
+Gate: `make compiler/pascal26` fixedpoint (converged, `0b134438899d`) +
+`tools/gate.sh quick` GREEN. The commit adds the probe only; no pass changed
+behaviour, so `-O0/-O1/-O2/-O3` output is unchanged by construction.

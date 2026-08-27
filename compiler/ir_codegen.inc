@@ -9657,6 +9657,23 @@ begin
         end;
     end;
   if nsyms = 0 then Exit;
+  { PXXDBG=a.resid — the tally this pass ranks on, before any pick is made.
+    The eligibility thresholds below are the whole subject of the -O3
+    register-pressure work, and they are invisible in the emitted bytes: a
+    local that just missed the cut and one that was never a candidate emit
+    identical frame traffic. Print the counts rather than inferring them from
+    a disassembly. }
+  if PxxDbgEnabled('a.resid') then
+    for k := 0 to nsyms - 1 do
+    begin
+      si := CSyms[k];
+      Write('PXXDBG a.resid TALLY proc=', Procs[CurProc].Name,
+            ' sym=', Syms[si].Name, ' count=', Counts[k],
+            ' type=', Syms[si].TypeKind, ' kind=', Syms[si].Kind);
+      if Syms[si].IsArray then Write(' array');
+      if SymSlotEscapes(si) then Write(' escapes');
+      WriteLn(' freegpr=', nFree);
+    end;
   { Ranked selection: repeatedly take the hottest remaining eligible sym whose
     class still has a free register. Within a class the descending-count order
     fills the lowest register first (r12 before r13, xmm8 before xmm9). }
@@ -9704,6 +9721,9 @@ begin
       EmitB($F2); EmitB($44); EmitB($0F); EmitB($10);
       EmitB($85 or (fslot shl 3)); EmitI32(Syms[si].Offset);  { movsd xmm(8+fslot), [rbp+off] }
       FrResidentSym[fslot] := si;
+      if PxxDbgEnabled('a.resid') then
+        WriteLn('PXXDBG a.resid ASSIGN proc=', Procs[CurProc].Name,
+                ' sym=', Syms[si].Name, ' reg=xmm', 8 + fslot, ' count=', bestCnt);
       Inc(fslot);
       FrResidentCount := fslot;
     end
@@ -9718,6 +9738,9 @@ begin
       RcResidentSaveOff[RcResidentCount] := saveOff;
       Inc(RcResidentCount);
       Inc(islot);
+      if PxxDbgEnabled('a.resid') then
+        WriteLn('PXXDBG a.resid ASSIGN proc=', Procs[CurProc].Name,
+                ' sym=', Syms[si].Name, ' reg=r', reg, ' count=', bestCnt);
     end;
   end;
 end;
