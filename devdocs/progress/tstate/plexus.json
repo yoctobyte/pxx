@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-26T15:10:42Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "abd96021126b0a6eb698183c016c3169c577dfd7",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-26T15:16:49Z",
    "fixed": [],
    "new_red": [],
@@ -461,6 +452,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "4461fd1d3802dc6d559ebe274d13f3535231ad74",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-27T04:07:30Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "839305290bb403c83e429f6330e327c95b3d05b7",
    "tier": "native",
    "timed_out": false,
    "verdict": "RED"
@@ -1809,6 +1809,7 @@
   "test-core#src:test/test_impl_static_and_pchar_index.pas": "native",
   "test-core#src:test/test_implicit_conversion_operator_widens_source.pas": "native",
   "test-core#src:test/test_in_is_boolean_b301.pas": "native",
+  "test-core#src:test/test_inc_dec_on_own_name.pas": "native",
   "test-core#src:test/test_include_fi_search.pas": "native",
   "test-core#src:test/test_index_a_call_result_directly.pas": "native",
   "test-core#src:test/test_index_a_dynamic_array_call_result.pas": "native",
@@ -5011,6 +5012,7 @@
   "test-core#src:test/test_impl_static_and_pchar_index.pas": "pass",
   "test-core#src:test/test_implicit_conversion_operator_widens_source.pas": "pass",
   "test-core#src:test/test_in_is_boolean_b301.pas": "pass",
+  "test-core#src:test/test_inc_dec_on_own_name.pas": "pass",
   "test-core#src:test/test_include_fi_search.pas": "pass",
   "test-core#src:test/test_index_a_call_result_directly.pas": "pass",
   "test-core#src:test/test_index_a_dynamic_array_call_result.pas": "pass",
@@ -6849,14 +6851,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-27T04:00:18Z",
+  "date": "2026-08-27T04:07:30Z",
   "deadline": 7200.0,
-  "sha": "4461fd1d3802dc6d559ebe274d13f3535231ad74",
+  "sha": "839305290bb403c83e429f6330e327c95b3d05b7",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "RED",
-  "wall": 310.7
+  "wall": 311.8
  },
  "last_bench": {
   "conf_rows": 550,
