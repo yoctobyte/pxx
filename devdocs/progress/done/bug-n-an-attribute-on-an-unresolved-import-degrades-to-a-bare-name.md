@@ -240,4 +240,4 @@ Both registered in the Makefile beside the other NilPy diagnostics.
 round. Both new tests pass, verified by running the Makefile's own assertions.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit afdbbe508.
