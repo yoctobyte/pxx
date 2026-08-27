@@ -5681,3 +5681,84 @@ says "stale checkout" — an empty `find` and a genuinely-missing file are the
 same empty string. Before telling a worker its output is missing, check the ref;
 and phrase the first message as a question, because the cost of being wrong is
 that a worker spends a session proving it already did its job.
+
+## 2026-08-27 — COORDINATION RESUMED. frank2-af coordinating; Track W is live and has a topology problem
+
+Coordination was stood down 2026-08-20 ("one track + Track T"). The owner
+reassigned it today: *"ok you are assigned the task of coordinator"*. This entry
+is the live state; everything above it about staffing is stale.
+
+**Staffing, verified by `ListAgents` at handover:**
+
+| session | role | lane | checkout |
+| --- | --- | --- | --- |
+| **frank2-af** | **coordinator** — assigns, does not code | none | `/home/neo/frank2` |
+| frank1-80 | dev worker, interactive, busy 9h | **A** (holds it; said so explicitly) | `/home/neo/frank1` |
+| ianweb | dev worker, idle, over Remote Control | **W** (website) | `/opt/pxx-website` on **`via`** |
+| frankwasm | holds `feature-target-wasm` per `working/` | A+B | unknown |
+| plexus-T | **OFFLINE** | T | — |
+
+Two active workers plus the coordinator: exactly the target concurrency. Nothing
+is dispatched to fill the third slot and nothing should be.
+
+**Track T is OFFLINE.** `plexus-T` has not been reachable all day. Per CLAUDE.md
+that raises the bar only when a lane needs breadth; nobody is blocked on it right
+now, but no sha since this morning has been swept.
+
+### The structural finding: Track W's authoring cannot happen where its worker is
+
+This is the coordination problem of the day and it is not a people problem.
+
+- `ianweb` holds W, is on `via`, and has the repo — but **`via` has no GitHub
+  push keys, deliberately.** The owner considered granting them and agreed not
+  to: `via` terminates a public tunnel, runs four gunicorn apps, and holds a
+  mirror of a self-hosting compiler's repo. App RCE becoming repo write is the
+  wrong trade for saving a manual step.
+- The boxes that DO have push rights have no W worker.
+
+So W work has to be authored in a clean clone on a push-capable box and pushed
+from there, while the lane holder reviews and deploys from the origin side. That
+split worked today (see below) but it means **W is not a lane one session can
+hold end to end**, and the queue will stall whenever the push-capable side is
+unstaffed. The coordinator should not paper over this by taking the tickets.
+
+### What landed today, and the two things only the human can release
+
+`e78595d` on the website repo — the OG card and the large-image Twitter card,
+closing the visible half of `bug-web-link-previews-render-as-bare-text`. Authored
+in a clean clone on frank2, reviewed line-by-line by `ianweb` from `via`,
+**fetched but deliberately not merged.**
+
+**Pending with the human — neither is a `decide-*`, both are one-line answers:**
+
+1. **Deploy go/no-go for `e78595d`.** `deploy/DEPLOY-STATUS.md`: *"Deploys stay
+   manual on purpose: auto-deploy would let a compromised GitHub account run
+   code on the host."* An agent pushing a commit and then asking the agent on
+   the host to pull it is structurally what that gate exists to stop. `ianweb`
+   refused to self-clear it and is right to. Recommendation attached, benign.
+2. **Whether the 18KB patch travels over the agent channel.** `ianweb` will not
+   send private-repo contents between hosts on its own judgement — the same rule
+   it applied when it declined to replicate the backup to `piborg`.
+
+### Deploy protocol agreed between the W sessions, and worth keeping
+
+**One unverified change per deploy, verified before the next.** Pushing costs
+nothing and deploys nothing; `via` only changes when it pulls. But if two
+changes land on `main` before a deploy, one pull brings both and a wrong served
+result cannot be attributed. So the p40 (`llms.txt` + JSON-LD) is **built but
+not pushed** until the p45's served tags come back.
+
+Also: template changes need `sudo systemctl restart pxxweb` — Jinja caches
+compiled templates in the worker, so a pull alone changes nothing visitors see.
+And `static/` is served with `expires 1h` and no fingerprint, so a REPLACED
+asset is stale at the edge for up to four hours. New filename, never overwrite.
+
+### Correction carried over: a dirty tree blocks EDITS IN THAT TREE, not the work
+
+`bug-web-production-tree-is-uncommitted-and-is-the-only-copy` (p70) was filed
+blocking all four W tickets. That was wrong and has been cleared: the blocker
+assumed edits happened on `via`. They don't. The p70 is still a real ticket —
+six production files, deployed since 2026-08-20, exist in no commit, and their
+backup is on the **same partition** of `via`'s only disk — but it gates nothing.
+It has now been narrowed twice by asking "where does the edit happen?", and was
+a real ticket both times. Narrowing is not weakening.
