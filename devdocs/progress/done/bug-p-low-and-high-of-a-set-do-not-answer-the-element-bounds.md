@@ -128,4 +128,4 @@ is not a gap, and under the FPC-parity ceiling the wording difference is not
 one either. Nothing to file.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 42e48c869.
