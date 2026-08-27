@@ -184,4 +184,4 @@ is a different mechanism (name resolution in the capture scan, not the
 signature) and still fails identically at this sha — re-measured.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 2ac166b9c.
