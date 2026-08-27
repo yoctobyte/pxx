@@ -1,13 +1,14 @@
 ---
 prio: 60
 track: P
+owner: frankA
 ---
 
 # Two generic templates cannot both declare a nested type of the same name
 
 - **Type:** bug (silent wrong resolution) — **Track P** (Pascal frontend, generic
   specialization).
-- **Status:** OPEN — found 2026-08-27 by frankA while fixing
+- **Status:** done
   [[bug-p-a-nested-type-may-name-a-field-after-an-enclosing-type-parameter]].
 - **Pre-existing:** reproduced identically on the **pinned** binary, so it is not
   a consequence of that fix.
@@ -58,3 +59,6 @@ the nested type wants too.
 Track P: `make compiler/pascal26` (self-host fixedpoint) + the repro matching
 `fpc -O2` output, plus `tools/run_fgl_corpus.sh` still 7/7. Add the repro as a
 test with an `.expected`.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.
