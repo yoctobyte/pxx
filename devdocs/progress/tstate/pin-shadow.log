@@ -174,3 +174,4 @@
 2026-08-27T10:22:42Z	plexus	192906caf7f7a3e6684dc720884da75061a5339b	would NOT pin 192906caf7f7 — 1 red(s) the current pin does not have: test-emit-obj#src:test/cxtensa_obj.c@1
 2026-08-27T10:48:27Z	plexus	6b59df667fe46c9d6ceabcd6f0b5d6e8e400fa68	would NOT pin 6b59df667fe4 — 1 red(s) the current pin does not have: test-emit-obj#src:test/cxtensa_obj.c@1
 2026-08-27T12:49:43Z	plexus	39d4afb022ce9a8f98f30f7a7202ccfa803b4d6f	would NOT pin 39d4afb022ce — 2 red(s) the current pin does not have, 1 inherited from the current pin: test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy, test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy
+2026-08-27T13:16:11Z	plexus	62a4242203a308e0cb9c46893976c45c29afcc7c	would NOT pin 62a4242203a3 — 2 red(s) the current pin does not have, 1 inherited from the current pin: test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy, test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy
