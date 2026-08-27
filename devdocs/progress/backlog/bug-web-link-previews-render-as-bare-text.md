@@ -2,7 +2,7 @@
 track: W
 prio: 45
 type: bug
-blocked-by: []
+blocked-by: [bug-web-production-tree-is-uncommitted-and-is-the-only-copy]
 summary: "pxxc.org declares og:title/og:description/og:url but NO og:image, and twitter:card is `summary` rather than `summary_large_image`. Every link to the site on HN, Reddit, Mastodon, Slack, Discord and LinkedIn renders as a bare text row next to posts that have a picture. Highest click-through gain per hour of work on the site; the fix is one image plus two meta tags."
 status: backlog
 ---

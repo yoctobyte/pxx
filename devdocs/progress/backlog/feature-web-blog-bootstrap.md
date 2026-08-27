@@ -2,7 +2,7 @@
 track: W
 prio: 35
 type: feature
-blocked-by: []
+blocked-by: [bug-web-production-tree-is-uncommitted-and-is-the-only-copy]
 summary: "`/blog/` returns 200 and says `Coming soon.` [[feature-promo-launch-plan]] already decided that VISIBILITY starts now and is ungated — the blog is the surface that decision needs and it does not exist yet. This ticket is the MACHINERY plus two concrete first posts; the strategy, the audience and the one-shot launch guard all live in that ticket and are not relitigated here."
 status: backlog
 ---
