@@ -104,4 +104,4 @@ an identifier followed by `=` at argument level is always a keyword argument in
 Python, and the decision should not be gated on resolving a callee.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 94a87f966.
