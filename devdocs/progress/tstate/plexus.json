@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-27T03:53:54Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "b7e2bab08b97a8947c82be68cb0bd7bb9abf5b7d",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-27T04:00:18Z",
    "fixed": [],
    "new_red": [],
@@ -458,6 +449,18 @@
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T14:05:18Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_nilpy_builtin_subclass_dunder_dispatch.npy",
+    "test-core#src:test/test_nilpy_unbound_builtin_method.npy"
+   ],
+   "sha": "c28e07a89f036f56d3bb860e62045b1103e22aae",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -467,6 +470,8 @@
   "target": "0dafbae41cadc69d7c260353b0e637af30f0aa0f"
  },
  "job_reason": {
+  "test-core#src:test/test_nilpy_builtin_subclass_dunder_dispatch.npy": "Expected: ), but got: i (Kind: 1, Line: 55) | pascal26:55: error: unexpected token | near: list  __getitem__  self  >>> i",
+  "test-core#src:test/test_nilpy_unbound_builtin_method.npy": "Expected: ), but got: x (Kind: 1, Line: 21) | pascal26:21: error: unexpected token | near: list  append  self  >>> x",
   "test-emit-obj#src:test/cxtensa_obj.c@1": "in: $TMP | near:  Integer  __pxxrawsyscall  SYS_getuid >>> | pascal26:477: error: undefined variable (SYS_getgid) | in: $TMP | near:  Integer  __pxxrawsyscall  SYS_getgid >>> | pascal26: too many errors, stopping",
   "test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy": "(0, 1) | -xy | -(1, 2) | -17 | -(4, 3) | -11 pq",
   "test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy": "-lt    False | -radd  ('radd', 3, 4) | -bare  TypeError | -nums  7 3 10 2.5 2 1 25 | -strs  xy | -lists [1, 2] [1, 1]"
@@ -2137,6 +2142,7 @@
   "test-core#src:test/test_nilpy_union_annotation.npy": "native",
   "test-core#src:test/test_nilpy_variant.npy": "native",
   "test-core#src:test/test_nilpy_widen_fix.npy": "native",
+  "test-core#src:test/test_nilpy_zero_argument_builtin_constructors.npy": "native",
   "test-core#src:test/test_not.pas": "native",
   "test-core#src:test/test_not_int64_expr.pas": "native",
   "test-core#src:test/test_not_of_a_constant_widens.pas": "native",
@@ -5257,7 +5263,7 @@
   "test-core#src:test/test_nilpy_bool_is_an_int_not_ole_minus_one.npy": "pass",
   "test-core#src:test/test_nilpy_bound_method_in_module.npy": "pass",
   "test-core#src:test/test_nilpy_builtin_shadow_slice.npy": "pass",
-  "test-core#src:test/test_nilpy_builtin_subclass_dunder_dispatch.npy": "pass",
+  "test-core#src:test/test_nilpy_builtin_subclass_dunder_dispatch.npy": "fail",
   "test-core#src:test/test_nilpy_bytes_methods.npy": "pass",
   "test-core#src:test/test_nilpy_c_define_const.npy": "pass",
   "test-core#src:test/test_nilpy_c_pointer.npy": "pass",
@@ -5369,10 +5375,11 @@
   "test-core#src:test/test_nilpy_tuple_eq_round_enum.npy": "pass",
   "test-core#src:test/test_nilpy_tuple_return.npy": "pass",
   "test-core#src:test/test_nilpy_two_argument_super.npy": "pass",
-  "test-core#src:test/test_nilpy_unbound_builtin_method.npy": "pass",
+  "test-core#src:test/test_nilpy_unbound_builtin_method.npy": "fail",
   "test-core#src:test/test_nilpy_union_annotation.npy": "pass",
   "test-core#src:test/test_nilpy_variant.npy": "pass",
   "test-core#src:test/test_nilpy_widen_fix.npy": "pass",
+  "test-core#src:test/test_nilpy_zero_argument_builtin_constructors.npy": "pass",
   "test-core#src:test/test_not.pas": "pass",
   "test-core#src:test/test_not_int64_expr.pas": "pass",
   "test-core#src:test/test_not_of_a_constant_widens.pas": "pass",
@@ -6923,14 +6930,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-27T13:46:51Z",
+  "date": "2026-08-27T14:05:18Z",
   "deadline": 7200.0,
-  "sha": "0842d9684f7fa20f51d3ffc6e4bb8031cc4e2329",
+  "sha": "c28e07a89f036f56d3bb860e62045b1103e22aae",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "GREEN",
-  "wall": 314.1
+  "verdict": "RED",
+  "wall": 316.2
  },
  "last_bench": {
   "conf_rows": 550,
@@ -7038,6 +7045,40 @@
     "49d47338e5d9052a7733038eff976a08ae96dbcd"
    ],
    "src": "test/test_nilpy_variant_operand_arith_dunders.npy test/test_nilpy_variant_operand_arith_dunders.expected",
+   "status": "fail"
+  },
+  {
+   "bad": "c28e07a89f036f56d3bb860e62045b1103e22aae",
+   "bad_untestable": true,
+   "first_seen": false,
+   "good": "0842d9684f7fa20f51d3ffc6e4bb8031cc4e2329",
+   "job": "test-core#src:test/test_nilpy_builtin_subclass_dunder_dispatch.npy",
+   "name": "test-core#1411",
+   "no_testable_change": false,
+   "opened": "2026-08-27T14:05:18Z",
+   "pin_axis": 0,
+   "pin_built": false,
+   "range": [
+    "5a996b4b2dad6ba833ed023141404e950361328a"
+   ],
+   "src": "test/test_nilpy_builtin_subclass_dunder_dispatch.npy",
+   "status": "fail"
+  },
+  {
+   "bad": "c28e07a89f036f56d3bb860e62045b1103e22aae",
+   "bad_untestable": true,
+   "first_seen": false,
+   "good": "0842d9684f7fa20f51d3ffc6e4bb8031cc4e2329",
+   "job": "test-core#src:test/test_nilpy_unbound_builtin_method.npy",
+   "name": "test-core#1410",
+   "no_testable_change": false,
+   "opened": "2026-08-27T14:05:18Z",
+   "pin_axis": 0,
+   "pin_built": false,
+   "range": [
+    "5a996b4b2dad6ba833ed023141404e950361328a"
+   ],
+   "src": "test/test_nilpy_unbound_builtin_method.npy",
    "status": "fail"
   }
  ],
