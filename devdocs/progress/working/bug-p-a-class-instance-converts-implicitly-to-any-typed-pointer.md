@@ -3,9 +3,10 @@ slug: bug-p-a-class-instance-converts-implicitly-to-any-typed-pointer
 track: P
 prio: 65
 type: bug
-status: backlog
+status: working
 blocked-by: []
 summary: "Passing a class instance where a typed pointer (^TSomeRecord) is expected compiles silently and reinterprets the object as that record; FPC rejects it (`Incompatible type for arg no. 1: Got \"TSub\", expected \"PBlob\"`). Two consequences: a silent memory-safety hole with no cast written, and an overload resolution that picks a pointer arm over an exact class arm — which is what stops typinfo's GetPropInfo(AnObject, 'Name') facade overload from ever being selected."
+owner: frankA
 ---
 
 # A class instance converts implicitly to any typed pointer
