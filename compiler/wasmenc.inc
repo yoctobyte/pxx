@@ -60,14 +60,23 @@ const
   WOP_F32_CONST = $43;
   WOP_F64_CONST = $44;
 
-  MAX_WASM_BYTES     = 32 * 1024 * 1024;  { module output }
-  MAX_WASM_BODY      = 4 * 1024 * 1024;   { one function body, scratch }
+  { Sizing. These are fixed arrays in BSS, and they are carried by EVERY pxx
+    invocation on every target, so they are not free just because no other
+    target touches them. The first draft cost 66MB against the compiler's own
+    76MB; this is ~20MB. BSS is zero-fill-on-demand, so pages no target touches
+    never become resident and the real cost to a non-wasm build is address
+    space rather than memory — but the reported figure is real and doubling it
+    for a feature nobody else uses was not defensible.
+    Phase 7 (the compiler itself under wasm) is the case that will actually
+    strain these; re-measure there rather than guessing upward now. }
+  MAX_WASM_BYTES     = 8 * 1024 * 1024;   { module output }
+  MAX_WASM_BODY      = 1024 * 1024;       { one function body, scratch }
   MAX_WASM_TYPES     = 4096;
   MAX_WASM_TYPESIG   = 65536;   { flattened param/result pool }
   MAX_WASM_FUNCS     = 16384;
-  MAX_WASM_LOCALS    = 262144;  { flattened local-type pool }
-  MAX_WASM_VARNAMES  = 262144;  { flattened param+local NAME pool }
-  MAX_WASM_CODE      = 24 * 1024 * 1024;  { flattened body-instruction pool }
+  MAX_WASM_LOCALS    = 131072;  { flattened local-type pool }
+  MAX_WASM_VARNAMES  = 65536;   { flattened param+local NAME pool }
+  MAX_WASM_CODE      = 8 * 1024 * 1024;   { flattened body-instruction pool }
   MAX_WASM_IMPORTS   = 1024;
   MAX_WASM_EXPORTS   = 4096;
   MAX_WASM_GLOBALS   = 1024;
@@ -737,4 +746,22 @@ begin
   end;
   sysfchmod(f, 420);           { 0644 — a module is data, not an executable }
   sysclose(f);
+end;
+
+{ ===== the compiler-facing entry point =====
+
+  Called from compiler.pas's output-writer dispatch, in place of the
+  registration-era Error. It is deliberately GUARDED: with no codegen the
+  module model is empty, and writing an empty-but-valid .wasm for a program
+  that plainly has code would be a silently wrong output — the exact failure
+  class this project treats as the expensive one. Until ir_codegen_wasm32.inc
+  populates the model (Phase 2), every real program takes the Error branch, and
+  it takes it for an accurate reason. }
+procedure writeWasm(const outPath: AnsiString);
+begin
+  if WasmFuncCount = 0 then
+    WasmFail('wasm32: nothing to write — no code was generated for this module '
+          + '(wasm codegen lands in Phase 2; the module writer is present and '
+          + 'tested via test/wasm/check_phase1.sh)');
+  WasmSaveModule(outPath);
 end;

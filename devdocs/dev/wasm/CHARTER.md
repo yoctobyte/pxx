@@ -43,13 +43,24 @@ in-progress code stays here.
 | `test/wasm/**` | own |
 | `devdocs/dev/wasm/**` | own |
 
-**Shared — the two known escapes. Each needs a Track A ticket on `master` and
+**Shared — the escapes. Each needs a Track A ticket on `master` and
 coordination before it is touched here:**
 
-| what | where | why it escapes |
+| what | where | status |
 | --- | --- | --- |
-| VMT slots hold code addresses → must hold table indices | `elfwriter.inc:1937`, `emit.inc:105` | wasm has no code addresses in linear memory |
-| exception model | `exception_emit.inc` | the hand-rolled setjmp/longjmp has no wasm equivalent |
+| module-writer wiring | `compiler.pas` (2 includes + the `TARGET_WASM32` output arm) | **taken 2026-08-27**, coordinator-granted, `feature-a-wasm32-module-writer-wiring` |
+| the wasm error message's stated reason | `exception_emit.inc:437` | **taken 2026-08-27**, same grant, message text only |
+| VMT slots hold code addresses → must hold table indices | `elfwriter.inc:1937`, `emit.inc:105` | Phase 4, not yet taken |
+| exception model | `exception_emit.inc` (the mechanism) | Phase 5, not yet taken |
+
+**The branch now touches shared files, and that changes its risk profile.** It
+was true until 2026-08-27 that a `master` merge could not conflict in
+`compiler/**`; it is not true any more. The first two rows above are small and
+were taken under a coordinator grant with a confirmed-empty file and the A gate
+(self-host fixedpoint seen to converge, plus a before/after corpus proving no
+existing target moved). But the property that made this lane cheap is now
+partially spent, so **merge `master` in more often, not less**, and treat a
+conflict in either file as a coordination event rather than a merge to resolve.
 
 Plus the small, unavoidable ones: a `TARGET_WASM32` constant in `defs.inc`, a
 `--target=wasm32` arm in `compiler.pas`, and the `TargetArch` chains — which is

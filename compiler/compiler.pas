@@ -78,6 +78,10 @@ procedure AsmI32(v: Int64); forward;
 procedure AsmI64(v: Int64); forward;
 {$include x64enc.inc}
 {$include rv32enc.inc}
+{ wasm32's module writer. Peer of the encoders above, but it emits a whole
+  CONTAINER rather than instructions into Code[] — a .wasm is not an ELF, so
+  there is no writeELF* for it to share (feature-a-wasm32-module-writer-wiring). }
+{$include wasmenc.inc}
 {$include xtensaenc.inc}
 { Forward decls needed by the single-pass FPC seed (and --require-forward).
   PXX_NEED_FORWARDS := FPC or PXX_REQUIRE_FORWARD. PXX without it prescans and
@@ -110,6 +114,7 @@ function GetOrAllocSymRTTI(symIdx: Integer): Integer; forward;
 {$ifndef PXX_NO_AARCH64}{$include asmtext_a64.inc}{$endif}
 {$ifndef PXX_NO_ARM32}{$include asmtext_arm32.inc}{$endif}
 {$include asmtext_xtensa.inc}
+{$include asmtext_wasm.inc}
 {$ifndef PXX_NO_CFRONT}procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;{$endif}
 procedure AddDefaultCIncludeDirs; forward;   { the C unit pull in pasparser_proc.inc needs it too }
 procedure BuildCSysIncludeDirs; forward;    { the host `<>` fallback table — cpreproc.inc fills it, --where prints it }
@@ -2091,8 +2096,7 @@ begin
       writeELF32Rel(outFile);
   end
   else if TargetArch = TARGET_WASM32 then
-    Error('wasm32: module writer not implemented (a .wasm module is not an ELF '
-          + 'container, so there is no writer to fall back to)')
+    writeWasm(outFile)
   else if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
      (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
     writeELF32(outFile)

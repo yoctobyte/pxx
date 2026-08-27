@@ -434,9 +434,20 @@ begin
     EmitExit(EXITCODE_UNHANDLED_EXCEPTION);
   end
   else if TargetArch = TARGET_WASM32 then
-    Error('wasm32: exception runtime not implemented (setjmp/longjmp has no '
-          + 'wasm lowering — the module needs the exception-handling proposal '
-          + 'or a trampoline)')
+    { Erroring here is correct — exceptions genuinely are not implemented yet.
+      The REASON matters though, and the original text named the wrong one: it
+      said the module needs the exception-handling proposal or a trampoline.
+      It needs neither. wasm's Phase 5 design threads a PENDING FLAG instead —
+      a raise sets two globals and branches to the statically-known landing pad
+      of the enclosing try, and every call site checks the flag afterwards. No
+      engine proposal, no version dependency, no trampoline, and it composes
+      with the br_table dispatch layout. That is exactly why it was chosen over
+      the EH proposal, whose legacy-vs-final opcode split is live fragmentation.
+      Prototyped and diffed against a native build before this text was
+      written: devdocs/dev/wasm/phase5-exceptions.md, test/wasm/proto/check.sh.
+      What is missing is the lowering, not a language feature to wait for. }
+    Error('wasm32: exception runtime not implemented yet (the design needs no '
+          + 'engine proposal — see devdocs/dev/wasm/phase5-exceptions.md)')
   else
     Error('compiler error: no exception runtime for target '
           + TargetArchName(TargetArch)

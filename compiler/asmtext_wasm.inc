@@ -88,58 +88,103 @@ begin
     end;
 end;
 
+{ Output goes through sysopen/syswrite/sysfchmod/sysclose, exactly as
+  WriteMapFile (asmdisasm_x64.inc) and writeELF do. The compiler has no Text
+  file I/O — Assign/Rewrite/Close are RTL, not compiler, and the first draft of
+  this file used them and failed to self-host. Lines accumulate in a buffer and
+  flush in blocks so a large module is not one syscall per line. }
+const
+  WT_CAP = 32768;
+
+var
+  WTFd    : Integer;
+  WTChars : array[0..WT_CAP-1] of Char;
+  WTLen   : Integer;
+
+procedure WTFlush;
+begin
+  if WTLen > 0 then
+  begin
+    syswrite(WTFd, WTChars, WTLen);
+    WTLen := 0;
+  end;
+end;
+
+{ Append. A dedicated char buffer rather than the compiler's shared TokChars
+  (which DisWriteStr borrows): borrowing global scratch is a hidden coupling,
+  and TokChars does not exist in the standalone self-test build at all. }
+procedure WT(const s: AnsiString);
+var i: Integer;
+begin
+  for i := 1 to Length(s) do
+  begin
+    if WTLen >= WT_CAP then WTFlush;
+    WTChars[WTLen] := s[i];
+    Inc(WTLen);
+  end;
+end;
+
+procedure WTLn(const s: AnsiString);
+begin
+  WT(s + Chr(10));
+end;
+
+function WasmIntTxt(v: Int64): AnsiString;
+var s: AnsiString;
+begin
+  Str(v, s);
+  WasmIntTxt := s;
+end;
+
 procedure WasmWriteText(const path: AnsiString);
 var
-  f: Text;
   i, j, gi: Integer;
   ex, loc, nm: AnsiString;
 begin
-  Assign(f, path);
-  Rewrite(f);
-  Writeln(f, '(module');
+  WTFd := sysopen(path, 577);        { O_WRONLY | O_CREAT | O_TRUNC }
+  if WTFd < 0 then WasmFail('wasm: cannot open ' + path + ' for writing');
+  sysfchmod(WTFd, 420);              { chmod 644 }
+  WTLen := 0;
+
+  WTLn('(module');
 
   { imports first — they define the low function index space }
   for i := 0 to WasmImpCount - 1 do
-    Writeln(f, '  (import "', WasmImpModule[i], '" "', WasmImpName[i],
-               '" (func $', WasmImpName[i], WasmSigText(WasmImpType[i]), '))');
+    WTLn('  (import "' + WasmImpModule[i] + '" "' + WasmImpName[i]
+         + '" (func $' + WasmImpName[i] + WasmSigText(WasmImpType[i]) + '))');
 
   if WasmMemPresent then
   begin
     ex := WasmExportNameOf(WEK_MEM, 0);
-    if ex <> '' then
-      Write(f, '  (memory (export "', ex, '") ')
-    else
-      Write(f, '  (memory ');
+    if ex <> '' then WT('  (memory (export "' + ex + '") ')
+    else WT('  (memory ');
     if WasmMemMax >= 0 then
-      Writeln(f, WasmMemMin, ' ', WasmMemMax, ')')
+      WTLn(WasmIntTxt(WasmMemMin) + ' ' + WasmIntTxt(WasmMemMax) + ')')
     else
-      Writeln(f, WasmMemMin, ')');
+      WTLn(WasmIntTxt(WasmMemMin) + ')');
   end;
 
   for gi := 0 to WasmGlobCount - 1 do
   begin
-    Write(f, '  (global $', WasmGlobName[gi]);
+    WT('  (global $' + WasmGlobName[gi]);
     ex := WasmExportNameOf(WEK_GLOBAL, gi);
-    if ex <> '' then Write(f, ' (export "', ex, '")');
+    if ex <> '' then WT(' (export "' + ex + '")');
     if WasmGlobMut[gi] then
-      Write(f, ' (mut ', WasmValTypeName(WasmGlobType[gi]), ')')
+      WT(' (mut ' + WasmValTypeName(WasmGlobType[gi]) + ')')
     else
-      Write(f, ' ', WasmValTypeName(WasmGlobType[gi]));
+      WT(' ' + WasmValTypeName(WasmGlobType[gi]));
     if WasmGlobType[gi] = WT_I64 then
-      Writeln(f, ' (i64.const ', WasmGlobInit[gi], '))')
+      WTLn(' (i64.const ' + WasmIntTxt(WasmGlobInit[gi]) + '))')
     else
-      Writeln(f, ' (i32.const ', WasmGlobInit[gi], '))');
+      WTLn(' (i32.const ' + WasmIntTxt(WasmGlobInit[gi]) + '))');
   end;
 
   for i := 0 to WasmFuncCount - 1 do
   begin
-    Write(f, '  (func $', WasmFuncName[i]);
+    WT('  (func $' + WasmFuncName[i]);
     ex := WasmExportNameOf(WEK_FUNC, WasmFuncIndex(i));
-    if ex <> '' then Write(f, ' (export "', ex, '")');
-    Write(f, WasmSigTextFor(WasmFuncType[i], i));
-    Writeln(f);
-    { locals, one declaration per local — the binary side run-length compresses
-      them, the text side does not need to and is clearer without it }
+    if ex <> '' then WT(' (export "' + ex + '")');
+    WTLn(WasmSigTextFor(WasmFuncType[i], i));
     for j := 0 to WasmFuncNLoc[i] - 1 do
     begin
       loc := WasmValTypeName(WasmLocalPool[WasmFuncLocOfs[i] + j]);
@@ -147,21 +192,20 @@ begin
       nm := '';
       if WasmTypeNPar[WasmFuncType[i]] + j < WasmFuncNVar[i] then
         nm := WasmVarNames[WasmFuncVarOfs[i] + WasmTypeNPar[WasmFuncType[i]] + j];
-      if nm <> '' then
-        Writeln(f, '    (local $', nm, ' ', loc, ')')
-      else
-        Writeln(f, '    (local ', loc, ')');
+      if nm <> '' then WTLn('    (local $' + nm + ' ' + loc + ')')
+      else WTLn('    (local ' + loc + ')');
     end;
-    Write(f, WasmFuncText[i]);
-    Writeln(f, '  )');
+    WT(WasmFuncText[i]);
+    WTLn('  )');
   end;
 
-  { any export that was not rendered inline above }
   for i := 0 to WasmExpCount - 1 do
     if WasmExpKind[i] = WEK_TABLE then
-      Writeln(f, '  (export "', WasmExpName[i], '" (',
-                 WasmExportKindName(WasmExpKind[i]), ' ', WasmExpIdx[i], '))');
+      WTLn('  (export "' + WasmExpName[i] + '" ('
+           + WasmExportKindName(WasmExpKind[i]) + ' '
+           + WasmIntTxt(WasmExpIdx[i]) + '))');
 
-  Writeln(f, ')');
-  Close(f);
+  WTLn(')');
+  WTFlush;
+  sysclose(WTFd);
 end;
