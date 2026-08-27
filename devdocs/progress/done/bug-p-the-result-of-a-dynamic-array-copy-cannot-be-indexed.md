@@ -93,4 +93,4 @@ indexed directly, and the loop). Probe row `dynarray-copy-and-alias` untagged.
 Gate: quick GREEN, self-host fixedpoint byte-identical.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 009b8af3c.
