@@ -60,9 +60,23 @@ applied. But it is a shared-file change in Track A's ground, not a new file —
 which is why it is written down here rather than left in the backend's own
 notes.
 
-**Open question worth a grep before anyone commits to this:** does anything in
-the RTL rely on `IR_PROCADDR` values being *comparable* or arithmetic-able
+**Open question — ANSWERED 2026-08-27, and the answer is favourable.** Does
+anything rely on `IR_PROCADDR` values being *comparable* or arithmetic-able
 rather than merely callable? Table indices break ordering and arithmetic.
+
+Grepped `lib/`, `examples/`, `compiler/` for casts of `@proc` to an integer
+type, ordered comparison of procvars, and arithmetic on them. **The only hits
+are in `lib/rtl/scheduler.pas`** (`Int64(@CoStart)` written into a hand-built
+stack frame as a return address, four times, one per architecture). Nothing
+compares procvars with `<`/`>`; nothing does arithmetic on one.
+
+That single consumer is the coroutine stack-frame builder — **already out of
+scope for wasm** (`IR_COSWITCH` / `IR_YIELD` are in the already-refused bucket,
+and `coroutine_emit.inc` is a per-target chain that emits nothing for
+unrecognised targets). So the risk is contained to code wasm cannot run anyway.
+
+**Table indices are viable.** Assignment, calling, and comparison against nil
+all work if index 0 is reserved as the null function reference.
 
 ## Escape #2 — exceptions are a hand-rolled setjmp/longjmp
 
@@ -160,6 +174,22 @@ and it is neither of the existing two:
 
 It is *output* parity across two hosts of the same compiler. It is not a
 self-host fixedpoint and must never be written as one.
+
+## Keeping the branch merge-free: register on `master` first
+
+The branch is cheap because it is ~85% new files. The other 15% is not codegen,
+it is **registration** — teaching existing dispatch chains that a 7th target
+exists — and that is exactly the part that conflicts on every merge.
+
+Measured from `bd49a59535c3`, the commit that introduced riscv32 **and** xtensa
+together: **~270 lines across 9 shared files** (`symtab.inc` 97, `parser.inc`
+70, `emit.inc` 34, `compiler.pas` 20, `lexer.inc` 18, `elfwriter.inc` 12,
+`ir_codegen.inc` 10, `exception_emit.inc` 7, `defs.inc` 2). One target is less.
+
+Landing that registration on `master` **before** the branch accumulates work —
+as a skeleton that Errors, with no codegen — means the branch touches zero
+shared files until Phase 4. Filed as
+`feature-a-wasm32-target-registration-skeleton`.
 
 ## Sizing, anchored to comparable artifacts in-tree
 

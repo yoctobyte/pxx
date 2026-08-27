@@ -66,6 +66,22 @@ arm, and falls out having set **no CPU defines at all**. Not "the x86-64
 answer" — *nothing*. No error, no warning, and the failure surfaces much later
 as source that compiles under the wrong conditional defines.
 
+# Two more sites, measured 2026-08-27
+
+A heuristic scan for `TargetArch` chains of >=3 arms with no final bare `else`:
+
+```
+  6 arms  compiler/exception_emit.inc:8
+  4 arms  compiler/coroutine_emit.inc:25
+```
+
+Both emit **nothing at all** for an unrecognised target — no exception runtime,
+no coroutine runtime, no diagnostic. Together with `lexer.inc:936` above that is
+three confirmed, and **the scan undercounts**: it missed `lexer.inc` entirely
+because that chain sits inside an outer `if TargetArch <> TARGET_X86_64` guard
+the scan did not follow. So the audit is genuinely the work here; the scan is a
+starting point and must not be mistaken for an inventory.
+
 # Why it is worth fixing before target #7 or #8, not after
 
 Two tickets add a target and both hit this:
@@ -107,6 +123,13 @@ list of the sites it refuses to absorb.** Follow that, including the refusals.
 3. **Compile a fixed corpus for all six targets before and after; every output
    binary byte-identical.** This is a pure refactor — any diff is a chain that
    was doing something other than what it appeared to.
+
+# Overlap with `feature-a-wasm32-target-registration-skeleton`
+
+That ticket applies this medicine to one concrete target (wasm32) and therefore
+fixes the chains wasm32 reaches, with a consumer and a date. Sensible order: it
+first, then this general sweep using the site list it produces. Doing both
+independently is the only bad option.
 
 ## Log
 - 2026-08-27 — filed from the wasm-target scoping session. Replaces an earlier
