@@ -4,8 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "`Format('%u', [q])` on a QWord prints -1: sysutils' formatter aliases 'u' to 'd' and runs both through the signed IntToStr. FPC prints 18446744073709551615. The same line makes `%u` of Integer(-1) print -1 where FPC prints 4294967295. Filed from Track A+C+P — B owns lib/rtl."
-status: backlog
-owner: unassigned
+status: done
+owner: frankB
 ---
 
 # `Format('%u', ...)` is a synonym for `%d`
@@ -85,3 +85,16 @@ all for a one-character string literal.
 Track B's: `make lib-test` / `make demos` with `$(PXX_STABLE)`, plus a probe
 comparing every specifier against `fpc -O- -Mobjfpc` 3.2.2 — the ten-line one in
 this ticket's repro is a good start and should be checked in with the fix.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.
+
+## Resolution (2026-08-27, frankB)
+
+Fixed as one of a three-ticket cluster — see
+[[bug-b-inttostr-of-a-qword-prints-it-signed]] for the full write-up. In short:
+`lib/rtl/sysutils.pas` had no unsigned decimal renderer at all, so one
+(`UIntToStr(QWord)`) was added and `IntToStr(QWord)` plus `Format`'s now-split
+`%u` arm both route through it, instead of each carrying its own signedness
+decision. Regression: `test/lib_qword_render.pas` + `.expected` in `make
+lib-test`, 29 rows byte-identical to fpc 3.2.2.

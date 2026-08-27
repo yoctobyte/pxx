@@ -14563,6 +14563,13 @@ endif
 	# is fpc 3.2.2's, byte for byte.
 	$(PXX_STABLE) -Fulib/rtl test/lib_sysutils_string_gaps.pas $(TESTTMP)/lib_sysutils_string_gaps
 	$(TESTTMP)/lib_sysutils_string_gaps | diff -u test/lib_sysutils_string_gaps.expected -
+	# unsigned 64-bit RENDERING: sysutils parsed unsigned and printed signed, so
+	# every QWord >= 2^63 came back negative from IntToStr and '%u' was a plain
+	# synonym for '%d'. Controls (WriteLn, Str, IntToHex, '%x') are in the same
+	# file on purpose -- the value was never wrong, only its rendering. Expected
+	# output is fpc 3.2.2's, byte for byte.
+	$(PXX_STABLE) -Fulib/rtl test/lib_qword_render.pas $(TESTTMP)/lib_qword_render
+	$(TESTTMP)/lib_qword_render | diff -u test/lib_qword_render.expected -
 	# the date PARSE direction (StrToDate/StrToDateTime/TryStrTo*). Rows are
 	# read off FPC 3.2.2, including the ones nobody guesses: ISO input raises
 	# under the d/m/y default, and a two-digit year uses a SLIDING window.

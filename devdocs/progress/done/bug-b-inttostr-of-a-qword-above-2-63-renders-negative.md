@@ -2,7 +2,8 @@
 slug: bug-b-inttostr-of-a-qword-above-2-63-renders-negative
 track: B
 prio: 55
-status: backlog
+status: done
+owner: frankB
 ---
 
 # `IntToStr` of a QWord above 2^63 renders it negative
@@ -74,3 +75,16 @@ An integer-arithmetic differential (34 programs). It surfaced disguised as a
 shift bug — `IntToStr(u64 shl 63)` was the failing row — and only isolating
 `IntToStr(u64)` on a plain variable showed the shift had nothing to do with it.
 `WriteLn(u64 shl 63)` was correct all along.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.
+
+## Resolution (2026-08-27, frankB)
+
+Fixed as one of a three-ticket cluster — see
+[[bug-b-inttostr-of-a-qword-prints-it-signed]] for the full write-up. In short:
+`lib/rtl/sysutils.pas` had no unsigned decimal renderer at all, so one
+(`UIntToStr(QWord)`) was added and `IntToStr(QWord)` plus `Format`'s now-split
+`%u` arm both route through it, instead of each carrying its own signedness
+decision. Regression: `test/lib_qword_render.pas` + `.expected` in `make
+lib-test`, 29 rows byte-identical to fpc 3.2.2.
