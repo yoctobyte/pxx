@@ -3,6 +3,7 @@ track: N
 prio: 65
 type: bug
 summary: "`f(*range(2))` passes ZERO arguments and `f(*b\"ab\")` passes empty ones, silently. The star-operand normaliser converts a str and a user iterable and returns every other object untouched, so a TPyRange / TPyBytes is stored into a TPyList-typed slot and read as a list header. The same hole in PyMakeIterOf makes `zip(b\"ab\", ...)` yield empties."
+status: done
 ---
 
 # A static star operand over a non-list iterable passes nothing
@@ -90,3 +91,43 @@ Found while resolving
 inferred, at self-host fixedpoint `1dbc94c691aa`. Unrelated to that
 regression's cause (a compiler zero-init hole); it is a separate defect the
 same test file walks past.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.
+
+## Resolution (2026-08-27)
+
+Fixed as the ticket proposed — both normalisers, one mechanism each, not a
+longer list of kinds.
+
+**`PyIterArgAsList`** now asks ONE question: is this node statically a
+`TPyList`? If yes it is handed back; every other `tyClass` operand is
+`pyiter_drain(PyMakeIterOf(n))`. That subsumes the user-iterable arm it
+replaces (PyMakeIterOf reaches `pyiter_of_userobj` itself) and covers range,
+bytes, dict, set and cursor without naming any of them. The str arm stays
+below it only because `pystr_charlist` is the cheaper route to the same
+answer.
+
+**`PyMakeIterOf`** gained the one kind it genuinely could not express: a
+`TPyBytes` arm calling a new `pyiter_of_bytes` in pylib, which is pyiter_v's
+own bytes arm given a name (`pyiter_of_list(list(b))` — the byte VALUES as
+ints, not the buffer read as a list header).
+
+**Verified against CPython, row by row**, at fixedpoint `207a6a1da8e9`: the
+star operand over list / tuple / str / range / dict / set / bytes / a user
+`__iter__` / a generator expression; a fixed-arity callee (`two(*range(2))`,
+`two(*b"ab")`); bytes through all ten consumers; and the other four callers of
+the same normaliser — `join`, `print(*x)`, `{*x}`, `[*x]`, `zip`, `enumerate`.
+Every row matches.
+
+**Gate:** `tools/gate.sh quick` GREEN. The FPC seed canary earned its keep
+again — it rejected a duplicate `PyMakeIterOf` forward that `make
+compiler/pascal26` accepts (declare-anywhere laxness); `forwards.inc:40`
+already had one.
+
+**Test:** `test/test_nilpy_star_over_any_static_iterable.npy`, registered
+beside its variant-spelling sibling. The pinned binary answers `range ()`,
+`bytes (, )` and drops five rows on it. The bytes rows that were ALREADY
+correct are kept in the file as controls, because that split — pyiter_v knew
+every kind, the two frontend normalisers did not — is the whole shape of the
+defect.

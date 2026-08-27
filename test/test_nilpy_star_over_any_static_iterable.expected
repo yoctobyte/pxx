@@ -1,0 +1,28 @@
+list  (1, 2)
+tuple (1, 2)
+str   ('a', 'b')
+range (0, 1)
+dict  ('k', 'j')
+set   (1, 2)
+bytes (97, 98)
+user  (3, 4)
+gen   (5, 6)
+two   1
+twob  195
+for    [97, 98]
+list   [97, 98]
+sorted [97, 98]
+sum    195
+max    98
+tuple  (97, 98)
+in     True
+zip    [(97, 'x'), (98, 'y')]
+enum   [(0, 97), (1, 98)]
+star   [97, 98]
+join str   h-e-l-l-o
+print* rng 0 1 2
+print* byt 97 98
+set  *rng  [0, 1, 2]
+list *rng  [0, 1, 2]
+zip  user  [(3, 'x'), (4, 'y')]
+enum user  [(0, 3), (1, 4)]

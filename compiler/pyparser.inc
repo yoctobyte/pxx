@@ -10151,23 +10151,38 @@ begin
 end;
 
 function PyIterArgAsList(n: Integer): Integer;
-var procIdx, argNode, uci: Integer;
+var procIdx, argNode, listCi: Integer;
 begin
   Result := n;
   if n < 0 then Exit;
-  { A USER class implementing the iterator protocol, drained here for the same
-    reason a str is exploded here: the callee takes a TPyList through a FIXED
-    FindProc index, so overload resolution never runs and the object would be
-    read as a list — which answered [] rather than crashing, the quieter half
-    of the same failure. bug-nilpy-builtins-over-a-user-iterable-answer-empty }
+  { An OBJECT operand becomes a real TPyList, and the question is asked ONCE:
+    is it already one? Everything else is drained through PyMakeIterOf, the
+    normaliser that already knows every iterable kind (str, range, bytes,
+    dict, set, cursor, user __iter__).
+
+    This used to be a LIST OF KINDS -- a user-iterable arm and nothing else --
+    and the kinds it did not name fell through UNTOUCHED into a caller that
+    stores the node in a TPyList-typed slot. So a TPyRange was read as a list
+    header and `f(*range(2))` passed ZERO arguments (`two(*range(2))` was
+    refused as "forwarded call got 0 arguments, expected 2 to 2"), and a
+    TPyBytes gave empty ones. Both silent. The VARIANT spelling of the same
+    construct was always right, because pystar_as_list converts on pyiter_v's
+    rules -- and that asymmetry is exactly what hid it: `def fwd(a): return
+    two(*a)` called with a range works, `two(*range(2))` does not, so the test
+    that exercises the construct end to end walks straight past it.
+
+    normalise-dont-special-case: the second path is the one that stays broken,
+    so there is now one. The user-iterable arm this replaces is subsumed --
+    PyMakeIterOf reaches pyiter_of_userobj itself. A str keeps its own arm
+    below only because pystr_charlist is the cheaper route to the same answer,
+    not because the general one would be wrong.
+    bug-n-a-static-star-operand-over-a-non-list-iterable-passes-nothing }
   if IntToTypeKind(ASTTk[n]) = tyClass then
   begin
-    uci := ResolveNodeRec(n) - REC_UCLASS_BASE;
-    if PyUClassIsIterable(uci) then
-    begin
-      Result := PyCallProc1('pyiter_drain', PyCallProc1('pyiter_of_userobj', n));
-      Exit;
-    end;
+    listCi := FindUClass('TPyList');
+    if (listCi >= 0) and (ResolveNodeRec(n) = REC_UCLASS_BASE + listCi) then Exit;
+    Result := PyCallProc1('pyiter_drain', PyMakeIterOf(n));
+    Exit;
   end;
   if not PyIsStrBaseTk(IntToTypeKind(ASTTk[n])) then Exit;
   procIdx := FindProc('pystr_charlist');
@@ -10202,6 +10217,18 @@ begin
     { a RANGE is a sequence, not a list — `zip(range(3), xs)` must not try to
       read its three Int64 fields as a TPyList header }
     Result := PyCallProc1('pyiter_of_range', node)
+  else if (tk = tyClass) and (FindUClass('TPyBytes') >= 0) and
+          PyRecIsCls(ResolveNodeRec(node), 'TPyBytes') then
+    { BYTES yield their bytes as INTs -- a buffer, not a list of variants, so
+      the generic tyClass arm below read a byte buffer as a TPyList header and
+      paired empties: `zip(b"ab", "xy")` gave [(, 'x'), (None, 'y')] and
+      `enumerate(b"ab")` gave [(0, ), (1, None)], while `for`, `list()`,
+      `sorted()`, `sum()`, `max()`, `tuple()` and `in` over the SAME object
+      were all correct -- those reach pyiter_v, which has had a bytes arm all
+      along. Exactly the TPyRange arm above, one class over, and missing for
+      the same reason: this normaliser names its kinds instead of asking one
+      question. bug-n-a-static-star-operand-over-a-non-list-iterable-passes-nothing }
+    Result := PyCallProc1('pyiter_of_bytes', node)
   else if (tk = tyClass) and (ResolveNodeRec(node) >= REC_UCLASS_BASE) and
           (not PyRecIsPylibOwnClass(ResolveNodeRec(node))) and
           PyUClassIsIterable(ResolveNodeRec(node) - REC_UCLASS_BASE) then

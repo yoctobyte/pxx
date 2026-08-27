@@ -1507,6 +1507,15 @@ function pypow_cx(b: Double; e: Double): Variant;
 { Iterating one yields a CURSOR — a fresh one each time, which is what makes a
   range re-iterable where a cursor is not. }
 function pyiter_of_range(r: TPyRange): TPyIter;
+{ Iterating BYTES yields its bytes as INTs. pyiter_v has had this arm since
+  bytes existed; PyMakeIterOf -- the frontend's "wrap any iterable in a cursor"
+  normaliser -- did not, and swallowed a TPyBytes into its generic tyClass arm
+  (pyiter_of_list), which reads a byte buffer as a list header. That is why
+  `zip(b"ab", "xy")` and `enumerate(b"ab")` yielded empties while `for`,
+  `list()`, `sum()` and `in` over the same object were all correct: those go
+  through pyiter_v and this one did not exist for the frontend to call.
+  bug-n-a-static-star-operand-over-a-non-list-iterable-passes-nothing }
+function pyiter_of_bytes(b: TPyBytes): TPyIter;
 function pyrange_is(const v: Variant): Boolean;
 { `len(map(...))` — CPython's TypeError, word for word. A FUNCTION returning
   Int64 so it can stand in for the whole len() expression at the call site, the
@@ -13823,6 +13832,20 @@ begin
   { the count is taken ONCE, here — a range is immutable, so unlike the list
     cursor there is nothing live to re-read }
   Result.FPos := Integer(pyrange_len(r));
+end;
+
+function pyiter_of_bytes(b: TPyBytes): TPyIter;
+begin
+  { Exactly pyiter_v's own bytes arm, given a name so the frontend can reach
+    it: list(b) materialises the byte VALUES as ints, and the cursor walks
+    those. Not pyiter_of_list(b) -- a TPyBytes is not a TPyList and reading
+    one as the other is the whole bug. }
+  if b = nil then
+  begin
+    pyiter_of_bytes := pyiter_of_list(TPyList.Create);
+    Exit;
+  end;
+  pyiter_of_bytes := pyiter_of_list(list(b));
 end;
 
 function pyrange_is(const v: Variant): Boolean;

@@ -1,0 +1,80 @@
+# A star operand, and every OTHER consumer of the "wrap an iterable" path, over
+# each iterable kind spelled STATICALLY.
+#
+# Two normalisers in pyparser.inc answer "give me this iterable as a list" and
+# "give me this iterable as a cursor", and both named their kinds instead of
+# asking one question. The kinds they did not name fell through UNTOUCHED into
+# a caller that stores the node in a TPyList-typed slot, so a TPyRange or a
+# TPyBytes object was read as a list header:
+#
+#     def c(*a): return a
+#     c(*range(2))     # ()          CPython (0, 1)
+#     c(*b"ab")        # (, )        CPython (97, 98)
+#     two(*range(2))   # TypeError: forwarded call got 0 arguments
+#     zip(b"ab", "xy") # [(, 'x'), (None, 'y')]
+#
+# WHY NO TEST SAW IT: the VARIANT spelling of the same construct was always
+# right -- a variant star operand goes through pystar_as_list, which converts
+# on pyiter_v's rules and has known every kind all along. So
+# `def fwd(a): return two(*a)` called with a range works, and
+# test_nilpy_star_operand_in_a_variant exercises exactly that path end to end.
+# The static spelling is the one nobody wrote down.
+#
+# Note which bytes rows were ALREADY correct: for / list / sorted / sum / max /
+# tuple / `in` all reach pyiter_v directly. Only the two frontend normalisers
+# were holed, which is what makes this a normalise-dont-special-case defect
+# rather than a missing feature.
+#
+# Expectations are CPython's own output.
+# bug-n-a-static-star-operand-over-a-non-list-iterable-passes-nothing
+
+def c(*a):
+    return a
+
+def two(a, b):
+    return a + b
+
+class K:
+    def __iter__(self):
+        return iter([3, 4])
+
+# --- the star operand, one row per iterable kind
+print("list ", c(*[1, 2]))
+print("tuple", c(*(1, 2)))
+print("str  ", c(*"ab"))
+print("range", c(*range(2)))
+print("dict ", c(*{"k": 1, "j": 2}))
+print("set  ", c(*{1, 2}))
+print("bytes", c(*b"ab"))
+print("user ", c(*K()))
+print("gen  ", c(*(x for x in [5, 6])))
+
+# --- a FIXED-arity callee: the arity guard sees the same nothing, so the
+#     failure mode here is a refusal rather than a wrong value
+print("two  ", two(*range(2)))
+print("twob ", two(*b"ab"))
+
+# --- bytes through every consumer. The first seven were already correct and
+#     are the controls; zip / enumerate / [*b] were the broken three.
+b = b"ab"
+print("for   ", [x for x in b])
+print("list  ", list(b))
+print("sorted", sorted(b))
+print("sum   ", sum(b))
+print("max   ", max(b))
+print("tuple ", tuple(b))
+print("in    ", 97 in b)
+print("zip   ", list(zip(b, "xy")))
+print("enum  ", list(enumerate(b)))
+print("star  ", [*b])
+
+# --- the other callers of the same normaliser
+print("join str  ", "-".join("hello"))
+print("print* rng", end=" ")
+print(*range(3))
+print("print* byt", end=" ")
+print(*b"ab")
+print("set  *rng ", sorted({*range(3)}))
+print("list *rng ", [*range(3)])
+print("zip  user ", list(zip(K(), "xy")))
+print("enum user ", list(enumerate(K())))

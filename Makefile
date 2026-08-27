@@ -1396,6 +1396,20 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_stardyn26 | diff -u test/test_nilpy_star_unpack_into_a_callable_value.expected -
 	./$(COMPILER) test/test_nilpy_star_operand_in_a_variant.npy $(TESTTMP)/test_nilpy_starvariant26
 	$(TESTTMP)/test_nilpy_starvariant26 | diff -u test/test_nilpy_star_operand_in_a_variant.expected -
+	# ...and the STATIC spelling of the same construct, which the file above
+	# cannot reach: a variant star operand goes through pystar_as_list and has
+	# always converted correctly, while a statically-typed one went through two
+	# frontend normalisers that named their kinds instead of asking one question.
+	# The kinds they did not name fell through UNTOUCHED into a caller that
+	# stores the node in a TPyList-typed slot, so `c(*range(2))` passed ZERO
+	# arguments, `two(*range(2))` was refused as "forwarded call got 0
+	# arguments", `c(*b"ab")` passed empty ones, and zip/enumerate over bytes
+	# paired empties -- all silent. The bytes rows that were already correct
+	# (for/list/sorted/sum/max/tuple/in) are kept here as controls: they reach
+	# pyiter_v, which has known every kind all along, and that split is what
+	# makes this a normalise-dont-special-case defect and not a missing feature.
+	./$(COMPILER) test/test_nilpy_star_over_any_static_iterable.npy $(TESTTMP)/test_nilpy_staticstar26
+	$(TESTTMP)/test_nilpy_staticstar26 | diff -u test/test_nilpy_star_over_any_static_iterable.expected -
 	./$(COMPILER) test/test_nilpy_genexpr_is_consumed_once.npy $(TESTTMP)/test_nilpy_genonce26
 	$(TESTTMP)/test_nilpy_genonce26 | diff -u test/test_nilpy_genexpr_is_consumed_once.expected -
 	./$(COMPILER) test/test_nilpy_str_format_keyword_fields.npy $(TESTTMP)/test_nilpy_fmtkw26
