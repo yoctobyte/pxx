@@ -1,17 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-27T09:35:00Z",
-   "fixed": [],
-   "new_red": [
-    "test-emit-obj#src:test/cxtensa_obj.c@1"
-   ],
-   "sha": "32fba2082684be424a045b5154c8ba3f7abea053",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-27T09:39:24Z",
    "fixed": [],
    "new_red": [],
@@ -464,6 +453,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "3c9fb9e9c6e8d566b2530475f30064b49f17feec",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T19:09:58Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "71b410a349b669eb914dca2aebc6e1b19d6c2f2f",
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
@@ -6955,14 +6953,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-27T18:52:29Z",
+  "date": "2026-08-27T19:09:58Z",
   "deadline": 7200.0,
-  "sha": "3c9fb9e9c6e8d566b2530475f30064b49f17feec",
+  "sha": "71b410a349b669eb914dca2aebc6e1b19d6c2f2f",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 314.3
+  "wall": 319.1
  },
  "last_bench": {
   "conf_rows": 550,
