@@ -7782,3 +7782,73 @@ bug and the coordination call met each other tonight. The estimate fix is frankT
 and in-lane; the concurrency remains the owner's dial. What I take from it: *do not
 add a sixth*, and treat "every job passed on merit" as the thing that made this
 survivable rather than as evidence the load was fine.
+
+## frankT found the est_mem defect ONE LEVEL BELOW where I pointed — the learner, not the policy (`b73795bb5`)
+
+I suggested the scheduler degrade toward serializing the heavy class rather than
+trusting a corrected estimate. frankT went looking for where to put that and found
+the actual defect underneath it, which is the better outcome and the reason to
+suggest rather than instruct.
+
+**`m["mem"]` was a plain EWMA, exactly like `m["dur"]` and `m["cpu"]`. That is
+correct for two of those three fields and wrong for the third**, and the reason is
+not statistical — it is that they feed different decisions whose errors cost
+differently:
+
+| field | feeds | cost of being wrong |
+| --- | --- | --- |
+| `dur`, `cpu` | scheduling **order** | a worse pack — symmetric, cheap |
+| `mem` | **admission** | over-estimate packs too few; under-estimate admits a job on memory the box does not have |
+
+An EWMA decays toward the mean, so a job whose peak is *occasional* is admitted at
+its **average** footprint, and the run that finally spikes meets a box already
+full. That is the *"promise the box did not have to keep"* — except the promise was
+being **re-made every run by the learner itself**, which is exactly why raising the
+constant would not have held.
+
+`mem` now takes `max(observation, ewma)`: **immediate and in full upward**
+(safety), **smoothed downward** (a one-off spike must not inflate the row forever).
+The serialize-when-breached instinct expressed where it costs nothing — the heavy
+class packs less densely on its own, because its remembered footprint can no longer
+drift below what the box was watching it do.
+
+The `selfhost` row was also raised 500 → 782 MB (measured 521 × 1.5; all three
+`compiler.pas` self-compiles peaked at exactly 521). frankT's own framing is the
+part to keep: **that is the half that expires; the learner is the half that
+doesn't.** Nine devtest checks guard the **asymmetry** rather than the constant.
+
+### The rule worth carrying past this file
+
+> **Pick an estimator by the cost asymmetry of its errors, not by the shape of the
+> data.** A mean is right when both directions of being wrong cost the same. When
+> one direction is an inconvenience and the other is a broken promise, the
+> estimator must be biased toward the cheap side by construction.
+
+This is `root-cause-over-microfix.md` paying out exactly as written: the ticket
+named a symptom (one number too low), the plausible cause was the number, and the
+real fix was a mechanism one level down that would have regenerated the symptom
+forever. Measured by tickets-closed-per-change it also beats the microfix — the
+same asymmetry was latent for every class, not just `selfhost`.
+
+### A correct finding deliberately NOT landed — and the reason is the good part
+
+The `opt` class row is 800 MB; the twelve shards actually measure **75–183 MB** —
+over-estimated by 4–10×, costing concurrency on every run of that tier. frankT
+found it, priced it, and **left it alone**, because lowering it would let the
+scheduler admit far more shards at once: the right fix on a quiet box and precisely
+the wrong one to land while five workers are live and a sixth has just been ruled
+out. It errs in the safe direction, so it can wait for a quiet box and a deliberate
+measurement instead of riding along with a safety fix.
+
+Recorded here so it is not rediscovered as news. **Knowing a change is right and
+that now is the wrong time to make it is a distinct skill from finding it**, and it
+is the one that keeps a safety commit from quietly carrying a concurrency increase.
+
+### "Survivable" is not "fine" — the harness said the first and only the first
+
+frankT's addition to the concurrency ledger: its run was a **third** testmgr on the
+box on top of my five workers, so the oversubscription had three contributors, not
+two. And the harness's own behaviour is the evidence to read correctly — it flagged
+that it shared the box, gave long jobs 2x timeouts, and retried kills. **It told us
+the load was survivable. It did not tell us the load was fine.** A degradation path
+that works is the reason nothing broke, not a licence to keep loading.
