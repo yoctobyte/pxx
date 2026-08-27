@@ -7852,3 +7852,87 @@ two. And the harness's own behaviour is the evidence to read correctly — it fl
 that it shared the box, gave long jobs 2x timeouts, and retried kills. **It told us
 the load was survivable. It did not tell us the load was fine.** A degradation path
 that works is the reason nothing broke, not a licence to keep loading.
+
+## frankB's revert batch: three reverted, one PROVED unrevertable — and it corrected my dispatch twice (`1091cd0ff`)
+
+**My dispatch was wrong on row 4.** I told frankB that
+`isinstance(x, cabc.Mapping)` was still open, don't revert it. It is in `done/`,
+and the qualified spelling compiles and answers correctly on v389. frankB measured
+instead of taking my word and reverted it too. That is the **sixth** instance of
+the day's pattern — a written claim about a tree that has since moved — and this
+one was mine, in a dispatch, which is the worst place for it because a worker's
+default is to trust the coordinator's read of the board.
+
+**The rule that follows, and it binds me specifically:** a dispatch must cite the
+directory a ticket is in *at dispatch time*, not what I remember about it. `ls
+devdocs/progress/done/ | grep <slug>` costs nothing. I have been telling every lane
+to cite the command rather than the answer while doing the opposite in my own
+messages.
+
+### The finding: one workaround CANNOT be reverted, and its blocker IS fixed
+
+`update()`'s `hasattr` row. Its stated blocker is fixed exactly as advertised —
+`hasattr(other, "keys")` through an untyped parameter now answers True for a dict
+and False for a list, matching CPython. **But the branch that fix selects calls
+`other.keys()`, and that segfaults.** The old `isinstance` code never reached it,
+because both its branches iterate `other` directly and never call `keys()`.
+
+**The workaround was masking a second bug by construction, and reverting it is
+what exposed it.** Filed as
+`bug-n-keys-through-an-untyped-receiver-is-not-dispatched-cross-module`
+[Track N, p55], with a two-file 22-line repro. It reopens
+`bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view` — which is in
+`done/` and is *genuinely fixed within one compilation unit*, so the `done/`
+placement is correct and the new ticket is the cross-module case. No bookkeeping
+move needed; frankB got that right.
+
+### Why it closed green the first time — a probe whose own file changed the answer
+
+**Whether it bites depends on what the CALLING module declares, not on the call.**
+A module that declares any simple `keys()` of its own dispatches correctly; a module
+that declares none — or declares a `keys()` that iterates `self`, which is exactly
+an ABC mixin's shape — segfaults.
+
+So **a probe written in a file that happens to contain a `keys()` passes and proves
+nothing.** That is the day's recurring failure in its purest form: a correct answer
+to the wrong question, where the wrong question was created by the probe's own
+file. frankB put the trigger in the registry's landmine note so the next person
+re-testing it does not repeat the measurement wrong — which is the right place,
+because the hazard is not knowable from the ticket.
+
+Generalise past NilPy: **when a defect's trigger is a property of the file the
+probe lives in, every probe is a fresh experiment and a passing one is not
+evidence.** Vary the *container*, not just the input.
+
+### frankB extended the revert rule, and the extension is the important half
+
+The 2026-08-17 lesson established that a row is revertible when **the pin carries
+the fix**, not when the bug is fixed. This batch adds: **and when the idiomatic
+form it unblocks actually runs.** `update()`'s blocker was fixed, the pin carried
+it, and the revert still could not be made.
+
+> **Reverting is a measurement, not a bookkeeping step.**
+
+### What did revert — each now GATED, not merely restored
+
+frankB did not just delete the workarounds, on the grounds that a restored
+capability with no test is the next thing to silently regress:
+
+- `mimic_xml_sax_xmlreader.py` → `self.__class__(...)`, with the test now asserting
+  the **type** rather than the contents (the old spelling answered
+  `AttributesImpl` for everything). 21 → 25 rows.
+- `mimic_collections_abc.py` → five dead `return`s after abstract `raise`s gone;
+  `self.__getitem__(k)` / `__setitem__(k,v)` back to `self[k]` / `self[k] = v`.
+- The qualified-isinstance row. 47 → 49 rows.
+
+Gate: `make lib-test` green, `make demos` 35/35 against v389, and both mimic tests
+diffed **byte-identical against CPython** rather than merely self-consistent.
+
+### Track N ledger now has THREE items and still no dispatch
+
+Two NilPy NEW-REDs from tstate, plus this segfault. The standing instruction is
+unchanged and I am not re-asking: **the owner deprioritized N and reserved the call
+to lift it.** Filed, ranked, repro'd, and waiting. Noting the count because *three*
+is a different conversation from *two* if the owner ever asks what N is holding —
+and one of them is a segfault that blocks a Track B revert, which is the highest-
+weight item the parked lane contains.
