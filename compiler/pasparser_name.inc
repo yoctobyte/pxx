@@ -216,7 +216,27 @@ begin
     `function NetToHost(Net: in_addr)...` must keep `Net.s_addr` a record
     field access even when unit net.pas is loaded — the qualifier greedily
     ate the param and s_addr resolved against the unit (undefined). }
-  if FindSym(name) >= 0 then Exit;
+  u := FindSym(name);
+  if u >= 0 then
+  begin
+    { …except a module's OWN global named after the module itself, seen from an
+      IMPORTING scope. CPython's `Lib/bisect.py` ends with `bisect =
+      bisect_right`, so `import bisect; bisect.bisect_left(a, x)` — what every
+      caller writes — found that global instead of the module and reported
+      `no class declares a method or callable field .bisect_left()`: a message
+      naming a CLASS for what is a module and a function, which sends the reader
+      somewhere unhelpful. In the importing scope Python binds `bisect` to the
+      MODULE; the module's internal rebinding of its own name is not visible
+      there at all.
+
+      As narrow as the collision: the symbol must live in exactly the unit this
+      qualifier names, and we must not be compiling that unit (inside it, the
+      module's own binding really does win, which is Python's rule too).
+      bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members }
+    if not (isNilPy and (SymUnitIdx[u] >= 0) and
+            (SymUnitIdx[u] <> CurrentUnitIdx) and
+            (PyFindUnitDotted(name) = SymUnitIdx[u])) then Exit;
+  end;
 
   { …and, under NilPy, a CLASS spelled exactly beats a unit that only matched by
     FOLDING CASE. Every unit and alias name in the tables is stored lowercased

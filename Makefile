@@ -9912,6 +9912,20 @@ test-core: $(COMPILER)
 	# bug-n-a-class-named-text-still-segfaults-outside-the-qualified-construction-arm
 	./$(COMPILER) test/test_nilpy_class_named_like_an_rtl_record.npy $(TESTTMP)/test_nilpy_rtlrec26
 	$(TESTTMP)/test_nilpy_rtlrec26 | diff -u test/test_nilpy_class_named_like_an_rtl_record.expected -
+	# A module that rebinds its OWN module name — `bisect = bisect_right` at the
+	# bottom of CPython's Lib/bisect.py — made every QUALIFIED access to the
+	# module's other members a compile error: the module's own global won the
+	# qualifier lookup (FPC's "a symbol shadows a same-named unit" rule, applied
+	# to a symbol in ANOTHER unit), so `bisect.bisect_left(a, x)` reported
+	# `no class declares a method or callable field .bisect_left()` — naming a
+	# CLASS for what is a module and a function. From-imports were unaffected,
+	# which is why the corpus did not hit it. The uses_own_name row is the
+	# control that inside the module its own binding still wins, which is
+	# Python's rule and the thing the fix must not trade away.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members
+	./$(COMPILER) test/test_nilpy_module_member_named_like_its_module.npy $(TESTTMP)/test_nilpy_selfnamed26
+	$(TESTTMP)/test_nilpy_selfnamed26 | diff -u test/test_nilpy_module_member_named_like_its_module.expected -
 	# `return lambda ...` — a closure factory, and the returned value was not
 	# CALLABLE while the same lambda bound to a local first was. The return-type
 	# scan's TUPLE detector counted the LAMBDA'S OWN PARAMETER COMMAS, so the

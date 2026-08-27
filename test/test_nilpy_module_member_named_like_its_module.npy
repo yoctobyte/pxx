@@ -1,0 +1,28 @@
+# A module that rebinds its own module name — `bisect = bisect_right` at the
+# bottom of CPython's Lib/bisect.py — made every QUALIFIED access to the
+# module's OTHER members a compile error: the module's own global won the
+# qualifier lookup, so `bisect.bisect_left(a, x)` reported `no class declares a
+# method or callable field .bisect_left()`, naming a CLASS for what is a module
+# and a function. From-imports were unaffected, which is why the corpus did not
+# hit it.
+# bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members
+
+import nilpy_selfnamed
+
+# the members that were hidden
+print(nilpy_selfnamed.left(1))
+print(nilpy_selfnamed.right(2))
+
+# ...and the same-named member itself, which always worked
+print(nilpy_selfnamed.nilpy_selfnamed(3))
+
+# inside the module its own binding still wins — Python's rule, and the one the
+# fix must not trade away
+print(nilpy_selfnamed.uses_own_name(4))
+
+# the from-import spellings, which were never broken
+from nilpy_selfnamed import left
+from nilpy_selfnamed import nilpy_selfnamed as alias
+
+print(left(5))
+print(alias(6))
