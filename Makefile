@@ -7885,6 +7885,8 @@ test-core: $(COMPILER)
 	# `math` mechanism), gated on threadsafe. Matches FPC 3.2.2 row for row.
 	./$(COMPILER) test/test_thread_api_no_uses.pas $(TESTTMP)/test_thread_api_no_uses26
 	test "$$($(TESTTMP)/test_thread_api_no_uses26)" = "$$(printf 'a 42\nb 15\nc ok\nd 8')"
+	./$(COMPILER) test/test_frozen_string_concat_operand.pas $(TESTTMP)/test_frozen_concat_operand26
+	test "$$($(TESTTMP)/test_frozen_concat_operand26)" = "$$(printf 'a ab!\nb ab!\nc <ab>\nd abcd\ne abab\nf ab!|3\ng box!\nh 400\nOK')"
 	./$(COMPILER) test/test_shortstring_function_result.pas $(TESTTMP)/test_ss_func_result26
 	test "$$($(TESTTMP)/test_ss_func_result26)" = "$$(printf 'a ab\nb sized\nc q|qq\nd Xd\ne ab|2|2\nf TRUE|FALSE\ng boxed\nh |   ab|\nOK')"
 	./$(COMPILER) -Futest/units test/test_unit_ambient_system_surface.pas $(TESTTMP)/test_unit_ambient_sys26

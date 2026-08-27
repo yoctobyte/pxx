@@ -9234,6 +9234,27 @@ begin
           (ASTTk[left] = Ord(tyChar))) then
         right := WrapPCharToString(right);
     end;
+    { A frozen-string OPERAND presents as a tyString value, exactly as a symbol
+      read does. StrValTk normalises every symbol site; a CALL node does not —
+      it carries Ord(Procs[pi].RetType), the STORAGE kind, at some 50 sites — so
+      `P + '!'` with `P: shortstring` arrived here as tyShortString, missed the
+      concat arm below (which tests tyString / tyAnsiString / tyChar) and fell
+      into POINTER ARITHMETIC: `writeln(P + '!')` printed an address and
+      `a := P + '!'` gave the empty string, while `v + '!'` on a shortstring
+      VARIABLE was correct all along.
+
+      Normalised HERE, on the operand, for the same reason the WideChar and
+      PChar wraps above are: every downstream arm then sees a string operand and
+      needs to know nothing about which frozen kind produced it. Storage kind
+      and capacity live on the symbol, not on the value.
+      bug-p-a-frozen-string-concat-operand-becomes-pointer-arithmetic }
+    if not CProgramMode then
+    begin
+      if TypeIsFrozenString(IntToTypeKind(ASTTk[left])) then
+        ASTTk[left] := StrValTk(IntToTypeKind(ASTTk[left]));
+      if TypeIsFrozenString(IntToTypeKind(ASTTk[right])) then
+        ASTTk[right] := StrValTk(IntToTypeKind(ASTTk[right]));
+    end;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     { {$Q+} region: + and - are overflow-checked (feature-pascal-overflow-checks-q-plus) }
     if ((op = tkPlus) or (op = tkMinus)) and TokQChecks[TokPos - 1] then
