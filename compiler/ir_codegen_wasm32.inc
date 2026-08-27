@@ -26,8 +26,34 @@
   $fp + (FrameSize - N). That conversion happens in WasmSlotDisp and nowhere
   else. }
 
+{ ===== incremental bringup =====
+
+  Phase 2 cannot compile "a small program" in isolation: even a trivial one
+  pulls compiler/builtin/builtinheap.pas, whose bodies use IR_STORE_MEM, calls
+  and control flow long before anything the user wrote does. Measured on the
+  backend's first ever run — it stopped at IR op 21 in builtinheap, not in the
+  test program. So "handle the ops my test needs" is not a reachable milestone;
+  the reachable one is "handle the ops the builtins need", which is most of
+  Phases 2-4 at once.
+
+  Rather than block all verification behind that, a body the backend cannot yet
+  lower is emitted as a single `unreachable` and RECORDED. The module still
+  builds, the bodies that ARE lowered can be called and diffed against the
+  native build, and an unlowered body fails loudly at run time instead of
+  quietly computing something.
+
+  This is scaffolding, and it is safe only because it reports itself: the
+  summary below prints unconditionally, so a module with holes can never be
+  mistaken for a complete one. It comes out when the op coverage is complete —
+  at which point the counter reads zero and the mechanism is inert. }
+
 var
   WasmModuleStarted : Boolean = False;
+  WasmBodyBroken    : Boolean = False;  { current body hit an unlowered op }
+  WasmBrokenReason  : AnsiString = '';
+  WasmBrokenCount   : Integer = 0;
+  WasmLoweredCount  : Integer = 0;
+  WasmBrokenNames   : AnsiString = '';
   WasmGSp           : Integer = -1;   { the $sp global's index }
   WasmCurSlot       : Integer = -1;   { function slot being emitted }
   WasmCurFrame      : Integer = 0;    { this body's frame size, bytes }
@@ -35,6 +61,16 @@ var
 
 { Pascal type -> wasm value type. Only the Phase 2 subset; anything else is a
   loud Error rather than a plausible i32. }
+{ Mark the body being emitted as not-yet-lowerable. Deliberately NOT Error:
+  Error aborts the compile, and one unimplemented op in a builtin would then
+  block every test of every op that IS implemented. }
+procedure WasmUnsupported(const why: AnsiString);
+begin
+  if WasmBodyBroken then Exit;     { keep the FIRST reason, not the last }
+  WasmBodyBroken := True;
+  WasmBrokenReason := why;
+end;
+
 function WasmValType(tk: TTypeKind): Byte;
 begin
   if (tk = tyInt64) or (tk = tyUInt64) then WasmValType := WT_I64
@@ -48,7 +84,11 @@ end;
 function WasmSlotDisp(si: Integer): Integer;
 begin
   if Syms[si].Kind = skGlobal then
-    Error('wasm32: globals not implemented yet (Phase 2 does frame slots first)');
+  begin
+    WasmUnsupported('global symbol ' + Syms[si].Name);
+    WasmSlotDisp := 0;
+    Exit;
+  end;
   WasmSlotDisp := WasmCurFrame + Syms[si].Offset;
 end;
 
@@ -77,8 +117,20 @@ end;
 
 procedure WasmEmitNode(node: Integer); forward;
 
+{ Phase 2 lowers i32-shaped slots only. Anything wider is refused HERE rather
+  than loaded as an i32 that the signature then disagrees with — see the note
+  on the validator below. }
+procedure WasmRequireI32(si: Integer);
+begin
+  if WasmValType(Syms[si].TypeKind) <> WT_I32 then
+    WasmUnsupported('non-i32 slot ' + Syms[si].Name
+                    + ' (Phase 2 lowers i32 only)');
+end;
+
 procedure WasmEmitLoadSym(si: Integer);
 begin
+  WasmRequireI32(si);
+  if WasmBodyBroken then Exit;
   WasmSlotAddr(si);
   WasmI32Load(2, 0);
 end;
@@ -98,20 +150,19 @@ begin
   else if op = tkMinus then WasmBinop($6B, 'i32.sub')
   else if op = tkStar then WasmBinop($6C, 'i32.mul')
   else
-    Error('wasm32: binary operator not implemented yet in Phase 2 (op '
-          + WasmIntStr(IRC[node]) + ')');
+    WasmUnsupported('binary operator ' + WasmIntStr(IRC[node]));
 end;
 
 procedure WasmEmitNode(node: Integer);
 begin
-  if node < 0 then Error('wasm32: null node reference');
+  if WasmBodyBroken then Exit;
+  if node < 0 then begin WasmUnsupported('null node reference'); Exit; end;
   case IRKind[node] of
     IR_CONST_INT : WasmI32Const(IRIVal[node]);
     IR_LOAD_SYM  : WasmEmitLoadSym(IRA[node]);
     IR_BINOP     : WasmEmitBinop(node);
   else
-    Error('wasm32: IR op ' + WasmIntStr(IRKind[node])
-          + ' not implemented yet (Phase 2 covers const/load/binop/store)');
+    WasmUnsupported('value IR op ' + WasmIntStr(IRKind[node]));
   end;
 end;
 
@@ -161,6 +212,13 @@ begin
   else
     sigIdx := WasmAddTypeN(ptypes, nParams, rtypes, nRes);
 
+  { Refuse a signature Phase 2 cannot honour, BEFORE emitting a body that would
+    contradict it. This is the concrete form of the argument in CHARTER.md: on a
+    register target, loading an Int64 slot with a 32-bit load produces a
+    plausible wrong value far from the cause. Here the module simply fails to
+    validate — `type mismatch in implicit return, expected [i64] but got [i32]`,
+    with a byte offset. The bug is the same bug; the target is what makes it
+    impossible to ship. }
   WasmCurSlot := WasmAddFunc(nm, sigIdx);
   for i := 0 to nParams - 1 do
     WasmAddParamName(WasmCurSlot, Procs[CurProc].Params[i].Name);
@@ -172,6 +230,13 @@ begin
     shadow stack aligned for anything that later cares. }
   WasmCurFrame := ((FrameSize + 15) div 16) * 16;
 
+  WasmBodyBroken := False;
+  WasmBrokenReason := '';
+  if (nRes = 1) and (rtypes[0] <> WT_I32) then
+    WasmUnsupported('non-i32 result (Phase 2 lowers i32 only)');
+  for i := 0 to nParams - 1 do
+    if ptypes[i] <> WT_I32 then
+      WasmUnsupported('non-i32 parameter ' + Procs[CurProc].Params[i].Name);
   WasmBodyBegin;
 
   { prologue: $fp := $sp - frame ; $sp := $fp }
@@ -185,30 +250,34 @@ begin
   { home the parameters into their frame slots. wasm hands them over as locals;
     everything downstream addresses them as memory, which is what makes IR_LEA,
     var params and records work unchanged. }
-  for i := 0 to nParams - 1 do
-    if Procs[CurProc].Params[i].SymIdx >= 0 then
-    begin
-      WasmSlotAddr(Procs[CurProc].Params[i].SymIdx);
-      WasmLocalGet(i);
-      WasmI32Store(2, 0);
-    end;
+  if not WasmBodyBroken then
+    for i := 0 to nParams - 1 do
+      if Procs[CurProc].Params[i].SymIdx >= 0 then
+      begin
+        WasmSlotAddr(Procs[CurProc].Params[i].SymIdx);
+        WasmLocalGet(i);
+        WasmI32Store(2, 0);
+      end;
 
   for i := 0 to IRCount - 1 do
     case IRKind[i] of
       IR_NOP, IR_BLOCK, IR_LABEL : ;
       IR_STORE_SYM :
         begin
-          WasmSlotAddr(IRA[i]);
-          WasmEmitNode(IRB[i]);
-          WasmI32Store(2, 0);
+          WasmRequireI32(IRA[i]);
+          if not WasmBodyBroken then
+          begin
+            WasmSlotAddr(IRA[i]);
+            WasmEmitNode(IRB[i]);
+            WasmI32Store(2, 0);
+          end;
         end;
     else
       { Anything not yet handled errors rather than being skipped. A skipped IR
         op is a program that compiles and computes the wrong answer, which is
         the failure class this target exists to make impossible. }
       if IRTopLevelStmt(i) then
-        Error('wasm32: IR op ' + WasmIntStr(IRKind[i])
-              + ' not implemented yet (Phase 2 is straight-line codegen)');
+        WasmUnsupported('statement IR op ' + WasmIntStr(IRKind[i]));
     end;
 
   { epilogue: restore $sp, then leave the result on the operand stack }
@@ -218,6 +287,20 @@ begin
   WasmGlobalSet(WasmGSp);
   if (nRes = 1) and (retSym >= 0) then WasmEmitLoadSym(retSym);
 
+  if WasmBodyBroken then
+  begin
+    { discard whatever was emitted and leave a body that traps if reached.
+      `unreachable` is polymorphic, so this validates for any signature. }
+    WasmBodyBegin;
+    WasmBodyUnreachable;
+    Inc(WasmBrokenCount);
+    if Length(WasmBrokenNames) < 4000 then
+      WasmBrokenNames := WasmBrokenNames + '    ' + nm + ' — '
+                         + WasmBrokenReason + Chr(10);
+  end
+  else
+    Inc(WasmLoweredCount);
+
   WasmBodyTerminate;
   WasmBodyEnd(WasmCurSlot);
 
@@ -225,4 +308,16 @@ begin
     profile actually needs; until then an exported function is how the test
     harness reaches a body at all. }
   WasmAddExport(nm, WEK_FUNC, WasmFuncIndex(WasmCurSlot));
+end;
+
+{ Printed once, from the module writer, before the .wasm is saved. Unconditional
+  by design: a module with trapping holes must never look like a complete one. }
+procedure WasmReportCoverage;
+begin
+  if WasmBrokenCount = 0 then Exit;
+  WriteLn('wasm32: ', WasmLoweredCount, ' of ',
+          WasmLoweredCount + WasmBrokenCount,
+          ' bodies lowered; ', WasmBrokenCount,
+          ' emitted as `unreachable` (Phase 2 is incomplete):');
+  Write(WasmBrokenNames);
 end;

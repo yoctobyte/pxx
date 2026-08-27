@@ -470,6 +470,14 @@ begin
   WasmBodyB($0F); WasmText('return');
 end;
 
+{ `unreachable` traps. It is also POLYMORPHIC in wasm's type system — it
+  satisfies any expected result type — which is what lets a not-yet-lowered
+  body be a single one of these regardless of the function's signature. }
+procedure WasmBodyUnreachable;
+begin
+  WasmBodyB($00); WasmText('unreachable');
+end;
+
 { The body's trailing `end`. Emitted into the binary; the text form gets its
   closing paren from asmtext_wasm.inc instead, so nothing is written here. }
 procedure WasmBodyTerminate;
@@ -767,8 +775,15 @@ end;
   class this project treats as the expensive one. Until ir_codegen_wasm32.inc
   populates the model (Phase 2), every real program takes the Error branch, and
   it takes it for an accurate reason. }
+{ Body in ir_codegen_wasm32.inc, which is included later (with the other
+  backends) than this file (with the other encoders). Forwarded here rather
+  than in compiler.pas: the dependency is between two wasm files, so it should
+  not cost a line in a shared one. }
+procedure WasmReportCoverage; forward;
+
 procedure writeWasm(const outPath: AnsiString);
 begin
+  WasmReportCoverage;
   if WasmFuncCount = 0 then
     WasmFail('wasm32: nothing to write — no code was generated for this module '
           + '(wasm codegen lands in Phase 2; the module writer is present and '

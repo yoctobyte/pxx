@@ -9067,11 +9067,17 @@ begin
     Exit;
   end;
   if TargetArch = TARGET_WASM32 then
-    { Registration only. This chain FALLS THROUGH to the x86-64 emitter below,
-      so without this arm a 7th target silently gets x86-64 machine code in a
-      file claiming to be its own — the loudest possible wrong answer, and the
-      quietest possible failure. feature-a-wasm32-target-registration-skeleton }
-    Error('wasm32: code generation not implemented');
+  begin
+    { The Exit matters as much as the call. This chain FALLS THROUGH to the
+      x86-64 emitter below, so a 7th target without an Exit here gets x86-64
+      machine code appended to its own — the loudest possible wrong answer and
+      the quietest possible failure. The registration skeleton put an Error
+      here for exactly that reason; replacing an Error with a call means the
+      Exit is now load-bearing rather than implied.
+      feature-a-wasm32-target-registration-skeleton }
+    IREmitMachineCodeWasm32;
+    Exit;
+  end;
   { Clear only the labels this body actually allocated. IRReset zeroes
     IRLabelCount per body and IRNewLabel hands out ids in [0, IRLabelCount),
     so every label id emitted or jumped-to in this body is < IRLabelCount;
