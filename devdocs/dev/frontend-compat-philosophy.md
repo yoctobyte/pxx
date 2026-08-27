@@ -150,3 +150,66 @@ FOR.
 `ir-as-substrate.md` is the north star behind all three: push generality down
 into the IR, keep frontends thin. A frontend that needs a special case is usually
 telling you the IR is missing something.
+
+---
+
+## REFINEMENT (owner, 2026-08-27) — the reference is the SPEC; an implementation's habits go behind `--strict-<impl>`
+
+> *"as far as divergence goes — we have `--strict-` in place. like `--strict-fpc`
+> and `--strict gcc`. apart that we rather work for specs (what does formal
+> pascal/c/python spec say) as compliance…. python the sortof exception since
+> cpython is the de-facto oracle. but since we are a static compiler, not all
+> wishes can be granted… that's the nature of pxx."*
+
+This sharpens the three positions above rather than replacing them, and it fixes
+a conflation the C section makes. **Two different things had been collapsed into
+the word "oracle":**
+
+| | the reference we comply with | how to get an implementation's behaviour |
+| --- | --- | --- |
+| **C** | the **formal C standard** | *(no flag exists — see the gap below)* |
+| **Pascal** | the **formal Pascal spec**, plus our deliberate dialect | `--strict-fpc`, `--mimic-fpc` |
+| **NilPy** | **CPython, de facto** — the acknowledged exception | `--strict-python` |
+
+**The default target is the SPEC. A reference implementation's
+idiosyncrasies are opt-in, behind a flag, not baked into the default.** That is
+what the `--strict-*` family is *for*, and it is why the family is named after
+implementations (`fpc`, `python`) rather than after behaviours.
+
+**Python is explicitly the exception**, and for a stated reason rather than by
+oversight: CPython is the de-facto oracle because that is what the ecosystem
+actually targets. The upward-compatibility rule above is unchanged.
+
+**And the bound that applies to all three:** *"since we are a static compiler,
+not all wishes can be granted — that's the nature of pxx."* This is the
+**permanent limit** category above, generalised past NilPy. It is not an excuse
+available on demand — the bar in the NilPy section still binds (show the
+workaround space is genuinely empty, and a permanent-limit claim is a Track U
+escalation, not a worker's call) — but it is now explicitly a property of the
+project, not a NilPy-specific apology.
+
+### Where this CHANGES the C section above, and the gap it exposes
+
+The C section says *"gcc / ISO C is the oracle"* and *"a difference from gcc is a
+**bug**, full stop."* Under the refinement those are two different claims and only
+the second half of the first one survives: **a difference from the C standard is
+a bug; a difference from gcc is not automatically anything.**
+
+That is not a safe edit to make silently, because the C section's *reason* pulls
+the other way: the frontend's stated value is that **real-world C compiles
+unmodified**, and real-world C — busybox, zlib, QuickJS — is full of GNU
+extensions that no C standard describes. Spec-compliance-by-default and
+compiles-the-world are in genuine tension for C specifically.
+
+**Measured, not assumed:** `--strict-gcc` **does not exist.** The shipped family is
+`--strict-case`, `--strict-fpc`, `--strict-ir`, `--strict-operator`,
+`--strict-overload`, `--strict-overload-width`, `--strict-python`,
+`--strict-uses`, `--strict-visibility`, plus `--mimic-fpc` and
+`--mimic-fpc-compiler`. So C is the one frontend with **no flag** for its
+reference implementation, and the ruling's C half has no mechanism today.
+
+Which way that flag should point is a real fork with real consequences for the
+corpora, so it is **not** derived here: see
+[[decide-c-frontend-iso-c-or-gnu-c-by-default]] (Track U). Until it is answered,
+the C section above stands as written — do not start rejecting GNU extensions on
+the strength of this refinement.
