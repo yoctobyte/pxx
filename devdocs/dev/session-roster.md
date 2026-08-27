@@ -8712,3 +8712,120 @@ with a measured number. **Dispatched as item 3.**
   not chased.
 - **frankA — #3 now, then the pointer-conversion bug.** Both are about which candidate a
   name resolves to, so worth a moment's thought rather than treating them as unrelated.
+
+## THE DISPATCH INVERTED AGAIN, and my own instruction caught it: W1 is worth ~1.6x, item 3 is worth ~5%
+
+I asked frank-optimize to write down *"re-measure the prize before starting an item."*
+It applied that to item 3 first. **Item 3 is ~5%, not 2.15x**, and the item that
+inherited the prize is **W1 — the one I deprioritised this morning.** Sized and banked
+at `d02b9e3eb`; nothing built, no item switched unilaterally.
+
+**Why the 2.15x was wrong: it measured two changes at once.** The morning sizing's V5
+and V3 differ by the dual-write stores **and** by all the operand staging through rax
+— V3 was an *idealised* 6-instruction body, not V5-minus-stores — so the whole delta
+was credited to the stores.
+
+Re-isolated on the **current** `-O3` body transcribed from today's disassembly,
+variants differing from A **by deletion only**, interleaved, min of 9-12, four
+independent runs agreeing:
+
+| variant | s | vs current |
+| --- | --- | --- |
+| A — current `-O3`, 21 insns (calibrates: real binary 0.61 s) | 0.62 | 1.00x |
+| B — item 3 exactly: three dual-write stores deleted, nothing else | 0.60 | **1.04-1.06x** |
+| C — item 3 + W1: staging through rax also gone, 11 insns | 0.38 | **~1.65x** |
+| D — ideal, fpc-like, 6 insns | 0.20 | 3.0x |
+
+> **An A/B comparison is only valid when B is A minus exactly one thing.** Obvious
+> stated; the failure mode is that a plausible variant table hides it.
+
+**Why item 3 is small, and it is the mirror of item 1's finding:** stores retire into
+the store buffer and sit **off** the loop-carried chain. *The very reason loads
+mattered so much to item 1 is the reason stores do not.* It is also the harder build
+— exit re-sync, exception landing pads, every path treating the frame slot as
+authoritative — so it is currently the worst effort-to-payoff item in the ticket.
+
+### The ranking history, stated plainly rather than smoothed
+
+**I deprioritised W1 this morning on frank-optimize's disconfirmation at 1.4%. That
+disconfirmation was correct. It is now stale — and item 1 is what made it stale.**
+The body was 12 cyc/iter dominated by two frame round-trips, and every `mov %rN,%rax`
+sat in their shadow. Item 1 removed the memory traffic: 6.5 cyc/iter, **zero memory
+reads**, and the chain now runs *through* the staging moves
+(`r13 → rax → r14 → rcx → rax`). **The same instructions that were free while they
+overlapped a 5-cycle store-forward are the critical path once it is gone.** Nobody was
+wrong at either moment.
+
+> **An optimisation's value is not a property of the transform. It is a property of the
+> transform against a baseline — and a baseline moves, sometimes by your own hand.**
+
+Two instances in one session, both caused by item 1: **item 2 emptied by it, W1 revived
+by it.** The pair is what makes the rule credible; either alone reads as a one-off.
+
+**Dispatched: W1, with the lane's own caveat promoted to a condition** — build behind
+`-O3` and land `hello.pas` at min-of-15 **in the same commit** as the loop benchmark,
+so the neutral number and the flattering one arrive together. All of this is one loop
+shape (`three.pas`, the same benchmark that gave item 1 its 1.9x) and a hand-transcribed
+model, not a built pass: it bounds tight scalar loops and says nothing about the compiler
+or the corpus. "Beyond C is another ~1.8x and that is a real allocator" — parked, not scoped.
+
+## frankA: #2 fixed, #3 parked and reclassified, and a fifth wall that is not a generics bug
+
+**#2 FIXED (`042bcbb32`)** — root cause upstream of the symptom.
+`DelphiRewriteGenericUses` rewrites `TSvc<T>.Sel` to objfpc by **deleting the `<T>`
+group**, which was also the only thing distinguishing it from a same-named non-generic
+class's method impl. The resolver's tie-break then did exactly what it should. **The
+tie-break stays; what was wrong was a comment** — *"a `X<T>.M` header never reaches this
+branch"* — **true in objfpc, false in Delphi mode because the rewrite runs first.**
+Corrected in place, because leaving it would re-authorise the same reasoning. Keyed on
+the class-name token's **SOffset, not token index**, since the rewrite runs to a fixed
+point per template and every round shifts indices.
+
+Rung-6 effect measured: the wall moves **2173 → 2351**. The next wall is a **fifth**,
+still not typinfo — `AN_CLASS_VIRTUAL_CALL` fails to lower when a virtual class method's
+**address is taken as a value**. Filed with an 18-line repro **containing no generics at
+all**, and saying so, because rung-6 context makes it read as a generics bug to everyone
+who meets it.
+
+**#3 PARKED to `unfinished/`, diagnosis banked, no partial code, tree at a verified
+fixedpoint — and it RECLASSIFIED.** It is **not a Delphi-surface bug**: hand-written
+objfpc fails on `pinned`. The real defect is that a nested `specialize X<T>` group is
+unsupported in **expression position**; the Delphi spelling merely arrives by another
+route with another message. Two stacked defects located — (a) the rewrite decides "is
+this a method impl header?" by what **follows** the group rather than what **precedes**
+the name, and an expression use has a dot too; (b) the nested-specialization prerequisite
+scan sweeps only the class body, never the separately-buffered method bodies. **Fixing
+(a) alone routes the use straight into (b)**, so it is not an improvement — reverted
+rather than shipping a change that swaps one error message for another, and said plainly
+that a third failure it saw is not yet understood.
+
+### Ranking: express dependence as an EDGE, never as a number
+
+frankA's call on the pointer bug's prio, and it is better than the alternative I would
+have accepted: leave it at 65 and add a **`Blocks:` edge** to
+`feature-typinfo-facade-unit`. *"This doesn't outrank things on its own merits, it
+outranks them because of what sits behind it."* The ranker propagates down edges by
+design; hand-inflating the number **double-counts** the moment the edge exists.
+
+### The symtab.inc boundary — asked, not guessed
+
+The pointer-conversion fix is ~15 lines at `symtab.inc:6963`, in
+`TypesCompatible`/`MatchParamCompatible`, with an **exact in-repo precedent beside it**
+(`MatchArgNilOk`, whose comment names the same architectural gap almost verbatim:
+the kind channel never sees identities). frankA **stopped rather than edit a file I
+fenced off for Track O**, and asked.
+
+Measured: nothing has touched `symtab.inc` tonight, and frankA's site is ~2,200 lines from
+the residency region W1 might use. Asked frank-optimize directly anyway. **Option 3
+(park it) was correctly named and correctly rejected** — parking costs the facade's whole
+consumer path (`streams`, `classes_lite`, `lfm`, all of `lib/pcl`, fpjsonrtti) against a
+hypothetical collision.
+
+### Two habits that appeared independently in two lanes tonight
+
+- **Regression tests that keep the already-working shapes as controls**, so the test
+  cannot be narrowed later. frankB did it with the QWord rows; frankA did it with #2's
+  two working header shapes.
+- **Stop varying the input; go after the mechanism**, when a passing probe is not
+  evidence. frankB's `keys()` and overload findings; frankA credits it with saving real
+  time on the pointer bug.
