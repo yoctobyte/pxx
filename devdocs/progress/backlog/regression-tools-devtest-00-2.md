@@ -75,3 +75,23 @@ second — prefer the line above.
 
 *Enriched from a watcher stub by Track T (face 2), which owns the tool and not
 the bug — the fix belongs to the lane that owns the test source.*
+
+## Extra cost: this red also fails PIN VERIFICATION
+
+Noticed while confirming the v389 retarget. The watcher's `pin_verify` block
+records this job red **at the pinned tree**, not only at HEAD:
+
+```
+ver v388  sha 20664a1576d3  tier full  verdict RED
+red: test-emit-obj#src:test/cxtensa_obj.c@1, tools-devtest#00
+```
+
+So the one-line temp-path fix clears a red from *two* places: the HEAD ladder
+and every pin verification that runs while it stands. A pin-verify red is the
+more expensive of the two — it is the binary every other track is building
+with right now, so a red there is what an agent checking "is my ground sound?"
+sees first, and a known-benign entry sitting in that list is exactly the noise
+that teaches people to skim it.
+
+Both entries in that list are already ticketed and neither is a compiler
+defect: this one, and [[regression-test-emit-obj-cxtensa-obj]].
