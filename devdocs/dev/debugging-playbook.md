@@ -61,6 +61,10 @@ order to read them in. Route by what you are holding:
   the named commit looks like an improvement
 - `## A number moving in the direction you hoped is not a check` -- the
   confirmation may be the symptom
+- ``## "The compiler couldn't compile X" and "the language can't do X" look
+  identical from inside `compiler/**` `` -- an "undefined" error in a
+  compiler-internal file may be a define at the top of the translation unit,
+  not a gap; compile it standalone before filing
 - ``## "The pinned binary reproduces it" may be a claim about a MIXED compiler``
 - `## A silent assertion makes the harness report something else, confidently`
 - `## When you are about to conclude something`
@@ -675,6 +679,59 @@ compiles **with no import at all** and the from-import binds nothing.
 The companion habit, from the same fix: **when you disprove a comment, correct
 it in place, and grep for its copies.** That one had two.
 
+## "The compiler couldn't compile X" and "the language can't do X" look identical from inside `compiler/**`
+
+A new backend file needed to write a text file. It used the idiomatic form —
+`var f: Text` with `Assign` / `Rewrite` / `Writeln` / `Close` — and the
+self-host build failed:
+
+```
+pascal26:166: error: undefined variable (Close)
+  in: compiler/asmtext_wasm.inc
+```
+
+That reads as an RTL gap, and the obvious next move is a ticket against the RTL
+for a missing `Close`. **The RTL is fine.** Three steps settle it, and they take
+about ten seconds:
+
+- A standalone pxx program does `Assign` / `Rewrite` / `Writeln` / `Close` and
+  writes its file. **This is the disproof, and it is the step people skip.**
+- The implicit textfile surface is pulled in by a token pre-scan at
+  `pasparser_prog.inc:651` — but only `if (not NoDefaultRtl)`.
+- `compiler.pas:19` is `{$define PXX_NODEFAULTRTL}`.
+
+The compiler deliberately opts out of the default RTL surface. `Close` is absent
+**by design**, and the error is the compiler handing back exactly what it asked
+for. Nothing at the failure site points at any of that: the define is one line
+near the top of a 2000-line program, and the gate that consumes it lives in a
+different file from the error.
+
+- **Inside a compiler-internal file you are not compiling in the language's
+  ordinary environment**, and an "undefined" diagnostic cannot tell you which of
+  the two you hit. It reports absence at the *use* site; the cause is a define at
+  the top of the translation unit.
+- **Compile the same construct standalone before filing anything.** Works there,
+  fails here → the absence is a property of the translation unit and there is no
+  language or RTL bug to file. Fails in both → now you have something.
+- **Getting this wrong files a bug that does not exist**, against a component
+  that works, with a real error message as its evidence. That is the durable kind
+  of wrong: nothing about it looks like a guess.
+
+**And it decides which form is platonic**, which matters under the
+do-not-revert-platonic-patches rule, where direction is the whole rule. If the
+idiomatic form is blocked by a defect, it is platonic and stays, with a
+`blocked-by:`. If it is blocked because this translation unit excludes the
+surface it needs, it was never the platonic form *here* — the house form is
+(`sysopen`/`syswrite`: 18 sites in `compiler/**`, zero declare a `Text`), and the
+idiomatic form remains right on the other side of that boundary. Both are correct
+in their own translation unit, neither is a workaround for the other, and nothing
+is owed a revert.
+
+Companion habit: **when you resolve one of these, write the chain into the file,
+not just the conclusion.** The conclusion alone gets re-litigated by the next
+person who hits the same error message, and their most likely move is the RTL
+ticket that should not exist.
+
 ## "The pinned binary reproduces it" may be a claim about a MIXED compiler
 
 A ticket recorded that `$(PXX_STABLE)` reproduced a segfault, which made a
@@ -1103,3 +1160,80 @@ what the `-O0` debug build gives than the `-O2` one. **A tool that fails to
 build fails silently in the worst possible way: as an absence of measurements,
 which reads exactly like an absence of anything to measure.** Build it before
 you trust a number attributed to it.
+
+## Only binaries timed inside ONE interleaved run are comparable — and a pass changed to fix a measurement is as sound as the measurement
+
+The `-O3` residency slice (2026-08-28) measured mandelbrot at **1.10 s** before
+a change and **1.18-1.24 s** after it: a clean 7% regression, min of 5, same
+command, same box. The obvious reading was that the change had a cost, so a
+per-class fix was built to remove it, and — this is the part worth recording —
+**the causal explanation was written into `ir_codegen.inc` as a comment stating
+it as fact**, complete with the two numbers.
+
+Re-measuring all three binaries *inside a single interleaved run* gave
+**1.34 / 1.33 / 1.34**. The same "before" binary that had measured 1.09 now
+measured 1.34. There was no regression, there had never been one, and the fix
+was a fix for the box's load.
+
+Why the usual precaution did not save it: `%U` user time, A/B alternating,
+**min of 5** is the discipline this repo already uses, and it is not enough
+here. plexus runs Track T's watcher and several agents; load swung between 4
+and 13 during that session. Min-of-N removes noise *within* a run and removes
+nothing at all *between* runs, so two numbers taken ten minutes apart are two
+measurements of the machine, with the binary as a minor term.
+
+- **Time every variant you intend to compare inside one loop**, alternating, in
+  the same process invocation window — `for k in 1..N; do for v in old new t3;
+  do time ./$v; done; done`, then take each one's minimum. Three variants in
+  one run is comparable; the same three run one after another as separate
+  commands is not.
+- **A delta measured across runs is not evidence for a cause.** It is not
+  evidence for an effect either. The interleaved re-run comes *before* the fix,
+  never after it.
+- When you do revert an experiment, **verify the revert by rebuilding and
+  comparing the binary sha to the pre-experiment one.** Bit-identical is proof
+  the tree is back where it was; "I undid the edits" is not.
+
+The general shape, which is why this sits next to the bisect entry above: a
+change made to fix a measurement inherits every weakness of that measurement,
+and a *comment* asserting the cause outlives the measurement entirely. The
+comment would have been read for years as a finding. It was a load average.
+
+**Interleaving alone is not enough, and the same slice proved that too.** Having
+adopted the rule above, the same session then reported a "~2-6% slower
+self-compile", *interleaved*, "reproduced in three runs" — and it evaporated at
+higher repetition (min of 6: +0.3%; and the same compiler was FASTER on a
+min-of-15 short-compile workload). Three under-powered runs share a bias; they
+do not confirm each other. **Interleaving fixes WHICH runs you may compare;
+repetition fixes how confidently.** Concretely, on this box: 3-4 reps cannot
+resolve a 5% effect on a 17-second workload, and **a short workload with many
+reps beats a long workload with few** — `hello.pas` at min-of-15 settled in two
+minutes what `compiler.pas` at min-of-3 had got wrong in ten. If the effect you
+are claiming is smaller than ~10%, say how many reps produced it, or do not
+claim it.
+
+## Regenerate the baseline; never reuse one from earlier in the session
+
+The same slice checked that an `-O3`-gated pass had not disturbed `-O2`, by
+hashing a fixed corpus compiled for all six targets and diffing against hashes
+taken earlier that session. One program, `exc`, came back **changed on all six
+targets**.
+
+That result is impossible: the pass exits on `OptLevel < 3` and the corpus is
+compiled at the default level. The impossibility is what made it cheap —
+an implausible-but-conceivable delta would have been debugged for an hour.
+Direct comparison of the two compilers on that program showed `cmp` finding no
+difference at all, which located the fault in the harness rather than the
+compiler. `exc` is the only corpus program that `uses SysUtils`, and a
+`git pull` between the two hash runs — the v389 pin — had updated `lib/rtl`
+underneath it. Re-running **both** sides back to back gave 48/48 identical.
+
+- **A baseline is only valid against the tree that produced it.** In a repo
+  where a pin can land `lib/rtl` mid-session and other lanes push continuously,
+  "earlier today" is a different tree. Regenerate both sides, back to back,
+  from the state you are actually comparing.
+- **Say what you pinned, when, to whoever is mid-measurement.** A pin that moves
+  `lib/rtl` invalidates every in-flight before/after in every lane, silently.
+- The tell that saves you is the one above: **when a result is not merely
+  surprising but structurally impossible, suspect the harness first**, and go
+  find the shortest path that bypasses it.

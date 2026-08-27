@@ -217,3 +217,112 @@ Every row above is a compile-and-run against `fpc -Mobjfpc` as oracle, one file
 at a time — the rung suites themselves (`make test-fgl`, `test-fpjson`) are
 hook-refused per CLAUDE.md and are Track T's to sweep. One file at a time is
 enough to survey a rung and is what found all three defects.
+
+### 2026-08-27, later — all three nested-type defects are closed; rung 6's named blocker is gone
+
+The three defects the re-survey above concentrated the rung's cost into are now
+fixed, and the second and third turned out to be **one cause, one change**
+(`7ee75329e`), as predicted:
+
+| defect | outcome |
+| --- | --- |
+| nested type's field named after an enclosing type parameter | fixed `83468c546` |
+| two templates cannot share a nested type name | fixed `7ee75329e` |
+| second specialization of a generic with a nested type segfaults | fixed `7ee75329e` |
+
+The shared cause is worth keeping because it is this repo's documented
+double-case shape: `AddClassLikeType` registers a nested type under its
+QUALIFIED name once the bare name is taken, and its own comment says the
+qualified spelling and a bare one inside the owner's body should "find the same
+entry" — but **only the qualified path was ever wired**, because every
+`FindNestedType` call site keys on a `.`. The bare reference fell through to the
+flat unit table and found whichever was registered first, so a generic's nested
+type — re-materialised per instantiation on purpose — was shared by every
+instantiation after the first.
+
+What identified it was ordering, not reading: whichever template was specialized
+**second** broke, and swapping the order moved the error to the other one.
+
+**Status of rung 6 (rtl-generics) after this:** every wall its ticket names or
+predicts is now cleared locally — type-keyword method names, untyped `constref`,
+generics across units, interface and class constraints, `TArray<T>`, and nested
+types. Its `blocked-by` is still the Track B typinfo/PTypeData gap, and the
+actual corpus (`packages/rtl-generics`) is not among the trees
+`tools/install_lib_candidates.sh` fetches, so **the next step for that rung is
+vendoring it and compiling — not another wall hunt.** Nothing local predicts a
+further blocker, which is exactly the point at which the real corpus is the only
+thing that will tell the truth.
+
+---
+
+## Rung 6 — `rtl-generics`: the one-shot diagnostic (2026-08-28)
+
+Fetcher entry landed as `4f380892c` (`fetch_rtl_generics`, same pinned
+`$FPC_COMMIT` as the other FPC-sourced corpora). **`CORPUS_EXPECTED` in
+`twatch.py` is deliberately untouched** — this rung is a one-shot diagnostic,
+not a gated job. Gate what can be green; diagnose what cannot.
+
+**Binary:** `2c4e727d4b63`, verified self-host fixedpoint at `4f380892c`. Every
+number below came from that binary; both new defects reproduce on **pinned**
+too, so none of them is fallout from the nested-type fixes.
+
+### What compiles today
+
+| unit | lines | status |
+| --- | --- | --- |
+| `generics.strings.pas` | 37 | clean |
+| `generics.helpers.pas` | 146 | clean |
+| `generics.memoryexpanders.pas` | 227 | clean |
+| `generics.hashes.pas` | 1,617 | clean |
+| `generics.defaults.pas` | 3,358 | **blocked** |
+| `generics.collections.pas` | 4,165 | blocked *only* through `defaults` |
+
+2,027 of 9,550 lines compile clean. All blockage is concentrated in
+`generics.defaults.pas`; `collections` was never independently assessed because
+it cannot get past its `uses`.
+
+### The answer to the question that motivated this: it is NOT typinfo all the way down
+
+The rung's dependency graph was wrong. Typinfo is the *largest* wall but not
+the only one, and **two of the four walls are Track P defects in our own
+generics implementation**. Method: stub each wall out in a throwaway copy
+(`$SCRATCH/rgsrc`, never the vendored tree) and re-probe, so each subsequent
+wall becomes visible. Stubs are labelled `{PROBE: ...}` in that copy and exist
+only to see past a wall — nothing here is a claim that the unit compiles.
+
+| # | wall | owner | sites | ticket |
+| --- | --- | --- | --- | --- |
+| 1 | typinfo: `PTypeData` fields, `PTypeInfo`, `GetTypeData`, `TTypeKind`, `TOrdType`, `TFloatType` | **B** | see list below | `feature-typinfo-facade-unit` (p72) |
+| 2 | generic method header binds to same-named non-generic class | **P** | ~700 lines gated | `bug-p-a-generic-methods-out-of-line-header-binds-to-a-same-named-non-generic-class` |
+| 3 | `TGeneric<T>.ClassMethod` inside another generic's body | **P** | 13 in `defaults`, ~357-ish shape count in `collections` | `bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body` |
+| 4 | SysUtils gaps: `EArgumentOutOfRangeException`, `Exception.CreateRes`, `System.Error`/`TRuntimeError` | **B** | 3 + 3 + 7 | (to file / relay to frankB) |
+
+After stubbing all four, `generics.defaults.pas` produced **no further distinct
+errors** — the walls above are the complete set for that unit, not a prefix of
+an unknown-length list.
+
+### The named typinfo list frankB asked for
+
+Not "generics.defaults needs typinfo" but exactly this surface:
+
+- `PTypeData` — 39 references. Fields actually touched: `OrdType` (×3),
+  `FloatType` (×3), `elSize` (×3), `MinInt64Value` (×1), `MaxInt64Value` (×1).
+  **Five fields, nine sites** — a facade does not need the whole record.
+- `PTypeInfo` — 14 references (passed through, rarely dereferenced).
+- `TypeInfo(...)` — 6; `GetTypeData(...)` — 6.
+- Enums needed whole: `TTypeKind`, `TOrdType` (`otSByte`/`otUByte`/`otSWord`/
+  `otUWord`/`otSLong`/`otULong`), `TFloatType`.
+
+`OrdType` and `FloatType` are used *only* as `case` selectors dispatching to a
+comparer, and `MinInt64Value`/`MaxInt64Value` only in a single range test — so
+the facade's hard requirement is a correct `OrdType`/`FloatType` for ordinal and
+real types. That is a much smaller target than 39 references suggests.
+
+### Caveat, stated plainly
+
+Walls 2 and 3 gate the parts of `defaults` that walls 1 and 4 do not, but the
+four sets are not proven disjoint: stubbing is not compiling, and code behind a
+stub was type-checked against the stub, not against the real thing. The
+partition above is sound as a list of *what must be built*; it is not a
+prediction that fixing all four makes the unit compile on the first try. Re-run
+this diagnostic — it is one `probe.sh` — after the typinfo facade lands.

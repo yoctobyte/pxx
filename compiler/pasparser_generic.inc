@@ -549,7 +549,19 @@ begin
               `<T>` there left a bare template name behind and produced
               `base type not found` on rtl-generics. }
             if (j + 1 < TokCount) and (Tokens[j + 1].Kind = tkDot) then
-              RemoveTokens(i + 1, j - i)   { method impl reference }
+            begin
+              { Deleting `<T>` here makes this header indistinguishable from the
+                impl of a same-named NON-generic class's method, and the resolver
+                downstream then picks by name. Record the class-name token's
+                source offset first so it can pick by fact instead. See
+                GenMethImplSOff in defs.inc. }
+              if GenMethImplCount < MAX_GEN_METH_IMPL then
+              begin
+                GenMethImplSOff[GenMethImplCount] := Tokens[i].SOffset;
+                Inc(GenMethImplCount);
+              end;
+              RemoveTokens(i + 1, j - i);   { method impl reference }
+            end
             else
             begin
               ins[0].Kind := tkIdent; ins[0].IVal := 0; ins[0].Line := Tokens[i].Line;

@@ -8,7 +8,7 @@ prio: 85
   file-ownership **Track A** — edits the shared `ir_codegen.inc` / `symtab.inc` /
   backends, so it obeys A's no-concurrent-edit rule + self-host gate) — umbrella
   for the next optimization campaign.
-- **Status:** UNFINISHED — released 2026-08-27 by frankA and handed to the
+- **Status:** working
   dedicated optimization checkout (`~/frank-optimize`), because Track O is
   implicitly Track A and two agents in `ir_codegen.inc` at once is the hazard the
   track letters exist to prevent. Nothing is half-applied; every commit passed
@@ -26,7 +26,7 @@ prio: 85
   a *dynamic* profile — the static sweep understates it badly.
   New passes still land behind **`-O3`**; `-O2` stays the proven default.
 - **Opened:** 2026-07-10 (post -O2-default flip, [[feature-optimization-levels]]).
-- **Owner:** — (frankA released it 2026-08-27; O moves to `~/frank-optimize`)
+- **Owner:** frank-optimize
 
 ## Why — the measured opportunity
 
@@ -928,3 +928,193 @@ at 3x that nobody separated is how a ticket ends up carrying a stale 1.29x.
 Harness (six asm variants + driver) was scratch, not committed — it is ~120
 lines of asm and the bodies are transcribed above and in frankA's disassembly
 table, which is what a re-run needs.
+
+## 2026-08-28 (frank-optimize) — item 1 LANDED at `-O3`: residency admits and ranks on LOADS. **1.9-2.1x on tight scalar loops, and ~2-6% SLOWER on the self-compile.** Both numbers are real
+
+The slice the sizing above ranked first. `UnifiedResidencyAssign` now tallies
+loop **loads** separately from total accesses, ranks candidates on loads, and
+admits any candidate with at least one loop load while a register is free — the
+bound is the register pool, not a threshold.
+
+Diff is 35 lines in `ir_codegen.inc`. Binary `fc9d664a4e63`.
+
+### Why loads, restated at the point of change
+
+Residency removes **reads**. `EmitStoreVar` dual-writes — the frame slot stays
+authoritative — so a store costs one extra register move, which is free. The
+old test, `Counts[k] <= 3` over loads AND stores, therefore ranked on a number
+whose store half it cannot cash: it let a store-heavy local outrank a
+load-bearing one, and on this ticket's own benchmark it excluded the accumulator
+`s` at exactly 3 accesses **while three registers sat idle**.
+
+### The numbers, and they disagree with each other
+
+`-O3`-built compilers, both from the same source; `%U` user time, A/B
+alternating in a single run, min of N. Box under Track T's watcher at load 8-13
+throughout, which matters — see the noise note below.
+
+| workload | before | after | |
+| --- | --- | --- | --- |
+| `three.pas` (three-local loop) | 1.15 s | **0.61 s** | **1.89x** (a second run: 1.33 -> 0.62, 2.15x) |
+| mandelbrot | 1.20 s | 1.09 s | within noise — its kernel is float, this is an int-side change |
+| sieve | 0.03 s | 0.02 s | too short to time |
+| **self-compile of `compiler.pas` at `-O3`** | **16.57 s** | **17.58 s** | **~6% SLOWER** |
+
+The self-compile regression reproduced in all three runs that measured it
+(20.87 -> 21.22, 16.57 -> 17.58, 15.47 -> 16.05: +1.7%, +6.1%, +3.7%). The sign
+is consistent even though the magnitude is not, so it is real.
+
+**`make compiler/pascal26` — the number every lane actually pays — is
+unaffected**, by construction and by measurement: the pass gates `OptLevel >= 3`
+and the build uses the default level. An 8-program corpus x 6 targets = 48
+output hashes is byte-identical before and after.
+
+**Why the compiler loses while the loop wins.** Residency's benefit scales with
+loop TRIP COUNT; its cost — prologue save, init load, epilogue restore — is paid
+per CALL. A body that *is* a loop pays the fixed cost once and wins big. A
+small, hot, call-per-item body with a short loop pays it constantly. The
+compiler is the second shape and `three.pas` is the first. That is the real
+finding here, and it is what the next slice has to price.
+
+**Tightening admission does NOT fix it — measured, so nobody retries it.**
+`loads >= 3` (roughly the old admission volume, ranked the new way) is worse on
+*both* workloads: self-compile 17.33 s (+12% vs before, worse than `>= 1`) and
+`three.pas` 1.17 s (giving up nearly the whole win). `loads >= 2` was also
+tested and sits between. So the regression is not "too many residents", and the
+per-call cost story above is a hypothesis the next slice must test rather than
+a conclusion this one proved.
+
+### Correctness
+
+- **`-O0`/`-O1`/`-O2`/`-O3` agree with each other AND with `fpc -O2`** on a
+  purpose-written residency stress (every store overflows its declared type, so
+  a missing re-extension shows at once: Byte/Word/ShortInt/SmallInt wrap; seven
+  live candidates against four registers; residents written inside a `try` block
+  that raises mid-loop, exercising the `IR_EXC_ENTER` landing-pad refresh;
+  nested procedure writing an enclosing local; recursion; a float loop) plus
+  arrays/records/strings/exceptions/hello. The **only** divergence anywhere is
+  the last two digits of one float print, which is **identical on the
+  pre-change compiler** — pre-existing, Track F, not this slice's.
+- `-O3` **self-host fixedpoint byte-identical** (`fc9d664a4e63`) after every commit.
+- The `-O3`-built compilers from before and after this change produce
+  **byte-identical output** compiling `compiler.pas`.
+- **`-O2` and all four cross targets unmoved**: 48/48 corpus hashes identical.
+- `tools/gate.sh quick` GREEN.
+
+### Two process notes worth more than the patch
+
+**A 7% "regression" that was noise, and it nearly became a source comment.**
+Mid-slice, mandelbrot measured 1.10 s before and 1.18-1.24 s after. I built a
+per-class rank split to fix it and wrote the cause into the code as fact.
+Re-measuring all three binaries *in one interleaved run* put them at 1.34 /
+1.33 / 1.34 — the same "before" binary that had measured 1.09 now measured 1.34.
+The effect was the box, not the change. The split was reverted (the rebuilt
+binary is bit-identical to the pre-experiment one, which is how the revert was
+verified) and the comment now records that the two rankings are
+indistinguishable. **On this box, min-of-N across separate invocations is not
+enough; only binaries timed inside the same interleaved run are comparable**,
+and a causal comment must not be written from a delta measured across runs.
+
+**A corpus diff that was also an artifact.** The `-O2` byte-identity check
+initially flagged `exc` as changed on all six targets, which for an `-O3`-gated
+pass should be impossible. It was: `exc` is the only corpus program that `uses
+SysUtils`, and a `git pull` between the two hash runs (the v389 pin) had updated
+`lib/rtl` underneath. Re-running **both** sides back to back gave 48/48.
+Compare against a baseline you regenerate now, not one from earlier in the
+session.
+
+### 2026-08-28 — CORRECTION to the entry above: the self-compile regression was not real either
+
+The `~2-6% slower self-compile` reported for item 1 does not survive a
+properly-powered measurement, and the number should not be used. It was
+produced the same way the mandelbrot artifact was — interleaved, but with only
+3-4 repetitions of a 17-second workload on a box whose load moved between 8 and
+16. "Reproduced in three runs" was three under-powered runs sharing a bias, not
+three confirmations.
+
+Re-measured, all interleaved in single runs:
+
+| workload | reps | before | after | |
+| --- | --- | --- | --- | --- |
+| self-compile of `compiler.pas` at `-O3` | **min of 6** | 16.92 s | 16.97 s | **+0.3%** |
+| compile `hello.pas` | min of 15 | 0.20 s | **0.16 s** | new is FASTER |
+| compile the residency stress program | min of 15 | 0.58 s | 0.58 s | identical |
+| `callheavy` (trip count 3, 20M calls) | min of 7 | 0.56 s (`-O2`), 0.56 s (old `-O3`) | **0.51 s** | new is FASTER |
+| `looplong` (same body, trip count 3000) | min of 7 | 0.23 s | **0.20 s** | new is FASTER |
+
+**So the honest summary of item 1 is: 1.9-2.1x on tight scalar loops, and
+neutral-to-slightly-positive everywhere else measured.** No workload measured
+here is slower.
+
+**The hypothesis the regression supported is also dead, and it was tested
+directly rather than abandoned.** `callheavy` was written specifically to be the
+shape the per-call-cost story predicts a loss for — a small body, a three-
+iteration loop, twenty million calls — and residency makes it 9% **faster**, not
+slower. Residency's save/init/restore is evidently cheap relative to what even
+three iterations of removed loads buy. The "benefit scales with trip count,
+cost is per call" model is not wrong in principle, but the per-call cost is too
+small to have produced the regression that motivated it, because there was no
+regression.
+
+What this does NOT change: the `loads >= 3` result (worse on both workloads)
+stands — it was measured inside a single interleaved run against both
+comparators. And `-O2` remains untouched and byte-identical, which was never a
+timing claim.
+
+**Method, now applied to itself.** The entry above this one records the lesson
+that only binaries timed inside one interleaved run are comparable. That was
+right and insufficient: this measurement WAS interleaved and still wrong,
+because **3-4 reps cannot resolve a 5% effect on a 17-second workload on a
+contended box.** The playbook entry has been extended accordingly. The
+generalisable form: interleaving fixes *which* runs you compare, repetition
+fixes *how confidently*, and a short workload with many reps beats a long
+workload with few. `hello.pas` at min-of-15 gave a cleaner answer in two
+minutes than `compiler.pas` at min-of-3 gave in ten.
+
+### 2026-08-28 — item 2 (store->reload elimination for resident destinations): DISCONFIRMED, and item 1 is why
+
+Claimed and measured. **The exclusion should stay.** No pass changed; the
+outcome is a corrected comment and this entry.
+
+The ticket says `ReloadElimSym` excludes resident destinations for a reason
+that "is no longer true after `e7c0d1d2a`". That is right about the reason and
+wrong about the conclusion, because the exclusion had **two** reasons:
+
+- **(a) stale, as the ticket says.** "The resident dual-write refreshes through
+  `EmitLoadVar` and so clobbers rax" — the refresh now re-extends from rax
+  itself, so rax does still hold the stored value. Dead.
+- **(b) still true, and now measured.** A resident load is ALREADY a reg-reg
+  move (`mov %r13,%rax`). Eliminating it removes a register move, not a memory
+  access.
+
+Dropping the exclusion and rebuilding, on `bt.pas` — a loop over
+`if (c >= 'A') and (c <= 'Z')`, the exact shape item 3 names — removes **6
+instructions out of 13,483**, every one a reg-reg move. That is the class the
+W1 sizing in this ticket already priced at ~0 (deleting 6 of 17 such moves from
+a hot loop body moved the clock 1.4%). Not worth timing; not worth landing.
+
+**Item 1 is what emptied it.** Before item 1 the boolean temp lived in the
+frame and the sequence was a genuine memory round trip —
+`mov %al,-0x1d(%rbp); movzbq %al,-0x1d(%rbp)` — which is what made item 2 look
+valuable when it was filed. At `-O3` today that temp is **resident in r14**, and
+the emitted body of `Upcount` contains exactly one memory READ, the string byte
+itself. There is no reload left to eliminate:
+
+```
+setae  %al
+movzbq %al,%rax          <- extend
+mov    %al,-0x1d(%rbp)   <- dual-write (a STORE; off the critical path)
+movzbq %al,%rax          <- re-extend from al, not a reload
+mov    %rax,%r14         <- refresh resident
+```
+
+**Where the remaining value actually is, and it is item 3.** What survives in
+that body is the **dual-write stores** — `mov %al,-0x1d(%rbp)`,
+`mov %eax,-0x14(%rbp)`, `mov %eax,-0x10(%rbp)` per iteration — not reloads.
+Removing those means making the register authoritative inside the loop and
+re-syncing the frame at exits, which is the V5 -> V3 step the sizing measured at
+a further **2.15x**. That is the real W2, and it is now the only unclaimed item
+in this ticket with measured value behind it.
+
+So the ordering the sizing proposed survives contact: item 1 landed and was
+worth 1.9-2.1x; item 2 is empty *because* item 1 landed; item 3 is the job.

@@ -1,72 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-27T11:48:43Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "03d293061f4019001b04bf21c25a4951e3f0466e",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T11:56:16Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "a683b7c3cd20881d34976263bc0e0768d71d501e",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T12:02:04Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "08fff1005e78a074867de0c0da558631824612fb",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T12:24:26Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "39d4afb022ce9a8f98f30f7a7202ccfa803b4d6f",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T12:49:43Z",
-   "fixed": [],
-   "new_red": [
-    "test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy",
-    "test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy"
-   ],
-   "sha": "39d4afb022ce9a8f98f30f7a7202ccfa803b4d6f",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-27T12:56:09Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "62a4242203a308e0cb9c46893976c45c29afcc7c",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T13:16:11Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "62a4242203a308e0cb9c46893976c45c29afcc7c",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-27T13:22:45Z",
    "fixed": [],
    "new_red": [],
@@ -466,9 +400,77 @@
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T21:45:36Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "3a915a9c7a6e483a77d4c37123a20651f47d823a",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T21:54:05Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "f8921102242b67ed5ecf5c9d37119836cf011e98",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T22:00:24Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "623b852da512986ed701568e91454e1d699f9cf4",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T22:06:37Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "948696d04998553dc1102ba5c75933ae457214c7",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T22:12:47Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "6d355df81021dcc8340f14e26b18f6f1ef8e76ab",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T22:18:53Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "8070d5e9c7b3ad02388b82216e85850a7dc73af5",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T22:25:40Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "f43d37076ce76578b3e7662e6a8f1415593a9413",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
+ "idle_yield": {
+  "aborts": 1,
+  "phase": "pin-verify",
+  "target": "83468c5462d40294a7e7a5885a61fbac20077285"
+ },
  "job_reason": {
   "test-emit-obj#src:test/cxtensa_obj.c@1": "in: $TMP | near:  Integer  __pxxrawsyscall  SYS_getuid >>> | pascal26:477: error: undefined variable (SYS_getgid) | in: $TMP | near:  Integer  __pxxrawsyscall  SYS_getgid >>> | pascal26: too many errors, stopping",
   "test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy": "+++ -\t2026-08-27 23:24:04.041092227 +0200 | @@ -1,4 +1,2 @@ | E:A A | F:B B | -C G:C | -H:G:C",
@@ -6966,14 +6968,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-27T21:38:58Z",
+  "date": "2026-08-27T22:25:40Z",
   "deadline": 7200.0,
-  "sha": "fc99029eb6a45a92ba69367123aac7a052bd26ab",
+  "sha": "f43d37076ce76578b3e7662e6a8f1415593a9413",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 329.2
+  "wall": 330.6
  },
  "last_bench": {
   "conf_rows": 550,

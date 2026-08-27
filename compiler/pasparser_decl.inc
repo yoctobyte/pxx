@@ -112,6 +112,7 @@ end;
 function ParseTypeKind: TTypeKind;
 var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci, tkQUnit: Integer;
     qtOuter, qtNested: Integer;   { `TOuter.TInner` — the nested-type lookup }
+    nestCi: Integer;              { the BARE `TInner` lookup, inside TOuter's own body }
     tnHasAlias: Boolean;   { a source/RTL alias of this name beats every builtin name }
     childDepth, childBaseTk, childBaseRec: Integer;
     ptrArrAi: Integer;   { `^TFixed`: the pointee's ArrType index, else -1 }
@@ -548,7 +549,33 @@ begin
         ci := -1;
         if tkQUnit >= 0 then ci := FindUClassInUnit(lo, tkQUnit);
         if ci < 0 then ci := FindUClass(lo);
-        if (ci >= 0) and UClsIsInterface[ci] then
+        { A nested type named by its BARE name inside its OWNER's own body
+          resolves through the class scope FIRST. AddClassLikeType registers a
+          nested type under its QUALIFIED name whenever the bare one is already
+          taken in this unit — that is what keeps `TOuter.TInner` and
+          `TOther.TInner` distinct — and it says the two spellings should "find
+          the same entry", but only the qualified spelling was ever wired: every
+          FindNestedType call site keys on a `.`. So a bare reference from
+          inside the body fell through to the flat unit table and found
+          whichever same-named type was registered FIRST.
+
+          Two specializations of one generic, and two generics each declaring a
+          `TPair`, are the same collision — a specialization re-materialises the
+          nested type per instantiation, so the second one's `array of TPair`
+          silently took the first's layout. Whichever was specialized SECOND
+          broke, which is what pinned the cause. }
+        nestCi := -1;
+        if (tkQUnit < 0) and (ParsingClassBodyCi >= 0) then
+          nestCi := FindNestedType(ParsingClassBodyCi, lo);
+        if nestCi >= 0 then
+        begin
+          LastTypeRecId := REC_UCLASS_BASE + nestCi;
+          if UClsIsRecord[nestCi] or UClsIsInterface[nestCi] then
+            Result := tyRecord
+          else
+            Result := tyClass;
+        end
+        else if (ci >= 0) and UClsIsInterface[ci] then
         begin
           { Interface-typed variable: a 16-byte fat pointer {IMT, instance}.
             Modelled as a tyRecord whose rec id is the interface's UCls entry. }

@@ -92,15 +92,7 @@ class AttributesImpl:
         return alternative
 
     def copy(self):
-        # CPython writes `self.__class__(self._attrs)`. Naming the class
-        # explicitly is a WORKAROUND, not a preference: calling `__class__` as a
-        # constructor does not compile
-        # (bug-n-self-__class__-cannot-be-called-as-a-constructor; reading
-        # `self.__class__.__name__` is fine, only the call form fails).
-        # Registered in devdocs/dev/track-b-workarounds.md -- revert to the
-        # __class__ form when that lands, since only that form gives a subclass
-        # back an instance of itself.
-        return AttributesImpl(self._attrs)
+        return self.__class__(self._attrs)
 
     def items(self):
         return list(self._attrs.items())
@@ -140,5 +132,4 @@ class AttributesNSImpl(AttributesImpl):
         return list(self._qnames.values())
 
     def copy(self):
-        # Same workaround as AttributesImpl.copy above.
-        return AttributesNSImpl(self._attrs, self._qnames)
+        return self.__class__(self._attrs, self._qnames)

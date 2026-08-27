@@ -1,13 +1,14 @@
 ---
 prio: 60
 track: P
+owner: frankA
 ---
 
 # A second specialization of a generic that has a nested type SEGFAULTS at runtime
 
 - **Type:** bug (segfault) — **Track P** (Pascal frontend, generic
   specialization) — may prove to be Track A once the cause is known.
-- **Status:** OPEN — found 2026-08-27 by frankA alongside
+- **Status:** done
   [[bug-p-two-generic-templates-cannot-share-a-nested-type-name]].
 - **Pre-existing:** reproduced identically on the **pinned** binary.
 
@@ -68,3 +69,6 @@ field offsets.
 Track P: `make compiler/pascal26` (self-host fixedpoint) + the repro running and
 matching `fpc -O2`, plus `tools/run_fgl_corpus.sh` still 7/7. Add the repro as a
 test with an `.expected`.
+
+## Log
+- 2026-08-27 — resolved, commit 7ee75329e.

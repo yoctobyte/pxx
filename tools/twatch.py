@@ -1203,6 +1203,25 @@ def save_state(clone, host, st):
 # self-skips and reports success.
 # fpc-rtl (test-fgl) and fcl-json (test-fpjson) added 2026-08-26 with the
 # enrolment of those two rungs; see the note in testmgr.TIERS["limited"].
+# GATE WHAT CAN BE GREEN; DIAGNOSE WHAT CANNOT. A name added here makes the
+# watcher fetch the corpus and warn when it is absent — it does NOT make
+# anything compile it. So a name whose job is blocked buys a recurring download
+# and a startup banner people learn to ignore, in exchange for restating a block
+# we already know about. The one-shot diagnostic belongs in a dev tree instead.
+#
+# PENDING (2026-08-27, with frank-coordinator): `rtl-generics` is deliberately
+# ABSENT. Its ladder rung is blocked-by the typinfo gap, so "it does not compile"
+# is the reason the edge exists rather than a finding. Add it here when
+# `feature-typinfo-facade-unit` lands and the rung can plausibly go green — from
+# that point a recurring job catches regressions instead of restating a block,
+# which is when it earns the box's cycles. `tools/install_lib_candidates.sh
+# rtl-generics` already fetches it for a dev tree today.
+#
+# The contract every name here relies on: install_lib_candidates.sh takes the
+# name as a POSITIONAL ARG and leaves a directory at
+# `library_candidates/<that exact name>`, exit 0. missing_corpus() re-checks by
+# that path, and the fetch below WARNS rather than fails — so a violation of
+# this contract is silent on an unattended watcher.
 CORPUS_EXPECTED = ("lua", "sqlite", "zlib", "c-testsuite", "tcc", "cjson",
                    "tiny-regex-c", "fpc-testsuite", "fpc-rtl", "fcl-json")
 
@@ -4874,6 +4893,176 @@ def verify_pin(clone, host, st, ver, sha, tier, abort_check=None):
     return True
 
 
+# --- targeted verdicts on request ------------------------------------------
+#
+# The watcher climbs to the newest testable commit rather than sweeping each
+# one, so most commits never get a verdict of their own (measured 2026-08-27:
+# 0 of the 79 commits touching compiler/ or lib/ since 08-26). That is the
+# right default -- sweeping every commit would cost +4.3 h/day at `native` and
+# is arithmetically impossible at `full`, on a box already at ~47% duty. What
+# it leaves missing is a way to ask for ONE.
+#
+# The queue is a committed file, so a request travels the same way everything
+# else does: an agent appends a line, commits, pushes; the daemon fetches it
+# with the next cycle. No socket, no shared filesystem, no daemon-writable
+# inbox -- and the watcher's write scope stays exactly `tstate/`.
+#
+# Completion needs no deletion and no acknowledgement: a request is satisfied
+# when judged_tiers() reports that tier for that sha, which is the same
+# primitive pin_verify_due() already uses to decide whether the pin needs
+# judging. So the queue is idempotent by construction, two hosts can drain the
+# same file without coordinating, and a re-request of something already judged
+# is a no-op rather than a duplicate run.
+VERIFY_REQ_REL = os.path.join(TSTATE_REL, "verify-requests.tsv")
+
+
+def request_verdict(repo, sha, tier, who, why):
+    """Append a request to the queue. The CALLER commits and pushes it.
+
+    Deliberately not a push: this runs in a dev checkout that may hold
+    unrelated staged work, and a tool that commits on your behalf is how an
+    unrelated change rides along. Print what to run instead.
+    """
+    try:
+        full = sh(["git", "rev-parse", "--verify", "%s^{commit}" % sha],
+                  cwd=repo)
+    except (RuntimeError, subprocess.SubprocessError, OSError):
+        print("twatch: %s is not a commit in this checkout" % sha)
+        return 3
+    for s2, t2, _who, _why in read_verify_requests(repo):
+        if s2 == full and t2 == tier:
+            print("twatch: already queued — %s at %s" % (full[:12], tier))
+            return 0
+    path = os.path.join(repo, VERIFY_REQ_REL)
+    new = not os.path.exists(path)
+    with open(path, "a") as f:
+        if new:
+            f.write("# Targeted verdict queue — one request per line:\n"
+                    "#   <40-char sha>\t<tier>\t<who>\t<why>\n"
+                    "# The watcher drains these FIRST among its idle phases. A "
+                    "request is satisfied\n"
+                    "# when that sha has a verdict at that tier, so lines need "
+                    "no deletion and a\n"
+                    "# repeat is a no-op. Stale lines cost one archive lookup "
+                    "per cycle; tidy at\n"
+                    "# will, but nothing breaks if you never do.\n")
+        f.write("%s\t%s\t%s\t%s\n" % (full, tier, who, why.replace("\t", " ")))
+    print("twatch: queued %s at tier %s (%s)" % (full[:12], tier, who))
+    print("twatch: now commit and push it — the daemon reads the file from "
+          "origin, not from your tree:")
+    print("        git add %s && git commit -m 'tstate: request %s at %s' "
+          "&& git push" % (VERIFY_REQ_REL, full[:12], tier))
+    return 0
+
+
+def read_verify_requests(repo):
+    """Parse the request queue -> [(sha, tier, who, why)], oldest first.
+
+    Tolerant on purpose: a malformed line is skipped rather than killing the
+    daemon's cycle. The file is hand-editable and agent-appended, so a bad row
+    is a likely event and must not be able to stop the watcher.
+    """
+    out = []
+    try:
+        with open(os.path.join(repo, VERIFY_REQ_REL)) as f:
+            for ln in f:
+                ln = ln.strip()
+                if not ln or ln.startswith("#"):
+                    continue
+                p = ln.split("\t")
+                if len(p) < 2:
+                    continue
+                sha, tier = p[0].strip(), p[1].strip()
+                if len(sha) != 40 or tier not in ("quick", "native",
+                                                  "limited", "full", "opt"):
+                    continue
+                out.append((sha, tier, (p[2].strip() if len(p) > 2 else "?"),
+                            (p[3].strip() if len(p) > 3 else "")))
+    except OSError:
+        pass
+    return out
+
+
+def verify_request_due(clone, host, st):
+    """First requested (sha, tier, who, why) this host has not yet judged.
+
+    Skips anything already judged at that tier -- that is the completion
+    signal -- and anything this clone cannot reach, for the same reason
+    pin_verify_due does: another box may have pushed a request naming a sha
+    newer than anything we have fetched, and checking out an unknown sha would
+    just fail the cycle.
+    """
+    head = None
+    for sha, tier, who, why in read_verify_requests(clone.path):
+        if tier in judged_tiers(clone, host, sha):
+            continue
+        if head is None:
+            head = clone.remote_head()
+        if not is_ancestor(clone.path, sha, head):
+            continue
+        return (sha, tier, who, why)
+    return None
+
+
+def verify_requested(clone, host, sha, tier, who, why, abort_check=None):
+    """Judge a REQUESTED sha out of band. verify_pin's shape, different subject.
+
+    Same reason it does not go through test_sha(): that function maintains the
+    HEAD progression -- st["last"], the per-job map, the open-regression ledger
+    -- all defined relative to the sha sequence this host is walking. Feeding
+    it an arbitrary older sha would set "last tested" backwards and manufacture
+    NEW-RED/FIXED pairs out of nothing but the time travel. This publishes
+    exactly one run record and touches no state another phase reads.
+    """
+    print("twatch: verifying REQUESTED %s (%s) — asked by %s%s"
+          % (sha[:12], tier, who, ": %s" % why if why else ""), flush=True)
+    set_phase(clone, host, "verify-request", sha=sha[:12], tier=tier)
+    clone.checkout(sha)
+    report, rc = run_gate(clone, tier, abort_check=abort_check,
+                          resume_key=(sha, tier))
+    clone_head_back(clone)
+    if rc == "aborted":
+        print("twatch: requested verdict preempted by a push — will resume",
+              flush=True)
+        return "aborted"
+    if rc == "busy":
+        print("twatch: requested verdict skipped — the repo lock is held "
+              "elsewhere", flush=True)
+        return False
+    if report is None or report.get("verdict") in ("INFRA", "INVALID") \
+            or no_measurement(report):
+        # A box that could not measure publishes NOTHING. An unanswered
+        # request is a known unknown; a fabricated verdict is worse, and worse
+        # still here because somebody asked for this one and will act on it.
+        print("twatch: requested verdict produced no usable measurement — "
+              "publishing nothing, the request stays open", flush=True)
+        return False
+    verdict = report["verdict"]
+    # job_key, never j["name"]: a positional index names a different file as
+    # soon as a test is inserted above it, and a requested sha is usually
+    # behind HEAD -- exactly the span in which the recipe moves. Same defect
+    # bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label
+    # records for the pin path.
+    reds = [job_key(j) for j in report["jobs"]
+            if j["status"] not in ("pass", "skip")]
+    with open(os.path.join(clone.path, TSTATE_REL,
+                           "runs-%s.ndjson" % host), "a") as f:
+        f.write(json.dumps({"sha": sha, "date": utcnow(), "tier": tier,
+                            "full": tier == "full", "verdict": verdict,
+                            "wall": report["wall"], "new_red": [], "fixed": [],
+                            # provenance: this row is an ANSWER, not a rung of
+                            # the ladder, so a reader counting ladder coverage
+                            # can exclude it.
+                            "requested_by": who}, sort_keys=True) + "\n")
+    regen_index(clone)
+    print("twatch: requested verdict %s at %s (%s)%s"
+          % (verdict, sha[:12], tier,
+             " — %s" % ", ".join(reds[:5]) if reds else ""), flush=True)
+    clone.publish("tstate(%s): requested %s %s (%s)"
+                  % (host, sha[:12], verdict, tier))
+    return True
+
+
 def needs_test(repo, sha):
     out = sh(["git", "diff-tree", "--no-commit-id", "--name-only", "-r",
               "-m", "--first-parent", sha], cwd=repo)
@@ -6245,6 +6434,22 @@ def main():
                          "one), then the first run per tier whose tree "
                          "CONTAINED it. exit 0 covered green, 1 red, 2 nothing "
                          "covers it, 3 not a commit here")
+    ap.add_argument("--request", metavar="SHA",
+                    help="queue a TARGETED verdict for one commit, drained "
+                         "first among the watcher's idle phases. Use --tier to "
+                         "pick the tier (default native). Appends to the "
+                         "queue file; you commit and push it")
+    ap.add_argument("--why", default="",
+                    help="--request: one line on why, recorded in the queue")
+    # SEPARATE from --tier on purpose. --tier is the DAEMON's nesting chain
+    # (quick<native<limited<full); `opt` and `slow` are disjoint idle phases
+    # and are not valid there. A request can name any of them, so widening
+    # --tier would make an invalid daemon configuration expressible.
+    ap.add_argument("--request-tier", dest="request_tier", default="native",
+                    choices=["quick", "native", "limited", "full", "opt"],
+                    help="--request: which tier to run (default native). "
+                         "`opt` is the -O-level differential and is disjoint "
+                         "from the nesting chain")
     ap.add_argument("--remote", help="clone URL if the clone dir doesn't exist yet")
     ap.add_argument("--branch", default=None,
                     help="branch to watch (daemon) or read verdicts for "
@@ -6293,7 +6498,7 @@ def main():
 
     global BRANCH
     if (args.status or args.follow is not None or args.retire_host
-            or args.covering):
+            or args.covering or args.request):
         repo = os.path.abspath(os.path.expanduser(args.clone)) if args.clone \
             else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         # A READER is about the branch it is standing on. A dev worker asking
@@ -6308,6 +6513,9 @@ def main():
                                renamed=args.renamed)
         if args.follow is not None:
             return follow(repo, args.follow, args.poll, args.branch, args.once)
+        if args.request:
+            return request_verdict(repo, args.request, args.request_tier,
+                                   args.host, args.why)
         if args.covering:
             # ALL hosts unless one was named. --host defaults to this box's
             # name, which is right for a daemon writing its own state and
@@ -6321,7 +6529,7 @@ def main():
         return status(repo, args.grace, fetch=not args.no_fetch)
     if not args.clone:
         ap.error("--clone is required (except with --status/--follow/"
-                 "--covering)")
+                 "--covering/--request)")
 
     def stop(*_):
         global STOP
@@ -6424,8 +6632,9 @@ def main():
             # condition. Requires `tested`: the abort-check below is defined
             # relative to it, and on a host that has tested nothing yet HEAD is
             # the more urgent work anyway.
-            pin_mid = pin_deep = None
+            pin_mid = pin_deep = req_due = None
             if tested and not do_test:
+                req_due = verify_request_due(clone, host, st)
                 pin_mid = pin_verify_due(clone, host, st, (args.mid_tier,))
                 pin_deep = pin_verify_due(clone, host, st, (args.tier,))
             if do_test:
@@ -6474,6 +6683,43 @@ def main():
                     # branch escalates to the full tier, which is the worst
                     # possible answer to "something else is already running".
                     did_work = r != "busy"
+            elif req_due and idle_aborts(st, "verify-request",
+                                         req_due[0]) < IDLE_YIELD_AFTER:
+                # FIRST among the idle phases, above even pin verify. Every
+                # other phase here is the watcher deciding what is worth
+                # testing; this is the only one where a human or an agent
+                # asked. Explicit beats inferred, and the queue is finite and
+                # self-clearing -- a request stops being due the moment
+                # judged_tiers() reports its tier, so it cannot hold the slot
+                # the way an unfinishable phase can.
+                #
+                # It is also the escape hatch for the starvation the phases
+                # below suffer: at a high push rate pin verify never gets its
+                # ~21 contiguous minutes (see IDLE_YIELD_AFTER), and a request
+                # naming the pinned sha jumps that queue. Measured 2026-08-27:
+                # v389 sat unverified for 4h while three lanes built on it.
+                #
+                # Same IDLE_YIELD_AFTER guard as the rest, for the same reason:
+                # "ahead of" must not become "instead of".
+                r = verify_requested(clone, host, *req_due,
+                                     abort_check=make_preempted(clone, tested))
+                if r == "aborted":
+                    n = note_idle_abort(clone, host, "verify-request",
+                                        req_due[0])
+                    if n >= IDLE_YIELD_AFTER:
+                        print("twatch: requested verdict preempted %d times "
+                              "running on %s — yielding the next idle slot to "
+                              "the phases below it"
+                              % (n, req_due[0][:12]), flush=True)
+                else:
+                    # Any outcome that is not a preemption means the phase used
+                    # its slot — including "no usable verdict". The counter is
+                    # about monopolising idle, not about succeeding.
+                    clear_idle_yield(clone, host)
+                # "busy" leaves did_work False on purpose, as everywhere else:
+                # did_work skips the poll sleep, so treating contention as work
+                # would spin the cycle against the lock holder.
+                did_work = r != "busy"
             elif pin_mid and idle_aborts(st, "pin-verify",
                                           pin_mid[1]) < IDLE_YIELD_AFTER:
                 # AHEAD of idle depth on HEAD, and deliberately so: this is the

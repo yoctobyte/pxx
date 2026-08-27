@@ -286,7 +286,12 @@ MIN_EST_MEM = 256 << 20
 CLASSES = {
     "unit":        {"est_mem": 550 << 20,  "timeout": 90},
     "qemu":        {"est_mem": 256 << 20,  "timeout": 240},
-    "selfhost":    {"est_mem": 500 << 20,  "timeout": 600},
+    # 782 = the 521 MB the three compiler.pas self-compiles actually peaked at
+    # on 2026-08-27, * 1.5, which is what mem_estimate_report() tells you to do
+    # when it catches a breach. The old 500 was under the real figure, so every
+    # FIRST run of a new selfhost job — before metrics exist for it — was
+    # admitted on a promise the box did not have to keep.
+    "selfhost":    {"est_mem": 782 << 20,  "timeout": 600},
     "corpus":      {"est_mem": 400 << 20,  "timeout": 1200},
     "conformance": {"est_mem": 256 << 20,  "timeout": 1200},
     "opt":         {"est_mem": 800 << 20,  "timeout": 900},
@@ -3057,7 +3062,24 @@ class Manager:
             return
         a = METRICS_ALPHA
         m["dur"] = round((1 - a) * m["dur"] + a * dur, 2)
-        m["mem"] = int((1 - a) * m["mem"] + a * mem)
+        # MEM RATCHETS UP, DECAYS DOWN — it is not an EWMA like the others, and
+        # the asymmetry is the point. `dur` and `cpu` feed SCHEDULING ORDER, so
+        # a mean is what you want and being wrong costs a worse pack. `mem`
+        # feeds ADMISSION, and being wrong in the two directions costs opposite
+        # amounts: over-estimate and the box packs fewer jobs than it could;
+        # under-estimate and it admits a job on memory it does not have.
+        #
+        # A plain EWMA cannot express that. It decays toward the mean, so a job
+        # whose peak is occasional gets admitted at its AVERAGE footprint, and
+        # the run that finally spikes meets a box already full. Measured
+        # 2026-08-27: the three test-opt selfhost jobs each peaked at 521 MB
+        # against a 500 MB class row, on a box carrying five workers.
+        #
+        # So: never learn a number below what we just watched the job do, but
+        # still fall when it is genuinely lighter run after run. Upward is
+        # immediate (safety), downward is smoothed (avoids a one-off spike
+        # inflating the row forever).
+        m["mem"] = max(int(mem), int((1 - a) * m["mem"] + a * mem))
         m["cpu"] = round((1 - a) * m.get("cpu", 1.0) + a * cores, 2)
         m["n"] = m.get("n", 0) + 1
 

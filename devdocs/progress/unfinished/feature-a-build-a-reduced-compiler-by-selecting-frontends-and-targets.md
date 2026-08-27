@@ -855,3 +855,33 @@ clean clone of origin/master taken after the failure, so whatever frank3 pushed
 is landed and green and nothing is partially applied in any live tree. Re-claim
 this the ordinary way; just re-verify the notes below against master before
 building on them, since they describe a tree that no longer exists.
+
+## wasm32 was added unguarded, deliberately — and its guard is not one line
+
+Noted 2026-08-28 by the wasm lane, so this ticket does not later discover the
+shape by tripping on it. The 7th target landed with **no `PXX_NO_WASM32`**,
+matching riscv32 and xtensa (the two most recent additions) rather than the
+guarded aarch64/i386/arm32.
+
+That was a considered call, not an oversight, and the reason is the part worth
+having: **wasm's guard has a wider footprint than the other targets'.** A
+target guard elsewhere wraps one `ir_codegen_*.inc` include. wasm needs three
+includes wrapped, plus a call site:
+
+| include | why it is separate |
+| --- | --- |
+| `ir_codegen_wasm32.inc` | the backend, same as any target |
+| `wasmenc.inc` | module model + binary writer — **~19.5MB of BSS** |
+| `asmtext_wasm.inc` | the WAT emitter |
+| `compiler.pas`'s `TARGET_WASM32` output arm | calls `writeWasm`, which lives in `wasmenc.inc` |
+
+**A partial guard would be worse than none.** Guarding only the backend leaves
+`wasmenc.inc`'s BSS behind, and that BSS is the single largest thing a reduced
+build would want to drop from this target — so the half-measure keeps the cost
+and adds the complexity. Either all four move together or none do.
+
+Also relevant to this ticket's own framing: that ~19.5MB is a *measured* figure
+(the first draft was 66MB against the compiler's own 76MB, right-sized before
+landing), and BSS is zero-fill-on-demand — so a non-wasm build pays address
+space rather than resident memory. Whether that is worth a guard at all is a
+judgement this ticket is better placed to make than the wasm lane was.

@@ -1695,6 +1695,7 @@ const
 
   MAX_TEMPLATES = 128;
   MAX_TEMPLATE_PARAMS = 4;   { type parameters per generic template (<TKey, TData>) }
+  MAX_GEN_METH_IMPL = 8192;  { mode-Delphi `procedure TFoo<T>.M` headers per compilation. See GenMethImplSOff. }
   MAX_TEMPLATE_TOKENS = 65536;  { FPC fgl alone buffers ~14k tokens of generic method bodies }
   MAX_NESTED_TOKENS = 8192;
   MAX_LIFTS = 512;
@@ -1773,6 +1774,24 @@ var
   SpecSubShadowed : array[0..MAX_TEMPLATE_PARAMS-1] of Boolean;  { a type parameter whose name the TEMPLATE also declares (field/param/local/method). Accumulated across every SpecializeStream call for one template -- the class body and each method body are separate calls, and a field declared in the body is used in the methods. Keyed on the template, NOT the specialization: SetSpecSubs runs once per stream, so resetting per specialization cleared it between the class body and the methods. See SpecSubNamePosition. }
   SpecSubShadowTi : Integer;  { the template SpecSubShadowed was accumulated for }
   SpecSubShadowValid : Boolean;  { has SpecSubShadowTi been set at all? A Boolean rather than a -1 sentinel so BSS zero-init already means "not computed" -- template index 0 is a real index and would alias a sentinel. }
+  { mode-Delphi ONLY. DelphiRewriteGenericUses rewrites a generic method impl
+    header `procedure TFoo<T>.M;` into the objfpc spelling `procedure TFoo.M;`
+    by DELETING the `<T>` group -- which also deletes the only thing that told
+    the header apart from the impl of a same-named NON-generic class's method.
+    ParseSubroutine then resolves ownership by name and, when both classes
+    declare a method of that name, hands the template's body to the ordinary
+    class, where the template's class vars do not exist
+    (bug-p-a-generic-methods-out-of-line-header-binds-to-a-same-named-non-generic-class).
+    So record what the deletion throws away. Keyed on the class-name token's
+    SOffset -- a source character offset, unique per occurrence and unaffected
+    by the token-array shifting that RemoveTokens/InsertTokens do, which token
+    INDICES are not (DelphiRewriteGenericUses runs to a fixed point, per
+    template, and every round can move them).
+    Delphi-only by construction: objfpc source spells this header `TFoo.M`
+    itself, nothing rewrites it, no entry is ever recorded, and that genuinely
+    ambiguous case keeps resolving exactly as before. }
+  GenMethImplSOff : array[0..MAX_GEN_METH_IMPL-1] of Integer;
+  GenMethImplCount : Integer;
   SpecSubNames  : array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
   SpecSubValues : array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
   SpecSubKinds  : array[0..MAX_TEMPLATE_PARAMS-1] of TTokenKind;

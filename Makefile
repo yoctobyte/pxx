@@ -14570,6 +14570,15 @@ endif
 	# output is fpc 3.2.2's, byte for byte.
 	$(PXX_STABLE) -Fulib/rtl test/lib_qword_render.pas $(TESTTMP)/lib_qword_render
 	$(TESTTMP)/lib_qword_render | diff -u test/lib_qword_render.expected -
+	# the typinfo FACADE (feature-typinfo-facade-unit): FPC's RTTI API shapes over
+	# our blobs. Every property KIND crossed with both ACCESS SHAPES -- `read
+	# FField` and `read GetIt` -- because the method arm was missing entirely and
+	# answered 0. Plus TTypeData's OrdType/FloatType, which a vendored
+	# Generics.Defaults uses as comparer case-selectors; those twelve values are
+	# fpc 3.2.2's, run for run.
+	$(PXX_STABLE) -Fulib/rtl test/lib_typinfo_props.pas $(TESTTMP)/lib_typinfo_props
+	test "$$($(TESTTMP)/lib_typinfo_props | grep -c '=ok')" = "63"
+	test "$$($(TESTTMP)/lib_typinfo_props | tail -1)" = "TYPINFO-PROPS OK"
 	# the date PARSE direction (StrToDate/StrToDateTime/TryStrTo*). Rows are
 	# read off FPC 3.2.2, including the ones nobody guesses: ISO input raises
 	# under the d/m/y default, and a two-digit year uses a SLIDING window.
@@ -14652,7 +14661,7 @@ endif
 	test "$$($(TESTTMP)/lib_mimic_saxutils | grep -c '=ok')" = "18"
 	test "$$($(TESTTMP)/lib_mimic_saxutils | tail -1)" = "MIMIC-SAXUTILS OK"
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_sax_xmlreader.npy $(TESTTMP)/lib_mimic_xmlreader
-	test "$$($(TESTTMP)/lib_mimic_xmlreader | grep -c '=ok')" = "21"
+	test "$$($(TESTTMP)/lib_mimic_xmlreader | grep -c '=ok')" = "25"
 	test "$$($(TESTTMP)/lib_mimic_xmlreader | tail -1)" = "MIMIC-XMLREADER OK"
 	# xml.dom.Node's twelve nodeType constants
 	# (feature-nilpy-xml-dom-is-two-questions-not-one). Every assertion is on a
@@ -14694,7 +14703,7 @@ endif
 	# writes `from collections.abc import Mapping`, which is swallowed before it
 	# reaches here (bug-n-from-collections-abc-import-is-swallowed-by-the-collections-root-rule).
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_collections_abc.npy $(TESTTMP)/lib_mimic_collections_abc
-	test "$$($(TESTTMP)/lib_mimic_collections_abc | grep -c '=ok')" = "47"
+	test "$$($(TESTTMP)/lib_mimic_collections_abc | grep -c '=ok')" = "49"
 	test "$$($(TESTTMP)/lib_mimic_collections_abc | tail -1)" = "MIMIC-COLLECTIONS-ABC OK"
 	# urllib.parse, reached the way the corpus reaches it: `from six.moves
 	# import urllib_parse as urlparse`, a RENAMED re-export through two shims
