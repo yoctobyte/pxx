@@ -167,4 +167,4 @@ old `j` could reach, so it exercises the new path end to end. It is covered by
 `make test-esp-idf`, which builds `timer-c3/main/main.pas` for **both** chips.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit cbfdb5de8.

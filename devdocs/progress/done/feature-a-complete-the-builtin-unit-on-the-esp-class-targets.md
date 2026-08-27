@@ -234,4 +234,4 @@ and its unsigned-32 sibling (did not refuse — answered *wrong*, `(double)$FFFF
 = -1). Both now execute on the real emulator against the x86-64 oracle.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit cbfdb5de8.
