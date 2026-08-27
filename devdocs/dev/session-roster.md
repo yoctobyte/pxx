@@ -6679,3 +6679,117 @@ this box is the contended resource and every agent's compile already runs 2-3x
 slower while the watcher works. So `frankT` was asked to **measure the wall-clock
 cost per day of a finer ladder and bring the number** before changing policy;
 if it is material it goes to the owner. A sequencing request, not a veto.
+
+## COORDINATOR DECISION (2026-08-27) — promote three passes to `-O2` before starting W1; W2 stays shut
+
+frankA returned item 1 of `feature-opt-o3-register-pressure` with numbers, and
+**both experiments the slice itself named as its gate came back empty.** Verified
+its push before acting: `552af4dcb` is +23 lines in `ir_codegen.inc` plus the
+ticket write-up, **zero `OptLevel` changes** — probe-only, as claimed.
+
+### What was disconfirmed, and the finding worth more than the speedup
+
+The slice's premise was *"what remains is exactly W2"*. It isn't.
+
+- **(a) Lower the residency threshold — no effect.** `three.pas` min-of-5: `>3`
+  (shipped) 0.79s, `>2` 0.77, `>1` 0.78, `>0` 0.80; fpc 0.34. The probe confirms
+  the pick lands and simply buys nothing. **The reason is the reusable part:**
+  `EmitStoreVar` dual-writes (the frame slot stays authoritative), so residency
+  removes **loads, not stores**. A local with ~1 load and ~1 store per iteration
+  trades a removed read for an added register move and nets zero.
+  **Corollary for whenever W2 is built: rank candidates by LOADS, not by
+  loads+stores.**
+- **(b) Use four callee-saved registers — already landed; item was stale.**
+  `UnifiedResidencyAssign` already pools r12..r15 minus regcall's claim. The
+  ticket text described the pre-unified pass. Struck.
+- **(c) Unconditional `for`-counter residency — near-moot.** A counter tallies 4
+  accesses unaided and clears `>3` on its own; it loses only when hotter locals
+  exhaust the pool, and forcing it in means evicting one of those, which (a) says
+  is worth ~0. Not implemented.
+
+**The real subject is W1, not W2** — the single-accumulator operand model. Run's
+loop body is 21 instructions on the common path, of which 5 are `mov %rN,%rax`
+staging an operand through rax. *A register allocator cannot help a body that
+moves every value into rax before touching it.*
+
+### The decision, and the reasoning, so it can be argued with
+
+**Do not start W1 yet. Take the `-O2` promotion first.**
+
+The promotion is worth more and costs a fraction: it is already measured, already
+proven at `-O3`, already differentially tested in the tens of millions of cases —
+**the work is done and only the gate constant is wrong.** It moves
+`make compiler/pascal26` from 1.018x toward the measured **1.29x**, on the one
+workload every agent on every track pays dozens of times a day. W1 is speculative
+new work by comparison.
+
+frankA's static sweep puts the operand-funnel family at ~1.2% of the binary,
+which *understates* it — 5 of 21 instructions on a hot path is 24%, not 1.2%, and
+the sweep decodes some data as code. That is an argument for doing W1 **later**,
+not for dismissing it, and not for doing it before a banked 1.29x is left on the
+floor. **W1 re-ranked ahead of W2** in the ticket.
+
+### THREE passes promote, not four
+
+| sha | pass | call |
+| --- | --- | --- |
+| `e9317428d` | div/mod by constant power of two → shifts/masks | **promote** |
+| `f9d9da4b5` | narrowing ordinal cast → one `movsx`/`movzx` | **promote** |
+| `6692d08b8` | cmp-immediate, branch **and** value-producing forms | **promote** |
+| `e7c0d1d2a` | residency refresh reads `rax`, not the slot | **stays `-O3`** |
+
+The fourth is not a judgement call: it fixes the **residency mechanism, which
+does not exist below `-O3`**. Promoting it would be a no-op wearing the costume of
+a change. Recorded explicitly because a future reader counting "four passes,
+three promoted" needs the fourth explained rather than silently dropped.
+
+One commit per pass, so a single pass can be reverted without the others.
+
+### Why this is landable rather than reckless — the brake is the pin
+
+A bad `-O2` default is everyone's default immediately, which is what makes this
+different from `-O3` work. It is contained by exactly one property:
+**`$(PXX_STABLE)` does not move until a pin, and pins are the coordinator's.**
+Master may carry a promoted `-O2` for hours — CLAUDE.md permits landing non-green
+— while every Track B/D/E build keeps using the pinned binary from before it.
+
+**The pin is HELD until Track T returns green verdicts on the promotion shas.**
+That is the whole safety argument, and frankA was invited to find a hole in it
+before pushing rather than after.
+
+And it cannot be satisfied by watching the ladder head: per `frankT`'s
+measurement, **0 of 79 commits touching `compiler/` or `lib/` since 2026-08-26
+were individually tested**. A green head does not cover these shas. `frankT` has
+been asked to get real verdicts on them and to say plainly if the ladder cannot
+be made to do it, in which case the pin waits longer rather than resting on
+inference.
+
+## 2026-08-27 — OWNER CONFIRMS: `ianweb` on `via` owns D+W, and via's push rights are "for now"
+
+Owner: *"the client on via is responsible for track D+W work. that's a clean
+separation, i think. and via also has push privileges for now."*
+
+Confirms the assignment recorded earlier today rather than changing it. Two
+things worth pinning down:
+
+- **The separation is clean because D and W are two halves of one loop.** CLAUDE.md:
+  *"Track D writes the Markdown here that W's machinery publishes."* One agent
+  holding both closes a loop that previously needed two sessions and a relay —
+  which is what cost half of 2026-08-27, when `docs/targets/nil-python.md` said
+  NilPy was mainline while the website said Experimental and nobody owned the gap.
+- **"For now" is doing real work in that sentence.** via's push key is an
+  account-level credential on a box that terminates a public tunnel and runs four
+  gunicorn apps; the owner has confirmed it as intentional
+  ([[decide-deploy-key-on-via]], resolved) but has now twice framed it as
+  provisional. **Do not build a workflow that cannot survive its withdrawal.**
+  The two-ended shape (author/push from a clean clone, deploy/verify from the
+  origin) is what the lane looked like without it and is still the fallback.
+  And it does not touch the deploy gate: **push and deploy are different
+  privileges** — the credential answers *can this box write to the repo*, the gate
+  answers *can a commit start executing here*. Deploys stay manual by design.
+
+**Still open with the owner, and now down to one:** deploy go/no-go for
+`e78595d` (the OG/Twitter card fix — in git, reviewed, fetched, unmerged;
+visitors still get the pre-fix tags). The second item — whether an 18KB patch may
+travel between hosts over the agent channel — is **moot** now that via can pull
+from origin directly.
