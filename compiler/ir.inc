@@ -1867,6 +1867,27 @@ begin
     else if TypeIsFrozenString(tk) and not isArr then
     begin
       lo := -7;
+      { …but `s[0]` is the classic shortstring LENGTH BYTE, not a character.
+        FPC's own compiler sources build strings with it — cutils.pas:1429 is
+        `inc(minilzw_encode[0])` — and it read and wrote pure garbage here:
+        IR_INDEX addresses base + (i - lo), so index 1 lands on data[0] at
+        base+8 and index 0 landed on base+7, the TOP byte of the 8-byte length
+        word. `ord(s[0])` answered 0 where FPC says 2, and `s[0] := #1` wrote
+        $0100000000000002 into the length.
+
+        The length's LOW byte is at base+0 on little-endian, and a frozen
+        string's capacity is <= 255, so one byte there IS the length — reads
+        give it, and writes leave the upper seven bytes at the zero a full
+        8-byte length store already put there. So index 0 just needs its own
+        origin; no separate load/store path, no new node kind.
+
+        Compile-time constant 0 only. A RUNTIME index of 0 would need a branch
+        per access to pick between two origins, and FPC's idiom is always the
+        literal — flagged on the ticket rather than paid for on every s[i].
+        bug-p-index-0-of-a-frozen-string-is-not-the-length-byte }
+      if (ASTRight[node] >= 0) and (ASTKind[ASTRight[node]] = AN_INT_LIT) and
+         (ASTIVal[ASTRight[node]] = 0) then
+        lo := 0;
       elemSize := 1;
       tk := tyChar;
       recName := REC_NONE;
