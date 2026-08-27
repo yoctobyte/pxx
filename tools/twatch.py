@@ -4516,15 +4516,16 @@ def pin_epoch(clone, version):
     return None
 
 
-def judged_tiers(clone, host, sha):
-    """Tiers in which THIS host has already published a verdict for `sha`.
+def archive_rows(repo, host):
+    """Every row of the uncapped run archive for `host`, oldest first.
 
-    Reads the uncapped run archive, not `st["history"]`, which is capped and
-    would forget a pin older than the cap — the exact case that matters here,
-    since a pin is usually days behind HEAD.
+    THE single reader for `runs-<host>.ndjson`. Both the tier lookup below and
+    the covering-verdict query go through here deliberately: two readers of one
+    archive that drift apart is a worse outcome than no query at all, and these
+    rows have already changed shape once (`timed_out` is absent before
+    2026-08-25, where absent means "not known", not False).
     """
-    got = set()
-    path = os.path.join(clone.path, TSTATE_REL, "runs-%s.ndjson" % host)
+    path = os.path.join(repo, TSTATE_REL, "runs-%s.ndjson" % host)
     try:
         with open(path) as f:
             for ln in f:
@@ -4532,14 +4533,154 @@ def judged_tiers(clone, host, sha):
                 if not ln:
                     continue
                 try:
-                    r = json.loads(ln)
+                    yield json.loads(ln)
                 except ValueError:
                     continue
-                if r.get("sha") == sha and r.get("tier"):
-                    got.add(r["tier"])
     except OSError:
+        return
+
+
+def archive_hosts(repo):
+    """Hosts with a run archive in this checkout, retired ones included.
+
+    Retired hosts are kept on purpose: their verdicts are historical fact, and
+    a covering run from borg in July is still evidence about a commit from
+    July. The caller labels the host so a reader can discount it.
+    """
+    try:
+        names = os.listdir(os.path.join(repo, TSTATE_REL))
+    except OSError:
+        return []
+    return sorted(n[len("runs-"):-len(".ndjson")] for n in names
+                  if n.startswith("runs-") and n.endswith(".ndjson"))
+
+
+def judged_tiers(clone, host, sha):
+    """Tiers in which THIS host has already published a verdict for `sha`.
+
+    Reads the uncapped run archive, not `st["history"]`, which is capped and
+    would forget a pin older than the cap — the exact case that matters here,
+    since a pin is usually days behind HEAD.
+    """
+    return {r["tier"] for r in archive_rows(clone.path, host)
+            if r.get("sha") == sha and r.get("tier")}
+
+
+def covering_runs(repo, sha, branch, host=None):
+    """Runs whose tested tree CONTAINED `sha` — the exact sha, or a descendant.
+
+    This is the question tstate can actually answer about an arbitrary commit,
+    and it is not the question people ask. An EXACT-sha verdict exists only for
+    shas that happened to be HEAD when the watcher woke: it climbs to the
+    newest testable commit rather than sweeping every one, so most commits have
+    no verdict of their own and never will. Measured 2026-08-27: of the 79
+    commits touching `compiler/` or `lib/` since 08-26, **zero** were swept
+    individually. So "what did T say about sha X" comes back empty for most X,
+    and empty reads as UNTESTED when the truth is nearly always "tested as part
+    of a later tree".
+
+    Returns (exact, covering), both oldest-first, each row tagged with `host`
+    and `distance` (commits from `sha` up to the run's sha).
+    """
+    hosts = [host] if host else archive_hosts(repo)
+    # ONE rev-list, not a merge-base per row: --ancestry-path restricts the
+    # range to genuine descendants of `sha`, so a run on a parallel branch
+    # cannot be miscounted as one that contained the change. 1110 unique run
+    # shas would otherwise be 1110 git invocations.
+    desc = {}
+    try:
+        out = sh(["git", "rev-list", "--ancestry-path", "--reverse",
+                  "%s..%s" % (sha, branch)], cwd=repo)
+        for i, s in enumerate(out.split()):
+            desc[s] = i + 1
+    except (RuntimeError, subprocess.SubprocessError, OSError):
         pass
-    return got
+    exact, covering = [], []
+    for h in hosts:
+        for r in archive_rows(repo, h):
+            s = r.get("sha") or ""
+            if s == sha:
+                exact.append(dict(r, host=h, distance=0))
+            elif s in desc:
+                covering.append(dict(r, host=h, distance=desc[s]))
+    exact.sort(key=lambda r: r.get("date") or "")
+    covering.sort(key=lambda r: r.get("date") or "")
+    return exact, covering
+
+
+def covering(repo, sha, branch=None, host=None, fetch=True):
+    """Report what tstate can and cannot say about one commit. Exit 0/1/2/3."""
+    branch = branch or BRANCH or "master"
+    if fetch:
+        try:
+            sh(["git", "fetch", "-q", "origin"], cwd=repo, check=False)
+        except OSError:
+            pass
+    try:
+        full = sh(["git", "rev-parse", "--verify", "%s^{commit}" % sha], cwd=repo)
+    except (RuntimeError, subprocess.SubprocessError, OSError):
+        print("twatch: %s is not a commit in this checkout" % sha)
+        return 3
+    subj = sh(["git", "log", "-1", "--format=%h %ad %s", "--date=short", full],
+              cwd=repo, check=False)
+    ref = "origin/%s" % branch
+    if sh(["git", "rev-parse", "--verify", "--quiet", ref], cwd=repo,
+          check=False) == "":
+        ref = branch
+    print("twatch: covering verdicts for %s" % subj)
+    print("twatch:   asking against %s" % ref)
+    exact, cov = covering_runs(repo, full, ref, host)
+
+    nested = ["quick", "native", "limited", "full"]
+    if exact:
+        for r in exact:
+            print("twatch:   EXACT  %-7s %-5s %s  %s" %
+                  (r.get("tier"), r.get("verdict"), r.get("date"), r["host"]))
+    else:
+        print("twatch:   EXACT: none — this commit was never swept on its own.")
+        print("twatch:          The watcher tests the newest testable commit, "
+              "not every one,")
+        print("twatch:          so most commits have no verdict of their own. "
+              "That is the")
+        print("twatch:          design working, NOT a gap in retention.")
+
+    # First covering run per tier: the earliest is the tightest evidence, since
+    # every later one carries more unrelated change alongside the commit.
+    first = {}
+    for r in cov:
+        t = r.get("tier")
+        if t and t not in first:
+            first[t] = r
+    if first:
+        print("twatch:   first covering run per tier (its tree contained this "
+              "commit):")
+        for t in nested:
+            r = first.get(t)
+            if r:
+                print("twatch:     %-7s %-5s %s  %s  +%d commit(s)  %s" %
+                      (t, r.get("verdict"), r.get("sha", "")[:12],
+                       r.get("date"), r["distance"], r["host"]))
+    else:
+        print("twatch:   no covering run: nothing has been tested at or after "
+              "this commit.")
+
+    print("twatch:   CAVEAT — a covering GREEN says the change was in the tree "
+          "of a green")
+    print("twatch:            run, NOT that this commit alone was green: a "
+          "later commit may")
+    print("twatch:            have fixed what it broke. Only an EXACT row "
+          "supports that")
+    print("twatch:            stronger claim. Cite the tier too — a green "
+          "`native` is silent")
+    print("twatch:            about everything `full` adds.")
+
+    best = exact or cov
+    if not best:
+        return 2
+    if any(r.get("verdict") == "RED" for r in (first.values() if not exact
+                                               else exact)):
+        return 1
+    return 0
 
 
 # How many times one idle phase may be preempted on the SAME target before the
@@ -6061,6 +6202,13 @@ def main():
                          "exit 0 all green, 1 a red, 2 still unjudged")
     ap.add_argument("--poll", type=float, default=30,
                     help="--follow: seconds between polls (default 30)")
+    ap.add_argument("--covering", metavar="SHA",
+                    help="what tstate can say about ONE commit: its exact-sha "
+                         "verdict if it has one (most commits never do — the "
+                         "watcher tests the newest testable commit, not every "
+                         "one), then the first run per tier whose tree "
+                         "CONTAINED it. exit 0 covered green, 1 red, 2 nothing "
+                         "covers it, 3 not a commit here")
     ap.add_argument("--remote", help="clone URL if the clone dir doesn't exist yet")
     ap.add_argument("--branch", default=None,
                     help="branch to watch (daemon) or read verdicts for "
@@ -6108,7 +6256,8 @@ def main():
     args = ap.parse_args()
 
     global BRANCH
-    if args.status or args.follow is not None or args.retire_host:
+    if (args.status or args.follow is not None or args.retire_host
+            or args.covering):
         repo = os.path.abspath(os.path.expanduser(args.clone)) if args.clone \
             else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         # A READER is about the branch it is standing on. A dev worker asking
@@ -6123,9 +6272,20 @@ def main():
                                renamed=args.renamed)
         if args.follow is not None:
             return follow(repo, args.follow, args.poll, args.branch, args.once)
+        if args.covering:
+            # ALL hosts unless one was named. --host defaults to this box's
+            # name, which is right for a daemon writing its own state and
+            # wrong for a reader: silently answering "plexus only" would
+            # report a commit as uncovered because the box that swept it was
+            # borg, and the caller would never see the word plexus to doubt.
+            named = ("--host" in sys.argv)
+            return covering(repo, args.covering, args.branch,
+                            args.host if named else None,
+                            fetch=not args.no_fetch)
         return status(repo, args.grace, fetch=not args.no_fetch)
     if not args.clone:
-        ap.error("--clone is required (except with --status/--follow)")
+        ap.error("--clone is required (except with --status/--follow/"
+                 "--covering)")
 
     def stop(*_):
         global STOP
