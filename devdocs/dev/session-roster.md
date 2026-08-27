@@ -9555,3 +9555,82 @@ coordinator's blind spot is not the answers, it is the questions.**
 
 frankB is holding **all** pushes, not just buildable ones, on its own initiative: its current
 item's deliverable is a verdict in a ticket, so nothing is time-critical for Track T.
+
+## ANSWERED: docs-only pushes do NOT arm the preemption — same predicate, not a parallel one
+
+frankT traced it end to end. Both `verify_pin` call sites pass
+`abort_check=make_preempted(clone, tested)`, whose check is
+`any(needs_test(path, c) for c in commits_between(tested, h))`, and `needs_test`
+(twatch.py:5071) is a `git diff-tree` filtered by
+`NOTEST_PREFIXES = ("devdocs/", "docs/")`. **There is no second, coarser abort filter.**
+
+Measured over the last 16 first-parent commits: **two preempt out of sixteen**, and one of
+them is frankT's own. **Every roster commit on the list is safe.** The current testmgr
+started 01:04:59, right after the daemon walked HEAD past the two testable commits
+(`d9ad65c79` and `46c8cf47e`); my `42cb4837d` landed 01:07, two minutes in — *"job 15,
+survived"* fits exactly. **Evidence, not luck.**
+
+### Four boundaries, exactly, because these get relayed and rounded
+
+1. **All-or-nothing per commit.** The predicate is `any(not docs)` over the commit's whole
+   file list — **one commit touching a roster file AND one `tools/` file preempts.** Keep
+   them separate commits.
+2. **`devdocs/progress/tstate/**` is safe** (it is under `devdocs/`) — deliberate, so the
+   daemon's own publishes cannot abort the work they were queued by. Ticket moves and
+   `resolve` are safe too.
+3. **Everything else preempts** — `tools/`, `Makefile`, `test/`, `.claude/`, even a
+   root-level `README.md`. The prefix list is two entries and **there is no
+   "looks-like-docs" heuristic.**
+4. **Evaluated over the whole range `tested..HEAD`, not the newest commit.** One testable
+   push arms it and it **stays armed until the daemon re-tests HEAD** — a later docs push
+   does not disarm it, and waiting does not make the run safe again. **So ordering matters
+   more than rate:** after a testable push, the next several minutes are lost regardless of
+   what else lands.
+
+**Hold narrowed and relayed: buildable files only. Roster, tickets, `docs/`, tstate all
+flow.** My two held roster commits pushed.
+
+## ⚠ THE v389 VERDICT WILL COME BACK **RED**, AND THAT RED IS KNOWN AND NOT ABOUT v389
+
+`tools-devtest#00` is **already red in this run** — it is
+`regression-tools-devtest-00-2`, the Track N `TESTTMP` regression frankT re-laned and
+filed, culprit `f3422cd14`, fix `os.environ.get("TESTTMP", "/tmp")`.
+
+**DO NOT `make revert` on this verdict.** The pin-verify record publishes a **whole-tier**
+verdict, and this is exactly the case where **the headline is wrong and the job list is
+right**. The part of the run that speaks to the binary is the self-host fixedpoint, already
+banked: **`325b4479070a`**, v389 reproducing itself.
+
+Carried into the loop's open items so a later tick cannot misread it.
+
+### My "~25 minutes" was closer than my correction
+
+Live at 01:15: **622/3202 jobs, 42.6% by cost, 9 min elapsed, ~13 min ETA.** I over-corrected
+to "hours" from the job count without weighting: **the cost-weighted head of a full tier is
+much heavier than its tail.** A raw job count is not a duration. One-liner for cost-weighted
+progress at any moment, no guessing:
+
+```
+python3 -c "import json;l=json.load(open('/home/neo/trackt-watch/.testmgr/live.json'));print('%d/%d %.0f%% %.0f min in, ~%.0f min left'%(l['done'],l['total'],l['pct'],l['elapsed']/60,(l.get('eta') or 0)/60))"
+```
+
+### A THIRD member of the quiet-affirmative family, from frankT, caught by measuring
+
+Its `trackt stop` printed a run's age from `watch.json`'s `ts`, which reads like a
+phase-start stamp. **It is a 30-second mid-run heartbeat**, so a 90-minute run prints as
+**"running 0 min"** — wrong in the one direction that matters for a line whose whole job is
+to say how much is about to be thrown away. It `stat`ed the file twice **12 seconds apart**,
+saw no drift, and read that as confirmation. **The interval was 30.**
+
+> **A check whose sampling window is shorter than the thing it samples returns "no change"
+> and looks like evidence.**
+
+Same family as `| tail` inverting a verification and a deny-list defaulting unknown states
+to safe: **all three fail quietly and affirmatively**, which is why none of them surfaces as
+an error. Duration now comes from `live.json`, and when that is missing the line **says
+nothing about time rather than something false** — which is the right repair for the whole
+family.
+
+`GATE_PHASES` was already correct in `trackt stop`; the bug was saying "safe" **before** the
+signal rather than after. Fixed, committed, **not pushed** — because pushing `tools/` is
+exactly what this section says not to do while the run is live.
