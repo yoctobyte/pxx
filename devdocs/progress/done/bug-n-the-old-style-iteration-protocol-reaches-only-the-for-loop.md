@@ -125,4 +125,4 @@ not even compile.
 changes `compiler/builtin/**`, which other lanes build from the frozen copy.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 9dd5c7ef4.
