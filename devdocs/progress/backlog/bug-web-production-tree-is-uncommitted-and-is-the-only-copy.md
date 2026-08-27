@@ -135,6 +135,23 @@ Priority stays at 70 rather than being raised on this finding: the ticket
 already heads the W queue and blocks the other four, so a higher number would
 change nothing operationally and would only inflate the scale.
 
+## CORRECTION 2026-08-27 — `via` could push all along
+
+The reason this sat uncommitted was recorded as a missing credential. **That was
+wrong.** `via` has carried an account-level GitHub key since 2026-06-22, and the
+owner has confirmed it is intentional — see
+[[decide-deploy-key-on-via]], which is resolved and should be read before anyone
+treats that key as a finding.
+
+So the "structurally stalled lane" framing in this ticket and in the roster had
+the right symptom and the wrong cause. Nothing was blocked by permissions.
+`ianweb` can commit and push the six directly, subject only to its own operator.
+
+What survives the correction, because it is about topology rather than
+credentials: a push-capable session still cannot observe what the origin
+**serves** or restart gunicorn, and `via` can. That half of the lane's shape is
+real and does not go away.
+
 ## What to do
 
 1. **Commit locally.** A local commit puts the six files in the object store

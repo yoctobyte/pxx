@@ -5721,7 +5721,19 @@ push-capable worker PLUS `ianweb` as the deploy-and-verify end — not a single
 owner.** A W ticket is not done when it is pushed; it is done when the origin
 reports what it serves.
 
-### Why the two ends exist (do not "fix" this by granting push keys)
+### CORRECTION — the two ends are about VISIBILITY, not credentials
+
+The first version of this section said `via` has no push rights. **It does, and
+has since 2026-06-22** — an account-level key the owner has confirmed is
+intentional ([[decide-deploy-key-on-via]], resolved). Do not re-raise it.
+
+The lane's two-ended shape still holds, for the reason that was always the real
+one: **only the origin can observe what the site SERVES**, and only the origin
+can restart gunicorn. A push-capable session can author, commit, push and audit
+from outside, and can never tell "not deployed" from "deployed and edge-cached".
+That is a topology fact and no credential changes it.
+
+### Why the two ends exist
 
 This is the coordination problem of the day and it is not a people problem.
 
@@ -5801,3 +5813,31 @@ with `NOT DEPLOYED`. It previously read as fixed. Committed is not served, and
 `ready` output shows summaries, so the distinction has to survive at
 summary-line length: *in git, reviewed, fetched, unmerged — visitors still get
 the pre-fix tags.*
+
+### Coordinator log — 2026-08-27, cycle 2
+
+**Track T is UP, not offline — my error in cycle 1.** `tools/twatch.py --status`
+exits 0: *"UP — commits through 5e8a97f70b7a tested"*. I read `plexus-T` being
+offline in `ListAgents` as Track T being down. **The watcher DAEMON is not the
+Track T session**, and CLAUDE.md is explicit that T is proven down only by
+`twatch --status` exit 1 or `trackt.py health` DOWN. An offline session in
+`ListAgents` proves nothing about the daemon.
+
+**Board state this cycle:** `urgent/` empty. One live lock — `feature-target-wasm`
+[A+B], frankwasm. Global `next` = `feature-opt-o3-register-pressure` [O, eff prio
+85], **parked in `unfinished/`, re-claim rather than restart**. Track O is
+implicitly Track A, so dispatching it needs the A slot, which frank1-80 holds.
+
+**T's standing reds at the v383 pin (`c28e07a89f03`, full, RED, 8 red / 7 new):**
+four `test-nilpy`, two `test-core` NilPy, `test-emit-obj#cxtensa_obj.c@1`,
+`tools-devtest#00`. Read them correctly before acting — T's own status line says
+these are **at the pinned tree, 10 testable commits behind origin/master**, and
+only **1 of the 7 new** also fails at `652c3d891e86`; the other six pass there
+and are noise. Both open regressions name a `bad=` that touches no buildable
+file, i.e. the tested upper bound, not a lead.
+
+**Nothing dispatched, nobody blocked on me.** All four NilPy reds already have
+tickets (several in `done/`), and frank1-80 said hours ago it is on the
+auto-filed NilPy regressions. `regression-tools-devtest-00-2` and
+`regression-test-emit-obj-cxtensa-obj` both already exist in `backlog/`.
+Two workers plus coordinator is target concurrency.
