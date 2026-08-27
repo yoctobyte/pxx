@@ -1,0 +1,17 @@
+'' 0 0.0 False
+[] () b''
+{} set() frozenset() bytearray(b'')
+1 0.5 a True
+0 0 0 0
+True True True
+True True True
+True True True True
+400
+[1, 2] 2 {'k': 0}
+('', 0, 1)
+('x', 3, 1)
+'' 0 []
+1 2 [0, 1]
+[0, 0, 0]
+True True True
+mine mine

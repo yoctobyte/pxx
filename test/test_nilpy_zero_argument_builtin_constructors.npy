@@ -1,0 +1,75 @@
+# `str()`, `int()`, `float()`, `bool()`, `list()`, `tuple()` and `bytes()` were
+# compile errors. Python's rule is uniform — the zero-argument form of a type
+# constructor is that type's zero value — and it was built for four of eleven
+# names, which is why the four that worked (`dict`, `set`, `frozenset`,
+# `bytearray`) are rows here too: they are the controls that the fix did not
+# disturb the mechanisms it followed.
+#
+# The two error messages were the tell that it fell through TWO mechanisms:
+# the parser INTRINSICS (str/int/float/bool) died in ParseArgExpr as `expected
+# expression`, the pylib PROCS (list/tuple/bytes) died in overload resolution.
+# Each is fixed by its own precedent among the four that already passed — a
+# zero-value arm for the intrinsics, and the zero-argument overload `bytearray`
+# has always had for the procs.
+# bug-n-the-zero-argument-form-of-a-builtin-type-constructor-is-rejected
+print(repr(str()), repr(int()), repr(float()), repr(bool()))
+print(repr(list()), repr(tuple()), repr(bytes()))
+print(repr(dict()), repr(set()), repr(frozenset()), repr(bytearray()))
+
+# the zero values must carry the right TYPE, not merely print right
+print(int() + 1, float() + 0.5, str() + "a", not bool())
+print(len(str()), len(list()), len(tuple()), len(bytes()))
+print(isinstance(str(), str), isinstance(int(), int), isinstance(float(), float))
+print(isinstance(list(), list), isinstance(tuple(), tuple), isinstance(bool(), bool))
+
+# `str()` must be indistinguishable from `""` in EVERY position, not just when
+# printed. Typing the node as the CALL's type (a managed handle) rather than as
+# a literal made `str() == ""` answer False in expression position while
+# `x = str(); x == ""` answered True — `==` dispatches on the static type.
+x = str()
+print(str() == "", x == "", "" == "", str() == x)
+s = str()
+s = s + ("x" * 400)
+print(len(s))            # not the frozen 255 ceiling
+
+# usable as a receiver, a default and a field
+l = list()
+l.append(1)
+l.append(2)
+d = dict()
+d["k"] = int()
+print(l, len(l), d)
+
+def dflt(a=str(), b=int(), c=None):
+    if c is None:
+        c = list()
+    c.append(a)
+    return (a, b, len(c))
+print(dflt())
+print(dflt("x", 3))
+
+class C:
+    def __init__(self):
+        self.s = str()
+        self.n = int()
+        self.xs = list()
+    def grow(self) -> int:
+        self.xs.append(self.n)
+        self.n = self.n + 1
+        return self.n
+c = C()
+print(repr(c.s), c.n, c.xs)
+print(c.grow(), c.grow(), c.xs)
+
+print([int() for _ in range(3)])
+
+# the CONTROLS the fix must not capture. A user `def str()` rebinds the name
+# and must win, at the call site and from inside another def; and the bare type
+# NAME is still a type, not a call.
+print(isinstance("a", str), isinstance(1, int), isinstance(2.0, float))
+
+def str():
+    return "mine"
+def outer():
+    return str()
+print(str(), outer())

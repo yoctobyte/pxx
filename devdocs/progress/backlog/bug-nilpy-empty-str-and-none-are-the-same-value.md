@@ -3,7 +3,7 @@ track: N
 prio: 75
 type: bug
 blocked-by: [decide-nilpy-none-str-sentinel-vs-textstr-kind]   # re-asked 2026-08-15: the decided representation's prerequisite (a stamped block kind) turns out never to have been built
-summary: "`\"\" is None` answers TRUE for a NilPy str: Pascal's empty AnsiString IS a nil handle, so the None sentinel and the empty string are indistinguishable — contradicting pylib's own comment that they are not."
+summary: "`\"\" is None` answers TRUE for a NilPy str whose static type is plain `str`. Re-measured 2026-08-27: `Optional[str]` and every pylib-computed empty are ALREADY correct (a variant carries its own tag), so the surface is the ONE untagged slot, not the ~260 producers the decide ticket sized. A constant-fold is unsafe — `def f() -> str: return None` is legal CPython. The decided TEXTSTR design handles both rows unchanged."
 ---
 
 # `""` and `None` are the same value for a NilPy str
@@ -221,3 +221,109 @@ operands either way.
 
 Track N, and it carries Track A's `stabilize-fast` + `make pin` obligation
 (`compiler/builtin/**`).
+
+---
+
+## Re-measured 2026-08-27 at HEAD — the surface is ~1 mechanism, not 260 producers
+
+Not resolved. Parked back to the backlog with the sizing corrected, because the
+sizing this ticket and [[decide-nilpy-none-str-sentinel-vs-textstr-kind]] both
+carry is **wrong by two orders of magnitude in our favour**, and the target is a
+different thing than either says. Nothing was changed in the tree.
+
+### Every empty a computation produces is ALREADY correct
+
+The decided design says the fix "lands at the string-PRODUCING sites", and the
+closing measurement counted `pylib.pas`'s ~260 `: AnsiString` functions as that
+surface. Measured at HEAD, none of them is in it — every one of these answers
+`is None` **False**, matching CPython exactly:
+
+| shape | `is None` | CPython |
+| --- | --- | --- |
+| `"abc".replace("abc", "")` | False | False |
+| `"abc"[0:0]` | False | False |
+| `"".join([])` | False | False |
+| `str("")` | False | False |
+| `"  ".strip()` | False | False |
+| `"x"[1:]` | False | False |
+| `"x" * 0` | False | False |
+
+They are correct because a pylib result reaches NilPy as a **variant**, and a
+variant carries its own tag — the tag distinguishes None from `""` without the
+handle having to. So the block-level representation was never load-bearing for
+any of them.
+
+### What is actually wrong: the statically-plain-`str` slot, and only that
+
+```python
+class E:
+    def opt(self)   -> Optional[str]: return ""
+    def plain(self) -> str:           return ""
+```
+
+| row | pxx | CPython |
+| --- | --- | --- |
+| `E().opt() is None` — **Optional** | False | False |
+| `E().plain() is None` — plain `str` | **True** | False |
+| `x = E().plain(); x is None` | **True** | False |
+| `"" is None` (bare literal) | **True** | False |
+| `y = ""; y is None` | **True** | False |
+| a value passed through a lambda parameter | False | False |
+
+`Optional[str]` is already right. Only a slot whose static type is plain `str`
+is wrong — that is the one place with no tag, where the value IS a bare
+AnsiString handle and nil means both things. **That is the whole bug.**
+
+This also explains why the original repro looked broader than it is: the
+`Optional` row in it was already passing when it was filed, and the two rows
+were read as one symptom.
+
+### The fold is UNSAFE — measured, not assumed
+
+The obvious cheap fix is to constant-fold `x is None` to False when `x` is
+statically plain `str`, on the theory that such a slot can never hold None. It
+cannot be done, because CPython does not enforce annotations:
+
+```python
+def retnone() -> str:
+    return None
+print(retnone() is None)    # CPython True
+```
+
+pxx answers True here too — accidentally, via the same nil that `""` produces.
+Folding to False would fix the five rows above and break this one, which is
+trading one wrong answer for another and is exactly the microfix
+`devdocs/dev/root-cause-over-microfix.md` says not to take as a consolation.
+
+(Two neighbouring rows are the *other* ticket, not this one:
+`takes(None)` for `def takes(s: str)` and `z: str = None` both yield the TEXT
+`'None'` — [[bug-nilpy-return-none-from-a-str-returning-def-yields-the-text-None]].)
+
+### The decided design handles BOTH rows, so nothing is re-opened
+
+Under `PXX_KIND_TEXTSTR` "may be zero length": `""` becomes a real length-0
+block so `is None` is False, and `return None` from `-> str` stays nil so
+`is None` is True. Both correct, no fork, no U ticket. The decision stands
+exactly as written — this is a sizing correction, not a design question, so the
+standing instruction to park string-model *questions* in U is not engaged.
+
+### What the work now looks like
+
+Much smaller than "stamp every producer", and in this order:
+
+1. Lower NilPy's **empty string literal** to a helper that allocates a
+   length-0 `PXX_KIND_TEXTSTR` block, instead of emitting an empty AnsiString
+   literal. A frontend change plus one runtime helper — `PXXStrFromLit`, the six
+   backends' inline literal paths, and Pascal's `''` are all untouched, which is
+   the "untouched by construction" the decision asked for.
+2. Make `return None` from a `-> str` def produce nil rather than `''`.
+3. **The one thing that must be measured before building:** what the rest of the
+   runtime does when a NilPy plain-`str` holds a *non-nil zero-length* handle.
+   `Length` reads the header and is fine; retain/release are fine; a content
+   compare is fine. The risk is any `Pointer(s) = nil` test that means "empty" —
+   which is option E's 55-site audit arriving through the back door, scoped now
+   to whatever pylib and the NilPy lowering do with a plain-`str` operand. Count
+   those sites FIRST; that count, not the producer count, is what sizes this.
+
+Also found while probing and filed separately: `str()` with no arguments is
+`expected expression` — [[bug-n-str-with-no-arguments-is-rejected]].

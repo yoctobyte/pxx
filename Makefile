@@ -9957,6 +9957,22 @@ test-core: $(COMPILER)
 	# bug-n-a-unicode-identifier-is-rejected-by-the-lexer
 	./$(COMPILER) test/test_nilpy_a_unicode_identifier.npy $(TESTTMP)/test_nilpy_uniid26
 	$(TESTTMP)/test_nilpy_uniid26 | diff -u test/test_nilpy_a_unicode_identifier.expected -
+	# Python's rule is uniform — the zero-argument form of a type constructor is
+	# that type's zero value — and it was built for four of eleven names.
+	# str()/int()/float()/bool() died in ParseArgExpr as `expected expression`
+	# (parser intrinsics); list()/tuple()/bytes() died in overload resolution
+	# (pylib procs). Each half is fixed by its own precedent among the four that
+	# already passed: a zero-value arm for the intrinsics, and the zero-argument
+	# overload `bytearray` has always had for the procs. The dict/set/frozenset/
+	# bytearray row is the control that neither mechanism was disturbed. The
+	# `str() == ""` row is the one that caught typing the new node as the CALL's
+	# type instead of a literal's — `==` dispatches on the static type, so it
+	# answered False in expression position and True through a local. The
+	# `def str()` rows are the control that a user rebinding still wins.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-the-zero-argument-form-of-a-builtin-type-constructor-is-rejected
+	./$(COMPILER) test/test_nilpy_zero_argument_builtin_constructors.npy $(TESTTMP)/test_nilpy_zeroctor26
+	$(TESTTMP)/test_nilpy_zeroctor26 | diff -u test/test_nilpy_zero_argument_builtin_constructors.expected -
 	# `return lambda ...` — a closure factory, and the returned value was not
 	# CALLABLE while the same lambda bound to a local first was. The return-type
 	# scan's TUPLE detector counted the LAMBDA'S OWN PARAMETER COMMAS, so the

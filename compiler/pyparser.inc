@@ -4315,6 +4315,69 @@ begin
   Result := callNode;
 end;
 
+function PyZeroArgScalarCtor(const nm: AnsiString): Boolean;
+{ `str()` / `int()` / `float()` / `bool()` with NO argument: sets CurASTNode to
+  that type's zero value and answers True, or answers False and touches nothing.
+
+  Python's rule is uniform — the zero-argument form of a type constructor is
+  that type's zero value — and it was implemented for four of the eleven builtin
+  constructors. These four are the ones the parser lowers as INTRINSICS, so they
+  failed in ParseArgExpr with `expected expression`; the pylib-backed
+  `list`/`tuple`/`bytes` failed one step later in overload resolution and are
+  fixed there, with the zero-argument overload `bytearray` already had. Two
+  mechanisms because there genuinely are two kinds of constructor, each with a
+  working precedent among the four that already passed.
+
+  `int()` is Int64 rather than a promotable int: 0 needs no width, and answering
+  the wide type here would register a promo SIGNATURE over an unannotated
+  `return int()` — the silent ABI mismatch the `int(...)` arm below documents.
+  bug-n-the-zero-argument-form-of-a-builtin-type-constructor-is-rejected }
+var lo: AnsiString;
+begin
+  PyZeroArgScalarCtor := True;
+  lo := LowerCase(nm);
+  if lo = 'str' then
+  begin
+    CurASTNode := AllocNode(AN_STR_LIT);
+    ASTSOffset[CurASTNode] := PyStoredName('');
+    ASTSLen[CurASTNode] := 0;
+    { tyString, matching what an ordinary `""` literal carries. tyAnsiString
+      here — the type `str` the CALL is inferred as — made `str() == ""`
+      answer False in expression position while `x = str(); x == ""` answered
+      True: `==` dispatches on the static type, and a literal typed as a
+      managed handle took a different arm from the literal it was compared
+      with. The value is a literal; it must be typed like one. }
+    ASTTk[CurASTNode] := Ord(tyString);
+    LastExprTk := tyString;
+    Exit;
+  end;
+  if lo = 'int' then
+  begin
+    CurASTNode := AllocNode(AN_INT_LIT);
+    ASTIVal[CurASTNode] := 0;
+    ASTTk[CurASTNode] := Ord(tyInt64);
+    LastExprTk := tyInt64;
+    Exit;
+  end;
+  if lo = 'float' then
+  begin
+    CurASTNode := AllocNode(AN_FLOAT_LIT);
+    ASTIVal[CurASTNode] := 0;              { IEEE 754 bits of +0.0 are all zero }
+    ASTTk[CurASTNode] := Ord(tyDouble);
+    LastExprTk := tyDouble;
+    Exit;
+  end;
+  if lo = 'bool' then
+  begin
+    CurASTNode := AllocNode(AN_BOOL_LIT);
+    ASTIVal[CurASTNode] := 0;
+    ASTTk[CurASTNode] := Ord(tyBoolean);
+    LastExprTk := tyBoolean;
+    Exit;
+  end;
+  PyZeroArgScalarCtor := False;
+end;
+
 { A name that is BOTH a type name and a builtin conversion call. }
 function PyIsBuiltinConvName(const nm: AnsiString): Boolean;
 var lo: AnsiString;
@@ -41369,6 +41432,33 @@ begin
     tkIdent:
     begin
       name := CurTok.SVal;
+      { `str()` / `int()` / `float()` / `bool()` — the ZERO-ARGUMENT form of a
+        builtin type constructor, which Python defines as that type's zero
+        value and which idiomatic code uses to spell a default (`x = x or
+        str()`, `d.get(k, list())`). These four are lowered as parser
+        INTRINSICS, so the missing argument reached ParseArgExpr and died as
+        `expected expression` rather than as a missing overload.
+
+        Their pylib-backed siblings are NOT handled here and deliberately so:
+        `list`/`tuple`/`bytes` are ordinary procs and get the zero-argument
+        OVERLOAD that `bytearray` has always had (pylib.pas) — each of the two
+        mechanisms keeps its own precedent instead of a third one growing here.
+        `dict`/`set`/`frozenset` already answered before either change.
+
+        Ahead of every other arm because the name would otherwise resolve
+        through the intrinsic chain far below and consume the '(' first.
+        Shadowing is respected the way the `str` arm already does it: a user
+        `def str()` or a bound name wins, so this cannot capture a call the
+        program meant for itself.
+        bug-n-the-zero-argument-form-of-a-builtin-type-constructor-is-rejected }
+      if isNilPy and (TokPos + 1 < TokCount) and
+         (Tokens[TokPos].Kind = tkLParen) and (Tokens[TokPos + 1].Kind = tkRParen) and
+         (FindSym(name) < 0) and (not PyUserShadowsProc(name)) and
+         PyZeroArgScalarCtor(name) then
+      begin
+        Next; Next; Next;              { the name, '(' and ')' }
+        Exit;
+      end;
       { A GENERATOR called in VALUE position — `g = gen()`, `list(gen())`,
         `next(gen())`. The `for` header has its own desugar and never reaches
         here; everything else becomes a cursor object (PyBuildGeneratorValue,
