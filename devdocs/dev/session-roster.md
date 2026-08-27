@@ -9634,3 +9634,107 @@ family.
 `GATE_PHASES` was already correct in `trackt stop`; the bug was saying "safe" **before** the
 signal rather than after. Fixed, committed, **not pushed** — because pushing `tools/` is
 exactly what this section says not to do while the run is live.
+
+## Milestones defined as the absence of a symptom are closeable by deleting the symptom (frankwasm, 2026-08-28)
+
+frankwasm hit Phase 2's milestone and found, by *running* it rather than reading
+it, that two of its clauses were unsatisfiable or self-referential:
+
+- *"no entry cites a value op"* could not be satisfied before Phase 4 at all — a
+  call in value position is **both** a value op and an `IR_CALL`, so the two rows
+  overlapped and the phase could never close on its own wording.
+- *"non-i32"* was phrased as **the absence of the then-current refusal message** —
+  a limitation the lane had written about itself, baked into the thing measuring
+  it. *"Reaching it meant deleting the refusal, not satisfying it."*
+
+> **State what must WORK. Keep the report as the evidence, never as the definition.**
+
+Broadcast-worthy well past wasm: **a ticket whose done-condition is "the error
+message is gone" can be closed by deleting the error message.** The backlog has
+many tickets phrased as the absence of a symptom and every one is closeable that
+way. This is only ever found by executing the milestone; reading it, it looks fine.
+
+## The validator makes the WIDTH class unrepresentable, not the MEANING class (frankwasm, 2026-08-28)
+
+The CHARTER's claim — wasm catches what a register backend turns into a plausible
+wrong number — got its boundary tonight, from a bug that is its **complement**:
+
+A `var` parameter's slot holds the caller's address, so the variable lives at
+`[slot]`, not `&slot`. The deref was in the address-of path but **not** in
+load/store, so `o := o + n` on a var parameter read the address as the value,
+added to it, and wrote the sum over the reference. **Both are i32.** The module
+validated, ran, and returned a plausible number. Only the differential caught it.
+
+> The validator's guarantees stop exactly where two things are the same width. It
+> makes the **width** class unrepresentable, not the **meaning** class.
+
+To be amended into `CHARTER.md` beside the original claim rather than filed as a
+separate note — the claim is load-bearing (the coordinator has been citing it all
+night) and this is its edge, not a footnote. It is also what the phase2
+differential *buys*, stated concretely instead of as prudence.
+
+## v389's verify has TWO known reds, not one — and the second was nearly filed as new (frankT, 2026-08-28)
+
+**Widening the pre-emption before the verdict lands.** `test-emit-obj#02` joined
+`tools-devtest#00` at ~57%. Both known, both ticketed. **The "known red, no
+revert" call still holds — it just covers two jobs.** A pre-emption that names
+one of two reds is *worse than none*: it primes the reader to treat the unnamed
+one as the surprise.
+
+**Fifth member of tonight's quiet-affirmative family, and the cleanest specimen.**
+Querying the run archive for `test-emit-obj` under the `red` key returned **0 hits
+in 1697 runs** — which reads exactly like "genuinely new". Wrong key. tstate
+stores reds under the **stable selector** (`test-emit-obj#src:test/cxtensa_obj.c@1`)
+while `#02` is a *positional index into the recipe*; the two strings share no
+substring. The right key: **13 runs, NEW_RED at `32fba2082684` 2026-08-27T09:35Z,
+`still_red` in every deep-tier run since.**
+
+> **A query against the wrong key returns zero and looks like an answer.** No
+> error, no empty-result warning — just a number that happens to be false.
+
+Saved by `live.json`'s `red_src` naming `test/cxtensa_obj.c`: the stable selector
+was one field away the whole time. The tell was the *cleanliness* — "0 of 1697"
+felt too clean to be true, and that suspicion is the only thing that fired.
+
+### It was mislaned, and the rule that mislaned it should not be changed
+Auto-laned **C** because the test file is `test/cxtensa_obj.c`. The failure is
+`undefined variable (SYS_openat)` raised inside
+`lib/rtl/platform/posix/platform_backend.pas` — a Track C agent opening
+`cparser.inc` on that evidence finds nothing, which plausibly explains 13
+consecutive deep runs red and unclaimed.
+
+Reproduced in **0.6s against the pinned v389 binary, no suite**, and a 2×2
+localises it to one cell:
+
+| | xtensa | riscv32 | x86-64 |
+| --- | --- | --- | --- |
+| **Pascal** | ok (211180B, 172 procs) | — | — |
+| **C** | **FAIL** — posix backend, 7 undefined `SYS_*` | ok (332952B, 432 procs) | the file's own deliberate `LONG_MAX` `#error` |
+
+Not "C is broken", not "xtensa is broken" — **C + xtensa specifically**: the
+Pascal arm reaches the ESP platform class for that target and the C arm does not.
+One-commit range `cbfdb5de8` *"xtensa reaches the IDF profile — profile-aware ESP
+class"* (+16 `pasparser_prog.inc`, +5 `cparser.inc`) matches the shape. Re-laned
+**A+S**, prio 70, with the honest caveat written into the ticket that if the fix
+lives entirely in `cparser.inc` it is C's file after all and A hands it over.
+
+> **The lane-guess rule is weakest exactly where a test SOURCE and a FAILURE SITE
+> are in different languages.** Left unchanged deliberately — it must guess or
+> everything parks in T's queue, and it is right most of the time. What must not
+> repeat is routing by the test's **file extension** rather than by the mechanism.
+
+## "Docs-only pushes are safe" is a property of the PUSH, not of the COMMIT (frankT, 2026-08-28)
+
+A wrinkle in the rule this coordinator gave every lane during the hold. frankT has
+three local commits: the `trackt stop` guard (`tools/`, buildable, must wait) and
+**two `devdocs/` ticket commits stacked behind it**. The safe two inherit the
+buildable one's cost; reordering means a rebase for no gain, so all three wait.
+
+> **A safe commit stacked behind a buildable one is not safe to push.** If a lane
+> wants ticket work to flow during a long run, it must commit the docs **first**,
+> not merely separately.
+
+Correction to the guidance as issued: I told lanes docs-only pushes stay open
+during a hold, which is true of the *push* and says nothing about *ordering*. The
+usable form is **"commit docs first, then code"** — cheap when done up front,
+a rebase when discovered later.
