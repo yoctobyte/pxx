@@ -54,12 +54,13 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (265)
+## backlog (266)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce | A | 30 | bug | Raised out of decide-how-much-string-machinery-the-basic-frontend-gets, decided 2026-08-25. That decision accepted ~100 KB BASIC binaries on the grounds that binary size is a GENERAL problem with a general answer (reachability-gated emission), not a per-frontend one. But feature-emission-size-dce is marked done while a Pascal hello-world is still 63,760 bytes -- so either the pass is not reaching this, or the done ticket's scope was narrower than its title. | — |
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
+| bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice | A | 55 | bug | ManagedLocalZeroBytes is a chain of per-kind arms, each of which has to remember to ask IsArray. Two arms have already shipped without it — interfaces (2026) and Variants (2026-08-27, a5 memory-corruption fix). Two more arms explicitly say `not IsArray` and nothing says whether that is a decision or the same omission a third time. | — |
 | bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse | A | 40 | bug | `C(**d)` and `C(*lst)` on a class with an ordinary `__init__` fail with `expected expression` — on the PINNED compiler too, so this is not a regression. The ctor path in pyparser.inc:45097 builds its own AN_ARG chain and never consults the star-forwarding branch that plain calls use. Routing it there needs the receiver prepended, which PyStarForwardCall's signature does not take. | — |
 | bug-a-riscv32-sa-onstack-has-no-effect-under-qemu | A | 12 | bug | riscv32 registers a signal alt stack correctly — the sigaltstack syscall succeeds and the flags word assembles to $18000004 — but the handler still runs on the FAULTING stack under qemu-riscv32, so a stack-overflow SIGSEGV kills the process. The identical construction works under qemu-i386/arm/aarch64 of the same build, which points at qemu-user rather than at us. Unverifiable without hardware. | — |
 | bug-a-the-div-by-zero-check-is-still-missing-on-xtensa | A+S | 25 | bug | The last target without a pre-divide zero check. The other five landed 2026-08-23; xtensa was left out because it cannot be RUN on this box (bare profile emits an ESP image, not a Linux ELF), its branches carry only an 8-bit displacement, its windowed ABI rotates the register window on a call, and its divide is two shapes depending on XtensaSoftDivide. | — |
@@ -674,6 +675,7 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3) [parked — re-claim, do not duplicate]
 - [p 55] [A] feature-nilpy-object-reclamation (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 55] [T] feature-t-freebsd-image-and-runner (unblocks 1)
+- [p 55] [A] bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice
 - [p 55] [B] bug-b-format-percent-u-prints-a-signed-value
 - [p 55] [B] bug-b-inttostr-of-a-qword-above-2-63-renders-negative
 - [p 55] [B] bug-b-inttostr-of-a-qword-prints-it-signed
