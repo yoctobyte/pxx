@@ -3,12 +3,10 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `0876929d00ae` | 2026-08-27T14:31:00Z | RED (native) | 318.4s | `62a4242203a3` RED |
+| plexus | `8787cfe4235a` | 2026-08-27T14:46:37Z | GREEN (native) | 310.9s | `62a4242203a3` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
 - **test-emit-obj#src:test/cxtensa_obj.c@1** — test/cxtensa_obj.c (plexus): bad `32fba2082684`, last good `457bda75412e`, 1 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy** — test/test_nilpy_star_operand_in_a_variant.npy test/test_nilpy_star_operand_in_a_variant.expected (plexus): bad `39d4afb022ce`, last good `6b59df667fe4`, 12 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy** — test/test_nilpy_variant_operand_arith_dunders.npy test/test_nilpy_variant_operand_arith_dunders.expected (plexus): bad `39d4afb022ce`, last good `6b59df667fe4`, 12 commit(s) in range
-- **test-core#src:test/test_nilpy_builtin_subclass_dunder_dispatch.npy** — test/test_nilpy_builtin_subclass_dunder_dispatch.npy (plexus): bad `c28e07a89f03`, last good `0842d9684f7f`, 1 commit(s) in range
-- **test-core#src:test/test_nilpy_unbound_builtin_method.npy** — test/test_nilpy_unbound_builtin_method.npy (plexus): bad `c28e07a89f03`, last good `0842d9684f7f`, 1 commit(s) in range
