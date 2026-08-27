@@ -23973,6 +23973,49 @@ begin
   end;
 end;
 
+function PyReboundParamSlotType(bodyStart: Integer; const nm: AnsiString;
+                                declTk: TTypeKind): TTypeKind;
+{ The type a REBOUND parameter's private slot must have, or tyUnknown when it
+  needs no private slot.
+
+  `def f(x: int): x /= 2` stored the DOUBLE's bit pattern in the Int64 parameter
+  slot and printed 4612811918334230528. The `/=` handler was already correct —
+  PyNoteLocalType records the float, and `PXXDBG=n.locals` showed `tk=19` — but
+  the note was then dropped, because a PARAMETER's symbol keeps its declared
+  type. A plain local copy of the same value was right all along, which is the
+  tell: one concept, two answers.
+
+  A parameter cannot simply widen: its type IS the calling convention, and
+  widening it would change what the caller pushes. Python has no typed slots —
+  a parameter that is REBOUND is an ordinary local from that point on — so the
+  faithful lowering is a private slot seeded from the incoming argument, which
+  is what the caller of this function then builds.
+
+  That machine already existed for a NARROWER trigger: a VARIANT parameter that
+  is rebound gets a private slot, because a variant travels const-by-REF and
+  `p = p + [9]` reached the caller's list
+  (bug-nilpy-rebinding-a-list-parameter-aliases-the-callers-list). This is the
+  same rule with the type test generalised — same rename, same seeding
+  assignment, same "every read, every write, the locals inference and the
+  nested-def capture scan see one ordinary local" property — rather than a
+  second mechanism beside it.
+
+  The join is PyWidenBinding, the one the locals table itself uses, so a
+  parameter and a local rebound the same way land on the same type. Asking it
+  requires the constraint table, so this is called AFTER the first
+  PyCollectLocalsAST pass; the caller re-runs that pass when any slot is
+  created, so the trial sees the ordinary local it is about to become.
+  bug-n-augmented-true-division-does-not-widen-an-annotated-int-parameter }
+var ci: Integer; w: TTypeKind;
+begin
+  PyReboundParamSlotType := tyUnknown;
+  if not PyParamRebound(bodyStart, nm) then Exit;
+  ci := PyFindConstraint(nm);
+  if ci < 0 then Exit;
+  w := PyWidenBinding(declTk, PyLocals[ci].TypeKind);
+  if w <> declTk then PyReboundParamSlotType := w;
+end;
+
 function PyPromoteNonlocalCells(bodyStart: Integer): Integer;
 var i, depth: Integer;
 begin
@@ -29194,6 +29237,7 @@ var isGenDef: Boolean;
     name, savedPfx, savedPfx2: AnsiString;
     nparams, i, procIdx, idx, savedSC, savedFS, patchPos, bodyStart, bodyNode: Integer;
     pbInit, pbAsgn, pbOwn: Integer;
+    pbRedo: Boolean; pbTk: TTypeKind;
     pbLocal: array[0..MAX_PROC_PARAMS - 1] of Integer;
     savedNest, savedTok, savedLam, savedHoist, savedSelf2: Integer;
     defTok0: Integer;   { this def's `def` token — the redefinition key }
@@ -29489,6 +29533,24 @@ begin
     end;
   end;
   PyCollectLocalsAST(bodyStart);
+  { ...and now that the constraint table exists, the same private-slot treatment
+    for a TYPED parameter this body rebinds to something its declared type
+    cannot hold — see PyReboundParamSlotType. The pass is re-run when any slot
+    is created so the trial sees the ordinary local the name has become. }
+  pbRedo := False;
+  for i := 0 to nparams - 1 do
+    if (i < pbOwn) and (i < MAX_PROC_PARAMS) and (pbLocal[i] < 0) and
+       (Procs[procIdx].Params[i].SymIdx >= 0) then
+    begin
+      pbTk := PyReboundParamSlotType(bodyStart, PyHdrPNames[i], PyHdrPTypes[i]);
+      if pbTk <> tyUnknown then
+      begin
+        Syms[Procs[procIdx].Params[i].SymIdx].Name := '$byref.' + PyHdrPNames[i];
+        pbLocal[i] := AllocVar(PyHdrPNames[i], pbTk);
+        pbRedo := True;
+      end;
+    end;
+  if pbRedo then PyCollectLocalsAST(bodyStart);
   PyDbgDumpLocals(Procs[procIdx].Name);
   for i := 0 to PyLocalCount - 1 do
     if PyAssignTargetSym(PyLocals[i].Name) < 0 then
@@ -32497,6 +32559,7 @@ var isGenDef: Boolean;
     savedDefGlobals: array[0..PY_MAX_DEF_GLOBALS-1] of AnsiString;
     savedDefGlobalCount, dgI, cellInit: Integer;
     pbInit, pbAsgn: Integer;
+    pbRedo: Boolean; pbTk: TTypeKind;
     pbLocal: array[0..MAX_PROC_PARAMS - 1] of Integer;
 begin
   { REPLAY of a flattened base's body: a definition the derived class or an
@@ -32791,6 +32854,24 @@ begin
     never collided (bug-nilpy-same-named-nested-defs-in-two-methods-collide). }
   savedPfx := PyNestPrefix; PyNestPrefix := fullName;
   PyCollectLocalsAST(bodyStart);
+  { ...and now that the constraint table exists, the same private-slot treatment
+    for a TYPED parameter this body rebinds to something its declared type
+    cannot hold — see PyReboundParamSlotType. The pass is re-run when any slot
+    is created so the trial sees the ordinary local the name has become. }
+  pbRedo := False;
+  for i := 0 to nparams - 1 do
+    if (i < MAX_PROC_PARAMS) and (pbLocal[i] < 0) and
+       (Procs[procIdx].Params[i].SymIdx >= 0) then
+    begin
+      pbTk := PyReboundParamSlotType(bodyStart, pnames[i], ptypes[i]);
+      if pbTk <> tyUnknown then
+      begin
+        Syms[Procs[procIdx].Params[i].SymIdx].Name := '$byref.' + pnames[i];
+        pbLocal[i] := AllocVar(pnames[i], pbTk);
+        pbRedo := True;
+      end;
+    end;
+  if pbRedo then PyCollectLocalsAST(bodyStart);
   PyDbgDumpLocals(Procs[procIdx].Name);
   for i := 0 to PyLocalCount - 1 do
     if PyAssignTargetSym(PyLocals[i].Name) < 0 then

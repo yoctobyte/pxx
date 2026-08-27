@@ -82,6 +82,7 @@ function PyMakePow(ppBase, ppExp: Integer): Integer; forward;  { Nil Python `**`
 function PyAugClassDunderNode(lhsNode: Integer; binTk: TTokenKind; rhsNode: Integer): Integer; forward; { Nil Python obj.field += x dunder dispatch (pyparser.inc) }
 function PyIsVarGetitemCall(n: Integer): Boolean; forward;
 function PyZeroArgScalarCtor(const nm: AnsiString): Boolean; forward; { Nil Python: str()/int()/float()/bool() with no argument -> that type's zero value (pyparser.inc) } { Nil Python: is this the pyvar_getitem read a non-lvalue receiver builds? (pyparser.inc) }
+function PyReboundParamSlotType(bodyStart: Integer; const nm: AnsiString; declTk: TTypeKind): TTypeKind; forward; { Nil Python: the private-slot type a rebound parameter needs, or tyUnknown (pyparser.inc) }
 function PyNodeListCi(n: Integer): Integer; forward; { Nil Python: TPyList class index of a node, else -1 (pyparser.inc) }
 function PyMakeDynAttrGet(baseNode: Integer; const fname: AnsiString): Integer; forward; { Nil Python obj.name dynamic read (pyparser.inc) }
 function PyMakeDynAttrSet(baseNode: Integer; const fname: AnsiString; valNode: Integer): Integer; forward; { Nil Python obj.name = v dynamic write (pyparser.inc) }

@@ -9990,6 +9990,25 @@ test-core: $(COMPILER)
 	# bug-n-a-fields-type-is-fixed-by-its-first-assignment-and-never-widened
 	./$(COMPILER) test/test_nilpy_a_field_widens_across_methods.npy $(TESTTMP)/test_nilpy_fldwiden26
 	$(TESTTMP)/test_nilpy_fldwiden26 | diff -u test/test_nilpy_a_field_widens_across_methods.expected -
+	# `def f(x: int): x /= 2` stored the DOUBLE's bit pattern in the Int64
+	# parameter slot and printed 4612811918334230528. The /= handler was already
+	# right (PXXDBG=n.locals showed tk=19); the note was dropped, because a
+	# PARAMETER's symbol keeps its declared type. A parameter cannot simply
+	# widen — its type IS the calling convention — so a rebound parameter gets a
+	# private slot seeded from the incoming argument, which is the machine a
+	# rebound VARIANT parameter has had since the caller's-list aliasing bug.
+	# This generalises that rule's type test rather than adding a second
+	# mechanism; the f1/src rows are the control that its original reason holds,
+	# a4/a6 are the local and unannotated controls that named the bug, b1/b2 are
+	# the controls that //= and %= stay integer, and d1 reads the parameter
+	# BEFORE rebinding it. The method rows are there because the two parameter
+	# paths are separate code and a fix in one leaves the other wrong.
+	# Three neighbouring shapes are deliberately absent, each measured and filed
+	# (see the tail of the .npy for which).
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-augmented-true-division-does-not-widen-an-annotated-int-parameter
+	./$(COMPILER) test/test_nilpy_a_rebound_parameter_widens.npy $(TESTTMP)/test_nilpy_parmwiden26
+	$(TESTTMP)/test_nilpy_parmwiden26 | diff -u test/test_nilpy_a_rebound_parameter_widens.expected -
 	# `return lambda ...` — a closure factory, and the returned value was not
 	# CALLABLE while the same lambda bound to a local first was. The return-type
 	# scan's TUPLE detector counted the LAMBDA'S OWN PARAMETER COMMAS, so the

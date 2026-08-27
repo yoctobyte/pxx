@@ -1,0 +1,107 @@
+# `def f(x: int): x /= 2` stored the DOUBLE's bit pattern in the Int64 parameter
+# slot and printed 4612811918334230528. The `/=` handler was already right —
+# PyNoteLocalType records the float, PXXDBG=n.locals showed tk=19 — but the note
+# was dropped, because a PARAMETER's symbol keeps its declared type. The same
+# value in a plain local copy was correct all along, which is the tell.
+#
+# A parameter cannot simply widen: its type IS the calling convention. Python
+# has no typed slots — a rebound parameter is an ordinary local from that point
+# — so it gets a private slot seeded from the incoming argument. That machine
+# already existed for a VARIANT parameter (which travels const-by-ref, so
+# `p = p + [9]` reached the caller's list); this generalises its type test
+# rather than adding a second mechanism beside it, and the f1/src rows are the
+# control that the original reason still holds.
+# bug-n-augmented-true-division-does-not-widen-an-annotated-int-parameter
+
+def a3(x: int):
+    x /= 2
+    return x
+
+def a5(x: int):
+    x /= 2
+    print("in a5", x)          # no return type in play: already wrong here
+    return 0
+
+def a6(x):                     # UNANNOTATED parameter — was always correct
+    x /= 2
+    return x
+
+def a4(x: int):                # plain LOCAL copy — the control that named the bug
+    y = x
+    y /= 2
+    return y
+
+def b1(x: int):                # //= and %= must stay INTEGER
+    x //= 2
+    return x
+
+def b2(x: int):
+    x %= 3
+    return x
+
+def c1(x: int):                # rebound to unrelated types
+    x = "s"
+    return x
+
+def c2(x: int):
+    x = [1, 2]
+    return len(x)
+
+def d1(x: int):                # the body READS the parameter before rebinding
+    before = x
+    x /= 2
+    return (before, x)
+
+def e1(v: int):                # rebinding must not reach the caller
+    v /= 2
+    return v
+
+def dflt(x: int = 4):          # ...and one with a default
+    x /= 2
+    return x
+
+n = 7
+print(a3(5))
+a5(5)
+print(a6(5), a4(5))
+print(b1(5), b2(5))
+print(c1(5), c2(5))
+print(d1(5))
+print(e1(n), n)
+print(dflt(), dflt(8))
+
+# Three neighbouring shapes are deliberately ABSENT, each measured and filed:
+#   x = x + 1 then x /= 2   -> refused, promo-int vs double has no join
+#                              (bug-n-rebinding-an-int-parameter-twice-across-
+#                               the-float-boundary-is-refused)
+#   rebound on ONE path     -> the untaken path returns the widened type
+#                              (bug-n-a-parameter-rebound-on-one-path-returns-
+#                               the-widened-type-on-every-path)
+#   captured by a nested def -> the capture resolves to the parameter
+#                              (bug-n-a-nested-def-capturing-a-rebound-
+#                               parameter-uses-the-parameters-type)
+
+# the same shapes in a METHOD — the two parameter paths are separate code and a
+# fix in one leaves the other wrong, which is why both are exercised
+class K:
+    def m(self, x: int):
+        x /= 2
+        return x
+    def p(self, x: int):
+        x //= 2
+        return x
+    def q(self, x: int):
+        x = "t"
+        return x
+
+k = K()
+print(k.m(5), k.p(5), k.q(5))
+
+# the CONTROL the generalisation must not trade away: a variant parameter that
+# is rebound still gets its own slot, so the caller's list is untouched
+def f1(p):
+    p = p + [9]
+    return p
+
+src = [1]
+print(f1(src), src)
