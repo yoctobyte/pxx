@@ -94,6 +94,21 @@ prerequisite rather than a nice-to-have.
   six existing targets. It belongs on `master`, done by Track A, precisely so
   that this branch merges it in rather than colliding with it. It is **not** a
   prerequisite for this lane — see `PLAN.md`, Phase 0.
+- **`compiler/wasmenc.inc` depends on nothing, and that is load-bearing.** It
+  is the module model and the binary writer, and it is included *alone* by
+  `test/wasm/wasmenc_selftest.pas` — which is the entire reason Phase 1 was
+  provable without touching a single shared file. Any symbol it references
+  whose body lives elsewhere breaks that selftest, and breaks it in a way the
+  compiler build cannot see, because inside `compiler.pas` both files are
+  present and the reference resolves.
+  This was spent once, on 2026-08-28, by something as small as a
+  `procedure WasmReportCoverage; forward;` added for the convenience of putting
+  the entry point next to the rest of the writer. `check_phase1.sh` went red at
+  that moment and stayed red across a handoff that reported it green, because
+  the harness piped a compile into `head`. The entry point now lives in
+  `ir_codegen_wasm32.inc` next to the report it calls.
+  So: a `forward` in `wasmenc.inc` for a body in another file is a hard no, not
+  a style note. If the entry point needs the backend, the entry point moves.
 - **Track A is held by another session (frank1-80, A+N, as of 2026-08-27).**
   Do not edit `symtab.inc` / `ir*.inc` / `defs.inc` / `lexer.inc` on `master`
   while that holds. Confirm before the Phase 4 and Phase 5 escapes.
