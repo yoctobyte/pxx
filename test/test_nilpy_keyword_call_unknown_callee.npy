@@ -1,0 +1,55 @@
+# A KEYWORD argument to a callee the frontend cannot resolve by name.
+#
+# `a = mk(1)` then `a(x=5)` was `error: undefined variable (x)` -- the keyword
+# NAME was being parsed as an ordinary expression identifier, because the
+# keyword-argument lowering only fired when a candidate callee could be named at
+# the call site. It inverted the usual expectation: the same call through a
+# PARAMETER, which the frontend knows strictly LESS about, worked fine, since
+# that site already took the dynamic path.
+#
+# Fixed by the callable-carrier work rather than by a change of its own
+# (refactor-a-one-signature-record-for-every-callable-carrier gave the runtime
+# dispatcher the parameter names; the parse-time gate went with it). This test
+# exists so the compile error cannot come back silently -- it was a COMPILE
+# error, so no runtime check could have caught it, and none of the callee shapes
+# below was gated anywhere.
+# bug-nilpy-a-keyword-call-through-a-statically-unknown-callee-does-not-compile
+
+
+def mk(k):
+    return lambda x, y=2: x * 100 + y + k
+
+
+def use(g):
+    return g(y=5, x=6)
+
+
+def named(a, b=10, c=20):
+    return a + b * 2 + c * 3
+
+
+# a local holding a CALL RESULT -- the shape the ticket was filed on
+a = mk(1)
+print("call-result:", a(x=5), a(x=5, y=7), a(1, y=9))
+
+# a dict VALUE and a list ELEMENT: no static callee either
+d = {"f": named}
+print("dict:", d["f"](1, c=5), d["f"](a=1, b=2))
+fs = [named]
+print("list:", fs[0](1, b=3), fs[0](a=2, c=1))
+
+# a PARAMETER -- the one that already worked, kept as the control
+print("param:", use(mk(0)))
+
+# the result of a call whose branch decides which function comes back
+def pick(n):
+    if n:
+        return named
+    return mk(0)
+
+
+print("branch:", pick(1)(1, b=4))
+
+# a local holding a bare def NAME, and the fully static spelling, as controls
+g = named
+print("local:", g(1, b=3), named(1, b=3))

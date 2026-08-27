@@ -51,7 +51,34 @@ begin
       zeroBytes := TARGET_PTR_SIZE;                       { scalar AnsiString }
   end
   else if Syms[i].TypeKind = tyVariant then
-    zeroBytes := TypeSize(tyVariant)
+  begin
+    { STATIC ARRAY of Variant -- `av: array[0..3] of Variant`. Exactly the
+      AnsiString arm above, one indirection out, and it was missing: the arm
+      zeroed ONE element's worth (16 bytes) for an array of any length, so
+      av[0] started empty and av[1..] held stack garbage. A Variant's first
+      word is its TAG, and the very first `av[i] := x` RELEASES the old
+      contents -- so whenever the frame garbage under av[1..] happened to
+      carry a tag the release path recognises, that store decremented a
+      refcount through a payload the slot never owned.
+
+      Measured in pylib's PyBoundPairCallKwBody, whose `av: array[0..3] of
+      Variant` is exactly this shape: `for i := nPos to 3 do av[i] := pynone`
+      ran `decq -0x10(%rax)` with rax pointing 40 bytes into an unrelated
+      bound-pair record, decrementing that record's Sig field by one. The pair
+      then read its signature one byte early and refused a legal two-argument
+      call as "missing 510 required positional argument(s)".
+
+      Same shape and the same red herring as
+      bug-a-a-local-array-of-interfaces-is-not-zero-initialised: it is
+      invisible on a clean stack, so it appears and disappears when an
+      unrelated routine changes the frame in front of it -- which is why it
+      surfaced as a NilPy regression with no NilPy change behind it.
+      regression-test-nilpy-test-nilpy-star-operand-in-a-variant }
+    if Syms[i].IsArray then
+      zeroBytes := Syms[i].ArrLen * TypeSize(tyVariant)
+    else
+      zeroBytes := TypeSize(tyVariant);
+  end
   { RecordNeedsZeroInit, not RecordHasManagedFields: an interface FIELD is
     excluded from the finalization predicate on purpose (releasing it under
     the record heap lock deadlocks), but it still has to START NIL — nilling
@@ -8367,10 +8394,18 @@ begin
     `(a if c else b).upper()` lands here too, which is the same rule Python
     has — a primary takes a suffix whatever produced it.
     bug-nilpy-a-chained-method-on-a-runtime-dispatched-result-is-refused }
+  { AN_VIRTUAL_CALL alongside AN_CALL for the reason spelled out at the bare-
+    ATTRIBUTE loop below: a call is two node kinds, and a method on a class that
+    participates in a hierarchy is built as the virtual one. Both loops had
+    drifted to knowing only AN_CALL while the subscript guard further down
+    already tested both, so `P(7).mk().mk().a` and `P(7).mk().txt().upper()`
+    stopped at the SECOND link — one subclass anywhere in the file was enough.
+    bug-n-an-attribute-off-a-call-returning-a-class-value-does-not-parse }
   while PyExprMode and (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
         (Tokens[TokPos].Kind = tkIdent) and
         (Tokens[TokPos + 1].Kind = tkLParen) and
         ((ASTKind[CurASTNode] = AN_CALL) or
+         (ASTKind[CurASTNode] = AN_VIRTUAL_CALL) or
          (ASTKind[CurASTNode] = AN_TERNARY)) and
         not (IntToTypeKind(ASTTk[CurASTNode]) in [tyClass, tyRecord]) do
   begin
@@ -8432,11 +8467,38 @@ begin
     bug-nilpy-a-bare-attribute-on-a-call-result-is-refused
 
     AN_TERNARY for the same reason as the '.method()' loop above — a
-    runtime-dispatched result is a ternary, so `x.split(",").foo` needs it too. }
+    runtime-dispatched result is a ternary, so `x.split(",").foo` needs it too.
+
+    AN_VIRTUAL_CALL because a call is one of TWO node kinds, and this loop knew
+    only one. A method reached on a class that participates in a hierarchy is
+    dispatched through the VMT and built as AN_VIRTUAL_CALL rather than AN_CALL
+    — so the identical program compiled or did not depending on whether the
+    receiver's class had a SUBCLASS anywhere in the file:
+
+        class P:
+            def __init__(self, a): self.a = a
+            def mk(self):
+                cls = P
+                return cls(self.a)      # a classref value call -> variant
+        class Q(P):                     # <-- delete these two lines and it compiles
+            pass
+        print(P(7).mk().a)              # pascal26: unexpected token
+
+    An unrelated class declaring its own `mk` does NOT trigger it, which is what
+    rules out the overload-set explanation the ticket opened with: it is
+    inheritance, not name collision. `P(self.a)` — a STATIC construction — is
+    unaffected because it types as tyClass and the class-selector loop above
+    claims it; only a call whose result is a variant reaches this loop at all.
+
+    The diagnostic named neither the subclass nor the class-valued return, so it
+    read as a typo at the field name. A factory method plus a subclass is the
+    reason to write a factory method in the first place.
+    bug-n-an-attribute-off-a-call-returning-a-class-value-does-not-parse }
   while PyExprMode and (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
         (Tokens[TokPos].Kind = tkIdent) and
         (Tokens[TokPos + 1].Kind <> tkLParen) and
         ((ASTKind[CurASTNode] = AN_CALL) or
+         (ASTKind[CurASTNode] = AN_VIRTUAL_CALL) or
          (ASTKind[CurASTNode] = AN_TERNARY)) and
         not (IntToTypeKind(ASTTk[CurASTNode]) in [tyClass, tyRecord]) do
   begin
@@ -9950,7 +10012,30 @@ begin
       either needing the other to be a class. Requiring both was what made
       `b < 1` fall through to the identity/numeric path.
       bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly }
+    { ...but a VARIANT operand is not a "non-class operand", it is an UNKNOWN
+      one, and this arm has no fall-through: when it finds no dunder it emits a
+      raise. So capturing a pair with a variant on one side turns the runtime
+      answer into a compile-time refusal. Measured: `lhs = 0; lhs = V(7); lhs < p`
+      where V declares `__lt__` — the left is statically a variant, so ordLCi is
+      -1, the REFLECTED `__gt__` is looked for on the right and V does not have
+      one, and the whole comparison became `raise TypeError: comparison not
+      supported`. CPython calls `lhs.__lt__(p)`; so does pylib's pycmp_v, which
+      is where a variant operand belongs and where it went before this arm was
+      widened to either side.
+
+      The dispatch would be wrong even when a dunder IS found, for the same
+      reason: Python asks the LEFT operand's type first, and with the left a
+      variant we cannot know whether it has the direct dunder — jumping to the
+      right operand's reflected one reverses the order the language specifies.
+      Both directions are therefore excluded, not just variant-on-the-left.
+
+      This does not narrow the fix it qualifies: `b < 1`, `b == "s"`,
+      `obj < 1.5` all still dispatch, because an int/str/float operand IS
+      statically known to have no dunders. Only tyVariant is unknowable here.
+      regression-test-nilpy-test-nilpy-variant-operand-arith-dunders }
     if PyExprMode and (op in [tkLt, tkLe, tkGt, tkGe]) and
+       (IntToTypeKind(ASTTk[left]) <> tyVariant) and
+       (IntToTypeKind(ASTTk[right]) <> tyVariant) and
        (((IntToTypeKind(ASTTk[left]) = tyClass) and
          (ResolveNodeRec(left) >= REC_UCLASS_BASE) and
          not PyRecIsPylibOwnClass(ResolveNodeRec(left))) or

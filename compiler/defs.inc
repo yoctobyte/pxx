@@ -2420,7 +2420,20 @@ var
   ProcNamedGP  : array of Integer; { count of named (non-variadic) GP params, for va_start's initial gp_offset }
   ProcNamedFP  : array of Integer; { count of named (non-variadic) FP/XMM params, for va_start's initial fp_offset }
   ProcUnitIdx : array of Integer; { Strs[] unit name, or -1 for main }
-  { The token index of a NilPy module-level `def` that SHADOWS a builtin, or 0.
+  { ONE-BASED token index of a NilPy module-level `def`, or 0 for "not one".
+    One-based because the sentinel and a real position would otherwise collide
+    at token 0, and token 0 is not a rare case: it is the `def` of a file whose
+    FIRST statement is a def, which is how most modules start. The collision
+    reads as "visible everywhere", which is accidentally right for a def at the
+    top of the file and silently wrong the moment two defs share a name and the
+    first one is at position 0 -- it drops out of every positional comparison.
+    Exactly the overload this array was introduced to REPLACE (see the note in
+    PyRegisterDefShells about ProcPyDefTok's predecessor dropping a def that was
+    the module's first statement); it survived one level down in the encoding.
+    Readers compare `ProcPyDefTok[i] - 1` against TokPos.
+    bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
+
+    The token index of a NilPy module-level `def` that SHADOWS a builtin, or 0.
     Python rebinds the name when the `def` STATEMENT runs, so a call ABOVE it
     still reaches the builtin — `print(min(3,1,2))` before a `def min(a,b,c,d,e)`
     is the builtin's 1, and only the call below it is the user's. The shell that
@@ -2430,6 +2443,21 @@ var
     Deliberately NOT ProcHdrTok: that one is compared against CurBodyHdrTok under
     RequireForward and means something else. }
   ProcPyDefTok: array of Integer;
+  { The token index of the first MODULE-LEVEL ASSIGNMENT that rebinds this
+    def's name after its own `def` statement, or -1 for none; -2 = not computed
+    yet. The other half of ProcPyDefTok's question.
+
+    `def f(): ...` followed by `f = D().f` or `f = lambda: 2` is two bindings of
+    one name, exactly as two `def f`s are, and Python's answer at any point is
+    whichever statement ran last. The def side of that comparison has had a
+    position since ProcPyDefTok; the ASSIGNMENT side had none, so a rebinding
+    written after a def could never win and `f("q")` still reached the def.
+
+    Filled lazily by PyDefRebindTok on first ask and reused, so a module whose
+    every identifier occurrence asks the question scans its token stream once
+    per def rather than once per occurrence.
+    bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name }
+  ProcPyRebindTok: array of Integer;
   ProcHdrTok  : array of Integer; { SOffset of a MAIN-program top-level header (pre-scan/forward stamp); 0 = always visible (builtins, units, interface, methods, nested). Compared against CurBodyHdrTok under RequireForward. }
   ProcRetRecId : array of Integer; { record id for tyRecord results }
   ProcAggregateDestSym : array of Integer; { hidden caller-result pointer local, or -1 }

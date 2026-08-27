@@ -1,307 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-27T04:54:14Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "c76e43e50c509d2367447ccf9e9bf3f9506b2bb7",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-27T05:00:48Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "b5597e82fd10be8cebcfb46639e2b737df3920b2",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T05:06:42Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "e03794fb11a69b207d0125c82f6e2ba915650806",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T05:26:55Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "e03794fb11a69b207d0125c82f6e2ba915650806",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-27T05:33:29Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "86f677fac8f95b55fa87395d42607965ec608212",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T05:53:47Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "86f677fac8f95b55fa87395d42607965ec608212",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-27T06:00:13Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "e2b4a9dfd9d6bb9b4b970a0e60f05901c491cc63",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T06:20:18Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "e2b4a9dfd9d6bb9b4b970a0e60f05901c491cc63",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-27T06:24:40Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "e2b4a9dfd9d6bb9b4b970a0e60f05901c491cc63",
-   "tier": "slow",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T06:32:02Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "e2b4a9dfd9d6bb9b4b970a0e60f05901c491cc63",
-   "tier": "opt",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T06:55:53Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "a366eb137b0e485b8810c53be6465efbfbbc7bca",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T07:16:34Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "a366eb137b0e485b8810c53be6465efbfbbc7bca",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-27T07:23:45Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "64f6819d38ffd7fde7754a490e4549e50031a153",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T07:43:41Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "64f6819d38ffd7fde7754a490e4549e50031a153",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-27T07:48:11Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "64f6819d38ffd7fde7754a490e4549e50031a153",
-   "tier": "slow",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T07:59:29Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "d273b67ddd0f95b00bc36b5cdd96d69b2cb611b6",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T08:20:24Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "d273b67ddd0f95b00bc36b5cdd96d69b2cb611b6",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-27T08:25:10Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "d273b67ddd0f95b00bc36b5cdd96d69b2cb611b6",
-   "tier": "slow",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T08:33:39Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "d273b67ddd0f95b00bc36b5cdd96d69b2cb611b6",
-   "tier": "opt",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T08:44:41Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "457bda75412e2e0f737309fabb75f1d7ab5c165b",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T09:05:26Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "457bda75412e2e0f737309fabb75f1d7ab5c165b",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-27T09:14:59Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "32fba2082684be424a045b5154c8ba3f7abea053",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T09:35:00Z",
-   "fixed": [],
-   "new_red": [
-    "test-emit-obj#src:test/cxtensa_obj.c@1"
-   ],
-   "sha": "32fba2082684be424a045b5154c8ba3f7abea053",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-27T09:39:24Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "32fba2082684be424a045b5154c8ba3f7abea053",
-   "tier": "slow",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T09:47:10Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "32fba2082684be424a045b5154c8ba3f7abea053",
-   "tier": "opt",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T10:03:09Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "192906caf7f7a3e6684dc720884da75061a5339b",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T10:22:42Z",
-   "fixed": [
-    "test-nilpy#src:test/test_nilpy_star_unpack_into_a_collecting_callee.npy"
-   ],
-   "new_red": [],
-   "sha": "192906caf7f7a3e6684dc720884da75061a5339b",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-27T10:29:00Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "6b59df667fe46c9d6ceabcd6f0b5d6e8e400fa68",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T10:48:27Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "6b59df667fe46c9d6ceabcd6f0b5d6e8e400fa68",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-27T10:54:40Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "33d25ba40f7e50a6a36db19ad4d822de51e284a8",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T11:02:56Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "7fddc65529f6c6667509ade8dddb885b1ff1f158",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T11:08:38Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "ce085157994a98389a9eb0e6d0d8b19a5e5d1e6a",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-08-27T11:14:55Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "c8cc3ffdc3780479aff3c347fad02c6f41dddbf4",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-27T11:29:08Z",
    "fixed": [],
    "new_red": [],
@@ -462,13 +161,319 @@
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T15:14:25Z",
+   "fixed": [],
+   "new_red": [
+    "tools-devtest#00"
+   ],
+   "sha": "8787cfe4235a9f6f869e8b365586bc1fce8c4a54",
+   "tier": "full",
+   "timed_out": false,
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-27T15:25:08Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "652c3d891e861df9437edf4a0acb306931b82075",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T15:45:35Z",
+   "fixed": [
+    "test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy",
+    "test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy"
+   ],
+   "new_red": [],
+   "sha": "652c3d891e861df9437edf4a0acb306931b82075",
+   "tier": "full",
+   "timed_out": false,
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-27T15:52:04Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "309e80227031acbf4f3a3be11bad69faebaf01a8",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T16:01:11Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "5e8a97f70b7ac73a1ed1942e165e430167db8269",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T16:17:08Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "203ae30f681e7512823f0892bdd0b08aa84828f8",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T16:24:06Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "7212484e85050a19ee61d67d19a43af06d609af8",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T16:30:33Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "035c114cfbab4768c52c5d206affa4e5cf02d03b",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T16:37:09Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "ebea4abf00c0199fa74ea5e59667a5ba287467c2",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T16:45:56Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "1684ae33bac593af89571db13f29c8644f2ba430",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T16:57:19Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "a721ad7e5c58987ff7ae7c55c4c933e6484eddb5",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T17:17:36Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "a721ad7e5c58987ff7ae7c55c4c933e6484eddb5",
+   "tier": "full",
+   "timed_out": false,
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-27T17:24:10Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "186a4a5cb8a5cd5332d2bf3f1f56e4946d4cb3c9",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T17:44:18Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "186a4a5cb8a5cd5332d2bf3f1f56e4946d4cb3c9",
+   "tier": "full",
+   "timed_out": false,
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-27T17:48:47Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "186a4a5cb8a5cd5332d2bf3f1f56e4946d4cb3c9",
+   "tier": "slow",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T17:56:06Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "2932d11543e9786970fcebe9825fe8af94132756",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T18:02:29Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "8930b76cf2773d1f673f9880e47f3eacbbff73b6",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T18:09:23Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "d5981b371754b92e716248a8b098223a5f29db73",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T18:18:03Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "9f3fb013402212a23fbd4e63dff7b7afb6451cfc",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T18:32:53Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "f723dd9dac9e20597b273eecf226372a3651672f",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T18:38:49Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "ed0e194b9196db258e8437c1ceb172c13cff6383",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T18:52:29Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "3c9fb9e9c6e8d566b2530475f30064b49f17feec",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T19:09:58Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "71b410a349b669eb914dca2aebc6e1b19d6c2f2f",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T19:35:32Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "71b410a349b669eb914dca2aebc6e1b19d6c2f2f",
+   "tier": "full",
+   "timed_out": false,
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-27T19:42:10Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "3cd21608e041fc255190faf7cb28ffe1da577c56",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T19:48:42Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "8b2cc332791e5da7618f123cfb05f87b12bd13f3",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T20:09:39Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "8b2cc332791e5da7618f123cfb05f87b12bd13f3",
+   "tier": "full",
+   "timed_out": false,
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-27T20:16:30Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "e02417b8313e0e5ff766dc72150c44b40933476d",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T20:26:39Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "b898d0543fc8499facc66706257ff08d39195520",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T20:46:26Z",
+   "fixed": [],
+   "new_red": [
+    "test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy",
+    "test-nilpy#src:test/test_nilpy_startswith_tuple.npy"
+   ],
+   "sha": "b898d0543fc8499facc66706257ff08d39195520",
+   "tier": "full",
+   "timed_out": false,
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-27T20:53:44Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "b70c6f40c4c7bdb43159f99efa3d083ab150c8ad",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T21:01:07Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "c0840ac21b55500223bb953251d5170318a4ff18",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T21:08:18Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "aca7f699288ebcd6343b0af26afdb73c12e85aa2",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
  "job_reason": {
   "test-emit-obj#src:test/cxtensa_obj.c@1": "in: $TMP | near:  Integer  __pxxrawsyscall  SYS_getuid >>> | pascal26:477: error: undefined variable (SYS_getgid) | in: $TMP | near:  Integer  __pxxrawsyscall  SYS_getgid >>> | pascal26: too many errors, stopping",
-  "test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy": "(0, 1) | -xy | -(1, 2) | -17 | -(4, 3) | -11 pq",
-  "test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy": "-lt    False | -radd  ('radd', 3, 4) | -bare  TypeError | -nums  7 3 10 2.5 2 1 25 | -strs  xy | -lists [1, 2] [1, 1]"
+  "test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy": "@@ -1,4 +1,2 @@ | E:A A | F:B B | -C G:C | -H:G:C | Segmentation fault (core dumped)",
+  "test-nilpy#src:test/test_nilpy_startswith_tuple.npy": "@@ -4,5 +4,3 @@ | plain      True True | window     True True | winmiss    False | -param      True False | -platform   False True",
+  "tools-devtest#00": "tools-devtest: tools/twatch_refile_stub_devtest.py | tools-devtest: tools/twatch_resume_devtest.py | tools-devtest: tools/twatch_timeout_staleness_devtest.py | tools-devtest: tools/twatch_timeout_verdict_devtest.py | tools-devtest: tools/whokilled_devtest.py | tools-devtest: 78 green, 1 RED -- tools/testmgr_hardcoded_tmp_devtest.py"
  },
  "job_tier": {
   "demos#00": "full",
@@ -642,6 +647,7 @@
   "lib-test#src:test/lib_synapse_transitive_unit.pas": "full",
   "lib-test#src:test/lib_sysutils.pas": "full",
   "lib-test#src:test/lib_sysutils_dirs_dates.pas": "full",
+  "lib-test#src:test/lib_sysutils_string_gaps.pas": "full",
   "lib-test#src:test/lib_textfile.pas": "full",
   "lib-test#src:test/lib_textreadchar.pas": "full",
   "lib-test#src:test/lib_textreadnumtok.pas": "full",
@@ -2498,6 +2504,7 @@
   "test-core#src:test/test_variant_empty_renders_as_pascal_empty.pas": "native",
   "test-core#src:test/test_variant_fn_return_forward.pas": "native",
   "test-core#src:test/test_variant_literal_concat_arg.pas": "native",
+  "test-core#src:test/test_variant_local_array_zero_init.pas": "native",
   "test-core#src:test/test_variant_null_propagates_through_arithmetic.pas": "native",
   "test-core#src:test/test_variant_ops.pas": "native",
   "test-core#src:test/test_variant_record_tag_padding.pas": "native",
@@ -2761,6 +2768,7 @@
   "test-nilpy#src:test/test_nilpy_adjacent_string_literals.npy": "full",
   "test-nilpy#src:test/test_nilpy_aggregate_builtins.npy": "full",
   "test-nilpy#src:test/test_nilpy_ambiguous_variant_field.npy": "full",
+  "test-nilpy#src:test/test_nilpy_ancestor_field_widened_by_a_descendant.npy": "full",
   "test-nilpy#src:test/test_nilpy_annotated.npy": "full",
   "test-nilpy#src:test/test_nilpy_annotated_class_attribute.npy": "full",
   "test-nilpy#src:test/test_nilpy_annotated_module_global.npy": "full",
@@ -2771,6 +2779,7 @@
   "test-nilpy#src:test/test_nilpy_ast_literal_eval.npy": "full",
   "test-nilpy#src:test/test_nilpy_atexit_io.npy": "full",
   "test-nilpy#src:test/test_nilpy_attr_off_subscript_of_call_result.npy": "full",
+  "test-nilpy#src:test/test_nilpy_attribute_off_a_virtual_call_result.npy": "full",
   "test-nilpy#src:test/test_nilpy_attrs.npy": "full",
   "test-nilpy#src:test/test_nilpy_augmented_add_variant_list.npy": "full",
   "test-nilpy#src:test/test_nilpy_augmented_assign_class_dunder.npy": "full",
@@ -2791,6 +2800,7 @@
   "test-nilpy#src:test/test_nilpy_body_scan_attribution.npy": "full",
   "test-nilpy#src:test/test_nilpy_bool.npy": "full",
   "test-nilpy#src:test/test_nilpy_bool_is_an_int_not_ole_minus_one.npy": "full",
+  "test-nilpy#src:test/test_nilpy_bool_op_return_type.npy": "full",
   "test-nilpy#src:test/test_nilpy_bool_operand_and_or.npy": "full",
   "test-nilpy#src:test/test_nilpy_bool_protocol.npy": "full",
   "test-nilpy#src:test/test_nilpy_boolop_class_identity.npy": "full",
@@ -2809,6 +2819,7 @@
   "test-nilpy#src:test/test_nilpy_builtins_list_enum.npy": "full",
   "test-nilpy#src:test/test_nilpy_by_name_list_params_take_a_str.npy": "full",
   "test-nilpy#src:test/test_nilpy_bytearray_ctor.npy": "full",
+  "test-nilpy#src:test/test_nilpy_bytearray_unbound_and_subclass.npy": "full",
   "test-nilpy#src:test/test_nilpy_bytearray_vs_bytes.npy": "full",
   "test-nilpy#src:test/test_nilpy_bytes.npy": "full",
   "test-nilpy#src:test/test_nilpy_bytes_ann.npy": "full",
@@ -2864,6 +2875,7 @@
   "test-nilpy#src:test/test_nilpy_comprehension_two_for.npy": "full",
   "test-nilpy#src:test/test_nilpy_computed_name_sees_a_property.npy": "full",
   "test-nilpy#src:test/test_nilpy_conditional_expression_none.npy": "full",
+  "test-nilpy#src:test/test_nilpy_conditionally_rebound_parameter_return.npy": "full",
   "test-nilpy#src:test/test_nilpy_configparser.npy": "full",
   "test-nilpy#src:test/test_nilpy_container_element_repr.npy": "full",
   "test-nilpy#src:test/test_nilpy_container_kind_tag.npy": "full",
@@ -2883,6 +2895,7 @@
   "test-nilpy#src:test/test_nilpy_dataclass_repr.npy": "full",
   "test-nilpy#src:test/test_nilpy_dedent.npy": "full",
   "test-nilpy#src:test/test_nilpy_def_local_shadows_module_global.npy": "full",
+  "test-nilpy#src:test/test_nilpy_def_redefined_rebinds_only_after.npy": "full",
   "test-nilpy#src:test/test_nilpy_def_return_type.npy": "full",
   "test-nilpy#src:test/test_nilpy_def_returning_a_big_int.npy": "full",
   "test-nilpy#src:test/test_nilpy_def_returning_a_field.npy": "full",
@@ -2959,6 +2972,7 @@
   "test-nilpy#src:test/test_nilpy_fallback_import_try_wins.npy": "full",
   "test-nilpy#src:test/test_nilpy_field_from_module_global.npy": "full",
   "test-nilpy#src:test/test_nilpy_field_from_unannotated_param.npy": "full",
+  "test-nilpy#src:test/test_nilpy_field_holding_a_def.npy": "full",
   "test-nilpy#src:test/test_nilpy_file_close_readlines.npy": "full",
   "test-nilpy#src:test/test_nilpy_file_dunder.npy": "full",
   "test-nilpy#src:test/test_nilpy_file_io_and_comprehensions.npy": "full",
@@ -3002,6 +3016,7 @@
   "test-nilpy#src:test/test_nilpy_fstring_selfdoc.npy": "full",
   "test-nilpy#src:test/test_nilpy_fstring_spec_on_variant.npy": "full",
   "test-nilpy#src:test/test_nilpy_fstrings.npy": "full",
+  "test-nilpy#src:test/test_nilpy_function_identity.npy": "full",
   "test-nilpy#src:test/test_nilpy_function_value_repr.npy": "full",
   "test-nilpy#src:test/test_nilpy_function_values.npy": "full",
   "test-nilpy#src:test/test_nilpy_funcvalue.npy": "full",
@@ -3064,6 +3079,7 @@
   "test-nilpy#src:test/test_nilpy_json_reparse_heap.npy": "full",
   "test-nilpy#src:test/test_nilpy_keyerror_names_the_key.npy": "full",
   "test-nilpy#src:test/test_nilpy_keyword_arg_through_a_callable_value.npy": "full",
+  "test-nilpy#src:test/test_nilpy_keyword_call_unknown_callee.npy": "full",
   "test-nilpy#src:test/test_nilpy_kwarg_overload.npy": "full",
   "test-nilpy#src:test/test_nilpy_kwarg_overload_set.npy": "full",
   "test-nilpy#src:test/test_nilpy_kwarg_through_lifted_value.npy": "full",
@@ -3125,6 +3141,7 @@
   "test-nilpy#src:test/test_nilpy_membership_bool_return.npy": "full",
   "test-nilpy#src:test/test_nilpy_membership_eq_dunder.npy": "full",
   "test-nilpy#src:test/test_nilpy_method_arity_missing_args_fails.npy": "full",
+  "test-nilpy#src:test/test_nilpy_method_call_result_assigned_to_a_local.npy": "full",
   "test-nilpy#src:test/test_nilpy_method_callable_param.npy": "full",
   "test-nilpy#src:test/test_nilpy_method_kwarg.npy": "full",
   "test-nilpy#src:test/test_nilpy_method_nested_def.npy": "full",
@@ -3150,6 +3167,7 @@
   "test-nilpy#src:test/test_nilpy_module_member_as_a_value.npy": "full",
   "test-nilpy#src:test/test_nilpy_module_name_from_a_field_in_a_block.npy": "full",
   "test-nilpy#src:test/test_nilpy_module_name_rebound_in_a_block.npy": "full",
+  "test-nilpy#src:test/test_nilpy_module_rebinding_beats_a_def.npy": "full",
   "test-nilpy#src:test/test_nilpy_module_true_divide_assign.npy": "full",
   "test-nilpy#src:test/test_nilpy_multi_param_lambda_is_compiled.npy": "full",
   "test-nilpy#src:test/test_nilpy_multiple_inheritance.npy": "full",
@@ -3159,6 +3177,7 @@
   "test-nilpy#src:test/test_nilpy_negative_zero_repr.npy": "full",
   "test-nilpy#src:test/test_nilpy_nested_comp.npy": "full",
   "test-nilpy#src:test/test_nilpy_nested_def.npy": "full",
+  "test-nilpy#src:test/test_nilpy_nested_def_captures_a_rebound_parameter.npy": "full",
   "test-nilpy#src:test/test_nilpy_nested_def_default_at_def_time.npy": "full",
   "test-nilpy#src:test/test_nilpy_nested_def_default_capture.npy": "full",
   "test-nilpy#src:test/test_nilpy_nested_def_default_override.npy": "full",
@@ -3260,6 +3279,7 @@
   "test-nilpy#src:test/test_nilpy_range_variant_bound.npy": "full",
   "test-nilpy#src:test/test_nilpy_raw_string_set.npy": "full",
   "test-nilpy#src:test/test_nilpy_re.npy": "full",
+  "test-nilpy#src:test/test_nilpy_rebind_across_the_float_boundary.npy": "full",
   "test-nilpy#src:test/test_nilpy_rebind_across_unrelated_classes.npy": "full",
   "test-nilpy#src:test/test_nilpy_rebind_type.npy": "full",
   "test-nilpy#src:test/test_nilpy_rebinding_a_parameter_is_local.npy": "full",
@@ -3286,6 +3306,7 @@
   "test-nilpy#src:test/test_nilpy_select_stdin_ready.npy": "full",
   "test-nilpy#src:test/test_nilpy_selector_off_call_returning_a_global.npy": "full",
   "test-nilpy#src:test/test_nilpy_selector_on_a_dict_returning_call.npy": "full",
+  "test-nilpy#src:test/test_nilpy_self_class_constructs.npy": "full",
   "test-nilpy#src:test/test_nilpy_selfassigned_comprehension.npy": "full",
   "test-nilpy#src:test/test_nilpy_sequence_ordering.npy": "full",
   "test-nilpy#src:test/test_nilpy_sequence_repeat_variant_count.npy": "full",
@@ -3323,6 +3344,7 @@
   "test-nilpy#src:test/test_nilpy_star_methods_and_targets.npy": "full",
   "test-nilpy#src:test/test_nilpy_star_not_first_argument.npy": "full",
   "test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy": "full",
+  "test-nilpy#src:test/test_nilpy_star_over_any_static_iterable.npy": "full",
   "test-nilpy#src:test/test_nilpy_star_unpack_into_a_callable_value.npy": "full",
   "test-nilpy#src:test/test_nilpy_star_unpack_into_a_collecting_callee.npy": "full",
   "test-nilpy#src:test/test_nilpy_starred_unpack.npy": "full",
@@ -3893,6 +3915,7 @@
   "lib-test#src:test/lib_synapse_transitive_unit.pas": "pass",
   "lib-test#src:test/lib_sysutils.pas": "pass",
   "lib-test#src:test/lib_sysutils_dirs_dates.pas": "pass",
+  "lib-test#src:test/lib_sysutils_string_gaps.pas": "pass",
   "lib-test#src:test/lib_textfile.pas": "pass",
   "lib-test#src:test/lib_textreadchar.pas": "pass",
   "lib-test#src:test/lib_textreadnumtok.pas": "pass",
@@ -5737,6 +5760,7 @@
   "test-core#src:test/test_variant_empty_renders_as_pascal_empty.pas": "pass",
   "test-core#src:test/test_variant_fn_return_forward.pas": "pass",
   "test-core#src:test/test_variant_literal_concat_arg.pas": "pass",
+  "test-core#src:test/test_variant_local_array_zero_init.pas": "pass",
   "test-core#src:test/test_variant_null_propagates_through_arithmetic.pas": "pass",
   "test-core#src:test/test_variant_ops.pas": "pass",
   "test-core#src:test/test_variant_record_tag_padding.pas": "pass",
@@ -5995,6 +6019,7 @@
   "test-nilpy#src:test/test_nilpy_adjacent_string_literals.npy": "pass",
   "test-nilpy#src:test/test_nilpy_aggregate_builtins.npy": "pass",
   "test-nilpy#src:test/test_nilpy_ambiguous_variant_field.npy": "pass",
+  "test-nilpy#src:test/test_nilpy_ancestor_field_widened_by_a_descendant.npy": "pass",
   "test-nilpy#src:test/test_nilpy_annotated.npy": "pass",
   "test-nilpy#src:test/test_nilpy_annotated_class_attribute.npy": "pass",
   "test-nilpy#src:test/test_nilpy_annotated_module_global.npy": "pass",
@@ -6005,6 +6030,7 @@
   "test-nilpy#src:test/test_nilpy_ast_literal_eval.npy": "pass",
   "test-nilpy#src:test/test_nilpy_atexit_io.npy": "pass",
   "test-nilpy#src:test/test_nilpy_attr_off_subscript_of_call_result.npy": "pass",
+  "test-nilpy#src:test/test_nilpy_attribute_off_a_virtual_call_result.npy": "pass",
   "test-nilpy#src:test/test_nilpy_attrs.npy": "pass",
   "test-nilpy#src:test/test_nilpy_augmented_add_variant_list.npy": "pass",
   "test-nilpy#src:test/test_nilpy_augmented_assign_class_dunder.npy": "pass",
@@ -6025,6 +6051,7 @@
   "test-nilpy#src:test/test_nilpy_body_scan_attribution.npy": "pass",
   "test-nilpy#src:test/test_nilpy_bool.npy": "pass",
   "test-nilpy#src:test/test_nilpy_bool_is_an_int_not_ole_minus_one.npy": "pass",
+  "test-nilpy#src:test/test_nilpy_bool_op_return_type.npy": "pass",
   "test-nilpy#src:test/test_nilpy_bool_operand_and_or.npy": "pass",
   "test-nilpy#src:test/test_nilpy_bool_protocol.npy": "pass",
   "test-nilpy#src:test/test_nilpy_boolop_class_identity.npy": "pass",
@@ -6043,6 +6070,7 @@
   "test-nilpy#src:test/test_nilpy_builtins_list_enum.npy": "pass",
   "test-nilpy#src:test/test_nilpy_by_name_list_params_take_a_str.npy": "pass",
   "test-nilpy#src:test/test_nilpy_bytearray_ctor.npy": "pass",
+  "test-nilpy#src:test/test_nilpy_bytearray_unbound_and_subclass.npy": "pass",
   "test-nilpy#src:test/test_nilpy_bytearray_vs_bytes.npy": "pass",
   "test-nilpy#src:test/test_nilpy_bytes.npy": "pass",
   "test-nilpy#src:test/test_nilpy_bytes_ann.npy": "pass",
@@ -6098,6 +6126,7 @@
   "test-nilpy#src:test/test_nilpy_comprehension_two_for.npy": "pass",
   "test-nilpy#src:test/test_nilpy_computed_name_sees_a_property.npy": "pass",
   "test-nilpy#src:test/test_nilpy_conditional_expression_none.npy": "pass",
+  "test-nilpy#src:test/test_nilpy_conditionally_rebound_parameter_return.npy": "pass",
   "test-nilpy#src:test/test_nilpy_configparser.npy": "pass",
   "test-nilpy#src:test/test_nilpy_container_element_repr.npy": "pass",
   "test-nilpy#src:test/test_nilpy_container_kind_tag.npy": "pass",
@@ -6117,6 +6146,7 @@
   "test-nilpy#src:test/test_nilpy_dataclass_repr.npy": "pass",
   "test-nilpy#src:test/test_nilpy_dedent.npy": "pass",
   "test-nilpy#src:test/test_nilpy_def_local_shadows_module_global.npy": "pass",
+  "test-nilpy#src:test/test_nilpy_def_redefined_rebinds_only_after.npy": "pass",
   "test-nilpy#src:test/test_nilpy_def_return_type.npy": "pass",
   "test-nilpy#src:test/test_nilpy_def_returning_a_big_int.npy": "pass",
   "test-nilpy#src:test/test_nilpy_def_returning_a_field.npy": "pass",
@@ -6191,6 +6221,7 @@
   "test-nilpy#src:test/test_nilpy_fallback_import_try_wins.npy": "pass",
   "test-nilpy#src:test/test_nilpy_field_from_module_global.npy": "pass",
   "test-nilpy#src:test/test_nilpy_field_from_unannotated_param.npy": "pass",
+  "test-nilpy#src:test/test_nilpy_field_holding_a_def.npy": "pass",
   "test-nilpy#src:test/test_nilpy_file_close_readlines.npy": "pass",
   "test-nilpy#src:test/test_nilpy_file_dunder.npy": "pass",
   "test-nilpy#src:test/test_nilpy_file_io_and_comprehensions.npy": "pass",
@@ -6234,6 +6265,7 @@
   "test-nilpy#src:test/test_nilpy_fstring_selfdoc.npy": "pass",
   "test-nilpy#src:test/test_nilpy_fstring_spec_on_variant.npy": "pass",
   "test-nilpy#src:test/test_nilpy_fstrings.npy": "pass",
+  "test-nilpy#src:test/test_nilpy_function_identity.npy": "pass",
   "test-nilpy#src:test/test_nilpy_function_value_repr.npy": "pass",
   "test-nilpy#src:test/test_nilpy_function_values.npy": "pass",
   "test-nilpy#src:test/test_nilpy_funcvalue.npy": "pass",
@@ -6295,6 +6327,7 @@
   "test-nilpy#src:test/test_nilpy_json_reparse_heap.npy": "pass",
   "test-nilpy#src:test/test_nilpy_keyerror_names_the_key.npy": "pass",
   "test-nilpy#src:test/test_nilpy_keyword_arg_through_a_callable_value.npy": "pass",
+  "test-nilpy#src:test/test_nilpy_keyword_call_unknown_callee.npy": "pass",
   "test-nilpy#src:test/test_nilpy_kwarg_overload.npy": "pass",
   "test-nilpy#src:test/test_nilpy_kwarg_overload_set.npy": "pass",
   "test-nilpy#src:test/test_nilpy_kwarg_through_lifted_value.npy": "pass",
@@ -6355,10 +6388,10 @@
   "test-nilpy#src:test/test_nilpy_membership_bool_return.npy": "pass",
   "test-nilpy#src:test/test_nilpy_membership_eq_dunder.npy": "pass",
   "test-nilpy#src:test/test_nilpy_method_arity_missing_args_fails.npy": "pass",
+  "test-nilpy#src:test/test_nilpy_method_call_result_assigned_to_a_local.npy": "pass",
   "test-nilpy#src:test/test_nilpy_method_callable_param.npy": "pass",
   "test-nilpy#src:test/test_nilpy_method_kwarg.npy": "pass",
   "test-nilpy#src:test/test_nilpy_method_nested_def.npy": "pass",
-  "test-nilpy#src:test/test_nilpy_method_on_call_result.npy": "pass",
   "test-nilpy#src:test/test_nilpy_method_on_fresh_construction.npy": "pass",
   "test-nilpy#src:test/test_nilpy_method_param_default.npy": "pass",
   "test-nilpy#src:test/test_nilpy_method_param_defaults.npy": "pass",
@@ -6380,6 +6413,7 @@
   "test-nilpy#src:test/test_nilpy_module_member_as_a_value.npy": "pass",
   "test-nilpy#src:test/test_nilpy_module_name_from_a_field_in_a_block.npy": "pass",
   "test-nilpy#src:test/test_nilpy_module_name_rebound_in_a_block.npy": "pass",
+  "test-nilpy#src:test/test_nilpy_module_rebinding_beats_a_def.npy": "pass",
   "test-nilpy#src:test/test_nilpy_module_true_divide_assign.npy": "pass",
   "test-nilpy#src:test/test_nilpy_multi_param_lambda_is_compiled.npy": "pass",
   "test-nilpy#src:test/test_nilpy_multiple_inheritance.npy": "pass",
@@ -6389,6 +6423,7 @@
   "test-nilpy#src:test/test_nilpy_negative_zero_repr.npy": "pass",
   "test-nilpy#src:test/test_nilpy_nested_comp.npy": "pass",
   "test-nilpy#src:test/test_nilpy_nested_def.npy": "pass",
+  "test-nilpy#src:test/test_nilpy_nested_def_captures_a_rebound_parameter.npy": "pass",
   "test-nilpy#src:test/test_nilpy_nested_def_default_at_def_time.npy": "pass",
   "test-nilpy#src:test/test_nilpy_nested_def_default_capture.npy": "pass",
   "test-nilpy#src:test/test_nilpy_nested_def_default_override.npy": "pass",
@@ -6441,7 +6476,7 @@
   "test-nilpy#src:test/test_nilpy_overridden_class_attribute.npy": "pass",
   "test-nilpy#src:test/test_nilpy_override_return_type_differs.npy": "pass",
   "test-nilpy#src:test/test_nilpy_param_defaults_nonconstant.npy": "pass",
-  "test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy": "pass",
+  "test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy": "fail",
   "test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy": "pass",
   "test-nilpy#src:test/test_nilpy_pathlib.npy": "pass",
   "test-nilpy#src:test/test_nilpy_percent_e_g_format.npy": "pass",
@@ -6490,6 +6525,7 @@
   "test-nilpy#src:test/test_nilpy_range_variant_bound.npy": "pass",
   "test-nilpy#src:test/test_nilpy_raw_string_set.npy": "pass",
   "test-nilpy#src:test/test_nilpy_re.npy": "pass",
+  "test-nilpy#src:test/test_nilpy_rebind_across_the_float_boundary.npy": "pass",
   "test-nilpy#src:test/test_nilpy_rebind_across_unrelated_classes.npy": "pass",
   "test-nilpy#src:test/test_nilpy_rebind_type.npy": "pass",
   "test-nilpy#src:test/test_nilpy_rebinding_a_parameter_is_local.npy": "pass",
@@ -6515,6 +6551,7 @@
   "test-nilpy#src:test/test_nilpy_select_stdin_ready.npy": "pass",
   "test-nilpy#src:test/test_nilpy_selector_off_call_returning_a_global.npy": "pass",
   "test-nilpy#src:test/test_nilpy_selector_on_a_dict_returning_call.npy": "pass",
+  "test-nilpy#src:test/test_nilpy_self_class_constructs.npy": "pass",
   "test-nilpy#src:test/test_nilpy_selfassigned_comprehension.npy": "pass",
   "test-nilpy#src:test/test_nilpy_sequence_ordering.npy": "pass",
   "test-nilpy#src:test/test_nilpy_sequence_repeat_variant_count.npy": "pass",
@@ -6551,11 +6588,12 @@
   "test-nilpy#src:test/test_nilpy_star_forward.npy": "pass",
   "test-nilpy#src:test/test_nilpy_star_methods_and_targets.npy": "pass",
   "test-nilpy#src:test/test_nilpy_star_not_first_argument.npy": "pass",
-  "test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy": "fail",
+  "test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy": "pass",
+  "test-nilpy#src:test/test_nilpy_star_over_any_static_iterable.npy": "pass",
   "test-nilpy#src:test/test_nilpy_star_unpack_into_a_callable_value.npy": "pass",
   "test-nilpy#src:test/test_nilpy_star_unpack_into_a_collecting_callee.npy": "pass",
   "test-nilpy#src:test/test_nilpy_starred_unpack.npy": "pass",
-  "test-nilpy#src:test/test_nilpy_startswith_tuple.npy": "pass",
+  "test-nilpy#src:test/test_nilpy_startswith_tuple.npy": "fail",
   "test-nilpy#src:test/test_nilpy_static_method_kwargs.npy": "pass",
   "test-nilpy#src:test/test_nilpy_static_mixed_type_guard.npy": "pass",
   "test-nilpy#src:test/test_nilpy_static_operand_clash.npy": "pass",
@@ -6656,7 +6694,7 @@
   "test-nilpy#src:test/test_nilpy_variant_in.npy": "pass",
   "test-nilpy#src:test/test_nilpy_variant_method_call.npy": "pass",
   "test-nilpy#src:test/test_nilpy_variant_method_pick_by_arity.npy": "pass",
-  "test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy": "fail",
+  "test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy": "pass",
   "test-nilpy#src:test/test_nilpy_variant_operator_sweep.npy": "pass",
   "test-nilpy#src:test/test_nilpy_variant_polymorphic_builtins.npy": "pass",
   "test-nilpy#src:test/test_nilpy_variant_print_container.npy": "pass",
@@ -6924,18 +6962,18 @@
   "test-uforth#src:compiler/.pascal26.fixedpoint@8": "pass",
   "test-uforth#src:compiler/.pascal26.fixedpoint@9": "pass",
   "test-zlib#src:compiler/.pascal26.fixedpoint": "pass",
-  "tools-devtest#00": "pass",
+  "tools-devtest#00": "fail",
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-27T14:46:37Z",
+  "date": "2026-08-27T21:08:18Z",
   "deadline": 7200.0,
-  "sha": "8787cfe4235a9f6f869e8b365586bc1fce8c4a54",
+  "sha": "aca7f699288ebcd6343b0af26afdb73c12e85aa2",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 310.9
+  "wall": 318.9
  },
  "last_bench": {
   "conf_rows": 550,
@@ -6951,22 +6989,22 @@
   "sha": "44193e547f6d4ca77453770378b710d8af82f5df"
  },
  "last_full": {
-  "date": "2026-08-27T13:16:11Z",
+  "date": "2026-08-27T20:46:26Z",
   "deadline": 7200.0,
-  "sha": "62a4242203a308e0cb9c46893976c45c29afcc7c",
+  "sha": "b898d0543fc8499facc66706257ff08d39195520",
   "tier": "full",
   "timed_out": false,
   "unreached": 0,
   "verdict": "RED",
-  "wall": 1187.2
+  "wall": 1173.5
  },
  "last_opt": {
   "date": "2026-08-27T09:47:14Z",
   "sha": "32fba2082684be424a045b5154c8ba3f7abea053"
  },
  "last_slow": {
-  "date": "2026-08-27T09:39:28Z",
-  "sha": "32fba2082684be424a045b5154c8ba3f7abea053"
+  "date": "2026-08-27T17:48:51Z",
+  "sha": "186a4a5cb8a5cd5332d2bf3f1f56e4946d4cb3c9"
  },
  "migrated_from": [
   "borg"
@@ -6990,104 +7028,106 @@
    "status": "fail"
   },
   {
-   "bad": "39d4afb022ce9a8f98f30f7a7202ccfa803b4d6f",
+   "bad": "8787cfe4235a9f6f869e8b365586bc1fce8c4a54",
    "bad_untestable": true,
    "first_seen": false,
-   "good": "6b59df667fe46c9d6ceabcd6f0b5d6e8e400fa68",
-   "job": "test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy",
-   "name": "test-nilpy#236",
+   "good": "62a4242203a308e0cb9c46893976c45c29afcc7c",
+   "job": "tools-devtest#00",
+   "name": "tools-devtest#00",
    "no_testable_change": false,
-   "opened": "2026-08-27T12:49:42Z",
+   "opened": "2026-08-27T15:14:25Z",
    "pin_axis": 0,
    "pin_built": false,
    "range": [
-    "9dd5c7ef4fbf88013a131a24e468286a70b4c701",
-    "d5659971925902adf31340dd2e395406979ffd91",
-    "2e2c5b9395429110fafe8c5eaa2ec02fc1b90c55",
-    "a2341e2c63add44d7a19c74567005d58cf86303e",
-    "0ecd624e63f8bb318a3bf88ecb4046996157c829",
-    "70165adc3f2ea1ae5bef2cdb8d34ec1dc76f2fbe",
-    "99f870ae89f55063d71d4a4e26c07ba298cc9da3",
-    "6703ca95b605bd7bd6bd0076136b6d5afdfef5ee",
-    "f9b4b061c277d4bd57b04a66523138dfeef777a0",
-    "c60cb62bcf8f65d73fb524fab2df5b8b8eb5a339",
-    "c350bd11261003e98c8203348f99b030bf4811de",
-    "49d47338e5d9052a7733038eff976a08ae96dbcd"
+    "f3422cd14b99caa4a5a495fb36f816e29463416c",
+    "cba47d112560b22a142d9fe2cc44fc780fb79bd3",
+    "bdf7a3c31d545675d4c8c6b53dc5e5cc0d198978",
+    "6c9f8cd70d68ef1f68ce9efa50dfdc63d5b6f4f6",
+    "97b865e0bed04c5683b83ed1f0aaf4e70d314cdd",
+    "5a996b4b2dad6ba833ed023141404e950361328a",
+    "bee8679c501d68b75f30e6ba572a55a1bc2f5b2e",
+    "65335c061f72f9b4f55e1003f0ddba58d93f792c",
+    "5d8784f1d51cad158178a7cabe696cedd6a128f9",
+    "a47e4892092e6e5318b2e1bc2f80c66d6399740a"
    ],
-   "src": "test/test_nilpy_star_operand_in_a_variant.npy test/test_nilpy_star_operand_in_a_variant.expected",
+   "src": "",
    "status": "fail"
   },
   {
-   "bad": "39d4afb022ce9a8f98f30f7a7202ccfa803b4d6f",
+   "bad": "b898d0543fc8499facc66706257ff08d39195520",
    "bad_untestable": true,
    "first_seen": false,
-   "good": "6b59df667fe46c9d6ceabcd6f0b5d6e8e400fa68",
-   "job": "test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy",
-   "name": "test-nilpy#430",
+   "good": "8b2cc332791e5da7618f123cfb05f87b12bd13f3",
+   "job": "test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy",
+   "name": "test-nilpy#207",
    "no_testable_change": false,
-   "opened": "2026-08-27T12:49:43Z",
+   "opened": "2026-08-27T20:46:26Z",
    "pin_axis": 0,
    "pin_built": false,
    "range": [
-    "9dd5c7ef4fbf88013a131a24e468286a70b4c701",
-    "d5659971925902adf31340dd2e395406979ffd91",
-    "2e2c5b9395429110fafe8c5eaa2ec02fc1b90c55",
-    "a2341e2c63add44d7a19c74567005d58cf86303e",
-    "0ecd624e63f8bb318a3bf88ecb4046996157c829",
-    "70165adc3f2ea1ae5bef2cdb8d34ec1dc76f2fbe",
-    "99f870ae89f55063d71d4a4e26c07ba298cc9da3",
-    "6703ca95b605bd7bd6bd0076136b6d5afdfef5ee",
-    "f9b4b061c277d4bd57b04a66523138dfeef777a0",
-    "c60cb62bcf8f65d73fb524fab2df5b8b8eb5a339",
-    "c350bd11261003e98c8203348f99b030bf4811de",
-    "49d47338e5d9052a7733038eff976a08ae96dbcd"
+    "19dc5586e384b5881f03509233f74437c08d4472",
+    "218ce1eaf2502e290dd68292faeaa1b2628f7ecb"
    ],
-   "src": "test/test_nilpy_variant_operand_arith_dunders.npy test/test_nilpy_variant_operand_arith_dunders.expected",
+   "src": "test/test_nilpy_parent_call_after_instantiation.npy test/test_nilpy_parent_call_after_instantiation.expected",
+   "status": "fail"
+  },
+  {
+   "bad": "b898d0543fc8499facc66706257ff08d39195520",
+   "bad_untestable": true,
+   "first_seen": false,
+   "good": "8b2cc332791e5da7618f123cfb05f87b12bd13f3",
+   "job": "test-nilpy#src:test/test_nilpy_startswith_tuple.npy",
+   "name": "test-nilpy#447",
+   "no_testable_change": false,
+   "opened": "2026-08-27T20:46:26Z",
+   "pin_axis": 0,
+   "pin_built": false,
+   "range": [
+    "19dc5586e384b5881f03509233f74437c08d4472",
+    "218ce1eaf2502e290dd68292faeaa1b2628f7ecb"
+   ],
+   "src": "test/test_nilpy_startswith_tuple.npy test/test_nilpy_startswith_tuple.expected",
    "status": "fail"
   }
  ],
  "pin_baseline": {
-  "at": "2026-08-27T12:49:43Z",
-  "how": "carried from v377, the outgoing pin",
-  "pin": "v381",
+  "at": "2026-08-27T19:35:32Z",
+  "how": "carried from v386, the outgoing pin",
+  "pin": "v388",
   "reds": [
-   "test-emit-obj#src:test/cxtensa_obj.c@1"
+   "test-emit-obj#src:test/cxtensa_obj.c@1",
+   "tools-devtest#00"
   ]
  },
  "pin_shadow": {
-  "at": "2026-08-27T13:16:11Z",
-  "inherited": 1,
-  "pin": "v381",
+  "at": "2026-08-27T20:46:27Z",
+  "inherited": 2,
+  "pin": "v388",
   "qualifies": false,
   "red_set": [
    "test-emit-obj#src:test/cxtensa_obj.c@1",
-   "test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy",
-   "test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy"
+   "test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy",
+   "test-nilpy#src:test/test_nilpy_startswith_tuple.npy",
+   "tools-devtest#00"
   ],
-  "reds": 3,
-  "sha": "62a4242203a308e0cb9c46893976c45c29afcc7c",
+  "reds": 4,
+  "sha": "b898d0543fc8499facc66706257ff08d39195520",
   "streak": 0,
   "unexpected": [
-   "test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy",
-   "test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy"
+   "test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy",
+   "test-nilpy#src:test/test_nilpy_startswith_tuple.npy"
   ],
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-08-27T14:54:12Z",
+  "date": "2026-08-27T19:14:18Z",
   "red": [
-   "test-nilpy#src:test/test_nilpy_unbound_builtin_method.npy",
-   "test-nilpy#src:test/test_nilpy_builtin_subclass_dunder_dispatch.npy",
-   "test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy",
-   "test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy",
    "test-emit-obj#src:test/cxtensa_obj.c@1",
-   "test-core#src:test/test_nilpy_unbound_builtin_method.npy",
-   "test-core#src:test/test_nilpy_builtin_subclass_dunder_dispatch.npy",
    "tools-devtest#00"
   ],
-  "sha": "c28e07a89f036f56d3bb860e62045b1103e22aae",
+  "sha": "20664a1576d3ac6f9398051a6626102e86f63357",
   "tier": "full",
-  "ver": "v383",
+  "ver": "v388",
   "verdict": "RED"
  },
  "renamed_from": [

@@ -370,6 +370,56 @@ var
     (a `has no method` at the call) rather than silent, and it is new ground —
     a program with a second base did not compile at all before. }
   PyClsUsedAsMixin: array[0..MAX_UCLASS-1] of Boolean;
+  { The whole-program FIELD JOIN table: for each (class, field name), the join
+    of every type that class OR ANY DESCENDANT OF IT assigns to that field.
+
+    It exists because a field's type is decided where the field is DECLARED —
+    in the ancestor — and the assignment that widens it may be a thousand lines
+    further down, in a subclass registered long afterwards. `class P: self.v = 1`
+    followed by `class Q(P): self.v = 2.5` stored a double's bits into P's Int64
+    slot and printed 4612811918334230528. Widening P's field when Q is reached
+    is not available: `curOff` for every subclass starts at UClsSize_[parent],
+    so every subclass registered BEFORE Q has already baked in the narrow size.
+
+    Widening the ancestor is the right answer and not merely the reachable one:
+    a P-typed reference can point at a Q, so if any descendant stores a float in
+    `v`, the slot must hold a float for every P. Widening only the descendant's
+    view would put two different types on one slot.
+
+    Consulted inside PyRegisterClassMembers rather than by its callers, which is
+    what makes it cover BOTH registration routes — the pre-pass one and the
+    PyParseClass one a class takes when its base could not be resolved early.
+    A side table only the pre-pass consulted would work for most programs and
+    silently not for the rest, the worst outcome for a silent-wrong-value bug.
+    bug-n-a-field-declared-in-an-ancestor-is-not-widened-by-a-descendants-rebind }
+  PyFJCls  : array of Integer;      { class the entry belongs to }
+  PyFJName : array of AnsiString;   { field name, Python-cased }
+  PyFJTk   : array of Integer;      { Ord() of the join so far }
+  PyFJCount: Integer;
+  PyFJCap  : Integer;
+  { the FIRST base of each class, read straight from the header. Deliberately
+    NOT UClsParent: that one is left unset for a multi-base or unresolvable
+    header and filled in later by PyParseClass, and the join has to propagate
+    before any of that. The first base is the real parent in both passes. }
+  PyFJParent: array[0..MAX_UCLASS-1] of Integer;
+  { the join DETECT pass is running. It replays PyInferFieldDecl over every
+    field declaration a second time, and that routine warns about an annotation
+    it cannot read — a warning the user would then see twice for one line. The
+    detect pass is invisible by construction, so it stays silent. }
+  PyFJDetecting: Boolean;
+  { The DEF whose body the return-type scan is currently walking: header range
+    and body range, in tokens. -1 outside a scan, and every arm that reads them
+    is inert then — exactly the shape PyInferSelfCi uses, and for the same
+    reason: PyInferExprType has no parameter for "which def is this" and is
+    called from ~50 places, most of which have no def in hand.
+
+    Read by PyDottedRootIsLocal, to tell `f.hi()` (a METHOD on a local) from
+    `math.sqrt()` (a module-qualified call). Saved and restored by the
+    PyInferDefRetTypeScan wrapper so a nested def's scan cannot leak its range
+    to the enclosing one.
+    bug-n-a-method-call-on-an-optional-class-field-returns-a-raw-pointer }
+  PyInferHdrLo, PyInferHdrHi: Integer;
+  PyInferBodyLo, PyInferBodyHi: Integer;
 
 { A parameter annotation NilPy could not read. CPython does not enforce
   annotations at all, so refusing the program over one breaks the
@@ -386,6 +436,10 @@ var
   bug-n-an-uninterpretable-annotation-refuses-the-program }
 procedure PyWarnUnreadAnnotation(const what: AnsiString; line: Integer);
 begin
+  { silent during the field-join detect pass — it re-reads every annotation the
+    registering pass will read, and a doubled warning is the whole of what the
+    user would notice about a pass that is meant to be invisible }
+  if PyFJDetecting then Exit;
   WarnAt(line, 'Nil Python: ' + what + ' has a type annotation this '
          + 'frontend cannot read; treating it as Any');
 end;
@@ -596,6 +650,10 @@ procedure PyRenameIdentRange(lo, hi: Integer; const oldName, newName: AnsiString
   Nothing in the day-to-day loop compiles with FPC, which is exactly why this
   rots silently — see the ticket. }
 function PyBytesCi: Integer; forward;
+{ Defined with the return-type scan helpers, ~26000 lines below the member-call
+  guard that now asks it (PyDottedRootIsLocal). }
+function PyNameBoundInDef(hdrFrom, hdrTo, bodyFrom, bodyTo: Integer;
+                          const nm: AnsiString): Boolean; forward;
 
 { Queue a setup statement to run before the current one — see PyHoistHead. }
 procedure PyHoistStmt(node: Integer);
@@ -1921,11 +1979,47 @@ end;
   two string kinds keep their own rule (a variant scalar-loaded on `return`
   yields its tag word), and a promotable int keeps its own join, whose
   float case is a deliberate honest error rather than a silent boxing. }
+{ ...and a PROMOTABLE int meets a float the same way. The comment above called
+  that pair "a deliberate honest error rather than a silent boxing", and the
+  second half of the phrase is what stopped being true: a variant is not a lossy
+  box for a promo int, because VT_PROMO_INT64 IS one of its tags and carries the
+  exact decimal past 2^63. The pair has an answer that loses nothing, and
+  refusing it rejected ordinary CPython code:
+
+    def two(x: int):
+        x = x + 1      # int + int can overflow -> promotable int  (kind 28)
+        x /= 2         # ...and true division wants a double       (kind 19)
+        return x       # `annotate the type / too dynamic [a=28 b=19]`
+
+  Either rebind ALONE compiled. Only the pair had no join.
+
+  Tested with TypeIsPromoInt directly and NOT through PyNumeric, which is where
+  the first attempt went wrong and is worth recording: PyNumeric lists the five
+  machine numeric kinds and does not include tyPromoInt64, so the two
+  `not TypeIsPromoInt(...)` clauses that used to sit in the condition below were
+  DEAD — `PyNumeric(a)` already implied them. Deleting them changed nothing at
+  all, because the refusal never came from here. It comes from PyWiden's own
+  promo arm ("Promo + float has no scalar lowering; error honestly"), and this
+  function has to answer BEFORE delegating there.
+
+  It stays in PyWidenBinding rather than in PyWiden for the reason this
+  function exists at all, stated at the top: the join for a REBOUND NAME is not
+  the join for an EXPRESSION. `bigint / 2.0` as an expression genuinely is a
+  float and should keep whatever lowering it has; what needs the variant is the
+  SLOT that holds an exact int at one point in the program and a double at
+  another.
+
+  A pure-integer accumulator is untouched: this arm requires exactly one FLOAT
+  side, so `x = x + 1` in a loop with no float in sight never reaches it and
+  keeps the promo width it exists for.
+  bug-n-rebinding-an-int-parameter-twice-across-the-float-boundary-is-refused }
 function PyWidenBinding(a, b: TTypeKind): TTypeKind;
 begin
-  if PyNumeric(a) and PyNumeric(b) and (a <> b) and
-     (not TypeIsPromoInt(a)) and (not TypeIsPromoInt(b)) and
-     (TypeIsFloat(a) <> TypeIsFloat(b)) then
+  if (TypeIsPromoInt(a) and TypeIsFloat(b)) or
+     (TypeIsPromoInt(b) and TypeIsFloat(a)) then
+    Result := tyVariant
+  else if PyNumeric(a) and PyNumeric(b) and (a <> b) and
+          (TypeIsFloat(a) <> TypeIsFloat(b)) then
     Result := tyVariant
   else
     Result := PyWiden(a, b);
@@ -2394,7 +2488,15 @@ begin
       refusing. Only reachable now that a type is a VALUE; before that there was
       nothing an expression could have evaluated TO.
       bug-n-a-type-name-is-not-a-first-class-value }
-    if (CurTok.Kind <> tkIdent) or QualifiedTypeAhead then
+    { ...and an identifier that CARRIES A SELECTOR — `isinstance(x, a.__class__)`,
+      `isinstance(x, self.__class__)`. It starts with tkIdent, so it used to miss
+      this arm by one token and fall into the name arms below, none of which
+      consume a '.', giving `unexpected token` for what CPython simply evaluates.
+      A module-qualified `mod.Class` was already routed here; every other
+      selector chain belongs here for the same reason.
+      bug-n-self-class-cannot-be-called-as-a-constructor }
+    if (CurTok.Kind <> tkIdent) or QualifiedTypeAhead or
+       ((TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot)) then
     begin
       if CurTok.Kind = tkRParen then
         Error('Nil Python: expected a type in isinstance');
@@ -3903,7 +4005,38 @@ begin
     PyTypingChanged := True;
     Exit;
   end;
-  w := PyWiden(PyLocals[ci].TypeKind, tk);
+  { PyWidenBinding, not PyWiden — and this line is the whole of
+    bug-n-rebinding-an-int-parameter-twice-across-the-float-boundary-is-refused.
+
+    This routine is the definition of a REBINDING: its own first line says
+    "record one assignment's RHS type against a local". PyWidenBinding is the
+    join written for precisely that, with a doc-comment saying so ("the join for
+    a NAME REBOUND across types — which is NOT the join for an EXPRESSION, and
+    that distinction is the whole fix"). It was wired into the module-local, the
+    field and the rebound-parameter sites and NOT into the one that names itself
+    after the concept, so the per-def locals table went on asking the expression
+    join what a rebinding means. Two joins for one concept, with the specific one
+    absent from the most specific site.
+
+    What it changes, concretely:
+
+      def two(x: int):
+          x = x + 1      # int + int may overflow -> promotable int (kind 28)
+          x /= 2         # ...and true division wants a double      (kind 19)
+          return x
+
+    PyWiden's promo arm has no scalar lowering for promo-meets-float and errors
+    honestly ("annotate the type / too dynamic [a=28 b=19]"); PyWidenBinding now
+    answers tyVariant, which loses nothing because VT_PROMO_INT64 is one of a
+    variant's own tags and holds the exact decimal past 2^63. Either rebinding
+    alone compiled before; only the pair had no join. A plain local shows the
+    identical shape (`y = 5; y = y + 1; y /= 2`) and was refused identically,
+    which is the tell that the site is here and not in the parameter machinery.
+
+    An integer-only accumulator is untouched: PyWidenBinding's redirect requires
+    exactly one FLOAT side, so `x = x + 1` in a loop with no float in sight keeps
+    the promo width it exists for. }
+  w := PyWidenBinding(PyLocals[ci].TypeKind, tk);
   { A name already known to hold UNRELATED classes never narrows back out of the
     dynamic representation, whatever this one assignment says. }
   if PyLocals[ci].Poly then w := tyVariant;
@@ -3966,7 +4099,23 @@ begin
   retTk := tyAnsiString;    { the str->str default; rows below override }
   wantArgs := 0;
   Result := True;
-  if CaseEqual(mname, 'upper') then pname := 'pystr_upper'
+  { The SUBSCRIPT protocol under its Python names. `len(s)` and `s[i]` both
+    worked while their METHOD spellings raised `'str' object has no attribute
+    '__len__'` — one capability, two spellings, only one wired, exactly as
+    recorded for dict in bug-n-a-builtin-types-method-cannot-be-called-unbound.
+    A str subclass delegating to the base it overrode writes the method form,
+    and so does any code that reaches a dunder by name.
+
+    pystr_charat, NOT pystr_at: Python's `s[i]` is a one-CHARACTER str and
+    pystr_at yields a lead BYTE — this is the same call the subscript itself
+    lowers to, which is the point. There is no `__setitem__` row because
+    CPython's str has none either: strings are immutable.
+    bug-n-bytes-getitem-returns-empty-instead-of-the-byte-value }
+  if CaseEqual(mname, '__len__') then
+    begin pname := 'pystr_len'; retTk := tyInteger; end
+  else if CaseEqual(mname, '__getitem__') then
+    begin pname := 'pystr_charat'; retTk := tyAnsiString; wantArgs := 1; end
+  else if CaseEqual(mname, 'upper') then pname := 'pystr_upper'
   else if CaseEqual(mname, 'lower') then pname := 'pystr_lower'
   { strip family: 0 args (whitespace) or 1 arg (a CHARS set) — see the -5 case
     in PyParseStrMethod, which appends _chars for the one-argument form. }
@@ -4202,7 +4351,17 @@ begin
   for ci := 0 to UClsCount - 1 do
   begin
     if UClsIsRecord[ci] then Continue;
-    if FindUMeth(ci, mname) >= 0 then begin Result := True; Exit; end;
+    { PyMethNameFor, not FindUMeth alone — the same rule its own header states:
+      "Every resolution path calls this instead of applying the table by hand."
+      This path applied it by hand and therefore could not see a method a pylib
+      container reaches through an ALIAS. `find` is declared literally on
+      TPyBytes and dual-dispatched fine; `__len__` is reached via count, so this
+      answered False, the str arm won unopposed, and a bytes receiver hit the
+      str arm's "not a string tag" branch — AttributeError for a call the
+      container plainly answers. The identical shape the header above describes
+      for `title` and `count`, one level further in.
+      bug-n-bytes-getitem-returns-empty-instead-of-the-byte-value }
+    if FindUMeth(ci, PyMethNameFor(ci, mname)) >= 0 then begin Result := True; Exit; end;
   end;
 end;
 
@@ -4322,7 +4481,7 @@ var lo: AnsiString;
 begin
   lo := LowerCase(nm);
   PyZeroArgCtorIsContainer :=
-    (lo = 'list') or (lo = 'tuple') or (lo = 'bytes');
+    (lo = 'list') or (lo = 'tuple') or (lo = 'bytes') or (lo = 'bytearray');
 end;
 
 function PyIsZeroArgCtorName(const nm: AnsiString): Boolean;
@@ -4423,7 +4582,7 @@ begin
     forms already use — no new construction path, and no new pylib name whose
     bare word could be called. The caller consumed only the NAME for these, so
     CurTok is the '(' PyParseListLiteralT expects, and it consumes the pair. }
-  if (lo = 'list') or (lo = 'tuple') or (lo = 'bytes') then
+  if (lo = 'list') or (lo = 'tuple') or (lo = 'bytes') or (lo = 'bytearray') then
   begin
     { PyParseListLiteralT stamps a PAREN-opened display as a TUPLE — which is
       right for `(1, 2)` and is why `tuple()` needs no mark of its own, and
@@ -4432,7 +4591,7 @@ begin
     PyParseListLiteralT(tkLParen, tkRParen, False);   { consumes the '(' ')' }
     if lo <> 'tuple' then
       CurASTNode := PyMarkAsSeqKind(CurASTNode, 'pylist_mark_list');
-    if lo = 'bytes' then
+    if (lo = 'bytes') or (lo = 'bytearray') then
     begin
       bPi := FindProc('pybytes_from_list');
       if bPi < 0 then Error('Nil Python: pylib (pybytes_from_list) not loaded');
@@ -4446,6 +4605,28 @@ begin
       if bCi >= 0 then ASTRight[bCall] := REC_UCLASS_BASE + bCi;
       ASTLeft[bCall] := bArg;
       CurASTNode := bCall;
+      { ...and bytearray is that, STAMPED. bytes and bytearray are one class
+        here (see TPyBytes.FIsByteArray), so the Python type is a runtime flag
+        and the empty bytearray needs it set: without the stamp
+        `repr(bytearray())` is `b''` and `type(bytearray()).__name__` is
+        `bytes`. That flag is the only reason bytearray was left out when
+        list/tuple/bytes moved into this arm — the pylib overload set it, and
+        this arm had no way to. pybytes_mark_bytearray is that way.
+        bug-n-bytearrays-zero-argument-overload-makes-the-bare-name-a-call }
+      if lo = 'bytearray' then
+      begin
+        bPi := FindProc('pybytes_mark_bytearray');
+        if bPi < 0 then Error('Nil Python: pylib (pybytes_mark_bytearray) not loaded');
+        bArg := AllocNode(AN_ARG);
+        ASTLeft[bArg] := CurASTNode;
+        ASTRight[bArg] := -1;
+        bCall := AllocNode(AN_CALL);
+        ASTIVal[bCall] := bPi;
+        ASTTk[bCall] := Ord(tyClass);
+        if bCi >= 0 then ASTRight[bCall] := REC_UCLASS_BASE + bCi;
+        ASTLeft[bCall] := bArg;
+        CurASTNode := bCall;
+      end;
     end;
     LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
     Exit;
@@ -4548,11 +4729,198 @@ begin
   if Tokens[ce + 1].Kind = tkDot then Result := tyVariant;
 end;
 
+{ The JOIN of two inferred operand types — the answer for any construct whose
+  value is one OPERAND or the other, chosen at run time. Three of those exist in
+  this file (the conditional expression, `and`, `or`) and they must not each
+  spell the rule out: this is the one spelling, and the arms are its callers
+  (devdocs/dev/normalise-dont-special-case.md).
+
+  The rule: an unknown on either side leaves the other standing; two classes
+  keep their identity only if it is the SAME class; anything else that differs
+  widens. Widening to a variant is what lets the RUNTIME dispatch decide, and it
+  is the same conclusion the reassigned-local rule reaches
+  (bug-nilpy-local-reassigned-across-classes-keeps-one-static-class).
+
+  ciOut carries the class identity alongside the kind, because for tyClass the
+  kind alone is not the type — ASTTk equality holds between ANY two classes,
+  which is how `bytearray() if flag else [1, 2]` once registered TPyBytes over a
+  list-returning call. }
+function PyJoinInferTk(ta: TTypeKind; ca: Integer;
+                       tb: TTypeKind; cb: Integer;
+                       var ciOut: Integer): TTypeKind;
+begin
+  ciOut := ca;
+  Result := ta;
+  if (ta = tyUnknown) or (tb = tyUnknown) then Exit;
+  if (ta = tyClass) and (tb = tyClass) then
+  begin
+    if ca <> cb then
+    begin
+      Result := tyVariant;
+      ciOut := -1;
+    end;
+    Exit;
+  end;
+  if ta <> tb then
+  begin
+    Result := PyWiden(ta, tb);
+    ciOut := -1;
+  end;
+end;
+
+function PyEndOfGroup(openIdx, limit: Integer): Integer;
+{ The index just PAST the bracket matching the one at openIdx, or `limit` when
+  the group does not close inside the range. Written once because the two
+  callers below both need it and a second copy of a bracket counter is a second
+  chance to get the nesting wrong. }
+var k, depth: Integer;
+begin
+  Result := limit;
+  depth := 0;
+  k := openIdx;
+  while k < limit do
+  begin
+    if Tokens[k].Kind in [tkLParen, tkLBrack] then Inc(depth)
+    else if Tokens[k].Kind in [tkRParen, tkRBrack] then
+    begin
+      Dec(depth);
+      if depth = 0 then
+      begin
+        Result := k + 1;
+        Exit;
+      end;
+    end;
+    Inc(k);
+  end;
+end;
+
+function PyCtorSelectorType(ci, afterCtor, endIdx: Integer;
+                            var outCi: Integer): TTypeKind;
+{ `Foo()` followed by `.m()` / `.f` selectors: what the LAST selector yields.
+
+  Without this the construction arms below answered tyClass for the whole
+  expression and simply ignored everything after the ctor`s `)`. `u = Foo().hi()`
+  — a method returning a string — was typed as a Foo, so a def returning `u`
+  declared a CLASS result and handed back a string handle; the caller read it as
+  an object pointer and the program printed a number, or segfaulted, with no
+  diagnostic anywhere. `Foo().tag` and `Foo().me().hi()` are the same shape.
+
+  Note the locals table got this RIGHT the whole time — PXXDBG=n.locals typed
+  `u` as tyAnsiString while PXXDBG=n.ret typed the def as tyClass. Two spellings
+  of one question, and the second is the broken one, which is exactly the shape
+  devdocs/dev/normalise-dont-special-case.md is about. The chase cannot simply
+  READ the locals table, though: PyInferExprType runs in the shell pre-pass with
+  no PyLocals and again in the body pass with one, and the two answering
+  differently is a silent ABI mismatch. So it is resolved token-only, from the
+  class tables, exactly like every other chase in this scan.
+
+  tyUnknown means "this chain did not resolve" — NOT "it is a Foo". The caller
+  must then fall through to the general walk rather than claim the class, which
+  is the whole bug in miniature.
+  bug-n-a-method-call-on-an-optional-class-field-returns-a-raw-pointer }
+var k, mi, pi2, fi2, cur: Integer;
+    nm: AnsiString;
+begin
+  Result := tyUnknown;
+  outCi := -1;
+  cur := ci;
+  k := afterCtor;
+  while (k + 1 < endIdx) and (Tokens[k].Kind = tkDot) and
+        (Tokens[k + 1].Kind = tkIdent) do
+  begin
+    { a selector on something with no class identity cannot be chased further }
+    if cur < 0 then
+    begin
+      Result := tyUnknown;
+      outCi := -1;
+      Exit;
+    end;
+    nm := GetTokenStr(k + 1);
+    if (k + 2 < endIdx) and (Tokens[k + 2].Kind = tkLParen) then
+    begin
+      mi := FindUMeth(cur, nm);
+      if mi < 0 then begin Result := tyUnknown; outCi := -1; Exit; end;
+      pi2 := UMthProc_[mi];
+      if pi2 < 0 then begin Result := tyUnknown; outCi := -1; Exit; end;
+      Result := Procs[pi2].RetType;
+      if (Result = tyClass) and (ProcRetRecId[pi2] >= REC_UCLASS_BASE) then
+        cur := ProcRetRecId[pi2] - REC_UCLASS_BASE
+      else
+        cur := -1;
+      k := PyEndOfGroup(k + 2, endIdx);
+    end
+    else
+    begin
+      fi2 := FindUField(cur, nm);
+      if fi2 < 0 then begin Result := tyUnknown; outCi := -1; Exit; end;
+      Result := IntToTypeKind(UFldTk[fi2]);
+      if (Result = tyClass) and (UFldRec_[fi2] >= REC_UCLASS_BASE) then
+        cur := UFldRec_[fi2] - REC_UCLASS_BASE
+      else
+        cur := -1;
+      k := k + 2;
+    end;
+  end;
+  { a chain that stopped short of the end of the expression was not fully
+    understood — say so rather than report the last selector we did resolve }
+  if k < endIdx then
+  begin
+    Result := tyUnknown;
+    outCi := -1;
+    Exit;
+  end;
+  if Result = tyClass then outCi := cur;
+end;
+
+function PyDottedRootIsLocal(i, startIdx: Integer): Boolean;
+{ Is the identifier at `i` a MEMBER of a value bound in the def being scanned,
+  rather than a free routine reached through a module name?
+
+  `f.hi()` and `math.sqrt(2)` are the same token shape and had the same answer:
+  the call arm below took `hi` and `sqrt` as free names and asked FindProc. For
+  `sqrt` that is right — a module-qualified call IS a flat lookup here. For `hi`
+  it found Pascal`s `Hi`, the high-BYTE intrinsic, case-insensitively, and typed
+  the whole expression tyUInt8. A def returning that local then declared a Byte
+  result and handed back a string handle: `print` showed 176, and
+  `Foo().me().hi()` segfaulted. Nothing warned.
+
+  This is the FOURTH site of one family — Pascal`s case-insensitive lookup
+  answering for a case-sensitive Python name (after PyIsClassTypeExact,
+  PyIsExactCtorName and the MEMBER arm`s FindUClass guard). An exact-case rule
+  does not work here, though: `math.sqrt` must keep reaching `Sqrt`, whose
+  Pascal spelling is capitalised. What separates the two cases is not the
+  spelling but the RECEIVER — a local or parameter has members, a module name
+  does not.
+
+  So: walk back to the ROOT of the dotted chain (`self` in `self.w.hi()`) and
+  ask PyNameBoundInDef, the routine that already exists to tell a name that
+  merely SPELLS a class from one that denotes it. Inert when no def range is in
+  hand, which keeps every other caller of PyInferExprType exactly as it was.
+  bug-n-a-method-call-on-an-optional-class-field-returns-a-raw-pointer }
+var k, root: Integer;
+begin
+  Result := False;
+  if (PyInferBodyLo < 0) or (PyInferBodyHi <= PyInferBodyLo) then Exit;
+  if (i <= startIdx) or (Tokens[i - 1].Kind <> tkDot) then Exit;
+  k := i;
+  root := -1;
+  while (k - 2 >= startIdx) and (Tokens[k - 1].Kind = tkDot) and
+        (Tokens[k - 2].Kind = tkIdent) do
+  begin
+    root := k - 2;
+    k := k - 2;
+  end;
+  if root < 0 then Exit;
+  Result := PyNameBoundInDef(PyInferHdrLo, PyInferHdrHi,
+                             PyInferBodyLo, PyInferBodyHi, GetTokenStr(root));
+end;
+
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
 var i, ci, si, procIdx, depth, smArgs, fci, fi, k2, rcvCi: Integer; tk: TTypeKind;
     fldCi, fldAt: Integer; fldTk: TTypeKind;
     ternCi, ternElse, ternDepth: Integer; ternTk: TTypeKind;
     divAt: Integer; divL, divR: TTypeKind;
+    ctorCi, ctorEnd, ctorSelCi: Integer; ctorTk: TTypeKind;  { `Foo().m().f` chase }
     name, lo, smPName: AnsiString;
 begin
   Result := tyUnknown;
@@ -4652,29 +5020,56 @@ begin
       if ternElse >= 0 then
       begin
         ternTk := PyInferExprType(ternElse + 1, endIdx);
-        if (ternTk <> tyUnknown) and (Result <> tyUnknown) then
-        begin
-          if (Result = tyClass) and (ternTk = tyClass) then
-          begin
-            if PyInferLastCi <> ternCi then
-            begin
-              Result := tyVariant;
-              PyInferLastCi := -1;
-              Exit;
-            end;
-          end
-          else if Result <> ternTk then
-          begin
-            Result := PyWiden(Result, ternTk);
-            PyInferLastCi := -1;
-            Exit;
-          end;
-        end;
+        Result := PyJoinInferTk(Result, ternCi, ternTk, PyInferLastCi, ternCi);
       end;
       PyInferLastCi := ternCi;
       Exit;
     end;
     Inc(k2);
+  end;
+  { `and` / `or` hand back an OPERAND, not a Boolean — NilPy implements that,
+    and the comparison arm below says so in as many words while typing nothing,
+    so the expression fell through to the operand walk and took an ARITHMETIC
+    answer. `def m(self): return self or 1` registered a number over a body that
+    returns an instance, and the caller died with `TypeError: expected a number,
+    got object`.
+
+    `self and 1` looked fine and is not evidence: it yields the RIGHT operand
+    because self is truthy, and that operand is the int the walk guessed anyway.
+    One arm was correct by coincidence, which is why this survived — see the
+    ticket's own warning about reading the `and` row as a working arm.
+
+    The type is the JOIN of the two operands, exactly as for the conditional
+    expression above, and it is the SAME join: PyJoinInferTk, one spelling.
+
+    `or` is scanned first and `and` only if no top-level `or` was found, which
+    is Python's precedence: `a and b or c` is `(a and b) or c`, so the `or`
+    is the operator that decides the whole expression. Splitting at the FIRST
+    one and recursing right handles the chain — `a or b or c` joins a with
+    `b or c` and the recursion does the rest. Depth-tracked, so an operator
+    inside a call or a subscript does not decide the enclosing expression.
+    bug-n-a-short-circuit-or-returning-self-is-typed-as-a-number }
+  for k2 := 0 to 1 do
+  begin
+    i := startIdx;
+    depth := 0;
+    while i < endIdx do
+    begin
+      if Tokens[i].Kind in [tkBegin, tkLBrack, tkLParen] then Inc(depth)
+      else if Tokens[i].Kind in [tkEnd, tkRBrack, tkRParen] then Dec(depth)
+      else if (depth = 0) and (i > startIdx) and
+              (((k2 = 0) and (Tokens[i].Kind = tkOr)) or
+               ((k2 = 1) and (Tokens[i].Kind = tkAnd))) then
+      begin
+        Result := PyInferExprType(startIdx, i);
+        ternCi := PyInferLastCi;
+        ternTk := PyInferExprType(i + 1, endIdx);
+        Result := PyJoinInferTk(Result, ternCi, ternTk, PyInferLastCi, ternCi);
+        PyInferLastCi := ternCi;
+        Exit;
+      end;
+      Inc(i);
+    end;
   end;
   { A COMPARISON or a membership test yields a Boolean whatever its operands
     are, and the scan below types an expression by the operands it recognises:
@@ -4906,9 +5301,26 @@ begin
      (startIdx + 3 < endIdx) and (Tokens[startIdx + 3].Kind = tkLParen) and
      (FindUClass(GetTokenStr(startIdx + 2)) >= 0) then
   begin
-    Result := tyClass;
-    PyInferLastCi := FindUClass(GetTokenStr(startIdx + 2));
-    Exit;
+    ctorCi := FindUClass(GetTokenStr(startIdx + 2));
+    ctorEnd := PyEndOfGroup(startIdx + 3, endIdx);
+    { the same selector chase as the bare-construction arm below — `mod.Foo()`
+      and `Foo()` must not answer differently about what follows the ')' }
+    if (ctorEnd < endIdx) and (Tokens[ctorEnd].Kind = tkDot) then
+    begin
+      ctorTk := PyCtorSelectorType(ctorCi, ctorEnd, endIdx, ctorSelCi);
+      if ctorTk <> tyUnknown then
+      begin
+        Result := ctorTk;
+        PyInferLastCi := ctorSelCi;
+        Exit;
+      end;
+    end
+    else
+    begin
+      Result := tyClass;
+      PyInferLastCi := ctorCi;
+      Exit;
+    end;
   end;
   if (startIdx < endIdx) and (Tokens[startIdx].Kind = tkIdent) and
      IsClassType(GetTokenStr(startIdx)) and (startIdx + 1 < endIdx) and
@@ -4920,9 +5332,29 @@ begin
       them tyClass-with-no-identity made an unannotated `return str(x)` hand
       back a string handle the caller read as an object pointer — a segfault.
       The builtin table further down gives them their real result types. }
-    Result := tyClass;
-    PyInferLastCi := FindUClass(GetTokenStr(startIdx));
-    Exit;
+    ctorCi := FindUClass(GetTokenStr(startIdx));
+    ctorEnd := PyEndOfGroup(startIdx + 1, endIdx);
+    { A SELECTOR after the construction: the expression is what the selector
+      yields, not the class that was built. This used to Exit with tyClass and
+      ignore everything past the ctor's ')' — see PyCtorSelectorType. }
+    if (ctorEnd < endIdx) and (Tokens[ctorEnd].Kind = tkDot) then
+    begin
+      ctorTk := PyCtorSelectorType(ctorCi, ctorEnd, endIdx, ctorSelCi);
+      if ctorTk <> tyUnknown then
+      begin
+        Result := ctorTk;
+        PyInferLastCi := ctorSelCi;
+        Exit;
+      end;
+      { unresolved chain: fall through to the general walk. Claiming the CLASS
+        here is the defect, not the fallback. }
+    end
+    else
+    begin
+      Result := tyClass;
+      PyInferLastCi := ctorCi;
+      Exit;
+    end;
   end;
   i := startIdx;
   while i < endIdx do
@@ -5010,7 +5442,12 @@ begin
         { Call form `name(...)`: take the callee's return type and skip the
           whole argument group so arg tokens do not pollute the widening. }
         if (i + 1 < endIdx) and (Tokens[i + 1].Kind = tkLParen) and
-           ((not IsClassType(name)) or PyIsBuiltinConvName(name)) then
+           ((not IsClassType(name)) or PyIsBuiltinConvName(name)) and
+           { ...but NOT a method on a value bound in this def — see
+             PyDottedRootIsLocal. Such a name falls through to this scan's
+             tyVariant answer, which is the honest "cannot type it here" and
+             what an unrecognised method name already got. }
+           (not PyDottedRootIsLocal(i, startIdx)) then
         begin
           { ...and the builtin CONVERSIONS get in even though IsClassType
             answers to their names: `str`, `int`, `float`, `bool`, `list`,
@@ -10151,23 +10588,38 @@ begin
 end;
 
 function PyIterArgAsList(n: Integer): Integer;
-var procIdx, argNode, uci: Integer;
+var procIdx, argNode, listCi: Integer;
 begin
   Result := n;
   if n < 0 then Exit;
-  { A USER class implementing the iterator protocol, drained here for the same
-    reason a str is exploded here: the callee takes a TPyList through a FIXED
-    FindProc index, so overload resolution never runs and the object would be
-    read as a list — which answered [] rather than crashing, the quieter half
-    of the same failure. bug-nilpy-builtins-over-a-user-iterable-answer-empty }
+  { An OBJECT operand becomes a real TPyList, and the question is asked ONCE:
+    is it already one? Everything else is drained through PyMakeIterOf, the
+    normaliser that already knows every iterable kind (str, range, bytes,
+    dict, set, cursor, user __iter__).
+
+    This used to be a LIST OF KINDS -- a user-iterable arm and nothing else --
+    and the kinds it did not name fell through UNTOUCHED into a caller that
+    stores the node in a TPyList-typed slot. So a TPyRange was read as a list
+    header and `f(*range(2))` passed ZERO arguments (`two(*range(2))` was
+    refused as "forwarded call got 0 arguments, expected 2 to 2"), and a
+    TPyBytes gave empty ones. Both silent. The VARIANT spelling of the same
+    construct was always right, because pystar_as_list converts on pyiter_v's
+    rules -- and that asymmetry is exactly what hid it: `def fwd(a): return
+    two(*a)` called with a range works, `two(*range(2))` does not, so the test
+    that exercises the construct end to end walks straight past it.
+
+    normalise-dont-special-case: the second path is the one that stays broken,
+    so there is now one. The user-iterable arm this replaces is subsumed --
+    PyMakeIterOf reaches pyiter_of_userobj itself. A str keeps its own arm
+    below only because pystr_charlist is the cheaper route to the same answer,
+    not because the general one would be wrong.
+    bug-n-a-static-star-operand-over-a-non-list-iterable-passes-nothing }
   if IntToTypeKind(ASTTk[n]) = tyClass then
   begin
-    uci := ResolveNodeRec(n) - REC_UCLASS_BASE;
-    if PyUClassIsIterable(uci) then
-    begin
-      Result := PyCallProc1('pyiter_drain', PyCallProc1('pyiter_of_userobj', n));
-      Exit;
-    end;
+    listCi := FindUClass('TPyList');
+    if (listCi >= 0) and (ResolveNodeRec(n) = REC_UCLASS_BASE + listCi) then Exit;
+    Result := PyCallProc1('pyiter_drain', PyMakeIterOf(n));
+    Exit;
   end;
   if not PyIsStrBaseTk(IntToTypeKind(ASTTk[n])) then Exit;
   procIdx := FindProc('pystr_charlist');
@@ -10202,6 +10654,18 @@ begin
     { a RANGE is a sequence, not a list — `zip(range(3), xs)` must not try to
       read its three Int64 fields as a TPyList header }
     Result := PyCallProc1('pyiter_of_range', node)
+  else if (tk = tyClass) and (FindUClass('TPyBytes') >= 0) and
+          PyRecIsCls(ResolveNodeRec(node), 'TPyBytes') then
+    { BYTES yield their bytes as INTs -- a buffer, not a list of variants, so
+      the generic tyClass arm below read a byte buffer as a TPyList header and
+      paired empties: `zip(b"ab", "xy")` gave [(, 'x'), (None, 'y')] and
+      `enumerate(b"ab")` gave [(0, ), (1, None)], while `for`, `list()`,
+      `sorted()`, `sum()`, `max()`, `tuple()` and `in` over the SAME object
+      were all correct -- those reach pyiter_v, which has had a bytes arm all
+      along. Exactly the TPyRange arm above, one class over, and missing for
+      the same reason: this normaliser names its kinds instead of asking one
+      question. bug-n-a-static-star-operand-over-a-non-list-iterable-passes-nothing }
+    Result := PyCallProc1('pyiter_of_bytes', node)
   else if (tk = tyClass) and (ResolveNodeRec(node) >= REC_UCLASS_BASE) and
           (not PyRecIsPylibOwnClass(ResolveNodeRec(node))) and
           PyUClassIsIterable(ResolveNodeRec(node) - REC_UCLASS_BASE) then
@@ -14765,6 +15229,39 @@ begin
     else if mname = '__len__' then Result := 'count';
     Exit;
   end;
+  { The BYTES half of the same subscript pair. TPyBytes declares the very same
+    count / at / put as TPyList and had no arm here, and the consequence is not
+    "no such method" — it is a SILENT MISDISPATCH, which is the part worth
+    writing down.
+
+    The variant-receiver dispatcher builds its candidate set by asking
+    PyMethNameFor of each class. With no arm, TPyBytes never became a candidate,
+    so a bytes receiver fell through to the FALLBACK arm — TPyList — and ran
+    list code over a TPyBytes. Measured 2026-08-27:
+
+      x.__len__()            3          <- RIGHT, and only by accident:
+                                           TPyList.count reads FLen, which sits
+                                           at the same offset in both classes
+      x.__getitem__(0)       (empty)    <- TPyList.at read FItems where FData is
+      x.__setitem__(0, 65)   CORRUPTS   <- TPyList.put wrote a 16-byte variant
+                                           slot over the byte buffer:
+                                           bytearray(b'abc') -> [1, 0, 0]
+
+    So the accidentally-correct row is what made the other two look like an
+    isolated `__getitem__` bug. A missing alias row on ANY pylib container has
+    this shape, not a diagnostic — that is the general lesson, and the reason
+    this arm exists rather than a single `__getitem__` special case.
+    `__delitem__` is deliberately absent: TPyBytes has no pop_at, and aliasing
+    it to anything else would delete by the wrong rule without a word — the same
+    call the list arm makes about `remove`.
+    bug-n-bytes-getitem-returns-empty-instead-of-the-byte-value }
+  if (FindUClass('TPyBytes') >= 0) and (ci = FindUClass('TPyBytes')) then
+  begin
+    if mname = '__getitem__' then Result := 'at'
+    else if mname = '__setitem__' then Result := 'put'
+    else if mname = '__len__' then Result := 'count';
+    Exit;
+  end;
   if (FindUClass('TPyList') >= 0) and (ci = FindUClass('TPyList')) then
   begin
     { the list half of the same subscript pair — pylib spells it at/put }
@@ -14792,10 +15289,12 @@ end;
   reach the dynamic-attribute fallback and raise `'B' object has no attribute
   '__class__'` at RUN time, while `type(self).__name__` worked: two spellings
   of one question, one of them answered.
-  Only the full CHAIN is accepted. A bare `x.__class__` is a class OBJECT in
-  Python and this frontend has no such value (the same reason bare `type(x)` is
-  refused a few lines from here), so leaving it to the existing AttributeError
-  is the honest answer rather than inventing one.
+  Only the full CHAIN is accepted HERE. A bare `x.__class__` used to have no
+  answer at all — "this frontend has no class-object value", which was true when
+  this was written and stopped being true when feature-nilpy-class-as-a-value
+  landed VT_CLASSREF. PyMakeClassRefOf below is the bare form; this predicate
+  runs FIRST at every site so the `__name__` chain keeps its own direct lowering
+  rather than boxing a classref only to read a name off it.
   feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep }
 function PyIsClassNameChainAhead: Boolean;
 begin
@@ -14824,6 +15323,51 @@ begin
   ASTIVal[Result] := pi;
   ASTLeft[Result] := argNode;
   ASTTk[Result] := Ord(tyAnsiString);
+  ASTRight[Result] := -1;
+end;
+
+{ A BARE `x.__class__` — the class OBJECT, which since
+  feature-nilpy-class-as-a-value is an ordinary VT_CLASSREF variant and needs no
+  representation of its own. Tested only AFTER PyIsClassNameChainAhead at every
+  site, so `x.__class__.__name__` keeps its direct lowering.
+
+  `self.__class__(args)` is the shape that pays for this: Python's standard "make
+  another one of my own type", and what CPython's own xml.sax AttributesImpl.copy()
+  does. It used to be `error: A has no method __class__` at COMPILE time, so
+  lib/rtl/mimic_xml_sax_xmlreader.py names its class literally instead (registered
+  in track-b-workarounds.md, retire it now).
+
+  Deliberately the RUNTIME class, not the declaring one. In a base method
+  `self.__class__` must answer the SUBCLASS — that is the entire reason the idiom
+  exists, and a static `ci` would have silently constructed the base for every
+  descendant, which is a wrong VALUE rather than an error. So the blob comes from
+  __pxxRttiOf(x) (`[[x+0] - 8]`) exactly as `x.ClassType` does, and construction
+  then rides the classref path that already exists: pyvar_callvN -> PyClassRefNew,
+  which reflects `create` by name over the RTTI. No second construction path, and
+  `cls = self.__class__` / `print(self.__class__)` / `self.__class__ is B` come
+  along for free because they were never about `__class__` at all.
+  bug-n-self-class-cannot-be-called-as-a-constructor }
+function PyIsBareClassRefAhead: Boolean;
+begin
+  Result := isNilPy and (CurTok.Kind = tkIdent) and
+            CaseEqual(CurTok.SVal, '__class__') and
+            (not PyIsClassNameChainAhead);
+end;
+
+function PyMakeClassRefOf(node: Integer): Integer;
+var pi, blobNode, argNode: Integer;
+begin
+  Next;                            { __class__ }
+  blobNode := GenMakeRttiOfCall(node);
+  pi := FindProc('PyBoxClassRef');
+  if pi < 0 then Error('Nil Python: pyeval (PyBoxClassRef) not loaded');
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := blobNode;
+  ASTRight[argNode] := -1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := pi;
+  ASTLeft[Result] := argNode;
+  ASTTk[Result] := Ord(tyVariant);
   ASTRight[Result] := -1;
 end;
 
@@ -14860,6 +15404,35 @@ begin
     begin
       Result := PyMakeDynCall(PyMakeDynAttrGet(baseNode, mname));
       Exit;
+    end;
+    { ...or a procedural FIELD holding a function value — `self.fn = named` then
+      `h.fn(1, 2)`, which is how a dispatch table is written. The VARIANT-receiver
+      route has claimed this for a while (the two passes around
+      PyMakeVariantFieldCall's call site: a field WITH a recorded signature, then
+      a plain variant Callable field); the STATIC-receiver route never did, so a
+      receiver the frontend knew MORE about was the one that failed — the same
+      inversion bug-nilpy-a-keyword-call-through-a-statically-unknown-callee
+      -does-not-compile describes for keyword arguments.
+
+      Measured before this line existed: `h = H(); g = h.fn; g(1, 2)` answered 3
+      while `H().fn(1, 2)` was `H has no method .fn()`. Reading the field and
+      calling it are each fine; only writing them as one statement failed.
+
+      Same builder as the variant route, not a second lowering — it emits the
+      pyvar_callv<n> that tells all four callable shapes apart at run time, so
+      the missing signature a plain class's Callable field carries is no
+      obstacle. Only when the class really declares the field: an unknown name
+      still gets the diagnostic below, so typo detection is unchanged.
+      bug-n-a-field-assigned-a-module-level-def-has-no-inferable-type }
+    if isNilPy then
+    begin
+      k := FindUField(ci, mname);
+      if (k >= 0) and ((UFldProcSig[k] >= 0) or
+                       (IntToTypeKind(UFldTk[k]) = tyVariant)) then
+      begin
+        Result := PyMakeVariantFieldCall(baseNode, ci, mname, UFldProcSig[k]);
+        Exit;
+      end;
     end;
     Error('Nil Python: ' + PyRawName(UClsNOff[ci], UClsNLen[ci]) + ' has no method .' + mname + '()');
   end;
@@ -24341,7 +24914,8 @@ begin
 end;
 
 function PyQueueNestedDef: Integer;
-var defTok, procIdx, bodyStart, bodyEnd, i, j, k, nCaps, nOwn, csym, csym2, capCi: Integer;
+var defTok, procIdx, bodyStart, bodyEnd, i, j, k, nCaps, nOwn, csym, csym2, capCi, capSym: Integer;
+    capNow: TTypeKind;
     qname, cname, cn2: AnsiString; already: Boolean;
     capNames: array[0..PY_MAX_CAPS-1] of AnsiString;
     capTypes: array[0..PY_MAX_CAPS-1] of TTypeKind;
@@ -24556,6 +25130,53 @@ begin
       begin
         Procs[procIdx].Params[nOwn + j].IsRef := True;
         ProcParamCapRef[procIdx * MAX_PROC_PARAMS + nOwn + j] := True;
+      end;
+      { ...and the capture's TYPE is re-applied for the same reason the by-ref
+        decision above is: it too was decided on the trial parse, against
+        whatever the name meant THEN.
+
+        `def o(x: int): x /= 2; def inner(): return x + 1` failed to compile at
+        all — "invalid IR node reference in store_sym" — and the str spelling
+        (`x = "s"` then `x + "t"`) compiled and raised a TypeError at run time.
+        Capturing a plain local of any type works, and capturing a rebound
+        VARIANT parameter works, which is what localised it: the variant
+        parameter's private slot is allocated BEFORE PyCollectLocalsAST, and the
+        TYPED one is allocated AFTER, because it needs the constraint table to
+        know its type. So on the trial parse `FindSym('x')` still answered the
+        Int64 PARAMETER, the nested def was registered with an Int64 capture
+        parameter, and the re-run that follows the slot's creation takes THIS
+        branch — the proc already exists, so nothing recomputed the signature.
+        The call site then passed the variant slot into an Int64 parameter.
+
+        Re-resolving by name here is the same move the cell arm makes and gets
+        the answer that is true now. The promo boxing mirrors the registration
+        arm's rule so the two spellings of this decision cannot drift apart: a
+        promotable int's rvalue is its frame SLOT ADDRESS, so a by-value promo
+        parameter would hand the callee a pointer into a frame it does not own.
+
+        The parameter's SYMBOL is retyped with it. They are one declaration in
+        two records, and leaving the symbol behind is the silent-ABI-mismatch
+        shape this file keeps meeting — the body would read the slot at the old
+        width while the caller wrote the new one.
+        bug-n-a-nested-def-capturing-a-rebound-parameter-uses-the-parameters-type }
+      if (nOwn + j < MAX_PROC_PARAMS) and (nOwn >= 0) then
+      begin
+        capSym := FindSym(PyCapName[procIdx * PY_MAX_CAPS + j]);
+        if (capSym >= 0) and (Syms[capSym].Kind in [skLocal, skParam]) and
+           not Syms[capSym].IsArray and (Syms[capSym].TypeKind <> tyRecord) then
+        begin
+          capNow := Syms[capSym].TypeKind;
+          if TypeIsPromoInt(capNow) then capNow := tyVariant;
+          if Procs[procIdx].Params[nOwn + j].TypeKind <> capNow then
+          begin
+            Procs[procIdx].Params[nOwn + j].TypeKind := capNow;
+            if Procs[procIdx].Params[nOwn + j].SymIdx >= 0 then
+            begin
+              Syms[Procs[procIdx].Params[nOwn + j].SymIdx].TypeKind := capNow;
+              SymSyncTypeRef(Procs[procIdx].Params[nOwn + j].SymIdx);
+            end;
+          end;
+        end;
       end;
     end;
   { The def-time default globals, re-recorded on EVERY pass for the same reason
@@ -27408,6 +28029,51 @@ begin
   end;
 end;
 
+function PyModuleGlobalIsDef(const name: AnsiString): Boolean;
+{ Is `name` a module-level `def` — a FUNCTION used as a value?
+
+  Third member of the PyModuleGlobalLiteralType / PyModuleGlobalCtorClass family
+  and it exists for the identical reason: the class-field pre-pass runs BEFORE
+  PyRegisterDefShells (see the two call sites, which order them and say why), so
+  at field-inference time no Proc for a module-level def exists yet and
+  FindProcInUnit cannot answer. That was measured, not assumed — the first cut
+  of this asked FindProcInUnit and changed nothing at all. So the tokens are the
+  only source, exactly as they are for a literal global.
+
+  Depth 0 and at statement start, matching the sibling scans: a `def` nested
+  inside a class or another def is not a module-level binding and must not
+  answer for this name. Per-name and on demand, storing nothing, for the same
+  reason spelled out on PyModuleGlobalLiteralType — seeding a shared table from
+  module scope collided with def-local inference.
+  bug-n-a-field-assigned-a-module-level-def-has-no-inferable-type }
+var k, d: Integer;
+    atStart: Boolean;
+begin
+  Result := False;
+  d := 0;
+  k := PyScanLo;
+  while k < MainProgramTokCount do
+  begin
+    if Tokens[k].Kind = tkIndent then Inc(d)
+    else if Tokens[k].Kind = tkDedent then Dec(d)
+    else if d = 0 then
+    begin
+      atStart := (k = PyScanLo) or
+                 (Tokens[k - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon]);
+      { tkFunction is what the lexer gives `def` (see PyRegisterDefShells, which
+        scans for exactly this at exactly this depth). }
+      if atStart and (Tokens[k].Kind = tkFunction) and
+         (k + 1 < MainProgramTokCount) and (Tokens[k + 1].Kind = tkIdent) and
+         (GetTokenStr(k + 1) = name) then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end;
+    Inc(k);
+  end;
+end;
+
 function PyModuleGlobalLiteralType(const name: AnsiString): TTypeKind;
 { What type does the module-level LITERAL global `name` hold — `NEW = "NEW"`,
   `LIMIT = 7`? Answers tyUnknown for anything it cannot read straight off the
@@ -28960,6 +29626,35 @@ begin
     end;
 end;
 
+function PyShellForDefTok(const nm: AnsiString; tok: Integer): Integer;
+{ The main-program Proc PyRegisterDefShells registered for the def standing at
+  token `tok`. There is at most one: the pre-pass visits each module-level def
+  exactly once and stamps ProcPyDefTok with the def token it stood on, and
+  PyParseDef is entered with the same token as defTok0.
+
+  Asking by TOKEN rather than by NAME is the whole point. A name defined twice
+  has two shells, and every by-name query -- FindProc, FindProcInUnit -- answers
+  one of them by hash-chain order, so the second def could not reach its own.
+  Returns -1 for a nested def, a class method and every Pascal path, none of
+  which the shell pass registers; those callers keep the by-name lookup.
+  bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it }
+var i: Integer;
+begin
+  Result := -1;
+  if tok <= 0 then Exit;
+  i := ProcChainHead(nm);
+  while i >= 0 do
+  begin
+    if (ProcUnitIdx[i] = -1) and (Procs[i].Name = nm) and
+       (ProcPyDefTok[i] = tok + 1) then
+    begin
+      Result := i;
+      Exit;
+    end;
+    i := ProcHashNext[i];
+  end;
+end;
+
 procedure PyRegisterDefShells;
 var savedTok, i, depth, procIdx, savedHoist: Integer;
     isGenDef: Boolean;
@@ -28997,7 +29692,25 @@ begin
         because pylib already declares `len`, and everything downstream behaved
         as if the user had not written it
         (bug-nilpy-user-def-len-of-a-container-still-binds-the-builtin). }
-      if FindProcInUnit(PyHdrName, -1) < 0 then
+      { ONE SHELL PER DEF STATEMENT, not per NAME. `def q` written twice is two
+        BINDINGS of one name in Python, and they can differ in body, arity and
+        return type -- so they need two Procs, or the second def has nowhere to
+        land but on top of the first, and every call site written ABOVE it then
+        runs the later body (the whole of
+        bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it).
+
+        The `if FindProcInUnit(...) < 0` this replaces was the other end of the
+        same lever: one Proc per name meant the redefinition either overwrote
+        the first (every call reaches the second body) or got an unreachable
+        Proc of its own (no call reaches it,
+        bug-nilpy-redefining-a-def-is-ignored-the-first-body-still-runs). Both
+        were wrong because the question is positional and one Proc cannot
+        answer it.
+
+        Registering unconditionally is safe HERE and only here: this pass walks
+        module-level defs at depth 0, each exactly once, so "unconditional"
+        means one per def token and not one per visit. ProcPyDefTok below is
+        what makes the set orderable afterwards. }
       begin
         procIdx := RegisterProc(PyHdrName, not PyHdrIsProc, PyHdrRetType,
                                 PyHdrNParams, PyHdrPNames, PyHdrPTypes);
@@ -29010,7 +29723,7 @@ begin
           builtin is the builtin. test_nilpy_min_max_variadic pins exactly that:
           `min(3, 1, 2)` above a `def min(a, b, c, d, e)` is the builtin's 1.
           Only PyUserShadowsProc reads this, so it costs nothing anywhere else. }
-        ProcPyDefTok[procIdx] := i;
+        ProcPyDefTok[procIdx] := i + 1;   { ONE-BASED -- 0 is the sentinel, see defs.inc }
       end;
       { Resume at the body's INDENT, not past it. After PyParseDefHeader the
         cursor sits on the first BODY token, so TokPos-2 is the INDENT and the
@@ -29416,30 +30129,30 @@ begin
     parse registered a second one, and the shell PyRegisterDefShells had made
     was left bodyless: "unresolved forward: len". A def is a main-program
     routine; its own shell is the one to reuse. }
-  procIdx := FindProcInUnit(name, -1);
-  if procIdx < 0 then procIdx := FindProc(name);
+  { THIS def's own shell, keyed by its `def` TOKEN. PyRegisterDefShells makes
+    one shell per def STATEMENT, so a name defined twice has two, and asking
+    for it by NAME returns whichever the hash chain hands back first -- which
+    for the SECOND def is the FIRST def's Proc. That is how a redefinition used
+    to land on top of its predecessor. Keyed by token, each def fills the shell
+    the pre-pass made for it, at its own position, and neither touches the
+    other. bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it }
+  procIdx := PyShellForDefTok(name, defTok0);
+  if procIdx < 0 then
+  begin
+    procIdx := FindProcInUnit(name, -1);
+    if procIdx < 0 then procIdx := FindProc(name);
+  end;
   if (procIdx >= 0) and (Procs[procIdx].BodyAddr >= 0) and
      (Procs[procIdx].ParamCount = nparams) then
   begin
-    { SAY SO. Reusing the first def's Proc is what makes the redefinition win,
-      and it also makes it win for the calls written ABOVE it — which CPython
-      binds to the FIRST body, because a `def` is an assignment executed where
-      it stands. That divergence used to be entirely silent, and it is not
-      bounded by "you get the other function's answer": when the two bodies
-      return different TYPES the earlier call site was compiled for the first
-      signature and runs the second body, which printed kilobytes of raw memory
-      in the case that surfaced it.
-
-      A warning is not the fix — the fix is a Proc per def plus positional
-      binding, designed in the ticket and deliberately not attempted here — but
-      it converts a silent wrong value into a message naming both lines, which
-      is the difference between a debuggable program and a haunted one.
-      bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it }
-    if NilPyUserCode and (ProcPyDefTok[procIdx] >= 0) then
-      Warn('Nil Python: `' + name + '` is defined again here; calls written '
-        + 'ABOVE this line will run THIS body, not the earlier one (CPython '
-        + 'binds them to the earlier one). Rename one of the two if that is '
-        + 'not what you meant');
+    { The warning that used to stand here is GONE, and its absence is the
+      point: it announced that calls above this line would run THIS body, and
+      that is no longer true. A module-level def now gets its own Proc
+      (PyRegisterDefShells) and binds positionally (PyDefBoundHere +
+      PyDefSupersededHere), so this branch is reached only by a NESTED def or a
+      class method redefined in one scope -- shapes with no separate shell,
+      where overwriting really is the binding and there is nothing to warn
+      about. bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it }
     for i := 0 to nparams - 1 do
     begin
       Procs[procIdx].Params[i].Name := PyHdrPNames[i];
@@ -30147,7 +30860,7 @@ begin
   PySkipNestedSuite := k;
 end;
 
-function PyInferDefRetTypeScan(methodStart: Integer; var retRec: Integer;
+function PyInferDefRetTypeScanInner(methodStart: Integer; var retRec: Integer;
                                var sawNone: Boolean): TTypeKind;
 var j, pdepth, bdepth, e, k, e2, rec2, bodyScanStart, curRec: Integer;
     tupDepth, chainRec: Integer;
@@ -30175,6 +30888,16 @@ begin
     Inc(j);
   end;
   bodyScanStart := j;
+  { Publish this def's ranges for PyDottedRootIsLocal. The wrapper below saves
+    and restores them, so a nested def's scan cannot leak its range into the
+    enclosing one. The body's upper bound is the whole suite, not the current
+    return: a name assigned AFTER the return is still a local of this def, and
+    the question being asked is whether the name is BOUND here. }
+  PyInferHdrLo := methodStart;
+  PyInferHdrHi := bodyScanStart;
+  PyInferBodyLo := bodyScanStart;
+  PyInferBodyHi := PySkipNestedSuite(methodStart);
+  if PyInferBodyHi < 0 then PyInferBodyHi := TokCount;
   bdepth := 0;
   while j < TokCount do
   begin
@@ -30634,10 +31357,158 @@ end;
   Not covered, and deliberately: falling off the END of a def also yields None
   in Python, but recognising that needs flow analysis rather than a token scan.
   bug-nilpy-none-returned-beside-a-container-is-an-unusable-nil-handle }
+{ Does this def RETURN a typed parameter that it rebinds only on SOME path?
+
+  `def branch(x: int, go: int): if go: x /= 2; return x` returned 5.0 for the
+  untaken branch where CPython returns 5. The private slot the rebinding creates
+  is correct — it is a variant, and on the untaken path it holds VT_INT 5 — but
+  the def's registered RETURN type was the widened double, so the variant was
+  coerced on the way out and the int came back as a float.
+
+  The three options were weighed on the ticket. This is option 1, NARROWED:
+  option 1 as written answers tyVariant for `return <name>` whenever the body
+  rebinds that parameter at all, which also fires for the very common
+  `def f(n: int): n = n + 1; return n` and would hand back a variant where an
+  Int64 comes back today. The narrowing is that only a rebinding the def can
+  SKIP makes the result dynamic — if every path rebinds, the widened type is
+  reached unconditionally and is the right answer, which is the ticket's own
+  control row satisfied by construction rather than by a test.
+
+  It asks about CONTROL FLOW, not about types, which is what keeps it out of
+  option 2's ditch ("a second miniature type-inferencer inside a token scan").
+  The type answer stays the scan's; this only decides whether that answer is
+  reached on every path. Option 3 — deferring the signature until after the body
+  pre-pass — remains what the file actually wants, and would subsume this.
+
+  Three conditions, all necessary:
+    - the parameter is ANNOTATED. An unannotated parameter is already a variant,
+      so its slot carries its own tag and nothing coerces it.
+    - it is rebound at a DEEPER block level and nowhere at the body's top level.
+      A top-level rebinding anywhere makes the widened type unconditional, even
+      if a conditional one precedes it.
+    - the body actually contains `return <param>` as a bare name. A def that
+      rebinds a parameter conditionally and returns something else has no
+      quarrel with its own signature.
+  bug-n-a-parameter-rebound-on-one-path-returns-the-widened-type-on-every-path }
+function PyDefReturnsAConditionallyReboundParam(methodStart: Integer): Boolean;
+const MAXP = 32;
+var names: array[0..MAXP - 1] of AnsiString;
+    annot: array[0..MAXP - 1] of Boolean;
+    deep, top, ret: array[0..MAXP - 1] of Boolean;
+    n, i, j, pdepth, bdepth, bodyStart: Integer;
+    nm: AnsiString;
+begin
+  Result := False;
+  n := 0;
+  { pass 1 — the parameter names, and which of them carry an annotation }
+  j := methodStart + 2;
+  pdepth := 0;
+  while j < TokCount do
+  begin
+    if Tokens[j].Kind = tkLParen then Inc(pdepth)
+    else if Tokens[j].Kind = tkRParen then
+    begin
+      Dec(pdepth);
+      if pdepth = 0 then begin Inc(j); Break; end;
+    end
+    else if (pdepth = 1) and (Tokens[j].Kind = tkIdent) and (j > 0) and
+            (Tokens[j - 1].Kind in [tkLParen, tkComma]) then
+    begin
+      if n >= MAXP then Exit;          { out of room — no answer beats a guess }
+      names[n] := GetTokenStr(j);
+      annot[n] := (j + 1 < TokCount) and (Tokens[j + 1].Kind = tkColon);
+      deep[n] := False; top[n] := False; ret[n] := False;
+      Inc(n);
+    end;
+    Inc(j);
+  end;
+  if n = 0 then Exit;
+  { the body proper starts after this def's own INDENT }
+  while (j < TokCount) and (Tokens[j].Kind <> tkIndent) do Inc(j);
+  if j >= TokCount then Exit;
+  bodyStart := j + 1;
+  { pass 2 — where each parameter is rebound, and whether it is returned bare }
+  j := bodyStart;
+  bdepth := 1;
+  while j < TokCount do
+  begin
+    if Tokens[j].Kind = tkIndent then Inc(bdepth)
+    else if Tokens[j].Kind = tkDedent then
+    begin
+      Dec(bdepth);
+      if bdepth <= 0 then Break;
+    end
+    else if Tokens[j].Kind = tkFunction then
+    begin
+      { a nested def's rebindings and returns are its own, not this def's —
+        the same skip PyInferDefRetTypeScan makes for the identical reason }
+      i := PySkipNestedSuite(j);
+      if i < 0 then Break;
+      j := i;
+      Continue;
+    end
+    else if (Tokens[j].Kind = tkIdent) and (j + 1 < TokCount) and
+            (Tokens[j + 1].Kind in [tkAssign, tkPlusEq, tkMinusEq, tkStarEq,
+                                    tkSlashEq, tkModEq, tkTrueDivEq, tkAmpEq,
+                                    tkPipeEq, tkXorEq, tkShlEq, tkShrEq,
+                                    tkAtEq]) then
+    begin
+      nm := GetTokenStr(j);
+      for i := 0 to n - 1 do
+        if names[i] = nm then
+        begin
+          if bdepth > 1 then deep[i] := True else top[i] := True;
+        end;
+    end
+    else if (Tokens[j].Kind = tkExit) and (j + 2 < TokCount) and
+            (Tokens[j + 1].Kind = tkIdent) and
+            (Tokens[j + 2].Kind in [tkNewline, tkDedent, tkEOF]) then
+    begin
+      nm := GetTokenStr(j + 1);
+      for i := 0 to n - 1 do
+        if names[i] = nm then ret[i] := True;
+    end;
+    Inc(j);
+  end;
+  for i := 0 to n - 1 do
+    if annot[i] and deep[i] and (not top[i]) and ret[i] then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
+function PyInferDefRetTypeScan(methodStart: Integer; var retRec: Integer;
+                               var sawNone: Boolean): TTypeKind;
+{ Save/restore wrapper around the scan proper. The scan publishes the def's
+  token ranges for PyDottedRootIsLocal, and it re-enters itself for a nested def
+  (PyNestedDefRetType), so without this the inner def's range would outlive it
+  and the enclosing def's `f.hi()` would be judged against the wrong body.
+  Outside any scan the ranges are -1 and every arm that reads them is inert.
+  bug-n-a-method-call-on-an-optional-class-field-returns-a-raw-pointer }
+var sHLo, sHHi, sBLo, sBHi: Integer;
+begin
+  sHLo := PyInferHdrLo;  sHHi := PyInferHdrHi;
+  sBLo := PyInferBodyLo; sBHi := PyInferBodyHi;
+  Result := PyInferDefRetTypeScanInner(methodStart, retRec, sawNone);
+  PyInferHdrLo := sHLo;  PyInferHdrHi := sHHi;
+  PyInferBodyLo := sBLo; PyInferBodyHi := sBHi;
+end;
+
 function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind;
 var sawNone: Boolean;
 begin
   Result := PyInferDefRetTypeScan(methodStart, retRec, sawNone);
+  { A typed parameter rebound on SOME path only: the value at the return is
+    either the parameter's declared type or the rebinding's, so the signature
+    has to be wide enough for both. See the helper for why this is narrower
+    than the ticket's option 1. }
+  if (Result <> tyVariant) and
+     PyDefReturnsAConditionallyReboundParam(methodStart) then
+  begin
+    Result := tyVariant;
+    retRec := REC_NONE;
+  end;
   if PxxDbgEnabled('n.ret') then
     WriteLn('PXXDBG n.ret def@', methodStart, ' ', GetTokenStr(methodStart + 1),
             ' tk=', Ord(Result), ' rec=', retRec, ' sawNone=', Ord(sawNone),
@@ -31233,10 +32104,478 @@ begin
       PyMixCollectKeys(PyClsBodyS[PyMixCi[k]], PyClsBodyE[PyMixCi[k]]);
 end;
 
+{ The TYPE of a field declared by `self.NAME = ...` or `self.NAME: ann = ...`:
+  everything between recognising the assignment and deciding what to do with the
+  answer.
+
+  EXTRACTED VERBATIM from the middle of PyRegisterClassMembers, whose body is
+  ~1200 lines. Behaviour-preserving by construction — the block was moved, not
+  rewritten. It is a routine because a SECOND caller needs the same answer, and
+  writing a second inference is the third-spelling failure
+  devdocs/dev/normalise-dont-special-case.md describes: the copy that stays
+  broken. The same move PyJoinInferTk was for the conditional-expression arm.
+
+  The second caller it exists for is the pre-pass that must compute, per
+  (class, field), the join over that class AND every descendant BEFORE any class
+  in the hierarchy is laid out — because a field declared in an ancestor is not
+  widened today when a descendant rebinds it across a type boundary, and the
+  parent's layout is already final by the time the subclass is registered. That
+  pass cannot be written while this inference is unreachable, so the extraction
+  lands and is gated on its own, first.
+  bug-n-a-field-declared-in-an-ancestor-is-not-widened-by-a-descendants-rebind
+
+  `fldAnn` comes IN: the caller decides whether this is an assignment (0) or an
+  annotated declaration (the annotation's token index), and only calls here when
+  it is one of the two. `rhsAt`, `k2` and `rhsName` were locals of the enclosing
+  routine and are purely internal to this block — measured, no use of any of them
+  survives it. `tk`, `fldRec` and `fldSig` are the answer.
+
+  `j` addresses the `self` token. Reads the token stream and the class tables;
+  writes neither. }
+function PyFJFind(ci: Integer; const nm: AnsiString): Integer;
+{ The (class, name) lookup into the field-join table. Linear: the table holds
+  one entry per field a NilPy class assigns, so it is the size of the program's
+  class surface, not of its token stream. }
+var k: Integer;
+begin
+  Result := -1;
+  for k := 0 to PyFJCount - 1 do
+    if (PyFJCls[k] = ci) and (PyFJName[k] = nm) then
+    begin
+      Result := k;
+      Exit;
+    end;
+end;
+
+procedure PyFJNote(ci: Integer; const nm: AnsiString; tk: TTypeKind);
+{ Record that class `ci` assigns type `tk` to field `nm`, joining with whatever
+  was recorded before. PyWidenBinding, not PyWiden — the same join the field
+  scan and the locals scan already use, so int-then-float lands on a VARIANT
+  here exactly as it does within one class. A third rule for the same question
+  is what devdocs/dev/normalise-dont-special-case.md is about. }
+var k: Integer;
+begin
+  if ci < 0 then Exit;
+  k := PyFJFind(ci, nm);
+  if k >= 0 then
+  begin
+    PyFJTk[k] := Ord(PyWidenBinding(IntToTypeKind(PyFJTk[k]), tk));
+    Exit;
+  end;
+  if PyFJCount >= PyFJCap then
+  begin
+    if PyFJCap = 0 then PyFJCap := 256 else PyFJCap := PyFJCap * 2;
+    SetLength(PyFJCls, PyFJCap);
+    SetLength(PyFJName, PyFJCap);
+    SetLength(PyFJTk, PyFJCap);
+  end;
+  PyFJCls[PyFJCount] := ci;
+  PyFJName[PyFJCount] := nm;
+  PyFJTk[PyFJCount] := Ord(tk);
+  Inc(PyFJCount);
+end;
+
+procedure PyFJReset;
+{ The capacity is deliberately kept — only the COUNT is cleared, so a second
+  module's pre-pass reuses the arrays rather than reallocating them. }
+var i: Integer;
+begin
+  PyFJCount := 0;
+  PyFJDetecting := False;
+  for i := 0 to MAX_UCLASS - 1 do PyFJParent[i] := -1;
+end;
+
+procedure PyFJPropagate;
+{ Push every entry UP its ancestor chain. After this, an entry for a class that
+  DECLARES a field holds the join over the whole hierarchy below it, which is
+  what the declaring class must lay the slot out for.
+
+  One pass suffices and no fixpoint is needed: each entry is merged into EVERY
+  ancestor, not only its parent, and the ancestors of a mid-chain class are a
+  subset of the ancestors of anything below it. Merging the entry's own
+  recorded type (rather than re-reading a table that is being mutated) is what
+  makes that true regardless of the order entries are visited in.
+
+  The walk is depth-bounded rather than cycle-checked: a NilPy class hierarchy
+  cannot be circular in valid source, but the pre-pass runs on source that has
+  not been checked yet, and an infinite loop here would be a hang with no
+  diagnostic. }
+var k, a, guard, ent: Integer;
+    tk: TTypeKind;
+begin
+  for k := 0 to PyFJCount - 1 do
+  begin
+    tk := IntToTypeKind(PyFJTk[k]);
+    a := PyFJParent[PyFJCls[k]];
+    guard := 0;
+    while (a >= 0) and (guard < MAX_UCLASS) do
+    begin
+      ent := PyFJFind(a, PyFJName[k]);
+      if ent >= 0 then
+        PyFJTk[ent] := Ord(PyWidenBinding(IntToTypeKind(PyFJTk[ent]), tk));
+      a := PyFJParent[a];
+      Inc(guard);
+    end;
+  end;
+end;
+
+function PyFieldDeclAt(j: Integer): Integer;
+{ Does a `self.NAME` at token j DECLARE a field, and if so where is its
+  annotation? Returns -1 for "not a field declaration", 0 for the plain
+  `self.NAME = expr` form, and the token index of the annotation for
+  `self.NAME: ann = expr`.
+
+  Extracted alongside PyInferFieldDecl and for the same reason: the
+  whole-program join pre-pass has to agree with the registering pass about
+  WHICH tokens declare a field, not only about what type they declare. Two
+  spellings of this test would disagree exactly at the shapes the comments
+  below were written to exclude — which is the failure mode
+  devdocs/dev/normalise-dont-special-case.md names.
+  bug-n-a-field-declared-in-an-ancestor-is-not-widened-by-a-descendants-rebind }
+begin
+  Result := -1;
+  { Both `self.NAME = expr` and `self.NAME: ann = expr` declare a
+    field. The annotated form used to be invisible here — the match
+    required '=' at j+3 — so a class that annotates its ctor fields
+    (the idiomatic Python form, and the one the uforth VM uses)
+    registered NO fields at all and every later `self.x` mis-resolved
+    against an empty class. }
+  if (Tokens[j].Kind = tkIdent) and (GetTokenStr(j) = 'self') and
+     (Tokens[j + 1].Kind = tkDot) and (Tokens[j + 2].Kind = tkIdent) then
+  begin
+    if Tokens[j + 3].Kind = tkAssign then Result := 0
+    { `self.x: int = 5` — an ANNOTATED declaration, which is a STATEMENT
+      and therefore always starts one. Without that requirement the
+      colon of a compound-statement HEADER matched: `if not
+      self.compiling:` reads as `self` `.` `compiling` `:` and declared a
+      phantom variant field named after whatever the condition tested.
+      Harmless for a name that is a real field (it is already
+      registered, and the guard below skips a duplicate) — but for a
+      @property it declared a FIELD SHADOWING THE PROPERTY, so every
+      access resolved to a slot nobody writes. `if self.x:`, `while
+      self.x:`, `{self.x: 1}` and `a[self.x:]` are all this shape.
+      bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver }
+    else if (Tokens[j + 3].Kind = tkColon) and
+            ((j = 0) or
+             (Tokens[j - 1].Kind in [tkNewline, tkIndent, tkDedent,
+                                     tkSemicolon])) then
+      Result := j + 4;
+  end;
+end;
+
+procedure PyInferFieldDecl(j, fldAnn, methodStart, bodyStart, bodyEnd: Integer;
+                           isCtor: Boolean;
+                           var tk: TTypeKind; var fldRec, fldSig: Integer);
+var rhsAt, k2: Integer; rhsName: AnsiString;
+begin
+  if fldAnn > 0 then
+  begin
+    { annotated: the annotation IS the type, exactly as for a
+      dataclass field — same PyAnnTypeAt grammar (Optional/Any/
+      List/Callable/forward refs). }
+    k2 := fldAnn;
+    tk := PyAnnTypeAt(k2);
+    fldSig := PyAnnLastProcSig;
+    fldRec := REC_NONE;
+    if (tk = tyClass) and (PyAnnLastCi >= 0) then
+      fldRec := REC_UCLASS_BASE + PyAnnLastCi;
+    if tk = tyUnknown then
+    begin
+      { An annotation this reader cannot interpret fell THROUGH to the
+        infer-from-the-right-hand-side path below and came out as
+        "cannot infer the type of field self.xs - annotate it" — about
+        a field that IS annotated. Degrade to Any, same as everywhere
+        else. bug-n-an-uninterpretable-annotation-refuses-the-program }
+      PyWarnUnreadAnnotation('field self.' + GetTokenStr(j + 2),
+                             Tokens[j].Line);
+      tk := tyVariant;
+      fldSig := -1;
+    end;
+  end
+  else
+  begin
+    rhsAt := j + 4;
+    { A QUALIFIED construction first — `self.canvas = tk.Canvas(root)`.
+      Reading the type off the FIRST token would resolve the module
+      alias `tk`, and a class may well be named for it (tkinter's own
+      `Tk` root window, matched case-insensitively): the field was then
+      recorded as a Tk, so `self.canvas.create_text(...)` found no such
+      method and fell through to the dynamic-attribute path — which
+      cannot bind keyword arguments. }
+    tk := tyUnknown;
+    fldRec := REC_NONE;
+    if (rhsAt + 3 < bodyEnd) and (Tokens[rhsAt].Kind = tkIdent) and
+       (Tokens[rhsAt + 1].Kind = tkDot) and (Tokens[rhsAt + 2].Kind = tkIdent) and
+       (Tokens[rhsAt + 3].Kind = tkLParen) and
+       (FindUClassNonRecord(GetTokenStr(rhsAt + 2)) >= 0) then
+    begin
+      { NonRecord, both times: a QUALIFIED construction
+        `self.t = tk.Text(...)` names a class, and the first row of
+        that name may be a same-named RECORD — which is how this arm
+        typed a Text field as the RTL's file record and then reported
+        "Text has no method insert".
+        bug-nilpy-text-class-name-binds-the-rtl-file-record. }
+      tk := tyClass;
+      fldRec := REC_UCLASS_BASE + FindUClassNonRecord(GetTokenStr(rhsAt + 2));
+    end;
+    { A bare identifier that names a PARAMETER of this method is a
+      VALUE, and that reading has to win before the type scanners see
+      it. PyTypeFromTokenIndex maps an identifier that names a class
+      to tyClass, case-INSENSITIVELY (Pascal rules), so in
+
+          class Node:
+              def __init__(self, node: int):
+                  self.node = node
+
+      the right-hand `node` matched the class `Node` and the field was
+      registered as an instance of its own class. `str(self.node)`
+      then took the object route and dispatched __str__ on the
+      integer, which SEGFAULTED — with the name being the only
+      trigger, so the identical class called `A` with a field `v` was
+      fine (bug-nilpy-str-of-object-segfaults-when-dunder-builds-a-
+      string). Any field whose name matches ANY class name, not only
+      its own, hit it.
+
+      Order only: a right-hand side that is not a parameter still
+      falls through to exactly the scanners it used before. }
+    { The end of the right-hand side, computed ONCE and used by every
+      arm below. `tkSemicolon` is in the terminator set because a
+      statement can end there: `def __init__(self, items):
+      self.items = items; self.i = 0` scanned to end-of-LINE, so the
+      expression scanner saw `items ; self . i = 0` and typed the
+      field from the `0`. A TPyList was then stored into an Int64
+      field and the first read died with "expected a number, got
+      object" — with the shape being as ordinary as a one-line
+      __init__ gets. PyBlkRhsEndsAt three functions up already knows
+      `;` ends a statement; this scan did not.
+      bug-n-a-field-typed-across-a-semicolon-takes-the-next-statements-type }
+    k2 := rhsAt;
+    while (k2 < bodyEnd) and
+          not (Tokens[k2].Kind in [tkNewline, tkDedent, tkSemicolon, tkEOF]) do Inc(k2);
+    { The two FIRST-TOKEN readers decide only when that token IS the
+      whole right-hand side. A first-token answer is a claim about
+      that token, and making it about the expression is how
+      `self.v = n / 2` came out an Int64 holding 2.5's IEEE bits: the
+      parameter reader answered `int` from the `n` and the expression
+      scanner — which types true division correctly — never ran. Same
+      for `self.v = n + 1.5`, where no division is involved at all,
+      which is what shows the operator was never the subject.
+      They are NOT reordered away: they run again as the fallback
+      below, so a right-hand side the expression scanner cannot type
+      resolves exactly as it did before.
+      bug-n-a-field-takes-its-type-from-the-first-token-of-its-right-hand-side }
+    if (tk = tyUnknown) and PyBlkRhsEndsAt(rhsAt) and
+       (Tokens[rhsAt].Kind = tkIdent) then
+    begin
+      rhsName := GetTokenStr(rhsAt);
+      tk := PyHeaderParamType(methodStart, j, rhsName);
+      fldSig := PyAnnLastProcSig;
+      fldRec := PyHeaderParamRec(methodStart, j, rhsName);
+    end;
+    if (tk = tyUnknown) and PyBlkRhsEndsAt(rhsAt) then
+    begin
+      tk := PyTypeFromTokenIndex(rhsAt);
+      fldRec := PyRecFromTokenIndex(rhsAt);
+    end;
+    if tk = tyUnknown then
+    begin
+      { Anything richer than a literal or a bare parameter — a list
+        literal (`self.base_stack = [10]`), a call, a construction.
+        One scanner already knows how to type an expression; reuse
+        it rather than erroring or growing a second half-scanner
+        here. }
+      tk := PyInferExprType(rhsAt, k2);
+      if (tk = tyClass) and (PyInferLastCi >= 0) then
+        fldRec := REC_UCLASS_BASE + PyInferLastCi;
+    end;
+    { ...and the first-token readers as the FALLBACK, unguarded, for a
+      multi-token right-hand side the expression scanner declined.
+      Nothing that resolved before this change stops resolving. }
+    if (tk = tyUnknown) and (Tokens[rhsAt].Kind = tkIdent) then
+    begin
+      rhsName := GetTokenStr(rhsAt);
+      tk := PyHeaderParamType(methodStart, j, rhsName);
+      fldSig := PyAnnLastProcSig;
+      fldRec := PyHeaderParamRec(methodStart, j, rhsName);
+    end;
+    if tk = tyUnknown then
+    begin
+      tk := PyTypeFromTokenIndex(rhsAt);
+      fldRec := PyRecFromTokenIndex(rhsAt);
+    end;
+  end;
+  { Assigned from a MODULE GLOBAL: `self.state = NEW`, the ordinary
+    Python module-level constant. None of the scanners above can see
+    it — the name is bound outside this class body — and the field was
+    rejected outright with "cannot infer the type of field", uniformly
+    for a str / int / float / list / bool global.
+    PyModuleGlobalLiteralType reads it straight off the module's
+    tokens — PyCollectModuleLocalsAST, which would know, does not run
+    until after this pre-pass.
+    bug-nilpy-a-field-assigned-from-a-module-global-has-no-inferable-type }
+  if (tk = tyUnknown) and (Tokens[j + 4].Kind = tkIdent) and
+     PyBlkRhsEndsAt(j + 4) and
+     (not PyHeaderHasParam(methodStart, j, GetTokenStr(j + 4))) then
+  begin
+    tk := PyModuleGlobalLiteralType(GetTokenStr(j + 4));
+    if tk <> tyUnknown then fldRec := REC_NONE
+    else
+    begin
+      { ...and the same global holding a class INSTANCE, `G = K()`,
+        which needs the class identity as well as the kind — see
+        PyModuleGlobalCtorClass for why reporting only the kind
+        produced a plausible wrong number. }
+      k2 := PyModuleGlobalCtorClass(GetTokenStr(j + 4));
+      if k2 >= 0 then
+      begin
+        tk := tyClass;
+        fldRec := REC_UCLASS_BASE + k2;
+      end
+      else if PyModuleGlobalIsDef(GetTokenStr(j + 4)) then
+      begin
+        { ...and the same global holding a FUNCTION: `self.fn = named`,
+          a module-level def used as a value. Third member of this
+          family and the same blind spot — the name is bound outside
+          the class body, so none of the scanners above sees it, and
+          the field was rejected outright with "cannot infer the type
+          of field self.fn - annotate it" for a shape that needs no
+          annotation in Python.
+
+          It is the LOCAL rule that settles the answer, not a new one:
+          `g = named` at module level already yields a variant
+          carrying the callable (feature-nilpy-function-values), and a
+          field is the other spelling of the same binding — one
+          concept, two spellings, only one of them wired
+          (devdocs/dev/normalise-dont-special-case.md). It also
+          matches what the ctor-PARAMETER arm just below already
+          answers for `self.on_next = on_next`, where the parameter
+          routinely IS a function: variant, so the runtime tag
+          travels with the value.
+
+          Variant and not a recorded signature, deliberately. The
+          dispatcher handles a callable variant including its KEYWORD
+          arguments -- measured through a dict value, a list element,
+          a parameter and a branch result -- so a static signature
+          here would buy nothing and would be wrong the moment the
+          field is reassigned to a different function, which is
+          exactly what a dispatch table does.
+          bug-n-a-field-assigned-a-module-level-def-has-no-inferable-type }
+        tk := tyVariant;
+        fldRec := REC_NONE;
+        fldSig := -1;
+      end;
+    end;
+  end;
+  if tk = tyUnknown then
+  begin
+    { Assigned from a bare ctor PARAMETER that carries no annotation:
+      `def __init__(self, parent, on_next)` then `self.on_next =
+      on_next`. Python does not require the annotation and neither can
+      we — that is the shape of an ordinary class, and erroring here
+      rejected whole modules over it (songformatter's FormatText).
+      The field takes the variant type, which is what an unannotated
+      LOCAL already gets, so the value keeps its runtime tag.
+
+      Only for that case: a right-hand side the scanners could not
+      type at all still errors, because guessing there would hide a
+      real mistake. }
+    if ((Tokens[j + 4].Kind = tkIdent) and
+        PyHeaderHasParam(methodStart, j, GetTokenStr(j + 4))) or
+       (Tokens[j + 4].Kind = tkNil) then
+    begin
+      { ...or assigned None outright: `self.file_path = None`, which is
+        how Python declares a field that gets a value later. There is
+        no type to read off None, and demanding an annotation for it
+        rejected the class. Variant, so the tag is whatever is stored
+        next. }
+      tk := tyVariant;
+      fldRec := REC_NONE;
+      fldSig := -1;
+    end
+    else if not isCtor then
+      { OUTSIDE the constructor an unreadable right-hand side is not a
+        diagnostic: `self.items = self.load()` in a helper is ordinary
+        Python, and the field is already declared (or will be) where
+        its type IS readable. The variant keeps the runtime tag; only
+        the ctor, where a field is normally introduced, still insists
+        on something it can type. }
+      tk := tyVariant
+    else
+      ErrorAt(Tokens[j].Line,
+              'Nil Python: cannot infer the type of field self.'
+              + GetTokenStr(j + 2) + ' - annotate it (self.'
+              + GetTokenStr(j + 2) + ': int = ...)');
+  end;
+  { An int field this class GROWS by arithmetic on itself becomes a
+    VARIANT, so an accumulator stays exact past 2^63 instead of
+    wrapping in silence — see PyFieldIsIntAccumulator for why variant
+    and not promo, and for why the test is deliberately narrow. }
+  if PyIsMachineIntTk(tk) and
+     PyFieldIsIntAccumulator(bodyStart, bodyEnd, GetTokenStr(j + 2)) then
+  begin
+    tk := tyVariant;
+    fldSig := -1;
+  end;
+  { see the dataclass branch: str fields are managed, not string[N] }
+  if tk = tyString then tk := tyAnsiString;
+  if tk <> tyClass then fldRec := REC_NONE;
+end;
+
+procedure PyCollectClassFieldJoins(ci, bodyStart, bodyEnd: Integer);
+{ The DETECT half of the field-join pre-pass: record what type each `self.NAME`
+  in this class's body gives that field, without laying anything out.
+
+  It shares the two routines that decide the answer — PyFieldDeclAt for WHICH
+  tokens declare a field and PyInferFieldDecl for WHAT type they declare — with
+  the registering pass, which is the point of both extractions. What is written
+  twice is only the walk itself: find a def, take its suite, step through it.
+  That skeleton carries no semantics; the two routines it calls carry all of
+  them, so the two passes cannot drift about what a field is.
+  bug-n-a-field-declared-in-an-ancestor-is-not-widened-by-a-descendants-rebind }
+var i, j, depth, methodStart: Integer;
+    isCtor: Boolean;
+    fldAnn, fldRec, fldSig: Integer;
+    tk: TTypeKind;
+begin
+  if (ci < 0) or (bodyEnd <= bodyStart) then Exit;
+  PyFJDetecting := True;
+  depth := 0;
+  i := bodyStart;
+  while i < bodyEnd do
+  begin
+    if Tokens[i].Kind = tkIndent then Inc(depth)
+    else if Tokens[i].Kind = tkDedent then Dec(depth)
+    else if (depth = 0) and (Tokens[i].Kind = tkFunction) and
+            (i + 1 < bodyEnd) and (Tokens[i + 1].Kind = tkIdent) then
+    begin
+      methodStart := i;
+      { `create`, not `__init__` — PyMethodName is what the registering pass
+        compares too, and isCtor changes which inference arms are available }
+      isCtor := PyMethodName(GetTokenStr(i + 1)) = 'create';
+      j := PyFindSuiteIndent(i, bodyEnd);
+      if j < 0 then j := bodyEnd else Inc(j);
+      while (j + 4 < bodyEnd) and (Tokens[j].Kind <> tkDedent) do
+      begin
+        fldAnn := PyFieldDeclAt(j);
+        fldSig := -1;
+        if fldAnn >= 0 then
+        begin
+          PyInferFieldDecl(j, fldAnn, methodStart, bodyStart, bodyEnd, isCtor,
+                           tk, fldRec, fldSig);
+          PyFJNote(ci, GetTokenStr(j + 2), tk);
+        end;
+        Inc(j);
+      end;
+    end;
+    Inc(i);
+  end;
+  PyFJDetecting := False;
+end;
+
 procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer; isDC: Boolean;
                                  fieldsOnly: Boolean);
 var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, align, sz: Integer;
-    fi, baseOff: Integer; wtk: TTypeKind; fldWidened: Boolean;
+    fi, baseOff, fj: Integer; wtk: TTypeKind; fldWidened: Boolean;
     ovMmi, ovPi: Integer;   { the inherited method an override must match }
     fldAnn, rhsAt, k2, fldSig: Integer;
     origName, name, fullName, rhsName: AnsiString; isCtor: Boolean;
@@ -31838,6 +33177,11 @@ begin
       PyInferSelfCi := ci;
       mRet := PyMethodRetType(methodStart, mRetRec);
       PyInferSelfCi := -1;
+  { -1, not the BSS zero: 0 is a valid TOKEN INDEX, so an unset range would read
+    as "the def starting at token 0" and PyDottedRootIsLocal would answer from
+    the top of the file. }
+  PyInferHdrLo := -1;  PyInferHdrHi := -1;
+  PyInferBodyLo := -1; PyInferBodyHi := -1;
       if mRet = tyUnknown then mRet := tyInteger;   { `-> None` / unannotated }
       { __repr__/__str__ return a str by contract — the SIGNATURE half of the
         forcing in PyParseDefHeader (see the note there). Without it an
@@ -32149,255 +33493,12 @@ begin
         if j < 0 then j := bodyEnd else Inc(j);
         while (j + 4 < bodyEnd) and (Tokens[j].Kind <> tkDedent) do
         begin
-          { Both `self.NAME = expr` and `self.NAME: ann = expr` declare a
-            field. The annotated form used to be invisible here — the match
-            required '=' at j+3 — so a class that annotates its ctor fields
-            (the idiomatic Python form, and the one the uforth VM uses)
-            registered NO fields at all and every later `self.x` mis-resolved
-            against an empty class. }
-          fldAnn := -1;
+          fldAnn := PyFieldDeclAt(j);
           fldSig := -1;
-          if (Tokens[j].Kind = tkIdent) and (GetTokenStr(j) = 'self') and
-             (Tokens[j + 1].Kind = tkDot) and (Tokens[j + 2].Kind = tkIdent) then
-          begin
-            if Tokens[j + 3].Kind = tkAssign then fldAnn := 0
-            { `self.x: int = 5` — an ANNOTATED declaration, which is a STATEMENT
-              and therefore always starts one. Without that requirement the
-              colon of a compound-statement HEADER matched: `if not
-              self.compiling:` reads as `self` `.` `compiling` `:` and declared a
-              phantom variant field named after whatever the condition tested.
-              Harmless for a name that is a real field (it is already
-              registered, and the guard below skips a duplicate) — but for a
-              @property it declared a FIELD SHADOWING THE PROPERTY, so every
-              access resolved to a slot nobody writes. `if self.x:`, `while
-              self.x:`, `{self.x: 1}` and `a[self.x:]` are all this shape.
-              bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver }
-            else if (Tokens[j + 3].Kind = tkColon) and
-                    ((j = 0) or
-                     (Tokens[j - 1].Kind in [tkNewline, tkIndent, tkDedent,
-                                             tkSemicolon])) then
-              fldAnn := j + 4;
-          end;
           if fldAnn >= 0 then
           begin
-            if fldAnn > 0 then
-            begin
-              { annotated: the annotation IS the type, exactly as for a
-                dataclass field — same PyAnnTypeAt grammar (Optional/Any/
-                List/Callable/forward refs). }
-              k2 := fldAnn;
-              tk := PyAnnTypeAt(k2);
-              fldSig := PyAnnLastProcSig;
-              fldRec := REC_NONE;
-              if (tk = tyClass) and (PyAnnLastCi >= 0) then
-                fldRec := REC_UCLASS_BASE + PyAnnLastCi;
-              if tk = tyUnknown then
-              begin
-                { An annotation this reader cannot interpret fell THROUGH to the
-                  infer-from-the-right-hand-side path below and came out as
-                  "cannot infer the type of field self.xs - annotate it" — about
-                  a field that IS annotated. Degrade to Any, same as everywhere
-                  else. bug-n-an-uninterpretable-annotation-refuses-the-program }
-                PyWarnUnreadAnnotation('field self.' + GetTokenStr(j + 2),
-                                       Tokens[j].Line);
-                tk := tyVariant;
-                fldSig := -1;
-              end;
-            end
-            else
-            begin
-              rhsAt := j + 4;
-              { A QUALIFIED construction first — `self.canvas = tk.Canvas(root)`.
-                Reading the type off the FIRST token would resolve the module
-                alias `tk`, and a class may well be named for it (tkinter's own
-                `Tk` root window, matched case-insensitively): the field was then
-                recorded as a Tk, so `self.canvas.create_text(...)` found no such
-                method and fell through to the dynamic-attribute path — which
-                cannot bind keyword arguments. }
-              tk := tyUnknown;
-              fldRec := REC_NONE;
-              if (rhsAt + 3 < bodyEnd) and (Tokens[rhsAt].Kind = tkIdent) and
-                 (Tokens[rhsAt + 1].Kind = tkDot) and (Tokens[rhsAt + 2].Kind = tkIdent) and
-                 (Tokens[rhsAt + 3].Kind = tkLParen) and
-                 (FindUClassNonRecord(GetTokenStr(rhsAt + 2)) >= 0) then
-              begin
-                { NonRecord, both times: a QUALIFIED construction
-                  `self.t = tk.Text(...)` names a class, and the first row of
-                  that name may be a same-named RECORD — which is how this arm
-                  typed a Text field as the RTL's file record and then reported
-                  "Text has no method insert".
-                  bug-nilpy-text-class-name-binds-the-rtl-file-record. }
-                tk := tyClass;
-                fldRec := REC_UCLASS_BASE + FindUClassNonRecord(GetTokenStr(rhsAt + 2));
-              end;
-              { A bare identifier that names a PARAMETER of this method is a
-                VALUE, and that reading has to win before the type scanners see
-                it. PyTypeFromTokenIndex maps an identifier that names a class
-                to tyClass, case-INSENSITIVELY (Pascal rules), so in
-
-                    class Node:
-                        def __init__(self, node: int):
-                            self.node = node
-
-                the right-hand `node` matched the class `Node` and the field was
-                registered as an instance of its own class. `str(self.node)`
-                then took the object route and dispatched __str__ on the
-                integer, which SEGFAULTED — with the name being the only
-                trigger, so the identical class called `A` with a field `v` was
-                fine (bug-nilpy-str-of-object-segfaults-when-dunder-builds-a-
-                string). Any field whose name matches ANY class name, not only
-                its own, hit it.
-
-                Order only: a right-hand side that is not a parameter still
-                falls through to exactly the scanners it used before. }
-              { The end of the right-hand side, computed ONCE and used by every
-                arm below. `tkSemicolon` is in the terminator set because a
-                statement can end there: `def __init__(self, items):
-                self.items = items; self.i = 0` scanned to end-of-LINE, so the
-                expression scanner saw `items ; self . i = 0` and typed the
-                field from the `0`. A TPyList was then stored into an Int64
-                field and the first read died with "expected a number, got
-                object" — with the shape being as ordinary as a one-line
-                __init__ gets. PyBlkRhsEndsAt three functions up already knows
-                `;` ends a statement; this scan did not.
-                bug-n-a-field-typed-across-a-semicolon-takes-the-next-statements-type }
-              k2 := rhsAt;
-              while (k2 < bodyEnd) and
-                    not (Tokens[k2].Kind in [tkNewline, tkDedent, tkSemicolon, tkEOF]) do Inc(k2);
-              { The two FIRST-TOKEN readers decide only when that token IS the
-                whole right-hand side. A first-token answer is a claim about
-                that token, and making it about the expression is how
-                `self.v = n / 2` came out an Int64 holding 2.5's IEEE bits: the
-                parameter reader answered `int` from the `n` and the expression
-                scanner — which types true division correctly — never ran. Same
-                for `self.v = n + 1.5`, where no division is involved at all,
-                which is what shows the operator was never the subject.
-                They are NOT reordered away: they run again as the fallback
-                below, so a right-hand side the expression scanner cannot type
-                resolves exactly as it did before.
-                bug-n-a-field-takes-its-type-from-the-first-token-of-its-right-hand-side }
-              if (tk = tyUnknown) and PyBlkRhsEndsAt(rhsAt) and
-                 (Tokens[rhsAt].Kind = tkIdent) then
-              begin
-                rhsName := GetTokenStr(rhsAt);
-                tk := PyHeaderParamType(methodStart, j, rhsName);
-                fldSig := PyAnnLastProcSig;
-                fldRec := PyHeaderParamRec(methodStart, j, rhsName);
-              end;
-              if (tk = tyUnknown) and PyBlkRhsEndsAt(rhsAt) then
-              begin
-                tk := PyTypeFromTokenIndex(rhsAt);
-                fldRec := PyRecFromTokenIndex(rhsAt);
-              end;
-              if tk = tyUnknown then
-              begin
-                { Anything richer than a literal or a bare parameter — a list
-                  literal (`self.base_stack = [10]`), a call, a construction.
-                  One scanner already knows how to type an expression; reuse
-                  it rather than erroring or growing a second half-scanner
-                  here. }
-                tk := PyInferExprType(rhsAt, k2);
-                if (tk = tyClass) and (PyInferLastCi >= 0) then
-                  fldRec := REC_UCLASS_BASE + PyInferLastCi;
-              end;
-              { ...and the first-token readers as the FALLBACK, unguarded, for a
-                multi-token right-hand side the expression scanner declined.
-                Nothing that resolved before this change stops resolving. }
-              if (tk = tyUnknown) and (Tokens[rhsAt].Kind = tkIdent) then
-              begin
-                rhsName := GetTokenStr(rhsAt);
-                tk := PyHeaderParamType(methodStart, j, rhsName);
-                fldSig := PyAnnLastProcSig;
-                fldRec := PyHeaderParamRec(methodStart, j, rhsName);
-              end;
-              if tk = tyUnknown then
-              begin
-                tk := PyTypeFromTokenIndex(rhsAt);
-                fldRec := PyRecFromTokenIndex(rhsAt);
-              end;
-            end;
-            { Assigned from a MODULE GLOBAL: `self.state = NEW`, the ordinary
-              Python module-level constant. None of the scanners above can see
-              it — the name is bound outside this class body — and the field was
-              rejected outright with "cannot infer the type of field", uniformly
-              for a str / int / float / list / bool global.
-              PyModuleGlobalLiteralType reads it straight off the module's
-              tokens — PyCollectModuleLocalsAST, which would know, does not run
-              until after this pre-pass.
-              bug-nilpy-a-field-assigned-from-a-module-global-has-no-inferable-type }
-            if (tk = tyUnknown) and (Tokens[j + 4].Kind = tkIdent) and
-               PyBlkRhsEndsAt(j + 4) and
-               (not PyHeaderHasParam(methodStart, j, GetTokenStr(j + 4))) then
-            begin
-              tk := PyModuleGlobalLiteralType(GetTokenStr(j + 4));
-              if tk <> tyUnknown then fldRec := REC_NONE
-              else
-              begin
-                { ...and the same global holding a class INSTANCE, `G = K()`,
-                  which needs the class identity as well as the kind — see
-                  PyModuleGlobalCtorClass for why reporting only the kind
-                  produced a plausible wrong number. }
-                k2 := PyModuleGlobalCtorClass(GetTokenStr(j + 4));
-                if k2 >= 0 then
-                begin
-                  tk := tyClass;
-                  fldRec := REC_UCLASS_BASE + k2;
-                end;
-              end;
-            end;
-            if tk = tyUnknown then
-            begin
-              { Assigned from a bare ctor PARAMETER that carries no annotation:
-                `def __init__(self, parent, on_next)` then `self.on_next =
-                on_next`. Python does not require the annotation and neither can
-                we — that is the shape of an ordinary class, and erroring here
-                rejected whole modules over it (songformatter's FormatText).
-                The field takes the variant type, which is what an unannotated
-                LOCAL already gets, so the value keeps its runtime tag.
-
-                Only for that case: a right-hand side the scanners could not
-                type at all still errors, because guessing there would hide a
-                real mistake. }
-              if ((Tokens[j + 4].Kind = tkIdent) and
-                  PyHeaderHasParam(methodStart, j, GetTokenStr(j + 4))) or
-                 (Tokens[j + 4].Kind = tkNil) then
-              begin
-                { ...or assigned None outright: `self.file_path = None`, which is
-                  how Python declares a field that gets a value later. There is
-                  no type to read off None, and demanding an annotation for it
-                  rejected the class. Variant, so the tag is whatever is stored
-                  next. }
-                tk := tyVariant;
-                fldRec := REC_NONE;
-                fldSig := -1;
-              end
-              else if not isCtor then
-                { OUTSIDE the constructor an unreadable right-hand side is not a
-                  diagnostic: `self.items = self.load()` in a helper is ordinary
-                  Python, and the field is already declared (or will be) where
-                  its type IS readable. The variant keeps the runtime tag; only
-                  the ctor, where a field is normally introduced, still insists
-                  on something it can type. }
-                tk := tyVariant
-              else
-                ErrorAt(Tokens[j].Line,
-                        'Nil Python: cannot infer the type of field self.'
-                        + GetTokenStr(j + 2) + ' - annotate it (self.'
-                        + GetTokenStr(j + 2) + ': int = ...)');
-            end;
-            { An int field this class GROWS by arithmetic on itself becomes a
-              VARIANT, so an accumulator stays exact past 2^63 instead of
-              wrapping in silence — see PyFieldIsIntAccumulator for why variant
-              and not promo, and for why the test is deliberately narrow. }
-            if PyIsMachineIntTk(tk) and
-               PyFieldIsIntAccumulator(bodyStart, bodyEnd, GetTokenStr(j + 2)) then
-            begin
-              tk := tyVariant;
-              fldSig := -1;
-            end;
-            { see the dataclass branch: str fields are managed, not string[N] }
-            if tk = tyString then tk := tyAnsiString;
-            if tk <> tyClass then fldRec := REC_NONE;
+            PyInferFieldDecl(j, fldAnn, methodStart, bodyStart, bodyEnd, isCtor,
+                             tk, fldRec, fldSig);
             { ...unless the name is a CLASS ATTRIBUTE lowered as a shared slot
               with per-instance overrides. There `self.x = ...` is precisely the
               write that creates the override, and giving it a field as well
@@ -32410,6 +33511,37 @@ begin
             if (fi < 0) and
                (PyClsAttrOvrSlot(ci, GetTokenStr(j + 2)) < 0) then
             begin
+              { DECLARING the field — so this is where the whole hierarchy's
+                answer has to be applied, not just this class's own. A subclass
+                that stores a float in a field its parent declared as an integer
+                cannot widen the parent later: every subclass laid out before it
+                already started at UClsSize_[parent] and baked the narrow size
+                in. The join was computed over the whole program before any
+                class was laid out; consulting it HERE is what makes the slot
+                right for every class that shares it.
+
+                Consulted in this routine rather than in the pre-pass that
+                filled the table, because a class whose base could not be
+                resolved early is registered from PyParseClass instead — and
+                both routes come through here.
+                bug-n-a-field-declared-in-an-ancestor-is-not-widened-by-a-descendants-rebind }
+              fj := PyFJFind(ci, GetTokenStr(j + 2));
+              if fj >= 0 then
+              begin
+                wtk := PyWidenBinding(tk, IntToTypeKind(PyFJTk[fj]));
+                if wtk <> tk then
+                begin
+                  tk := wtk;
+                  { same rule the widen arm below states: the class identity
+                    belongs to the narrow type, and a widened field is no
+                    longer that class }
+                  if wtk <> tyClass then
+                  begin
+                    fldRec := REC_NONE;
+                    fldSig := -1;
+                  end;
+                end;
+              end;
               sz := TypeSize(tk);
               curOff := AlignTo(curOff, TypeAlign(tk));
               { AddUField reads LastTypeProcSig for a procedural field, which is
@@ -33597,45 +34729,30 @@ end;
 
   The real pass later resets each class's field window and rebuilds it, so
   these entries are orphaned rather than duplicated. }
-procedure PyRegisterClassFieldsPrepass;
+procedure PyClassHeaderSweep(phase: Integer);
+{ One walk over every `class` header in the token stream. Run TWICE, and the
+  two runs are not the same job:
+
+    phase 0  DETECT   — resolve each class`s first base and collect, per
+                        (class, field), the type each assignment gives it.
+    phase 1  REGISTER — lay the classes out, consulting the join the detect
+                        run and PyFJPropagate between them have computed.
+
+  It is one routine rather than two because everything except the last
+  statement is shared: locating the header, reading @dataclass off the lines
+  above it, resolving the base list, and finding the body span are all
+  delicate and all have their own bugs recorded in the comments below. A
+  second copy for the detect run would be a second answer to every one of
+  those questions — including whether a one-line body has a suite at all.
+
+  The parts of the body that are not the final call are re-run in phase 1 and
+  must therefore be idempotent. They are: UClsParent, PyDcOrder and
+  PyFJParent are assignments of the same value, and PyMembersHoisted is set in
+  phase 1 only.
+  bug-n-a-field-declared-in-an-ancestor-is-not-widened-by-a-descendants-rebind }
 var i, j, k, ci, bs, be, depth, baseCi: Integer;
     isDC, hoist, multiBase: Boolean;
 begin
-  { FIRST: which classes are named as a SECOND base anywhere? They are flattened
-    into their host and not compiled standalone (see PyClsUsedAsMixin), and both
-    this pass and PyParseClass have to know it before they register anything. }
-  i := PyScanLo;
-  while i < MainProgramTokCount - 2 do
-  begin
-    if (Tokens[i].Kind = tkClass) and (Tokens[i + 1].Kind = tkIdent) and
-       (Tokens[i + 2].Kind = tkLParen) then
-    begin
-      j := i + 2; depth := 0;
-      while j < MainProgramTokCount do
-      begin
-        if Tokens[j].Kind = tkLParen then Inc(depth)
-        else if Tokens[j].Kind = tkRParen then
-        begin
-          Dec(depth);
-          if depth = 0 then Break;
-        end
-        else if (depth = 1) and (Tokens[j].Kind = tkComma) and
-                (Tokens[j + 1].Kind = tkIdent) then
-        begin
-          k := j + 1;
-          { a DOTTED base names the module it came from; the class is the last
-            segment, exactly as the header parse takes it }
-          while (k + 2 < MainProgramTokCount) and (Tokens[k + 1].Kind = tkDot) and
-                (Tokens[k + 2].Kind = tkIdent) do k := k + 2;
-          baseCi := FindUClassNonRecord(GetTokenStr(k));
-          if baseCi >= 0 then PyClsUsedAsMixin[baseCi] := True;
-        end
-        else if Tokens[j].Kind in [tkNewline, tkEOF] then Break;
-        Inc(j);
-      end;
-    end;
-    Inc(i);
-  end;
   i := PyScanLo;
   while i < MainProgramTokCount - 2 do
   begin
@@ -33718,6 +34835,11 @@ begin
             else
               baseCi := FindUClassNonRecord(GetTokenStr(i + 3));
           end;
+          { the join's parent link — taken here, before the multi-base and
+            mixin decisions below turn it into a "defer to PyParseClass".
+            Those decisions are about LAYOUT; the field join needs the
+            hierarchy either way. }
+          if phase = 0 then PyFJParent[ci] := baseCi;
           { MULTIPLE BASES — a comma at the header's own paren depth. The extra
             bases are FLATTENED, which needs each one's recorded body span, and
             spans are recorded in source order by PyParseClass. So the whole
@@ -33812,13 +34934,69 @@ begin
             let the module-collect trial parse resolve `x = obj.method()`.
             PyParseClass skips its own (second) full run via the flag — the
             append-only PyDc* default tables must be filled exactly once. }
-          PyRegisterClassMembers(ci, bs, be, isDC, not hoist);
-          if hoist then PyMembersHoisted[ci] := True;
+          if phase = 0 then
+            { DETECT — record what every class assigns to every field, laying
+              nothing out. Nothing here may depend on a class registered later,
+              which is the whole reason the pass exists. }
+            PyCollectClassFieldJoins(ci, bs, be)
+          else
+          begin
+            PyRegisterClassMembers(ci, bs, be, isDC, not hoist);
+            if hoist then PyMembersHoisted[ci] := True;
+          end;
         end;
       end;
     end;
     Inc(i);
   end;
+end;
+
+procedure PyRegisterClassFieldsPrepass;
+var i, j, k, depth, baseCi: Integer;
+begin
+  { FIRST: which classes are named as a SECOND base anywhere? They are flattened
+    into their host and not compiled standalone (see PyClsUsedAsMixin), and both
+    this pass and PyParseClass have to know it before they register anything. }
+  i := PyScanLo;
+  while i < MainProgramTokCount - 2 do
+  begin
+    if (Tokens[i].Kind = tkClass) and (Tokens[i + 1].Kind = tkIdent) and
+       (Tokens[i + 2].Kind = tkLParen) then
+    begin
+      j := i + 2; depth := 0;
+      while j < MainProgramTokCount do
+      begin
+        if Tokens[j].Kind = tkLParen then Inc(depth)
+        else if Tokens[j].Kind = tkRParen then
+        begin
+          Dec(depth);
+          if depth = 0 then Break;
+        end
+        else if (depth = 1) and (Tokens[j].Kind = tkComma) and
+                (Tokens[j + 1].Kind = tkIdent) then
+        begin
+          k := j + 1;
+          { a DOTTED base names the module it came from; the class is the last
+            segment, exactly as the header parse takes it }
+          while (k + 2 < MainProgramTokCount) and (Tokens[k + 1].Kind = tkDot) and
+                (Tokens[k + 2].Kind = tkIdent) do k := k + 2;
+          baseCi := FindUClassNonRecord(GetTokenStr(k));
+          if baseCi >= 0 then PyClsUsedAsMixin[baseCi] := True;
+        end
+        else if Tokens[j].Kind in [tkNewline, tkEOF] then Break;
+        Inc(j);
+      end;
+    end;
+    Inc(i);
+  end;
+  { The class hierarchy has to be known, and every field assignment in it
+    seen, BEFORE the first class is laid out — a field`s type is decided where
+    it is declared, and the assignment that widens it may be in a subclass a
+    thousand lines further down. Hence detect, propagate, then register. }
+  PyFJReset;
+  PyClassHeaderSweep(0);
+  PyFJPropagate;
+  PyClassHeaderSweep(1);
 end;
 
 { Evaluate the NON-CONSTANT parameter defaults of a class's methods.
@@ -36626,6 +37804,14 @@ begin
         Result := node;
         Exit;
       end;
+      { ...and the BARE `x.__class__`. Same position, same one builder. }
+      if PyIsBareClassRefAhead and (tk = tyClass) then
+      begin
+        node := PyMakeClassRefOf(node);
+        tk := tyVariant; recId := REC_NONE; outTk := tk;
+        Result := node;
+        Exit;
+      end;
       mmi := -1;
       if ci >= 0 then mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
       if mmi >= 0 then
@@ -37202,6 +38388,44 @@ end;
   therefore left in place THERE: isNilPy still holds while an .npy program's
   Pascal RTL units are parsed, with PyExprMode false.
   --------------------------------------------------------------------------- }
+function PyQualifierBefore(identTok: Integer): AnsiString;
+{ The dotted receiver the user wrote immediately before the identifier at
+  identTok, or '' when there is none: `strings.Foo` -> 'strings',
+  `a.b.Foo` -> 'a.b', a bare `Foo` -> ''.
+
+  Read back off the TOKEN STREAM rather than threaded down from the caller.
+  ParseLValueAST hands its NilPy half only (idx, identTokIdx): by the time a
+  member lookup has failed, every arm that could have resolved the receiver has
+  already consumed it, and threading it would mean passing it from a dozen
+  sites, each a chance to pass the wrong one. What the user WROTE is one place
+  and cannot drift from itself.
+
+  Only a plain dotted chain of identifiers is named. `a[i].Foo` and
+  `f(x).Foo` answer '' — there is no short phrase for those receivers, and a
+  half-right one in a diagnostic is worse than none.
+  bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name }
+var k, lo: Integer;
+begin
+  Result := '';
+  if identTok < 2 then Exit;
+  if Tokens[identTok - 1].Kind <> tkDot then Exit;
+  k := identTok - 1;
+  lo := -1;
+  while (k >= 1) and (Tokens[k].Kind = tkDot) and (Tokens[k - 1].Kind = tkIdent) do
+  begin
+    lo := k - 1;
+    k := k - 2;
+  end;
+  if lo < 0 then Exit;
+  k := lo;
+  while k < identTok - 1 do
+  begin
+    if Tokens[k].Kind = tkIdent then Result := Result + GetTokenStr(k)
+    else if Tokens[k].Kind = tkDot then Result := Result + '.';
+    Inc(k);
+  end;
+end;
+
 function PyParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   augBin: TTokenKind; augRead, augNode: Integer;   { `d[k] += v` }
@@ -37237,6 +38461,7 @@ var
   setTmpSym, setTmpAssign, setInnerComma: Integer;   { chained subscript-assign value }
   binNode: Integer; augTk2: TTokenKind;   { `v[k] op= x` on a variant base }
   sharedNeedsOvr: Boolean;   { the shared class-attribute slot also has per-instance overrides }
+  qualRecv: AnsiString;   { the dotted receiver the user wrote, for the diagnostic }
 begin
   prevTok := identTokIdx;
   if DebugTrace then writeln('PyParseLValueAST: idx = ', idx, ' prevTok = ', prevTok, ' TokenStr = "', GetTokenStr(prevTok), '" CurTok.Line = ', CurTok.Line, ' TokPos = ', TokPos);
@@ -38191,10 +39416,41 @@ begin
         else
         begin
           ErrorIdent := fieldName;
+          { NAME THE RECEIVER. `X.Y` whose receiver resolved to nothing arrives
+            here having been compiled as the bare name `Y`, and the diagnostic
+            then reported `undefined variable (Y)` — naming the attribute and
+            never the qualifier that actually failed, so the message points at
+            the wrong half of the line. `import strings` (a Pascal RTL unit
+            wearing a Python module's name) followed by `strings.Foo` said
+            `undefined variable (Foo)`, which reads as a typo in `Foo`.
+
+            The cause is deliberately NOT claimed: this site cannot tell a
+            receiver that resolved to nothing from one that resolved and has no
+            such member, and guessing between them is how the ticket that filed
+            this bug got its own root cause wrong. What is stated is only what
+            is known — the qualified name the user wrote, and that no member
+            came of it.
+
+            The Pascal half of this routine (pasparser_lval.inc) has the same
+            shape and is deliberately left alone: the two parsers are duplicated
+            across languages on purpose
+            (devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md), and
+            Pascal has no unresolved-import path that reaches it this way.
+            bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name }
+          qualRecv := PyQualifierBefore(prevTok);
           if HiddenByDeclOrder(fieldName) then
             Error('undefined variable — it is a global declared later, declare it before use')
           else if HiddenByForwardOrder(fieldName) then
             Error('routine used before its declaration — define it above, or add a forward; declaration (--strict/require-forward)')
+          else if qualRecv <> '' then
+          begin
+            ErrorIdent := qualRecv + '.' + fieldName;
+            { Terse on purpose: ErrorIdent already prints the qualified name in
+              parentheses, so the text must not spell it a third time. }
+            Error('no member ' + fieldName + ' came of the qualifier ' +
+                  qualRecv + ' — check what ' + qualRecv + ' resolves to; an ' +
+                  'import that bound nothing gives exactly this');
+          end
           else
             Error('undefined variable');
         end;
@@ -39031,6 +40287,15 @@ begin
       begin
         node := PyMakeClassNameOf(node);
         tk := tyAnsiString; recName := REC_NONE;
+        Result := node;
+        Exit;
+      end;
+      { ...and the BARE `x.__class__`, the class object itself. Same position,
+        same one builder — see PyMakeClassRefOf. }
+      if PyIsBareClassRefAhead and (tk = tyClass) then
+      begin
+        node := PyMakeClassRefOf(node);
+        tk := tyVariant; recName := REC_NONE;
         Result := node;
         Exit;
       end;
@@ -44390,8 +45655,34 @@ begin
         representative whose SIGNATURE callers read types off. It is not a "what
         does this name call" query. The decision belongs here.
         bug-nilpy-a-callable-in-a-variable-loses-to-a-def-of-the-same-name }
+      { The MODULE-level arm of exactly that, split out when the local arm
+        landed because the answer here depends on which statement ran last and
+        this site could not see it. It can now: PyDefRebound compares the def's
+        ProcPyDefTok against the position of the assignment that rebinds it.
+
+            def f(x):    return "MOD"
+            class D:
+                def f(self, x): return "METH"
+            f = D().f
+            print(f("q"))        # CPython METH, pxx MOD
+
+        skGlobal is required and is not a formality — it is what says the name
+        really does denote a module-level VARIABLE here, so unbinding the def
+        leaves something for the ordinary variable path to claim. Without it the
+        name reaches the "nothing claimed the name" restore below and the def
+        simply comes back — which is what happened when this was first tried
+        through PyDefBoundHere alone: the funnel correctly answered "not bound",
+        and the def was handed back a few thousand lines later.
+
+        A rebinding inside a nested suite does NOT count — see PyDefRebindTok.
+        `f = something` under a branch that never runs must leave the def in
+        place, because NilPy is upward compatible with CPython and that program
+        is legal there.
+        bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name }
       if (qUnit < 0) and (procIdx >= 0) and
-         (idx >= 0) and (Syms[idx].Kind in [skLocal, skParam]) then
+         (idx >= 0) and
+         ((Syms[idx].Kind in [skLocal, skParam]) or
+          ((Syms[idx].Kind = skGlobal) and PyDefRebound(procIdx))) then
         procIdx := -1;
 
       pyLateDefPi := -1;

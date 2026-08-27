@@ -69,6 +69,12 @@ ALLOWED = {
         "joins TSTATE_REL onto a tempfile.mkdtemp() it just made, so "
         "write_report_md has a reports/ dir to write into; it never touches "
         "the repo's tstate",
+    "twatch_covering_devtest.py":
+        "builds a whole throwaway git repo under tempfile and writes a "
+        "runs-box.ndjson fixture into its tstate; it asserts on that fixture "
+        "and never opens the checkout's own archive — deliberately, since the "
+        "live one grows every few minutes and an assertion about its contents "
+        "would pass or fail on its own",
     "autotriage.py":
         "reads tstate off the REF by default (git show origin/master:...) — the "
         "path join remains only for the explicit `--rev ''` worktree opt-in, "

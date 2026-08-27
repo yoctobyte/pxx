@@ -1785,6 +1785,15 @@ begin
         Result := node;
         Exit;
       end;
+      { ...and the BARE `x.__class__`, the class object itself. Same position,
+        same one builder — see PyMakeClassRefOf. }
+      if PyIsBareClassRefAhead and (tk = tyClass) then
+      begin
+        node := PyMakeClassRefOf(node);
+        tk := tyVariant; recName := REC_NONE;
+        Result := node;
+        Exit;
+      end;
       { NilPy DYNAMIC attribute on a class instance: `vm._trans_ptr` where the
         class declares no such field/method/property. Python adds attributes at
         run time; route reads to pydynattr_get and writes to pydynattr_set (the

@@ -1,0 +1,72 @@
+# A class field assigned a module-level DEF -- `self.fn = named` -- which is how
+# a dispatch table is written.
+#
+# Two separate refusals, both COMPILE errors, so neither could be worked around:
+#
+#   self.fn = named       "cannot infer the type of field self.fn - annotate it
+#                          (self.fn: int = ...)"
+#   h.fn(1, 2)            "H has no method .fn()"
+#
+# The first is the module-level blind spot the field pre-pass already has two
+# arms for (a literal global, a global holding an instance): the pre-pass runs
+# BEFORE PyRegisterDefShells, so no Proc exists for the def yet and only the
+# tokens can answer. The second is the same inversion the keyword-argument
+# ticket describes -- the VARIANT-receiver route had claimed procedural fields
+# for a while and the STATIC-receiver route had not, so the receiver the
+# frontend knew MORE about was the one that failed.
+#
+# Both answers already existed: a LOCAL holding a def is a variant carrying the
+# callable, and PyMakeVariantFieldCall is the builder the variant route uses.
+# bug-n-a-field-assigned-a-module-level-def-has-no-inferable-type
+
+
+def named(a, b=10, c=100):
+    return a + b * 2 + c * 3
+
+
+def other(a, b=10, c=100):
+    return a - b
+
+
+class H:
+    def __init__(self):
+        self.fn = named
+        self.g = other
+
+
+class Table:
+    def __init__(self, f):
+        self.op = f              # from a ctor PARAMETER -- always worked
+    def run(self, x):
+        return self.op(x)
+
+
+h = H()
+
+# reading the field, and calling through a local -- the control that showed the
+# store was never the problem
+f = h.fn
+print("via-local:", f(1), f(1, 2), f(1, b=2), f(a=1, c=0))
+
+# ...and calling it directly, which is the spelling that did not compile
+print("direct:", h.fn(1), h.fn(1, 2), h.fn(1, b=2), h.fn(a=1, c=0))
+print("second:", h.g(5), h.g(5, 2), h.g(a=9, b=4))
+
+# a field reassigned to a DIFFERENT function: this is why the field is a variant
+# and carries no static signature
+h.fn = other
+print("rebound:", h.fn(5, 2))
+
+# through a method, and through the ctor-parameter spelling
+t = Table(named)
+print("param-field:", t.run(1), t.op(1, 2))
+
+# self.<field>(...) from INSIDE the class
+class Inner:
+    def __init__(self):
+        self.fn = named
+    def call(self, x):
+        return self.fn(x, b=1)
+
+
+print("self-call:", Inner().call(1))

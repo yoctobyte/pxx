@@ -1,0 +1,8 @@
+unbound: 2 [65, 66]
+subclass: 0 0
+empty: bytearray(b'') bytearray
+empty: b'' bytes
+arity: bytearray(b'\x00\x00\x00') bytearray(b'ab') bytearray(b'\x01\x02')
+arity: b'' b'\x01\x02'
+mutate: bytearray(b'\x07\x08\t') bytearray 3
+siblings: 1 5 1 9

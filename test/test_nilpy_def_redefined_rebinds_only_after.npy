@@ -1,0 +1,98 @@
+# A module-level `def` binds its name AT THE POINT IT STANDS, and a later `def`
+# of the same name rebinds it only for calls that come AFTER it.  Every call
+# site must resolve to the def that was last executed above it, which for
+# module-level code is simply the nearest one preceding it in the file.
+#
+# pxx used to answer the LAST def in the file for every call site, including
+# calls textually above the redefinition -- the second def reused the first's
+# shell, so the two were literally the same routine and the earlier call could
+# not see anything else.  When the two defs also returned different TYPES the
+# earlier call read the later def's return value through the earlier one's
+# type, so `first:1` became a corrupted string rather than a wrong number.
+# bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
+
+# --- same signature, same return type: calls on both sides ---
+def f():
+    return 1
+
+print("f-before:", f())
+
+def f():
+    return 2
+
+print("f-after:", f())
+
+# --- differing return TYPE: the shape that corrupted rather than mis-valued ---
+def g():
+    return 1
+
+print("g-before:", g())
+
+def g():
+    return "two"
+
+print("g-after:", g())
+
+# --- differing ARITY: these were always separate Procs (overload-shaped),
+#     and that path must keep working unchanged ---
+def h(a):
+    return a * 10
+
+print("h1:", h(3))
+
+def h(a, b):
+    return a + b
+
+print("h2:", h(3, 4))
+
+# --- three of them, so the middle one is neither first nor last ---
+def t():
+    return "one"
+
+print("t1:", t())
+
+def t():
+    return "two"
+
+print("t2:", t())
+
+def t():
+    return "three"
+
+print("t3:", t())
+
+# --- a def shadowing a pylib builtin, redefined again: the positional
+#     builtin-shadowing rule shares ProcPyDefTok with the fix above ---
+print("len-builtin:", len([1, 2, 3]))
+
+def len(x):
+    return 99
+
+print("len-user:", len([1, 2, 3]))
+
+# --- a nested def is scoped to its enclosing function and is unaffected ---
+def outer():
+    def inner():
+        return "i1"
+    r1 = inner()
+
+    def inner():
+        return "i2"
+    r2 = inner()
+    return r1 + "/" + r2
+
+print("nested:", outer())
+
+# --- calling through the earlier binding from inside another def defined
+#     before the redefinition: the call is compiled where it stands ---
+def early():
+    return 1
+
+def caller():
+    return early()
+
+def early():
+    return 2
+
+print("caller:", caller())
+print("early:", early())

@@ -3788,7 +3788,16 @@ begin
   begin
     { bytearray() / bytearray(n) / bytes(existing) }
     if nargs = 0 then
-      res := PyBoxObj(Pointer(bytearray))
+      { `bytearray(0)`, not the parameterless overload — that overload is gone
+        (it made the bare word a complete call; see pybytes_mark_bytearray). It
+        also answered a BYTEARRAY-stamped object for a zero-argument `bytes()`
+        reached through this reflective route, so `type(bytes()).__name__` said
+        bytearray. Split, since the two lines now have to be written anyway.
+        bug-n-bytearrays-zero-argument-overload-makes-the-bare-name-a-call }
+      if name = 'bytearray' then
+        res := PyBoxObj(Pointer(bytearray(0)))
+      else
+        res := PyBoxObj(Pointer(TPyBytes.Create(0)))
     else
     begin
       cand := args.at(0);

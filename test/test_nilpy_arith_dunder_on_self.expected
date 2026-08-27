@@ -12,5 +12,6 @@ rshift rshift
 V(6) 6
 V(16) 16
 9 2.5
+1 True BITWISE-AND
 4.5
 BITWISE-AND

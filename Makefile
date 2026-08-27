@@ -1072,6 +1072,43 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_idxslice26 | diff -u test/test_nilpy_dunder_index_slice.expected -
 	./$(COMPILER) test/test_nilpy_widen_binding_variant.npy $(TESTTMP)/test_nilpy_widenbind26
 	$(TESTTMP)/test_nilpy_widenbind26 | diff -u test/test_nilpy_widen_binding_variant.expected -
+	# a name rebound twice, the second time across the float boundary, joins to a
+	# variant instead of being refused as "too dynamic"
+	./$(COMPILER) test/test_nilpy_rebind_across_the_float_boundary.npy $(TESTTMP)/test_nilpy_rebindfloat26
+	$(TESTTMP)/test_nilpy_rebindfloat26 | diff -u test/test_nilpy_rebind_across_the_float_boundary.expected -
+	# a typed parameter rebound on SOME paths returns a value wide enough for both
+	./$(COMPILER) test/test_nilpy_conditionally_rebound_parameter_return.npy $(TESTTMP)/test_nilpy_condrebind26
+	$(TESTTMP)/test_nilpy_condrebind26 | diff -u test/test_nilpy_conditionally_rebound_parameter_return.expected -
+	# a nested def captures the PRIVATE SLOT of a rebound typed parameter
+	./$(COMPILER) test/test_nilpy_nested_def_captures_a_rebound_parameter.npy $(TESTTMP)/test_nilpy_capreb26
+	$(TESTTMP)/test_nilpy_capreb26 | diff -u test/test_nilpy_nested_def_captures_a_rebound_parameter.expected -
+	# a module-level assignment rebinds a def's name, positionally
+	./$(COMPILER) test/test_nilpy_module_rebinding_beats_a_def.npy $(TESTTMP)/test_nilpy_modreb26
+	$(TESTTMP)/test_nilpy_modreb26 | diff -u test/test_nilpy_module_rebinding_beats_a_def.expected -
+	# a selector after a VIRTUAL call (the receiver's class has a subclass)
+	./$(COMPILER) test/test_nilpy_attribute_off_a_virtual_call_result.npy $(TESTTMP)/test_nilpy_virtcall26
+	$(TESTTMP)/test_nilpy_virtcall26 | diff -u test/test_nilpy_attribute_off_a_virtual_call_result.expected -
+	# a member lookup through a qualifier that supplies nothing must name the
+	# QUALIFIER, not just the member — and a bare name must keep the short form
+	@out=$$(./$(COMPILER) test/test_nilpy_qualified_name_error_names_the_receiver.npy $(TESTTMP)/test_nilpy_qualrecv26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:14: error: no member Foo came of the qualifier strings .* (strings\.Foo)$$' \
+	   && test ! -e $(TESTTMP)/test_nilpy_qualrecv26 \
+	  || { echo "test_nilpy_qualified_name_error_names_the_receiver: FAIL - rc=$$rc (want 1, one error on line 14 naming the qualifier, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	@out=$$(./$(COMPILER) test/test_nilpy_bare_name_error_stays_short.npy $(TESTTMP)/test_nilpy_barename26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:6: error: undefined variable (Foo)$$' \
+	   && test ! -e $(TESTTMP)/test_nilpy_barename26 \
+	  || { echo "test_nilpy_bare_name_error_stays_short: FAIL - rc=$$rc (want 1 and the SHORT message on line 6, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	# a method call assigned to a local: the def's return type must come from the
+	# METHOD, not from a same-named Pascal intrinsic reached by a flat lookup
+	./$(COMPILER) test/test_nilpy_method_call_result_assigned_to_a_local.npy $(TESTTMP)/test_nilpy_mcall26
+	$(TESTTMP)/test_nilpy_mcall26 | diff -u test/test_nilpy_method_call_result_assigned_to_a_local.expected -
+	# a field DECLARED in an ancestor, widened by a descendant's assignment
+	./$(COMPILER) test/test_nilpy_ancestor_field_widened_by_a_descendant.npy $(TESTTMP)/test_nilpy_ancfld26
+	$(TESTTMP)/test_nilpy_ancfld26 | diff -u test/test_nilpy_ancestor_field_widened_by_a_descendant.expected -
 	./$(COMPILER) test/test_nilpy_ast_literal_eval.npy $(TESTTMP)/test_nilpy_ast_literal26
 	test "$$($(TESTTMP)/test_nilpy_ast_literal26)" = "$$(printf '0.7 0.7 0.5 3\n42 -3 hi\n2\nTrue None\n1 3')"
 	# atexit handlers run at exit (LIFO), io's in-memory buffers behave
@@ -1396,6 +1433,75 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_stardyn26 | diff -u test/test_nilpy_star_unpack_into_a_callable_value.expected -
 	./$(COMPILER) test/test_nilpy_star_operand_in_a_variant.npy $(TESTTMP)/test_nilpy_starvariant26
 	$(TESTTMP)/test_nilpy_starvariant26 | diff -u test/test_nilpy_star_operand_in_a_variant.expected -
+	# ...and the STATIC spelling of the same construct, which the file above
+	# cannot reach: a variant star operand goes through pystar_as_list and has
+	# always converted correctly, while a statically-typed one went through two
+	# frontend normalisers that named their kinds instead of asking one question.
+	# The kinds they did not name fell through UNTOUCHED into a caller that
+	# stores the node in a TPyList-typed slot, so `c(*range(2))` passed ZERO
+	# arguments, `two(*range(2))` was refused as "forwarded call got 0
+	# arguments", `c(*b"ab")` passed empty ones, and zip/enumerate over bytes
+	# paired empties -- all silent. The bytes rows that were already correct
+	# (for/list/sorted/sum/max/tuple/in) are kept here as controls: they reach
+	# pyiter_v, which has known every kind all along, and that split is what
+	# makes this a normalise-dont-special-case defect and not a missing feature.
+	./$(COMPILER) test/test_nilpy_star_over_any_static_iterable.npy $(TESTTMP)/test_nilpy_staticstar26
+	$(TESTTMP)/test_nilpy_staticstar26 | diff -u test/test_nilpy_star_over_any_static_iterable.expected -
+	# `self.__class__(...)` -- construct another one of the receiver's OWN type.
+	# Was a COMPILE error while `self.__class__.__name__` beside it read fine.
+	# Every `B` row is load-bearing: in a BASE method the class object must be
+	# the SUBCLASS, so a static "declaring class" reading would build an A for
+	# b.copy() -- a silent wrong value, worse than the error it replaced.
+	./$(COMPILER) test/test_nilpy_self_class_constructs.npy $(TESTTMP)/test_nilpy_selfclass26
+	$(TESTTMP)/test_nilpy_selfclass26 | diff -u test/test_nilpy_self_class_constructs.expected -
+	# a function is ONE object however it is reached -- `f is f`, `g = f; g is f`,
+	# a call that returns it -- and id() of it is stable. It is boxed on the heap
+	# as a value and the box was fresh per evaluation, so identity compared two
+	# different boxes. The `False` bound-method rows are deliberate: CPython
+	# rebuilds one per attribute read, so `c.m is c.m` is False there too.
+	./$(COMPILER) test/test_nilpy_function_identity.npy $(TESTTMP)/test_nilpy_fnident26
+	$(TESTTMP)/test_nilpy_fnident26 | diff -u test/test_nilpy_function_identity.expected -
+	# `and`/`or` hand back an OPERAND, so a def returning one registers THAT
+	# operand's type -- the token scanner had no arm and took an arithmetic
+	# answer, so `return self or 1` died with "expected a number, got object".
+	# Every `and` row is here because `self and 1` was right by COINCIDENCE
+	# (self is truthy, so it yields the int the walk guessed anyway).
+	./$(COMPILER) test/test_nilpy_bool_op_return_type.npy $(TESTTMP)/test_nilpy_boolopret26
+	$(TESTTMP)/test_nilpy_boolopret26 | diff -u test/test_nilpy_bool_op_return_type.expected -
+	# the subscript protocol under its PYTHON METHOD names, on every builtin that
+	# has it, through both receiver routes. The bytes half was not a missing
+	# method but a SILENT MISDISPATCH -- TPyBytes was never a dispatch candidate,
+	# so a bytes receiver fell to the TPyList fallback and ran list code over it:
+	# __len__ right by accident (same FLen offset), __getitem__ empty, and
+	# __setitem__ CORRUPTING the buffer. The mutation rows are why every
+	# spelling is asserted rather than just the one the ticket named.
+	./$(COMPILER) test/test_nilpy_subscript_dunder_spellings.npy $(TESTTMP)/test_nilpy_subdunder26
+	$(TESTTMP)/test_nilpy_subdunder26 | diff -u test/test_nilpy_subscript_dunder_spellings.expected -
+	# `bytearray.append(self, x)` was `unexpected token`: pylib's parameterless
+	# `function bytearray` made the BARE WORD a complete call, so it parsed as
+	# `bytearray().append(self, x)`. The zero-arg form now comes from the parser
+	# keyed on the `name` `(` `)` SHAPE, which cannot capture a bare name. The
+	# repr rows are load-bearing -- without the FIsByteArray stamp that overload
+	# used to apply, `repr(bytearray())` is `b''`. The subclass rows cover a
+	# second defect the repro depended on: constructing ANY subclass of
+	# bytes/bytearray segfaulted, TPyBytes having no parameterless Create.
+	./$(COMPILER) test/test_nilpy_bytearray_unbound_and_subclass.npy $(TESTTMP)/test_nilpy_baunbound26
+	$(TESTTMP)/test_nilpy_baunbound26 | diff -u test/test_nilpy_bytearray_unbound_and_subclass.expected -
+	# a KEYWORD argument to a callee the frontend cannot name at the call site.
+	# `a = mk(1); a(x=5)` was `undefined variable (x)` -- the keyword NAME parsed
+	# as an expression, because the lowering only fired when a candidate callee
+	# resolved. It inverted the usual expectation: the same call through a
+	# PARAMETER, known strictly LESS about, worked. Fixed by the callable-carrier
+	# work; gated here because a COMPILE error admits no runtime check.
+	./$(COMPILER) test/test_nilpy_keyword_call_unknown_callee.npy $(TESTTMP)/test_nilpy_kwunknown26
+	$(TESTTMP)/test_nilpy_kwunknown26 | diff -u test/test_nilpy_keyword_call_unknown_callee.expected -
+	# a class field assigned a module-level DEF -- how a dispatch table is
+	# written. Two compile refusals: the field pre-pass runs BEFORE the def
+	# shells so only the tokens can type `self.fn = named`, and the STATIC
+	# receiver route had no procedural-field arm where the VARIANT route has had
+	# two. The rebound row is why the field is a variant with no signature.
+	./$(COMPILER) test/test_nilpy_field_holding_a_def.npy $(TESTTMP)/test_nilpy_fielddef26
+	$(TESTTMP)/test_nilpy_fielddef26 | diff -u test/test_nilpy_field_holding_a_def.expected -
 	./$(COMPILER) test/test_nilpy_genexpr_is_consumed_once.npy $(TESTTMP)/test_nilpy_genonce26
 	$(TESTTMP)/test_nilpy_genonce26 | diff -u test/test_nilpy_genexpr_is_consumed_once.expected -
 	./$(COMPILER) test/test_nilpy_str_format_keyword_fields.npy $(TESTTMP)/test_nilpy_fmtkw26
@@ -2763,6 +2869,18 @@ test-nilpy: $(COMPILER)
 	# unreachable -- uforth's two w_include defs, and its whole ANS FILE word set.
 	./$(COMPILER) test/test_nilpy_nested_def_redefined_in_one_scope.npy $(TESTTMP)/test_nilpy_redef26
 	test "$$($(TESTTMP)/test_nilpy_redef26)" = "$$(printf '%b' 'between: 11\nafter: 110\n11 110\n1 2 3 3\n[5, 7]\n42\n2')"
+	# ...and the same rule at MODULE level, which is the wider half: two
+	# module-level `def f` used to share ONE shell, so both call sites ran the
+	# LAST body and the earlier call could not see anything else. With differing
+	# return types that is not a wrong number but a corrupted read -- `g-before`
+	# printed a pointer as an integer. Covers: same-signature redefinition with
+	# calls on both sides, differing return type, differing ARITY (the separate-
+	# Proc overload path, which must keep working), three defs so the middle one
+	# is neither first nor last, a redefined pylib-builtin shadow (the positional
+	# shadowing rule shares ProcPyDefTok with this), a nested def (unaffected),
+	# and a call from INSIDE another def, which CPython resolves late.
+	./$(COMPILER) test/test_nilpy_def_redefined_rebinds_only_after.npy $(TESTTMP)/test_nilpy_modredef26
+	$(TESTTMP)/test_nilpy_modredef26 | diff -u test/test_nilpy_def_redefined_rebinds_only_after.expected -
 	./$(COMPILER) test/test_nilpy_escaping_closure.npy $(TESTTMP)/test_nilpy_escaping_closure26
 	test "$$($(TESTTMP)/test_nilpy_escaping_closure26)" = "$$(printf '42\n42\n13\n16\n42\n3\n6\n42\n42\n7')"
 	@# ...at EVERY arity. The bridge's per-arity table had gaps (no 10, no 12,
@@ -5049,6 +5167,20 @@ test-core: $(COMPILER)
 	# lottery. The pinned binary SEGFAULTS on this file.
 	./$(COMPILER) test/test_interface_local_array_zero_init.pas $(TESTTMP)/test_ifarrzi26
 	test "$$($(TESTTMP)/test_ifarrzi26 | tail -1)" = "total ok 5 / 5"
+	# ...and the SAME arm-shaped hole one type over: a local `array[0..N] of
+	# Variant` was zero-initialised for ONE ELEMENT only, because
+	# ManagedLocalZeroBytes' variant arm returned TypeSize(tyVariant) without
+	# asking IsArray the way its AnsiString neighbour does. av[0] started empty,
+	# av[1..] held stack garbage, and a Variant's first word is its TAG -- so the
+	# first `av[i] := x` released a payload the slot never owned. Measured in
+	# pylib's own PyBoundPairCallKwBody: it decremented an unrelated bound-pair
+	# record's Sig field by one, the dispatcher read that signature a byte early,
+	# and a legal two-argument call through a callable value came back as
+	# "missing 510 required positional argument(s)". Invisible on a clean stack,
+	# so the test dirties its own. Counts are FPC 3.2.2's; the pinned binary
+	# scores 4 / 8 on this file.
+	./$(COMPILER) test/test_variant_local_array_zero_init.pas $(TESTTMP)/test_vararrzi26
+	test "$$($(TESTTMP)/test_vararrzi26 | tail -1)" = "total ok 8 / 8"
 	# A record holding an interface field, both halves of the same design fault:
 	# RecordHasManagedFields excluded a COM interface field because FINALIZING one
 	# under the non-reentrant record heap lock deadlocks -- and that single
@@ -14425,6 +14557,12 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_strutil.pas $(TESTTMP)/lib_strutil
 	test "$$($(TESTTMP)/lib_strutil | grep -c '=ok')" = "59"
 	test "$$($(TESTTMP)/lib_strutil | grep -c 'FAIL')" = "0"
+	# the four gaps a 22-program string differential against fpc 3.2.2 found:
+	# variadic Concat under `uses sysutils`, AnsiQuotedStr, SameStr, and a
+	# failed TryStr* leaving the caller's stale value in place. Expected output
+	# is fpc 3.2.2's, byte for byte.
+	$(PXX_STABLE) -Fulib/rtl test/lib_sysutils_string_gaps.pas $(TESTTMP)/lib_sysutils_string_gaps
+	$(TESTTMP)/lib_sysutils_string_gaps | diff -u test/lib_sysutils_string_gaps.expected -
 	# the date PARSE direction (StrToDate/StrToDateTime/TryStrTo*). Rows are
 	# read off FPC 3.2.2, including the ones nobody guesses: ISO input raises
 	# under the d/m/y default, and a two-digit year uses a SLIDING window.

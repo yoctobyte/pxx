@@ -5681,3 +5681,1539 @@ says "stale checkout" — an empty `find` and a genuinely-missing file are the
 same empty string. Before telling a worker its output is missing, check the ref;
 and phrase the first message as a question, because the cost of being wrong is
 that a worker spends a session proving it already did its job.
+
+## 2026-08-27 — COORDINATION RESUMED. frank2-af coordinating; Track W is live and has a topology problem
+
+Coordination was stood down 2026-08-20 ("one track + Track T"). The owner
+reassigned it today: *"ok you are assigned the task of coordinator"*. This entry
+is the live state; everything above it about staffing is stale.
+
+**Staffing, verified by `ListAgents` at handover:**
+
+| session | role | lane | checkout |
+| --- | --- | --- | --- |
+| **frank2-af** | **coordinator** — assigns, does not code | none | `/home/neo/frank2` |
+| frank1-80 | dev worker, interactive, busy 9h | **A** (holds it; said so explicitly) | `/home/neo/frank1` |
+| ianweb | dev worker, idle, over Remote Control | **W** (website) | `/opt/pxx-website` on **`via`** |
+| frankwasm | holds `feature-target-wasm` per `working/` | A+B | unknown |
+| plexus-T | **OFFLINE** | T | — |
+
+Two active workers plus the coordinator: exactly the target concurrency. Nothing
+is dispatched to fill the third slot and nothing should be.
+
+**Track T is OFFLINE.** `plexus-T` has not been reachable all day. Per CLAUDE.md
+that raises the bar only when a lane needs breadth; nobody is blocked on it right
+now, but no sha since this morning has been swept.
+
+### Track W's SHAPE — two ends, permanently. Not a staffing gap.
+
+Corrected by `ianweb` after the first draft called this a temporary gap. It is
+not; it does not go away when someone gets assigned, so staff it as a shape:
+
+| end | can do | cannot do |
+| --- | --- | --- |
+| **push-capable worker** (a clean clone on a box with GitHub push rights) | author, commit, push, audit the site from outside | see what the origin actually **serves**; restart gunicorn |
+| **`ianweb` on `via`** (holds the tree, no push keys, by policy) | review, deploy, restart, report the served result | push |
+
+Those last two are permanently `via`'s, because only the origin can distinguish
+"not deployed" from "deployed and edge-cached". **So the lane wants a
+push-capable worker PLUS `ianweb` as the deploy-and-verify end — not a single
+owner.** A W ticket is not done when it is pushed; it is done when the origin
+reports what it serves.
+
+### CORRECTION — the two ends are about VISIBILITY, not credentials
+
+The first version of this section said `via` has no push rights. **It does, and
+has since 2026-06-22** — an account-level key the owner has confirmed is
+intentional ([[decide-deploy-key-on-via]], resolved). Do not re-raise it.
+
+The lane's two-ended shape still holds, for the reason that was always the real
+one: **only the origin can observe what the site SERVES**, and only the origin
+can restart gunicorn. A push-capable session can author, commit, push and audit
+from outside, and can never tell "not deployed" from "deployed and edge-cached".
+That is a topology fact and no credential changes it.
+
+### Why the two ends exist
+
+This is the coordination problem of the day and it is not a people problem.
+
+- `ianweb` holds W, is on `via`, and has the repo — but **`via` has no GitHub
+  push keys, deliberately.** The owner considered granting them and agreed not
+  to: `via` terminates a public tunnel, runs four gunicorn apps, and holds a
+  mirror of a self-hosting compiler's repo. App RCE becoming repo write is the
+  wrong trade for saving a manual step.
+- The boxes that DO have push rights have no W worker.
+
+So W work has to be authored in a clean clone on a push-capable box and pushed
+from there, while the lane holder reviews and deploys from the origin side. That
+split worked today (see below) but it means **W is not a lane one session can
+hold end to end**, and the queue will stall whenever the push-capable side is
+unstaffed. The coordinator should not paper over this by taking the tickets.
+
+### What landed today, and the two things only the human can release
+
+`e78595d` on the website repo — the OG card and the large-image Twitter card,
+closing the visible half of `bug-web-link-previews-render-as-bare-text`. Authored
+in a clean clone on frank2, reviewed line-by-line by `ianweb` from `via`,
+**fetched but deliberately not merged.**
+
+**Pending with the human — neither is a `decide-*`, both are one-line answers:**
+
+1. **Deploy go/no-go for `e78595d`.** `deploy/DEPLOY-STATUS.md`: *"Deploys stay
+   manual on purpose: auto-deploy would let a compromised GitHub account run
+   code on the host."* An agent pushing a commit and then asking the agent on
+   the host to pull it is structurally what that gate exists to stop. `ianweb`
+   refused to self-clear it and is right to. Recommendation attached, benign.
+2. **Whether the 18KB patch travels over the agent channel.** `ianweb` will not
+   send private-repo contents between hosts on its own judgement — the same rule
+   it applied when it declined to replicate the backup to `piborg`.
+
+### Deploy protocol agreed between the W sessions, and worth keeping
+
+**One unverified change per deploy, verified before the next.** Pushing costs
+nothing and deploys nothing; `via` only changes when it pulls. But if two
+changes land on `main` before a deploy, one pull brings both and a wrong served
+result cannot be attributed. So the p40 (`llms.txt` + JSON-LD) is **built but
+not pushed** until the p45's served tags come back.
+
+Also: template changes need `sudo systemctl restart pxxweb` — Jinja caches
+compiled templates in the worker, so a pull alone changes nothing visitors see.
+And `static/` is served with `expires 1h` and no fingerprint, so a REPLACED
+asset is stale at the edge for up to four hours. New filename, never overwrite.
+
+### Correction carried over: a dirty tree blocks EDITS IN THAT TREE, not the work
+
+`bug-web-production-tree-is-uncommitted-and-is-the-only-copy` (p70) was filed
+blocking all four W tickets. That was wrong and has been cleared: the blocker
+assumed edits happened on `via`. They don't. The p70 is still a real ticket —
+six production files, deployed since 2026-08-20, exist in no commit, and their
+backup is on the **same partition** of `via`'s only disk — but it gates nothing.
+It has now been narrowed twice by asking "where does the edit happen?", and was
+a real ticket both times. Narrowing is not weakening.
+
+### Coordinator log — 2026-08-27, first cycle
+
+**Nothing dispatched.** frank1-80 (A) and ianweb (W) are the two workers; that
+is target concurrency. The W queue has unassigned tickets and stays that way —
+the push-capable end is unstaffed since the coordinator role change, and an idle
+queue is cheaper than the wrong session taking it.
+
+**Two items with the human have now STACKED rather than been declined** —
+`ianweb`'s read, and I agree. Both are one-line answers, neither is a `decide-*`:
+
+1. Deploy go/no-go on `e78595d`.
+2. Whether the 18KB patch may cross hosts over the agent channel.
+
+Item 2 has sat through several exchanges. Flagging the stack itself, because two
+unanswered one-liners look like low-priority individually and like a stalled
+lane together.
+
+**Board corrected so a successor is not misled:** the p45's summary now LEADS
+with `NOT DEPLOYED`. It previously read as fixed. Committed is not served, and
+`ready` output shows summaries, so the distinction has to survive at
+summary-line length: *in git, reviewed, fetched, unmerged — visitors still get
+the pre-fix tags.*
+
+### Coordinator log — 2026-08-27, cycle 2
+
+**Track T is UP, not offline — my error in cycle 1.** `tools/twatch.py --status`
+exits 0: *"UP — commits through 5e8a97f70b7a tested"*. I read `plexus-T` being
+offline in `ListAgents` as Track T being down. **The watcher DAEMON is not the
+Track T session**, and CLAUDE.md is explicit that T is proven down only by
+`twatch --status` exit 1 or `trackt.py health` DOWN. An offline session in
+`ListAgents` proves nothing about the daemon.
+
+**Board state this cycle:** `urgent/` empty. One live lock — `feature-target-wasm`
+[A+B], frankwasm. Global `next` = `feature-opt-o3-register-pressure` [O, eff prio
+85], **parked in `unfinished/`, re-claim rather than restart**. Track O is
+implicitly Track A, so dispatching it needs the A slot, which frank1-80 holds.
+
+**T's standing reds at the v383 pin (`c28e07a89f03`, full, RED, 8 red / 7 new):**
+four `test-nilpy`, two `test-core` NilPy, `test-emit-obj#cxtensa_obj.c@1`,
+`tools-devtest#00`. Read them correctly before acting — T's own status line says
+these are **at the pinned tree, 10 testable commits behind origin/master**, and
+only **1 of the 7 new** also fails at `652c3d891e86`; the other six pass there
+and are noise. Both open regressions name a `bad=` that touches no buildable
+file, i.e. the tested upper bound, not a lead.
+
+**Nothing dispatched, nobody blocked on me.** All four NilPy reds already have
+tickets (several in `done/`), and frank1-80 said hours ago it is on the
+auto-filed NilPy regressions. `regression-tools-devtest-00-2` and
+`regression-test-emit-obj-cxtensa-obj` both already exist in `backlog/`.
+Two workers plus coordinator is target concurrency.
+
+### STANDING — two rules out of the 2026-08-27 credential afternoon
+
+Both from `ianweb`; full write-up in `decided/decide-deploy-key-on-via.md`.
+
+**1. Push and deploy are different privileges on different boxes.** The
+credential answers *can this box write to the repo*; the deploy gate answers
+*can a commit start executing here*. They look like one decision only when the
+same agent could do both. A coordinator routing W work must not let an answer to
+one read as clearance for the other — that happened twice in one afternoon, in
+opposite directions.
+
+**2. A CORRECT ANSWER TO THE WRONG QUESTION LOOKS EXACTLY LIKE A CORRECT
+ANSWER.** `ianweb`'s wording, adopted after this shape appeared **four times in
+one day**. It is the single most useful line the day produced.
+
+The failure is never "nobody measured". Every reading below was **true**. Each
+instrument answered a near-neighbour question and returned success, which is
+exactly what makes it invisible — a wrong reading announces itself, this does
+not.
+
+| instrument | actually answers | was read as | cost |
+| --- | --- | --- | --- |
+| `ssh -T git@github.com` — *never run* | — | "`via` has no push key", inherited and untested | an afternoon spent routing around a wall that was not there |
+| `ListAgents` | is a session named `plexus-T` connected | is Track T running | a wrong DOWN reported to the owner |
+| `test -x $(PXX_STABLE)` | is this file flagged executable | can this machine execute it | a gate saying "no pinned stable" about a present one — `bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture` |
+| `grep 'experimental\|staged'` | where does this **wording** appear | where does the site make this **claim** | 4 of 6 stale claims found |
+
+**Ask what your instrument measures before trusting what it implies.** And when
+a chain of reasoning rests on a fact you did not personally measure, **price the
+check before building the workaround** — in every row the check was seconds and
+the workaround was hours.
+
+*Fifth instance, same day, on the coordinator: a `str.replace()` with no
+assertion silently succeeds when it matches nothing, and a `str.index()` anchor
+that is line-wrapped in the file will not match the one-line form you typed.
+Both bit this roster. Every edit script gets an `assert`.*
+
+### 2026-08-27 — `ianweb` assigned **D+W**; and the W lane's two-ended shape is now moot
+
+Owner: *"since ian@via has push rights now, it may as well work on track D+W."*
+
+**Sole holder of both.** Verified at assignment: nothing in `working/` is D or W,
+and the only parked D ticket is `docs-devnotes-ai-assisted-build` (p50,
+`unfinished/` — **re-claim, do not restart**). No collision.
+
+**This is the low-risk combined-track case**, and arguably the most natural pair
+in the whole scheme: CLAUDE.md says *"Track D writes the Markdown here that W's
+machinery publishes."* One agent holding both closes a loop that previously
+needed two sessions and a relay — which is exactly what cost half of 2026-08-27,
+when `docs/targets/nil-python.md` said NilPy was mainline while the website said
+Experimental and nobody owned the gap.
+
+**The W lane's "two ends" problem is now resolved by staffing, not by topology.**
+Earlier today this file recorded that W could not be held end to end because a
+push-capable session cannot see what the origin serves. `ianweb` is on `via`
+*and* can push, so one session now spans author → push → deploy → verify. The
+topology fact still holds for anyone else (only the origin observes the served
+result); it simply no longer splits this lane.
+
+**Boundaries that still bind:**
+
+- **D is `docs/**` in the pxx repo ONLY.** NOT `devdocs/**` — the dev docs, this
+  roster and the progress board belong to A/B. CLAUDE.md is explicit and the
+  names are one letter apart.
+- **D's gate:** docs stay internally consistent, and code snippets are verified
+  by **compiling them against `$(PXX_STABLE)`** — never by rebuilding the
+  compiler, and never by inventing behaviour. **Open question for `ianweb`:
+  does `via` have a full pxx checkout and a usable pinned binary?** If not, the
+  prose half of D is available and the snippet-verification half is not, and
+  that bound should be stated rather than discovered.
+- **The site's content mirror is not a working tree.** It is `--depth 1` and
+  re-synced every five minutes by a timer that re-clones on corruption. Editing
+  `docs/**` there gets clobbered on the next tick. D work needs a separate full
+  clone.
+- A compiler or library gap found while documenting → **file a ticket in the
+  owning lane**, do not fix code under D.
+
+### STANDING — corollary on searching (2026-08-27)
+
+Row 4 above as a rule: **grep for the CLAIM, not the WORDING you already found.**
+Prose restates; only the claim is invariant. And **sweep before editing, not
+after** — the cheap pass is worthless once you have fixed the instances you
+already knew about.
+
+### BOUND on Track D for `ianweb` — **LIFTED 2026-08-27 via a qemu shim**
+
+**Superseded within hours of being recorded. D on `via` is NOT prose-only.**
+
+The bound assumed a *native* aarch64 stable was required. It never was. The
+shipped x86-64 stable runs under `qemu-x86_64`, so `PXX_STABLE` points at a shim:
+
+```sh
+#!/bin/sh
+exec qemu-x86_64 /home/ian/pxx/stable_linux_amd64/default/pinned "$@"
+```
+
+**Verified end to end rather than asserted:** a real snippet (dynamic array,
+`SetLength`, `High`, for-loop accumulation) compiled through the shim targeting
+aarch64, and the result ran **natively** on `via` — `sum of squares 0..4 = 30`.
+Compile emulated, run native, both real.
+
+**Standing caveat, and it is small:** verification is against the *pinned* stable
+under emulation, not a native build. That is the same oracle CI uses, reached
+differently.
+
+Note `ianweb` could *not* build a native aarch64 stable — that failure is
+`bug-a-cross-bootstrap-aarch64-overflows-max-code`, a genuine Track A bug, not a
+setup problem. The shim routes around it; it does not fix it.
+
+Incidental: the shim also makes `test -x` honest on `via`, since the thing tested
+is now a script the machine can run. **That does not close
+`bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture`** — the guard
+still checks the wrong property and still lies for anyone pointing `PXX_STABLE`
+at a raw foreign binary.
+
+### SUPERSEDED — the original bound, kept for the reasoning
+
+Measured by `ianweb` on `via` and verified in `/home/neo/frank2`.
+
+**`via` is aarch64; the repo ships only `stable_linux_amd64`.** The pinned
+stable is an x86-64 ELF and will not execute there. No `qemu-x86_64`, nothing in
+`binfmt_misc`, no FPC — so the `make bootstrap` escape hatch is shut too.
+
+| half of Track D | on `via` |
+| --- | --- |
+| prose: accuracy, consistency, sourcing behaviour from the repo and its docs | **available** |
+| snippet verification: *"verify code snippets by compiling them"* | **impossible** |
+
+So any doc change whose correctness depends on compiling the example needs a
+verifier on x86-64. `ianweb` will state behaviour it can source and **will not
+assert compiled-and-checked for anything it could not compile** — which is the
+right posture and the reason to record the bound rather than let it be
+discovered in a wrong doc.
+
+**Lifting it is the owner's call** — three routes, all system-level changes to a
+production web host, none of them an agent's to make unasked: install FPC on
+arm64 and `make bootstrap` a native stable; install `qemu-user-static`; or
+publish an aarch64 stable upstream, which is A/T work that would help more than
+one host.
+
+**Working tree for D is `/home/ian/pxx`** — a full clone (`is-shallow-repository
+false`), clean, on `master`, ~12k commits behind so it needs a pull. Entirely
+separate from the five-minute content mirror, which is `--depth 1` and must
+never be edited.
+
+### 2026-08-27 — MEASURED: the "tipping point" claim, before staffing on it
+
+The owner proposed a large parallel expansion on the premise *"we no longer file
+more bugs than we fix, and new targets (BSD, etc) are mostly mechanical"*, and
+asked to be corrected. Measured rather than agreed with.
+
+**Flow, 21 days:** 1169 filed / 1083 resolved = **-86 net**.
+**Queue depth, 6 weeks** (the unambiguous instrument — file-creation counting is
+confounded by directory moves):
+
+| date | backlog | done |
+| --- | --- | --- |
+| 07-13 | 108 | 687 |
+| 07-27 | 164 | 977 |
+| 08-10 | 238 | 1619 |
+| 08-24 | **294** | 2318 |
+| 08-27 | **263** | 2523 |
+
+**So the claim is not yet true.** Backlog grew 2.4x in six weeks while `done`
+grew 3.7x. The last three days are a genuine -31 drawdown, the best in the
+window, and the last seven are roughly break-even — but 08-11 (+15) and 08-15
+(+31) also looked like turns and the queue kept growing. **Three days is a
+hopeful signal, not a trend, and it is not a base to staff five workers on.**
+
+**The owner's instinct is right about something else, and it is the stronger
+claim.** The *shape* has changed even though the count has not:
+
+- Open backlog is **98 features vs 58 bugs** — a feature-dominated queue is not
+  what a project drowning in defects looks like.
+- **2 regressions in the last 200 resolved (~1%).** The gate is holding. Backlog
+  growth is coming from *ambition and discovery*, not from breakage.
+
+That is the defensible version: **not "we fix faster than we file", but "what we
+file has changed kind."**
+
+**IR/AST/PAL "stable or just extendable" — one of the three does not hold.**
+Open backlog tickets mentioning each: **AST 9** (supports it), **PAL 16**
+(supports it, and BSD PAL work is additive), **IR/codegen 28** — the single
+largest concentration in the repo, alongside 52 open Track A tickets. IR is the
+most active surface, not a settled one.
+
+**BSD "mostly mechanical" — correct, and the ticket structure proves it.**
+`feature-port-freebsd-native` is blocked by `feature-t-freebsd-image-and-runner`
+— i.e. by *not having a machine to test on*, not by compiler work. That is
+exactly what mechanical looks like. Caveat: `feature-port-openbsd-libc` is a
+different shape (libc-based, not raw-syscall) and is not the same job twice.
+
+**The staffing proposal conflicts with two RECORDED constraints, both the
+owner's own:**
+
+1. *"Target concurrency: 1-2 workers plus the coordinator"* (owner, 2026-08-17),
+   because tokens are shared across sessions and are the binding constraint —
+   *"a single session running flat out can consume a max plan on its own."*
+2. **Four concurrent workers hit an account session limit on 2026-08-25 and all
+   four died at once.** That is a hard ceiling, not a budget preference, and it
+   does not care that the sessions are on different machines.
+
+The proposed frankA(+P+C+N) / frankB(+E) / via(D+W) / plexus(T) / wasm / rust is
+4-6 concurrent. **The lane design is sound; the concurrency is not.**
+
+**What IS well-designed in the proposal, and should be kept:** folding P, C and N
+into frankA is the correct move, not a compromise — P shares `lexer.inc` with A
+and must never be edited concurrently with it, so putting them in *one* agent
+dissolves the sole-A hazard instead of managing it. Same for B+E, which is
+file-ownership by construction.
+
+## 2026-08-27 — PER-TOPIC TREE TOPOLOGY built, for the parallel restart
+
+Owner's call: a checkout per role/topic, so a human can tell at a glance which
+agent is which, and so destabilizing work sits in a topic tree that "only gets
+merged on occasion". Built on `plexus`; agents are NOT yet restarted into
+them.
+
+### The trees
+
+| tree | lane | branch | needs a compiler? |
+| --- | --- | --- | --- |
+| `~/frank-user` | **the human's interface** — chats with the owner so the coordinator is never interrupted | master | no |
+| `~/frank-coordinator` | coordination only; holds no lane, writes no code | master | no |
+| `~/frankA` | A (+P +C +N) — core, IR, backends, frontends | master | **yes** (seeded) |
+| `~/frankB` | B (+E) — libs, demos, examples | master | no — builds with `$(PXX_STABLE)` |
+| `~/frank-rust` | R — Rust frontend | `rust` (topic) | **yes** (seeded) |
+| `~/frankwasm` | A+B — wasm target, holds `feature-target-wasm` | `wasm` (topic) | pre-existing |
+| `~/trackt-watch` | T watcher daemon, own dedicated clone | detached | pre-existing |
+| `~/pxx-website` | W — separate private repo | — | n/a |
+
+Pre-existing and NOT part of the scheme: `~/frank1` (live — holds
+`bug-b-sysutils-string-gaps-found-by-differential` with uncommitted edits),
+`~/frank2` (the coordinator's current tree, retire after the move), `~/pxx`
+(**KEEP — see the correction below**).
+
+### Why trunk vs topic, and not a branch per tree
+
+The topic-branch model applies where work is *destabilizing* (wasm, rust). It
+does **not** extend to A/B, for one mechanical reason: `stable_linux_amd64/**`
+is 28 MB of **committed binary** that Track A rewrites at every pin — 148 pins
+in the last 30 days. B's whole mode is "build with `$(PXX_STABLE)`, never
+rebuild the compiler", so B on its own branch cannot see a pin until someone
+merges, and every long-lived branch pays a binary conflict on that 28 MB at
+every merge. A is the integrator and pins move `master` by definition.
+
+So: **master is the trunk where A, B and the coordinator meet** — collisions
+there are handled by the existing `working/` ticket lock, not by branches —
+**and topic branches carry the destabilizing targets.**
+
+The sync discipline that keeps a topic branch alive is visible in `wasm`'s own
+history: `re-cut the branch from master`, then `merge: master@<sha>`. Merge
+master **into** the topic tree often; merge **out** on occasion. The failure
+mode when you don't is recorded below.
+
+### Evidence for that discipline: `origin/feature/rust-frontend-skeleton` is dead
+
+Last commit **2026-07-03**, **13,262 commits behind master**, 3 ahead. Its three
+commits (rlexer/rparser skeleton, enum tagged-union + match, impl blocks) are
+already **superseded on master** — `compiler/rlexer.inc`, `compiler/rparser.inc`
+and a full Rust suite under the test directory are all on the trunk. So
+`frank-rust`'s `rust` branch was cut from **current master**, not from that
+corpse. The stale branch is dead weight on origin and is a deletion candidate
+(owner's call — I did not delete it).
+
+### Setting up a new tree — two steps a fresh clone does NOT inherit
+
+1. **`git config merge.ours.driver true`** — `.gitattributes` declares
+   `devdocs/progress/BOARD.md merge=ours`, and that driver is per-checkout and
+   **not committable**. Without it every merge conflicts on the generated board.
+   It was **missing from `frankwasm`, `frank1` and `frank2`** — including the one
+   tree that actually merges master in regularly. Now set on all seven.
+2. **Seed the compiler** (only for trees that build one — A, rust, wasm):
+   `cp stable_linux_amd64/default/pinned compiler/pascal26` then
+   `make compiler/pascal26`. A clone has no `compiler/pascal26` (untracked) and
+   `make` refuses with `self-hosted compiler seed missing`. `make bootstrap` (via
+   FPC) also works and is slower. **Accept nothing but
+   `converged after N round(s)`.** This is now safe against the old
+   copied-in-seed no-op: the Makefile writes a stamp last, so a copied binary can
+   no longer forge convergence
+   (`bug-a-the-selfhost-rule-is-a-no-op-when-the-seed-is-newer-than-its-sources`).
+   Measured cold: 47s.
+
+### Disk: hardlinked clones, and the premise that didn't hold
+
+Clone with **`git clone --local <sibling-tree>`** — it hardlinks the object
+store, so a new tree costs only its working tree. Measured: the four new clones
+took **942 MB instead of 2,416 MB** (`links=5` on the 465 MB pack).
+
+The owner's worry — "the SSD is limited" — did not survive measurement: **98 GB
+free**, whole fleet 4.4 GB, packed growth **~150 MB/month/checkout** (449 MB pack
+over 95 days of history). Eight trees is ~9 years of headroom, so the `/data` HDD
+move was rejected: the per-fix loop is `make compiler/pascal26` over thousands of
+small files, dozens of times a day per agent, which is exactly the workload seek
+latency punishes.
+
+Reclaimable for free at any time, no topology change: **~690 MB of loose objects**
+(`git gc`: frank1 192 MB, pxx 294 MB, trackt-watch 104 MB + 97 MB actual garbage)
+plus **386 MB of ignored build output in frank1** (332 MB of it `examples/`,
+against 9 MB tracked).
+
+### Do not
+
+- **Do not move or rename a tree that has a live session in it.** `frank1` is live.
+- **Do not `git gc --prune` anything if the topology ever moves to `--reference`
+  alternates.** It has not: these are hardlinks, and hardlinked objects are safe
+  because git never rewrites an object in place. Clones simply diverge as each
+  one repacks, which at 98 GB free is fine.
+- **Do not work in `~/pxx`, and do not delete it either.** See the correction
+  immediately below.
+
+### `~/frank.sh` — the fleet launcher (clean start after a reboot)
+
+```
+~/frank.sh                 # launch every role
+~/frank.sh frankA frankB   # a subset
+~/frank.sh -l              # what is up
+~/frank.sh -k [role...]    # stop one or all
+```
+
+Two design points that are not obvious and are why the script exists rather
+than a line of shell per tree:
+
+- **Windows, not sessions.** roost renders the windows of exactly ONE tmux
+  session and hardcodes its name (`roost/src/roost/config.py:1`,
+  `SESSION_NAME = "roost"`). An agent started in its *own* tmux session is
+  invisible to the GUI. So each agent is a named **window** in the `roost`
+  session — and *named*, because as of today every tab in roost reads `claude`
+  and you cannot tell frank1 from frank2 without opening it.
+- **The alias is expanded.** `claudea` is an interactive-shell alias
+  (`~/.bashrc:95` → `claude --dangerously-skip-permissions`) and does not exist
+  inside a script.
+
+Each window runs
+`claude --dangerously-skip-permissions --remote-control <role> -n <role>`, so
+Remote Control is on and the role name is what shows in `ListAgents`, the
+`/resume` picker and the terminal title. The window is `; exec bash`-terminated
+so the tab survives the agent exiting.
+
+`trackt-watch` is deliberately **not** launched: Track T's watcher is a daemon
+(`tools/twatch.py`), not an agent. Neither are `frank1`/`frank2` (the
+pre-restart trees) or `pxx` (stale `dev`).
+
+The script lives outside git at `~/frank.sh`. Verified end to end on plexus with
+a stand-in command — window name, cwd, shell survival — and the claude flag
+combination was checked separately.
+
+### CORRECTION — `~/pxx` is not dormant; it is running a live service
+
+I inspected `~/pxx`, found a clean working tree on the retired `dev` branch 501
+commits behind master, and told the owner it was "safe to delete (clean, no
+stash)". The owner's reply — *"pxx was the old track-T agentic watcher.. i
+suggest to keep it"* — sent me back to look properly, and there is a live
+process in it:
+
+```
+219557  python3 /home/neo/pxx/tools/twatch_web.py --clone /home/neo/trackt-watch --port 8377
+```
+
+It is the **twatch web dashboard**, serving HTTP 200 right now, reading
+`~/trackt-watch` as its clone. Deleting the tree would have killed it.
+
+**The lesson, and it is a repeat.** I checked *git* state and reported on
+*process* state. `git status` clean, no stash, branch stale — none of that is
+evidence a tree is unused, because a tree's real job may be to host something
+that never touches the index. This is the same shape as the correction recorded
+earlier today ("a dirty working tree blocks EDITS MADE IN THAT TREE, not the
+work itself"): both times I read a git fact as though it settled a question git
+does not answer. **Before calling any tree disposable, run `pgrep -af <path>`.**
+
+**What is actually true about `~/pxx`:**
+
+- **Keep it. It hosts the dashboard on port 8377.**
+- Its 501-commit lag does **not** affect that service: `tools/twatch_web.py`
+  there is **byte-identical** to master's copy. The lag is real but inert.
+- The one genuine hazard is unchanged — an agent *working* in it inherits a
+  checkout whose `CLAUDE.md` describes the retired `dev` branch model, which is
+  exactly what produced four tickets filed to `dev` earlier today. So: no agent
+  is dispatched there. `~/frank.sh` excludes it by name and now says why.
+
+### Reboot survival — what comes back on its own, and what does not
+
+Checked before the owner's planned reboot, rather than assumed.
+
+**Comes back by itself:**
+- **The Track T watcher daemon.** `trackt-watcher.service` is a systemd *user*
+  unit, `is-enabled` = enabled, `WantedBy=default.target`, `Restart=on-failure`,
+  and `loginctl show-user neo` reports `Linger=yes` — so it starts at boot
+  without anyone logging in.
+- **Credentials.** `~/.claude/.credentials.json`, mode 600, holds the OAuth
+  refresh token on disk. No keyring unlock in the path.
+- **The trees and their seeds.** Plain files.
+
+**Does NOT come back, and this is the one that would have been missed:**
+- **The twatch web dashboard (port 8377).** `trackt-watcher.service`'s ExecStart
+  is `twatch.py` *alone*; the Flask UI is spawned by `trackt`, and nothing runs
+  `trackt` at boot. Its config says `web=on(:8377)`, which makes the gap look
+  closed when it is not — the setting is honoured by `trackt up`, not by the
+  unit. Today it survives only as an orphaned process adopted by `systemd --user`
+  (parent PID 1904), started by hand at 07:26 on 2026-08-26.
+
+  Fixed in `~/frank.sh`, which now runs
+  `trackt --clone ~/trackt-watch up --no-daemon --no-attach` and then prints T's
+  health. `--no-daemon` so it does not race systemd; the call is idempotent and
+  was verified against the live, already-serving UI without disturbing it.
+
+  Printing T's health at fleet start is not decoration: **when Track T is down,
+  every lane's gate widens** from `make compiler/pascal26` to a full local run
+  (CLAUDE.md). That is worth knowing *before* dispatching six agents.
+
+- **Anything mid-flight.** A `testmgr --tier native` run was in progress; the
+  reboot kills it. The watcher re-runs on restart, so this costs time, not state.
+
+Pre-existing and unrelated: `pxx-idf-install.service` is in `failed` (ESP-IDF
+install). Not part of this stack.
+
+## 2026-08-27 — FLEET RESTARTED into the per-topic trees; frankA dispatched
+
+First cycle of the coordinator session running from `~/frank-coordinator` (the
+tree the topology section above specifies). The reboot and `~/frank.sh` did what
+the audit predicted: six sessions came up, the Track T watcher restarted itself
+via its systemd user unit, and every tree carries `merge.ours.driver=true`.
+
+**Verified, not assumed** — branch and merge-driver checked per tree; `frankA`'s
+seed present (9.6 MB `compiler/pascal26`), tree clean.
+
+| session | lane | tree | branch | state at dispatch |
+| --- | --- | --- | --- | --- |
+| frank-coordinator | none | `~/frank-coordinator` | master | me |
+| frank-user | human interface | `~/frank-user` | master | idle |
+| **frankA** | **A (+P +C +N)** | `~/frankA` | master | **dispatched, busy** |
+| frankB | B (+E) | `~/frankB` | master | idle (deliberate) |
+| frank-rust | R | `~/frank-rust` | `rust` | idle (deliberate) |
+| frankwasm | A+B | `~/frankwasm` | `wasm` | idle; holds `feature-target-wasm` |
+| ianweb | D+W | `via` | — | idle |
+
+**Concurrency: one worker plus the coordinator.** Six sessions are UP; that is
+not the same as six dispatched, and the difference is the whole point. The
+owner's word was *"let's tread carefully"*, which matches the recorded
+constraints exactly — 1-2 workers (owner, 2026-08-17) and the hard ceiling of
+four concurrent sessions that died together on 2026-08-25. **An idle session
+costs nothing; a dispatched one costs the shared limit.** Do not fill slots.
+
+### Dispatch: frankA → `feature-opt-o3-register-pressure` (re-claim)
+
+Global ranked top, eff prio 85, parked in `unfinished/` since 2026-08-26 —
+briefed as **re-claim, do not restart**. frankA claimed it inside `~/frankA`
+(correct: claiming from the wrong tree is how a claim ends up in someone else's
+commit). Sole-A holds — frankwasm and frank-rust are on topic branches, nobody
+else is on master's shared core files.
+
+**Scope deliberately narrowed to the ticket's own next-slice item 1** — lower the
+residency eligibility threshold (currently *>3 loop accesses*, which excludes the
+accumulator at exactly 3), use all four free callee-saved registers rather than
+two, make a `for` induction variable resident unconditionally. **W2 proper (the
+linear-scan allocator) is explicitly out of scope**: it is the multi-session
+project that got the umbrella parked in the first place, and re-opening it is not
+what "tread carefully" means. If the experiments say W2 is the only way forward,
+frankA banks the finding and returns it.
+
+Briefed with the four facts that have cost time here before: `bench-o/` is NOT
+committed and has to be re-created; `perf` does not work on this box
+(`perf_event_paranoid = 4`) so it is FPC `-pg` + gprof reading **call counts**;
+every number names the sha of the binary it came from; and `IREmitNode`'s
+`IR_BINOP` guard chain and `IRFirstEvaluated`/`IRStmtFirstEvaluated` **must move
+together**.
+
+### OPEN WITH ME: the `-O2` promotion of the four `-O3` passes
+
+The parked ticket hands this to the coordinator explicitly, and it is where most
+of the banked **1.29x on the self-compile** still sits — at today's `-O2` default
+only the release-blob change is live, for **1.018x**.
+
+**Evidence path, corrected.** The ticket names Track T's sweep of `e7c0d1d2a` as
+the evidence. **`tstate/plexus.json` retains only 50 history entries and no
+longer reaches that sha** — so that sweep cannot be cited, and I will not cite
+it. What *is* true and better: the matrix carries real `-O3` coverage —
+`test-opt#src:compiler/compiler.pas@3`, twelve `optdiff#shard*/12` jobs, and
+`test-core#src:test/test_o3_residency_six_hot_locals.pas`. The decision is
+therefore re-derivable against a **current** sha rather than a lost one.
+Caveat for whoever picks this up: `Makefile:284`'s comment that *"-O2/-O3
+currently ALIAS -O1"* is **stale** — the passes in this ticket gate
+`OptLevel >= 3`. Do not reason from it.
+
+Not decided this cycle. Nothing is blocked on it — frankA lands behind `-O3`
+regardless, and `-O2` stays the proven default.
+
+### Self-watch installed (owner's request)
+
+The coordinator now runs a self-paced watch cycle: pull, `ListAgents`, relay
+worker findings, check `working/` and the ready queue for anything BLOCKED on me,
+and `twatch --status` for Track T (because every lane's gate widens when T is
+down). A tick that finds nothing blocked is a NOOP and dispatches nothing.
+
+**What it does and does not cover, stated rather than implied:** it recovers from
+transient API/network errors, a stalled cycle, or a worker going quiet, because
+the next tick simply retries. It does **not** survive this session's process
+dying — nothing in-session can. That recovery path is `~/frank.sh <role>`, and it
+is the human's.
+
+## REBOOT RECOVERY RUNBOOK (owner, 2026-08-27) — read this first after a reboot
+
+The owner asked for a note so *"in case of any next reboot, we recover."* This is
+that note. Everything below was **measured on plexus after the 2026-08-27
+reboot**, not inherited from the pre-reboot audit — which is the point, since the
+audit's own conclusion about the dashboard had already gone stale (see the
+correction at the end).
+
+### The one-line version
+
+**Infra comes back by itself. Agents do not. Run `~/frank.sh` — and only for the
+roles you actually intend to dispatch.**
+
+### Comes back with no human action — verified
+
+| thing | mechanism | verified |
+| --- | --- | --- |
+| Track T watcher daemon | `trackt-watcher.service`, user unit, `enabled` + `active` | `systemctl --user is-enabled/is-active` |
+| T health + regression timers | `trackt-health.timer`, `trackt-regressions.timer`, both `enabled` | unit-file listing |
+| boot without login | `loginctl show-user neo` → `Linger=yes` | measured |
+| credentials | `~/.claude/.credentials.json`, mode 600, OAuth refresh on disk; no keyring unlock | audit, unchanged |
+| the trees and their compiler seeds | plain files | — |
+
+### Does NOT come back — this is the whole gap
+
+**No agent session survives a reboot, and nothing launches `~/frank.sh` at
+boot.** Checked rather than assumed: `crontab -l` → *no crontab for neo*; no user
+unit references the script; nothing in `~/.profile` or `~/.bashrc` runs it. So
+after a reboot the box is healthy, the watcher is testing, the dashboard serves —
+**and there is no coordinator and no worker.** Nothing announces this. The fleet
+is simply absent.
+
+### The recovery sequence
+
+1. **`~/frank.sh -l`** — see what is up. After a reboot: nothing.
+2. **`~/frank.sh frank-coordinator`**, then whichever roles are actually being
+   dispatched. **Do not launch the full fleet reflexively.** `~/frank.sh` with no
+   arguments starts every role, and six live sessions against a target of 1-2
+   workers is how the 2026-08-25 four-session death happened. Launch the
+   coordinator plus the lanes with live work; leave the rest down.
+3. **The new coordinator reads `CLAUDE.md` then this file's opening section**,
+   which is the complete briefing by the owner's own standing instruction.
+4. **Re-read the most recent dated sections at the BOTTOM of this file** — that is
+   the live state. Everything above the last few entries is history.
+5. **Check for orphaned locks.** `ls devdocs/progress/working/` after a crash may
+   hold a ticket whose session no longer exists. A lock that outlived its session
+   is **released, not respected** — but confirm the session is really gone
+   (`ListAgents`) before touching it, and never absorb another agent's staged
+   work into your own commit.
+6. **Confirm T rather than assume it**: `tools/twatch.py --status` (exit 0 = up),
+   after a `git fetch` — without one it reports your own checkout's staleness.
+   **`ListAgents` showing `plexus-T` offline proves nothing**; the watcher is a
+   daemon, not a session. That error was made on 2026-08-27 and reported to the
+   owner as a false DOWN.
+7. **Anything mid-flight is lost, and that costs time, not state** — a running
+   `testmgr` tier dies with the box and the watcher simply re-runs it. **The one
+   irreplaceable thing is uncommitted work in a worker's tree**, which has no
+   backup; never tell a session to discard it.
+
+### Should the fleet auto-start at boot? Deliberately NOT proposed
+
+It would be a few lines of systemd, and it is the wrong default: auto-launching
+agents spends the shared 5-hour and weekly budget on sessions nobody asked for,
+against a recorded target of 1-2 concurrent workers. **Recovery here means "a
+human runs one script", not "six agents wake up and start burning tokens."** If
+the owner ever wants it, the right shape is a unit that starts the *coordinator
+alone* and lets it dispatch — never `frank.sh` bare.
+
+### CORRECTION — the dashboard has MOVED, and `~/pxx`'s stated reason is stale
+
+The pre-reboot audit recorded that `~/pxx` must be kept because it hosted the
+twatch web dashboard on port 8377. **That is no longer where it runs.** Measured
+now:
+
+```
+4327  python3 /home/neo/trackt-watch/tools/twatch_web.py --clone /home/neo/trackt-watch --port 8377
+```
+
+Serving HTTP 200, from **`~/trackt-watch`**, on a fresh post-reboot PID — brought
+up by `~/frank.sh`, which now runs `trackt --clone ~/trackt-watch up`. The old
+orphan in `~/pxx` died with the reboot and was not the thing that came back.
+
+**The owner's "keep `~/pxx`" call stands on its own and is not being reopened
+here.** What has changed is the *reason*: it is no longer load-bearing for the
+dashboard. Recorded because a stale justification is how a tree gets deleted
+later by someone who checks the justification and finds it false. And the
+underlying lesson repeats for the third time: **`pgrep -af <path>` before calling
+any tree disposable — and again before citing why you kept it.**
+
+## STANDING — frankA's track priority (owner, 2026-08-27)
+
+Owner: *"frank-A has some prio, at all times. frank a is track A+C+P. but also
+track A+N. but right now, tracks P and C and plain A have prio. user will say
+when track N has prio again."*
+
+Two separate instructions; do not collapse them.
+
+**1. frankA has standing priority over the other lanes.** It is the integrator —
+A owns the shared core, the self-host gate, and the stable binary every other
+track builds on — so when budget or attention is scarce, frankA is the lane that
+keeps running. This is the reason the "tread carefully" restart brought up frankA
+first and left B, rust and wasm idle.
+
+**2. Within frankA, the ordering is P / C / plain A ahead of N — until the owner
+says otherwise.** N is not dropped and its tickets are not closed; they are
+**deprioritized as a dispatch choice**, and the owner explicitly reserved the
+call to bring N back: *"user will say when track N has prio again."* Do not infer
+that from a high-prio N ticket appearing at the head of `ready`.
+
+**This is a repeat, and the repetition is the signal.** The same mandate was
+issued on 2026-08-19 (*"A/P/C over everything N"*, above in this file) and drifted
+— the coordinator dispatched NilPy work under it and was corrected by the owner
+the next day. The failure mode is not disagreement; it is that `progress.sh next`
+ranks by `prio:` and knows nothing about this mandate, so **the ranker will hand
+you an N ticket at the top of the queue and it will look like the right answer.**
+
+**Operationally, for whoever dispatches frankA:** run `next --track A`, `--track
+P`, `--track C` and pick from those. If the global `next` returns an N ticket,
+that is the ranker doing its job, not a dispatch instruction. Note frankA's
+current work (`feature-opt-o3-register-pressure`, Track O → file-owned by A) is
+plain A and sits inside the mandate — no change needed.
+
+## STANDING — `frank1` / `frank2` are LIVE ad-hoc trees, and `via` is a compute resource (owner, 2026-08-27)
+
+Owner: *"we also have frank1 and frank2 checkouts, user may use them at random.
+and we have the host via, ian@via, which may also be doing work for us, since,
+native aarch64."*
+
+Both corrections narrow claims this file made earlier today. Neither is cosmetic.
+
+### `frank1` and `frank2` are not retirable, and the owner may appear in them
+
+The topology section above says *"`~/frank2` (the coordinator's current tree,
+retire after the move)"* and lists `frank1` as merely pre-existing. **Read both
+as live.** The owner uses them at random, and an ad-hoc session there is a real
+agent on `master` that no dispatch of mine created.
+
+State measured now, after the reboot:
+
+| tree | branch | dirty | seed | lag vs real origin/master |
+| --- | --- | --- | --- | --- |
+| `frank1` | master | **clean** | present (9.6 MB) | 6 behind |
+| `frank2` | master | **clean** | present (9.6 MB) | 3 behind |
+
+Both are clean, seeded and immediately usable — which is exactly why the owner
+can walk into either and start. Note `frank1`'s earlier uncommitted
+`bug-b-sysutils-string-gaps-found-by-differential` edits are **gone in the good
+way**: its HEAD is an ancestor of master, not divergent, so that work was
+committed and pushed before the reboot rather than lost.
+
+**The lag is the trap, not the staleness.** Each tree's `origin/master` ref is
+whatever it last fetched, so `git status` there reports "up to date with
+origin/master" while sitting six commits behind the real one. That is the same
+instrument-answers-a-near-neighbour-question failure this file has now recorded
+five times: `status` answers *does my HEAD match my cached ref*, not *am I
+current*. **Anyone starting in `frank1`/`frank2` fetches first.**
+
+**Coordination consequence, and it is the important half.** An ad-hoc session in
+`frank1`/`frank2` is on `master`, holds no assignment from me, and may not be
+distinguishable in `ListAgents` from any other interactive session. So **I cannot
+maintain sole-A by tracking sessions.** The mechanism that still works is the one
+CLAUDE.md already names: the **`working/` ticket lock**. That is why the topology
+puts A, B and the coordinator on one trunk and handles collisions by lock rather
+than by branch. Practical rules:
+
+- **`working/` is the authority on who holds what**, not my roster table and not
+  `ListAgents`. Check it before dispatching anything that touches shared core.
+- **Workers pull often and push often** — a lock is only visible once it is
+  pushed, and an unpushed claim protects nobody.
+- **Do not "tidy" `frank1`/`frank2`**, do not move or rename them, and never
+  `git add -A` in them. A tree the owner may be sitting in is not litter.
+
+### `via` is a native aarch64 worker, not only the website host
+
+Recorded here as D+W and as *"a production web host"*. The owner adds the part
+that matters technically: **`via` is native aarch64 and may do work for us.**
+
+That is a capability the rest of the fleet does not have. Everything on plexus is
+x86-64; aarch64 currently reaches us only as a **cross** target, and `ianweb`
+runs the pinned x86-64 stable under `qemu-x86_64` via a shim — *compile emulated,
+run native*. So `via` is the only place a **native aarch64 execution** result can
+be observed, which is precisely the evidence class cross-compilation cannot
+produce.
+
+Two live items it bears directly on:
+
+- **`bug-a-cross-bootstrap-aarch64-overflows-max-code`** (p60, Track A) — the
+  reason `ianweb` could not build a native aarch64 stable. The qemu shim routes
+  around it; it does not fix it. A native aarch64 box is the natural place to
+  work or verify it.
+- **`bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture`** — found
+  on `via` for exactly this reason, and still open: the shim made `test -x`
+  honest there without fixing the guard.
+
+**The constraints that do not go away, and they are the owner's own:** `via`
+terminates a public tunnel and runs four gunicorn apps. It is a production host
+that happens to be aarch64, not a build farm. Deploys stay manual by design, and
+a long compile there competes with the site. **So route aarch64 *verification*
+to `via` — a run, an execution result, a "does this actually work on real
+hardware" question — and keep bulk building on plexus.** And ask `ianweb` rather
+than assuming capacity; it holds D+W and knows what else the box is doing.
+
+## 2026-08-27 — Track T's AGENT face is staffed (`frankT`), and `~/pxx` stops being a trap
+
+Owner launched an agent in `~/pxx` to watch the Track T daemon and triage, and
+asked for it to be added to `~/frank.sh`. Done — but the launch surfaced the
+hazard this file had been documenting *around* rather than removing.
+
+### The tree was on the retired branch, and the agent had already read the wrong CLAUDE.md
+
+Measured at the moment of the handover:
+
+| property | value |
+| --- | --- |
+| branch | **`dev`** — retired by the owner 2026-08-26 |
+| lag | **514 commits** behind `master` |
+| working tree | clean (nothing at risk) |
+| `CLAUDE.md` | the stale copy; mentions `dev` **14 times** |
+
+An agent launched there reads, as its very first act, a project guide describing
+a branch model that no longer exists — a sync-back gate, `master` as a snapshot
+advanced only at a pin, never-rebase. **This is not hypothetical: it is exactly
+what filed four tickets against a dead branch earlier the same day.** The agent
+was told immediately, before doing any work, with the fix to run **itself**
+(`git checkout master && git pull --rebase`) — a coordinator does not edit under
+a live session's feet, and the same rule that says claim in your own worktree
+says fix your own branch.
+
+**Why the standing "do not work in `~/pxx`" advice could be retired instead of
+repeated.** It rested on one fact that has since expired: that `~/pxx` hosted the
+port-8377 dashboard and therefore had to stay as it was. It does not — the
+dashboard runs from `~/trackt-watch` now (PID 4327, fresh post-reboot, HTTP 200),
+brought up by `frank.sh`'s own `trackt_bringup()`. With nothing pinning the tree
+to `dev`, switching it to `master` **removes** the trap. A warning that has to be
+re-read by every future agent is a worse fix than deleting the thing being warned
+about.
+
+### `frank.sh` now carries the role
+
+`FLEET` gains `frankT:$HOME/pxx`, the concurrency note is corrected to 7 roles,
+and the `~/pxx` comment block is rewritten from "do not work here" to "this is
+frankT's tree; if its branch is not `master`, fix that first." The `frank1`/
+`frank2` lines are corrected too — they are **live ad-hoc trees the owner uses at
+random**, not retired trees, and are deliberately not relaunched by the fleet
+because a session in them is the owner's, not ours.
+
+Two naming notes for whoever reads `ListAgents` next:
+
+- The live session is **`pxx-a5`**, not `frankT` — it was hand-launched, so it
+  got an auto-generated name. After any relaunch through `frank.sh` the role
+  comes up as `frankT`. Same job, two names, only until the next restart.
+- Its roost tab read **`claude`**, which is the precise illegibility `frank.sh`
+  was written to prevent. Renamed to `frankT` with `tmux rename-window`
+  (cosmetic; it does not rename the agent session).
+
+### Concurrency: this is a third *dispatched* session, and it is a deliberate one
+
+frankA (A) + pxx-a5/frankT (T) + the coordinator. That is at the top of the
+recorded 1-2 worker target. It is defensible because **T is not a competing
+consumer of the same queue**: it does not take tickets from `ready`, it reads
+`tstate` and files into other lanes. The thing to watch is tokens, not
+collisions — T's file scope (`tools/testmgr.py`, `twatch`, `trackt`, the fuzzers,
+`tstate/**`) is disjoint from every dev lane by construction, which is the whole
+reason the letter exists.
+
+**frankB, frank-rust and frankwasm stay down.** Seven roles can be launched; three
+are dispatched.
+
+## CORRECTION (2026-08-27) — the tstate retention cap was NOT why a sweep could not be cited, and the `-O2` decision is unblessable by history
+
+Earlier today I recorded that `tstate/plexus.json` retains only 50 history
+entries and therefore "no longer reaches `e7c0d1d2a`". `frankT` disputed it. It
+was right; I verified rather than conceded, and every number below is mine.
+
+**Appending rather than editing the original entry** — this repo does not rewrite
+its own records.
+
+### What is actually true
+
+| claim | verdict |
+| --- | --- |
+| `HISTORY_CAP = 50` (twatch.py:313) | true, but it caps `plexus.json["history"]` **only** |
+| a day-old verdict is unretrievable | **false** — twatch.py:2802 appends to an **uncapped** archive, `tstate/runs-plexus.ndjson`, whose own comment says so |
+| the archive is thin | **false** — 1,680 rows, 2026-08-04T23:37:06Z → 2026-08-27T20:26:39Z |
+| `e7c0d1d2a` aged out | **false** — 0 occurrences. It was **never swept** |
+
+**The watcher climbs to the newest testable commit when it wakes; it does not
+sweep every commit.** Measured independently and reproducing `frankT`'s figure
+exactly: of the **79 commits touching `compiler/` or `lib/` since 2026-08-26,
+exactly 0 were individually tested.** That is the design working, not a defect.
+
+**So the question "can you cite T's sweep of sha X" is malformed for most shas.**
+The answerable one is *"what is the newest verdict whose run COVERS sha X"* — and
+no tool answers it today: `--follow` waits for a future verdict, `--status`
+reports the head of the ladder, and neither walks the archive backwards.
+`frankT` is building that query, in lane, no ticket needed. It was pointed at
+`judged_tiers()` (twatch.py:4519), which **already** reads the uncapped archive
+for an exact sha — extend that primitive, do not grow a second archive reader
+that can disagree with it.
+
+### The consequence that matters more, and it lands on the coordinator
+
+I was holding the **`-O2` promotion** of the four `-O3` codegen passes on
+`feature-opt-o3-register-pressure` as "blocked on a T verdict I could not
+retrieve". **It is not blocked on retrieval, and no archive query — however
+good — can ever settle it.**
+
+All four passes gate `OptLevel >= 3`. Promotion means making them fire at `-O2`.
+**Every `-O2` verdict ever recorded is therefore a verdict on an `-O2` that did
+not run them.** The configuration in question has never been executed by
+anything, so there is nothing in the archive to find. A perfect covering-verdict
+query would have answered my question correctly and I would have drawn a false
+conclusion from it.
+
+That is **`ianweb`'s law arriving a third time in one day, on me**: *a correct
+answer to the wrong question looks exactly like a correct answer.* Twice today it
+cost an afternoon each. Here it was caught only because a peer disputed the
+premise rather than serving the request — which is the argument for keeping
+workers willing to push back on the coordinator.
+
+**Standing consequence for whoever holds this next:** the promotion needs a
+**prospective** per-pass run against a tree with the promotion applied — which is
+what CLAUDE.md already said (*"promote to `-O2` per-pass only after the full
+gate"*). It is sequenced with frankA, not with Track T, and it is not blocked.
+
+### Open with me, unchanged in substance: sweep granularity
+
+`frankT`'s sharpest observation: *"0 of 79 tested"* and *"both open regressions
+have a `bad=` on a commit touching no buildable file"* are **the same fact**. A
+bisect cannot name a culprit when there is no fine-grained ladder to land on, so
+the lever for useful blame ranges is sweep granularity, not the bisect code.
+
+Tier composition is explicitly Track T's to change. **Machine time is not** —
+this box is the contended resource and every agent's compile already runs 2-3x
+slower while the watcher works. So `frankT` was asked to **measure the wall-clock
+cost per day of a finer ladder and bring the number** before changing policy;
+if it is material it goes to the owner. A sequencing request, not a veto.
+
+## COORDINATOR DECISION (2026-08-27) — promote three passes to `-O2` before starting W1; W2 stays shut
+
+frankA returned item 1 of `feature-opt-o3-register-pressure` with numbers, and
+**both experiments the slice itself named as its gate came back empty.** Verified
+its push before acting: `552af4dcb` is +23 lines in `ir_codegen.inc` plus the
+ticket write-up, **zero `OptLevel` changes** — probe-only, as claimed.
+
+### What was disconfirmed, and the finding worth more than the speedup
+
+The slice's premise was *"what remains is exactly W2"*. It isn't.
+
+- **(a) Lower the residency threshold — no effect.** `three.pas` min-of-5: `>3`
+  (shipped) 0.79s, `>2` 0.77, `>1` 0.78, `>0` 0.80; fpc 0.34. The probe confirms
+  the pick lands and simply buys nothing. **The reason is the reusable part:**
+  `EmitStoreVar` dual-writes (the frame slot stays authoritative), so residency
+  removes **loads, not stores**. A local with ~1 load and ~1 store per iteration
+  trades a removed read for an added register move and nets zero.
+  **Corollary for whenever W2 is built: rank candidates by LOADS, not by
+  loads+stores.**
+- **(b) Use four callee-saved registers — already landed; item was stale.**
+  `UnifiedResidencyAssign` already pools r12..r15 minus regcall's claim. The
+  ticket text described the pre-unified pass. Struck.
+- **(c) Unconditional `for`-counter residency — near-moot.** A counter tallies 4
+  accesses unaided and clears `>3` on its own; it loses only when hotter locals
+  exhaust the pool, and forcing it in means evicting one of those, which (a) says
+  is worth ~0. Not implemented.
+
+**The real subject is W1, not W2** — the single-accumulator operand model. Run's
+loop body is 21 instructions on the common path, of which 5 are `mov %rN,%rax`
+staging an operand through rax. *A register allocator cannot help a body that
+moves every value into rax before touching it.*
+
+### The decision, and the reasoning, so it can be argued with
+
+**Do not start W1 yet. Take the `-O2` promotion first.**
+
+The promotion is worth more and costs a fraction: it is already measured, already
+proven at `-O3`, already differentially tested in the tens of millions of cases —
+**the work is done and only the gate constant is wrong.** It moves
+`make compiler/pascal26` from 1.018x toward the measured **1.29x**, on the one
+workload every agent on every track pays dozens of times a day. W1 is speculative
+new work by comparison.
+
+frankA's static sweep puts the operand-funnel family at ~1.2% of the binary,
+which *understates* it — 5 of 21 instructions on a hot path is 24%, not 1.2%, and
+the sweep decodes some data as code. That is an argument for doing W1 **later**,
+not for dismissing it, and not for doing it before a banked 1.29x is left on the
+floor. **W1 re-ranked ahead of W2** in the ticket.
+
+### THREE passes promote, not four
+
+| sha | pass | call |
+| --- | --- | --- |
+| `e9317428d` | div/mod by constant power of two → shifts/masks | **promote** |
+| `f9d9da4b5` | narrowing ordinal cast → one `movsx`/`movzx` | **promote** |
+| `6692d08b8` | cmp-immediate, branch **and** value-producing forms | **promote** |
+| `e7c0d1d2a` | residency refresh reads `rax`, not the slot | **stays `-O3`** |
+
+The fourth is not a judgement call: it fixes the **residency mechanism, which
+does not exist below `-O3`**. Promoting it would be a no-op wearing the costume of
+a change. Recorded explicitly because a future reader counting "four passes,
+three promoted" needs the fourth explained rather than silently dropped.
+
+One commit per pass, so a single pass can be reverted without the others.
+
+### Why this is landable rather than reckless — the brake is the pin
+
+A bad `-O2` default is everyone's default immediately, which is what makes this
+different from `-O3` work. It is contained by exactly one property:
+**`$(PXX_STABLE)` does not move until a pin, and pins are the coordinator's.**
+Master may carry a promoted `-O2` for hours — CLAUDE.md permits landing non-green
+— while every Track B/D/E build keeps using the pinned binary from before it.
+
+**The pin is HELD until Track T returns green verdicts on the promotion shas.**
+That is the whole safety argument, and frankA was invited to find a hole in it
+before pushing rather than after.
+
+And it cannot be satisfied by watching the ladder head: per `frankT`'s
+measurement, **0 of 79 commits touching `compiler/` or `lib/` since 2026-08-26
+were individually tested**. A green head does not cover these shas. `frankT` has
+been asked to get real verdicts on them and to say plainly if the ladder cannot
+be made to do it, in which case the pin waits longer rather than resting on
+inference.
+
+## 2026-08-27 — OWNER CONFIRMS: `ianweb` on `via` owns D+W, and via's push rights are "for now"
+
+Owner: *"the client on via is responsible for track D+W work. that's a clean
+separation, i think. and via also has push privileges for now."*
+
+Confirms the assignment recorded earlier today rather than changing it. Two
+things worth pinning down:
+
+- **The separation is clean because D and W are two halves of one loop.** CLAUDE.md:
+  *"Track D writes the Markdown here that W's machinery publishes."* One agent
+  holding both closes a loop that previously needed two sessions and a relay —
+  which is what cost half of 2026-08-27, when `docs/targets/nil-python.md` said
+  NilPy was mainline while the website said Experimental and nobody owned the gap.
+- **"For now" is doing real work in that sentence.** via's push key is an
+  account-level credential on a box that terminates a public tunnel and runs four
+  gunicorn apps; the owner has confirmed it as intentional
+  ([[decide-deploy-key-on-via]], resolved) but has now twice framed it as
+  provisional. **Do not build a workflow that cannot survive its withdrawal.**
+  The two-ended shape (author/push from a clean clone, deploy/verify from the
+  origin) is what the lane looked like without it and is still the fallback.
+  And it does not touch the deploy gate: **push and deploy are different
+  privileges** — the credential answers *can this box write to the repo*, the gate
+  answers *can a commit start executing here*. Deploys stay manual by design.
+
+**Still open with the owner, and now down to one:** deploy go/no-go for
+`e78595d` (the OG/Twitter card fix — in git, reviewed, fetched, unmerged;
+visitors still get the pre-fix tags). The second item — whether an 18KB patch may
+travel between hosts over the agent channel — is **moot** now that via can pull
+from origin directly.
+
+## COORDINATOR MANDATE (owner, 2026-08-27) — decide the trivial, file the rest on U
+
+Owner: *"you are the coordinator. if anything really needs human judgement, file
+on track U. but i trust you to make trivial judgement calls. see project
+philosophy and other docs for guidelines."*
+
+This is the standing operating instruction for this session. Read
+`frontend-compat-philosophy.md` and `autonomy.md` before leaning on it — they are
+the guidelines the owner is pointing at, and both were re-read at the time this
+was recorded rather than recalled.
+
+**The filter, from `autonomy.md` and the roster's own philosophy-check rule:**
+
+1. **Derive, don't escalate, when the principles settle it.**
+   `frontend-compat-philosophy.md` exists to answer most compat questions
+   outright: C = compliance, a gcc divergence is a bug; Pascal = its own dialect
+   ON PURPOSE, so *"FPC does X"* is not by itself an argument; NilPy = upward
+   compatible with CPython, one direction only. When one of these settles a
+   question, **derive the answer and file a confirmation** — do not spend the
+   owner's attention on it.
+2. **Escalate genuine forks, paradoxes and goal-choices**, as `decide-<topic>`
+   with the fork, the options, the trade-offs and a recommendation, so the answer
+   takes seconds.
+3. **U holds open QUESTIONS, not work.** An item that turns out to be plain work
+   once decided is re-filed into the owning lane.
+4. **Never as chat.** The reason to file rather than ask is that *chat dies with
+   the session* — demonstrated below, where two items sat "stacked with the
+   human" in this file long after one of them had been resolved.
+
+### Correction, immediately: the "stacked with the human" items were NOT open
+
+Recorded twice today as pending owner input, and reported as such to the owner.
+Checked properly instead of carried forward:
+
+- **Deploy go/no-go for `e78595d` — ALREADY DONE.**
+  `bug-web-link-previews-render-as-bare-text` is in `done/`, resolved
+  2026-08-27: *"DEPLOYED AND VERIFIED LIVE"* — `og:image`,
+  `og:image:width/height/alt`, `twitter:image` and
+  `twitter:card=summary_large_image` served from pxxc.org, HTTP 200, 29,667
+  bytes, decoding at 1200x630, **confirmed twice on independent instruments**
+  (`ianweb` from the origin including nginx `X-Cache-Status`, and from the public
+  internet). The lane closed its own loop once `ianweb` held both ends.
+- **Whether the 18KB patch crosses hosts — moot**, since via can pull from origin
+  directly.
+
+**So nothing is pending with the owner right now, and manufacturing a U ticket to
+have one would be the opposite of the mandate.** The lesson is the one this file
+keeps re-learning in new clothes: *a stale pending-item is indistinguishable from
+a live one*, and the cost lands on the person whose attention it claims. **Verify
+a "waiting on the human" item before re-reporting it**, exactly as one verifies a
+peer's claim.
+
+Open W work exists (8 tickets, top prio 45: `chore-web-secrets-sops-age`,
+`feature-web-tracker-and-host-portability`) but none of it is blocked on the
+owner — it is unstaffed by choice, not stalled.
+
+### CONCURRENCY — `autonomy.md` is stricter than this file, and we are above it
+
+Surfaced on re-reading, and the coordinator is the one currently exceeding it.
+
+This file records *"target concurrency: 1-2 workers plus the coordinator"*.
+**`autonomy.md` says something stronger**, from the same period:
+
+> *"prefer one worker cycling lanes over a parallel fleet."*
+> *H1 — a single session at a time is effectively unlimited (a lone worker rarely
+> exhausts a 5h block). H2 — concurrent sessions hit the cap fast,
+> super-linearly (two light agents trip a limit one hard worker never would)."*
+
+It also prescribes **serial handoff with a ≥60s cooldown** between an outgoing
+and incoming worker, on the grounds that even a few seconds of overlap costs.
+
+**Right now three sessions are active: frankA, frankT and the coordinator.** By
+`autonomy.md`'s hypothesis that is super-linearly expensive, not merely additive.
+It is defensible — the owner launched the fleet and staffed T personally, T is
+not a competing consumer of the dev queue, and both workers are mid-task — but it
+should be *chosen*, not drifted into. **Do not add a fourth** (dispatching
+`ianweb` would be exactly that, and the 2026-08-25 four-session death did not care
+that the boxes differed). The natural serialisation point is after frankA's
+promotion sequence is pushed and swept.
+
+Raised with the owner rather than filed as a `decide-*`: they are present and
+engaged, and the fleet size is a live call they are already making.
+
+## CORRECTION (2026-08-27) — the coordinator sent Track T the wrong shas, and sweep granularity is SETTLED against the change
+
+Fourth instance of *"a correct answer to the wrong question looks exactly like a
+correct answer"* in one day, and the first with the coordinator as the source
+rather than the one catching it.
+
+### The error
+
+I asked `frankT` to sweep `e9317428d`, `f9d9da4b5` and `6692d08b8` as "frankA's
+`-O2` promotion shas". **They are the `-O3` INTRODUCTION shas.** Verified after
+`frankT` refused the request: all three dated 2026-08-26, titled `perf(O): -O3
+...`, adding **3, 1 and 1** `OptLevel >= 3` guards respectively. The promotion
+commits do not exist yet — I had described them in the same message as landing
+"over the next while" and then named shas anyway.
+
+Had it been swept, three green rows would have come back that genuinely tested
+something, and none of it the thing the pin is gating on.
+
+**`frankT` was asked for a sweep and interrogated the request instead of serving
+it.** That is the behaviour to protect: the coordinator is structurally worst at
+catching its own malformed requests, because the worker sees the data and the
+coordinator sees only the plan. This is now the second time today a worker has
+disconfirmed the coordinator and been right both times.
+
+### Sweep granularity: PRICED, and the number argues against the change
+
+Asked for as a cost before any policy change. Measured by `frankT` from the
+archive:
+
+| | |
+| --- | --- |
+| commits/day touching buildable paths (14d mean) | **64.9** (range 5-115) |
+| watcher's existing machine time | median **11.2 h/day** — ~47% duty on the contended box |
+| uniform sweep at `native` | +4.3 h/day → **~15.5 h/day**, ~65% duty |
+| uniform sweep at `full` | +20.8 h/day → **exceeds the day**; arithmetically impossible |
+
+**Decision: do NOT make the ladder uniformly finer.** Even the cheap version buys
+a third more contention, permanently, on the box where every agent's compile
+already runs 2-3x slower — to answer a question only ever asked about a handful of
+shas. The lever is **targeted on-demand verdicts** (~5 min each, zero standing
+cost). `frankT` is building the request queue; `verify_pin` is the precedent for
+judging an arbitrary sha out of band.
+
+**Nothing goes to the owner.** This is the mandate working as intended: a cost was
+requested before a policy change, the measurement argued against it, and
+escalating anyway would spend the owner's attention ratifying a decision the
+number already made.
+
+### The instrument, and a bound worth keeping straight
+
+`opt` is the right tier and is **disjoint from the nesting chain**
+(testmgr.py:218) — a `full` run neither contains nor evicts it. It is `test-opt`
+plus 12 `optdiff` shards sweeping ~900 programs for identical
+stdout+stderr+exit at `-O0` vs `-O2` vs `-O3`. Median 5.1 min; three shas ≈ 15-25
+min serial.
+
+**The pin hold is therefore minutes, not hours** — I had framed it as a long hold
+and that was wrong too, for a better reason than the sha error:
+
+- `make compiler/pascal26` builds at the **default** `-O` level, and CLAUDE.md's
+  scope note says the fixedpoint proves byte-identity *at that level only*.
+  Normally that caveat weakens the claim. **Here the default IS `-O2`**
+  (compiler.pas:758), the level being promoted — so the usual limitation points
+  the other way, and the guard lands exactly on the change, over the largest
+  Pascal program in the tree, on every agent's machine, every fix, in ~12s.
+- **The bound:** that covers the compiler's own source at `-O2`. It says nothing
+  about `lib/rtl`, the ~900 optdiff programs, or cross targets — which is exactly
+  what the opt tier covers. Complementary, not redundant. The verdict is still
+  wanted; the hold is just short.
+- And `optdiff`'s standing `-O3`-vs-`-O0` evidence does **not** transfer
+  unqualified: at `-O2` the passes compose with a different, smaller pass set, so
+  an interaction `-O3`'s other passes mask or create would not show. Strong
+  evidence, not sufficient.
+
+`twatch --covering <sha>` shipped (`29c459412`) — exact rows if any, else the
+first covering run per tier with commit distance, **and it prints the caveat
+rather than trusting the reader to supply it**, which is the failure mode this
+repo keeps paying for. On the original sha: `e7c0d1d2a` never swept, covered
+green at native +2, covered by a RED full at +36.
+
+## Coordinator cycle, 2026-08-27 ~23:00 — the three promotions LANDED; pin held on T's verdict
+
+Not a quiet tick. frankA pushed all three `-O2` promotions between 22:50 and
+22:58, one commit per pass as directed:
+
+| sha | pass | time |
+| --- | --- | --- |
+| `13d4bba0c` | div/mod by a constant power of two | 22:50 |
+| `e4fe576eb` | narrowing ordinal cast → one `movsx`/`movzx` | 22:54 |
+| `7767acc60` | cmp-immediate, both forms — **current HEAD** | 22:58 |
+
+**Verified before sending them to `frankT` this time.** Each flips a guard from
+`OptLevel >= 3` to `OptLevel >= 2` in `compiler/` and nothing else (pass 1 two
+sites, pass 2 one, pass 3 two). `e7c0d1d2a` is correctly **absent** — the
+residency refresh stays `-O3` because the mechanism it fixes does not exist
+below it. They are **not three consecutive shas**; docs commits are interleaved.
+
+**Method suggested to `frankT`, explicitly overrulable:** the question the pin is
+gated on is *"is the promoted `-O2` sound?"*, and **`7767acc60` alone answers it
+cumulatively** — all three promotions are live in it. Per-pass rows buy
+*attribution*, which only matters on a red. So: run HEAD first (~5 min), fan out
+only if red. Green at HEAD releases the pin in a fraction of the 15-25 min and
+keeps the box free for frankA. The counter-argument was handed over with it — a
+cumulative green could in principle mask two passes cancelling out — and the call
+left to the lane that owns the instrument.
+
+**PIN STATUS: HELD**, on `frankT`'s verdict and nothing else. `$(PXX_STABLE)`
+still points at the pre-promotion binary, so every Track B/D/E build is unaffected
+by what is now on master. That is the containment, and it is working as designed.
+
+### Fleet, this cycle
+
+| session | state |
+| --- | --- |
+| frankA | **busy** — finishing the ticket write-up after the promotions |
+| pxx-a5 (`frankT`) | **busy** — was holding for these shas |
+| frank-user | waiting |
+| frankB / frank-rust / frankwasm | idle, deliberately undispatched |
+| ianweb | idle; D+W, nothing blocked on it |
+
+Three dispatched, which is where it stays. `working/` holds exactly two locks —
+frankA's ticket and `feature-target-wasm` — and `urgent/` is empty.
+
+**Track T UP**, `--status` exit 0: plexus GREEN native at `b70c6f40c4c7`, full
+through `b898d0543fc8` RED, pin-verify v388 at `20664a1576d3` RED (2 red, 0 new).
+The status line's own caveat applies and is worth repeating because it reads like
+a contradiction otherwise: **those reds are AT THE PINNED TREE, 14 testable
+commits behind origin/master** — a job fixed since is still red there, and that is
+not a contradiction.
+
+### Carried items, corrected — the loop prompt is now stale on both
+
+The self-watch prompt still carries *"two one-line questions stacked with the
+human on Track W"*. **Both are closed** (deploy go/no-go was already DONE and
+verified live; the cross-host patch question is moot). And the `-O2` promotion is
+**decided**, not pending — three passes promoted, awaiting a verdict rather than
+a decision. Updated in the loop prompt so the next tick does not re-raise settled
+items; recorded here because a stale carried item is indistinguishable from a
+live one, which is the same failure this file logged three hours ago.
+
+**Genuinely open, and only these two:**
+
+1. **Two NilPy NEW-REDs** (`test_nilpy_parent_call_after_instantiation`,
+   `test_nilpy_startswith_tuple`, both p70, both `bad=b898d0543fc8` — a
+   **docs-only commit**, so the bound is an upper bound and not a lead).
+   **Not dispatched**: N is deprioritized by owner instruction and the owner
+   reserved the call to lift it. Deprioritized is not dropped — they are filed and
+   will head the N queue the moment it is lifted. `frankT` asked whether they are
+   genuine NEW-REDs or first-ever-reports, since `test-nilpy` runs in limited/full
+   only and an unseen job reports as a regression against a green history it never
+   had.
+2. **A hook false positive**, reported to the owner as an observation only.
+   `.claude/hooks/no-full-suite.sh` matches command text anywhere in a Bash
+   invocation, so it refused a file write whose heredoc merely *quoted* a
+   `testmgr --tier full` repro line. `frankT` reworded rather than using
+   `PXX_TRACK=T` — correct, the escape is for *running* suites — and did not touch
+   the hook. **Neither will I.** That file and `.claude/settings.json` are the
+   owner's; a peer reporting friction is not authorisation to edit them.
+
+## 2026-08-27 — `~/frank-optimize` BUILT (owner request); NOT dispatched, because O and A share files
+
+Owner: *"we would like to have another checkout - frank-optimize. that would
+purely focus on optimizing (broad spectrum)."*
+
+Tree is built, seeded and in the launcher. **It is deliberately not staffed yet**
+— see the collision below, which is the one hazard the track letters exist to
+prevent and which lands squarely on this lane.
+
+### What was built, and it is verified rather than asserted
+
+| step | result |
+| --- | --- |
+| `git clone --local ~/frank-coordinator ~/frank-optimize` | 1.7s, **583 MB** working tree, objects hardlinked |
+| `origin` re-pointed at GitHub | `git@github.com:yoctobyte/pxx.git` — **not** the local sibling it was cloned from |
+| `merge.ours.driver=true` | set (per-checkout, not committable — the step every fresh clone misses) |
+| compiler seeded + self-hosted | **`converged after 2 round(s)`**, fixedpoint `591ae8160f69` |
+| built ≠ pinned | `591ae816…` vs `e8b72f8a…` — a real build, **not** a copied-seed no-op |
+| branch | `master` |
+
+Disk after: 97 GB free. The 583 MB is working tree only.
+
+**Re-pointing `origin` is not optional and is easy to miss.** `git clone --local`
+sets `origin` to the *sibling tree*, so a push would go into another agent's
+checkout rather than to GitHub. Add it to the new-tree checklist alongside the
+merge driver and the seed.
+
+### A free confirmation of the `-O2` promotion fell out of the seeding
+
+The seed self-hosted at HEAD, which now carries all three promotions. So
+**`591ae8160f69` is a promoted-`-O2` compiler that reproduces itself
+byte-identically, built from scratch in a clean tree.** That is an independent
+instance of the guard described earlier — `make compiler/pascal26` builds at the
+default `-O` level, and the default is the level being promoted.
+
+Bounded honestly, because this is exactly where over-claiming starts: it confirms
+**the compiler's own source at `-O2`**, in one tree, on x86-64. It says nothing
+about `lib/rtl`, the ~900 optdiff programs, or cross targets. **The pin stays held
+on `frankT`'s opt-tier verdict.** This is corroboration, not the verdict.
+
+### WHY IT IS NOT STAFFED — Track O is implicitly Track A, and A is held
+
+This is the coordination problem and it is structural, not a scheduling nicety.
+CLAUDE.md: *"Track O — optimization (formal category, **implicitly Track A**). …
+Almost everything here edits Track A's shared ground (`ir_codegen.inc`,
+`symtab.inc`, the backends, `compiler/builtin/**`), so an O ticket carries a Track
+A file-ownership tag and obeys A's rules: self-host byte-identical gate,
+**no-concurrent-edit with A**."*
+
+**frankA is editing `ir_codegen.inc` right now** — it holds
+`feature-opt-o3-register-pressure`, itself an O ticket. A second agent in
+`frank-optimize` on `master` would be the textbook sole-A violation: two sessions
+editing the same shared core files, which is the specific hazard the letters
+exist for, and which `working/` locks mitigate but do not eliminate when both
+agents want the same file rather than the same ticket.
+
+The topic-branch escape used by `rust` and `wasm` does **not** obviously apply.
+Per this file's own rationale, topic branches carry *destabilizing* work whose
+merge cost is acceptable; optimization lands in the core, needs pins to reach
+other lanes, and would pay a conflict on the 28 MB committed `stable_linux_amd64/**`
+at every merge — the exact reason A and B were kept on the trunk.
+
+**So the fork is real and it is the owner's**, put to them with a recommendation
+rather than guessed at. Options recorded in the message: sequence O behind
+frankA; split by file (O takes the allocator/runtime/`compiler/builtin/**`, A
+keeps `ir_codegen.inc`); or run frank-optimize on an `optimize` topic branch and
+pay the merge cost. **Nothing is dispatched into the tree until that is answered.**
+
+Also unresolved and asked: *"broad spectrum"* may be wider than Track O's codegen
+lane — compiler build time, RTL algorithmic cost and allocator work span A **and**
+B, and B's gate is different (build with `$(PXX_STABLE)`, never rebuild the
+compiler). Worth pinning down before the first ticket, not after.
+
+### Concurrency note
+
+The fleet is now **8 launchable roles**; `frank.sh`'s note updated to match.
+Dispatched remains **three** (frankA, frankT, coordinator). Building a tree costs
+nothing; staffing it does.
+
+## 2026-08-27 — THE 1.29x WAS STALE (it is 1.04x); O handed to `frank-optimize`, frankA to P
+
+Two things at once: the number my afternoon decision rested on was disconfirmed
+by the worker I gave the decision to, and the O/A collision resolved itself at a
+clean seam.
+
+### The coordinator ranked promotion above W1 on a number that no longer existed
+
+frankA re-measured after promoting. **1.29x → 1.04x.** Two independent reasons,
+either fatal:
+
+1. **It compared base `-O2` against new `-O3`** — so it always included `-O3`-only
+   passes that were never in the promotable set (residency, W1 scratch arms,
+   float-tree fusion). *No promotion of a `-O3`→`-O2` subset could ever have
+   delivered it.*
+2. **Its baseline no longer exists.** That row measured 3.65s for `empty.npy`;
+   the same workload is 2.27s today on the PRE-promotion binary, because
+   `13e196cc8` (variant clear/retain blobs emitted once instead of at 10,707 call
+   sites) landed afterwards and had already taken most of the headroom.
+
+**THE GENERAL LESSON, and it is the third costume of the same error this file has
+logged today: A BANKED SPEEDUP DECAYS AS THE TREE MOVES UNDERNEATH IT.** A figure
+quoted from a ticket weeks later is a claim about **a binary nobody still has**. I
+treated a written measurement as a fact when it was a fact about a tree that no
+longer exists. Alongside *verify a peer's claim* and *measure before escalating*:
+**re-measure anything you are about to justify work with, and name the sha of the
+binary every number came from.**
+
+The correction is trustworthy because of the method, not because it is newer:
+frankA rebuilt `552af4dcb` from the pinned binary to a fixedpoint and landed
+**byte-identically on `0b134438899d`** — the same sha as the morning's probe build
+— which proves the baseline was not constructed to agree with the conclusion.
+Real number is **1.04x** from the short workload; the self-compile's 1.02x is
+noise-floor (the same binary spanned 17.95-19.41s as watcher load moved 2→13) and
+is recorded as consistent-with, not as a second measurement.
+
+**The promotion still stands.** 1.04x on every compile on every track, for a
+gate-constant-only change backed by tens of millions of differential cases, is a
+good trade. **What was wrong was the ranking, not the action** — and W1 was never
+actually outbid.
+
+### The revertability hole, and why the separation is DEFERRED rather than cosmetic
+
+frankA's catch: T climbs to the newest testable commit, so it will sweep only
+`7767acc60`, and a green there is a verdict on all three passes together — leaving
+three separately-revertable commits and one undifferentiated verdict.
+
+**Correct, but the conclusion doesn't follow.** The commits are on master and
+independently revertable, so if HEAD comes back red, T can run `13d4bba0c` and
+`e4fe576eb` individually *then*. The per-pass evidence does not exist yet; the
+**ability to generate it cheaply does**, and it costs ~10 extra minutes only in
+the world where it is needed. Attribution is worthless while everything is green.
+So the separate commits buy a real **option**, not tidy history — they would only
+be cosmetic if the passes had landed as one commit and could not be picked apart.
+**Single cumulative run stands.**
+
+Also relayed: A/P/C/N agents on master pick up the new `-O2` the moment they
+build, so a bad pass surfaces in someone else's lane before any pin. An argument
+for landing this class of change early in a session rather than late.
+
+### Staffing: the collision resolved at the seam, not by a branch
+
+The owner staffed `~/frank-optimize` (session `frank-optimize-b4`), which checked
+in **idle and refused to claim an A/O ticket unasked** — the right instinct, and
+what made the handover clean.
+
+- **`frank-optimize-b4` → Track O**, takes the `feature-opt-o3-register-pressure`
+  umbrella, **first task W1**, with an explicit instruction to **size the prize
+  with a cheap experiment before building the scheduler** — the discipline that
+  has now paid twice in one day. Told the 1.29x story directly, because it is the
+  exact trap its ticket sets for it.
+- **frankA → Track P**, releasing the O umbrella to `unfinished/` with its
+  write-up intact (**released, not resolved**). Next from `--track P`
+  (`feature-pascal-corpus-expansion` p75).
+- **Boundary stated to both, because it is a convention and not a gate:** O owns
+  `ir_codegen.inc`, `symtab.inc`, the backends, `compiler/builtin/**`, the
+  allocator. P owns `pasparser_*.inc`. `lexer.inc` is shared A/P but O work does
+  not touch it — both told to report if that stops being true.
+
+**This is the sequencing option, and it worked because frankA finishing the
+promotion WAS the seam.** No topic branch, no 28 MB binary conflict, one agent in
+the shared codegen files at a time.
+
+**Concurrency is now FOUR sessions** (frankA, frankT, frank-optimize-b4,
+coordinator). That is the count that hit an account limit and died together on
+2026-08-25, and it is above `autonomy.md`'s stronger preference for one worker
+cycling lanes. The owner created and staffed the tree, so this is their call and
+it has been surfaced twice; recording it here so a successor does not read four as
+a target. **Do not add a fifth.**
+
+### Also filed by frankA, correctly not fixed
+
+`bug-p-qword-div-by-a-literal-above-2-63-is-signed` (`c4bb2dff9`, p55).
+`QWord div <literal ≥ 2^63>` returns 0 where fpc gives 1; the `mod` form prints a
+QWord as −1. **A silent wrong VALUE, so a `bug-` in any dialect and never a
+`compat` item** — being our own dialect licenses semantics chosen on purpose,
+never a wrong answer nobody chose. Wrong at `-O0` and identical at every `-O`
+level, so it predates today's work and blocks nothing. Root cause confirmed
+against the boundary: `NormalizeUnsignedLiteralOperand` bails on
+`ASTIVal[lit] < 0`, and 2^63 stored in an Int64 **is** negative, so the literal
+keeps its signed type and QWord(−1) enters a signed divide. Same value through a
+variable is correct, which is what makes it silent.

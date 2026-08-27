@@ -624,7 +624,16 @@ type
       what CPython REJECTS and therefore laxity rather than a defect — see the
       ticket. bug-nilpy-bytearray-and-bytes-are-the-same-type }
     FIsByteArray: Boolean;
-    constructor Create(n: Integer);
+    { TWO spellings, because a SUBCLASS needs the parameterless one. `class
+      BA(bytearray)` with no __init__ of its own emits a call to the base's
+      no-argument Create, and TPyBytes had only Create(n) — so constructing any
+      subclass of bytes/bytearray SEGFAULTED, while `class L(list)` and
+      `class D(dict)` were fine because TPyList and TPyDict both declare a
+      parameterless Create. The asymmetry, not the subclassing, was the defect.
+      No bare-name hazard here: `Create` is not a name a NilPy program writes.
+      bug-n-bytearrays-zero-argument-overload-makes-the-bare-name-a-call }
+    constructor Create; overload;
+    constructor Create(n: Integer); overload;
     function count: Integer;
     { see TPyList.at — bytearrays have no Python .get either }
     function at(i: Integer): Integer;
@@ -996,6 +1005,14 @@ function PyClassRefStr(const v: Variant): AnsiString;
   in the interface — ir.inc calls it by name. }
 function pyraise_check(const v: Variant): Variant;
 function pyvar_eqv(a, b: Pointer; neq: Int64): Int64;
+{ ...and the IDENTITY twin, same 0/1/2 protocol. `is` lowers to the same tkEq
+  node `==` does and is told apart only by PY_BINOP_IDENTITY, so it cannot share
+  pyvar_eqv — content equality is exactly what `is` must not do. This one claims
+  ONLY a pair of plain functions and declines everything else, leaving the
+  existing pointer compare in place for every other type.
+  Must stay in the interface — ir.inc calls it by name.
+  bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function }
+function pyvar_isv(a, b: Pointer; neg: Int64): Int64;
 function pyvar_repr(const v: Variant): AnsiString;
 { The message text for `raise SomeError(x)` where x is NOT a string. Every
   builtin exception below KeyError takes `const m: AnsiString`, so a bare
@@ -1075,7 +1092,19 @@ function pyformat_v(const v: Variant; const spec: AnsiString): AnsiString;
   recognised by the frontend: neither name is a Pascal keyword, so both
   resolve through the normal call path with no parser hook. (`set()` needed a
   hook only because `set` IS a keyword.) }
-function bytearray: TPyBytes; overload;   { bytearray() — an EMPTY buffer }
+{ Stamp an existing TPyBytes as a bytearray rather than a bytes — the twin of
+  pylist_mark_list, and for the same reason: the empty `bytearray()` is built by
+  the ordinary literal path and needs the flag afterwards.
+
+  It replaces `function bytearray: TPyBytes; overload;`, which had to go. This
+  dialect lets a parameterless function be called by its BARE NAME, so that
+  overload made the bare word `bytearray` a complete call and
+  `bytearray.append(self, x)` — how a subclass of a builtin reaches the base it
+  just overrode — parsed as `bytearray().append(self, x)`. Same defect that
+  landed and was reverted for list/tuple/bytes on 2026-08-27; bytearray was the
+  original, and had carried it for as long as the overload existed.
+  bug-n-bytearrays-zero-argument-overload-makes-the-bare-name-a-call }
+function pybytes_mark_bytearray(b: TPyBytes): TPyBytes;
 function bytearray(n: Integer): TPyBytes; overload;
 { bytearray(b"abc") — a COPY of a bytes/bytearray, never an alias. The point of
   the call is almost always to get a MUTABLE copy of an immutable bytes, so
@@ -1507,6 +1536,15 @@ function pypow_cx(b: Double; e: Double): Variant;
 { Iterating one yields a CURSOR — a fresh one each time, which is what makes a
   range re-iterable where a cursor is not. }
 function pyiter_of_range(r: TPyRange): TPyIter;
+{ Iterating BYTES yields its bytes as INTs. pyiter_v has had this arm since
+  bytes existed; PyMakeIterOf -- the frontend's "wrap any iterable in a cursor"
+  normaliser -- did not, and swallowed a TPyBytes into its generic tyClass arm
+  (pyiter_of_list), which reads a byte buffer as a list header. That is why
+  `zip(b"ab", "xy")` and `enumerate(b"ab")` yielded empties while `for`,
+  `list()`, `sum()` and `in` over the same object were all correct: those go
+  through pyiter_v and this one did not exist for the frontend to call.
+  bug-n-a-static-star-operand-over-a-non-list-iterable-passes-nothing }
+function pyiter_of_bytes(b: TPyBytes): TPyIter;
 function pyrange_is(const v: Variant): Boolean;
 { `len(map(...))` — CPython's TypeError, word for word. A FUNCTION returning
   Int64 so it can stand in for the whole len() expression at the call site, the
@@ -1943,15 +1981,6 @@ function min(const v: Variant): Variant; overload;
 { `list(x)` — a shallow COPY, as Python's list() constructor makes. Overloads
   rather than one variant-taking function so the ordinary call path resolves
   them by argument type, like min/max (feature-nilpy-missing-builtins). }
-{ `list()` / `tuple()` / `bytes()` — the ZERO-ARGUMENT form, which Python
-  defines as that type's zero value. `bytearray` (above) has had its zero-arg
-  overload all along and is the reason it was the only one of the four that
-  compiled; its three siblings fell out of overload resolution with "no overload
-  of list matches these arguments".
-  bug-n-the-zero-argument-form-of-a-builtin-type-constructor-is-rejected }
-function list: TPyList; overload;
-function tuple: TPyList; overload;
-function bytes: TPyBytes; overload;
 function list(l: TPyList): TPyList;
 function list(const s: AnsiString): TPyList; overload;
 function list(const v: Variant): TPyList; overload;
@@ -4575,6 +4604,18 @@ begin
     { ...then a @property, CALLED, since it has no storage of its own }
     Result := PyPropertyGet(obj, name, declFound);
     if declFound then Exit;
+    { `obj.__class__` — the runtime twin of PyMakeClassRefOf, kept on BOTH
+      getters so the two agree. The compile-time route claims this name for a
+      statically class-typed receiver, so what arrives here is the residue: a
+      receiver typed as a class through a path that reaches the dynamic getter
+      instead. Same VT_CLASSREF, same blob, no retain (static data).
+      bug-n-self-class-cannot-be-called-as-a-constructor }
+    if name = '__class__' then
+    begin
+      PPyVarRec(@Result)^.VType := 11;
+      PPyVarRec(@Result)^.Payload := Int64(NativeInt(GetInstanceRTTI(obj)));
+      Exit;
+    end;
     { ...and LAST, the class's own __getattr__, which is defined precisely to
       answer for names that are not there. CPython's order is instance dict,
       class, then this. bug-nilpy-getattr-dunder-not-supported }
@@ -4650,6 +4691,23 @@ begin
       The RTTI Code address is safe to bind because a method whose name is read
       as a value is normalised to the all-variant function ABI by the frontend
       (PyMethodUsedAsValue), which keys on exactly this spelling. }
+    { `obj.__class__` where the receiver's tag is only known at RUN time — an
+      unannotated parameter, a for-loop element, a dict value. The compile-time
+      route (PyMakeClassRefOf) handles a STATICALLY class-typed receiver and
+      never reaches here; this is its runtime twin, and both hand back the same
+      VT_CLASSREF the class-as-a-value feature already defines, so `o.__class__`
+      compares, prints and CONSTRUCTS exactly like a class held in a variable.
+      One concept, two getters — the pairing this file's own comments keep
+      calling out. The blob is static data, so no retain.
+      A non-object tag (int/str/list) still raises: CPython answers a builtin
+      type object there and this frontend has no value for one.
+      bug-n-self-class-cannot-be-called-as-a-constructor }
+    if (name = '__class__') and (obj <> nil) then
+    begin
+      PPyVarRec(@Result)^.VType := 11;
+      PPyVarRec(@Result)^.Payload := Int64(NativeInt(GetInstanceRTTI(obj)));
+      Exit;
+    end;
     if obj <> nil then
     begin
       mi := PyFindMethByName(GetInstanceRTTI(obj), name);
@@ -6041,6 +6099,38 @@ begin
   if eq then Result := 2 else Result := 1;
 end;
 
+function pyvar_isv(a, b: Pointer; neg: Int64): Int64;
+var ca, ra, cb, rb: Pointer; isa, isb, eq: Boolean;
+begin
+  { `f is f` answered FALSE, and `id(f)` was a different number on every
+    evaluation. A function used as a VALUE is boxed on the heap, a fresh box per
+    evaluation, and identity compared the BOX -- so a function lost against
+    itself, against a variable holding it, and against a call that returned it.
+    CPython guarantees all three, and the sentinel pattern rests on it:
+    xml.etree.ElementTree uses a function as its own tag marker and html5lib
+    compares against it, a comparison that fails SILENTLY (comments are simply
+    never recognised) rather than raising.
+
+    A function's identity is its CODE address, which is why this claims only the
+    plain-function pair. A BOUND METHOD (recv <> nil) is deliberately declined:
+    CPython builds a fresh bound-method object per attribute read, so `a.m is
+    a.m` is False there too, and the box-per-evaluation behaviour already gives
+    that answer. Claiming it would have replaced one wrong answer with another.
+
+    Everything that is not a callable declines to 0 and the caller's own pointer
+    compare stands, so no other type's `is` moves.
+    bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function }
+  Result := 0;
+  ca := nil; ra := nil; cb := nil; rb := nil;
+  isa := PyCallablePartsP(PPyVarRec(a), ca, ra);
+  isb := PyCallablePartsP(PPyVarRec(b), cb, rb);
+  if not (isa and isb) then Exit;
+  if (ra <> nil) or (rb <> nil) then Exit;      { bound methods: see above }
+  eq := ca = cb;
+  if neg <> 0 then eq := not eq;
+  if eq then Result := 2 else Result := 1;
+end;
+
 { Does this variant hold the given pylib container? k: 1=list, 2=dict,
   3=bytes. The runtime side of variant-method dual dispatch. }
 function pyvar_holds(const v: Variant; k: Int64): Boolean;
@@ -6504,8 +6594,19 @@ begin
 end;
 
 function pyid_v(const v: Variant): Int64;
+var code, recv: Pointer;
 begin
-  pyid_v := PPyVarRec(@v)^.Payload;
+  { A plain FUNCTION identifies by its code address, not by the heap box a
+    function-as-a-value is wrapped in — the box is freshly allocated per
+    evaluation, so `id(f) == id(f)` was False and CPython guarantees it True.
+    A bound method keeps the box: CPython rebuilds one per attribute read, so an
+    unstable id is the correct answer there.
+    bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function }
+  code := nil; recv := nil;
+  if PyCallablePartsP(PPyVarRec(@v), code, recv) and (recv = nil) then
+    pyid_v := Int64(NativeInt(code))
+  else
+    pyid_v := PPyVarRec(@v)^.Payload;
 end;
 
 function pyascii_v(const v: Variant): AnsiString;
@@ -9922,6 +10023,11 @@ begin
   raise IndexError.Create('bytearray index out of range');
 end;
 
+constructor TPyBytes.Create;
+begin
+  Create(0);
+end;
+
 constructor TPyBytes.Create(n: Integer);
 var k: Integer; p: PByte;
 begin
@@ -10195,10 +10301,10 @@ begin
   if k < FLen then BadInput('utf-32', k);
 end;
 
-function bytearray: TPyBytes; overload;
+function pybytes_mark_bytearray(b: TPyBytes): TPyBytes;
 begin
-  Result := TPyBytes.Create(0);
-  Result.FIsByteArray := True;
+  Result := b;
+  if b <> nil then b.FIsByteArray := True;
 end;
 
 function bytearray(n: Integer): TPyBytes; overload;
@@ -13834,6 +13940,20 @@ begin
   Result.FPos := Integer(pyrange_len(r));
 end;
 
+function pyiter_of_bytes(b: TPyBytes): TPyIter;
+begin
+  { Exactly pyiter_v's own bytes arm, given a name so the frontend can reach
+    it: list(b) materialises the byte VALUES as ints, and the cursor walks
+    those. Not pyiter_of_list(b) -- a TPyBytes is not a TPyList and reading
+    one as the other is the whole bug. }
+  if b = nil then
+  begin
+    pyiter_of_bytes := pyiter_of_list(TPyList.Create);
+    Exit;
+  end;
+  pyiter_of_bytes := pyiter_of_list(list(b));
+end;
+
 function pyrange_is(const v: Variant): Boolean;
 var o: TObject;
 begin
@@ -16661,26 +16781,6 @@ function HexDigitChar(v: Int64): AnsiString;
 begin
   if v < 10 then Result := Chr(Ord('0') + v)
   else Result := Chr(Ord('a') + (v - 10));
-end;
-
-function list: TPyList; overload;
-{ The zero-argument constructors. Each is its type's zero value, and each is
-  spelled as the ONE-argument body would produce from an empty input, so a
-  future change to what an empty list/tuple/bytes IS lands in one place.
-  See the declaration block for why bytearray already had this. }
-begin
-  Result := TPyList.Create;
-end;
-
-function tuple: TPyList; overload;
-begin
-  Result := TPyList.Create;
-  Result.FKind := PYSEQ_TUPLE;
-end;
-
-function bytes: TPyBytes; overload;
-begin
-  Result := TPyBytes.Create(0);
 end;
 
 function list(l: TPyList): TPyList;

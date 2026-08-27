@@ -175,3 +175,10 @@
 2026-08-27T10:48:27Z	plexus	6b59df667fe46c9d6ceabcd6f0b5d6e8e400fa68	would NOT pin 6b59df667fe4 — 1 red(s) the current pin does not have: test-emit-obj#src:test/cxtensa_obj.c@1
 2026-08-27T12:49:43Z	plexus	39d4afb022ce9a8f98f30f7a7202ccfa803b4d6f	would NOT pin 39d4afb022ce — 2 red(s) the current pin does not have, 1 inherited from the current pin: test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy, test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy
 2026-08-27T13:16:11Z	plexus	62a4242203a308e0cb9c46893976c45c29afcc7c	would NOT pin 62a4242203a3 — 2 red(s) the current pin does not have, 1 inherited from the current pin: test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy, test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy
+2026-08-27T15:14:25Z	plexus	8787cfe4235a9f6f869e8b365586bc1fce8c4a54	would NOT pin 8787cfe4235a — 1 red(s) the current pin does not have, 3 inherited from the current pin: tools-devtest#00
+2026-08-27T15:45:35Z	plexus	652c3d891e861df9437edf4a0acb306931b82075	would NOT pin 652c3d891e86 — 1 red(s) the current pin does not have, 1 inherited from the current pin: tools-devtest#00
+2026-08-27T17:17:36Z	plexus	a721ad7e5c58987ff7ae7c55c4c933e6484eddb5	would-pin PENDING a721ad7e5c58 — qualifies, streak 1/2
+2026-08-27T17:44:18Z	plexus	186a4a5cb8a5cd5332d2bf3f1f56e4946d4cb3c9	WOULD PIN 186a4a5cb8a5 — 2 red(s), none new, 2 inherited from the current pin, self-host clean, streak 2/2
+2026-08-27T19:35:32Z	plexus	71b410a349b669eb914dca2aebc6e1b19d6c2f2f	WOULD PIN 71b410a349b6 — 2 red(s), none new, 2 inherited from the current pin, self-host clean, streak 3/2
+2026-08-27T20:09:39Z	plexus	8b2cc332791e5da7618f123cfb05f87b12bd13f3	WOULD PIN 8b2cc332791e — 2 red(s), none new, 2 inherited from the current pin, self-host clean, streak 4/2
+2026-08-27T20:46:27Z	plexus	b898d0543fc8499facc66706257ff08d39195520	would NOT pin b898d0543fc8 — 2 red(s) the current pin does not have, 2 inherited from the current pin: test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy, test-nilpy#src:test/test_nilpy_startswith_tuple.npy

@@ -5,18 +5,16 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:23 blocked:7 backlog:266 backlog_new:2 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2501 rejected:45`
+`working:1 unfinished:21 blocked:8 backlog:265 backlog_new:2 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2525 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-target-wasm` [A+B] — owner: frankwasm
 
-## unfinished (23) — parked mid-flight; re-claim, do not duplicate
+## unfinished (21) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
-- `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N]
-- `bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `docs-devnotes-ai-assisted-build` [D]
@@ -37,8 +35,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-threadsafe-heap-optimize` [A]
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
-## blocked (7) — has an unmet blocker; do not claim
+## blocked (8) — has an unmet blocker; do not claim
 
+- `bug-b-nilpy-random-is-never-seeded-and-its-first-draw-is-the-low-bound` [N] — blocked-by: decide-does-nilpy-random-seed-itself-at-import
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
 - `bug-n-a-subpackage-directory-does-not-resolve-as-a-module` [N] — blocked-by: bug-a-a-python-module-s-identity-is-its-name-not-its-file
 - `bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module` [N] — blocked-by: decide-how-a-compiled-def-carries-its-signature-when-boxed
@@ -47,7 +46,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 279, ranked
+## Ready — top 30 of 276, ranked
 
 - `[p 85] [O]` feature-opt-o3-register-pressure
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
@@ -55,18 +54,16 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 72] [N]` feature-nilpy-stdlib-coverage-gaps-measured
 - `[p 72] [B]` feature-typinfo-facade-unit
-- `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
-- `[p 70] [N]` bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
 - `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - `[p 70] [N]` feature-nilpy-staticmethod-and-classmethod
 - `[p 70] [P]` feature-p-delphi-string-helpers
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 70] [C]` regression-test-emit-obj-cxtensa-obj
-- `[p 70] [N]` regression-test-nilpy-test-nilpy-star-operand-in-a-variant
-- `[p 70] [N]` regression-test-nilpy-test-nilpy-variant-operand-arith-dunders
+- `[p 70] [N]` regression-test-nilpy-test-nilpy-parent-call-after-instantiation
+- `[p 70] [N]` regression-test-nilpy-test-nilpy-startswith-tuple
+- `[p 70] [N]` regression-tools-devtest-00-2
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
-- `[p 65] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 65] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - `[p 65] [B]` feature-b-text-file-surface-seekeof-rename-settextbuf
@@ -76,8 +73,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [O]` feature-opt-bulk-copy-is-byte-at-a-time
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
-- `[p 62] [N]` bug-n-a-field-declared-in-an-ancestor-is-not-widened-by-a-descendants-rebind
-- `[p 62] [N]` bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name
-- `[p 62] [N]` bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name
+- `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
+- `[p 62] [A]` feature-a-typeref-migrate-consumers
+- `[p 62] [B]` feature-b-the-module-shim-batch-blocking-the-python-corpus
+- `[p 62] [N]` feature-nilpy-enum-class
+- `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
 
-_249 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_246 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -8,19 +8,25 @@ prio: 85
   file-ownership **Track A** — edits the shared `ir_codegen.inc` / `symtab.inc` /
   backends, so it obeys A's no-concurrent-edit rule + self-host gate) — umbrella
   for the next optimization campaign.
-- **Status:** UNFINISHED (parked 2026-08-26) — five more slices landed green at
-  `-O3` (see the 2026-08-26 log at the bottom: **1.29x on the self-compile**,
-  gap to fpc 4.06x -> 3.24x). Nothing is half-applied; every commit passed the
-  `-O3` self-host fixedpoint and `gate.sh quick`. Parked because the umbrella's
-  core — W2, a real register allocator — is a multi-session project, and the
-  measurements plus the next slice are now banked below.
-  **Two things wait on someone else:** the `-O2` promotion of the four `-O3`
-  passes (coordinator's call — that is where most of the 1.29x still sits), and
-  Track T's sweep of `e7c0d1d2a`.
-  New passes still land behind **`-O3`** (see gating); `-O2` stays the proven
-  default and the stable fallback.
+- **Status:** UNFINISHED — released 2026-08-27 by frankA and handed to the
+  dedicated optimization checkout (`~/frank-optimize`), because Track O is
+  implicitly Track A and two agents in `ir_codegen.inc` at once is the hazard the
+  track letters exist to prevent. Nothing is half-applied; every commit passed
+  the self-host fixedpoint and `gate.sh quick`.
+  **Read the two 2026-08-27 sections at the bottom before the older ones — they
+  supersede two claims the older text still makes:**
+  1. The `-O2` promotion is **DONE** (`13d4bba0c`, `e4fe576eb`, `7767acc60`), and
+     it is worth **1.04x, not the 1.29x** quoted below. That figure compared base
+     `-O2` against new `-O3` and its baseline no longer exists. **A banked
+     speedup decays as the tree moves underneath it** — do not re-quote a number
+     from this ticket without rebuilding its baseline.
+  2. **W1 now ranks ahead of W2.** Both of W2's cheap experiments came back empty;
+     the gap on the hot loops is the operand model, not allocation.
+  **Next slice = W1** (emit-time operand scheduler), and it must be justified on
+  a *dynamic* profile — the static sweep understates it badly.
+  New passes still land behind **`-O3`**; `-O2` stays the proven default.
 - **Opened:** 2026-07-10 (post -O2-default flip, [[feature-optimization-levels]]).
-- **Owner:** — (agent-O-regalloc released it 2026-08-26)
+- **Owner:** — (frankA released it 2026-08-27; O moves to `~/frank-optimize`)
 
 ## Why — the measured opportunity
 
@@ -575,3 +581,241 @@ a reload is redundant — the file says "MUST MOVE TOGETHER" and it means it.
 Each new arm was checked against the mirror: all of them evaluate the same node
 first as the arm they preempt (const-right -> left first), so the mirrors did
 not need to change. The next arm might not be so lucky.
+
+## 2026-08-27 (frankA) — next-slice item 1: both cheap experiments are NO-OPS, and the premise is wrong
+
+Dispatched to work item 1 only ("the three-local loop is still 3x off fpc …
+what remains is exactly W2"), running the two experiments the slice says to run
+before building anything bigger. **Both are no-ops, the third is near-moot, and
+the measurement does not support the premise: what remains on these loops is
+W1, not W2.** Nothing was built beyond the instrument.
+
+### The instrument — this time it is COMMITTED
+
+`bench-o/` was scratch and had to be re-created, as the slice warned. The half
+that is worth keeping is now a probe rather than a directory:
+
+**`PXXDBG=a.resid`** (`UnifiedResidencyAssign`, committed) prints one `TALLY`
+line per residency candidate — proc, sym, loop-access count, type, kind, whether
+it escapes, and how many GPRs were free — and one `ASSIGN` line per pick. It
+exists because *the eligibility thresholds are invisible in the emitted bytes*: a
+local that just missed the cut and one that was never a candidate emit identical
+frame traffic, so a disassembly cannot tell you which knob to turn. Reading the
+counts is what made both experiments below cheap, and items 2 and 3 of this slice
+will want it too.
+
+The timing half stays scratch (three lines of shell): A/B alternating,
+`%U` user time, reported as **min of 5** — the box was running Track T's watcher
+at load 13 throughout.
+
+**Every number below came from a self-hosted `make compiler/pascal26` fixedpoint
+build at this commit, binary sha256 `0b134438899d`.** Two benchmarks, both
+`LongInt`/`Int64` (FPC's default mode makes `Integer` 16-bit — the first draft
+silently measured a range-check-folded no-op):
+
+- `three.pas` — three locals: `i` (for counter), `j` (temp), `s` (accumulator).
+- `many.pas` — six candidates, three free registers: genuine pressure.
+
+Both agree with `fpc -O2` on output at every level tested.
+
+### (a) Lower the eligibility threshold — **no effect**
+
+`three.pas`, min of 5, user seconds:
+
+| threshold | `j` gets a register? | pxx `-O3` | `fpc -O2` |
+| --- | --- | --- | --- |
+| `> 3` (shipped) | no | 0.79 | 0.34 |
+| `> 2` | no | 0.77 | |
+| `> 1` | **yes, r15** | 0.78 | |
+| `> 0` | yes, r15 | 0.80 | |
+
+`many.pas`, where the pool actually runs out: `> 3` → 0.16, `> 1` → 0.17,
+`fpc -O2` → 0.05.
+
+The probe confirms the change *lands* — at `> 1`, `j` (count 2) is assigned r15
+next to `s` (5, r12) and `i` (4, r13). It buys nothing, at either threshold, on
+either shape.
+
+**Why, and this is the part worth keeping:** residency removes **loads, not
+stores** — `EmitStoreVar` dual-writes the frame slot *and* the register, because
+the slot stays authoritative. A local with roughly one load and one store per
+iteration therefore trades one removed memory read for one added register move
+and nets ~zero. `j` is exactly that local. The existing comment's rationale
+("plain L1 reloads measured as free — the regcall phase-2 rejection") is
+confirmed rather than overturned, so the threshold stays at `> 3`.
+
+The corollary is a better ranking metric for whenever W2 does get built: rank by
+**loads**, not by loads+stores. A store-heavy resident is close to free; a
+load-heavy one is the whole payoff.
+
+### (b) Use all four free callee-saved registers — **already landed; the slice is stale**
+
+`UnifiedResidencyAssign` already builds its pool as **r12..r15 minus whatever
+regcall param residency claimed**, and the probe reports `freegpr=2..4` per body.
+The "rather than two" in item 1 describes the pre-unified pass and was overtaken
+by the unified-residency work itself. No change; the item is struck.
+
+### (c) A `for` counter should be resident unconditionally — **near-moot**
+
+A `for` counter tallies **4** loop accesses on its own (entry test, bottom test,
+increment load, increment store), so it clears `> 3` unaided in the common case —
+in `three.pas` it takes r13 with count 4. It loses only when hotter locals
+exhaust the pool: in `many.pas`, `i` (4) is beaten by `a`/`b`/`c` (6 each) and
+spends the loop in the frame. But forcing it in means **evicting** one of those,
+and (a) says the marginal register is worth ~0 there. Not implemented: it would
+be policy churn with no measurable payoff behind it.
+
+### What the gap actually is — read off the disassembly
+
+`Run`'s loop body in `three.pas` at `-O3` is **21 instructions** on the common
+path. The waste is not allocation:
+
+| pattern | instances per iteration |
+| --- | --- |
+| `mov %rN,%rax` — operand staged through rax before every use | 5 |
+| `mov %rax,%r12` immediately followed by `mov %r12,%rax` | 1 (pure round trip) |
+| resident dual-write (`mov %rax,-0x20(%rbp)` + `mov %rax,%r12`) | 2 |
+| `j` stored then reloaded from the same slot | 1 |
+| for-limit temp reloaded from the frame | 1 |
+
+Every one of those is the **single-accumulator operand model** — that is W1's
+subject (the emit-time operand scheduler), not W2's. The register allocator
+cannot help a body that moves each value into rax before touching it.
+
+Two things that look like levers and are not, both measured:
+
+- Making the limit a **constant** (no limit temp at all) made `three.pas`
+  *slower*, 0.87 vs 0.79. Do not chase the limit temp on its own.
+- Across the whole `-O3`-built compiler these patterns are individually small.
+  Approximate linear decode of the 9.1 MB text segment, 1.93M instructions
+  (approximate because a pxx binary carries no section headers, so the sweep
+  decodes data as code in places — read the magnitudes, not the digits):
+  dead rax round trip **0.29%**, store-then-reload-same-slot **0.16%**, resident
+  dual-write **0.03%**, operand funnel `mov %rN,%rax` **1.21%**.
+
+### Verdict — do NOT start W2 on this evidence
+
+Item 1 asserts "what remains is exactly W2". On the measurement it is not. Both
+cheap experiments the slice itself proposed as the gate on that assertion came
+back empty, and the third is moot. The remaining gap on both loop shapes is the
+operand model, so **W1 (emit-time operand scheduler) should rank ahead of W2**,
+and W2's own ranking metric should be loads rather than accesses when it is
+built.
+
+Banked and handed back to the coordinator rather than starting W1 unilaterally —
+the dispatch was item 1 only. `-O2` promotion untouched (coordinator's call); no
+pin taken.
+
+Gate: `make compiler/pascal26` fixedpoint (converged, `0b134438899d`) +
+`tools/gate.sh quick` GREEN. The commit adds the probe only; no pass changed
+behaviour, so `-O0/-O1/-O2/-O3` output is unchanged by construction.
+
+## 2026-08-27 (frankA) — the `-O2` promotion landed, and its payoff is **1.04x, not 1.29x**
+
+Coordinator's call, three passes, one commit each. All three landed green. But
+the number that justified doing this ahead of W1 does not survive being
+re-measured, so the record below leads with that.
+
+### What landed
+
+| commit | pass | guards moved |
+| --- | --- | --- |
+| `13d4bba0c` | div/mod by a constant power of two → shifts/masks | the strength reduction + both zero-check elisions (tkDiv, tkMod) |
+| `e4fe576eb` | narrowing ordinal cast → one `movsx`/`movzx` | one (`NarrowCastFold`'s guard) |
+| `7767acc60` | cmp-immediate, **both** the branch and value-producing forms | two — they move together, because a short-circuit `and`/`or` lowers each operand to a value, so promoting only the branch form leaves the larger half behind |
+
+Gate constants only; no pass logic changed. Every other `OptLevel >= 3` guard in
+`ir_codegen.inc` stays put — float-tree fusion (`FloatTreeFits`), the W1 scratch
+arms (`ScratchSafeSubtree` / `CsScratchOn`), and `skipLastArg` are **not** part
+of this set and were checked individually rather than swept by pattern.
+
+**`e7c0d1d2a` is deliberately NOT promoted, and this is the fourth pass a future
+reader will count and miss.** It fixes the residency refresh so it reads `rax`
+rather than the slot it just wrote — and the residency mechanism it repairs is
+itself gated `OptLevel >= 3` and does not exist at `-O2`. Promoting it would
+change no emitted byte at `-O2`: a no-op wearing the costume of a change. It
+stays at `-O3` where it does work.
+
+### Correctness — per pass, differentials re-run after each promotion
+
+Each pass got a checksummed two-oracle differential: `-O0/-O1/-O2/-O3` must agree
+with each other **and** with `fpc -O2`, run once **before** the promotion as a
+control and again after, with the earlier passes' differentials re-run each time.
+Each also confirmed the `-O2` **binary actually changed** — agreement from a pass
+that silently failed to fire is worth nothing, and that check is cheap.
+
+- **div/mod:** every power of two through 2^62 and non-powers (10, 3, 7, 100) for
+  the zero-check arm, over Int64/LongInt/Cardinal/QWord, dense −300k..300k across
+  zero where the sign bias lives, a 40k-point sparse sweep of the full Int64
+  range, and the type extremes.
+- **narrowing:** every width and signedness, dense −70k..70k plus a 60k-point
+  sparse sweep, every width boundary by hand, the hand-written idioms the fold is
+  value-identical to, and **four near-misses that must not fold** (partial mask
+  `$FE`, 9-bit `$1FF`, mask+xor with no subtract, subtract off by one).
+- **cmp-imm:** the imm32 sign-extension boundaries are the whole point — 0, ±1,
+  127, −128, imm32 max/min, one past each, 4294967295, 4294967296, the Int64
+  extremes — against Int64/LongInt/QWord/Cardinal, six operators, both the branch
+  and the value form, plus two short-circuit shapes that exist only in the value
+  form.
+
+Self-host fixedpoint after every commit, **converging in 2 rounds rather than 1**
+— which is the expected signature here, because the compiler now compiles itself
+differently — and `gate.sh quick` GREEN after each.
+
+One case is **excluded and filed rather than papered over**: `QWord div` by a
+LITERAL ≥ 2^63 returns a wrong value at `-O0` too, so it is not ours —
+[[bug-p-qword-div-by-a-literal-above-2-63-is-signed]]. The sweep divides by the
+same value through a variable, which is correct.
+
+### The payoff, measured properly — **1.04x, and the 1.29x was never this**
+
+Method, because the answer depends on it: the baseline must be a compiler whose
+**own code** was emitted with the passes off. Built by seeding `552af4dcb`'s
+sources from the pinned binary and iterating to a fixedpoint — landing on
+`0b134438899d`, byte-identical to the probe-only build measured earlier, which is
+what confirms the baseline is genuine. Then A/B alternating, `%U`, min of N.
+
+| workload | pre-promotion `-O2` | post `-O2` | `-O3`-built |
+| --- | --- | --- | --- |
+| compile `empty.npy` (min of 15) | 2.27 s | **2.19 s** | 2.19 s (min of 9) |
+| self-compile `compiler.pas` (min of 3) | 18.31 s | **17.95 s** | — |
+
+**The three promoted passes are worth ~1.04x**, reproduced twice (2.35→2.26 and
+2.27→2.19). The entire remaining `-O3` set is worth about another 1.03x on top.
+
+The `1.29x` in the section above is **not** what this promotion could ever have
+delivered, and reading it as such is the mistake to avoid repeating:
+
+1. It compared base **`-O2`** against new **`-O3`**, so it always included the
+   `-O3`-only passes that are not in the promotable set.
+2. Its baseline no longer exists. That row measured 3.65 s for `empty.npy`; the
+   same workload is 2.27 s today on the *pre-promotion* binary. Work that landed
+   afterwards — `13e196cc8`, emitting the variant clear/retain blobs once instead
+   of at 10,707 call sites — had already captured most of that headroom. **A
+   banked speedup decays as the tree moves underneath it**, and a figure quoted
+   from a ticket months later is a claim about a binary nobody still has.
+
+Not an argument against having promoted them: 1.04x on every compile on every
+track, for a change that alters no pass logic and is backed by tens of millions
+of differential cases, is a good trade. It **is** an argument against the
+priority reasoning that ranked it above W1 on the strength of a stale number.
+
+### Re-ranking: **W1 before W2**
+
+On the evidence in the section above this one, the workstream order at the top of
+this ticket is wrong and is superseded:
+
+- **W1 (emit-time operand scheduler) is now the keystone.** Both of W2's cheap
+  experiments came back empty, and the disassembly puts 5 of 21 instructions on
+  the hot loop's common path in the rax funnel alone. W1 attacks that directly.
+- **W2 (linear-scan allocator) drops behind it**, and when it is built its
+  ranking metric should be **loads, not loads+stores** — `EmitStoreVar`
+  dual-writes, so residency removes reads and not writes, and a store-heavy
+  resident is close to free while a load-heavy one is the entire payoff.
+
+A caution for whoever picks W1 up, from this session's own numbers: the static
+text-segment sweep put the operand-funnel family at ~1.2% of the binary while the
+hot loop shows 24% on its common path. Those are not in conflict — a static count
+weights cold code equally — but it does mean **W1 must be justified on a dynamic
+profile, not a static one**, and its win will land on hot loops rather than on
+overall code size.

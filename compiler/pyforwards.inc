@@ -60,6 +60,8 @@ function PyParseInputCall: Integer; forward;  { `input([prompt])` -> pyinput / p
 function PyParseFormatCall: Integer; forward; { `format(v[, spec])` -> pyformat_v, one builder for both intercepts (pyparser.inc) }
 function PyParsePrint: Integer; forward;      { `print(...)`; a STATEMENT node — expression use wraps it in AN_COMMA (pyparser.inc) }
 function PyIsClassNameChainAhead: Boolean; forward;   { CurTok begins `__class__ . __name__` (pyparser.inc) }
+function PyIsBareClassRefAhead: Boolean; forward;     { CurTok is a bare `__class__` (pyparser.inc) }
+function PyMakeClassRefOf(node: Integer): Integer; forward;  { x.__class__ as a VT_CLASSREF (pyparser.inc) }
 function PyMakeClassNameOf(node: Integer): Integer; forward;   { ...consume it and answer pytype_name_v(node) (pyparser.inc) }
 function PyMethNameFor(ci: Integer; const mname: AnsiString): AnsiString; forward;  { the name to look up on this class for a Python method spelling — pylib's alias when the class does not declare it as written (pyparser.inc) }
 function PyForceVariant(node: Integer): Integer; forward;  { box a value into a variant (pyparser.inc) }
@@ -140,6 +142,7 @@ function PyIsSliceBase(n: Integer): Boolean; forward;
 function PySliceBracketAt(i: Integer): Boolean; forward; { Nil Python: is the bracket group at i a SLICE? (pyparser.inc) }
 function PyParseSliceTail(baseNode, loNode: Integer): Integer; forward; { Nil Python x[a:b], from the ':' (pyparser.inc) }
 function PyIterArgAsList(n: Integer): Integer; forward; { Nil Python: explode a str arg to an iterable builtin (pyparser.inc) }
+function PyShellForDefTok(const nm: AnsiString; tok: Integer): Integer; forward; { Nil Python: the def-shell registered at this `def` token (pyparser.inc) }
 function PyIsIntBaseTk(tk: TTypeKind): Boolean; forward; { Nil Python: is this an int base for .to_bytes? (pyparser.inc) }
 function PyParseToBytes(baseNode: Integer): Integer; forward; { Nil Python <int>.to_bytes(...) intrinsic (pyparser.inc) }
 function PyParseIntMethod(baseNode: Integer; const nm: AnsiString): Integer; forward; { Nil Python intercepted int method (pyparser.inc) }

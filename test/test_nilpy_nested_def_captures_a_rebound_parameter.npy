@@ -1,0 +1,110 @@
+# A nested def capturing a parameter that the enclosing body REBINDS.
+#
+# bug-n-a-nested-def-capturing-a-rebound-parameter-uses-the-parameters-type
+#
+# Rebinding a parameter makes it an ordinary local from that point on, so the
+# lowering gives it a private slot seeded from the incoming argument. A nested
+# def capturing the name must capture THAT slot, not the parameter.
+#
+# It did not, and the boundary is what named the cause: capturing a plain local
+# of any type worked, and capturing a rebound UNTYPED parameter worked, while
+# capturing a rebound TYPED one failed —
+#
+#     def o(x: int):
+#         x /= 2
+#         def inner():
+#             return x + 1
+#         return inner()
+#
+#     -> pascal26:5: error: invalid IR node reference in store_sym
+#
+# and the string spelling compiled and then raised a TypeError at run time.
+#
+# The two private slots are created at different times. An untyped (variant)
+# parameter's slot is allocated BEFORE the locals pre-pass; a typed one is
+# allocated AFTER it, because it needs the constraint table to know its type.
+# So on the trial parse the captured name still resolved to the Int64
+# PARAMETER, the nested def was registered with an Int64 capture parameter, and
+# the re-run that follows the slot's creation found the proc already registered
+# and recomputed nothing. The call site then passed a variant slot into an
+# Int64 parameter.
+#
+# The fix re-applies the capture's type on that re-run, beside the by-ref
+# decision that was already re-applied there for the very same reason.
+
+def o(x: int):
+    x /= 2
+    def inner():
+        return x + 1
+    return inner()
+
+print(o(5))
+
+# the same shape rebinding to a completely unrelated type
+def ostr(x: int):
+    x = "s"
+    def inner():
+        return x + "t"
+    return inner()
+
+print(ostr(5))
+
+# CONTROL: a rebound UNTYPED parameter, which worked all along
+def vparam(x):
+    x /= 2
+    def inner():
+        return x + 1
+    return inner()
+
+print(vparam(4))
+
+# CONTROL: a plain local, which worked all along
+def plainlocal():
+    y = 5
+    y /= 2
+    def inner():
+        return y + 1
+    return inner()
+
+print(plainlocal())
+
+# a `nonlocal` WRITE through the captured slot. This one failed on v387 too,
+# for the same reason arriving through the by-ref arm, and is why the re-apply
+# is not restricted to by-value captures.
+def nl(x: int):
+    x /= 2
+    def bump():
+        nonlocal x
+        x = x + 10
+    bump()
+    return x
+
+print(nl(5))
+
+# the same shape inside a METHOD
+class M:
+    def run(self, x: int):
+        x /= 2
+        def inner():
+            return x * 2
+        return inner()
+
+print(M().run(7))
+
+# ...and captured by a LAMBDA rather than a nested def
+def lam(x: int):
+    x /= 2
+    f = lambda: x + 100
+    return f()
+
+print(lam(9))
+
+# two rebound typed parameters captured at once, of different types
+def two(a: int, b: int):
+    a /= 2
+    b = "z"
+    def inner():
+        return str(a) + b
+    return inner()
+
+print(two(6, 0))

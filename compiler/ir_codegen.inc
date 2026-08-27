@@ -5759,14 +5759,14 @@ begin
           Exit;
         end;
 
-        { -O3 cmp-immediate, value-producing form. The branch form is folded in
+        { -O2 cmp-immediate, value-producing form. The branch form is folded in
           IREmitMachineCode's IR_JUMP_IF_FALSE arm; this is the same fold for a
           comparison whose result is a VALUE — which is where a short-circuit
           `and`/`or` puts every operand, so `if (c >= 'A') and (c <= 'Z')` paid
           `mov rcx, imm32` twice per character with the branch fold alone.
           CmpFusible is the shared predicate: it is exactly the set that lowers
           to a bare `cmp` + setcc. }
-        if (OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) and
+        if (OptLevel >= 2) and (IRKind[right] = IR_CONST_INT) and
            (IRIVal[right] >= -2147483648) and (IRIVal[right] <= 2147483647) and
            CmpFusible(node) then
         begin
@@ -5794,10 +5794,10 @@ begin
           Exit;
         end;
 
-        { -O3 narrowing-cast fold: the three-binop, three-constant shape a
+        { -O2 narrowing-cast fold: the three-binop, three-constant shape a
           narrowing ordinal cast lowers to collapses to one movsx/movzx.
           See NarrowCastFold for the shapes and why they are value-identical. }
-        if (OptLevel >= 3) and
+        if (OptLevel >= 2) and
            (not TypeIsFloat(IntToTypeKind(IRTk[node]))) and
            NarrowCastFold(node, ncSrc, ncBytes, ncSigned) then
         begin
@@ -5823,7 +5823,7 @@ begin
           Exit;
         end;
 
-        { -O3 constant-divisor strength reduction: `x div 2^k` / `x mod 2^k`
+        { -O2 constant-divisor strength reduction: `x div 2^k` / `x mod 2^k`
           become shifts and masks instead of a ~25-40 cycle idiv preceded by a
           zero-check on a constant that is provably non-zero.
 
@@ -5845,7 +5845,7 @@ begin
           Operands arrive sign/zero-extended to the full 64-bit register (the
           same contract the idiv path relies on), so 64-bit shifts are correct
           for every narrower type and the store narrows the result as before. }
-        if (OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) and
+        if (OptLevel >= 2) and (IRKind[right] = IR_CONST_INT) and
            ((op = tkDiv) or (op = tkMod)) and
            (not TypeIsFloat(IntToTypeKind(IRTk[node]))) and
            (IntToTypeKind(IRTk[node]) <> tyAnsiString) and
@@ -6295,13 +6295,13 @@ begin
               end;
             end;
           
-          { -O3: a divisor that is a non-zero CONSTANT cannot be zero, so the
+          { -O2: a divisor that is a non-zero CONSTANT cannot be zero, so the
             two-instruction pre-divide guard is dead code at every such site
             (`div 10` in every number formatter, `div 3`, ...). The power-of-two
             case never reaches here — it was strength-reduced above. }
           tkDiv:
             begin
-              if not ((OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) and
+              if not ((OptLevel >= 2) and (IRKind[right] = IR_CONST_INT) and
                       (IRIVal[right] <> 0)) then
                 EmitDivZeroCheckX64;
               if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then
@@ -6311,7 +6311,7 @@ begin
             end;
           tkMod:
             begin
-              if not ((OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) and
+              if not ((OptLevel >= 2) and (IRKind[right] = IR_CONST_INT) and
                       (IRIVal[right] <> 0)) then
                 EmitDivZeroCheckX64;
               if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then
@@ -9164,14 +9164,14 @@ begin
               reload in the condition is redundant. }
             cLeft := IRA[condNode];
             cRight := IRB[condNode];
-            { -O3 cmp-immediate: `cmp rax, imm32` exists, so a constant right
+            { -O2 cmp-immediate: `cmp rax, imm32` exists, so a constant right
               operand needs no register at all. The `mov rcx, imm32` this
               replaces sign-extends its immediate to 64 bits exactly as opcode
               3D does, so signed and unsigned comparisons both keep their
               meaning. A compiler compares against a literal constantly -- token
               kinds, character ranges, array bounds -- and CaseEqual's inner
               loop alone paid it four times per character. }
-            cmpImmOk := (OptLevel >= 3) and (IRKind[cRight] = IR_CONST_INT) and
+            cmpImmOk := (OptLevel >= 2) and (IRKind[cRight] = IR_CONST_INT) and
                         (IRIVal[cRight] >= -2147483648) and
                         (IRIVal[cRight] <= 2147483647);
             if cmpImmOk then
@@ -9657,6 +9657,23 @@ begin
         end;
     end;
   if nsyms = 0 then Exit;
+  { PXXDBG=a.resid — the tally this pass ranks on, before any pick is made.
+    The eligibility thresholds below are the whole subject of the -O3
+    register-pressure work, and they are invisible in the emitted bytes: a
+    local that just missed the cut and one that was never a candidate emit
+    identical frame traffic. Print the counts rather than inferring them from
+    a disassembly. }
+  if PxxDbgEnabled('a.resid') then
+    for k := 0 to nsyms - 1 do
+    begin
+      si := CSyms[k];
+      Write('PXXDBG a.resid TALLY proc=', Procs[CurProc].Name,
+            ' sym=', Syms[si].Name, ' count=', Counts[k],
+            ' type=', Syms[si].TypeKind, ' kind=', Syms[si].Kind);
+      if Syms[si].IsArray then Write(' array');
+      if SymSlotEscapes(si) then Write(' escapes');
+      WriteLn(' freegpr=', nFree);
+    end;
   { Ranked selection: repeatedly take the hottest remaining eligible sym whose
     class still has a free register. Within a class the descending-count order
     fills the lowest register first (r12 before r13, xmm8 before xmm9). }
@@ -9704,6 +9721,9 @@ begin
       EmitB($F2); EmitB($44); EmitB($0F); EmitB($10);
       EmitB($85 or (fslot shl 3)); EmitI32(Syms[si].Offset);  { movsd xmm(8+fslot), [rbp+off] }
       FrResidentSym[fslot] := si;
+      if PxxDbgEnabled('a.resid') then
+        WriteLn('PXXDBG a.resid ASSIGN proc=', Procs[CurProc].Name,
+                ' sym=', Syms[si].Name, ' reg=xmm', 8 + fslot, ' count=', bestCnt);
       Inc(fslot);
       FrResidentCount := fslot;
     end
@@ -9718,6 +9738,9 @@ begin
       RcResidentSaveOff[RcResidentCount] := saveOff;
       Inc(RcResidentCount);
       Inc(islot);
+      if PxxDbgEnabled('a.resid') then
+        WriteLn('PXXDBG a.resid ASSIGN proc=', Procs[CurProc].Name,
+                ' sym=', Syms[si].Name, ' reg=r', reg, ' count=', bestCnt);
     end;
   end;
 end;

@@ -11,6 +11,20 @@ rediscovery costs a session an hour before it finds the decision.
 The rule for adding a row: it belongs here only once a `decide-*` ticket has been
 **resolved**. An unexplained disagreement is a bug ticket, not a row here.
 
+**WHY these exist at all** — worth knowing before you read a row as a compatibility
+failure. Owner, 2026-08-27: *"us being 'lax' is not intended to be incompatible.
+it is more because of the odd design goal of pxx where we intend to be
+cross-language."* Pascal is what the compiler and the RTL are written in, so it
+must be expressive enough to serve **every other frontend's runtime**. A
+restriction that is harmless in a Pascal-only world can be exactly what stops the
+RTL expressing another language's semantics. So the question a divergence answers
+is *"does this restriction serve a cross-language substrate, or is it an accident
+of Pascal's own history?"* — not *"does FPC do it?"* Full reasoning:
+`frontend-compat-philosophy.md`.
+
+Note also what the divergences are **not**: FPC-compatible code still compiles.
+These widen what is accepted; they do not reject anything FPC accepts.
+
 ---
 
 ## Shift width: `shl` / `shr` on a declared 32-bit operand

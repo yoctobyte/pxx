@@ -1,0 +1,6 @@
+# The control for test_nilpy_qualified_name_error_names_the_receiver: with no
+# qualifier in front of it, an undefined name keeps the short message. The
+# diagnostic must name a receiver only when the user actually wrote one.
+# bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name
+
+print(Foo)
