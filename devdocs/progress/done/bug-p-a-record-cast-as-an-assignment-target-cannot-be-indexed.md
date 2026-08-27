@@ -145,4 +145,4 @@ InterLocked warts and belongs in its own ticket.
 Gate: quick GREEN, self-host fixedpoint byte-identical.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit acd14fe64.
