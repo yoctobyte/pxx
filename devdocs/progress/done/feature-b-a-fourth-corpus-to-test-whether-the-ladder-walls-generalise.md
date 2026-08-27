@@ -208,4 +208,4 @@ the next step was another corpus. It did not, so it needs no follow-up corpus �
 it needs the stdlib-coverage measurement.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit b125395e2.
