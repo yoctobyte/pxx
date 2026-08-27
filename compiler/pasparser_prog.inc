@@ -551,6 +551,7 @@ var jmpPatch, i, j, wdDepth: Integer; needsPromoInt: Boolean;
     doneUses, doneDecls, hasExceptions, needsBuiltin,
     needsHeap, needsAnsiRuntime, needsDivStub, needHeapUnit, hasCoroutine, needsTextfile: Boolean;
     usesMath, needsMath: Boolean;
+    needsThreads: Boolean;
     usesTextfile: Boolean; tnm: AnsiString;
     savedUnitIdx, afterDeclTok: Integer;
     exitPi: Integer;   { PXXExitProcess — the main-body epilogue, see the end of this routine }
@@ -622,6 +623,7 @@ begin
   needsTextfile := False;
   usesMath := False;
   needsMath := False;
+  needsThreads := False;
   needsPromoInt := False;
   { Default standard surface: textfile (classic Text/Assign/Reset/WriteLn) is
     loaded by default on every non-ESP program, so `var f: Text` resolves
@@ -699,6 +701,42 @@ begin
         begin usesMath := True; Break; end;
       end;
     if usesMath then needsMath := True;
+  end;
+  { FPC's LOW-LEVEL thread API lives in the System unit, so portable sources call
+    BeginThread / EndThread / WaitForThreadTerminate / CloseThread and declare a
+    `TThreadID` with no uses line at all (their `cthreads` only picks the thread
+    MANAGER). pxx keeps them in palthreadobj — a real unit with a slot registry,
+    a mutex and TThread itself, which has no business being duplicated into
+    builtin — so this pulls the unit on demand, exactly as `math` is pulled for
+    sqrt/ln and `textfile` for Text/IOResult. A user routine of the same name
+    still shadows at the call site.
+
+    Gated on THREADSAFE, and that is not a convenience: palthread refuses
+    __pxxclone without it, so an unconditional pull would turn any program that
+    merely CONTAINS the token `BeginThread(` into a compile error about a
+    runtime it never asked for. Without threadsafe the names stay unknown, which
+    is the honest answer — a non-threadsafe build cannot start a thread.
+    compat-pascal-thread-api-surface-differs-from-fpc (the uses-clause wart it
+    left open) }
+  if ThreadSafeMode and (not NoDefaultRtl) and (not TargetIsEspClass) then
+  begin
+    for i := 0 to TokCount - 1 do
+      if (Tokens[i].Kind = tkIdent) and
+         (Tokens[i].SLen >= 9) and (Tokens[i].SLen <= 22) then
+      begin
+        tnm := GetTokenStr(i);
+        { The routines: require a following '(' for the same reason `math` does. }
+        if (CaseEqual(tnm, 'BeginThread') or CaseEqual(tnm, 'EndThread') or
+            CaseEqual(tnm, 'WaitForThreadTerminate') or
+            CaseEqual(tnm, 'CloseThread')) and
+           (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkLParen) then
+        begin needsThreads := True; Break; end;
+        { The TYPES are written bare — `var h: TThreadID` — and both names are
+          distinctive enough that a bare match cannot plausibly be anything
+          else. }
+        if CaseEqual(tnm, 'TThreadID') or CaseEqual(tnm, 'TThreadFunc') then
+        begin needsThreads := True; Break; end;
+      end;
   end;
   DetectPascalRuntimeNeeds(needsHeap, needsAnsiRuntime, needsDivStub);
   { Full builtin (Str/Val/Variant) is pulled only for AnsiString/exception
@@ -1209,6 +1247,7 @@ begin
     managed-field zero-init. }
   if needsTextfile then ParseUsesUnitAmbient('textfile');
   if needsMath then ParseUsesUnitAmbient('math');
+  if needsThreads then ParseUsesUnitAmbient('palthreadobj');
   FixupTVarRecLayout;
   DbgGlobalScopeBase := SymCount;  { -g: program globals are declared past here }
 

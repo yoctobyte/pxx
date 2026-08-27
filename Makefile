@@ -7874,6 +7874,12 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_index_getter_string26)" = "$$(printf 'h\nh\no\ne\na\nb\ny\nhello\n5 hello\nOK')"
 	./$(COMPILER) test/test_interlocked_no_uses.pas $(TESTTMP)/test_interlocked_no_uses26
 	test "$$($(TESTTMP)/test_interlocked_no_uses26)" = "$$(printf '6 6\n5 5\n5 42\n42 50\n50 99\n99 99\n101 101\n101 1001\nOK')"
+	# ...and the same wart for the LOW-LEVEL THREAD API, which FPC also declares
+	# in System: BeginThread / WaitForThreadTerminate / CloseThread / TThreadID
+	# with no uses line. palthreadobj is pulled on demand from a token scan (the
+	# `math` mechanism), gated on threadsafe. Matches FPC 3.2.2 row for row.
+	./$(COMPILER) test/test_thread_api_no_uses.pas $(TESTTMP)/test_thread_api_no_uses26
+	test "$$($(TESTTMP)/test_thread_api_no_uses26)" = "$$(printf 'a 42\nb 15\nc ok\nd 8')"
 	./$(COMPILER) -Fulib/rtl test/test_assert_raises_with_sysutils.pas $(TESTTMP)/test_assert_raises26
 	test "$$($(TESTTMP)/test_assert_raises26)" = "$$(printf 'passed\ncaught: EAssertionFailed: boom\nnomsg: EAssertionFailed: Assertion failed\nstill running\nOK')"
 	./$(COMPILER) test/test_static_array_managed_scope_exit.pas $(TESTTMP)/test_static_array_managed_scope_exit26

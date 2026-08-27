@@ -278,6 +278,7 @@ P
 probe bool-write known <<'P'
 begin writeln(1 > 0, '|', 2 < 1); end.
 P
+# filed: decide-is-real-a-double-or-fpcs-80-bit-extended (Track U)
 probe real-default known <<'P'
 begin writeln(3.14159); end.
 P
@@ -755,9 +756,16 @@ P
 # not for a longer one. This case used to compare that exact order and PASSED
 # only because pxx's Sort was case-SENSITIVE, which put 'A' before 'a' for an
 # unrelated reason; fixing Sort to be case-insensitive like FPC's exposed it.
-# Kept as a marker, with sl-sort-dups-stable-pairs below covering what IS
-# specified: the multiset and the case-insensitive ordering.
-probe sl-sort-dups known <<'P'
+# Kept as a marker, with sl-sort-dups-defined below covering what IS specified:
+# the multiset and the case-insensitive ordering.
+#
+# `bydesign`, not `known`: it was tagged `known` from the day it was written and
+# never had a ticket behind it, because there is nothing to file — the two
+# implementations are BOTH correct and the row compares something neither
+# promises. A `known` with no ticket is a lie with a cost (see the header); this
+# is the honest tag for it.
+probe sl-sort-dups bydesign \
+  'TIE ORDER AMONG CASE-EQUAL STRINGS IS UNSPECIFIED. FPC own quicksort is not stable across a run of this length (it sorts (a,A) stably but (b,a,b,A) to "A a b b"), and neither implementation promises an order for entries that compare equal. What IS specified is covered by sl-sort-dups-defined right below: the count, and a non-decreasing case-insensitive order. Permanent -- do NOT "fix" pxx to reproduce FPC tie order.' <<'P'
 uses classes; var l: TStringList; i: Integer;
 begin
   l:=TStringList.Create;
@@ -1654,12 +1662,11 @@ begin
   writeln(Format('%d|%s|%x|%u', [42, 'ab', 255, 7]));
 end.
 P
-# '%c' is a PXX EXTENSION, not a parity gap. It is not in the Delphi/FPC Format
-# spec, and FPC's behaviour on it is unspecified garbage — it re-emits the
-# PREVIOUS conversion, so '%x|%c' of [255,'q'] prints 'FF|FF' while a lone '%c'
-# prints nothing at all. pxx prints the character, as C's printf does. Kept as a
-# [known] case so the divergence stays visible and cannot be "fixed" by accident.
-probe format-pct-c-extension known <<'P'
+# `bydesign`, not `known`: the note below IS the decision, and it had been
+# carrying a `known` tag with no ticket behind it — which the header calls a lie
+# with a cost. Retagged 2026-08-27; nothing about the behaviour changed.
+probe format-pct-c-extension bydesign \
+  "'%c' is a PXX EXTENSION, not a parity gap. It is not in the Delphi/FPC Format spec, and FPC's behaviour on it is unspecified garbage -- it re-emits the PREVIOUS conversion, so '%x|%c' of [255,'q'] prints 'FF|FF' while a lone '%c' prints nothing at all. pxx prints the character, as C's printf does. Permanent -- do NOT \"fix\" it to match FPC's garbage." <<'P'
 uses SysUtils;
 begin
   writeln(Format('%x|%c', [255, 'q']));
@@ -2171,17 +2178,15 @@ begin
   t.Free;
 end.
 P
-# [known] BeginThread / TThreadID do not exist in the RTL
-# (compat-pascal-thread-api-surface-differs-from-fpc).
-# [known], but the REASON changed 2026-08-09: BeginThread / EndThread /
-# TThreadID / WaitForThreadTerminate / CloseThread now exist and match FPC
+# Untagged 2026-08-27. The API arrived 2026-08-09
 # (compat-pascal-thread-api-surface-differs-from-fpc, verified on x86-64, i386,
-# arm32 and aarch64). What is left is the uses-clause wart — FPC has them in
-# `system`, pxx needs an explicit `uses palthreadobj`, exactly like
-# bug-a-interlocked-family-needs-a-uses-clause-unlike-fpc. Adding palthreadobj
-# to the {$ELSE} arm below would make it pass and would hide that wart, so the
-# probe deliberately keeps FPC's own uses line.
-probe thread-beginthread known <<'P'
+# arm32 and aarch64) and the uses-clause wart it left open is gone too:
+# palthreadobj is pulled on demand from a token scan the way `math` is, so the
+# FPC spelling below — FPC's own uses line, naming no thread unit — compiles
+# as written (bug-p-the-fpc-low-level-thread-api-needs-a-uses-clause).
+# Keeping FPC's uses line is still deliberate: adding palthreadobj to the
+# {$ELSE} arm would hide exactly what this row now proves.
+probe thread-beginthread <<'P'
 {$threadsafe on}
 uses {$IFDEF FPC} cthreads, {$ENDIF} SysUtils;
 var Done: Integer;
