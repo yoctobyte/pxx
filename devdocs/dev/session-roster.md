@@ -8461,3 +8461,73 @@ Optional note passed on, not a condition: aarch64/i386/arm32 includes carry
 free now and awkward to retrofit given
 `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` sits in
 `unfinished/`.
+
+## CORRECTION (`1b0787864`): the ~6% self-compile regression WAS NOT REAL — and it was a decision input I had already acted on
+
+frank-optimize was dispatched to price the per-call cost. **The first thing it did
+was re-measure the regression that motivated the dispatch** — its own new playbook
+rule says the interleaved re-run comes before the fix — and it dissolved:
+
+| workload | reps | before | after | |
+| --- | --- | --- | --- | --- |
+| self-compile at `-O3` | **min of 6** | 16.92 s | 16.97 s | **+0.3%** |
+| compile `hello.pas` | min of 15 | 0.20 s | **0.16 s** | faster |
+| compile the stress program | min of 15 | 0.58 s | 0.58 s | identical |
+| `callheavy` — 3-iter loop, 20M calls | min of 7 | 0.56 s | **0.51 s** | faster |
+| `looplong` — same body, 3000 iters | min of 7 | 0.23 s | **0.20 s** | faster |
+
+**Honest summary: 1.9–2.1x on tight scalar loops, neutral-to-slightly-positive
+everywhere else, and no measured workload is slower.**
+
+### What was wrong, precisely — and it is a DIFFERENT error from the one it had just documented
+
+*"+1.7%, +6.1%, +3.7%, the sign is consistent so it's real"* was **three
+under-powered runs sharing a bias**, not three confirmations: 3–4 reps of a
+17-second workload on a box moving between load 8 and 16.
+
+> **Interleaving fixes WHICH runs you may compare. Repetition fixes HOW
+> CONFIDENTLY.** Two failures that look identical from outside, with different fixes.
+
+frank-optimize wrote the interleaving entry and then made the adjacent error *inside
+it*, which is why the extension belongs on the same playbook entry. The operational
+corollary is the part every lane here needs, because everyone reaches for the long
+workload on the grounds that it feels more representative: **on this box a short
+workload with many reps beats a long one with few** — `hello.pas` at min-of-15
+settled in two minutes what `compiler.pas` at min-of-3 got wrong in ten.
+
+### It tested the dead hypothesis instead of dropping it, which is what makes the result transferable
+
+`callheavy` was written **specifically to be the shape the per-call-cost story
+predicts a loss for** — small body, three-iteration loop, twenty million calls — and
+residency makes it **9% faster**. So the finding is not *"the regression wasn't
+real"* but *"the cost model was built to explain something that did not exist"*.
+Only the second is worth carrying. The assigned slice is **complete but empty**.
+
+### Decision status after the correction
+
+- **`-O3`-only STANDS, on one leg instead of two.** The "6% slower compiler" leg is
+  withdrawn. What remains is **breadth, not narrowness**: seven programs measured,
+  not a corpus, and promotion changes every lane's default build — a pin-affecting
+  change whose bar is corpus evidence.
+- **Not buying a Track T sweep for it yet.** The optimisation-agreement tier proves
+  `-O0`/`-O2`/`-O3` produce identical *output* — correctness, not speed — and it is
+  already sweeping the pass at `-O3` for free. Promotion needs a `-O2` build *with
+  the pass promoted* plus a corpus timing story: one experiment, proposed after item
+  2 lands. Track T is also starved right now; v389's own `full` request has been
+  queued and undrained for ~1h.
+- **Item 2 UNBLOCKED and claimed** — the attribution hazard I held it for has lapsed.
+- `loads >= 3` **stands unchanged** (measured inside one interleaved run against both
+  comparators — the protocol that survives). `-O2` byte-identity unaffected; never a
+  timing claim.
+
+### AMENDING my own earlier entry: the v389 pin was NOT the fault
+
+I recorded the `exc` baseline artifact as partly my fault for pinning mid-measurement.
+frank-optimize declined the credit and is right: **a pin landing `lib/rtl` mid-session
+is normal operation**, and the defect was comparing against a baseline generated
+earlier in the session instead of regenerating both sides.
+
+Recording it as my fault would put the fix in the wrong place — the same error class
+the correction above is about. *"Announce that a pin moves `lib/rtl`"* stays as a
+courtesy I owe, because it is free and would have saved an hour of confusion, but it
+is not the cause and the playbook entry says so correctly.
