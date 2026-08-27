@@ -96,4 +96,4 @@ re-created this ticket for real.
 - a label as the last thing before `end`.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 77965626e.
