@@ -8855,3 +8855,66 @@ today, report it rather than resolving it quietly.* At 1,900 lines of separation
 conflict would mean one of them is not where they think they are — the same class as
 tonight's impossible `exc` result, where the impossibility is what saved the
 measurement. **A conflict that should not be possible is evidence, not a chore.**
+
+## MILESTONE: pxx compiles Pascal to wasm, and it answers what the native build answers (`10fbc7ec7`)
+
+```
+wasm32: 5 of 125 bodies lowered; 120 emitted as `unreachable`
+ok  wasm matches the native build (4 values), $sp balanced
+```
+
+Gate: converged, `044add345f88`, differing from pinned. 20/20 hashes across 4
+programs × 6 targets, **both sides regenerated back-to-back**. All three wasm suites
+green. Scope stayed the one arm — and the `Exit` beside it is not extra scope but the
+point: **that ladder falls through to the x86-64 emitter**, so replacing an `Error`
+with a call is what turns the `Exit` from implied into required.
+
+### 1. A trivial program cannot be compiled in isolation — and that invalidates Phase 2's milestone
+
+The backend's **first run** stopped at IR op 21 in `compiler/builtin/builtinheap.pas`,
+not in the test program. A `.pas` pulls the builtin heap unconditionally
+(`-dPXX_NODEFAULTRTL` does **not** suppress it), and those bodies use stores, calls and
+control flow long before user code does.
+
+> *"Implement the ops my test needs"* was never a reachable milestone. **"Implement the
+> ops the builtins need" is most of Phases 2-4 at once.**
+
+Answer: an unlowerable body is emitted as a single `unreachable` and **recorded**, with
+an unconditional summary line. Lowered bodies diff against native today; an unlowered
+one **traps loudly instead of computing quietly**. Approved as-is — own file,
+self-reporting, self-retiring at zero — with one condition: **the scaffold and its
+removal condition go on the wasm ticket, not only in the file's comment.** A scaffold
+whose retirement lives only where the scaffold lives is how temporary things become
+permanent, because the person who would remove it is the person who stopped reading
+that file. PLAN.md's Phase 2 milestone is now known-unreachable and gets rewritten
+against the coverage counter: **5 of 125 is a real metric; "Phase 2 complete" is not.**
+
+### 2. Lowered bodies went 14 → 5 — the number went DOWN because it got more honest
+
+The validator caught a real bug **unprompted**: slot loads hardcoded `i32` while
+`WasmValType` correctly gave `Int64` bodies an `i64` signature — *"type mismatch in
+implicit return, expected [i64] but got [i32]"*, **with a byte offset**. On a register
+backend that same bug loads 32 bits of a 64-bit slot and returns a plausible wrong
+number far from the cause.
+
+**frankwasm wrote that exact argument into `CHARTER.md` this morning and had it
+demonstrated on its own code by lunchtime.**
+
+And note what it did *not* do: widen the load to match. That would have been guessing at
+a type model Phase 2 has not built. It made the backend **refuse** what it cannot honour
+— non-`i32` signatures and slots marked unsupported before a contradicting body is
+emitted — and the count fell. Same instinct as `writeWasm`'s empty-module guard and the
+`IR_FRAME` call. **A metric that goes down when you get more honest is a metric worth
+trusting.**
+
+### 3. All three flagged-unobserved assumptions held — and the one that would have bitten was found by READING
+
+Parameter homing, the negative `[rbp-N]` offset conversion, and the program body arriving
+with `CurProc < 0` all held. The trap was elsewhere: **`IRTopLevelStmt` takes a node index
+despite its parameter being named `k`**, and it was about to pass a kind. **Compiles fine,
+then indexes the IR array with an opcode number** — a silently-wrong-value trap with no
+diagnostic, in a function every backend author calls. Found by reading the riscv32 arms
+rather than by trusting its own reasoning about them.
+
+**Asked frankwasm to FILE it (Track A, low prio, don't take it):** a rename plus a one-line
+comment is nearly free and closes the class. The next person may not read the riscv32 arms.
