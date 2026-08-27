@@ -52,7 +52,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (267)
+## backlog (266)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -83,6 +83,7 @@ _none_
 | bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence | N | 55 | bug | Six `timeout N` literals are hardcoded inside the test-nilpy and test-uforth recipes. The three uforth ones are the damaging pair of shapes: `wait $pp \|\| true` discards timeout's exit 124, the kill truncates p.out mid-stream, and the truncation is then reported as `DIFF <corpus>` — a pxx-versus-CPython divergence — and counted into `bad`. A machine under load thus manufactures a Nil-Python frontend finding. Filed by Track T, which owns the harness but not the Makefile. | — |
 | bug-n-abs-of-a-complex-raises-typeerror | N | 12 | bug | `abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set. | — |
 | bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising | N | 50 | bug | `None.bit_length()` returns 0 where CPython raises AttributeError — the int-method arm on a variant receiver unboxes without checking the tag, and None's payload reads as the integer 0. dict/list/str receivers do raise, so None is the one shape that answers. | — |
+| bug-n-bytearrays-zero-argument-overload-makes-the-bare-name-a-call | N | 60 | bug | `bytearray.append(self, x)` — how a bytearray subclass reaches the base method it overrode — is `unexpected token`, because pylib's `function bytearray: TPyBytes` makes the bare word `bytearray` a complete parameterless call, so it parses as `bytearray().append(self, x)`. The identical defect in list/tuple/bytes was introduced and reverted on 2026-08-27; this one is original and has never been written down. | — |
 | bug-n-bytes-getitem-returns-empty-instead-of-the-byte-value | N | 60 | bug | `b'abc'.__getitem__(0)` prints nothing where CPython prints 97 — a silent wrong value, not a diagnostic. `b'abc'.__len__()` on the same receiver is correct, and `str.__len__` / `str.__getitem__` raise AttributeError for methods CPython has. | — |
 | bug-n-exec-ignores-a-caller-supplied-builtins-mapping | N | 20 | bug | `exec(src, {\"__builtins__\": {}})` — the restricted-exec idiom — raises NameError in CPython and silently resolves builtins anyway in pxx. The caller's explicit instruction to resolve names against THIS mapping is discarded, so working CPython code takes a different path. Upward-compatibility defect, split out of the cosmetic decide-nilpy-exec-injects-a-builtins-key. | — |
 | bug-n-hasattr-with-a-computed-name-cannot-see-a-builtin-method | N | 55 | bug | `hasattr(x, n)` with the name in a VARIABLE answers False for every builtin-container, str, int and float method — `n = 'keys'; hasattr(a_dict, n)` is False while `hasattr(a_dict, 'keys')` is True. The literal and computed spellings of one question resolve through two different mechanisms and only the literal one was fixed. | — |
@@ -313,8 +314,6 @@ _none_
 | refactor-p-the-overload-probe-cannot-see-the-argument-match-channels | P | 45 | refactor | The speculative overload probe in FindUMethOverloadAhead has only argument KINDS, while the free-call path has five side channels (MatchArgArray/ArrayElemTk/Nil/Rec/Scalar) filled in pasparser_lval.inc. So the probe cannot run the free path's own compatibility check — measured, a gate built on kinds alone refuses four classes of legal call. Lift the population into a helper both callers share. | — |
 | refactor-p-three-hand-rolled-postfix-loops | P | 55 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
-| regression-test-core-test-nilpy-builtin-subclass-dunder-dispatch | N | 70 | regression | regression: test-core#src:test/test_nilpy_builtin_subclass_dunder_dispatch.npy red at c28e07a89f03 (auto-filed by twatch) | — |
-| regression-test-core-test-nilpy-unbound-builtin-method | N | 70 | regression | regression: test-core#src:test/test_nilpy_unbound_builtin_method.npy red at c28e07a89f03 (auto-filed by twatch) | — |
 | regression-test-emit-obj-cxtensa-obj | C | 70 | regression | regression: test-emit-obj#src:test/cxtensa_obj.c@1 red at 32fba2082684 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-star-operand-in-a-variant | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy red at 39d4afb022ce (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-variant-operand-arith-dunders | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy red at 39d4afb022ce (auto-filed by twatch) | — |
@@ -556,9 +555,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2499)
+## done (2501)
 
-2499 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2501 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (45)
 
@@ -624,8 +623,6 @@ _none_
 - [p 70] [N] feature-nilpy-staticmethod-and-classmethod
 - [p 70] [P] feature-p-delphi-string-helpers
 - [p 70] [P] feature-pascal-typed-and-untyped-files
-- [p 70] [N] regression-test-core-test-nilpy-builtin-subclass-dunder-dispatch
-- [p 70] [N] regression-test-core-test-nilpy-unbound-builtin-method
 - [p 70] [C] regression-test-emit-obj-cxtensa-obj
 - [p 70] [N] regression-test-nilpy-test-nilpy-star-operand-in-a-variant
 - [p 70] [N] regression-test-nilpy-test-nilpy-variant-operand-arith-dunders
@@ -653,6 +650,7 @@ _none_
 - [p 62] [A] feature-unicodestring-model
 - [p 60] [B] bug-b-sysutils-string-gaps-found-by-differential
 - [p 60] [N] bug-n-a-short-circuit-or-returning-self-is-typed-as-a-number
+- [p 60] [N] bug-n-bytearrays-zero-argument-overload-makes-the-bare-name-a-call
 - [p 60] [N] bug-n-bytes-getitem-returns-empty-instead-of-the-byte-value
 - [p 60] [N] bug-n-rebinding-an-int-parameter-twice-across-the-float-boundary-is-refused
 - [p 60] [N] bug-nilpy-a-keyword-call-through-a-statically-unknown-callee-does-not-compile

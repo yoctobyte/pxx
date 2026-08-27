@@ -4315,27 +4315,70 @@ begin
   Result := callNode;
 end;
 
+function PyZeroArgCtorIsContainer(const nm: AnsiString): Boolean;
+{ Of the zero-argument constructors, the ones whose `()` is parsed as an empty
+  LITERAL (and so consumed by the literal parser) rather than discarded. }
+var lo: AnsiString;
+begin
+  lo := LowerCase(nm);
+  PyZeroArgCtorIsContainer :=
+    (lo = 'list') or (lo = 'tuple') or (lo = 'bytes');
+end;
+
+function PyIsZeroArgCtorName(const nm: AnsiString): Boolean;
+{ Every builtin type constructor whose zero-argument form this parser answers.
+  `dict`, `set` and `frozenset` are absent because they already answered before
+  any of this, through their own paths. }
+var lo: AnsiString;
+begin
+  lo := LowerCase(nm);
+  PyIsZeroArgCtorName :=
+    (lo = 'str') or (lo = 'int') or (lo = 'float') or (lo = 'bool') or
+    PyZeroArgCtorIsContainer(nm);
+end;
+
 function PyZeroArgScalarCtor(const nm: AnsiString): Boolean;
-{ `str()` / `int()` / `float()` / `bool()` with NO argument: sets CurASTNode to
-  that type's zero value and answers True, or answers False and touches nothing.
+{ A builtin type constructor called with NO argument: sets CurASTNode to that
+  type's zero value and answers True, or answers False and touches nothing.
+  The caller has already checked the shape is exactly `name` `(` `)`, and
+  consumes all three tokens when this answers True — except for the container
+  arms, which parse their own `()` as an empty literal.
 
   Python's rule is uniform — the zero-argument form of a type constructor is
   that type's zero value — and it was implemented for four of the eleven builtin
-  constructors. These four are the ones the parser lowers as INTRINSICS, so they
-  failed in ParseArgExpr with `expected expression`; the pylib-backed
-  `list`/`tuple`/`bytes` failed one step later in overload resolution and are
-  fixed there, with the zero-argument overload `bytearray` already had. Two
-  mechanisms because there genuinely are two kinds of constructor, each with a
-  working precedent among the four that already passed.
+  constructors.
+
+  ALL of them are answered HERE, in the parser, and NOT by a zero-argument
+  overload in pylib. That was the first spelling of this fix, following the one
+  `bytearray` has carried for years, and it is exactly the wrong mechanism: this
+  dialect lets a parameterless function be called by its BARE NAME, so giving
+  `list` a zero-argument overload made the bare word `list` a complete call.
+  `list.append(self, x)` — how a subclass of a builtin reaches the base
+  implementation it just overrode — then parsed as `list().append(self, x)` and
+  died with `Expected: ), but got: x`. Track T caught it as a NEW-RED on
+  test_nilpy_unbound_builtin_method and test_nilpy_builtin_subclass_dunder_dispatch
+  within the hour (regression-test-core-test-nilpy-unbound-builtin-method).
+  Keying on the `(` `)` SHAPE cannot make that mistake: a bare name, or a name
+  before a `.`, never reaches here.
+
+  `bytearray` is the standing proof rather than the exception. Measured at v383,
+  `bytearray.append(self, x)` was ALREADY broken — same shape, same cause, for as
+  long as its zero-argument overload has existed, and nobody had written that
+  spelling. It is deliberately NOT taken over here: its overload also stamps
+  FIsByteArray, which this arm has no way to reproduce without a second pylib
+  entry point, so routing it through here changed `repr(bytearray())` from
+  `bytearray(b'')` to `b''`. Left alone, and filed as its own ticket
+  (bug-n-bytearrays-zero-argument-overload-makes-the-bare-name-a-call).
 
   `int()` is Int64 rather than a promotable int: 0 needs no width, and answering
   the wide type here would register a promo SIGNATURE over an unannotated
   `return int()` — the silent ABI mismatch the `int(...)` arm below documents.
   bug-n-the-zero-argument-form-of-a-builtin-type-constructor-is-rejected }
-var lo: AnsiString;
+var lo: AnsiString; bPi, bArg, bCall, bCi: Integer;
 begin
   PyZeroArgScalarCtor := True;
   lo := LowerCase(nm);
+  { The NAME is already consumed by the caller; the scalars' '(' ')' too. }
   if lo = 'str' then
   begin
     CurASTNode := AllocNode(AN_STR_LIT);
@@ -4373,6 +4416,38 @@ begin
     ASTIVal[CurASTNode] := 0;
     ASTTk[CurASTNode] := Ord(tyBoolean);
     LastExprTk := tyBoolean;
+    Exit;
+  end;
+  { The CONTAINERS. `()` is syntactically an empty literal group, so the empty
+    list/tuple/bytes each come from the literal builder the `[...]` and `(...)`
+    forms already use — no new construction path, and no new pylib name whose
+    bare word could be called. The caller consumed only the NAME for these, so
+    CurTok is the '(' PyParseListLiteralT expects, and it consumes the pair. }
+  if (lo = 'list') or (lo = 'tuple') or (lo = 'bytes') then
+  begin
+    { PyParseListLiteralT stamps a PAREN-opened display as a TUPLE — which is
+      right for `(1, 2)` and is why `tuple()` needs no mark of its own, and
+      wrong for the other two, which must undo it. `list()` rendered `()`
+      before this line existed. }
+    PyParseListLiteralT(tkLParen, tkRParen, False);   { consumes the '(' ')' }
+    if lo <> 'tuple' then
+      CurASTNode := PyMarkAsSeqKind(CurASTNode, 'pylist_mark_list');
+    if lo = 'bytes' then
+    begin
+      bPi := FindProc('pybytes_from_list');
+      if bPi < 0 then Error('Nil Python: pylib (pybytes_from_list) not loaded');
+      bArg := AllocNode(AN_ARG);
+      ASTLeft[bArg] := CurASTNode;
+      ASTRight[bArg] := -1;
+      bCall := AllocNode(AN_CALL);
+      ASTIVal[bCall] := bPi;
+      ASTTk[bCall] := Ord(tyClass);
+      bCi := FindUClass('TPyBytes');
+      if bCi >= 0 then ASTRight[bCall] := REC_UCLASS_BASE + bCi;
+      ASTLeft[bCall] := bArg;
+      CurASTNode := bCall;
+    end;
+    LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
     Exit;
   end;
   PyZeroArgScalarCtor := False;
@@ -41595,9 +41670,14 @@ begin
       if isNilPy and (TokPos + 1 < TokCount) and
          (Tokens[TokPos].Kind = tkLParen) and (Tokens[TokPos + 1].Kind = tkRParen) and
          (FindSym(name) < 0) and (not PyUserShadowsProc(name)) and
-         PyZeroArgScalarCtor(name) then
+         PyIsZeroArgCtorName(name) then
       begin
-        Next; Next; Next;              { the name, '(' and ')' }
+        Next;                          { the name }
+        { the SCALARS' parentheses are empty and carry nothing, so they are
+          consumed here; the CONTAINERS parse the same '(' ')' as an empty
+          literal and consume it themselves. }
+        if not PyZeroArgCtorIsContainer(name) then begin Next; Next; end;
+        PyZeroArgScalarCtor(name);
         Exit;
       end;
       { A GENERATOR called in VALUE position — `g = gen()`, `list(gen())`,

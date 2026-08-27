@@ -8,9 +8,16 @@
 # The two error messages were the tell that it fell through TWO mechanisms:
 # the parser INTRINSICS (str/int/float/bool) died in ParseArgExpr as `expected
 # expression`, the pylib PROCS (list/tuple/bytes) died in overload resolution.
-# Each is fixed by its own precedent among the four that already passed — a
-# zero-value arm for the intrinsics, and the zero-argument overload `bytearray`
-# has always had for the procs.
+#
+# All of them are answered in the PARSER, keyed on the `(` `)` shape. Giving the
+# procs a zero-argument overload instead — following the one `bytearray` has
+# always had — was the first spelling and was wrong: this dialect lets a
+# parameterless function be called by its BARE NAME, so `list` alone became a
+# complete call and `list.append(self, x)` parsed as `list().append(self, x)`.
+# Track T caught it within the hour. The unbound rows at the bottom are the
+# control for that, and they are why `bytearray` is left on its old path — its
+# overload also stamps FIsByteArray, so this arm cannot reproduce it.
+# regression-test-core-test-nilpy-unbound-builtin-method
 # bug-n-the-zero-argument-form-of-a-builtin-type-constructor-is-rejected
 print(repr(str()), repr(int()), repr(float()), repr(bool()))
 print(repr(list()), repr(tuple()), repr(bytes()))
@@ -73,3 +80,18 @@ def str():
 def outer():
     return str()
 print(str(), outer())
+
+# ...and the shape a zero-argument overload in pylib would have broken: a
+# builtin type name as an unbound RECEIVER, which is how a subclass reaches the
+# base it just overrode. The `(` `)` shape test cannot capture it — there is no
+# `(` after the name — which is the property the parser arm was chosen for.
+class Stack(list):
+    def push(self, x):
+        list.append(self, x)
+    def first(self):
+        return list.__getitem__(self, 0)
+
+st = Stack()
+st.push(4)
+st.push(5)
+print(len(st), st.first(), list(), type(list()).__name__)

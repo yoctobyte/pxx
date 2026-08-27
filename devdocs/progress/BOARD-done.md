@@ -2354,6 +2354,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-nested-dynarray-field | P | 70 | regression | regression: test-core#src:test/test_nested_dynarray_field.pas red at b936d125601e (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-augmented-assign-class-dunder | T | 70 | regression | regression: test-core#src:test/test_nilpy_augmented_assign_class_dunder.npy red at e8450c58d67e (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-bound-method-in-module | N | 70 | regression | regression: test-core#src:test/test_nilpy_bound_method_in_module.npy red at 9bbbbef6c055 (auto-filed by twatch) | — |
+| regression-test-core-test-nilpy-builtin-subclass-dunder-dispatch | N | 70 | regression | regression: test-core#src:test/test_nilpy_builtin_subclass_dunder_dispatch.npy red at c28e07a89f03 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-c-define-const | T | 70 | regression | regression: test-core#src:test/test_nilpy_c_define_const.npy red at 67015a8cf7d8 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-c-pointer | T | 70 | regression | regression: test-core#src:test/test_nilpy_c_pointer.npy red at 67015a8cf7d8 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-dataclass-dict-factory | T | 70 | regression | regression: test-core#src:test/test_nilpy_dataclass_dict_factory.npy red at 2fbb5a270acc (auto-filed by twatch) | — |
@@ -2369,6 +2370,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-nilpy-re | T | 70 | regression | regression: test-core#src:test/test_nilpy_re.npy red at b9e334fbd649 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-sorted-pairs | T | 70 | regression | regression: test-core#src:test/test_nilpy_sorted_pairs.npy red at bb845b13ceb3 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-star-methods-and-targets | T | 70 | regression | regression: test-core#src:test/test_nilpy_star_methods_and_targets.npy red at 89dae725b972 (auto-filed by twatch) | — |
+| regression-test-core-test-nilpy-unbound-builtin-method | N | 70 | regression | regression: test-core#src:test/test_nilpy_unbound_builtin_method.npy red at c28e07a89f03 (auto-filed by twatch) | — |
 | regression-test-core-test-operator-implicit-shortstring-b356 | P | 70 | regression | regression: test-core#src:test/test_operator_implicit_shortstring_b356.pas red at 203438d2cf63 (auto-filed by twatch) | — |
 | regression-test-core-test-pascal-cast-chain-method-call | P | 70 | regression | regression: test-core#src:test/test_pascal_cast_chain_method_call.pas red at 97f96a5cc766 (auto-filed by twatch) | — |
 | regression-test-core-test-platform-defines | T | 70 | regression | regression: test-core#src:test/test_platform_defines.pas@2 red at 96147f570d29 (auto-filed by twatch) | — |

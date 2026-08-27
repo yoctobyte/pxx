@@ -81,6 +81,8 @@ function PyAugBinTok(k: TTokenKind): TTokenKind; forward; { Nil Python augmented
 function PyMakePow(ppBase, ppExp: Integer): Integer; forward;  { Nil Python `**` lowering, shared with `**=` (pyparser.inc) }
 function PyAugClassDunderNode(lhsNode: Integer; binTk: TTokenKind; rhsNode: Integer): Integer; forward; { Nil Python obj.field += x dunder dispatch (pyparser.inc) }
 function PyIsVarGetitemCall(n: Integer): Boolean; forward;
+function PyZeroArgCtorIsContainer(const nm: AnsiString): Boolean; forward; { Nil Python: zero-arg ctor whose () is an empty literal (pyparser.inc) }
+function PyIsZeroArgCtorName(const nm: AnsiString): Boolean; forward; { Nil Python: a builtin type ctor with a zero-argument form (pyparser.inc) }
 function PyZeroArgScalarCtor(const nm: AnsiString): Boolean; forward; { Nil Python: str()/int()/float()/bool() with no argument -> that type's zero value (pyparser.inc) } { Nil Python: is this the pyvar_getitem read a non-lvalue receiver builds? (pyparser.inc) }
 function PyReboundParamSlotType(bodyStart: Integer; const nm: AnsiString; declTk: TTypeKind): TTypeKind; forward; { Nil Python: the private-slot type a rebound parameter needs, or tyUnknown (pyparser.inc) }
 function PyNodeListCi(n: Integer): Integer; forward; { Nil Python: TPyList class index of a node, else -1 (pyparser.inc) }
@@ -160,6 +162,7 @@ function PyParseAttrName: AnsiString; forward; { Nil Python: the literal attr na
 function PyMakeDynAttrByExpr(recvNode, nameNode, dfltNode: Integer; wantHas: Boolean): Integer; forward; { ...and the COMPUTED-name form, resolved at run time (pyparser.inc) }
 function PyTupleParenAhead: Boolean; forward; { Nil Python: is this '(' a tuple? (pyparser.inc) }
 procedure PyParseListLiteralT(opener, closer: TTokenKind; dedup: Boolean); forward; { Nil Python list/tuple literal (pyparser.inc) }
+function PyMarkAsSeqKind(node: Integer; const marker: AnsiString): Integer; forward; { Nil Python: stamp a TPyList-producing node as list/tuple/set/frozenset (pyparser.inc) }
 function PyIsListCompAhead: Boolean; forward; { Nil Python: is `[ ... for ... ]` a comprehension? (pyparser.inc) }
 function PyParseCompExprValue(bracketed: Boolean): Integer; forward;
 function PyIsParenCompAhead: Boolean; forward;      { `(x for x in xs)` (pyparser.inc) }

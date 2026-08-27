@@ -1943,15 +1943,6 @@ function min(const v: Variant): Variant; overload;
 { `list(x)` — a shallow COPY, as Python's list() constructor makes. Overloads
   rather than one variant-taking function so the ordinary call path resolves
   them by argument type, like min/max (feature-nilpy-missing-builtins). }
-{ `list()` / `tuple()` / `bytes()` — the ZERO-ARGUMENT form, which Python
-  defines as that type's zero value. `bytearray` (above) has had its zero-arg
-  overload all along and is the reason it was the only one of the four that
-  compiled; its three siblings fell out of overload resolution with "no overload
-  of list matches these arguments".
-  bug-n-the-zero-argument-form-of-a-builtin-type-constructor-is-rejected }
-function list: TPyList; overload;
-function tuple: TPyList; overload;
-function bytes: TPyBytes; overload;
 function list(l: TPyList): TPyList;
 function list(const s: AnsiString): TPyList; overload;
 function list(const v: Variant): TPyList; overload;
@@ -16661,26 +16652,6 @@ function HexDigitChar(v: Int64): AnsiString;
 begin
   if v < 10 then Result := Chr(Ord('0') + v)
   else Result := Chr(Ord('a') + (v - 10));
-end;
-
-function list: TPyList; overload;
-{ The zero-argument constructors. Each is its type's zero value, and each is
-  spelled as the ONE-argument body would produce from an empty input, so a
-  future change to what an empty list/tuple/bytes IS lands in one place.
-  See the declaration block for why bytearray already had this. }
-begin
-  Result := TPyList.Create;
-end;
-
-function tuple: TPyList; overload;
-begin
-  Result := TPyList.Create;
-  Result.FKind := PYSEQ_TUPLE;
-end;
-
-function bytes: TPyBytes; overload;
-begin
-  Result := TPyBytes.Create(0);
 end;
 
 function list(l: TPyList): TPyList;

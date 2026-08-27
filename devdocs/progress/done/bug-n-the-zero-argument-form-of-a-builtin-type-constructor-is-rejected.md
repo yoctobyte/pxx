@@ -92,6 +92,39 @@ Two mechanisms because there genuinely are two kinds of constructor, and each
 already had a working example among the four that passed. Growing a third
 dispatch to cover both would have been the second path that stays broken.
 
+> ### CORRECTION 2026-08-27, same day — the pylib half was REVERTED
+>
+> The paragraph above reasons from a precedent that was itself a latent bug, and
+> following it broke two gated tests inside an hour
+> ([[regression-test-core-test-nilpy-unbound-builtin-method]],
+> [[regression-test-core-test-nilpy-builtin-subclass-dunder-dispatch]]).
+>
+> **This dialect lets a parameterless function be called by its BARE NAME.** So
+> a zero-argument overload does not add the spelling `list()`; it makes the bare
+> word `list` a complete call, and `list.append(self, x)` — how a subclass
+> reaches the base method it just overrode — became `list().append(self, x)`.
+>
+> All seven now answer in the PARSER, keyed on the `name` `(` `)` **shape**,
+> which by construction cannot capture a bare name or a name before a `.`. The
+> containers build their zero value from `PyParseListLiteralT` on the same
+> `(` `)`, so no new pylib name exists whose bare word could be called; `list()`
+> and `bytes()` then undo that parser's paren-implies-TUPLE stamp with
+> `pylist_mark_list`.
+>
+> So there is ONE mechanism after all, and the "two kinds of constructor" framing
+> was wrong — not about the code, about which property mattered. What separates
+> the two routes is not intrinsic-vs-proc, it is *what else the name becomes
+> callable from*.
+>
+> `bytearray` keeps its overload and stays broken for the unbound spelling —
+> measured identical at v383, original rather than a regression, and filed as
+> [[bug-n-bytearrays-zero-argument-overload-makes-the-bare-name-a-call]]. It is
+> not taken over here because its overload also stamps `FIsByteArray`, which the
+> parser arm cannot reproduce without a new pylib entry point.
+>
+> The witness now carries a `Stack(list)` calling `list.append` and
+> `list.__getitem__` unbound, so the shape is gated from this side too.
+
 ### The bug inside the fix, caught by varying the shape
 
 The first spelling typed the new `str()` node as `tyAnsiString` — the type the
