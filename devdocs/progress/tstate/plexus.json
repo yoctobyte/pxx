@@ -465,9 +465,9 @@
  ],
  "host": "plexus",
  "idle_yield": {
-  "aborts": 3,
+  "aborts": 1,
   "phase": "pin-verify",
-  "target": "0dafbae41cadc69d7c260353b0e637af30f0aa0f"
+  "target": "c28e07a89f036f56d3bb860e62045b1103e22aae"
  },
  "job_reason": {
   "test-core#src:test/test_nilpy_builtin_subclass_dunder_dispatch.npy": "Expected: ), but got: i (Kind: 1, Line: 55) | pascal26:55: error: unexpected token | near: list  __getitem__  self  >>> i",
