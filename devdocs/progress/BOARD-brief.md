@@ -5,11 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:24 blocked:7 backlog:283 backlog_new:31 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2402 rejected:40`
+`urgent:1 unfinished:24 blocked:8 backlog:283 backlog_new:31 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2402 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
+
+## urgent (1) — jump the queue
+
+- `refactor-a-target-properties-have-no-single-answer` [A]
 
 ## unfinished (24) — parked mid-flight; re-claim, do not duplicate
 
@@ -38,7 +42,7 @@ _none — no lane is locked._
 - `feature-threadsafe-heap-optimize` [A]
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
-## blocked (7) — has an unmet blocker; do not claim
+## blocked (8) — has an unmet blocker; do not claim
 
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
 - `bug-n-a-subpackage-directory-does-not-resolve-as-a-module` [N] — blocked-by: bug-a-a-python-module-s-identity-is-its-name-not-its-file
@@ -46,10 +50,12 @@ _none — no lane is locked._
 - `bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity` [N] — blocked-by: feature-b-tkhtmlview-in-nilpy
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
+- `feature-target-wasm` [A+B] — blocked-by: refactor-a-target-properties-have-no-single-answer
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 326, ranked
+## Ready — top 30 of 327, ranked
 
+- `[p 80] [A]` refactor-a-target-properties-have-no-single-answer (unblocks 1)
 - `[p 85] [O]` feature-opt-o3-register-pressure
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
 - `[p 75] [P]` feature-pascal-corpus-expansion
@@ -79,6 +85,5 @@ _none — no lane is locked._
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [N]` bug-n-a-fields-type-is-fixed-by-its-first-assignment-and-never-widened
 - `[p 65] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
-- `[p 65] [N]` bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members
 
-_296 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_297 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -85,6 +85,14 @@ backend, and *every* frontend gets it free.
 
 ### WebAssembly as a target (not a frontend)
 
+> **Superseded on the numbers, 2026-08-27.** This section's *shape* is right and
+> its *count* is low. The measured accounting — 76 IR ops bucketed, ~90 PAL
+> entries classified against WASI preview1, sizing anchored to comparable files
+> in-tree, and the two places the work escapes a backend file (VMT slots hold
+> code addresses; exceptions are a hand-rolled setjmp/longjmp) — is in
+> **`devdocs/dev/wasm-target-findings.md`**. Ticket: `feature-target-wasm`.
+
+
 wasm = portable **stack-machine bytecode**, sandboxed, runs in browsers +
 standalone runtimes (wasmtime / wasmer / node). As a PXX target we'd emit wasm
 modules instead of ELF. Properties vs our register ISAs:
