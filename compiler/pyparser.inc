@@ -3974,7 +3974,23 @@ begin
   retTk := tyAnsiString;    { the str->str default; rows below override }
   wantArgs := 0;
   Result := True;
-  if CaseEqual(mname, 'upper') then pname := 'pystr_upper'
+  { The SUBSCRIPT protocol under its Python names. `len(s)` and `s[i]` both
+    worked while their METHOD spellings raised `'str' object has no attribute
+    '__len__'` — one capability, two spellings, only one wired, exactly as
+    recorded for dict in bug-n-a-builtin-types-method-cannot-be-called-unbound.
+    A str subclass delegating to the base it overrode writes the method form,
+    and so does any code that reaches a dunder by name.
+
+    pystr_charat, NOT pystr_at: Python's `s[i]` is a one-CHARACTER str and
+    pystr_at yields a lead BYTE — this is the same call the subscript itself
+    lowers to, which is the point. There is no `__setitem__` row because
+    CPython's str has none either: strings are immutable.
+    bug-n-bytes-getitem-returns-empty-instead-of-the-byte-value }
+  if CaseEqual(mname, '__len__') then
+    begin pname := 'pystr_len'; retTk := tyInteger; end
+  else if CaseEqual(mname, '__getitem__') then
+    begin pname := 'pystr_charat'; retTk := tyAnsiString; wantArgs := 1; end
+  else if CaseEqual(mname, 'upper') then pname := 'pystr_upper'
   else if CaseEqual(mname, 'lower') then pname := 'pystr_lower'
   { strip family: 0 args (whitespace) or 1 arg (a CHARS set) — see the -5 case
     in PyParseStrMethod, which appends _chars for the one-argument form. }
@@ -4210,7 +4226,17 @@ begin
   for ci := 0 to UClsCount - 1 do
   begin
     if UClsIsRecord[ci] then Continue;
-    if FindUMeth(ci, mname) >= 0 then begin Result := True; Exit; end;
+    { PyMethNameFor, not FindUMeth alone — the same rule its own header states:
+      "Every resolution path calls this instead of applying the table by hand."
+      This path applied it by hand and therefore could not see a method a pylib
+      container reaches through an ALIAS. `find` is declared literally on
+      TPyBytes and dual-dispatched fine; `__len__` is reached via count, so this
+      answered False, the str arm won unopposed, and a bytes receiver hit the
+      str arm's "not a string tag" branch — AttributeError for a call the
+      container plainly answers. The identical shape the header above describes
+      for `title` and `count`, one level further in.
+      bug-n-bytes-getitem-returns-empty-instead-of-the-byte-value }
+    if FindUMeth(ci, PyMethNameFor(ci, mname)) >= 0 then begin Result := True; Exit; end;
   end;
 end;
 
@@ -14863,6 +14889,39 @@ begin
     else if mname = '__getitem__' then Result := 'fetch'
     else if mname = '__setitem__' then Result := 'store'
     else if mname = '__delitem__' then Result := 'remove'
+    else if mname = '__len__' then Result := 'count';
+    Exit;
+  end;
+  { The BYTES half of the same subscript pair. TPyBytes declares the very same
+    count / at / put as TPyList and had no arm here, and the consequence is not
+    "no such method" — it is a SILENT MISDISPATCH, which is the part worth
+    writing down.
+
+    The variant-receiver dispatcher builds its candidate set by asking
+    PyMethNameFor of each class. With no arm, TPyBytes never became a candidate,
+    so a bytes receiver fell through to the FALLBACK arm — TPyList — and ran
+    list code over a TPyBytes. Measured 2026-08-27:
+
+      x.__len__()            3          <- RIGHT, and only by accident:
+                                           TPyList.count reads FLen, which sits
+                                           at the same offset in both classes
+      x.__getitem__(0)       (empty)    <- TPyList.at read FItems where FData is
+      x.__setitem__(0, 65)   CORRUPTS   <- TPyList.put wrote a 16-byte variant
+                                           slot over the byte buffer:
+                                           bytearray(b'abc') -> [1, 0, 0]
+
+    So the accidentally-correct row is what made the other two look like an
+    isolated `__getitem__` bug. A missing alias row on ANY pylib container has
+    this shape, not a diagnostic — that is the general lesson, and the reason
+    this arm exists rather than a single `__getitem__` special case.
+    `__delitem__` is deliberately absent: TPyBytes has no pop_at, and aliasing
+    it to anything else would delete by the wrong rule without a word — the same
+    call the list arm makes about `remove`.
+    bug-n-bytes-getitem-returns-empty-instead-of-the-byte-value }
+  if (FindUClass('TPyBytes') >= 0) and (ci = FindUClass('TPyBytes')) then
+  begin
+    if mname = '__getitem__' then Result := 'at'
+    else if mname = '__setitem__' then Result := 'put'
     else if mname = '__len__' then Result := 'count';
     Exit;
   end;

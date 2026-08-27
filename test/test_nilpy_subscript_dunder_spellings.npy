@@ -1,0 +1,68 @@
+# The subscript protocol under its PYTHON METHOD names, on every builtin that
+# has it, through both receiver routes. `len(x)` and `x[i]` always worked; their
+# method spellings -- what a subclass writes to delegate to the base it just
+# overrode, and what any code reaching a dunder by name uses -- did not.
+#
+# The bytes half was not a missing-method error but a SILENT MISDISPATCH, and
+# that is the part worth keeping. The variant-receiver dispatcher builds its
+# candidate set by asking each class for the name; TPyBytes had no alias row, so
+# it never became a candidate and a bytes receiver fell through to the FALLBACK
+# arm -- TPyList -- and ran list code over a TPyBytes:
+#
+#   x.__len__()           3         RIGHT, and only by accident: TPyList.count
+#                                   reads FLen, at the same offset in both
+#   x.__getitem__(0)      (empty)   TPyList.at read FItems where FData is
+#   x.__setitem__(0, 65)  CORRUPTS  TPyList.put wrote a 16-byte variant slot
+#                                   over the byte buffer: b'abc' -> [1, 0, 0]
+#
+# The accidentally-correct row is what made this look like an isolated
+# `__getitem__` bug. The mutation row is why every spelling is asserted here.
+# bug-n-bytes-getitem-returns-empty-instead-of-the-byte-value
+
+
+def get(x, k):
+    return x.__getitem__(k)
+
+
+def size(x):
+    return x.__len__()
+
+
+def setit(x, k, v):
+    x.__setitem__(k, v)
+    return x
+
+
+# --- through an UNTYPED parameter: the receiver's class is a runtime tag ---
+print("var:", size(b'abc'), get(b'abc', 0))
+print("var:", size('abc'), get('abc', 0))
+print("var:", size([7, 8]), get([7, 8], 0))
+print("var:", size({'a': 1}), get({'a': 1}, 'a'))
+
+# --- and on a DIRECT receiver, where the class is static ---
+print("dir:", b'abc'.__len__(), b'abc'.__getitem__(0))
+print("dir:", 'abc'.__len__(), 'abc'.__getitem__(0))
+print("dir:", [7, 8].__len__(), [7, 8].__getitem__(0))
+print("dir:", {'a': 1}.__len__(), {'a': 1}.__getitem__('a'))
+
+# --- the MUTATING half: this is the row that used to corrupt the buffer ---
+ba = bytearray(b'abc')
+print("mut:", list(setit(ba, 0, 65)))
+li = [7, 8, 9]
+print("mut:", setit(li, 0, 65))
+dd = {'a': 1}
+print("mut:", setit(dd, 'b', 2)['b'])
+
+# --- negative indices, since the dunder must be the SAME call the operator is ---
+print("neg:", get(b'abc', -1), get('abc', -1), get([7, 8], -1))
+
+# --- hasattr agrees, because it reads the same tables. It answered False for
+#     bytes and str while the call was wrong or impossible; that was the honest
+#     answer then and the wrong one now.
+print("has:", hasattr(b'ab', '__len__'), hasattr('s', '__len__'),
+      hasattr([1], '__len__'), hasattr({'a': 1}, '__len__'))
+print("has:", hasattr(b'ab', '__getitem__'), hasattr('s', '__getitem__'),
+      hasattr([1], '__getitem__'))
+
+# --- the operator spellings must be unchanged by any of this ---
+print("op:", len(b'abc'), b'abc'[0], len('abc'), 'abc'[0], len([7, 8]), [7, 8][0])

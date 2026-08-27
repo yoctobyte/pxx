@@ -1,0 +1,15 @@
+var: 3 97
+var: 3 a
+var: 2 7
+var: 1 1
+dir: 3 97
+dir: 3 a
+dir: 2 7
+dir: 1 1
+mut: [65, 98, 99]
+mut: [65, 8, 9]
+mut: 2
+neg: 99 c 8
+has: True True True True
+has: True True True
+op: 3 97 3 a 2 7

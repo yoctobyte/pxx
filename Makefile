@@ -1431,6 +1431,15 @@ test-nilpy: $(COMPILER)
 	# (self is truthy, so it yields the int the walk guessed anyway).
 	./$(COMPILER) test/test_nilpy_bool_op_return_type.npy $(TESTTMP)/test_nilpy_boolopret26
 	$(TESTTMP)/test_nilpy_boolopret26 | diff -u test/test_nilpy_bool_op_return_type.expected -
+	# the subscript protocol under its PYTHON METHOD names, on every builtin that
+	# has it, through both receiver routes. The bytes half was not a missing
+	# method but a SILENT MISDISPATCH -- TPyBytes was never a dispatch candidate,
+	# so a bytes receiver fell to the TPyList fallback and ran list code over it:
+	# __len__ right by accident (same FLen offset), __getitem__ empty, and
+	# __setitem__ CORRUPTING the buffer. The mutation rows are why every
+	# spelling is asserted rather than just the one the ticket named.
+	./$(COMPILER) test/test_nilpy_subscript_dunder_spellings.npy $(TESTTMP)/test_nilpy_subdunder26
+	$(TESTTMP)/test_nilpy_subdunder26 | diff -u test/test_nilpy_subscript_dunder_spellings.expected -
 	./$(COMPILER) test/test_nilpy_genexpr_is_consumed_once.npy $(TESTTMP)/test_nilpy_genonce26
 	$(TESTTMP)/test_nilpy_genonce26 | diff -u test/test_nilpy_genexpr_is_consumed_once.expected -
 	./$(COMPILER) test/test_nilpy_str_format_keyword_fields.npy $(TESTTMP)/test_nilpy_fmtkw26
