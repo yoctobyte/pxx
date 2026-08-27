@@ -144,4 +144,4 @@ can be proved here, and it is what the gate asked for).
 than routed around with a target ifdef; the ticket says how to restore it.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 908800622.
