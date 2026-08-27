@@ -9950,7 +9950,30 @@ begin
       either needing the other to be a class. Requiring both was what made
       `b < 1` fall through to the identity/numeric path.
       bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly }
+    { ...but a VARIANT operand is not a "non-class operand", it is an UNKNOWN
+      one, and this arm has no fall-through: when it finds no dunder it emits a
+      raise. So capturing a pair with a variant on one side turns the runtime
+      answer into a compile-time refusal. Measured: `lhs = 0; lhs = V(7); lhs < p`
+      where V declares `__lt__` — the left is statically a variant, so ordLCi is
+      -1, the REFLECTED `__gt__` is looked for on the right and V does not have
+      one, and the whole comparison became `raise TypeError: comparison not
+      supported`. CPython calls `lhs.__lt__(p)`; so does pylib's pycmp_v, which
+      is where a variant operand belongs and where it went before this arm was
+      widened to either side.
+
+      The dispatch would be wrong even when a dunder IS found, for the same
+      reason: Python asks the LEFT operand's type first, and with the left a
+      variant we cannot know whether it has the direct dunder — jumping to the
+      right operand's reflected one reverses the order the language specifies.
+      Both directions are therefore excluded, not just variant-on-the-left.
+
+      This does not narrow the fix it qualifies: `b < 1`, `b == "s"`,
+      `obj < 1.5` all still dispatch, because an int/str/float operand IS
+      statically known to have no dunders. Only tyVariant is unknowable here.
+      regression-test-nilpy-test-nilpy-variant-operand-arith-dunders }
     if PyExprMode and (op in [tkLt, tkLe, tkGt, tkGe]) and
+       (IntToTypeKind(ASTTk[left]) <> tyVariant) and
+       (IntToTypeKind(ASTTk[right]) <> tyVariant) and
        (((IntToTypeKind(ASTTk[left]) = tyClass) and
          (ResolveNodeRec(left) >= REC_UCLASS_BASE) and
          not PyRecIsPylibOwnClass(ResolveNodeRec(left))) or

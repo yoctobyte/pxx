@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: N
+status: done
 ---
 
 > **Track guessed as N** from the test source. The ranker reads frontmatter, so an unset track parks a stub in Track T's queue regardless of what the body says -- correct the `track:` line if this is wrong.
@@ -44,3 +45,43 @@ Unhandled exception: TypeError: comparison not supported between these instances
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+- 2026-08-27 — resolved, commit PENDING-COMMIT.
+
+## Resolution (2026-08-27)
+
+**Cause:** `bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly`
+(`2e2c5b939`) widened the compile-time ordering arm in `pasparser_expr.inc` from
+"the LEFT operand is a user class" to "EITHER operand is". That was the right
+fix for `b < 1`, and it also captured pairs with a **variant** on one side —
+which is a different thing from a non-class operand. A variant's real type is
+not known until run time, and this arm has **no fall-through**: when it finds no
+dunder it emits `PyNotOrderableError`. So a case that used to reach pylib's
+`pycmp_v` and be answered correctly at run time became a compile-time refusal.
+
+Measured at HEAD before the fix:
+
+```python
+lhs = 0        # lhs is now statically a variant
+lhs = V(7)     # V declares __lt__ only
+p = V(2)
+print(lhs < p)   # CPython False; pxx TypeError: comparison not supported
+```
+
+`ordLCi` is -1 (left is tyVariant), so the REFLECTED `__gt__` is looked for on
+the right — V has none — and the whole comparison lowered to a raise. The test
+comment predicted exactly this shape: *"the ORDERING path … is a separate
+function (pycmp_v) … `lt` below is what catches a fix that stops at the
+arithmetic ones."* It caught one that went too far instead.
+
+**Fix:** the arm is skipped when EITHER operand is `tyVariant`. Both directions,
+not just variant-on-the-left: with a variant on the right, dispatching the
+left's direct dunder is right by luck, but concluding "no dunder anywhere" is
+still wrong, and Python's left-operand-first rule cannot be honoured when the
+left's type is unknown. `b < 1`, `obj < 1.5`, `b == "s"` all still dispatch —
+an int/float/str operand IS statically known to carry no dunders.
+
+**Gate:** `make compiler/pascal26` fixedpoint (`3e756cec1271`), the regression
+test green, and the five ordering siblings re-run individually and green:
+`dataclass_order`, `cmp_dunder_nonclass_operand` (the ticket that caused this),
+`dunder_ordering`, `min_max_of_a_variant_list`, `sort_lt_dunder`, plus
+`mixed_type_operands` (the control the arm's own comment names).
