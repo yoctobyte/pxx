@@ -89,10 +89,30 @@ begin
 end;
 
 { Output goes through sysopen/syswrite/sysfchmod/sysclose, exactly as
-  WriteMapFile (asmdisasm_x64.inc) and writeELF do. The compiler has no Text
-  file I/O — Assign/Rewrite/Close are RTL, not compiler, and the first draft of
-  this file used them and failed to self-host. Lines accumulate in a buffer and
-  flush in blocks so a large module is not one syscall per line. }
+  WriteMapFile (asmdisasm_x64.inc) and writeELF do — 20 sites in the compiler
+  use this path and none uses Text.
+
+  This file's first draft used `var f: Text` + Assign/Rewrite/Writeln/Close and
+  failed to self-host with `undefined variable (Close)`. That looks like an RTL
+  gap and is NOT one, so the reason is written down here rather than left to be
+  rediscovered and mis-filed:
+
+    - The RTL supports Text I/O perfectly well; a standalone pxx program does
+      Assign/Rewrite/Writeln/Close and writes its file.
+    - `pasparser_prog.inc:651` pulls that surface in implicitly when the token
+      stream mentions Text/TextFile/IOResult/Flush — but only `if (not
+      NoDefaultRtl)`.
+    - `compiler.pas:19` is `{$define PXX_NODEFAULTRTL}`.
+
+  So the compiler DELIBERATELY opts out of the default RTL surface, and Text
+  file I/O is absent by design rather than missing by omission. The
+  sysopen/syswrite form is therefore the platonic one *for compiler-internal
+  output* — not a workaround standing in for idiomatic code, and nothing to
+  file a bug against. The idiomatic-FPC form is the right one on the other side
+  of that boundary, which is where the RTL lives.
+
+  Lines accumulate in a buffer and flush in blocks so a large module is not one
+  syscall per line. }
 const
   WT_CAP = 32768;
 
