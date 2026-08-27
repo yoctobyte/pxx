@@ -53,7 +53,7 @@ begin
     { $fp := $sp - 16 ; $sp := $fp }
     WasmGlobalGet(gSp);
     WasmI32Const(16);
-    WasmBinop($6B, 'i32.sub');
+    WasmOp($6B, 'i32.sub');
     WasmLocalSet(lFp);
     WasmLocalGet(lFp);
     WasmGlobalSet(gSp);
@@ -61,17 +61,17 @@ begin
     WasmLocalGet(lFp);
     WasmLocalGet(0);
     WasmLocalGet(1);
-    WasmBinop($6A, 'i32.add');
+    WasmOp($6A, 'i32.add');
     WasmI32Store(2, 0);
     { result := [fp+0] * 2 }
     WasmLocalGet(lFp);
     WasmI32Load(2, 0);
     WasmI32Const(2);
-    WasmBinop($6C, 'i32.mul');
+    WasmOp($6C, 'i32.mul');
     { $sp := $fp + 16  — restore, so the harness's balance assertion means something }
     WasmLocalGet(lFp);
     WasmI32Const(16);
-    WasmBinop($6A, 'i32.add');
+    WasmOp($6A, 'i32.add');
     WasmGlobalSet(gSp);
     WasmBodyTerminate;
   WasmBodyEnd(fAddMul);

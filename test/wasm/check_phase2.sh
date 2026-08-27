@@ -19,8 +19,12 @@ trap 'rm -rf "$work"' EXIT
 "$root/compiler/pascal26" "$here/phase2_slice.pas" "$work/native" >/dev/null
 "$work/native" > "$work/native.txt"
 
+# NOT piped into head: a pipeline's exit status is the LAST command's, so
+# `pascal26ns ... | head -1` under `set -e` reports head's success and a failed
+# compile sails through. Capture, check, then trim.
 "$root/compiler/pascal26" --target=wasm32 -dWASM_NOMAIN \
-    "$here/phase2_slice.pas" "$work/p2.wasm" 2>&1 | head -1
+    "$here/phase2_slice.pas" "$work/p2.wasm" > "$work/cov.txt" 2>&1
+head -1 "$work/cov.txt"
 wasm-validate "$work/p2.wasm"
 
 cat > "$work/run.js" <<'JS'
@@ -28,11 +32,42 @@ const fs = require('fs');
 const inst = new WebAssembly.Instance(
   new WebAssembly.Module(fs.readFileSync(process.argv[2])), {});
 const sp0 = inst.exports.sp.value;
+// Mirrors the native main's writeln order. The duplication is deliberate: two
+// independent expressions of the same call sequence is what makes this a
+// differential test — generating one from the other would cancel a bug in the
+// generator against itself.
+// i64 crosses the JS boundary as BigInt, which prints without the `n`, so the
+// two sides' text compares directly.
 const out = [
   inst.exports.AddMul(3, 4),
   inst.exports.AddMul(-2, 5),
   inst.exports.Chain(6),
   inst.exports.Chain(0),
+  inst.exports.Wide(3000000000n, 4n),
+  inst.exports.Wide(-5n, 7n),
+  inst.exports.Mix(-7, 10000000000n),
+  inst.exports.Narrow(2147483647n),
+  inst.exports.Narrow(-1n),
+  inst.exports.Pack(0),
+  inst.exports.Pack(1000),
+  // Booleans cross as 0/1; Number() matches what native's Ord() prints.
+  Number(inst.exports.LtI(1, 2)),
+  Number(inst.exports.LtI(2, 2)),
+  Number(inst.exports.EqI(2, 2)),
+  Number(inst.exports.GeI(3, 2)),
+  Number(inst.exports.GeI(1, 2)),
+  Number(inst.exports.LtU(-1, 1)),          // 4294967295 as an i32 bit pattern
+  Number(inst.exports.LtU(1, -1)),
+  Number(inst.exports.LtW(-10000000000n, 1n)),
+  Number(inst.exports.EqW(10000000000n, 10000000000n)),
+  inst.exports.Negate(-2147483647),
+  inst.exports.NegateW(-10000000000n),
+  inst.exports.BitNot(0),
+  inst.exports.BitNot(-13),
+  Number(inst.exports.LogNot(0)),
+  Number(inst.exports.LogNot(1)),
+  inst.exports.Bits(120, 5),
+  inst.exports.BitsW(8000000000n, 5n),
 ];
 if (inst.exports.sp.value !== sp0) {
   console.error(`FAIL shadow stack leaked: ${sp0} -> ${inst.exports.sp.value}`);

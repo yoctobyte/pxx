@@ -348,7 +348,11 @@ begin
   until x = 0;
 end;
 
-procedure WasmBodyS32(v: Int64);
+{ Signed LEB128, no width cap — it runs until the value is exhausted, so the
+  same writer serves i32.const (max 5 bytes) and i64.const (max 10). It was
+  called WasmBodyS32 until i64 constants arrived and the name became a claim
+  the body does not make. }
+procedure WasmBodySLEB(v: Int64);
 var x: Int64; b: Byte; more: Boolean;
 begin
   x := v;
@@ -391,13 +395,13 @@ end;
 
 procedure WasmI32Const(v: Int64);
 begin
-  WasmBodyB(WOP_I32_CONST); WasmBodyS32(v);
+  WasmBodyB(WOP_I32_CONST); WasmBodySLEB(v);
   WasmText('i32.const ' + WasmIntStr(v));
 end;
 
 procedure WasmI64Const(v: Int64);
 begin
-  WasmBodyB(WOP_I64_CONST); WasmBodyS32(v);
+  WasmBodyB(WOP_I64_CONST); WasmBodySLEB(v);
   WasmText('i64.const ' + WasmIntStr(v));
 end;
 
@@ -431,23 +435,36 @@ begin
   WasmText('global.set $' + WasmGlobName[idx]);
 end;
 
-{ align is the LOG2 alignment hint; a wrong hint is a performance note, not a
+{ Every load and store in wasm has the same shape — opcode, then a memarg of
+  (log2 alignment hint, offset) — so there is ONE emitter and the caller passes
+  the opcode. The alternative is eight near-identical procedures that differ in
+  two literals, and the widths are not a closed set: i32.load8_s, i32.load16_u,
+  i64.load32_u and the rest are all this instruction.
+
+  align is the LOG2 alignment hint; a wrong hint is a performance note, not a
   fault — unaligned access is legal and defined (phase2-shadow-stack.md). }
+procedure WasmMemOp(opcode: Byte; const nm: AnsiString; align, offset: Integer);
+begin
+  WasmBodyB(opcode); WasmBodyU32(align); WasmBodyU32(offset);
+  WasmText(nm + ' offset=' + WasmIntStr(offset)
+           + ' align=' + WasmIntStr(1 shl align));
+end;
+
 procedure WasmI32Load(align, offset: Integer);
 begin
-  WasmBodyB($28); WasmBodyU32(align); WasmBodyU32(offset);
-  WasmText('i32.load offset=' + WasmIntStr(offset)
-           + ' align=' + WasmIntStr(1 shl align));
+  WasmMemOp($28, 'i32.load', align, offset);
 end;
 
 procedure WasmI32Store(align, offset: Integer);
 begin
-  WasmBodyB($36); WasmBodyU32(align); WasmBodyU32(offset);
-  WasmText('i32.store offset=' + WasmIntStr(offset)
-           + ' align=' + WasmIntStr(1 shl align));
+  WasmMemOp($36, 'i32.store', align, offset);
 end;
 
-procedure WasmBinop(opcode: Byte; const nm: AnsiString);
+{ Any instruction whose whole encoding is one opcode byte: every arithmetic,
+  comparison, conversion and drop instruction in the MVP. It was called
+  WasmBinop until the conversions arrived and the name stopped being true —
+  i64.extend_i32_s is not a binary operator. }
+procedure WasmOp(opcode: Byte; const nm: AnsiString);
 begin
   WasmBodyB(opcode);
   WasmText(nm);
@@ -775,18 +792,16 @@ end;
   class this project treats as the expensive one. Until ir_codegen_wasm32.inc
   populates the model (Phase 2), every real program takes the Error branch, and
   it takes it for an accurate reason. }
-{ Body in ir_codegen_wasm32.inc, which is included later (with the other
-  backends) than this file (with the other encoders). Forwarded here rather
-  than in compiler.pas: the dependency is between two wasm files, so it should
-  not cost a line in a shared one. }
-procedure WasmReportCoverage; forward;
+{ `writeWasm` — the compiler's entry point into all of this — deliberately does
+  NOT live here. It reports coverage first, and coverage is the backend's, so
+  putting it here forced a `procedure WasmReportCoverage; forward;` whose body
+  arrives in a file this one is not allowed to need. That forward compiled fine
+  inside the compiler (where both files are included) and broke the ONE thing
+  this file's independence exists for: test/wasm/wasmenc_selftest.pas includes
+  wasmenc.inc alone, and an unresolved forward is a hard error there. It sat
+  red for a while, because the harness piped the compile into `head` and a
+  pipeline reports the LAST command's status.
 
-procedure writeWasm(const outPath: AnsiString);
-begin
-  WasmReportCoverage;
-  if WasmFuncCount = 0 then
-    WasmFail('wasm32: nothing to write — no code was generated for this module '
-          + '(wasm codegen lands in Phase 2; the module writer is present and '
-          + 'tested via test/wasm/check_phase1.sh)');
-  WasmSaveModule(outPath);
-end;
+  So the entry point is in ir_codegen_wasm32.inc, next to the report it calls,
+  and this file is back to depending on nothing. }
+
