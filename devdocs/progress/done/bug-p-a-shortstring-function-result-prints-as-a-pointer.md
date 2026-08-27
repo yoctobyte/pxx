@@ -112,4 +112,4 @@ regression from this fix:
    walker does not carry. Not needed by the corpus march yet.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 8a62d7eb4.
