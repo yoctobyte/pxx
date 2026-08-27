@@ -6057,7 +6057,7 @@ file-ownership by construction.
 
 Owner's call: a checkout per role/topic, so a human can tell at a glance which
 agent is which, and so destabilizing work sits in a topic tree that "only gets
-merged on occasion". Built on `frank1`'s host; agents are NOT yet restarted into
+merged on occasion". Built on `plexus`; agents are NOT yet restarted into
 them.
 
 ### The trees
@@ -6152,3 +6152,39 @@ against 9 MB tracked).
   because git never rewrites an object in place. Clones simply diverge as each
   one repacks, which at 98 GB free is fine.
 - **Do not work in `~/pxx`.** Retired `dev`, 501 behind.
+
+### `~/frank.sh` — the fleet launcher (clean start after a reboot)
+
+```
+~/frank.sh                 # launch every role
+~/frank.sh frankA frankB   # a subset
+~/frank.sh -l              # what is up
+~/frank.sh -k [role...]    # stop one or all
+```
+
+Two design points that are not obvious and are why the script exists rather
+than a line of shell per tree:
+
+- **Windows, not sessions.** roost renders the windows of exactly ONE tmux
+  session and hardcodes its name (`roost/src/roost/config.py:1`,
+  `SESSION_NAME = "roost"`). An agent started in its *own* tmux session is
+  invisible to the GUI. So each agent is a named **window** in the `roost`
+  session — and *named*, because as of today every tab in roost reads `claude`
+  and you cannot tell frank1 from frank2 without opening it.
+- **The alias is expanded.** `claudea` is an interactive-shell alias
+  (`~/.bashrc:95` → `claude --dangerously-skip-permissions`) and does not exist
+  inside a script.
+
+Each window runs
+`claude --dangerously-skip-permissions --remote-control <role> -n <role>`, so
+Remote Control is on and the role name is what shows in `ListAgents`, the
+`/resume` picker and the terminal title. The window is `; exec bash`-terminated
+so the tab survives the agent exiting.
+
+`trackt-watch` is deliberately **not** launched: Track T's watcher is a daemon
+(`tools/twatch.py`), not an agent. Neither are `frank1`/`frank2` (the
+pre-restart trees) or `pxx` (stale `dev`).
+
+The script lives outside git at `~/frank.sh`. Verified end to end on plexus with
+a stand-in command — window name, cwd, shell survival — and the claude flag
+combination was checked separately.
