@@ -2,9 +2,10 @@
 track: N
 prio: 62
 type: bug
-owner: unassigned
+owner: frank1-AN
 blocked-by: []
 summary: "`self.v = 2.5` in a SUBCLASS, where `v` was declared `self.v = 1` in the parent, prints 4612811918334230528 — the double's bits. The sibling defect within one class was fixed 2026-08-27; this one is left because the parent's layout is already final by the time the subclass is registered, so it needs a whole-program pre-pass rather than a local join."
+status: working
 ---
 
 # A field declared in an ancestor is not widened by a descendant's rebind
@@ -137,3 +138,78 @@ Parked deliberately rather than microfixed. `root-cause-over-microfix.md`: the
 diagnosis is the deliverable when the session cannot finish the overhaul, and a
 narrow "widen when the RHS is a float literal" patch would close the two repros
 above while leaving the concept wrong and the ticket looking done.
+
+## Step 1 done — the field inference is now callable
+
+The scoping note above names the first blocker: *"the field TYPE inference is not
+callable... step one is extracting that inference into a routine,
+behaviour-preserving... Do that as its own commit and gate it before touching
+layout at all."* Done, and landed on its own.
+
+`PyInferFieldDecl(j, fldAnn, methodStart, bodyStart, bodyEnd, isCtor;
+var tk, fldRec, fldSig)` — 271 lines lifted verbatim out of
+`PyRegisterClassMembers`. Not one line of it was rewritten, which is the whole
+point: the pre-pass needs the SAME answer, and a second inference is the
+third-spelling failure this ticket was parked to avoid.
+
+`fldAnn` comes in (the caller still decides assignment-vs-annotated);
+`rhsAt`, `k2` and `rhsName` were locals of the enclosing routine and are now
+locals of this one — verified by measurement that no use of any of them survives
+the block.
+
+### The boundary was one statement off, and it compiled anyway
+
+Worth recording, because the failure was loud but pointed somewhere else
+entirely. The first cut took the block from the `fldAnn` decision through the
+normalisation — which spans the END of one statement and the body of the next:
+
+```pascal
+if (self.NAME shape) then
+begin
+  <fldAnn decision>
+end;                     <-- this end; went into the new routine
+if fldAnn >= 0 then
+begin
+  <the inference>
+```
+
+so the moved `end;` closed the new routine's `begin` early, and the rest of the
+body re-balanced against later `begin`s — a `begin`/`end` count of 18/18, and a
+file whose braces balanced too. It built as far as **`undefined variable
+(LoadFileCI)` in `compiler/pasparser_proc.inc`**, a file included *thirty
+includes earlier* than `pyparser.inc`, with no error reported in the file that
+was actually wrong.
+
+What settled it was bisection, not reading: a stub with the same signature built;
+the body truncated to its **first statement** did not. Printing that truncation
+showed the stray `end;` immediately. The real boundary is the second statement's
+body alone — `if fldAnn > 0 then` through `if tk <> tyClass then fldRec :=
+REC_NONE;`.
+
+The lesson for the next extraction in this file: a balanced `begin`/`end` count
+proves nothing about where a block STARTS, and pxx attributes the resulting
+error to wherever the scope confusion first bites, which can be an unrelated
+file compiled long before.
+
+### Verification — it changes nothing, which is the requirement
+
+- Self-host fixedpoint verified, `converged after 1 round(s)`.
+- **The ticket's own repro is byte-identical to v388 pinned** — `Q().widen()`
+  still prints `4612811918334230528`, `R().read()` still `1`, `P().v` still `1`.
+  An extraction that fixed the bug would mean it had not been an extraction.
+- 55 named field / class-attribute / dataclass / property / inheritance / ctor
+  canaries green. The five that need `-Futest/nilpy_units`
+  (`last_class_in_module_attrs`, `multiple_inheritance_imported_base`,
+  `renamed_class_attrs`, `shim_from_import_class_attrs`,
+  `cross_module_defaults`) were verified byte-identical to pinned WITH the flag —
+  without it they fail identically on both binaries, which is the harness, not
+  the compiler.
+
+### What is left
+
+Step 2, unchanged from the scoping note: a third sub-pass in
+`PyRegisterClassFieldsPrepass` computing, per (class, field), the join over that
+class and every descendant into a side table, consulted by **both** registration
+routes — the pre-pass one and `PyParseClass`'s, or the fix works for most
+programs and silently not for the rest. Blocker 2 of the note still stands and is
+untouched by this commit.

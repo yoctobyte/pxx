@@ -31829,6 +31829,292 @@ begin
       PyMixCollectKeys(PyClsBodyS[PyMixCi[k]], PyClsBodyE[PyMixCi[k]]);
 end;
 
+{ The TYPE of a field declared by `self.NAME = ...` or `self.NAME: ann = ...`:
+  everything between recognising the assignment and deciding what to do with the
+  answer.
+
+  EXTRACTED VERBATIM from the middle of PyRegisterClassMembers, whose body is
+  ~1200 lines. Behaviour-preserving by construction — the block was moved, not
+  rewritten. It is a routine because a SECOND caller needs the same answer, and
+  writing a second inference is the third-spelling failure
+  devdocs/dev/normalise-dont-special-case.md describes: the copy that stays
+  broken. The same move PyJoinInferTk was for the conditional-expression arm.
+
+  The second caller it exists for is the pre-pass that must compute, per
+  (class, field), the join over that class AND every descendant BEFORE any class
+  in the hierarchy is laid out — because a field declared in an ancestor is not
+  widened today when a descendant rebinds it across a type boundary, and the
+  parent's layout is already final by the time the subclass is registered. That
+  pass cannot be written while this inference is unreachable, so the extraction
+  lands and is gated on its own, first.
+  bug-n-a-field-declared-in-an-ancestor-is-not-widened-by-a-descendants-rebind
+
+  `fldAnn` comes IN: the caller decides whether this is an assignment (0) or an
+  annotated declaration (the annotation's token index), and only calls here when
+  it is one of the two. `rhsAt`, `k2` and `rhsName` were locals of the enclosing
+  routine and are purely internal to this block — measured, no use of any of them
+  survives it. `tk`, `fldRec` and `fldSig` are the answer.
+
+  `j` addresses the `self` token. Reads the token stream and the class tables;
+  writes neither. }
+procedure PyInferFieldDecl(j, fldAnn, methodStart, bodyStart, bodyEnd: Integer;
+                           isCtor: Boolean;
+                           var tk: TTypeKind; var fldRec, fldSig: Integer);
+var rhsAt, k2: Integer; rhsName: AnsiString;
+begin
+  if fldAnn > 0 then
+  begin
+    { annotated: the annotation IS the type, exactly as for a
+      dataclass field — same PyAnnTypeAt grammar (Optional/Any/
+      List/Callable/forward refs). }
+    k2 := fldAnn;
+    tk := PyAnnTypeAt(k2);
+    fldSig := PyAnnLastProcSig;
+    fldRec := REC_NONE;
+    if (tk = tyClass) and (PyAnnLastCi >= 0) then
+      fldRec := REC_UCLASS_BASE + PyAnnLastCi;
+    if tk = tyUnknown then
+    begin
+      { An annotation this reader cannot interpret fell THROUGH to the
+        infer-from-the-right-hand-side path below and came out as
+        "cannot infer the type of field self.xs - annotate it" — about
+        a field that IS annotated. Degrade to Any, same as everywhere
+        else. bug-n-an-uninterpretable-annotation-refuses-the-program }
+      PyWarnUnreadAnnotation('field self.' + GetTokenStr(j + 2),
+                             Tokens[j].Line);
+      tk := tyVariant;
+      fldSig := -1;
+    end;
+  end
+  else
+  begin
+    rhsAt := j + 4;
+    { A QUALIFIED construction first — `self.canvas = tk.Canvas(root)`.
+      Reading the type off the FIRST token would resolve the module
+      alias `tk`, and a class may well be named for it (tkinter's own
+      `Tk` root window, matched case-insensitively): the field was then
+      recorded as a Tk, so `self.canvas.create_text(...)` found no such
+      method and fell through to the dynamic-attribute path — which
+      cannot bind keyword arguments. }
+    tk := tyUnknown;
+    fldRec := REC_NONE;
+    if (rhsAt + 3 < bodyEnd) and (Tokens[rhsAt].Kind = tkIdent) and
+       (Tokens[rhsAt + 1].Kind = tkDot) and (Tokens[rhsAt + 2].Kind = tkIdent) and
+       (Tokens[rhsAt + 3].Kind = tkLParen) and
+       (FindUClassNonRecord(GetTokenStr(rhsAt + 2)) >= 0) then
+    begin
+      { NonRecord, both times: a QUALIFIED construction
+        `self.t = tk.Text(...)` names a class, and the first row of
+        that name may be a same-named RECORD — which is how this arm
+        typed a Text field as the RTL's file record and then reported
+        "Text has no method insert".
+        bug-nilpy-text-class-name-binds-the-rtl-file-record. }
+      tk := tyClass;
+      fldRec := REC_UCLASS_BASE + FindUClassNonRecord(GetTokenStr(rhsAt + 2));
+    end;
+    { A bare identifier that names a PARAMETER of this method is a
+      VALUE, and that reading has to win before the type scanners see
+      it. PyTypeFromTokenIndex maps an identifier that names a class
+      to tyClass, case-INSENSITIVELY (Pascal rules), so in
+
+          class Node:
+              def __init__(self, node: int):
+                  self.node = node
+
+      the right-hand `node` matched the class `Node` and the field was
+      registered as an instance of its own class. `str(self.node)`
+      then took the object route and dispatched __str__ on the
+      integer, which SEGFAULTED — with the name being the only
+      trigger, so the identical class called `A` with a field `v` was
+      fine (bug-nilpy-str-of-object-segfaults-when-dunder-builds-a-
+      string). Any field whose name matches ANY class name, not only
+      its own, hit it.
+
+      Order only: a right-hand side that is not a parameter still
+      falls through to exactly the scanners it used before. }
+    { The end of the right-hand side, computed ONCE and used by every
+      arm below. `tkSemicolon` is in the terminator set because a
+      statement can end there: `def __init__(self, items):
+      self.items = items; self.i = 0` scanned to end-of-LINE, so the
+      expression scanner saw `items ; self . i = 0` and typed the
+      field from the `0`. A TPyList was then stored into an Int64
+      field and the first read died with "expected a number, got
+      object" — with the shape being as ordinary as a one-line
+      __init__ gets. PyBlkRhsEndsAt three functions up already knows
+      `;` ends a statement; this scan did not.
+      bug-n-a-field-typed-across-a-semicolon-takes-the-next-statements-type }
+    k2 := rhsAt;
+    while (k2 < bodyEnd) and
+          not (Tokens[k2].Kind in [tkNewline, tkDedent, tkSemicolon, tkEOF]) do Inc(k2);
+    { The two FIRST-TOKEN readers decide only when that token IS the
+      whole right-hand side. A first-token answer is a claim about
+      that token, and making it about the expression is how
+      `self.v = n / 2` came out an Int64 holding 2.5's IEEE bits: the
+      parameter reader answered `int` from the `n` and the expression
+      scanner — which types true division correctly — never ran. Same
+      for `self.v = n + 1.5`, where no division is involved at all,
+      which is what shows the operator was never the subject.
+      They are NOT reordered away: they run again as the fallback
+      below, so a right-hand side the expression scanner cannot type
+      resolves exactly as it did before.
+      bug-n-a-field-takes-its-type-from-the-first-token-of-its-right-hand-side }
+    if (tk = tyUnknown) and PyBlkRhsEndsAt(rhsAt) and
+       (Tokens[rhsAt].Kind = tkIdent) then
+    begin
+      rhsName := GetTokenStr(rhsAt);
+      tk := PyHeaderParamType(methodStart, j, rhsName);
+      fldSig := PyAnnLastProcSig;
+      fldRec := PyHeaderParamRec(methodStart, j, rhsName);
+    end;
+    if (tk = tyUnknown) and PyBlkRhsEndsAt(rhsAt) then
+    begin
+      tk := PyTypeFromTokenIndex(rhsAt);
+      fldRec := PyRecFromTokenIndex(rhsAt);
+    end;
+    if tk = tyUnknown then
+    begin
+      { Anything richer than a literal or a bare parameter — a list
+        literal (`self.base_stack = [10]`), a call, a construction.
+        One scanner already knows how to type an expression; reuse
+        it rather than erroring or growing a second half-scanner
+        here. }
+      tk := PyInferExprType(rhsAt, k2);
+      if (tk = tyClass) and (PyInferLastCi >= 0) then
+        fldRec := REC_UCLASS_BASE + PyInferLastCi;
+    end;
+    { ...and the first-token readers as the FALLBACK, unguarded, for a
+      multi-token right-hand side the expression scanner declined.
+      Nothing that resolved before this change stops resolving. }
+    if (tk = tyUnknown) and (Tokens[rhsAt].Kind = tkIdent) then
+    begin
+      rhsName := GetTokenStr(rhsAt);
+      tk := PyHeaderParamType(methodStart, j, rhsName);
+      fldSig := PyAnnLastProcSig;
+      fldRec := PyHeaderParamRec(methodStart, j, rhsName);
+    end;
+    if tk = tyUnknown then
+    begin
+      tk := PyTypeFromTokenIndex(rhsAt);
+      fldRec := PyRecFromTokenIndex(rhsAt);
+    end;
+  end;
+  { Assigned from a MODULE GLOBAL: `self.state = NEW`, the ordinary
+    Python module-level constant. None of the scanners above can see
+    it — the name is bound outside this class body — and the field was
+    rejected outright with "cannot infer the type of field", uniformly
+    for a str / int / float / list / bool global.
+    PyModuleGlobalLiteralType reads it straight off the module's
+    tokens — PyCollectModuleLocalsAST, which would know, does not run
+    until after this pre-pass.
+    bug-nilpy-a-field-assigned-from-a-module-global-has-no-inferable-type }
+  if (tk = tyUnknown) and (Tokens[j + 4].Kind = tkIdent) and
+     PyBlkRhsEndsAt(j + 4) and
+     (not PyHeaderHasParam(methodStart, j, GetTokenStr(j + 4))) then
+  begin
+    tk := PyModuleGlobalLiteralType(GetTokenStr(j + 4));
+    if tk <> tyUnknown then fldRec := REC_NONE
+    else
+    begin
+      { ...and the same global holding a class INSTANCE, `G = K()`,
+        which needs the class identity as well as the kind — see
+        PyModuleGlobalCtorClass for why reporting only the kind
+        produced a plausible wrong number. }
+      k2 := PyModuleGlobalCtorClass(GetTokenStr(j + 4));
+      if k2 >= 0 then
+      begin
+        tk := tyClass;
+        fldRec := REC_UCLASS_BASE + k2;
+      end
+      else if PyModuleGlobalIsDef(GetTokenStr(j + 4)) then
+      begin
+        { ...and the same global holding a FUNCTION: `self.fn = named`,
+          a module-level def used as a value. Third member of this
+          family and the same blind spot — the name is bound outside
+          the class body, so none of the scanners above sees it, and
+          the field was rejected outright with "cannot infer the type
+          of field self.fn - annotate it" for a shape that needs no
+          annotation in Python.
+
+          It is the LOCAL rule that settles the answer, not a new one:
+          `g = named` at module level already yields a variant
+          carrying the callable (feature-nilpy-function-values), and a
+          field is the other spelling of the same binding — one
+          concept, two spellings, only one of them wired
+          (devdocs/dev/normalise-dont-special-case.md). It also
+          matches what the ctor-PARAMETER arm just below already
+          answers for `self.on_next = on_next`, where the parameter
+          routinely IS a function: variant, so the runtime tag
+          travels with the value.
+
+          Variant and not a recorded signature, deliberately. The
+          dispatcher handles a callable variant including its KEYWORD
+          arguments -- measured through a dict value, a list element,
+          a parameter and a branch result -- so a static signature
+          here would buy nothing and would be wrong the moment the
+          field is reassigned to a different function, which is
+          exactly what a dispatch table does.
+          bug-n-a-field-assigned-a-module-level-def-has-no-inferable-type }
+        tk := tyVariant;
+        fldRec := REC_NONE;
+        fldSig := -1;
+      end;
+    end;
+  end;
+  if tk = tyUnknown then
+  begin
+    { Assigned from a bare ctor PARAMETER that carries no annotation:
+      `def __init__(self, parent, on_next)` then `self.on_next =
+      on_next`. Python does not require the annotation and neither can
+      we — that is the shape of an ordinary class, and erroring here
+      rejected whole modules over it (songformatter's FormatText).
+      The field takes the variant type, which is what an unannotated
+      LOCAL already gets, so the value keeps its runtime tag.
+
+      Only for that case: a right-hand side the scanners could not
+      type at all still errors, because guessing there would hide a
+      real mistake. }
+    if ((Tokens[j + 4].Kind = tkIdent) and
+        PyHeaderHasParam(methodStart, j, GetTokenStr(j + 4))) or
+       (Tokens[j + 4].Kind = tkNil) then
+    begin
+      { ...or assigned None outright: `self.file_path = None`, which is
+        how Python declares a field that gets a value later. There is
+        no type to read off None, and demanding an annotation for it
+        rejected the class. Variant, so the tag is whatever is stored
+        next. }
+      tk := tyVariant;
+      fldRec := REC_NONE;
+      fldSig := -1;
+    end
+    else if not isCtor then
+      { OUTSIDE the constructor an unreadable right-hand side is not a
+        diagnostic: `self.items = self.load()` in a helper is ordinary
+        Python, and the field is already declared (or will be) where
+        its type IS readable. The variant keeps the runtime tag; only
+        the ctor, where a field is normally introduced, still insists
+        on something it can type. }
+      tk := tyVariant
+    else
+      ErrorAt(Tokens[j].Line,
+              'Nil Python: cannot infer the type of field self.'
+              + GetTokenStr(j + 2) + ' - annotate it (self.'
+              + GetTokenStr(j + 2) + ': int = ...)');
+  end;
+  { An int field this class GROWS by arithmetic on itself becomes a
+    VARIANT, so an accumulator stays exact past 2^63 instead of
+    wrapping in silence — see PyFieldIsIntAccumulator for why variant
+    and not promo, and for why the test is deliberately narrow. }
+  if PyIsMachineIntTk(tk) and
+     PyFieldIsIntAccumulator(bodyStart, bodyEnd, GetTokenStr(j + 2)) then
+  begin
+    tk := tyVariant;
+    fldSig := -1;
+  end;
+  { see the dataclass branch: str fields are managed, not string[N] }
+  if tk = tyString then tk := tyAnsiString;
+  if tk <> tyClass then fldRec := REC_NONE;
+end;
+
 procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer; isDC: Boolean;
                                  fieldsOnly: Boolean);
 var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, align, sz: Integer;
@@ -32776,257 +33062,8 @@ begin
           end;
           if fldAnn >= 0 then
           begin
-            if fldAnn > 0 then
-            begin
-              { annotated: the annotation IS the type, exactly as for a
-                dataclass field — same PyAnnTypeAt grammar (Optional/Any/
-                List/Callable/forward refs). }
-              k2 := fldAnn;
-              tk := PyAnnTypeAt(k2);
-              fldSig := PyAnnLastProcSig;
-              fldRec := REC_NONE;
-              if (tk = tyClass) and (PyAnnLastCi >= 0) then
-                fldRec := REC_UCLASS_BASE + PyAnnLastCi;
-              if tk = tyUnknown then
-              begin
-                { An annotation this reader cannot interpret fell THROUGH to the
-                  infer-from-the-right-hand-side path below and came out as
-                  "cannot infer the type of field self.xs - annotate it" — about
-                  a field that IS annotated. Degrade to Any, same as everywhere
-                  else. bug-n-an-uninterpretable-annotation-refuses-the-program }
-                PyWarnUnreadAnnotation('field self.' + GetTokenStr(j + 2),
-                                       Tokens[j].Line);
-                tk := tyVariant;
-                fldSig := -1;
-              end;
-            end
-            else
-            begin
-              rhsAt := j + 4;
-              { A QUALIFIED construction first — `self.canvas = tk.Canvas(root)`.
-                Reading the type off the FIRST token would resolve the module
-                alias `tk`, and a class may well be named for it (tkinter's own
-                `Tk` root window, matched case-insensitively): the field was then
-                recorded as a Tk, so `self.canvas.create_text(...)` found no such
-                method and fell through to the dynamic-attribute path — which
-                cannot bind keyword arguments. }
-              tk := tyUnknown;
-              fldRec := REC_NONE;
-              if (rhsAt + 3 < bodyEnd) and (Tokens[rhsAt].Kind = tkIdent) and
-                 (Tokens[rhsAt + 1].Kind = tkDot) and (Tokens[rhsAt + 2].Kind = tkIdent) and
-                 (Tokens[rhsAt + 3].Kind = tkLParen) and
-                 (FindUClassNonRecord(GetTokenStr(rhsAt + 2)) >= 0) then
-              begin
-                { NonRecord, both times: a QUALIFIED construction
-                  `self.t = tk.Text(...)` names a class, and the first row of
-                  that name may be a same-named RECORD — which is how this arm
-                  typed a Text field as the RTL's file record and then reported
-                  "Text has no method insert".
-                  bug-nilpy-text-class-name-binds-the-rtl-file-record. }
-                tk := tyClass;
-                fldRec := REC_UCLASS_BASE + FindUClassNonRecord(GetTokenStr(rhsAt + 2));
-              end;
-              { A bare identifier that names a PARAMETER of this method is a
-                VALUE, and that reading has to win before the type scanners see
-                it. PyTypeFromTokenIndex maps an identifier that names a class
-                to tyClass, case-INSENSITIVELY (Pascal rules), so in
-
-                    class Node:
-                        def __init__(self, node: int):
-                            self.node = node
-
-                the right-hand `node` matched the class `Node` and the field was
-                registered as an instance of its own class. `str(self.node)`
-                then took the object route and dispatched __str__ on the
-                integer, which SEGFAULTED — with the name being the only
-                trigger, so the identical class called `A` with a field `v` was
-                fine (bug-nilpy-str-of-object-segfaults-when-dunder-builds-a-
-                string). Any field whose name matches ANY class name, not only
-                its own, hit it.
-
-                Order only: a right-hand side that is not a parameter still
-                falls through to exactly the scanners it used before. }
-              { The end of the right-hand side, computed ONCE and used by every
-                arm below. `tkSemicolon` is in the terminator set because a
-                statement can end there: `def __init__(self, items):
-                self.items = items; self.i = 0` scanned to end-of-LINE, so the
-                expression scanner saw `items ; self . i = 0` and typed the
-                field from the `0`. A TPyList was then stored into an Int64
-                field and the first read died with "expected a number, got
-                object" — with the shape being as ordinary as a one-line
-                __init__ gets. PyBlkRhsEndsAt three functions up already knows
-                `;` ends a statement; this scan did not.
-                bug-n-a-field-typed-across-a-semicolon-takes-the-next-statements-type }
-              k2 := rhsAt;
-              while (k2 < bodyEnd) and
-                    not (Tokens[k2].Kind in [tkNewline, tkDedent, tkSemicolon, tkEOF]) do Inc(k2);
-              { The two FIRST-TOKEN readers decide only when that token IS the
-                whole right-hand side. A first-token answer is a claim about
-                that token, and making it about the expression is how
-                `self.v = n / 2` came out an Int64 holding 2.5's IEEE bits: the
-                parameter reader answered `int` from the `n` and the expression
-                scanner — which types true division correctly — never ran. Same
-                for `self.v = n + 1.5`, where no division is involved at all,
-                which is what shows the operator was never the subject.
-                They are NOT reordered away: they run again as the fallback
-                below, so a right-hand side the expression scanner cannot type
-                resolves exactly as it did before.
-                bug-n-a-field-takes-its-type-from-the-first-token-of-its-right-hand-side }
-              if (tk = tyUnknown) and PyBlkRhsEndsAt(rhsAt) and
-                 (Tokens[rhsAt].Kind = tkIdent) then
-              begin
-                rhsName := GetTokenStr(rhsAt);
-                tk := PyHeaderParamType(methodStart, j, rhsName);
-                fldSig := PyAnnLastProcSig;
-                fldRec := PyHeaderParamRec(methodStart, j, rhsName);
-              end;
-              if (tk = tyUnknown) and PyBlkRhsEndsAt(rhsAt) then
-              begin
-                tk := PyTypeFromTokenIndex(rhsAt);
-                fldRec := PyRecFromTokenIndex(rhsAt);
-              end;
-              if tk = tyUnknown then
-              begin
-                { Anything richer than a literal or a bare parameter — a list
-                  literal (`self.base_stack = [10]`), a call, a construction.
-                  One scanner already knows how to type an expression; reuse
-                  it rather than erroring or growing a second half-scanner
-                  here. }
-                tk := PyInferExprType(rhsAt, k2);
-                if (tk = tyClass) and (PyInferLastCi >= 0) then
-                  fldRec := REC_UCLASS_BASE + PyInferLastCi;
-              end;
-              { ...and the first-token readers as the FALLBACK, unguarded, for a
-                multi-token right-hand side the expression scanner declined.
-                Nothing that resolved before this change stops resolving. }
-              if (tk = tyUnknown) and (Tokens[rhsAt].Kind = tkIdent) then
-              begin
-                rhsName := GetTokenStr(rhsAt);
-                tk := PyHeaderParamType(methodStart, j, rhsName);
-                fldSig := PyAnnLastProcSig;
-                fldRec := PyHeaderParamRec(methodStart, j, rhsName);
-              end;
-              if tk = tyUnknown then
-              begin
-                tk := PyTypeFromTokenIndex(rhsAt);
-                fldRec := PyRecFromTokenIndex(rhsAt);
-              end;
-            end;
-            { Assigned from a MODULE GLOBAL: `self.state = NEW`, the ordinary
-              Python module-level constant. None of the scanners above can see
-              it — the name is bound outside this class body — and the field was
-              rejected outright with "cannot infer the type of field", uniformly
-              for a str / int / float / list / bool global.
-              PyModuleGlobalLiteralType reads it straight off the module's
-              tokens — PyCollectModuleLocalsAST, which would know, does not run
-              until after this pre-pass.
-              bug-nilpy-a-field-assigned-from-a-module-global-has-no-inferable-type }
-            if (tk = tyUnknown) and (Tokens[j + 4].Kind = tkIdent) and
-               PyBlkRhsEndsAt(j + 4) and
-               (not PyHeaderHasParam(methodStart, j, GetTokenStr(j + 4))) then
-            begin
-              tk := PyModuleGlobalLiteralType(GetTokenStr(j + 4));
-              if tk <> tyUnknown then fldRec := REC_NONE
-              else
-              begin
-                { ...and the same global holding a class INSTANCE, `G = K()`,
-                  which needs the class identity as well as the kind — see
-                  PyModuleGlobalCtorClass for why reporting only the kind
-                  produced a plausible wrong number. }
-                k2 := PyModuleGlobalCtorClass(GetTokenStr(j + 4));
-                if k2 >= 0 then
-                begin
-                  tk := tyClass;
-                  fldRec := REC_UCLASS_BASE + k2;
-                end
-                else if PyModuleGlobalIsDef(GetTokenStr(j + 4)) then
-                begin
-                  { ...and the same global holding a FUNCTION: `self.fn = named`,
-                    a module-level def used as a value. Third member of this
-                    family and the same blind spot — the name is bound outside
-                    the class body, so none of the scanners above sees it, and
-                    the field was rejected outright with "cannot infer the type
-                    of field self.fn - annotate it" for a shape that needs no
-                    annotation in Python.
-
-                    It is the LOCAL rule that settles the answer, not a new one:
-                    `g = named` at module level already yields a variant
-                    carrying the callable (feature-nilpy-function-values), and a
-                    field is the other spelling of the same binding — one
-                    concept, two spellings, only one of them wired
-                    (devdocs/dev/normalise-dont-special-case.md). It also
-                    matches what the ctor-PARAMETER arm just below already
-                    answers for `self.on_next = on_next`, where the parameter
-                    routinely IS a function: variant, so the runtime tag
-                    travels with the value.
-
-                    Variant and not a recorded signature, deliberately. The
-                    dispatcher handles a callable variant including its KEYWORD
-                    arguments -- measured through a dict value, a list element,
-                    a parameter and a branch result -- so a static signature
-                    here would buy nothing and would be wrong the moment the
-                    field is reassigned to a different function, which is
-                    exactly what a dispatch table does.
-                    bug-n-a-field-assigned-a-module-level-def-has-no-inferable-type }
-                  tk := tyVariant;
-                  fldRec := REC_NONE;
-                  fldSig := -1;
-                end;
-              end;
-            end;
-            if tk = tyUnknown then
-            begin
-              { Assigned from a bare ctor PARAMETER that carries no annotation:
-                `def __init__(self, parent, on_next)` then `self.on_next =
-                on_next`. Python does not require the annotation and neither can
-                we — that is the shape of an ordinary class, and erroring here
-                rejected whole modules over it (songformatter's FormatText).
-                The field takes the variant type, which is what an unannotated
-                LOCAL already gets, so the value keeps its runtime tag.
-
-                Only for that case: a right-hand side the scanners could not
-                type at all still errors, because guessing there would hide a
-                real mistake. }
-              if ((Tokens[j + 4].Kind = tkIdent) and
-                  PyHeaderHasParam(methodStart, j, GetTokenStr(j + 4))) or
-                 (Tokens[j + 4].Kind = tkNil) then
-              begin
-                { ...or assigned None outright: `self.file_path = None`, which is
-                  how Python declares a field that gets a value later. There is
-                  no type to read off None, and demanding an annotation for it
-                  rejected the class. Variant, so the tag is whatever is stored
-                  next. }
-                tk := tyVariant;
-                fldRec := REC_NONE;
-                fldSig := -1;
-              end
-              else if not isCtor then
-                { OUTSIDE the constructor an unreadable right-hand side is not a
-                  diagnostic: `self.items = self.load()` in a helper is ordinary
-                  Python, and the field is already declared (or will be) where
-                  its type IS readable. The variant keeps the runtime tag; only
-                  the ctor, where a field is normally introduced, still insists
-                  on something it can type. }
-                tk := tyVariant
-              else
-                ErrorAt(Tokens[j].Line,
-                        'Nil Python: cannot infer the type of field self.'
-                        + GetTokenStr(j + 2) + ' - annotate it (self.'
-                        + GetTokenStr(j + 2) + ': int = ...)');
-            end;
-            { An int field this class GROWS by arithmetic on itself becomes a
-              VARIANT, so an accumulator stays exact past 2^63 instead of
-              wrapping in silence — see PyFieldIsIntAccumulator for why variant
-              and not promo, and for why the test is deliberately narrow. }
-            if PyIsMachineIntTk(tk) and
-               PyFieldIsIntAccumulator(bodyStart, bodyEnd, GetTokenStr(j + 2)) then
-            begin
-              tk := tyVariant;
-              fldSig := -1;
-            end;
-            { see the dataclass branch: str fields are managed, not string[N] }
-            if tk = tyString then tk := tyAnsiString;
-            if tk <> tyClass then fldRec := REC_NONE;
+            PyInferFieldDecl(j, fldAnn, methodStart, bodyStart, bodyEnd, isCtor,
+                             tk, fldRec, fldSig);
             { ...unless the name is a CLASS ATTRIBUTE lowered as a shared slot
               with per-instance overrides. There `self.x = ...` is precisely the
               write that creates the override, and giving it a field as well
