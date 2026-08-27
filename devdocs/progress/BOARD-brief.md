@@ -5,17 +5,17 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:22 blocked:7 backlog:262 backlog_new:2 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2522 rejected:45`
+`working:2 unfinished:21 blocked:7 backlog:263 backlog_new:2 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2522 rejected:45`
 
 ## Held now (working/ — do not touch these files)
 
+- `bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name` [N] — owner: frank1-AN
 - `feature-target-wasm` [A+B] — owner: frankwasm
 
-## unfinished (22) — parked mid-flight; re-claim, do not duplicate
+## unfinished (21) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
-- `bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `docs-devnotes-ai-assisted-build` [D]
@@ -71,12 +71,12 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [O]` feature-opt-bulk-copy-is-byte-at-a-time
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
-- `[p 62] [N]` bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
 - `[p 62] [B]` feature-b-the-module-shim-batch-blocking-the-python-corpus
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
 - `[p 62] [A]` feature-unicodestring-model
+- `[p 60] [B]` bug-b-nilpy-random-is-never-seeded-and-its-first-draw-is-the-low-bound
 
 _244 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

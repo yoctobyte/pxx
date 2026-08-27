@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 summary: "`X.attr` where X came from an import that did not resolve is compiled as the BARE NAME `attr`, so `ModuleType.__name__` fails with `undefined variable (__name__)` — a message naming the attribute and never the unresolved import that caused it. Now the first wall on 4 html5lib files."
 status: working
-owner: frankonpiler-an
+owner: frank1-AN
 ---
 
 # An attribute on an unresolved import degrades to a bare name
@@ -137,3 +137,104 @@ mistake was inferring a cause from one observation (`pyvartag = 12` → "the
 boundfn carrier"; "no such Python module" → "unresolved import") instead of
 printing which path actually ran. The correction is recorded here rather than
 edited away.
+
+---
+
+## 2026-08-27 — RESOLVED. Piece 1 was already fixed; piece 2 is what landed.
+
+The 2026-08-19 investigation split this into two pieces and said neither was
+what the title said. Re-measured today on HEAD, both halves have moved:
+
+### Piece 1 (the collision) is already fixed — by someone else, since
+
+The two worst rows in the investigation's table now name the collision exactly:
+
+```
+from types import ModuleType
+  -> import: types is the Pascal unit .../lib/rtl/types.pas, not a Python
+     module — a bare NilPy import resolves to Python (.py/.npy) only. To reach
+     the Pascal unit, name it with its extension: import 'types.pas' as types
+
+from classes import Foo
+  -> the same message, naming lib/rtl/classes.pas
+```
+
+That is `pasparser_proc.inc`'s "THE COLLISION, NAMED" guard. So the design call
+this ticket wanted to send to Track U has been made and implemented, and
+`classes` — the row the investigation called the worst of them, failing inside
+Pascal's unit with a message about `Delete` — is gone.
+
+All eight colliding names, measured today with `import X` + `X.NoSuchThing`:
+
+| name | verdict |
+| --- | --- |
+| `classes`, `types` | refused, collision NAMED — correct |
+| `io`, `json`, `math`, `re` | resolve as NilPy modules — correct, and the member error now names the qualifier |
+| `strings` | resolves to something; members do not answer |
+| `random` | the qualifier itself is undefined (`random.f` flat-resolves, `random.NoSuchThing` does not) |
+
+### Piece 2 (the diagnostic) is what this commit does
+
+*"When a member lookup through a qualifier fails, name the receiver as well as
+the member"* — the half the investigation said was worth doing either way.
+
+```
+import strings
+print(strings.Foo)
+
+  was:  error: undefined variable (Foo)
+  now:  error: no member Foo came of the qualifier strings — check what
+        strings resolves to; an import that bound nothing gives exactly
+        this (strings.Foo)
+```
+
+`PyQualifierBefore(identTok)` reads the dotted receiver back off the TOKEN
+STREAM. `ParseLValueAST` hands its NilPy half only `(idx, identTokIdx)`, and by
+the time a member lookup has failed every arm that could have resolved the
+receiver has consumed it — threading it down would mean passing it from a dozen
+sites, each a chance to pass the wrong one. What the user *wrote* is one place
+and cannot drift from itself.
+
+Only a plain dotted chain is named: `a[i].Foo` and `f(x).Foo` answer `''` and
+keep the short message, because there is no short phrase for those receivers
+and a half-right one in a diagnostic is worse than none.
+
+**The cause is deliberately not claimed.** This site cannot tell a receiver that
+resolved to nothing from one that resolved and has no such member. Guessing
+between them is precisely how this ticket's own original root cause came out
+wrong — twice, as the 2026-08-19 note records. The message states only what is
+known: the qualified name the user wrote, and that no member came of it.
+
+The Pascal half (`pasparser_lval.inc:85/89`) is deliberately left alone. The two
+parsers are duplicated across languages on purpose
+(`devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md`), and Pascal has no
+unresolved-import path that reaches this arm the same way.
+
+### Tests
+
+- `test_nilpy_qualified_name_error_names_the_receiver` — the qualifier is named,
+  exit 1, no binary emitted.
+- `test_nilpy_bare_name_error_stays_short` — the **control**: a genuinely bare
+  undefined name keeps `undefined variable (Foo)`. Inventing a receiver where
+  the user wrote none would be the same defect pointing the other way. Two files
+  rather than two lines because this site calls `Error`, not `ErrorRecover`, so
+  one compile reports one error.
+
+Both registered in the Makefile beside the other NilPy diagnostics.
+
+### Left open, filed separately
+
+- **`random` is never seeded and its first draw is the low bound** — found while
+  sweeping the eight colliding names. `random.randint(1,100)` gives the same
+  sequence every run and always opens with `1`. Filed as
+  [[bug-b-nilpy-random-is-never-seeded-and-its-first-draw-is-the-low-bound]]
+  (Track B, p60).
+- **`strings`** resolves to something whose members do not answer, unlike
+  `types`/`classes` which are refused outright. Not chased: the new diagnostic
+  now makes it self-explaining at the point of use, which is what this ticket
+  was for.
+
+### Gate
+
+`make compiler/pascal26` — self-host fixedpoint `100300ef2b3a`, converged in 1
+round. Both new tests pass, verified by running the Makefile's own assertions.

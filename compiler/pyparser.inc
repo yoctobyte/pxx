@@ -38149,6 +38149,44 @@ end;
   therefore left in place THERE: isNilPy still holds while an .npy program's
   Pascal RTL units are parsed, with PyExprMode false.
   --------------------------------------------------------------------------- }
+function PyQualifierBefore(identTok: Integer): AnsiString;
+{ The dotted receiver the user wrote immediately before the identifier at
+  identTok, or '' when there is none: `strings.Foo` -> 'strings',
+  `a.b.Foo` -> 'a.b', a bare `Foo` -> ''.
+
+  Read back off the TOKEN STREAM rather than threaded down from the caller.
+  ParseLValueAST hands its NilPy half only (idx, identTokIdx): by the time a
+  member lookup has failed, every arm that could have resolved the receiver has
+  already consumed it, and threading it would mean passing it from a dozen
+  sites, each a chance to pass the wrong one. What the user WROTE is one place
+  and cannot drift from itself.
+
+  Only a plain dotted chain of identifiers is named. `a[i].Foo` and
+  `f(x).Foo` answer '' — there is no short phrase for those receivers, and a
+  half-right one in a diagnostic is worse than none.
+  bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name }
+var k, lo: Integer;
+begin
+  Result := '';
+  if identTok < 2 then Exit;
+  if Tokens[identTok - 1].Kind <> tkDot then Exit;
+  k := identTok - 1;
+  lo := -1;
+  while (k >= 1) and (Tokens[k].Kind = tkDot) and (Tokens[k - 1].Kind = tkIdent) do
+  begin
+    lo := k - 1;
+    k := k - 2;
+  end;
+  if lo < 0 then Exit;
+  k := lo;
+  while k < identTok - 1 do
+  begin
+    if Tokens[k].Kind = tkIdent then Result := Result + GetTokenStr(k)
+    else if Tokens[k].Kind = tkDot then Result := Result + '.';
+    Inc(k);
+  end;
+end;
+
 function PyParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   augBin: TTokenKind; augRead, augNode: Integer;   { `d[k] += v` }
@@ -38184,6 +38222,7 @@ var
   setTmpSym, setTmpAssign, setInnerComma: Integer;   { chained subscript-assign value }
   binNode: Integer; augTk2: TTokenKind;   { `v[k] op= x` on a variant base }
   sharedNeedsOvr: Boolean;   { the shared class-attribute slot also has per-instance overrides }
+  qualRecv: AnsiString;   { the dotted receiver the user wrote, for the diagnostic }
 begin
   prevTok := identTokIdx;
   if DebugTrace then writeln('PyParseLValueAST: idx = ', idx, ' prevTok = ', prevTok, ' TokenStr = "', GetTokenStr(prevTok), '" CurTok.Line = ', CurTok.Line, ' TokPos = ', TokPos);
@@ -39138,10 +39177,41 @@ begin
         else
         begin
           ErrorIdent := fieldName;
+          { NAME THE RECEIVER. `X.Y` whose receiver resolved to nothing arrives
+            here having been compiled as the bare name `Y`, and the diagnostic
+            then reported `undefined variable (Y)` — naming the attribute and
+            never the qualifier that actually failed, so the message points at
+            the wrong half of the line. `import strings` (a Pascal RTL unit
+            wearing a Python module's name) followed by `strings.Foo` said
+            `undefined variable (Foo)`, which reads as a typo in `Foo`.
+
+            The cause is deliberately NOT claimed: this site cannot tell a
+            receiver that resolved to nothing from one that resolved and has no
+            such member, and guessing between them is how the ticket that filed
+            this bug got its own root cause wrong. What is stated is only what
+            is known — the qualified name the user wrote, and that no member
+            came of it.
+
+            The Pascal half of this routine (pasparser_lval.inc) has the same
+            shape and is deliberately left alone: the two parsers are duplicated
+            across languages on purpose
+            (devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md), and
+            Pascal has no unresolved-import path that reaches it this way.
+            bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name }
+          qualRecv := PyQualifierBefore(prevTok);
           if HiddenByDeclOrder(fieldName) then
             Error('undefined variable — it is a global declared later, declare it before use')
           else if HiddenByForwardOrder(fieldName) then
             Error('routine used before its declaration — define it above, or add a forward; declaration (--strict/require-forward)')
+          else if qualRecv <> '' then
+          begin
+            ErrorIdent := qualRecv + '.' + fieldName;
+            { Terse on purpose: ErrorIdent already prints the qualified name in
+              parentheses, so the text must not spell it a third time. }
+            Error('no member ' + fieldName + ' came of the qualifier ' +
+                  qualRecv + ' — check what ' + qualRecv + ' resolves to; an ' +
+                  'import that bound nothing gives exactly this');
+          end
           else
             Error('undefined variable');
         end;

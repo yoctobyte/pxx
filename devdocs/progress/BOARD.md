@@ -8,19 +8,19 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name | N | 62 | bug | `X.attr` where X came from an import that did not resolve is compiled as the BARE NAME `attr`, so `ModuleType.__name__` fails with `undefined variable (__name__)` — a message naming the attribute and never the unresolved import that caused it. Now the first wall on 4 html5lib files. | — |
 | feature-target-wasm | A+B | 60 | feature | NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim. | — |
 
-## unfinished (22)
+## unfinished (21)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-nilpy-on-cross-targets-four-remaining-walls | A | 40 | bug | After the string-tagged-binop gate was lifted, NilPy still does not RUN on any cross target: arm32 builds and SIGILLs, i386 refuses on `symbol kind not supported yet (load)`, aarch64 on `aggregate result with more than 8 params`, riscv32 on bare-metal mmap. Four separate walls, one campaign — ~53 .npy tests are cross-blind until they fall. | — |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
-| bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name | N | 62 | bug | `X.attr` where X came from an import that did not resolve is compiled as the BARE NAME `attr`, so `ModuleType.__name__` fails with `undefined variable (__name__)` — a message naming the attribute and never the unresolved import that caused it. Now the first wall on 4 html5lib files. | — |
 | bug-nilpy-shared-nonlocal-frame-cell-is-never-freed | N | 40 | bug | A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted | — |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
@@ -53,7 +53,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (262)
+## backlog (263)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -69,6 +69,7 @@ _none_
 | bug-b-format-percent-u-prints-a-signed-value | B | 55 | bug | `Format('%u', [q])` on a QWord prints -1: sysutils' formatter aliases 'u' to 'd' and runs both through the signed IntToStr. FPC prints 18446744073709551615. The same line makes `%u` of Integer(-1) print -1 where FPC prints 4294967295. Filed from Track A+C+P — B owns lib/rtl. | — |
 | bug-b-inttostr-of-a-qword-above-2-63-renders-negative | B | 55 | bug | `IntToStr` of a QWord above 2^63 renders it negative | — |
 | bug-b-inttostr-of-a-qword-prints-it-signed | B | 55 | bug | IntToStr(q) where q: QWord >= 2^63 prints a NEGATIVE number — IntToStr(High(QWord)) answers -1 — because sysutils declares only IntToStr(Int64) and the QWord argument is passed through it. WriteLn(q) is correct, so the same value prints two different ways in one program. UIntToStr does not exist at all. Overload resolution on QWord vs Int64 already works, so this is purely two RTL functions. | — |
+| bug-b-nilpy-random-is-never-seeded-and-its-first-draw-is-the-low-bound | B | 60 | bug | `import random` then `random.randint(1,100)` produces the SAME sequence on every run — CPython seeds from OS entropy at import and NilPy never does. The first draw is also always the low bound: randint(1,5) and randint(1,100) both open with 1. | — |
 | bug-b-sysutils-string-gaps-found-by-differential | B | 60 | bug | Four sysutils gaps from one 22-program string differential against FPC 3.2.2: Concat takes exactly two AnsiStrings (FPC's is variadic and takes Chars), AnsiQuotedStr and SameStr do not exist, and the TryStr* family leaves its value untouched on failure where FPC zeroes it. Everything else in the family — Copy/Pos/Delete/Insert bounds, StringReplace, Format, Trim, comparison, PChar interop, ShortString — was byte-identical. | — |
 | bug-b-the-fpc-vartype-constants-are-missing | B | 55 | bug | `VarType(v) = varInteger` does not compile — varEmpty/varNull/varInteger/varDouble/varString/... are not declared anywhere, so the ONLY way to test a variant's type is against this RTL's private 0..6 tags, which are not FPC's numbers either (FPC: varString = 256, varInteger = 3). | — |
 | bug-b-varisstr-is-false-for-a-one-character-string | B | 45 | bug | VarIsStr answers FALSE for a ONE-CHARACTER string variant. It tests `VarType(V) = 6` (VT_STRING) and a single char is tagged VT_CHAR = 5, so `v := \'x\'; VarIsStr(v)` is False while `v := \'xy\'` and `v := \'\'` are both True. The same unit already has the right predicate three lines below — IsTextTag(t) = (t = VT_STRING) or (t = VT_CHAR) — and VarCompareValue uses it and gets the one-char case right. Two mechanisms for one concept, disagreeing. | — |
@@ -635,13 +636,13 @@ _none_
 - [p 65] [O] feature-opt-bulk-copy-is-byte-at-a-time
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite [parked — re-claim, do not duplicate]
 - [p 65] [P] feature-pascal-corpus-generics [parked — re-claim, do not duplicate]
-- [p 62] [N] bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name [parked — re-claim, do not duplicate]
 - [p 62] [U] decide-nilpy-what-version-does-sys-version-info-claim
 - [p 62] [A] feature-a-typeref-migrate-consumers
 - [p 62] [B] feature-b-the-module-shim-batch-blocking-the-python-corpus [parked — re-claim, do not duplicate]
 - [p 62] [N] feature-nilpy-enum-class
 - [p 62] [N] feature-nilpy-list-sort-inplace-key-reverse
 - [p 62] [A] feature-unicodestring-model
+- [p 60] [B] bug-b-nilpy-random-is-never-seeded-and-its-first-draw-is-the-low-bound
 - [p 60] [B] bug-b-sysutils-string-gaps-found-by-differential
 - [p 60] [N] feature-a-declaration-phase
 - [p 60] [A] feature-a-wasm32-target-registration-skeleton

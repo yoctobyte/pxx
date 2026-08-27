@@ -1088,6 +1088,20 @@ test-nilpy: $(COMPILER)
 	# a selector after a VIRTUAL call (the receiver's class has a subclass)
 	./$(COMPILER) test/test_nilpy_attribute_off_a_virtual_call_result.npy $(TESTTMP)/test_nilpy_virtcall26
 	$(TESTTMP)/test_nilpy_virtcall26 | diff -u test/test_nilpy_attribute_off_a_virtual_call_result.expected -
+	# a member lookup through a qualifier that supplies nothing must name the
+	# QUALIFIER, not just the member — and a bare name must keep the short form
+	@out=$$(./$(COMPILER) test/test_nilpy_qualified_name_error_names_the_receiver.npy $(TESTTMP)/test_nilpy_qualrecv26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:14: error: no member Foo came of the qualifier strings .* (strings\.Foo)$$' \
+	   && test ! -e $(TESTTMP)/test_nilpy_qualrecv26 \
+	  || { echo "test_nilpy_qualified_name_error_names_the_receiver: FAIL - rc=$$rc (want 1, one error on line 14 naming the qualifier, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	@out=$$(./$(COMPILER) test/test_nilpy_bare_name_error_stays_short.npy $(TESTTMP)/test_nilpy_barename26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:6: error: undefined variable (Foo)$$' \
+	   && test ! -e $(TESTTMP)/test_nilpy_barename26 \
+	  || { echo "test_nilpy_bare_name_error_stays_short: FAIL - rc=$$rc (want 1 and the SHORT message on line 6, no binary)"; printf '%s\n' "$$out"; exit 1; }
 	# a field DECLARED in an ancestor, widened by a descendant's assignment
 	./$(COMPILER) test/test_nilpy_ancestor_field_widened_by_a_descendant.npy $(TESTTMP)/test_nilpy_ancfld26
 	$(TESTTMP)/test_nilpy_ancfld26 | diff -u test/test_nilpy_ancestor_field_widened_by_a_descendant.expected -
