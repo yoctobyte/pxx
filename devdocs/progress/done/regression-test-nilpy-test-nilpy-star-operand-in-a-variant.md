@@ -42,7 +42,7 @@ Unhandled exception: TypeError: missing 510 required positional argument(s)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit a7c4d428d.
 
 ## Resolution (2026-08-27)
 

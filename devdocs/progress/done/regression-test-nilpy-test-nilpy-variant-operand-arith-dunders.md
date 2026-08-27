@@ -45,7 +45,7 @@ Unhandled exception: TypeError: comparison not supported between these instances
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 833f3ccba.
 
 ## Resolution (2026-08-27)
 
