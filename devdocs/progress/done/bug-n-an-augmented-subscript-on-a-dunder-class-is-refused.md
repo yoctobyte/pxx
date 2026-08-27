@@ -147,4 +147,4 @@ line 21.
 No pin needed: `compiler/builtin/**` is untouched.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 6703ca95b.
