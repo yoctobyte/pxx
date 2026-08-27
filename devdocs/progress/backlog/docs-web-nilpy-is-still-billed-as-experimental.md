@@ -3,7 +3,7 @@ track: W
 prio: 55
 type: docs
 blocked-by: []
-summary: "The website bills NilPy as experimental in four places — the compliance table says `Experimental`, the frontpage and about say `staged`, and the site-wide meta description says `in development` — while `docs/targets/nil-python.md` in the pxx repo already says the opposite (mainline frontend, peer of Pascal and C, gated by test-nilpy). Owner's call 2026-08-27: Python is a first-class citizen now, open bug tickets notwithstanding. Content files live in the website repo, so this is W by file ownership even though the work is D-shaped."
+summary: "The website bills NilPy as experimental in four places — the compliance table says `Experimental`, the frontpage and about say `staged`, and the site-wide meta description says `in development` — while `docs/targets/nil-python.md` in the pxx repo already says the opposite (mainline frontend, peer of Pascal and C, gated by test-nilpy). Owner's call 2026-08-27: Python is a first-class citizen now, open bug tickets notwithstanding. Content files live in the website repo, so this is W by file ownership even though the work is D-shaped. ALSO on the same page, owner 2026-08-27: C++ is billed as `Never` / `deliberately never` — the substance is right and stays, but soften the absolute. Never say never."
 status: backlog
 ---
 
@@ -77,6 +77,44 @@ the posture of a project treating the library ecosystem as out of scope.
 **Do not change it on this ticket.** The owner spoke to "experimental" only.
 Flagged so whoever edits line 14 notices they are standing next to a second
 claim, and asks rather than tidies.
+
+## SECOND ITEM, same page, same edit pass — soften "never" on C++
+
+Owner, 2026-08-27:
+
+> *"oh, and same page lists c++ as 'never'. i'd say, that's still accurate.
+> just, never say never."*
+
+**The substance is endorsed and does not change.** C++ is not planned, the
+reasoning below the table is sound, and nothing here promises a C++ frontend.
+Only the absolute goes.
+
+Two places, and they must move together — softening the table row while the
+prose underneath still says "deliberately never" reads worse than leaving both:
+
+| file | line | current |
+| --- | --- | --- |
+| `pxxweb/content/compliance/overview.md` | table row | `<span class="cstat exp">Never</span>` · "Will not be implemented — see below" |
+| same file | `## C++ — deliberately never` | "C++ **will not be implemented**. … The cost never justifies the payoff." |
+
+Suggested shape, not prescribed wording: `Not planned` in the status cell, and a
+heading and paragraph that give the same reasons in the present tense — the
+grammar is huge and context-sensitive, the build model drags in a heavyweight
+toolchain, the cost does not justify the payoff **today**. That says everything
+the current text says about intent while not committing the project to a
+position it would have to eat later.
+
+**Why this is worth doing rather than pedantry:** the page's own opening
+sentence promises "the honest map". An absolute is a claim about the future,
+which is the one thing a status page cannot measure — and it sits three rows
+below a `Never` on a language that has an experimental frontend two rows up.
+The credibility cost of an unnecessary absolute is paid the day it changes, and
+this project has already had to correct one over-strong claim class (see
+CLAUDE.md's byte-identical discipline). Same failure, smaller stakes.
+
+Note the status cell also uses `class="cstat exp"` — the *experimental* colour —
+for `Never`, which is a class mismatch rather than a style choice. Fix or leave,
+but notice it.
 
 ## Lane note
 
