@@ -8,7 +8,7 @@ prio: 85
   file-ownership **Track A** — edits the shared `ir_codegen.inc` / `symtab.inc` /
   backends, so it obeys A's no-concurrent-edit rule + self-host gate) — umbrella
   for the next optimization campaign.
-- **Status:** UNFINISHED (parked 2026-08-26) — five more slices landed green at
+- **Status:** working
   `-O3` (see the 2026-08-26 log at the bottom: **1.29x on the self-compile**,
   gap to fpc 4.06x -> 3.24x). Nothing is half-applied; every commit passed the
   `-O3` self-host fixedpoint and `gate.sh quick`. Parked because the umbrella's
@@ -20,7 +20,7 @@ prio: 85
   New passes still land behind **`-O3`** (see gating); `-O2` stays the proven
   default and the stable fallback.
 - **Opened:** 2026-07-10 (post -O2-default flip, [[feature-optimization-levels]]).
-- **Owner:** — (agent-O-regalloc released it 2026-08-26)
+- **Owner:** frankA
 
 ## Why — the measured opportunity
 
