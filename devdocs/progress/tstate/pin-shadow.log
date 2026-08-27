@@ -183,3 +183,4 @@
 2026-08-27T20:09:39Z	plexus	8b2cc332791e5da7618f123cfb05f87b12bd13f3	WOULD PIN 8b2cc332791e — 2 red(s), none new, 2 inherited from the current pin, self-host clean, streak 4/2
 2026-08-27T20:46:27Z	plexus	b898d0543fc8499facc66706257ff08d39195520	would NOT pin b898d0543fc8 — 2 red(s) the current pin does not have, 2 inherited from the current pin: test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy, test-nilpy#src:test/test_nilpy_startswith_tuple.npy
 2026-08-27T21:28:16Z	plexus	aca7f699288ebcd6343b0af26afdb73c12e85aa2	would NOT pin aca7f699288e — 2 red(s) the current pin does not have, 2 inherited from the current pin: test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy, test-nilpy#src:test/test_nilpy_startswith_tuple.npy
+2026-08-27T23:45:45Z	plexus	c52fc389fd976e2333282adc22a2ca49c7ee000f	would NOT pin c52fc389fd97 — 1 red(s) the current pin does not have, 4 inherited from the current pin: lib-test#src:test/lib_synapse.pas

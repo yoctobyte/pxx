@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `c52fc389fd97` | 2026-08-27T23:04:53Z | GREEN (native) | 311.9s | `aca7f699288e` RED |
+| plexus | `c52fc389fd97` | 2026-08-27T23:45:45Z | RED (full) | 1155.7s | `c52fc389fd97` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -11,3 +11,4 @@
 - **tools-devtest#00** (plexus): bad `8787cfe4235a`, last good `62a4242203a3`, 10 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy** — test/test_nilpy_parent_call_after_instantiation.npy test/test_nilpy_parent_call_after_instantiation.expected (plexus): bad `b898d0543fc8`, last good `8b2cc332791e`, 2 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_startswith_tuple.npy** — test/test_nilpy_startswith_tuple.npy test/test_nilpy_startswith_tuple.expected (plexus): bad `b898d0543fc8`, last good `8b2cc332791e`, 2 commit(s) in range
+- **lib-test#src:test/lib_synapse.pas** — test/lib_synapse.pas (plexus): bad `c52fc389fd97`, last good `aca7f699288e`, 9 commit(s) in range
