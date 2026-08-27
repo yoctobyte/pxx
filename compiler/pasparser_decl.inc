@@ -26,17 +26,22 @@
   bug-a-for-in-over-a-set-variable-refuses-the-kinds-its-error-message-claims }
 procedure ParseSetElemSpec;
 var elemTk: TTypeKind;
+    elemLo, elemHi: Int64;
 begin
   LastTypeEnumId := -1;
+  elemLo := 0; elemHi := -1;   { Hi < Lo = the element is not a subrange }
   if CurTok.Kind = tkInteger then
   begin
     { `set of <subrange>` e.g. `set of 1..10` — consume lo..hi (the element
       is an integer subrange). Without this the `..hi` leaked and the
       type-skip loop in ParseVarSection corrupted the variable's type away
       from tySet, so set ops/membership read garbage. }
-    ConstEvalOrdBound;
+    { …and KEEP both bounds. They used to be evaluated and discarded, which is
+      why Low/High of a `set of 1..10` had nothing to answer with.
+      bug-p-low-and-high-of-a-set-do-not-answer-the-element-bounds }
+    elemLo := ConstEvalOrdBound;
     Expect(tkDotDot, '..');
-    ConstEvalOrdBound;
+    elemHi := ConstEvalOrdBound;
     elemTk := tyInteger;
   end
   else
@@ -45,6 +50,8 @@ begin
     as the set's element enum for RTTI. }
   LastTypeSetEnumId := LastTypeEnumId;
   LastTypeSetElemTk := Ord(elemTk);
+  LastTypeSetElemLo := elemLo;
+  LastTypeSetElemHi := elemHi;
 end;
 
 procedure ParseEnumMembers(etid: Integer);
@@ -582,6 +589,8 @@ begin
                   Expose it as LastTypeSetEnumId for RTTI typeRef. }
                 LastTypeSetEnumId := AliasElemTk[aliasIdx];
                 LastTypeSetElemTk := AliasSetElemTk[aliasIdx];
+                LastTypeSetElemLo := AliasSetElemLo[aliasIdx];
+                LastTypeSetElemHi := AliasSetElemHi[aliasIdx];
                 Result := tySet;
               end
               else if AliasTk[aliasIdx] = Ord(tyPointer) then
@@ -1066,6 +1075,8 @@ begin
     begin
       SymSetEnumId[idx] := LastTypeSetEnumId;
       SymSetElemTk[idx] := LastTypeSetElemTk;
+      SymSetElemLo[idx] := LastTypeSetElemLo;
+      SymSetElemHi[idx] := LastTypeSetElemHi;
     end;
   end;
   Result := idx;
@@ -5592,7 +5603,8 @@ begin
         Next;
         Expect(tkOf, 'of');
         ParseSetElemSpec;
-        RegisterSetAlias(tnOff, tnLen, LastTypeSetEnumId, LastTypeSetElemTk);
+        RegisterSetAlias(tnOff, tnLen, LastTypeSetEnumId, LastTypeSetElemTk,
+                         LastTypeSetElemLo, LastTypeSetElemHi);
         while not (CurTok.Kind in [tkSemicolon,tkEOF]) do Next;
       end
       else if CurTok.Kind = tkArray then

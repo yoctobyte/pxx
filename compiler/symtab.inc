@@ -344,7 +344,8 @@ begin
       begin Result := i; Exit; end;
 end;
 
-procedure RegisterSetAlias(noff, nlen, elemEnumId, elemTk: Integer);
+procedure RegisterSetAlias(noff, nlen, elemEnumId, elemTk: Integer;
+                          elemLo, elemHi: Int64);
 { Named set type: TFooSet = set of TFoo. Stored in the alias table with
   AliasTk=tySet; AliasElemTk holds the element enum id (or -1) and
   AliasSetElemTk the element TTypeKind ordinal — a `set of Char` or
@@ -358,6 +359,8 @@ begin
   AliasTk[AliasCount] := Ord(tySet);
   AliasElemTk[AliasCount] := elemEnumId;
   AliasSetElemTk[AliasCount] := elemTk;
+  AliasSetElemLo[AliasCount] := elemLo;
+  AliasSetElemHi[AliasCount] := elemHi;
   AliasElemRec[AliasCount] := REC_NONE;
   AliasPtrDepth[AliasCount] := 0;
   AliasPtrBaseTk[AliasCount] := Ord(tyUnknown);
@@ -3790,6 +3793,7 @@ begin
   SetLength(SymElemDynDepth, n);   SetLength(SymDynElemRowLen, n);  SetLength(SymDynElemRowLo, n);
   SetLength(SymGenSlot, n);        SetLength(SymProcSig, n);        SetLength(SymElemProcSig, n);
   SetLength(SymSetEnumId, n);      SetLength(SymEnumId, n);         SetLength(SymSetElemTk, n);
+  SetLength(SymSetElemLo, n);      SetLength(SymSetElemHi, n);
   SetLength(SymElemEnumId, n);
   SetLength(SymStrCap, n);         SetLength(SymIsSub, n);          SetLength(SymSubLo, n);
   SetLength(SymSubHi, n);          SetLength(SymPtrDepth, n);       SetLength(SymPtrBaseTk, n);
@@ -3908,6 +3912,8 @@ begin
   SymEnumId[SymCount] := -1;
   SymElemEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
+  SymSetElemLo[SymCount] := 0;
+  SymSetElemHi[SymCount] := -1;   { Hi < Lo = no element subrange recorded }
   SymStrCap[SymCount] := 0;
   SymIsSub[SymCount] := LastTypeIsSub;
   if LastTypeIsSub then
@@ -4083,6 +4089,8 @@ begin
   SymEnumId[SymCount] := -1;
   SymElemEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
+  SymSetElemLo[SymCount] := 0;
+  SymSetElemHi[SymCount] := -1;   { Hi < Lo = no element subrange recorded }
   SymStrCap[SymCount] := 0;
   SymIsSub[SymCount] := LastTypeIsSub;
   if LastTypeIsSub then
@@ -4353,6 +4361,8 @@ begin
   SymEnumId[SymCount] := -1;
   SymElemEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
+  SymSetElemLo[SymCount] := 0;
+  SymSetElemHi[SymCount] := -1;   { Hi < Lo = no element subrange recorded }
   SymStrCap[SymCount] := 0;
   SymIsSub[SymCount] := LastTypeIsSub;
   if LastTypeIsSub then
@@ -4468,6 +4478,8 @@ begin
   SymEnumId[SymCount] := -1;
   SymElemEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
+  SymSetElemLo[SymCount] := 0;
+  SymSetElemHi[SymCount] := -1;   { Hi < Lo = no element subrange recorded }
   SymStrCap[SymCount] := 0;
   SymIsSub[SymCount] := LastTypeIsSub;
   if LastTypeIsSub then

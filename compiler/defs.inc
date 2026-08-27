@@ -2308,6 +2308,15 @@ var
   SymEnumId : array of Integer; { enum-typed var: enum type index, else -1. Set at decl sites (NOT inside AllocVar — LastTypeEnumId may be stale there); drives enum-identity diagnostics }
   SymElemEnumId : array of Integer; { ARRAY var whose ELEMENT is an enum: that enum type index, else -1. An array symbol's TypeKind IS its element kind, so an enum element leaves TypeKind=tyInteger and SymEnumId would be the wrong slot to reuse — every reader of SymEnumId means "this VALUE is an enum", which an array is not. Set at the array decl sites beside SymEnumId's scalar arm; drives `WriteLn(a[i])` printing the member name. }
   SymSetElemTk : array of Integer; { set var: element TTypeKind ordinal (tyChar/tyInteger/enum-as-integer), else 0 }
+  { The element SUBRANGE bounds of `set of 1..10`. SymSetElemTk answers the
+    element KIND and SymSetEnumId the enum identity, which between them cover
+    `set of Byte` and `set of TE` — an anonymous subrange element collapses to
+    tyInteger and its bounds were simply dropped, so Low/High could not answer
+    the one shape whose bounds are written down in the source.
+    Hi < Lo means "no subrange recorded"; init is 0 / -1.
+    bug-p-low-and-high-of-a-set-do-not-answer-the-element-bounds }
+  SymSetElemLo : array of Int64;
+  SymSetElemHi : array of Int64;
   SymStrCap : array of Integer; { see decl below }
   SymIsSub : array of Boolean; { symbol declared via a named SUBRANGE type (T = lo..hi): {$R+} checks stores against SymSubLo/Hi. BSS-false default = unchecked (feature-pascal-range-checks-r-plus). }
   SymSubLo : array of Int64;
@@ -4240,6 +4249,8 @@ var
   SetLitMixed    : Boolean;
   SetLitHasPlain : Boolean;
   LastTypeSetElemTk : Integer;  { set by ParseTypeKind for set types: element TTypeKind ordinal }
+  LastTypeSetElemLo : Int64;    { …and the element subrange bounds, when it is one (Hi < Lo = none) }
+  LastTypeSetElemHi : Int64;
 
   { Named type aliases. Phase 2: pointer aliases (PFoo = ^TFoo) carry an element
     type so the deref/index machinery knows what they point at. }
@@ -4248,6 +4259,8 @@ var
   AliasTk      : array[0..MAX_TYPEALIAS-1] of Integer;  { resolved TTypeKind ordinal }
   AliasElemTk  : array[0..MAX_TYPEALIAS-1] of Integer;  { pointer element TTypeKind ordinal }
   AliasSetElemTk : array[0..MAX_TYPEALIAS-1] of Integer;  { set alias: element TTypeKind ordinal (AliasElemTk holds the enum id there) }
+  AliasSetElemLo : array[0..MAX_TYPEALIAS-1] of Int64;    { …and the element subrange bounds (Hi < Lo = none) }
+  AliasSetElemHi : array[0..MAX_TYPEALIAS-1] of Int64;
   AliasElemRec : array[0..MAX_TYPEALIAS-1] of Integer;  { pointer element record/class id }
   AliasPtrElemArrAi : array[0..MAX_TYPEALIAS-1] of Integer; { pointer alias whose POINTEE is a named FIXED-array type (`PFixed = ^TFixed`): that ArrType index, else -1. An array alias is not in the scalar alias table, so ParseTypeKind answers its unknown-name default for the pointee; without this the pointer kept a 4-byte stride whatever the real element was. }
   AliasPtrDepth : array[0..MAX_TYPEALIAS-1] of Integer; { pointer alias depth, 0 for non-pointer/unknown }

@@ -6386,6 +6386,41 @@ begin
     Result := True;
     Exit;
   end;
+  { A SET answers its ELEMENT type's bounds — `High(s)` on `set of Byte` is 255,
+    not the set's own anything. tySet is not an ordinal, so OrdinalTypeBound
+    below declined and both Low and High fell to the 0 / -1 pair described at
+    the top of this routine: `for e := Low(s) to High(s)` ran zero times, and
+    silently, since 0..-1 is a legal empty range.
+
+    The same three-way this routine already applies to a plain variable, one
+    level down on the element: the recorded subrange first, then the enum's
+    ordinal range, then the element kind's own bounds. Answering only the last
+    two would have been worse than the uniform gap — `set of 1..10` would get a
+    plausible 0 / 2147483647 — which is why the subrange bounds were plumbed
+    through rather than the arm being written without them.
+    bug-p-low-and-high-of-a-set-do-not-answer-the-element-bounds }
+  if tkOut = tySet then
+  begin
+    tkOut := IntToTypeKind(SymSetElemTk[symIdx]);
+    if SymSetElemHi[symIdx] >= SymSetElemLo[symIdx] then
+    begin
+      if wantHigh then v := SymSetElemHi[symIdx] else v := SymSetElemLo[symIdx];
+      Result := True;
+      Exit;
+    end;
+    if SymSetEnumId[symIdx] >= 0 then
+    begin
+      EnumTypeOrdRange(SymSetEnumId[symIdx], eLo, eHi);
+      if wantHigh then v := eHi else v := eLo;
+      Result := True;
+      Exit;
+    end;
+    { `set of Byte` / `set of Char` — the element kind's own range. An element
+      kind of 0 (nothing recorded) falls through to False, keeping the old
+      answer rather than inventing one. }
+    Result := (SymSetElemTk[symIdx] <> 0) and OrdinalTypeBound(tkOut, wantHigh, v);
+    Exit;
+  end;
   Result := OrdinalTypeBound(tkOut, wantHigh, v);
 end;
 
