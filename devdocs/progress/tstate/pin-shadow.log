@@ -164,3 +164,4 @@
 2026-08-27T04:27:54Z	plexus	839305290bb403c83e429f6330e327c95b3d05b7	would NOT pin 839305290bb4 — 2 red(s) the current pin does not have: test-core#src:test/test_pascal_cast_chain_method_call.pas, test-nilpy#src:test/test_nilpy_star_unpack_into_a_collecting_callee.npy
 2026-08-27T04:54:14Z	plexus	c76e43e50c509d2367447ccf9e9bf3f9506b2bb7	would NOT pin c76e43e50c50 — 1 red(s) the current pin does not have: test-nilpy#src:test/test_nilpy_star_unpack_into_a_collecting_callee.npy
 2026-08-27T05:26:55Z	plexus	e03794fb11a69b207d0125c82f6e2ba915650806	would NOT pin e03794fb11a6 — 1 red(s) the current pin does not have: test-nilpy#src:test/test_nilpy_star_unpack_into_a_collecting_callee.npy
+2026-08-27T05:53:47Z	plexus	86f677fac8f95b55fa87395d42607965ec608212	would NOT pin 86f677fac8f9 — 1 red(s) the current pin does not have: test-nilpy#src:test/test_nilpy_star_unpack_into_a_collecting_callee.npy
