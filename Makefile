@@ -14557,6 +14557,12 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_strutil.pas $(TESTTMP)/lib_strutil
 	test "$$($(TESTTMP)/lib_strutil | grep -c '=ok')" = "59"
 	test "$$($(TESTTMP)/lib_strutil | grep -c 'FAIL')" = "0"
+	# the four gaps a 22-program string differential against fpc 3.2.2 found:
+	# variadic Concat under `uses sysutils`, AnsiQuotedStr, SameStr, and a
+	# failed TryStr* leaving the caller's stale value in place. Expected output
+	# is fpc 3.2.2's, byte for byte.
+	$(PXX_STABLE) -Fulib/rtl test/lib_sysutils_string_gaps.pas $(TESTTMP)/lib_sysutils_string_gaps
+	$(TESTTMP)/lib_sysutils_string_gaps | diff -u test/lib_sysutils_string_gaps.expected -
 	# the date PARSE direction (StrToDate/StrToDateTime/TryStrTo*). Rows are
 	# read off FPC 3.2.2, including the ones nobody guesses: ISO input raises
 	# under the d/m/y default, and a two-digit year uses a SLIDING window.

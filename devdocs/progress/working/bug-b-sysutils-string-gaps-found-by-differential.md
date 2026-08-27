@@ -4,12 +4,13 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "Four sysutils gaps from one 22-program string differential against FPC 3.2.2: Concat takes exactly two AnsiStrings (FPC's is variadic and takes Chars), AnsiQuotedStr and SameStr do not exist, and the TryStr* family leaves its value untouched on failure where FPC zeroes it. Everything else in the family — Copy/Pos/Delete/Insert bounds, StringReplace, Format, Trim, comparison, PChar interop, ShortString — was byte-identical."
+owner: frank1-AN
 ---
 
 # Four sysutils string gaps
 
 - **Type:** bug / missing entry points — Track B (`lib/rtl/sysutils.pas`).
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-08-21, from a string differential run while working Track A.
 
 ## Context first: the family is in good shape
@@ -80,3 +81,66 @@ explicit `value := 0` on each failure path.
 ## Gate
 
 `make lib-test` green, plus each of the four shapes above matching fpc 3.2.2.
+
+---
+
+## 2026-08-27 — RESOLVED. Two of the four were already fixed; the other two are done.
+
+Re-measured every row against **fpc 3.2.2** before touching anything, which is
+what stopped a wrong change from landing.
+
+| # | ticket said | measured today |
+| --- | --- | --- |
+| 1 | `Concat` is fixed-arity and AnsiString-only | **already fixed, in the COMPILER** |
+| 2 | `AnsiQuotedStr` does not exist | genuinely missing — **added** |
+| 3 | `SameStr` does not exist | **already there**, with `AnsiSameStr` beside it |
+| 4 | `TryStr*` leaves the value untouched | date/time three already cleared; the **four scalar ones did not — done** |
+
+### 1 — and the library fix I nearly landed was the wrong one
+
+`Concat('a','b','c')` compiles and prints `abc` today, on the fresh compiler
+**and on v388 pinned**. It was fixed in `pasparser_expr.inc`
+(`compat-pascal-uses-sysutils-withdraws-the-variadic-concat`): `uses sysutils`
+was withdrawing the variadic intrinsic because a two-argument `Concat` was in
+scope, and that arm now folds `Concat(s1..sn)` to `+` when no overload matched.
+
+I had already written the obvious library fix — a `Concat(const args: array of
+const)` overload rendering each element through `FmtArgStr` — and it worked.
+**It was still wrong.** It has exactly the shape to MATCH `Concat('a','b','c')`
+at the overload site, so it would divert those calls away from the intrinsic
+fold into a TVarRec-building library call, and for the dynamic-array form
+(`Concat(arr1, arr2)`, which the same intrinsic serves) it would silently
+produce text instead of an array. Measured cost of the version I reverted: the
+test binary was 498 bytes larger.
+
+Reverted, and the test carries a comment saying why no such overload exists,
+because adding one is the natural move for the next reader.
+
+### 2 — AnsiQuotedStr, and QuotedStr rewritten as its special case
+
+`QuotedStr` kept its own copy of the quote-doubling loop. It is now
+`AnsiQuotedStr(s, '''')` — one rule, one place
+(`devdocs/dev/normalise-dont-special-case.md`).
+
+### 4 — the four scalar TryStr* now zero on failure
+
+`TryStrToInt`, `TryStrToInt64`, `TryStrToQWord`, `TryStrToFloat`. The ticket
+said all seven behaved this way; `TryStrToDate`/`Time`/`DateTime` already
+cleared, with a comment saying why, so only four changed. `out` would not have
+done it, for the two reasons the ticket already records.
+
+Callers checked rather than assumed: `lib/rtl/variants.pas` reads the value only
+on success, and `lib_strtoint` / `lib_strutil` assert it only inside
+`TryStrToInt(...) and (v = ...)`.
+
+### Measured
+
+- **`test/lib_sysutils_string_gaps`** — 13 rows, expected output taken from
+  **fpc 3.2.2 itself**, byte-identical. Registered in the Makefile beside
+  `lib_strutil`, built with `$(PXX_STABLE) -Fulib/rtl` and verified through that
+  exact path, so it needs no pin.
+- The two rows that were ALREADY fixed are kept in the test. A gap that closed
+  without a test is a gap that can reopen without one.
+- `lib_strutil` (59 `=ok`, 0 FAIL), `lib_strtoint` (36 `=ok`),
+  `lib_strutils_words` and `lib_format` all green through `$(PXX_STABLE)`, with
+  the exact counts the Makefile asserts.

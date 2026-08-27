@@ -578,6 +578,9 @@ function TryStrToInt(const s: AnsiString; var value: Integer): Boolean;
 function StringReplace(const S, OldPattern, NewPattern: AnsiString; Flags: TReplaceFlags): AnsiString;
 
 { Wrap s in single quotes, doubling any embedded quote. }
+{ the general form QuotedStr is a special case of: quote with any character,
+  doubling that character where it occurs in the text }
+function AnsiQuotedStr(const s: AnsiString; quote: Char): AnsiString;
 function QuotedStr(const s: AnsiString): AnsiString;
 
 { printf-style formatting over an `array of const`. Specifiers: %d %u %x %s %f
@@ -888,9 +891,19 @@ end;
   yields whichever default was asked for, so the two runs disagree; a well-formed input parses
   to the same value both times. That is cheaper and more honest than duplicating each
   parser's validation, and it cannot be fooled -- no single input can equal both sentinels. }
+{ ZERO on failure. FPC's documentation calls the value undefined after a failed
+  Val, so leaving it alone was not strictly wrong — but FPC in practice zeroes
+  it, and a stale value surviving a failed conversion is the shape that bites:
+  `if not TryStrToInt(s, n) then` is usually followed by code that uses `n`
+  with a default in mind, and it silently got the caller's own previous value.
+  Switching the declarations to `out` would NOT do it — pxx does not model
+  `out` (bug-a-an-out-parameter-of-a-managed-type-is-not-cleared) and FPC's
+  `out` does not clear ordinals either. One explicit assignment each.
+  bug-b-sysutils-string-gaps-found-by-differential }
 function TryStrToInt64(const s: AnsiString; var value: Int64): Boolean;
 begin
   Result := ParseIntPrefixed(s, value);
+  if not Result then value := 0;
 end;
 
 function TryStrToQWord(const s: AnsiString; var value: QWord): Boolean;
@@ -899,7 +912,7 @@ begin
   a := StrToQWordDef(s, 0);
   b := StrToQWordDef(s, 1);
   Result := (a = b);
-  if Result then value := a;
+  if Result then value := a else value := 0;   { see TryStrToInt64 }
 end;
 
 { The single float parser; body far below, next to the exact-decimal
@@ -917,6 +930,7 @@ begin
     subnormal ([[bug-b-strtofloat-is-3600x-slower-than-cpython-for-small-exponents]]).
     ParseFloatCore returns the flag directly, so the trick is not needed. }
   Result := ParseFloatCore(s, value);
+  if not Result then value := 0.0;             { see TryStrToInt64 }
 end;
 
 constructor Exception.Create(const msg: string);
@@ -3330,7 +3344,7 @@ function TryStrToInt(const s: AnsiString; var value: Integer): Boolean;
 var v: Int64;
 begin
   Result := ParseIntPrefixed(s, v);
-  if Result then value := Integer(v);
+  if Result then value := Integer(v) else value := 0;   { see TryStrToInt64 }
 end;
 
 { pat matches src at 1-based pos (no allocation, unlike Copy(src,pos,plen)=pat). }
@@ -3387,15 +3401,25 @@ begin
     end;
 end;
 
-function QuotedStr(const s: AnsiString): AnsiString;
+{ The general form: quote with any character, doubling that character inside.
+  QuotedStr is now written as the ' case of THIS rather than carrying its own
+  copy of the doubling loop — two spellings of one rule is how they drift
+  (devdocs/dev/normalise-dont-special-case.md).
+  bug-b-sysutils-string-gaps-found-by-differential }
+function AnsiQuotedStr(const s: AnsiString; quote: Char): AnsiString;
 var i: Integer; r: AnsiString;
 begin
-  r := '''';
+  r := quote;
   for i := 1 to Length(s) do
   begin
-    if s[i] = '''' then r := r + '''''' else r := r + s[i];
+    if s[i] = quote then r := r + quote + quote else r := r + s[i];
   end;
-  Result := r + '''';
+  Result := r + quote;
+end;
+
+function QuotedStr(const s: AnsiString): AnsiString;
+begin
+  Result := AnsiQuotedStr(s, '''');
 end;
 
 function IsPathSep(c: Char): Boolean;
