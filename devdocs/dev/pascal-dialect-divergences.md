@@ -213,5 +213,12 @@ stop the program and we would continue. If that bites, the fix is to halt, and
 this entry is the record that the choice was made knowingly rather than by
 default.
 
+**The symptom to look for**, since an entry you must already suspect to go read
+is not findable: *if a vendored consumer appears to CONTINUE PAST AN IMPOSSIBLE
+STATE — an `else` arm that says "cannot happen" is reached and the program keeps
+running, or a `try..except` reports an error it has no business seeing — suspect
+a swallowed `Error`.* Under FPC the program would have stopped there. Grep the
+consumer for `Error(re` and check whether any caller wraps it in a handler.
+
 Verified against FPC 3.2.2: `test/lib_sysutils_delphi_exceptions.pas` runs
 identically under both for its first 18 rows and diverges at exactly this point.

@@ -1,5 +1,6 @@
 ---
 prio: 40
+blocked-by: [bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching]
 ---
 
 # DWScript — compile under pxx + RTTI auto-bind (scripting stress test)
@@ -21,6 +22,26 @@ prio: 40
   first). Sibling of [[feature-synapse-compile-check]]. The RTTI half is the real
   driver for [[feature-metaclass-descendant-enforcement]]-adjacent typinfo work —
   see "the interesting coupling" below.
+
+## The `blocked-by` edge, and why it is on THIS ticket and not a nearer one
+
+*Added 2026-08-28 by frankB.*
+[[bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching]]
+is what stops `GetPropInfo(AnObject, 'Name')` — the instance-taking spelling —
+from resolving: the overloads exist in `lib/rtl/typinfo.pas` and are never
+selected, so the call binds the `PClassRTTI` arm and segfaults.
+
+The edge sits here because this is the only ranked ticket that actually needs
+that spelling. **Checked rather than assumed:** every existing consumer in this
+repo — `classes_lite.pas:130,155`, `gtk3widgets.pas:552,561,580,585` — calls
+`GetPropInfo(cls, name)` with a class pointer it already holds, so none of them
+is blocked and an edge on any of them would be false. `dwsRTTIExposer`'s whole
+premise is binding an arbitrary HOST OBJECT handed in from script, which is the
+instance spelling by construction, and vendored FPC code will spell it FPC's way.
+
+A false edge would rank correctly for the wrong reason and outlive the reason —
+so if the RTTI half of this ticket turns out to reach only the type-level API,
+delete this edge rather than leaving it as decoration.
 
 ## Why this is the sharper test case
 
