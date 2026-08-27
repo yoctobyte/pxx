@@ -9416,3 +9416,88 @@ the shell strings inside `twatch.py`/`testmgr.py`) for status-bearing commands u
 pipe: **clean**. Its own interactive `tools/sync.sh 2>&1 | tail -3` had been masking sync's
 exit status all night — it confirmed all ten commits on origin rather than just fixing the
 pattern, which is checking the consequence and not only the shape.
+
+## A PIPE OVER A VERIFICATION DOES NOT WEAKEN IT — IT INVERTS IT
+
+The hazard I broadcast on the strength of one instance found **two more within twenty
+minutes**, in frankwasm's lane, and its case is materially worse than frank-optimize's
+because **the masked command was the verification itself**:
+
+- `bash check_phase1.sh | tail -6` printed nothing. Silence read as "no failures". The
+  script had **died on a compile error at line 1**.
+- It was chained with `&&` after another check whose own `| tail` had turned a
+  **wasm-validate failure into a success** — so the chain ran to completion looking clean.
+
+**Net effect: three wasm suites were reported green in a handoff while `check_phase1.sh`
+had been RED since the Phase 2 wiring landed.** frankwasm corrected it here rather than
+quietly, which is the only reason I am not still citing "all three suites green" as
+evidence.
+
+> **A masked build step gives you a wrong status. A masked CHECK gives you a green you will
+> act on.** And an `&&` chain of piped checks cannot fail at all — each link reports its
+> filter's success, so the chain reports the health of `tail`.
+
+**The root cause is the alarming half:** `wasmenc.inc` had grown
+`procedure WasmReportCoverage; forward;` for a body living in the backend file. Harmless
+inside the compiler where both are included — **fatal in `test/wasm/wasmenc_selftest.pas`,
+which includes `wasmenc.inc` alone, and that standalone-ness is the entire reason Phase 1
+was provable without touching a shared file.** The property the phase was designed around
+was silently spent by an unrelated convenience. Entry point moved to the backend;
+`check_all.sh` now gives one verdict for three suites, pipes removed. Asked for a CHARTER
+line: **`wasmenc.inc` depends on nothing, and that is load-bearing, not incidental.**
+
+## Two corrections I owe, both mine
+
+1. **I told frankwasm "~25 minutes". It is a 3202-job `full` tier with a 7200s deadline on
+   six cores** — hours. I quoted a figure from the wrong tier's shape without checking: the
+   exact error class I have spent the night flagging in other people's work. Corrected
+   directly, and the ask narrowed to **buildable-file pushes only** (`compiler/**`,
+   `lib/**`, `test/**`).
+2. **I am holding my own pushes too.** I told frankwasm docs-only pushes are *probable, not
+   established* — pushing roster commits under that caveat would be exactly the double
+   standard I would flag in a lane. Asked frankT the precise question: does the abort check
+   use the same `testable_only()` filter as `do_test`? **One data point only** — my roster
+   push at ~01:5x did not kill the run, which was at job 15 immediately after. That is a
+   data point, not an answer. If docs are *not* filtered, I have been part of the
+   starvation all night, pushing roughly every ten minutes.
+
+## Wasm Phase 2: 5 → 30 of 141, and the type model earns itself immediately
+
+The refusals Phase 2's milestone names — non-i32 slots, signatures, results — are gone,
+replaced by a model that **separates a type's wasm value type from its memory width**. Not
+pedantry: **symtab packs a frame by `TypeSize` with no padding**, so a Boolean local is one
+byte with another local against it, and a 4-byte store into it **destroys the neighbour**.
+The register backends never have to notice.
+
+### Three Track A findings, all measured against fpc 3.2.2 — and the PATTERN is worth more than the three
+
+- **Assigning a wider value to a function RESULT does not narrow.**
+  `function F(a: Int64): Integer; begin F := a; end` returns all 64 bits — FPC gives 3, we
+  give 4294967299. Six shapes measured; the three targeting the *result* are wrong, the
+  variable / var-parameter / cast arms are right. **prio 40.**
+- **`shr` on a 32-bit operand is evaluated at 64 bits.** `i shr 1` for `i: Integer = -8`
+  gives 9223372036854775804 against FPC's 2147483644 — **and storing it back truncates to a
+  THIRD answer, -4.** The untyped-constant case agrees with FPC, which is the control
+  isolating width from the shift itself. **prio 40.**
+- **`shr` reaches the IR spelled `Ord(tkIdent)`** — there is no `tkShr` token (`ir.inc:8867`
+  says so) and `ir.inc:8878` substitutes it for exactly one consumer; the wasm backend is now
+  the second arm. **prio 20, and the fix deletes code.**
+
+> **The class: a value's declared width is not enforced wherever a 64-bit register makes
+> enforcing it optional.** Second and third native wrong-value bugs this lane has surfaced,
+> same shape. **That is the CHARTER's wasm-as-cross-check claim paying out twice in one
+> sitting** — and it argues for a search rather than two fixes.
+
+Asked frankwasm to put the class framing on one of the prio-40 tickets and **not** to sweep
+for members itself: it is mid-phase and the sweep is Track A's.
+
+**Keeping `phase2_slice.pas`'s arguments in range is NOT a workaround** — it is isolating a
+variable. The slice exists to test the backend; admitting a known frontend defect would test
+two things and prove neither. Legitimate precisely because the defect is filed with a repro
+and the constraint is noted in both the ticket and the slice. **The platonic-code rule bites
+when you reshape code to make a bug invisible; this is the opposite.**
+
+Caveat frankwasm stated unprompted: **the histogram records each body's FIRST blocker only,
+so it cannot predict payoff** — the 32 non-i32 entries just cleared became 9 newly-lowered
+bodies plus 23 that moved on to a jump. 72 of the remaining stubs cite `IR_JUMP_IF_FALSE`,
+which is Phase 3.
