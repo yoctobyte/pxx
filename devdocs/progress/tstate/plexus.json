@@ -1,18 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-27T14:05:18Z",
-   "fixed": [],
-   "new_red": [
-    "test-core#src:test/test_nilpy_builtin_subclass_dunder_dispatch.npy",
-    "test-core#src:test/test_nilpy_unbound_builtin_method.npy"
-   ],
-   "sha": "c28e07a89f036f56d3bb860e62045b1103e22aae",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-27T14:11:14Z",
    "fixed": [],
    "new_red": [],
@@ -460,6 +448,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "034780ed861aab65d516414080578a2f38a6c509",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T22:51:32Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "b2cc28cf0a998daf5cec8c27359fee54554362fa",
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
@@ -6968,14 +6965,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-27T22:45:02Z",
+  "date": "2026-08-27T22:51:32Z",
   "deadline": 7200.0,
-  "sha": "034780ed861aab65d516414080578a2f38a6c509",
+  "sha": "b2cc28cf0a998daf5cec8c27359fee54554362fa",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 315.0
+  "wall": 317.4
  },
  "last_bench": {
   "conf_rows": 550,
