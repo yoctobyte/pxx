@@ -6876,3 +6876,83 @@ promotion sequence is pushed and swept.
 
 Raised with the owner rather than filed as a `decide-*`: they are present and
 engaged, and the fleet size is a live call they are already making.
+
+## CORRECTION (2026-08-27) — the coordinator sent Track T the wrong shas, and sweep granularity is SETTLED against the change
+
+Fourth instance of *"a correct answer to the wrong question looks exactly like a
+correct answer"* in one day, and the first with the coordinator as the source
+rather than the one catching it.
+
+### The error
+
+I asked `frankT` to sweep `e9317428d`, `f9d9da4b5` and `6692d08b8` as "frankA's
+`-O2` promotion shas". **They are the `-O3` INTRODUCTION shas.** Verified after
+`frankT` refused the request: all three dated 2026-08-26, titled `perf(O): -O3
+...`, adding **3, 1 and 1** `OptLevel >= 3` guards respectively. The promotion
+commits do not exist yet — I had described them in the same message as landing
+"over the next while" and then named shas anyway.
+
+Had it been swept, three green rows would have come back that genuinely tested
+something, and none of it the thing the pin is gating on.
+
+**`frankT` was asked for a sweep and interrogated the request instead of serving
+it.** That is the behaviour to protect: the coordinator is structurally worst at
+catching its own malformed requests, because the worker sees the data and the
+coordinator sees only the plan. This is now the second time today a worker has
+disconfirmed the coordinator and been right both times.
+
+### Sweep granularity: PRICED, and the number argues against the change
+
+Asked for as a cost before any policy change. Measured by `frankT` from the
+archive:
+
+| | |
+| --- | --- |
+| commits/day touching buildable paths (14d mean) | **64.9** (range 5-115) |
+| watcher's existing machine time | median **11.2 h/day** — ~47% duty on the contended box |
+| uniform sweep at `native` | +4.3 h/day → **~15.5 h/day**, ~65% duty |
+| uniform sweep at `full` | +20.8 h/day → **exceeds the day**; arithmetically impossible |
+
+**Decision: do NOT make the ladder uniformly finer.** Even the cheap version buys
+a third more contention, permanently, on the box where every agent's compile
+already runs 2-3x slower — to answer a question only ever asked about a handful of
+shas. The lever is **targeted on-demand verdicts** (~5 min each, zero standing
+cost). `frankT` is building the request queue; `verify_pin` is the precedent for
+judging an arbitrary sha out of band.
+
+**Nothing goes to the owner.** This is the mandate working as intended: a cost was
+requested before a policy change, the measurement argued against it, and
+escalating anyway would spend the owner's attention ratifying a decision the
+number already made.
+
+### The instrument, and a bound worth keeping straight
+
+`opt` is the right tier and is **disjoint from the nesting chain**
+(testmgr.py:218) — a `full` run neither contains nor evicts it. It is `test-opt`
+plus 12 `optdiff` shards sweeping ~900 programs for identical
+stdout+stderr+exit at `-O0` vs `-O2` vs `-O3`. Median 5.1 min; three shas ≈ 15-25
+min serial.
+
+**The pin hold is therefore minutes, not hours** — I had framed it as a long hold
+and that was wrong too, for a better reason than the sha error:
+
+- `make compiler/pascal26` builds at the **default** `-O` level, and CLAUDE.md's
+  scope note says the fixedpoint proves byte-identity *at that level only*.
+  Normally that caveat weakens the claim. **Here the default IS `-O2`**
+  (compiler.pas:758), the level being promoted — so the usual limitation points
+  the other way, and the guard lands exactly on the change, over the largest
+  Pascal program in the tree, on every agent's machine, every fix, in ~12s.
+- **The bound:** that covers the compiler's own source at `-O2`. It says nothing
+  about `lib/rtl`, the ~900 optdiff programs, or cross targets — which is exactly
+  what the opt tier covers. Complementary, not redundant. The verdict is still
+  wanted; the hold is just short.
+- And `optdiff`'s standing `-O3`-vs-`-O0` evidence does **not** transfer
+  unqualified: at `-O2` the passes compose with a different, smaller pass set, so
+  an interaction `-O3`'s other passes mask or create would not show. Strong
+  evidence, not sufficient.
+
+`twatch --covering <sha>` shipped (`29c459412`) — exact rows if any, else the
+first covering run per tier with commit distance, **and it prints the caveat
+rather than trusting the reader to supply it**, which is the failure mode this
+repo keeps paying for. On the original sha: `e7c0d1d2a` never swept, covered
+green at native +2, covered by a RED full at +36.
