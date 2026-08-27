@@ -77,4 +77,4 @@ is a silently plausible wrong count. `cutils.pas` does not use it. Worth doing
 with the overload set thought through rather than as a rider here.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 60b7b7f0e.
