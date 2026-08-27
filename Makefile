@@ -7310,6 +7310,11 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_not_ord_bitwise26)" = "$$(printf '%s\n' -2 -2 158 254 254 254 -2)"
 	./$(COMPILER) test/test_record_cast_field_offset.pas $(TESTTMP)/test_record_cast_fo26
 	test "$$($(TESTTMP)/test_record_cast_fo26)" = "$$(printf '%s\n' 305419896 2596069104 1311768467463790320 5 5 not-ok notor-ok)"
+	# ...and the INDEXED field of a cast, read and written, which was broken two
+	# ways at once: unparseable as an assignment target, and silently read at the
+	# RECORD's width as an rvalue. Row e is FPC's own reverse_longword verbatim.
+	./$(COMPILER) test/test_record_cast_indexed_field.pas $(TESTTMP)/test_record_cast_idx26
+	test "$$($(TESTTMP)/test_record_cast_idx26)" = "$$(printf 'a 4 3 2 1 \nb 4 3 2 1 4 3 2 1 \nc 16 32 48 64 | 1076895760\nd 258|772|50594050\ne 549470336|255|2147483648')"
 	./$(COMPILER) test/test_u64_to_double.pas $(TESTTMP)/test_u64_to_double26
 	test "$$($(TESTTMP)/test_u64_to_double26)" = "$$(printf '%s\n' assign-ok field-ok cmp-ok round-ok small-ok signed-ok)"
 	./$(COMPILER) test/test_qword_literal_binop.pas $(TESTTMP)/test_qword_lit26

@@ -6391,7 +6391,31 @@ begin
                 ASTIVal[valNode] := castRec;     { pointee rec for ResolveNodeRec }
                 ASTTk[valNode] := Ord(tyRecord);
               end;
-              while CurTok.Kind in [tkCaret, tkDot] do
+              { The suffix chain after the cast. `^` is answered here (a cast's
+                pointee rec is carried on the deref node, which is this arm's
+                own business); everything else — `.field`, `[i]`, an N-D or
+                jagged subscript, a property, a chain of them — goes to
+                ParseClassRecordSelectors, the node-keyed selector walker the
+                expression side and the call-result path already share.
+
+                It used to be a hand-rolled `while CurTok.Kind in [tkCaret,
+                tkDot]` that knew `^` and `.field` and NOT `[`. So
+                `TRec(r).b[0] := 5` stopped at the `[` and reported
+                `Expected: :=, but got: [` — while the identical expression as
+                an RVALUE parsed, and so did the same target one field
+                shallower. That is FPC's own cutils.pas:330
+                (`TLongWordRec(reverse_longword).b[0] := ...`), where the
+                right-hand side of the very same line parsed and the left did
+                not.
+
+                Adding a `tkLBrack` arm to that loop would have made a FIFTH
+                hand-rolled postfix walker, and the ~120 lines it would have to
+                grow to be right (N-D folding of both `m[i,j]` and `m[i][j]`,
+                partial-row subscripts, the jagged comma sugar, string-value
+                indexing, default properties) already exist once.
+                bug-p-a-record-cast-as-an-assignment-target-cannot-be-indexed;
+                devdocs/dev/normalise-dont-special-case.md }
+              while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do
               begin
                 if CurTok.Kind = tkCaret then
                 begin
@@ -6403,24 +6427,15 @@ begin
                   ASTTk[fieldNode] := Ord(tyRecord);
                   valNode := fieldNode;
                 end
-                else { tkDot }
+                else
                 begin
-                  Next;
-                  if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then
-                    Error('expected field name after .');
-                  castPrevTok := TokPos - 1;
-                  castFieldName := '';
-                  for i := Tokens[castPrevTok].SOffset to Tokens[castPrevTok].SOffset + Tokens[castPrevTok].SLen - 1 do
-                    AppendChar(castFieldName, TokChars[i]);
-                  fieldNode := AllocNode(AN_FIELD);
-                  ASTLeft[fieldNode] := valNode;
-                  ASTSOffset[fieldNode] := Tokens[castPrevTok].SOffset;
-                  ASTSLen[fieldNode]   := Tokens[castPrevTok].SLen;
-                  castTk  := RecFieldType(castRec, castFieldName);
-                  castRec := RecFieldRecId(castRec, castFieldName);
-                  ASTTk[fieldNode] := Ord(castTk);
-                  Next;
-                  valNode := fieldNode;
+                  castPrevTok := TokPos;
+                  valNode := ParseClassRecordSelectors(valNode, castRec, castTk);
+                  castRec := ResolveNodeRec(valNode);
+                  { The walker consumes the whole chain it can, so a second turn
+                    of this loop only happens for a following `^`. If it consumed
+                    NOTHING the loop would spin, so stop rather than hang. }
+                  if TokPos = castPrevTok then Break;
                 end;
               end;
               Expect(tkAssign, ':=');

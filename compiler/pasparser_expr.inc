@@ -6322,8 +6322,20 @@ begin
               ParseClassRecordSelectors resolves, so once the name is not a
               field, the rest of the chain is its job -- one resolver, not a
               second partial copy (devdocs/dev/normalise-dont-special-case.md). }
-            if (recName >= REC_UCLASS_BASE) and
-               (FindUField(recName - REC_UCLASS_BASE, GetTokenStr(TokPos)) < 0) then
+            { …and since 2026-08-27 that is EVERY name, not only the ones that
+              are not fields. The guard used to send non-fields to the shared
+              walker and keep plain fields on the hand-rolled builder below —
+              and the builder is followed by this loop's own `[` arm, which
+              hard-codes `tk := tyRecord` and `ASTTk := Ord(tyRecord)` for the
+              indexed value. So `TLongWordRec(l).b[0]` read the Byte element at
+              the RECORD's width: FPC prints 4, pxx printed 18486690310128388.
+              Silent, wrong, and worse than the parse error on the lvalue twin
+              that led here — while `x.b[0]` on a variable and `p^.b[0]` through
+              a pointer were both right all along, because both go through the
+              shared walker. One resolver, not a partial copy plus a crude
+              subscript arm.
+              bug-p-a-record-cast-as-an-assignment-target-cannot-be-indexed }
+            if recName >= REC_UCLASS_BASE then
             begin
               node := ParseClassRecordSelectors(node, recName, tk);
               recName := REC_NONE;
