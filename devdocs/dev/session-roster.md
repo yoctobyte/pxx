@@ -5928,3 +5928,33 @@ rather than in measurement.
 
 **Sweep before editing, not after.** The cheap pass is worthless once you have
 already fixed the instances you knew about.
+
+### BOUND on Track D for `ianweb` — prose half only, and it is ARCHITECTURAL
+
+Measured by `ianweb` on `via` and verified in `/home/neo/frank2`.
+
+**`via` is aarch64; the repo ships only `stable_linux_amd64`.** The pinned
+stable is an x86-64 ELF and will not execute there. No `qemu-x86_64`, nothing in
+`binfmt_misc`, no FPC — so the `make bootstrap` escape hatch is shut too.
+
+| half of Track D | on `via` |
+| --- | --- |
+| prose: accuracy, consistency, sourcing behaviour from the repo and its docs | **available** |
+| snippet verification: *"verify code snippets by compiling them"* | **impossible** |
+
+So any doc change whose correctness depends on compiling the example needs a
+verifier on x86-64. `ianweb` will state behaviour it can source and **will not
+assert compiled-and-checked for anything it could not compile** — which is the
+right posture and the reason to record the bound rather than let it be
+discovered in a wrong doc.
+
+**Lifting it is the owner's call** — three routes, all system-level changes to a
+production web host, none of them an agent's to make unasked: install FPC on
+arm64 and `make bootstrap` a native stable; install `qemu-user-static`; or
+publish an aarch64 stable upstream, which is A/T work that would help more than
+one host.
+
+**Working tree for D is `/home/ian/pxx`** — a full clone (`is-shallow-repository
+false`), clean, on `master`, ~12k commits behind so it needs a pull. Entirely
+separate from the five-minute content mirror, which is `--depth 1` and must
+never be edited.
