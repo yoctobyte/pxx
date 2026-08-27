@@ -1,0 +1,101 @@
+# A field is DECLARED where it is first assigned — in the ancestor — but the
+# assignment that decides how WIDE it must be may live in a subclass a thousand
+# lines further down. Storing a float into the Int64 slot the parent sized
+# printed the double's BITS (4612811918334230528 for 2.5), silently.
+#
+# The slot is shared, so this is not a per-class question: a P-typed reference
+# can point at a Q, so if ANY descendant stores a float in `v`, the slot must
+# hold a float for every P. That is why the join is computed over the whole
+# hierarchy before any class is laid out, rather than the parent being widened
+# when the subclass is reached — every subclass laid out earlier has already
+# baked the narrow size into its own offsets.
+# bug-n-a-field-declared-in-an-ancestor-is-not-widened-by-a-descendants-rebind
+
+class P:
+    def __init__(self):
+        self.v = 1
+        self.after = 7          # a neighbour: its value must survive the widening
+
+class Q(P):
+    def widen(self):
+        self.v = 2.5
+        return self.v
+
+class R(P):
+    def read(self):             # a SIBLING subclass that never widens
+        return self.v
+
+# the mixin-shaped spelling of the same thing: the field is declared in a base
+# whose method the subclass merely calls
+class M:
+    def setup(self):
+        self.m = 1
+
+class C(M):
+    def __init__(self):
+        self.setup()
+    def widen(self):
+        self.m = 3.5
+        return self.m
+
+# three levels: the assignment is two hops below the declaration
+class A1:
+    def __init__(self):
+        self.deep = 1
+class B1(A1):
+    pass
+class C1(B1):
+    def widen(self):
+        self.deep = 0.5
+        return self.deep
+
+# CONTROL: a same-type rebind in a descendant must NOT widen anything
+class S:
+    def __init__(self):
+        self.n = 10
+class T(S):
+    def again(self):
+        self.n = 20
+        return self.n
+
+# The OTHER registration route. A class with more than one base defers its
+# layout to PyParseClass rather than taking the pre-pass's own hoisted run, so
+# a join consulted only by the pre-pass would work above and silently not here.
+# Both routes go through PyRegisterClassMembers, which is where the join is
+# read; these two rows are what proves it.
+class Mix:
+    def helper(self):
+        return 1
+
+class Base:
+    def __init__(self):
+        self.v = 1
+
+class D(Base, Mix):
+    def widen(self):
+        self.v = 2.5
+        return self.v + self.helper()
+
+class Other:
+    def __init__(self):
+        self.z = 2
+
+class E(Other, Mix):
+    def __init__(self):
+        self.z = 4.5
+    def rd(self):
+        return self.z
+
+q = Q()
+print(q.widen())
+print(q.after)
+print(R().read())
+p = P()
+print(p.v)
+print(p.after)
+print(C().widen())
+print(C1().widen())
+print(T().again())
+print(S().n)
+print(D().widen())
+print(E().rd())

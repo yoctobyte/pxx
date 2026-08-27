@@ -213,3 +213,118 @@ class and every descendant into a side table, consulted by **both** registration
 routes — the pre-pass one and `PyParseClass`'s, or the fix works for most
 programs and silently not for the rest. Blocker 2 of the note still stands and is
 untouched by this commit.
+
+## Step 2 done — the whole-program join, and the bug is closed
+
+The scoping note's plan, followed as written: *"a third sub-pass inserted before
+the registering one, which computes per (class, field-name) the join over that
+class and every descendant, into a side table PyRegisterClassMembers consults
+when it first sizes a field."*
+
+### What landed
+
+**`PyClassHeaderSweep(phase)`** — the pre-pass's second sub-pass, now run twice
+rather than once. Phase 0 DETECTS (resolve each class's first base; record what
+type every `self.NAME` assignment gives every field); `PyFJPropagate` runs
+between the phases; phase 1 REGISTERS as before, and the layout it computes now
+consults the join.
+
+It is one routine run twice, not two routines. Everything except the final
+statement is shared — locating the header, reading `@dataclass` off the lines
+above it, resolving the base list, finding the body span — and every one of
+those carries its own recorded bug in its comments (the `@dataclass(eq=True)`
+step-back, the one-line body that used to harvest the next class's members, the
+multi-base deferral). A second copy for the detect run would have been a second
+answer to each. The parts re-run in phase 1 are all idempotent assignments of
+the same value; `PyMembersHoisted` is phase 1 only.
+
+**The join table** (`PyFJCls` / `PyFJName` / `PyFJTk`, with `PyFJParent`): per
+(class, field), the join of every type that class or any descendant assigns.
+`PyWidenBinding`, not a third rule — the same join the field scan and the locals
+scan already use, so int-then-float lands on a VARIANT here exactly as it does
+within one class.
+
+**`PyFJParent`, and why it is not `UClsParent`.** `UClsParent` is deliberately
+left unset for a multi-base or not-yet-resolvable header and filled in later by
+`PyParseClass` — which is after the join has to have propagated. `PyFJParent` is
+read straight from the header's first base, before the multi-base and mixin
+decisions, because those decisions are about LAYOUT and the join needs the
+hierarchy either way.
+
+**Propagation is one pass, no fixpoint.** Each entry is merged into EVERY
+ancestor rather than just its parent, and the ancestors of a mid-chain class are
+a subset of those of anything below it — so the order entries are visited in
+cannot matter. The walk is depth-bounded rather than cycle-checked: valid source
+has no circular hierarchy, but the pre-pass runs before anything is checked, and
+a hang with no diagnostic is the wrong failure.
+
+**The consult site is inside `PyRegisterClassMembers`, and that is the answer to
+blocker 2.** The scoping note warned that a side table consulted only by the
+pre-pass "works for most programs and silently does not for the rest", because a
+class whose base could not be resolved early is registered from `PyParseClass`
+instead. Both routes call `PyRegisterClassMembers`, so putting the lookup in the
+routine — at the point where a field is first sized — covers both by
+construction rather than by a second call the next person has to remember.
+
+### Two extractions, and the second was not in the plan
+
+Step 1 extracted `PyInferFieldDecl` (what type does this declaration give?). The
+detect pass turned out to need the other half too — **which tokens declare a
+field at all** — so `PyFieldDeclAt` came out as well. That test is where the
+`self.x: int = 5` / `if self.x:` distinction lives, and the comments around it
+are a list of shapes that were once matched wrongly; two spellings of it would
+have disagreed at exactly those shapes. What is still written twice is only the
+walk — find a def, take its suite, step through it — which carries no semantics.
+
+`PyWarnUnreadAnnotation` is silenced during detect (`PyFJDetecting`): the pass
+re-reads every annotation the registering pass reads, and a doubled warning is
+the one thing a user would notice about a pass meant to be invisible.
+
+### Measured
+
+- Self-host fixedpoint `95d62c4f3b4b`, `converged after 1 round(s)`.
+- **Every row of the Gate matches CPython**, on the new
+  `test_nilpy_ancestor_field_widened_by_a_descendant` (registered in the
+  Makefile): `Q().widen()` `2.5`, the neighbour field `7`, the sibling subclass
+  `R().read()` `1`, `P().v` `1` and its neighbour `7`, the mixin-shaped
+  `C().widen()` `3.5`, a **three-level** hierarchy `C1().widen()` `0.5`, and the
+  same-type control `T().again()` `20` / `S().n` `10` unwidened.
+- **uforth.py (4357 lines of real Python) compiles to a BYTE-IDENTICAL binary**
+  under the new compiler and v388 pinned, in 13.1s vs 14.1s. The pre-pass costs
+  nothing measurable on a program with a real class surface, and changes nothing
+  where nothing needs changing.
+- A differential over `test_nilpy_*` tests whose name mentions a field, class,
+  attribute, method, property, dataclass, ctor, inheritance, mixin, virtual,
+  slot, widening or rebinding — new binary vs v388 pinned, comparing both
+  compile status and program output. **Ran ~10 minutes over a 184-test list
+  with zero differences, and was stopped there rather than completed** (the
+  work was landed on request; Track T's watcher was building on the same box,
+  so each compile took 2-3x its usual time). Re-run against the landed sha
+  before treating that as full coverage — the count of tests it actually
+  reached was not recorded, which is the part to fix if this is repeated.
+
+### A class-typed field improved too, unasked
+
+Probing whether the join could damage class identity found the opposite:
+
+```python
+class Base:
+    def __init__(self): self.k = 0
+class D(Base):
+    def bump(self):
+        self.k = Foo()
+        return self.k.tag      # v388: 1277165808   HEAD: 9   CPython: 9
+```
+
+The same probe surfaced a genuinely separate defect that is NOT this one and
+reproduces on pinned with no inheritance at all — a method call on a field that
+was `None` at declaration returns the receiver's address. Filed as
+[[bug-n-a-method-call-on-an-optional-class-field-returns-a-raw-pointer]].
+
+### What this fix does NOT cover
+
+A field a class inherits from a **flattened second base** (a mixin) is collected
+against the mixin's own class index, not against each host that flattens it. So
+a host widening a mixin-supplied field is unchanged from today. That is a gap,
+not a regression, and it is narrow: single inheritance — the case both repros
+and all real code in the tree use — goes through `PyFJParent` and is covered.

@@ -1088,6 +1088,9 @@ test-nilpy: $(COMPILER)
 	# a selector after a VIRTUAL call (the receiver's class has a subclass)
 	./$(COMPILER) test/test_nilpy_attribute_off_a_virtual_call_result.npy $(TESTTMP)/test_nilpy_virtcall26
 	$(TESTTMP)/test_nilpy_virtcall26 | diff -u test/test_nilpy_attribute_off_a_virtual_call_result.expected -
+	# a field DECLARED in an ancestor, widened by a descendant's assignment
+	./$(COMPILER) test/test_nilpy_ancestor_field_widened_by_a_descendant.npy $(TESTTMP)/test_nilpy_ancfld26
+	$(TESTTMP)/test_nilpy_ancfld26 | diff -u test/test_nilpy_ancestor_field_widened_by_a_descendant.expected -
 	./$(COMPILER) test/test_nilpy_ast_literal_eval.npy $(TESTTMP)/test_nilpy_ast_literal26
 	test "$$($(TESTTMP)/test_nilpy_ast_literal26)" = "$$(printf '0.7 0.7 0.5 3\n42 -3 hi\n2\nTrue None\n1 3')"
 	# atexit handlers run at exit (LIFO), io's in-memory buffers behave

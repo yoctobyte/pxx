@@ -370,6 +370,43 @@ var
     (a `has no method` at the call) rather than silent, and it is new ground —
     a program with a second base did not compile at all before. }
   PyClsUsedAsMixin: array[0..MAX_UCLASS-1] of Boolean;
+  { The whole-program FIELD JOIN table: for each (class, field name), the join
+    of every type that class OR ANY DESCENDANT OF IT assigns to that field.
+
+    It exists because a field's type is decided where the field is DECLARED —
+    in the ancestor — and the assignment that widens it may be a thousand lines
+    further down, in a subclass registered long afterwards. `class P: self.v = 1`
+    followed by `class Q(P): self.v = 2.5` stored a double's bits into P's Int64
+    slot and printed 4612811918334230528. Widening P's field when Q is reached
+    is not available: `curOff` for every subclass starts at UClsSize_[parent],
+    so every subclass registered BEFORE Q has already baked in the narrow size.
+
+    Widening the ancestor is the right answer and not merely the reachable one:
+    a P-typed reference can point at a Q, so if any descendant stores a float in
+    `v`, the slot must hold a float for every P. Widening only the descendant's
+    view would put two different types on one slot.
+
+    Consulted inside PyRegisterClassMembers rather than by its callers, which is
+    what makes it cover BOTH registration routes — the pre-pass one and the
+    PyParseClass one a class takes when its base could not be resolved early.
+    A side table only the pre-pass consulted would work for most programs and
+    silently not for the rest, the worst outcome for a silent-wrong-value bug.
+    bug-n-a-field-declared-in-an-ancestor-is-not-widened-by-a-descendants-rebind }
+  PyFJCls  : array of Integer;      { class the entry belongs to }
+  PyFJName : array of AnsiString;   { field name, Python-cased }
+  PyFJTk   : array of Integer;      { Ord() of the join so far }
+  PyFJCount: Integer;
+  PyFJCap  : Integer;
+  { the FIRST base of each class, read straight from the header. Deliberately
+    NOT UClsParent: that one is left unset for a multi-base or unresolvable
+    header and filled in later by PyParseClass, and the join has to propagate
+    before any of that. The first base is the real parent in both passes. }
+  PyFJParent: array[0..MAX_UCLASS-1] of Integer;
+  { the join DETECT pass is running. It replays PyInferFieldDecl over every
+    field declaration a second time, and that routine warns about an annotation
+    it cannot read — a warning the user would then see twice for one line. The
+    detect pass is invisible by construction, so it stays silent. }
+  PyFJDetecting: Boolean;
 
 { A parameter annotation NilPy could not read. CPython does not enforce
   annotations at all, so refusing the program over one breaks the
@@ -386,6 +423,10 @@ var
   bug-n-an-uninterpretable-annotation-refuses-the-program }
 procedure PyWarnUnreadAnnotation(const what: AnsiString; line: Integer);
 begin
+  { silent during the field-join detect pass — it re-reads every annotation the
+    registering pass will read, and a doubled warning is the whole of what the
+    user would notice about a pass that is meant to be invisible }
+  if PyFJDetecting then Exit;
   WarnAt(line, 'Nil Python: ' + what + ' has a type annotation this '
          + 'frontend cannot read; treating it as Any');
 end;
@@ -31857,6 +31898,137 @@ end;
 
   `j` addresses the `self` token. Reads the token stream and the class tables;
   writes neither. }
+function PyFJFind(ci: Integer; const nm: AnsiString): Integer;
+{ The (class, name) lookup into the field-join table. Linear: the table holds
+  one entry per field a NilPy class assigns, so it is the size of the program's
+  class surface, not of its token stream. }
+var k: Integer;
+begin
+  Result := -1;
+  for k := 0 to PyFJCount - 1 do
+    if (PyFJCls[k] = ci) and (PyFJName[k] = nm) then
+    begin
+      Result := k;
+      Exit;
+    end;
+end;
+
+procedure PyFJNote(ci: Integer; const nm: AnsiString; tk: TTypeKind);
+{ Record that class `ci` assigns type `tk` to field `nm`, joining with whatever
+  was recorded before. PyWidenBinding, not PyWiden — the same join the field
+  scan and the locals scan already use, so int-then-float lands on a VARIANT
+  here exactly as it does within one class. A third rule for the same question
+  is what devdocs/dev/normalise-dont-special-case.md is about. }
+var k: Integer;
+begin
+  if ci < 0 then Exit;
+  k := PyFJFind(ci, nm);
+  if k >= 0 then
+  begin
+    PyFJTk[k] := Ord(PyWidenBinding(IntToTypeKind(PyFJTk[k]), tk));
+    Exit;
+  end;
+  if PyFJCount >= PyFJCap then
+  begin
+    if PyFJCap = 0 then PyFJCap := 256 else PyFJCap := PyFJCap * 2;
+    SetLength(PyFJCls, PyFJCap);
+    SetLength(PyFJName, PyFJCap);
+    SetLength(PyFJTk, PyFJCap);
+  end;
+  PyFJCls[PyFJCount] := ci;
+  PyFJName[PyFJCount] := nm;
+  PyFJTk[PyFJCount] := Ord(tk);
+  Inc(PyFJCount);
+end;
+
+procedure PyFJReset;
+{ The capacity is deliberately kept — only the COUNT is cleared, so a second
+  module's pre-pass reuses the arrays rather than reallocating them. }
+var i: Integer;
+begin
+  PyFJCount := 0;
+  PyFJDetecting := False;
+  for i := 0 to MAX_UCLASS - 1 do PyFJParent[i] := -1;
+end;
+
+procedure PyFJPropagate;
+{ Push every entry UP its ancestor chain. After this, an entry for a class that
+  DECLARES a field holds the join over the whole hierarchy below it, which is
+  what the declaring class must lay the slot out for.
+
+  One pass suffices and no fixpoint is needed: each entry is merged into EVERY
+  ancestor, not only its parent, and the ancestors of a mid-chain class are a
+  subset of the ancestors of anything below it. Merging the entry's own
+  recorded type (rather than re-reading a table that is being mutated) is what
+  makes that true regardless of the order entries are visited in.
+
+  The walk is depth-bounded rather than cycle-checked: a NilPy class hierarchy
+  cannot be circular in valid source, but the pre-pass runs on source that has
+  not been checked yet, and an infinite loop here would be a hang with no
+  diagnostic. }
+var k, a, guard, ent: Integer;
+    tk: TTypeKind;
+begin
+  for k := 0 to PyFJCount - 1 do
+  begin
+    tk := IntToTypeKind(PyFJTk[k]);
+    a := PyFJParent[PyFJCls[k]];
+    guard := 0;
+    while (a >= 0) and (guard < MAX_UCLASS) do
+    begin
+      ent := PyFJFind(a, PyFJName[k]);
+      if ent >= 0 then
+        PyFJTk[ent] := Ord(PyWidenBinding(IntToTypeKind(PyFJTk[ent]), tk));
+      a := PyFJParent[a];
+      Inc(guard);
+    end;
+  end;
+end;
+
+function PyFieldDeclAt(j: Integer): Integer;
+{ Does a `self.NAME` at token j DECLARE a field, and if so where is its
+  annotation? Returns -1 for "not a field declaration", 0 for the plain
+  `self.NAME = expr` form, and the token index of the annotation for
+  `self.NAME: ann = expr`.
+
+  Extracted alongside PyInferFieldDecl and for the same reason: the
+  whole-program join pre-pass has to agree with the registering pass about
+  WHICH tokens declare a field, not only about what type they declare. Two
+  spellings of this test would disagree exactly at the shapes the comments
+  below were written to exclude — which is the failure mode
+  devdocs/dev/normalise-dont-special-case.md names.
+  bug-n-a-field-declared-in-an-ancestor-is-not-widened-by-a-descendants-rebind }
+begin
+  Result := -1;
+  { Both `self.NAME = expr` and `self.NAME: ann = expr` declare a
+    field. The annotated form used to be invisible here — the match
+    required '=' at j+3 — so a class that annotates its ctor fields
+    (the idiomatic Python form, and the one the uforth VM uses)
+    registered NO fields at all and every later `self.x` mis-resolved
+    against an empty class. }
+  if (Tokens[j].Kind = tkIdent) and (GetTokenStr(j) = 'self') and
+     (Tokens[j + 1].Kind = tkDot) and (Tokens[j + 2].Kind = tkIdent) then
+  begin
+    if Tokens[j + 3].Kind = tkAssign then Result := 0
+    { `self.x: int = 5` — an ANNOTATED declaration, which is a STATEMENT
+      and therefore always starts one. Without that requirement the
+      colon of a compound-statement HEADER matched: `if not
+      self.compiling:` reads as `self` `.` `compiling` `:` and declared a
+      phantom variant field named after whatever the condition tested.
+      Harmless for a name that is a real field (it is already
+      registered, and the guard below skips a duplicate) — but for a
+      @property it declared a FIELD SHADOWING THE PROPERTY, so every
+      access resolved to a slot nobody writes. `if self.x:`, `while
+      self.x:`, `{self.x: 1}` and `a[self.x:]` are all this shape.
+      bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver }
+    else if (Tokens[j + 3].Kind = tkColon) and
+            ((j = 0) or
+             (Tokens[j - 1].Kind in [tkNewline, tkIndent, tkDedent,
+                                     tkSemicolon])) then
+      Result := j + 4;
+  end;
+end;
+
 procedure PyInferFieldDecl(j, fldAnn, methodStart, bodyStart, bodyEnd: Integer;
                            isCtor: Boolean;
                            var tk: TTypeKind; var fldRec, fldSig: Integer);
@@ -32115,10 +32287,61 @@ begin
   if tk <> tyClass then fldRec := REC_NONE;
 end;
 
+procedure PyCollectClassFieldJoins(ci, bodyStart, bodyEnd: Integer);
+{ The DETECT half of the field-join pre-pass: record what type each `self.NAME`
+  in this class's body gives that field, without laying anything out.
+
+  It shares the two routines that decide the answer — PyFieldDeclAt for WHICH
+  tokens declare a field and PyInferFieldDecl for WHAT type they declare — with
+  the registering pass, which is the point of both extractions. What is written
+  twice is only the walk itself: find a def, take its suite, step through it.
+  That skeleton carries no semantics; the two routines it calls carry all of
+  them, so the two passes cannot drift about what a field is.
+  bug-n-a-field-declared-in-an-ancestor-is-not-widened-by-a-descendants-rebind }
+var i, j, depth, methodStart: Integer;
+    isCtor: Boolean;
+    fldAnn, fldRec, fldSig: Integer;
+    tk: TTypeKind;
+begin
+  if (ci < 0) or (bodyEnd <= bodyStart) then Exit;
+  PyFJDetecting := True;
+  depth := 0;
+  i := bodyStart;
+  while i < bodyEnd do
+  begin
+    if Tokens[i].Kind = tkIndent then Inc(depth)
+    else if Tokens[i].Kind = tkDedent then Dec(depth)
+    else if (depth = 0) and (Tokens[i].Kind = tkFunction) and
+            (i + 1 < bodyEnd) and (Tokens[i + 1].Kind = tkIdent) then
+    begin
+      methodStart := i;
+      { `create`, not `__init__` — PyMethodName is what the registering pass
+        compares too, and isCtor changes which inference arms are available }
+      isCtor := PyMethodName(GetTokenStr(i + 1)) = 'create';
+      j := PyFindSuiteIndent(i, bodyEnd);
+      if j < 0 then j := bodyEnd else Inc(j);
+      while (j + 4 < bodyEnd) and (Tokens[j].Kind <> tkDedent) do
+      begin
+        fldAnn := PyFieldDeclAt(j);
+        fldSig := -1;
+        if fldAnn >= 0 then
+        begin
+          PyInferFieldDecl(j, fldAnn, methodStart, bodyStart, bodyEnd, isCtor,
+                           tk, fldRec, fldSig);
+          PyFJNote(ci, GetTokenStr(j + 2), tk);
+        end;
+        Inc(j);
+      end;
+    end;
+    Inc(i);
+  end;
+  PyFJDetecting := False;
+end;
+
 procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer; isDC: Boolean;
                                  fieldsOnly: Boolean);
 var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, align, sz: Integer;
-    fi, baseOff: Integer; wtk: TTypeKind; fldWidened: Boolean;
+    fi, baseOff, fj: Integer; wtk: TTypeKind; fldWidened: Boolean;
     ovMmi, ovPi: Integer;   { the inherited method an override must match }
     fldAnn, rhsAt, k2, fldSig: Integer;
     origName, name, fullName, rhsName: AnsiString; isCtor: Boolean;
@@ -33031,35 +33254,8 @@ begin
         if j < 0 then j := bodyEnd else Inc(j);
         while (j + 4 < bodyEnd) and (Tokens[j].Kind <> tkDedent) do
         begin
-          { Both `self.NAME = expr` and `self.NAME: ann = expr` declare a
-            field. The annotated form used to be invisible here — the match
-            required '=' at j+3 — so a class that annotates its ctor fields
-            (the idiomatic Python form, and the one the uforth VM uses)
-            registered NO fields at all and every later `self.x` mis-resolved
-            against an empty class. }
-          fldAnn := -1;
+          fldAnn := PyFieldDeclAt(j);
           fldSig := -1;
-          if (Tokens[j].Kind = tkIdent) and (GetTokenStr(j) = 'self') and
-             (Tokens[j + 1].Kind = tkDot) and (Tokens[j + 2].Kind = tkIdent) then
-          begin
-            if Tokens[j + 3].Kind = tkAssign then fldAnn := 0
-            { `self.x: int = 5` — an ANNOTATED declaration, which is a STATEMENT
-              and therefore always starts one. Without that requirement the
-              colon of a compound-statement HEADER matched: `if not
-              self.compiling:` reads as `self` `.` `compiling` `:` and declared a
-              phantom variant field named after whatever the condition tested.
-              Harmless for a name that is a real field (it is already
-              registered, and the guard below skips a duplicate) — but for a
-              @property it declared a FIELD SHADOWING THE PROPERTY, so every
-              access resolved to a slot nobody writes. `if self.x:`, `while
-              self.x:`, `{self.x: 1}` and `a[self.x:]` are all this shape.
-              bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver }
-            else if (Tokens[j + 3].Kind = tkColon) and
-                    ((j = 0) or
-                     (Tokens[j - 1].Kind in [tkNewline, tkIndent, tkDedent,
-                                             tkSemicolon])) then
-              fldAnn := j + 4;
-          end;
           if fldAnn >= 0 then
           begin
             PyInferFieldDecl(j, fldAnn, methodStart, bodyStart, bodyEnd, isCtor,
@@ -33076,6 +33272,37 @@ begin
             if (fi < 0) and
                (PyClsAttrOvrSlot(ci, GetTokenStr(j + 2)) < 0) then
             begin
+              { DECLARING the field — so this is where the whole hierarchy's
+                answer has to be applied, not just this class's own. A subclass
+                that stores a float in a field its parent declared as an integer
+                cannot widen the parent later: every subclass laid out before it
+                already started at UClsSize_[parent] and baked the narrow size
+                in. The join was computed over the whole program before any
+                class was laid out; consulting it HERE is what makes the slot
+                right for every class that shares it.
+
+                Consulted in this routine rather than in the pre-pass that
+                filled the table, because a class whose base could not be
+                resolved early is registered from PyParseClass instead — and
+                both routes come through here.
+                bug-n-a-field-declared-in-an-ancestor-is-not-widened-by-a-descendants-rebind }
+              fj := PyFJFind(ci, GetTokenStr(j + 2));
+              if fj >= 0 then
+              begin
+                wtk := PyWidenBinding(tk, IntToTypeKind(PyFJTk[fj]));
+                if wtk <> tk then
+                begin
+                  tk := wtk;
+                  { same rule the widen arm below states: the class identity
+                    belongs to the narrow type, and a widened field is no
+                    longer that class }
+                  if wtk <> tyClass then
+                  begin
+                    fldRec := REC_NONE;
+                    fldSig := -1;
+                  end;
+                end;
+              end;
               sz := TypeSize(tk);
               curOff := AlignTo(curOff, TypeAlign(tk));
               { AddUField reads LastTypeProcSig for a procedural field, which is
@@ -34263,45 +34490,30 @@ end;
 
   The real pass later resets each class's field window and rebuilds it, so
   these entries are orphaned rather than duplicated. }
-procedure PyRegisterClassFieldsPrepass;
+procedure PyClassHeaderSweep(phase: Integer);
+{ One walk over every `class` header in the token stream. Run TWICE, and the
+  two runs are not the same job:
+
+    phase 0  DETECT   — resolve each class`s first base and collect, per
+                        (class, field), the type each assignment gives it.
+    phase 1  REGISTER — lay the classes out, consulting the join the detect
+                        run and PyFJPropagate between them have computed.
+
+  It is one routine rather than two because everything except the last
+  statement is shared: locating the header, reading @dataclass off the lines
+  above it, resolving the base list, and finding the body span are all
+  delicate and all have their own bugs recorded in the comments below. A
+  second copy for the detect run would be a second answer to every one of
+  those questions — including whether a one-line body has a suite at all.
+
+  The parts of the body that are not the final call are re-run in phase 1 and
+  must therefore be idempotent. They are: UClsParent, PyDcOrder and
+  PyFJParent are assignments of the same value, and PyMembersHoisted is set in
+  phase 1 only.
+  bug-n-a-field-declared-in-an-ancestor-is-not-widened-by-a-descendants-rebind }
 var i, j, k, ci, bs, be, depth, baseCi: Integer;
     isDC, hoist, multiBase: Boolean;
 begin
-  { FIRST: which classes are named as a SECOND base anywhere? They are flattened
-    into their host and not compiled standalone (see PyClsUsedAsMixin), and both
-    this pass and PyParseClass have to know it before they register anything. }
-  i := PyScanLo;
-  while i < MainProgramTokCount - 2 do
-  begin
-    if (Tokens[i].Kind = tkClass) and (Tokens[i + 1].Kind = tkIdent) and
-       (Tokens[i + 2].Kind = tkLParen) then
-    begin
-      j := i + 2; depth := 0;
-      while j < MainProgramTokCount do
-      begin
-        if Tokens[j].Kind = tkLParen then Inc(depth)
-        else if Tokens[j].Kind = tkRParen then
-        begin
-          Dec(depth);
-          if depth = 0 then Break;
-        end
-        else if (depth = 1) and (Tokens[j].Kind = tkComma) and
-                (Tokens[j + 1].Kind = tkIdent) then
-        begin
-          k := j + 1;
-          { a DOTTED base names the module it came from; the class is the last
-            segment, exactly as the header parse takes it }
-          while (k + 2 < MainProgramTokCount) and (Tokens[k + 1].Kind = tkDot) and
-                (Tokens[k + 2].Kind = tkIdent) do k := k + 2;
-          baseCi := FindUClassNonRecord(GetTokenStr(k));
-          if baseCi >= 0 then PyClsUsedAsMixin[baseCi] := True;
-        end
-        else if Tokens[j].Kind in [tkNewline, tkEOF] then Break;
-        Inc(j);
-      end;
-    end;
-    Inc(i);
-  end;
   i := PyScanLo;
   while i < MainProgramTokCount - 2 do
   begin
@@ -34384,6 +34596,11 @@ begin
             else
               baseCi := FindUClassNonRecord(GetTokenStr(i + 3));
           end;
+          { the join's parent link — taken here, before the multi-base and
+            mixin decisions below turn it into a "defer to PyParseClass".
+            Those decisions are about LAYOUT; the field join needs the
+            hierarchy either way. }
+          if phase = 0 then PyFJParent[ci] := baseCi;
           { MULTIPLE BASES — a comma at the header's own paren depth. The extra
             bases are FLATTENED, which needs each one's recorded body span, and
             spans are recorded in source order by PyParseClass. So the whole
@@ -34478,13 +34695,69 @@ begin
             let the module-collect trial parse resolve `x = obj.method()`.
             PyParseClass skips its own (second) full run via the flag — the
             append-only PyDc* default tables must be filled exactly once. }
-          PyRegisterClassMembers(ci, bs, be, isDC, not hoist);
-          if hoist then PyMembersHoisted[ci] := True;
+          if phase = 0 then
+            { DETECT — record what every class assigns to every field, laying
+              nothing out. Nothing here may depend on a class registered later,
+              which is the whole reason the pass exists. }
+            PyCollectClassFieldJoins(ci, bs, be)
+          else
+          begin
+            PyRegisterClassMembers(ci, bs, be, isDC, not hoist);
+            if hoist then PyMembersHoisted[ci] := True;
+          end;
         end;
       end;
     end;
     Inc(i);
   end;
+end;
+
+procedure PyRegisterClassFieldsPrepass;
+var i, j, k, depth, baseCi: Integer;
+begin
+  { FIRST: which classes are named as a SECOND base anywhere? They are flattened
+    into their host and not compiled standalone (see PyClsUsedAsMixin), and both
+    this pass and PyParseClass have to know it before they register anything. }
+  i := PyScanLo;
+  while i < MainProgramTokCount - 2 do
+  begin
+    if (Tokens[i].Kind = tkClass) and (Tokens[i + 1].Kind = tkIdent) and
+       (Tokens[i + 2].Kind = tkLParen) then
+    begin
+      j := i + 2; depth := 0;
+      while j < MainProgramTokCount do
+      begin
+        if Tokens[j].Kind = tkLParen then Inc(depth)
+        else if Tokens[j].Kind = tkRParen then
+        begin
+          Dec(depth);
+          if depth = 0 then Break;
+        end
+        else if (depth = 1) and (Tokens[j].Kind = tkComma) and
+                (Tokens[j + 1].Kind = tkIdent) then
+        begin
+          k := j + 1;
+          { a DOTTED base names the module it came from; the class is the last
+            segment, exactly as the header parse takes it }
+          while (k + 2 < MainProgramTokCount) and (Tokens[k + 1].Kind = tkDot) and
+                (Tokens[k + 2].Kind = tkIdent) do k := k + 2;
+          baseCi := FindUClassNonRecord(GetTokenStr(k));
+          if baseCi >= 0 then PyClsUsedAsMixin[baseCi] := True;
+        end
+        else if Tokens[j].Kind in [tkNewline, tkEOF] then Break;
+        Inc(j);
+      end;
+    end;
+    Inc(i);
+  end;
+  { The class hierarchy has to be known, and every field assignment in it
+    seen, BEFORE the first class is laid out — a field`s type is decided where
+    it is declared, and the assignment that widens it may be in a subclass a
+    thousand lines further down. Hence detect, propagate, then register. }
+  PyFJReset;
+  PyClassHeaderSweep(0);
+  PyFJPropagate;
+  PyClassHeaderSweep(1);
 end;
 
 { Evaluate the NON-CONSTANT parameter defaults of a class's methods.
