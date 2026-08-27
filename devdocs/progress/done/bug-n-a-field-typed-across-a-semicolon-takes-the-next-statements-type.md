@@ -62,4 +62,4 @@ which owns the same span: one terminator set, computed once, used by every arm.
 against CPython.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit d56599719.
