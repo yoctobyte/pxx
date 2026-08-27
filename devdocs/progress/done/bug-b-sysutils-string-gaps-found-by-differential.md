@@ -146,4 +146,4 @@ on success, and `lib_strtoint` / `lib_strutil` assert it only inside
   the exact counts the Makefile asserts.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 78a429d8d.
