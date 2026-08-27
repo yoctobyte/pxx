@@ -182,3 +182,4 @@
 2026-08-27T19:35:32Z	plexus	71b410a349b669eb914dca2aebc6e1b19d6c2f2f	WOULD PIN 71b410a349b6 — 2 red(s), none new, 2 inherited from the current pin, self-host clean, streak 3/2
 2026-08-27T20:09:39Z	plexus	8b2cc332791e5da7618f123cfb05f87b12bd13f3	WOULD PIN 8b2cc332791e — 2 red(s), none new, 2 inherited from the current pin, self-host clean, streak 4/2
 2026-08-27T20:46:27Z	plexus	b898d0543fc8499facc66706257ff08d39195520	would NOT pin b898d0543fc8 — 2 red(s) the current pin does not have, 2 inherited from the current pin: test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy, test-nilpy#src:test/test_nilpy_startswith_tuple.npy
+2026-08-27T21:28:16Z	plexus	aca7f699288ebcd6343b0af26afdb73c12e85aa2	would NOT pin aca7f699288e — 2 red(s) the current pin does not have, 2 inherited from the current pin: test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy, test-nilpy#src:test/test_nilpy_startswith_tuple.npy
