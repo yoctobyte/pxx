@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:23 blocked:7 backlog:269 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2478 rejected:45`
+`unfinished:23 blocked:7 backlog:269 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2479 rejected:45`
 
 ## Held now (working/ — do not touch these files)
 
@@ -69,7 +69,7 @@ _none — no lane is locked._
 - `[p 70] [N]` feature-nilpy-staticmethod-and-classmethod
 - `[p 70] [P]` feature-p-delphi-string-helpers
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
-- `[p 70] [N]` regression-test-nilpy-test-nilpy-star-unpack-into-a-collecting-callee
+- `[p 70] [C]` regression-test-emit-obj-cxtensa-obj
 - `[p 68] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
 - `[p 68] [N]` feature-nilpy-user-defined-decorators

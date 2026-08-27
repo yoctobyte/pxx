@@ -2424,6 +2424,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-nilpy-test-nilpy-pyexpr-semantics | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_pyexpr_semantics.npy red at 9294bce2c800 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-qualifier-vs-cproc | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_qualifier_vs_cproc.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-sqlite-crud | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_sqlite_crud.npy red at 67015a8cf7d8 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-star-unpack-into-a-collecting-callee | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_star_unpack_into_a_collecting_callee.npy red at b4d62b3dcfde (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-str-isnumeric-istitle | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_str_isnumeric_istitle.npy red at 0d6de0cbeae1 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-type-name-of-a-big-int | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_type_name_of_a_big_int.npy red at 44193e547f6d (auto-filed by twatch) | — |
 | regression-test-nilpy-test-pascal-at-procvar-mode | P | 70 | regression | regression: test-nilpy#src:test/test_pascal_at_procvar_mode.pas@1 red at 23becd24b8e5 (auto-filed by twatch) | — |

@@ -1571,6 +1571,54 @@ begin
   end;
 end;
 
+{ True when some argument in the call's parenthesised list STARTS with a
+  NilPy unpack -- `*xs` or `**kw` at bracket depth 0 (`**` lexes as two tkStar,
+  so one test covers both). Purely token-level, and a
+  sibling of ArgListHasBracketElem above for the same reason: a star is not an
+  expression, so the speculative probe below hands it to ParseArgExpr, which
+  reports "expected expression" -- and Error HALTS, so the probe's own
+  "unsupported arg shape" escape (nArgs <> nExplicitArgs) is never reached and
+  the compile dies on a call that is perfectly well formed.
+
+  `c.take(*xs)` against `def take(self, *a)` was refused outright. The boundary
+  is the arity filter: the probe only runs when the written arguments already
+  fill the fixed parameters, which is why `c.take(0, *xs)` compiled and the
+  shorter form did not -- a shape difference that looks like a call-site rule
+  and is really "did the probe get to run".
+
+  Answered BEFORE the probe, exactly as the `**` dict-keyword case is answered
+  in PyDictKwOverloadAhead and the `[` case in ArgListHasBracketElem: a shape
+  the probe cannot parse has to be settled before it, not after. Selection then
+  falls back to arity, which is what these calls had before the probe existed --
+  and arity is all that is knowable anyway, since an unpacked list's LENGTH is
+  a runtime value.
+
+  lp is the index of the '('.
+  regression-test-nilpy-test-nilpy-star-unpack-into-a-collecting-callee }
+function ArgListHasStarUnpack(lp: Integer): Boolean;
+var i, depth: Integer; atElemStart: Boolean; tk: TTokenKind;
+begin
+  Result := False;
+  if lp < 0 then Exit;
+  depth := 0; atElemStart := True; i := lp + 1;
+  while i < TokCount do
+  begin
+    tk := Tokens[i].Kind;
+    if tk = tkEOF then Exit;
+    if (tk = tkStar) and (depth = 0) and atElemStart then
+    begin Result := True; Exit; end;
+    if (tk = tkLParen) or (tk = tkLBrack) then Inc(depth)
+    else if (tk = tkRBrack) then Dec(depth)
+    else if tk = tkRParen then
+    begin
+      if depth = 0 then Exit;
+      Dec(depth);
+    end;
+    atElemStart := (tk = tkComma) and (depth = 0);
+    Inc(i);
+  end;
+end;
+
 function FindUMethOverloadAhead(ci: Integer; const name: AnsiString; nExplicitArgs: Integer): Integer;
 { TYPE-aware method overload selection.
 
@@ -1687,6 +1735,14 @@ begin
     had before the probe existed. Making the probe parameter-aware instead is
     refactor-p-the-overload-probe-cannot-see-the-argument-match-channels.
     regression-test-core-test-arrayofconst-to-method-b287 }
+  { …and the NilPy unpack shapes, for the same reason and with no candidate
+    test: `*xs` cannot be parsed by the probe under ANY signature. }
+  if isNilPy and ArgListHasStarUnpack(lp) then
+  begin
+    Result := FindUMethArity(ci, name, nExplicitArgs);
+    Exit;
+  end;
+
   if ArgListHasBracketElem(lp) then
   begin
     ok := False;
