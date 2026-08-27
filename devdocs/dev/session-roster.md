@@ -8601,3 +8601,114 @@ convention on slot offsets, whether the program body arrives with `CurProc < 0` 
 all reasoned about and none observed. **Which is the argument for granting now
 rather than after another thousand lines**, and the same argument that moved the
 Phase 2 grant to the start.
+
+## typinfo facade LANDED (`cfa72767f`) — and the relayed list changed the work, not just its scope
+
+frankA's named list arrived while frankB had the file open, and it produced a
+**concrete change**: `elSize`, `MinInt64Value`, `MaxInt64Value` — three of the five
+fields named — were **unspellable** in our `TTypeData`, which had `ElemSize`,
+`MinValue`, `MaxValue`.
+
+> **A facade whose field NAMES differ from FPC's is not a facade**, because the
+> consumer would need editing — the one thing the design exists to avoid.
+
+Fixed with a variant part carrying FPC's spellings at identical offsets: same
+storage, nothing keyed on a tag, so it is not the kind-keyed variance that record
+deliberately refuses. Without the measurement, a facade that **reads correctly and
+cannot be written against** would have shipped.
+
+**The hard requirement is diffed, not assumed:** all twelve `OrdType`/`FloatType`
+values identical to FPC 3.2.2, ShortInt through QWord, Boolean, Char, Single,
+Double — as checked-in rows. Both fields are *only* case selectors picking a
+comparer, so a wrong ordinal silently picks the wrong one: a bug with no symptom at
+the site. Also measured rather than recalled: **FPC's `GetSetProp` returns
+`clRed,clBlue` with NO brackets by default** (`[...]` only with `brackets=True`).
+The first cut always bracketed — a quiet divergence in the direction that *feels*
+right, since the bracketed form is what an .lfm shows.
+
+**Bug one (frankB's own, fixed):** `GetOrdProp`/`GetStrProp` handled only
+direct-field properties and answered **0 / ''** for a property with a read *method*,
+while the write half already dispatched through setter methods. One arm of a double
+case, and the missing arm is the one nobody round-trips — `property Num: Integer
+read GetI` read 0 through RTTI and 107 directly. Same edit fixed a second: the
+setter trampoline was `procedure(Self; v: Integer)` for every width, **truncating
+every Int64 property with a setter method.**
+
+`FindPropInfo` deliberately absent and named at the declaration rather than faked —
+raising needs `Exception`, needs a `uses`, and typinfo has none by design (`streams`,
+`classes_lite`, `lfm` and all of `lib/pcl` sit on it).
+
+### BUG TWO — Track P, and it is the serious class: `bug-p-a-class-instance-converts-implicitly-to-any-typed-pointer` [p65]
+
+pxx lets a class instance convert implicitly to **any** typed pointer; FPC errors.
+Two consequences:
+
+1. **A silent memory-safety hole with no cast written anywhere** — an object read as
+   an unrelated record.
+2. A pointer-taking overload becomes a viable and **preferred** candidate for a class
+   argument, so `GetPropInfo(AnObject, 'Caption')` — *the spelling every FPC consumer
+   uses* — binds to the `PClassRTTI` arm and segfaults. Proven by instrumenting the
+   `TObject` arm and showing it is never entered.
+
+**So the facade landed today but its real-consumer path is unreachable until this is
+fixed** — it gates `streams`, `classes_lite`, `lfm`, all of `lib/pcl`, fpjsonrtti.
+Relayed to frankA to take after its current #3, with the note that the frontmatter
+number is its call, not mine.
+
+**It did not reduce, and frankB stopped varying the input.** Every synthetic
+two-overload repro passes — unit or program, bare `TObject` or descendant,
+declarations adjacent or separated, self-recursive inner call — so the ticket **drops
+overloading entirely** and demonstrates the underlying conversion in 14 lines.
+**Second time tonight, second lane:** when a passing probe is not evidence, stop
+varying the input and go after the mechanism.
+
+Platonic handling correct: instance overloads left in place with the hazard stated at
+the declaration, test routed via `GetInstanceRTTI` with a pointer to the ticket. And
+the resolution carries my scope warning in its own words — one of four walls,
+collections unassessed — so nobody infers a green rung from a p72 resolve.
+
+## Item 2 disconfirmed — and item 1 ATE ITS PRIZE (`cb5e2f564`, comment-only)
+
+The ticket said the resident exclusion rests on a reason that died at `e7c0d1d2a`.
+**Right about the reason, wrong about the conclusion: the exclusion had two reasons
+and only one died.**
+
+- dead: *"the refresh reloads via `EmitLoadVar` and clobbers rax"* — it re-extends
+  from rax now.
+- **alive:** a resident load is *already* a reg-reg move, so eliminating it removes a
+  register move, not a memory access.
+
+Measured rather than reasoned: dropping the exclusion removes **6 instructions out of
+13,483**, every one a reg-reg move — the class W1's sizing already priced at ~0.
+
+> **A ticket can be factually correct that a mechanism died and still wrong about what
+> follows, because it recorded one of the reasons and not both.** Checking whether a
+> stale rationale was the *only* rationale is a cheap step nobody takes.
+
+**And the reason it is empty is item 1.** When item 2 was filed, the boolean temp
+lived in the frame and the sequence was a genuine memory round trip. At `-O3` today
+the temp is resident in r14 and the whole `Upcount` body contains **exactly one memory
+read** — the string byte. **Item 1 consumed item 2's prize.**
+
+That is the day's stale-claim pattern in its most expensive form: unlike a wrong
+number, a stale optimisation ticket looks like *work waiting to be done* rather than a
+claim to re-check. Asked for a line on the umbrella: **before starting any item,
+re-measure the prize, not just the mechanism.**
+
+What survives is the **dual-write stores**, not reloads — making the register
+authoritative inside the loop and re-syncing the frame at exits, the V5→V3 step the
+sizing measured at a further **2.15x**. That is the real W2 and the only unclaimed item
+with a measured number. **Dispatched as item 3.**
+
+## Dispatch state after this round
+
+- **frankwasm — GRANTED the `ir_codegen.inc` dispatch arm.** frank-optimize answered
+  option 1 and said *why* it got safer, not just "still free": its entire footprint in
+  that file since is one comment ~1500 lines from the ladder. That is a fact anyone can
+  check; "it's free" is a claim that expires.
+- **frank-optimize — item 3** (the real W2).
+- **frankB — the SysUtils ticket** (`feature-sysutils-delphi-exception-api-gaps-found-by-rtl-generics`),
+  on the rung-6 critical path, with the reminder that `Error`'s numbers are explicitly
+  not chased.
+- **frankA — #3 now, then the pointer-conversion bug.** Both are about which candidate a
+  name resolves to, so worth a moment's thought rather than treating them as unrelated.
