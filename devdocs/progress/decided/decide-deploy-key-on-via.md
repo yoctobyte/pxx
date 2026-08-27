@@ -3,8 +3,8 @@ track: W
 prio: 60
 type: decide
 blocked-by: []
-summary: "REOPENED — the premise was FALSE. `via` has carried an ACCOUNT-level GitHub key since 2026-06-22 with read (and by ownership, write) reach into the `pxx` COMPILER repo. So there was never a no-push-key posture, the owner is accepting a risk he already carries in a WIDER form, and adding the scoped key while removing/scoping `~/.ssh/id_ed25519` is a net risk REDUCTION rather than a trade against velocity. Original decision: `via` gets a deploy key with write access scoped to the website repo, accepting a security cost to unstall Track W. Records the bound the decision was made INSIDE — one repo, never the compiler repo, never a PAT — because that bound is the whole difference between the accepted risk and a much larger one, and it is the part that erodes silently."
-status: decided  # REOPENED — see the correction at the top of the body
+summary: "RESOLVED 2026-08-27 — `via`'s account-level GitHub key is INTENTIONAL and the risk was already calculated by the owner (*\"this is actually good news / all working as intended. security risks all calculated\"*). No credential change needed; the scoped deploy key is unnecessary. Read this before treating that key as a finding — three sessions burned an afternoon routing around a wall that was not there, and the credential is not a discovery. Background: the premise of the original decision was FALSE. `via` has carried an ACCOUNT-level GitHub key since 2026-06-22 with read (and by ownership, write) reach into the `pxx` COMPILER repo. So there was never a no-push-key posture, the owner is accepting a risk he already carries in a WIDER form, and adding the scoped key while removing/scoping `~/.ssh/id_ed25519` is a net risk REDUCTION rather than a trade against velocity. Original decision: `via` gets a deploy key with write access scoped to the website repo, accepting a security cost to unstall Track W. Records the bound the decision was made INSIDE — one repo, never the compiler repo, never a PAT — because that bound is the whole difference between the accepted risk and a much larger one, and it is the part that erodes silently."
+status: decided
 ---
 
 # DECIDE: `via` gets a write-capable deploy key, scoped to the website repo
@@ -14,7 +14,58 @@ status: decided  # REOPENED — see the correction at the top of the body
 - **Status:** DECIDED 2026-08-27
 - **Owner:** the user
 
-## CORRECTION 2026-08-27, SAME DAY — THE PREMISE WAS FALSE. Re-decide.
+## RESOLVED 2026-08-27 — the key is INTENTIONAL. Do not re-raise it.
+
+> *"this is actually good news / all working as intended. security risks all
+> calculated."* — the owner, on being shown the finding below.
+
+**`via`'s account-level GitHub credential is deliberate, known, and its risk was
+already priced by the owner.** It is not a misconfiguration, not a leak, and not
+something for an agent to flag, tidy, scope, or remove.
+
+**Outcome:**
+
+| | |
+| --- | --- |
+| `/home/ian/.ssh/id_ed25519` on `via` | **stays as it is.** Intentional. |
+| the scoped deploy key `ianweb` generated | **not needed.** Inert; `rm` it or leave it unenrolled. |
+| the 18KB patch-transfer question | **moot** — `via` can already push. Withdraw it. |
+| the six uncommitted production files | `ianweb` can commit and push them directly, subject only to its own operator |
+| the manual deploy gate | **unchanged.** Pushing was never the gated step; a push *executing* on `via` is. |
+
+**Why this page exists at all — this is the part with future value.** Three
+sessions spent an afternoon reasoning carefully from a false premise. `frank2-af`
+argued against granting push access, `ianweb` agreed and declined to move a patch
+between hosts on principle, the owner decided twice, and the roster and
+[[bug-web-production-tree-is-uncommitted-and-is-the-only-copy]] both recorded a
+"structurally stalled lane" — all of it routing around a wall that was not there.
+Nobody was careless; the credential simply was not visible from any of the places
+being reasoned from.
+
+**So: an agent finding an account key on `via` has found a documented, intended
+arrangement, not a hazard.** Check this page before escalating it. The cost of
+re-discovering it is not a security incident, it is another afternoon.
+
+`ianweb` was right to flag it rather than act on it, and right not to touch
+someone else's credential — that judgement holds regardless of the outcome, and
+is the reason the correct answer arrived in one round trip rather than after a
+removal that broke something invisible from `via`.
+
+## The measurement, kept because it is what makes the above checkable
+
+**`via` has carried `/home/ian/.ssh/id_ed25519` since 2026-06-22**, fingerprint
+`SHA256:MOUfGKeCqWlsWTp9tAhamOm4lVrfd+hJiSC2mCh2/9A`.
+
+- `ssh -T git@github.com` from `via` answers **`Hi yoctobyte!`** — the bare
+  account. A repo-scoped deploy key answers `Hi yoctobyte/pxx-website!`.
+- `git ls-remote --heads git@github.com:yoctobyte/pxx.git` **succeeds from
+  `via`**, returning `eda9c305f6d9 refs/heads/dev` — `frank2-af`'s own orphaned
+  commit from that morning, matched against this checkout, so the read is real
+  and current rather than inferred.
+- Proven: account authentication and read to the compiler repo. Not tested:
+  write, because testing write means writing.
+
+## SUPERSEDED — the correction that reopened this (kept for the reasoning chain)
 
 **`via` has had a write-capable GitHub credential since 2026-06-22.** Not a
 deploy key. An **account** key, `/home/ian/.ssh/id_ed25519`, fingerprint
@@ -72,11 +123,7 @@ touched `id_ed25519`**: that is the owner's credential, may be load-bearing for
 something invisible from `via`, and removing it is his call with full facts
 rather than a tidy-up. Flagging, not acting — the correct line.
 
-### Status: the ORIGINAL decision below stands as written, but was made on false facts
-
-The owner should re-decide against this page rather than against the version
-everyone held an hour ago. The likely outcome is the same grant plus step 4,
-which is why the original text is preserved rather than rewritten.
+### Status: re-decided above. The owner's answer was that no change is needed.
 
 ## ORIGINAL DECISION (made on the false premise above)
 
