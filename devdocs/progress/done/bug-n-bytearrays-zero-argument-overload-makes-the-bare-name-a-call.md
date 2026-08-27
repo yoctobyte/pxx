@@ -135,4 +135,4 @@ why it was seen and passed over.
 same push.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit d89b2714f.
