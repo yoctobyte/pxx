@@ -75,6 +75,10 @@ ALLOWED = {
         "and never opens the checkout's own archive — deliberately, since the "
         "live one grows every few minutes and an assertion about its contents "
         "would pass or fail on its own",
+    "twatch_verify_request_devtest.py":
+        "builds a throwaway git repo under tempfile and writes both the "
+        "request queue and a runs-box.ndjson fixture into ITS tstate; it "
+        "asserts on that fixture and never opens the checkout's own",
     "autotriage.py":
         "reads tstate off the REF by default (git show origin/master:...) — the "
         "path join remains only for the explicit `--rev ''` worktree opt-in, "

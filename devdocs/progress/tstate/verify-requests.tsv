@@ -1,0 +1,6 @@
+# Targeted verdict queue — one request per line:
+#   <40-char sha>	<tier>	<who>	<why>
+# The watcher drains these FIRST among its idle phases. A request is satisfied
+# when that sha has a verdict at that tier, so lines need no deletion and a
+# repeat is a no-op. Stale lines cost one archive lookup per cycle; tidy at
+# will, but nothing breaks if you never do.
