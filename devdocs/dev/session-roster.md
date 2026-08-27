@@ -6076,8 +6076,7 @@ them.
 Pre-existing and NOT part of the scheme: `~/frank1` (live — holds
 `bug-b-sysutils-string-gaps-found-by-differential` with uncommitted edits),
 `~/frank2` (the coordinator's current tree, retire after the move), `~/pxx`
-(**stale, on the retired `dev` branch, 501 behind master** — this is the exact
-trap that produced four tickets filed to `dev` earlier today; retire it).
+(**KEEP — see the correction below**).
 
 ### Why trunk vs topic, and not a branch per tree
 
@@ -6151,7 +6150,8 @@ against 9 MB tracked).
   alternates.** It has not: these are hardlinks, and hardlinked objects are safe
   because git never rewrites an object in place. Clones simply diverge as each
   one repacks, which at 98 GB free is fine.
-- **Do not work in `~/pxx`.** Retired `dev`, 501 behind.
+- **Do not work in `~/pxx`, and do not delete it either.** See the correction
+  immediately below.
 
 ### `~/frank.sh` — the fleet launcher (clean start after a reboot)
 
@@ -6188,3 +6188,36 @@ pre-restart trees) or `pxx` (stale `dev`).
 The script lives outside git at `~/frank.sh`. Verified end to end on plexus with
 a stand-in command — window name, cwd, shell survival — and the claude flag
 combination was checked separately.
+
+### CORRECTION — `~/pxx` is not dormant; it is running a live service
+
+I inspected `~/pxx`, found a clean working tree on the retired `dev` branch 501
+commits behind master, and told the owner it was "safe to delete (clean, no
+stash)". The owner's reply — *"pxx was the old track-T agentic watcher.. i
+suggest to keep it"* — sent me back to look properly, and there is a live
+process in it:
+
+```
+219557  python3 /home/neo/pxx/tools/twatch_web.py --clone /home/neo/trackt-watch --port 8377
+```
+
+It is the **twatch web dashboard**, serving HTTP 200 right now, reading
+`~/trackt-watch` as its clone. Deleting the tree would have killed it.
+
+**The lesson, and it is a repeat.** I checked *git* state and reported on
+*process* state. `git status` clean, no stash, branch stale — none of that is
+evidence a tree is unused, because a tree's real job may be to host something
+that never touches the index. This is the same shape as the correction recorded
+earlier today ("a dirty working tree blocks EDITS MADE IN THAT TREE, not the
+work itself"): both times I read a git fact as though it settled a question git
+does not answer. **Before calling any tree disposable, run `pgrep -af <path>`.**
+
+**What is actually true about `~/pxx`:**
+
+- **Keep it. It hosts the dashboard on port 8377.**
+- Its 501-commit lag does **not** affect that service: `tools/twatch_web.py`
+  there is **byte-identical** to master's copy. The lag is real but inert.
+- The one genuine hazard is unchanged — an agent *working* in it inherits a
+  checkout whose `CLAUDE.md` describes the retired `dev` branch model, which is
+  exactly what produced four tickets filed to `dev` earlier today. So: no agent
+  is dispatched there. `~/frank.sh` excludes it by name and now says why.
