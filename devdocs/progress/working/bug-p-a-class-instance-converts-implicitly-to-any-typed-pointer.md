@@ -100,3 +100,73 @@ The 14-line program is a compile ERROR, matching FPC's diagnostic in substance;
 `test/lib_typinfo_props.pas` can assert the instance spelling directly (it
 currently routes through `GetInstanceRTTI` and says why). `make test` +
 self-host fixedpoint.
+
+---
+
+## Root cause (frankA, 2026-08-28)
+
+`symtab.inc:6963`, inside `TypesCompatible`:
+
+```pascal
+{ A class instance converts implicitly to a rooted object reference — the
+  builtin TObject / `object` param type is a tyPointer (elem tyClass), so a
+  `P(o: TObject)` plain routine must accept any tyClass argument... }
+if (pType = tyPointer) and (aType = tyClass) then
+begin
+  Result := True;
+  Exit;
+end;
+```
+
+The rule is **load-bearing and right in intent** — the builtin `TObject`
+parameter type really is a `tyPointer` whose ELEMENT is `tyClass`, so removing it
+breaks every `P(o: TObject)`. What is wrong is that it is *blanket*: it also
+accepts a pointer whose element is a **record**, which is this ticket.
+
+The discriminator is the pointer's **element type**, and `TypesCompatible`
+receives only KINDS — never identities. That is the same architectural gap
+`MatchArgNilOk` was added to close, and its comment says so almost verbatim:
+"pxx types nil as a tyPointer literal, so the kind channel let it through". So
+this defect has an exact in-repo precedent, and the house style for it is
+established.
+
+### Where the fix goes
+
+**`MatchArgRecMismatch(i, j, aTk)`** (`symtab.inc:7385`) — already the home for
+this exact family: "this argument definitely cannot bind this parameter"
+rejections, each carrying its own ticket reference. Two are there now (a scalar
+argument binding an array parameter; an array argument binding a scalar one).
+This is the third of the same shape.
+
+No new side channel is needed: `aTk` is already `tyClass` for a class-instance
+argument, and the parameter's element type is reachable as
+`Syms[Procs[i].Params[j].SymIdx].PtrElemTk` (`TParam` itself does not carry it,
+`TSym` does). Reject when the argument is `tyClass`, the parameter is
+`tyPointer`, the parameter is not untyped, and its `PtrElemTk` is not a class.
+
+`TypesCompatible` stays exactly as it is — the coarse kind channel, with its
+other callers untouched. `MatchArgRecMismatch` is already ANDed in beside
+`MatchParamCompatible` at every match site, and a single-candidate call walks the
+same path (a candidate chain of length one), so **one site covers the
+no-overload repro and the overload consequence together**.
+
+### Guard test landed ahead of the fix
+
+`test/test_class_arg_to_pointer_param_boundary` pins the **legitimate** half so
+tightening the other half cannot take it with it: a class instance binding an
+untyped `Pointer`, binding a `TObject` formal, both with a descendant, `nil`
+through both, and a genuine pointer-to-class argument. It passes today and must
+keep passing; FPC accepts all of it and agrees byte for byte. The illegitimate
+half is a compile-time diagnostic and cannot be asserted from inside a Pascal
+program, so it is gated separately — same split as `test/cerror_directive.c`.
+
+Over-reach is the real risk in this fix (the rule exists for a reason), which is
+why the guard is in the tree before the change.
+
+### Blocked on lane ownership, not on analysis
+
+The fix is `symtab.inc` — shared core, Track A's file-lane, and inside the
+boundary this session was given while Track O runs in `~/frank-optimize`. Per
+CLAUDE.md a shared-internals change is a Track A change regardless of the Track P
+symptom. Raised with the coordinator rather than edited; analysis above is
+complete and the change is ~15 lines in one function.
