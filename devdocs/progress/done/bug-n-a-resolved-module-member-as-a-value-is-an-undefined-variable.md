@@ -163,4 +163,4 @@ output. At pinned v380 it does not merely differ — it does not compile:
 No pin needed: `compiler/builtin/**` is untouched.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 99f870ae8.
