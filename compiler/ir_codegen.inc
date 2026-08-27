@@ -5823,7 +5823,7 @@ begin
           Exit;
         end;
 
-        { -O3 constant-divisor strength reduction: `x div 2^k` / `x mod 2^k`
+        { -O2 constant-divisor strength reduction: `x div 2^k` / `x mod 2^k`
           become shifts and masks instead of a ~25-40 cycle idiv preceded by a
           zero-check on a constant that is provably non-zero.
 
@@ -5845,7 +5845,7 @@ begin
           Operands arrive sign/zero-extended to the full 64-bit register (the
           same contract the idiv path relies on), so 64-bit shifts are correct
           for every narrower type and the store narrows the result as before. }
-        if (OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) and
+        if (OptLevel >= 2) and (IRKind[right] = IR_CONST_INT) and
            ((op = tkDiv) or (op = tkMod)) and
            (not TypeIsFloat(IntToTypeKind(IRTk[node]))) and
            (IntToTypeKind(IRTk[node]) <> tyAnsiString) and
@@ -6295,13 +6295,13 @@ begin
               end;
             end;
           
-          { -O3: a divisor that is a non-zero CONSTANT cannot be zero, so the
+          { -O2: a divisor that is a non-zero CONSTANT cannot be zero, so the
             two-instruction pre-divide guard is dead code at every such site
             (`div 10` in every number formatter, `div 3`, ...). The power-of-two
             case never reaches here — it was strength-reduced above. }
           tkDiv:
             begin
-              if not ((OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) and
+              if not ((OptLevel >= 2) and (IRKind[right] = IR_CONST_INT) and
                       (IRIVal[right] <> 0)) then
                 EmitDivZeroCheckX64;
               if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then
@@ -6311,7 +6311,7 @@ begin
             end;
           tkMod:
             begin
-              if not ((OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) and
+              if not ((OptLevel >= 2) and (IRKind[right] = IR_CONST_INT) and
                       (IRIVal[right] <> 0)) then
                 EmitDivZeroCheckX64;
               if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then
