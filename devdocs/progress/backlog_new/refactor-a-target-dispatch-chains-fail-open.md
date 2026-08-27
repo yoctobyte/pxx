@@ -137,3 +137,62 @@ independently is the only bad option.
   a wrong premise and onto the retired `dev` branch; corrected after
   frank1-80 measured `TARGET_PTR_SIZE`'s 129 call sites and pointed at
   `util.inc:87`. Findings: `devdocs/dev/wasm-target-findings.md`.
+
+- 2026-08-27 (frank-optimize) — **the site list produced by the wasm32
+  registration, and it changes this ticket's scope.** Landed
+  `feature-a-wasm32-target-registration-skeleton` at `290ee8ca4`; the audit it
+  required is the "starting point, not an inventory" warning above coming true.
+
+  **The scan found 2 of 4, and missed the two that matter.** Confirmed as filed:
+  `exception_emit.inc:8`, `lexer.inc:936`, and `coroutine_emit.inc:25` (real,
+  but currently unreachable — the codegen chain below errors first). The two the
+  scan could not see:
+
+  | site | what it falls through to |
+  | --- | --- |
+  | **`ir_codegen.inc:9048`** (`IREmitMachineCode`) | **the x86-64 emitter** |
+  | **`compiler.pas:2082`** (output writer) | **`writeELF`** (64-bit ELF) |
+
+  Both are `if ... Exit` **ladders**, not `if / else if` chains — each arm ends
+  in `Exit` and the "else" is simply the code after the last one. A heuristic
+  looking for a missing final `else` cannot match that shape at all. **This
+  ticket's site list must grep for Exit-terminated target ladders as well as
+  chains without an `else`**; on the two spellings measured so far the ladder
+  form is where the worse failures live.
+
+  **And that changes what this ticket is about.** The framing above is "matches
+  no arm and configures *nothing*" — no defines, no runtime, no diagnostic. That
+  is the cheap half: an absence, and absences tend to surface as a confusing
+  error somewhere downstream. The two ladder sites do something else. A 7th
+  target reaching `ir_codegen.inc:9048` receives **x86-64 machine code in a file
+  claiming to be its own architecture**, and `compiler.pas:2082` then wraps it
+  in a 64-bit ELF. That is not a missing error message, it is a **plausible
+  wrong output far from its cause** — the class `devdocs/dev/debugging-playbook.md`
+  opens by naming as the expensive one, and the reason it is expensive is that
+  the binary exists, has a normal size, and fails only when someone runs it on
+  the hardware. Worth stating in the summary line: this ticket prevents wrong
+  code generation, not just silent no-ops.
+
+  Both ladder sites are already loud **for wasm32 specifically** (an explicit
+  arm each, landed in `290ee8ca4`). What is still open here is the general
+  `else` for target #8, which is this ticket's job.
+
+  **One boundary that ticket hit and this one inherits.** `coroutine_emit.inc`
+  did **not** get a mandatory `else`: riscv32 and xtensa fall through it
+  deliberately ("Other targets land in later phases"), so an `else Error` there
+  would move an existing target and break that ticket's acceptance #3. It is a
+  live example of the audit this ticket calls the work — the chain looks
+  exhaustive-by-intent and is not. Whoever takes this must decide what riscv32
+  and xtensa should do when a program uses `__pxxcoswitch`, which is a real
+  question about those targets rather than a refactor. If the answer is "error
+  clearly", that is a behaviour change for two shipped targets and wants its own
+  ticket, not a line in a sweep.
+
+  Method note for acceptance #3, since it is the same bar the registration
+  ticket had to clear: an 8-program corpus x 6 targets = 48 output hashes,
+  before and after, **failures included** (a program that fails identically on
+  both sides is evidence too). Build the "before" compiler by stashing the edits
+  and rebuilding rather than reusing `pinned`, which carries unrelated deltas —
+  and check the corpus actually reaches the chains being changed. Mine did not
+  on the first pass: it contained no `try` at all, so it never exercised the one
+  chain where a bare `else` had been added.
