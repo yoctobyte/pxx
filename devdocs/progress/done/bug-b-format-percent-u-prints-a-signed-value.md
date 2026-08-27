@@ -87,7 +87,7 @@ comparing every specifier against `fpc -O- -Mobjfpc` 3.2.2 — the ten-line one 
 this ticket's repro is a good start and should be checked in with the fix.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 0b2f731b6.
 
 ## Resolution (2026-08-27, frankB)
 

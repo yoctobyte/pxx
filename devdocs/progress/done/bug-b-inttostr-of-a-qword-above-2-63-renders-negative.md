@@ -77,7 +77,7 @@ shift bug — `IntToStr(u64 shl 63)` was the failing row — and only isolating
 `WriteLn(u64 shl 63)` was correct all along.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 0b2f731b6.
 
 ## Resolution (2026-08-27, frankB)
 

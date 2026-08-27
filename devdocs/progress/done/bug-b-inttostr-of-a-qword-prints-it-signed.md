@@ -82,7 +82,7 @@ rows and `High(QWord)`/`High(Cardinal)`/`High(Word)` round-tripping.
 Track A gap — file it if you need it for the test, or write the literal.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 0b2f731b6.
 
 ## Resolution (2026-08-27, frankB)
 
