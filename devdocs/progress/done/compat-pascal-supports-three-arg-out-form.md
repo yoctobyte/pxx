@@ -98,4 +98,4 @@ other reason to nil.
 220/0 · fgl 7/7. No compiler change, so the self-host binary is untouched.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit ca0cab417.
