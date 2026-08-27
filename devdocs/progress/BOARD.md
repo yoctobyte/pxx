@@ -80,11 +80,11 @@ _none_
 | bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name | N | 62 | bug | The MODULE-level arm of the local-binding-beats-a-def fix: `f = o.f` written after `def f` still calls the def. The local/parameter arm is fixed and gated; this one needs module-level bindings to carry a token position, which is a mechanism rather than a patch, so it was split out rather than guessed at. | — |
 | bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members | N | 65 | bug | A module that defines a name equal to its own module name makes every QUALIFIED access to the module's other members fail: `import bisect; bisect.bisect_left(...)` gives `no class declares a method or callable field .bisect_left()`, because `bisect` resolves to the module's member rather than the module. CPython's own Lib/bisect.py has `bisect = bisect_right`, so this is ordinary stdlib-shaped code. From-imports are unaffected. | — |
 | bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable | N | 70 | bug | `import m` then `m.f(1)` compiles and runs, but `h = m.f` — the same member in VALUE position — is a COMPILE ERROR, `undefined variable (f)`, naming the attribute as if it were a bare name. Every value position fails the same way (assignment, dict value, `map(m.f, ...)`), so a module's functions cannot be used as callbacks at all. The import resolves; only the value position is broken. | — |
+| bug-n-a-short-circuit-or-returning-self-is-typed-as-a-number | N | 60 | bug | `def m(self): return self or 1` dies with `TypeError: expected a number, got object` — a top-level short-circuit `or` hands back an OPERAND, and the def-return-type scanner types it from the wrong side. The `and` spelling answers correctly only because its truthy arm happens to be the int. | — |
 | bug-n-a-staticmethod-read-through-an-instance-binds-a-receiver | N | 25 | bug | bug(N): a @staticmethod read through an INSTANCE binds a receiver, so `type(k.stat).__name__` says 'method' | — |
 | bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence | N | 55 | bug | Six `timeout N` literals are hardcoded inside the test-nilpy and test-uforth recipes. The three uforth ones are the damaging pair of shapes: `wait $pp \|\| true` discards timeout's exit 124, the kill truncates p.out mid-stream, and the truncation is then reported as `DIFF <corpus>` — a pxx-versus-CPython divergence — and counted into `bad`. A machine under load thus manufactures a Nil-Python frontend finding. Filed by Track T, which owns the harness but not the Makefile. | — |
 | bug-n-a-unicode-identifier-is-rejected-by-the-lexer | N | 65 | bug | `_κ = 5` is legal Python 3 and the NilPy lexer rejects it with `unexpected character`. Non-ASCII in a STRING literal already works, so this is the identifier path only. Two tinycss2 files (color4.py, color5.py) use Greek letters as names for colour-space constants. | — |
 | bug-n-abs-of-a-complex-raises-typeerror | N | 12 | bug | `abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set. | — |
-| bug-n-an-arithmetic-dunder-on-self-is-pointer-arithmetic | N | 72 | bug | `self + 1` inside a class does not dispatch to __add__ at all — it falls through to POINTER ARITHMETIC on the instance handle and prints an address where CPython prints the method's result. The identical expression on a NAMED receiver (`a + 1`) dispatches correctly. Silent wrong value, no diagnostic, one class and no inheritance needed. | — |
 | bug-n-an-augmented-subscript-on-a-dunder-class-is-refused | N | 70 | bug | `obj[k] += v` on any class that reaches subscripting through `__getitem__`/`__setitem__` is a named compile-time refusal — `augmented assignment to a __getitem__/__setitem__ subscript is not supported`. Ordinary Python, and the counting idiom (`counts[k] += 1`) is the single most common thing a dict-like class is written for. The default-indexed-property arm beside it already desugars the augmented form; only the dunder arm does not. | — |
 | bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising | N | 50 | bug | `None.bit_length()` returns 0 where CPython raises AttributeError — the int-method arm on a variant receiver unboxes without checking the tag, and None's payload reads as the integer 0. dict/list/str receivers do raise, so None is the one shape that answers. | — |
 | bug-n-augmented-true-division-does-not-widen-an-annotated-int-parameter | N | 62 | bug | `def f(x: int): x /= 2; print(x)` prints 4612811918334230528 — the double's bit pattern stored in the Int64 parameter slot. PyNoteLocalType DOES note the float (PXXDBG=n.locals shows tk=19), but a PARAMETER's symbol keeps its declared type, so the note is dropped. No return is involved: the plain print is already wrong. | — |
@@ -558,9 +558,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2479)
+## done (2480)
 
-2479 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2480 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (45)
 
@@ -618,7 +618,6 @@ _none_
 - [p 75] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 75] [P] feature-pascal-corpus-expansion
 - [p 75] [P] feature-pascal-corpus-oop
-- [p 72] [N] bug-n-an-arithmetic-dunder-on-self-is-pointer-arithmetic
 - [p 72] [N] bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop
 - [p 72] [N] feature-nilpy-stdlib-coverage-gaps-measured
 - [p 72] [B] feature-typinfo-facade-unit
@@ -662,6 +661,7 @@ _none_
 - [p 62] [N] feature-nilpy-list-sort-inplace-key-reverse
 - [p 62] [A] feature-unicodestring-model
 - [p 60] [B] bug-b-sysutils-string-gaps-found-by-differential
+- [p 60] [N] bug-n-a-short-circuit-or-returning-self-is-typed-as-a-number
 - [p 60] [N] bug-n-bytes-getitem-returns-empty-instead-of-the-byte-value
 - [p 60] [N] bug-nilpy-a-keyword-call-through-a-statically-unknown-callee-does-not-compile
 - [p 60] [N] feature-a-declaration-phase

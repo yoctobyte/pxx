@@ -1,0 +1,16 @@
+add add
+sub sub
+mul mul
+truediv truediv
+floordiv floordiv
+mod mod
+and and
+or or
+xor xor
+lshift lshift
+rshift rshift
+V(6) 6
+V(16) 16
+9 2.5
+4.5
+BITWISE-AND

@@ -3810,6 +3810,16 @@ test-core: $(COMPILER)
 	# bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
 	./$(COMPILER) test/test_nilpy_dunder_on_self_reaches_the_override.npy $(TESTTMP)/test_nilpy_dunderself26
 	$(TESTTMP)/test_nilpy_dunderself26 | diff -u test/test_nilpy_dunder_on_self_reaches_the_override.expected -
+	# ...and the ARITHMETIC half of the same receiver: eleven operator dunders,
+	# each written twice — through a named receiver and through `self` — so the
+	# two arms can only agree or fail as a mismatched pair. The parser dispatched
+	# all eleven correctly through a name and always did; the def-return-type
+	# SCANNER could not type `self` at all, so `return self + 1` registered an
+	# Int64 result and handed the dunder's string back as an ADDRESS.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-an-arithmetic-dunder-on-self-is-pointer-arithmetic
+	./$(COMPILER) test/test_nilpy_arith_dunder_on_self.npy $(TESTTMP)/test_nilpy_arithdunderself26
+	$(TESTTMP)/test_nilpy_arithdunderself26 | diff -u test/test_nilpy_arith_dunder_on_self.expected -
 	# ...and the other side of the same rule: a REBOUND name is refused, never
 	# resolved to its first binding. CPython prints "second"; a compile-time
 	# alias table cannot say that, so it must decline rather than answer "first".

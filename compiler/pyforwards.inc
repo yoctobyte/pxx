@@ -32,6 +32,7 @@
 
 procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
 function PyParseLValueAST(idx: Integer; identTokIdx: Integer): Integer; forward;  { the NilPy half of ParseLValueAST, carved out into pyparser.inc — ParseLValueAST dispatches here on PyExprMode }
+function PyBinOpDunderName(tk: TTokenKind): AnsiString; forward;  { raw-token operator -> dunder name; PyInferExprType asks it long before the body below }
 procedure PyParseFactorCore; forward;  { the NilPy half of ParseFactorCore, carved out into pyparser.inc — ParseFactorCore dispatches here on PyExprMode }
 function PyMakeNone: Integer; forward;  { the None VALUE (a VT_EMPTY variant) — pyparser.inc }
 function PyBuildGeneratorValue(gpi: Integer): Integer; forward;  { a generator CALL in value position becomes a cursor object (pyparser.inc) }

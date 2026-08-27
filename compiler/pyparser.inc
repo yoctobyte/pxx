@@ -314,6 +314,16 @@ var
     were lexed. So nothing is copied: the span is replayed with `ci` = the
     derived class, which is exactly the semantics Python gives a mixin (`self`
     IS the derived object). bug-nilpy-multiple-inheritance-does-not-parse }
+  { The class whose METHOD body the return-type scanner is currently reading,
+    or -1 outside one. `self` is a parameter whose class only the member
+    pre-pass knows, so PyInferExprType answered tyUnknown for it and every arm
+    that types a CLASS operand was unreachable through `self` — which is why
+    `self + 1` fell past the operator-dunder arm to arithmetic on the instance
+    HANDLE and a def returning it declared an integer result. Set around the
+    one call in PyRegisterClassMembers that has the class in hand; the scanner
+    reads it for a BARE `self` only.
+    bug-n-an-arithmetic-dunder-on-self-is-pointer-arithmetic }
+  PyInferSelfCi: Integer;
   PyClsBodyS: array[0..MAX_UCLASS-1] of Integer;
   PyClsBodyE: array[0..MAX_UCLASS-1] of Integer;
   { The extra (2nd..Nth) bases of the class currently being registered/parsed,
@@ -4479,6 +4489,79 @@ begin
     are excluded: Python hands back an OPERAND for the first and builds a tuple
     for the second, so the `/` does not decide the whole expression's type.
     bug-n-inferred-return-type-of-true-division-is-int }
+  { A bare `self`. The scanner has no other way to reach it — `self` is a
+    parameter whose class only the member pre-pass knows — so every arm below
+    that types a CLASS operand was unreachable through it. PyInferSelfCi is set
+    for exactly the one call in PyRegisterClassMembers that has the class in
+    hand; outside that it is -1 and this arm is inert.
+
+    ONE token only: `self.x` and `self.m()` have their own arms further down and
+    must keep them, so widening this to any expression STARTING with `self`
+    would take those over. bug-n-an-arithmetic-dunder-on-self-is-pointer-arithmetic }
+  if (endIdx = startIdx + 1) and (PyInferSelfCi >= 0) and
+     (Tokens[startIdx].Kind = tkIdent) and
+     CaseEqual(GetTokenStr(startIdx), 'self') then
+  begin
+    Result := tyClass;
+    PyInferLastCi := PyInferSelfCi;
+    Exit;
+  end;
+  { An operator DUNDER on a user-class LEFT operand — `self + 1` inside the
+    class, `v * 2` on a local holding one.
+
+    The parser DISPATCHES all eleven of these correctly already (measured on a
+    named receiver: __add__ __sub__ __mul__ __truediv__ __floordiv__ __mod__
+    __and__ __or__ __xor__ __lshift__ __rshift__). What was missing is the
+    def-return-type SCANNER, which walked past the operator and typed the whole
+    expression as arithmetic on the instance HANDLE — so `def probe(self):
+    return self + 1` registered an Int64 result and handed the dunder's string
+    back as an ADDRESS. Silent: a plausible-looking number, no diagnostic, and
+    the identical expression through a named receiver was right, which is what
+    made this read like a dispatch bug rather than a typing one.
+
+    Only the LEFT operand is consulted, matching Python's own
+    left-operand-first lookup and the parser arms this mirrors; the reflected
+    __radd__ family is not inferred here for the same reason it is not
+    dispatched there. First top-level operator wins: a scanner cannot honour
+    precedence, and answering nothing is what it did before.
+    bug-n-an-arithmetic-dunder-on-self-is-pointer-arithmetic }
+  if startIdx < endIdx then
+  begin
+    depth := 0;
+    for k2 := startIdx to endIdx - 1 do
+    begin
+      if Tokens[k2].Kind in [tkBegin, tkLBrack, tkLParen] then Inc(depth)
+      else if Tokens[k2].Kind in [tkEnd, tkRBrack, tkRParen] then Dec(depth)
+      else if (depth = 0) and (k2 > startIdx) and
+              (PyBinOpDunderName(Tokens[k2].Kind) <> '') then
+      begin
+        { `**` is two tkStar and lowers through PyMakePow, so it is not one of
+          these — the same exclusion the list-repeat arm above makes. }
+        if (Tokens[k2].Kind = tkStar) and
+           (((k2 + 1 < endIdx) and (Tokens[k2 + 1].Kind = tkStar)) or
+            (Tokens[k2 - 1].Kind = tkStar)) then Break;
+        tk := PyInferExprType(startIdx, k2);
+        rcvCi := PyInferLastCi;
+        PyInferLastCi := -1;
+        if (tk = tyClass) and (rcvCi >= 0) then
+        begin
+          fi := FindUMeth(rcvCi, PyBinOpDunderName(Tokens[k2].Kind));
+          if fi >= 0 then
+          begin
+            fci := UMthProc_[fi];
+            if fci >= 0 then
+            begin
+              Result := Procs[fci].RetType;
+              if (Result = tyClass) and (ProcRetRecId[fci] >= REC_UCLASS_BASE) then
+                PyInferLastCi := ProcRetRecId[fci] - REC_UCLASS_BASE;
+              Exit;
+            end;
+          end;
+        end;
+        Break;
+      end;
+    end;
+  end;
   divAt := -1;
   depth := 0;
   k2 := startIdx;
@@ -23099,6 +23182,39 @@ begin
   end;
 end;
 
+function PyBinOpDunderName(tk: TTokenKind): AnsiString;
+{ The dunder a BINARY operator asks for, keyed on the token as the NilPy LEXER
+  produced it.
+
+  Deliberately NOT PyAugDunderName above, and the difference is a trap rather
+  than a style choice: that one is keyed on the token PyAugBinTok NORMALISES an
+  augmented assignment to, where `&=` becomes tkAnd and `|=` becomes tkOr. In
+  the raw stream a bare `&` is tkAmp and a bare `|` is tkPipe, while tkAnd and
+  tkOr are the `and` / `or` KEYWORDS — short-circuit booleans with no dunder at
+  all. Delegating here would have given `self and x` the type of __and__.
+
+  `**` is absent for the same reason it is absent from PyAugDunderName's binary
+  half: it lexes as two tkStar and lowers through PyMakePow, so there is no
+  binary token to key on. Callers must exclude it themselves.
+  bug-n-an-arithmetic-dunder-on-self-is-pointer-arithmetic }
+begin
+  case tk of
+    tkPlus:  Result := '__add__';
+    tkMinus: Result := '__sub__';
+    tkStar:  Result := '__mul__';
+    tkSlash: Result := '__truediv__';
+    tkDiv:   Result := '__floordiv__';
+    tkMod:   Result := '__mod__';
+    tkAt:    Result := '__matmul__';
+    tkAmp:   Result := '__and__';
+    tkPipe:  Result := '__or__';
+    tkXor:   Result := '__xor__';
+    tkShl:   Result := '__lshift__';
+    tkShr:   Result := '__rshift__';
+    else Result := '';
+  end;
+end;
+
 function PyAugClassDunder(symIdx: Integer; binTk: TTokenKind; rhsNode: Integer): Integer;
 { `obj += x` where obj is a USER class instance: dispatch __iadd__, else fall
   back to __add__ and REBIND — Python's own rule. Returns the whole assignment
@@ -31220,7 +31336,14 @@ begin
       fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]);
       AppendChar(fullName, '.');
       for k := 1 to Length(name) do AppendChar(fullName, name[k]);
+      { The scanner under PyMethodRetType cannot type `self` on its own — this
+        is the one pass that knows which class the method belongs to, so it
+        lends it for the duration. Cleared straight after: a stale value would
+        type a FREE function's `self`-named local as a class.
+        bug-n-an-arithmetic-dunder-on-self-is-pointer-arithmetic }
+      PyInferSelfCi := ci;
       mRet := PyMethodRetType(methodStart, mRetRec);
+      PyInferSelfCi := -1;
       if mRet = tyUnknown then mRet := tyInteger;   { `-> None` / unannotated }
       { __repr__/__str__ return a str by contract — the SIGNATURE half of the
         forcing in PyParseDefHeader (see the note there). Without it an
@@ -35233,6 +35356,7 @@ begin
   PyImpNameCount := 0;
   PyStdAliasCount := 0;
   PyOptMissingCount := 0;
+  PyInferSelfCi := -1;
   PyExprHadOptionalMissing := False;
   PyDcCount := 0;
   for i := 0 to PY_MAX_DC_FIELDS - 1 do PyDcClassIsDc[i] := False;

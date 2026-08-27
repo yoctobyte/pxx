@@ -1,0 +1,142 @@
+# An arithmetic/bitwise dunder reached through `self` must answer what the
+# dunder returns — not the instance HANDLE read as a number.
+#
+# The parser DISPATCHES all eleven of these correctly through a named receiver
+# and always did; what was wrong is the def-return-type SCANNER, which could not
+# type `self` at all, so `def p(self): return self + 1` registered an Int64
+# result and handed the dunder's string back as an address. Each pair below is
+# the same expression twice — named receiver, then `self` — so a regression in
+# either half shows up as a mismatched pair rather than as a number nobody reads.
+#
+# bug-n-an-arithmetic-dunder-on-self-is-pointer-arithmetic
+
+
+class A:
+    def __add__(self, o):
+        return 'add'
+
+    def __sub__(self, o):
+        return 'sub'
+
+    def __mul__(self, o):
+        return 'mul'
+
+    def __truediv__(self, o):
+        return 'truediv'
+
+    def __floordiv__(self, o):
+        return 'floordiv'
+
+    def __mod__(self, o):
+        return 'mod'
+
+    def __and__(self, o):
+        return 'and'
+
+    def __or__(self, o):
+        return 'or'
+
+    def __xor__(self, o):
+        return 'xor'
+
+    def __lshift__(self, o):
+        return 'lshift'
+
+    def __rshift__(self, o):
+        return 'rshift'
+
+    def s_add(self):
+        return self + 1
+
+    def s_sub(self):
+        return self - 1
+
+    def s_mul(self):
+        return self * 1
+
+    def s_truediv(self):
+        return self / 1
+
+    def s_floordiv(self):
+        return self // 1
+
+    def s_mod(self):
+        return self % 1
+
+    def s_and(self):
+        return self & 1
+
+    def s_or(self):
+        return self | 1
+
+    def s_xor(self):
+        return self ^ 1
+
+    def s_lshift(self):
+        return self << 1
+
+    def s_rshift(self):
+        return self >> 1
+
+
+a = A()
+print(a + 1, a.s_add())
+print(a - 1, a.s_sub())
+print(a * 1, a.s_mul())
+print(a / 1, a.s_truediv())
+print(a // 1, a.s_floordiv())
+print(a % 1, a.s_mod())
+print(a & 1, a.s_and())
+print(a | 1, a.s_or())
+print(a ^ 1, a.s_xor())
+print(a << 1, a.s_lshift())
+print(a >> 1, a.s_rshift())
+
+
+# a dunder that returns the CLASS keeps its identity through `self`, so the
+# result can be chained — the mixin idiom this bug made unusable
+class V:
+    def __init__(self, n):
+        self.n = n
+
+    def __add__(self, o):
+        return V(self.n + o)
+
+    def __repr__(self):
+        return "V(" + str(self.n) + ")"
+
+    def bump(self):
+        return self + 1
+
+    def twice(self):
+        return (self + 1) + 10
+
+
+v = V(5)
+print(v.bump(), v.bump().n)
+print(v.twice(), v.twice().n)
+
+
+# the shapes the operator table must NOT claim. `and` / `or` are absent on
+# purpose: they are short-circuit operators that hand back an OPERAND, they have
+# no dunder, and `return self or 1` is separately broken at pinned and at HEAD
+# (bug-n-a-short-circuit-or-returning-self-is-typed-as-a-number) — asserting it
+# here would tie this test to a defect it does not cover.
+class N:
+    def __and__(self, o):
+        return 'BITWISE-AND'
+
+    def pw(self, k):
+        return k ** 2            # `**` lexes as two `*` and is not a dunder
+
+    def half(self, k):
+        return k / 2             # ordinary true division stays a float
+
+    def me(self):
+        return self              # the fluent-builder rule still holds
+
+
+n = N()
+print(n.pw(3), n.half(5))
+print(n.me().half(9))
+print(n & 1)
