@@ -5,11 +5,10 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:21 blocked:8 backlog:265 backlog_new:1 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2525 rejected:46`
+`working:1 unfinished:21 blocked:8 backlog:265 backlog_new:1 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2526 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
-- `feature-a-wasm32-target-registration-skeleton` [A] — owner: frank-optimize
 - `feature-target-wasm` [A+B] — owner: frankwasm
 
 ## unfinished (21) — parked mid-flight; re-claim, do not duplicate

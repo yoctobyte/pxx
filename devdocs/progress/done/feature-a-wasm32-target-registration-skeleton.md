@@ -5,7 +5,7 @@ track: A
 prio: 60
 type: feature
 blocked-by: []
-status: working
+status: done
 owner: frank-optimize
 created: 2026-08-27
 unblocks: feature-target-wasm
@@ -105,3 +105,82 @@ first is fine too; doing both independently is the only bad option.
 - 2026-08-27 — filed while scoping `feature-target-wasm`, deliberately ahead of
   any wasm code, to keep the branch free of shared-file merges.
   Findings: `devdocs/dev/wasm-target-findings.md`.
+
+- 2026-08-27 (frank-optimize) — **LANDED.** `TARGET_WASM32 = 6` registered
+  across the shared files; no codegen, no encoder, no writer.
+
+### What changed, and why each site
+
+| file | what |
+| --- | --- |
+| `defs.inc` | the constant + `TargetArchName` -> `'wasm32'` |
+| `compiler.pas` | `--target=wasm32` arm; `TARGET_PTR_SIZE := 4`; **explicit `Error` in the output-writer dispatch** (it fell through to `writeELF`, i.e. a 64-bit ELF for a 32-bit non-ELF target); a `--list-targets` row |
+| `lexer.inc` | `CPU32` / `CPUWASM32` / `CPU_WASM32` defines + a loud `else` |
+| `ir_codegen.inc` | **explicit `Error` in the backend dispatch** — it falls through to the x86-64 emitter, so without an arm wasm32 got x86-64 machine code in a file claiming to be wasm |
+| `exception_emit.inc` | wasm32 arm + a loud `else` |
+| `coroutine_emit.inc` | wasm32 arm (see the caveat below) |
+| `emit.inc` | wasm32 joins the 4-byte-pointer fixup-width list |
+
+`symtab.inc`, `elfwriter.inc` and the `pasparser_*` files needed **nothing**:
+their target tests are ESP/riscv-specific (`iram`, `interrupt`, `Real = Single`,
+bare-metal profile), and wasm32 correctly takes the not-ESP branch of each.
+`elfwriter.inc:2335` already refuses `--emit-obj` for anything but
+xtensa/riscv32, which covers wasm32 with a good message. That is why this came
+in well under the ~270-line estimate: the estimate was measured from a commit
+adding **two ESP targets**, and most of its width was ESP profile plumbing that
+a wasm target does not have.
+
+### The fail-open audit — the scan found 2 of 4
+
+The ticket predicted the scan undercounts. It did, in both directions:
+`exception_emit.inc:8` and `lexer.inc:936` are real (as filed);
+`coroutine_emit.inc:25` is real but currently **unreachable**; and the scan
+missed the two that matter most, because both are `if/Exit` ladders rather than
+`if/else if` chains, so a heuristic looking for a missing `else` cannot see them:
+
+- **`ir_codegen.inc:9048`** — `IREmitMachineCode`. Falls through to the x86-64
+  emitter. A 7th target silently gets **x86-64 machine code**.
+- **`compiler.pas:2082`** — the output writer. Falls through to `writeELF`.
+
+Both are now loud. Worth carrying into
+`refactor-a-target-dispatch-chains-fail-open`: **grep for `Exit`-terminated
+target ladders, not just for chains missing an `else`.**
+
+Two `else` arms were added (`lexer.inc`, `exception_emit.inc`) where all six
+existing targets are already covered by explicit arms, so they are unreachable
+today and exist for target #8. `coroutine_emit.inc` deliberately did **not**
+get one: riscv32/xtensa fall through it silently on purpose ("later phases"),
+and making them loud would move an existing target — that belongs to the
+refactor ticket, not to a registration ticket bound by acceptance #3.
+
+### Acceptance
+
+1. **Clear error naming the facility, never a crash or a silent empty output.**
+   `--target=wasm32 hello.pas` -> `error: wasm32: code generation not
+   implemented`; a program with `try`/`raise` -> `error: wasm32: exception
+   runtime not implemented (setjmp/longjmp has no wasm lowering — the module
+   needs the exception-handling proposal or a trampoline)`.
+   **Honest caveat:** the codegen arm fires first for most sources (the builtin
+   heap's bodies compile before the later runtimes are emitted), so the
+   **coroutine arm is currently unreachable and was NOT exercised** — it is a
+   safety net that lights up as the wasm backend lands. The exception arm IS
+   reachable and was exercised (the runtime is enabled during the parse).
+2. **`make compiler/pascal26` converges byte-identical** — `converged after 1
+   round(s)`, fixedpoint `a49d915e18f7`, confirmed different from `pinned`.
+   `tools/gate.sh quick` GREEN (self-host fixedpoint + testmgr quick).
+3. **No existing target moved — measured, not argued.** A fixed 8-program
+   corpus (arrays, strings, records, constinit, hello, two exception units, and
+   a try/except/finally program that exercises the exception runtime I touched)
+   compiled for all six existing targets = 48 rows, hashed before and after:
+   **48/48 identical**, failures included (the same 22 cross-target gaps fail
+   identically). The "before" compiler was rebuilt from a stash of these edits
+   and reproduced `591ae8160f69` exactly, so the oracle is the same binary the
+   session started from rather than an approximation of it.
+   *Method note:* the first corpus contained no `try` at all, so it did not
+   cover the one chain where a bare `else` was added. That hole was found by
+   checking coverage rather than by assuming it, and closed by adding `exc.pas`
+   and re-running both sides.
+
+`frankwasm` is unblocked: the wasm branch can now add only new files, and
+touches no shared file until it emits.
+- 2026-08-27 — resolved, commit PENDING-COMMIT.

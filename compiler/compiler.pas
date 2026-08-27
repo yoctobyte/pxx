@@ -294,6 +294,7 @@ begin
 {$endif}
   WriteLn('riscv32                 via qemu-riscv32');
   WriteLn('xtensa                  no                  ESP32/S2/S3 — flash it');
+  WriteLn('wasm32                  no                  registered only — no codegen yet');
   WriteLn;
   WriteLn('ESP SoC names (imply their arch, and --platform=esp):');
   Write('  ');
@@ -1064,6 +1065,15 @@ begin
       TargetArch := TARGET_RISCV32;
       Inc(i);
     end
+    else if option = '--target=wasm32' then
+    begin
+      { Registered, not implemented: the target exists so the dispatch chains
+        name it, and each one errors with the facility it is missing rather
+        than falling through to the x86-64 arm.
+        feature-a-wasm32-target-registration-skeleton }
+      TargetArch := TARGET_WASM32;
+      Inc(i);
+    end
     else if option = '--emit-obj' then
     begin
       EmitObjMode := True;
@@ -1504,7 +1514,8 @@ begin
       readingOptions := False;
   end;
   if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
-     (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
+     (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) or
+     (TargetArch = TARGET_WASM32) then
     TARGET_PTR_SIZE := 4
   else
     TARGET_PTR_SIZE := 8;
@@ -2079,6 +2090,9 @@ begin
     else
       writeELF32Rel(outFile);
   end
+  else if TargetArch = TARGET_WASM32 then
+    Error('wasm32: module writer not implemented (a .wasm module is not an ELF '
+          + 'container, so there is no writer to fall back to)')
   else if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
      (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
     writeELF32(outFile)

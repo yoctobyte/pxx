@@ -1274,6 +1274,11 @@ const
   TARGET_ARM32   = 3;
   TARGET_XTENSA  = 4;
   TARGET_RISCV32 = 5;
+  { wasm32 is REGISTERED but has no backend: every dispatch chain it reaches
+    errors explicitly (feature-a-wasm32-target-registration-skeleton). The
+    registration lands ahead of the codegen so the wasm branch adds only new
+    files and never merges a shared one until it emits. }
+  TARGET_WASM32  = 6;
   XTENSA_ABI_CALL0    = 0;
   XTENSA_ABI_WINDOWED = 1;
   { Platform / OS axis — independent of the CPU axis above. posix = hosted
@@ -4621,6 +4626,7 @@ begin
     TARGET_ARM32:   TargetArchName := 'arm32';
     TARGET_XTENSA:  TargetArchName := 'xtensa';
     TARGET_RISCV32: TargetArchName := 'riscv32';
+    TARGET_WASM32:  TargetArchName := 'wasm32';
   else
     TargetArchName := '<unknown target>';
   end;
