@@ -6793,3 +6793,86 @@ things worth pinning down:
 visitors still get the pre-fix tags). The second item — whether an 18KB patch may
 travel between hosts over the agent channel — is **moot** now that via can pull
 from origin directly.
+
+## COORDINATOR MANDATE (owner, 2026-08-27) — decide the trivial, file the rest on U
+
+Owner: *"you are the coordinator. if anything really needs human judgement, file
+on track U. but i trust you to make trivial judgement calls. see project
+philosophy and other docs for guidelines."*
+
+This is the standing operating instruction for this session. Read
+`frontend-compat-philosophy.md` and `autonomy.md` before leaning on it — they are
+the guidelines the owner is pointing at, and both were re-read at the time this
+was recorded rather than recalled.
+
+**The filter, from `autonomy.md` and the roster's own philosophy-check rule:**
+
+1. **Derive, don't escalate, when the principles settle it.**
+   `frontend-compat-philosophy.md` exists to answer most compat questions
+   outright: C = compliance, a gcc divergence is a bug; Pascal = its own dialect
+   ON PURPOSE, so *"FPC does X"* is not by itself an argument; NilPy = upward
+   compatible with CPython, one direction only. When one of these settles a
+   question, **derive the answer and file a confirmation** — do not spend the
+   owner's attention on it.
+2. **Escalate genuine forks, paradoxes and goal-choices**, as `decide-<topic>`
+   with the fork, the options, the trade-offs and a recommendation, so the answer
+   takes seconds.
+3. **U holds open QUESTIONS, not work.** An item that turns out to be plain work
+   once decided is re-filed into the owning lane.
+4. **Never as chat.** The reason to file rather than ask is that *chat dies with
+   the session* — demonstrated below, where two items sat "stacked with the
+   human" in this file long after one of them had been resolved.
+
+### Correction, immediately: the "stacked with the human" items were NOT open
+
+Recorded twice today as pending owner input, and reported as such to the owner.
+Checked properly instead of carried forward:
+
+- **Deploy go/no-go for `e78595d` — ALREADY DONE.**
+  `bug-web-link-previews-render-as-bare-text` is in `done/`, resolved
+  2026-08-27: *"DEPLOYED AND VERIFIED LIVE"* — `og:image`,
+  `og:image:width/height/alt`, `twitter:image` and
+  `twitter:card=summary_large_image` served from pxxc.org, HTTP 200, 29,667
+  bytes, decoding at 1200x630, **confirmed twice on independent instruments**
+  (`ianweb` from the origin including nginx `X-Cache-Status`, and from the public
+  internet). The lane closed its own loop once `ianweb` held both ends.
+- **Whether the 18KB patch crosses hosts — moot**, since via can pull from origin
+  directly.
+
+**So nothing is pending with the owner right now, and manufacturing a U ticket to
+have one would be the opposite of the mandate.** The lesson is the one this file
+keeps re-learning in new clothes: *a stale pending-item is indistinguishable from
+a live one*, and the cost lands on the person whose attention it claims. **Verify
+a "waiting on the human" item before re-reporting it**, exactly as one verifies a
+peer's claim.
+
+Open W work exists (8 tickets, top prio 45: `chore-web-secrets-sops-age`,
+`feature-web-tracker-and-host-portability`) but none of it is blocked on the
+owner — it is unstaffed by choice, not stalled.
+
+### CONCURRENCY — `autonomy.md` is stricter than this file, and we are above it
+
+Surfaced on re-reading, and the coordinator is the one currently exceeding it.
+
+This file records *"target concurrency: 1-2 workers plus the coordinator"*.
+**`autonomy.md` says something stronger**, from the same period:
+
+> *"prefer one worker cycling lanes over a parallel fleet."*
+> *H1 — a single session at a time is effectively unlimited (a lone worker rarely
+> exhausts a 5h block). H2 — concurrent sessions hit the cap fast,
+> super-linearly (two light agents trip a limit one hard worker never would)."*
+
+It also prescribes **serial handoff with a ≥60s cooldown** between an outgoing
+and incoming worker, on the grounds that even a few seconds of overlap costs.
+
+**Right now three sessions are active: frankA, frankT and the coordinator.** By
+`autonomy.md`'s hypothesis that is super-linearly expensive, not merely additive.
+It is defensible — the owner launched the fleet and staffed T personally, T is
+not a competing consumer of the dev queue, and both workers are mid-task — but it
+should be *chosen*, not drifted into. **Do not add a fourth** (dispatching
+`ianweb` would be exactly that, and the 2026-08-25 four-session death did not care
+that the boxes differed). The natural serialisation point is after frankA's
+promotion sequence is pushed and swept.
+
+Raised with the owner rather than filed as a `decide-*`: they are present and
+engaged, and the fleet size is a live call they are already making.
