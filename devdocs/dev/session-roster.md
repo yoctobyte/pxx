@@ -7434,3 +7434,41 @@ Per the owner's correction (*"you insist on asking the human"*):
 - **The fgl runner's vacuous pass → not a ticket.** Enrolment closed it one level
   up (`CORPUS_EXPECTED`), which is the only layer that can distinguish
   unprovisioned from broken. The runner structurally cannot.
+
+### Concurrency is at 5 workers + coordinator — above the recorded ceiling, and NOT unilaterally reducible
+
+Live right now: frankA, frankB, frankwasm, frank-optimize-b4, frankT busy;
+frank-rust waiting; frank-user waiting. That is **five concurrent workers**, and
+two recorded owner constraints sit below it — *"target concurrency: 1-2 workers
+plus the coordinator"* (2026-08-17) and the 2026-08-25 event where **four
+concurrent sessions hit an account limit and all four died at once**.
+
+**I am not reducing it, and that is deliberate**, for two reasons that both point
+the same way:
+
+1. The owner staged this themselves (*"i'd launch track B first for easy fixes.
+   then wasm"*) after assigning me the coordinator role. Concurrency is the
+   owner's dial, and they turned it.
+2. **Killing a busy worker destroys uncommitted work, which is the only state
+   here with no backup.** The remedy for over-concurrency is to let lanes finish
+   and not refill, never to cull. So: **do not dispatch to fill capacity.**
+   frank-rust idling is the correct state, not an opportunity — Track R is
+   X-tagged, never ranked, picked up on request or for fun.
+
+The failure mode to watch for is all sessions dying at once on an account limit,
+not gradual slowdown. If that happens, the recovery is `~/frank.sh <role>` per
+role and this roster is what re-briefs them.
+
+### Two tstate lines that are stale BY CONSTRUCTION — don't chase either
+
+`twatch.py --status` at pin time reported both, and both read as live problems:
+
+- **`pin verify — v388 at 20664a1576d3 RED (full, 2h old)`** — that is against
+  the **old** pin. v389 supersedes it. The status output cannot know a pin moved
+  under it; a fresh pin-verify job against the new stable tree is the only run
+  that answers the question.
+- **Four "open regression" rows whose `bad=` commit touches NO buildable file.**
+  twatch says so itself in the line: *"it is the tested upper bound, not a lead."*
+  The bisect range simply has not been narrowed. Reading `bad=` as a culprit is
+  the same error class as the day's stale-claim pattern above — a field that
+  answers a different question than the one being asked of it.
