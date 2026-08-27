@@ -133,4 +133,4 @@ merely differ — it aborts on the first row, which is the whole point.
 **`compiler/builtin/pylib.pas` changed, so this needs a PIN.**
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 0ecd624e6.
