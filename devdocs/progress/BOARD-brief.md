@@ -5,11 +5,10 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:21 blocked:7 backlog:263 backlog_new:2 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2522 rejected:45`
+`working:1 unfinished:21 blocked:7 backlog:263 backlog_new:2 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2523 rejected:45`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name` [N] — owner: frank1-AN
 - `feature-target-wasm` [A+B] — owner: frankwasm
 
 ## unfinished (21) — parked mid-flight; re-claim, do not duplicate

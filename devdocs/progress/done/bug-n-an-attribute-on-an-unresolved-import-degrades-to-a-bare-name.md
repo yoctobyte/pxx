@@ -4,7 +4,7 @@ prio: 62
 type: bug
 blocked-by: []
 summary: "`X.attr` where X came from an import that did not resolve is compiled as the BARE NAME `attr`, so `ModuleType.__name__` fails with `undefined variable (__name__)` — a message naming the attribute and never the unresolved import that caused it. Now the first wall on 4 html5lib files."
-status: working
+status: done
 owner: frank1-AN
 ---
 
@@ -238,3 +238,6 @@ Both registered in the Makefile beside the other NilPy diagnostics.
 
 `make compiler/pascal26` — self-host fixedpoint `100300ef2b3a`, converged in 1
 round. Both new tests pass, verified by running the Makefile's own assertions.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.
