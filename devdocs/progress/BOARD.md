@@ -105,6 +105,7 @@ _none_
 | bug-nilpy-empty-str-and-none-are-the-same-value | N | 75 | bug | `\"\" is None` answers TRUE for any NilPy value whose static type is plain `str` — literal, local, parameter, `-> str` return, AND every pylib str-method result (`.replace()`, a slice, `.join()`, `*0`). Container-derived and `Optional[str]` values are correct, because they carry a variant TAG; the rule is tagged-vs-untagged, not literal-vs-computed. A CORRECTION at the bottom retracts the 2026-08-27 down-scoping, which claimed the pylib results were already right and was measured wrong (they answer True on v385, v386 and HEAD alike) — the original ~260-producer sizing, and the basis the decision was taken on, both stand. A constant-fold is unsafe: `def f() -> str: return None` is legal CPython. | decide-nilpy-none-str-sentinel-vs-textstr-kind |
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 55 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 12 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
+| bug-p-a-class-instance-converts-implicitly-to-any-typed-pointer | P | 65 | bug | Passing a class instance where a typed pointer (^TSomeRecord) is expected compiles silently and reinterprets the object as that record; FPC rejects it (`Incompatible type for arg no. 1: Got \"TSub\", expected \"PBlob\"`). Two consequences: a silent memory-safety hole with no cast written, and an overload resolution that picks a pointer arm over an exact class arm — which is what stops typinfo's GetPropInfo(AnObject, 'Name') facade overload from ever being selected. | — |
 | bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
 | bug-p-qword-div-by-a-literal-above-2-63-is-signed | P | 55 | bug | `QWord div` / `mod` by a literal >= 2^63 divides SIGNED and returns a wrong value | — |
 | bug-p-sysopen-intrinsic-shadows-a-user-function-name | P | 15 | bug | sysopen/syswrite/sysclose/sysfchmod are compiler INTRINSICS with dedicated tokens (tkSysOpen &c), so the lexer never produces an identifier for them and a user program cannot declare a function with one of those names. The diagnostic is `expected name`, which does not mention the reservation. Real but nearly unreachable: prio 15. | — |
@@ -277,7 +278,6 @@ _none_
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | feature-twatch-full-tier-coverage-age | T | 35 | feature | No signal distinguishes "full tier is lagging" from "full tier never completes" | — |
 | feature-typeinfo-last-categories | A | 20 | feature | The tail of the TypeInfo widening that still has NO consumer: interfaces (14) and metaclasses (28) are refused outright, TypeInfo(PChar) is refused while bare Pointer works, Currency (4) needs a tyCurrency that does not exist, procvar/method types get no TTypeData, and NativeInt reports tkInteger where FPC reports tkInt64 on a 64-bit target. | — |
-| feature-typinfo-facade-unit | B | 72 | feature | `typinfo` facade unit: FPC's RTTI API shapes over OUR blobs | feature-typeinfo-all-types |
 | feature-unicodestring-model | A | 62 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
 | feature-web-blog-bootstrap | W | 35 | feature | `/blog/` returns 200 and says `Coming soon.` [[feature-promo-launch-plan]] already decided that VISIBILITY starts now and is ungated — the blog is the surface that decision needs and it does not exist yet. This ticket is the MACHINERY plus two concrete first posts; the strategy, the audience and the one-shot launch guard all live in that ticket and are not relitigated here. | — |
 | feature-web-machine-readable-project-metadata | W | 40 | feature | pxxc.org serves no `/llms.txt` (404) and no JSON-LD structured data. The site is otherwise unusually legible to machines — server-rendered, indexed, and summarised ACCURATELY including the byte-identical discipline holding under compression — so these two files are the remaining gap in a channel that already works, not a rescue job. | — |
@@ -560,9 +560,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2533)
+## done (2535)
 
-2533 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2535 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (46)
 
@@ -621,7 +621,6 @@ _none_
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [P] feature-pascal-corpus-oop
 - [p 72] [N] feature-nilpy-stdlib-coverage-gaps-measured
-- [p 72] [B] feature-typinfo-facade-unit
 - [p 70] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - [p 70] [N] feature-nilpy-staticmethod-and-classmethod
 - [p 70] [P] feature-p-delphi-string-helpers
@@ -633,6 +632,7 @@ _none_
 - [p 68] [E] feature-demo-songformatter-pxx-target
 - [p 68] [N] feature-nilpy-user-defined-decorators
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython [parked — re-claim, do not duplicate]
+- [p 65] [P] bug-p-a-class-instance-converts-implicitly-to-any-typed-pointer
 - [p 65] [B] feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - [p 65] [B] feature-b-text-file-surface-seekeof-rename-settextbuf
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source [parked — re-claim, do not duplicate]

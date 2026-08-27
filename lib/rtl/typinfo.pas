@@ -131,6 +131,9 @@ type
                tkDynArray, tkInterfaceRaw, tkProcVar, tkUString, tkUChar,
                tkHelper, tkFile, tkClassRef, tkPointer);
 
+  { FPC's `TTypeKinds`, the set GetPropList filters on. }
+  TTypeKinds = set of TTypeKind;
+
   { The uniform "PTypeInfo" header TypeInfo(T) now yields for anything OTHER
     than an enum type (compiler/rtti_emit.inc EmitTypeInfoHeaders) — scalars,
     strings, classes, records, and (the case this rung of the OOP corpus
@@ -195,28 +198,62 @@ type
       `td^.FloatType` is how the calling code already spells it. }
     FloatType: TFloatType;
     _pad_flt:  LongInt;
-    { The ordinal range. tkSet: the ELEMENT's range. tkSString: 0..N, i.e.
-      MaxValue is FPC's MaxLength. A QWord's 2^64-1 does not fit a signed slot,
-      so for otUQWord these are BIT PATTERNS — read QWord(td^.MaxValue). FPC has
-      the same problem one size down and answers -1 for LongWord's MaxValue;
-      ours is honest at 32 bits and only casts at 64. }
-    MinValue:  Int64;
-    MaxValue:  Int64;
-    { The element/component type of a set or an array: Ord(TTypeKind), 0 = none. }
-    ElemKind:  Int64;
-    { The element type's OWN RTTI blob — PEnumRTTI for an enum element,
-      PClassRTTI for a class one — or nil. Same idiom as TPropInfo.TypeRef, and
-      deliberately not a nested PTypeInfo: a nested header would mean the
-      compiler emitting type info for types the program never named. }
-    ElemRef:   Pointer;
-    {$ifdef CPU32} _pad_elemref: LongInt; {$endif}
-    ElemSize:  Int64;     { bytes per element (arrays, sets); 0 for a scalar }
-    ElemCount: Int64;     { tkArray: total element count, all dimensions flattened }
-    DimCount:  Int64;     { tkArray: dimension count. tkDynArray: nesting depth }
-    { tkArray: -> DimCount TTypeDataDim records, one per dimension. nil for a
-      dynamic array, whose bounds belong to the value and not to the type. }
-    DimsPtr:   Pointer;
-    {$ifdef CPU32} _pad_dims: LongInt; {$endif}
+    { A VARIANT PART CARRYING FPC'S OWN FIELD SPELLINGS AT THE SAME OFFSETS.
+      Both arms describe identical storage — nothing is keyed on a tag and no
+      byte moves — so this is NOT the kind-keyed variance the comment above
+      declines. It exists because vendored FPC code writes `td^.elSize` and
+      `td^.MinInt64Value` where this unit had grown `ElemSize` and `MinValue`,
+      and a facade whose field NAMES differ from FPC's is not a facade: the
+      consumer would need editing, which is the one thing this design promised
+      to avoid. Measured requirement, not anticipated — Generics.Defaults reaches
+      exactly five TTypeData fields at nine sites (`OrdType`, `FloatType`,
+      `elSize`, `MinInt64Value`, `MaxInt64Value`), and three of those five were
+      unspellable here before this arm existed.
+
+      Arm 0 is this unit's own vocabulary and what the code below reads; arm 1 is
+      FPC's. Add to BOTH when you add a field, or the record's arms drift apart
+      and the second one silently addresses the wrong bytes. }
+    case Integer of
+    0: (
+      { The ordinal range. tkSet: the ELEMENT's range. tkSString: 0..N, i.e.
+        MaxValue is FPC's MaxLength. A QWord's 2^64-1 does not fit a signed slot,
+        so for otUQWord these are BIT PATTERNS — read QWord(td^.MaxValue). FPC has
+        the same problem one size down and answers -1 for LongWord's MaxValue;
+        ours is honest at 32 bits and only casts at 64. }
+      MinValue:  Int64;
+      MaxValue:  Int64;
+      { The element/component type of a set or an array: Ord(TTypeKind), 0 = none. }
+      ElemKind:  Int64;
+      { The element type's OWN RTTI blob — PEnumRTTI for an enum element,
+        PClassRTTI for a class one — or nil. Same idiom as TPropInfo.TypeRef, and
+        deliberately not a nested PTypeInfo: a nested header would mean the
+        compiler emitting type info for types the program never named. }
+      ElemRef:   Pointer;
+      {$ifdef CPU32} _pad_elemref: LongInt; {$endif}
+      ElemSize:  Int64;     { bytes per element (arrays, sets); 0 for a scalar }
+      ElemCount: Int64;     { tkArray: total element count, all dimensions flattened }
+      DimCount:  Int64;     { tkArray: dimension count. tkDynArray: nesting depth }
+      { tkArray: -> DimCount TTypeDataDim records, one per dimension. nil for a
+        dynamic array, whose bounds belong to the value and not to the type. }
+      DimsPtr:   Pointer;
+      {$ifdef CPU32} _pad_dims: LongInt; {$endif}
+    );
+    1: (
+      { FPC's spellings of the same bytes. MinInt64Value/MaxInt64Value are FPC's
+        names for the tkInt64/tkQWord arm of ITS variant record; ours is one
+        Int64 pair for every ordinal, so these two are always readable and are
+        the same values MinValue/MaxValue give. }
+      MinInt64Value: Int64;
+      MaxInt64Value: Int64;
+      _fpc_elemkind: Int64;
+      _fpc_elemref:  Pointer;
+      {$ifdef CPU32} _fpc_pad_elemref: LongInt; {$endif}
+      elSize:        Int64;
+      _fpc_elemcount: Int64;
+      _fpc_dimcount:  Int64;
+      _fpc_dimsptr:   Pointer;
+      {$ifdef CPU32} _fpc_pad_dims: LongInt; {$endif}
+    );
   end;
   PTypeData = ^TTypeData;
 
@@ -265,6 +302,8 @@ type
   PPropList = ^TPropList;
   PPPropInfo = ^PPropInfo;
 
+  PSingle = ^Single;
+  PDouble = ^Double;
   PInt8   = ^ShortInt;
   PUInt8  = ^Byte;
   PInt16  = ^SmallInt;
@@ -333,8 +372,8 @@ const
 function GetClass(const name: string): PClassRTTI;
 function GetClassName(cls: PClassRTTI): string;
 function CreateInstance(cls: PClassRTTI): Pointer;
-function GetPropInfo(cls: PClassRTTI; const name: string): PPropInfo;
-function GetPropList(cls: PClassRTTI; list: PPropList): Integer;
+function GetPropInfo(cls: PClassRTTI; const name: string): PPropInfo; overload;
+function GetPropList(cls: PClassRTTI; list: PPropList): Integer; overload;
 function GetOrdProp(instance: Pointer; p: PPropInfo): Int64;
 procedure SetOrdProp(instance: Pointer; p: PPropInfo; v: Int64);
 function GetStrProp(instance: Pointer; p: PPropInfo): string;
@@ -400,6 +439,132 @@ function GetEnumNameCount(TypeInfo: PEnumRTTI): Integer;
   behind a pointer instead, so it is one load. nil when the kind has no
   descriptor — check it, because a plain string or a Variant genuinely has none. }
 function GetTypeData(TypeInfo: PTypeInfo): PTypeData;
+
+{ ---------------------------------------------------------------------------
+  THE FPC `typinfo` FACADE
+
+  Everything above is the reader for OUR blob. Everything below is the API real
+  FPC code calls, expressed over it — the point of [[feature-typinfo-facade-unit]]:
+  consumers do not read RTTI bytes, they call these names, and since we supply
+  the unit we owe FPC's SHAPES, not FPC's byte layout.
+
+  ONE OMISSION, NAMED RATHER THAN FAKED. FPC's `FindPropInfo` is `GetPropInfo`
+  that raises `EPropertyError` instead of returning nil. It is absent here
+  because raising needs an `Exception` class, `Exception` needs a `uses`, and
+  this unit deliberately has none — `streams`, `classes_lite`, `lfm` and all of
+  `lib/pcl` sit on top of it, so a dependency here is a dependency for the whole
+  stack. Test `GetPropInfo(...) = nil`; that is the same information without the
+  cost. If a corpus target actually calls FindPropInfo, revisit the dependency
+  then, deliberately.
+  --------------------------------------------------------------------------- }
+
+{ The property's kind in FPC's vocabulary. Reads `Kind` first for the categories
+  the blob tags directly (class/enum/set/method) and falls back to translating
+  `OrdType`, because the blob's coarse `Kind` says 0 for an integer, a float, a
+  string and a boolean alike — it is `OrdType` that separates them. }
+function PropType(p: PPropInfo): TTypeKind; overload;
+function PropType(cls: PClassRTTI; const name: string): TTypeKind; overload;
+
+{ FPC's PropIsType: does the named property have this kind? False when there is
+  no such property, which is why it is not spelled `PropType(...) = kind` at
+  every call site (that answers tkUnknown = kind for a missing name). }
+function PropIsType(cls: PClassRTTI; const name: string; kind: TTypeKind): Boolean; overload;
+
+{ Is there a published property of this name on the class or an ancestor? }
+function IsPublishedProp(cls: PClassRTTI; const name: string): Boolean; overload;
+
+{ FPC's IsStoredProp. **We do not record a `stored` specifier in the blob**, so
+  this answers True for every existing property and False only for a nil
+  PPropInfo. That is FPC's answer for a property with no `stored` clause, which
+  is nearly all of them — but a `stored False` property WILL be reported stored
+  here, and a streamer using this to decide what to write out will write it.
+  Declared rather than omitted because streaming code calls it unconditionally;
+  the divergence is stated here so nobody reads a True as authoritative. }
+function IsStoredProp(instance: Pointer; p: PPropInfo): Boolean;
+
+{ GetPropList filtered by kind — FPC's three-argument form. The unfiltered
+  two-argument one above stays exactly as it was. }
+function GetPropList(cls: PClassRTTI; kinds: TTypeKinds; list: PPropList): Integer; overload;
+
+{ The typed accessors. Each one dispatches through a field or a getter/setter
+  METHOD depending on GetKind/SetKind, exactly as GetOrdProp does — a property
+  written `read GetFoo` is not a special case, it is the other half of the
+  ordinary case. }
+function GetInt64Prop(instance: Pointer; p: PPropInfo): Int64;
+procedure SetInt64Prop(instance: Pointer; p: PPropInfo; v: Int64);
+
+{ Float properties. Single and Double are distinguished by OrdType, since a
+  float read at the wrong width is garbage rather than an approximation.
+  Extended is read as Double: pxx's Extended IS a Double, so this is the honest
+  answer and not a narrowing. }
+function GetFloatProp(instance: Pointer; p: PPropInfo): Double;
+procedure SetFloatProp(instance: Pointer; p: PPropInfo; v: Double);
+
+{ Object-valued properties. Returns an untyped Pointer rather than TObject so
+  this unit keeps its empty `uses`; cast at the call site. }
+function GetObjectProp(instance: Pointer; p: PPropInfo): Pointer;
+procedure SetObjectProp(instance: Pointer; p: PPropInfo; v: Pointer);
+
+{ Enum properties by NAME, which is what a streamer reads and writes.
+  GetEnumProp answers '' for a value with no name in the type (an out-of-range
+  ordinal), and SetEnumProp leaves the property untouched for a name the type
+  does not have — neither invents an ordinal. }
+function GetEnumProp(instance: Pointer; p: PPropInfo): string;
+procedure SetEnumProp(instance: Pointer; p: PPropInfo; const v: string);
+
+{ INSTANCE-TAKING OVERLOADS. FPC code writes `GetPropInfo(AnObject, 'Caption')`,
+  not `GetPropInfo(GetInstanceRTTI(...), 'Caption')`, and a facade that forces
+  the second spelling is not one. Only the LOOKUP functions need these: the
+  accessors declare `instance: Pointer` and an object converts to it implicitly,
+  so `GetOrdProp(obj, p)` — FPC's own spelling — already compiles unchanged
+  (measured 2026-08-28). The class each resolves through is the RUNTIME one, so
+  a property introduced by a descendant is found.
+
+  !! THESE ARE NOT REACHABLE YET, AND CALLING THEM CRASHES. !!
+  blocked-by [[bug-p-a-class-instance-converts-implicitly-to-any-typed-pointer]]:
+  pxx lets a class instance convert implicitly to ANY typed pointer (FPC errors),
+  so the `PClassRTTI` arm above is a viable candidate for an object argument and
+  is PREFERRED over the exact class match. `GetPropInfo(obj, 'Num')` therefore
+  binds to the pointer arm, reads the object as an RTTI blob, and segfaults —
+  measured by instrumenting the arm below, which is never entered.
+
+  They are declared anyway, and deliberately: they are the correct code, the
+  hazard predates them (the same call bound to the pointer arm and crashed
+  before they existed), and the standing rule is to leave platonic code in place
+  and file the bug rather than reshape around it. **Until that ticket lands,
+  spell it `GetPropInfo(GetInstanceRTTI(Pointer(obj)), name)`** — which is what
+  `test/lib_typinfo_props.pas` does, with a note pointing here. }
+function GetPropInfo(instance: TObject; const name: string): PPropInfo; overload;
+function GetPropList(instance: TObject; list: PPropList): Integer; overload;
+function GetPropList(instance: TObject; kinds: TTypeKinds; list: PPropList): Integer; overload;
+function PropType(instance: TObject; const name: string): TTypeKind; overload;
+function IsPublishedProp(instance: TObject; const name: string): Boolean; overload;
+function PropIsType(instance: TObject; const name: string; kind: TTypeKind): Boolean; overload;
+
+{ Set properties as FPC renders them, INCLUDING the default: measured against
+  FPC 3.2.2, `GetSetProp` returns 'clRed,clBlue' with NO brackets, and only
+  `brackets=True` gives '[clRed,clBlue]'. An empty set is therefore '' by
+  default and '[]' with brackets. That default is easy to get wrong in the
+  memorable direction — the bracketed form is what an .lfm shows — so it is
+  stated here rather than left to a reader's recollection.
+
+  Only members the element enum names are scanned: a bit set past the enum's
+  range is not reported, and could not be spelled back in either.
+
+  CANNOT-ANSWER CASES answer '' — a nil TypeRef (a set whose element type has no
+  enum RTTI) and a set-valued GETTER METHOD, which would return the set by value
+  and is not a shape this unit can call through. Under the default brackets=False
+  that is indistinguishable from a legitimately empty set; pass brackets=True
+  when the difference matters, where '' and '[]' separate cleanly. }
+function GetSetProp(instance: Pointer; p: PPropInfo; brackets: Boolean = False): string;
+procedure SetSetProp(instance: Pointer; p: PPropInfo; const v: string); overload;
+
+{ The same rendering and parsing, decoupled from an instance: `value` is the set
+  as a bitmask, which is how a set of up to 32 members is held in an ordinal.
+  StringToSet ignores names the element enum does not have rather than failing —
+  FPC's behaviour, and the one that lets a newer file load into an older type. }
+function SetToString(p: PPropInfo; value: Integer; brackets: Boolean = False): string;
+function StringToSet(p: PPropInfo; const v: string): Integer;
 
 implementation
 
@@ -592,20 +757,54 @@ begin
   GetPropList := count;
 end;
 
+type
+  { Property accessor ABI: Self in the first slot (rdi), the value in the second
+    (rsi) — the same convention the GTK trampolines call methods with.
+
+    WIDTH IS DECLARED, NOT CAST. There is a trampoline per width rather than one
+    Int64-shaped pair, because a procedural type is how the ABI is told what to
+    read and write: calling an Integer-returning getter through an Int64 one
+    reads whatever the callee left in the high half of the return register, and
+    passing an Int64 through an Integer-shaped setter truncates it. The single
+    `procedure(Self: Pointer; v: Integer)` this replaced did exactly that to
+    every Int64 property with a setter method
+    ([[bug-b-rtti-read-of-a-getter-method-property-answers-zero]]). }
+  TOrdGetter8s  = function(Self: Pointer): ShortInt;
+  TOrdGetter8u  = function(Self: Pointer): Byte;
+  TOrdGetter16s = function(Self: Pointer): SmallInt;
+  TOrdGetter16u = function(Self: Pointer): Word;
+  TOrdGetter32s = function(Self: Pointer): LongInt;
+  TOrdGetter32u = function(Self: Pointer): LongWord;
+  TOrdGetter64  = function(Self: Pointer): Int64;
+  TOrdSetter8   = procedure(Self: Pointer; v: Byte);
+  TOrdSetter16  = procedure(Self: Pointer; v: Word);
+  TOrdSetter32  = procedure(Self: Pointer; v: LongInt);
+  TOrdSetter64  = procedure(Self: Pointer; v: Int64);
+  TStrGetter    = function(Self: Pointer): string;
+  TStrSetter    = procedure(Self: Pointer; const v: string);
+  TSingleGetter = function(Self: Pointer): Single;
+  TDoubleGetter = function(Self: Pointer): Double;
+  TSingleSetter = procedure(Self: Pointer; v: Single);
+  TDoubleSetter = procedure(Self: Pointer; v: Double);
+  TObjGetter    = function(Self: Pointer): Pointer;
+  TObjSetter    = procedure(Self: Pointer; v: Pointer);
+
 function GetOrdProp(instance: Pointer; p: PPropInfo): Int64;
 var
   addr: Pointer;
+  code: Pointer;
   sz, tk: Integer;
   sgn: Boolean;
 begin
   GetOrdProp := 0;
+  if p = nil then Exit;
+  tk := Integer(p^.OrdType);
+  sz := TypeKindSize(tk);
+  sgn := TypeKindSigned(tk);
+
   if p^.GetKind = 0 then
   begin
     addr := @PUInt8(instance)[p^.GetRef];
-    tk := Integer(p^.OrdType);
-    sz := TypeKindSize(tk);
-    sgn := TypeKindSigned(tk);
-
     if sz = 1 then
     begin
       if sgn then GetOrdProp := PInt8(addr)^
@@ -618,56 +817,79 @@ begin
     end
     else if sz = 4 then
     begin
-      GetOrdProp := PInt32(addr)^;
+      if sgn then GetOrdProp := PInt32(addr)^
+      else GetOrdProp := Int64(PUInt32(addr)^);
     end
     else
     begin
       GetOrdProp := PInt64(addr)^;
     end;
+  end
+  else
+  begin
+    { GetKind=1: GetRef is the getter method's code pointer. Called through a
+      trampoline of the property's OWN width — see the type block above for why
+      one Int64-shaped getter would not do. Until 2026-08-28 this branch did not
+      exist and every read-method property answered 0. }
+    code := Pointer(p^.GetRef);
+    if sz = 1 then
+    begin
+      if sgn then GetOrdProp := TOrdGetter8s(code)(instance)
+      else GetOrdProp := TOrdGetter8u(code)(instance);
+    end
+    else if sz = 2 then
+    begin
+      if sgn then GetOrdProp := TOrdGetter16s(code)(instance)
+      else GetOrdProp := TOrdGetter16u(code)(instance);
+    end
+    else if sz = 4 then
+    begin
+      if sgn then GetOrdProp := TOrdGetter32s(code)(instance)
+      else GetOrdProp := Int64(TOrdGetter32u(code)(instance));
+    end
+    else
+      GetOrdProp := TOrdGetter64(code)(instance);
   end;
 end;
-
-type
-  { setter method ABI: Self in the first slot (rdi), value in the second (rsi) —
-    same convention the GTK trampolines call methods with. }
-  TOrdSetter = procedure(Self: Pointer; v: Integer);
-  TStrSetter = procedure(Self: Pointer; const v: string);
 
 procedure SetOrdProp(instance: Pointer; p: PPropInfo; v: Int64);
 var
   addr: Pointer;
+  code: Pointer;
   sz, tk: Integer;
-  setter: TOrdSetter;
 begin
+  if p = nil then Exit;
+  tk := Integer(p^.OrdType);
+  sz := TypeKindSize(tk);
+
   if p^.SetKind = 0 then
   begin
     addr := @PUInt8(instance)[p^.SetRef];
-    tk := Integer(p^.OrdType);
-    sz := TypeKindSize(tk);
-
     if sz = 1 then
-    begin
-      PUInt8(addr)^ := Byte(v);
-    end
+      PUInt8(addr)^ := Byte(v)
     else if sz = 2 then
-    begin
-      PUInt16(addr)^ := Word(v);
-    end
+      PUInt16(addr)^ := Word(v)
     else if sz = 4 then
-    begin
-      PInt32(addr)^ := Integer(v);
-    end
+      PInt32(addr)^ := Integer(v)
     else
-    begin
       PInt64(addr)^ := v;
-    end;
   end
   else
   begin
     { SetKind=1: SetRef is the setter method's code pointer. Invoke it so the
-      property's side effects run (e.g. TControl.SetLeft updating the widget). }
-    setter := TOrdSetter(Pointer(p^.SetRef));
-    setter(instance, Integer(v));
+      property's side effects run (e.g. TControl.SetLeft updating the widget).
+      Through a trampoline of the property's own width: this call used to be
+      `procedure(Self; v: Integer)` for every width, which truncated an Int64
+      property's value on the way in. }
+    code := Pointer(p^.SetRef);
+    if sz = 1 then
+      TOrdSetter8(code)(instance, Byte(v))
+    else if sz = 2 then
+      TOrdSetter16(code)(instance, Word(v))
+    else if sz = 4 then
+      TOrdSetter32(code)(instance, LongInt(v))
+    else
+      TOrdSetter64(code)(instance, v);
   end;
 end;
 
@@ -676,11 +898,16 @@ var
   addr: Pointer;
 begin
   GetStrProp := '';
+  if p = nil then Exit;
   if p^.GetKind = 0 then
   begin
     addr := @PUInt8(instance)[p^.GetRef];
     GetStrProp := PAnsiStr(addr)^;
-  end;
+  end
+  else
+    { GetKind=1: a read METHOD. Absent until 2026-08-28, so every
+      `property S: string read GetS` answered '' through RTTI. }
+    GetStrProp := TStrGetter(Pointer(p^.GetRef))(instance);
 end;
 
 procedure SetStrProp(instance: Pointer; p: PPropInfo; const v: string);
@@ -953,5 +1180,331 @@ begin
   kind := fi^.TypeKind;
   GetFieldPtr := @PUInt8(instance)[fi^.Offset];
 end;
+
+{ ---------------------------------------------------------------------------
+  THE FPC `typinfo` FACADE — implementations. See the interface for the shapes
+  and for the one omission (FindPropInfo).
+  --------------------------------------------------------------------------- }
+
+function PropType(p: PPropInfo): TTypeKind;
+begin
+  PropType := tkUnknown;
+  if p = nil then Exit;
+  { The blob's `Kind` is coarse — 0 covers integer, float, string and boolean
+    alike — so it is authoritative only for the categories it tags, and OrdType
+    answers the rest. Measured 2026-08-28: a `string` property reports Kind=0
+    with OrdType=pxxTkAnsiString, NOT the Kind=1 the field's own comment
+    suggests, which is why this reads OrdType rather than trusting Kind. }
+  if p^.Kind = 2 then PropType := tkClass
+  else if p^.Kind = 3 then PropType := tkEnumeration
+  else if p^.Kind = 4 then PropType := tkSet
+  else if p^.Kind = 5 then PropType := tkMethod
+  else PropType := TTypeKind(PxxKindToTypeKind(p^.OrdType));
+end;
+
+function PropType(cls: PClassRTTI; const name: string): TTypeKind;
+begin
+  PropType := PropType(GetPropInfo(cls, name));
+end;
+
+function PropIsType(cls: PClassRTTI; const name: string; kind: TTypeKind): Boolean;
+var p: PPropInfo;
+begin
+  p := GetPropInfo(cls, name);
+  PropIsType := (p <> nil) and (PropType(p) = kind);
+end;
+
+function IsPublishedProp(cls: PClassRTTI; const name: string): Boolean;
+begin
+  IsPublishedProp := GetPropInfo(cls, name) <> nil;
+end;
+
+function IsStoredProp(instance: Pointer; p: PPropInfo): Boolean;
+begin
+  { No `stored` specifier is recorded in the blob — see the declaration. }
+  IsStoredProp := p <> nil;
+end;
+
+function GetPropList(cls: PClassRTTI; kinds: TTypeKinds; list: PPropList): Integer;
+var
+  all: TPropList;
+  plist: PPPropInfo;
+  n, i, count: Integer;
+begin
+  n := GetPropList(cls, @all);
+  plist := PPPropInfo(list);
+  count := 0;
+  for i := 0 to n - 1 do
+    if PropType(all[i]) in kinds then
+    begin
+      plist[count] := all[i];
+      Inc(count);
+    end;
+  GetPropList := count;
+end;
+
+{ Int64 properties are ordinals, so these are GetOrdProp/SetOrdProp under FPC's
+  name. Declared separately rather than aliased because consumers spell them
+  this way and the width dispatch already lives one level down. }
+function GetInt64Prop(instance: Pointer; p: PPropInfo): Int64;
+begin
+  GetInt64Prop := GetOrdProp(instance, p);
+end;
+
+procedure SetInt64Prop(instance: Pointer; p: PPropInfo; v: Int64);
+begin
+  SetOrdProp(instance, p, v);
+end;
+
+function GetFloatProp(instance: Pointer; p: PPropInfo): Double;
+var
+  addr: Pointer;
+  code: Pointer;
+begin
+  GetFloatProp := 0.0;
+  if p = nil then Exit;
+  if p^.GetKind = 0 then
+  begin
+    addr := @PUInt8(instance)[p^.GetRef];
+    if p^.OrdType = pxxTkSingle then GetFloatProp := PSingle(addr)^
+    else GetFloatProp := PDouble(addr)^;
+  end
+  else
+  begin
+    code := Pointer(p^.GetRef);
+    if p^.OrdType = pxxTkSingle then GetFloatProp := TSingleGetter(code)(instance)
+    else GetFloatProp := TDoubleGetter(code)(instance);
+  end;
+end;
+
+procedure SetFloatProp(instance: Pointer; p: PPropInfo; v: Double);
+var
+  addr: Pointer;
+  code: Pointer;
+begin
+  if p = nil then Exit;
+  if p^.SetKind = 0 then
+  begin
+    addr := @PUInt8(instance)[p^.SetRef];
+    if p^.OrdType = pxxTkSingle then PSingle(addr)^ := v
+    else PDouble(addr)^ := v;
+  end
+  else
+  begin
+    code := Pointer(p^.SetRef);
+    if p^.OrdType = pxxTkSingle then TSingleSetter(code)(instance, v)
+    else TDoubleSetter(code)(instance, v);
+  end;
+end;
+
+function GetObjectProp(instance: Pointer; p: PPropInfo): Pointer;
+var addr: Pointer;
+begin
+  GetObjectProp := nil;
+  if p = nil then Exit;
+  if p^.GetKind = 0 then
+  begin
+    addr := @PUInt8(instance)[p^.GetRef];
+    GetObjectProp := PPointer(addr)^;
+  end
+  else
+    GetObjectProp := TObjGetter(Pointer(p^.GetRef))(instance);
+end;
+
+procedure SetObjectProp(instance: Pointer; p: PPropInfo; v: Pointer);
+var addr: Pointer;
+begin
+  if p = nil then Exit;
+  if p^.SetKind = 0 then
+  begin
+    addr := @PUInt8(instance)[p^.SetRef];
+    PPointer(addr)^ := v;
+  end
+  else
+    TObjSetter(Pointer(p^.SetRef))(instance, v);
+end;
+
+function GetEnumProp(instance: Pointer; p: PPropInfo): string;
+var et: PEnumRTTI;
+begin
+  GetEnumProp := '';
+  if p = nil then Exit;
+  et := PEnumRTTI(p^.TypeRef);
+  if et = nil then Exit;
+  GetEnumProp := GetEnumName(et, Integer(GetOrdProp(instance, p)));
+end;
+
+procedure SetEnumProp(instance: Pointer; p: PPropInfo; const v: string);
+var
+  et: PEnumRTTI;
+  ord_: Integer;
+begin
+  if p = nil then Exit;
+  et := PEnumRTTI(p^.TypeRef);
+  if et = nil then Exit;
+  ord_ := GetEnumValue(et, v);
+  { -1 is "this type has no such member": leave the property alone rather than
+    storing a sentinel that would read back as a real member. }
+  if ord_ >= 0 then SetOrdProp(instance, p, ord_);
+end;
+
+{ A set property's storage is a BIT ARRAY at the field, one bit per element
+  ordinal (measured: `[clRed, clBlue]` of a 4-member enum is the single byte 5).
+  Only ordinals the element enum names are scanned — see the declaration. }
+function SetPropBitsToString(et: PEnumRTTI; addr: PUInt8; brackets: Boolean): string;
+var
+  i, byteIdx, bitIdx, mask, k: Integer;
+  s: string;
+begin
+  s := '';
+  for i := 0 to Integer(et^.Count) - 1 do
+  begin
+    byteIdx := i div 8;
+    bitIdx := i - byteIdx * 8;
+    mask := 1;
+    for k := 1 to bitIdx do mask := mask * 2;
+    if (Integer(addr[byteIdx]) and mask) <> 0 then
+    begin
+      if s <> '' then s := s + ',';
+      s := s + GetEnumName(et, i);
+    end;
+  end;
+  if brackets then SetPropBitsToString := '[' + s + ']'
+  else SetPropBitsToString := s;
+end;
+
+function GetSetProp(instance: Pointer; p: PPropInfo; brackets: Boolean = False): string;
+var et: PEnumRTTI;
+begin
+  GetSetProp := '';
+  if p = nil then Exit;
+  et := PEnumRTTI(p^.TypeRef);
+  { See the declaration for why these answer '' rather than an empty set. }
+  if (et = nil) or (p^.GetKind <> 0) then Exit;
+  GetSetProp := SetPropBitsToString(et, @PUInt8(instance)[p^.GetRef], brackets);
+end;
+
+{ Split '[a,b]' (brackets optional, spaces tolerated) and call back per name. }
+function SetNamesFold(et: PEnumRTTI; const v: string; var bits: Integer): Boolean;
+var
+  i, n, ord_, k, mask: Integer;
+  tok: string;
+  ch: Char;
+begin
+  bits := 0;
+  SetNamesFold := True;
+  tok := '';
+  n := Length(v);
+  for i := 1 to n + 1 do
+  begin
+    if i <= n then ch := v[i] else ch := ',';
+    if (ch = '[') or (ch = ']') or (ch = ' ') then Continue;
+    if ch = ',' then
+    begin
+      if tok <> '' then
+      begin
+        ord_ := GetEnumValue(et, tok);
+        if ord_ >= 0 then
+        begin
+          mask := 1;
+          for k := 1 to ord_ do mask := mask * 2;
+          bits := bits or mask;
+        end;
+        tok := '';
+      end;
+    end
+    else
+      tok := tok + ch;
+  end;
+end;
+
+function StringToSet(p: PPropInfo; const v: string): Integer;
+var
+  et: PEnumRTTI;
+  bits: Integer;
+begin
+  StringToSet := 0;
+  if p = nil then Exit;
+  et := PEnumRTTI(p^.TypeRef);
+  if et = nil then Exit;
+  SetNamesFold(et, v, bits);
+  StringToSet := bits;
+end;
+
+function SetToString(p: PPropInfo; value: Integer; brackets: Boolean = False): string;
+var
+  et: PEnumRTTI;
+  bytes: array[0..3] of Byte;
+begin
+  SetToString := '';
+  if p = nil then Exit;
+  et := PEnumRTTI(p^.TypeRef);
+  if et = nil then Exit;
+  bytes[0] := Byte(value and 255);
+  bytes[1] := Byte((value shr 8) and 255);
+  bytes[2] := Byte((value shr 16) and 255);
+  bytes[3] := Byte((value shr 24) and 255);
+  SetToString := SetPropBitsToString(et, @bytes[0], brackets);
+end;
+
+procedure SetSetProp(instance: Pointer; p: PPropInfo; const v: string);
+var
+  et: PEnumRTTI;
+  addr: PUInt8;
+  bits, i, byteIdx, bitIdx, mask, k: Integer;
+begin
+  if p = nil then Exit;
+  et := PEnumRTTI(p^.TypeRef);
+  if (et = nil) or (p^.SetKind <> 0) then Exit;
+  SetNamesFold(et, v, bits);
+  addr := @PUInt8(instance)[p^.SetRef];
+  { Assign the WHOLE set, clearing members the string omits — the ordinal-taking
+    SetSetProp above only ever ORs a bit in, which is `Include`, not `:=`. Both
+    spellings are wanted (classes_lite streams one member at a time), so they are
+    overloads rather than one having replaced the other. }
+  for i := 0 to Integer(et^.Count) - 1 do
+  begin
+    byteIdx := i div 8;
+    bitIdx := i - byteIdx * 8;
+    mask := 1;
+    for k := 1 to bitIdx do mask := mask * 2;
+    if (bits and mask) <> 0 then
+      addr[byteIdx] := Byte(Integer(addr[byteIdx]) or mask)
+    else
+      addr[byteIdx] := Byte(Integer(addr[byteIdx]) and (255 - mask));
+  end;
+end;
+
+
+function GetPropInfo(instance: TObject; const name: string): PPropInfo;
+begin
+  GetPropInfo := GetPropInfo(GetInstanceRTTI(Pointer(instance)), name);
+end;
+
+function GetPropList(instance: TObject; list: PPropList): Integer;
+begin
+  GetPropList := GetPropList(GetInstanceRTTI(Pointer(instance)), list);
+end;
+
+function GetPropList(instance: TObject; kinds: TTypeKinds; list: PPropList): Integer;
+begin
+  GetPropList := GetPropList(GetInstanceRTTI(Pointer(instance)), kinds, list);
+end;
+
+function PropType(instance: TObject; const name: string): TTypeKind;
+begin
+  PropType := PropType(GetInstanceRTTI(Pointer(instance)), name);
+end;
+
+function IsPublishedProp(instance: TObject; const name: string): Boolean;
+begin
+  IsPublishedProp := IsPublishedProp(GetInstanceRTTI(Pointer(instance)), name);
+end;
+
+function PropIsType(instance: TObject; const name: string; kind: TTypeKind): Boolean;
+begin
+  PropIsType := PropIsType(GetInstanceRTTI(Pointer(instance)), name, kind);
+end;
+
 
 end.

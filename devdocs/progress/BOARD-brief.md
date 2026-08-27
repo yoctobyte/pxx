@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:21 blocked:8 backlog:265 backlog_new:1 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2533 rejected:46`
+`working:3 unfinished:21 blocked:8 backlog:265 backlog_new:1 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2535 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
@@ -54,7 +54,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 72] [N]` feature-nilpy-stdlib-coverage-gaps-measured
-- `[p 72] [B]` feature-typinfo-facade-unit
 - `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - `[p 70] [N]` feature-nilpy-staticmethod-and-classmethod
 - `[p 70] [P]` feature-p-delphi-string-helpers
@@ -66,6 +65,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
+- `[p 65] [P]` bug-p-a-class-instance-converts-implicitly-to-any-typed-pointer
 - `[p 65] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - `[p 65] [B]` feature-b-text-file-surface-seekeof-rename-settextbuf
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source

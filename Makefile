@@ -14570,6 +14570,15 @@ endif
 	# output is fpc 3.2.2's, byte for byte.
 	$(PXX_STABLE) -Fulib/rtl test/lib_qword_render.pas $(TESTTMP)/lib_qword_render
 	$(TESTTMP)/lib_qword_render | diff -u test/lib_qword_render.expected -
+	# the typinfo FACADE (feature-typinfo-facade-unit): FPC's RTTI API shapes over
+	# our blobs. Every property KIND crossed with both ACCESS SHAPES -- `read
+	# FField` and `read GetIt` -- because the method arm was missing entirely and
+	# answered 0. Plus TTypeData's OrdType/FloatType, which a vendored
+	# Generics.Defaults uses as comparer case-selectors; those twelve values are
+	# fpc 3.2.2's, run for run.
+	$(PXX_STABLE) -Fulib/rtl test/lib_typinfo_props.pas $(TESTTMP)/lib_typinfo_props
+	test "$$($(TESTTMP)/lib_typinfo_props | grep -c '=ok')" = "63"
+	test "$$($(TESTTMP)/lib_typinfo_props | tail -1)" = "TYPINFO-PROPS OK"
 	# the date PARSE direction (StrToDate/StrToDateTime/TryStrTo*). Rows are
 	# read off FPC 3.2.2, including the ones nobody guesses: ISO input raises
 	# under the d/m/y default, and a two-digit year uses a SLIDING window.
