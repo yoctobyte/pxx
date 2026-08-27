@@ -1292,6 +1292,15 @@ function pystr_reverse(const s: AnsiString): AnsiString;
   module whose `try: import X` failed; this is what happens if such a name is
   actually USED, and it names the module so the message is actionable. }
 function pyoptional_missing(const what: AnsiString): Variant;
+{ A member a module we DO provide does not have — `sys.version_info` on a build
+  that has no version_info. A DIFFERENT thing from the above, and it shared its
+  raise until 2026-08-27: the message blamed "the import it came from could not
+  be resolved" for an import that resolved perfectly, and named a guard flag no
+  such call has. One raise serving two concepts describes only the first of
+  them, and the second gets a sentence that is simply false about it.
+  CPython's own wording, and CPython's own exception class.
+  bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through }
+function pyattr_missing(const owner: AnsiString; const attr: AnsiString): Variant;
 function pyos_startfile(const path: AnsiString): Integer;
 function pyos_environ_get(const name: AnsiString): Variant;
 function pyos_environ_get_d(const name: AnsiString; const dflt: Variant): Variant;
@@ -12309,6 +12318,13 @@ begin
   raise Exception.Create('this build has no ' + what
     + ': the import it came from could not be resolved, and the code guarding '
     + 'that (the flag its except-branch sets) let this call through anyway');
+end;
+
+function pyattr_missing(const owner: AnsiString; const attr: AnsiString): Variant;
+begin
+  pyattr_missing := pynone;
+  raise AttributeError.Create('module ''' + owner + ''' has no attribute ''' +
+    attr + '''');
 end;
 
 function pyos_startfile(const path: AnsiString): Integer;
