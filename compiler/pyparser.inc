@@ -24666,7 +24666,8 @@ begin
 end;
 
 function PyQueueNestedDef: Integer;
-var defTok, procIdx, bodyStart, bodyEnd, i, j, k, nCaps, nOwn, csym, csym2, capCi: Integer;
+var defTok, procIdx, bodyStart, bodyEnd, i, j, k, nCaps, nOwn, csym, csym2, capCi, capSym: Integer;
+    capNow: TTypeKind;
     qname, cname, cn2: AnsiString; already: Boolean;
     capNames: array[0..PY_MAX_CAPS-1] of AnsiString;
     capTypes: array[0..PY_MAX_CAPS-1] of TTypeKind;
@@ -24881,6 +24882,53 @@ begin
       begin
         Procs[procIdx].Params[nOwn + j].IsRef := True;
         ProcParamCapRef[procIdx * MAX_PROC_PARAMS + nOwn + j] := True;
+      end;
+      { ...and the capture's TYPE is re-applied for the same reason the by-ref
+        decision above is: it too was decided on the trial parse, against
+        whatever the name meant THEN.
+
+        `def o(x: int): x /= 2; def inner(): return x + 1` failed to compile at
+        all — "invalid IR node reference in store_sym" — and the str spelling
+        (`x = "s"` then `x + "t"`) compiled and raised a TypeError at run time.
+        Capturing a plain local of any type works, and capturing a rebound
+        VARIANT parameter works, which is what localised it: the variant
+        parameter's private slot is allocated BEFORE PyCollectLocalsAST, and the
+        TYPED one is allocated AFTER, because it needs the constraint table to
+        know its type. So on the trial parse `FindSym('x')` still answered the
+        Int64 PARAMETER, the nested def was registered with an Int64 capture
+        parameter, and the re-run that follows the slot's creation takes THIS
+        branch — the proc already exists, so nothing recomputed the signature.
+        The call site then passed the variant slot into an Int64 parameter.
+
+        Re-resolving by name here is the same move the cell arm makes and gets
+        the answer that is true now. The promo boxing mirrors the registration
+        arm's rule so the two spellings of this decision cannot drift apart: a
+        promotable int's rvalue is its frame SLOT ADDRESS, so a by-value promo
+        parameter would hand the callee a pointer into a frame it does not own.
+
+        The parameter's SYMBOL is retyped with it. They are one declaration in
+        two records, and leaving the symbol behind is the silent-ABI-mismatch
+        shape this file keeps meeting — the body would read the slot at the old
+        width while the caller wrote the new one.
+        bug-n-a-nested-def-capturing-a-rebound-parameter-uses-the-parameters-type }
+      if (nOwn + j < MAX_PROC_PARAMS) and (nOwn >= 0) then
+      begin
+        capSym := FindSym(PyCapName[procIdx * PY_MAX_CAPS + j]);
+        if (capSym >= 0) and (Syms[capSym].Kind in [skLocal, skParam]) and
+           not Syms[capSym].IsArray and (Syms[capSym].TypeKind <> tyRecord) then
+        begin
+          capNow := Syms[capSym].TypeKind;
+          if TypeIsPromoInt(capNow) then capNow := tyVariant;
+          if Procs[procIdx].Params[nOwn + j].TypeKind <> capNow then
+          begin
+            Procs[procIdx].Params[nOwn + j].TypeKind := capNow;
+            if Procs[procIdx].Params[nOwn + j].SymIdx >= 0 then
+            begin
+              Syms[Procs[procIdx].Params[nOwn + j].SymIdx].TypeKind := capNow;
+              SymSyncTypeRef(Procs[procIdx].Params[nOwn + j].SymIdx);
+            end;
+          end;
+        end;
       end;
     end;
   { The def-time default globals, re-recorded on EVERY pass for the same reason
