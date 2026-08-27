@@ -172,4 +172,4 @@ hazard (the source is a scalar, not a slot), so it is a size/speed question and
 not a correctness one, and it had no business riding along on a bug fix.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 02b59739f.
