@@ -7639,3 +7639,88 @@ arg handling would break it without anyone noticing. Directory name settled as
 This is the coordinator role working as intended: two lanes that cannot see each
 other, one holding a contract the other is about to depend on, and the seam named
 before it is crossed rather than after.
+
+## COORDINATOR CALL: frankwasm gets a NARROW, NAMED grant into two shared files
+
+frankwasm built Phase 1's encoder (`a4de4c2b8`) entirely in new files, then
+stopped at the shared-file boundary and asked rather than arguing itself across
+it. Its own words are the reason I'm granting rather than routing: *"I'd rather
+you decide than have me quietly widen the branch's footprint on a 'it's only three
+lines' argument — that argument is exactly how the strategy erodes."* Correct, and
+it is why the grant is written down with edges instead of given as a nod.
+
+**Measured before deciding** (`git log --since='3 hours ago'` on both files): the
+only recent touch is frank-optimize's landed registration commit `290ee8ca4`.
+**`compiler/compiler.pas` and `compiler/exception_emit.inc` are uncontended right
+now** — frankA is in `pasparser_*.inc` / `defs.inc` / `test/`, frank-optimize is in
+`ir_codegen.inc` and has stated no contact with either.
+
+### The grant, and its exact edges
+
+frankwasm may edit, under Track A's gate, **only**:
+
+1. `compiler/compiler.pas` — two `{$include}` lines, and replacing the `Error` at
+   the `TARGET_WASM32` arm (~line 2094) with the module-writer call.
+2. `compiler/exception_emit.inc:437` — **the message text only**, not the
+   mechanism.
+
+Anything else in a shared file is a new conversation. Filed as a Track A ticket
+that frankwasm self-resolves — the combined-track pattern CLAUDE.md already
+describes, valid because the coordinator has confirmed no concurrent A holder,
+which is the *only* thing that pattern requires.
+
+**Why grant instead of routing to an A holder.** The letters exist to stop two
+agents editing one file at once. Nobody is in these files, so routing buys no
+safety and costs a stranger reading PLAN.md to place three lines. The person with
+the context is frankwasm. The registration commit itself anticipated this exact
+moment — *"that branch adds only new files and never merges a shared one until it
+emits"* — and it emits now.
+
+**The real risk is not collision, it is the fixedpoint.** frankwasm notes the
+self-host still converges at `325b4479070a` *because nothing `compiler.pas`
+includes has moved*. Adding two includes ends that: the compiler binary changes,
+and `make compiler/pascal26` must be seen to print `converged after N round(s)`
+with a sha differing from `pinned`. That is the whole gate and it is not optional
+here — this is the first wasm change that can reach the self-host loop at all.
+
+### The disproven claim in a shared file — a real finding, not a nit
+
+`exception_emit.inc:437` tells the reader wasm exceptions need *"the
+exception-handling proposal or a trampoline"*. Phase 5's prototype disproves it:
+pending-flag threading needs **neither** — no engine proposal, no trampoline —
+which is precisely why PLAN.md chose it. The mechanism (erroring at lowering) stays
+right, because exceptions genuinely are not implemented yet. **Only the
+explanation is false, and it is false in a shared file where the next reader will
+believe it** — a wrong *reason* attached to a correct *behaviour* is the most
+durable kind of wrong, because nothing ever fails to make anyone check it.
+
+### The `sysopen` diagnostic: FILE it, low prio — don't leave it in a message
+
+frankwasm chose to mention rather than file that a Pascal program defining a
+function named `sysopen` dies with `expected name`, reading CLAUDE.md's compat
+table as "diagnostic differs → defer". I'm overriding, mildly, because the table's
+own escape applies: **it can name a program whose behaviour changes** (`function
+sysopen(…)` fails to compile), which is what separates a low-prio ticket from a
+`rejected/` one. It is row 3 — *FPC accepts a form we reject* — ranked by how much
+real code uses it, which is almost none. So: prio ~15, and the fix is likely one
+better message naming the reservation. Filed, it costs one ticket; mentioned, the
+knowledge dies with this session's context.
+
+### Measured facts worth keeping out of the transcript
+
+- **Padded (non-minimal) LEB128 is accepted** by `wasm-validate` and V8.
+- **`sysopen`/`syswrite`/`sysfchmod`/`sysclose` are compiler intrinsics**
+  (`tkSysOpen`), callable undeclared from a standalone program — which is what
+  made a self-test possible with no shared-file wiring.
+- Our module is **219 bytes vs wat2wasm's 183** = 4 × (7 sections + 2 function
+  bodies). Fixed cost per section and per function, so it is noise on anything real.
+
+### The day's stale-claim pattern, fifth instance — and the first one caught by its own author
+
+frankwasm's header comment claimed function body sizes were canonical. Measuring
+the 36-byte delta *after* the code existed proved they are padded too, and the
+comment was corrected to describe what the code does. Same failure as the 1.29x,
+the `High(QWord)` assertion and the two aged-out "what next" lists — a written
+claim about a tree that moved — except this one was caught in minutes by its
+author, because a number was checked instead of a sentence being trusted. That is
+the counter-example: the pattern is beatable, and measuring after is how.
