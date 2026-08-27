@@ -1,7 +1,8 @@
 ---
 prio: 60
 track: P
-owner: unassigned
+owner: frankA
+status: working
 ---
 
 # A generic class's out-of-line method header binds to a same-named non-generic class
