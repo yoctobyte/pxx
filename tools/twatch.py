@@ -6701,8 +6701,29 @@ def main():
                 #
                 # Same IDLE_YIELD_AFTER guard as the rest, for the same reason:
                 # "ahead of" must not become "instead of".
+                # A COMMITMENT POINT, and it is the difference between this
+                # phase working and not working. Measured 2026-08-27, 90
+                # minutes after this queue shipped: a `full` request sat
+                # undrained while the log showed the phase being ENTERED and
+                # then "preempted by a push — will resume", 15 times. The
+                # queue's position was never the problem — it is reached fine
+                # and cannot FINISH, because make_preempted() with no
+                # commit_after is abortable at every moment and pushes never
+                # stop at four workers.
+                #
+                # Same value and same reasoning as the idle full backfill
+                # below: a push in the first `full_commit_secs` still
+                # preempts, so a genuinely fresh sha is not starved by a run
+                # that just started; after that the run is allowed to finish.
+                # NOT breadth's commit_after=0 — that is for a RESERVED slot
+                # taken deliberately, and a request should still yield to a
+                # brand-new push in its first minute.
                 r = verify_requested(clone, host, *req_due,
-                                     abort_check=make_preempted(clone, tested))
+                                     abort_check=make_preempted(
+                                         clone, tested,
+                                         commit_after=(
+                                             CONF.get("full_commit_secs")
+                                             or None)))
                 if r == "aborted":
                     n = note_idle_abort(clone, host, "verify-request",
                                         req_due[0])
