@@ -7472,3 +7472,43 @@ role and this roster is what re-briefs them.
   The bisect range simply has not been narrowed. Reading `bad=` as a culprit is
   the same error class as the day's stale-claim pattern above — a field that
   answers a different question than the one being asked of it.
+
+### FOR THE OWNER: `no-full-suite.sh` matches the blocked text as a SUBSTRING, anywhere in the invocation — THREE times in one session
+
+Two instances reported by frankT, **both on commands that ran no suite at all**:
+
+1. A **heredoc** whose body quoted a repro line containing the blocked text.
+2. A read-only `pgrep -f` process check whose *search pattern* contained it.
+
+Then a third, on **this very roster entry**: the commit that first tried to
+record the finding was itself refused, because the heredoc describing the bug
+quoted the offending string. The hook demonstrated the report while I was writing
+it. In all three cases the blocked text sat in an argument that executes nothing;
+the hook substring-matches the whole command text rather than anchoring on the
+command actually being invoked.
+
+**Nobody in the fleet is touching it, and nobody should propose to.**
+`.claude/hooks/**` and `.claude/settings.json` are the owner's files; a peer
+cannot authorise a change to them and neither can I. This is a **report**, filed
+where the owner will see it. The workaround costs nothing — paraphrase instead of
+quoting — and the hook erring toward refusal is the correct direction for a guard
+whose whole purpose is to stop a ten-minute suite: a false positive costs one
+rephrase, a false negative costs the thing the hook exists to prevent. Worth an
+anchor if it is ever touched; not worth a ticket.
+
+*(Written deliberately without quoting the pattern. That is the whole workaround.)*
+
+### Fixedpoint corroboration: `591ae8160f69` reproduced a FOURTH time
+
+frankT's build at `03afd81fd` converged after 2 rounds to `591ae8160f69…` —
+byte-identical to the seed frank-optimize reported from `~/frank-optimize`, in a
+separate checkout on a separate build. Not a contradiction of the pin's
+`325b4479070a`: different commits (`03afd81fd` vs `83468c546`), so different
+binaries, each reproducing itself.
+
+frankT declined to upgrade the claim and is right to: the self-host gate proves
+the compiler reproduces **itself at `-O2`** and is silent on `lib/rtl`, the
+~900-program optimisation-agreement corpus, and every cross target. Four
+reproductions is corroboration of the same narrow property, not breadth — exactly
+the claims-discipline distinction CLAUDE.md draws, where *the binary is identical
+to our own previous output* says nothing about anything the binary compiles.
