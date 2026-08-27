@@ -8096,3 +8096,64 @@ the ticket so the next session inherits it rather than meeting it in a conflict,
 will merge master more often and treat a conflict in either file as a **coordination
 event** rather than a local resolution. Phase 2's `ir_codegen.inc` dispatch arm comes
 back to me for its own grant; this one does not extend.
+
+## `sysopen` in `compiler/**` is PLATONIC — measured, and the failure message points the wrong way (`ed91194bd`)
+
+frankwasm answered the question I put to it rather than letting *"it self-hosts
+now"* settle it, and the answer inverts the obvious reading:
+
+1. **The RTL supports Text I/O fine** — a standalone pxx program does
+   `Assign`/`Rewrite`/`Writeln`/`Close` and writes its file. It ran one.
+2. `pasparser_prog.inc:651` pulls that surface in implicitly when the token stream
+   mentions `Text`/`TextFile`/`IOResult`/`Flush` — **but only `if (not
+   NoDefaultRtl)`**.
+3. **`compiler.pas:19` is `{$define PXX_NODEFAULTRTL}`.**
+
+So Text file I/O is absent from the compiler **by design**, not missing by
+omission. `undefined variable (Close)` looks like an RTL gap and is actually the
+compiler getting exactly what it asked for. 20 compiler sites use the `sysopen`
+path; zero use `Text`. **No gap, no ticket** — and it was never platonic →
+workaround, because the original code used a surface this translation unit
+deliberately excludes. The FPC form stays right on the other side of that boundary,
+where the RTL lives.
+
+It put the **whole chain** in the file header rather than the conclusion, because
+the conclusion alone gets re-litigated the first time someone meets that error —
+and the next person's most likely move is filing the RTL bug that does not exist.
+Comment-only, verified by the fixedpoint reproducing `cb55d648a657` unchanged, which
+is what *proves* it was comment-only.
+
+### The general shape, and it will recur
+
+> **"The compiler couldn't compile X" and "the language can't do X" look identical
+> from inside a compiler-internal file.**
+
+`PXX_NODEFAULTRTL` is one define at line 19 of a 2000+ line program and **nothing at
+the failure site points to it**. Any lane writing new `compiler/**` code that
+reaches for an RTL convenience hits the same wall and reads the same wrong
+conclusion off it — and the wrong conclusion is a filed ticket against a working
+RTL, which is expensive in the way a wrong root cause always is.
+
+### Routing call: frankwasm writes it, into the debugging playbook, ON MASTER
+
+It asked me to route rather than widen its footprint again on a *"it's only a
+paragraph"* argument — correctly identifying that as the same shape as *"only three
+lines."* The instinct is right and it does not bind here, for reasons I measured
+rather than asserted:
+
+- **Uncontended.** `git log --since='24 hours ago'` on `debugging-playbook.md` and
+  `parallel-tracks.md` is empty.
+- **Nothing in `devdocs/dev/**` mentions `NODEFAULTRTL` at all** — the only hits are
+  progress tickets and a prototype patch. This is genuinely undocumented ground, not
+  a duplicate.
+- **The charter property it is protecting is about merge conflicts in
+  `compiler/**`.** A devdocs file is not that, so writing here spends nothing. On
+  **master**, not the branch, so the branch's footprint is untouched.
+- It holds the entire chain; routing to another lane costs a re-derivation of three
+  non-obvious steps.
+
+Home is `debugging-playbook.md`, whose section titles are already exactly this shape
+— *"A property that holds for the wrong reason will stop holding silently"*, *"A
+comment is an unverified claim, and tickets inherit it"*. The playbook's whole
+subject is readings that are confidently wrong, and this is one with a named cause
+and a one-line check.
