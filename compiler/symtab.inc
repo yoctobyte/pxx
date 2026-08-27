@@ -1329,6 +1329,80 @@ begin
   end;
 end;
 
+function ClassHelperRecFor(recId: Integer; const memberName: AnsiString): Integer;
+{ The rec id a member lookup on `recId` should actually run against: the rec of
+  a `class helper for <that class>` that declares `memberName`, or recId
+  unchanged when no helper claims the name.
+
+  FPC binds a helper member BEFORE the extended class's own members, and binds
+  it NON-virtually: a helper method that shadows a virtual one wins at every
+  static type that can see the helper, and the VMT dispatch never runs
+  (class-helper-shadowing in fpc_diff_probe). Answering the redirect as a rec
+  id is what makes both true at once — the caller's existing lookup then runs
+  against the helper row, whose methods carry no virtual slot.
+
+  Guarded on the member actually existing on the helper, so a class with a
+  helper in scope resolves every one of its own members exactly as before.
+  There are two member-lookup loops in the Pascal parser (the ParseLValueAST
+  designator loop and ParseClassRecordSelectors); both ask this, rather than
+  growing a redirect apiece that could drift. }
+var ci, hci: Integer;
+begin
+  Result := recId;
+  if recId < REC_UCLASS_BASE then Exit;
+  ci := recId - REC_UCLASS_BASE;
+  if ci >= UClsCount then Exit;
+  { A helper does not itself get a helper, and neither records nor interfaces
+    take the CLASS flavour: `record helper for` has its own dispatch. }
+  if (UClsHelperTk[ci] >= 0) or UClsIsRecord[ci] or UClsIsInterface[ci] then Exit;
+  { The walk is FPC's rule, and it INTERLEAVES: at each class from the static
+    type upward, a helper for THAT class is consulted before that class's own
+    members, and the first answer wins. So with `TDerived = class(TBase)`
+    overriding Name and a `class helper for TBase` also declaring Name, FPC
+    answers `d.Name` = TDerived's override (TDerived has no helper, and it
+    declares the name itself) but `b.Name` = the helper (TBase's helper is
+    reached before TBase's own member). Checking only the exact class would
+    lose the first, and checking the class's members first would lose the
+    second. }
+  while ci >= 0 do
+  begin
+    hci := FindHelperForType(tyClass, REC_UCLASS_BASE + ci);
+    if (hci >= 0) and (FindUMeth(hci, memberName) >= 0) then
+    begin
+      Result := REC_UCLASS_BASE + hci;
+      Exit;
+    end;
+    if (FindUMeth(ci, memberName) >= 0) or (FindUField(ci, memberName) >= 0) or
+       (FindUProp(ci, memberName) >= 0) then Exit;   { the class's own member wins }
+    ci := UClsParent[ci];
+  end;
+end;
+
+function SelfMemberCi(const memberName: AnsiString): Integer;
+{ The class index a BARE (unqualified) name inside the CURRENT method body is
+  looked up on. Normally that is CurSelfClass's class. Inside a CLASS HELPER's
+  method it is the HELPER when the helper declares the name, and the EXTENDED
+  class otherwise — FPC's order, and the reason CurSelfClass points at the
+  extended class inside a helper body in the first place: Self there IS the
+  extended instance, fields, offsets and all, so every other consumer of
+  CurSelfClass wants the extended class. Only the NAME LOOKUP has the helper in
+  front, and only for names the helper actually declares.
+
+  The qualified direction (`b.M` on a receiver) is ClassHelperRecFor; this is
+  the unqualified one. Both are the same rule read from opposite ends. }
+var hci: Integer;
+begin
+  Result := -1;
+  if CurSelfClass >= REC_UCLASS_BASE then Result := CurSelfClass - REC_UCLASS_BASE;
+  if (CurMethClass >= REC_UCLASS_BASE) and (CurMethClass <> CurSelfClass) then
+  begin
+    hci := CurMethClass - REC_UCLASS_BASE;
+    if (hci < UClsCount) and (UClsHelperTk[hci] = Ord(tyClass)) and
+       ((FindUMeth(hci, memberName) >= 0) or (FindUProp(hci, memberName) >= 0)) then
+      Result := hci;
+  end;
+end;
+
 function EnsureMethodPtrRec: Integer;
 { Record id of the shared 16-byte method-pointer layout {Code@0, Data@8}. Minted
   lazily on the first `procedure(...) of object` type. No named fields are needed:

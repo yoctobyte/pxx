@@ -5,7 +5,7 @@ prio: 55
 # `record helper for T` / `type helper for T` — type helpers
 
 - **Type:** feature (Pascal frontend — Track P; dispatch plumbing may touch shared parser = A gate)
-- **Status:** unfinished — v1+v2 landed and pinned; v3 partly landed (type-name spelling, target-type-name receivers). Remaining: rvalue receivers, class helpers.
+- **Status:** unfinished — v1+v2 landed and pinned; v3 partly landed (type-name spelling, target-type-name receivers, class helpers). Remaining: rvalue receivers.
 - **Owner:** claude-acp
 - **Blocks:** [[feature-pascal-corpus-generics]] (generics.helpers.pas is in
   Generics.Collections' uses chain), and broadly sysutils.TStringHelper-style
@@ -117,7 +117,13 @@ So v3 now has exactly two items left:
 
 - **rvalue receivers** — `'abc'.ToLower`, `F().ToLower`. Need a materialized
   temp. FPC oracle for both: `Abc` in the probe used here. Still refused.
-- **class helpers** (`class helper for TSomeClass`).
+- ~~**class helpers** (`class helper for TSomeClass`)~~ — **DONE 2026-08-27**,
+  under [[compat-pascal-class-helpers]]. Same helper row, marker
+  `UClsHelperTk = Ord(tyClass)`; what forked was Self (by VALUE for a class
+  target, and its `RecName` is the EXTENDED class so `Self.Field` resolves) and
+  the two name-lookup directions, `ClassHelperRecFor` (qualified) and
+  `SelfMemberCi` (unqualified). All three `class-helper-*` probe rows are
+  untagged. `test/test_class_helper_for_a_class.pas`.
 - ~~**`UInt32.SIZED_SIGN_MASK[i]`**~~ — **DONE 2026-08-20, and not by helper
   code.** It fails identically
   through the HELPER's own name (`TU32Helper.SIZED_SIGN_MASK[2]`), so the

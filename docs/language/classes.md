@@ -467,6 +467,65 @@ Output:
 instances created: 2
 ```
 
+## Helpers
+
+A **helper** adds methods to a type you do not own, without subclassing it.
+pxx supports all three FPC spellings:
+
+```pascal
+type
+  TBoxHelper  = class helper for TBox    { extends a CLASS   }
+  TPointHelper = record helper for TPoint { extends a RECORD  }
+  TIntHelper  = type helper for Integer   { extends a SCALAR  }
+```
+
+A helper declares methods (and properties, class vars and consts) but never
+fields — it adds no storage to the type it extends. Inside a helper method,
+`Self` **is** the extended value: for a class helper that is the instance, for
+a record or scalar helper it is the value by reference, so a record helper's
+method can mutate its receiver.
+
+```pascal
+type
+  TBox = class
+    Value: Integer;
+  end;
+  TBoxHelper = class helper for TBox
+    function Doubled: Integer;
+  end;
+
+function TBoxHelper.Doubled: Integer;
+begin
+  Doubled := Value * 2;      { unqualified: the extended class's field }
+end;
+
+var b: TBox;
+begin
+  b := TBox.Create;
+  b.Value := 21;
+  WriteLn(b.Doubled);        { 42 }
+end.
+```
+
+Name resolution follows FPC:
+
+- A helper member is found **before** the extended type's own member of the
+  same name, and is bound **non-virtually** — a helper method that shadows a
+  virtual one wins wherever the helper is visible, and the virtual dispatch
+  does not run.
+- The search runs from the receiver's **static** type upward, asking at each
+  class for that class's helper first and that class's own members second. So a
+  descendant that overrides a name answers with its own override, while the
+  same object seen through an ancestor variable answers with the ancestor's
+  helper.
+- A helper for a base class serves descendants of that class too.
+- Inside a helper method body, an unqualified name asks the helper first and
+  the extended type second.
+
+One helper is active for a given type at a point in the source; the last one
+declared wins. `class helper(TAncestorHelper) for T` parses — the ancestor is
+accepted and ignored, which matters only once two helpers are in scope at once.
+
 ## Runtime type information (RTTI)
 
 Every `TObject` descendant carries runtime type information. The basic

@@ -4068,6 +4068,13 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_rec_helper_b33126)" = "$$(printf 'lower:  hello\ndouble: HeLLoHeLLo\nbang:   HeLLo!\nparam: mixed\nsq:     49\nmask:   2147483648\nbits:   32')"
 	./$(COMPILER) test/test_type_helper_for_spelling.pas $(TESTTMP)/test_type_helper_spelling26
 	test "$$($(TESTTMP)/test_type_helper_spelling26)" = "42 0"
+	# ...and the CLASS flavour: `class helper for <class>`. The helper binds
+	# BEFORE the extended class's own members and NON-virtually, the search
+	# interleaves helper-then-members up the ancestor chain, and inside a helper
+	# body an unqualified name asks the helper first and the extended type
+	# second. Every row is oracled against FPC 3.2.2 -Mobjfpc.
+	./$(COMPILER) test/test_class_helper_for_a_class.pas $(TESTTMP)/test_class_helper26
+	test "$$($(TESTTMP)/test_class_helper26)" = "$$(printf 'a 42\ne 63\nd 42\nb helper\nf helper\nf2 helper\nh  derived\ng  shout:helper\nc T2')"
 	# v3: the TARGET TYPE'S OWN NAME as receiver — UInt32.GetSignMask, how
 	# generics.helpers spells its UInt32/UInt64 sections. Not a second dispatch
 	# path: the name resolves to the HELPER's ci, so the spelling that already

@@ -1714,11 +1714,12 @@ end.
 P
 
 # ---- class helpers ----
-# All three [known]: pxx's parser rejects `class helper for` outright
-# (compat-pascal-class-helpers). Kept so the day it parses, the SEMANTICS are
-# already under test — a helper method shadows a virtual one non-virtually, and
-# an unqualified call inside a helper binds to the extended type's members.
-probe class-helper-method known <<'P'
+# Untagged since 2026-08-27 (compat-pascal-class-helpers): `class helper for`
+# parses and all three semantics match FPC — a helper member binds before the
+# extended type's own, non-virtually, and an unqualified name inside a helper
+# body reaches the extended type's members. test_class_helper_for_a_class
+# carries the same rows plus the ancestor-chain ones.
+probe class-helper-method <<'P'
 type
   TBox = class
     Value: Integer;
@@ -1735,7 +1736,7 @@ begin
   b.Free;
 end.
 P
-probe class-helper-shadowing known <<'P'
+probe class-helper-shadowing <<'P'
 type
   TBase = class
     function Name: string; virtual;
@@ -1753,7 +1754,7 @@ begin
   o.Free;
 end.
 P
-probe class-helper-inherited known <<'P'
+probe class-helper-inherited <<'P'
 type
   TThing = class
     function Tag: string;

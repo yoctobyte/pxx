@@ -550,6 +550,13 @@ begin
           if IsGenericTemplateName(CurTok.SVal) and
              not ((TokPos < TokCount) and (Tokens[TokPos].Kind = tkLt)) then
             Error('Default: the generic type ' + CurTok.SVal + ' must be specialized');
+          { A HELPER type is not a type you can hold a value of — it names a set
+            of methods bolted onto another type and has no storage of its own,
+            so it has no zero value either (tdefault13). Same shape as the
+            unspecialized-generic refusal above. }
+          i := FindUClass(CurTok.SVal);
+          if (i >= 0) and (UClsHelperTk[i] >= 0) then
+            Error('Default: a helper type has no value');
         end;
         { An AGGREGATE type has no integer zero: `Default(TRec)` used to yield
           the same INT_LIT 0 as `Default(Integer)`, and the record assignment
@@ -742,10 +749,10 @@ begin
         (innermost scope), matching the other implicit-Self dispatches. }
       else if (idx < 0) and (CurProc >= 0) and (CurSelfClass >= REC_UCLASS_BASE) and
               (Procs[CurProc].ParamCount > 0) and
-              (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) >= 0) and
+              (FindUMeth(SelfMemberCi(name), name) >= 0) and
               ((TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot)) then
       begin
-        mmi := FindUMeth(CurSelfClass - REC_UCLASS_BASE, name);
+        mmi := FindUMeth(SelfMemberCi(name), name);
         valNode := AllocNode(AN_IDENT);
         ASTIVal[valNode] := Procs[CurProc].Params[0].SymIdx;   { Self }
         ASTTk[valNode] := Ord(tyClass);
@@ -4970,7 +4977,7 @@ begin
         body from a Pascal unit). bug-a-the-import-escape-hatch-fails-on-classes-pas }
       if (procIdx >= 0) and (qUnit = -1) and (idx < 0) and (not NilPyUserCode) and
          (CurSelfClass >= REC_UCLASS_BASE) and
-         (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) >= 0) then
+         (FindUMeth(SelfMemberCi(name), name) >= 0) then
         procIdx := -1;
 
       { `Eof` (standard input), no args -> Boolean. The textfile RTL declares
@@ -7809,7 +7816,9 @@ begin
         node := -1;
         if (idx < 0) and (procIdx < 0) and (CurSelfClass >= REC_UCLASS_BASE) then
         begin
-          ci := CurSelfClass - REC_UCLASS_BASE;
+          { …on the CLASS HELPER that owns this body when it declares the name,
+            otherwise on the extended class — SelfMemberCi. }
+          ci := SelfMemberCi(name);
           mmi := FindUMethOverloadAhead(ci, name, CountCallArgsAhead);
           if mmi >= 0 then
           begin

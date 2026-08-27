@@ -4685,7 +4685,7 @@ begin
       end
       else if (CurProc >= 0) and (CurSelfClass >= REC_UCLASS_BASE) and
               (Tokens[TokPos].Kind = tkLParen) and
-              (FindUMeth(CurSelfClass - REC_UCLASS_BASE, CurTok.SVal) >= 0) then
+              (FindUMeth(SelfMemberCi(CurTok.SVal), CurTok.SVal) >= 0) then
       begin
         { An unqualified `Read`/`Write`/`Readln`/`Writeln` naming a METHOD of the
           enclosing class binds to that member (Self.method), like FPC — not the
@@ -4695,7 +4695,7 @@ begin
           keeps the intrinsic path; the own-name result assignment is rejected
           above. Mirrors the implicit-Self method statement dispatch in the tkIdent
           case. See bug-bare-read-write-in-method-hits-intrinsic. }
-        smci := CurSelfClass - REC_UCLASS_BASE;
+        smci := SelfMemberCi(CurTok.SVal);
         smmii := FindUMeth(smci, CurTok.SVal);
         smpii := UMthProc_[smmii];
         Next; { consume the method name token }
@@ -5946,7 +5946,7 @@ begin
           NilPyUserCode and not isNilPy; the two MUST move together }
         if (procIdx >= 0) and (qUnit = -1) and (si < 0) and (not NilPyUserCode) and
            (CurSelfClass >= REC_UCLASS_BASE) and
-           (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) >= 0) then
+           (FindUMeth(SelfMemberCi(name), name) >= 0) then
           procIdx := -1;
 
       { Bare call to a sibling CLASS (static) method, from inside a class method.
@@ -6876,6 +6876,15 @@ begin
         ASTSLen[node]    := Tokens[TokPos-1].SLen;
         Next;
       end
+      else if (CurTok.Kind = tkDefault) and (TokPos < TokCount) and
+              (Tokens[TokPos].Kind = tkLParen) then
+        { `Default(T);` standing alone as a statement. FPC says "Illegal
+          expression"; the catch-all below would SKIP it instead, silently — and
+          with it every diagnostic the Default() expression arm raises, which is
+          where "a helper type has no value" and the file-type refusals live
+          (tdefault13). A value-producing expression as a whole statement does
+          nothing by construction, so there is nothing to recover. }
+        Error('Default(T) is an expression, not a statement')
       else
         while not (CurTok.Kind in [tkSemicolon,tkEnd,tkElse,tkUntil,tkEOF]) do Next;
     end;

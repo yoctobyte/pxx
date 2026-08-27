@@ -538,7 +538,7 @@ begin
     end
     else if (CurSelfClass >= REC_UCLASS_BASE) and (CurProc >= 0)
             and (Procs[CurProc].ParamCount > 0)
-            and (FindUProp(CurSelfClass - REC_UCLASS_BASE, fieldName) >= 0) then
+            and (FindUProp(SelfMemberCi(fieldName), fieldName) >= 0) then
     begin
       { Bare (unqualified) property access inside a method -> implicit Self.<prop>.
         Field-backed read/write rewrites to the backing field (like the bare-field
@@ -547,7 +547,7 @@ begin
         with the [index] args (fgl's InternalItems[i] / [i] := v). A non-indexed
         method-backed WRITE stays Self.<prop> := ... (needs the RHS earlier than
         this path sees it). See bug-unqualified-property-in-method. }
-      selfClassCi := CurSelfClass - REC_UCLASS_BASE;
+      selfClassCi := SelfMemberCi(fieldName);
       pri := FindUProp(selfClassCi, fieldName);
       isAssign := (CurTok.Kind = tkAssign);
       selfIdx := Procs[CurProc].Params[0].SymIdx;
@@ -1703,6 +1703,11 @@ begin
       propFOff := Tokens[prevTok].SOffset;
       propFLen := Tokens[prevTok].SLen;
       viaProp := False;
+
+      { A CLASS HELPER standing in front of the receiver's own members — see
+        ClassHelperRecFor. Asked once, here, where the member name is known and
+        before any of the lookups below run. }
+      recName := ClassHelperRecFor(recName, fieldName);
 
       { `x.__class__.__name__`, ahead of the dynamic-attribute fallback below —
         which is what used to claim it and raise AttributeError at run time. }
@@ -3867,6 +3872,11 @@ begin
       fieldName := GetTokenStr(prevTok);
 
       ci := -1;
+      if recId >= REC_UCLASS_BASE then ci := recId - REC_UCLASS_BASE;
+
+      { A CLASS HELPER standing in front of the receiver's own members —
+        see ClassHelperRecFor. }
+      recId := ClassHelperRecFor(recId, fieldName);
       if recId >= REC_UCLASS_BASE then ci := recId - REC_UCLASS_BASE;
 
       { The class-reference OPERATIONS on a chained value: `(Data as TJSONArray).ClassType`,

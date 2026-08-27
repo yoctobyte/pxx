@@ -1362,10 +1362,12 @@ begin
     else if (methOwnerCi >= 0) and (UClsHelperTk[methOwnerCi] >= 0) then
     begin
       { TYPE HELPER method impl: Self = the target type by reference — must
-        agree with the decl side's registration or the impl never binds. }
+        agree with the decl side's registration or the impl never binds. A
+        CLASS helper is the exception: the instance is already a pointer, so
+        Self goes by value (same fork as the decl side). }
       ptypes[0] := IntToTypeKind(UClsHelperTk[methOwnerCi]);
       ptypesRec[0] := UClsHelperRec[methOwnerCi];
-      pbyref[0] := True;
+      pbyref[0] := ptypes[0] <> tyClass;
     end
     else if UClsIsRecord[methOwnerCi] then
     begin
@@ -1782,6 +1784,17 @@ begin
       CurSelfClass := methOwnerRec;
     CurMethClass := methOwnerRec;
 
+    { Inside a CLASS HELPER's method, Self IS the extended instance, so an
+      unqualified name binds to the extended class's members — `Tag + '2'`
+      inside TThingHelper.Tag2 reaches TThing.Tag (class-helper-inherited in
+      fpc_diff_probe). CurSelfClass is the rec the bare-name lookups search, so
+      it is the extended class here, not the helper row. A helper's own sibling
+      member still resolves through the qualified `Self.X`, which the class
+      helper redirect (ClassHelperRecFor) sends back to the helper. }
+    if (methOwnerCi >= 0) and (UClsHelperTk[methOwnerCi] = Ord(tyClass)) and
+       (not UMthIsStatic[mmi]) then
+      CurSelfClass := UClsHelperRec[methOwnerCi];
+
     if UMthVirSlot[mmi] >= 0 then
     begin
       slot := UMthVirSlot[mmi];
@@ -1988,10 +2001,20 @@ begin
       at the loop-body's single exit rather than after each. }
     SymSyncTypeRef(idx);
   end;
-  { Wire Self's RecName so field lookups resolve against the owner class }
+  { Wire Self's RecName so field lookups resolve against the owner class — or,
+    in a HELPER's method, against the EXTENDED type, which is what Self really
+    is there. Without the fork a class helper's `Self.Value` searched the helper
+    row (which has no fields) and the extended class's members were unreachable
+    through Self. Only when the target HAS a rec: a helper for a scalar
+    (`type helper for Integer`) leaves Self pointing at the helper row as
+    before, which is what its own member lookups want. }
   if (methOwnerCi >= 0) and not isStaticMethod then
   begin
-    Syms[Procs[procIdx].Params[0].SymIdx].RecName := methOwnerRec;
+    if (UClsHelperTk[methOwnerCi] >= 0) and
+       (UClsHelperRec[methOwnerCi] <> REC_NONE) then
+      Syms[Procs[procIdx].Params[0].SymIdx].RecName := UClsHelperRec[methOwnerCi]
+    else
+      Syms[Procs[procIdx].Params[0].SymIdx].RecName := methOwnerRec;
     SymSyncTypeRef(Procs[procIdx].Params[0].SymIdx);
   end;
 

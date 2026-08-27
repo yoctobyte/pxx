@@ -3126,8 +3126,12 @@ begin
     ptRec[0] := UClsHelperRec[ci];
     { a `class function ...; static;` helper method takes Self BY VALUE (the
       body may not use Self, per FPC static rules) so a TYPE-NAME call site
-      (TU32Helper.GetSignMask) can pass a dummy literal }
-    pRef[0] := not RecordMethodClassPrefix;
+      (TU32Helper.GetSignMask) can pass a dummy literal.
+
+      A CLASS helper's Self is by value too, whatever the prefix: a class
+      instance is already a pointer, so by-ref would hand the method the
+      address OF the reference. The impl side forks on the same question. }
+    pRef[0] := (not RecordMethodClassPrefix) and (pt[0] <> tyClass);
   end
   else
   begin
@@ -4274,6 +4278,50 @@ begin
         RegisterClassRefAlias(tnOff, tnLen, REC_UCLASS_BASE + ci);
         Next;
         Eat(tkSemicolon);
+      end
+      else if (CurTok.Kind = tkClass) and (Tokens[TokPos].Kind = tkIdent) and
+              CaseEqual(GetTokenStrFromRaw(Tokens[TokPos].SOffset, Tokens[TokPos].SLen), 'helper') and
+              (TokPos + 1 < TokCount) and
+              ((Tokens[TokPos + 1].Kind = tkFor) or (Tokens[TokPos + 1].Kind = tkLParen)) then
+      begin
+        { `class helper for <class>` — the CLASS flavour of the helper machinery
+          that already backs `record helper for` / `type helper for`. One row,
+          one marker: UClsHelperTk = Ord(tyClass) and UClsHelperRec = the
+          extended class's rec id, so FindHelperForType answers it like any
+          other helper and the member lookup redirects through it.
+
+          The one thing that is NOT shared with the record flavour: Self. A
+          class instance IS a pointer, so a class helper takes Self BY VALUE,
+          where a record/scalar helper takes the target by reference. Both
+          sides (decl here, impl in pasparser_proc) key that off the target
+          kind rather than off the helper flavour, so the two agree.
+
+          Members are parsed with the advanced-record member machinery — a
+          class helper may declare methods and properties but no fields, which
+          is exactly the subset ParseRecordFields already accepts here. }
+        Next;                       { class }
+        Next;                       { helper }
+        if Eat(tkLParen) then
+        begin
+          { `class helper(TAncestorHelper) for T` — helper inheritance. The
+            ancestor is accepted and dropped: with one helper active per type
+            at a point in the source, an inherited helper method only matters
+            once two helpers are in scope, which is the case this does not
+            claim to cover. }
+          if CurTok.Kind <> tkIdent then Error('expected ancestor helper name');
+          Next;
+          Expect(tkRParen, ')');
+        end;
+        Expect(tkFor, 'for');
+        ci := AddClassLikeType(FindUClass(tname), tnOff, tnLen, tname);
+        UClsParent[ci] := -1;
+        UClsIsRecord[ci] := True;
+        fTk := ParseTypeKind;
+        if fTk <> tyClass then
+          Error('class helper: the extended type must be a class');
+        UClsHelperTk[ci] := Ord(fTk);
+        UClsHelperRec[ci] := LastTypeRecId;
+        ParseRecordFields(ci, False);
       end
       else if CurTok.Kind = tkClass then
       begin
