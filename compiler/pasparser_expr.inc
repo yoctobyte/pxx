@@ -10090,7 +10090,21 @@ begin
     lowering (where IsASTLValue is visible), which also rejects `a++ += x`. The
     plain value-bearing `=` (op = tkAssign) is produced by the C frontend; the
     node + lowering handle it as the trivial store-and-yield subset of this. }
-  if CurTok.Kind in [tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq] then
+  { ...but NOT when the target is a SUBSCRIPT READ through a receiver that is
+    not a name — `f()[k] += 1`. The node this tail would take as its lvalue is
+    a pyvar_getitem CALL: there is no address to read-modify-write, so the
+    AN_ASSIGN built below stored into the call's result and the update was
+    silently DISCARDED (measured: `get_dict()["n"] += 2` left the dict at 1).
+    Declining here leaves the operator for NilPy's statement-level arm, which
+    is the one place that can express the store — it desugars to
+    pyvar_setitem(recv, k, pyvar_getitem(recv, k) OP rhs).
+
+    `**=`, `/=`, `%=`, `&=`, `|=`, `^=`, `<<=`, `>>=` are not in the token set
+    above and already fall through to that arm; this only stops the four that
+    do reach here from claiming the shape first.
+    bug-n-a-subscript-store-whose-receiver-is-a-call-result-does-not-parse }
+  if (CurTok.Kind in [tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq]) and
+     not (NilPyUserCode and PyIsVarGetitemCall(CurASTNode)) then
   begin
     op := CurTok.Kind; Next;
     left := CurASTNode;

@@ -10697,6 +10697,62 @@ begin
   Result := (procIdx >= 0) and (ASTIVal[n] = procIdx);
 end;
 
+{ True when `n` is the pyvar_getitem call the EXPRESSION path builds for
+  `<expr>[k]` — a subscript read whose receiver has no static class to key on.
+  A NAME, an attribute and a list element all reach an lvalue route instead and
+  never produce this node, which is why only the receivers that cannot (a call
+  result, a construction) come here.
+  bug-n-a-subscript-store-whose-receiver-is-a-call-result-does-not-parse }
+function PyIsVarGetitemCall(n: Integer): Boolean;
+var procIdx: Integer;
+begin
+  Result := False;
+  if n < 0 then Exit;
+  if ASTKind[n] <> AN_CALL then Exit;
+  procIdx := FindProc('pyvar_getitem');
+  Result := (procIdx >= 0) and (ASTIVal[n] = procIdx);
+end;
+
+{ A fresh `pyvar_getitem(recv, key)` over subtrees the caller already holds —
+  the READ half of an augmented store, which needs the value twice and the
+  operands once. }
+function PyMakeVarSubscriptRead(recvNode, keyNode: Integer): Integer;
+var procIdx, a1, a2: Integer;
+begin
+  procIdx := FindProc('pyvar_getitem');
+  if procIdx < 0 then Error('Nil Python: pylib (pyvar_getitem) not loaded');
+  a2 := AllocNode(AN_ARG); ASTLeft[a2] := keyNode; ASTRight[a2] := -1;
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := recvNode; ASTRight[a1] := a2;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTLeft[Result] := a1;
+  ASTTk[Result] := Ord(tyVariant);
+end;
+
+{ `<expr>[k] = v` — turn the already-built read into pyvar_setitem by swapping
+  the proc and appending the value, exactly as PyRewriteSliceAssign does one
+  construct over. pyvar_setitem dispatches a dict, a list AND a user class's
+  __setitem__ at run time, so one rewrite serves every container.
+  bug-n-a-subscript-store-whose-receiver-is-a-call-result-does-not-parse }
+function PyRewriteVarSubscriptAssign(readNode, rhsNode: Integer): Integer;
+var procIdx, a3, a: Integer;
+begin
+  procIdx := FindProc('pyvar_setitem');
+  if procIdx < 0 then Error('Nil Python: pylib (pyvar_setitem) not loaded');
+  a3 := AllocNode(AN_ARG);
+  ASTLeft[a3] := rhsNode;
+  ASTRight[a3] := -1;
+  a := ASTLeft[readNode];
+  while ASTRight[a] >= 0 do a := ASTRight[a];
+  ASTRight[a] := a3;
+  ASTIVal[readNode] := procIdx;
+  { pyvar_setitem is a PROCEDURE: no result type, and the record id the read
+    call carried has to go or the statement looks class-typed }
+  ASTTk[readNode] := Ord(tyUnknown);
+  ASTRight[readNode] := -1;
+  Result := readNode;
+end;
+
 { `b[lo:hi] = src` / `l[lo:hi] = src` — turn the already-built read into the
   setter call by swapping the target proc and appending the source as a fourth
   argument. The whole statement IS this call. }
@@ -25243,6 +25299,7 @@ var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integ
     delCi, delRecv, delKey: Integer;   { `del c[k]` on a user class }
     delSavedInDel: Boolean;
     setOp: AnsiString;                 { the in-place set op for |= &= ^= -= }
+    subA1, subA2, subRead: Integer; subPow: Boolean;   { `<expr>[k] op= v` — bug-n-a-subscript-store-whose-receiver-is-a-call-result-does-not-parse }
 begin
   Result := -1;
   PyStmtAteBlock := False;
@@ -26464,6 +26521,66 @@ begin
     Next;
     PyParseBoolExpr;
     Result := PyRewriteSliceAssign(lhsNode, CurASTNode);
+    Exit;
+  end;
+  { `<expr>[k] = v` and `<expr>[k] op= v` — the SUBSCRIPT twin of the slice
+    rewrite above, and it exists for the same reason: a receiver that is not a
+    NAME reaches no assignment route at all, so the expression path returned the
+    READ call and left the '=' sitting there. The three failure modes that made
+    it worth ranking above a plain refusal:
+
+      f()[k] = v     error: expected expression  (pointing at the '=')
+      f()[k] += v    COMPILED, and silently DISCARDED the store
+      C()[k] += 1    reported `assignment target is not an lvalue` at a LATER,
+                     unrelated statement, so the line number led away from it
+
+    Not container-specific and not dunder-specific: a dict, a list and a user
+    class with __setitem__ all failed identically, which is what says the defect
+    is in the receiver GRAMMAR. One rewrite covers all three, because
+    pyvar_setitem dispatches all three at run time.
+
+    THE RECEIVER AND THE KEY ARE EVALUATED ONCE. An augmented store references
+    both twice and an AST node used twice is EMITTED twice, so
+    `next_bucket()[k] += 1` would call next_bucket() TWICE where CPython calls
+    it once — and here the receiver is a CALL by construction, so this is the
+    one shape where that is guaranteed to be observable rather than merely
+    possible. Same discipline as the indexed-property and dunder arms
+    (bug-nilpy-augmented-subscript-evaluates-its-index-twice).
+    bug-n-a-subscript-store-whose-receiver-is-a-call-result-does-not-parse }
+  if PyIsVarGetitemCall(CurASTNode) and
+     ((CurTok.Kind = tkAssign) or (PyAugBinTok(CurTok.Kind) <> tkEOF) or
+      (CurTok.Kind = tkPowEq)) then
+  begin
+    lhsNode := CurASTNode;
+    subA1 := ASTLeft[lhsNode];
+    subA2 := ASTRight[subA1];
+    augTk := PyAugBinTok(CurTok.Kind);
+    subPow := CurTok.Kind = tkPowEq;
+    if (augTk <> tkEOF) or subPow then
+    begin
+      ASTLeft[subA1] := PyEvalOnce(ASTLeft[subA1]);
+      ASTLeft[subA2] := PyEvalOnce(ASTLeft[subA2]);
+      subRead := PyMakeVarSubscriptRead(ASTLeft[subA1], ASTLeft[subA2]);
+      Next;                              { the `op=` token }
+      PyParseBoolExpr;
+      if subPow then
+        CurASTNode := PyMakePow(subRead, CurASTNode)
+      else
+      begin
+        node := AllocNode(AN_BINOP);
+        ASTIVal[node] := Ord(augTk);
+        ASTLeft[node] := subRead;
+        ASTRight[node] := CurASTNode;
+        ASTTk[node] := Ord(tyVariant);
+        CurASTNode := node;
+      end;
+    end
+    else
+    begin
+      Expect(tkAssign, ':=');
+      PyParseBoolExpr;
+    end;
+    Result := PyRewriteVarSubscriptAssign(lhsNode, CurASTNode);
     Exit;
   end;
   Result := CurASTNode;
@@ -35913,6 +36030,8 @@ var sub, prevTok: Integer; fieldName, accName: AnsiString; tk: TTypeKind;
     ci, mmi, mpi, callN, selfArg, lastA, aSeq, aNode, aIdx, mai: Integer;
     pri, i, w, margIdx: Integer; isAssign: Boolean;
     cvIdx: Integer;
+    crAugBin: TTokenKind; crAugPow: Boolean;   { `f()[k] op= v` on a chained receiver }
+    crAugRead: Integer;
 begin
   tk := IntToTypeKind(ASTTk[node]);
   { EVALUATE THE RECEIVER ONCE. `f(args).m()` arrives here with the CALL as the
@@ -36525,15 +36644,71 @@ begin
           begin Dec(w); if w = 0 then begin Inc(i); Break; end; end;
           Inc(i);
         end;
-        if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True;
+        { …and the AUGMENTED spelling, `mk()[k] += 1`. Only '=' was peeked for,
+          so `+=` left this arm as a plain READ and the operator fell out to the
+          shared compound-assignment tail in pasparser_expr.inc, which built an
+          AN_ASSIGN whose target was the __getitem__ CALL — no address, so the
+          store was silently DISCARDED. The named receiver has had this desugar
+          since bug-n-an-augmented-subscript-on-a-dunder-class-is-refused; this
+          is the twin arm that never got it, which is the one-concept-two-parsers
+          shape this function's header already records twice.
+          bug-n-a-subscript-store-whose-receiver-is-a-call-result-does-not-parse }
+        crAugBin := tkEOF;
+        crAugPow := False;
+        if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True
+        else if i < TokCount then
+        begin
+          crAugBin := PyAugBinTok(Tokens[i].Kind);
+          if crAugBin <> tkEOF then isAssign := True
+          else if Tokens[i].Kind = tkPowEq then
+          begin crAugPow := True; isAssign := True; end;
+        end;
         Next;                     { consume '[' }
         PyParseBoolExpr;
         margIdx := CurASTNode;    { the key }
         Expect(tkRBrack, ']');
         if isAssign then
         begin
-          Expect(tkAssign, '=');
+          crAugRead := -1;
+          if (crAugBin <> tkEOF) or crAugPow then
+          begin
+            { An augmented store READS as well as writes, so it needs BOTH
+              dunders; with no getter CPython raises at RUN time, so build the
+              raise rather than a compile error — same trade the named path
+              makes. The value is still parsed first (left-to-right). }
+            if FindUMeth(ci, '__getitem__') < 0 then
+            begin
+              Next;               { the `op=` token }
+              PyParseBoolExpr;
+              node := PyNotSubscriptableNode(ci);
+              if node < 0 then Error('Nil Python: pylib (not-subscriptable) not loaded');
+              outTk := IntToTypeKind(ASTTk[node]);
+              Result := node;
+              Exit;
+            end;
+            { EVALUATE THE RECEIVER AND THE KEY ONCE — the read and the write
+              both reference them and an AST node used twice is EMITTED twice,
+              so `counted()[key()] += 1` would call each twice where CPython
+              calls each once. (The receiver is usually already a temp: the
+              top of this loop binds a chained CALL base. The key is not.) }
+            node := PyEvalOnce(node);
+            margIdx := PyEvalOnce(margIdx);
+            crAugRead := PyCallMeth1(ci, '__getitem__', node, margIdx);
+            Next;                 { consume the `op=` token }
+          end
+          else Expect(tkAssign, '=');
           PyParseBoolExpr;
+          if crAugPow then
+            CurASTNode := PyMakePow(crAugRead, CurASTNode)
+          else if crAugBin <> tkEOF then
+          begin
+            sub := AllocNode(AN_BINOP);
+            ASTIVal[sub] := Ord(crAugBin);
+            ASTLeft[sub] := crAugRead;
+            ASTRight[sub] := CurASTNode;
+            ASTTk[sub] := Ord(tyVariant);
+            CurASTNode := sub;
+          end;
           if FindUMeth(ci, '__setitem__') < 0 then
           begin
             node := PyClassErrCallNode('PyNoSetitemError', ci);
@@ -36581,7 +36756,24 @@ begin
           begin Dec(dfW); if dfW = 0 then begin Inc(dfI); Break; end; end;
           Inc(dfI);
         end;
-        if (dfI < TokCount) and (Tokens[dfI].Kind = tkAssign) then dfAssign := True;
+        { …and `f(x)[k] += v`, the augmented spelling. Same hole as the dunder
+          arm above and the same consequence: only '=' was peeked for, so the
+          operator escaped to the shared compound-assignment tail, which made an
+          AN_ASSIGN over the GETTER CALL and dropped the store without a word.
+          Desugared the way the named path does it (PyParseLValueAST's default-
+          property arm): base and index into temps, read through the getter over
+          a CLONE of the index chain, combine, write through the setter.
+          bug-n-a-subscript-store-whose-receiver-is-a-call-result-does-not-parse }
+        crAugBin := tkEOF;
+        crAugPow := False;
+        if (dfI < TokCount) and (Tokens[dfI].Kind = tkAssign) then dfAssign := True
+        else if dfI < TokCount then
+        begin
+          crAugBin := PyAugBinTok(Tokens[dfI].Kind);
+          if crAugBin <> tkEOF then dfAssign := True
+          else if Tokens[dfI].Kind = tkPowEq then
+          begin crAugPow := True; dfAssign := True; end;
+        end;
         if dfAssign then
         begin
           dfName := '';
@@ -36592,8 +36784,34 @@ begin
           dfMpi := UMthProc_[dfMmi];
           dfIdxHead := -1; dfIdxTail := -1;
           ParsePropIndexArgs(dfIdxHead, dfIdxTail);   { consumes [ .. ] }
-          Expect(tkAssign, '=');
+          crAugRead := -1;
+          if (crAugBin <> tkEOF) or crAugPow then
+          begin
+            if UPropReadMLen[dfPri] <= 0 then Error('default property is write-only');
+            { evaluate base and index ONCE — see the dunder arm above; the read
+              gets a CLONE of the chain because the setter appends its value to
+              the original, and sharing it would make the value an argument of
+              the read (a cycle the compiler walks forever) }
+            node := PyEvalOnce(node);
+            if dfIdxHead >= 0 then
+              ASTLeft[dfIdxHead] := PyEvalOnce(ASTLeft[dfIdxHead]);
+            crAugRead := PyMakeSubscriptRead(node, PyCloneArgChain(dfIdxHead),
+                                             dfCi, dfPri);
+            Next;                                   { consume the `op=` token }
+          end
+          else Expect(tkAssign, '=');
           ParseExpr;
+          if crAugPow then
+            CurASTNode := PyMakePow(crAugRead, CurASTNode)
+          else if crAugBin <> tkEOF then
+          begin
+            sub := AllocNode(AN_BINOP);
+            ASTIVal[sub] := Ord(crAugBin);
+            ASTLeft[sub] := crAugRead;
+            ASTRight[sub] := CurASTNode;
+            ASTTk[sub] := Ord(tyVariant);
+            CurASTNode := sub;
+          end;
           if UMthVirSlot[dfMmi] >= 0 then
           begin sub := AllocNode(AN_VIRTUAL_CALL); ASTRight[sub] := UMthVirSlot[dfMmi]; end
           else sub := AllocNode(AN_CALL);

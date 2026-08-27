@@ -9857,6 +9857,22 @@ test-core: $(COMPILER)
 	# bug-n-an-augmented-subscript-on-a-dunder-class-is-refused
 	./$(COMPILER) test/test_nilpy_augmented_dunder_subscript.npy $(TESTTMP)/test_nilpy_augdunsub26
 	$(TESTTMP)/test_nilpy_augdunsub26 | diff -u test/test_nilpy_augmented_dunder_subscript.expected -
+	# A subscript STORE through a receiver that is not a NAME — a call result, a
+	# method call, a construction, a chain of calls. Such a receiver reaches no
+	# lvalue route, so `f()[k] = v` was "expected expression" and EVERY augmented
+	# form (`+= -= *= //= /= %= &= |= ^= <<= >>= **=`) compiled and silently threw
+	# the store away. A dict, a list and a __setitem__ class all failed
+	# identically, which is what named the receiver GRAMMAR rather than the store.
+	# Three arms had the same hole: the shared compound-assignment tail claimed
+	# the four tokens it knows and made an AN_ASSIGN over a CALL, and the two
+	# chained-receiver arms peeked only for '='. Receiver and key are evaluated
+	# ONCE (the counted()/one_key() rows), and half-a-protocol classes still raise
+	# CPython's TypeError at RUN time. The named / attribute / element rows are
+	# controls.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-a-subscript-store-whose-receiver-is-a-call-result-does-not-parse
+	./$(COMPILER) test/test_nilpy_subscript_store_on_a_call_result.npy $(TESTTMP)/test_nilpy_callsubst26
+	$(TESTTMP)/test_nilpy_callsubst26 | diff -u test/test_nilpy_subscript_store_on_a_call_result.expected -
 	# `return lambda ...` — a closure factory, and the returned value was not
 	# CALLABLE while the same lambda bound to a local first was. The return-type
 	# scan's TUPLE detector counted the LAMBDA'S OWN PARAMETER COMMAS, so the
