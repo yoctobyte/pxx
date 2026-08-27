@@ -6,7 +6,6 @@ blocked-by: []
 summary: "`f()[k] = v` is `error: expected expression` for ANY container — a dict, a list, a user class. The augmented form `f()[k] += v` is worse: it COMPILES and silently discards the store. And on a construction receiver (`C()[k] += 1`) the parse corruption surfaces at a LATER, unrelated statement, so the line number points away from the cause."
 status: done
 owner: agent-A
-resolved: PENDING-COMMIT
 ---
 
 # A subscript store whose receiver is a call result does not parse
