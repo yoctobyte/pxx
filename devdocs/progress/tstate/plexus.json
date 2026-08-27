@@ -1,18 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-27T12:49:43Z",
-   "fixed": [],
-   "new_red": [
-    "test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy",
-    "test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy"
-   ],
-   "sha": "39d4afb022ce9a8f98f30f7a7202ccfa803b4d6f",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-27T12:56:09Z",
    "fixed": [],
    "new_red": [],
@@ -463,6 +451,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "948696d04998553dc1102ba5c75933ae457214c7",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T22:12:47Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "6d355df81021dcc8340f14e26b18f6f1ef8e76ab",
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
@@ -6971,14 +6968,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-27T22:06:37Z",
+  "date": "2026-08-27T22:12:47Z",
   "deadline": 7200.0,
-  "sha": "948696d04998553dc1102ba5c75933ae457214c7",
+  "sha": "6d355df81021dcc8340f14e26b18f6f1ef8e76ab",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 315.9
+  "wall": 313.0
  },
  "last_bench": {
   "conf_rows": 550,
