@@ -1350,6 +1350,13 @@ var
     bare `--target=riscv32` / `--target=xtensa`, which is what those spellings
     have always meant. }
   TargetSoc : Integer;
+  { …and whether it was NAMED (`--target=esp32c6`) rather than DERIVED from the
+    ISA. Same reason PlatformExplicit exists: a derived value must not be echoed
+    back as though the user chose it. A bare `--target=riscv32` defaults the SoC
+    to esp32c3, and a diagnostic that then said "target esp32c3" told a hosted
+    riscv32 Linux build about a chip it was not targeting.
+    bug-a-a-riscv32-diagnostic-names-the-wrong-target }
+  SocExplicit : Boolean;
 
 const
   ELF32_HEADER_SIZE  = 52;
@@ -4557,6 +4564,38 @@ begin
   else
     SocName := '';
   end;
+end;
+
+function TargetArchName(arch: Integer): AnsiString;
+{ The spelling `--target=` accepts, so a diagnostic can name the target the user
+  actually typed. Exists because one did not: the external-symbol refusal in
+  elfwriter.inc said "target esp32" for BOTH xtensa and riscv32, and hosted
+  riscv32 Linux is a first-class target with its own qemu rows in the suite, not
+  the ESP32-C3 profile's spelling. A user who typed `--target=riscv32` was told
+  about a chip they were not targeting.
+  bug-a-a-riscv32-diagnostic-names-the-wrong-target }
+begin
+  case arch of
+    TARGET_X86_64:  TargetArchName := 'x86-64';
+    TARGET_I386:    TargetArchName := 'i386';
+    TARGET_AARCH64: TargetArchName := 'aarch64';
+    TARGET_ARM32:   TargetArchName := 'arm32';
+    TARGET_XTENSA:  TargetArchName := 'xtensa';
+    TARGET_RISCV32: TargetArchName := 'riscv32';
+  else
+    TargetArchName := '<unknown target>';
+  end;
+end;
+
+function TargetDisplayName: AnsiString;
+{ …and the SoC name when one is selected, since `--target=esp32c6` implies the
+  ISA and the chip is the more useful half to hear back. Falls back to the ISA
+  spelling on a hosted target. }
+begin
+  TargetDisplayName := '';
+  if SocExplicit then TargetDisplayName := SocName(TargetSoc);
+  if TargetDisplayName = '' then
+    TargetDisplayName := TargetArchName(TargetArch);
 end;
 
 function SocFromName(const nm: AnsiString): Integer;

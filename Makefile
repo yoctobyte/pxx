@@ -4577,6 +4577,13 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_missing_diagnostics26)" = "$$(printf 'textfile=text\nTRUE')"
 	! ./$(COMPILER) test/test_default_textfile_fail.pas $(TESTTMP)/test_dtf26 > $(TESTTMP)/test_dtf.log 2>&1
 	grep -q "Default: file types are not allowed" $(TESTTMP)/test_dtf.log
+	! ./$(COMPILER) --target=riscv32 -O0 test/test_target_name_in_external_refusal.pas $(TESTTMP)/test_tner26 > $(TESTTMP)/test_tner_r.log 2>&1
+	grep -q "target riscv32: external (dynamic) symbols are not supported" $(TESTTMP)/test_tner_r.log
+	grep -q "first one: fabs" $(TESTTMP)/test_tner_r.log
+	! ./$(COMPILER) --target=xtensa -O0 test/test_target_name_in_external_refusal.pas $(TESTTMP)/test_tner26 > $(TESTTMP)/test_tner_x.log 2>&1
+	grep -q "target xtensa: external (dynamic) symbols are not supported" $(TESTTMP)/test_tner_x.log
+	! ./$(COMPILER) --target=esp32c6 -O0 test/test_target_name_in_external_refusal.pas $(TESTTMP)/test_tner26 > $(TESTTMP)/test_tner_c.log 2>&1
+	grep -q "target esp32c6: external (dynamic) symbols are not supported" $(TESTTMP)/test_tner_c.log
 	! ./$(COMPILER) test/test_file_type_fail.pas $(TESTTMP)/test_ftf26 > $(TESTTMP)/test_ftf.log 2>&1
 	grep -q "file types are not supported" $(TESTTMP)/test_ftf.log
 	! ./$(COMPILER) test/test_default_filefield_fail.pas $(TESTTMP)/test_dff26 > $(TESTTMP)/test_dff.log 2>&1

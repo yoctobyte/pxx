@@ -801,6 +801,7 @@ begin
   PlatformExplicit := False;
   NoUnhandledHandler := False;
   ThreadSafeMode := False;
+  SocExplicit := False;
   CompactClasses := False;
   CompactClassesExplicit := False;
   ProcExceptionCleanupFrameActive := False;
@@ -1010,6 +1011,7 @@ begin
             (SocFromName(Copy(option, 10, Length(option) - 9)) <> SOC_NONE) then
     begin
       TargetSoc := SocFromName(Copy(option, 10, Length(option) - 9));
+      SocExplicit := True;   { NAMED, not derived — see TargetDisplayName }
       if SocIsXtensa(TargetSoc) then TargetArch := TARGET_XTENSA
       else TargetArch := TARGET_RISCV32;
       Inc(i);

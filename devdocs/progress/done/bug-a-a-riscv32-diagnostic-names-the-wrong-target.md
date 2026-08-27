@@ -3,7 +3,7 @@ track: A
 prio: 25
 type: bug
 blocked-by: []
-status: backlog
+status: done
 owner: ""
 summary: "`--target=riscv32` on a program with an external cdecl symbol fails with `target esp32: external (dynamic) symbols not yet supported`. The user typed riscv32, the message says esp32, and the two are different things — riscv32 is a hosted Linux target in its own right, not only the ESP32-C3 profile. One shared arm, one hard-coded name."
 ---
@@ -56,3 +56,54 @@ Found 2026-08-24 while sweeping -O levels across targets.
 
 Track A's, plus the message naming riscv32 when riscv32 was asked for and xtensa
 when xtensa was. No behaviour change — this is a diagnostic.
+---
+
+# Outcome — FIXED, 2026-08-27
+
+All three complaints, since the line was being touched anyway.
+
+## The target name
+
+The ticket suggested a `TargetArchName` helper *"or the equivalent if no arch-name
+helper exists yet, in which case adding one is the better fix"*. There was none —
+`SocName` existed for the chip axis and nothing for the ISA. Added
+`TargetArchName` and `TargetDisplayName` beside it in `defs.inc`.
+
+**And a second bug found while testing it.** Naming the SoC was not enough:
+`--target=riscv32` still reported `esp32c3`, because `compiler.pas` *defaults*
+`TargetSoc` from the ISA. So the first attempt swapped one wrong chip name for
+another — the ticket's exact complaint, one layer down.
+
+Fixed with `SocExplicit`, mirroring the `PlatformExplicit` that already exists
+for the same reason: a **derived** value must not be echoed back as though the
+user chose it. `TargetDisplayName` prefers the SoC only when it was NAMED.
+
+| user typed | before | after |
+| --- | --- | --- |
+| `--target=riscv32` | `target esp32` | `target riscv32` |
+| `--target=xtensa` | `target esp32` | `target xtensa` |
+| `--target=esp32c6` | `target esp32` | `target esp32c6` |
+| `--target=esp32s2` | `target esp32` | `target esp32s2` |
+
+## The other two
+
+- **Names the symbol.** `first one: fabs` — `ExternalProc[0]` is a proc index,
+  so the name was one lookup away. The `in:` line still points at
+  `softfloat.pas`, which is honest (that *is* where the external is declared),
+  but there is now something to grep for.
+- **Says what to do.** *"this backend emits no dynamic segment, so link the
+  dependency in statically or build for a target that has one (x86-64, i386,
+  arm32, aarch64)"*.
+
+## Verified
+
+`test/test_target_name_in_external_refusal.pas`, wired into `test-core` as a
+compile-fail test against **three** `--target` spellings, each grepped for its
+own name, plus the symbol name. Hand-substituted and run, since the quick tier
+does not reach `test-core`.
+
+`gate.sh quick` GREEN; Pascal conformance 346/0/170/34, C conformance 220/0,
+fgl 7/7.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.

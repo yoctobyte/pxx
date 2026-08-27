@@ -1839,8 +1839,19 @@ begin
   end;
   if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
   begin
+    { Neither backend emits a dynamic segment, so a `cdecl external` cannot be
+      resolved — the restriction is real. Three things were wrong with SAYING
+      so: it named esp32 for BOTH architectures, so `--target=riscv32` was told
+      about a chip it was not targeting; it named no symbol, so the `in:` line
+      pointed at whichever RTL unit happened to hold the first external
+      (softfloat.pas) with nothing to grep for; and it did not say what to do.
+      bug-a-a-riscv32-diagnostic-names-the-wrong-target }
     if ExternalCount > 0 then
-      Error('target esp32: external (dynamic) symbols not yet supported');
+      Error('target ' + TargetDisplayName + ': external (dynamic) symbols are '
+            + 'not supported on this target (first one: '
+            + Procs[ExternalProc[0]].Name + '); this backend emits no dynamic '
+            + 'segment, so link the dependency in statically or build for a '
+            + 'target that has one (x86-64, i386, arm32, aarch64)');
     { @proc address fixups (ProcAddrFix) are 32-bit-absolute patched in place
       below and work for the bare ET_EXEC image on both riscv32 (auipc +
       inline literal) and xtensa (L32R inline literal) — each IR_PROCADDR
