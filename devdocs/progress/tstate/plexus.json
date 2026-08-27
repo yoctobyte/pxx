@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-26T12:55:39Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "902e53050f07ffcad5da54ffa67f190acbfb8f69",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-26T13:01:48Z",
    "fixed": [],
    "new_red": [
@@ -467,6 +458,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "6261a8a5ad09e254d51de0c60f0101873179e5a7",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T02:03:51Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "8d22db657f99ba84980258e7a0170b31eae1556d",
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
@@ -6839,14 +6839,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-27T01:57:30Z",
+  "date": "2026-08-27T02:03:51Z",
   "deadline": 7200.0,
-  "sha": "6261a8a5ad09e254d51de0c60f0101873179e5a7",
+  "sha": "8d22db657f99ba84980258e7a0170b31eae1556d",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 306.9
+  "wall": 309.2
  },
  "last_bench": {
   "conf_rows": 550,
