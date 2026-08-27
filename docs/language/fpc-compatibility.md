@@ -72,6 +72,9 @@ Use this pattern for compiler-specific code:
 - Overflow (`{$Q+}`), range (`{$R+}`), and IO (`{$I+}`) checking are implemented
   but opt-in per region and off in the lax default; several other compile-switch
   states are still inert markers.
+- On the ESP targets (xtensa, riscv32) `Real` means `Single`, not `Double` —
+  it is the target's native float depth, deliberately. FPC makes `Real` a
+  `Double` everywhere. See [Types](types.md#real-is-the-targets-native-float).
 - Only tested project units and examples should be treated as supported.
 
 ## Hint directives

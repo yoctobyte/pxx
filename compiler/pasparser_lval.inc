@@ -6204,13 +6204,7 @@ begin
   { floats. `Real` is the target's native float depth: ESP and riscv32 have no
     hardware double. `Extended` aliases Double on every target
     (feature-extended-alias-or-reject) and `ValReal` is FPC's "widest real". }
-  else if CaseEqual(nm, 'real') then
-  begin
-    if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
-      Result := tySingle
-    else
-      Result := tyDouble;
-  end
+  else if CaseEqual(nm, 'real') then Result := RealTypeKind
   else if CaseEqual(nm, 'single') then Result := tySingle
   else if CaseEqual(nm, 'double') or CaseEqual(nm, 'extended') or
           CaseEqual(nm, 'valreal') or CaseEqual(nm, 'tdatetime') or
@@ -6317,8 +6311,14 @@ begin
   Result := OrdinalNameToTk(nm);
   if Result <> tyUnknown then Exit;
   if CaseEqual(nm, 'single') then Result := tySingle
-  { Real is Double here, as it is in FPC on this target -- not a distinct type. }
-  else if CaseEqual(nm, 'double') or CaseEqual(nm, 'real') then Result := tyDouble
+  else if CaseEqual(nm, 'double') then Result := tyDouble
+  { `Real` is the target's NATIVE float depth, not an alias for Double: xtensa
+    and riscv32 have no hardware double, deliberately. This line used to say
+    tyDouble outright, and since SizeOf consults THIS table and declarations
+    consult BuiltinScalarTypeKind, `SizeOf(Real)` answered 8 on those targets
+    for a variable that occupied 4.
+    bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets }
+  else if CaseEqual(nm, 'real') then Result := RealTypeKind
   else if CaseEqual(nm, 'extended') then Result := tyExtended
   else if CaseEqual(nm, 'variant') then Result := tyVariant
   else if CaseEqual(nm, 'pointer') or CaseEqual(nm, 'codepointer') then Result := tyPointer

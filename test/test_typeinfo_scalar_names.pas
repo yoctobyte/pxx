@@ -17,7 +17,15 @@ program test_typeinfo_scalar_names;
   FPC parity:
     * Integer reports "Integer"; FPC says "LongInt" (Integer is an alias for
       LongInt there).
-    * Real reports "Double", which is what Real IS here.
+    * Real reports the type it resolves to — "Double" here — where FPC reports
+      the name "Real", because FPC gives the alias its own RTTI entry and we
+      report the underlying type. The KIND (4, tkFloat) agrees.
+      The row is target-dependent by design: `Real` is the target's native
+      float depth, so it reports "Single" on xtensa and riscv32
+      (docs/language/types.md). It is here so that the third copy of that
+      rule — the TypeInfo token-kind arm — cannot drift back to a hard-wired
+      Double the way BuiltinTypeNameTk did
+      (bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets).
   feature-typeinfo-all-types }
 
 uses typinfo;
@@ -42,5 +50,6 @@ begin
   S('Boolean', TypeInfo(Boolean));
   S('Double', TypeInfo(Double));
   S('Single', TypeInfo(Single));
+  S('Real', TypeInfo(Real));         { the target's native float depth }
   S('string', TypeInfo(string));
 end.

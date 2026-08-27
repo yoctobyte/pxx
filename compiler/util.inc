@@ -60,6 +60,30 @@ begin
   Result := res;
 end;
 
+function RealTypeKind: TTypeKind;
+{ What the type name `Real` MEANS on this target: the native float depth.
+  xtensa and riscv32 have no hardware double, and `Real` being single-precision
+  there is DELIBERATE — a long-settled dialect decision, not a target test that
+  forgot a profile. Documented in docs/language/types.md; see
+  bug-a-real-is-single-on-hosted-riscv32, which read it as a bug and is
+  rejected.
+
+  It is a routine because the rule was written out twice and the two copies
+  DISAGREED. BuiltinScalarTypeKind (the declaration path) had it target-keyed,
+  so `var r: Real` was 4 bytes on riscv32 and the arithmetic was genuinely
+  single-precision. BuiltinTypeNameTk — the table whose own header says "one
+  table, so the next builtin type cannot be present in half the compiler" —
+  hard-wired tyDouble, and that is the table SizeOf consults. So `SizeOf(Real)`
+  answered 8 for a variable that occupied 4: a wrong size reaching GetMem and
+  Move, silently, on the one target where it was least likely to be noticed.
+  bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets }
+begin
+  if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
+    RealTypeKind := tySingle
+  else
+    RealTypeKind := tyDouble;
+end;
+
 function TargetIsEspClass: Boolean;
 { True for the ESP-class bare-metal targets — the ones that have no hosted OS
   under them and therefore no full RTL: xtensa ALWAYS, riscv32 only under

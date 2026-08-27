@@ -4419,7 +4419,7 @@ test-core: $(COMPILER)
 	# -Mobjfpc makes `string` a ShortString and answers 7, so an oracle run
 	# without {$H+} will disagree with this row and is the wrong oracle.
 	./$(COMPILER) -Fulib/rtl test/test_typeinfo_scalar_names.pas $(TESTTMP)/test_typeinfo_names26
-	test "$$($(TESTTMP)/test_typeinfo_names26)" = "$$(printf 'Byte 1 Byte\nUInt8 1 Byte\nInteger 1 Integer\nWord 1 Word\nLongWord 1 LongWord\nInt64 19 Int64\nChar 2 Char\nBoolean 18 Boolean\nDouble 4 Double\nSingle 4 Single\nstring 9 AnsiString')"
+	test "$$($(TESTTMP)/test_typeinfo_names26)" = "$$(printf 'Byte 1 Byte\nUInt8 1 Byte\nInteger 1 Integer\nWord 1 Word\nLongWord 1 LongWord\nInt64 19 Int64\nChar 2 Char\nBoolean 18 Boolean\nDouble 4 Double\nSingle 4 Single\nReal 4 Double\nstring 9 AnsiString')"
 	# TypeInfo(T) over the NAMED types the alias table carries — subrange, set,
 	# procedural type, method pointer, string[N], plain rename. All six were a
 	# hard "TypeInfo is not supported for type:" before this. Kinds are FPC's
@@ -7894,6 +7894,8 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_thread_api_no_uses26)" = "$$(printf 'a 42\nb 15\nc ok\nd 8')"
 	./$(COMPILER) test/test_numeric_goto_labels.pas $(TESTTMP)/test_numeric_goto26
 	test "$$($(TESTTMP)/test_numeric_goto26)" = "$$(printf 'a 1\nb case-one\nc 10\nd 5\ne done\nOK')"
+	./$(COMPILER) test/test_sizeof_real_matches_storage.pas $(TESTTMP)/test_sizeof_real26
+	test "$$($(TESTTMP)/test_sizeof_real26)" = "$$(printf 'a 8|8\nb 8|8\nc 4|4\nd TRUE\ne TRUE\nf TRUE|TRUE\nOK')"
 	./$(COMPILER) test/test_set_low_high_element_bounds.pas $(TESTTMP)/test_set_low_high26
 	test "$$($(TESTTMP)/test_set_low_high26)" = "$$(printf 'a 0|255\nb 1|10\nc 0|2\nd 0|255\ne 1|10\nf 0|2\ng 10\nh 3\ni TRUE|FALSE\nj TRUE|FALSE\nOK')"
 	./$(COMPILER) test/test_bitscan_and_radix_str.pas $(TESTTMP)/test_bitscan_radix26

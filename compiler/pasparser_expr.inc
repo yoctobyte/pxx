@@ -4399,7 +4399,12 @@ begin
             tkBoolean_T:  tiTk := tyBoolean;
             tkChar_T:     tiTk := tyChar;
             tkString_T:   tiTk := tyAnsiString;
-            tkReal_T:     tiTk := tyDouble;
+            { RealTypeKind, not tyDouble: `Real` is the target's native float
+              depth, and on xtensa/riscv32 that is Single by design. RTTI has to
+              report the type the program actually got, the same reason
+              BuiltinTypeNameTk stopped hard-wiring it.
+              bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets }
+            tkReal_T:     tiTk := RealTypeKind;
             tkLongWord_T: tiTk := tyUInt32;
             tkSingle_T:   tiTk := tySingle;
             tkDouble_T:   tiTk := tyDouble;

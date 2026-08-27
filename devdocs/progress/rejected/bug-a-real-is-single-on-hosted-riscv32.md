@@ -5,7 +5,7 @@ prio: 35
 type: bug
 blocked-by: []
 summary: "`Real` is Single (4 bytes) on hosted riscv32 Linux and Double (8) on every other target and on FPC. The type is keyed on the ARCH, not on the ESP profile, so a target with no ESP in it inherits an ESP decision — silently halving the precision of every `Real` in a ported program."
-status: backlog
+status: rejected
 ---
 
 # `Real` is Single on hosted riscv32, Double everywhere else
@@ -86,3 +86,60 @@ question, since these are the same call one target apart.
 `--esp-profile=bare`, both under qemu; plus a `Real` arithmetic round-trip that
 needs more than 24 bits of mantissa. Self-host byte-identical. Cross-target
 breadth is Track T's.
+
+---
+
+## Rejected by the owner (2026-08-27) — the premise is wrong
+
+Ruling, verbatim:
+
+> real being native (4-byte/single) float on esp32 is _intended_ behaviour.
+> this was discussed long ago. ticket didnt read the docs - or we never
+> documented this properly. obviously sizeof(real) should be reported properly.
+
+`Real` is **not** a portable alias for `Double` in this dialect. It names the
+target's native float depth, and on xtensa and riscv32 that is Single. So the
+table in "Measured" above is not a bug report — it is the design, correctly
+implemented. Every recommendation this ticket makes ("Recommend `Real = Double`
+on hosted riscv32 for parity") would have broken it.
+
+Two things this ticket got wrong, both worth naming because they are repeatable
+mistakes rather than bad luck:
+
+1. **It ranked FPC parity above the dialect decision.** CLAUDE.md's ceiling says
+   we compile correct Pascal correctly; we do not mimic FPC. "FPC says 8" is
+   evidence about FPC, not about us. A deliberate divergence looks exactly like
+   a defect from inside a differential probe, which is why the probe's output is
+   a question and never a verdict.
+2. **It read the target test as a mis-keyed condition.** The `xtensa or riscv32`
+   spelling was real and load-bearing; `TargetIsEspClass`'s own header had
+   already listed **"Real is Single"** among the concepts that share that
+   spelling without being the same concept. The ticket cited that header and
+   still concluded the site had forgotten a profile.
+
+The second one nearly landed. Acting on this ticket, `Real` on hosted riscv32
+was changed to Double and the change was built and measured before the owner
+stopped it — a self-inflicted dialect change with a green gate behind it.
+
+### What was real, and where it went
+
+One line of this ticket was pointing at something: `SizeOf` disagreeing across
+targets. Not because `Real` was the wrong width, but because `SizeOf(Real)`
+**reported** 8 on a target where the variable occupied 4 — two tables in the
+compiler carried the rule and only one of them was target-aware. That is a
+genuine silent-wrong-value bug, and it is the one the owner named. Split out,
+fixed, and closed as
+[[bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets]].
+
+### The documentation half
+
+`docs/language/types.md` said `Real` was an "alias of `Double`", flatly, with no
+target qualification — so the ticket's author read the docs and the docs agreed
+with them. The owner allowed for exactly this ("or we never documented this
+properly"). Rewritten as part of the split-out fix: `types.md` now carries the
+per-target table and the rationale, `docs/targets/esp32.md` states it where an
+ESP user will actually hit it, and `fpc-compatibility.md` lists it among the
+deliberate divergences.
+
+Not moved to `float/`: the charter question this ticket raised for itself is
+moot once the premise is gone.

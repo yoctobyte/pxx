@@ -30,12 +30,46 @@ Ordinal helpers: `Ord`, `Succ`, `Pred`, `Inc`, `Dec`, `Low`, `High`, `Odd`.
 
 ## Real types
 
-`Single` (4-byte), `Double` (8-byte), and `Real` (alias of `Double`). Write with
-a field-width/precision suffix:
+`Single` (4-byte), `Double` (8-byte), and `Real`. Write with a
+field-width/precision suffix:
 
 ```pascal
 writeln(f:0:1);   { 3.5 }
 ```
+
+### `Real` is the target's native float
+
+`Real` is **not** a fixed alias for `Double`. It is the widest float the target
+handles natively:
+
+| Target                              | `Real` is | `SizeOf(Real)` |
+| ----------------------------------- | --------- | -------------- |
+| x86-64, i386, aarch64, arm32        | `Double`  | 8              |
+| xtensa (ESP32), riscv32 (ESP32-C3)  | `Single`  | 4              |
+
+This is deliberate and settled, not a gap waiting to be closed. The ESP class
+has no hardware double, so a `Double` there is a software-emulated value that
+costs both cycles and flash on parts that have little of either. Making `Real`
+mean "the float this chip actually has" is the whole point of the name: code
+written to `Real` gets the fast path everywhere, and code that genuinely needs
+53 bits of mantissa says `Double` and gets it — emulated on ESP, but only where
+it was actually asked for.
+
+The practical consequences, on the ESP targets only:
+
+* `SizeOf(Real)` is 4, and an `array of Real` strides by 4.
+* `Real` arithmetic carries about 7 decimal digits, so `1.0/3.0` is
+  `0.33333334`, not `0.33333333333333331`.
+* A `Real` written to a file or sent over a wire is 4 bytes. Anything shared
+  with a host program must name `Single` or `Double` explicitly rather than
+  `Real`, because the two ends disagree about what `Real` means.
+
+If you want the same width on every target, say `Single` or `Double`. Those two
+names always mean exactly what they say.
+
+This differs from FPC, where `Real` is `Double` on every supported platform.
+It is one of the few places PXX deliberately parts company with FPC — see
+[FPC compatibility](fpc-compatibility.md).
 
 ## Strings
 

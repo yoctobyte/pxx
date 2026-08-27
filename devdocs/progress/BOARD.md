@@ -52,11 +52,10 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (246)
+## backlog (245)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-real-is-single-on-hosted-riscv32 | A | 35 | bug | `Real` is Single (4 bytes) on hosted riscv32 Linux and Double (8) on every other target and on FPC. The type is keyed on the ARCH, not on the ESP profile, so a target with no ESP in it inherits an ESP decision — silently halving the precision of every `Real` in a ported program. | — |
 | bug-a-riscv32-codegen-has-no-variant-support | A | 25 | bug | `var v: Variant; v := 1;` does not compile for --target=riscv32: `unsupported node in IR codegen: var_store`. Every other target (x86-64, i386, aarch64, arm32) compiles and runs the same program. Loud, not silent -- and it means any ticket claiming riscv32 'routes through PXXVarBinOpPas' is describing a path nothing can reach. | — |
 | bug-a-riscv32-sa-onstack-has-no-effect-under-qemu | A | 12 | bug | riscv32 registers a signal alt stack correctly — the sigaltstack syscall succeeds and the flags word assembles to $18000004 — but the handler still runs on the FAULTING stack under qemu-riscv32, so a stack-overflow SIGSEGV kills the process. The identical construction works under qemu-i386/arm/aarch64 of the same build, which points at qemu-user rather than at us. Unverifiable without hardware. | — |
 | bug-a-the-div-by-zero-check-is-still-missing-on-xtensa | A+S | 25 | bug | The last target without a pre-divide zero check. The other five landed 2026-08-23; xtensa was left out because it cannot be RUN on this box (bare profile emits an ESP image, not a Linux ELF), its branches carry only an 8-bit displacement, its windowed ABI rotates the register window on a call, and its divide is two shapes depending on XtensaSoftDivide. | — |
@@ -558,16 +557,17 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2469)
+## done (2470)
 
-2469 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2470 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
-## rejected (44)
+## rejected (45)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-elf-so-missing-pt-gnu-stack | A | 60 | bug | pxx-emitted .so has no PT_GNU_STACK, so glibc >= 2.41 refuses to dlopen it: cannot enable executable stack | — |
 | bug-a-nilpy-subscript-of-a-string-literal | A | 40 | bug | NilPy: subscripting a string LITERAL is a parse error | — |
+| bug-a-real-is-single-on-hosted-riscv32 | A | 35 | bug | `Real` is Single (4 bytes) on hosted riscv32 Linux and Double (8) on every other target and on FPC. The type is keyed on the ARCH, not on the ESP profile, so a target with no ESP in it inherits an ESP decision — silently halving the precision of every `Real` in a ported program. | — |
 | bug-a-threadsafe-heap-parallel-for-managed-string-race | A | 70 | bug | REJECTED — not a heap bug: was a shared captured-variable data race | — |
 | bug-b-power-lost-an-ulp-on-a-half-integer-exponent | B | 40 | bug | DUPLICATE of regression-b-power-lost-a-ulp-when-it-got-26x-faster (merged 2026-08-16; its 1e300-is-stale-good finding folded in). The 26x Power/LogN rewrite (11321a09c) traded one ulp on a half-integer exponent: math.pow(2.0, 0.5) answers 1.414213562373095 where CPython and the correctly-rounded sqrt give 1.4142135623730951. It also FIXED math.pow(1e300, 1.0) (was 9.999999999999999e+299, now the exact 1e+300), so two frozen .expected rows in the nilpy suite are now stale in the good direction. | — |
 | bug-b-tkhtmlview-uses-named-arguments-pascal-does-not-have | B | 60 | bug | lib/pcl/tkhtmlview.pas has never compiled: line 171 uses Python-style NAMED ARGUMENTS (`configure(yscrollcommand := bar.set_)`), which this dialect does not have, and calls `bar.set_` where tkinter declares plain `set`. Any NilPy app importing tkhtmlview fails to build — songformatter does | — |
@@ -780,7 +780,6 @@ _none_
 - [p 40] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
 - [p 40] [A] task-a-add-fu-to-the-compiler-usage-line
 - [p 35] [A] bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error
-- [p 35] [A] bug-a-real-is-single-on-hosted-riscv32
 - [p 35] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
 - [p 35] [N] bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds
 - [p 35] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing

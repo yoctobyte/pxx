@@ -124,6 +124,20 @@ rather than silently linking the kernels in. 64-bit integer arithmetic
 (`Int64`/`UInt64`, including multiply, divide and shifts) is always
 available and validated against the x86-64 oracle.
 
+**`Real` is `Single` here, not `Double`.** These cores have no hardware double,
+so `Real` — the type that means "the native float of this machine" — is the
+4-byte one. `SizeOf(Real)` is 4, an `array of Real` strides by 4, and `Real`
+arithmetic carries about 7 decimal digits. This is deliberate: it keeps
+`Real` code on the cheaper soft-float kernels, and `Double` remains available
+by name for the places that genuinely need the precision and can afford it.
+
+The trap worth knowing about is shared data. A record containing a `Real`
+does not have the same layout on an ESP32 and on the x86-64 host it talks to.
+Name `Single` or `Double` explicitly in anything you serialise, log in binary,
+or map onto a struct the other side also declares.
+
+See [Types](../language/types.md#real-is-the-targets-native-float).
+
 ## Generators and language features
 
 Most of the shared-IR language surface works on the ESP targets: records,
