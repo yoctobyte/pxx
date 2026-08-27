@@ -153,4 +153,4 @@ after another instance widened — all match CPython.
 needed, though the fix rides the next one.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 65335c061.
