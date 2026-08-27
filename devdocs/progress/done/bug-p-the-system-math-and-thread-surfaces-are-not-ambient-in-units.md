@@ -117,4 +117,4 @@ assumed.
    done half-way.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 929832b10.
