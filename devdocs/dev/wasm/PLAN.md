@@ -27,38 +27,67 @@ reason is a judgment call rather than a measurement.
 | nil safety | reserve page 0; explicit nil checks under `-g` | address 0 is *valid* linear memory — `nil^` does not trap |
 | shadow stack | explicit limit check in the prologue under `-g` | no guard page; it would run into the heap silently |
 
-## Phase 0 — start here (NOT blocked; corrected 2026-08-27)
+## Phase 0 — prep (COMPLETE; Phase 1 waits only on the registration skeleton)
 
 An earlier version of this plan blocked all wasm work on a target-property
 refactor. **That was wrong and the block is lifted.** `TARGET_PTR_SIZE` already
 exists (`defs.inc:1758`, 129 call sites) and a wasm32 target declares its
-pointer width exactly where every other target does — the `compiler.pas:1508`
-arm. There is no prerequisite. Phase 1 can begin as soon as Phase 0's three
-items are done.
+pointer width at the `compiler.pas:1508` arm like every other target.
 
-What remains from that finding is real but does not gate us:
-`refactor-a-target-dispatch-chains-fail-open` (prio 50, backlog, Track A's to
-do on `master`). Several per-target chains have no final `else`, so a 7th target
-matches no arm and is configured as nothing — `lexer.inc:936` is the worked
-example. **We will hit this the first time we add `TARGET_WASM32`**, and the
-right response is to notice it, not to work around it: if a chain silently skips
-wasm32, that is evidence for the ticket, so record the site rather than patching
-it here.
+- [x] **Does anything need `IR_PROCADDR` values to be comparable or
+      arithmetic-able?** No — and this was the one answer that could have
+      reshaped Phase 4. Grepped `lib/`, `examples/`, `compiler/`: the only code
+      treating a procedure address as a number is `lib/rtl/scheduler.pas`
+      (`Int64(@CoStart)` into a hand-built stack frame, four times, one per
+      arch). Nothing orders procvars; nothing does arithmetic on one. That
+      consumer is the coroutine stack-frame builder — already out of scope for
+      wasm. **Table indices are viable**, with index 0 reserved as the null
+      function reference.
+- [x] **Enumerate the chains a 7th target falls through.** Three confirmed:
+      `exception_emit.inc:8` (6 arms), `coroutine_emit.inc:25` (4 arms) — both
+      emit *nothing at all*, no diagnostic — and `lexer.inc:936` (no CPU
+      defines). Handed to the two Track A tickets. Caveat recorded there: the
+      scan missed `lexer.inc` because it sits inside an outer
+      `if TargetArch <> TARGET_X86_64` guard, so it is a starting point, not an
+      inventory.
+- [x] **Stand up the tooling.** Done 2026-08-27 — and the box was already
+      equipped. `wabt 1.0.36` (`wat2wasm`, `wasm-validate`, `wasm2wat`) and
+      `node v22.22.1` are installed; **`wasmtime` is not**, but node is a
+      complete runtime for Phases 1-5 and `node:wasi` covers preview1 for
+      Phase 6. Install wasmtime before Phase 6 as the reference standalone
+      runtime; nothing before that needs it.
 
-Three items, none of which need anyone else:
+      A hand-written probe was validated and run end to end, deliberately
+      exercising the two mechanisms this plan rests on:
 
-- [ ] **Grep the open question.** Does anything in the RTL or `lib/` rely on
-      `IR_PROCADDR` values being **comparable** or arithmetic-able rather than
-      merely callable? Table indices break ordering and arithmetic. If something
-      does, that changes Phase 4's shape and needs to be known before it is
-      built on the assumption.
-- [ ] **Enumerate the chains wasm32 will fall through.** Every raw `TargetArch`
-      chain that is exhaustive-by-intent and has no `else`. This is the audit
-      the Track A ticket needs, and we are the lane that will find them
-      empirically — hand the list over rather than fixing them here.
-- [ ] **Stand up the tooling.** `wasmtime` + `wabt` installed, a scratch
-      hand-written `.wat` validating and running, so Phase 1 has an oracle from
-      its first commit.
+      | mechanism | phase it de-risks | result |
+      | --- | --- | --- |
+      | spill a value to linear memory and read it back (`i32.store`/`i32.load`) | Phase 2 shadow stack | `addmul(3,4) = 14` |
+      | `block` / `loop` / `br_if` | Phase 3 dispatch | `loopsum(10) = 45` |
+
+      Chain: `wat2wasm` -> `wasm-validate` -> `wasm2wat` round-trip ->
+      `new WebAssembly.Instance` under node. All four steps clean. **Phase 1 has
+      its oracle.**
+
+### The gate on Phase 1 — and why it is a feature, not a delay
+
+**Phase 1 does not start until
+`feature-a-wasm32-target-registration-skeleton` has landed on `master`.**
+
+That ticket registers `TARGET_WASM32` across the 9 shared files a new target
+touches (~270 lines, measured from `bd49a59535c3`) with **no codegen** — every
+dispatch chain gets an explicit `Error('wasm32: not implemented')`.
+
+This is the whole conflict-avoidance strategy in one move. Registration is the
+only part of this work that lives in files other lanes edit constantly. Land it
+on `master` first and **the branch touches zero shared files until Phase 4**.
+Let the branch do it instead and every `master` merge conflicts in exactly the
+hottest files in the tree.
+
+**So the standing rule for this branch: if a phase needs a shared-file edit,
+that is a signal to file a Track A ticket and wait — never to make the edit
+here.** The two known ones are Phase 4 (VMT fixups) and Phase 5 (exceptions);
+anything else appearing on that list is a surprise worth stopping for.
 
 ## Phase 1 — module writer + WAT emitter, no codegen
 
@@ -161,6 +190,10 @@ smaller than the C frontend was.
 ## Log
 - 2026-08-27 — branch and standalone checkout established; plan and charter
   written.
+- 2026-08-27 — Phase 0 complete. Tooling proven (wabt + node, no wasmtime yet),
+  the `IR_PROCADDR` question answered favourably, three fall-through chains
+  found and handed to Track A. Phase 1 now waits on one thing only:
+  `feature-a-wasm32-target-registration-skeleton` landing on `master`.
 - 2026-08-27 — **re-cut from `master`.** The branch was originally cut from
   `dev`, which had been retired the previous day (collapse `8b2a6bae6`) and was
   379 commits behind. The block on a prerequisite refactor was lifted in the
