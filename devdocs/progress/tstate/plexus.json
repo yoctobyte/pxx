@@ -1,17 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-27T03:27:50Z",
-   "fixed": [],
-   "new_red": [
-    "test-core#src:test/test_pascal_cast_chain_method_call.pas"
-   ],
-   "sha": "97f96a5cc7664fb2521b3fa5d0bd5de681b6c0d2",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-27T03:47:30Z",
    "fixed": [],
    "new_red": [],
@@ -457,6 +446,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "6b39a873530a7ac641ab405783fe3d557e7a6ba6",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T13:38:12Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "763e12253549b8d3cf74347e93c5c1c145f6952d",
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
@@ -2073,6 +2071,7 @@
   "test-core#src:test/test_nilpy_import_spellings.npy": "native",
   "test-core#src:test/test_nilpy_infer_return.npy": "native",
   "test-core#src:test/test_nilpy_is_identity_vs_class_test.npy": "native",
+  "test-core#src:test/test_nilpy_isinstance_against_a_qualified_class_name.npy": "native",
   "test-core#src:test/test_nilpy_iter_next_cursor.npy": "native",
   "test-core#src:test/test_nilpy_json_module.npy": "native",
   "test-core#src:test/test_nilpy_json_reparse_heap.npy": "native",
@@ -5307,6 +5306,7 @@
   "test-core#src:test/test_nilpy_import_spellings.npy": "pass",
   "test-core#src:test/test_nilpy_infer_return.npy": "pass",
   "test-core#src:test/test_nilpy_is_identity_vs_class_test.npy": "pass",
+  "test-core#src:test/test_nilpy_isinstance_against_a_qualified_class_name.npy": "pass",
   "test-core#src:test/test_nilpy_iter_next_cursor.npy": "pass",
   "test-core#src:test/test_nilpy_json_module.npy": "pass",
   "test-core#src:test/test_nilpy_json_reparse_heap.npy": "pass",
@@ -6921,14 +6921,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-27T13:22:45Z",
+  "date": "2026-08-27T13:38:12Z",
   "deadline": 7200.0,
-  "sha": "6b39a873530a7ac641ab405783fe3d557e7a6ba6",
+  "sha": "763e12253549b8d3cf74347e93c5c1c145f6952d",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 317.3
+  "wall": 314.2
  },
  "last_bench": {
   "conf_rows": 550,
