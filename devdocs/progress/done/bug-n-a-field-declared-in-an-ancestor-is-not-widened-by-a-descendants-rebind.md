@@ -330,4 +330,4 @@ not a regression, and it is narrow: single inheritance — the case both repros
 and all real code in the tree use — goes through `PyFJParent` and is covered.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 5a8b4496f.
