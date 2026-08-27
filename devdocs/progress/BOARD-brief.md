@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:24 blocked:8 backlog:283 backlog_new:31 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2402 rejected:40`
+`urgent:1 unfinished:24 blocked:8 backlog:287 backlog_new:31 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2402 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -53,7 +53,7 @@ _none — no lane is locked._
 - `feature-target-wasm` [A+B] — blocked-by: refactor-a-target-properties-have-no-single-answer
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 327, ranked
+## Ready — top 30 of 331, ranked
 
 - `[p 80] [A]` refactor-a-target-properties-have-no-single-answer (unblocks 1)
 - `[p 85] [O]` feature-opt-o3-register-pressure
@@ -86,4 +86,4 @@ _none — no lane is locked._
 - `[p 65] [N]` bug-n-a-fields-type-is-fixed-by-its-first-assignment-and-never-widened
 - `[p 65] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 
-_297 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_301 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
