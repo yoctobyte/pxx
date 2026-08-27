@@ -121,7 +121,7 @@ is for; it does not reopen that.
   memory — so without the check an overflowing shadow stack walks into the heap
   silently.
 
-## `IR_FRAME` — recommend Error, following xtensa
+## `IR_FRAME` — a target limitation, not an open decision
 
 `IR_FRAME` (op 70) backs the FPC-compat intrinsics `get_frame`, `get_pc_addr`
 and `get_caller_stackinfo` (`pasparser_expr.inc:4480`,
@@ -145,9 +145,20 @@ give real function-level traces with names, which is strictly better than
 anything a hand-rolled chain could reconstruct here. That is a Phase 8 /
 import-profile matter, not an `IR_FRAME` implementation.
 
-Flagging it rather than deciding it: this is a visible behaviour difference for
-any Pascal program calling `get_frame`, and if the user wants it to be something
-other than a compile-time Error it is a `decide-*`, not a branch call.
+**Settled 2026-08-27, and deliberately NOT filed as a `decide-*`.** A recorded
+precedent applied to a materially identical case is derivation, not a new
+decision, and Track U is for forks the code and the existing rulings cannot
+settle. `defs.inc` already settled this one for xtensa. Spending the owner's
+attention ratifying a call the codebase has already made is its own error.
+
+So it is documented here as what it is — **a target limitation**, in the same
+voice `defs.inc` uses: wasm has no walkable frame chain, because the return
+address lives in the engine's call stack and is unreadable by design; `IR_FRAME`
+Errors at lowering rather than lying with a plausible-looking pointer.
+
+This becomes a decision the day a real Pascal program calling `get_frame` has to
+work on wasm — with that program named, which is the bar CLAUDE.md's compat
+table sets. There is no such program today.
 
 ## Revised sizing for Phase 2
 
@@ -181,13 +192,16 @@ shaped*, not simply smaller.
   signed Int64 is logical, per `ir_codegen_riscv32.inc:824`). Port that rule
   deliberately; it is exactly the kind of thing that produces a plausible wrong
   value.
-* **Division by zero and overflow traps.** wasm `div_s` *traps* on divide-by-zero
-  and on `INT_MIN / -1`, where the register targets emit an explicit check and
-  raise a Pascal runtime error. A trap is not a Pascal exception and cannot be
-  caught. Whether the emitted code keeps the explicit pre-check (and so keeps
-  Pascal semantics) or lets the engine trap is a real decision with a
-  correctness consequence — the check almost certainly stays, but confirm
-  against `EmitDivZeroCheckRV32` rather than assuming.
+* **Division by zero and overflow traps — the pre-check STAYS, and removing it
+  would be a semantic change, not an optimization.** wasm `div_s` *traps* on
+  divide-by-zero and on `INT_MIN / -1`, where the register targets emit an
+  explicit check and raise a catchable Pascal runtime error. A wasm trap is not
+  a Pascal exception: it cannot be caught, and it takes the whole module down.
+  So the explicit pre-check is the difference between Pascal semantics and
+  engine semantics, and it is load-bearing precisely where it looks redundant.
+  **Written down here so nobody later deletes it as duplicating a hardware
+  check that does not exist on this target.** Model it on
+  `EmitDivZeroCheckRV32`.
 * **`IR_ALLOCA`.** Legal only where the epilogue restores `sp` from `fp`
   (`defs.inc`). The shadow stack does exactly that, so wasm may be able to
   support it where four other backends currently Error — worth checking, but

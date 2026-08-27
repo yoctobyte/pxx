@@ -123,9 +123,11 @@ allocator, no spills).
   → x86-64/aarch64.
 - Also settled there: expression temporaries live on **wasm's operand stack**,
   not the shadow stack (the backends' push/pop dance is deleted, not
-  translated); the shadow stack holds named slots only. And `IR_FRAME` should
-  Error like xtensa rather than link a chain nothing can walk — flagged as a
-  `decide-*` if the user wants otherwise.
+  translated); the shadow stack holds named slots only. And `IR_FRAME` Errors at
+  lowering like xtensa rather than link a chain nothing can walk — recorded as a
+  **target limitation**, not a `decide-*`: `defs.inc` already settled the
+  identical case, so this is derivation. It becomes a decision only when a real
+  program calling `get_frame` must work here, with that program named.
 
 ## Phase 3 — control flow
 
