@@ -89,4 +89,4 @@ pointed straight at `5a996b4b2` one commit below. No bisect was needed.
 
 Gate: `make compiler/pascal26` + `tools/gate.sh quick` GREEN, both named jobs
 verified by hand against their inline expected strings.
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit a47e48920.
