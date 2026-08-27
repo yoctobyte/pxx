@@ -188,3 +188,30 @@ No correct FPC program can observe the difference: every program in rows 1-4 is
 one FPC refuses to build, so nothing portable depends on pxx refusing it too.
 Worth a diagnostic some day if a scope model appears at that layer; not worth
 inventing one for this.
+
+## `SysUtils.Error(TRuntimeError)` raises where FPC halts
+
+*Recorded 2026-08-28, with
+[[feature-sysutils-delphi-exception-api-gaps-found-by-rtl-generics]].*
+
+FPC's `Error(reRangeError)` produces an **uncatchable** runtime error 201 and
+terminates. Ours raises a catchable exception mapped to the nearest SysUtils
+class (`ERangeError` here), so a surrounding `try..except` sees it.
+
+**Deliberate, on two grounds.** It is inside the "error handling stays ours"
+ruling — a strict flag governs how source is compiled, not how a program dies.
+And it matches our own runtime, which is the consistency that matters more than
+parity here: pxx already surfaces a division by zero as a catchable
+`EDivByZero` and a malformed `StrToInt` as `EConvertError`, so a halting
+`Error` would be the odd one out in its own RTL.
+
+**The cost, stated so it is not rediscovered as a surprise:** a catchable
+`Error` can be swallowed. Every call site that motivated this — 7 in
+`generics.defaults.pas` — is the `else` arm of a `case` over a type kind, i.e.
+"this cannot happen"; if one ever does happen inside a `try..except`, FPC would
+stop the program and we would continue. If that bites, the fix is to halt, and
+this entry is the record that the choice was made knowingly rather than by
+default.
+
+Verified against FPC 3.2.2: `test/lib_sysutils_delphi_exceptions.pas` runs
+identically under both for its first 18 rows and diverges at exactly this point.

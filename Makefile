@@ -14579,6 +14579,16 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_typinfo_props.pas $(TESTTMP)/lib_typinfo_props
 	test "$$($(TESTTMP)/lib_typinfo_props | grep -c '=ok')" = "63"
 	test "$$($(TESTTMP)/lib_typinfo_props | tail -1)" = "TYPINFO-PROPS OK"
+	# the three Delphi/FPC exception-API gaps a vendored rtl-generics hits:
+	# EArgumentOutOfRangeException (a DESCENDANT of EArgumentException, so
+	# `on E: EArgumentException` catches it), Exception.CreateRes/CreateResFmt,
+	# and System.Error over TRuntimeError -- whose tail is FPC's, not Delphi's.
+	# The first 18 rows run identically under fpc 3.2.2; the file then diverges
+	# deliberately at Error(), which halts there and raises here (our domain by
+	# the error-handling ruling; see devdocs/dev/pascal-dialect-divergences.md).
+	$(PXX_STABLE) -Fulib/rtl test/lib_sysutils_delphi_exceptions.pas $(TESTTMP)/lib_sysutils_delphi_exc
+	test "$$($(TESTTMP)/lib_sysutils_delphi_exc | grep -c '=ok')" = "21"
+	test "$$($(TESTTMP)/lib_sysutils_delphi_exc | tail -1)" = "SYSUTILS-DELPHI-EXC OK"
 	# the date PARSE direction (StrToDate/StrToDateTime/TryStrTo*). Rows are
 	# read off FPC 3.2.2, including the ones nobody guesses: ISO input raises
 	# under the d/m/y default, and a two-digit year uses a SLIDING window.

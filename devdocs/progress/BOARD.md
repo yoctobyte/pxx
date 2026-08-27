@@ -56,13 +56,14 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (264)
+## backlog (265)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce | A | 30 | bug | Raised out of decide-how-much-string-machinery-the-basic-frontend-gets, decided 2026-08-25. That decision accepted ~100 KB BASIC binaries on the grounds that binary size is a GENERAL problem with a general answer (reachability-gated emission), not a per-frontend one. But feature-emission-size-dce is marked done while a Pascal hello-world is still 63,760 bytes -- so either the pass is not reaching this, or the done ticket's scope was narrower than its title. | — |
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
 | bug-a-cross-bootstrap-aarch64-overflows-max-code | A | 60 | bug | MEASURED — it is DENSITY, raise the cap. aarch64 codegen runs 2.295x x86-64 across four unrelated programs (spread 2.27-2.34); the compiler needs only 1.80x to breach MAX_CODE, so predicted aarch64 size is 20.4 MB against a 16 MB cap. Runaway ruled out. ~21 MB floor, 32 MB gives headroom, A's call. Originally: `make cross-bootstrap` for aarch64 fails at HEAD with `code overflow: emitted code exceeds MAX_CODE` in compiler/pyparser.inc. Same pinned stable, same source, only the target differs — x86-64 emits 9,343,257 B (56% of the 16 MiB cap) while aarch64 exceeds it, so that backend needs >1.8x the code density for identical input. The error's own suggested remedy does not apply: default and -O2 overflow identically. Unseen because cross-bootstrap runs ONLY on a manual tag dispatch in release.yml, never per-commit, so it can rot at HEAD indefinitely — while the website advertises aarch64 as a supported target. | — |
+| bug-a-irtoplevelstmt-parameter-is-a-node-index-named-k | A | 20 | bug | ir_codegen.inc:8813 declares IRTopLevelStmt(k: Integer) and its body is `case IRKind[k] of`, so the parameter is a node index. The name reads as a kind, and passing IRKind[i] compiles cleanly and indexes the IR array with an opcode number — a silently-wrong-value trap with no diagnostic, in a function every backend author will call. Rename plus a one-line comment closes the class. | — |
 | bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice | A | 55 | bug | ManagedLocalZeroBytes is a chain of per-kind arms, each of which has to remember to ask IsArray. Two arms have already shipped without it — interfaces (2026) and Variants (2026-08-27, a5 memory-corruption fix). Two more arms explicitly say `not IsArray` and nothing says whether that is a decision or the same omission a third time. | — |
 | bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse | A | 40 | bug | `C(**d)` and `C(*lst)` on a class with an ordinary `__init__` fail with `expected expression` — on the PINNED compiler too, so this is not a regression. The ctor path in pyparser.inc:45097 builds its own AN_ARG chain and never consults the star-forwarding branch that plain calls use. Routing it there needs the receiver prepended, which PyStarForwardCall's signature does not take. | — |
 | bug-a-riscv32-sa-onstack-has-no-effect-under-qemu | A | 12 | bug | riscv32 registers a signal alt stack correctly — the sigaltstack syscall succeeds and the flags word assembles to $18000004 — but the handler still runs on the FAULTING stack under qemu-riscv32, so a stack-overflow SIGSEGV kills the process. The identical construction works under qemu-i386/arm/aarch64 of the same build, which points at qemu-user rather than at us. Unverifiable without hardware. | — |
@@ -106,6 +107,7 @@ _none_
 | bug-nilpy-empty-str-and-none-are-the-same-value | N | 75 | bug | `\"\" is None` answers TRUE for any NilPy value whose static type is plain `str` — literal, local, parameter, `-> str` return, AND every pylib str-method result (`.replace()`, a slice, `.join()`, `*0`). Container-derived and `Optional[str]` values are correct, because they carry a variant TAG; the rule is tagged-vs-untagged, not literal-vs-computed. A CORRECTION at the bottom retracts the 2026-08-27 down-scoping, which claimed the pylib results were already right and was measured wrong (they answer True on v385, v386 and HEAD alike) — the original ~260-producer sizing, and the basis the decision was taken on, both stand. A constant-fold is unsafe: `def f() -> str: return None` is legal CPython. | decide-nilpy-none-str-sentinel-vs-textstr-kind |
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 55 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 12 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
+| bug-p-a-resourcestring-is-not-addressable | P | 55 | bug | `@SomeResourceString` is `error: undefined variable` — pxx parses a `resourcestring` section as a plain const section (pasparser_proc.inc:4783), and a const has no address. FPC makes resourcestrings addressable (they are runtime-replaceable variables), which is what `Exception.CreateRes(@SArgumentOutOfRange)` — the Delphi/FPC idiom, 3 sites in generics.defaults.pas — depends on. | — |
 | bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
 | bug-p-qword-div-by-a-literal-above-2-63-is-signed | P | 55 | bug | `QWord div` / `mod` by a literal >= 2^63 divides SIGNED and returns a wrong value | — |
 | bug-p-sysopen-intrinsic-shadows-a-user-function-name | P | 15 | bug | sysopen/syswrite/sysclose/sysfchmod are compiler INTRINSICS with dedicated tokens (tkSysOpen &c), so the lexer never produces an identifier for them and a user program cannot declare a function with one of those names. The diagnostic is `expected name`, which does not mention the reservation. Real but nearly unreachable: prio 15. | — |
@@ -265,7 +267,6 @@ _none_
 | feature-port-windows-pe | M | 25→55 | feature | Windows/x64 target — PE/COFF writer, MS x64 ABI, IAT imports; testable via Wine | feature-port-rtl-over-libc |
 | feature-promo-launch-plan | W | 15 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | — |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
-| feature-sysutils-delphi-exception-api-gaps-found-by-rtl-generics | B | 55 | feature | SysUtils gaps found by rtl-generics: `EArgumentOutOfRangeException`, `CreateRes`, `System.Error` | — |
 | feature-t-fail-when-a-test-file-is-wired-into-no-build-rule | T | 45 | feature | A file in test/ is not a test until a build rule runs it. Two confirmed cases of a test that existed, passed, and was referenced by nothing — one ungated for two weeks. Proposed: a check (progress.sh check or testmgr) that fails when a test/*.expected or test/*.npy has no rule referencing it, converting the class from 'someone notices' to 'CI notices'. | — |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | — |
 | feature-t-nilpy-cpython-differential-fuzzer | T | 45 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
@@ -560,9 +561,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2535)
+## done (2536)
 
-2535 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2536 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (46)
 
@@ -675,6 +676,7 @@ _none_
 - [p 55] [N] bug-n-keys-through-an-untyped-receiver-is-not-dispatched-cross-module
 - [p 55] [N] bug-n-super-as-an-expression-fails-with-a-misleading-diagnostic
 - [p 55] [N] bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only
+- [p 55] [P] bug-p-a-resourcestring-is-not-addressable
 - [p 55] [P] bug-p-qword-div-by-a-literal-above-2-63-is-signed
 - [p 55] [P] bug-p-the-address-of-a-virtual-class-method-cannot-be-lowered
 - [p 55] [A] chore-a-the-range-checked-fpc-seed-cannot-be-built
@@ -692,7 +694,6 @@ _none_
 - [p 55] [P] feature-pascal-corpus-fgl
 - [p 55] [A] feature-pascal-type-helpers [parked — re-claim, do not duplicate]
 - [p 55] [A] feature-signal-siginfo-ucontext [parked — re-claim, do not duplicate]
-- [p 55] [B] feature-sysutils-delphi-exception-api-gaps-found-by-rtl-generics
 - [p 55] [A+O] perf-o-promote-constant-divisor-strength-reduction-to-o2
 - [p 55] [A] refactor-a-two-predicates-answer-what-a-caret-yields
 - [p 55] [P] refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too
@@ -842,6 +843,7 @@ _none_
 - [p 22] [S] bug-a-xtensa-codegen-has-no-variant-support
 - [p 22] [C] compat-c-printf-p-of-null-prints-0x0-not-nil
 - [p 22] [A] refactor-a-seven-frontends-borrow-rust-parser-helpers
+- [p 20] [A] bug-a-irtoplevelstmt-parameter-is-a-node-index-named-k
 - [p 20] [N] bug-n-exec-ignores-a-caller-supplied-builtins-mapping
 - [p 20] [N] bug-n-name-on-a-builtin-type-is-unimplemented
 - [p 20] [A] chore-a-sweep-the-unwired-tests-into-the-suite
