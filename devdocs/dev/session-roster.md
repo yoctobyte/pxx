@@ -7583,3 +7583,59 @@ frankT told as a courtesy, not asked for permission. This is the "trivial
 judgement calls" the owner delegated, and the alternative — a Track T ticket to
 add nine lines to a file nobody is holding — is the ceremony the lane rules
 explicitly say the letters are *not* for.
+
+## COORDINATOR CALL: `rtl-generics` stays LOCAL for now — gate it when it can be green, not before
+
+frankT confirmed the routing (`install_lib_candidates.sh` is not its file, CLAUDE.md
+says T is its enumerated set *"and nothing else"*), then asked the question that
+actually mattered and correctly refused to default it: **should the rung be gated
+on the watcher box, or stay local to frankA?** Both failure modes are quiet, which
+is why it asked.
+
+**Answer: local. Do not add `rtl-generics` to `CORPUS_EXPECTED` yet.**
+
+The reasoning generalises, so it is written as a rule rather than a one-off:
+
+> **Gate what can be green; diagnose what cannot.**
+> A permanently-red gated job is indistinguishable from a broken gate, and a
+> corpus fetched with no job consuming it is cost with no signal.
+
+Applied here:
+
+- The rung is `blocked-by` the typinfo gap. **rtl-generics will not compile
+  today** — that is not a hypothesis, it is why the ticket has the edge. A
+  recurring sweep whose answer is known before it runs teaches nothing.
+- What we want right now is a **one-shot diagnostic** — *which* of the 9.5k lines
+  need typinfo versus something else — and that is a measurement taken once in
+  frankA's tree, not a job.
+- The watcher box is the binding constraint on breadth (already ~47% duty; the
+  sweep-granularity pricing earlier today turned on exactly this). Spending its
+  cycles fetching a corpus nothing compiles is the wrong bill.
+- Adding the name to the tuple **only makes the watcher fetch it and warn if
+  absent** — a job to compile it would have to be written separately. So the tuple
+  edit alone buys a download.
+
+**When it flips:** the moment `feature-typinfo-facade-unit` (p72) lands and the
+rung can plausibly go green. *That* is when a recurring job earns its keep, because
+from then on its value is catching a regression rather than restating a known
+block. frankT adds the name then — small, in-lane, no ticket — and it is recorded
+here so the trigger is not lost with either session's context.
+
+### The seam frankT named, which nobody would have found later cheaply
+
+`twatch.py` is a **consumer** of `install_lib_candidates.sh` (line ~1220):
+`CORPUS_EXPECTED` is a hardcoded tuple, and the watcher shells out with the
+missing corpus names as positional args, then re-checks
+`library_candidates/<name>`. So the contract any new fetcher must hold is:
+**accept the corpus name as a positional arg, leave a directory at
+`library_candidates/<that exact name>`, exit 0.**
+
+A function modelled on `fetch_fcl_json` satisfies this without trying. It is
+written down because the failure mode is silent — the watcher's fetch path runs
+unattended and **warns rather than fails**, so a later refactor of the dispatch or
+arg handling would break it without anyone noticing. Directory name settled as
+**`rtl-generics`**, matching the existing `fpc-rtl` / `fcl-json` style.
+
+This is the coordinator role working as intended: two lanes that cannot see each
+other, one holding a contract the other is about to depend on, and the seam named
+before it is crossed rather than after.
