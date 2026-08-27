@@ -6609,3 +6609,73 @@ reason the letter exists.
 
 **frankB, frank-rust and frankwasm stay down.** Seven roles can be launched; three
 are dispatched.
+
+## CORRECTION (2026-08-27) — the tstate retention cap was NOT why a sweep could not be cited, and the `-O2` decision is unblessable by history
+
+Earlier today I recorded that `tstate/plexus.json` retains only 50 history
+entries and therefore "no longer reaches `e7c0d1d2a`". `frankT` disputed it. It
+was right; I verified rather than conceded, and every number below is mine.
+
+**Appending rather than editing the original entry** — this repo does not rewrite
+its own records.
+
+### What is actually true
+
+| claim | verdict |
+| --- | --- |
+| `HISTORY_CAP = 50` (twatch.py:313) | true, but it caps `plexus.json["history"]` **only** |
+| a day-old verdict is unretrievable | **false** — twatch.py:2802 appends to an **uncapped** archive, `tstate/runs-plexus.ndjson`, whose own comment says so |
+| the archive is thin | **false** — 1,680 rows, 2026-08-04T23:37:06Z → 2026-08-27T20:26:39Z |
+| `e7c0d1d2a` aged out | **false** — 0 occurrences. It was **never swept** |
+
+**The watcher climbs to the newest testable commit when it wakes; it does not
+sweep every commit.** Measured independently and reproducing `frankT`'s figure
+exactly: of the **79 commits touching `compiler/` or `lib/` since 2026-08-26,
+exactly 0 were individually tested.** That is the design working, not a defect.
+
+**So the question "can you cite T's sweep of sha X" is malformed for most shas.**
+The answerable one is *"what is the newest verdict whose run COVERS sha X"* — and
+no tool answers it today: `--follow` waits for a future verdict, `--status`
+reports the head of the ladder, and neither walks the archive backwards.
+`frankT` is building that query, in lane, no ticket needed. It was pointed at
+`judged_tiers()` (twatch.py:4519), which **already** reads the uncapped archive
+for an exact sha — extend that primitive, do not grow a second archive reader
+that can disagree with it.
+
+### The consequence that matters more, and it lands on the coordinator
+
+I was holding the **`-O2` promotion** of the four `-O3` codegen passes on
+`feature-opt-o3-register-pressure` as "blocked on a T verdict I could not
+retrieve". **It is not blocked on retrieval, and no archive query — however
+good — can ever settle it.**
+
+All four passes gate `OptLevel >= 3`. Promotion means making them fire at `-O2`.
+**Every `-O2` verdict ever recorded is therefore a verdict on an `-O2` that did
+not run them.** The configuration in question has never been executed by
+anything, so there is nothing in the archive to find. A perfect covering-verdict
+query would have answered my question correctly and I would have drawn a false
+conclusion from it.
+
+That is **`ianweb`'s law arriving a third time in one day, on me**: *a correct
+answer to the wrong question looks exactly like a correct answer.* Twice today it
+cost an afternoon each. Here it was caught only because a peer disputed the
+premise rather than serving the request — which is the argument for keeping
+workers willing to push back on the coordinator.
+
+**Standing consequence for whoever holds this next:** the promotion needs a
+**prospective** per-pass run against a tree with the promotion applied — which is
+what CLAUDE.md already said (*"promote to `-O2` per-pass only after the full
+gate"*). It is sequenced with frankA, not with Track T, and it is not blocked.
+
+### Open with me, unchanged in substance: sweep granularity
+
+`frankT`'s sharpest observation: *"0 of 79 tested"* and *"both open regressions
+have a `bad=` on a commit touching no buildable file"* are **the same fact**. A
+bisect cannot name a culprit when there is no fine-grained ladder to land on, so
+the lever for useful blame ranges is sweep granularity, not the bisect code.
+
+Tier composition is explicitly Track T's to change. **Machine time is not** —
+this box is the contended resource and every agent's compile already runs 2-3x
+slower while the watcher works. So `frankT` was asked to **measure the wall-clock
+cost per day of a finer ladder and bring the number** before changing policy;
+if it is material it goes to the owner. A sequencing request, not a veto.
