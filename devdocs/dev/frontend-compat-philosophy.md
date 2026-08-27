@@ -66,6 +66,40 @@ obligatory, the other is not merely optional but actively deprioritised.
 Owner, 2026-08-27: *"there are exceptions. for example, for pascal, we are more
 lax by default and don't enforce certain (unnecessary) restrictions."*
 
+**WHY we are lax — corrected by the owner, 2026-08-27, and this is the part to
+lead with:** *"us being 'lax' is not intended to be incompatible. it is more
+because of the odd design goal of pxx where we intend to be cross-language."*
+
+Laxness is **not a position on compatibility at all.** It is a *consequence* of
+the substrate requirement, and reading it as a compatibility stance gets the
+causation backwards. Pascal is what the compiler and the RTL are written in, so
+it has to be expressive enough to serve **every other frontend's runtime** — C's,
+NilPy's, Rust's, Zig's. A restriction that is harmless in a Pascal-only world can
+be exactly the thing that stops the RTL expressing what another language's
+semantics need. That is the *"cement between the frontends"* reason above, and it
+is the load-bearing one.
+
+**This predicts which restrictions to drop, which a mere permission argument
+cannot.** The test is not *"is being lax here harmful?"* — it is **"does this
+restriction serve a cross-language substrate, or is it an accident of Pascal's
+own history?"** Historic FPC restrictions are overwhelmingly the latter: they
+constrain a single-language compiler for reasons that never applied to a
+substrate serving five frontends. Those are the *"unnecessary restrictions"* — not
+unnecessary because nobody is hurt, but unnecessary **to the job Pascal is doing
+here.**
+
+And note what laxness is *not*: **FPC-compatible code still compiles.** We accept
+more; we reject nothing FPC accepts. So laxness never costs compatibility — it is
+orthogonal to it, which is precisely why *"not intended to be incompatible"* is
+the right way to say it.
+
+The mechanical framing below is still correct, and still useful for deciding
+whether a *specific* laxness is safe. It is just downstream of the reason: it
+explains why dropping a restriction is **free**, while the paragraph above
+explains why we **want** to.
+
+---
+
 The laxness is real and deliberate — but **most of it is not an exception to the
 floor rule, it is the floor rule working.** "Lax" means *accepting source FPC
 rejects*, which is exactly "exceeding the floor", which the table above already
