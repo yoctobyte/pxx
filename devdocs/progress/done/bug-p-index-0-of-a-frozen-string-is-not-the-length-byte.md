@@ -75,4 +75,4 @@ fgl 7/7.
    `[` on a walker rather than anything about strings.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit fed3e1f43.
