@@ -163,4 +163,4 @@ fixedpoint verified, `converged after 1 round(s)`.
 (+`.expected`, registered) — the seven rows above.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit fb94570e2.
