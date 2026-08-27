@@ -7330,3 +7330,107 @@ whole cost surface, spanning A-owned codegen and B-owned RTL/allocator perf, eac
 ticket obeying the gate of the lane owning the file; concurrency is the owner's
 call, already made, dropped. The standing bar: escalate genuine forks, not
 questions the code or an existing instruction already answers.
+
+## PIN v389 TAKEN — `325b4479070a`, blessing `83468c546` (2026-08-27 ~23:20)
+
+**Owner's call, and it corrected an over-gate of mine:** *"if we can pin a
+native, we should."* I had been holding the pin for Track T's opt-tier verdict on
+the three `-O2` promotions. **CLAUDE.md's pin standard is `gate.sh quick` +
+`stabilize-fast`, not a full matrix** — breadth is T's and comes back
+asynchronously, and `make revert` moves `pinned` back if it turns red. Holding
+past the documented gate was caution costing other lanes.
+
+| step | result |
+| --- | --- |
+| `tools/gate.sh quick` | **GREEN** — pinned builds live lib/rtl, no vendor tracked, self-host fixedpoint (96s under load 7.79), `testmgr --tier quick` |
+| `make stabilize-fast` | STABLE **v389** OK, `325b4479070a…` |
+| `make pin` | `pinned -> stable_pinned`, **froze 8 builtin RTL sources**, **pin verify passed** (pinned still builds `uses SysUtils`) |
+| commit | `ab51855df` |
+
+Blesses the three `-O2` promotions, the wasm32 registration and frankA's
+nested-type generics fix. **Unfreezes the three Track B workarounds** whose fixes
+were stuck in `compiler/builtin/pylib.pas`.
+
+Note the coordinator tree had **no compiler seed** — it is docs-only by default.
+Seeding it (`cp pinned compiler/pascal26`, `touch` the sources, `make
+compiler/pascal26`) is a prerequisite for pinning from here. Took ~50s.
+
+## The pattern that showed up THREE times today: a written claim about a tree that has since moved
+
+Not a new lesson, but the third independent instance in one session makes it the
+day's finding:
+
+1. **The `-O2` umbrella's "1.29x"** — measured against a baseline `13e196cc8` had
+   already erased. Real figure 1.04x. It drove a coordinator ranking decision.
+2. **A QWord ticket closing with "`High(QWord)` is refused by the compiler, file a
+   Track A gap"** — it compiles fine today; frankB checked instead of forwarding
+   it. Nothing to file.
+3. **`feature-pascal-corpus-expansion`'s "what next" list** — all of the fpjson
+   fixup overflow, enrolment and the three fgl walls already in `done/`. This was
+   the **second** time that ticket's recommendations had aged out.
+
+frankA's conclusion is the general fix and it generalises past corpora:
+**rung/state belongs in the RUNNER'S OUTPUT, not in prose.** Prose cannot be
+re-derived; a runner can. Anything a ticket asserts about the current state of the
+tree is stale the moment it is written — cite the command, not the answer.
+
+## Lane results this cycle — all five productive
+
+- **frankB — QWord render cluster CLOSED**, three tickets in one commit
+  (`0b2f731b6`). Root cause deeper than any ticket said: `lib/rtl/sysutils.pas`
+  had **no unsigned decimal renderer at all** — it parsed unsigned
+  (`StrToQWord`…) and printed signed through one `IntToStr(Int64)`. One mechanism,
+  four call sites, copying `%x`'s existing tag-based width recovery rather than
+  inventing a second. Sibling sweep done (`IntToHex`, `Str`, the `asmcore_*`
+  bodies); two surprising rows **verified against fpc 3.2.2 and deliberately left
+  alone** (`Format('%d',[q])` prints signed in FPC too). Regression test keeps the
+  already-correct rows as **controls**, because the value was never wrong — only
+  its rendering. Now on the workaround-revert batch.
+- **frank-optimize — wasm32 registration LANDED** (`290ee8ca4`), 7 files not the
+  estimated 9 (the 270-line estimate came from a commit adding two **ESP**
+  targets; `symtab.inc`/`elfwriter.inc`/`pasparser_*` needed nothing because their
+  target tests are ESP-specific). Acceptance measured: **48/48 identical output
+  hashes** across 8 programs × 6 existing targets, with the "before" compiler
+  rebuilt from a stash and reproducing `591ae8160f69` exactly. Now on item 1
+  (residency admission by loads).
+- **frankwasm — UNBLOCKED**, Phase 1 running; Phase 5 exception prototype proved
+  the design (finally-continuation is **one i32 local**, five values not five
+  mechanisms; **no runtime handler stack at all**). Phase 2 found that
+  *"32-bit target"* and *"lower Int64 into a pair"* have been the same sentence
+  across all six targets purely by coincidence — wasm32 has 4-byte pointers **and**
+  native `i64`, so ~480 lines of riscv32's lo:hi model get **deleted, not ported**.
+- **frankA — nested-type generics fix** (`83468c546`) plus two filed-not-fixed
+  defects that share one cause (a nested type's identity is not per-specialization).
+  Probed all seven of rung 6's predicted walls: **six already work**; the entire
+  remaining cost is nested types.
+- **frankT** — running the opt-tier verdict under a concurrency cap after I told
+  it the quiet window was never coming (I had filled the box myself). Testing
+  `03afd81fd`, compiler-identical to `7767acc60` — `git rev-list 7767acc60..03afd81fd -- compiler/ lib/ test/`
+  is empty, so the built binary is bit-for-bit the same work.
+
+### The dispatch-chain finding worth more than the ticket that prompted it
+
+frank-optimize's acceptance pass found `refactor-a-target-dispatch-chains-fail-open`
+**found 2 of 4 sites and missed the two that matter**: `ir_codegen.inc:9048` fell
+through to the **x86-64 emitter** (a 7th target would get x86-64 machine code in a
+file claiming its own architecture) and `compiler.pas:2082` fell through to
+`writeELF`. Both are `if … Exit` ladders, not `if/else if` chains, which is why a
+heuristic hunting a missing final `else` cannot see them. **That ticket must grep
+for Exit-terminated target ladders.** Those two are not missing error messages —
+they silently emit the wrong architecture's code, which is the expensive class.
+
+### Three decisions DERIVED rather than escalated
+
+Per the owner's correction (*"you insist on asking the human"*):
+
+- **`IR_FRAME`/`get_frame` on wasm → Error at lowering.** `defs.inc` already
+  records the precedent for xtensa (*"Errors at lowering instead of lying with a
+  plausible-looking pointer"*). A recorded precedent applied to a materially
+  identical case is derivation, not a fork. No U ticket.
+- **frankA's fix accepting four shapes FPC rejects → not a defect.** The compat
+  table says so outright, and the realistic alternative was never "reject like
+  FPC" but the previous behaviour, which **silently miscompiled all five shapes**.
+  Recorded in `pascal-dialect-divergences.md`.
+- **The fgl runner's vacuous pass → not a ticket.** Enrolment closed it one level
+  up (`CORPUS_EXPECTED`), which is the only layer that can distinguish
+  unprovisioned from broken. The runner structurally cannot.
