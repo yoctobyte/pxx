@@ -7066,20 +7066,14 @@
   "would_pin": true
  },
  "pin_verify": {
-  "date": "2026-08-27T14:54:12Z",
+  "date": "2026-08-27T19:14:18Z",
   "red": [
-   "test-nilpy#src:test/test_nilpy_unbound_builtin_method.npy",
-   "test-nilpy#src:test/test_nilpy_builtin_subclass_dunder_dispatch.npy",
-   "test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy",
-   "test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy",
    "test-emit-obj#src:test/cxtensa_obj.c@1",
-   "test-core#src:test/test_nilpy_unbound_builtin_method.npy",
-   "test-core#src:test/test_nilpy_builtin_subclass_dunder_dispatch.npy",
    "tools-devtest#00"
   ],
-  "sha": "c28e07a89f036f56d3bb860e62045b1103e22aae",
+  "sha": "20664a1576d3ac6f9398051a6626102e86f63357",
   "tier": "full",
-  "ver": "v383",
+  "ver": "v388",
   "verdict": "RED"
  },
  "renamed_from": [
