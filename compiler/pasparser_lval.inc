@@ -183,6 +183,7 @@ end;
 
 procedure ResolveDerefShape(node: Integer; var tk: TTypeKind; var recName: Integer;
                             var remDepth, ptrBaseTk, ptrBaseRec: Integer); forward;
+function IndexDynArrayValue(node, elemTk, elemRec, dynDepth, tailRec: Integer; var outTk: TTypeKind): Integer; forward;   { the ONE materialisation point for a suffix on a dyn-array VALUE }
 procedure ApplyCallResultPtrSuffix(node, procIdx: Integer); forward;   { the ONE materialisation point for a suffix on a call RESULT — the index arm below hands array-returning calls to it }
 
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
@@ -4471,6 +4472,101 @@ begin
   { an INSTANCE method: found, but not callable this way -- -1, caller diagnoses }
 end;
 
+function IndexDynArrayValue(node, elemTk, elemRec, dynDepth, tailRec: Integer;
+                            var outTk: TTypeKind): Integer;
+{ `<dynamic-array-valued expression>[i]` — and any further suffix. AN_INDEX
+  needs an ADDRESSABLE base, and a dyn-array VALUE is a bare heap handle, so the
+  value is materialised into a hidden dyn-array temp and the answer is
+  `(tmp := value, tmp[i])` as an AN_COMMA — which also evaluates the value
+  exactly once.
+
+  Keyed on the node and its element shape (element kind, element rec, `array of`
+  depth, and the rec a record/class element's `.field` tail resolves against)
+  rather than on a proc row, because the same construct arrives from callers
+  that have no proc row: the dynamic-array `Copy(a, i, n)[k]` intrinsic builds
+  an AN_DYN_COPY, not a call. One materialisation point, one lifetime story.
+
+  The lifetime is the ordinary one and was measured: an AllocDynArray local in
+  the enclosing scope gets the ordinary scope-exit release, and 200k iterations
+  of `acc := acc + Make[1]` hold RSS flat.
+  compat-pascal-index-a-function-call-result }
+var tk: TTypeKind; sub, tmpSym, tmpN, ndD, prevTok: Integer;
+begin
+    tk := IntToTypeKind(elemTk);
+    LastTypeRecId := elemRec;
+    ndD := dynDepth;
+    if ndD < 1 then ndD := 1;
+    tmpSym := AllocDynArray('', tk, ndD);
+    Syms[tmpSym].ElemRecName := elemRec;
+    SymSyncTypeRef(tmpSym);
+    { the side-effect leg: tmp := call }
+    tmpN := AllocNode(AN_IDENT);
+    ASTIVal[tmpN] := tmpSym;
+    ASTTk[tmpN] := Ord(tk);
+    sub := AllocNode(AN_ASSIGN);
+    ASTLeft[sub] := tmpN;
+    ASTRight[sub] := node;
+    node := sub;
+    { the value leg: tmp[i] — and then any further suffix, since a dyn array
+      of arrays indexes again and a record element selects fields }
+    tmpN := AllocNode(AN_IDENT);
+    ASTIVal[tmpN] := tmpSym;
+    ASTTk[tmpN] := Ord(tk);
+    sub := AllocNode(AN_INDEX);
+    ASTLeft[sub] := tmpN;
+    Next;                                   { the '[' }
+    ParseExpr;
+    ASTRight[sub] := CurASTNode;
+    Expect(tkRBrack, ']');
+    ASTTk[sub] := StrValTk(tk);
+    { `MakeMat[1][0]` — an `array of array of T` result. A dyn array of dyn
+      arrays is indexed one bracket per LEVEL (there is no `[i,j]` spelling for
+      it, unlike the fixed arm's N-D temp), so keep taking brackets while
+      levels remain. Without this the second `[` was left for the enclosing
+      suffix loop, which built a raw AN_INDEX over the AN_COMMA below — a
+      value with no address — and the program SEGFAULTED where it had been
+      refused.
+
+      The condition asks NodeDynDepth of the node built so far rather than
+      counting down a depth taken from the proc row: the two can disagree
+      (a result declared through a named `array of T` alias), and the node is
+      the one that has to be right. }
+    while (CurTok.Kind = tkLBrack) and (NodeDynDepth(sub) > 0) do
+    begin
+      tmpN := sub;
+      sub := AllocNode(AN_INDEX);
+      ASTLeft[sub] := tmpN;
+      Next;                                 { the next '[' }
+      ParseExpr;
+      ASTRight[sub] := CurASTNode;
+      Expect(tkRBrack, ']');
+      ASTTk[sub] := StrValTk(tk);
+    end;
+    { A `[` still pending over a value that is no longer an array means the
+      temp ran out of levels before the source did — `MakeMat[1][0]` where
+      the proc row records depth 1 for an `array of array of T` result. The
+      enclosing suffix loop would build a raw AN_INDEX over the AN_COMMA
+      below, which has no address, and the program SEGFAULTS. Refuse instead:
+      a loud error is what this construct had before, and trading it for a
+      crash is the trade this ticket exists to refuse.
+      bug-p-a-nested-dynamic-array-result-crashes-however-it-is-reached }
+    if (CurTok.Kind = tkLBrack) and (tk <> tyRecord) and (tk <> tyClass) then
+      Error('cannot index that deep into an array-returning function result — '
+            + 'assign it to a variable first');
+    if ((tk = tyRecord) or (tk = tyClass)) and (CurTok.Kind in [tkDot, tkLBrack]) then
+    begin
+      sub := ParseClassRecordSelectors(sub, tailRec, tk);
+    end;
+    prevTok := AllocNode(AN_COMMA);
+    ASTLeft[prevTok] := node;
+    ASTRight[prevTok] := sub;
+    ASTTk[prevTok] := StrValTk(tk);
+    node := prevTok;
+    tk := IntToTypeKind(StrValTk(tk));
+  outTk := tk;
+  Result := node;
+end;
+
 procedure ApplyCallResultPtrSuffix(node, procIdx: Integer);
 var tk: TTypeKind; elemTk, elemRec, recId, sub, prevTok, tmpN: Integer; fieldName: AnsiString;
     mcCi, mmi, mpi, mcallNode: Integer; mcFin: Boolean;
@@ -4716,94 +4812,18 @@ begin
       Banked in compat-pascal-index-a-function-call-result with the measurement. }
     if ProcRetIsDynArray[procIdx] then
     begin
-      { …and the DYNAMIC result, which the note above banked as open. It is the
-        same move, and the two failed attempts recorded there both went at it
-        from the WRONG END: they tried to make IRLowerAddress answer an address
-        for the call node itself, which is a handle and not a slot. Nothing has
-        to. A dyn-array LOCAL is a slot holding a handle, `tmp := call` is an
-        ordinary dyn-array assignment (the compiler has always done that — `c :=
-        Copy(MakeArr, 1, 2)` works), and `tmp[i]` is an ordinary dyn-array
-        index. So the temp is built HERE, exactly as the fixed arm above builds
-        its shaped temp, and both ends are already implemented.
-
-        The lifetime is the ordinary one and was measured before this landed:
-        an AllocDynArray local in the enclosing scope gets the ordinary
-        scope-exit release, and 200k iterations of `acc := acc + Make[1]` hold
-        RSS flat.
-        compat-pascal-index-a-function-call-result }
+      { …and the DYNAMIC result, which the note above banked as open. The move
+        itself lives in IndexDynArrayValue: it is keyed on the NODE and its
+        element shape, not on a procIdx, because the same construct arrives from
+        places that have no proc row at all (the dynamic-array `Copy(a, i, n)[k]`
+        intrinsic is one). Everything the two callers do not share is in the
+        four shape arguments. }
+      nIdx := ProcRetElemRec[procIdx];
+      if nIdx = REC_NONE then nIdx := ProcRetRecId[procIdx];
       tk := ProcRetElemTk[procIdx];
       LastTypeRecId := ProcRetElemRec[procIdx];
-      ndD := ProcRetDynDepth[procIdx];
-      if ndD < 1 then ndD := 1;
-      tmpSym := AllocDynArray('', tk, ndD);
-      Syms[tmpSym].ElemRecName := ProcRetElemRec[procIdx];
-      SymSyncTypeRef(tmpSym);
-      { the side-effect leg: tmp := call }
-      tmpN := AllocNode(AN_IDENT);
-      ASTIVal[tmpN] := tmpSym;
-      ASTTk[tmpN] := Ord(tk);
-      sub := AllocNode(AN_ASSIGN);
-      ASTLeft[sub] := tmpN;
-      ASTRight[sub] := node;
-      node := sub;
-      { the value leg: tmp[i] — and then any further suffix, since a dyn array
-        of arrays indexes again and a record element selects fields }
-      tmpN := AllocNode(AN_IDENT);
-      ASTIVal[tmpN] := tmpSym;
-      ASTTk[tmpN] := Ord(tk);
-      sub := AllocNode(AN_INDEX);
-      ASTLeft[sub] := tmpN;
-      Next;                                   { the '[' }
-      ParseExpr;
-      ASTRight[sub] := CurASTNode;
-      Expect(tkRBrack, ']');
-      ASTTk[sub] := StrValTk(tk);
-      { `MakeMat[1][0]` — an `array of array of T` result. A dyn array of dyn
-        arrays is indexed one bracket per LEVEL (there is no `[i,j]` spelling for
-        it, unlike the fixed arm's N-D temp), so keep taking brackets while
-        levels remain. Without this the second `[` was left for the enclosing
-        suffix loop, which built a raw AN_INDEX over the AN_COMMA below — a
-        value with no address — and the program SEGFAULTED where it had been
-        refused.
-
-        The condition asks NodeDynDepth of the node built so far rather than
-        counting down a depth taken from the proc row: the two can disagree
-        (a result declared through a named `array of T` alias), and the node is
-        the one that has to be right. }
-      while (CurTok.Kind = tkLBrack) and (NodeDynDepth(sub) > 0) do
-      begin
-        tmpN := sub;
-        sub := AllocNode(AN_INDEX);
-        ASTLeft[sub] := tmpN;
-        Next;                                 { the next '[' }
-        ParseExpr;
-        ASTRight[sub] := CurASTNode;
-        Expect(tkRBrack, ']');
-        ASTTk[sub] := StrValTk(tk);
-      end;
-      { A `[` still pending over a value that is no longer an array means the
-        temp ran out of levels before the source did — `MakeMat[1][0]` where
-        the proc row records depth 1 for an `array of array of T` result. The
-        enclosing suffix loop would build a raw AN_INDEX over the AN_COMMA
-        below, which has no address, and the program SEGFAULTS. Refuse instead:
-        a loud error is what this construct had before, and trading it for a
-        crash is the trade this ticket exists to refuse.
-        bug-p-a-nested-dynamic-array-result-crashes-however-it-is-reached }
-      if (CurTok.Kind = tkLBrack) and (tk <> tyRecord) and (tk <> tyClass) then
-        Error('cannot index that deep into an array-returning function result — '
-              + 'assign it to a variable first');
-      if ((tk = tyRecord) or (tk = tyClass)) and (CurTok.Kind in [tkDot, tkLBrack]) then
-      begin
-        nIdx := ProcRetElemRec[procIdx];
-        if nIdx = REC_NONE then nIdx := ProcRetRecId[procIdx];
-        sub := ParseClassRecordSelectors(sub, nIdx, tk);
-      end;
-      prevTok := AllocNode(AN_COMMA);
-      ASTLeft[prevTok] := node;
-      ASTRight[prevTok] := sub;
-      ASTTk[prevTok] := StrValTk(tk);
-      node := prevTok;
-      tk := IntToTypeKind(StrValTk(tk));
+      node := IndexDynArrayValue(node, Ord(tk), ProcRetElemRec[procIdx],
+                                 ProcRetDynDepth[procIdx], nIdx, tk);
       CurASTNode := node;
       LastExprTk := tk;
       Exit;

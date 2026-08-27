@@ -6215,6 +6215,12 @@ test-core: $(COMPILER)
 	# the cross differentials and the nested element source dies on riscv32 for an
 	# unrelated pre-existing reason
 	# (bug-a-riscv32-nested-dynamic-array-element-write-segfaults).
+	# Indexing the RESULT of a dynamic-array Copy, `Copy(a, 1, 2)[0]`. The value
+	# is a bare heap handle with no address, so it goes through the same hidden
+	# dyn-array temp an array-returning CALL uses (IndexDynArrayValue). Row e is
+	# 200k indexed copies in a loop — the temp must not leak.
+	./$(COMPILER) test/test_dynarray_copy_result_indexed.pas $(TESTTMP)/test_dyncopy_idx26
+	test "$$($(TESTTMP)/test_dyncopy_idx26)" = "$$(printf 'a 99|99|1\na2 2|2\nb 10\nc r\nd 3\ne 400000')"
 	./$(COMPILER) test/test_dynarray_copy_expr_source.pas $(TESTTMP)/test_dyncopy_expr26
 	test "$$($(TESTTMP)/test_dyncopy_expr26)" = "$$(printf '3 10 30\n10 99\n2 20\n3 7 9\n9 77\n1 9\nkeep REPLACED also\nalso SECOND')"
 	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_dynarray_copy_expr_source.pas $(TESTTMP)/test_dyncopy_expr_hd26

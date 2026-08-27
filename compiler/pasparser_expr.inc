@@ -361,6 +361,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
     rndRawArg: Integer;      { round(x, n): the argument node before the float unbox }
     bcN: Integer;            { element count of a `[..]` open-array constructor operand }
+    copyElemRec: Integer;    { element rec of a dynamic-array Copy's source, for a `[i]` suffix }
     intBaseArg, atRecv, atFld, atDflt, atProp: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     supPi: Integer;   { __pxxGetInterface, for the three-argument Supports }
@@ -6073,6 +6074,25 @@ begin
           { Pointer-typed: the result is a dyn-array handle, so the assignment
             stores all 8 bytes (an element-typed tag would truncate it). }
           ASTTk[argSeq] := Ord(tyPointer);
+          { `Copy(a, 1, 2)[0]` — the postfix chain, which this branch used to
+            Exit straight past, so the trailing `[` reached the statement parser
+            as a stray token and reported `unexpected token` at the wrong place
+            (dynarray-copy-and-alias in fpc_diff_probe). A dyn-array VALUE has no
+            address to index, and the answer to that is the hidden temp
+            IndexDynArrayValue already builds for an array-returning CALL —
+            keyed on the node's element shape, which for this node is the
+            SOURCE array's (the same trio AN_DYN_COPY's own lowering reads).
+            The string arm below does the same thing through
+            ApplyCallResultPtrSuffix. }
+          if CurTok.Kind = tkLBrack then
+          begin
+            copyElemRec := NodeDynBaseRec(exprNode);
+            LastExprTk := NodeDynBaseTk(exprNode);
+            CurASTNode := IndexDynArrayValue(argSeq, Ord(NodeDynBaseTk(exprNode)),
+                                             copyElemRec, NodeDynDepth(exprNode),
+                                             copyElemRec, LastExprTk);
+            Exit;
+          end;
           CurASTNode := argSeq;
           Exit;
         end;

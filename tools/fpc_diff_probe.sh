@@ -1851,7 +1851,7 @@ P
 # [known] for the LAST line only: `Copy(a, 1, 2)[0]` — indexing a call result —
 # does not parse (compat-pascal-index-a-function-call-result). Everything above
 # it (dynamic-array aliasing vs Copy, an over-long Copy count) matches FPC.
-probe dynarray-copy-and-alias known <<'P'
+probe dynarray-copy-and-alias <<'P'
 var a, b, c: array of Integer;
 begin
   SetLength(a, 3); a[0] := 1; a[1] := 2; a[2] := 3;
