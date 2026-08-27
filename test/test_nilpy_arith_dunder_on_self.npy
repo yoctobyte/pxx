@@ -117,14 +117,26 @@ print(v.bump(), v.bump().n)
 print(v.twice(), v.twice().n)
 
 
-# the shapes the operator table must NOT claim. `and` / `or` are absent on
-# purpose: they are short-circuit operators that hand back an OPERAND, they have
-# no dunder, and `return self or 1` is separately broken at pinned and at HEAD
-# (bug-n-a-short-circuit-or-returning-self-is-typed-as-a-number) — asserting it
-# here would tie this test to a defect it does not cover.
+# the shapes the operator table must NOT claim. `and` / `or` are short-circuit
+# operators that hand back an OPERAND and have no dunder, so `__and__` below
+# must NOT be reached by the keyword -- only by the bitwise `&`.
+#
+# These two rows were deliberately left unasserted when this test was written,
+# because `return self or 1` was separately broken then
+# (bug-n-a-short-circuit-or-returning-self-is-typed-as-a-number, fixed
+# 2026-08-27). Folded back in now, as that ticket asked. `kw_and` returning 1 is
+# NOT evidence on its own -- self is truthy so `and` yields the right operand,
+# which is the int the old scanner guessed anyway; `kw_or` is the row that
+# actually distinguishes them.
 class N:
     def __and__(self, o):
         return 'BITWISE-AND'
+
+    def kw_and(self):
+        return self and 1        # -> 1, the RIGHT operand (self is truthy)
+
+    def kw_or(self):
+        return self or 1         # -> self, the LEFT operand -- an INSTANCE
 
     def pw(self, k):
         return k ** 2            # `**` lexes as two `*` and is not a dunder
@@ -138,5 +150,6 @@ class N:
 
 n = N()
 print(n.pw(3), n.half(5))
+print(n.kw_and(), n.kw_or() is n, n & n)
 print(n.me().half(9))
 print(n & 1)

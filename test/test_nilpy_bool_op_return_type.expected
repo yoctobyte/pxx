@@ -1,0 +1,11 @@
+and: 1 1
+or: 1 0
+field: 1 d
+none: 1
+andor: 1
+cls: 1 True
+method: 1 1
+plain: 7 3 x
+chain: 5 4 1
+mixed: 0 s
+bare: 1 1 1 True True

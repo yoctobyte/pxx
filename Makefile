@@ -1424,6 +1424,13 @@ test-nilpy: $(COMPILER)
 	# rebuilds one per attribute read, so `c.m is c.m` is False there too.
 	./$(COMPILER) test/test_nilpy_function_identity.npy $(TESTTMP)/test_nilpy_fnident26
 	$(TESTTMP)/test_nilpy_fnident26 | diff -u test/test_nilpy_function_identity.expected -
+	# `and`/`or` hand back an OPERAND, so a def returning one registers THAT
+	# operand's type -- the token scanner had no arm and took an arithmetic
+	# answer, so `return self or 1` died with "expected a number, got object".
+	# Every `and` row is here because `self and 1` was right by COINCIDENCE
+	# (self is truthy, so it yields the int the walk guessed anyway).
+	./$(COMPILER) test/test_nilpy_bool_op_return_type.npy $(TESTTMP)/test_nilpy_boolopret26
+	$(TESTTMP)/test_nilpy_boolopret26 | diff -u test/test_nilpy_bool_op_return_type.expected -
 	./$(COMPILER) test/test_nilpy_genexpr_is_consumed_once.npy $(TESTTMP)/test_nilpy_genonce26
 	$(TESTTMP)/test_nilpy_genonce26 | diff -u test/test_nilpy_genexpr_is_consumed_once.expected -
 	./$(COMPILER) test/test_nilpy_str_format_keyword_fields.npy $(TESTTMP)/test_nilpy_fmtkw26

@@ -1,0 +1,80 @@
+# `and` / `or` hand back an OPERAND, not a Boolean, and a def whose body returns
+# one must register the type of THAT operand.
+#
+# The token-level return-type scanner had no arm for them, so the expression
+# fell through to the operand walk and took an ARITHMETIC answer:
+# `def m(self): return self or 1` registered a number over a body that hands
+# back an instance, and the caller died with
+# `TypeError: expected a number, got object`.
+#
+# `self and 1` is NOT evidence that the path worked -- self is truthy, so `and`
+# yields the RIGHT operand, and that operand is the int the walk guessed anyway.
+# One arm was right by coincidence. Every `or` row below is the one that
+# distinguishes them, and every `and` row is here to prove the coincidence is
+# not what is being tested.
+#
+# The type is the JOIN of the two operands, which is the same rule the
+# conditional expression uses and is now literally the same function
+# (PyJoinInferTk): equal kinds keep the kind, two different classes or two
+# different kinds widen to a variant and let the runtime dispatch decide.
+# bug-n-a-short-circuit-or-returning-self-is-typed-as-a-number
+
+
+class N:
+    def __init__(self, v=1):
+        self.v = v
+
+    def kw_and(self):
+        return self and 1            # -> 1        (right operand, an int)
+
+    def kw_or(self):
+        return self or 1             # -> self     (left operand, an INSTANCE)
+
+    def field_or(self):
+        return self.v or "d"         # int-or-str -> variant, either may win
+
+    def none_or(self):
+        return None or self          # left is falsy -> the instance
+
+    def and_or(self):
+        return (self and 0) or self  # precedence: (a and b) or c
+
+    def two_classes(self, o):
+        return self or o             # same class both sides -> keeps it
+
+
+def plain(a, b):
+    return a or b
+
+
+def chain3(a, b, c):
+    return a or b or c
+
+
+def mixed(a):
+    return a and "s"
+
+
+n = N()
+z = N(0)
+
+# the operand actually handed back
+print("and:", n.kw_and(), z.kw_and())
+print("or:", n.kw_or().v, z.kw_or().v)
+print("field:", n.field_or(), z.field_or())
+print("none:", n.none_or().v)
+print("andor:", n.and_or().v)
+print("cls:", n.two_classes(z).v, n.two_classes(z) is n)
+
+# ...and the identity is preserved, so a method call on the result resolves
+print("method:", n.kw_or().kw_and(), n.none_or().kw_and())
+
+# free functions, and a chain longer than one operator
+print("plain:", plain(0, 7), plain(3, 7), plain("", "x"))
+print("chain:", chain3(0, 0, 5), chain3(0, 4, 5), chain3(1, 4, 5))
+print("mixed:", mixed(0), mixed(1))
+
+# the outside-a-def spellings, which were always right and must stay right
+x = n and 1
+y = n or 1
+print("bare:", x, y.v, (1 if n else 0), bool(n), bool(z))

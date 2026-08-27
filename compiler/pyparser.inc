@@ -4556,6 +4556,45 @@ begin
   if Tokens[ce + 1].Kind = tkDot then Result := tyVariant;
 end;
 
+{ The JOIN of two inferred operand types — the answer for any construct whose
+  value is one OPERAND or the other, chosen at run time. Three of those exist in
+  this file (the conditional expression, `and`, `or`) and they must not each
+  spell the rule out: this is the one spelling, and the arms are its callers
+  (devdocs/dev/normalise-dont-special-case.md).
+
+  The rule: an unknown on either side leaves the other standing; two classes
+  keep their identity only if it is the SAME class; anything else that differs
+  widens. Widening to a variant is what lets the RUNTIME dispatch decide, and it
+  is the same conclusion the reassigned-local rule reaches
+  (bug-nilpy-local-reassigned-across-classes-keeps-one-static-class).
+
+  ciOut carries the class identity alongside the kind, because for tyClass the
+  kind alone is not the type — ASTTk equality holds between ANY two classes,
+  which is how `bytearray() if flag else [1, 2]` once registered TPyBytes over a
+  list-returning call. }
+function PyJoinInferTk(ta: TTypeKind; ca: Integer;
+                       tb: TTypeKind; cb: Integer;
+                       var ciOut: Integer): TTypeKind;
+begin
+  ciOut := ca;
+  Result := ta;
+  if (ta = tyUnknown) or (tb = tyUnknown) then Exit;
+  if (ta = tyClass) and (tb = tyClass) then
+  begin
+    if ca <> cb then
+    begin
+      Result := tyVariant;
+      ciOut := -1;
+    end;
+    Exit;
+  end;
+  if ta <> tb then
+  begin
+    Result := PyWiden(ta, tb);
+    ciOut := -1;
+  end;
+end;
+
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
 var i, ci, si, procIdx, depth, smArgs, fci, fi, k2, rcvCi: Integer; tk: TTypeKind;
     fldCi, fldAt: Integer; fldTk: TTypeKind;
@@ -4660,29 +4699,56 @@ begin
       if ternElse >= 0 then
       begin
         ternTk := PyInferExprType(ternElse + 1, endIdx);
-        if (ternTk <> tyUnknown) and (Result <> tyUnknown) then
-        begin
-          if (Result = tyClass) and (ternTk = tyClass) then
-          begin
-            if PyInferLastCi <> ternCi then
-            begin
-              Result := tyVariant;
-              PyInferLastCi := -1;
-              Exit;
-            end;
-          end
-          else if Result <> ternTk then
-          begin
-            Result := PyWiden(Result, ternTk);
-            PyInferLastCi := -1;
-            Exit;
-          end;
-        end;
+        Result := PyJoinInferTk(Result, ternCi, ternTk, PyInferLastCi, ternCi);
       end;
       PyInferLastCi := ternCi;
       Exit;
     end;
     Inc(k2);
+  end;
+  { `and` / `or` hand back an OPERAND, not a Boolean — NilPy implements that,
+    and the comparison arm below says so in as many words while typing nothing,
+    so the expression fell through to the operand walk and took an ARITHMETIC
+    answer. `def m(self): return self or 1` registered a number over a body that
+    returns an instance, and the caller died with `TypeError: expected a number,
+    got object`.
+
+    `self and 1` looked fine and is not evidence: it yields the RIGHT operand
+    because self is truthy, and that operand is the int the walk guessed anyway.
+    One arm was correct by coincidence, which is why this survived — see the
+    ticket's own warning about reading the `and` row as a working arm.
+
+    The type is the JOIN of the two operands, exactly as for the conditional
+    expression above, and it is the SAME join: PyJoinInferTk, one spelling.
+
+    `or` is scanned first and `and` only if no top-level `or` was found, which
+    is Python's precedence: `a and b or c` is `(a and b) or c`, so the `or`
+    is the operator that decides the whole expression. Splitting at the FIRST
+    one and recursing right handles the chain — `a or b or c` joins a with
+    `b or c` and the recursion does the rest. Depth-tracked, so an operator
+    inside a call or a subscript does not decide the enclosing expression.
+    bug-n-a-short-circuit-or-returning-self-is-typed-as-a-number }
+  for k2 := 0 to 1 do
+  begin
+    i := startIdx;
+    depth := 0;
+    while i < endIdx do
+    begin
+      if Tokens[i].Kind in [tkBegin, tkLBrack, tkLParen] then Inc(depth)
+      else if Tokens[i].Kind in [tkEnd, tkRBrack, tkRParen] then Dec(depth)
+      else if (depth = 0) and (i > startIdx) and
+              (((k2 = 0) and (Tokens[i].Kind = tkOr)) or
+               ((k2 = 1) and (Tokens[i].Kind = tkAnd))) then
+      begin
+        Result := PyInferExprType(startIdx, i);
+        ternCi := PyInferLastCi;
+        ternTk := PyInferExprType(i + 1, endIdx);
+        Result := PyJoinInferTk(Result, ternCi, ternTk, PyInferLastCi, ternCi);
+        PyInferLastCi := ternCi;
+        Exit;
+      end;
+      Inc(i);
+    end;
   end;
   { A COMPARISON or a membership test yields a Boolean whatever its operands
     are, and the scan below types an expression by the operands it recognises:

@@ -4,6 +4,8 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "`def m(self): return self or 1` dies with `TypeError: expected a number, got object` — a top-level short-circuit `or` hands back an OPERAND, and the def-return-type scanner types it from the wrong side. The `and` spelling answers correctly only because its truthy arm happens to be the int."
+status: done
+owner: frank1-AN
 ---
 
 # A short-circuit `or` returning `self` is typed as a number
@@ -62,3 +64,47 @@ rather than guessed.
 The four lines above matching CPython, plus the two `and`/`or` rows that
 `test/test_nilpy_arith_dunder_on_self.npy` documents as deliberately NOT
 asserted — fold them back in when this closes.
+
+## Resolution — 2026-08-27
+
+Fixedpoint `68e7d2d154fc`, `tools/gate.sh quick` GREEN.
+Test: `test/test_nilpy_bool_op_return_type.npy` + `.expected`, registered in the
+Makefile — and the two deferred rows in
+`test/test_nilpy_arith_dunder_on_self.npy` are **folded back in**, as the Gate
+section asked, with its comment rewritten to say why `kw_and` is not evidence.
+
+Implemented as the ticket described, including the warning it ends with.
+
+**The join is now spelled ONCE.** The ticket said the new arm "should not be a
+third spelling of the join", so the conditional expression's inline copy was
+extracted into `PyJoinInferTk(ta, ca, tb, cb, var ciOut)` and the ternary arm
+became its first caller before the `and`/`or` arm became its second. The
+extraction is behaviour-preserving — same unknown/same-class/widen ladder, with
+`ciOut` carrying the class identity that `ASTTk` equality cannot (the reason
+`bytearray() if flag else [1, 2]` once registered TPyBytes).
+
+**Precedence, not just presence.** `or` is scanned at depth 0 first and `and`
+only if no top-level `or` exists, because `a and b or c` is `(a and b) or c` —
+the `or` is what decides the whole expression. Splitting at the FIRST operator
+and recursing right handles chains (`a or b or c` joins `a` with `b or c`).
+Depth-tracked, so an operator inside a call or a subscript does not claim the
+enclosing expression.
+
+**The `and` row is asserted everywhere in the new test, on purpose.** The
+ticket's own warning — "do not read the `and` row as a working arm" — is a
+property of the test suite too: `self and 1` yields the right operand because
+self is truthy, and that operand is the int the old walk guessed anyway. A test
+that asserted only `and` would have passed before this change.
+
+**Canaries, all green, named individually:** `mixed_type_bool_op`,
+`membership_bool_return`, `call_return_infer`, `def_return_type`,
+`quick_canary_nilpy`, `lambda_returned_from_def`, `one_line_def_suite`,
+`empty_tuple`, `kwarg_overload`, `nonlocal_escaping_closure`,
+`def_returning_a_big_int`, `arith_dunder_on_self`, `return_type_inference`,
+`infer_return`, `conditional_expression_none`, `variant_method_call`,
+`a_rebound_parameter_widens`, `numeric_widen`, `container_kind_tag`,
+`is_none_typed`, `lib_mimic_xml_etree_elementtree`. The ternary ones matter most
+— that arm was rewritten, not just added beside.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.
