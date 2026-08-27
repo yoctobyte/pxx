@@ -5,15 +5,68 @@ prio: 45
 type: feature
 blocked-by: []
 status: backlog
-summary: "xtensa is the one target whose output nothing on this box can RUN, so every xtensa ticket ends in 'do not land this on inspection' and stalls. But `qemu-xtensa` (user mode) IS installed here, with dc232b/dc233c/lx106 cores. Two things stand between it and being a real oracle: xtensa has no IR_SYSCALL arm, and TargetIsEspClass hardcodes xtensa as bare-metal ALWAYS."
+summary: "xtensa is the one target whose output nothing here can RUN, so every xtensa ticket ends in 'do not land this on inspection'. Stock `qemu-xtensa` (user mode) IS installed, but xtensa has no IR_SYSCALL arm and TargetIsEspClass hardcodes it as bare-metal ALWAYS. Installing ESP-IDF (its qemu fork) is the CHEAPER first move and is worth doing regardless — but it does NOT make the blocked tickets' gates reachable, because those tests need the builtin unit, which no ESP-class target gets."
 ---
 
 # A hosted xtensa profile, so qemu-xtensa can be an oracle
 
+> **Read this first — two corrections after the box change (2026-08-27).**
+> Everything below was measured on **plexus**, the current dev box. plexus
+> replaced borg's frank2/frank3 after the 2026-08-20 PSU death, so *"cannot be
+> settled on this box"* in [[bug-a-the-div-by-zero-check-is-still-missing-on-xtensa]]
+> and its siblings was written about a machine that no longer exists. Whether
+> the old box had ESP-IDF is **unknown** — nothing in the tree or in the
+> box-level notes records it.
+>
+> **1. Install ESP-IDF first; it is much cheaper than this ticket.** IDF ships
+> the Espressif qemu fork (`qemu-system-xtensa` / `qemu-system-riscv32`), which
+> boots a real ESP image, and `test-esp-bare` **already has every row wired**
+> behind `if [ -z "$XT" ]; then echo "...not installed; skipped"`. Measured on
+> plexus: no `IDF_PATH`, no `~/.espressif`, no `~/esp`, and no
+> `qemu-system-*` of ANY kind anywhere on the filesystem — only the stock
+> user-mode `qemu-<arch>` binaries. So those rows are all skipping today, and a
+> download turns them on. **Do that before doing this.**
+>
+> **2. But IDF does not unblock the tickets this one was filed to unblock.**
+> That was the flaw in the original argument. The gate on
+> [[bug-a-the-div-by-zero-check-is-still-missing-on-xtensa]] is
+> `test_div_by_zero_raises_on_every_target.pas` producing `ALL OK` under
+> xtensa — and that file **cannot be built for an ESP-class target at all**:
+>
+> ```
+> $ pascal26 --target=xtensa  --esp-profile=bare -Fulib/rtl -Fulib/rtl/platform/esp <it>
+> error: UpCase: builtin helper unavailable (needs the builtin unit; not on ESP)
+> $ pascal26 --target=riscv32 --esp-profile=bare -Fulib/rtl -Fulib/rtl/platform/esp <it>
+> error: UpCase: builtin helper unavailable (needs the builtin unit; not on ESP)
+> ```
+>
+> Note the second line: **riscv32-bare fails too**, and riscv32 already has the
+> div check landed — because it was verified on the **hosted** profile, which
+> gets the full RTL:
+>
+> ```
+> $ pascal26 --target=riscv32 -Fulib/rtl <it> && run_target.sh riscv32 …
+> ALL OK
+> ```
+>
+> That is the whole case for this ticket, stated properly: not *"there is no
+> emulator"* but *"xtensa is the only target with no HOSTED profile, so the
+> cross-differential corpus cannot be built for it, whatever emulator you
+> have."* The Espressif fork tests the ESP **product**; a hosted profile tests
+> the **backend** against the same corpus every other target runs. They are
+> complementary, and only the second makes the blocked gates reachable.
+>
+> Partial credit where it is due: some cross tests *do* build bare —
+> `test_cross_float` does — so the IDF fork would let a subset run. But
+> `test_cross_variant` does not either, for an unrelated reason:
+> [[bug-a-xtensa-codegen-has-no-variant-support]].
+
+
 ## The problem this exists to remove
 
-xtensa is the only target with **no local execution oracle**, and it shows up as
-a recurring paragraph in ticket after ticket rather than as one item:
+xtensa is the only target with **no local execution oracle and no hosted
+profile**, and it shows up as a recurring paragraph in ticket after ticket
+rather than as one item:
 
 - [[bug-a-the-div-by-zero-check-is-still-missing-on-xtensa]] — *"No local
   oracle... Every other backend's arm was verified by EXECUTING the differential
