@@ -120,4 +120,4 @@ identical on pinned v384, both filed rather than folded in:**
 Track B's file and its lifecycle, and it wants the next pin under it first.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit f34b1851b.
