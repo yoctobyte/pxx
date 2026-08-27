@@ -9222,3 +9222,55 @@ Two lanes parking drops the push rate, which is what the daemon needs after fran
 for v389's queued verdict to reach a commitment point. **The lever I said only works when
 several lanes free up together is now, for the first time tonight, available** — and it
 arrived from finishing rather than from anyone being idled.
+
+## frankA stood down clean — and reframed the near-miss better than I did
+
+Final act was `ceb42945c`: **a stale claim in the repo with its own name on it.** The rung-6
+section still said four walls and *"complete set for this unit"* — made false by its own fix
+to wall 2, which exposed a fifth. **Appended rather than edited**, so the original
+measurement stays readable as what it was, and the section now says plainly: *don't treat the
+wall list as a work estimate; re-run the probe after each wall lands.* It also records that
+**the typinfo chain does NOT block rung 6** — that rung needs the type-level API, not the
+instance overloads — because the two are newly easy to conflate.
+
+Final state: tree clean, HEAD == origin/master, no ticket in `working/`, binary
+`f2e90dedc75c` a verified fixedpoint at the pushed sha.
+
+### The correction worth keeping: a default, not a virtue
+
+I had filed the near-miss next to fatigue. frankA rejected that framing:
+
+> The transferable part is not *"be careful when tired"*. It is that **a baseline run is
+> cheap and should be the DEFAULT step, not a suspicion-triggered one.**
+
+**A rule that only fires when you are already suspicious protects you exactly when you least
+need it.** That is the version in the tickets and the version to carry.
+
+And it credited frankB's *"it did not reduce, stop varying the input"* note for priming it to
+distrust a passing probe — *"without that message in the thread I'd probably have shipped the
+claim."* Worth recording as evidence the relay does something: neither lane can see the
+other, and a message about `keys()` two hours earlier is what stopped a false claim about
+overload resolution.
+
+### Track P queue, in frankA's own order, for whoever picks it up
+
+1. **`bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching`**
+   — unblocks typinfo's consumer path, and **it is a five-minute question before it is a fix**:
+   confirm whether the *symbol* is wrong or the *field* is, because they have different fixes.
+2. `bug-p-a-resourcestring-is-not-addressable` — ticket already carries the boundary
+   measurement that picks the fix (only `resourcestring` differs; untyped `const` refuses `@`
+   in both pxx and FPC).
+3. The vmt-address wall (`AN_CLASS_VIRTUAL_CALL`, 18-line repro with **no generics in it**).
+4. Nested `specialize` in expression position — the biggest, and its ticket now starts from
+   the **objfpc** repro rather than the Delphi symptom.
+
+### Why the sole-A check was worth its cost even though it came back clean
+
+frankA thanked me for asking frank-optimize rather than waving it through. The reason it was
+worth the message: **frank-optimize DID end up in `symtab.inc` after saying it might not, and
+told me unprompted.** A check that returns "no problem" is not wasted — it is the only way to
+know the difference between separation and luck, and the arrangement works only because both
+sides treated it as a real question rather than a formality.
+
+**Session tally for frankA:** five rung-6 walls found where the ticket said one, two real
+defects fixed, three filed with the analysis banked, one false claim caught before it shipped.
