@@ -8234,3 +8234,71 @@ re-derives 20 from the branch and concludes the doc is stale.
 
 Seventh instance of the day's pattern, second caught by its own author, and the
 first where the *document being written* was about the pattern itself.
+
+## rtl-generics measured: NOT typinfo all the way down — the rung's dependency graph was wrong (`b03e00ecf`, fetcher `4f380892c`)
+
+The exercise paid out exactly where it was supposed to. **2,027 of 9,550 lines
+compile clean** (strings 37, helpers 146, memoryexpanders 227, hashes 1,617), all
+blockage concentrated in `generics.defaults.pas` (3,358), and
+`generics.collections` (4,165) is blocked **only through it** and has never been
+independently assessed. Binary `2c4e727d4b63`, verified fixedpoint at `4f380892c`.
+
+**Four walls, and two of them are OURS** — which is the finding, because the ticket
+said typinfo and nobody would have guessed otherwise:
+
+1. **typinfo** (Track B, frankB's p72) — the named list it asked for. `PTypeData` is
+   **39 references but only FIVE FIELDS at NINE SITES**: `OrdType` ×3, `FloatType`
+   ×3, `elSize` ×3, `MinInt64Value` ×1, `MaxInt64Value` ×1. Plus `PTypeInfo` ×14
+   (mostly passed through), `TypeInfo` ×6, `GetTypeData` ×6, and `TTypeKind` /
+   `TOrdType` / `TFloatType` whole. **`OrdType` and `FloatType` are used only as case
+   selectors dispatching to a comparer**; the Int64 bounds only in one range test. So
+   the facade's hard requirement is a correct `OrdType`/`FloatType` for ordinals and
+   reals — far smaller than 39 references implies. Relayed to frankB with the file open.
+2. **A generic class's out-of-line method header binds to a SAME-NAMED NON-GENERIC
+   class** (Track P, 33-line repro). `THashService<T: THashFactory> = class(THashService)`:
+   pxx drops the `<T>` from the implementation header, compiles the body in the
+   non-generic class's scope, and every class var of the generic becomes "undefined
+   variable". **The compiler's own warning names it** — *"duplicate definition of
+   'TSvc.Sel'… the later body wins"*. Renaming the two colliding generics in a scratch
+   copy cleared the entire hierarchy: **this one defect gates ~700 lines alone.**
+3. **`TGeneric<T>.ClassMethod` inside another generic's body reads as an undefined
+   variable** (Track P, 24-line repro). Needs `T` to be the *enclosing* generic's
+   parameter; a concrete specialization resolves fine. FPC prints 8, we reject. 13
+   expression-position sites in defaults and **the dominant shape in collections**.
+4. **SysUtils** (Track B, p55, independent of typinfo) —
+   `EArgumentOutOfRangeException` ×3, `Exception.CreateRes` ×3,
+   `System.Error`/`TRuntimeError` ×7. frankA flagged in the ticket that the `Error`
+   part sits inside the *"error handling stays ours"* ruling: the requirement is that
+   `Error` exists and halts, **not** that its numbers match FPC's.
+
+Both P defects **reproduce on `pinned`**, which rules out the nested-type fixes as
+fallout — the first thing anyone would have suspected.
+
+### The method is what makes the partition trustworthy
+
+Each wall was stubbed in a **throwaway scratch copy** and re-probed so the next
+became visible, with `library_candidates/rtl-generics` left untouched — the
+difference between measuring the library and measuring your own edits. After all
+four stubs, `generics.defaults` produced **no further distinct errors**, so this is
+the complete set *for that unit* rather than a prefix of an unknown-length list.
+
+**And frankA volunteered the caveat I would otherwise have had to ask for:** that is
+not the same as predicting all four fixes make it compile first try, because code
+behind a stub was type-checked **against the stub**. Re-running is one `probe.sh`,
+and the trigger is *after the typinfo facade lands*.
+
+### Dispatch: frankA takes both P bugs, and the ranker's own rule says so
+
+Not a preference — **a blocker inherits the priority of what it unblocks.** Both gate
+`feature-pascal-corpus-expansion`; #2 gates ~700 lines alone; #3 is the dominant
+shape in the 4,165 unassessed lines of collections. Their effective prio is the
+rung's, which beats whatever `next --track P` prints. frankA also holds the repros,
+so routing them costs a re-derivation of two subtle scope bugs. Sequenced #2 then #3.
+
+**Guard against a misread I set up myself:** frankB's p72 landing does **not** make
+rung 6 green. I told frankB that explicitly, because "typinfo unblocks generics" is
+what the ticket has said for weeks and is now known to be a quarter of the truth.
+
+`feature-pascal-corpus-expansion` moves `working/` → `unfinished/` when frankA claims
+the first P bug: it is a park waiting on three other tickets, and `working/` is a
+live lock, not a bookmark.
