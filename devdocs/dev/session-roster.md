@@ -7035,3 +7035,82 @@ live one, which is the same failure this file logged three hours ago.
    `PXX_TRACK=T` — correct, the escape is for *running* suites — and did not touch
    the hook. **Neither will I.** That file and `.claude/settings.json` are the
    owner's; a peer reporting friction is not authorisation to edit them.
+
+## 2026-08-27 — `~/frank-optimize` BUILT (owner request); NOT dispatched, because O and A share files
+
+Owner: *"we would like to have another checkout - frank-optimize. that would
+purely focus on optimizing (broad spectrum)."*
+
+Tree is built, seeded and in the launcher. **It is deliberately not staffed yet**
+— see the collision below, which is the one hazard the track letters exist to
+prevent and which lands squarely on this lane.
+
+### What was built, and it is verified rather than asserted
+
+| step | result |
+| --- | --- |
+| `git clone --local ~/frank-coordinator ~/frank-optimize` | 1.7s, **583 MB** working tree, objects hardlinked |
+| `origin` re-pointed at GitHub | `git@github.com:yoctobyte/pxx.git` — **not** the local sibling it was cloned from |
+| `merge.ours.driver=true` | set (per-checkout, not committable — the step every fresh clone misses) |
+| compiler seeded + self-hosted | **`converged after 2 round(s)`**, fixedpoint `591ae8160f69` |
+| built ≠ pinned | `591ae816…` vs `e8b72f8a…` — a real build, **not** a copied-seed no-op |
+| branch | `master` |
+
+Disk after: 97 GB free. The 583 MB is working tree only.
+
+**Re-pointing `origin` is not optional and is easy to miss.** `git clone --local`
+sets `origin` to the *sibling tree*, so a push would go into another agent's
+checkout rather than to GitHub. Add it to the new-tree checklist alongside the
+merge driver and the seed.
+
+### A free confirmation of the `-O2` promotion fell out of the seeding
+
+The seed self-hosted at HEAD, which now carries all three promotions. So
+**`591ae8160f69` is a promoted-`-O2` compiler that reproduces itself
+byte-identically, built from scratch in a clean tree.** That is an independent
+instance of the guard described earlier — `make compiler/pascal26` builds at the
+default `-O` level, and the default is the level being promoted.
+
+Bounded honestly, because this is exactly where over-claiming starts: it confirms
+**the compiler's own source at `-O2`**, in one tree, on x86-64. It says nothing
+about `lib/rtl`, the ~900 optdiff programs, or cross targets. **The pin stays held
+on `frankT`'s opt-tier verdict.** This is corroboration, not the verdict.
+
+### WHY IT IS NOT STAFFED — Track O is implicitly Track A, and A is held
+
+This is the coordination problem and it is structural, not a scheduling nicety.
+CLAUDE.md: *"Track O — optimization (formal category, **implicitly Track A**). …
+Almost everything here edits Track A's shared ground (`ir_codegen.inc`,
+`symtab.inc`, the backends, `compiler/builtin/**`), so an O ticket carries a Track
+A file-ownership tag and obeys A's rules: self-host byte-identical gate,
+**no-concurrent-edit with A**."*
+
+**frankA is editing `ir_codegen.inc` right now** — it holds
+`feature-opt-o3-register-pressure`, itself an O ticket. A second agent in
+`frank-optimize` on `master` would be the textbook sole-A violation: two sessions
+editing the same shared core files, which is the specific hazard the letters
+exist for, and which `working/` locks mitigate but do not eliminate when both
+agents want the same file rather than the same ticket.
+
+The topic-branch escape used by `rust` and `wasm` does **not** obviously apply.
+Per this file's own rationale, topic branches carry *destabilizing* work whose
+merge cost is acceptable; optimization lands in the core, needs pins to reach
+other lanes, and would pay a conflict on the 28 MB committed `stable_linux_amd64/**`
+at every merge — the exact reason A and B were kept on the trunk.
+
+**So the fork is real and it is the owner's**, put to them with a recommendation
+rather than guessed at. Options recorded in the message: sequence O behind
+frankA; split by file (O takes the allocator/runtime/`compiler/builtin/**`, A
+keeps `ir_codegen.inc`); or run frank-optimize on an `optimize` topic branch and
+pay the merge cost. **Nothing is dispatched into the tree until that is answered.**
+
+Also unresolved and asked: *"broad spectrum"* may be wider than Track O's codegen
+lane — compiler build time, RTL algorithmic cost and allocator work span A **and**
+B, and B's gate is different (build with `$(PXX_STABLE)`, never rebuild the
+compiler). Worth pinning down before the first ticket, not after.
+
+### Concurrency note
+
+The fleet is now **8 launchable roles**; `frank.sh`'s note updated to match.
+Dispatched remains **three** (frankA, frankT, coordinator). Building a tree costs
+nothing; staffing it does.
