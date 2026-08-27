@@ -10,7 +10,7 @@ owner: frank1-AN
 # Four sysutils string gaps
 
 - **Type:** bug / missing entry points — Track B (`lib/rtl/sysutils.pas`).
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-08-21, from a string differential run while working Track A.
 
 ## Context first: the family is in good shape
@@ -144,3 +144,6 @@ on success, and `lib_strtoint` / `lib_strutil` assert it only inside
 - `lib_strutil` (59 `=ok`, 0 FAIL), `lib_strtoint` (36 `=ok`),
   `lib_strutils_words` and `lib_format` all green through `$(PXX_STABLE)`, with
   the exact counts the Makefile asserts.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.
