@@ -78,4 +78,4 @@ what `cutils.pas:1429` still needs:
 - **`P[1]` — indexing a frozen-string result — does not parse.**
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 0fb510d5c.
