@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-27T01:04:44Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "33576b46c7271a9b845e4682eecdf2c099e9df6d",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-27T01:13:22Z",
    "fixed": [],
    "new_red": [],
@@ -454,6 +445,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "33d25ba40f7e50a6a36db19ad4d822de51e284a8",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T11:02:56Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "7fddc65529f6c6667509ade8dddb885b1ff1f158",
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
@@ -1017,11 +1017,11 @@
   "test-core#168": "full",
   "test-core#169": "full",
   "test-core#170": "full",
-  "test-core#171": "native",
   "test-core#172": "native",
   "test-core#173": "native",
   "test-core#174": "native",
   "test-core#175": "native",
+  "test-core#176": "native",
   "test-core#src:compiler/.pascal26.fixedpoint": "native",
   "test-core#src:compiler/compiler.pas@2": "native",
   "test-core#src:examples/sudoku/sudoku.pas": "native",
@@ -2026,6 +2026,7 @@
   "test-core#src:test/test_nilpy_class_base_is_an_alias.npy": "native",
   "test-core#src:test/test_nilpy_class_named_after_its_imported_base.npy": "native",
   "test-core#src:test/test_nilpy_class_named_after_its_py_module_base.npy": "native",
+  "test-core#src:test/test_nilpy_cmp_dunder_nonclass_operand.npy": "native",
   "test-core#src:test/test_nilpy_configparser.npy": "native",
   "test-core#src:test/test_nilpy_convert.npy": "native",
   "test-core#src:test/test_nilpy_counter.npy": "native",
@@ -4244,11 +4245,11 @@
   "test-cjson#src:compiler/.pascal26.fixedpoint": "pass",
   "test-core#169": "pass",
   "test-core#170": "pass",
-  "test-core#171": "pass",
   "test-core#172": "pass",
   "test-core#173": "pass",
   "test-core#174": "pass",
   "test-core#175": "pass",
+  "test-core#176": "pass",
   "test-core#src:compiler/.pascal26.fixedpoint": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
@@ -5250,6 +5251,7 @@
   "test-core#src:test/test_nilpy_class_base_is_an_alias.npy": "pass",
   "test-core#src:test/test_nilpy_class_named_after_its_imported_base.npy": "pass",
   "test-core#src:test/test_nilpy_class_named_after_its_py_module_base.npy": "pass",
+  "test-core#src:test/test_nilpy_cmp_dunder_nonclass_operand.npy": "pass",
   "test-core#src:test/test_nilpy_configparser.npy": "pass",
   "test-core#src:test/test_nilpy_convert.npy": "pass",
   "test-core#src:test/test_nilpy_counter.npy": "pass",
@@ -6894,14 +6896,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-27T10:54:40Z",
+  "date": "2026-08-27T11:02:56Z",
   "deadline": 7200.0,
-  "sha": "33d25ba40f7e50a6a36db19ad4d822de51e284a8",
+  "sha": "7fddc65529f6c6667509ade8dddb885b1ff1f158",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 303.0
+  "wall": 302.8
  },
  "last_bench": {
   "conf_rows": 550,
