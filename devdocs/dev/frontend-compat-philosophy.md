@@ -61,6 +61,53 @@ obligatory, the other is not merely optional but actively deprioritised.
    does not govern runtime-error numbers, exit codes or fault messages, which stay
    ours by default (CLAUDE.md, owner 2026-08-21).
 
+### Laxness: an INSTANCE of the floor rule, with one real exception inside it
+
+Owner, 2026-08-27: *"there are exceptions. for example, for pascal, we are more
+lax by default and don't enforce certain (unnecessary) restrictions."*
+
+The laxness is real and deliberate — but **most of it is not an exception to the
+floor rule, it is the floor rule working.** "Lax" means *accepting source FPC
+rejects*, which is exactly "exceeding the floor", which the table above already
+calls free. It only looks like an exception if you read "follow the de-facto
+standard" as "behave identically to FPC", which is the misreading the floor/
+ceiling framing exists to prevent.
+
+**But there is a real exception hiding inside it, and it is the line that
+matters:**
+
+| kind of laxness | what changes | free? |
+| --- | --- | --- |
+| **diagnostic** — we accept source FPC rejects | the set of accepted programs grows; every program both accept means the same thing | **yes, free.** Pure superset |
+| **semantic** — the same source produces a different VALUE | the meaning of a program that already compiled everywhere | **NO.** This is the dangerous class |
+
+The shipped flags sort themselves cleanly along that line, and the docs already
+say so. `--strict-case`, `--strict-operator`, `--strict-visibility`,
+`--strict-overload` and `--require-forward` are **diagnostic**: the lax default
+parses visibility markers and grants access anyway, resolves overloads without
+the `overload;` marker, permits `=`/`<>` on class operands. Nothing that compiles
+under both means anything different. That is the "unnecessary restriction" the
+owner is describing, and dropping it costs nothing.
+
+`--strict-fpc`'s own documentation then flags the exceptions explicitly — it
+*"switches two rules that change a **value** rather than a diagnostic: FPC shift
+widths, and `Variant`→`Char`."* **Those two are not free**, because the same
+source computes a different answer depending on the flag. They are behind a flag
+precisely because the choice is real.
+
+**The operational rule:** *being lax is free when it strictly enlarges the set of
+accepted programs. It stops being free the moment it changes what an
+already-accepted program MEANS.* At that point CLAUDE.md's escape rule applies —
+a divergence producing a **silently wrong value** is promoted to an ordinary
+`bug-` ticket in the owning lane, not filed as a dialect choice or a `compat`
+item. Being our own dialect licenses different semantics *chosen on purpose*; it
+never licenses a wrong answer nobody chose.
+
+And note laxness is not uniform even in Pascal: `{$DECLORDER}` defaults **ON**
+(declare-before-use is enforced), with `--lax-decl-order` as the opt-out. The
+default is chosen per feature on whether the restriction earns its keep, not by a
+blanket preference for permissiveness.
+
 **Where an implementation's own idiosyncrasies live:** behind `--strict-<impl>`,
 opt-in, never the default — `--strict-fpc` / `--mimic-fpc` and `--strict-python`
 ship today. There is deliberately **no `--strict-gcc`**: being bug-compatible with
