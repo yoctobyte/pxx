@@ -14652,7 +14652,7 @@ endif
 	test "$$($(TESTTMP)/lib_mimic_saxutils | grep -c '=ok')" = "18"
 	test "$$($(TESTTMP)/lib_mimic_saxutils | tail -1)" = "MIMIC-SAXUTILS OK"
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_sax_xmlreader.npy $(TESTTMP)/lib_mimic_xmlreader
-	test "$$($(TESTTMP)/lib_mimic_xmlreader | grep -c '=ok')" = "21"
+	test "$$($(TESTTMP)/lib_mimic_xmlreader | grep -c '=ok')" = "25"
 	test "$$($(TESTTMP)/lib_mimic_xmlreader | tail -1)" = "MIMIC-XMLREADER OK"
 	# xml.dom.Node's twelve nodeType constants
 	# (feature-nilpy-xml-dom-is-two-questions-not-one). Every assertion is on a
@@ -14694,7 +14694,7 @@ endif
 	# writes `from collections.abc import Mapping`, which is swallowed before it
 	# reaches here (bug-n-from-collections-abc-import-is-swallowed-by-the-collections-root-rule).
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_collections_abc.npy $(TESTTMP)/lib_mimic_collections_abc
-	test "$$($(TESTTMP)/lib_mimic_collections_abc | grep -c '=ok')" = "47"
+	test "$$($(TESTTMP)/lib_mimic_collections_abc | grep -c '=ok')" = "49"
 	test "$$($(TESTTMP)/lib_mimic_collections_abc | tail -1)" = "MIMIC-COLLECTIONS-ABC OK"
 	# urllib.parse, reached the way the corpus reaches it: `from six.moves
 	# import urllib_parse as urlparse`, a RENAMED re-export through two shims

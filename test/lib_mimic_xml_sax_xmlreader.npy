@@ -76,6 +76,24 @@ b = a.copy()
 check("copy_len", b.getLength(), 2)
 check("copy_value", b.getValue((None, "class")), "hero")
 
+# ...and it must come back as the RUNTIME class, which is the whole reason
+# CPython spells this `self.__class__(...)` rather than naming the class. The
+# shim named it explicitly until 2026-08-27, because calling `__class__` as a
+# constructor did not compile; these three rows are what the revert bought, and
+# `copy_subclass_type` is the one the old spelling could not pass -- it answered
+# `AttributesImpl` for any subclass.
+check("copy_type", type(b).__name__, "AttributesNSImpl")
+check("copy_qname_survives", b.getQNameByName((XLINK, "href")), "xlink:href")
+
+class TaggedAttrs(AttributesNSImpl):
+    def tag(self):
+        return "tagged:" + str(self.getLength())
+
+t = TaggedAttrs(a._attrs, a._qnames)
+tc = t.copy()
+check("copy_subclass_type", type(tc).__name__, "TaggedAttrs")
+check("copy_subclass_method", tc.tag(), "tagged:2")
+
 if fails == 0:
     print("MIMIC-XMLREADER OK")
 else:
