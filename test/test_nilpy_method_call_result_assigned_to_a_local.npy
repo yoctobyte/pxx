@@ -1,0 +1,92 @@
+# `t = obj.hi()` then `return t` typed the def as a BYTE. The call arm in the
+# return scan took `hi` as a free name and asked FindProc, which found Pascal's
+# `Hi` — the high-byte intrinsic — case-insensitively. The def then declared a
+# Byte result and handed back a string handle: this printed 176, and the
+# chained form segfaulted. Nothing warned, and the locals table had the type
+# right the whole time.
+#
+# The rows are the shapes that reach it, and the LAST THREE are the controls
+# that must not change: a module-qualified call IS a flat lookup here, so
+# math.sqrt must keep reaching Pascal's capitalised `Sqrt`.
+# bug-n-a-method-call-on-an-optional-class-field-returns-a-raw-pointer
+
+import math
+import json
+
+
+class Foo:
+    def __init__(self):
+        self.tag = "T"
+
+    def hi(self):               # collides with Pascal's Hi() intrinsic
+        return "foo"
+
+    def me(self):
+        return self
+
+    def num(self):
+        return 42
+
+
+class Holder:
+    def __init__(self):
+        self.w = None           # the shape the ticket was filed under
+        self.w = Foo()
+
+    def viaField(self):
+        s = self.w.hi()
+        return s
+
+    def viaLocal(self):
+        f = Foo()
+        t = f.hi()
+        return t
+
+    def viaDirect(self):
+        u = Foo().hi()
+        return u
+
+    def viaChain(self):
+        v = Foo().me().hi()
+        return v
+
+    def viaAttr(self):
+        a = Foo().tag
+        return a
+
+    def intReturn(self):        # an int-returning method was never broken
+        n = self.w.num()
+        return n
+
+
+def modLevel():
+    u = Foo().hi()
+    return u
+
+
+def qualifiedCall():            # CONTROL: module-qualified, must stay typed
+    r = math.sqrt(2.0)
+    return r
+
+
+def qualifiedJson():            # CONTROL
+    d = json.dumps([1, 2])
+    return d
+
+
+def strMethod():                # CONTROL: a str method on a literal
+    p = "a,b".split(",")
+    return p
+
+
+h = Holder()
+print(h.viaField())
+print(h.viaLocal())
+print(h.viaDirect())
+print(h.viaChain())
+print(h.viaAttr())
+print(h.intReturn())
+print(modLevel())
+print(qualifiedCall())
+print(qualifiedJson())
+print(strMethod())

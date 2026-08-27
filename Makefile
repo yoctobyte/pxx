@@ -1102,6 +1102,10 @@ test-nilpy: $(COMPILER)
 	   && printf '%s\n' "$$out" | grep -q '^pascal26:6: error: undefined variable (Foo)$$' \
 	   && test ! -e $(TESTTMP)/test_nilpy_barename26 \
 	  || { echo "test_nilpy_bare_name_error_stays_short: FAIL - rc=$$rc (want 1 and the SHORT message on line 6, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	# a method call assigned to a local: the def's return type must come from the
+	# METHOD, not from a same-named Pascal intrinsic reached by a flat lookup
+	./$(COMPILER) test/test_nilpy_method_call_result_assigned_to_a_local.npy $(TESTTMP)/test_nilpy_mcall26
+	$(TESTTMP)/test_nilpy_mcall26 | diff -u test/test_nilpy_method_call_result_assigned_to_a_local.expected -
 	# a field DECLARED in an ancestor, widened by a descendant's assignment
 	./$(COMPILER) test/test_nilpy_ancestor_field_widened_by_a_descendant.npy $(TESTTMP)/test_nilpy_ancfld26
 	$(TESTTMP)/test_nilpy_ancfld26 | diff -u test/test_nilpy_ancestor_field_widened_by_a_descendant.expected -

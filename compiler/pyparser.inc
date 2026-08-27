@@ -407,6 +407,19 @@ var
     it cannot read — a warning the user would then see twice for one line. The
     detect pass is invisible by construction, so it stays silent. }
   PyFJDetecting: Boolean;
+  { The DEF whose body the return-type scan is currently walking: header range
+    and body range, in tokens. -1 outside a scan, and every arm that reads them
+    is inert then — exactly the shape PyInferSelfCi uses, and for the same
+    reason: PyInferExprType has no parameter for "which def is this" and is
+    called from ~50 places, most of which have no def in hand.
+
+    Read by PyDottedRootIsLocal, to tell `f.hi()` (a METHOD on a local) from
+    `math.sqrt()` (a module-qualified call). Saved and restored by the
+    PyInferDefRetTypeScan wrapper so a nested def's scan cannot leak its range
+    to the enclosing one.
+    bug-n-a-method-call-on-an-optional-class-field-returns-a-raw-pointer }
+  PyInferHdrLo, PyInferHdrHi: Integer;
+  PyInferBodyLo, PyInferBodyHi: Integer;
 
 { A parameter annotation NilPy could not read. CPython does not enforce
   annotations at all, so refusing the program over one breaks the
@@ -637,6 +650,10 @@ procedure PyRenameIdentRange(lo, hi: Integer; const oldName, newName: AnsiString
   Nothing in the day-to-day loop compiles with FPC, which is exactly why this
   rots silently — see the ticket. }
 function PyBytesCi: Integer; forward;
+{ Defined with the return-type scan helpers, ~26000 lines below the member-call
+  guard that now asks it (PyDottedRootIsLocal). }
+function PyNameBoundInDef(hdrFrom, hdrTo, bodyFrom, bodyTo: Integer;
+                          const nm: AnsiString): Boolean; forward;
 
 { Queue a setup statement to run before the current one — see PyHoistHead. }
 procedure PyHoistStmt(node: Integer);
@@ -4751,11 +4768,159 @@ begin
   end;
 end;
 
+function PyEndOfGroup(openIdx, limit: Integer): Integer;
+{ The index just PAST the bracket matching the one at openIdx, or `limit` when
+  the group does not close inside the range. Written once because the two
+  callers below both need it and a second copy of a bracket counter is a second
+  chance to get the nesting wrong. }
+var k, depth: Integer;
+begin
+  Result := limit;
+  depth := 0;
+  k := openIdx;
+  while k < limit do
+  begin
+    if Tokens[k].Kind in [tkLParen, tkLBrack] then Inc(depth)
+    else if Tokens[k].Kind in [tkRParen, tkRBrack] then
+    begin
+      Dec(depth);
+      if depth = 0 then
+      begin
+        Result := k + 1;
+        Exit;
+      end;
+    end;
+    Inc(k);
+  end;
+end;
+
+function PyCtorSelectorType(ci, afterCtor, endIdx: Integer;
+                            var outCi: Integer): TTypeKind;
+{ `Foo()` followed by `.m()` / `.f` selectors: what the LAST selector yields.
+
+  Without this the construction arms below answered tyClass for the whole
+  expression and simply ignored everything after the ctor`s `)`. `u = Foo().hi()`
+  — a method returning a string — was typed as a Foo, so a def returning `u`
+  declared a CLASS result and handed back a string handle; the caller read it as
+  an object pointer and the program printed a number, or segfaulted, with no
+  diagnostic anywhere. `Foo().tag` and `Foo().me().hi()` are the same shape.
+
+  Note the locals table got this RIGHT the whole time — PXXDBG=n.locals typed
+  `u` as tyAnsiString while PXXDBG=n.ret typed the def as tyClass. Two spellings
+  of one question, and the second is the broken one, which is exactly the shape
+  devdocs/dev/normalise-dont-special-case.md is about. The chase cannot simply
+  READ the locals table, though: PyInferExprType runs in the shell pre-pass with
+  no PyLocals and again in the body pass with one, and the two answering
+  differently is a silent ABI mismatch. So it is resolved token-only, from the
+  class tables, exactly like every other chase in this scan.
+
+  tyUnknown means "this chain did not resolve" — NOT "it is a Foo". The caller
+  must then fall through to the general walk rather than claim the class, which
+  is the whole bug in miniature.
+  bug-n-a-method-call-on-an-optional-class-field-returns-a-raw-pointer }
+var k, mi, pi2, fi2, cur: Integer;
+    nm: AnsiString;
+begin
+  Result := tyUnknown;
+  outCi := -1;
+  cur := ci;
+  k := afterCtor;
+  while (k + 1 < endIdx) and (Tokens[k].Kind = tkDot) and
+        (Tokens[k + 1].Kind = tkIdent) do
+  begin
+    { a selector on something with no class identity cannot be chased further }
+    if cur < 0 then
+    begin
+      Result := tyUnknown;
+      outCi := -1;
+      Exit;
+    end;
+    nm := GetTokenStr(k + 1);
+    if (k + 2 < endIdx) and (Tokens[k + 2].Kind = tkLParen) then
+    begin
+      mi := FindUMeth(cur, nm);
+      if mi < 0 then begin Result := tyUnknown; outCi := -1; Exit; end;
+      pi2 := UMthProc_[mi];
+      if pi2 < 0 then begin Result := tyUnknown; outCi := -1; Exit; end;
+      Result := Procs[pi2].RetType;
+      if (Result = tyClass) and (ProcRetRecId[pi2] >= REC_UCLASS_BASE) then
+        cur := ProcRetRecId[pi2] - REC_UCLASS_BASE
+      else
+        cur := -1;
+      k := PyEndOfGroup(k + 2, endIdx);
+    end
+    else
+    begin
+      fi2 := FindUField(cur, nm);
+      if fi2 < 0 then begin Result := tyUnknown; outCi := -1; Exit; end;
+      Result := IntToTypeKind(UFldTk[fi2]);
+      if (Result = tyClass) and (UFldRec_[fi2] >= REC_UCLASS_BASE) then
+        cur := UFldRec_[fi2] - REC_UCLASS_BASE
+      else
+        cur := -1;
+      k := k + 2;
+    end;
+  end;
+  { a chain that stopped short of the end of the expression was not fully
+    understood — say so rather than report the last selector we did resolve }
+  if k < endIdx then
+  begin
+    Result := tyUnknown;
+    outCi := -1;
+    Exit;
+  end;
+  if Result = tyClass then outCi := cur;
+end;
+
+function PyDottedRootIsLocal(i, startIdx: Integer): Boolean;
+{ Is the identifier at `i` a MEMBER of a value bound in the def being scanned,
+  rather than a free routine reached through a module name?
+
+  `f.hi()` and `math.sqrt(2)` are the same token shape and had the same answer:
+  the call arm below took `hi` and `sqrt` as free names and asked FindProc. For
+  `sqrt` that is right — a module-qualified call IS a flat lookup here. For `hi`
+  it found Pascal`s `Hi`, the high-BYTE intrinsic, case-insensitively, and typed
+  the whole expression tyUInt8. A def returning that local then declared a Byte
+  result and handed back a string handle: `print` showed 176, and
+  `Foo().me().hi()` segfaulted. Nothing warned.
+
+  This is the FOURTH site of one family — Pascal`s case-insensitive lookup
+  answering for a case-sensitive Python name (after PyIsClassTypeExact,
+  PyIsExactCtorName and the MEMBER arm`s FindUClass guard). An exact-case rule
+  does not work here, though: `math.sqrt` must keep reaching `Sqrt`, whose
+  Pascal spelling is capitalised. What separates the two cases is not the
+  spelling but the RECEIVER — a local or parameter has members, a module name
+  does not.
+
+  So: walk back to the ROOT of the dotted chain (`self` in `self.w.hi()`) and
+  ask PyNameBoundInDef, the routine that already exists to tell a name that
+  merely SPELLS a class from one that denotes it. Inert when no def range is in
+  hand, which keeps every other caller of PyInferExprType exactly as it was.
+  bug-n-a-method-call-on-an-optional-class-field-returns-a-raw-pointer }
+var k, root: Integer;
+begin
+  Result := False;
+  if (PyInferBodyLo < 0) or (PyInferBodyHi <= PyInferBodyLo) then Exit;
+  if (i <= startIdx) or (Tokens[i - 1].Kind <> tkDot) then Exit;
+  k := i;
+  root := -1;
+  while (k - 2 >= startIdx) and (Tokens[k - 1].Kind = tkDot) and
+        (Tokens[k - 2].Kind = tkIdent) do
+  begin
+    root := k - 2;
+    k := k - 2;
+  end;
+  if root < 0 then Exit;
+  Result := PyNameBoundInDef(PyInferHdrLo, PyInferHdrHi,
+                             PyInferBodyLo, PyInferBodyHi, GetTokenStr(root));
+end;
+
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
 var i, ci, si, procIdx, depth, smArgs, fci, fi, k2, rcvCi: Integer; tk: TTypeKind;
     fldCi, fldAt: Integer; fldTk: TTypeKind;
     ternCi, ternElse, ternDepth: Integer; ternTk: TTypeKind;
     divAt: Integer; divL, divR: TTypeKind;
+    ctorCi, ctorEnd, ctorSelCi: Integer; ctorTk: TTypeKind;  { `Foo().m().f` chase }
     name, lo, smPName: AnsiString;
 begin
   Result := tyUnknown;
@@ -5136,9 +5301,26 @@ begin
      (startIdx + 3 < endIdx) and (Tokens[startIdx + 3].Kind = tkLParen) and
      (FindUClass(GetTokenStr(startIdx + 2)) >= 0) then
   begin
-    Result := tyClass;
-    PyInferLastCi := FindUClass(GetTokenStr(startIdx + 2));
-    Exit;
+    ctorCi := FindUClass(GetTokenStr(startIdx + 2));
+    ctorEnd := PyEndOfGroup(startIdx + 3, endIdx);
+    { the same selector chase as the bare-construction arm below — `mod.Foo()`
+      and `Foo()` must not answer differently about what follows the ')' }
+    if (ctorEnd < endIdx) and (Tokens[ctorEnd].Kind = tkDot) then
+    begin
+      ctorTk := PyCtorSelectorType(ctorCi, ctorEnd, endIdx, ctorSelCi);
+      if ctorTk <> tyUnknown then
+      begin
+        Result := ctorTk;
+        PyInferLastCi := ctorSelCi;
+        Exit;
+      end;
+    end
+    else
+    begin
+      Result := tyClass;
+      PyInferLastCi := ctorCi;
+      Exit;
+    end;
   end;
   if (startIdx < endIdx) and (Tokens[startIdx].Kind = tkIdent) and
      IsClassType(GetTokenStr(startIdx)) and (startIdx + 1 < endIdx) and
@@ -5150,9 +5332,29 @@ begin
       them tyClass-with-no-identity made an unannotated `return str(x)` hand
       back a string handle the caller read as an object pointer — a segfault.
       The builtin table further down gives them their real result types. }
-    Result := tyClass;
-    PyInferLastCi := FindUClass(GetTokenStr(startIdx));
-    Exit;
+    ctorCi := FindUClass(GetTokenStr(startIdx));
+    ctorEnd := PyEndOfGroup(startIdx + 1, endIdx);
+    { A SELECTOR after the construction: the expression is what the selector
+      yields, not the class that was built. This used to Exit with tyClass and
+      ignore everything past the ctor's ')' — see PyCtorSelectorType. }
+    if (ctorEnd < endIdx) and (Tokens[ctorEnd].Kind = tkDot) then
+    begin
+      ctorTk := PyCtorSelectorType(ctorCi, ctorEnd, endIdx, ctorSelCi);
+      if ctorTk <> tyUnknown then
+      begin
+        Result := ctorTk;
+        PyInferLastCi := ctorSelCi;
+        Exit;
+      end;
+      { unresolved chain: fall through to the general walk. Claiming the CLASS
+        here is the defect, not the fallback. }
+    end
+    else
+    begin
+      Result := tyClass;
+      PyInferLastCi := ctorCi;
+      Exit;
+    end;
   end;
   i := startIdx;
   while i < endIdx do
@@ -5240,7 +5442,12 @@ begin
         { Call form `name(...)`: take the callee's return type and skip the
           whole argument group so arg tokens do not pollute the widening. }
         if (i + 1 < endIdx) and (Tokens[i + 1].Kind = tkLParen) and
-           ((not IsClassType(name)) or PyIsBuiltinConvName(name)) then
+           ((not IsClassType(name)) or PyIsBuiltinConvName(name)) and
+           { ...but NOT a method on a value bound in this def — see
+             PyDottedRootIsLocal. Such a name falls through to this scan's
+             tyVariant answer, which is the honest "cannot type it here" and
+             what an unrecognised method name already got. }
+           (not PyDottedRootIsLocal(i, startIdx)) then
         begin
           { ...and the builtin CONVERSIONS get in even though IsClassType
             answers to their names: `str`, `int`, `float`, `bool`, `list`,
@@ -30653,7 +30860,7 @@ begin
   PySkipNestedSuite := k;
 end;
 
-function PyInferDefRetTypeScan(methodStart: Integer; var retRec: Integer;
+function PyInferDefRetTypeScanInner(methodStart: Integer; var retRec: Integer;
                                var sawNone: Boolean): TTypeKind;
 var j, pdepth, bdepth, e, k, e2, rec2, bodyScanStart, curRec: Integer;
     tupDepth, chainRec: Integer;
@@ -30681,6 +30888,16 @@ begin
     Inc(j);
   end;
   bodyScanStart := j;
+  { Publish this def's ranges for PyDottedRootIsLocal. The wrapper below saves
+    and restores them, so a nested def's scan cannot leak its range into the
+    enclosing one. The body's upper bound is the whole suite, not the current
+    return: a name assigned AFTER the return is still a local of this def, and
+    the question being asked is whether the name is BOUND here. }
+  PyInferHdrLo := methodStart;
+  PyInferHdrHi := bodyScanStart;
+  PyInferBodyLo := bodyScanStart;
+  PyInferBodyHi := PySkipNestedSuite(methodStart);
+  if PyInferBodyHi < 0 then PyInferBodyHi := TokCount;
   bdepth := 0;
   while j < TokCount do
   begin
@@ -31259,6 +31476,23 @@ begin
       Result := True;
       Exit;
     end;
+end;
+
+function PyInferDefRetTypeScan(methodStart: Integer; var retRec: Integer;
+                               var sawNone: Boolean): TTypeKind;
+{ Save/restore wrapper around the scan proper. The scan publishes the def's
+  token ranges for PyDottedRootIsLocal, and it re-enters itself for a nested def
+  (PyNestedDefRetType), so without this the inner def's range would outlive it
+  and the enclosing def's `f.hi()` would be judged against the wrong body.
+  Outside any scan the ranges are -1 and every arm that reads them is inert.
+  bug-n-a-method-call-on-an-optional-class-field-returns-a-raw-pointer }
+var sHLo, sHHi, sBLo, sBHi: Integer;
+begin
+  sHLo := PyInferHdrLo;  sHHi := PyInferHdrHi;
+  sBLo := PyInferBodyLo; sBHi := PyInferBodyHi;
+  Result := PyInferDefRetTypeScanInner(methodStart, retRec, sawNone);
+  PyInferHdrLo := sHLo;  PyInferHdrHi := sHHi;
+  PyInferBodyLo := sBLo; PyInferBodyHi := sBHi;
 end;
 
 function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind;
@@ -32943,6 +33177,11 @@ begin
       PyInferSelfCi := ci;
       mRet := PyMethodRetType(methodStart, mRetRec);
       PyInferSelfCi := -1;
+  { -1, not the BSS zero: 0 is a valid TOKEN INDEX, so an unset range would read
+    as "the def starting at token 0" and PyDottedRootIsLocal would answer from
+    the top of the file. }
+  PyInferHdrLo := -1;  PyInferHdrHi := -1;
+  PyInferBodyLo := -1; PyInferBodyHi := -1;
       if mRet = tyUnknown then mRet := tyInteger;   { `-> None` / unannotated }
       { __repr__/__str__ return a str by contract — the SIGNATURE half of the
         forcing in PyParseDefHeader (see the note there). Without it an
