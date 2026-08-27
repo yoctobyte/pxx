@@ -52,7 +52,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (271)
+## backlog (269)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -62,7 +62,6 @@ _none_
 | bug-a-riscv32-sa-onstack-has-no-effect-under-qemu | A | 12 | bug | riscv32 registers a signal alt stack correctly — the sigaltstack syscall succeeds and the flags word assembles to $18000004 — but the handler still runs on the FAULTING stack under qemu-riscv32, so a stack-overflow SIGSEGV kills the process. The identical construction works under qemu-i386/arm/aarch64 of the same build, which points at qemu-user rather than at us. Unverifiable without hardware. | — |
 | bug-a-the-div-by-zero-check-is-still-missing-on-xtensa | A+S | 25 | bug | The last target without a pre-divide zero check. The other five landed 2026-08-23; xtensa was left out because it cannot be RUN on this box (bare profile emits an ESP image, not a Linux ELF), its branches carry only an 8-bit displacement, its windowed ABI rotates the register window on a call, and its divide is two shapes depending on XtensaSoftDivide. | — |
 | bug-a-xtensa-codegen-has-no-variant-support | S | 22 | bug | `var v: Variant; v := 1;` does not compile for --target=xtensa: `unsupported node in IR codegen: var_store`. The exact sibling of bug-a-riscv32-codegen-has-no-variant-support, which was fixed 2026-08-27 -- xtensa is the last backend with no IR_VAR_STORE / IR_VAR_BOX / IR_VAR_BINOP arm at all. | — |
-| bug-a-xtensa-entry-jump-cannot-reach-a-main-body-past-128kb | S | 55→60 | bug | The xtensa program entry stub ends in a bare `j` to the main body, which sits past every unit body. Xtensa's J reaches +-128 KiB, so any xtensa image with more than 128 KiB of unit code cannot be entered. It is now a hard compile error rather than a silent mis-jump; making it WORK needs a reach-independent entry jump. Blocks xtensa under ESP-IDF. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-format-percent-u-prints-a-signed-value | B | 55 | bug | `Format('%u', [q])` on a QWord prints -1: sysutils' formatter aliases 'u' to 'd' and runs both through the signed IntToStr. FPC prints 18446744073709551615. The same line makes `%u` of Integer(-1) print -1 where FPC prints 4294967295. Filed from Track A+C+P — B owns lib/rtl. | — |
 | bug-b-inttostr-of-a-qword-above-2-63-renders-negative | B | 55 | bug | `IntToStr` of a QWord above 2^63 renders it negative | — |
@@ -157,7 +156,6 @@ _none_
 | docs-toolchain-cli-flags | D | 35 | docs | Document the toolchain information flags (--help / --version / --where / --config / --list-targets / --list-libraries / --doctor, PXX_HOME, PXX_LIBPATH, pxx.cfg) | — |
 | feature-a-a-variant-has-no-null-tag | A | 45 | feature | pxx has one no-value variant tag (VT_EMPTY), so VarIsNull and VarIsEmpty are the same question and `v := Null; VarIsEmpty(v)` answers True where FPC says False. variants.pas states the approximation in its header and asks for a ticket rather than a silent guess — this is that ticket. A VT_NULL tag is a compiler change, and decide-variant-tag-space-is-a-language-wide-commitment already settled that the tag space is Track A\'s to renumber freely. | — |
 | feature-a-classinfo-returns-the-typinfo-header | A | 45 | feature | Re-filed from decide-classinfo-returns-our-blob-or-nothing / decide-tobject-classinfo-blob-or-refusal, both decided 2026-08-25. x.ClassInfo returns exactly what TypeInfo(TThatClass) returns -- the 24-byte {Kind; NamePtr; DataPtr} header whose DataPtr points at the class blob -- so o.ClassInfo = TypeInfo(TFoo) holds and a layout walker reads a real kind byte. One header word per declared class. | — |
-| feature-a-complete-the-builtin-unit-on-the-esp-class-targets | S | 60 | feature | Not \"builtin is unavailable on ESP\" but \"xtensa is hardcoded as bare-metal on both axes, whatever the profile\". Measured under --platform=esp (the IDF-linked route): esp32c3 compiles Variant + UpCase + Str with the FULL builtin unit; esp32s3 is refused. riscv32-under-IDF already proves the unit works on an ESP target — xtensa, the user's own S2/S3 hardware, is the one locked out, and it is locked out of the profile where FreeRTOS, VFS and sockets actually live. | bug-a-xtensa-entry-jump-cannot-reach-a-main-body-past-128kb |
 | feature-a-declaration-phase | N | 60 | feature | A real declaration phase: all decls before any body is typed | — |
 | feature-a-dynamic-array-of-frozen-strings | A | 45 | feature | In the FROZEN-string model (-uPXX_MANAGED_STRING, the self-host build), `array of string` is refused from SetLength up: the element is an inline fixed-capacity buffer and no path knows its stride. Delete/Insert refuse it downstream of that, which is why they carry a frozen-string exclusion. | — |
 | feature-a-emit-obj-record-class-abi-mode | A | 40 | feature | --emit-obj objects built with and without --compact-classes disagree on VMT slot numbers, and nothing diagnoses it. Record the class-ABI mode in the object and refuse a mismatched link, the way --threadsafe's hazard is meant to be handled. | — |
@@ -560,9 +558,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2476)
+## done (2478)
 
-2476 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2478 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (45)
 
@@ -663,7 +661,6 @@ _none_
 - [p 62] [N] feature-nilpy-enum-class
 - [p 62] [N] feature-nilpy-list-sort-inplace-key-reverse
 - [p 62] [A] feature-unicodestring-model
-- [p 60] [S] bug-a-xtensa-entry-jump-cannot-reach-a-main-body-past-128kb (unblocks 1)
 - [p 60] [B] bug-b-sysutils-string-gaps-found-by-differential
 - [p 60] [N] bug-n-bytes-getitem-returns-empty-instead-of-the-byte-value
 - [p 60] [N] bug-nilpy-a-keyword-call-through-a-statically-unknown-callee-does-not-compile
@@ -903,7 +900,6 @@ _none_
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
-- **1** — bug-a-xtensa-entry-jump-cannot-reach-a-main-body-past-128kb
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — decide-how-a-compiled-def-carries-its-signature-when-boxed
 - **1** — decide-how-much-string-machinery-the-basic-frontend-gets

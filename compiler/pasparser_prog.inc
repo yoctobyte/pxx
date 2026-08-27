@@ -1263,9 +1263,21 @@ begin
   { arm32 has hardware VFP, but its double->int convert is 32-bit only; a 64-bit
     Trunc/Round of a large double routes to the soft-float __pxx_d2i64 kernel
     (mirrors the C-frontend pull in cparser), so arm32 pulls softfloat too. }
-  if (((((TargetArch = TARGET_RISCV32) and (not EspBareBoot))) or (TargetArch = TARGET_ARM32)) and
+  { No-FPU targets that DO have an RTL pull softfloat wholesale: every float op
+    is a __pxx_* kernel and the RTL's own bodies (builtinheap's variant/float
+    formatting, builtin's conversions) compile against them, so on-demand is not
+    enough — the demand comes from the UNIT, not from the user's tokens.
+    xtensa under the IDF profile joined this set on 2026-08-27: it was absent
+    entirely, because the predicate predated xtensa having a non-bare profile at
+    all. arm32 is here for a narrower reason — hardware VFP, but its double->int
+    convert is 32-bit only, so a 64-bit Trunc/Round routes to __pxx_d2i64.
+    ESP-class BARE stays on the token scan below: no RTL, and softfloat is
+    ~54-64KB of flash that a float-free MCU program must not pay.
+    feature-a-complete-the-builtin-unit-on-the-esp-class-targets }
+  if (((((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) and (not EspBareBoot)) or
+       (TargetArch = TARGET_ARM32)) and
       (needHeapUnit or needsBuiltin)) or
-     { ESP-class: on demand, from the token scan above — see the comment there. }
+     { ESP-class bare: on demand, from the token scan above — see there. }
      needsSoftFloat then
     ParseUsesUnitAmbient('softfloat');
   { The promotable-int runtime is written in ordinary Pascal over managed

@@ -3,8 +3,8 @@ slug: feature-a-complete-the-builtin-unit-on-the-esp-class-targets
 track: A+S
 prio: 60
 type: feature
-blocked-by: [bug-a-xtensa-entry-jump-cannot-reach-a-main-body-past-128kb]
-status: backlog
+blocked-by: []
+status: done
 summary: "Not \"builtin is unavailable on ESP\" but \"xtensa is hardcoded as bare-metal on both axes, whatever the profile\". Measured under --platform=esp (the IDF-linked route): esp32c3 compiles Variant + UpCase + Str with the FULL builtin unit; esp32s3 is refused. riscv32-under-IDF already proves the unit works on an ESP target — xtensa, the user's own S2/S3 hardware, is the one locked out, and it is locked out of the profile where FreeRTOS, VFS and sockets actually live."
 ---
 
@@ -171,12 +171,7 @@ usual gate.
 
 ---
 
-## 2026-08-27 — implemented, verified, and BLOCKED one step short
-
-The change is four small edits and they are **correct**; the patch is kept at
-`devdocs/progress/attachments/esp-profile-aware-builtin.patch`. It was NOT
-landed, because it turns a passing test red. Detail below so the next session
-does not re-derive it.
+## 2026-08-27 — done, together with the entry-jump fix it exposed
 
 ### The fix
 
@@ -185,43 +180,50 @@ does not re-derive it.
    `EspBareBoot` is already validated to those two ISAs in `compiler.pas`, so
    the ISA test is redundant as well as wrong.
 2. `builtin/builtinheap.pas` — `{$ifdef PXX_ESP_BARE}{$define PXX_ESP}` replacing
-   the unconditional `{$ifdef CPU_XTENSA}` arm. Same defect, unit side.
+   the unconditional `{$ifdef CPU_XTENSA}` arm. Same defect, unit side. The
+   capability list above the `{$ifndef PXX_ESP}` block ("Not yet on ESP: file
+   I/O, ... variant, float formatting") was reworded: it is a statement about
+   the BARE profile, not about what an ESP chip can do.
 3. `pasparser_prog.inc` + `cparser.inc` — xtensa joins riscv32 in the wholesale
    softfloat pull for no-FPU targets that have an RTL (the demand comes from the
    UNIT, not the user's tokens). Bare stays on the on-demand token scan: no RTL,
    and softfloat is ~54-64 KB of flash a float-free MCU program must not pay.
 
-### Measured effect, `--platform=esp`
+### Measured
 
 | program | before | after |
 | --- | --- | --- |
 | hello-s3 / hello-s2 | 47375B / 90 procs | 188115B / 174 procs |
-| timer-s3 | 49731B / 101 procs | 263963B / 291 procs |
-| hello-c3 / timer-c3 / net-c3 | — | **byte-identical, no regression** |
+| timer-s3 | 49731B / 101 procs | **264003B / 291 procs** |
+| hello-c3 / timer-c3 / net-c3 | — | byte-identical, no regression |
 
-`UpCase` / `Str` / `Pos` / `Int64->float` all lower on S3 after the change.
-Bare-profile images proven **byte-identical** across 6 images (2 targets x 3
-tests). `tools/gate.sh quick` green.
+`UpCase` / `Str` / `Pos` / `Int64->float` all lower on S3 now. Every bare image
+stays **byte-identical** to the pre-change compiler.
 
-### Why it is not landed
+### It could not land alone
 
-It makes xtensa images large for the first time, and the xtensa entry stub's
-`j` reaches only ±128 KiB —
-[[bug-a-xtensa-entry-jump-cannot-reach-a-main-body-past-128kb]]. The esp32s3
-IDF `esp_timer` test goes from **passing** to a hard compile error:
+Making xtensa images large for the first time immediately hit
+[[bug-a-xtensa-entry-jump-cannot-reach-a-main-body-past-128kb]] — the entry
+stub's `j` reaches only ±128 KiB and a 264 KB image is 2x that. Before this
+change the esp32s3 IDF row passed *because* xtensa pulled almost no RTL: a green
+row bought with the very crippling this ticket exists to remove, which is worth
+recording as a case where green meant "we compile almost nothing".
+
+Both fixes landed together. Verified on the real Espressif emulator:
 
 ```
-error: target xtensa: j displacement 262581 is outside the encodable range
+esp32s3 IDF esp_timer callback: PXX timer: started .. done ticks=5 status=0
+esp32c3 IDF esp_timer callback: 7/7 lines
+bare-float esp32c3 / esp32s3  : == x86-64 oracle
 ```
 
-Before this fix that test passed *because* xtensa pulled almost no RTL — a
-green row bought with the very crippling this ticket exists to remove. It is
-worth being explicit that the pre-change green was not evidence of health.
+`tools/gate.sh quick` GREEN, self-host fixedpoint verified.
 
-Landing it before the entry-jump fix would trade a silent gap for a loud one.
-So: **fix the entry jump first, then apply the patch and both land green
-together.** The remaining gap after that is
-[[bug-a-xtensa-codegen-has-no-variant-support]].
+### Remaining gap
+
+[[bug-a-xtensa-codegen-has-no-variant-support]] — `var v: Variant; v := 1;`
+still fails `unsupported node in IR codegen: var_store` on xtensa. riscv32 got
+its variant support the same day and is the exact template.
 
 ### Not the blocker
 
@@ -230,3 +232,6 @@ separately, since they are real on bare too:
 [[bug-a-xtensa-cannot-lower-an-int64-to-float-conversion]] (refused outright)
 and its unsigned-32 sibling (did not refuse — answered *wrong*, `(double)$FFFFFFFF`
 = -1). Both now execute on the real emulator against the x86-64 oracle.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.

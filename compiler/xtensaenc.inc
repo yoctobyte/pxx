@@ -447,6 +447,33 @@ begin
   EmitB($00);
 end;
 
+procedure xtensa_jx(s: Integer);
+{ Register-indirect jump: PC := a[s]. The one xtensa branch with UNLIMITED
+  reach, which is why it exists here at all -- J is imm18 (+-128 KiB) and
+  CALL0/CALL8 imm18 words (+-512 KiB), so a large image cannot be entered
+  without it (bug-a-xtensa-entry-jump-cannot-reach-a-main-body-past-128kb).
+
+  Bytes verified against xtensa-esp-elf-as, as everything else in this file is
+  -- but verified against `objdump -s` (RAW MEMORY BYTES), not against the hex
+  column of `objdump -d`. That column is NOT a byte dump and reading it as one
+  emitted this instruction BACKWARDS on the first attempt: 00 08 A0 is a
+  perfectly valid RRR encoding with op2=$A, i.e. `addx4 a0, a8, a0`, which
+  computes a garbage address and FALLS THROUGH. Control then ran into the next
+  routine's `entry`, the window rotated by 8, and the callee received a0 and a2
+  from the stub's leftover a8 and a10 -- a StoreProhibited deep inside a runtime
+  helper with no hint that a jump was involved. objdump printed `addx4` at that
+  address and it was misread as a disassembler desync.
+
+    jx a8  = A0 08 00        jx a10 = A0 0A 00
+    (RRR: op0=0, t=$A -> m=2,n=2 = JX; s = the register; op1=op2=0)
+
+  Same shape as xtensa_add's A0 88 80 right above -- t in byte 0, s in byte 1. }
+begin
+  EmitB($A0);
+  EmitB(s);
+  EmitB($00);
+end;
+
 function EncodeXtensaCall0(pc, target: Integer): Integer;
 var
   imm18: Integer;

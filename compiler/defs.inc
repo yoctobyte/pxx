@@ -2251,6 +2251,15 @@ var
   CodeRefCount  : Integer;
   CodeRefCapacity : Integer;
 
+  { xtensa long entry jump: the code offset a0 holds after the entry stub's
+    `call0`, i.e. the runtime PC anchor the entry literal is measured FROM.
+    -1 = the short 3-byte `j` was emitted and jmpPatch is a `j` to patch.
+    Two numbers are needed at patch time (the literal's position and the
+    anchor) and PatchProgramEntryJump is handed only the first, so the second
+    rides here rather than widening a signature every backend shares.
+    bug-a-xtensa-entry-jump-cannot-reach-a-main-body-past-128kb }
+  XtEntryPcAnchor : Integer;
+
   { --- reachability-gated dead-code elimination (dce.inc) --------------------
     Sized by MAX_PROCS: one entry per emitted routine, never per instruction. }
   DceEnabled    : Boolean;   { --dce: drop unreachable routine bodies }

@@ -9785,7 +9785,10 @@ begin
       "__pxx_dmul not found". The whole guard now matches the Pascal default-RTL
       pull: hosted riscv32 is INCLUDED (was skipped entirely, leaving riscv32 C
       with no __pxx_write/malloc bridge and no softfloat). }
-    if ((TargetArch = TARGET_RISCV32) and (not EspBareBoot)) or
+    { xtensa joins riscv32 here for the IDF profile — same reason, same date;
+      see the Pascal driver's note in ParseProgram.
+      feature-a-complete-the-builtin-unit-on-the-esp-class-targets }
+    if (((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) and (not EspBareBoot)) or
        (TargetArch = TARGET_ARM32) then
       { arm32 has hardware VFP, but VFP's double->int convert is 32-bit only;
         a 64-bit cast of a large double (e.g. sqlite %f's double->u64) routes to

@@ -86,10 +86,11 @@ end;
 
 function TargetIsEspClass: Boolean;
 { True for the ESP-class bare-metal targets — the ones that have no hosted OS
-  under them and therefore no full RTL: xtensa ALWAYS, riscv32 only under
-  `--esp-profile=bare`. riscv32 is dual-role (bare ESP32-C3 or hosted Linux),
-  which is exactly why the profile has to be part of the test and why writing it
-  out by hand is a trap.
+  under them and therefore no full RTL: EITHER ESP ISA under `--esp-profile=bare`,
+  and neither of them otherwise. BOTH are dual-role — riscv32 is bare ESP32-C3 or
+  hosted Linux, xtensa is bare or IDF/FreeRTOS-linked — which is exactly why the
+  profile has to be part of the test and why writing it out by hand is a trap.
+  (Until 2026-08-27 the body said xtensa ALWAYS; see the note in it.)
 
   It was written out by hand, 24 times, all identical:
 
@@ -118,8 +119,29 @@ function TargetIsEspClass: Boolean;
   They are also where riscv64 must NOT simply be added: each needs its own
   answer. The list is in the riscv64 ticket. }
 begin
-  Result := (TargetArch = TARGET_XTENSA) or
-            ((TargetArch = TARGET_RISCV32) and EspBareBoot);
+  { PROFILE, not ISA. This used to read `(TargetArch = TARGET_XTENSA) or
+    ((TargetArch = TARGET_RISCV32) and EspBareBoot)` — "xtensa MEANS bare
+    metal", which was true before the IDF profile existed and became wrong the
+    moment it did, in the worst possible place: xtensa is the ESP32/S2/S3, and
+    the asymmetry locked it out of the one profile where FreeRTOS tasks, IDF
+    drivers, VFS file I/O and sockets live, while riscv32 under the same profile
+    got all of it. Same program, same flags, measured 2026-08-27:
+
+      hello  --platform=esp  esp32c3 (riscv32) 239120B / 169 procs
+                             esp32s3 (xtensa)   47375B /  90 procs
+      timer  --platform=esp  esp32c3           345572B / 288 procs
+                             esp32s3            49731B / 101 procs
+
+    and `examples/esp32/net-c3` has no `net-s3` counterpart at all.
+
+    The question this predicate answers is "is there an OS under this program",
+    and the flag that answers it is `--esp-profile=bare` — for BOTH ESP ISAs.
+    EspBareBoot is already validated to riscv32/xtensa only (compiler.pas), so
+    the ISA test is redundant as well as wrong; it is kept for clarity about
+    which targets can reach the state at all.
+    feature-a-complete-the-builtin-unit-on-the-esp-class-targets }
+  Result := EspBareBoot and
+            ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32));
 end;
 
 function SoftFloatMissing(const nm: AnsiString): AnsiString;

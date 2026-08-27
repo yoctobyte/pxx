@@ -1681,6 +1681,7 @@ begin
   GlobFixCount := 0; CallFixCount := 0; ProcAddrFixCount := 0;
   CallFixCapacity := 0; CodeRefCapacity := 0; GlobFixCapacity := 0;
   CodeRefCount := 0;
+  XtEntryPcAnchor := -1;
   IramCallFixCount := 0;
   SymCount := 0; ProcCount := 0;
   { bootstrap the per-routine tables before anything can index them }

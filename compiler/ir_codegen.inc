@@ -1605,6 +1605,8 @@ procedure EmitProgramEntryForTarget(withHeapArena: Boolean; var jmpPatch: Intege
   ELF with `Machine: ARM` whose first instruction was `mov %rsp, 0x82b5060` —
   x86-64 bytes, SIGILL on the first instruction, and no diagnostic anywhere.
   bug-a-nilpy-on-cross-targets-four-remaining-walls }
+var
+  xtEntryPc, xtEntryTgt: Integer;   { xtensa reach-independent entry jump }
 begin
   if TargetArch = TARGET_I386 then
   begin
@@ -1721,9 +1723,63 @@ begin
       xtensa_wsr_cpenable(reg_xtensa_a8);
       xtensa_rsync;
     end;
-    { Xtensa entry stub: jump to main body. }
+    { Xtensa entry stub: jump to main body.
+
+      The main body sits past EVERY unit body -- skipping them is what this
+      jump is for -- so its distance grows with the whole program's unit code,
+      while xtensa's `j` reaches only +-128 KiB. That is narrower than a
+      realistic image: an ESP-IDF esp32s3 build put the main body 262591 bytes
+      out, 2x the reach. Every other backend has room (aarch64 b +-128 MiB,
+      arm32 +-32 MiB, riscv32 JAL +-1 MiB, x86-64 rel32), so xtensa is the only
+      target whose ENTRY branch is the binding constraint.
+
+      BARE keeps the 3-byte `j`: those images are SRAM-bounded at tens of KB,
+      cannot approach 128 KiB, and are covered by a byte-identity canary that
+      the long form would perturb for no gain.
+
+      Otherwise emit a reach-independent jump. It needs the runtime PC, and
+      xtensa has no instruction that yields it -- but CALL0 leaves the address
+      of the instruction AFTER itself in a0, which is one. So: save a0 (the
+      windowed return address app_main still needs to `retw` through), take the
+      PC, add a code-internal delta, and `jx`.
+
+      The delta is `mainOffset - anchorOffset`: both are .text offsets, so it is
+      a pure compile-time constant and needs NO relocation in either the linked
+      or the --emit-obj path. That is the whole reason this shape was chosen
+      over an absolute address in the literal, which would have needed a new
+      "address of a code offset" fixup threaded through the ELF writer's four
+      ProcAddrFix sites. bug-a-xtensa-entry-jump-cannot-reach-a-main-body-past-128kb }
+    if EspBareBoot then
+    begin
+      XtEntryPcAnchor := -1;
+      jmpPatch := CodeLen;
+      xtensa_j(0);
+      Exit;
+    end;
+    xtensa_mov(reg_xtensa_a9, reg_xtensa_a0);   { save the return address }
+    { call0 to the next 4-aligned offset. CALL0 targets must be 4-aligned (the
+      encoder now asserts it), so pad the gap with bytes that are never
+      executed -- the call0 jumps over them. }
+    xtEntryPc := CodeLen + 3;                   { what a0 will hold }
+    xtEntryTgt := ((xtEntryPc + 3) div 4) * 4;
+    xtensa_call0(xtEntryTgt - CodeLen);
+    while CodeLen < xtEntryTgt do EmitB(0);
+    XtEntryPcAnchor := xtEntryPc;
+    xtensa_mov(reg_xtensa_a8, reg_xtensa_a0);   { a8 := anchor PC }
+    xtensa_mov(reg_xtensa_a0, reg_xtensa_a9);   { restore the return address }
+    XtensaEmitLitHeader;
     jmpPatch := CodeLen;
-    xtensa_j(0);
+    EmitI32(0);                                 { delta, patched below }
+    xtensa_l32r(reg_xtensa_a10, $FFFF);
+    xtensa_add(reg_xtensa_a8, reg_xtensa_a8, reg_xtensa_a10);
+    { Leave no live value in an ARGUMENT register. Under the windowed ABI the
+      outgoing-argument registers depend on the call flavour -- call4 passes in
+      a6..a9, call8 in a10..a15 -- so a9 and a10 are both argument slots, and
+      whatever this stub leaves there is what the main body's first call hands
+      its callee for any argument the caller does not itself set. }
+    xtensa_movi(reg_xtensa_a9, 0);
+    xtensa_movi(reg_xtensa_a10, 0);
+    xtensa_jx(reg_xtensa_a8);
     Exit;
   end;
   if TargetArch = TARGET_RISCV32 then
@@ -1788,7 +1844,14 @@ begin
   else if TargetArch = TARGET_AARCH64 then
     Patch32(jmpPatch, $14000000 or (((CodeLen - jmpPatch) div 4) and $03ffffff))
   else if TargetArch = TARGET_XTENSA then
-    Patch24(jmpPatch, EncodeXtensaJ(CodeLen - jmpPatch))
+  begin
+    { Long form: jmpPatch is a 4-byte LITERAL holding a code-internal delta
+      measured from the PC anchor, not a `j` to re-encode. }
+    if XtEntryPcAnchor >= 0 then
+      Patch32(jmpPatch, CodeLen - XtEntryPcAnchor)
+    else
+      Patch24(jmpPatch, EncodeXtensaJ(CodeLen - jmpPatch));
+  end
   else if TargetArch = TARGET_RISCV32 then
     Patch32(jmpPatch, EncodeRISCVJAL(0, CodeLen - jmpPatch))
   else

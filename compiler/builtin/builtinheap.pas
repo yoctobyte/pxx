@@ -2,14 +2,20 @@
 unit builtinheap;
 
 {$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
-{ ESP (xtensa/bare riscv32) has no mmap and no OS heap of its own here; back the
+{ BARE ESP (either ISA) has no mmap and no OS heap of its own here; back the
   allocator with a fixed static arena instead. One marker for both ESP ISAs.
   HOSTED riscv32 (qemu-user linux) DOES have mmap and the linux syscall ABI (its
   read/write already use syscalls 63/64), so it must NOT take the static-arena
   path — a 64 KiB arena OOMs on any real workload (e.g. sqlite) and PXXAlloc then
-  stores through a NULL base. Only bare-metal riscv32 (PXX_ESP_BARE) is ESP. }
-{$ifdef CPU_XTENSA}{$define PXX_ESP}{$endif}
-{$ifdef CPU_RISCV32}{$ifdef PXX_ESP_BARE}{$define PXX_ESP}{$endif}{$endif}
+  stores through a NULL base. Only a BARE boot (PXX_ESP_BARE) is ESP for this
+  purpose — under IDF, FreeRTOS supplies the heap, on xtensa as on riscv32. }
+{ PROFILE, not ISA — the unit-side twin of util.inc's TargetIsEspClass, and it
+  had the same defect: `{$ifdef CPU_XTENSA}{$define PXX_ESP}` unconditionally,
+  so every {$ifndef PXX_ESP} body below was excluded on xtensa even under the
+  IDF profile, where FreeRTOS supplies a heap and VFS supplies files. riscv32
+  under IDF compiled all of them, which is the proof the bodies are fine on an
+  ESP target. feature-a-complete-the-builtin-unit-on-the-esp-class-targets }
+{$ifdef PXX_ESP_BARE}{$define PXX_ESP}{$endif}
 
 { Heap allocator + managed-string runtime helpers, split out of `builtin` so a
   program that only needs the heap (New/Dispose/GetMem) or the managed-string
@@ -359,8 +365,15 @@ function __pxx_udivsi3(n: LongWord; d: LongWord): LongWord;
 function __pxx_divsi3(a: Integer; b: Integer): Integer;
 function __pxx_modsi3(a: Integer; b: Integer): Integer;
 {$endif}
-{ Not yet on ESP: file I/O, managed-element dynarray/record retain/release,
-  variant, float formatting. }
+{ Not on BARE ESP: file I/O, managed-element dynarray/record retain/release,
+  variant, float formatting. Bare metal, hence PXX_ESP, is now the only profile
+  that excludes them — under IDF both ESP ISAs get FreeRTOS's heap and VFS's
+  files and compile every body below, which riscv32 has done all along and
+  xtensa was wrongly locked out of until 2026-08-27.
+
+  So this is a PROFILE statement, not a platform one: none of these bodies is
+  unimplementable on an ESP chip. `file I/O` here means there is no filesystem
+  under a bare boot to open. Do not read the list as "ESP cannot do this". }
 {$ifndef PXX_ESP}
 function PXXStrLoadFile(path: Pointer): Pointer;
 procedure PXXRecordRetain(recAddr: Pointer; desc: Pointer);
