@@ -114,4 +114,4 @@ that boundary rather than claiming the file is portable.
 `make lib-test` green, `make demos` 35/35, both against v389.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit a6b06ebc1.
