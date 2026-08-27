@@ -79,4 +79,4 @@ through Self), a helper on an ancestor reached through a descendant (row g),
 and the record/type helper rows stay in test-core beside it as controls.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit dac5bf93e.
