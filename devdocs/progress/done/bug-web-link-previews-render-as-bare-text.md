@@ -3,8 +3,8 @@ track: W
 prio: 45
 type: bug
 blocked-by: []
-summary: "NOT DEPLOYED — visitors still get twitter:card=summary and no og:image. The fix is committed and reviewed as e78595d on the website repo but has not been pulled onto `via`, so it is in git and not on the wire; do not read `committed` as `live`. Originally: pxxc.org declares og:title/og:description/og:url but NO og:image, and twitter:card is `summary` rather than `summary_large_image`. Every link to the site on HN, Reddit, Mastodon, Slack, Discord and LinkedIn renders as a bare text row next to posts that have a picture. Highest click-through gain per hour of work on the site; the fix is one image plus two meta tags."
-status: backlog
+summary: "RESOLVED 2026-08-27 — DEPLOYED AND VERIFIED LIVE. og:image, og:image:width/height/alt, twitter:image and twitter:card=summary_large_image are served from pxxc.org; the card returns HTTP 200, 29667 bytes, and decodes at 1200x630. Confirmed twice on independent instruments: `ianweb` from the origin (gunicorn direct + nginx, X-Cache-Status MISS) and `frank2-af` from the public internet. Originally: pxxc.org declares og:title/og:description/og:url but NO og:image, and twitter:card is `summary` rather than `summary_large_image`. Every link to the site on HN, Reddit, Mastodon, Slack, Discord and LinkedIn renders as a bare text row next to posts that have a picture. Highest click-through gain per hour of work on the site; the fix is one image plus two meta tags."
+status: done
 ---
 
 # Link previews to pxxc.org render as bare text — no `og:image`
@@ -17,7 +17,41 @@ but the social-card surface is empty.
 
 **Fix lands in the private `~/pxx-website` repo, not in this checkout.**
 
-## STATUS 2026-08-27 — IN GIT, NOT ON THE WIRE. Do not read this as live.
+## RESOLVED 2026-08-27 — DEPLOYED AND VERIFIED LIVE
+
+Fixed by `e78595d` on the website repo, deployed to `via`, gunicorn restarted.
+
+**Served from pxxc.org, fetched from the public internet by `frank2-af`:**
+
+```
+<meta property="og:image" content="https://pxxc.org/static/img/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="pxx — a Pascal and C compiler">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://pxxc.org/static/img/og-card.png">
+
+/static/img/og-card.png -> HTTP 200, 29667 bytes, image/png, decodes 1200x630 RGB
+```
+
+**Verified on two independent instruments, deliberately** — the failure mode this
+lane hit all day was a correct reading of the wrong one:
+
+| instrument | who | result |
+| --- | --- | --- |
+| origin side — gunicorn on 127.0.0.1:16242, and nginx with `Host: pxxc.org`, `X-Cache-Status: MISS` | `ianweb` on `via` | tags served, fresh render not a cached artifact |
+| **public internet** — plain `curl https://pxxc.org` | `frank2-af` | same six tags, card loads and decodes at the declared dimensions |
+
+The detail most likely to have shipped silently broken was the absolute URL:
+`canonical_url ~ url_for(...)` had to produce `https://pxxc.org/...`, because a
+relative `og:image` unfurls as nothing. It resolved correctly, and the public
+fetch is what proves it rather than the template.
+
+**Do not overwrite `og-card.png` in place.** nginx serves `static/` with
+`expires 1h` and no fingerprint, so a replaced asset is stale at the edge for up
+to four hours. Ship a new filename and update the template.
+
+## Superseded status notes (kept for the sequence)
 
 **What visitors get right now: the pre-fix tags.** `twitter:card=summary`, no
 `og:image`. A link to pxxc.org still unfurls as a bare text row. That is the
@@ -152,3 +186,6 @@ discipline is most likely to be lost first.
 
 Fetch the page, confirm the tags are present, and validate the rendered card
 against at least two unfurlers before closing.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.

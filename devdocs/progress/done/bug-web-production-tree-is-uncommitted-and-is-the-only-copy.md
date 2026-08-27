@@ -3,8 +3,8 @@ track: W
 prio: 70
 type: bug
 blocked-by: []
-summary: "/opt/pxx-website on `via` has six modified files DEPLOYED AND SERVING pxxc.org since 2026-08-20 that exist in no commit and no branch. UPDATE 2026-08-27: the data-loss half is MITIGATED — a verified out-of-repo backup now exists — but the BLOCKING half stands and this ticket closes only on commit-and-push. Do not close it on the backup. A `git checkout .` or a re-clone destroys them, and one of the six IS the re-clone recovery script. The blocking claim has since NARROWED: work done in a clean clone and pushed is unaffected, so the other four W tickets no longer declare this as a blocker. What remains is that the deployed tree diverges from origin/main and the six files are only same-partition durable."
-status: backlog
+summary: "RESOLVED 2026-08-27 — BOTH HALVES. The six are committed and pushed as a4f878e / 18dead8 / 2b035c7; via is 0 ahead 0 behind origin/main with a clean working tree for the first time since 2026-08-20. Originally: six modified files DEPLOYED AND SERVING pxxc.org since 2026-08-20 that existed in no commit and no branch. UPDATE 2026-08-27: the data-loss half is MITIGATED — a verified out-of-repo backup now exists — but the BLOCKING half stands and this ticket closes only on commit-and-push. Do not close it on the backup. A `git checkout .` or a re-clone destroys them, and one of the six IS the re-clone recovery script. The blocking claim has since NARROWED: work done in a clean clone and pushed is unaffected, so the other four W tickets no longer declare this as a blocker. What remains is that the deployed tree diverges from origin/main and the six files are only same-partition durable."
+status: done
 ---
 
 # The deployed website tree is uncommitted, and it is the only copy
@@ -135,6 +135,34 @@ Priority stays at 70 rather than being raised on this finding: the ticket
 already heads the W queue and blocks the other four, so a higher number would
 change nothing operationally and would only inflate the scale.
 
+## RESOLVED 2026-08-27 — both halves closed
+
+`ianweb` committed the six as three coherent commits and pushed. Rebased onto
+`e78595d` with no conflicts; the resilience suite was green before and after
+(61/61 synthetic on both scenarios, 109/109 against the live checkout).
+
+```
+a4f878e  The content checkout must heal itself after a power cut
+18dead8  An empty content file is a broken one, not an empty page
+2b035c7  A pull that keeps failing must say so on the dashboard
+```
+
+Verified by `frank2-af` against `origin/main`: all three present, `2b035c7` at
+the head. `via` reports 0 ahead / 0 behind with a clean working tree — the first
+time since 2026-08-20.
+
+| half | state |
+| --- | --- |
+| data loss | **closed.** The work is in git, on origin, replicated off the box. The same-partition backup is now redundant and stays only until the owner says otherwise. |
+| blocking / divergence | **closed.** The deployed tree matches origin/main. |
+
+**One attribution note worth keeping**, because it looks like a rule was bent
+and wasn't: the restart that followed deployed *two commits' worth of files* but
+exactly **one unverified change**. The three commits above were already the
+running code — serving since 2026-08-20 — so committing them altered nothing
+visitors get. The only behaviour that changed was `e78595d`. One-unverified-
+change-per-deploy held.
+
 ## CORRECTION 2026-08-27 — `via` could push all along
 
 The reason this sat uncommitted was recorded as a missing credential. **That was
@@ -197,3 +225,6 @@ out the tree still being served, `ls-remote` before recovering so a dead network
 does not trigger a re-clone that cannot complete, and an `flock` because the
 timer and the webhook are separate systemd units and per-unit serialisation
 never covered them against each other.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.
