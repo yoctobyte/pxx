@@ -217,3 +217,38 @@ Every row above is a compile-and-run against `fpc -Mobjfpc` as oracle, one file
 at a time — the rung suites themselves (`make test-fgl`, `test-fpjson`) are
 hook-refused per CLAUDE.md and are Track T's to sweep. One file at a time is
 enough to survey a rung and is what found all three defects.
+
+### 2026-08-27, later — all three nested-type defects are closed; rung 6's named blocker is gone
+
+The three defects the re-survey above concentrated the rung's cost into are now
+fixed, and the second and third turned out to be **one cause, one change**
+(`7ee75329e`), as predicted:
+
+| defect | outcome |
+| --- | --- |
+| nested type's field named after an enclosing type parameter | fixed `83468c546` |
+| two templates cannot share a nested type name | fixed `7ee75329e` |
+| second specialization of a generic with a nested type segfaults | fixed `7ee75329e` |
+
+The shared cause is worth keeping because it is this repo's documented
+double-case shape: `AddClassLikeType` registers a nested type under its
+QUALIFIED name once the bare name is taken, and its own comment says the
+qualified spelling and a bare one inside the owner's body should "find the same
+entry" — but **only the qualified path was ever wired**, because every
+`FindNestedType` call site keys on a `.`. The bare reference fell through to the
+flat unit table and found whichever was registered first, so a generic's nested
+type — re-materialised per instantiation on purpose — was shared by every
+instantiation after the first.
+
+What identified it was ordering, not reading: whichever template was specialized
+**second** broke, and swapping the order moved the error to the other one.
+
+**Status of rung 6 (rtl-generics) after this:** every wall its ticket names or
+predicts is now cleared locally — type-keyword method names, untyped `constref`,
+generics across units, interface and class constraints, `TArray<T>`, and nested
+types. Its `blocked-by` is still the Track B typinfo/PTypeData gap, and the
+actual corpus (`packages/rtl-generics`) is not among the trees
+`tools/install_lib_candidates.sh` fetches, so **the next step for that rung is
+vendoring it and compiling — not another wall hunt.** Nothing local predicts a
+further blocker, which is exactly the point at which the real corpus is the only
+thing that will tell the truth.
