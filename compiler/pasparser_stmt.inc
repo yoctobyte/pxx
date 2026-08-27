@@ -5200,7 +5200,16 @@ begin
         else if CurTok.Kind <> tkIdent then Error('expected variable')
         else
         begin
-          argIdx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
+          argIdx := FindSym(CurTok.SVal);
+          { …or the bare OWN NAME of the enclosing function, which FindSym
+            cannot see (it is a proc, not a symbol). `Inc(FuncName[0])` is how
+            FPC's cutils.pas:1429 grows a shortstring, and it reported
+            `undefined variable`. Same rule as the expression-read arm, shared
+            through OwnNameResultSym. Only when nothing else claimed the name,
+            so a local that shadows the function still wins. }
+          if (argIdx < 0) and (Tokens[TokPos].Kind <> tkLParen) then
+            argIdx := OwnNameResultSym(CurTok.SVal);
+          identTokIdx := TokPos - 1; Next;
           { Parse the FULL target lvalue (consuming any .field / [i] / ^
             selectors) BEFORE the optional step and ')'. Inc/Dec accept any
             assignable lvalue, exactly like a `var` parameter — a bare-symbol

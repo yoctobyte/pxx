@@ -186,6 +186,29 @@ procedure ResolveDerefShape(node: Integer; var tk: TTypeKind; var recName: Integ
 function IndexDynArrayValue(node, elemTk, elemRec, dynDepth, tailRec: Integer; var outTk: TTypeKind): Integer; forward;   { the ONE materialisation point for a suffix on a dyn-array VALUE }
 procedure ApplyCallResultPtrSuffix(node, procIdx: Integer); forward;   { the ONE materialisation point for a suffix on a call RESULT — the index arm below hands array-returning calls to it }
 
+function OwnNameResultSym(const name: AnsiString): Integer;
+{ The result variable a bare OWN NAME reads, or -1 when `name` is not the
+  current function's own name. FPC's `FuncName` synonym for `Result`, e.g.
+  `F := F + x` — and, the reason this is a routine rather than a condition
+  spelled twice, `Inc(FuncName[0])`: FPC's own cutils.pas:1429 builds a
+  shortstring with `inc(minilzw_encode[0])`, and the Inc/Dec arm resolved its
+  target with a bare FindSym, which misses a PROC name and reported
+  `undefined variable`. The expression-read arm had the rule; the lvalue arms
+  did not.
+
+  {$mode delphi} delta: in Delphi a bare own-name read is NEVER the result var
+  — it is a reference to the routine — so this answers -1 there and `Result` is
+  the only spelling. A following `(` is a recursive call, not a result read, and
+  is excluded by the caller (which sees the token) rather than here. }
+begin
+  Result := -1;
+  if DelphiMode then Exit;
+  if (CurProc < 0) or (not Procs[CurProc].IsFunc) then Exit;
+  if (name = Procs[CurProc].Name) or
+     CaseEqual(name, LastDotName(Procs[CurProc].Name)) then
+    Result := Procs[CurProc].RetSymIdx;
+end;
+
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   augBin: TTokenKind; augRead, augNode: Integer;   { `d[k] += v` }
