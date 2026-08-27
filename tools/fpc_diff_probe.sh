@@ -1170,7 +1170,7 @@ begin
   writeln(a.Who, '|', b.Num);
 end.
 P
-probe iface-supports known <<'P'
+probe iface-supports <<'P'
 uses sysutils;
 type
   IA = interface ['{51111111-2222-3333-4444-555555555555}'] function Who: string; end;
