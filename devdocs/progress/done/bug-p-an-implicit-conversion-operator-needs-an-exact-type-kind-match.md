@@ -163,4 +163,4 @@ corpus gate named in the ticket — `constexp.pas` compiling — cleared earlier
 today under `--mimic-fpc-compiler`.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit b67170d9d.
