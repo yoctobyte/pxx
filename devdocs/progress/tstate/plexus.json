@@ -470,6 +470,11 @@
   }
  ],
  "host": "plexus",
+ "idle_yield": {
+  "aborts": 1,
+  "phase": "pin-verify",
+  "target": "2bae398f57aa3945f64a5672e0fba00481bdb856"
+ },
  "job_reason": {
   "test-emit-obj#src:test/cxtensa_obj.c@1": "in: $TMP | near:  Integer  __pxxrawsyscall  SYS_getuid >>> | pascal26:477: error: undefined variable (SYS_getgid) | in: $TMP | near:  Integer  __pxxrawsyscall  SYS_getgid >>> | pascal26: too many errors, stopping",
   "tools-devtest#00": "tools-devtest: tools/twatch_refile_stub_devtest.py | tools-devtest: tools/twatch_resume_devtest.py | tools-devtest: tools/twatch_timeout_staleness_devtest.py | tools-devtest: tools/twatch_timeout_verdict_devtest.py | tools-devtest: tools/whokilled_devtest.py | tools-devtest: 78 green, 1 RED -- tools/testmgr_hardcoded_tmp_devtest.py"
