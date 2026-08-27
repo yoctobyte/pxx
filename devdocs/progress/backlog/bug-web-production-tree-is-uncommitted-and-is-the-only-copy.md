@@ -3,7 +3,7 @@ track: W
 prio: 70
 type: bug
 blocked-by: []
-summary: "/opt/pxx-website on `via` has six modified files DEPLOYED AND SERVING pxxc.org since 2026-08-20 that exist in no commit and no branch. UPDATE 2026-08-27: the data-loss half is MITIGATED — a verified out-of-repo backup now exists — but the BLOCKING half stands and this ticket closes only on commit-and-push. Do not close it on the backup. A `git checkout .` or a re-clone destroys them, and one of the six IS the re-clone recovery script. It also silently blocks every other Track W ticket: the deployed tree does not match origin/main, so work branched off origin conflicts on arrival and the documented `git pull --ff-only` deploy step fails."
+summary: "/opt/pxx-website on `via` has six modified files DEPLOYED AND SERVING pxxc.org since 2026-08-20 that exist in no commit and no branch. UPDATE 2026-08-27: the data-loss half is MITIGATED — a verified out-of-repo backup now exists — but the BLOCKING half stands and this ticket closes only on commit-and-push. Do not close it on the backup. A `git checkout .` or a re-clone destroys them, and one of the six IS the re-clone recovery script. The blocking claim has since NARROWED: work done in a clean clone and pushed is unaffected, so the other four W tickets no longer declare this as a blocker. What remains is that the deployed tree diverges from origin/main and the six files are only same-partition durable."
 status: backlog
 ---
 
@@ -46,7 +46,31 @@ The work being protected is not trivial. It was written after a power cut left
 twelve loose objects and a zero-length `refs/heads/master`, which **froze the
 site's content for 13.5 hours**.
 
-## Why it blocks the rest of Track W
+## CORRECTION 2026-08-27 — this no longer blocks the other four
+
+The blocking claim below was **mine and it was too broad.** It assumed W work
+would be edited on `via`, in the tree holding the six uncommitted files, where
+a commit would either sweep them up or collide with them. That is not how the
+work is being done: `frank2-af` clones the website repo on a box that already
+has push rights, edits there, and pushes. The commit then contains only the
+intended files, and `via` picks it up with an ordinary fast-forward.
+
+`ianweb` verified the part only the origin can see: `git diff --name-only` on
+`via` does not list `pxxweb/templates/base.html`, so the first such commit
+(`e78595d`, the OG card) fast-forwards cleanly and leaves the six alone.
+
+So [[bug-web-link-previews-render-as-bare-text]],
+[[feature-web-machine-readable-project-metadata]],
+[[feature-web-blog-bootstrap]] and [[feature-web-syndication-feeds]] have had
+their `blocked-by` cleared. **This ticket stays open on its own merits** — the
+deployed tree still diverges from origin/main, and the six files are still only
+same-partition durable — but it is not gating the lane.
+
+The general lesson, since it cost the lane half a day of false sequencing: a
+dirty working tree blocks *edits made in that tree*, not the work itself. Ask
+where the edit happens before declaring a blocker.
+
+## Why it blocked the rest of Track W (superseded — kept for the record)
 
 Every other W ticket edits this repo. Anyone branching off `origin/main` works
 against a tree that does not match what is serving pxxc.org, and the documented

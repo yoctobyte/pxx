@@ -120,8 +120,8 @@ _none_
 | bug-t-a-skip-that-cannot-say-why-is-a-pass-in-the-verdict | T | 50 | bug | testmgr records `reason: \"\"` on every skipped job. A full-tier sweep on 2026-08-26 skipped ~50 jobs — every conformance shard and every real-program corpus — and the report could not say why for any of them. The verdict line says RED/GREEN with no skip count, so a run that silently covered 3031 of 3081 jobs reports in the vocabulary of one that covered all of them. | — |
 | bug-t-fpc-seed-canary-red-cited-lines-that-cannot-contain-the-identifier | T | 30 | bug | One gate.sh quick run reported the FPC seed canary RED with 'symtab.inc(5934,30) Identifier not found ByRefArgNeedsLvalue' — but line 5934 of that file contains an unrelated loop, and the real call sites are at 6185/6186, AFTER the definition at 6099. Not reproducible: fpc compiled the identical tree rc=0 twice by hand and the next gate.sh run was GREEN. Evidence points at the canary reading a stale/other tree state, the same class the fixedpoint step already defends against; a false RED costs an agent a full investigation. | — |
 | bug-t-twatch-web-lists-a-target-that-cannot-be-built | T | 15 | bug | tools/twatch_web.py lists riscv64 in CROSS_TARGETS, but no compiler backend can produce a riscv64 binary and the test manager never mentions the target. The dashboard therefore carries a column that is structurally empty, and an empty column reads as 'no news' rather than 'impossible'. | — |
-| bug-web-link-previews-render-as-bare-text | W | 45 | bug | pxxc.org declares og:title/og:description/og:url but NO og:image, and twitter:card is `summary` rather than `summary_large_image`. Every link to the site on HN, Reddit, Mastodon, Slack, Discord and LinkedIn renders as a bare text row next to posts that have a picture. Highest click-through gain per hour of work on the site; the fix is one image plus two meta tags. | bug-web-production-tree-is-uncommitted-and-is-the-only-copy |
-| bug-web-production-tree-is-uncommitted-and-is-the-only-copy | W | 70 | bug | /opt/pxx-website on `via` has six modified files DEPLOYED AND SERVING pxxc.org since 2026-08-20 that exist in no commit and no branch. UPDATE 2026-08-27: the data-loss half is MITIGATED — a verified out-of-repo backup now exists — but the BLOCKING half stands and this ticket closes only on commit-and-push. Do not close it on the backup. A `git checkout .` or a re-clone destroys them, and one of the six IS the re-clone recovery script. It also silently blocks every other Track W ticket: the deployed tree does not match origin/main, so work branched off origin conflicts on arrival and the documented `git pull --ff-only` deploy step fails. | — |
+| bug-web-link-previews-render-as-bare-text | W | 45 | bug | pxxc.org declares og:title/og:description/og:url but NO og:image, and twitter:card is `summary` rather than `summary_large_image`. Every link to the site on HN, Reddit, Mastodon, Slack, Discord and LinkedIn renders as a bare text row next to posts that have a picture. Highest click-through gain per hour of work on the site; the fix is one image plus two meta tags. | — |
+| bug-web-production-tree-is-uncommitted-and-is-the-only-copy | W | 70 | bug | /opt/pxx-website on `via` has six modified files DEPLOYED AND SERVING pxxc.org since 2026-08-20 that exist in no commit and no branch. UPDATE 2026-08-27: the data-loss half is MITIGATED — a verified out-of-repo backup now exists — but the BLOCKING half stands and this ticket closes only on commit-and-push. Do not close it on the backup. A `git checkout .` or a re-clone destroys them, and one of the six IS the re-clone recovery script. The blocking claim has since NARROWED: work done in a clean clone and pushed is unaffected, so the other four W tickets no longer declare this as a blocker. What remains is that the deployed tree diverges from origin/main and the six files are only same-partition durable. | — |
 | chore-a-delete-the-dead-pascal-lvalue-statement-path | A | 30 | chore | `ParseLValue` and `CompileLValueAddress` in pasparser_lval.inc have no callers anywhere in compiler/** — ~130 lines of pre-AST statement-assignment parsing, including direct machine-code emission, that nothing reaches. | — |
 | chore-a-re-include-bench-timing-in-tools-devtest | A | 30 | chore | One line: `tools-devtest` skips `bench_timing_devtest.py` with an explicit `case ... continue`, added by a1fd5715e because the guard was load-sensitive. It has been fixed (c194b01e9) and is green under load average 14. Deleting the skip re-arms the only guard for bug-t-bench-sub-second-timings-quantized-to-50ms, which has not run in the fleet since the family was wired up. | — |
 | chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments | A | 15 | chore | compiler/builtin/pylib.pas still carries a no-op `pyexec` stub, plus comments in pylib.pas and pyeval.pas saying things SEGFAULT 'because pyexec is a stub'. Engine 1 landed 2026-07-31 and `exec` lowers to pyeval's EvalPyStmts — nothing calls the stub. The stale prose is the cost: it reads as an unimplemented feature and made a reader doubt a done, gated one. | — |
@@ -284,9 +284,9 @@ _none_
 | feature-typeinfo-last-categories | A | 20 | feature | The tail of the TypeInfo widening that still has NO consumer: interfaces (14) and metaclasses (28) are refused outright, TypeInfo(PChar) is refused while bare Pointer works, Currency (4) needs a tyCurrency that does not exist, procvar/method types get no TTypeData, and NativeInt reports tkInteger where FPC reports tkInt64 on a 64-bit target. | — |
 | feature-typinfo-facade-unit | B | 72 | feature | `typinfo` facade unit: FPC's RTTI API shapes over OUR blobs | feature-typeinfo-all-types |
 | feature-unicodestring-model | A | 62 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
-| feature-web-blog-bootstrap | W | 35 | feature | `/blog/` returns 200 and says `Coming soon.` [[feature-promo-launch-plan]] already decided that VISIBILITY starts now and is ungated — the blog is the surface that decision needs and it does not exist yet. This ticket is the MACHINERY plus two concrete first posts; the strategy, the audience and the one-shot launch guard all live in that ticket and are not relitigated here. | bug-web-production-tree-is-uncommitted-and-is-the-only-copy |
-| feature-web-machine-readable-project-metadata | W | 40 | feature | pxxc.org serves no `/llms.txt` (404) and no JSON-LD structured data. The site is otherwise unusually legible to machines — server-rendered, indexed, and summarised ACCURATELY including the byte-identical discipline holding under compression — so these two files are the remaining gap in a channel that already works, not a rescue job. | bug-web-production-tree-is-uncommitted-and-is-the-only-copy |
-| feature-web-syndication-feeds | W | 30 | feature | The site publishes two things that change continuously — the `Latest resolved` ticket list and (once it exists) the blog — and offers no RSS/Atom feed for either. No `application/rss+xml` or `application/atom+xml` link anywhere in the head. A follower has no way to follow, and the one genuinely novel asset (a live public record of a compiler being built by an agent fleet) is unsubscribable. | bug-web-production-tree-is-uncommitted-and-is-the-only-copy |
+| feature-web-blog-bootstrap | W | 35 | feature | `/blog/` returns 200 and says `Coming soon.` [[feature-promo-launch-plan]] already decided that VISIBILITY starts now and is ungated — the blog is the surface that decision needs and it does not exist yet. This ticket is the MACHINERY plus two concrete first posts; the strategy, the audience and the one-shot launch guard all live in that ticket and are not relitigated here. | — |
+| feature-web-machine-readable-project-metadata | W | 40 | feature | pxxc.org serves no `/llms.txt` (404) and no JSON-LD structured data. The site is otherwise unusually legible to machines — server-rendered, indexed, and summarised ACCURATELY including the byte-identical discipline holding under compression — so these two files are the remaining gap in a channel that already works, not a rescue job. | — |
+| feature-web-syndication-feeds | W | 30 | feature | The site publishes two things that change continuously — the `Latest resolved` ticket list and (once it exists) the blog — and offers no RSS/Atom feed for either. No `application/rss+xml` or `application/atom+xml` link anywhere in the head. A follower has no way to follow, and the one genuinely novel asset (a live public record of a compiler being built by an agent fleet) is unsubscribable. | — |
 | feature-web-track-w-bootstrap | W | 40→45 | feature | Track W (website) — bootstrap the lane: two repos, one board | — |
 | feature-web-tracker-and-host-portability | W | 45 | feature | Public tracker on GitHub + host-portability rule (nothing lives only in a service) | feature-web-track-w-bootstrap |
 | feature-writeln-as-library | A | 40 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
@@ -625,7 +625,7 @@ _none_
 - [p 75] [P] feature-pascal-corpus-oop
 - [p 72] [N] feature-nilpy-stdlib-coverage-gaps-measured
 - [p 72] [B] feature-typinfo-facade-unit
-- [p 70] [W] bug-web-production-tree-is-uncommitted-and-is-the-only-copy (unblocks 4)
+- [p 70] [W] bug-web-production-tree-is-uncommitted-and-is-the-only-copy
 - [p 70] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - [p 70] [N] feature-nilpy-staticmethod-and-classmethod
 - [p 70] [P] feature-p-delphi-string-helpers
@@ -728,6 +728,7 @@ _none_
 - [p 45] [N] bug-n-object-is-the-one-builtin-type-name-that-is-not-a-value
 - [p 45] [N] bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind
 - [p 45] [T] bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing
+- [p 45] [W] bug-web-link-previews-render-as-bare-text
 - [p 45] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
 - [p 45] [U] decide-t-refuse-unscoped-pattern-kills-in-a-hook
 - [p 45] [D] docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out
@@ -778,6 +779,7 @@ _none_
 - [p 40] [N] feature-nilpy-map-over-several-iterables
 - [p 40] [N] feature-nilpy-str-surface-gaps-2026-08-09
 - [p 40] [O] feature-opt-dynarray-grows-in-place
+- [p 40] [W] feature-web-machine-readable-project-metadata
 - [p 40] [A] feature-writeln-as-library
 - [p 40] [N] perf-nilpy-remaining-perbyte-string-builders
 - [p 40] [C] refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag
@@ -797,6 +799,7 @@ _none_
 - [p 35] [N] feature-nilpy-walrus-operator
 - [p 35] [P] feature-pascal-management-operators-nested-and-array
 - [p 35] [T] feature-twatch-full-tier-coverage-age
+- [p 35] [W] feature-web-blog-bootstrap
 - [p 35] [A] refactor-a-the-const-cast-width-table-is-the-third-copy
 - [p 32] [O] feature-opt-rtti-emit-on-use
 - [p 30] [N] bug-b-reportlab-mimic-multi-font-heap-corruption (unblocks 1) [parked — re-claim, do not duplicate]
@@ -824,6 +827,7 @@ _none_
 - [p 30] [P] feature-pascal-management-operators-copy-and-addref
 - [p 30] [T] feature-t-pasmith-rung-selftest
 - [p 30] [A] feature-toolchain-cli-ux
+- [p 30] [W] feature-web-syndication-feeds
 - [p 30] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 30] [A] refactor-a-two-dyn-array-depth-functions-that-drift [parked — re-claim, do not duplicate]
 - [p 25] [A+S] bug-a-the-div-by-zero-check-is-still-missing-on-xtensa
@@ -900,7 +904,6 @@ _none_
 
 ## Leverage (tickets each one unblocks)
 
-- **4** — bug-web-production-tree-is-uncommitted-and-is-the-only-copy
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap

@@ -2,7 +2,7 @@
 track: W
 prio: 45
 type: bug
-blocked-by: [bug-web-production-tree-is-uncommitted-and-is-the-only-copy]
+blocked-by: []
 summary: "pxxc.org declares og:title/og:description/og:url but NO og:image, and twitter:card is `summary` rather than `summary_large_image`. Every link to the site on HN, Reddit, Mastodon, Slack, Discord and LinkedIn renders as a bare text row next to posts that have a picture. Highest click-through gain per hour of work on the site; the fix is one image plus two meta tags."
 status: backlog
 ---
@@ -16,6 +16,39 @@ verdict was good — see
 but the social-card surface is empty.
 
 **Fix lands in the private `~/pxx-website` repo, not in this checkout.**
+
+## STATUS 2026-08-27 — code landed, deploy and verification pending
+
+Fixed in the website repo as **`e78595d`** ("Link previews: an Open Graph card,
+and the large-image Twitter card"), pushed to `origin/main`.
+
+- `pxxweb/static/img/og-card.png` — 1200x630, new directory
+- `pxxweb/templates/base.html` — `og:image` (+ width/height/alt),
+  `twitter:image`, and `twitter:card` raised to `summary_large_image`
+- `scripts/make-og-card.py` — the card is generated, not hand-drawn, so a copy
+  change is a one-line edit and a re-run
+
+**Not closed yet, deliberately.** Two steps remain and neither is mine:
+
+1. **A gunicorn restart on `via`.** Jinja caches compiled templates in the
+   worker, so `git pull` alone does not change what visitors are served. Until
+   that happens the tags are in git and not on the wire.
+2. **Confirmation of the served result, from the origin.** An outside audit
+   cannot distinguish "not deployed" from "deployed and edge-cached", so the
+   check has to come from `via`. `ianweb` has it.
+
+Safe to land ahead of
+[[bug-web-production-tree-is-uncommitted-and-is-the-only-copy]] because the
+edit was made in a clean clone and pushed, not made on `via`. `ianweb` verified
+the part only it could: `git diff --name-only` on `via` does not list
+`base.html`, so the pull fast-forwards cleanly and leaves the six uncommitted
+files alone. That is also why this ticket and its three siblings no longer
+declare the p70 as a blocker — see that ticket for why the premise narrowed.
+
+**Do not overwrite `og-card.png` in place.** nginx serves `static/` with
+`expires 1h` and no fingerprint in the URL, so a new file needs no purge but a
+replaced one is served stale from the edge for up to four hours. Ship a new
+filename and update the template instead.
 
 ## The measurement
 

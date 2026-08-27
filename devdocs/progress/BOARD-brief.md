@@ -46,7 +46,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 278, ranked
+## Ready — top 30 of 282, ranked
 
 - `[p 85] [O]` feature-opt-o3-register-pressure
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
@@ -54,7 +54,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 72] [N]` feature-nilpy-stdlib-coverage-gaps-measured
 - `[p 72] [B]` feature-typinfo-facade-unit
-- `[p 70] [W]` bug-web-production-tree-is-uncommitted-and-is-the-only-copy (unblocks 4)
+- `[p 70] [W]` bug-web-production-tree-is-uncommitted-and-is-the-only-copy
 - `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - `[p 70] [N]` feature-nilpy-staticmethod-and-classmethod
 - `[p 70] [P]` feature-p-delphi-string-helpers
@@ -79,4 +79,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` bug-n-self-class-cannot-be-called-as-a-constructor
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 
-_248 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_252 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

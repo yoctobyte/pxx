@@ -2,7 +2,7 @@
 track: W
 prio: 30
 type: feature
-blocked-by: [bug-web-production-tree-is-uncommitted-and-is-the-only-copy]
+blocked-by: []
 summary: "The site publishes two things that change continuously — the `Latest resolved` ticket list and (once it exists) the blog — and offers no RSS/Atom feed for either. No `application/rss+xml` or `application/atom+xml` link anywhere in the head. A follower has no way to follow, and the one genuinely novel asset (a live public record of a compiler being built by an agent fleet) is unsubscribable."
 status: backlog
 ---

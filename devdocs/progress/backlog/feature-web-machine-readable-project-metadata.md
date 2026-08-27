@@ -2,7 +2,7 @@
 track: W
 prio: 40
 type: feature
-blocked-by: [bug-web-production-tree-is-uncommitted-and-is-the-only-copy]
+blocked-by: []
 summary: "pxxc.org serves no `/llms.txt` (404) and no JSON-LD structured data. The site is otherwise unusually legible to machines — server-rendered, indexed, and summarised ACCURATELY including the byte-identical discipline holding under compression — so these two files are the remaining gap in a channel that already works, not a rescue job."
 status: backlog
 ---
