@@ -5,7 +5,7 @@ type: bug
 owner: frank1-AN
 blocked-by: []
 summary: "`self.w = None` in the ctor, `self.w = Foo()` later, then `self.w.hi()` returns an INTEGER — the receiver's address — instead of calling the method. The idiomatic `self.w: Optional[Foo] = None` spelling is wrong the same way, which is what makes it expensive."
-status: working
+status: done
 ---
 
 # A method call on an Optional class field returns a raw pointer
@@ -174,3 +174,6 @@ claiming the class is the bug, not the fallback.
 The ticket's Gate asked for a control that `if self.w is not None:` still
 narrows as it does today. That is unaffected by this change — nothing here
 touches narrowing — and is not covered by the new test.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.
