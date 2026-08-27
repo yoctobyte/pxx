@@ -155,11 +155,17 @@ function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
   IR_BINOP only, so every `'lit' + F(x)` leaked F's result on all four targets
   (bug-a-a-string-function-result-in-a-concat-leaks-on-every-cross-target). }
 function IRNodeOwnsManagedStr(n: Integer): Boolean; forward;
+{ Same mechanism, same reason: the wasm32 backend needs IRTopLevelStmt to tell
+  a statement from a value node, and it is defined in ir_codegen.inc, included
+  after the cross backends. Forwarding is what this file already does for that
+  situation — a second mechanism would be the special case. }
+function IRTopLevelStmt(k: Integer): Boolean; forward;
 {$ifndef PXX_NO_AARCH64}{$include ir_codegen_aarch64.inc}{$endif}
 {$ifndef PXX_NO_I386}{$include ir_codegen386.inc}{$endif}
 {$ifndef PXX_NO_ARM32}{$include ir_codegen_arm32.inc}{$endif}
 {$include ir_codegen_riscv32.inc}
 {$include ir_codegen_xtensa.inc}
+{$include ir_codegen_wasm32.inc}
 {$include ir_codegen.inc}
 { The shared program-driver prologue/epilogue every frontend calls. After
   ir_codegen.inc (the emitters), pasparser_prog.inc (the Register* helpers) and
