@@ -63,4 +63,4 @@ two missing System-unit functions — `BsfQWord` (line 960) and `octstr`
 (line 1092) — and nothing else. Those are RTL surface, not frontend defects.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit c6a73e2d5.
