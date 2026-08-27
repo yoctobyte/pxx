@@ -1070,3 +1070,51 @@ generalisable form: interleaving fixes *which* runs you compare, repetition
 fixes *how confidently*, and a short workload with many reps beats a long
 workload with few. `hello.pas` at min-of-15 gave a cleaner answer in two
 minutes than `compiler.pas` at min-of-3 gave in ten.
+
+### 2026-08-28 — item 2 (store->reload elimination for resident destinations): DISCONFIRMED, and item 1 is why
+
+Claimed and measured. **The exclusion should stay.** No pass changed; the
+outcome is a corrected comment and this entry.
+
+The ticket says `ReloadElimSym` excludes resident destinations for a reason
+that "is no longer true after `e7c0d1d2a`". That is right about the reason and
+wrong about the conclusion, because the exclusion had **two** reasons:
+
+- **(a) stale, as the ticket says.** "The resident dual-write refreshes through
+  `EmitLoadVar` and so clobbers rax" — the refresh now re-extends from rax
+  itself, so rax does still hold the stored value. Dead.
+- **(b) still true, and now measured.** A resident load is ALREADY a reg-reg
+  move (`mov %r13,%rax`). Eliminating it removes a register move, not a memory
+  access.
+
+Dropping the exclusion and rebuilding, on `bt.pas` — a loop over
+`if (c >= 'A') and (c <= 'Z')`, the exact shape item 3 names — removes **6
+instructions out of 13,483**, every one a reg-reg move. That is the class the
+W1 sizing in this ticket already priced at ~0 (deleting 6 of 17 such moves from
+a hot loop body moved the clock 1.4%). Not worth timing; not worth landing.
+
+**Item 1 is what emptied it.** Before item 1 the boolean temp lived in the
+frame and the sequence was a genuine memory round trip —
+`mov %al,-0x1d(%rbp); movzbq %al,-0x1d(%rbp)` — which is what made item 2 look
+valuable when it was filed. At `-O3` today that temp is **resident in r14**, and
+the emitted body of `Upcount` contains exactly one memory READ, the string byte
+itself. There is no reload left to eliminate:
+
+```
+setae  %al
+movzbq %al,%rax          <- extend
+mov    %al,-0x1d(%rbp)   <- dual-write (a STORE; off the critical path)
+movzbq %al,%rax          <- re-extend from al, not a reload
+mov    %rax,%r14         <- refresh resident
+```
+
+**Where the remaining value actually is, and it is item 3.** What survives in
+that body is the **dual-write stores** — `mov %al,-0x1d(%rbp)`,
+`mov %eax,-0x14(%rbp)`, `mov %eax,-0x10(%rbp)` per iteration — not reloads.
+Removing those means making the register authoritative inside the loop and
+re-syncing the frame at exits, which is the V5 -> V3 step the sizing measured at
+a further **2.15x**. That is the real W2, and it is now the only unclaimed item
+in this ticket with measured value behind it.
+
+So the ordering the sizing proposed survives contact: item 1 landed and was
+worth 1.9-2.1x; item 2 is empty *because* item 1 landed; item 3 is the job.

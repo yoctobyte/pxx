@@ -8841,9 +8841,20 @@ end;
     * ordinal or pointer ONLY — a record / set / class / variant destination
       takes one of IR_STORE_SYM's earlier arms, which do not end with rax
       holding the stored value;
-    * NOT register-resident — EmitStoreVar's resident dual-write goes through
-      RegcallRefreshResident, which reloads via EmitLoadVar and so clobbers rax.
-      (A resident load is a reg-reg move already; there is nothing to win.) }
+    * NOT register-resident. This exclusion once had two reasons and only the
+      second survives, so read it as the second one:
+        (a) STALE since `e7c0d1d2a`: "the resident dual-write refreshes through
+            EmitLoadVar and so clobbers rax". The refresh now re-extends from
+            rax itself, so rax does still hold the stored value. Not a reason.
+        (b) THE reason: a resident load is ALREADY a reg-reg move
+            (`mov %r13,%rax`), so eliminating it removes a register move, not a
+            memory access. Measured 2026-08-28 by dropping this line and
+            rebuilding: on a boolean-heavy loop — the `(c >= 'A') and
+            (c <= 'Z')` shape this pass was aimed at — it removed **6
+            instructions out of 13,483**, every one of them a reg-reg move.
+            The W1 sizing in the same ticket measured that class at ~0 (deleting
+            6 of 17 such moves from a hot loop body moved the clock 1.4%).
+            So this is not "we cannot", it is "there is nothing there". }
 function ReloadElimSym(idx: Integer): Boolean;
 var tk: TTypeKind;
 begin
