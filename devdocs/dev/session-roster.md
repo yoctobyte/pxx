@@ -8016,3 +8016,83 @@ flattering version: **write diagnostics that name the DECISION that was made, no
 just the number that was wrong.** A message saying "521 MB exceeded a 500 MB
 estimate" would have produced a corrected constant. A message saying a job was
 *admitted* on a broken promise produced a fix to the learner.
+
+## OWNER INSTRUCTION (2026-08-28): **do not revert platonic patches** — broadcast to all lanes
+
+Verbatim: *"tell agents not to revert platonic patches."* Sent to frankA, frankB,
+frankwasm, frank-optimize and frankT.
+
+**Direction is the whole rule**, and stating it as a direction is what makes it
+operable:
+
+| move | verdict |
+| --- | --- |
+| workaround → platonic | **always right** — this is the standing goal |
+| platonic → workaround | **forbidden** — file the bug, mark `blocked-by:`, leave the code that *should* work in place |
+
+It is the owner's existing rule (*"leave code that should work in place and file a
+bug report"*) extended to code that has **already been restored**. The temptation
+it forbids is specific and arrives late: a platonic form is restored, a gate goes
+red days later, and putting the workaround back looks like tidying rather than
+regression. **If a lane concludes a platonic patch must come out, that is an owner
+call routed through me — never a local one.**
+
+**Unaffected:** `track-b-workarounds.md`'s documented revert-when-fixed lifecycle,
+which CLAUDE.md protects explicitly. That covers code that **never left** workaround
+form — exactly `update()`'s situation, where keeping the workaround and re-pointing
+it at the real blocker was correct. The new rule bites on restored code, not on
+tracked ones.
+
+**Per-lane edges I named rather than left to inference:**
+
+- **frank-optimize** has the sharpest one. An optimizer's characteristic failure is
+  finding that correct-but-slow source blocks a pass and reshaping *the source*.
+  Same move, better PR. Corollary: **a pass that requires source to be written a
+  particular way is not a pass, it is a convention** — if residency admission needs
+  a loop spelled differently, that is the finding.
+- **frankA**, compiling `rtl-generics`: do not edit the corpus to get past walls. A
+  corpus you have edited measures your edits.
+- **frankwasm**: `asmtext_wasm.inc` moved off `Assign`/`Rewrite`/`Close` because
+  they failed to self-host. Asked it to say which form is platonic — if that is an
+  **RTL gap**, the gap deserves a ticket even though `WriteMapFile`'s pattern is
+  legitimately the house style for compiler-internal output. *"It self-hosts now"*
+  must not settle a question that is actually about what the RTL should support.
+- **frankT**: a fuzz/sweep finding that platonic code fails goes to the owning lane;
+  never suggest a lane reshape source to make a job go green.
+
+## frankwasm Phase 1 landed — both grant edges, gate SEEN (`3c6716b0e`; tickets `de423986f`)
+
+`make compiler/pascal26` → **`converged after 1 round(s)`, `cb55d648a657`**,
+differing from pinned as required. Watched for specifically, because two includes
+end the "nothing `compiler.pas` includes has moved" condition that made the
+previous convergences cheap.
+
+**It distrusted its own first proof and redid it.** The first "no existing target
+moved" pass printed six hashes *with nothing to compare them against* — which
+proves nothing. Redone as a real before/after: revert the two files, rebuild
+(reproduced `325b4479070a` exactly), hash 4 programs × 6 targets, restore, rebuild,
+diff. **20/20 identical.** Catching that on yourself is rare and it is the
+difference between a check and a proof.
+
+- **Edge 1** — `writeWasm` is **guarded**, erroring when `WasmFuncCount = 0`. With
+  no codegen the model is empty, and an empty-but-valid `.wasm` for a program that
+  plainly has code is a silently wrong output. Same instinct as the `IR_FRAME` call:
+  error for an accurate reason rather than emit a plausible lie.
+- **Edge 2** — `exception_emit.inc:437` message replaced, mechanism untouched, with
+  a comment saying why and pointing at the prototype.
+
+Two caught by measuring: **66MB of fixed BSS arrays** (against the compiler's own
+76MB) right-sized to ~19.5MB, with Phase 7 flagged as what will actually strain it;
+and a first draft coupling to the compiler's shared `TokChars`, **which does not
+exist in the standalone build at all** — hidden coupling that happens to work is how
+a standalone test stops proving anything about the integrated build.
+
+### The charter fact that outlives the phase
+
+`CHARTER.md` now records that **the wasm branch touches shared files**. Until today
+a `master` merge could not conflict in `compiler/**`; that property is partially
+spent — small, deliberate, gated, but spent. frankwasm wrote it into the charter and
+the ticket so the next session inherits it rather than meeting it in a conflict, and
+will merge master more often and treat a conflict in either file as a **coordination
+event** rather than a local resolution. Phase 2's `ir_codegen.inc` dispatch arm comes
+back to me for its own grant; this one does not extend.
