@@ -1118,3 +1118,84 @@ in this ticket with measured value behind it.
 
 So the ordering the sizing proposed survives contact: item 1 landed and was
 worth 1.9-2.1x; item 2 is empty *because* item 1 landed; item 3 is the job.
+
+## STANDING RULE for this umbrella: re-measure the PRIZE before starting an item, not just the mechanism
+
+Every item in this ticket was sized against a compiler that has since changed.
+Twice in one session an item's stated prize turned out to have been consumed or
+created by a *different* item landing:
+
+- **item 2 was emptied by item 1.** Filed when the boolean temp lived in the
+  frame and its store/reload was a real memory round trip; by the time it was
+  claimed the temp was resident and there was no reload left to remove.
+- **W1 was REVIVED by item 1** (below). Correctly disconfirmed at 1.4% against
+  the compiler as it stood; the same transform is now worth ~1.6x, because item
+  1 removed the memory traffic that had been hiding it.
+
+A stale prize is more expensive than a stale number, because it does not look
+like a claim to re-check — it looks like work waiting to be done. So: before
+starting an item, disassemble the current output and re-measure. It costs
+minutes.
+
+## 2026-08-28 (frank-optimize) — item 3 sized before building: worth **~5%**, and W1 is now worth **~1.6x**. The order inverts
+
+Dispatched to item 3 (make the register authoritative inside the loop, re-sync
+the frame at exits). Sized it first per the rule above. **Do not build item 3
+next; build W1.**
+
+### Why the old 2.15x was wrong — it measured two changes at once
+
+The V5 -> V3 step in the sizing entry above (0.368 -> 0.171 s) was read as the
+price of the dual-write stores. It is not. V5 and V3 differ by the stores **and**
+by all the operand staging through rax; V3 was an idealised 6-instruction body,
+not V5-minus-stores. The 2.15x is the two transforms together.
+
+### The isolated measurement
+
+`Run`'s **current** `-O3` body, transcribed from today's disassembly (21
+instructions, and note it now contains **zero memory reads** — item 1 removed
+them all; the only frame traffic left is three dual-write stores). Variants
+differ from A by deletion only. Interleaved in one process, min of 9-12, four
+independent runs agreeing.
+
+| variant | s | cyc/iter | vs current |
+| --- | --- | --- | --- |
+| **A — current `-O3`** (21 insns, calibrates: real binary 0.61 s) | 0.616-0.654 | 6.5 | 1.00x |
+| **B — item 3 exactly: the three dual-write stores deleted, nothing else** | 0.593-0.618 | 6.3 | **1.04-1.06x** |
+| **C — item 3 + W1: staging through rax also gone** (11 insns) | 0.365-0.385 | 3.9 | **~1.65x** |
+| D — ideal, fpc-like (6 insns) | 0.193-0.216 | 2.1 | 3.0x |
+
+**Item 3 alone is ~5%.** Stores retire into the store buffer and are off the
+loop-carried dependency chain, so deleting them buys close to nothing — the
+same reason the *loads* mattered so much is why the stores do not.
+
+**B -> C is ~1.6x, and that is W1** — the emit-time operand scheduler this
+ticket deprioritised this morning on my own measurement.
+
+### Why W1's value changed, which is the transferable part
+
+W1 was sized at **1.4%** against the pre-item-1 compiler and that number was
+correct. At the time the body was 12 cyc/iter dominated by two frame
+round-trips; every `mov %rN,%rax` sat in their shadow, and deleting six of them
+moved nothing. Item 1 removed the memory traffic. The body is now 6.5 cyc/iter
+and the dependency chain runs **through the staging moves themselves** — the
+value is threaded `r13 -> rax -> r14 -> rcx -> rax` between the xor and the add.
+The same instructions that were free when they overlapped a 5-cycle
+store-forward are the critical path once the store-forward is gone.
+
+**An optimisation's value is not a property of the transform. It is a property
+of the transform against a specific baseline** — and this ticket's baseline
+moved this morning, by our own hand.
+
+### Recommendation
+
+1. **W1 — emit-time operand scheduler.** ~1.6x on this shape, now measured
+   twice from opposite directions. Un-deprioritise it; it is the item that
+   inherits item 1's win.
+2. **Item 3 — register authoritative.** ~5%, and it is the *harder* of the two
+   (exit re-sync, exception landing pads, every path that reads the frame slot
+   as authoritative). Worst effort-to-payoff ratio in the ticket right now.
+3. The far end (D) is another ~1.8x beyond C, and is a real allocator.
+
+Nothing built, nothing changed. Handing the inversion back to the coordinator
+rather than switching items unilaterally — the dispatch was item 3.
