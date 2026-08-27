@@ -5,7 +5,7 @@ type: bug
 owner: frank1-AN
 blocked-by: []
 summary: "`self.v = 2.5` in a SUBCLASS, where `v` was declared `self.v = 1` in the parent, prints 4612811918334230528 — the double's bits. The sibling defect within one class was fixed 2026-08-27; this one is left because the parent's layout is already final by the time the subclass is registered, so it needs a whole-program pre-pass rather than a local join."
-status: working
+status: done
 ---
 
 # A field declared in an ancestor is not widened by a descendant's rebind
@@ -328,3 +328,6 @@ against the mixin's own class index, not against each host that flattens it. So
 a host widening a mixin-supplied field is unchanged from today. That is a gap,
 not a regression, and it is narrow: single inheritance — the case both repros
 and all real code in the tree use — goes through `PyFJParent` and is covered.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.
