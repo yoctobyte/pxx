@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-26T10:50:19Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "ecc00f26811e69e4dcf6d9bf6cab75c46fd8b1e0",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-26T10:56:17Z",
    "fixed": [],
    "new_red": [],
@@ -469,6 +460,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "bda66c31f0dfde04c4d99ab919df1b772c2a4942",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T00:06:37Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "2cd5f13617beac47bac1e801e907f408637b8533",
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
@@ -2371,6 +2371,7 @@
   "test-core#src:test/test_string_sized.pas": "native",
   "test-core#src:test/test_string_to_pchar_auto.pas": "native",
   "test-core#src:test/test_string_typecast_is_a_cast.pas": "native",
+  "test-core#src:test/test_subrange_bound_stops_at_the_initialiser.pas": "native",
   "test-core#src:test/test_succ_pred_odd.pas": "native",
   "test-core#src:test/test_symslot_stale_ndims.pas": "native",
   "test-core#src:test/test_syncobjs.pas": "native",
@@ -5559,6 +5560,7 @@
   "test-core#src:test/test_string_sized.pas": "pass",
   "test-core#src:test/test_string_to_pchar_auto.pas": "pass",
   "test-core#src:test/test_string_typecast_is_a_cast.pas": "pass",
+  "test-core#src:test/test_subrange_bound_stops_at_the_initialiser.pas": "pass",
   "test-core#src:test/test_succ_pred_odd.pas": "pass",
   "test-core#src:test/test_symslot_stale_ndims.pas": "pass",
   "test-core#src:test/test_syncobjs.pas": "pass",
@@ -6829,14 +6831,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-27T00:00:22Z",
+  "date": "2026-08-27T00:06:37Z",
   "deadline": 7200.0,
-  "sha": "bda66c31f0dfde04c4d99ab919df1b772c2a4942",
+  "sha": "2cd5f13617beac47bac1e801e907f408637b8533",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 305.4
+  "wall": 302.6
  },
  "last_bench": {
   "conf_rows": 550,
