@@ -703,3 +703,113 @@ pin taken.
 Gate: `make compiler/pascal26` fixedpoint (converged, `0b134438899d`) +
 `tools/gate.sh quick` GREEN. The commit adds the probe only; no pass changed
 behaviour, so `-O0/-O1/-O2/-O3` output is unchanged by construction.
+
+## 2026-08-27 (frankA) — the `-O2` promotion landed, and its payoff is **1.04x, not 1.29x**
+
+Coordinator's call, three passes, one commit each. All three landed green. But
+the number that justified doing this ahead of W1 does not survive being
+re-measured, so the record below leads with that.
+
+### What landed
+
+| commit | pass | guards moved |
+| --- | --- | --- |
+| `13d4bba0c` | div/mod by a constant power of two → shifts/masks | the strength reduction + both zero-check elisions (tkDiv, tkMod) |
+| `e4fe576eb` | narrowing ordinal cast → one `movsx`/`movzx` | one (`NarrowCastFold`'s guard) |
+| `7767acc60` | cmp-immediate, **both** the branch and value-producing forms | two — they move together, because a short-circuit `and`/`or` lowers each operand to a value, so promoting only the branch form leaves the larger half behind |
+
+Gate constants only; no pass logic changed. Every other `OptLevel >= 3` guard in
+`ir_codegen.inc` stays put — float-tree fusion (`FloatTreeFits`), the W1 scratch
+arms (`ScratchSafeSubtree` / `CsScratchOn`), and `skipLastArg` are **not** part
+of this set and were checked individually rather than swept by pattern.
+
+**`e7c0d1d2a` is deliberately NOT promoted, and this is the fourth pass a future
+reader will count and miss.** It fixes the residency refresh so it reads `rax`
+rather than the slot it just wrote — and the residency mechanism it repairs is
+itself gated `OptLevel >= 3` and does not exist at `-O2`. Promoting it would
+change no emitted byte at `-O2`: a no-op wearing the costume of a change. It
+stays at `-O3` where it does work.
+
+### Correctness — per pass, differentials re-run after each promotion
+
+Each pass got a checksummed two-oracle differential: `-O0/-O1/-O2/-O3` must agree
+with each other **and** with `fpc -O2`, run once **before** the promotion as a
+control and again after, with the earlier passes' differentials re-run each time.
+Each also confirmed the `-O2` **binary actually changed** — agreement from a pass
+that silently failed to fire is worth nothing, and that check is cheap.
+
+- **div/mod:** every power of two through 2^62 and non-powers (10, 3, 7, 100) for
+  the zero-check arm, over Int64/LongInt/Cardinal/QWord, dense −300k..300k across
+  zero where the sign bias lives, a 40k-point sparse sweep of the full Int64
+  range, and the type extremes.
+- **narrowing:** every width and signedness, dense −70k..70k plus a 60k-point
+  sparse sweep, every width boundary by hand, the hand-written idioms the fold is
+  value-identical to, and **four near-misses that must not fold** (partial mask
+  `$FE`, 9-bit `$1FF`, mask+xor with no subtract, subtract off by one).
+- **cmp-imm:** the imm32 sign-extension boundaries are the whole point — 0, ±1,
+  127, −128, imm32 max/min, one past each, 4294967295, 4294967296, the Int64
+  extremes — against Int64/LongInt/QWord/Cardinal, six operators, both the branch
+  and the value form, plus two short-circuit shapes that exist only in the value
+  form.
+
+Self-host fixedpoint after every commit, **converging in 2 rounds rather than 1**
+— which is the expected signature here, because the compiler now compiles itself
+differently — and `gate.sh quick` GREEN after each.
+
+One case is **excluded and filed rather than papered over**: `QWord div` by a
+LITERAL ≥ 2^63 returns a wrong value at `-O0` too, so it is not ours —
+[[bug-p-qword-div-by-a-literal-above-2-63-is-signed]]. The sweep divides by the
+same value through a variable, which is correct.
+
+### The payoff, measured properly — **1.04x, and the 1.29x was never this**
+
+Method, because the answer depends on it: the baseline must be a compiler whose
+**own code** was emitted with the passes off. Built by seeding `552af4dcb`'s
+sources from the pinned binary and iterating to a fixedpoint — landing on
+`0b134438899d`, byte-identical to the probe-only build measured earlier, which is
+what confirms the baseline is genuine. Then A/B alternating, `%U`, min of N.
+
+| workload | pre-promotion `-O2` | post `-O2` | `-O3`-built |
+| --- | --- | --- | --- |
+| compile `empty.npy` (min of 15) | 2.27 s | **2.19 s** | 2.19 s (min of 9) |
+| self-compile `compiler.pas` (min of 3) | 18.31 s | **17.95 s** | — |
+
+**The three promoted passes are worth ~1.04x**, reproduced twice (2.35→2.26 and
+2.27→2.19). The entire remaining `-O3` set is worth about another 1.03x on top.
+
+The `1.29x` in the section above is **not** what this promotion could ever have
+delivered, and reading it as such is the mistake to avoid repeating:
+
+1. It compared base **`-O2`** against new **`-O3`**, so it always included the
+   `-O3`-only passes that are not in the promotable set.
+2. Its baseline no longer exists. That row measured 3.65 s for `empty.npy`; the
+   same workload is 2.27 s today on the *pre-promotion* binary. Work that landed
+   afterwards — `13e196cc8`, emitting the variant clear/retain blobs once instead
+   of at 10,707 call sites — had already captured most of that headroom. **A
+   banked speedup decays as the tree moves underneath it**, and a figure quoted
+   from a ticket months later is a claim about a binary nobody still has.
+
+Not an argument against having promoted them: 1.04x on every compile on every
+track, for a change that alters no pass logic and is backed by tens of millions
+of differential cases, is a good trade. It **is** an argument against the
+priority reasoning that ranked it above W1 on the strength of a stale number.
+
+### Re-ranking: **W1 before W2**
+
+On the evidence in the section above this one, the workstream order at the top of
+this ticket is wrong and is superseded:
+
+- **W1 (emit-time operand scheduler) is now the keystone.** Both of W2's cheap
+  experiments came back empty, and the disassembly puts 5 of 21 instructions on
+  the hot loop's common path in the rax funnel alone. W1 attacks that directly.
+- **W2 (linear-scan allocator) drops behind it**, and when it is built its
+  ranking metric should be **loads, not loads+stores** — `EmitStoreVar`
+  dual-writes, so residency removes reads and not writes, and a store-heavy
+  resident is close to free while a load-heavy one is the entire payoff.
+
+A caution for whoever picks W1 up, from this session's own numbers: the static
+text-segment sweep put the operand-funnel family at ~1.2% of the binary while the
+hot loop shows 24% on its common path. Those are not in conflict — a static count
+weights cold code equally — but it does mean **W1 must be justified on a dynamic
+profile, not a static one**, and its win will land on hot loops rather than on
+overall code size.
