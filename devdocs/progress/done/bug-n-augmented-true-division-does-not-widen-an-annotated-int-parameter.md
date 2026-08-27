@@ -157,4 +157,4 @@ and none is a regression:
 needed.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 5d8784f1d.
