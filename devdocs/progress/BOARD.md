@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body | P | 60 | bug | `TGeneric<T>.ClassMethod` is "undefined variable" inside another generic's body | — |
 | feature-opt-o3-register-pressure | O | 85 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-target-wasm | A+B | 60 | feature | NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim. | — |
 
@@ -104,10 +105,10 @@ _none_
 | bug-nilpy-empty-str-and-none-are-the-same-value | N | 75 | bug | `\"\" is None` answers TRUE for any NilPy value whose static type is plain `str` — literal, local, parameter, `-> str` return, AND every pylib str-method result (`.replace()`, a slice, `.join()`, `*0`). Container-derived and `Optional[str]` values are correct, because they carry a variant TAG; the rule is tagged-vs-untagged, not literal-vs-computed. A CORRECTION at the bottom retracts the 2026-08-27 down-scoping, which claimed the pylib results were already right and was measured wrong (they answer True on v385, v386 and HEAD alike) — the original ~260-producer sizing, and the basis the decision was taken on, both stand. A constant-fold is unsafe: `def f() -> str: return None` is legal CPython. | decide-nilpy-none-str-sentinel-vs-textstr-kind |
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 55 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 12 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
-| bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body | P | 60 | bug | `TGeneric<T>.ClassMethod` is "undefined variable" inside another generic's body | — |
 | bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
 | bug-p-qword-div-by-a-literal-above-2-63-is-signed | P | 55 | bug | `QWord div` / `mod` by a literal >= 2^63 divides SIGNED and returns a wrong value | — |
 | bug-p-sysopen-intrinsic-shadows-a-user-function-name | P | 15 | bug | sysopen/syswrite/sysclose/sysfchmod are compiler INTRINSICS with dedicated tokens (tkSysOpen &c), so the lexer never produces an identifier for them and a user program cannot declare a function with one of those names. The diagnostic is `expected name`, which does not mention the reservation. Real but nearly unreachable: prio 15. | — |
+| bug-p-the-address-of-a-virtual-class-method-cannot-be-lowered | P | 55 | bug | The address of a virtual class method cannot be lowered (`AN_CLASS_VIRTUAL_CALL`, kind 88) | — |
 | bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence | T | 40 | bug | file_cascade_ticket's Root-cause-suspects line falls back to 'likely a broken build or harness event' whenever no CASCADE_ROOT_JOBS entry is in the red set. That is a conclusion drawn from the absence of one narrow signal, printed with no hedge, and it is now directly contradicted by the Range section shipped in 8ec77190c — which on the live incident named the actual cause. Same defect class the Range work fixed for the sha: an auto-filed ticket asserting something it has no evidence for. | — |
 | bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio | T | 50 | bug | Float-accuracy assertions in the gated suites make a one-ulp move a CI RED, and a red job is worked at the priority of BEING RED - which overrides the owner's standing rule that float accuracy is low prio. Parking the tickets in float/ does not close this door; only the tests can. | — |
 | bug-t-a-pin-verifys-reds-carry-no-reasons | T | 40 | bug | A pin verify's reds carry no reasons | — |
@@ -648,7 +649,6 @@ _none_
 - [p 62] [A] feature-unicodestring-model
 - [p 60] [U] decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - [p 60] [A] bug-a-cross-bootstrap-aarch64-overflows-max-code
-- [p 60] [P] bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body
 - [p 60] [N] feature-a-declaration-phase
 - [p 60] [N] feature-nilpy-process-exec-binding
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application
@@ -676,6 +676,7 @@ _none_
 - [p 55] [N] bug-n-super-as-an-expression-fails-with-a-misleading-diagnostic
 - [p 55] [N] bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only
 - [p 55] [P] bug-p-qword-div-by-a-literal-above-2-63-is-signed
+- [p 55] [P] bug-p-the-address-of-a-virtual-class-method-cannot-be-lowered
 - [p 55] [A] chore-a-the-range-checked-fpc-seed-cannot-be-built
 - [p 55] [B] compat-pascal-ioresult-returns-a-negative-errno
 - [p 55] [A] feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets [parked — re-claim, do not duplicate]

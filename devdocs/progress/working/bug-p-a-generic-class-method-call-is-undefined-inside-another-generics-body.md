@@ -1,7 +1,8 @@
 ---
 prio: 60
 track: P
-owner: unassigned
+owner: frankA
+status: working
 ---
 
 # `TGeneric<T>.ClassMethod` is "undefined variable" inside another generic's body
