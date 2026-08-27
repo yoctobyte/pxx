@@ -8546,6 +8546,13 @@ test-core: $(COMPILER)
 	# measured on constexp.pas's own QWord/Int64 pair. FPC 3.2.2's output.
 	./$(COMPILER) test/test_implicit_conversion_operator_widens_source.pas $(TESTTMP)/test_implconv26
 	$(TESTTMP)/test_implconv26 | diff -u test/test_implicit_conversion_operator_widens_source.expected -
+	# The variadic Concat intrinsic must survive a unit that declares a Concat of
+	# its own: lib/rtl/sysutils declares a two-argument one, and the guard was
+	# "any Concat in scope withdraws the intrinsic", so `uses sysutils` broke
+	# Concat('a','b','c'). The array rows are the sharper half -- sysutils' Concat
+	# has the right ARITY for two arrays and the wrong types. FPC 3.2.2's output.
+	./$(COMPILER) -Fulib/rtl test/test_concat_survives_uses_sysutils.pas $(TESTTMP)/test_concatsu26
+	$(TESTTMP)/test_concatsu26 | diff -u test/test_concat_survives_uses_sysutils.expected -
 	./$(COMPILER) test/test_ansistring_cast_extern_pchar.pas $(TESTTMP)/test_ansistring_cast_extern_pchar26
 	test "$$($(TESTTMP)/test_ansistring_cast_extern_pchar26)" = "$$(printf 'direct=hello len=5\nviavar=hello len=5')"
 	./$(COMPILER) test/test_ansistring_cast_fnptr.pas $(TESTTMP)/test_ansistring_cast_fnptr26

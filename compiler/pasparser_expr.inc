@@ -5865,7 +5865,16 @@ begin
 
       { Concat(s1, s2, ..., sn): the System string-concatenation intrinsic, just
         chained `+`. Folded here so it needs no `uses` and reuses the working
-        string-concat codegen. A user `Concat` (procIdx>=0) shadows it.
+        string-concat codegen.
+
+        This arm is for when NO `Concat` is in scope at all. When one IS —
+        `lib/rtl/sysutils` declares a two-argument one — `procIdx >= 0` sends the
+        call down the ordinary overload path, and the intrinsic is picked up
+        again at the no-overload-match point below, where whether the user's
+        Concat actually accepts these arguments has been decided rather than
+        guessed. Same pair as `Copy`, for the same reason and with the same
+        obligation to stay in step.
+        compat-pascal-uses-sysutils-withdraws-the-variadic-concat
 
         FPC's Concat is ALSO the dynamic-array concatenation, so the first
         operand's shape picks which one this is — one intrinsic, two element
@@ -7491,6 +7500,57 @@ begin
             { Pointer-typed: dyn-array handle result, stored full-width on assign. }
             ASTTk[node] := Ord(tyPointer);
             CurASTNode := node;
+            Exit;
+          end;
+          { Concat(s1, ..., sn) / Concat(arr1, ..., arrn): the twin of the
+            bare-intrinsic arm in ParseFactor, and needed for the same reason the
+            Copy pair above is — which path a program takes depends on whether a
+            `Concat` routine is in scope AT ALL, and `lib/rtl/sysutils` declares a
+            two-argument one. So `uses sysutils` withdrew the variadic intrinsic
+            outright and turned a working `Concat('a','b','c')` into `no overload
+            of Concat matches these arguments`; the dynamic-array form went the
+            same way, since sysutils' Concat has the right ARITY for two arrays
+            and the wrong types.
+
+            Reached only when no overload matched, so a real
+            `sysutils.Concat(s1, s2)` is never shadowed — shadowing a builtin
+            with a routine of the same name is right, withdrawing it for calls
+            that routine cannot accept is not, and FPC's `uses sysutils` changes
+            nothing here.
+            Guarded on the FIRST argument being something Concat can actually
+            join — a dynamic array or a string/char — exactly as the Copy arm
+            above is guarded on a dynamic array. Without it a plainly wrong
+            `Concat(rec1, rec2, rec3)` would fold into `rec1 + rec2 + rec3` and
+            be reported as a missing `+` overload instead of as the wrong call
+            it is.
+            compat-pascal-uses-sysutils-withdraws-the-variadic-concat }
+          if CaseEqual(name, 'Concat') and (nArgs >= 1) and
+             ((NodeDynDepth(ASTLeft[argsHead]) > 0) or
+              (IntToTypeKind(ASTTk[ASTLeft[argsHead]]) in
+                 [tyString, tyAnsiString, tyShortString, tyFixedString, tyChar])) then
+          begin
+            node := ASTLeft[argsHead];
+            argSeq := ASTRight[argsHead];
+            while argSeq <> -1 do
+            begin
+              if NodeDynDepth(node) > 0 then
+                node := MakeDynConcat(node, ASTLeft[argSeq])
+              else
+              begin
+                exprNode := AllocNode(AN_BINOP);
+                ASTIVal[exprNode] := Ord(tkPlus);
+                ASTLeft[exprNode] := node;
+                ASTRight[exprNode] := ASTLeft[argSeq];
+                ASTTk[exprNode] := Ord(tyAnsiString);
+                node := exprNode;
+              end;
+              argSeq := ASTRight[argSeq];
+            end;
+            CurASTNode := node;
+            { one-argument Concat is the identity and never reaches
+              MakeDynConcat, so ask the NODE rather than which branch ran }
+            if NodeDynDepth(node) > 0 then LastExprTk := tyPointer
+            else LastExprTk := tyAnsiString;
             Exit;
           end;
           procIdx := TryFillTrailingDefaults(name, qUnit, nArgs, argsHead, lastArg);
