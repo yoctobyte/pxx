@@ -8302,3 +8302,91 @@ what the ticket has said for weeks and is now known to be a quarter of the truth
 `feature-pascal-corpus-expansion` moves `working/` → `unfinished/` when frankA claims
 the first P bug: it is a park waiting on three other tickets, and `working/` is a
 live lock, not a bookmark.
+
+## Residency item 1 landed at `-O3` (`562965e1c`) — with two numbers that disagree, both reported
+
+frank-optimize led with the figure that argues against its own work, which is why
+the good number is believable:
+
+| workload | before | after | |
+| --- | --- | --- | --- |
+| three-local loop | 1.15 s | **0.61 s** | **1.89x** (repeat: 1.33 → 0.62) |
+| mandelbrot | 1.20 s | 1.09 s | noise — float kernel, int-side change |
+| **self-compile of `compiler.pas` at `-O3`** | **16.57 s** | **17.58 s** | **~6% SLOWER** |
+
+The regression is real: three runs, +1.7% / +6.1% / +3.7% — magnitude varies, sign
+does not. **No lane pays it today** — the pass gates `OptLevel >= 3`, the build uses
+the default level, and 48 corpus hashes across six targets are byte-identical.
+
+**Why the two disagree is the actual finding:** residency's benefit scales with loop
+**trip count**; its cost — prologue save, init load, epilogue restore — is paid **per
+call**. A body that *is* a loop pays once and wins big; a small hot body called per
+item with a short loop pays constantly. `three.pas` is the first shape, **the
+compiler is the second**. Tightening admission was measured, not assumed: `loads >= 3`
+is worse on *both* workloads (self-compile 17.33 s) and surrenders most of the loop
+win.
+
+**Call: NOT promoted. Stays at `-O3`** — agreeing with its own recommendation. A ~6%
+slower `-O3` compiler on call-heavy code, for a win only on long scalar loops, is a
+bad trade at the tier that is every lane's proven fallback.
+
+**Next slice: price the per-call cost, NOT item 2.** The admission policy is
+known-mispriced, so stacking store→reload elimination on top of it gives any future
+regression two candidate causes and no way to separate them. And the workload the
+regression lands on is **our own compiler** — the thing every lane waits on — so
+making residency cheap for small call-heavy bodies is the difference between an
+`-O3` curiosity and a promotable pass.
+
+Correctness bar unchanged and thorough: `-O0`/`-O1`/`-O2`/`-O3` agree with each other
+and with `fpc -O2` on a purpose-written stress where **every store overflows its
+declared type** so a missing re-extension shows immediately, plus seven live
+candidates against four registers, residents written inside a `try` that raises
+mid-loop (exercising the `IR_EXC_ENTER` landing-pad refresh), a nested proc writing
+an enclosing local, recursion and floats. Only divergence is two digits of one float
+print, **identical on the pre-change compiler** — pre-existing, Track F, not its.
+
+## TWO MEASUREMENT RULES THAT INVALIDATE HOW EVERY LANE QUOTED NUMBERS TODAY
+
+Both from frank-optimize, both routed back to it to write into
+`debugging-playbook.md` on master.
+
+### 1. On this box, min-of-N across separate invocations is NOT comparable
+
+**Only binaries timed inside a single interleaved run are.** The proof is brutal: the
+same unchanged *"before"* binary measured **1.09 s and then 1.34 s**. Mandelbrot
+looked 7% regressed; frank-optimize built a per-class rank split to fix it and
+**wrote the causal explanation into the source as fact**; the interleaved re-measure
+returned 1.34 / 1.33 / 1.34 across all three binaries. **The box was the effect.** It
+reverted the split and verified the rebuilt binary was bit-identical to the
+pre-experiment one — the right proof that a revert was clean.
+
+Generalised, and it is the rule the whole night has been circling from different
+angles: **a pass changed to fix a measurement is only as sound as the measurement, so
+the interleaved re-run comes BEFORE the fix, not after.**
+
+### 2. Regenerate the baseline; never reuse one from earlier in the session
+
+The `-O2` byte-identity check flagged `exc` as changed on all six targets — which is
+**impossible** for an `-O3`-gated pass, and the impossibility is what saved it. Cause:
+`exc` is the only corpus program that `uses SysUtils`, and **my v389 pin updated
+`lib/rtl` between its two hash runs.** Re-running both sides back to back gave 48/48.
+
+**Partly my fault, recorded as such:** I pinned while lanes were mid-measurement and
+announced it as an unblock rather than as an event that invalidates in-flight
+baselines. A pin moves `lib/rtl` under everyone. Next pin, say that.
+
+### The platonic rule's real edge in an optimizer lane, found by the lane
+
+I warned frank-optimize against reshaping source to suit a pass. It identified the
+direction I would have missed: **the danger here is changing the PASS to chase a
+regression that is not real.** It nearly shipped a causal comment for a noise
+artifact. Same rule, opposite arm.
+
+## Tick: two lanes idle, and that is the lull pin verify needs
+
+frankwasm and frankT both idle (frankT's *agent*; its daemon is separate and running).
+frankA on the first P generics bug, frankB on typinfo, frank-optimize committed and
+between slices. `urgent/` empty. **v389's `full` request is queued and not yet
+drained** — expected; the daemon needs an idle phase and pushes have been steady.
+Nudged frankwasm since it had declared Phase 2 and then stopped; did not nudge frankT,
+which has no pending ask and whose daemon is what matters.
