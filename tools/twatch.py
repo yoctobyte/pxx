@@ -302,6 +302,11 @@ def code_fingerprint(path=None):
 
 
 CODE_FP = ""            # set once at daemon start; "" for short-lived readers
+# Set by a READER that was told (or could find) the watcher clone, so
+# report_running_code() can compare the resident image against disk. Empty
+# means "we do not know where the daemon lives" -> the check stays silent
+# rather than guessing, because an unreadable watch.json is not evidence.
+CLONE_HINT = ""
 
 
 def set_phase(clone, host, phase, **kw):
@@ -5835,6 +5840,46 @@ def pin_verify_corroboration(pv, st, now):
             "gap": (pv_age - lf_age) if fresher else None}
 
 
+def report_running_code(clone_path):
+    """Warn when the RESIDENT daemon is not running the code on its own disk.
+
+    A pushed fix is not a live fix. Between `git push` and observable behaviour
+    sits a long-running process that loaded its source at start time, and
+    "landed on origin, pulled into the clone, passed its guards" is
+    indistinguishable from live unless something compares the running image.
+
+    That is not hypothetical: it hid three fixes on 2026-08-26 and was noticed
+    only because one of them happened to add a FIELD whose absence showed up in
+    a report. It recurred on 2026-08-27 — a scheduler fix was pushed, announced
+    as live, and the daemon had been running older code for hours.
+
+    `code_fp` is already published in watch.json for exactly this question. The
+    only thing missing was that somebody had to remember to ask it, which is a
+    poor place to put a silent failure mode. So --status asks.
+
+    Deliberately advisory: it never changes the exit code. UP/DOWN is about
+    whether the matrix is being covered; running-stale-but-covering is a real
+    state and not the same as down. Says nothing at all when it cannot tell,
+    rather than guessing — an unreadable watch.json is not evidence of drift.
+    """
+    if not clone_path:
+        return
+    try:
+        with open(os.path.join(clone_path, WATCH_REL)) as f:
+            running = (json.load(f) or {}).get("code_fp") or ""
+    except (OSError, ValueError):
+        return
+    on_disk = code_fingerprint(os.path.join(clone_path, "tools", "twatch.py"))
+    if not running or not on_disk or running == on_disk:
+        return
+    print("tstate: !! the DAEMON is running twatch.py %s, but %s is on disk "
+          "(%s). A fix that landed, was pulled, and passed its guards is NOT "
+          "live until the daemon restarts — `trackt restart`. This does not "
+          "affect the UP/DOWN verdict above; coverage is real, it is the CODE "
+          "producing it that is behind."
+          % (running, on_disk, os.path.join(clone_path, "tools", "twatch.py")))
+
+
 def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
     """Is Track T covering this repo?  No ping, no network: a watcher is
     considered UP iff every commit older than the grace window is tested by
@@ -6283,6 +6328,7 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
     else:
         print("tstate: UP — only fresh commits pending (within %d min grace)%s"
               % (grace_min, stale))
+    report_running_code(CLONE_HINT)
     return STATUS_UP
 
 
@@ -6506,6 +6552,15 @@ def main():
         # about master's frozen snapshot. --branch overrides for the rare case
         # of asking about somebody else's.
         BRANCH = args.branch or repo_branch(repo)
+        # Where the resident daemon lives, for the running-code check. --clone
+        # when we were told; otherwise the repo we are standing in, which is
+        # right when --status is run INSIDE the watcher clone and simply finds
+        # no watch.json anywhere else. Deliberately no guessing at a
+        # conventional path: a wrong clone would compare the wrong image, and a
+        # confident wrong answer is worse here than no answer.
+        global CLONE_HINT
+        CLONE_HINT = os.path.abspath(os.path.expanduser(args.clone)) \
+            if args.clone else repo
         if args.retire_host:
             if args.renamed and not args.into:
                 sys.exit("twatch: --renamed needs --into (renamed into WHAT?)")
