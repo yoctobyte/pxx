@@ -135,4 +135,4 @@ language on purpose
 file is waiting on it.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 97b865e0b.
