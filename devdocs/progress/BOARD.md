@@ -53,7 +53,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (267)
+## backlog (266)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -93,7 +93,6 @@ _none_
 | bug-n-name-on-a-builtin-type-is-unimplemented | N | 20 | bug | `str.__name__` / `int.__name__` raise AttributeError: 'type' object has no attribute '__name__'. A USER class answers correctly, so only the builtin-type value (VT_BTYPE) is missing the attribute. Clean Python-shaped error, not a crash. | — |
 | bug-n-nilpy-carries-its-own-copies-of-the-float-type-table | N | 30 | bug | `compiler/pyparser.inc` holds three private copies of the builtin float mapping, all hard-wiring `real` to `tyDouble`, and one of them additionally collapses `single` and `extended` to Double. The Pascal frontend just had the same duplication fixed; NilPy kept its own, so `Real` there is Double even on targets where it is Single. | — |
 | bug-n-object-is-the-one-builtin-type-name-that-is-not-a-value | N | 45 | bug | `B = object` is `undefined variable (object)`, while `t = str`, `u = int`, `v = dict` all bind and call fine. `object` is the single builtin type name that is not a first-class value — it is consumed as a no-op in the base-class position and has no row anywhere else, so any expression naming it fails. | — |
-| bug-n-rebinding-an-int-parameter-twice-across-the-float-boundary-is-refused | N | 60 | bug | `def f(x: int): x = x + 1; x /= 2` is refused with `annotate the type / too dynamic [a=28 b=19]` — a promotable int (28) joined against a double (19). Ordinary CPython code, refused at compile time. One rebind of either kind alone is fine; it is the PAIR that has no join. | — |
 | bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base | N | 50 | bug | str(e) on an exception class declared in a Pascal unit dispatches __str__ by the STATIC type of the except clause, not the runtime type: `except URLError as e` gives '<urlopen error boom>' and `except Exception as e` gives 'boom' for the same object. CPython gives the same string either way. Pure-NilPy classes are NOT affected. | — |
 | bug-n-super-as-an-expression-fails-with-a-misleading-diagnostic | N | 55 | bug | `return super().hi()` (super() in expression position, documented as unsupported) is refused with `error: Nil Python: annotate the type / too dynamic [a=22 b=8]` reported at line 1 — a diagnostic that names neither the construct nor the right line. Also: `B.__init__(self)` for a second base is `class method not found`. | — |
 | bug-n-the-dunder-subscript-arm-is-duplicated-verbatim-in-two-lvalue-parsers | N | 40 | bug | The ~60-line __getitem__/__setitem__ subscript arm exists TWICE, character for character: compiler/pyparser.inc ~38087 and compiler/pasparser_lval.inc ~1290. Which one a NilPy statement reaches depends on which lvalue parser its statement path entered, so a fix applied to one and not the other silently leaves a shape behind. Both copies had to be edited to close the augmented-subscript ticket. | — |
@@ -561,9 +560,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2513)
+## done (2514)
 
-2513 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2514 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (45)
 
@@ -651,7 +650,6 @@ _none_
 - [p 62] [N] feature-nilpy-list-sort-inplace-key-reverse
 - [p 62] [A] feature-unicodestring-model
 - [p 60] [B] bug-b-sysutils-string-gaps-found-by-differential
-- [p 60] [N] bug-n-rebinding-an-int-parameter-twice-across-the-float-boundary-is-refused
 - [p 60] [N] feature-a-declaration-phase
 - [p 60] [A] feature-a-wasm32-target-registration-skeleton
 - [p 60] [N] feature-nilpy-process-exec-binding

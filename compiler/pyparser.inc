@@ -1921,11 +1921,47 @@ end;
   two string kinds keep their own rule (a variant scalar-loaded on `return`
   yields its tag word), and a promotable int keeps its own join, whose
   float case is a deliberate honest error rather than a silent boxing. }
+{ ...and a PROMOTABLE int meets a float the same way. The comment above called
+  that pair "a deliberate honest error rather than a silent boxing", and the
+  second half of the phrase is what stopped being true: a variant is not a lossy
+  box for a promo int, because VT_PROMO_INT64 IS one of its tags and carries the
+  exact decimal past 2^63. The pair has an answer that loses nothing, and
+  refusing it rejected ordinary CPython code:
+
+    def two(x: int):
+        x = x + 1      # int + int can overflow -> promotable int  (kind 28)
+        x /= 2         # ...and true division wants a double       (kind 19)
+        return x       # `annotate the type / too dynamic [a=28 b=19]`
+
+  Either rebind ALONE compiled. Only the pair had no join.
+
+  Tested with TypeIsPromoInt directly and NOT through PyNumeric, which is where
+  the first attempt went wrong and is worth recording: PyNumeric lists the five
+  machine numeric kinds and does not include tyPromoInt64, so the two
+  `not TypeIsPromoInt(...)` clauses that used to sit in the condition below were
+  DEAD — `PyNumeric(a)` already implied them. Deleting them changed nothing at
+  all, because the refusal never came from here. It comes from PyWiden's own
+  promo arm ("Promo + float has no scalar lowering; error honestly"), and this
+  function has to answer BEFORE delegating there.
+
+  It stays in PyWidenBinding rather than in PyWiden for the reason this
+  function exists at all, stated at the top: the join for a REBOUND NAME is not
+  the join for an EXPRESSION. `bigint / 2.0` as an expression genuinely is a
+  float and should keep whatever lowering it has; what needs the variant is the
+  SLOT that holds an exact int at one point in the program and a double at
+  another.
+
+  A pure-integer accumulator is untouched: this arm requires exactly one FLOAT
+  side, so `x = x + 1` in a loop with no float in sight never reaches it and
+  keeps the promo width it exists for.
+  bug-n-rebinding-an-int-parameter-twice-across-the-float-boundary-is-refused }
 function PyWidenBinding(a, b: TTypeKind): TTypeKind;
 begin
-  if PyNumeric(a) and PyNumeric(b) and (a <> b) and
-     (not TypeIsPromoInt(a)) and (not TypeIsPromoInt(b)) and
-     (TypeIsFloat(a) <> TypeIsFloat(b)) then
+  if (TypeIsPromoInt(a) and TypeIsFloat(b)) or
+     (TypeIsPromoInt(b) and TypeIsFloat(a)) then
+    Result := tyVariant
+  else if PyNumeric(a) and PyNumeric(b) and (a <> b) and
+          (TypeIsFloat(a) <> TypeIsFloat(b)) then
     Result := tyVariant
   else
     Result := PyWiden(a, b);
@@ -3911,7 +3947,38 @@ begin
     PyTypingChanged := True;
     Exit;
   end;
-  w := PyWiden(PyLocals[ci].TypeKind, tk);
+  { PyWidenBinding, not PyWiden — and this line is the whole of
+    bug-n-rebinding-an-int-parameter-twice-across-the-float-boundary-is-refused.
+
+    This routine is the definition of a REBINDING: its own first line says
+    "record one assignment's RHS type against a local". PyWidenBinding is the
+    join written for precisely that, with a doc-comment saying so ("the join for
+    a NAME REBOUND across types — which is NOT the join for an EXPRESSION, and
+    that distinction is the whole fix"). It was wired into the module-local, the
+    field and the rebound-parameter sites and NOT into the one that names itself
+    after the concept, so the per-def locals table went on asking the expression
+    join what a rebinding means. Two joins for one concept, with the specific one
+    absent from the most specific site.
+
+    What it changes, concretely:
+
+      def two(x: int):
+          x = x + 1      # int + int may overflow -> promotable int (kind 28)
+          x /= 2         # ...and true division wants a double      (kind 19)
+          return x
+
+    PyWiden's promo arm has no scalar lowering for promo-meets-float and errors
+    honestly ("annotate the type / too dynamic [a=28 b=19]"); PyWidenBinding now
+    answers tyVariant, which loses nothing because VT_PROMO_INT64 is one of a
+    variant's own tags and holds the exact decimal past 2^63. Either rebinding
+    alone compiled before; only the pair had no join. A plain local shows the
+    identical shape (`y = 5; y = y + 1; y /= 2`) and was refused identically,
+    which is the tell that the site is here and not in the parameter machinery.
+
+    An integer-only accumulator is untouched: PyWidenBinding's redirect requires
+    exactly one FLOAT side, so `x = x + 1` in a loop with no float in sight keeps
+    the promo width it exists for. }
+  w := PyWidenBinding(PyLocals[ci].TypeKind, tk);
   { A name already known to hold UNRELATED classes never narrows back out of the
     dynamic representation, whatever this one assignment says. }
   if PyLocals[ci].Poly then w := tyVariant;

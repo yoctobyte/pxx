@@ -1072,6 +1072,10 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_idxslice26 | diff -u test/test_nilpy_dunder_index_slice.expected -
 	./$(COMPILER) test/test_nilpy_widen_binding_variant.npy $(TESTTMP)/test_nilpy_widenbind26
 	$(TESTTMP)/test_nilpy_widenbind26 | diff -u test/test_nilpy_widen_binding_variant.expected -
+	# a name rebound twice, the second time across the float boundary, joins to a
+	# variant instead of being refused as "too dynamic"
+	./$(COMPILER) test/test_nilpy_rebind_across_the_float_boundary.npy $(TESTTMP)/test_nilpy_rebindfloat26
+	$(TESTTMP)/test_nilpy_rebindfloat26 | diff -u test/test_nilpy_rebind_across_the_float_boundary.expected -
 	./$(COMPILER) test/test_nilpy_ast_literal_eval.npy $(TESTTMP)/test_nilpy_ast_literal26
 	test "$$($(TESTTMP)/test_nilpy_ast_literal26)" = "$$(printf '0.7 0.7 0.5 3\n42 -3 hi\n2\nTrue None\n1 3')"
 	# atexit handlers run at exit (LIFO), io's in-memory buffers behave

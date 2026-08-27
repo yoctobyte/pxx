@@ -1,0 +1,90 @@
+# A name rebound TWICE, where the second rebinding crosses the float boundary
+# and the first has already made it a PROMOTABLE int.
+#
+# bug-n-rebinding-an-int-parameter-twice-across-the-float-boundary-is-refused
+#
+# `x = x + 1` on an int is int-meets-int, and NilPy types that as a promotable
+# int (kind 28) because Python's int has no width and the sum may leave 64 bits.
+# `x /= 2` is true division, which wants a double (kind 19). Neither rebinding
+# is unusual and either one ALONE compiled; only the pair had no join, and the
+# program was refused outright:
+#
+#     pascal26:3: error: Nil Python: annotate the type / too dynamic [a=28 b=19]
+#
+# The join a rebinding needs is PyWidenBinding, whose entire reason to exist is
+# that the join for a NAME REBOUND is not the join for an EXPRESSION. It was
+# wired into the module-local, field and rebound-parameter sites but NOT into
+# PyNoteLocalType — the routine whose own first line reads "record one
+# assignment's RHS type against a local" — so the per-def locals table asked the
+# expression join what a rebinding meant, and got PyWiden's honest "promo meets
+# float has no scalar lowering".
+#
+# A variant is the answer that loses nothing: VT_PROMO_INT64 is one of its own
+# tags and carries the exact decimal past 2^63, so the slot is dynamic without
+# being lossy.
+#
+# The rows below are the three places the shape occurs plus the two properties
+# the fix must NOT disturb.
+
+# 1. the ticket's own repro: an ANNOTATED parameter
+def two(x: int):
+    x = x + 1
+    x /= 2
+    return x
+
+print(two(5))
+
+# 2. the same shape on a plain LOCAL — the tell that the site is the locals
+#    table and not the parameter machinery, since both were refused identically
+def local_shape():
+    y = 5
+    y = y + 1
+    y /= 2
+    return y
+
+print(local_shape())
+
+# 3. and on a FIELD, which already had the binding join and must stay right
+class Box:
+    def __init__(self):
+        self.v = 5
+
+    def go(self):
+        self.v = self.v + 1
+        self.v /= 2
+        return self.v
+
+print(Box().go())
+
+# 4. NOT disturbed: an integer-only accumulator still gets the promo width it
+#    exists for. The redirect requires exactly one FLOAT side, so a rebinding
+#    with no float in sight never reaches it and stays exact past 2^63.
+def big():
+    n = 9223372036854775807
+    n = n + 1
+    n = n + 1
+    return n
+
+print(big())
+print(big() * 2)
+
+# 5. NOT disturbed: an int rebound to a float renders each binding as itself.
+#    Widening the slot to double would print the earlier binding as `5.0` — a
+#    wrong value produced by an assignment that has not run yet.
+def each_binding_renders_as_itself():
+    z = 5
+    print(z)
+    z = 3.14
+    return z
+
+print(each_binding_renders_as_itself())
+
+# 6. floor division on the same doubly-rebound name keeps intness, so the pair
+#    is not being widened indiscriminately: only the float side wants a variant.
+def floor_shape(k: int):
+    b = k
+    b = b + 1
+    b //= 2
+    return b
+
+print(floor_shape(7))
