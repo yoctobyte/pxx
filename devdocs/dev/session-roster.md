@@ -8918,3 +8918,77 @@ rather than by trusting its own reasoning about them.
 
 **Asked frankwasm to FILE it (Track A, low prio, don't take it):** a rename plus a one-line
 comment is nearly free and closes the class. The next person may not read the riscv32 arms.
+
+## SysUtils ticket landed (`a6b06ebc1`) — and item 2 is only half-unblocked, for a Track P reason
+
+**`CreateRes`/`CreateResFmt` work with any `^string`. The call-site spelling every real
+site uses does not compile** — `@SSomeResourceString` is `error: undefined variable`,
+because pxx parses `resourcestring` as a plain const section and a const has no address.
+Filed as **`bug-p-a-resourcestring-is-not-addressable` [P, p55]**, and frankB measured the
+boundary rather than filing the first thing that failed: **of the four ways to declare a
+string, only `resourcestring` differs** — untyped `const` refuses `@` in *both* pxx and
+FPC. So the fix is emphatically **not** "let `@` take a const"; it is one row, **give
+resourcestrings storage**, which is what they are in FPC (runtime-replaceable variables —
+the whole point of the construct). Checking all four spellings is what made the ticket name
+the *right* change instead of the plausible one.
+
+### Three checks that each caught something a reasonable person would have assumed
+
+- **`EArgumentOutOfRangeException` descends from `EArgumentException`** — confirmed by
+  running FPC 3.2.2. A sibling would make `on E: EArgumentException` **silently not fire**:
+  a handler that does nothing rather than an error.
+- **`TRuntimeError` read off a RUNNING FPC program, not written from Delphi.** The tails
+  differ: FPC ends `reQuit`/`reCodesetConversion`/`reNoDynLibsSupport`/`reThreadError`
+  where Delphi has the monitor errors. 29 members, `reRangeError` = 4 — and a vendored
+  `case` compares against those ordinals. Writing it from memory would have been wrong from
+  member 25 on.
+- **The parameter is `PResStringRec` (Delphi's name), NOT FPC's `PString`** — because
+  `typinfo` already exports a `PString` that is `^string[255]` for RTTI name blobs.
+  `uses typinfo, sysutils` would take whichever came last: **two incompatible meanings for
+  one name in one RTL is a wrong answer, not an error.**
+
+### `Error` RAISES rather than halts — a deliberate divergence, upheld, with its cost recorded
+
+The ticket said *"exists and halts"*. frankB made it raise, flagged the call rather than
+burying it, and asked whether "halts" was binding. **It was setting a low bar, not writing a
+spec** — it meant *don't chase FPC's numbers* — and frankB correctly read past the literal
+word. The stronger argument is its own: error handling is explicitly ours, pxx already
+surfaces div-by-zero as a catchable `EDivByZero` and a bad `StrToInt` as `EConvertError`, so
+a halting `Error` would be **the odd one out in its own RTL**. Internal consistency beats
+matching a reference we have been told not to match.
+
+**What makes it a decision rather than a preference is the recorded cost, and it is real:**
+a catchable `Error` can be swallowed by a surrounding handler, turning a "cannot happen"
+arm into a handled path — and all seven call sites are exactly such arms. Asked for the
+divergences entry to **name the symptom** as well as the mechanism: *"if a vendored consumer
+appears to continue past an impossible state, suspect a swallowed `Error`"* is findable by
+someone debugging; a mechanism description is only findable by someone who already suspects it.
+
+**Differential claim stated precisely, because *"checked against FPC"* decays into folklore
+inside a week:** the test's first **18 rows run byte-identically under FPC 3.2.2**, then
+diverge at `Error()` **by design**, where the FPC run terminates. The header states that
+boundary rather than claiming the file is portable.
+
+## Tick: the targeted-verdict queue is starved by the very thing it was built to escape
+
+v389's request has been queued ~1.5h; `--covering ab51855df` still reports **no EXACT row**.
+Breadth is 1h old and 16 testable commits behind. The shape: **the queue drains first among
+the IDLE phases, and an idle phase is not being reached.** frankT built it with the same
+`IDLE_YIELD_AFTER` guard as its neighbours — *"'ahead of' must not become 'instead of'"* —
+which is right; what may not have been anticipated is the degree. **"First in a queue that
+never runs" and "not in the queue" are the same outcome from outside.**
+
+Reported as an observation, explicitly **not** a request to retune, because frankT has twice
+declined to change scheduling under the load it would be evaluated against and that reasoning
+is stronger here than in either previous case. The open question left with it: **is a
+targeted request an idle phase at all, or is it a job?** Every other idle phase is the
+watcher deciding what is worth testing; a request is someone having already decided.
+
+### And I declined to pull the one lever I had been claiming — because it would not have worked
+
+I have been telling Track T that the lull comes from not refilling lanes as they finish.
+frankB finishing was the first moment that lever existed, **and I did not pull it**: with
+frankA, frankwasm and frank-optimize all mid-work the push rate stays high regardless, so
+idling frankB would have bought nothing while costing real work. Said so to frankB in those
+words. **A lever that only works when several lanes free up together is not a lever you can
+pull on one.** Better to name that than to keep implying I am holding something back.
