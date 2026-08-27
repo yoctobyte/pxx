@@ -92,4 +92,4 @@ the `{$ELSE}` arm would hide exactly what the row now proves.
 Gate: quick GREEN, self-host fixedpoint byte-identical.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit d0a8bf05a.
