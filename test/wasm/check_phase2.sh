@@ -38,7 +38,7 @@ const sp0 = inst.exports.sp.value;
 // generator against itself.
 // i64 crosses the JS boundary as BigInt, which prints without the `n`, so the
 // two sides' text compares directly.
-const out = [
+let out = [
   inst.exports.AddMul(3, 4),
   inst.exports.AddMul(-2, 5),
   inst.exports.Chain(6),
@@ -68,7 +68,19 @@ const out = [
   Number(inst.exports.LogNot(1)),
   inst.exports.Bits(120, 5),
   inst.exports.BitsW(8000000000n, 5n),
+  inst.exports.BumpG(5),
+  inst.exports.BumpG(7),
+  inst.exports.BumpW(10000000000n),
+  inst.exports.BumpW(-3n),
 ];
+// The scratch global's address: the native side passes a real pointer here and
+// the wasm side needs the i32, so the address itself is never compared — only
+// what the two builds do through it.
+const scratch = inst.exports.ScratchAddr();
+out.push(inst.exports.Poke(scratch, 1234));
+out.push(inst.exports.Poke(scratch, -7));
+inst.exports.AddTo(scratch, 100);
+out.push(inst.exports.GetScratch());
 if (inst.exports.sp.value !== sp0) {
   console.error(`FAIL shadow stack leaked: ${sp0} -> ${inst.exports.sp.value}`);
   process.exit(1);
@@ -82,3 +94,10 @@ if diff -u "$work/native.txt" "$work/wasm.txt"; then
 else
   echo "FAIL wasm diverges from native"; exit 1
 fi
+
+# A POSITIVE sentinel, last line, reachable only after every check above
+# passed: `set -e` kills the script before here on any failure. check_all.sh
+# asserts this line is PRESENT rather than asserting nothing went wrong —
+# "green is the absence of output" is indistinguishable from a script that died
+# at line 1, which is how this suite stayed red across a handoff.
+echo "PASS check_phase2"

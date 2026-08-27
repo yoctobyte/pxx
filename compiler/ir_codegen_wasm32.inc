@@ -23,8 +23,9 @@
   Frame layout. Pascal allocates locals downward and records Syms[i].Offset as
   NEGATIVE (symtab.inc:4115, `Offset := -FrameSize`), the [rbp-N] shape. $fp
   here points at the BOTTOM of the frame, so a slot at Pascal offset -N sits at
-  $fp + (FrameSize - N). That conversion happens in WasmSlotDisp and nowhere
-  else. }
+  $fp + (FrameSize - N). That conversion happens in WasmSlotAddr and nowhere
+  else. Globals are not on the frame at all; the memory map is documented at
+  WASM_BSS_BASE below. }
 
 { ===== incremental bringup =====
 
@@ -160,18 +161,29 @@ begin
   else WasmMemOp($36, 'i32.store', 2, 0);
 end;
 
-{ A frame slot's byte displacement from $fp. The one place the sign convention
-  is converted; see the header note. }
-function WasmSlotDisp(si: Integer): Integer;
-begin
-  if Syms[si].Kind = skGlobal then
-  begin
-    WasmUnsupported('global symbol ' + Syms[si].Name);
-    WasmSlotDisp := 0;
-    Exit;
-  end;
-  WasmSlotDisp := WasmCurFrame + Syms[si].Offset;
-end;
+{ ===== the linear-memory map =====
+
+    0 .. WASM_BSS_BASE-1   null guard.
+    WASM_BSS_BASE ..       globals: BSSSize bytes at Syms[].Offset, which for
+                           an skGlobal is a positive offset from the start of
+                           BSS. Zero-initialised for free — wasm linear memory
+                           starts zeroed, so a .bss needs no data segment.
+    ... WasmStackTop       the shadow stack, growing DOWN from the top.
+
+  The null guard is a CONVENTION and nothing more, which is a genuine
+  difference from every other target here. Address 0 is a perfectly legal wasm
+  address: a load from it returns zero rather than faulting, and linear memory
+  has no page protection to give it. So a nil dereference on this target reads
+  zeros and keeps going where on x86-64 it segfaults. Reserving the low
+  kilobyte does not fix that; it only means a nil-plus-small-field-offset
+  deref stays inside the region nothing else uses, so it cannot silently
+  corrupt a real global. Making nil actually fault would need an explicit
+  compare before every dereference — a real cost, and a Phase 7 decision, not
+  something to slip in here. }
+const
+  WASM_BSS_BASE    = 1024;
+  WASM_STACK_BYTES = 65536;
+  WASM_PAGE        = 65536;
 
 procedure WasmBeginModuleOnce;
 begin
@@ -188,15 +200,48 @@ begin
   WasmAddExport('sp', WEK_GLOBAL, WasmGSp);
 end;
 
-{ Load the address of a frame slot onto the operand stack. }
+{ Load the address of a slot onto the operand stack. A global's address is a
+  constant; a local's is $fp plus a displacement, and this is the ONE place the
+  sign convention is converted — Pascal records a local's Offset as NEGATIVE
+  from the frame top (symtab.inc, `Offset := -FrameSize`) and $fp points at the
+  frame BOTTOM, so the slot sits at $fp + (FrameSize - N). }
 procedure WasmSlotAddr(si: Integer);
 begin
-  WasmLocalGet(WasmLocalFp);
-  WasmI32Const(WasmSlotDisp(si));
-  WasmOp($6A, 'i32.add');
+  if Syms[si].Kind = skGlobal then
+    WasmI32Const(WASM_BSS_BASE + Syms[si].Offset)
+  else
+  begin
+    WasmLocalGet(WasmLocalFp);
+    WasmI32Const(WasmCurFrame + Syms[si].Offset);
+    WasmOp($6A, 'i32.add');
+  end;
 end;
 
 function WasmEmitNode(node: Integer): TTypeKind; forward;
+
+{ The address at which the PASCAL VARIABLE `si` lives, which is not always the
+  address of its slot. A var/out parameter's slot holds the CALLER's address,
+  so the variable is at [slot] and the extra load is the whole difference
+  between writing through the reference and overwriting the reference.
+
+  Every read, write and address-of goes through here, and that is the point:
+  the first cut put this deref in the address-of path alone, so `o := o + n` on
+  a var parameter read the address as if it were the value, added to it, and
+  stored the sum over the reference. Both are i32, so the module validated and
+  ran; the differential caught it, and nothing else could have. One concept
+  reachable through three shapes is exactly the case
+  devdocs/dev/normalise-dont-special-case.md says to normalise, and the arm
+  left out is reliably the one that stays broken.
+
+  Parameter HOMING is the deliberate exception and uses WasmSlotAddr directly:
+  it writes the incoming reference INTO the slot, which is the one operation
+  that means the slot itself. }
+procedure WasmLValueAddr(si: Integer);
+begin
+  WasmSlotAddr(si);
+  if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+    WasmMemOp($28, 'i32.load', 2, 0);
+end;
 
 { Classify a frame slot, recording the body as unlowered if its type has no
   wasm value type at all (a record, a set, a variant). }
@@ -212,7 +257,7 @@ var vt: Byte;
 begin
   WasmEmitLoadSym := Syms[si].TypeKind;
   if not WasmSlotType(si, vt) then Exit;
-  WasmSlotAddr(si);
+  WasmLValueAddr(si);
   WasmTypeLoad(Syms[si].TypeKind, vt);
 end;
 
@@ -430,6 +475,96 @@ begin
   end;
 end;
 
+{ ===== memory operands =====
+
+  IR_LEA takes a SYMBOL and yields its address; IR_LOAD_MEM and IR_STORE_MEM
+  take an address VALUE and carry the accessed type in IRTk[node]. That is the
+  same contract the register backends read (ir_codegen_riscv32.inc:1534, :1669,
+  :1710), and the load/store side maps onto WasmTypeLoad/WasmTypeStore exactly,
+  narrow ordinals included.
+
+  What is deliberately NOT handled: the slot shapes where an address is not
+  `&slot`. A dynamic array's or an open-array parameter's slot holds a heap
+  handle; a managed string's slot holds a handle in read position but its own
+  address in write position; a frozen string store through an address is a
+  length-clamped copy, not a store. Each is a real case with real rules, and
+  each is refused by name here rather than approximated — an approximated
+  address is a wrong pointer, which is the one failure this backend is built
+  not to produce quietly. They arrive with the managed types, not with Phase 2
+  scalars. }
+
+function WasmEmitLea(node: Integer): TTypeKind;
+var si: Integer;
+begin
+  WasmEmitLea := tyPointer;
+  si := IRA[node];
+  if Syms[si].IsArray then
+  begin
+    WasmUnsupported('address of array ' + Syms[si].Name);
+    Exit;
+  end;
+  if Syms[si].TypeKind = tyAnsiString then
+  begin
+    WasmUnsupported('address of managed string ' + Syms[si].Name);
+    Exit;
+  end;
+  WasmLValueAddr(si);
+end;
+
+{ A field's address: the base address plus a constant byte offset. IRIVal
+  carries the offset, which the record layout has already resolved, so there is
+  no record-shape knowledge in this backend at all — it is address arithmetic
+  that happens to be spelled with a dot. }
+function WasmEmitField(node: Integer): TTypeKind;
+begin
+  WasmEmitField := tyPointer;
+  WasmEmitValueAs(IRA[node], WT_I32, 'record base address');
+  if WasmBodyBroken then Exit;
+  if Integer(IRIVal[node]) <> 0 then
+  begin
+    WasmI32Const(Integer(IRIVal[node]));
+    WasmOp($6A, 'i32.add');
+  end;
+end;
+
+function WasmEmitLoadMem(node: Integer): TTypeKind;
+var tk: TTypeKind; vt: Byte;
+begin
+  tk := IntToTypeKind(IRTk[node]);
+  WasmEmitLoadMem := tk;
+  if not WasmScalarType(tk, vt) then
+  begin
+    WasmUnsupported('load through a pointer of type ' + WasmIntStr(IRTk[node]));
+    Exit;
+  end;
+  WasmEmitValueAs(IRA[node], WT_I32, 'address of a load');
+  if WasmBodyBroken then Exit;
+  WasmTypeLoad(tk, vt);
+end;
+
+procedure WasmEmitStoreMem(node: Integer);
+var tk: TTypeKind; vt: Byte;
+begin
+  tk := IntToTypeKind(IRTk[node]);
+  if not WasmScalarType(tk, vt) then
+  begin
+    WasmUnsupported('store through a pointer of type ' + WasmIntStr(IRTk[node]));
+    Exit;
+  end;
+  { ADDRESS FIRST, then the value — wasm's i32.store pops them in that order.
+    The register backends evaluate the VALUE first and spill it
+    (ir_codegen_riscv32.inc:1710), so the two orders differ. Unobservable
+    today, because nothing in Phase 2 can have a side effect: there are no
+    calls yet. It becomes observable the moment Phase 4 lands and `p^ := f()`
+    can be written, and at that point this needs a scratch local to evaluate
+    the value first and keep the register backends' order — not a reshuffle of
+    these two lines, which wasm's stack discipline will not allow. }
+  WasmEmitValueAs(IRA[node], WT_I32, 'address of a store');
+  WasmEmitValueAs(IRB[node], vt, 'value of a store');
+  if WasmBodyBroken then Exit;
+  WasmTypeStore(tk, vt);
+end;
+
 { A representative Pascal type for a wasm value type. Only its WIDTH and SIGN
   are ever read back — this is how a computed value carries enough of itself to
   be coerced again by whatever consumes it. }
@@ -606,6 +741,9 @@ begin
     IR_CONST_INT : WasmEmitNode := WasmEmitConstInt(node);
     IR_LOAD_SYM  : WasmEmitNode := WasmEmitLoadSym(IRA[node]);
     IR_BINOP     : WasmEmitNode := WasmEmitBinop(node);
+    IR_LEA       : WasmEmitNode := WasmEmitLea(node);
+    IR_FIELD     : WasmEmitNode := WasmEmitField(node);
+    IR_LOAD_MEM  : WasmEmitNode := WasmEmitLoadMem(node);
     IR_NEG       : WasmEmitNode := WasmEmitUnary(node, True);
     IR_NOT       : WasmEmitNode := WasmEmitUnary(node, False);
   else
@@ -728,10 +866,11 @@ begin
   for i := 0 to IRCount - 1 do
     case IRKind[i] of
       IR_NOP, IR_BLOCK, IR_LABEL : ;
+      IR_STORE_MEM : WasmEmitStoreMem(i);
       IR_STORE_SYM :
         if WasmSlotType(IRA[i], pvt) then
         begin
-          WasmSlotAddr(IRA[i]);
+          WasmLValueAddr(IRA[i]);
           { The value is brought to the SLOT's width before the store, not
             after: `i: Integer; j: Int64; i := j` is a defined truncation in
             Pascal and an i32.store of an i64 in wasm, which is not an
@@ -810,8 +949,22 @@ end;
   Called from compiler.pas's writer arm. It lives here rather than beside the
   rest of the writer in wasmenc.inc so that wasmenc.inc keeps depending on
   nothing — see the note there. }
+{ The memory map cannot be laid out when the module starts: BSSSize is not
+  final until the last body has been lowered. So the two numbers that depend on
+  it — the memory's minimum size and $sp's initial value — are written here,
+  overwriting the placeholders WasmBeginModuleOnce installed. }
+procedure WasmFinishMemory;
+var top: Integer;
+begin
+  if WasmGSp < 0 then Exit;
+  top := ((WASM_BSS_BASE + BSSSize + 15) div 16) * 16 + WASM_STACK_BYTES;
+  WasmGlobInit[WasmGSp] := top;
+  WasmSetMemory((top + WASM_PAGE - 1) div WASM_PAGE, -1);
+end;
+
 procedure writeWasm(const outPath: AnsiString);
 begin
+  WasmFinishMemory;
   WasmReportCoverage;
   if WasmFuncCount = 0 then
     WasmFail('wasm32: nothing to write — no code was generated for this module '

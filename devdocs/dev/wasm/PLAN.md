@@ -130,9 +130,29 @@ allocator, no spills).
 
   | phase | milestone, stated as a property of that report |
   | --- | --- |
-  | **2 — values and slots** | no entry cites a *value* op, a non-i32 slot, or a non-i32 signature. Scalar i32/i64/f64 loads, stores, consts, binops, unaries all lower. |
+  | **2 — values and slots** | no entry cites a *value* op **other than a call**, a non-scalar slot, or a non-scalar signature. Scalar i32/i64/f64 loads, stores, consts, binops, unaries, slot and pointer access all lower. |
   | **3 — control flow** | no entry cites a control-flow op (`IR_JUMP`, `IR_JUMP_IF_FALSE`, `IR_LABEL` reachability). The `br_table` dispatch exists. |
   | **4 — calls and code addresses** | no entry cites `IR_CALL`, `IR_VIRTUAL_CALL` or `IR_CALL_IND`; the report reads **N of N** for the builtin set. |
+
+  Two corrections to that table, both from running it (2026-08-28):
+
+  * **Phase 2's row said "no value op", which cannot be satisfied before Phase
+    4.** A call in value position is a value op *and* an `IR_CALL`, so the two
+    rows overlapped and Phase 2 could never close on its own wording. Amended
+    above to carve calls out. Phase 2's real content is: every value op that is
+    not a call, and every SCALAR slot and signature.
+  * **"non-i32" became "non-scalar".** The row was written when the backend
+    lowered i32 only, and phrasing the milestone as the absence of the
+    *then-current* refusal message baked a limitation into the target it was
+    measuring. Reaching it meant deleting the refusal, not satisfying it. What
+    Phase 2 actually owes is that the four wasm value types all work; what it
+    does not owe is aggregates — a record or set parameter has no wasm value
+    type at all and goes by pointer, which is an ABI question and therefore
+    Phase 4's.
+
+  A milestone stated as "the report no longer says X" is only as good as X, and
+  X here was a message this lane wrote about itself. Prefer stating what must
+  WORK; keep the report as the evidence, not as the definition.
 
   **The differential is unchanged and still the real gate**: `check_phase2.sh`
   diffs the lowered bodies against the native build. Coverage says how much is

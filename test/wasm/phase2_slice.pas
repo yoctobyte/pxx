@@ -34,6 +34,14 @@
     Cmp              comparisons, which produce i32 from operands of any width. }
 program Phase2Slice;
 
+type
+  PInt = ^Integer;
+
+var
+  GCounter: Integer;
+  GWide: Int64;
+  Scratch: Integer;
+
 function AddMul(a, b: Integer): Integer;
 begin
   AddMul := a * b + 7;
@@ -133,6 +141,50 @@ begin
   BitsW := (a and b) + (a or b) + (a xor b) + (a shl 2) + (a shr 1);
 end;
 
+{ Globals live in linear memory at WASM_BSS_BASE + Offset, not on the shadow
+  stack, and wasm memory starts zeroed — so a .bss needs no data segment and
+  these start at 0 on both sides even though the wasm build's main is empty. }
+function BumpG(n: Integer): Integer;
+begin
+  GCounter := GCounter + n;
+  BumpG := GCounter;
+end;
+
+function BumpW(n: Int64): Int64;
+begin
+  GWide := GWide + n;
+  BumpW := GWide;
+end;
+
+{ Store and load THROUGH a pointer (IR_STORE_MEM / IR_LOAD_MEM), and the
+  address of a global (IR_LEA). ScratchAddr exists only for the harness: the
+  native side passes a real pointer, the wasm side needs the i32 to pass, and
+  neither prints it — an address is the one value the two builds cannot agree
+  on. }
+function ScratchAddr: PInt;
+begin
+  ScratchAddr := @Scratch;
+end;
+
+function Poke(p: PInt; v: Integer): Integer;
+begin
+  p^ := v;
+  Poke := p^;
+end;
+
+{ A var parameter's slot holds the CALLER's address, so its lvalue address is
+  [slot] and not &slot — one extra load, and the whole difference between
+  writing through the reference and overwriting the reference. }
+procedure AddTo(var o: Integer; n: Integer);
+begin
+  o := o + n;
+end;
+
+function GetScratch: Integer;
+begin
+  GetScratch := Scratch;
+end;
+
 {$ifndef WASM_NOMAIN}
 begin
   writeln(AddMul(3, 4));
@@ -163,6 +215,14 @@ begin
   writeln(Ord(LogNot(True)));
   writeln(Bits(120, 5));
   writeln(BitsW(8000000000, 5));
+  writeln(BumpG(5));
+  writeln(BumpG(7));
+  writeln(BumpW(10000000000));
+  writeln(BumpW(-3));
+  writeln(Poke(@Scratch, 1234));
+  writeln(Poke(@Scratch, -7));
+  AddTo(Scratch, 100);
+  writeln(GetScratch);
 end.
 {$else}
 begin

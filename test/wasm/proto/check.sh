@@ -31,3 +31,10 @@ else
   echo "FAIL wasm trace diverges from native"
   exit 1
 fi
+
+# A POSITIVE sentinel, last line, reachable only after every check above
+# passed: `set -e` kills the script before here on any failure. check_all.sh
+# asserts this line is PRESENT rather than asserting nothing went wrong —
+# "green is the absence of output" is indistinguishable from a script that died
+# at line 1, which is how this suite stayed red across a handoff.
+echo "PASS check"

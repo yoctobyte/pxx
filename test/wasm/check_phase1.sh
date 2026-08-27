@@ -65,3 +65,10 @@ EXP
 diff "$work/expected.txt" "$work/ra.txt" >/dev/null || { echo "FAIL binary trace"; diff -u "$work/expected.txt" "$work/ra.txt"; exit 1; }
 diff "$work/ra.txt" "$work/rb.txt" >/dev/null || { echo "FAIL text-built trace differs"; exit 1; }
 echo "ok  both run under node, trace matches expected, \$sp balanced"
+
+# A POSITIVE sentinel, last line, reachable only after every check above
+# passed: `set -e` kills the script before here on any failure. check_all.sh
+# asserts this line is PRESENT rather than asserting nothing went wrong —
+# "green is the absence of output" is indistinguishable from a script that died
+# at line 1, which is how this suite stayed red across a handoff.
+echo "PASS check_phase1"
