@@ -127,4 +127,4 @@ Gate: `make lib-test` green, `make demos` 35/35 (typinfo is under all of
 `lib/pcl`), both against v389.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit cfa72767f.

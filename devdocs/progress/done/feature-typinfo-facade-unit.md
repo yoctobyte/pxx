@@ -117,4 +117,4 @@ second round of findings should be expected. Nothing here was verified against
 the vendored tree — it is not in this checkout.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit cfa72767f.
