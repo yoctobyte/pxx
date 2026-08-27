@@ -6654,11 +6654,40 @@ begin
             IREmitCodeCall(AnsiStrReleaseAddr);
           Code[pNil] := Byte(CodeLen - (pNil + 1));
         end
-        else if IntToTypeKind(IRTk[node]) = tyString then
+        else if TypeIsFrozenString(IntToTypeKind(IRTk[node])) then
         begin
           { String-valued expression (e.g. a function returning String):
-            the value is the address of a [len][chars] struct in rax. }
+            the value is the address of a [len][chars] struct in rax.
+            TypeIsFrozenString, not `= tyString`: a CALL carries its result's
+            STORAGE kind (Procs[].RetType), and only a symbol read is passed
+            through StrValTk's value-kind normalisation. So a `function
+            P: shortstring` reached here as tyShortString, fell through to the
+            integer arm below and printed the struct POINTER — `writeln(P)`
+            printed 4304016 where FPC prints `ab`. Widening the predicate is
+            what TypeIsFrozenString exists for (see its own note in symtab.inc).
+            bug-p-a-shortstring-function-result-prints-as-a-pointer }
           IREmitNode(valNode);
+          if wid > 0 then
+          begin
+            { Field width: pad with max(0, wid - len) spaces first. Every OTHER
+              write arm already did — the symbol-read tyString path, the
+              tyAnsiString path, even the Char path — so `writeln(s:5)` padded
+              for a shortstring VARIABLE and not for a frozen-string VALUE.
+              rax = struct address, length at [rax]. Same shape as the
+              tyAnsiString arm above; rax is preserved across the pad syscall
+              on the stack, since the syscall clobbers it. }
+            EmitB($50);                                      { push rax (the struct) }
+            EnsureSpaces;
+            EmitB($48); EmitB($8B); EmitB($08);              { mov rcx, [rax] = len }
+            MovRaxImm(wid);
+            EmitB($48); EmitB($29); EmitB($C8);              { sub rax, rcx }
+            EmitB($7E); pDone := CodeLen; EmitB(0);           { jle skip_pad }
+            EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset); { mov rsi, spaces }
+            EmitB($48); EmitB($89); EmitB($C2);              { mov rdx, rax (pad count) }
+            MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
+            Code[pDone] := Byte(CodeLen - (pDone + 1));
+            EmitB($58);                                      { pop rax }
+          end;
           EmitB($48); EmitB($89); EmitB($C6);              { mov rsi, rax }
           EmitB($48); EmitB($8B); EmitB($10);              { mov rdx, [rax] }
           EmitB($48); EmitB($83); EmitB($C6); EmitB($08);  { add rsi, 8 }
