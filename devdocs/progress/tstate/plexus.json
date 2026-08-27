@@ -7079,15 +7079,20 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-08-27T12:29:27Z",
+  "date": "2026-08-27T14:54:12Z",
   "red": [
-   "test-emit-obj#src:test/cxtensa_obj.c@1",
+   "test-nilpy#src:test/test_nilpy_unbound_builtin_method.npy",
+   "test-nilpy#src:test/test_nilpy_builtin_subclass_dunder_dispatch.npy",
    "test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy",
-   "test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy"
+   "test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy",
+   "test-emit-obj#src:test/cxtensa_obj.c@1",
+   "test-core#src:test/test_nilpy_unbound_builtin_method.npy",
+   "test-core#src:test/test_nilpy_builtin_subclass_dunder_dispatch.npy",
+   "tools-devtest#00"
   ],
-  "sha": "1e49e4c54252ac6d047a5901d82d9df3ed3d872e",
+  "sha": "c28e07a89f036f56d3bb860e62045b1103e22aae",
   "tier": "full",
-  "ver": "v381",
+  "ver": "v383",
   "verdict": "RED"
  },
  "renamed_from": [
