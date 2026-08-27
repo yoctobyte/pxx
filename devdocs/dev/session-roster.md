@@ -9274,3 +9274,75 @@ sides treated it as a real question rather than a formality.
 
 **Session tally for frankA:** five rung-6 walls found where the ticket said one, two real
 defects fixed, three filed with the analysis banked, one false claim caught before it shipped.
+
+## frank-optimize parked clean — and left the one line that makes its numbers safely reusable
+
+Playbook trap #3 landed (`7c5e3dfd0`) as a **table**, because the three look identical from
+outside and each needs a different fix:
+
+| | fixes | symptom when missing |
+| --- | --- | --- |
+| Interleaving | WHICH runs you may compare | the same binary measures 1.09 and 1.34 |
+| Repetition | HOW CONFIDENTLY | three under-powered runs share a bias and read as confirmation |
+| Amplification | WHETHER THE TIMER CAN SEE IT AT ALL | a one-tick difference reads as a consistent few-percent effect |
+
+Fix given as a copy-pasteable line, with the note that **amplification is the cheapest
+question to ask and the easiest to skip, because the number already looks like a
+measurement.**
+
+Umbrella parked to `unfinished/` (`2584e211c`), body status corrected to match the folder,
+`progress.sh check` clean. **Nothing half-applied:** every slice landed with an `-O3`
+self-host fixedpoint, and **`-O2` is byte-identical to where the day started** — 48/48
+corpus hashes across six targets, re-verified after each landing.
+
+**The line that makes the whole umbrella safely reusable:** *numbers dated 2026-08-28 were
+taken under all three traps and earlier ones were not.* **A stale number with no provenance
+is worse than no number** — that sentence is what makes the earlier ones safely ignorable
+rather than quietly load-bearing.
+
+Left with its number *and its shape*: W1's larger half ~1.4x but a **contract change rather
+than a deletion**; item 3 ~5% and the harder build; the promotion experiment as one
+experiment, still my call and still unmade until there is corpus evidence rather than seven
+programs.
+
+### NEVER PUT A STATUS-BEARING COMMAND UPSTREAM OF A PIPE
+
+frank-optimize's park command was `progress.sh unfinish X | tail -2 || git mv ...`. There is
+no `unfinish` subcommand — but **a pipeline's exit status is the last command's**, so `||`
+never fired, the `git mv` never ran, and a trailing `&& echo "moved"` **printed a success
+message for work that had not happened.** Caught only because the next command could not find
+the file.
+
+**Same failure class as CLAUDE.md's silent no-op `make`: a success message in the wrong
+dialect, with nothing downstream to contradict it.** Broadcast to every remaining lane —
+frankwasm especially, since a `check_*.sh` that pipes a compile into `grep` or `head` reports
+the **filter's** success, not the compile's. I use that shape constantly myself, which is why
+it is here rather than in a ticket.
+
+## THE LULL HAS ARRIVED — and it came from finishing, not from idling anyone
+
+frankA and frank-optimize both parked within minutes of each other: trees clean, nothing
+unpushed, `working/` holds **only frankwasm's ticket**, and `ir_codegen.inc` / `symtab.inc`
+are both free. **One lane is pushing.**
+
+This is the quiet box Track T twice said its deferred decisions needed, and it arrived exactly
+as predicted — from **not refilling as lanes finish**, which was already policy for a
+different reason. Reported to frankT with the three things now available that were not:
+
+1. the restart, which makes `commit_after` live;
+2. `mid_tier=native`, **if** the post-restart measurement says `commit_after` alone was not
+   enough — measured rather than reasoned, because reasoning from the shape is exactly what
+   sent me at the idle chain;
+3. `verify_pin`'s own commitment question, deliberately deferred to a quiet box.
+
+State at the time of writing: `--covering ab51855df` still shows **no EXACT row**, status
+still reads **`pin verify — v388`**. Both expected while the fix is not in the running process.
+
+### On credit for the two instructions that produced the most value
+
+frank-optimize credited *"bank the measurement before you start"* and *"re-measure the prize
+before starting an item"*. The honest accounting is narrower: **the instructions were free;
+turning the second on the LIVE dispatch was the judgement.** Most lanes would have applied it
+to the next item and left the current one alone. Same with the 6% regression — it re-measured
+the thing that justified its own dispatch, which is the least comfortable direction to point
+a check.
