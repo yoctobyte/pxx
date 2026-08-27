@@ -3841,6 +3841,30 @@ test-core: $(COMPILER)
 	# bug-n-a-field-typed-across-a-semicolon-takes-the-next-statements-type
 	./$(COMPILER) test/test_nilpy_field_type_from_whole_rhs.npy $(TESTTMP)/test_nilpy_fieldrhs26
 	$(TESTTMP)/test_nilpy_fieldrhs26 | diff -u test/test_nilpy_field_type_from_whole_rhs.expected -
+	# A comparison dunder must be consulted when the OTHER operand is not a user
+	# class. All three arms (__eq__, __ne__, and the four orderings) required
+	# BOTH sides to be classes, so `m == 2` fell through to the identity path and
+	# answered by allocation address with __eq__ sitting right there unused —
+	# constant-False for ==, constant-True for !=, and an address comparison for
+	# the orderings, all of them plausible-looking wrong answers rather than a
+	# crash. The row deliberately pairs the class-operand arm (already correct,
+	# so it stays a control) with int, float and the REFLECTED direction
+	# (`2 < m` asks the right operand for __gt__), because widening the guard is
+	# exactly where the reflected lookup could have been lost. OnlyEq is the
+	# fallback control: a class defining just __eq__ must still get CPython's
+	# derived __ne__ and not a dunder that isn't there.
+	# The second half of the row is the RUNTIME twin: a variant-typed holder and
+	# a list element have no static class for the parser arms to key on, so they
+	# route through pylib's PyVarEq / pyvar_gt / pycmp_v — which asked the same
+	# both-sides-are-objects question and got it wrong the same way, and where
+	# `g < 9` died with "expected a number, got object" on a declared __lt__.
+	# Plain (no dunders at all) is there so the widening cannot invent an answer
+	# where no method exists, and the container rows so their own value rules
+	# stay untouched.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly
+	./$(COMPILER) test/test_nilpy_cmp_dunder_nonclass_operand.npy $(TESTTMP)/test_nilpy_cmpnonclass26
+	$(TESTTMP)/test_nilpy_cmpnonclass26 | diff -u test/test_nilpy_cmp_dunder_nonclass_operand.expected -
 	# ...and the other side of the same rule: a REBOUND name is refused, never
 	# resolved to its first binding. CPython prints "second"; a compile-time
 	# alias table cannot say that, so it must decline rather than answer "first".

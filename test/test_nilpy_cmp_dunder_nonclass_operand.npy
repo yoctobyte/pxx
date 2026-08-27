@@ -1,0 +1,112 @@
+# A comparison dunder must be consulted when the OTHER operand is not a class.
+# Every arm below used to require both sides to be user classes, so `b == 1`
+# fell through to the identity/numeric path and answered by allocation address
+# with __eq__ sitting right there unused.
+# bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly
+
+
+class Money:
+    def __init__(self, cents):
+        self.cents = cents
+
+    def _as(self, o):
+        if isinstance(o, Money):
+            return o.cents
+        return o * 100
+
+    def __eq__(self, o):
+        return self.cents == self._as(o)
+
+    def __ne__(self, o):
+        return self.cents != self._as(o)
+
+    def __lt__(self, o):
+        return self.cents < self._as(o)
+
+    def __le__(self, o):
+        return self.cents <= self._as(o)
+
+    def __gt__(self, o):
+        return self.cents > self._as(o)
+
+    def __ge__(self, o):
+        return self.cents >= self._as(o)
+
+
+m = Money(250)
+
+# the class-operand arm, which was already correct
+print(m == Money(250), m != Money(250), m < Money(300), m >= Money(100))
+
+# the int-operand arm, which answered by address
+print(m == 2, m == 3, m != 2, m != 3)
+print(m < 2, m < 3, m <= 2, m <= 3)
+print(m > 2, m > 3, m >= 2, m >= 3)
+
+# a float on the right
+print(m == 2.5, m < 2.5, m > 2.5, m >= 2.5)
+
+# the REFLECTED direction: the plain value is on the LEFT.  `2 < m` asks the
+# right operand for __gt__, so the reflected lookup must survive the widening.
+print(2 < m, 3 < m, 2 > m, 3 > m)
+print(2 <= m, 3 <= m, 2 >= m, 3 >= m)
+print(2 == m, 3 == m, 2 != m, 3 != m)
+
+
+# A class with only SOME of the dunders still falls back for the rest.
+class OnlyEq:
+    def __init__(self, n):
+        self.n = n
+
+    def __eq__(self, o):
+        return self.n == o
+
+
+e = OnlyEq(7)
+print(e == 7, e == 8, e != 7, e != 8)
+
+
+# ---- the RUNTIME half of the same rule ----
+# The compile-time arms above key on an operand's STATIC class.  A variant-typed
+# holder has none, and a list element never has one, so those route through
+# pylib's PyVarEq / pyvar_gt / pycmp_v instead — which asked the identical
+# question ("are BOTH sides objects?") and got it wrong the identical way.
+
+class Grams:
+    def __init__(self, n):
+        self.n = n
+
+    def __eq__(self, o):
+        if isinstance(o, Grams):
+            return self.n == o.n
+        return self.n == o
+
+    def __lt__(self, o):
+        if isinstance(o, Grams):
+            return self.n < o.n
+        return self.n < o
+
+
+# rebound from a scalar first, so the holder is variant-typed
+g = 0
+g = Grams(5)
+print(g == 5, g == 6, g != 5, g < 9, g < 2)
+print(5 == g, 6 == g)
+
+# a list ELEMENT has no static class either
+xs = [Grams(3), Grams(1)]
+print(2 in xs, 3 in xs, xs[0] == 3, xs[0] < 9)
+print([x.n for x in sorted(xs)])
+
+# a class with NO dunders keeps identity semantics — the widening must not
+# invent an answer where there is no method to ask.
+class Plain:
+    def __init__(self, n):
+        self.n = n
+
+
+p = Plain(1)
+print(p == p, p == 1, p == "x", p != 1, p in [p], 1 in [p])
+
+# and the containers keep their own value rules, untouched
+print([1, 2] == [1, 2], (1, 2) == (1, 2), 1 in [1, 2], None in [None])

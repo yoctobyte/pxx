@@ -9867,9 +9867,17 @@ begin
         Exit;
       end;
     end;
+    { The RIGHT operand needs no type at all. Python's comparison dunders take
+      ANY object — `obj == 1`, `obj < 1.5`, `obj == "s"`, `obj == None` — and
+      requiring a class on both sides meant the method was simply never
+      consulted: a `__eq__` returning True unconditionally still compared
+      UNEQUAL, so the answer was the OPPOSITE of CPython, silently, with one
+      class and no inheritance. Only the LEFT operand decides whose dunder
+      runs, which is Python's own left-operand-first rule and what the
+      arithmetic arms above already do.
+      bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly }
     if PyExprMode and (op = tkNeq) and
        (IntToTypeKind(ASTTk[left]) = tyClass) and
-       (IntToTypeKind(ASTTk[right]) = tyClass) and
        (ResolveNodeRec(left) >= REC_UCLASS_BASE) and
        not PyRecIsPylibOwnClass(ResolveNodeRec(left)) and
        (FindUMeth(ResolveNodeRec(left) - REC_UCLASS_BASE, '__ne__') >= 0) then
@@ -9882,10 +9890,11 @@ begin
         Exit;
       end;
     end;
+    { ...and the same for `__eq__` — see the note on the `__ne__` arm above. }
     if PyExprMode and (op in [tkEq, tkNeq]) and
        (IntToTypeKind(ASTTk[left]) = tyClass) and
-       (IntToTypeKind(ASTTk[right]) = tyClass) and
        (ResolveNodeRec(left) >= REC_UCLASS_BASE) and
+       not PyRecIsPylibOwnClass(ResolveNodeRec(left)) and
        (FindUMeth(ResolveNodeRec(left) - REC_UCLASS_BASE, '__eq__') >= 0) then
     begin
       node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__eq__',
@@ -9930,13 +9939,24 @@ begin
       `__contains__` dispatch makes in pyparser.inc, for the same reason: a bare
       tyClass operand only means "genuine user object" AFTER pylib's own rows are
       ruled out. }
+    { The ORDERING pair, and the same widening: either operand being a genuine
+      user object is enough. `b < 1` answered by allocation address with
+      `__lt__` sitting right there unused, exactly as `b == 1` did — the whole
+      family shared one over-strict guard.
+
+      The two sides are now asked SEPARATELY: `ordLCi` / `ordRCi` are -1 for a
+      non-class operand, and FindUMeth(-1, ...) finds nothing, so the direct
+      lookup is tried on the left and the REFLECTED one on the right without
+      either needing the other to be a class. Requiring both was what made
+      `b < 1` fall through to the identity/numeric path.
+      bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly }
     if PyExprMode and (op in [tkLt, tkLe, tkGt, tkGe]) and
-       (IntToTypeKind(ASTTk[left]) = tyClass) and
-       (IntToTypeKind(ASTTk[right]) = tyClass) and
-       (ResolveNodeRec(left) >= REC_UCLASS_BASE) and
-       (ResolveNodeRec(right) >= REC_UCLASS_BASE) and
-       not PyRecIsPylibOwnClass(ResolveNodeRec(left)) and
-       not PyRecIsPylibOwnClass(ResolveNodeRec(right)) then
+       (((IntToTypeKind(ASTTk[left]) = tyClass) and
+         (ResolveNodeRec(left) >= REC_UCLASS_BASE) and
+         not PyRecIsPylibOwnClass(ResolveNodeRec(left))) or
+        ((IntToTypeKind(ASTTk[right]) = tyClass) and
+         (ResolveNodeRec(right) >= REC_UCLASS_BASE) and
+         not PyRecIsPylibOwnClass(ResolveNodeRec(right)))) then
     begin
       case op of
         tkLt: begin ordDirect := '__lt__'; ordRefl := '__gt__'; end;
@@ -9944,12 +9964,20 @@ begin
         tkGt: begin ordDirect := '__gt__'; ordRefl := '__lt__'; end;
         else  begin ordDirect := '__ge__'; ordRefl := '__le__'; end;
       end;
-      ordLCi := ResolveNodeRec(left) - REC_UCLASS_BASE;
-      ordRCi := ResolveNodeRec(right) - REC_UCLASS_BASE;
+      ordLCi := -1;
+      if (IntToTypeKind(ASTTk[left]) = tyClass) and
+         (ResolveNodeRec(left) >= REC_UCLASS_BASE) and
+         not PyRecIsPylibOwnClass(ResolveNodeRec(left)) then
+        ordLCi := ResolveNodeRec(left) - REC_UCLASS_BASE;
+      ordRCi := -1;
+      if (IntToTypeKind(ASTTk[right]) = tyClass) and
+         (ResolveNodeRec(right) >= REC_UCLASS_BASE) and
+         not PyRecIsPylibOwnClass(ResolveNodeRec(right)) then
+        ordRCi := ResolveNodeRec(right) - REC_UCLASS_BASE;
       node := -1;
-      if FindUMeth(ordLCi, ordDirect) >= 0 then
+      if (ordLCi >= 0) and (FindUMeth(ordLCi, ordDirect) >= 0) then
         node := PyCallMeth1(ordLCi, ordDirect, left, right)
-      else if FindUMeth(ordRCi, ordRefl) >= 0 then
+      else if (ordRCi >= 0) and (FindUMeth(ordRCi, ordRefl) >= 0) then
         { reflected: the RIGHT operand is the receiver and the left the argument }
         node := PyCallMeth1(ordRCi, ordRefl, right, left);
       if node < 0 then
