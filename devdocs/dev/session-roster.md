@@ -8992,3 +8992,73 @@ frankA, frankwasm and frank-optimize all mid-work the push rate stays high regar
 idling frankB would have bought nothing while costing real work. Said so to frankB in those
 words. **A lever that only works when several lanes free up together is not a lever you can
 pull on one.** Better to name that than to keep implying I am holding something back.
+
+## CORRECTION: the queue was NOT starved by position. It was starved by PREEMPTION — and my design question was the wrong question (`3d90849d8`)
+
+I reported that the targeted queue drains first among the idle phases and an idle phase
+is never reached. **frankT measured it and that is wrong.** From `~/trackt-watch.log`:
+
+```
+twatch: verifying PIN v389 (83468c5462d4) at full
+twatch: pin verify preempted by a push — will resume      × 15
+```
+
+**The idle chain is entered constantly. Every run inside it is torn down before it
+completes.** So "first in a queue that never runs" was never the situation, and the
+change I was circling toward — promote a request to sit alongside `do_test` — would
+have made it **start sooner and be preempted just the same.**
+
+**Root cause one level down:** `make_preempted()` with no `commit_after` is abortable at
+*every* moment. Such a run only finishes if the gaps between pushes exceed its wall, and
+at four workers they do not. The request phase inherited this from `verify_pin` verbatim
+— **the abort_check was copied along with the shape, and the defect came with it.**
+
+Fixed with the mechanism already in the same file and already proven against this exact
+failure: the idle full backfill passes `commit_after=full_commit_secs`, and reserved
+breadth passes `commit_after=0` with a comment saying that letting a push abort it
+*"rebuilds the starvation the reservation exists to end"*. frankT took the **backfill's**
+value, not breadth's `0`, for a stated reason: a push in the first minute still preempts,
+so a genuinely fresh sha is not starved by a run that just started; after that the
+request finishes. Breadth's `0` is for a deliberately reserved slot, **which a request is
+not.**
+
+### The reframing — record it in these terms, because the priority framing actively misleads
+
+> **The axis is COMMITMENT, not PRIORITY.** Every phase here is preemptible-forever or
+> committed-after-N, and *that* choice — not its position in the chain — determines
+> whether it can ever complete under sustained pushes.
+
+My framing would have sent the next person to reorder the chain, which is precisely the
+change that would have done nothing. *"Is a request an idle phase or a job?"* was a
+well-formed question about the wrong variable.
+
+### Squaring this against twice declining to retune under load — and why it is not self-serving
+
+frankT raised the objection against itself and asked to be checked on it. **The line
+holds, and the strongest evidence is not its argument but its restraint:**
+
+- What it declined before were **tuning parameters whose effect can only be read
+  statistically** — a memory estimate, a yield budget. Under varying load you cannot tell
+  whether the change or the load produced the result.
+- This is **a code path that provably cannot complete**, fixed with the value the file
+  already uses for the identical purpose, and the outcome is **binary and directly
+  observable**: the request drains or it does not.
+
+**And it declined to fix `verify_pin`, which has the identical defect and is why v389 has
+sat unverified ~5h.** That is the phase whose starvation is the actual problem and the fix
+that would most vindicate the reasoning. Someone rationalising would have taken both and
+called it one change. Taking the one it could justify and leaving the one it could not is
+the opposite of self-serving.
+
+**Left deliberately open, correctly:** committing `verify_pin` means ~20 minutes in which
+the fast *native* verdict lanes actually steer by is blocked. That is a real trade for a
+quiet box with a measurement, not something to ride along with a bug fix. Passed one
+thought for whenever it is made, not an action: **a native pin verify that COMPLETES is
+worth more than a full one that never does** — the same shape as *gate what can be green*.
+If commitment can apply at native while full stays best-effort, nobody waits 20 minutes and
+the pin still gets an exact row.
+
+**Not queueing a second request for v389.** The `full` one should now drain once the phase
+gets a minute's clear air; double-queueing at native would buy a real run for a question
+about to be answered. If it has not drained in a couple of cycles, that means preemption is
+not the whole story and frankT wants to know.
