@@ -8531,3 +8531,73 @@ Recording it as my fault would put the fix in the wrong place — the same error
 the correction above is about. *"Announce that a pin moves `lib/rtl`"* stays as a
 courtesy I owe, because it is free and would have saved an hour of confusion, but it
 is not the cause and the playbook entry says so correctly.
+
+## Wasm Phase 2: granted edits taken, backend COMPILES, and the dispatch arm is now a real sequencing question
+
+Branch `05ec4ac00`, guard analysis on master `e9fca265f`. Gate seen: `converged
+after 1 round(s)`, `8dedbc7a0e07`. 20/20 hashes identical across 4 programs × 6
+targets, **both sides regenerated back-to-back** rather than reusing this session's
+earlier baseline — taking Track O's warning literally instead of deciding its own
+case was fine.
+
+### It distrusted a suspiciously good result and verified it three ways
+
+228 lines written blind **compiled on the first attempt**, which is the shape of a
+result that is wrong in a way that looks right — and a silently-skipped include is
+exactly the failure that produces it. So:
+
+1. two distinctive strings from the file are present in the binary;
+2. a **deliberately broken procedure** appended to it was caught —
+   `pascal26:232: error: undefined variable (this)`;
+3. removing it reproduced the same fixedpoint.
+
+The middle one is the only instrument that **proves the compiler is looking at the
+file**, rather than merely that the file broke nothing. That is what the staged
+grant bought: 228 blind lines now stand up to the parser before another thousand
+land on top of them.
+
+### The forward declaration, argued in the commit rather than granted in it
+
+frankwasm put the *reasoning* in the commit message instead of "granted by
+coordinator" — because the next reader needs the argument, not the permission. It
+also sharpened my own framing: this is not "there is precedent", it is that
+`compiler.pas` already forwards `IRNodeOwnsManagedStr` **for this exact structural
+reason, with a comment saying so**, so adding a second mechanism would have been the
+special case. `normalise-dont-special-case` cuts **in favour of** the edit.
+
+**Make this the house habit.** A grant is a fact about a moment; the reasoning is
+what survives. Same principle as frankT recording the corpus decision at
+`CORPUS_EXPECTED` itself.
+
+### The guard: NOT added, and the "no" is worth more than a "yes" would have been
+
+Written onto `unfinished/feature-a-build-a-reduced-compiler-…` rather than into a
+commit message. **Wasm's guard is four edits, not one** — three includes
+(`ir_codegen_wasm32`, `wasmenc`, `asmtext_wasm`) plus `compiler.pas`'s output arm,
+which calls `writeWasm` *inside* `wasmenc.inc`. And **a partial guard is worse than
+none**: guarding only the backend leaves `wasmenc.inc`'s ~19.5MB of BSS behind,
+which is the single largest thing a reduced build would want to drop here. All four
+move together or none do.
+
+That ticket now carries a costed, specific trap instead of a generic "add guards"
+item — and whether it is worth having at all stays that ticket's call.
+
+### The dispatch arm: sequencing IS live now, and it was not an hour ago
+
+The ask is one arm in one target ladder — replacing the registration-era `Error` in
+`TARGET_WASM32` with `IREmitMachineCodeWasm32`. **It is the line between "the backend
+compiles" and "the backend has ever run":** 228 lines and an oracle that prints 19,
+-3, 43, 1, with no way to put them in the same room.
+
+frank-optimize said `ir_codegen.inc` was free — **and then I handed it item 2, which
+lives in that file.** So its clearance is stale by my own action. Asked it directly,
+with three acceptable answers including "add the arm yourself from frankwasm's text
+while you are in there". I told frankwasm I would re-check contention *at the moment
+it asked* rather than trusting an earlier message, and an earlier message is exactly
+what I would be trusting.
+
+frankwasm expects the first run to fail several times — parameter homing, the sign
+convention on slot offsets, whether the program body arrives with `CurProc < 0` —
+all reasoned about and none observed. **Which is the argument for granting now
+rather than after another thousand lines**, and the same argument that moved the
+Phase 2 grant to the start.
