@@ -6341,3 +6341,125 @@ transient API/network errors, a stalled cycle, or a worker going quiet, because
 the next tick simply retries. It does **not** survive this session's process
 dying — nothing in-session can. That recovery path is `~/frank.sh <role>`, and it
 is the human's.
+
+## REBOOT RECOVERY RUNBOOK (owner, 2026-08-27) — read this first after a reboot
+
+The owner asked for a note so *"in case of any next reboot, we recover."* This is
+that note. Everything below was **measured on plexus after the 2026-08-27
+reboot**, not inherited from the pre-reboot audit — which is the point, since the
+audit's own conclusion about the dashboard had already gone stale (see the
+correction at the end).
+
+### The one-line version
+
+**Infra comes back by itself. Agents do not. Run `~/frank.sh` — and only for the
+roles you actually intend to dispatch.**
+
+### Comes back with no human action — verified
+
+| thing | mechanism | verified |
+| --- | --- | --- |
+| Track T watcher daemon | `trackt-watcher.service`, user unit, `enabled` + `active` | `systemctl --user is-enabled/is-active` |
+| T health + regression timers | `trackt-health.timer`, `trackt-regressions.timer`, both `enabled` | unit-file listing |
+| boot without login | `loginctl show-user neo` → `Linger=yes` | measured |
+| credentials | `~/.claude/.credentials.json`, mode 600, OAuth refresh on disk; no keyring unlock | audit, unchanged |
+| the trees and their compiler seeds | plain files | — |
+
+### Does NOT come back — this is the whole gap
+
+**No agent session survives a reboot, and nothing launches `~/frank.sh` at
+boot.** Checked rather than assumed: `crontab -l` → *no crontab for neo*; no user
+unit references the script; nothing in `~/.profile` or `~/.bashrc` runs it. So
+after a reboot the box is healthy, the watcher is testing, the dashboard serves —
+**and there is no coordinator and no worker.** Nothing announces this. The fleet
+is simply absent.
+
+### The recovery sequence
+
+1. **`~/frank.sh -l`** — see what is up. After a reboot: nothing.
+2. **`~/frank.sh frank-coordinator`**, then whichever roles are actually being
+   dispatched. **Do not launch the full fleet reflexively.** `~/frank.sh` with no
+   arguments starts every role, and six live sessions against a target of 1-2
+   workers is how the 2026-08-25 four-session death happened. Launch the
+   coordinator plus the lanes with live work; leave the rest down.
+3. **The new coordinator reads `CLAUDE.md` then this file's opening section**,
+   which is the complete briefing by the owner's own standing instruction.
+4. **Re-read the most recent dated sections at the BOTTOM of this file** — that is
+   the live state. Everything above the last few entries is history.
+5. **Check for orphaned locks.** `ls devdocs/progress/working/` after a crash may
+   hold a ticket whose session no longer exists. A lock that outlived its session
+   is **released, not respected** — but confirm the session is really gone
+   (`ListAgents`) before touching it, and never absorb another agent's staged
+   work into your own commit.
+6. **Confirm T rather than assume it**: `tools/twatch.py --status` (exit 0 = up),
+   after a `git fetch` — without one it reports your own checkout's staleness.
+   **`ListAgents` showing `plexus-T` offline proves nothing**; the watcher is a
+   daemon, not a session. That error was made on 2026-08-27 and reported to the
+   owner as a false DOWN.
+7. **Anything mid-flight is lost, and that costs time, not state** — a running
+   `testmgr` tier dies with the box and the watcher simply re-runs it. **The one
+   irreplaceable thing is uncommitted work in a worker's tree**, which has no
+   backup; never tell a session to discard it.
+
+### Should the fleet auto-start at boot? Deliberately NOT proposed
+
+It would be a few lines of systemd, and it is the wrong default: auto-launching
+agents spends the shared 5-hour and weekly budget on sessions nobody asked for,
+against a recorded target of 1-2 concurrent workers. **Recovery here means "a
+human runs one script", not "six agents wake up and start burning tokens."** If
+the owner ever wants it, the right shape is a unit that starts the *coordinator
+alone* and lets it dispatch — never `frank.sh` bare.
+
+### CORRECTION — the dashboard has MOVED, and `~/pxx`'s stated reason is stale
+
+The pre-reboot audit recorded that `~/pxx` must be kept because it hosted the
+twatch web dashboard on port 8377. **That is no longer where it runs.** Measured
+now:
+
+```
+4327  python3 /home/neo/trackt-watch/tools/twatch_web.py --clone /home/neo/trackt-watch --port 8377
+```
+
+Serving HTTP 200, from **`~/trackt-watch`**, on a fresh post-reboot PID — brought
+up by `~/frank.sh`, which now runs `trackt --clone ~/trackt-watch up`. The old
+orphan in `~/pxx` died with the reboot and was not the thing that came back.
+
+**The owner's "keep `~/pxx`" call stands on its own and is not being reopened
+here.** What has changed is the *reason*: it is no longer load-bearing for the
+dashboard. Recorded because a stale justification is how a tree gets deleted
+later by someone who checks the justification and finds it false. And the
+underlying lesson repeats for the third time: **`pgrep -af <path>` before calling
+any tree disposable — and again before citing why you kept it.**
+
+## STANDING — frankA's track priority (owner, 2026-08-27)
+
+Owner: *"frank-A has some prio, at all times. frank a is track A+C+P. but also
+track A+N. but right now, tracks P and C and plain A have prio. user will say
+when track N has prio again."*
+
+Two separate instructions; do not collapse them.
+
+**1. frankA has standing priority over the other lanes.** It is the integrator —
+A owns the shared core, the self-host gate, and the stable binary every other
+track builds on — so when budget or attention is scarce, frankA is the lane that
+keeps running. This is the reason the "tread carefully" restart brought up frankA
+first and left B, rust and wasm idle.
+
+**2. Within frankA, the ordering is P / C / plain A ahead of N — until the owner
+says otherwise.** N is not dropped and its tickets are not closed; they are
+**deprioritized as a dispatch choice**, and the owner explicitly reserved the
+call to bring N back: *"user will say when track N has prio again."* Do not infer
+that from a high-prio N ticket appearing at the head of `ready`.
+
+**This is a repeat, and the repetition is the signal.** The same mandate was
+issued on 2026-08-19 (*"A/P/C over everything N"*, above in this file) and drifted
+— the coordinator dispatched NilPy work under it and was corrected by the owner
+the next day. The failure mode is not disagreement; it is that `progress.sh next`
+ranks by `prio:` and knows nothing about this mandate, so **the ranker will hand
+you an N ticket at the top of the queue and it will look like the right answer.**
+
+**Operationally, for whoever dispatches frankA:** run `next --track A`, `--track
+P`, `--track C` and pick from those. If the global `next` returns an N ticket,
+that is the ranker doing its job, not a dispatch instruction. Note frankA's
+current work (`feature-opt-o3-register-pressure`, Track O → file-owned by A) is
+plain A and sits inside the mandate — no change needed.
