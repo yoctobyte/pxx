@@ -176,4 +176,4 @@ narrows as it does today. That is unaffected by this change — nothing here
 touches narrowing — and is not covered by the new test.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 24ace0b25.
