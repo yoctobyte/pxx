@@ -5955,3 +5955,69 @@ one host.
 false`), clean, on `master`, ~12k commits behind so it needs a pull. Entirely
 separate from the five-minute content mirror, which is `--depth 1` and must
 never be edited.
+
+### 2026-08-27 — MEASURED: the "tipping point" claim, before staffing on it
+
+The owner proposed a large parallel expansion on the premise *"we no longer file
+more bugs than we fix, and new targets (BSD, etc) are mostly mechanical"*, and
+asked to be corrected. Measured rather than agreed with.
+
+**Flow, 21 days:** 1169 filed / 1083 resolved = **-86 net**.
+**Queue depth, 6 weeks** (the unambiguous instrument — file-creation counting is
+confounded by directory moves):
+
+| date | backlog | done |
+| --- | --- | --- |
+| 07-13 | 108 | 687 |
+| 07-27 | 164 | 977 |
+| 08-10 | 238 | 1619 |
+| 08-24 | **294** | 2318 |
+| 08-27 | **263** | 2523 |
+
+**So the claim is not yet true.** Backlog grew 2.4x in six weeks while `done`
+grew 3.7x. The last three days are a genuine -31 drawdown, the best in the
+window, and the last seven are roughly break-even — but 08-11 (+15) and 08-15
+(+31) also looked like turns and the queue kept growing. **Three days is a
+hopeful signal, not a trend, and it is not a base to staff five workers on.**
+
+**The owner's instinct is right about something else, and it is the stronger
+claim.** The *shape* has changed even though the count has not:
+
+- Open backlog is **98 features vs 58 bugs** — a feature-dominated queue is not
+  what a project drowning in defects looks like.
+- **2 regressions in the last 200 resolved (~1%).** The gate is holding. Backlog
+  growth is coming from *ambition and discovery*, not from breakage.
+
+That is the defensible version: **not "we fix faster than we file", but "what we
+file has changed kind."**
+
+**IR/AST/PAL "stable or just extendable" — one of the three does not hold.**
+Open backlog tickets mentioning each: **AST 9** (supports it), **PAL 16**
+(supports it, and BSD PAL work is additive), **IR/codegen 28** — the single
+largest concentration in the repo, alongside 52 open Track A tickets. IR is the
+most active surface, not a settled one.
+
+**BSD "mostly mechanical" — correct, and the ticket structure proves it.**
+`feature-port-freebsd-native` is blocked by `feature-t-freebsd-image-and-runner`
+— i.e. by *not having a machine to test on*, not by compiler work. That is
+exactly what mechanical looks like. Caveat: `feature-port-openbsd-libc` is a
+different shape (libc-based, not raw-syscall) and is not the same job twice.
+
+**The staffing proposal conflicts with two RECORDED constraints, both the
+owner's own:**
+
+1. *"Target concurrency: 1-2 workers plus the coordinator"* (owner, 2026-08-17),
+   because tokens are shared across sessions and are the binding constraint —
+   *"a single session running flat out can consume a max plan on its own."*
+2. **Four concurrent workers hit an account session limit on 2026-08-25 and all
+   four died at once.** That is a hard ceiling, not a budget preference, and it
+   does not care that the sessions are on different machines.
+
+The proposed frankA(+P+C+N) / frankB(+E) / via(D+W) / plexus(T) / wasm / rust is
+4-6 concurrent. **The lane design is sound; the concurrency is not.**
+
+**What IS well-designed in the proposal, and should be kept:** folding P, C and N
+into frankA is the correct move, not a compromise — P shares `lexer.inc` with A
+and must never be edited concurrently with it, so putting them in *one* agent
+dissolves the sole-A hazard instead of managing it. Same for B+E, which is
+file-ownership by construction.
