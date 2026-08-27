@@ -180,7 +180,7 @@ divergence: CPython says a function is never equal to a number.
 not see the equality change until someone pins. Flagged to `frank1-72`.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit e669023a7.
 
 ---
 
