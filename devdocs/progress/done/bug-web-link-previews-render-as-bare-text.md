@@ -188,4 +188,4 @@ Fetch the page, confirm the tags are present, and validate the rendered card
 against at least two unfurlers before closing.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 86911308f.

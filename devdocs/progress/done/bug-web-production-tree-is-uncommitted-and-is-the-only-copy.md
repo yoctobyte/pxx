@@ -227,4 +227,4 @@ timer and the webhook are separate systemd units and per-unit serialisation
 never covered them against each other.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 86911308f.
