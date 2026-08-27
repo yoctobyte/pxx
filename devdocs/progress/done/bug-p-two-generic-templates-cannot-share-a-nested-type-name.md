@@ -61,4 +61,4 @@ Track P: `make compiler/pascal26` (self-host fixedpoint) + the repro matching
 test with an `.expected`.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 7ee75329e.

@@ -71,4 +71,4 @@ matching `fpc -O2`, plus `tools/run_fgl_corpus.sh` still 7/7. Add the repro as a
 test with an `.expected`.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 7ee75329e.
