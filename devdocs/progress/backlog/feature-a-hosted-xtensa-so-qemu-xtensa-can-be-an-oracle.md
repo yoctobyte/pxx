@@ -1,7 +1,7 @@
 ---
 slug: feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle
 track: A+S
-prio: 45
+prio: 25
 type: feature
 blocked-by: []
 status: backlog
@@ -55,6 +55,17 @@ summary: "xtensa is the one target whose output nothing here can RUN, so every x
 > have."* The Espressif fork tests the ESP **product**; a hosted profile tests
 > the **backend** against the same corpus every other target runs. They are
 > complementary, and only the second makes the blocked gates reachable.
+>
+> **3. And correction 2 was itself half wrong — re-ranked 45 -> 25.** The claim
+> "the corpus cannot be built for xtensa whatever emulator you have" assumed
+> `builtin` cannot work on an ESP-class target. It can: that is three layers of
+> never-revisited `not on ESP` guards, not a platform fact, and taking them off
+> gets both ESP targets past the `UpCase` wall — measured in
+> [[feature-a-complete-the-builtin-unit-on-the-esp-class-targets]], which is the
+> cheap route and the real unblock. This ticket keeps only its weaker,
+> genuine justification: running the whole `test_cross_*` corpus on xtensa the
+> way riscv32 does, against a Linux ELF. That is worth something and is not
+> worth 68 audited sites yet.
 >
 > Partial credit where it is due: some cross tests *do* build bare —
 > `test_cross_float` does — so the IDF fork would let a subset run. But

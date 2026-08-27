@@ -32,10 +32,14 @@ suite is greener than the coverage.
 ## Why now
 
 The box changed. plexus replaced borg's frank2/frank3 after the 2026-08-20 PSU
-death, and **whether the old box had IDF is unrecorded** — not in the tree, not
-in the box-level notes. Several open tickets say "cannot be verified on this
-box" about a machine that no longer exists, so the claim needs re-establishing
-either way.
+death. **borg HAD ESP-IDF installed** (user, 2026-08-27); plexus does not, and
+nothing in the tree or the box-level notes recorded either fact — which is why
+several open tickets say "cannot be verified on this box" about a machine that
+no longer exists, and why this is a restore rather than a first-time setup.
+
+That also means the ESP execution coverage silently *regressed* with the
+hardware move: the rows did not start skipping because anything changed in the
+repo, and nothing went red to say so.
 
 ## What it buys, and what it does not
 
@@ -52,8 +56,11 @@ coverage that exists, and none of it executes.
 ESP-class target at all (`UpCase: builtin helper unavailable ... not on ESP`) —
 riscv32-bare fails on it too, and riscv32 passes that gate only on its **hosted**
 profile. Reaching those needs
-[[feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle]], which is a
-different and much larger job. The two are complementary, not alternatives.
+[[feature-a-complete-the-builtin-unit-on-the-esp-class-targets]] — which, once
+done, makes those gates buildable for a bare ESP target, at which point THIS
+ticket is what makes them runnable. That pairing is the cheap route;
+[[feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle]] is the expensive one
+and is no longer the unblock.
 
 ## Not done unilaterally
 
