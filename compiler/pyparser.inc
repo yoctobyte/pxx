@@ -2336,6 +2336,29 @@ var xNode, node, left, term, callN, argN, tagCall: Integer;
     ASTTk[Result] := Ord(tyBoolean);
   end;
 
+  function QualifiedTypeAhead: Boolean;
+  { `isinstance(x, mod.Class)` — a MODULE-qualified type. The arms below read a
+    BARE `CurTok.SVal`, so the module name was taken as the type and the
+    `.Class` selector was left behind: `unknown type in isinstance: cabc`,
+    naming the module as the unknown TYPE, which sends the reader to look for a
+    class by that name. `from mod import Cls` then the bare name worked, so it
+    was the spelling and not the class.
+
+    An attribute of a SYMBOL (`holder.klass`) already reached the bound-name arm
+    below and was parsed whole; a MODULE is not a symbol, which is the entire
+    gap. Handed to the not-an-identifier arm, which evaluates the expression and
+    lets the runtime test decide — the same route `type(y)` and a bound type
+    name already take, and available only because a class is a VALUE here
+    (bug-n-a-type-name-is-not-a-first-class-value).
+    bug-n-isinstance-does-not-accept-a-qualified-class-name }
+  begin
+    QualifiedTypeAhead :=
+      (CurTok.Kind = tkIdent) and (TokPos + 1 < TokCount) and
+      (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos + 1].Kind = tkIdent) and
+      (FindSym(CurTok.SVal) < 0) and (FindUClass(CurTok.SVal) < 0) and
+      (FindUnitOrAlias(CurTok.SVal) >= 0);
+  end;
+
 begin
   Next;                     { 'isinstance' }
   Expect(tkLParen, '(');
@@ -2347,13 +2370,31 @@ begin
   hadTuple := CurTok.Kind = tkLParen;
   if hadTuple then Next;                 { optional tuple of types }
   repeat
+    { A TRAILING comma is legal inside a Python tuple, and for a ONE-element
+      tuple it is the only spelling there is — `(C,)`. Every element arm hands
+      its comma to the until-test below, so control arrives back here with the
+      tuple's ')' current, and the not-an-identifier arm read that as a missing
+      type: `isinstance(x, (C,))` was `expected a type in isinstance`.
+      Guarded on `left >= 0` so a genuinely EMPTY `()` still reaches the
+      empty-tuple answer below instead of building an OrJoin over nothing. }
+    if hadTuple and (left >= 0) and (CurTok.Kind = tkRParen) then Break;
+    { `isinstance(x, ())` — CPython RUNS this and answers False (nothing to
+      match), so refusing it was an upward-compatibility defect, not a
+      diagnostic. It is the natural base case of a computed tuple of types
+      (`isinstance(x, tuple(accepted))` with nothing accepted), which is why
+      the spelling exists at all. }
+    if hadTuple and (left < 0) and (CurTok.Kind = tkRParen) then
+    begin
+      left := FalseLit;
+      Break;
+    end;
     { A second argument that is not an identifier at all — `isinstance(x, type(y))`,
       `isinstance(x, types[0])`. CPython evaluates the expression, so hand it to
       the same runtime test a type held in a NAME already uses rather than
       refusing. Only reachable now that a type is a VALUE; before that there was
       nothing an expression could have evaluated TO.
       bug-n-a-type-name-is-not-a-first-class-value }
-    if CurTok.Kind <> tkIdent then
+    if (CurTok.Kind <> tkIdent) or QualifiedTypeAhead then
     begin
       if CurTok.Kind = tkRParen then
         Error('Nil Python: expected a type in isinstance');
@@ -2369,7 +2410,7 @@ begin
       ASTTk[term] := Ord(tyBoolean);
       ASTLeft[term] := rtArg;
       left := OrJoin(left, term);
-      if hadTuple and (CurTok.Kind = tkComma) then begin Next; Continue; end;
+      if hadTuple and (CurTok.Kind = tkComma) then Continue;   { the until-test eats it }
       Break;
     end;
     nm := LowerCase(CurTok.SVal);
@@ -2418,7 +2459,7 @@ begin
       ASTTk[term] := Ord(tyBoolean);
       ASTLeft[term] := rtArg;
       left := OrJoin(left, term);
-      if hadTuple and (CurTok.Kind = tkComma) then begin Next; Continue; end;
+      if hadTuple and (CurTok.Kind = tkComma) then Continue;   { the until-test eats it }
       Break;
     end
     else if nm = 'type' then
@@ -2465,7 +2506,7 @@ begin
         ASTTk[term] := Ord(tyBoolean);
         ASTLeft[term] := rtArg;
         left := OrJoin(left, term);
-        if hadTuple and (CurTok.Kind = tkComma) then begin Next; Continue; end;
+        if hadTuple and (CurTok.Kind = tkComma) then Continue;   { the until-test eats it }
         Break;
       end;
       if ci < 0 then Error('Nil Python: unknown type in isinstance: ' + CurTok.SVal);

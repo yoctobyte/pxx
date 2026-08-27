@@ -1,0 +1,62 @@
+# isinstance() must accept a MODULE-QUALIFIED class name, the spelling ordinary
+# CPython code uses constantly (`isinstance({}, collections.abc.Mapping)`).
+# It reported `unknown type in isinstance: nilpy_isishapes` — the second
+# argument was read as a bare token, so the `.Box` selector was never folded in.
+#
+# The tuple rows are a SECOND, independent defect the first one exposed: an
+# element that takes the runtime `pyisinstance_v` route — a qualified name, a
+# bound name, or `type(y)` — ate the separating comma itself and then hit
+# `until not Eat(tkComma)`, which found none and closed the tuple early. So the
+# tuple was silently TRUNCATED at the first such element unless it was last.
+# bug-n-isinstance-does-not-accept-a-qualified-class-name
+import nilpy_isishapes
+import nilpy_isishapes as shapes
+
+class Local:
+    pass
+
+b = nilpy_isishapes.Box(3)
+o = nilpy_isishapes.Other()
+l = Local()
+
+# the qualified form itself, direct and through an alias
+print(isinstance(b, nilpy_isishapes.Box))
+print(isinstance(b, shapes.Box))
+print(isinstance(b, nilpy_isishapes.Other))
+print(isinstance(o, shapes.Other))
+print(isinstance(l, nilpy_isishapes.Box))
+
+# in a tuple, in every position — a truncating tuple answers False for a
+# member that follows the first runtime-route element
+print(isinstance(b, (nilpy_isishapes.Other, nilpy_isishapes.Box)))
+print(isinstance(b, (nilpy_isishapes.Box, nilpy_isishapes.Other)))
+print(isinstance(l, (nilpy_isishapes.Box, shapes.Other)))
+print(isinstance(b, (nilpy_isishapes.Other, Local, nilpy_isishapes.Box)))
+print(isinstance(b, (shapes.Other, shapes.Box, Local)))
+
+# the same truncation with the other two runtime-route elements: `type(y)`
+# and a class held in a NAME. Both are red at v382 with nothing qualified
+# in sight, which is what makes the tuple defect independent of this ticket.
+print(isinstance(b, (type(o), nilpy_isishapes.Box)))
+print(isinstance(b, (type(o), Local)))
+alias = nilpy_isishapes.Box
+print(isinstance(b, (alias, Local)))
+print(isinstance(l, (alias, Local)))
+
+# builtins mixed in, before and after
+print(isinstance(3, (nilpy_isishapes.Box, int)))
+print(isinstance("s", (int, nilpy_isishapes.Box, str)))
+print(isinstance(3, (int, nilpy_isishapes.Box)))
+
+# the control the fix must not trade away: a bare `isinstance(x, C)` whose ')'
+# is immediately followed by the enclosing one still closes exactly what it
+# opened, and a single-element tuple still parses.
+print(max(v for v in [1, "a", 2] if isinstance(v, int)))
+print(isinstance(b, (nilpy_isishapes.Box,)))
+
+# `isinstance(x, ())` — CPython runs it and answers False; we refused it. It is
+# the base case of a COMPUTED tuple of types, which is the reason the spelling
+# exists. `expected a type in isinstance` is kept for a MISSING type, which is
+# a different thing: `isinstance(x, )` is a syntax error in CPython too.
+print(isinstance(3, ()))
+print(isinstance(b, ()))

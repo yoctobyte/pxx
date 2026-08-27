@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:23 blocked:7 backlog:265 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2494 rejected:45`
+`unfinished:23 blocked:7 backlog:264 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2495 rejected:45`
 
 ## Held now (working/ — do not touch these files)
 
@@ -47,7 +47,7 @@ _none — no lane is locked._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 276, ranked
+## Ready — top 30 of 275, ranked
 
 - `[p 85] [O]` feature-opt-o3-register-pressure
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
@@ -69,7 +69,6 @@ _none — no lane is locked._
 - `[p 65] [N]` bug-n-a-fields-type-is-fixed-by-its-first-assignment-and-never-widened
 - `[p 65] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 - `[p 65] [N]` bug-n-a-unicode-identifier-is-rejected-by-the-lexer
-- `[p 65] [N]` bug-n-isinstance-does-not-accept-a-qualified-class-name
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 65] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - `[p 65] [B]` feature-b-text-file-surface-seekeof-rename-settextbuf
@@ -79,5 +78,6 @@ _none — no lane is locked._
 - `[p 65] [O]` feature-opt-bulk-copy-is-byte-at-a-time
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
+- `[p 62] [N]` bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name
 
-_246 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_245 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

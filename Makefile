@@ -9926,6 +9926,23 @@ test-core: $(COMPILER)
 	# bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members
 	./$(COMPILER) test/test_nilpy_module_member_named_like_its_module.npy $(TESTTMP)/test_nilpy_selfnamed26
 	$(TESTTMP)/test_nilpy_selfnamed26 | diff -u test/test_nilpy_module_member_named_like_its_module.expected -
+	# `isinstance(x, mod.Class)` — the spelling ordinary CPython code uses
+	# constantly — was `unknown type in isinstance: <module>`: the arms read a
+	# BARE token, so the module name became the type and `.Class` was left
+	# behind. Routed to the same runtime test `type(y)` and a bound class name
+	# already take. Fixing it exposed two OLDER defects in the same loop, both
+	# red at v382 with nothing qualified in sight, so all three are witnessed
+	# here: an element on that runtime route ate its own separating comma and
+	# then met `until not Eat(tkComma)`, which found none and closed the tuple
+	# EARLY — so `isinstance(b, (type(o), Box))` silently answered on `type(o)`
+	# alone; and a trailing comma, the only one-element tuple spelling Python
+	# has, was `expected a type`. `isinstance(x, ())` is CPython-legal False and
+	# was refused. The genexpr row is the control for the ')'-counting fix that
+	# lives in the same loop; the missing-type diagnostic is still a diagnostic.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-isinstance-does-not-accept-a-qualified-class-name
+	./$(COMPILER) test/test_nilpy_isinstance_against_a_qualified_class_name.npy $(TESTTMP)/test_nilpy_qualisi26
+	$(TESTTMP)/test_nilpy_qualisi26 | diff -u test/test_nilpy_isinstance_against_a_qualified_class_name.expected -
 	# `return lambda ...` — a closure factory, and the returned value was not
 	# CALLABLE while the same lambda bound to a local first was. The return-type
 	# scan's TUPLE detector counted the LAMBDA'S OWN PARAMETER COMMAS, so the
