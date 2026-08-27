@@ -5841,3 +5841,24 @@ tickets (several in `done/`), and frank1-80 said hours ago it is on the
 auto-filed NilPy regressions. `regression-tools-devtest-00-2` and
 `regression-test-emit-obj-cxtensa-obj` both already exist in `backlog/`.
 Two workers plus coordinator is target concurrency.
+
+### STANDING — two rules out of the 2026-08-27 credential afternoon
+
+Both from `ianweb`; full write-up in `decided/decide-deploy-key-on-via.md`.
+
+**1. Push and deploy are different privileges on different boxes.** The
+credential answers *can this box write to the repo*; the deploy gate answers
+*can a commit start executing here*. They look like one decision only when the
+same agent could do both. A coordinator routing W work must not let an answer to
+one read as clearance for the other — that happened twice in one afternoon, in
+opposite directions.
+
+**2. Inherited facts are the ones nobody re-measures.** Three sessions reasoned
+carefully on top of "via has no push key" and none ran `ssh -T git@github.com`,
+one command from the box the fact was about. A premise that arrives sounding
+settled gets built on rather than tested. **When a chain of reasoning rests on a
+fact you did not personally measure, price the check before building the
+workaround** — here the check was one command and the workaround was an
+afternoon. This is CLAUDE.md's "measure, do not reason" applied to premises
+rather than to conclusions, and premises are the less examined of the two
+because nobody remembers deciding them.

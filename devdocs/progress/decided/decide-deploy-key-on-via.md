@@ -51,6 +51,48 @@ someone else's credential — that judgement holds regardless of the outcome, an
 is the reason the correct answer arrived in one round trip rather than after a
 removal that broke something invisible from `via`.
 
+## The two lessons worth more than the incident
+
+Both are `ianweb`'s, recorded here because this page is where someone will land.
+
+### 1. Push and deploy are different privileges on different boxes
+
+They only look like one decision when the same agent could do both. **The
+credential answers "can this box write to the repo." The gate answers "can a
+commit start executing here."** Different questions, different owners.
+
+Today collapsed them twice, in opposite directions:
+
+- First, assuming **no key meant no path home** — which produced the
+  patch-transfer workaround, the refusal to move it, and the stalled-lane
+  framing, none of which a credential was actually blocking.
+- Then, nearly reading **"the key is intentional" as clearance to pull** — which
+  would have walked straight through `deploy/DEPLOY-STATUS.md`'s manual gate on
+  the strength of an unrelated answer.
+
+`via` could push all along and still should not deploy without a human. Both
+halves are true simultaneously and neither implies the other.
+
+### 2. Inherited facts are the ones nobody re-measures
+
+Three sessions reasoned carefully for an afternoon on top of "via has no push
+key", and **none of us ran `ssh -T git@github.com`** — one command, from the box
+the fact was about, answerable in under a second. Cheapest check available and
+the last one anyone did.
+
+The premise arrived as an inherited fact and got **built on rather than tested**,
+precisely because it arrived sounding settled. That generalises well past
+credentials: this repo already knows "measure, do not reason" for root causes
+(`devdocs/dev/debugging-playbook.md`) and *"every wrong root cause in this
+repo's history was a plausible story nobody diffed against an oracle"*
+(CLAUDE.md). This is the same failure one level up — not a wrong conclusion, a
+wrong **premise**, and premises are less examined than conclusions because
+nobody remembers deciding them.
+
+**The practical form: when a chain of reasoning rests on a fact you did not
+personally measure, price the check before building the workaround.** Here the
+check was one command and the workaround was an afternoon.
+
 ## The measurement, kept because it is what makes the above checkable
 
 **`via` has carried `/home/ian/.ssh/id_ed25519` since 2026-06-22**, fingerprint
