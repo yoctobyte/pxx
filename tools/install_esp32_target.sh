@@ -38,6 +38,13 @@ have() {
   command -v "$1" >/dev/null 2>&1
 }
 
+apt_has_candidate() {
+  # True when apt can actually install this name on this release. `apt-cache
+  # policy` prints `Candidate: (none)` for a name that exists only as a
+  # transitional/renamed stub, which is exactly the case worth catching.
+  [ -n "$(apt-cache policy "$1" 2>/dev/null | awk '/Candidate:/ && $2 != "(none)" {print $2}')" ]
+}
+
 install_host_packages() {
   case "$ESP_IDF_INSTALL_HOST_PACKAGES" in
     0|no|false|skip)
@@ -64,7 +71,22 @@ install_host_packages() {
   if ! sudo apt-get update; then
     say "warn: apt-get update failed (likely an unrelated broken repo); continuing"
   fi
-  sudo apt-get install -y \
+  # Resolve each name against what this release actually ships before asking
+  # for it. Ubuntu's 64-bit-time_t transition renamed a pile of runtime
+  # libraries to a `t64` suffix, so on 24.04+ `libglib2.0-0` has NO candidate
+  # (`libglib2.0-0t64` is the package) -- and with `set -e` one such name makes
+  # `apt-get install` exit non-zero and takes the whole ESP-IDF install with it,
+  # before a single byte is cloned. Measured on plexus 2026-08-27: libglib2.0-0
+  # unavailable, libglib2.0-0t64 already installed.
+  #
+  # So: keep a name that has a candidate, else try `<name>t64`, else drop it and
+  # SAY SO. Dropping is right for this list -- it is host prerequisites, and
+  # ESP-IDF's own install.sh fails loudly later if something is genuinely
+  # missing -- but a silent drop would turn a packaging change into a mystery
+  # build error, which is what the `warn:` line is for.
+  pkgs=''
+  missing=''
+  for pkg in \
     git wget flex bison gperf \
     python3 python3-pip python3-venv \
     cmake ninja-build ccache \
@@ -72,6 +94,19 @@ install_host_packages() {
     dfu-util libusb-1.0-0 \
     libgcrypt20 libglib2.0-0 libpixman-1-0 libsdl2-2.0-0 libslirp0 \
     qemu-user qemu-user-static binfmt-support
+  do
+    if apt_has_candidate "$pkg"; then
+      pkgs="$pkgs $pkg"
+    elif apt_has_candidate "${pkg}t64"; then
+      say "note: $pkg -> ${pkg}t64 (time_t transition)"
+      pkgs="$pkgs ${pkg}t64"
+    else
+      missing="$missing $pkg"
+    fi
+  done
+  [ -n "$missing" ] && say "warn: no candidate for:$missing (skipped)"
+  # shellcheck disable=SC2086
+  sudo apt-get install -y $pkgs
 }
 
 ensure_idf_checkout() {

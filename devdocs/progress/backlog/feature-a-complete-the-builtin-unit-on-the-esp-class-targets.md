@@ -1,14 +1,76 @@
 ---
 slug: feature-a-complete-the-builtin-unit-on-the-esp-class-targets
 track: A+S
-prio: 50
+prio: 60
 type: feature
 blocked-by: []
 status: backlog
-summary: "\"builtin is not available on ESP\" is not a limitation — it is three layers of `not on ESP` guards that were never revisited, and defeating them is far cheaper than the hosted-xtensa profile that was filed to work around the same wall. Measured: with the unit's own ifdefs off, BOTH ESP targets get past the UpCase wall, and what remains is two already-filed gaps plus a softfloat ordering fix."
+summary: "Not \"builtin is unavailable on ESP\" but \"xtensa is hardcoded as bare-metal on both axes, whatever the profile\". Measured under --platform=esp (the IDF-linked route): esp32c3 compiles Variant + UpCase + Str with the FULL builtin unit; esp32s3 is refused. riscv32-under-IDF already proves the unit works on an ESP target — xtensa, the user's own S2/S3 hardware, is the one locked out, and it is locked out of the profile where FreeRTOS, VFS and sockets actually live."
 ---
 
 # Complete the `builtin` unit on the ESP-class targets
+
+> **Re-scoped 2026-08-27 after the user's second correction:** *"the IDF-linked
+> route is more interesting than the bare metal route, bare tests the compiler
+> but misses out on a lot of functionality."* That reframes this ticket, and
+> measuring against the IDF profile makes the defect much sharper than the
+> version below found.
+>
+> Under **`--platform=esp`** (relocatable `.o` linked by `idf.py` into a
+> FreeRTOS app — what `tools/esp_run.sh` builds and what actually ships):
+>
+> | | `Variant` + `UpCase` + `Str` |
+> | --- | --- |
+> | `--target=riscv32 --platform=esp` (esp32c3) | **compiles** — the full `builtin` unit, 341416B |
+> | `--target=xtensa --xtensa-abi=windowed --platform=esp` (esp32s3) | **`UpCase: builtin helper unavailable ... not on ESP`** |
+>
+> So it is **not** "the ESP targets cannot have `builtin`" — riscv32 under IDF
+> already has all of it, on an ESP target, today. It is that **xtensa is
+> hardcoded as bare-metal on both axes, regardless of profile**:
+>
+> ```pascal
+> { util.inc — the COMPILER side }
+> Result := (TargetArch = TARGET_XTENSA) or
+>           ((TargetArch = TARGET_RISCV32) and EspBareBoot);
+>
+> { builtinheap.pas — the UNIT side }
+> {$ifdef CPU_XTENSA}{$define PXX_ESP}{$endif}
+> {$ifdef CPU_RISCV32}{$ifdef PXX_ESP_BARE}{$define PXX_ESP}{$endif}{$endif}
+> ```
+>
+> Both read "xtensa **means** bare metal". That was true before the IDF profile
+> existed and is now wrong, and it is wrong in the worst place: xtensa is the
+> **S2/S3**, the user's own hardware, and it is locked out of precisely the
+> profile where FreeRTOS tasks, IDF drivers, VFS file I/O and sockets live.
+>
+> **This also retires a judgement call from the version below.** It said
+> `{$ifndef PXX_ESP}` around **file I/O** was "a genuine platform statement".
+> It is not — under IDF, basic VFS file I/O works (CLAUDE.md's own ESP note:
+> *"sockets and basic VFS file I/O are what work"*). The exclusions are keyed on
+> the **ISA** where they should be keyed on the **profile**, and that single
+> mis-keying is the bug. `--esp-profile=bare` is the axis that legitimately
+> withholds an OS; `TARGET_XTENSA` is not.
+>
+> **The repo already knew.** `test-esp-idf`'s own comment, on the timer demo:
+> *"passing a 64-bit argument to a C function was broken on BOTH backends for a
+> month with no symptom other than a callback that never fired. **Nothing in
+> the bare-metal suite calls into C, so nothing there could have caught it.**"*
+> That target builds and runs on esp32c3 AND esp32s3 under the Espressif qemu —
+> and it is skipping too, for want of IDF
+> ([[task-s-install-esp-idf-to-turn-on-the-skipped-esp-execution-rows]]).
+>
+> **Revised plan — do this first, it is smaller than what follows:**
+> 1. make `TargetIsEspClass` and the units' `PXX_ESP` **profile-aware**, so
+>    xtensa-under-IDF behaves like riscv32-under-IDF (which is proven working);
+> 2. [[bug-a-xtensa-cannot-lower-an-int64-to-float-conversion]] — measured to be
+>    the next wall behind the guards, and already filed;
+> 3. [[bug-a-xtensa-codegen-has-no-variant-support]] — already filed;
+> 4. only then consider what, if anything, genuinely belongs behind
+>    `PXX_ESP_BARE` for the bare profile.
+>
+> Everything below stands as the bare-profile measurement and is still the
+> reference for the three guard layers; read it after the above.
+
 
 Filed after the user pushed back on
 [[feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle]]: *"builtins not
