@@ -101,4 +101,4 @@ GREEN · pascal-conformance 346/0/170/34 · c-conformance 220/0 · fgl 7/7 ·
 `fpc_diff_probe.sh` 0 new against master.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 6457836d4.
