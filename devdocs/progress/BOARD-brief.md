@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:23 blocked:7 backlog:266 backlog_new:2 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2501 rejected:45`
+`working:1 unfinished:23 blocked:7 backlog:266 backlog_new:2 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2503 rejected:45`
 
 ## Held now (working/ — do not touch these files)
 
@@ -62,11 +62,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` feature-p-delphi-string-helpers
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 70] [C]` regression-test-emit-obj-cxtensa-obj
-- `[p 70] [N]` regression-test-nilpy-test-nilpy-star-operand-in-a-variant
-- `[p 70] [N]` regression-test-nilpy-test-nilpy-variant-operand-arith-dunders
+- `[p 70] [T]` regression-tools-devtest-00-2
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
+- `[p 65] [N]` bug-n-a-static-star-operand-over-a-non-list-iterable-passes-nothing
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 65] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - `[p 65] [B]` feature-b-text-file-surface-seekeof-rename-settextbuf

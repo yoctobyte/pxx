@@ -51,7 +51,34 @@ begin
       zeroBytes := TARGET_PTR_SIZE;                       { scalar AnsiString }
   end
   else if Syms[i].TypeKind = tyVariant then
-    zeroBytes := TypeSize(tyVariant)
+  begin
+    { STATIC ARRAY of Variant -- `av: array[0..3] of Variant`. Exactly the
+      AnsiString arm above, one indirection out, and it was missing: the arm
+      zeroed ONE element's worth (16 bytes) for an array of any length, so
+      av[0] started empty and av[1..] held stack garbage. A Variant's first
+      word is its TAG, and the very first `av[i] := x` RELEASES the old
+      contents -- so whenever the frame garbage under av[1..] happened to
+      carry a tag the release path recognises, that store decremented a
+      refcount through a payload the slot never owned.
+
+      Measured in pylib's PyBoundPairCallKwBody, whose `av: array[0..3] of
+      Variant` is exactly this shape: `for i := nPos to 3 do av[i] := pynone`
+      ran `decq -0x10(%rax)` with rax pointing 40 bytes into an unrelated
+      bound-pair record, decrementing that record's Sig field by one. The pair
+      then read its signature one byte early and refused a legal two-argument
+      call as "missing 510 required positional argument(s)".
+
+      Same shape and the same red herring as
+      bug-a-a-local-array-of-interfaces-is-not-zero-initialised: it is
+      invisible on a clean stack, so it appears and disappears when an
+      unrelated routine changes the frame in front of it -- which is why it
+      surfaced as a NilPy regression with no NilPy change behind it.
+      regression-test-nilpy-test-nilpy-star-operand-in-a-variant }
+    if Syms[i].IsArray then
+      zeroBytes := Syms[i].ArrLen * TypeSize(tyVariant)
+    else
+      zeroBytes := TypeSize(tyVariant);
+  end
   { RecordNeedsZeroInit, not RecordHasManagedFields: an interface FIELD is
     excluded from the finalization predicate on purpose (releasing it under
     the record heap lock deadlocks), but it still has to START NIL — nilling

@@ -5049,6 +5049,20 @@ test-core: $(COMPILER)
 	# lottery. The pinned binary SEGFAULTS on this file.
 	./$(COMPILER) test/test_interface_local_array_zero_init.pas $(TESTTMP)/test_ifarrzi26
 	test "$$($(TESTTMP)/test_ifarrzi26 | tail -1)" = "total ok 5 / 5"
+	# ...and the SAME arm-shaped hole one type over: a local `array[0..N] of
+	# Variant` was zero-initialised for ONE ELEMENT only, because
+	# ManagedLocalZeroBytes' variant arm returned TypeSize(tyVariant) without
+	# asking IsArray the way its AnsiString neighbour does. av[0] started empty,
+	# av[1..] held stack garbage, and a Variant's first word is its TAG -- so the
+	# first `av[i] := x` released a payload the slot never owned. Measured in
+	# pylib's own PyBoundPairCallKwBody: it decremented an unrelated bound-pair
+	# record's Sig field by one, the dispatcher read that signature a byte early,
+	# and a legal two-argument call through a callable value came back as
+	# "missing 510 required positional argument(s)". Invisible on a clean stack,
+	# so the test dirties its own. Counts are FPC 3.2.2's; the pinned binary
+	# scores 4 / 8 on this file.
+	./$(COMPILER) test/test_variant_local_array_zero_init.pas $(TESTTMP)/test_vararrzi26
+	test "$$($(TESTTMP)/test_vararrzi26 | tail -1)" = "total ok 8 / 8"
 	# A record holding an interface field, both halves of the same design fault:
 	# RecordHasManagedFields excluded a COM interface field because FINALIZING one
 	# under the non-reentrant record heap lock deadlocks -- and that single
