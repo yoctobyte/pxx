@@ -7119,14 +7119,16 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-08-27T19:14:18Z",
+  "date": "2026-08-27T23:25:33Z",
   "red": [
+   "test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy",
+   "test-nilpy#src:test/test_nilpy_startswith_tuple.npy",
    "test-emit-obj#src:test/cxtensa_obj.c@1",
    "tools-devtest#00"
   ],
-  "sha": "20664a1576d3ac6f9398051a6626102e86f63357",
+  "sha": "83468c5462d40294a7e7a5885a61fbac20077285",
   "tier": "full",
-  "ver": "v388",
+  "ver": "v389",
   "verdict": "RED"
  },
  "renamed_from": [
