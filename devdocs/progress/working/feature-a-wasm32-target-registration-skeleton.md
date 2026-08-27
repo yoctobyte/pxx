@@ -5,8 +5,8 @@ track: A
 prio: 60
 type: feature
 blocked-by: []
-status: backlog_new
-owner: ""
+status: working
+owner: frank-optimize
 created: 2026-08-27
 unblocks: feature-target-wasm
 summary: "Register TARGET_WASM32 across the 9 shared files a new target touches — constant, --target= arm, TARGET_PTR_SIZE := 4, and an explicit Error('wasm32: not implemented') in every dispatch chain — with NO codegen. Measured from bd49a5953, the commit that added riscv32+xtensa: ~270 lines over 9 shared files. Landing it FIRST means the wasm branch adds only new files and never merges a shared file until Phase 4. Also closes the practical half of refactor-a-target-dispatch-chains-fail-open."

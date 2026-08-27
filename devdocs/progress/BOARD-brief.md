@@ -5,10 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:21 blocked:8 backlog:265 backlog_new:2 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2525 rejected:46`
+`working:2 unfinished:21 blocked:8 backlog:265 backlog_new:1 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2525 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
+- `feature-a-wasm32-target-registration-skeleton` [A] — owner: frank-optimize
 - `feature-target-wasm` [A+B] — owner: frankwasm
 
 ## unfinished (21) — parked mid-flight; re-claim, do not duplicate
@@ -46,7 +47,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 276, ranked
+## Ready — top 30 of 275, ranked
 
 - `[p 85] [O]` feature-opt-o3-register-pressure
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
@@ -79,4 +80,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
 
-_246 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_245 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

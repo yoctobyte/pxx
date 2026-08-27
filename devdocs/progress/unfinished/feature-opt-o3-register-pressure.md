@@ -819,3 +819,112 @@ hot loop shows 24% on its common path. Those are not in conflict — a static co
 weights cold code equally — but it does mean **W1 must be justified on a dynamic
 profile, not a static one**, and its win will land on hot loops rather than on
 overall code size.
+
+## 2026-08-27 (frank-optimize) — W1 sized before building: it is worth **1.4%**. The prize is the residency ADMISSION METRIC, and it is already shipped
+
+**A loop-carried accumulator must never sit in the frame while GPRs idle.**
+
+Dispatched to size W1 (the emit-time operand scheduler) before committing to it,
+after frankA's run above found the operand funnel — 5 of 21 instructions on the
+common path — and concluded "a register allocator cannot help a body that moves
+every value into rax before touching it". That is true. It is also true that
+*removing* those movs helps nothing, and this slice measures both halves.
+
+Nothing was built. No pass changed. The whole result is one A/B harness.
+
+### Method — hand-written asm, calibrated at BOTH ends before it was used
+
+`Run`'s actual `-O3` disassembly (17 instructions on the common path, `i`
+resident in r12, `s`/`j` in the frame) was transcribed into raw asm, then
+successively optimized into five variants, all six timed in one process.
+The next reader's first instinct will be to distrust a hand-written asm model,
+so it was calibrated against the two things it sits between:
+
+| | model | real binary |
+| --- | --- | --- |
+| shipped `-O3` body | 1.147 s | **1.14 s** (pxx `-O3`) |
+| ideal allocation | 0.171 s | **0.23 s** (`fpc -O2`) |
+
+It reproduces the thing being modelled *and* the target being chased. A model
+calibrated at neither end is a story; this one is evidence.
+
+Every variant returns the identical result (`-200000002`), which is also what
+pxx at `-O0/-O1/-O2/-O3` and `fpc -O2` print for the same source.
+
+### The decomposition
+
+Binary sha256 `591ae8160f69...` (self-hosted fixedpoint at HEAD, confirmed
+different from `pinned`). Box at load 7-13 (Track T's watcher); `%U` user time,
+A/B alternating, min of 5. `three.pas` = `j := i xor s; s := s + j` over
+200M iterations, three `LongInt` locals in a procedure.
+
+| variant | s | cyc/iter | vs shipped |
+| --- | --- | --- | --- |
+| V0 — the shipped `-O3` body (17 insns) | 1.142 | 12.00 | 1.00x |
+| **V1 — W1 applied: all three `mov %rN,%rax` funnels + the dead round trip gone (11 insns)** | **1.133** | 11.89 | **1.01x** |
+| V4 — `s` also resident, dual-write kept | 0.702 | 7.37 | 1.63x |
+| V2 — W1 + store->reload elimination | 0.630 | 6.61 | 1.81x |
+| V5 — all three resident, dual-write kept | 0.368 | 3.86 | 3.10x |
+| V3 — true allocation, no frame traffic (fpc-like) | 0.171 | 1.79 | 6.68x |
+
+**W1 buys 1.4% on the exact loop that motivated it.** Deleting 6 of 17
+instructions moved nothing measurable: those instructions were never on the
+critical path. (Mechanism is almost certainly move elimination at rename on this
+Ivy Bridge Xeon, but the measurement does not depend on the explanation.) The
+5-of-21 static share is real and irrelevant — **do not build the operand
+scheduler for speed.** Its residual value is code size (-35% on this body,
+~1.2% image-wide by frankA's sweep), which is a different and much weaker case.
+
+What the 12 cyc/iter actually is: **two frame round-trips on the loop-carried
+dependency chain at ~5 cycles each** (store-to-load forwarding), plus ~2 cycles
+of real work. Each variant above removes exactly one such round trip and pays
+back exactly one forwarding latency — V1->V2 removes `j`'s store+reload (-5.3
+cyc), V2->V3 removes `s`'s (-4.8 cyc). The model is that simple.
+
+### Why the threshold experiment came back empty — this CONFIRMS frankA's run, it does not correct it
+
+`PXXDBG=a.resid` (frankA's probe, and it is what made this cheap) on this body:
+
+```
+TALLY proc=Run sym=i count=4 ... freegpr=4     ASSIGN sym=i reg=r12
+TALLY proc=Run sym=s count=3 ... freegpr=4
+TALLY proc=Run sym=j count=2 ... freegpr=4
+```
+
+**`s` misses the `> 3` cut by one, with three registers sitting idle.** Giving
+`s` a register is worth 1.63x on its own (V4); all three, 3.10x (V5) — keeping
+the dual-write exactly as designed.
+
+frankA's `three.pas` already had `s` resident at count 5, so lowering the
+threshold there only ever admitted `j` — one load per iteration, the load-poor
+candidate, correctly worth ~0. Their conclusion *"the threshold stays at > 3"*
+is right. The measurement's actual content is that **the METRIC is wrong, not
+the threshold** — and their own corollary, *rank by LOADS, not accesses*, turns
+out to be the pass itself rather than a footnote for a future W2. Two runs from
+different angles converging on the same mechanism.
+
+### Revised ranking (adopted by the coordinator, 2026-08-27)
+
+1. **Residency admission by LOADS, and never leave free GPRs idle** — a small
+   change inside the shipped `UnifiedResidencyAssign`. Up to 3.1x on tight
+   scalar loops. **Land behind `-O3`:** unlike today's promotions this changes
+   *which* programs get *which* registers, so it is not gate-constant — full
+   `-O0/-O1/-O2/-O3` + `fpc -O2` differential, self-host fixedpoint per commit.
+2. **Store->reload elimination for resident destinations** — the `ReloadElimSym`
+   exclusion whose stated reason stopped being true at `e7c0d1d2a`.
+3. **Drop the dual-write inside a loop** (register authoritative, frame re-synced
+   at exits). V5->V3 is a further 2.15x. This is the real W2 and the big job.
+4. **W1** — deprioritised to a code-size item.
+
+### Scope limit, stated up front
+
+This bounds **tight scalar user code** (mandelbrot-class). It does **not** bound
+the self-compile, which this ticket already measures as memory-bound and which
+took only 1.05x from residency. When item 1 lands, `make compiler/pascal26` gets
+measured and reported as **its own number even if it is ~1.0x** — a pass that is
+3x on mandelbrot and 1.0x on the compiler is still worth having; a pass claimed
+at 3x that nobody separated is how a ticket ends up carrying a stale 1.29x.
+
+Harness (six asm variants + driver) was scratch, not committed — it is ~120
+lines of asm and the bodies are transcribed above and in frankA's disassembly
+table, which is what a re-run needs.

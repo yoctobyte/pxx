@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| feature-a-wasm32-target-registration-skeleton | A | 60 | feature | Register TARGET_WASM32 across the 9 shared files a new target touches — constant, --target= arm, TARGET_PTR_SIZE := 4, and an explicit Error('wasm32: not implemented') in every dispatch chain — with NO codegen. Measured from bd49a5953, the commit that added riscv32+xtensa: ~270 lines over 9 shared files. Landing it FIRST means the wasm branch adds only new files and never merges a shared file until Phase 4. Also closes the practical half of refactor-a-target-dispatch-chains-fail-open. | — |
 | feature-target-wasm | A+B | 60 | feature | NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim. | — |
 
 ## unfinished (21)
@@ -323,11 +324,10 @@ _none_
 | task-d-document-warn-ignored-directives | D | 20 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (2)
+## backlog_new (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| feature-a-wasm32-target-registration-skeleton | A | 60 | feature | Register TARGET_WASM32 across the 9 shared files a new target touches — constant, --target= arm, TARGET_PTR_SIZE := 4, and an explicit Error('wasm32: not implemented') in every dispatch chain — with NO codegen. Measured from bd49a5953, the commit that added riscv32+xtensa: ~270 lines over 9 shared files. Landing it FIRST means the wasm branch adds only new files and never merges a shared file until Phase 4. Also closes the practical half of refactor-a-target-dispatch-chains-fail-open. | — |
 | refactor-a-target-dispatch-chains-fail-open | A | 50 | refactor | Not a missing-helper ticket: TARGET_PTR_SIZE exists and is read at 129 sites. The narrow, verified gap is that several per-target if/else-if chains have no final else, so adding target #7 (wasm32) or #8 (riscv64) matches no arm and configures nothing, silently. lexer.inc:936 is the worked example. Fix is a mandatory else that Errors, not a collapse of the 180 TargetArch sites — util.inc:87 already documents why collapsing is wrong. | — |
 
 ## experimental (20)
@@ -650,7 +650,6 @@ _none_
 - [p 60] [U] decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - [p 60] [A] bug-a-cross-bootstrap-aarch64-overflows-max-code
 - [p 60] [N] feature-a-declaration-phase
-- [p 60] [A] feature-a-wasm32-target-registration-skeleton
 - [p 60] [N] feature-nilpy-process-exec-binding
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application
 - [p 60] [O] feature-opt-emitasmx64-reparses-fixed-strings
