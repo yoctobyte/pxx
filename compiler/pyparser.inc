@@ -15090,6 +15090,35 @@ begin
       Result := PyMakeDynCall(PyMakeDynAttrGet(baseNode, mname));
       Exit;
     end;
+    { ...or a procedural FIELD holding a function value — `self.fn = named` then
+      `h.fn(1, 2)`, which is how a dispatch table is written. The VARIANT-receiver
+      route has claimed this for a while (the two passes around
+      PyMakeVariantFieldCall's call site: a field WITH a recorded signature, then
+      a plain variant Callable field); the STATIC-receiver route never did, so a
+      receiver the frontend knew MORE about was the one that failed — the same
+      inversion bug-nilpy-a-keyword-call-through-a-statically-unknown-callee
+      -does-not-compile describes for keyword arguments.
+
+      Measured before this line existed: `h = H(); g = h.fn; g(1, 2)` answered 3
+      while `H().fn(1, 2)` was `H has no method .fn()`. Reading the field and
+      calling it are each fine; only writing them as one statement failed.
+
+      Same builder as the variant route, not a second lowering — it emits the
+      pyvar_callv<n> that tells all four callable shapes apart at run time, so
+      the missing signature a plain class's Callable field carries is no
+      obstacle. Only when the class really declares the field: an unknown name
+      still gets the diagnostic below, so typo detection is unchanged.
+      bug-n-a-field-assigned-a-module-level-def-has-no-inferable-type }
+    if isNilPy then
+    begin
+      k := FindUField(ci, mname);
+      if (k >= 0) and ((UFldProcSig[k] >= 0) or
+                       (IntToTypeKind(UFldTk[k]) = tyVariant)) then
+      begin
+        Result := PyMakeVariantFieldCall(baseNode, ci, mname, UFldProcSig[k]);
+        Exit;
+      end;
+    end;
     Error('Nil Python: ' + PyRawName(UClsNOff[ci], UClsNLen[ci]) + ' has no method .' + mname + '()');
   end;
   mmi := PyPromoteOverloadByKw(ci, mmi, mn);
@@ -27637,6 +27666,51 @@ begin
   end;
 end;
 
+function PyModuleGlobalIsDef(const name: AnsiString): Boolean;
+{ Is `name` a module-level `def` — a FUNCTION used as a value?
+
+  Third member of the PyModuleGlobalLiteralType / PyModuleGlobalCtorClass family
+  and it exists for the identical reason: the class-field pre-pass runs BEFORE
+  PyRegisterDefShells (see the two call sites, which order them and say why), so
+  at field-inference time no Proc for a module-level def exists yet and
+  FindProcInUnit cannot answer. That was measured, not assumed — the first cut
+  of this asked FindProcInUnit and changed nothing at all. So the tokens are the
+  only source, exactly as they are for a literal global.
+
+  Depth 0 and at statement start, matching the sibling scans: a `def` nested
+  inside a class or another def is not a module-level binding and must not
+  answer for this name. Per-name and on demand, storing nothing, for the same
+  reason spelled out on PyModuleGlobalLiteralType — seeding a shared table from
+  module scope collided with def-local inference.
+  bug-n-a-field-assigned-a-module-level-def-has-no-inferable-type }
+var k, d: Integer;
+    atStart: Boolean;
+begin
+  Result := False;
+  d := 0;
+  k := PyScanLo;
+  while k < MainProgramTokCount do
+  begin
+    if Tokens[k].Kind = tkIndent then Inc(d)
+    else if Tokens[k].Kind = tkDedent then Dec(d)
+    else if d = 0 then
+    begin
+      atStart := (k = PyScanLo) or
+                 (Tokens[k - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon]);
+      { tkFunction is what the lexer gives `def` (see PyRegisterDefShells, which
+        scans for exactly this at exactly this depth). }
+      if atStart and (Tokens[k].Kind = tkFunction) and
+         (k + 1 < MainProgramTokCount) and (Tokens[k + 1].Kind = tkIdent) and
+         (GetTokenStr(k + 1) = name) then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end;
+    Inc(k);
+  end;
+end;
+
 function PyModuleGlobalLiteralType(const name: AnsiString): TTypeKind;
 { What type does the module-level LITERAL global `name` hold — `NEW = "NEW"`,
   `LIMIT = 7`? Answers tyUnknown for anything it cannot read straight off the
@@ -32618,6 +32692,39 @@ begin
                 begin
                   tk := tyClass;
                   fldRec := REC_UCLASS_BASE + k2;
+                end
+                else if PyModuleGlobalIsDef(GetTokenStr(j + 4)) then
+                begin
+                  { ...and the same global holding a FUNCTION: `self.fn = named`,
+                    a module-level def used as a value. Third member of this
+                    family and the same blind spot — the name is bound outside
+                    the class body, so none of the scanners above sees it, and
+                    the field was rejected outright with "cannot infer the type
+                    of field self.fn - annotate it" for a shape that needs no
+                    annotation in Python.
+
+                    It is the LOCAL rule that settles the answer, not a new one:
+                    `g = named` at module level already yields a variant
+                    carrying the callable (feature-nilpy-function-values), and a
+                    field is the other spelling of the same binding — one
+                    concept, two spellings, only one of them wired
+                    (devdocs/dev/normalise-dont-special-case.md). It also
+                    matches what the ctor-PARAMETER arm just below already
+                    answers for `self.on_next = on_next`, where the parameter
+                    routinely IS a function: variant, so the runtime tag
+                    travels with the value.
+
+                    Variant and not a recorded signature, deliberately. The
+                    dispatcher handles a callable variant including its KEYWORD
+                    arguments -- measured through a dict value, a list element,
+                    a parameter and a branch result -- so a static signature
+                    here would buy nothing and would be wrong the moment the
+                    field is reassigned to a different function, which is
+                    exactly what a dispatch table does.
+                    bug-n-a-field-assigned-a-module-level-def-has-no-inferable-type }
+                  tk := tyVariant;
+                  fldRec := REC_NONE;
+                  fldSig := -1;
                 end;
               end;
             end;

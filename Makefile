@@ -1450,6 +1450,21 @@ test-nilpy: $(COMPILER)
 	# bytes/bytearray segfaulted, TPyBytes having no parameterless Create.
 	./$(COMPILER) test/test_nilpy_bytearray_unbound_and_subclass.npy $(TESTTMP)/test_nilpy_baunbound26
 	$(TESTTMP)/test_nilpy_baunbound26 | diff -u test/test_nilpy_bytearray_unbound_and_subclass.expected -
+	# a KEYWORD argument to a callee the frontend cannot name at the call site.
+	# `a = mk(1); a(x=5)` was `undefined variable (x)` -- the keyword NAME parsed
+	# as an expression, because the lowering only fired when a candidate callee
+	# resolved. It inverted the usual expectation: the same call through a
+	# PARAMETER, known strictly LESS about, worked. Fixed by the callable-carrier
+	# work; gated here because a COMPILE error admits no runtime check.
+	./$(COMPILER) test/test_nilpy_keyword_call_unknown_callee.npy $(TESTTMP)/test_nilpy_kwunknown26
+	$(TESTTMP)/test_nilpy_kwunknown26 | diff -u test/test_nilpy_keyword_call_unknown_callee.expected -
+	# a class field assigned a module-level DEF -- how a dispatch table is
+	# written. Two compile refusals: the field pre-pass runs BEFORE the def
+	# shells so only the tokens can type `self.fn = named`, and the STATIC
+	# receiver route had no procedural-field arm where the VARIANT route has had
+	# two. The rebound row is why the field is a variant with no signature.
+	./$(COMPILER) test/test_nilpy_field_holding_a_def.npy $(TESTTMP)/test_nilpy_fielddef26
+	$(TESTTMP)/test_nilpy_fielddef26 | diff -u test/test_nilpy_field_holding_a_def.expected -
 	./$(COMPILER) test/test_nilpy_genexpr_is_consumed_once.npy $(TESTTMP)/test_nilpy_genonce26
 	$(TESTTMP)/test_nilpy_genonce26 | diff -u test/test_nilpy_genexpr_is_consumed_once.expected -
 	./$(COMPILER) test/test_nilpy_str_format_keyword_fields.npy $(TESTTMP)/test_nilpy_fmtkw26
