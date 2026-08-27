@@ -5912,3 +5912,19 @@ result); it simply no longer splits this lane.
   clone.
 - A compiler or library gap found while documenting → **file a ticket in the
   owning lane**, do not fix code under D.
+
+### STANDING — grep for the CLAIM, not the WORDING (2026-08-27)
+
+Third instance of one shape in a day. A sweep for known wordings
+(`experimental|staged|in development`) found four stale claims on the website;
+a sweep of the **claim-space** before editing found six. The miss was a footnote
+restating the same claim in different prose.
+
+**A string search answers "where does this sentence appear". That is a different
+question from "where does the site say this thing"** — prose restates, only the
+claim is invariant. Same correct-reading-of-the-wrong-instrument failure as
+`ListAgents`-for-Track-T and the untested "via has no push key", in search
+rather than in measurement.
+
+**Sweep before editing, not after.** The cheap pass is worthless once you have
+already fixed the instances you knew about.

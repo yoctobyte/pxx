@@ -3,11 +3,60 @@ track: W
 prio: 55
 type: docs
 blocked-by: []
-summary: "The website bills NilPy as experimental in four places — the compliance table says `Experimental`, the frontpage and about say `staged`, and the site-wide meta description says `in development` — while `docs/targets/nil-python.md` in the pxx repo already says the opposite (mainline frontend, peer of Pascal and C, gated by test-nilpy). Owner's call 2026-08-27: Python is a first-class citizen now, open bug tickets notwithstanding. Content files live in the website repo, so this is W by file ownership even though the work is D-shaped. ALSO on the same page, owner 2026-08-27: C++ is billed as `Never` / `deliberately never` — the substance is right and stays, but soften the absolute. Never say never."
-status: backlog
+summary: "RESOLVED 2026-08-27, verified live at 4beadde. nilpy now reads Supported (fidelity target: CPython observable behaviour), C++ reads Not planned, and the site-wide meta description says 'Pascal, C and Python compiler'. NOTE it was SIX locations, not the four this ticket listed — see the grep lesson below. Originally: the website billed NilPy as experimental in four places — the compliance table says `Experimental`, the frontpage and about say `staged`, and the site-wide meta description says `in development` — while `docs/targets/nil-python.md` in the pxx repo already says the opposite (mainline frontend, peer of Pascal and C, gated by test-nilpy). Owner's call 2026-08-27: Python is a first-class citizen now, open bug tickets notwithstanding. Content files live in the website repo, so this is W by file ownership even though the work is D-shaped. ALSO on the same page, owner 2026-08-27: C++ is billed as `Never` / `deliberately never` — the substance is right and stays, but soften the absolute. Never say never."
+status: done
 ---
 
 # The website still bills NilPy as experimental; the docs already say otherwise
+
+## RESOLVED 2026-08-27 — shipped as `4beadde`, verified from the public internet
+
+Verified by `frank2-af` with a plain `curl`, independently of the origin-side check:
+
+```
+<meta name="description" content="PXX is a from-scratch Pascal, C and Python
+  compiler — self-hosting, cross-compiling to several CPU targets, highly FPC-
+  and C99-compatible, with nilpy compiling Python to native binaries.">
+```
+
+| row | status | fidelity target |
+| --- | --- | --- |
+| nilpy | **Supported** | CPython's **observable behaviour** — divergences filed as bugs |
+| C++ | **Not planned** | "No plans to implement — see below" |
+
+`/` and `/about/` carry no remaining `staged` / `in development` / `never`. The
+one `out of scope` still on `/compliance/` is the **C row** — "C99 — GCC
+extensions out of scope" — which is correct and unrelated.
+
+`ianweb` made the nilpy fidelity claim **harder**, not softer: "Python syntax
+only" became CPython observable-behaviour parity with divergences filed as bugs,
+lifted from `docs/targets/nil-python.md`. That is the right call and worth
+noting — the page had understated the ambition and overstated the limits at the
+same time, and it gives the deep NilPy queue its honest reading: an exacting
+reference target, not a fragile frontend.
+
+## THE GREP LESSON — it was SIX locations, not four
+
+The table below listed four. There were six. The miss was `about.md:59`, a
+footnote under the About page's footnote list, carrying both "Staged —" and a
+*second independent copy* of the library-ecosystem claim.
+
+**Why it evaded the sweep:** the four were found by grepping the **wordings
+already known** — `experimental|staged|in development`. The sixth phrased the
+same claim differently, in prose reachable only through a footnote link.
+`ianweb` found it by grepping the **claim-space** across all of
+`pxxweb/content/` before editing — `staged|experimental|in development|out of
+scope|never` — which cost seconds.
+
+**The rule: grep for the CLAIM, not for the WORDING you already found.** A
+string sweep answers "where does this sentence appear", which is a different
+question from "where does the site say this thing" — the same
+correct-reading-of-the-wrong-instrument shape that cost this lane an afternoon,
+in search rather than in measurement. Prose restates; only the claim is
+invariant. Corollary: **sweep before editing, not after**, because the cheap
+pass is worthless once you have already fixed the instances you knew about.
+
+
 
 Owner, 2026-08-27:
 
@@ -122,3 +171,6 @@ The owner called this "a small track D notice". Filed as **W** because D owns
 `docs/**` in the pxx repo and these files are `pxxweb/content/**` in the website
 repo — the letter follows file ownership, which is what the lanes are for. The
 work itself is D-shaped prose. Noted rather than silently reclassified.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.
