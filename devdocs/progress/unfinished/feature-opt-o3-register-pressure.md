@@ -8,7 +8,9 @@ prio: 85
   file-ownership **Track A** — edits the shared `ir_codegen.inc` / `symtab.inc` /
   backends, so it obeys A's no-concurrent-edit rule + self-host gate) — umbrella
   for the next optimization campaign.
-- **Status:** working
+- **Status:** unfinished — parked 2026-08-28 in a clean state (see the PARKED
+  section at the bottom for what landed, what is left and what to read first).
+  Nothing is half-applied. Worked from a
   dedicated optimization checkout (`~/frank-optimize`), because Track O is
   implicitly Track A and two agents in `ir_codegen.inc` at once is the hazard the
   track letters exist to prevent. Nothing is half-applied; every commit passed
@@ -1277,3 +1279,60 @@ residency stress, the boolean loop and both call-heavy shapes (only divergence
 is the pre-existing float print, identical on the pre-change compiler);
 **`-O2` and all four cross targets byte-identical, 48/48**; `gate.sh quick`
 GREEN.
+
+---
+
+## PARKED 2026-08-28 (frank-optimize) — state of the umbrella, and what the next agent should do first
+
+Nothing is half-applied. Every slice below landed green with an `-O3` self-host
+fixedpoint, and `-O2` is byte-identical to where the day started (48/48 corpus
+hashes across all six targets, re-verified after each landing). The tree is a
+safe place to stop.
+
+### What landed today
+
+| sha | slice | measured |
+| --- | --- | --- |
+| `562965e1c` | **item 1** — residency admits and ranks on LOADS, not accesses | **1.9-2.1x** tight scalar loops; neutral elsewhere |
+| `46c8cf47e` | **W1 slice 4** — a resident BINOP right operand needs no `mov rcx` | **1.12-1.17x** on the loop; neutral elsewhere |
+| `cb5e2f564` | item 2 closed as **disconfirmed** (comment corrected, no pass change) | 6 insns of 13,483 |
+
+### What is left, ranked, with the numbers behind each
+
+1. **W1's larger half — a left operand and a destination not forced through
+   rax.** The sizing model bounds the *whole* of W1 at ~1.65x on the loop shape
+   and slice 4 collected ~1.15x of it, so roughly **1.4x remains**. This is a
+   change to `IREmitNode`'s register contract (every arm assumes rax = value),
+   not a deletion — a multi-session project, which is why it was not started
+   here. Model variant C in the 2026-08-28 sizing entry is the target shape.
+2. **Item 3 — register authoritative inside the loop** (~5%, and the harder
+   build: exit re-sync, exception landing pads, every path treating the frame
+   slot as authoritative). Worst effort-to-payoff in the ticket. Re-sized today
+   from a bad 2.15x that had compared two changes at once.
+3. **The promotion experiment** (coordinator's call, deliberately not started):
+   a `-O2` build with the passes promoted, the optimisation-agreement tier, and
+   a corpus-wide timing story — proposed as ONE experiment, not a request to
+   Track T. Blocked on nothing but Track T's queue depth.
+4. Parked, not scoped: beyond model variant C is another ~1.8x and that is a
+   real register allocator.
+
+### Read these two things before touching anything
+
+- **The standing rule at the top of this ticket: re-measure the PRIZE, not just
+  the mechanism.** It fired twice in one session — item 2 was emptied by item 1
+  landing, and W1 was *revived* by it (correctly disconfirmed at 1.4% in the
+  morning, measured at ~1.6x in the evening, because item 1 removed the memory
+  traffic that had been hiding the staging moves). Every remaining number above
+  describes the compiler as of `46c8cf47e` and has a shelf life.
+- **The three measurement traps**, now in `devdocs/dev/debugging-playbook.md`:
+  interleaving fixes WHICH runs you may compare, repetition fixes HOW
+  CONFIDENTLY, amplification fixes WHETHER THE TIMER CAN SEE IT AT ALL. This box
+  produced three false readings in one night and two of them were briefly
+  believed. Every number in this ticket dated 2026-08-28 was taken under all
+  three; numbers dated earlier were not.
+
+### Standing condition on any future slice here
+
+Land the **neutral workload in the same commit as the flattering one** — a
+speedup reported without it is half a measurement. Every entry above from
+`562965e1c` onward follows that.
