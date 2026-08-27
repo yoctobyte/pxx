@@ -173,4 +173,4 @@ repo — the letter follows file ownership, which is what the lanes are for. The
 work itself is D-shaped prose. Noted rather than silently reclassified.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit f6f9879d9.
