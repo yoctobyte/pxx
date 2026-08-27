@@ -463,7 +463,7 @@
  "idle_yield": {
   "aborts": 1,
   "phase": "pin-verify",
-  "target": "0ea457349eadc4177c27dad07d11c0ac570828a3"
+  "target": "a4a34ad1951548485912e6400e34f58d0b89a651"
  },
  "job_reason": {
   "test-emit-obj#src:test/cxtensa_obj.c@1": "in: $TMP | near:  Integer  __pxxrawsyscall  SYS_getuid >>> | pascal26:477: error: undefined variable (SYS_getgid) | in: $TMP | near:  Integer  __pxxrawsyscall  SYS_getgid >>> | pascal26: too many errors, stopping"
