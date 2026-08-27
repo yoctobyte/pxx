@@ -251,4 +251,4 @@ only). The second carries a Track U question — what a conditionally-bound name
 should resolve to — and is noted as such rather than guessed at.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit e52661d74.
