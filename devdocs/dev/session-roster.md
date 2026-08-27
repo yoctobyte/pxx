@@ -5705,7 +5705,23 @@ is dispatched to fill the third slot and nothing should be.
 that raises the bar only when a lane needs breadth; nobody is blocked on it right
 now, but no sha since this morning has been swept.
 
-### The structural finding: Track W's authoring cannot happen where its worker is
+### Track W's SHAPE — two ends, permanently. Not a staffing gap.
+
+Corrected by `ianweb` after the first draft called this a temporary gap. It is
+not; it does not go away when someone gets assigned, so staff it as a shape:
+
+| end | can do | cannot do |
+| --- | --- | --- |
+| **push-capable worker** (a clean clone on a box with GitHub push rights) | author, commit, push, audit the site from outside | see what the origin actually **serves**; restart gunicorn |
+| **`ianweb` on `via`** (holds the tree, no push keys, by policy) | review, deploy, restart, report the served result | push |
+
+Those last two are permanently `via`'s, because only the origin can distinguish
+"not deployed" from "deployed and edge-cached". **So the lane wants a
+push-capable worker PLUS `ianweb` as the deploy-and-verify end — not a single
+owner.** A W ticket is not done when it is pushed; it is done when the origin
+reports what it serves.
+
+### Why the two ends exist (do not "fix" this by granting push keys)
 
 This is the coordination problem of the day and it is not a people problem.
 
@@ -5762,3 +5778,26 @@ six production files, deployed since 2026-08-20, exist in no commit, and their
 backup is on the **same partition** of `via`'s only disk — but it gates nothing.
 It has now been narrowed twice by asking "where does the edit happen?", and was
 a real ticket both times. Narrowing is not weakening.
+
+### Coordinator log — 2026-08-27, first cycle
+
+**Nothing dispatched.** frank1-80 (A) and ianweb (W) are the two workers; that
+is target concurrency. The W queue has unassigned tickets and stays that way —
+the push-capable end is unstaffed since the coordinator role change, and an idle
+queue is cheaper than the wrong session taking it.
+
+**Two items with the human have now STACKED rather than been declined** —
+`ianweb`'s read, and I agree. Both are one-line answers, neither is a `decide-*`:
+
+1. Deploy go/no-go on `e78595d`.
+2. Whether the 18KB patch may cross hosts over the agent channel.
+
+Item 2 has sat through several exchanges. Flagging the stack itself, because two
+unanswered one-liners look like low-priority individually and like a stalled
+lane together.
+
+**Board corrected so a successor is not misled:** the p45's summary now LEADS
+with `NOT DEPLOYED`. It previously read as fixed. Committed is not served, and
+`ready` output shows summaries, so the distinction has to survive at
+summary-line length: *in git, reviewed, fetched, unmerged — visitors still get
+the pre-fix tags.*

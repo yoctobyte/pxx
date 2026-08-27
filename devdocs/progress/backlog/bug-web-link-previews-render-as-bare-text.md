@@ -3,7 +3,7 @@ track: W
 prio: 45
 type: bug
 blocked-by: []
-summary: "pxxc.org declares og:title/og:description/og:url but NO og:image, and twitter:card is `summary` rather than `summary_large_image`. Every link to the site on HN, Reddit, Mastodon, Slack, Discord and LinkedIn renders as a bare text row next to posts that have a picture. Highest click-through gain per hour of work on the site; the fix is one image plus two meta tags."
+summary: "NOT DEPLOYED — visitors still get twitter:card=summary and no og:image. The fix is committed and reviewed as e78595d on the website repo but has not been pulled onto `via`, so it is in git and not on the wire; do not read `committed` as `live`. Originally: pxxc.org declares og:title/og:description/og:url but NO og:image, and twitter:card is `summary` rather than `summary_large_image`. Every link to the site on HN, Reddit, Mastodon, Slack, Discord and LinkedIn renders as a bare text row next to posts that have a picture. Highest click-through gain per hour of work on the site; the fix is one image plus two meta tags."
 status: backlog
 ---
 
@@ -17,7 +17,49 @@ but the social-card surface is empty.
 
 **Fix lands in the private `~/pxx-website` repo, not in this checkout.**
 
-## STATUS 2026-08-27 — code landed, deploy and verification pending
+## STATUS 2026-08-27 — IN GIT, NOT ON THE WIRE. Do not read this as live.
+
+**What visitors get right now: the pre-fix tags.** `twitter:card=summary`, no
+`og:image`. A link to pxxc.org still unfurls as a bare text row. That is the
+one line to carry forward — a future session reading "p45 committed" will
+reasonably assume the site serves a card, and it does not.
+
+State from the origin side, reported by `ianweb` on `via` (the only session that
+can observe it):
+
+| | |
+| --- | --- |
+| `origin/main` | `e78595d` — p45 committed, reviewed line-by-line, recommended |
+| `via` HEAD | `d7b36d845` — 0 ahead / 0 behind; the fix is **fetched but unmerged** |
+| what visitors get | **still the pre-p45 tags** |
+| blocking step | the manual deploy gate, with the human |
+
+**Three distinct states, and the middle one is where this sits:** committed →
+reviewed-and-fetched-but-not-merged → served. Only the third changes what
+anyone sees.
+
+**Why it is not deployed, and why that is correct.** `deploy/DEPLOY-STATUS.md`:
+*"Deploys stay manual on purpose: auto-deploy would let a compromised GitHub
+account run code on the host."* An agent pushing a commit and then asking the
+agent on the host to pull it is structurally what that gate exists to stop —
+benign here, since `ianweb` read every line and recommends it, but "I checked
+and it's fine" is precisely what the gate is designed not to depend on. It is
+the same reasoning that kept push keys off `via`, pointed the other way down the
+same pipe.
+
+**Remaining steps, neither of them a coding task:**
+
+1. A human go/no-go on the deploy.
+2. `git pull` on `via`, then `sudo systemctl restart pxxweb` — Jinja caches
+   compiled templates in the worker, so a pull alone changes nothing served.
+3. The rendered `<meta>` lines captured from the origin and pasted into this
+   ticket. An outside audit cannot distinguish "not deployed" from "deployed and
+   edge-cached", so this verification has to come from `via`.
+
+**This ticket resolves on step 3, not on the commit.** Everything about the p45
+is done except the one step that makes it real.
+
+## What landed (for the record)
 
 Fixed in the website repo as **`e78595d`** ("Link previews: an Open Graph card,
 and the large-image Twitter card"), pushed to `origin/main`.
