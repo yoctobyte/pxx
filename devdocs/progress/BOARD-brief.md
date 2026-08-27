@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:23 blocked:7 backlog:266 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2501 rejected:45`
+`working:1 unfinished:23 blocked:7 backlog:266 backlog_new:1 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2501 rejected:45`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `feature-target-wasm` [A+B] — owner: frankwasm
 
 ## unfinished (23) — parked mid-flight; re-claim, do not duplicate
 
@@ -47,7 +47,7 @@ _none — no lane is locked._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 277, ranked
+## Ready — top 30 of 278, ranked
 
 - `[p 85] [O]` feature-opt-o3-register-pressure
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
@@ -80,4 +80,4 @@ _none — no lane is locked._
 - `[p 62] [N]` bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name
 - `[p 62] [N]` bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name
 
-_247 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_248 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
