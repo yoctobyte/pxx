@@ -1,0 +1,128 @@
+# `c[k] += 1` on a class that subscripts through __getitem__/__setitem__ — the
+# counting idiom, and the single most common thing a dict-like class is written
+# for. It was a NAMED compile-time refusal: "augmented assignment to a
+# __getitem__/__setitem__ subscript is not supported". That refusal was the
+# right call when it landed (the alternative on the table was `c[k] += 1`
+# silently calling pylib's store() while the plain `c[k]` beside it called the
+# override) — this row is the job finished, not the refusal undone.
+# bug-n-an-augmented-subscript-on-a-dunder-class-is-refused
+
+
+class Counts(dict):
+    def __getitem__(self, k):
+        return dict.__getitem__(self, k)
+
+    def __setitem__(self, k, v):
+        dict.__setitem__(self, k, v)
+
+
+c = Counts()
+c["a"] = 0
+c["a"] += 1
+c["a"] += 4
+print(c["a"])
+
+
+class Store:
+    def __init__(self):
+        self.d = {}
+
+    def __getitem__(self, k):
+        return self.d[k]
+
+    def __setitem__(self, k, v):
+        self.d[k] = v
+
+
+# every augmented operator, including `**=`, which has no binary token in this
+# frontend and needed its own arm at all three augmented-assign target shapes
+s = Store()
+s["n"] = 10
+s["n"] += 5
+s["n"] -= 3
+s["n"] *= 2
+s["n"] //= 4
+print(s["n"])
+s["n"] %= 4
+s["n"] **= 3
+print(s["n"])
+s["b"] = 6
+s["b"] &= 3
+s["b"] |= 8
+s["b"] ^= 1
+s["b"] <<= 2
+s["b"] >>= 1
+print(s["b"])
+s["f"] = 7
+s["f"] /= 2
+print(s["f"])
+
+# THE INDEX IS EVALUATED ONCE. The read and the write both reference it, and an
+# AST node used in two places is emitted twice, so a side-effecting index would
+# run twice where CPython runs it once — the exact trap the indexed-property arm
+# one level up already fell into
+# (bug-nilpy-augmented-subscript-evaluates-its-index-twice).
+calls = []
+
+
+def key():
+    calls.append(1)
+    return "n"
+
+
+s[key()] += 1
+print(len(calls), s["n"])
+
+# a receiver reached through an attribute, and through a method body
+class Holder:
+    def __init__(self):
+        self.s = Store()
+        self.s["n"] = 1
+
+    def bump(self):
+        self.s["n"] += 1
+        return self.s["n"]
+
+
+h = Holder()
+print(h.bump(), h.bump())
+h.s["n"] += 10
+print(h.s["n"])
+
+
+# An augmented store READS as well as writes, so it needs BOTH dunders. Half a
+# protocol raises CPython's own TypeError at RUN time — not a compile error, so
+# a try/except around it still compiles and runs its handler.
+class OnlySet:
+    def __setitem__(self, k, v):
+        pass
+
+
+class OnlyGet:
+    def __getitem__(self, k):
+        return 1
+
+
+# (Named receivers, not `OnlySet()["x"] += 1`: an augmented store on a
+# CONSTRUCTION receiver is a separate, pre-existing defect — it does not reach
+# this arm at all and corrupts the parse of a LATER statement. Same at the
+# previous pin. Filed as
+# bug-n-a-dunder-subscript-through-a-dynamically-typed-receiver-is-lost.)
+ws = OnlySet()
+try:
+    ws["x"] += 1
+    print("no raise")
+except TypeError as e:
+    print("TypeError:", e)
+
+rs = OnlyGet()
+try:
+    rs["x"] += 1
+    print("no raise")
+except TypeError as e:
+    print("TypeError:", e)
+
+# the plain (non-augmented) forms must not have moved
+p = Store()
+p["z"] = 3
+print(p["z"])

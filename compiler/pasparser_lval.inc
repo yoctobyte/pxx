@@ -1273,9 +1273,10 @@ begin
             `obj[i]` fell all the way through to the generic AN_INDEX
             fallback below — raw array/pointer arithmetic on the instance,
             a silent WRONG value (`0` observed), not even a crash.
-            Single-key subscript only (no `obj[a, b]` tuple key, no `+=`
-            augmented form) -- the common shape; either loudly errors below
-            rather than guessing.
+            Single-key subscript only (no `obj[a, b]` tuple key) -- the common
+            shape; that one loudly errors below rather than guessing. The `+=`
+            augmented form used to be refused here too and is now desugared;
+            see the note on the aug scan below.
             bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic }
           isAssign := False;
           i := TokPos - 1; w := 0;   { TokPos-1 = the '[' }
@@ -1286,14 +1287,26 @@ begin
             begin Dec(w); if w = 0 then begin Inc(i); Break; end; end;
             Inc(i);
           end;
+          { `c[k] += 1` on a class that subscripts through the DUNDERS. Kept
+            IDENTICAL to the twin in pyparser.inc — this whole ~60-line block is
+            a verbatim copy of it, and the copy is what this change had to touch
+            twice. Which of the two a NilPy statement reaches depends on which
+            lvalue parser its statement path entered, so fixing one and not the
+            other is how a shape gets left behind; the duplication itself is
+            filed as bug-n-the-dunder-subscript-arm-is-duplicated-verbatim-in-two-lvalue-parsers.
+            Full rationale — why the refusal was right when it landed, and why
+            the base and key must be evaluated ONCE — is on the twin.
+            bug-n-an-augmented-subscript-on-a-dunder-class-is-refused }
+          augBin := tkEOF;
+          augPow := False;
           if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True
-          else if (i < TokCount) and ((PyAugBinTok(Tokens[i].Kind) <> tkEOF)
-                                      or (Tokens[i].Kind = tkPowEq)) then
-            { tkPowEq is listed explicitly: `**` has no binary token, so
-              PyAugBinTok returns tkEOF for it and `obj[k] **= v` fell past this
-              named refusal into a bare "expected expression". }
-            Error('Nil Python: augmented assignment to a __getitem__/__setitem__ '
-                  + 'subscript is not supported');
+          else if i < TokCount then
+          begin
+            augBin := PyAugBinTok(Tokens[i].Kind);
+            if augBin <> tkEOF then isAssign := True
+            else if Tokens[i].Kind = tkPowEq then
+            begin augPow := True; isAssign := True; end;
+          end;
           Next;                       { consume '[' }
           PyParseBoolExpr;
           keyNode := CurASTNode;
@@ -1302,8 +1315,38 @@ begin
           Expect(tkRBrack, ']');
           if isAssign then
           begin
-            Expect(tkAssign, ':=');
+            augRead := -1;
+            if (augBin <> tkEOF) or augPow then
+            begin
+              { an augmented store READS as well as writes, so it needs BOTH
+                dunders; a run-time TypeError, not a compile error, so a
+                try/except around it still compiles. Twin of the pyparser arm. }
+              if FindUMeth(mci, '__getitem__') < 0 then
+              begin
+                Next;                 { the `+=` token }
+                ParseExpr;
+                node := PyNotSubscriptableNode(mci);
+                if node < 0 then Error('Nil Python: pylib (not-subscriptable) not loaded');
+                Result := node; Exit;
+              end;
+              node := PyEvalOnce(node);
+              keyNode := PyEvalOnce(keyNode);
+              augRead := PyCallMeth1(mci, '__getitem__', node, keyNode);
+              Next;                   { consume the `+=` token }
+            end
+            else Expect(tkAssign, ':=');
             ParseExpr;
+            if augPow then
+              CurASTNode := PyMakePow(augRead, CurASTNode)
+            else if augBin <> tkEOF then
+            begin
+              augNode := AllocNode(AN_BINOP);
+              ASTIVal[augNode] := Ord(augBin);
+              ASTLeft[augNode] := augRead;
+              ASTRight[augNode] := CurASTNode;
+              ASTTk[augNode] := Ord(tyVariant);
+              CurASTNode := augNode;
+            end;
             if FindUMeth(mci, '__setitem__') < 0 then
             begin
               { A genuine runtime error (a `try/except` around this must

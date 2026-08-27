@@ -9845,6 +9845,18 @@ test-core: $(COMPILER)
 	# bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable
 	./$(COMPILER) test/test_nilpy_module_member_as_a_value.npy $(TESTTMP)/test_nilpy_modmemval26
 	$(TESTTMP)/test_nilpy_modmemval26 | diff -u test/test_nilpy_module_member_as_a_value.expected -
+	# `c[k] += 1` on a class subscripting through __getitem__/__setitem__ — the
+	# counting idiom, and a NAMED compile-time refusal until now. Every
+	# augmented operator including `**=` (no binary token in this frontend, so
+	# it needs its own arm at all three augmented-assign target shapes), the
+	# index evaluated exactly ONCE (a node referenced twice is emitted twice —
+	# the trap the indexed-property arm one level up already fell into), and
+	# half-a-protocol classes raising CPython's own TypeError at RUN time so a
+	# try/except still compiles. The plain stores are the controls.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-an-augmented-subscript-on-a-dunder-class-is-refused
+	./$(COMPILER) test/test_nilpy_augmented_dunder_subscript.npy $(TESTTMP)/test_nilpy_augdunsub26
+	$(TESTTMP)/test_nilpy_augdunsub26 | diff -u test/test_nilpy_augmented_dunder_subscript.expected -
 	./$(COMPILER) test/test_nilpy_ast_literal_eval.npy $(TESTTMP)/test_nilpy_ast_literal26
 	test "$$($(TESTTMP)/test_nilpy_ast_literal26)" = "$$(printf '0.7 0.7 0.5 3\n42 -3 hi\n2\nTrue None\n1 3')"
 	# atexit handlers run at exit (LIFO), io's in-memory buffers behave

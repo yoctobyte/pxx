@@ -38094,9 +38094,10 @@ begin
             `obj[i]` fell all the way through to the generic AN_INDEX
             fallback below — raw array/pointer arithmetic on the instance,
             a silent WRONG value (`0` observed), not even a crash.
-            Single-key subscript only (no `obj[a, b]` tuple key, no `+=`
-            augmented form) -- the common shape; either loudly errors below
-            rather than guessing.
+            Single-key subscript only (no `obj[a, b]` tuple key) -- the common
+            shape; that one loudly errors below rather than guessing. The `+=`
+            augmented form used to be refused here too and is now desugared;
+            see the note on the aug scan below.
             bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic }
           isAssign := False;
           i := TokPos - 1; w := 0;   { TokPos-1 = the '[' }
@@ -38107,14 +38108,40 @@ begin
             begin Dec(w); if w = 0 then begin Inc(i); Break; end; end;
             Inc(i);
           end;
+          { `c[k] += 1` on a class that subscripts through the DUNDERS — the
+            counting idiom, and the single most common thing a dict-like class
+            is written for. This arm used to refuse it by name, which was the
+            right call at the time (the sibling fix routed an augmented
+            subscript here whenever either dunder is declared, and the
+            alternative on the table was `c[k] += 1` silently calling pylib's
+            store() while the plain `c[k]` beside it called the override — a
+            named refusal beats a silent divergence). This finishes the job.
+
+            Desugared exactly the way the default-indexed-property arm above
+            does it, which is the model and the reason this is a small change:
+            evaluate the base and the key ONCE into hidden temps, build the read
+            with __getitem__, combine, write back with __setitem__. Evaluating
+            once is not a nicety — an AST node referenced twice is EMITTED
+            twice, so `c[key()] += 1` would call key() twice where CPython calls
+            it once (bug-nilpy-augmented-subscript-evaluates-its-index-twice,
+            the same trap one arm up).
+
+            tkPowEq is tested explicitly: `**` has no binary token in this
+            frontend (it lowers through PyMakePow), so PyAugBinTok returns tkEOF
+            for it and `obj[k] **= v` would fall past every test into a bare
+            "expected expression". Third of the three augmented-assign target
+            shapes to need its own arm.
+            bug-n-an-augmented-subscript-on-a-dunder-class-is-refused }
+          augBin := tkEOF;
+          augPow := False;
           if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True
-          else if (i < TokCount) and ((PyAugBinTok(Tokens[i].Kind) <> tkEOF)
-                                      or (Tokens[i].Kind = tkPowEq)) then
-            { tkPowEq is listed explicitly: `**` has no binary token, so
-              PyAugBinTok returns tkEOF for it and `obj[k] **= v` fell past this
-              named refusal into a bare "expected expression". }
-            Error('Nil Python: augmented assignment to a __getitem__/__setitem__ '
-                  + 'subscript is not supported');
+          else if i < TokCount then
+          begin
+            augBin := PyAugBinTok(Tokens[i].Kind);
+            if augBin <> tkEOF then isAssign := True
+            else if Tokens[i].Kind = tkPowEq then
+            begin augPow := True; isAssign := True; end;
+          end;
           Next;                       { consume '[' }
           PyParseBoolExpr;
           keyNode := CurASTNode;
@@ -38123,8 +38150,43 @@ begin
           Expect(tkRBrack, ']');
           if isAssign then
           begin
-            Expect(tkAssign, ':=');
+            augRead := -1;
+            if (augBin <> tkEOF) or augPow then
+            begin
+              { An augmented store READS as well as writes, so it needs BOTH
+                dunders. A class with only __setitem__ has nothing to read: a
+                run-time TypeError naming the class, not a compile error, so
+                `try: c[k] += 1 / except TypeError:` still compiles — the same
+                call the plain read below makes. The value is still parsed
+                first, matching Python's left-to-right order. }
+              if FindUMeth(mci, '__getitem__') < 0 then
+              begin
+                Next;                 { the `+=` token }
+                PyParseBoolExpr;
+                node := PyNotSubscriptableNode(mci);
+                if node < 0 then Error('Nil Python: pylib (not-subscriptable) not loaded');
+                Result := node; Exit;
+              end;
+              node := PyEvalOnce(node);
+              keyNode := PyEvalOnce(keyNode);
+              augRead := PyCallMeth1(mci, '__getitem__', node, keyNode);
+              Next;                   { consume the `+=` token }
+            end
+            else Expect(tkAssign, ':=');
             PyParseBoolExpr;
+            if augPow then
+              { value := <current element> ** <rhs> — PyMakePow, not AN_BINOP,
+                and it carries the __pow__/__rpow__ dispatch with it. }
+              CurASTNode := PyMakePow(augRead, CurASTNode)
+            else if augBin <> tkEOF then
+            begin
+              augNode := AllocNode(AN_BINOP);
+              ASTIVal[augNode] := Ord(augBin);
+              ASTLeft[augNode] := augRead;
+              ASTRight[augNode] := CurASTNode;
+              ASTTk[augNode] := Ord(tyVariant);
+              CurASTNode := augNode;
+            end;
             if FindUMeth(mci, '__setitem__') < 0 then
             begin
               { A genuine runtime error (a `try/except` around this must
