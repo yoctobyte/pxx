@@ -9614,6 +9614,7 @@ var k, j, t, best, bestCnt, lbl, si, nsyms: Integer;
     islot, fslot, nFree, reg, saveOff: Integer;
     FreeGpr: array[0..3] of Integer;
     Counts: array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
+    LCounts: array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
     CSyms:  array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
     seen: Boolean;
 begin
@@ -9655,10 +9656,18 @@ begin
           if si < 0 then Continue;
           seen := False;
           for best := 0 to nsyms - 1 do
-            if CSyms[best] = si then begin Inc(Counts[best]); seen := True; Break; end;
+            if CSyms[best] = si then
+            begin
+              Inc(Counts[best]);
+              if IRKind[j] = IR_LOAD_SYM then Inc(LCounts[best]);
+              seen := True; Break;
+            end;
           if (not seen) and (nsyms < MAX_LOOPSYM_SCAN) then
           begin
-            CSyms[nsyms] := si; Counts[nsyms] := 1; Inc(nsyms);
+            CSyms[nsyms] := si; Counts[nsyms] := 1;
+            if IRKind[j] = IR_LOAD_SYM then LCounts[nsyms] := 1
+            else LCounts[nsyms] := 0;
+            Inc(nsyms);
           end;
         end;
     end;
@@ -9675,20 +9684,28 @@ begin
       si := CSyms[k];
       Write('PXXDBG a.resid TALLY proc=', Procs[CurProc].Name,
             ' sym=', Syms[si].Name, ' count=', Counts[k],
+            ' loads=', LCounts[k],
             ' type=', Syms[si].TypeKind, ' kind=', Syms[si].Kind);
       if Syms[si].IsArray then Write(' array');
       if SymSlotEscapes(si) then Write(' escapes');
       WriteLn(' freegpr=', nFree);
     end;
-  { Ranked selection: repeatedly take the hottest remaining eligible sym whose
-    class still has a free register. Within a class the descending-count order
-    fills the lowest register first (r12 before r13, xmm8 before xmm9). }
+  { Ranked selection: repeatedly take the sym with the most loop LOADS whose
+    class still has a free register. Within a class the descending order fills
+    the lowest register first (r12 before r13, xmm8 before xmm9).
+    The rank is LOADS, not accesses, for both classes: residency removes READS,
+    while a store dual-writes through a register move and is close to free. So a
+    store-heavy resident buys almost nothing and a load-heavy one is the whole
+    payoff. Ranking floats on loads was measured against ranking them on total
+    accesses (mandelbrot, whose kernel is entirely float): indistinguishable, so
+    this takes the simpler rule rather than a per-class split no measurement
+    asks for. }
   islot := 0; fslot := 0;
   while (islot < nFree) or (fslot < FR_RESIDENT_MAX) do
   begin
     best := -1; bestCnt := 0;
     for k := 0 to nsyms - 1 do
-      if Counts[k] > bestCnt then
+      if LCounts[k] > bestCnt then
       begin
         si := CSyms[k];
         if Syms[si].IsArray then Continue;
@@ -9701,17 +9718,28 @@ begin
         else
         begin
           if islot >= nFree then Continue;
-          if Counts[k] <= 3 then Continue;      { int threshold: > 3 loop accesses }
+          { Admission is by LOADS, and one is enough. Residency removes READS —
+            EmitStoreVar dual-writes, so the frame slot stays authoritative and
+            a store costs one extra register move, which is free (it is
+            eliminated at rename). The old test was `Counts[k] <= 3` over loads
+            AND stores, which ranked a store-heavy local above a load-bearing
+            one and, on the ticket's own three-local benchmark, excluded the
+            accumulator at exactly 3 accesses while THREE registers sat idle.
+            A loop-carried accumulator must never sit in the frame while a GPR
+            is free. Measured 1.63x for that one local, 3.10x for the body.
+            The bound that remains is the register pool, not a threshold. }
+          if LCounts[k] < 1 then Continue;      { int: at least one loop LOAD }
           if not RegcallScalarType(Syms[si].TypeKind) then Continue;
           if ResidentRegOf(si) <> 0 then Continue;
           if RcResidentCount >= RC_RESIDENT_SLOTS then Continue;   { the TABLE bound }
         end;
         if SymSlotEscapes(si) then Continue;
-        best := k; bestCnt := Counts[k];
+        best := k; bestCnt := LCounts[k];   { same scale the loop above tests }
       end;
     if best < 0 then Break;
     si := CSyms[best];
     Counts[best] := 0;
+    LCounts[best] := 0;
     FrameSize := AlignTo(FrameSize + 8, 8);
     saveOff := -FrameSize;
     if Syms[si].TypeKind = tyDouble then
@@ -9729,7 +9757,7 @@ begin
       FrResidentSym[fslot] := si;
       if PxxDbgEnabled('a.resid') then
         WriteLn('PXXDBG a.resid ASSIGN proc=', Procs[CurProc].Name,
-                ' sym=', Syms[si].Name, ' reg=xmm', 8 + fslot, ' count=', bestCnt);
+                ' sym=', Syms[si].Name, ' reg=xmm', 8 + fslot, ' loads=', bestCnt);
       Inc(fslot);
       FrResidentCount := fslot;
     end
@@ -9746,7 +9774,7 @@ begin
       Inc(islot);
       if PxxDbgEnabled('a.resid') then
         WriteLn('PXXDBG a.resid ASSIGN proc=', Procs[CurProc].Name,
-                ' sym=', Syms[si].Name, ' reg=r', reg, ' count=', bestCnt);
+                ' sym=', Syms[si].Name, ' reg=r', reg, ' loads=', bestCnt);
     end;
   end;
 end;

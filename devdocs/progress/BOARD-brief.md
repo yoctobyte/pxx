@@ -5,14 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:22 blocked:8 backlog:265 backlog_new:1 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2532 rejected:46`
+`working:3 unfinished:21 blocked:8 backlog:265 backlog_new:1 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2532 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-p-a-generic-methods-out-of-line-header-binds-to-a-same-named-non-generic-class` [P] — owner: frankA
+- `feature-opt-o3-register-pressure` [O] — owner: frank-optimize
 - `feature-target-wasm` [A+B] — owner: frankwasm
 
-## unfinished (22) — parked mid-flight; re-claim, do not duplicate
+## unfinished (21) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -26,7 +27,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
-- `feature-opt-o3-register-pressure` [O]
 - `feature-pascal-corpus-expansion` [P]
 - `feature-pascal-corpus-fpc-testsuite` [P]
 - `feature-pascal-corpus-generics` [P] — blocked-by: gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo
@@ -48,9 +48,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 276, ranked
+## Ready — top 30 of 275, ranked
 
-- `[p 85] [O]` feature-opt-o3-register-pressure
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -80,5 +79,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [B]` feature-b-the-module-shim-batch-blocking-the-python-corpus
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
+- `[p 62] [A]` feature-unicodestring-model
 
-_246 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_245 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
