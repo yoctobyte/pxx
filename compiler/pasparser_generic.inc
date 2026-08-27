@@ -293,6 +293,37 @@ begin
     RTL file for an error on line 2074 of the corpus unit.
     bug-a-a-diagnostic-in-a-used-unit-names-the-wrong-source-file }
   AdjustSrcRanges(TokPos, subCount);
+  { …and NOT AdjustPass2Spans, unlike InsertTokens, which calls both. That is
+    correct here, not an omission: no splice site can be reached while
+    Pass2Active is true, so the span adjustment would be a no-op.
+
+    Pass 2 replays recorded DeclItem spans through ParseSubroutine and nothing
+    else. Every caller of this splice is a DECLARATION parser:
+
+      ParseSpecialization                 <- ParseTypeSection
+      FlushPendingClassSpecializations    <- ParseTypeSection
+      SpecializeInlineGenericFuncUses     <- ParseGenericFunctionDef
+      ParseOperatorDef                    <- ParseProgram / ParseUnit
+      BufferGenericMethod                 <- ParseSubroutine … but see below
+
+    BufferGenericMethod is the one that looks reachable, and is not:
+    GenericMethodBuffered (defs.inc) exists so the pass-1 driver does NOT record
+    a generic method impl as a replayable DeclItem — "replaying it in pass 2
+    would double-buffer and corrupt the token stream", which is a stronger
+    statement than this one and already relied upon.
+
+    A `specialize` written INSIDE a routine body does not splice from the body:
+    it resolves a declaration-level specialization, which is why the hoisting
+    SpecializeInlineGenericFuncUses does for the function form is the same shape
+    the class form has always had.
+
+    Measured 2026-08-27 as well as argued: with `if Pass2Active then Error(...)`
+    at all five sites, a full self-host fixedpoint, gate.sh quick, 346 Pascal
+    conformance tests, 220 C conformance tests and the fgl corpus all passed;
+    and with a Warn instead, the sites demonstrably ARE reached (five times in a
+    program written to put a specialization and an operator desugar inside
+    routine bodies), every time with Pass2Active false.
+    bug-a-the-specialization-splice-does-not-adjust-the-body-pass-spans }
   { ...and the pasted region's own provenance, which the adjustment above cannot
     supply: these tokens are the TEMPLATE's, not this file's. Without it the
     specialized body's diagnostics carried fgl.pp's line numbers under the

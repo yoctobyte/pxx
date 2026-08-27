@@ -243,6 +243,11 @@ begin
   end;
   Inc(TokCount, 2);
   AdjustSrcRanges(TokPos, 2);   { …and the same for the insert }
+  { No AdjustPass2Spans, for the reason spelled out at the splice in
+    pasparser_generic.inc: ParseOperatorDef is reached only from ParseProgram
+    and ParseUnit — an operator DEFINITION, never a body — so Pass2Active cannot
+    be true here. Verified by instrumentation, not only by reading.
+    bug-a-the-specialization-splice-does-not-adjust-the-body-pass-spans }
 
   if isFunc then Tokens[TokPos].Kind := tkFunction
   else Tokens[TokPos].Kind := tkProcedure;
