@@ -9879,6 +9879,33 @@ end;
   dereferenced — SIGSEGV, no diagnostic, from `zip(s, t)` or `enumerate(s)`
   (bug-nilpy-str-iterable-builtins-segfault-on-a-string-handle).
   A non-str node is returned untouched, so nothing else changes. }
+function PyUClassIsIterable(ci: Integer): Boolean;
+{ Is this user class ITERABLE — by either protocol? CPython has two, and a
+  class needs only one of them:
+
+    `__iter__` (+ `__next__`)   the modern iterator protocol
+    `__getitem__`              the OLD-STYLE sequence protocol, walked from
+                               index 0 and stopped by `__len__` or IndexError
+
+  Every "make this argument iterable" site used to test `__iter__` alone, so a
+  plain `class Box` with `__getitem__`/`__len__` — which CPython iterates, and
+  which this frontend's `for` loop already lowered by index — was refused by
+  list(), sum(), `in`, tuple unpack, zip and enumerate. list() was the dangerous
+  one: it answered `[]`, a silent wrong value that flows on.
+
+  ONE predicate rather than a second `or` at each site, because the sites are
+  the reason this bug exists: the `for` lowering learned the sequence protocol
+  and none of its siblings did (devdocs/dev/normalise-dont-special-case.md).
+  The RUNTIME half is equally single-owner — pylib's pyiter_of_userobj builds
+  the right cursor for whichever protocol the object has, so a consumer that
+  routes through it needs to know nothing about the distinction.
+  bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop }
+begin
+  Result := (ci >= 0) and
+            ((FindUMeth(ci, '__iter__') >= 0) or
+             (FindUMeth(ci, '__getitem__') >= 0));
+end;
+
 function PyIterArgAsList(n: Integer): Integer;
 var procIdx, argNode, uci: Integer;
 begin
@@ -9892,7 +9919,7 @@ begin
   if IntToTypeKind(ASTTk[n]) = tyClass then
   begin
     uci := ResolveNodeRec(n) - REC_UCLASS_BASE;
-    if (uci >= 0) and (FindUMeth(uci, '__iter__') >= 0) then
+    if PyUClassIsIterable(uci) then
     begin
       Result := PyCallProc1('pyiter_drain', PyCallProc1('pyiter_of_userobj', n));
       Exit;
@@ -9932,7 +9959,8 @@ begin
       read its three Int64 fields as a TPyList header }
     Result := PyCallProc1('pyiter_of_range', node)
   else if (tk = tyClass) and (ResolveNodeRec(node) >= REC_UCLASS_BASE) and
-          (FindUMeth(ResolveNodeRec(node) - REC_UCLASS_BASE, '__iter__') >= 0) then
+          (not PyRecIsPylibOwnClass(ResolveNodeRec(node))) and
+          PyUClassIsIterable(ResolveNodeRec(node) - REC_UCLASS_BASE) then
     { a USER class implementing the iterator protocol. Before this it fell into
       the pyiter_of_list arm below and its object was read as a TPyList header,
       so `zip(bag, "xyz")` paired EMPTY values with the string's characters —
@@ -20074,7 +20102,7 @@ begin
   rec := ResolveNodeRec(node);
   if rec < REC_UCLASS_BASE then Exit;
   if PyRecIsPylibOwnClass(rec) then Exit;
-  Result := FindUMeth(rec - REC_UCLASS_BASE, '__iter__') >= 0;
+  Result := PyUClassIsIterable(rec - REC_UCLASS_BASE);
 end;
 
 function PyBuiltinTypeCallbackProc(code: Integer): Integer;
@@ -20825,8 +20853,17 @@ begin
       PYITER_USEROBJ arm, reached from pyiter_v as well — so iter(), list(),
       sorted() and `in` over the same object work by the same route.
       bug-nilpy-iterator-protocol-on-a-user-class }
+    { ...and a class with `__getitem__` but NO `__len__`, which CPython
+      iterates by walking 0.. until the subscript raises IndexError. The index
+      lowering below cannot express that -- it snapshots a length first -- so it
+      refused the shape outright. The cursor terminates on either signal, so
+      routing this one case here closes it without disturbing the index loop,
+      which stays the path for `__getitem__` + `__len__` and is what pylib's own
+      containers use.
+      bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop }
     if (not isIter) and (ci >= 0) and (iterCi >= 0) and
-       (FindUMeth(ci, '__iter__') >= 0) then
+       ((FindUMeth(ci, '__iter__') >= 0) or
+        ((FindUMeth(ci, '__getitem__') >= 0) and (FindUMeth(ci, '__len__') < 0))) then
     begin
       contNode := PyCallProc1('pyiter_of_userobj', contNode);
       if contNode < 0 then
@@ -21052,13 +21089,11 @@ begin
         __len__ is CPython-iterable (it walks 0.. and stops on IndexError), so
         the honest message is which of the two we still require -- not the
         pylib spelling, which a NilPy program never mentions. }
-      if (ci >= 0) and (FindUMeth(ci, '__getitem__') >= 0) then
-        Error('Nil Python: `for` over this object needs `__len__` as well as '
-              + '`__getitem__` — iterating by __getitem__ alone (stopping on '
-              + 'IndexError) is not supported yet')
-      else
-        Error('Nil Python: `for` over this object needs `__iter__`, or '
-              + '`__getitem__` with `__len__`');
+      { `__getitem__` alone no longer reaches here -- it is routed to the
+        cursor above, which stops on the IndexError CPython stops on. What is
+        left is a class with neither protocol. }
+      Error('Nil Python: `for` over this object needs `__iter__`, or '
+            + '`__getitem__`');
     end;
   end;
   { a cursor has no length to snapshot — and asking for one is the whole point

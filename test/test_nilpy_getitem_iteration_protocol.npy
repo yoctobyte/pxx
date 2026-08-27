@@ -1,0 +1,90 @@
+# The OLD-STYLE sequence protocol: a class with `__getitem__` is iterable in
+# CPython without any `__iter__` at all, walked from index 0 and stopped by
+# `__len__` or by the IndexError the subscript raises.
+#
+# The `for` lowering learned this on its own and none of its siblings did, so
+# every OTHER consumer of iteration refused the same object — and `list(b)`
+# answered `[]`, a silent wrong value that flows on, rather than failing. Each
+# row below is a consumer; they are here together because being apart is the
+# bug.
+#
+# bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop
+
+
+class Box:
+    def __init__(self, items):
+        self.items = items
+
+    def __getitem__(self, idx):
+        return self.items[idx]
+
+    def __len__(self):
+        return len(self.items)
+
+
+b = Box([1, 2, 3])
+
+for x in b:
+    print(x)
+print([x * 2 for x in b])
+print(list(b))
+print(tuple(b))
+print(sum(b))
+print(max(b), min(b))
+print(2 in b, 9 in b)
+print(sorted(Box([3, 1, 2])))
+print(list(reversed(b)))
+print(list(zip(b, "abc")))
+print(list(enumerate(b)))
+print(list(map(str, b)))
+print(any(b), all(b))
+p, q, r = b
+print(p, q, r)
+print(", ".join(map(str, b)))
+
+
+# `__getitem__` with NO `__len__` — CPython walks 0.. and stops on IndexError.
+# The index lowering cannot express that (it snapshots a length first), so this
+# shape was refused outright at compile time.
+class Bare:
+    def __init__(self, items):
+        self.items = items
+
+    def __getitem__(self, idx):
+        if idx >= len(self.items):
+            raise IndexError("out of range")
+        return self.items[idx]
+
+
+for y in Bare([7, 8]):
+    print(y)
+print(list(Bare([4, 5, 6])))
+print(sum(Bare([1, 2, 3])))
+
+
+# the modern protocol still reaches every one of the same consumers — the arm
+# this fix widened rather than replaced
+class It:
+    def __init__(self, items):
+        self.items = items
+        self.i = 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.i >= len(self.items):
+            raise StopIteration
+        self.i = self.i + 1
+        return self.items[self.i - 1]
+
+
+print(list(It([1, 2, 3])))
+print(sum(It([1, 2, 3])))
+print(sorted(It([3, 1, 2])))
+
+
+# a class with NEITHER is still refused, and by name
+class Plain:
+    def m(self):
+        return 1

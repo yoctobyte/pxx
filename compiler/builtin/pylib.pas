@@ -130,6 +130,14 @@ const
     already works on a cursor. Adding the kind is the whole feature on this
     side. See feature-nilpy-a-generator-as-a-first-class-value. }
   PYITER_SLGEN  = 11;
+  { The OLD-STYLE sequence protocol: a class with `__getitem__` and no
+    `__iter__`, walked by INDEX from 0 and stopping on `__len__` (or on the
+    IndexError `__getitem__` raises, when there is no `__len__`). CPython has
+    iterated these since before `__iter__` existed and still does, which is why
+    a plain `class Box` with `__getitem__`/`__len__` is iterable there and why
+    `list(b)` answering [] was a SILENT wrong value rather than a missing
+    feature. bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop }
+  PYITER_SEQOBJ = 12;
 
 type
   TPyVarRec = record
@@ -5666,6 +5674,7 @@ function PyUserObjHash(o: TObject; var h: NativeUInt): Boolean; forward;
 function PyUserObjNoArgDunder(o: TObject; const dunder: AnsiString;
                               var res: Variant): Boolean; forward;
 function PyUserObjHasDunder(o: TObject; const dunder: AnsiString): Boolean; forward;
+function PyUserObjIterable(o: TObject): Boolean; forward;   { __iter__ OR the old-style __getitem__ sequence protocol }
 { Is this object UNHASHABLE the way CPython means it — its class defines
   __eq__ and does NOT define __hash__? Defining __eq__ says "compare these by
   content, not identity"; using the same class as a dict key asks for identity.
@@ -12531,7 +12540,7 @@ begin
       the `for` lowering, so iter(), list(), sorted(), sum(), `in` and a
       tuple-unpack all reach it too — one site, every consumer.
       bug-nilpy-iterator-protocol-on-a-user-class }
-    if PyUserObjHasDunder(o, '__iter__') then
+    if PyUserObjIterable(o) then
     begin
       Result := pyiter_of_userobj(o);
       Exit;
@@ -12681,6 +12690,7 @@ function pyiter_has(it: TPyIter): Boolean;
 var genStep: TPyGenStep; genCur: Pointer;   { PYITER_SLGEN }
     l: TPyList; pair: TPyList; ev, mv: Variant; pv: Variant; kept: Boolean;
     zc: TPyIter; zi, zn: Integer;   { the N-way zip's cursor walk }
+    lenv, idxv: Variant; nilo: TObject;   { PYITER_SEQOBJ's __len__ / __getitem__ }
     b0, b1: Integer;                { the str cursors' UTF-8 character span }
 begin
   Result := False;
@@ -12858,6 +12868,39 @@ begin
         Exit;
       end;
     end;
+    it.FBox.put(0, pv);
+    it.FHas := True;
+    Result := True;
+    Exit;
+  end;
+  if it.FKind = PYITER_SEQOBJ then
+  begin
+    { The old-style sequence walk: `obj[0]`, `obj[1]`, ... CPython stops on the
+      IndexError the subscript raises; when the class also declares `__len__`
+      we ask that first, which is cheaper and is what the `for` lowering does.
+      Both terminators are honoured, because a class may have either.
+
+      A `__getitem__` the arity-2 dispatcher cannot call (an index parameter
+      that is not a Variant) RAISES rather than ending the walk: answering
+      "exhausted" there would put back exactly the silent empty result this
+      whole cursor exists to remove. }
+    if PyUserObjHasDunder(it.FObj, '__len__') then
+    begin
+      if not PyUserObjNoArgDunder(it.FObj, '__len__', lenv) then
+      begin it.FEnd := True; Exit; end;
+      if it.FPos >= PPyVarRec(@lenv)^.Payload then
+      begin it.FEnd := True; Exit; end;
+    end;
+    idxv := pyvar_of_int(it.FPos);
+    nilo := nil;
+    try
+      if not PyUserArithCall1(it.FObj, nilo, idxv, '__getitem__', pv) then
+        raise TypeError.Create('cannot iterate ''' + TObject(it.FObj).ClassName +
+              ''' by index: its __getitem__ could not be called');
+    except
+      on E: IndexError do begin it.FEnd := True; Exit; end;
+    end;
+    Inc(it.FPos);
     it.FBox.put(0, pv);
     it.FHas := True;
     Result := True;
@@ -13561,8 +13604,27 @@ begin
   Result.FKind := PYITER_USEROBJ;
   if o = nil then begin Result.FEnd := True; Exit; end;
   if not PyUserObjHasDunder(ito, '__next__') then
+  begin
+    { ...and BEFORE giving up, the old-style sequence protocol: a class with
+      `__getitem__` is iterable in CPython without any `__iter__` at all. The
+      `for` lowering learned this separately (PySeqAtMethod / PySeqLenMethod,
+      an inline index loop), which left every OTHER consumer of iteration —
+      list(), sum(), `in`, tuple unpacking, zip, enumerate — refusing the same
+      object; list() was the bad one, because it answered [] rather than
+      failing. Putting the fallback HERE rather than in each of them is what
+      makes them agree: they already route through this one constructor.
+      bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop }
+    if PyUserObjHasDunder(ito, '__getitem__') then
+    begin
+      Result.FKind := PYITER_SEQOBJ;
+      Result.FPos := 0;
+      Result.FObj := ito;
+      PXXObjRetain(Pointer(ito));
+      Exit;
+    end;
     raise TypeError.Create('iter() returned non-iterator of type ''' +
                            TObject(ito).ClassName + '''');
+  end;
   Result.FObj := ito;
   PXXObjRetain(Pointer(ito));
 end;
@@ -16297,6 +16359,23 @@ begin
   Result := TPyDict.Create;
 end;
 
+{ Is this object ITERABLE by either Python protocol — `__iter__`, or the
+  OLD-STYLE `__getitem__` sequence walk? A class needs only one of them, and
+  CPython iterates both.
+
+  One predicate rather than an `or` at each gate, because the gates are the
+  reason the bug existed: the `for` lowering learned the sequence protocol on
+  its own and the runtime chain did not, so `list(b)` over a `__getitem__`
+  class answered [] — a silent wrong value — while `for x in b` over the same
+  object was right. pyiter_of_userobj builds the correct cursor for whichever
+  protocol is present, so a gate that asks this needs to know nothing more.
+  bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop }
+function PyUserObjIterable(o: TObject): Boolean;
+begin
+  Result := PyUserObjHasDunder(o, '__iter__') or
+            PyUserObjHasDunder(o, '__getitem__');
+end;
+
 function pyseq_of_obj(o: TObject): TPyList;
 begin
   Result := nil;
@@ -16315,7 +16394,7 @@ begin
   if o is TPyRange then begin Result := list(TPyRange(o)); Exit; end;
   { a USER class implementing the iterator protocol, drained the same way a
     cursor is. This is the arm the three copies of this chain were missing. }
-  if PyUserObjHasDunder(o, '__iter__') then
+  if PyUserObjIterable(o) then
     Result := pyiter_drain(pyiter_of_userobj(o));
 end;
 
@@ -16431,7 +16510,7 @@ begin
 end;
 
 function reversed(const v: Variant): TPyIter; overload;
-var o: TObject;
+var o: TObject; seq: TPyList;
 begin
   if pyvartag(v) = 7 then
   begin
@@ -16443,6 +16522,18 @@ begin
     if o is TPyRange then begin Result := reversed(TPyRange(o)); Exit; end;
     if o is TPyIter then begin Result := reversed(pyiter_drain(TPyIter(o))); Exit; end;
     if o is TPyDict then begin Result := reversed(TPyDict(o).keylist); Exit; end;
+    { any other USER object that is ITERABLE -- by `__iter__` or by the
+      old-style `__getitem__` sequence protocol -- materialised through the one
+      chain and reversed, exactly as the cursor arm above does. Without it this
+      fell to the empty-cursor default below, so reversed() answered [] on an
+      object every other consumer iterates: the silent wrong value, again, in
+      the last of the chain's copies.
+      bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop }
+    if PyUserObjIterable(o) then
+    begin
+      seq := pyseq_of_obj(o);
+      if seq <> nil then begin Result := reversed(seq); Exit; end;
+    end;
   end;
   if pyvartag(v) = 6 then begin Result := reversed(pystr_of(v)); Exit; end;
   Result := pyiter_of_list(TPyList.Create);

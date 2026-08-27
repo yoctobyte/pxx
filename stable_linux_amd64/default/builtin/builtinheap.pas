@@ -2,14 +2,20 @@
 unit builtinheap;
 
 {$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
-{ ESP (xtensa/bare riscv32) has no mmap and no OS heap of its own here; back the
+{ BARE ESP (either ISA) has no mmap and no OS heap of its own here; back the
   allocator with a fixed static arena instead. One marker for both ESP ISAs.
   HOSTED riscv32 (qemu-user linux) DOES have mmap and the linux syscall ABI (its
   read/write already use syscalls 63/64), so it must NOT take the static-arena
   path — a 64 KiB arena OOMs on any real workload (e.g. sqlite) and PXXAlloc then
-  stores through a NULL base. Only bare-metal riscv32 (PXX_ESP_BARE) is ESP. }
-{$ifdef CPU_XTENSA}{$define PXX_ESP}{$endif}
-{$ifdef CPU_RISCV32}{$ifdef PXX_ESP_BARE}{$define PXX_ESP}{$endif}{$endif}
+  stores through a NULL base. Only a BARE boot (PXX_ESP_BARE) is ESP for this
+  purpose — under IDF, FreeRTOS supplies the heap, on xtensa as on riscv32. }
+{ PROFILE, not ISA — the unit-side twin of util.inc's TargetIsEspClass, and it
+  had the same defect: `{$ifdef CPU_XTENSA}{$define PXX_ESP}` unconditionally,
+  so every {$ifndef PXX_ESP} body below was excluded on xtensa even under the
+  IDF profile, where FreeRTOS supplies a heap and VFS supplies files. riscv32
+  under IDF compiled all of them, which is the proof the bodies are fine on an
+  ESP target. feature-a-complete-the-builtin-unit-on-the-esp-class-targets }
+{$ifdef PXX_ESP_BARE}{$define PXX_ESP}{$endif}
 
 { Heap allocator + managed-string runtime helpers, split out of `builtin` so a
   program that only needs the heap (New/Dispose/GetMem) or the managed-string
@@ -359,8 +365,15 @@ function __pxx_udivsi3(n: LongWord; d: LongWord): LongWord;
 function __pxx_divsi3(a: Integer; b: Integer): Integer;
 function __pxx_modsi3(a: Integer; b: Integer): Integer;
 {$endif}
-{ Not yet on ESP: file I/O, managed-element dynarray/record retain/release,
-  variant, float formatting. }
+{ Not on BARE ESP: file I/O, managed-element dynarray/record retain/release,
+  variant, float formatting. Bare metal, hence PXX_ESP, is now the only profile
+  that excludes them — under IDF both ESP ISAs get FreeRTOS's heap and VFS's
+  files and compile every body below, which riscv32 has done all along and
+  xtensa was wrongly locked out of until 2026-08-27.
+
+  So this is a PROFILE statement, not a platform one: none of these bodies is
+  unimplementable on an ESP chip. `file I/O` here means there is no filesystem
+  under a bare boot to open. Do not read the list as "ESP cannot do this". }
 {$ifndef PXX_ESP}
 function PXXStrLoadFile(path: Pointer): Pointer;
 procedure PXXRecordRetain(recAddr: Pointer; desc: Pointer);
@@ -387,6 +400,7 @@ function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeI
 function PXXVarNot(dest: Pointer; src: Pointer): Int64;
 function PXXVarStrAppend(dest: Pointer; right: Pointer): Int64;
 procedure PXXVarClear(v: Pointer);
+procedure PXXVarReleasePayload(v: Pointer);
 procedure PXXVarRetain(v: Pointer);
 procedure PXXWriteVariant(v: Pointer);
 { Exact 17-significant-digit decimal expansion of a finite non-zero |Double|.
@@ -3642,21 +3656,31 @@ type
 
 { The bitwise operator set, named once. tkAnd = 30, tkOr = 31, tkShl = 103,
   tkXor = 117, tkShr = 119 — the TTokenKind ordinals from defs.inc, which the
-  runtime cannot see. }
+  runtime cannot see.
+
+  1119 is not a token: it is the out-of-band opcode PXXVarBinOpPas substitutes
+  for tkShr, spelling "shift right, LOGICALLY". The runtime cannot see
+  PyProgramMode, so the language split is made by the CALLER — Pascal enters
+  through PXXVarBinOpPas and rewrites the opcode, NilPy enters PXXVarBinOp
+  directly and keeps 119. Same seam, same reason, as the string rule that
+  wrapper already carries. }
 function VarOpIsBitwise(opTk: NativeInt): Boolean;
 begin
   VarOpIsBitwise := (opTk = 30) or (opTk = 31) or (opTk = 103) or
-                    (opTk = 117) or (opTk = 119);
+                    (opTk = 117) or (opTk = 119) or (opTk = 1119);
 end;
 
 { Apply one of them to two already-integral operands. Kept apart from its two
   call sites so the INTEGER arm and the FLOAT arm of PXXVarBinOp cannot drift
   the way this function and x86-64's EmitVarBinOp did.
-  `shr` is ARITHMETIC (sign-extending), matching the `sar` x86-64 emits and
-  Python's `>>`. Pascal's own `shr` is logical, and FPC's Variant `shr` is
-  neither — it narrows to 32 bits first, so `v(-12) shr 1` is 2147483642
-  there. All three agree on non-negative operands, which is every row anyone
-  has actually written; the fork is parked as decide-variant-bitwise-width. }
+  119 (`shr`) is ARITHMETIC (sign-extending), matching the `sar` x86-64 emits
+  for NilPy and Python's `>>`; 1119 is LOGICAL, which is what Pascal's own
+  `shr` does on a static Integer or Int64, so a Variant answers the same. FPC's
+  Variant `shr` is a third thing — it narrows to 32 bits first, so
+  `v(-12) shr 1` is 2147483642 there — and that narrowing is a behaviour we do
+  not copy (decide-variant-bitwise-width, decided 2026-08-25, option 2).
+  All of them agree on non-negative operands.
+  bug-a-variant-shr-is-arithmetic-where-static-shr-is-logical }
 function VarBitwiseInt(lVal, rVal: Int64; opTk: NativeInt): Int64;
 var r: Int64;
 begin
@@ -3664,7 +3688,8 @@ begin
   else if opTk = 31 then r := lVal or rVal
   else if opTk = 117 then r := lVal xor rVal
   else if opTk = 103 then r := lVal shl rVal
-  else if lVal < 0 then r := not ((not lVal) shr rVal)   { arithmetic shr }
+  else if opTk = 1119 then r := lVal shr rVal             { Pascal: logical shr }
+  else if lVal < 0 then r := not ((not lVal) shr rVal)    { NilPy: arithmetic shr }
   else r := lVal shr rVal;
   VarBitwiseInt := r;
 end;
@@ -4044,12 +4069,39 @@ procedure PXXVarClear(v: Pointer);
   (bug-nilpy-bound-fn-closure-objects-are-never-freed,
   refactor-a-variant-object-tag-list-lives-in-four-places). }
 begin
+  PXXVarReleasePayload(v);
+  PXXMemZero(v, 16);
+end;
+
+procedure PXXVarReleasePayload(v: Pointer);
+{ PXXVarClear WITHOUT the zeroing — release the managed payload and leave the
+  16 slot bytes alone.
+
+  This is the half a variant-to-variant ASSIGNMENT wants, and calling the full
+  PXXVarClear there was a real bug: the emitters do
+
+      PXXVarRetain(src); PXXVarClear(dest); copy 16 bytes src -> dest
+
+  and the retain-before-release makes the ALIASED case safe for the payload's
+  REFCOUNT — which is what the comment at every one of those sites claimed was
+  the whole story. It is not: when src and dest are the same slot, PXXMemZero
+  wipes the bytes the copy is about to read, so `v := v` copied sixteen zeroes
+  over itself and the variant came back Empty, on every target, where FPC leaves
+  the value. It leaked too: the retain took the payload to +2, the release put
+  it back to +1, and then nothing referenced it.
+
+  Splitting the routine rather than branching on `src = dest` in six emitters:
+  the zeroing was never wanted on this path in the FIRST place — the bytes are
+  overwritten by the copy on the very next instruction — so removing it is the
+  fix and a self-assignment then falls out as the degenerate case (retain +1,
+  release -1, copy a slot onto itself) with no test to get wrong and no branch
+  in the hot path. bug-a-a-variant-assigned-to-itself-becomes-empty }
+begin
   if (PWord(v)^ = VT_STRING_TAG) or
      ((PWord(v)^ >= VT_PROMO_FIRST) and (PWord(v)^ <= VT_PROMO_LAST)) then
     PXXStrDecRef(Pointer(PWord(Int64(v) + 8)^))
   else if (PWord(v)^ >= VT_OBJ_FIRST) and (PWord(v)^ <= VT_OBJ_LAST) then
     PXXObjRelease(Pointer(PWord(Int64(v) + 8)^));
-  PXXMemZero(v, 16);
 end;
 
 procedure PXXVarRetain(v: Pointer);
@@ -4748,7 +4800,18 @@ begin
   end
   else if (tag = 1) or (tag = 2) then          { VT_INT / VT_INT64 }
   begin
-    iv := PWord(Int64(v) + 8)^;
+    { PInt64, NOT PWord. The payload of BOTH integer tags is a full Int64 (see
+      defs.inc: VT_INT is "payload = sign-extended Int64"), and PWord is a
+      MACHINE word — four bytes on i386 and arm32. Reading it as PWord threw
+      away the high half of every integer variant on those two targets, so
+      `v := 3000000000; v := v * 2` wrote 1705032704 and `v(1) shl 40` wrote 0,
+      while x86-64 and aarch64 — where a machine word happens to BE eight bytes
+      — printed both correctly. Silent, target-dependent, and invisible until a
+      variant carried a value that did not fit 32 bits. The other three PWord
+      reads in this routine are right as they are: a tag, a Boolean's 0/1, and a
+      string HANDLE really are machine words.
+      bug-a-variant-shr-is-arithmetic-where-static-shr-is-logical }
+    iv := PInt64(Int64(v) + 8)^;
     write(iv);
   end
   else if tag = 3 then  { VT_DOUBLE }

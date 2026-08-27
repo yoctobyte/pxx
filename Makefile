@@ -3820,6 +3820,16 @@ test-core: $(COMPILER)
 	# bug-n-an-arithmetic-dunder-on-self-is-pointer-arithmetic
 	./$(COMPILER) test/test_nilpy_arith_dunder_on_self.npy $(TESTTMP)/test_nilpy_arithdunderself26
 	$(TESTTMP)/test_nilpy_arithdunderself26 | diff -u test/test_nilpy_arith_dunder_on_self.expected -
+	# The OLD-STYLE sequence protocol -- a class with `__getitem__` is iterable in
+	# CPython with no `__iter__` at all. The `for` lowering learned it alone, so
+	# every other consumer refused the same object and list() answered [], a
+	# silent wrong value. Every consumer is asserted here BECAUSE being apart is
+	# the bug; `Bare` is the `__getitem__`-without-`__len__` shape, which stops on
+	# IndexError and was refused at compile time.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop
+	./$(COMPILER) test/test_nilpy_getitem_iteration_protocol.npy $(TESTTMP)/test_nilpy_getitemiter26
+	$(TESTTMP)/test_nilpy_getitemiter26 | diff -u test/test_nilpy_getitem_iteration_protocol.expected -
 	# ...and the other side of the same rule: a REBOUND name is refused, never
 	# resolved to its first binding. CPython prints "second"; a compile-time
 	# alias table cannot say that, so it must decline rather than answer "first".
