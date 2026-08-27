@@ -1,19 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-26T16:08:15Z",
-   "fixed": [
-    "test-aarch64#src:test/test_parallel_for_capture_aggr.pas",
-    "test-arm32#src:test/test_parallel_for_capture_aggr.pas",
-    "test-i386#src:test/test_parallel_for_capture_aggr.pas"
-   ],
-   "new_red": [],
-   "sha": "23e3ba7435cc240ee5824287f6d682714c625b22",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-26T16:14:34Z",
    "fixed": [],
    "new_red": [],
@@ -460,6 +447,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "b5597e82fd10be8cebcfb46639e2b737df3920b2",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T05:06:42Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "e03794fb11a69b207d0125c82f6e2ba915650806",
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
@@ -2115,6 +2111,7 @@
   "test-core#src:test/test_not_of_negated_operand.pas": "native",
   "test-core#src:test/test_not_operand_type_matrix.pas": "native",
   "test-core#src:test/test_not_ord_bitwise.pas": "native",
+  "test-core#src:test/test_numeric_goto_labels.pas": "native",
   "test-core#src:test/test_o3_residency_six_hot_locals.pas": "native",
   "test-core#src:test/test_object_ref_array_identity.pas": "native",
   "test-core#src:test/test_object_reference.pas": "native",
@@ -5319,6 +5316,7 @@
   "test-core#src:test/test_not_of_negated_operand.pas": "pass",
   "test-core#src:test/test_not_operand_type_matrix.pas": "pass",
   "test-core#src:test/test_not_ord_bitwise.pas": "pass",
+  "test-core#src:test/test_numeric_goto_labels.pas": "pass",
   "test-core#src:test/test_o3_residency_six_hot_locals.pas": "pass",
   "test-core#src:test/test_object_ref_array_identity.pas": "pass",
   "test-core#src:test/test_object_reference.pas": "pass",
@@ -6853,14 +6851,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-27T05:00:48Z",
+  "date": "2026-08-27T05:06:42Z",
   "deadline": 7200.0,
-  "sha": "b5597e82fd10be8cebcfb46639e2b737df3920b2",
+  "sha": "e03794fb11a69b207d0125c82f6e2ba915650806",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 317.6
+  "wall": 318.5
  },
  "last_bench": {
   "conf_rows": 550,
