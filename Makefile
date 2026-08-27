@@ -8808,6 +8808,12 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_math_unit26)" = "$$(printf '42\n999\n10\n20\n256\n6\n144')"
 	./$(COMPILER) test/test_generic_func.pas $(TESTTMP)/test_generic_func26
 	test "$$($(TESTTMP)/test_generic_func26)" = "$$(printf '7\n10\n3\n4\n5\n1\n10\n99\n42')"
+	# ...and the INLINE spelling of the same thing: `specialize F<C>(args)` at
+	# the call site, in expression and statement position, two concrete types
+	# per template, coexisting with the declaration form. Rows a-d and f are
+	# oracled against FPC 3.2.2 -Mobjfpc.
+	./$(COMPILER) test/test_inline_generic_specialization.pas $(TESTTMP)/test_inline_genspec26
+	test "$$($(TESTTMP)/test_inline_genspec26)" = "$$(printf 'a 9|9\nb abd\nc 2|1\nd q|p\ne z\nf 22')"
 	./$(COMPILER) test/test_overloading.pas $(TESTTMP)/test_overloading26
 	test "$$($(TESTTMP)/test_overloading26)" = "$$(printf 'Integer: 42\nChar: A\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
 	./$(COMPILER) test/test_op_overload.pas $(TESTTMP)/test_op_overload26

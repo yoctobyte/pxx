@@ -9,13 +9,17 @@ PXX supports Object Pascal generics, allowing you to write type-independent func
 
 ## Specialization Model
 
-PXX uses a strict **explicit named specialization** model. 
-- You must explicitly specialize a generic template and give it a concrete name before calling or instantiating it.
-- There is no implicit call-site specialization (such as `Max<Integer>(A, B)`); you must specialize the routine first and call the specialized version.
+A generic template is always specialized with concrete type arguments before it
+is called or instantiated. There is no *implicit* specialization — the type
+arguments are always written out, never inferred from the call's arguments
+(`Max(A, B)` alone never picks `T` for you).
 
-Specialization is supported in two forms:
+Specialization is supported in three forms:
 1. **Top-level form**: Specializing a generic function or class in the global scope using `specialize Name<Type> as SpecializedName`.
 2. **Type-section form**: Specializing a generic class inside a `type` declaration block.
+3. **Inline form**: Specializing a generic *routine* at the call site,
+   `specialize Name<Type>(Args)`, in expression or statement position. This is
+   what FPC code in the wild writes.
 
 ---
 
@@ -46,6 +50,20 @@ begin
   i := MaxInt(10, 20);
 end;
 ```
+
+Or specialize it **inline at the call site**, which needs no name of its own —
+useful when a unit uses one generic routine on several types and would otherwise
+carry an identifier per (routine, type) pair:
+
+```pascal
+begin
+  WriteLn(specialize Max<Integer>(3, 9));   { expression position }
+  specialize Swap<string>(S1, S2);          { statement position  }
+end.
+```
+
+The two spellings produce one specialization per (routine, type) pair, and can
+be mixed freely in the same program.
 
 ---
 

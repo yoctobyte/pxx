@@ -1146,6 +1146,99 @@ end;
 
 { Parses: generic function Max<T>(A, B: T): T; begin...end;
   Called when CurTok = tkIdent('generic') }
+
+{ FPC lets a generic ROUTINE be specialized INLINE at the call site --
+  `specialize MaxOf<Integer>(3, 9)` in an expression, `specialize Swp<Integer>(x, y)`
+  as a statement -- as well as in the DECLARATION form ParseTopLevelSpecialize
+  handles (`specialize MaxOf<Integer> as MaxIntF;`). Those are one
+  specialization under two spellings, so this rewrites the inline spelling INTO
+  the declaration one rather than growing a second specialization path:
+
+    - every `specialize F<C>(` group still in the token stream collapses to the
+      single identifier `F_C` — the very name the declaration form
+      auto-generates when no `as` clause is given;
+    - one declaration-form specialization is emitted per DISTINCT C, right here,
+      immediately after F's template, which is exactly where a hand-written
+      `specialize F<C> as F_C;` would have sat.
+
+  Everything downstream then sees an ordinary call of an ordinary routine — no
+  call site, overload rule or diagnostic has to learn about generics.
+
+  The `(` in the pattern is load-bearing: it is what separates a CALL from the
+  declaration form (`... > as Name;`), which must keep its own path, and from a
+  bare `a < b` comparison that happens to sit beside the word.
+
+  Called from ParseGenericFunc, so the scan sees the whole rest of the unit and
+  a routine used before it is declared is refused as it always was.
+  compat-pascal-inline-generic-specialization }
+procedure SpecializeInlineGenericFuncUses(gfi: Integer);
+const MAX_INLINE_SPECS = 64;
+var i, k, nSpec: Integer;
+    fname, cname, specName: AnsiString;
+    seen: Boolean;
+    specArgs: array[0..MAX_INLINE_SPECS-1] of AnsiString;
+    specNames: array[0..MAX_INLINE_SPECS-1] of AnsiString;
+    specKinds: array[0..MAX_INLINE_SPECS-1] of TTokenKind;
+begin
+  fname := GenericFuncs[gfi].Name;
+  nSpec := 0;
+  i := TokPos;
+  while i + 5 < TokCount do
+  begin
+    if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'specialize') and
+       (Tokens[i + 1].Kind = tkIdent) and CaseEqual(GetTokenStr(i + 1), fname) and
+       (Tokens[i + 2].Kind = tkLt) and
+       IsConcreteTypeArgKind(Tokens[i + 3].Kind) and
+       (Tokens[i + 4].Kind = tkGt) and (Tokens[i + 5].Kind = tkLParen) then
+    begin
+      cname := GetTokenStr(i + 3);
+      specName := fname + '_' + cname;
+      seen := False;
+      for k := 0 to nSpec - 1 do
+        if CaseEqual(specNames[k], specName) then seen := True;
+      if not seen then
+      begin
+        if nSpec >= MAX_INLINE_SPECS then
+          Error('too many inline specializations of ' + fname);
+        specArgs[nSpec] := cname;
+        specNames[nSpec] := specName;
+        specKinds[nSpec] := Tokens[i + 3].Kind;
+        Inc(nSpec);
+      end;
+      { collapse `specialize F < C >` to the one identifier F_C }
+      Tokens[i].Kind := tkIdent;
+      Tokens[i].IVal := 0;
+      Tokens[i].SOffset := TokCharsAppend(specName);
+      Tokens[i].SLen := Length(specName);
+      RemoveTokens(i + 1, 4);
+    end;
+    Inc(i);
+  end;
+
+  for k := 0 to nSpec - 1 do
+  begin
+    { A name already taken means the DECLARATION form got here first (its
+      auto-generated name is the same one) — one specialization is what we
+      want, so leave that one alone. }
+    if FindProc(specNames[k]) >= 0 then Continue;
+    SpecializeTemplateName := GenericFuncs[gfi].Name;
+    { generic FUNCTIONS stay single-parameter — load the substitution directly }
+    SpecSubCount := 1;
+    SpecSubNames[0]  := GenericFuncs[gfi].Param;
+    SpecSubValues[0] := specArgs[k];
+    SpecSubKinds[0]  := specKinds[k];
+    { SpecializeStream splices at TokPos, and CurTok is holding the token AT
+      TokPos-1 — so step back, splice in front of it, and the `Next` below reads
+      the first spliced token. When ParseSubroutine finishes, CurTok is back on
+      the token it was holding, which is what the caller expects. }
+    Dec(TokPos);
+    SpecializeStream(GenericFuncs[gfi].TokStart, GenericFuncs[gfi].TokCount,
+                     specNames[k]);
+    Next;
+    ParseSubroutine;
+  end;
+end;
+
 procedure ParseGenericFunctionDef;
 var isFunc: Boolean; funcName, paramName: AnsiString;
     gfi, j, cur, finalCur, depth: Integer;
@@ -1226,6 +1319,7 @@ begin
   Inc(GenericFuncCount);
   TokPos := finalCur;
   Next;
+  SpecializeInlineGenericFuncUses(gfi);
 end;
 
 { Parses: specialize Max<Integer> as MaxInt;

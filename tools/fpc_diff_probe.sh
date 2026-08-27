@@ -985,21 +985,21 @@ P
 # of a generic ROUTINE diverges — pxx wants the declaration form
 # `specialize Max<Integer> as MaxInt;` — filed as
 # compat-pascal-inline-generic-specialization.
-probe gen-func-int   known <<'P'
+probe gen-func-int   <<'P'
 generic function MaxOf<T>(a, b: T): T;
 begin if a < b then Result := b else Result := a; end;
 begin
   writeln(specialize MaxOf<Integer>(3, 9), '|', specialize MaxOf<Integer>(9, 3));
 end.
 P
-probe gen-func-string known <<'P'
+probe gen-func-string <<'P'
 generic function MaxOf<T>(a, b: T): T;
 begin if a < b then Result := b else Result := a; end;
 begin
   writeln(specialize MaxOf<string>('abc', 'abd'));
 end.
 P
-probe gen-swap-var   known <<'P'
+probe gen-swap-var   <<'P'
 generic procedure Swp<T>(var a, b: T);
 var tmp: T;
 begin tmp := a; a := b; b := tmp; end;
