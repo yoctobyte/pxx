@@ -119,4 +119,4 @@ about to be the source of, and the copy copies the zeros. Six backends plus the
 runtime, and no business riding along here.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 57ba5677a.
