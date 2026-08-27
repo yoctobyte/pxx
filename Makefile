@@ -1440,6 +1440,16 @@ test-nilpy: $(COMPILER)
 	# spelling is asserted rather than just the one the ticket named.
 	./$(COMPILER) test/test_nilpy_subscript_dunder_spellings.npy $(TESTTMP)/test_nilpy_subdunder26
 	$(TESTTMP)/test_nilpy_subdunder26 | diff -u test/test_nilpy_subscript_dunder_spellings.expected -
+	# `bytearray.append(self, x)` was `unexpected token`: pylib's parameterless
+	# `function bytearray` made the BARE WORD a complete call, so it parsed as
+	# `bytearray().append(self, x)`. The zero-arg form now comes from the parser
+	# keyed on the `name` `(` `)` SHAPE, which cannot capture a bare name. The
+	# repr rows are load-bearing -- without the FIsByteArray stamp that overload
+	# used to apply, `repr(bytearray())` is `b''`. The subclass rows cover a
+	# second defect the repro depended on: constructing ANY subclass of
+	# bytes/bytearray segfaulted, TPyBytes having no parameterless Create.
+	./$(COMPILER) test/test_nilpy_bytearray_unbound_and_subclass.npy $(TESTTMP)/test_nilpy_baunbound26
+	$(TESTTMP)/test_nilpy_baunbound26 | diff -u test/test_nilpy_bytearray_unbound_and_subclass.expected -
 	./$(COMPILER) test/test_nilpy_genexpr_is_consumed_once.npy $(TESTTMP)/test_nilpy_genonce26
 	$(TESTTMP)/test_nilpy_genonce26 | diff -u test/test_nilpy_genexpr_is_consumed_once.expected -
 	./$(COMPILER) test/test_nilpy_str_format_keyword_fields.npy $(TESTTMP)/test_nilpy_fmtkw26

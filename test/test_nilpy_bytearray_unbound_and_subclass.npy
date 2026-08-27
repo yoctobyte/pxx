@@ -1,0 +1,81 @@
+# `bytearray.append(self, x)` -- how a subclass of a builtin reaches the base
+# implementation it just overrode -- was `error: unexpected token`.
+#
+# Cause: this dialect lets a PARAMETERLESS function be called by its bare name,
+# a Pascal inheritance. pylib declared `function bytearray: TPyBytes; overload;`
+# for the zero-argument constructor, so the bare word `bytearray` was already a
+# complete call and the line parsed as `bytearray().append(self, x)` -- an
+# instance append handed two arguments. The identical defect was introduced and
+# reverted for list/tuple/bytes on 2026-08-27; bytearray was the ORIGINAL, and
+# had carried it for as long as the overload existed, because nobody had written
+# the spelling.
+#
+# The zero-argument form now comes from the parser, keyed on the `name` `(` `)`
+# SHAPE -- which by construction cannot capture a bare name or a name before a
+# `.`. The FIsByteArray stamp that kept bytearray out of that arm when the other
+# three moved into it is now pybytes_mark_bytearray, so the repr rows below are
+# load-bearing: without the stamp `repr(bytearray())` is `b''`.
+#
+# The subclass rows are a SECOND defect the repro depended on: constructing any
+# subclass of bytes/bytearray segfaulted, because a subclass with no __init__
+# emits a call to the base's parameterless Create and TPyBytes declared only
+# Create(n). TPyList and TPyDict both had one, which is why `class L(list)` was
+# fine and this was not.
+# bug-n-bytearrays-zero-argument-overload-makes-the-bare-name-a-call
+
+
+# --- the unbound base call, the shape the ticket is named for ---
+class BA(bytearray):
+    def add(self, x):
+        bytearray.append(self, x)
+
+
+b = BA()
+b.add(65)
+b.add(66)
+print("unbound:", len(b), list(b))
+
+# --- constructing a subclass at all (this used to segfault before any call) ---
+class Plain(bytearray):
+    pass
+
+
+class PlainB(bytes):
+    pass
+
+
+print("subclass:", len(Plain()), len(PlainB()))
+
+# --- the zero-argument form still constructs the right TYPE, which is the
+#     whole reason bytearray could not simply join list/tuple/bytes in the
+#     parser arm: bytes and bytearray are ONE class here and the Python type is
+#     a runtime flag
+print("empty:", repr(bytearray()), type(bytearray()).__name__)
+print("empty:", repr(bytes()), type(bytes()).__name__)
+
+# --- and every other arity is untouched ---
+print("arity:", repr(bytearray(3)), repr(bytearray(b'ab')), repr(bytearray([1, 2])))
+print("arity:", repr(bytes()), repr(bytes([1, 2])))
+
+# --- an empty bytearray is still MUTABLE, i.e. a real one and not a bytes ---
+m = bytearray()
+m.append(7)
+m.extend(bytearray([8, 9]))
+print("mutate:", repr(m), type(m).__name__, len(m))
+
+# --- the sibling spellings that were gated when this one was not ---
+class L(list):
+    def add(self, x):
+        list.append(self, x)
+
+
+class D(dict):
+    def put(self, k, v):
+        dict.__setitem__(self, k, v)
+
+
+l = L()
+l.add(5)
+d = D()
+d.put('k', 9)
+print("siblings:", len(l), l[0], len(d), d['k'])

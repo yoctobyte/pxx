@@ -4356,7 +4356,7 @@ var lo: AnsiString;
 begin
   lo := LowerCase(nm);
   PyZeroArgCtorIsContainer :=
-    (lo = 'list') or (lo = 'tuple') or (lo = 'bytes');
+    (lo = 'list') or (lo = 'tuple') or (lo = 'bytes') or (lo = 'bytearray');
 end;
 
 function PyIsZeroArgCtorName(const nm: AnsiString): Boolean;
@@ -4457,7 +4457,7 @@ begin
     forms already use — no new construction path, and no new pylib name whose
     bare word could be called. The caller consumed only the NAME for these, so
     CurTok is the '(' PyParseListLiteralT expects, and it consumes the pair. }
-  if (lo = 'list') or (lo = 'tuple') or (lo = 'bytes') then
+  if (lo = 'list') or (lo = 'tuple') or (lo = 'bytes') or (lo = 'bytearray') then
   begin
     { PyParseListLiteralT stamps a PAREN-opened display as a TUPLE — which is
       right for `(1, 2)` and is why `tuple()` needs no mark of its own, and
@@ -4466,7 +4466,7 @@ begin
     PyParseListLiteralT(tkLParen, tkRParen, False);   { consumes the '(' ')' }
     if lo <> 'tuple' then
       CurASTNode := PyMarkAsSeqKind(CurASTNode, 'pylist_mark_list');
-    if lo = 'bytes' then
+    if (lo = 'bytes') or (lo = 'bytearray') then
     begin
       bPi := FindProc('pybytes_from_list');
       if bPi < 0 then Error('Nil Python: pylib (pybytes_from_list) not loaded');
@@ -4480,6 +4480,28 @@ begin
       if bCi >= 0 then ASTRight[bCall] := REC_UCLASS_BASE + bCi;
       ASTLeft[bCall] := bArg;
       CurASTNode := bCall;
+      { ...and bytearray is that, STAMPED. bytes and bytearray are one class
+        here (see TPyBytes.FIsByteArray), so the Python type is a runtime flag
+        and the empty bytearray needs it set: without the stamp
+        `repr(bytearray())` is `b''` and `type(bytearray()).__name__` is
+        `bytes`. That flag is the only reason bytearray was left out when
+        list/tuple/bytes moved into this arm — the pylib overload set it, and
+        this arm had no way to. pybytes_mark_bytearray is that way.
+        bug-n-bytearrays-zero-argument-overload-makes-the-bare-name-a-call }
+      if lo = 'bytearray' then
+      begin
+        bPi := FindProc('pybytes_mark_bytearray');
+        if bPi < 0 then Error('Nil Python: pylib (pybytes_mark_bytearray) not loaded');
+        bArg := AllocNode(AN_ARG);
+        ASTLeft[bArg] := CurASTNode;
+        ASTRight[bArg] := -1;
+        bCall := AllocNode(AN_CALL);
+        ASTIVal[bCall] := bPi;
+        ASTTk[bCall] := Ord(tyClass);
+        if bCi >= 0 then ASTRight[bCall] := REC_UCLASS_BASE + bCi;
+        ASTLeft[bCall] := bArg;
+        CurASTNode := bCall;
+      end;
     end;
     LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
     Exit;
