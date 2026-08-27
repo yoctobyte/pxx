@@ -5853,12 +5853,22 @@ same agent could do both. A coordinator routing W work must not let an answer to
 one read as clearance for the other — that happened twice in one afternoon, in
 opposite directions.
 
-**2. Inherited facts are the ones nobody re-measures.** Three sessions reasoned
-carefully on top of "via has no push key" and none ran `ssh -T git@github.com`,
-one command from the box the fact was about. A premise that arrives sounding
-settled gets built on rather than tested. **When a chain of reasoning rests on a
-fact you did not personally measure, price the check before building the
-workaround** — here the check was one command and the workaround was an
-afternoon. This is CLAUDE.md's "measure, do not reason" applied to premises
-rather than to conclusions, and premises are the less examined of the two
-because nobody remembers deciding them.
+**2. A correct reading of the wrong instrument.** This is the sharper form —
+`ianweb`'s, after it caught the same shape twice in one afternoon. The failure is
+not "nobody measured". It is that the instrument answered a question nobody
+asked, and nothing about it looked broken.
+
+- `ListAgents` said `plexus-T` was **offline**. True — and it never measured the
+  watcher. "Is a session named plexus-T connected" sits close enough to "is
+  Track T running" to substitute for it unnoticed. T was up the whole time, by
+  three instruments: `twatch --status` exit 0, `tstate/TSTATE.md` written
+  minutes ago, and its host row citing a real sha.
+- "`via` has no push key" was an inherited fact nobody tested. `ssh -T
+  git@github.com`, one command from the box the fact was about, would have
+  answered it in under a second. Three sessions built an afternoon's workaround
+  on it instead.
+
+**Ask what your instrument actually measures before trusting what it implies**,
+and when a chain of reasoning rests on a fact you did not personally measure,
+price the check before building the workaround. A wrong reading announces
+itself; a correct reading of the wrong thing does not.
