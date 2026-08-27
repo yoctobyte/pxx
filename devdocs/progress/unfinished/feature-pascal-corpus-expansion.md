@@ -326,3 +326,56 @@ stub was type-checked against the stub, not against the real thing. The
 partition above is sound as a list of *what must be built*; it is not a
 prediction that fixing all four makes the unit compile on the first try. Re-run
 this diagnostic — it is one `probe.sh` — after the typinfo facade lands.
+
+---
+
+## Rung 6 partition superseded — five walls, not four (2026-08-28, end of session)
+
+The four-wall table above was correct **for that unit at that moment**, and both
+halves of that qualifier have since moved. Recording it here rather than editing
+the table, so the earlier measurement stays readable as what it was.
+
+**What changed:** `042bcbb32` fixed wall 2, which moved `generics.defaults.pas`
+from failing at line 2173 to 2351 and exposed a **fifth** wall the partition did
+not predict — `AN_CLASS_VIRTUAL_CALL` failing to lower when a virtual class
+method's *address* is taken as a value
+([[bug-p-the-address-of-a-virtual-class-method-cannot-be-lowered]]). It is not
+typinfo and **not generic-specific**: the repro has no generics in it at all,
+which is worth knowing before anyone searches the generics code for it.
+
+That is the concrete instance of the hedge the original partition carried: code
+behind a stub is type-checked against the stub, so clearing one wall can reveal
+another. **Do not treat the wall list as a work estimate.** Re-run the probe
+(`$SCRATCH/rg/probe.sh`, one command) after each wall lands; it is cheap and it
+is the only thing that keeps this section honest.
+
+### Current state of the five walls
+
+| # | wall | owner | status |
+| --- | --- | --- | --- |
+| 1 | typinfo surface | B | facade landed `cfa72767f`; **type-level API only** — its instance-taking overloads are still unreachable, see below |
+| 2 | generic method header binds to same-named non-generic class | P | **fixed**, `042bcbb32` |
+| 3 | nested `specialize X<T>` in expression position | P | parked, diagnosis banked, **reclassified** — not a Delphi bug, fails in objfpc on `pinned` |
+| 4 | SysUtils: `EArgumentOutOfRangeException`, `CreateRes`, `System.Error` | B | filed |
+| 5 | address of a virtual class method | P | filed |
+
+### A second chain now runs alongside this one
+
+The typinfo facade shipped, but `GetPropInfo(AnObject, 'Caption')` — the spelling
+every FPC consumer uses — still binds the wrong overload. Two defects were
+stacked there: the implicit class-to-typed-pointer conversion (**fixed**,
+`8b75fcabd`, which also closed a silent memory-safety hole) and, underneath it,
+[[bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching]],
+which is what still gates the facade's consumer path.
+
+That chain does **not** block this rung — rung 6 needs the *type-level* API
+(`GetTypeData(PTypeInfo)`), not the instance overloads. Stated explicitly
+because the two are easy to conflate now that they are open at the same time,
+and a `blocked-by:` edge between them would rank correctly for the wrong reason.
+
+### Standing warning for anyone verifying work on this chain
+
+**A repro that passes on the fix and on `pinned` is not a verification.** Two
+synthetic overload repros written during this session passed on both and were
+never broken; they were a step away from being recorded as proof that the
+overload half was fixed. Run the "before". It is the only thing that catches it.
