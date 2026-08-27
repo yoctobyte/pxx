@@ -3,8 +3,8 @@ track: W
 prio: 60
 type: decide
 blocked-by: []
-summary: "DECIDED 2026-08-27 by the owner: `via` gets a GitHub deploy key with write access, scoped to the website repo, accepting the security cost to unstall Track W. Records the bound the decision was made INSIDE — one repo, never the compiler repo, never a PAT — because that bound is the whole difference between the accepted risk and a much larger one, and it is the part that erodes silently."
-status: decided
+summary: "REOPENED — the premise was FALSE. `via` has carried an ACCOUNT-level GitHub key since 2026-06-22 with read (and by ownership, write) reach into the `pxx` COMPILER repo. So there was never a no-push-key posture, the owner is accepting a risk he already carries in a WIDER form, and adding the scoped key while removing/scoping `~/.ssh/id_ed25519` is a net risk REDUCTION rather than a trade against velocity. Original decision: `via` gets a deploy key with write access scoped to the website repo, accepting a security cost to unstall Track W. Records the bound the decision was made INSIDE — one repo, never the compiler repo, never a PAT — because that bound is the whole difference between the accepted risk and a much larger one, and it is the part that erodes silently."
+status: decided  # REOPENED — see the correction at the top of the body
 ---
 
 # DECIDE: `via` gets a write-capable deploy key, scoped to the website repo
@@ -13,6 +13,72 @@ status: decided
 - **Track:** W (website)
 - **Status:** DECIDED 2026-08-27
 - **Owner:** the user
+
+## CORRECTION 2026-08-27, SAME DAY — THE PREMISE WAS FALSE. Re-decide.
+
+**`via` has had a write-capable GitHub credential since 2026-06-22.** Not a
+deploy key. An **account** key, `/home/ian/.ssh/id_ed25519`, fingerprint
+`SHA256:MOUfGKeCqWlsWTp9tAhamOm4lVrfd+hJiSC2mCh2/9A`.
+
+Found by `ianweb` on `via` and **independently corroborated** by `frank2-af`:
+
+- `ssh -T git@github.com` from `via` answers **`Hi yoctobyte!`** — the bare
+  account. A repo-scoped deploy key answers `Hi yoctobyte/pxx-website!`. That
+  difference is the whole point: a user key carries the account's permissions,
+  and yoctobyte owns both repos.
+- `git ls-remote --heads git@github.com:yoctobyte/pxx.git` **succeeds from
+  `via`** and returns `eda9c305f6d9 refs/heads/dev`. That sha is `frank2-af`'s
+  own orphaned commit from this morning, matched against this checkout — so the
+  read is real and current, not inferred.
+- What is proven: **account-level authentication and read access to the compiler
+  repo.** What is not tested: write, because testing write means writing. Write
+  follows from it being the owner's own account key, not from a measurement.
+
+### What this does to the day's reasoning
+
+1. **"No push key on `via`" was never true.** Every party argued for a posture
+   that did not exist — `ianweb` argued for it, `frank2-af` argued for it, the
+   owner decided on it twice. The 18KB-patch workaround, the refusal to move it
+   between hosts, the "structurally stalled lane" framing in
+   [[bug-web-production-tree-is-uncommitted-and-is-the-only-copy]] and in the
+   roster: all of it was routing around a wall that was not there.
+
+2. **The owner is accepting a risk he already carries, in a narrower form than
+   he already has.** His bound — *"`pxx-website` only, never the compiler repo"*
+   — is exactly right, and is **currently violated by the credential already on
+   the box**.
+
+3. **The erosion path recorded below is not a future hazard.** It said the danger
+   was "a future session hitting friction on the `pxx` repo and reaching for the
+   credential already sitting on the box." That credential is sitting on the box
+   and has been for two months. Anything running as `ian` on `via` — including
+   an RCE in any of the four gunicorn apps behind the public tunnel — can reach
+   the self-hosting compiler's repo today.
+
+### The recommendation now runs the OTHER WAY
+
+Adding the scoped deploy key is **not** a risk increase traded against velocity.
+Paired with removing or scoping `~/.ssh/id_ed25519` on `via`, it is a strict
+**reduction**, and it lands the box on the bound the owner articulated instead
+of leaving it wider than anyone believed. Same three steps, plus a fourth that
+is the actual security win:
+
+4. **Remove or scope `/home/ian/.ssh/id_ed25519` on `via`** once the deploy key
+   is enrolled and proven, so account-level reach into `pxx` goes away.
+
+`ianweb` has generated the scoped keypair — inert until enrolled, `rm`-able if
+the owner re-decides, private half has not left `via`. It has deliberately **not
+touched `id_ed25519`**: that is the owner's credential, may be load-bearing for
+something invisible from `via`, and removing it is his call with full facts
+rather than a tidy-up. Flagging, not acting — the correct line.
+
+### Status: the ORIGINAL decision below stands as written, but was made on false facts
+
+The owner should re-decide against this page rather than against the version
+everyone held an hour ago. The likely outcome is the same grant plus step 4,
+which is why the original text is preserved rather than rewritten.
+
+## ORIGINAL DECISION (made on the false premise above)
 
 ## DECIDED — grant it, and the reasoning is the owner's
 
