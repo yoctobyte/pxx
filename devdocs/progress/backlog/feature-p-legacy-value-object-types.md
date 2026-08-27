@@ -6,7 +6,7 @@ prio: 15
 type: feature
 blocked-by: []
 gated-by: decide-old-style-object-types
-status: backlog_new
+status: backlog
 owner: ""
 created: 2026-08-25
 summary: "Turbo/Object Pascal's value `object` (a record with methods and single inheritance, `new`/`dispose`-able) has never been supported: `type TO = object X: Integer; ... end` fails with `Expected: begin, but got: X`. `object` is claimed by an unrelated meaning in ParseTypeKind (a rooted object REFERENCE, feature-object-reference-type), so the type-declaration position has no arm for it. Five fpc-testsuite generics tests fail on this alone."

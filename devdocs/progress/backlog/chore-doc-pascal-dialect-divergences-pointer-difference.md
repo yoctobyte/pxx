@@ -5,7 +5,7 @@ track: D
 prio: 25
 type: chore
 blocked-by: []
-status: backlog_new
+status: backlog
 owner: ""
 created: 2026-08-25
 summary: "Re-filed from decide-pointer-difference-unit and decide-should-a-null-variant-raise-like-fpc, both decided 2026-08-25. Two divergences from FPC are now CHOSEN rather than merely inherited, and a chosen divergence that is not written down is indistinguishable from a bug to the next reader. Both entries land in devdocs/dev/pascal-dialect-divergences.md."

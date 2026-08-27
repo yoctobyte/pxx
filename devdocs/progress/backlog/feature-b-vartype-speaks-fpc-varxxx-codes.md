@@ -5,7 +5,7 @@ track: B
 prio: 45
 type: feature
 blocked-by: []
-status: backlog_new
+status: backlog
 owner: ""
 created: 2026-08-25
 summary: "Re-filed from decide-vartype-returns-pxx-tags-not-fpc-codes, decided 2026-08-25 (option A). VarType currently returns pxx's internal tag (VT_INT=1, VT_DOUBLE=3, ...) and the unit exports no varXxx constants at all, so the FPC idiom `if VarType(v) = varInteger` does not compile. Measured: zero in-tree consumers compare VarType against a VT_ constant outside variants.pas itself, so the ticket's own gating condition for option A is met."

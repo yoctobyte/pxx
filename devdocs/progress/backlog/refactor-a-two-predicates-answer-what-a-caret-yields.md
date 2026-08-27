@@ -5,7 +5,7 @@ track: A
 prio: 55
 type: refactor
 blocked-by: []
-status: backlog_new
+status: backlog
 owner: ""
 created: 2026-08-25
 summary: "Two functions type a dereference. NodePtrElem knows more SPELLINGS (index-into-base, pointer FIELD, inline PTR_CAST, pointer arithmetic); ResolveDerefShape knows more ABOUT each (remaining depth, ultimate base). Swapping a call site from one to the other trades one kind of knowledge for the other, silently — which is exactly what shipped a regression on 2026-08-25."

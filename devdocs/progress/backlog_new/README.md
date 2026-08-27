@@ -24,13 +24,33 @@ which is precisely what `backlog/` can no longer answer.
   way. Do not pre-triage into `backlog/`.
 - Frontmatter is unchanged — `track:`, `prio:`, `type:`, `summary:`, `blocked-by:`.
   Set `prio:` if you have an opinion; leave it at the default if you do not.
-- **Not ranked.** `tools/progress.sh ready`/`next` scan `urgent`, `working`,
-  `unfinished` and `backlog` only, so nothing here is dispatched automatically —
-  the same arrangement as `float/` and `experimental/`. It is picked up
-  deliberately, or promoted into `backlog/` when someone decides it belongs in
-  the ranked queue.
+- **Ranked, exactly like `backlog/`.** `Board.RANKED_STATUSES` is
+  `urgent`/`backlog`/`backlog_new`/`unfinished`, asserted by
+  `tools/progress_ranked_statuses_devtest.py`, so `ready`/`next` dispatch from
+  here like anywhere else. The split is a FILING convenience — sort by date
+  instead of by a judgement call at filing time — **not** a parking lot.
+
+  > This bullet used to say the opposite ("Not ranked... nothing here is
+  > dispatched automatically... the same arrangement as `float/`"). That was
+  > true of the lane as first conceived and false of the lane as built; it was
+  > ranked from the start in code. Anyone who read this README to decide where
+  > to file was told their ticket would sit undispatched when it would not.
+  > `float/` and `experimental/` ARE unranked — those are the real parking lots.
 - **`urgent/` still exists and still means urgent.** This folder is the default
   destination, not the only one: something that must be worked *now* goes to
   `urgent/` as before.
 - Resolving works exactly as it always did — `tools/progress.sh resolve <slug>`
   moves it to `done/`, no sha.
+
+## Drained 2026-08-27
+
+All 24 tickets then in this folder were moved to `backlog/` at the owner's
+request; `README.md` stayed. Nothing was lost in the move — the lane is ranked
+identically, so no ticket changed dispatch position, and `status:` frontmatter
+that said `backlog_new` was rewritten to `backlog` so no ticket claims a folder
+it is not in. Filing dates remain recoverable from git.
+
+The lane itself is **not retired**: the rule above still stands and new tickets
+still land here. Draining it periodically into `backlog/` is what keeps "what
+came in recently" answerable by listing the folder, which is the whole reason
+it exists.

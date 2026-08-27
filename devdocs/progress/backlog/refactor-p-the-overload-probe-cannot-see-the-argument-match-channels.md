@@ -3,7 +3,7 @@ track: P
 prio: 45
 type: refactor
 blocked-by: []
-status: backlog_new
+status: backlog
 owner: ""
 created: 2026-08-26
 summary: "The speculative overload probe in FindUMethOverloadAhead has only argument KINDS, while the free-call path has five side channels (MatchArgArray/ArrayElemTk/Nil/Rec/Scalar) filled in pasparser_lval.inc. So the probe cannot run the free path's own compatibility check — measured, a gate built on kinds alone refuses four classes of legal call. Lift the population into a helper both callers share."

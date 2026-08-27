@@ -5,7 +5,7 @@ track: P
 prio: 55
 type: refactor
 blocked-by: []
-status: backlog_new
+status: backlog
 owner: ""
 created: 2026-08-24
 summary: "An assignment TARGET is parsed by a second, smaller copy of the lvalue walk in pasparser_stmt.inc, which resolves every `.name` as a field and ends on Expect(':='). Every capability the expression path gains has to be re-added there by hand, and three bugs so far are exactly that omission: the builtin pointer-name fallback, the PChar adapter, and the deref-then-index shape. The statement path should delegate, as its own cast-headed-CALL arm already does."

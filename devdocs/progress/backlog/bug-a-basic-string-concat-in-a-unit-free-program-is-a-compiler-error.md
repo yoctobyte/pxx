@@ -5,7 +5,7 @@ track: A
 prio: 35
 type: bug
 blocked-by: [decide-how-much-string-machinery-the-basic-frontend-gets]
-status: backlog_new
+status: backlog
 owner: ""
 created: 2026-08-24
 summary: "Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over."

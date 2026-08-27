@@ -5,7 +5,7 @@ track: P
 prio: 45
 type: refactor
 blocked-by: []
-status: backlog_new
+status: backlog
 owner: ""
 created: 2026-08-25
 summary: "`ParseRecordFields` (pasparser_decl.inc ~3199) and the class-body field arm inside `ParseTypeSection` (~4824) parse the same grammar — comma-separated names, inline fixed/dynamic array, named array alias, scalar — with the same locals under different names and the same AddUField tail. Every field-level feature has to be written twice, and the second copy is the one that stays broken."

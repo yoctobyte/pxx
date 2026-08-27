@@ -5,7 +5,7 @@ track: P
 prio: 40
 type: bug
 blocked-by: []
-status: backlog_new
+status: backlog
 owner: ""
 created: 2026-08-26
 summary: "`v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem."

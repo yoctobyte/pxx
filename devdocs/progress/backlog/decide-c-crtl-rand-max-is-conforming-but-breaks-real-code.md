@@ -5,7 +5,7 @@ track: U
 prio: 40
 type: decide
 blocked-by: []
-status: backlog_new
+status: backlog
 owner: unassigned
 created: 2026-08-26
 summary: "crtl defines RAND_MAX as 32767 and rand() returns [0,32767]. C99 7.20.2.1 only requires RAND_MAX >= 32767, so this is conforming — but every mainstream libc uses 2147483647 and real programs branch on the value. busybox editors/awk.c has an #error for anything else and is the only busybox file still blocked on a non-library gap. Raising it is a behaviour change to a shipped library, not a defect fix, so it is a call to make, not a bug to close."

@@ -5,7 +5,7 @@ track: A
 prio: 45
 type: feature
 blocked-by: []
-status: backlog_new
+status: backlog
 owner: ""
 created: 2026-08-25
 summary: "Re-filed from decide-classinfo-returns-our-blob-or-nothing / decide-tobject-classinfo-blob-or-refusal, both decided 2026-08-25. x.ClassInfo returns exactly what TypeInfo(TThatClass) returns -- the 24-byte {Kind; NamePtr; DataPtr} header whose DataPtr points at the class blob -- so o.ClassInfo = TypeInfo(TFoo) holds and a layout walker reads a real kind byte. One header word per declared class."
