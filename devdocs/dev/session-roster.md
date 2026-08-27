@@ -5853,25 +5853,31 @@ same agent could do both. A coordinator routing W work must not let an answer to
 one read as clearance for the other — that happened twice in one afternoon, in
 opposite directions.
 
-**2. A correct reading of the wrong instrument.** This is the sharper form —
-`ianweb`'s, after it caught the same shape twice in one afternoon. The failure is
-not "nobody measured". It is that the instrument answered a question nobody
-asked, and nothing about it looked broken.
+**2. A CORRECT ANSWER TO THE WRONG QUESTION LOOKS EXACTLY LIKE A CORRECT
+ANSWER.** `ianweb`'s wording, adopted after this shape appeared **four times in
+one day**. It is the single most useful line the day produced.
 
-- `ListAgents` said `plexus-T` was **offline**. True — and it never measured the
-  watcher. "Is a session named plexus-T connected" sits close enough to "is
-  Track T running" to substitute for it unnoticed. T was up the whole time, by
-  three instruments: `twatch --status` exit 0, `tstate/TSTATE.md` written
-  minutes ago, and its host row citing a real sha.
-- "`via` has no push key" was an inherited fact nobody tested. `ssh -T
-  git@github.com`, one command from the box the fact was about, would have
-  answered it in under a second. Three sessions built an afternoon's workaround
-  on it instead.
+The failure is never "nobody measured". Every reading below was **true**. Each
+instrument answered a near-neighbour question and returned success, which is
+exactly what makes it invisible — a wrong reading announces itself, this does
+not.
 
-**Ask what your instrument actually measures before trusting what it implies**,
-and when a chain of reasoning rests on a fact you did not personally measure,
-price the check before building the workaround. A wrong reading announces
-itself; a correct reading of the wrong thing does not.
+| instrument | actually answers | was read as | cost |
+| --- | --- | --- | --- |
+| `ssh -T git@github.com` — *never run* | — | "`via` has no push key", inherited and untested | an afternoon spent routing around a wall that was not there |
+| `ListAgents` | is a session named `plexus-T` connected | is Track T running | a wrong DOWN reported to the owner |
+| `test -x $(PXX_STABLE)` | is this file flagged executable | can this machine execute it | a gate saying "no pinned stable" about a present one — `bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture` |
+| `grep 'experimental\|staged'` | where does this **wording** appear | where does the site make this **claim** | 4 of 6 stale claims found |
+
+**Ask what your instrument measures before trusting what it implies.** And when
+a chain of reasoning rests on a fact you did not personally measure, **price the
+check before building the workaround** — in every row the check was seconds and
+the workaround was hours.
+
+*Fifth instance, same day, on the coordinator: a `str.replace()` with no
+assertion silently succeeds when it matches nothing, and a `str.index()` anchor
+that is line-wrapped in the file will not match the one-line form you typed.
+Both bit this roster. Every edit script gets an `assert`.*
 
 ### 2026-08-27 — `ianweb` assigned **D+W**; and the W lane's two-ended shape is now moot
 
@@ -5913,21 +5919,12 @@ result); it simply no longer splits this lane.
 - A compiler or library gap found while documenting → **file a ticket in the
   owning lane**, do not fix code under D.
 
-### STANDING — grep for the CLAIM, not the WORDING (2026-08-27)
+### STANDING — corollary on searching (2026-08-27)
 
-Third instance of one shape in a day. A sweep for known wordings
-(`experimental|staged|in development`) found four stale claims on the website;
-a sweep of the **claim-space** before editing found six. The miss was a footnote
-restating the same claim in different prose.
-
-**A string search answers "where does this sentence appear". That is a different
-question from "where does the site say this thing"** — prose restates, only the
-claim is invariant. Same correct-reading-of-the-wrong-instrument failure as
-`ListAgents`-for-Track-T and the untested "via has no push key", in search
-rather than in measurement.
-
-**Sweep before editing, not after.** The cheap pass is worthless once you have
-already fixed the instances you knew about.
+Row 4 above as a rule: **grep for the CLAIM, not the WORDING you already found.**
+Prose restates; only the claim is invariant. And **sweep before editing, not
+after** — the cheap pass is worthless once you have fixed the instances you
+already knew about.
 
 ### BOUND on Track D for `ianweb` — prose half only, and it is ARCHITECTURAL
 
