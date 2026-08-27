@@ -34802,7 +34802,7 @@ begin
             bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes }
           if (UnitAliasCount < MAX_UNIT_ALIASES) and (not SoftUnitMissed) and
              (FindCompiledUnit(impAlias) < 0) and
-             (not UnitDeclaresClassExactly(impReal, FindUnitOrAlias(impName))) then
+             (not UnitDeclaresNameExactly(impReal, FindUnitOrAlias(impName))) then
           begin
             { Point the alias at what the imported NAME resolves to, not at the
               module the import was written against. `from sm import

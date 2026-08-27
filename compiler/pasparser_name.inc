@@ -123,6 +123,22 @@ end;
   to be tried in that spelling too or `import a.b.c` binds a name no expression
   can then use. Underscore form only under isNilPy, so no Pascal qualifier
   changes meaning. feature-nilpy-dotted-imports-resolve-to-source-files }
+{ Does this spelling carry an uppercase letter? The unit and unit-alias tables
+  are lowercased on the way in, so an uppercase letter in a lookup key means any
+  hit it scores was scored by FOLDING — which is a match Python would not make.
+  See the NilPy guard in ConsumeUnitQualifier below. }
+function NameHasUpper(const nm: AnsiString): Boolean;
+var i: Integer;
+begin
+  NameHasUpper := False;
+  for i := 1 to Length(nm) do
+    if nm[i] in ['A'..'Z'] then
+    begin
+      NameHasUpper := True;
+      Exit;
+    end;
+end;
+
 function PyFindUnitDotted(const cand: AnsiString): Integer;
 var m: AnsiString; i: Integer;
 begin
@@ -201,6 +217,33 @@ begin
     field access even when unit net.pas is loaded — the qualifier greedily
     ate the param and s_addr resolved against the unit (undefined). }
   if FindSym(name) >= 0 then Exit;
+
+  { …and, under NilPy, a CLASS spelled exactly beats a unit that only matched by
+    FOLDING CASE. Every unit and alias name in the tables is stored lowercased
+    (FindCompiledUnit lowercases its query; all three alias registrations call
+    LowerCase), so a `name` carrying an uppercase letter can only have matched
+    one of them by folding — and Python does not fold: `Canvas` and `canvas` are
+    two different names.
+
+    `from reportlab.graphics.shapes import Canvas` beside `import canvas` is the
+    concrete shape: `Canvas.KIND` was consumed here as a qualifier, `KIND` was
+    then looked up as a bare symbol of the canvas MODULE, and the error read
+    `undefined variable (KIND)` — naming the attribute when the RECEIVER is what
+    mis-resolved, which sends the reader to the class body. Construction,
+    instance attributes and the fully qualified spelling all kept working, which
+    is what pins it to this one arm.
+
+    The EXACT-case collision (a class and a module both spelled `canvas`) is
+    deliberately left alone: there the two names really are the same name, so
+    which one wins is a rebinding-order question this frontend does not model
+    (bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it), and the
+    module keeps winning exactly as before. Restricting to the folded case is
+    what makes this a pure repair rather than a trade.
+
+    Fifth site of the family PyIsClassTypeExact heads — typing, construction,
+    the two guards beside them, and now the unit qualifier.
+    bug-n-importing-both-f-and-F-from-one-module-loses-the-class }
+  if isNilPy and NameHasUpper(name) and PyIsClassTypeExact(name) then Exit;
 
   cand := name;
   bestUnit := -1; bestExtra := -1;

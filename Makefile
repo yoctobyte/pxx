@@ -9873,6 +9873,21 @@ test-core: $(COMPILER)
 	# bug-n-a-subscript-store-whose-receiver-is-a-call-result-does-not-parse
 	./$(COMPILER) test/test_nilpy_subscript_store_on_a_call_result.npy $(TESTTMP)/test_nilpy_callsubst26
 	$(TESTTMP)/test_nilpy_callsubst26 | diff -u test/test_nilpy_subscript_store_on_a_call_result.expected -
+	# A from-import registers a MODULE ALIAS for the imported name — it cannot tell
+	# a submodule from anything else, and `from tkinter import ttk` needs it. The
+	# alias table stores and matches LOWERCASED, so the optimistic alias also
+	# answered for a DIFFERENT Python name: a local `class ZZ` beside
+	# `from m import zz` had `ZZ.VAL` consumed as a unit qualifier and reported
+	# `undefined variable (VAL)` — naming the ATTRIBUTE when the RECEIVER is what
+	# mis-resolved. A def, a module-level variable and a class/def letter pair are
+	# each a row; so is the reportlab shape (`Canvas` the class beside `canvas` the
+	# module), where the fold is in the COMPILED-UNIT table instead. Construction,
+	# instance attributes, the qualified spelling and an unrelated name are the
+	# controls.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-importing-both-f-and-F-from-one-module-loses-the-class
+	./$(COMPILER) test/test_nilpy_import_case_folds_onto_a_class.npy $(TESTTMP)/test_nilpy_impcase26
+	$(TESTTMP)/test_nilpy_impcase26 | diff -u test/test_nilpy_import_case_folds_onto_a_class.expected -
 	# `return lambda ...` — a closure factory, and the returned value was not
 	# CALLABLE while the same lambda bound to a local first was. The return-type
 	# scan's TUPLE detector counted the LAMBDA'S OWN PARAMETER COMMAS, so the

@@ -1,0 +1,65 @@
+# A from-import registers a MODULE ALIAS for the imported name (it cannot tell a
+# submodule from anything else, and `from tkinter import ttk` needs it). The
+# alias table stores and matches LOWERCASED — so the bogus alias also answered
+# for a DIFFERENT Python name, and a class whose spelling case-folds onto an
+# imported name had its class-level attribute reads eaten as unit qualifiers.
+# The error named the ATTRIBUTE while the RECEIVER was what mis-resolved.
+# bug-n-importing-both-f-and-F-from-one-module-loses-the-class
+
+from nilpy_casehelper import zz
+from nilpy_casehelper import ww
+from nilpy_casehelper import unrelated
+
+
+class ZZ:
+    VAL = 1
+
+
+class WW:
+    VAL = 2
+
+
+# an imported DEF that case-folds onto a local class
+print(ZZ.VAL)
+print(zz())
+
+# ...and an imported module-level VARIABLE, which fails the same way
+print(WW.VAL)
+print(ww)
+
+# the import placed AFTER the class it collides with — order-independent
+from nilpy_casehelper import qq
+from nilpy_casehelper import QQ
+
+print(QQ.VAL)
+print(qq())
+
+# the reportlab shape: a class and a MODULE whose names differ only in case.
+# Here the fold is in the compiled-unit table rather than the alias table, so it
+# needs the other half of the fix.
+from nilpy_caseshapes import NILPY_CASECV
+import nilpy_casecv
+
+print(NILPY_CASECV.KIND)
+print(nilpy_casecv.WIDTH)
+print(nilpy_casecv.make())
+
+# ---- controls: none of these ever depended on the fold ----
+
+# a name with no case relation to anything
+print(unrelated())
+
+# construction, instance attributes and the qualified spelling all worked
+# before, and must keep working
+z = ZZ()
+print(z.VAL)
+
+# the module's own qualified spelling of the colliding class
+import nilpy_casehelper
+
+print(nilpy_casehelper.QQ.VAL)
+print(nilpy_casehelper.unrelated())
+# NOT asserted here: `nilpy_casehelper.zz()` beside a local `class ZZ` still
+# constructs the CLASS instead of calling the module's function — the mirror of
+# this bug on the QUALIFIED path, pre-existing and unchanged by this fix.
+# bug-n-a-qualified-module-member-is-taken-by-a-case-folded-local-class

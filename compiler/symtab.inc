@@ -54,6 +54,7 @@ function DeclVisible(declUnit: Integer): Boolean; forward;
   the FPC SEED build has none of pxx's declare-anywhere laxness — it is the
   canary that catches this, not `make compiler/pascal26`
   (bug-a-fpc-seed-drift-emitasmx64-forward). }
+function StrEqual(const s1, s2: AnsiString): Boolean; forward;   { exact (case-SENSITIVE) compare — body is further down this file, and UnitDeclaresNameExactly is above it }
 function UsesRankOf(curUnit, declUnit: Integer): Integer; forward;
 procedure IREmitCodeCall(addr: Integer); forward;
 procedure EmitDynArrayReleaseForSym(symIdx: Integer); forward;
@@ -534,6 +535,36 @@ begin
       if TokChars[UClsNOff[i] + j] <> name[j + 1] then begin ok := False; Break; end;
     if ok then begin UnitDeclaresClassExactly := True; Exit; end;
   end;
+end;
+
+{ …and the same question for a ROUTINE or a module-level VARIABLE: does this
+  unit declare `name`, spelled exactly, as something that is definitely NOT a
+  submodule?
+
+  The class half above exists because a from-import cannot tell a submodule from
+  anything else and registers a module alias optimistically (`from tkinter
+  import ttk` needs that). A class was excluded; a `def` and a module-level
+  assignment were not, and they misfire the same way — worse, because the alias
+  table stores and matches LOWERCASED, so the bogus alias also answers for a
+  DIFFERENT Python name. `from cm import zz` beside a local `class ZZ` made
+  `ZZ.VAL` resolve as `cm.VAL` and report `undefined variable (VAL)`: an error
+  naming the ATTRIBUTE when the RECEIVER is what mis-resolved.
+
+  Exact spelling on every arm, for the reason the class arm gives: Python is
+  case-sensitive, `Canvas` and `canvas` are different names, and the decision of
+  which one is a submodule has to be made on the raw spelling because the alias
+  table cannot represent it.
+  bug-n-importing-both-f-and-F-from-one-module-loses-the-class }
+function UnitDeclaresNameExactly(const name: AnsiString; unitIdx: Integer): Boolean;
+var i: Integer;
+begin
+  UnitDeclaresNameExactly := True;
+  if UnitDeclaresClassExactly(name, unitIdx) then Exit;
+  for i := 0 to ProcCount - 1 do
+    if (ProcUnitIdx[i] = unitIdx) and StrEqual(Procs[i].Name, name) then Exit;
+  for i := 0 to SymCount - 1 do
+    if (SymUnitIdx[i] = unitIdx) and StrEqual(Syms[i].Name, name) then Exit;
+  UnitDeclaresNameExactly := False;
 end;
 
 procedure RecordUsesEdge(fromUnit, toUnit: Integer; iface: Boolean);

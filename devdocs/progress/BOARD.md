@@ -77,6 +77,7 @@ _none_
 | bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart | N | 45 | bug | `hasattr([1], 'add')` and `hasattr([1], 'update')` are True: list and set are both TPyList at run time, so every `is`-test-based introspection answers set questions about a list. `type(x).__name__` DOES tell them apart, so the discriminator exists and the predicate is not using it. | — |
 | bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name | N | 62 | bug | The MODULE-level arm of the local-binding-beats-a-def fix: `f = o.f` written after `def f` still calls the def. The local/parameter arm is fixed and gated; this one needs module-level bindings to carry a token position, which is a mechanism rather than a patch, so it was split out rather than guessed at. | — |
 | bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members | N | 65 | bug | A module that defines a name equal to its own module name makes every QUALIFIED access to the module's other members fail: `import bisect; bisect.bisect_left(...)` gives `no class declares a method or callable field .bisect_left()`, because `bisect` resolves to the module's member rather than the module. CPython's own Lib/bisect.py has `bisect = bisect_right`, so this is ordinary stdlib-shaped code. From-imports are unaffected. | — |
+| bug-n-a-qualified-module-member-is-taken-by-a-case-folded-local-class | N | 64 | bug | `m.zz()` beside a local `class ZZ` CONSTRUCTS ZZ and returns the instance instead of calling the module's function — silently, and the qualifier `m.` is ignored entirely. The mirror of bug-n-importing-both-f-and-F-from-one-module-loses-the-class on the QUALIFIED path; that one is fixed, this one is not. | — |
 | bug-n-a-short-circuit-or-returning-self-is-typed-as-a-number | N | 60 | bug | `def m(self): return self or 1` dies with `TypeError: expected a number, got object` — a top-level short-circuit `or` hands back an OPERAND, and the def-return-type scanner types it from the wrong side. The `and` spelling answers correctly only because its truthy arm happens to be the int. | — |
 | bug-n-a-staticmethod-read-through-an-instance-binds-a-receiver | N | 25 | bug | bug(N): a @staticmethod read through an INSTANCE binds a receiver, so `type(k.stat).__name__` says 'method' | — |
 | bug-n-a-tuple-unpacking-assignment-does-not-box-a-callable-value | N | 55 | bug | `a, b = lambda x: x + 1, lambda x: x + 2` compiles and then `a(1)` raises TypeError: object is not callable. The single-target spellings (`a = lambda ...`, `return lambda ...`) box the callable so the name is a variant; the tuple-UNPACK targets do not, so each name holds a raw pointer the dynamic-call path does not recognise. | — |
@@ -88,7 +89,6 @@ _none_
 | bug-n-bytes-getitem-returns-empty-instead-of-the-byte-value | N | 60 | bug | `b'abc'.__getitem__(0)` prints nothing where CPython prints 97 — a silent wrong value, not a diagnostic. `b'abc'.__len__()` on the same receiver is correct, and `str.__len__` / `str.__getitem__` raise AttributeError for methods CPython has. | — |
 | bug-n-exec-ignores-a-caller-supplied-builtins-mapping | N | 20 | bug | `exec(src, {\"__builtins__\": {}})` — the restricted-exec idiom — raises NameError in CPython and silently resolves builtins anyway in pxx. The caller's explicit instruction to resolve names against THIS mapping is discarded, so working CPython code takes a different path. Upward-compatibility defect, split out of the cosmetic decide-nilpy-exec-injects-a-builtins-key. | — |
 | bug-n-hasattr-with-a-computed-name-cannot-see-a-builtin-method | N | 55 | bug | `hasattr(x, n)` with the name in a VARIABLE answers False for every builtin-container, str, int and float method — `n = 'keys'; hasattr(a_dict, n)` is False while `hasattr(a_dict, 'keys')` is True. The literal and computed spellings of one question resolve through two different mechanisms and only the literal one was fixed. | — |
-| bug-n-importing-both-f-and-F-from-one-module-loses-the-class | N | 68 | bug | Importing a lowercase function and an uppercase class of the same letter from one module breaks the class: `from M import f` plus `from M import F` gives `undefined variable (VAL)` on `F.VAL`, in EITHER order, while importing F alone works. Pre-existing (fails on pinned v351). CPython keeps them apart because it is case-sensitive; the flat namespace here folds case. | — |
 | bug-n-inline-cast-deref-loses-a-pointer-fields-pointee | N | 55 | bug | compiler/pyparser.inc:44098 carries a byte-identical copy of the alias-cast postfix loop just fixed on the Pascal side: its `^` arm answers the pointee from the ORIGINAL cast's alias every time, so the second `^` in a `PRec(x)^.fld^` chain gets the type the CAST points at instead of the type the FIELD points at. The deref happens, only the tag is wrong, so the value is plausible and silently wrong. | — |
 | bug-n-isinstance-does-not-accept-a-qualified-class-name | N | 65 | bug | `isinstance(x, mod.Class)` is a compile error — `unknown type in isinstance: cabc` — so any code that imports a module and tests against one of its classes must first rebind the class to a bare name. | — |
 | bug-n-kwargs-collector-alongside-named-params-needs-the-remainder | N | 50 | bug | `def f(a=1, **kw)` called as `f(**{'a':5,'x':7,'y':8})` must give a=5 and kw={'x':7,'y':8} — the collector takes the UNCONSUMED keys. pylib has no helper that subtracts consumed names, and adding one is compiler/builtin/** which NEEDS A PIN, so this is coordinator-scheduled, not worker-startable. | — |
@@ -555,9 +555,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2490)
+## done (2491)
 
-2490 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2491 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (45)
 
@@ -624,7 +624,6 @@ _none_
 - [p 70] [P] feature-p-delphi-string-helpers
 - [p 70] [P] feature-pascal-typed-and-untyped-files
 - [p 70] [C] regression-test-emit-obj-cxtensa-obj
-- [p 68] [N] bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - [p 68] [E] feature-demo-songformatter-pxx-target
 - [p 68] [N] feature-nilpy-user-defined-decorators
 - [p 65] [N] bug-n-a-class-named-text-still-segfaults-outside-the-qualified-construction-arm
@@ -642,6 +641,7 @@ _none_
 - [p 65] [O] feature-opt-bulk-copy-is-byte-at-a-time
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite [parked — re-claim, do not duplicate]
 - [p 65] [P] feature-pascal-corpus-generics [parked — re-claim, do not duplicate]
+- [p 64] [N] bug-n-a-qualified-module-member-is-taken-by-a-case-folded-local-class
 - [p 62] [N] bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name
 - [p 62] [N] bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name [parked — re-claim, do not duplicate]
 - [p 62] [N] bug-n-augmented-true-division-does-not-widen-an-annotated-int-parameter

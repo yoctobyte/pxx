@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:23 blocked:7 backlog:266 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2490 rejected:45`
+`unfinished:23 blocked:7 backlog:266 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2491 rejected:45`
 
 ## Held now (working/ — do not touch these files)
 
@@ -62,7 +62,6 @@ _none — no lane is locked._
 - `[p 70] [P]` feature-p-delphi-string-helpers
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 70] [C]` regression-test-emit-obj-cxtensa-obj
-- `[p 68] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [N]` bug-n-a-class-named-text-still-segfaults-outside-the-qualified-construction-arm
@@ -79,5 +78,6 @@ _none — no lane is locked._
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [O]` feature-opt-bulk-copy-is-byte-at-a-time
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
+- `[p 65] [P]` feature-pascal-corpus-generics
 
 _247 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
