@@ -6543,3 +6543,69 @@ a long compile there competes with the site. **So route aarch64 *verification*
 to `via` — a run, an execution result, a "does this actually work on real
 hardware" question — and keep bulk building on plexus.** And ask `ianweb` rather
 than assuming capacity; it holds D+W and knows what else the box is doing.
+
+## 2026-08-27 — Track T's AGENT face is staffed (`frankT`), and `~/pxx` stops being a trap
+
+Owner launched an agent in `~/pxx` to watch the Track T daemon and triage, and
+asked for it to be added to `~/frank.sh`. Done — but the launch surfaced the
+hazard this file had been documenting *around* rather than removing.
+
+### The tree was on the retired branch, and the agent had already read the wrong CLAUDE.md
+
+Measured at the moment of the handover:
+
+| property | value |
+| --- | --- |
+| branch | **`dev`** — retired by the owner 2026-08-26 |
+| lag | **514 commits** behind `master` |
+| working tree | clean (nothing at risk) |
+| `CLAUDE.md` | the stale copy; mentions `dev` **14 times** |
+
+An agent launched there reads, as its very first act, a project guide describing
+a branch model that no longer exists — a sync-back gate, `master` as a snapshot
+advanced only at a pin, never-rebase. **This is not hypothetical: it is exactly
+what filed four tickets against a dead branch earlier the same day.** The agent
+was told immediately, before doing any work, with the fix to run **itself**
+(`git checkout master && git pull --rebase`) — a coordinator does not edit under
+a live session's feet, and the same rule that says claim in your own worktree
+says fix your own branch.
+
+**Why the standing "do not work in `~/pxx`" advice could be retired instead of
+repeated.** It rested on one fact that has since expired: that `~/pxx` hosted the
+port-8377 dashboard and therefore had to stay as it was. It does not — the
+dashboard runs from `~/trackt-watch` now (PID 4327, fresh post-reboot, HTTP 200),
+brought up by `frank.sh`'s own `trackt_bringup()`. With nothing pinning the tree
+to `dev`, switching it to `master` **removes** the trap. A warning that has to be
+re-read by every future agent is a worse fix than deleting the thing being warned
+about.
+
+### `frank.sh` now carries the role
+
+`FLEET` gains `frankT:$HOME/pxx`, the concurrency note is corrected to 7 roles,
+and the `~/pxx` comment block is rewritten from "do not work here" to "this is
+frankT's tree; if its branch is not `master`, fix that first." The `frank1`/
+`frank2` lines are corrected too — they are **live ad-hoc trees the owner uses at
+random**, not retired trees, and are deliberately not relaunched by the fleet
+because a session in them is the owner's, not ours.
+
+Two naming notes for whoever reads `ListAgents` next:
+
+- The live session is **`pxx-a5`**, not `frankT` — it was hand-launched, so it
+  got an auto-generated name. After any relaunch through `frank.sh` the role
+  comes up as `frankT`. Same job, two names, only until the next restart.
+- Its roost tab read **`claude`**, which is the precise illegibility `frank.sh`
+  was written to prevent. Renamed to `frankT` with `tmux rename-window`
+  (cosmetic; it does not rename the agent session).
+
+### Concurrency: this is a third *dispatched* session, and it is a deliberate one
+
+frankA (A) + pxx-a5/frankT (T) + the coordinator. That is at the top of the
+recorded 1-2 worker target. It is defensible because **T is not a competing
+consumer of the same queue**: it does not take tickets from `ready`, it reads
+`tstate` and files into other lanes. The thing to watch is tokens, not
+collisions — T's file scope (`tools/testmgr.py`, `twatch`, `trackt`, the fuzzers,
+`tstate/**`) is disjoint from every dev lane by construction, which is the whole
+reason the letter exists.
+
+**frankB, frank-rust and frankwasm stay down.** Seven roles can be launched; three
+are dispatched.
