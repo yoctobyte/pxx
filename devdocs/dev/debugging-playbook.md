@@ -1160,3 +1160,67 @@ what the `-O0` debug build gives than the `-O2` one. **A tool that fails to
 build fails silently in the worst possible way: as an absence of measurements,
 which reads exactly like an absence of anything to measure.** Build it before
 you trust a number attributed to it.
+
+## Only binaries timed inside ONE interleaved run are comparable — and a pass changed to fix a measurement is as sound as the measurement
+
+The `-O3` residency slice (2026-08-28) measured mandelbrot at **1.10 s** before
+a change and **1.18-1.24 s** after it: a clean 7% regression, min of 5, same
+command, same box. The obvious reading was that the change had a cost, so a
+per-class fix was built to remove it, and — this is the part worth recording —
+**the causal explanation was written into `ir_codegen.inc` as a comment stating
+it as fact**, complete with the two numbers.
+
+Re-measuring all three binaries *inside a single interleaved run* gave
+**1.34 / 1.33 / 1.34**. The same "before" binary that had measured 1.09 now
+measured 1.34. There was no regression, there had never been one, and the fix
+was a fix for the box's load.
+
+Why the usual precaution did not save it: `%U` user time, A/B alternating,
+**min of 5** is the discipline this repo already uses, and it is not enough
+here. plexus runs Track T's watcher and several agents; load swung between 4
+and 13 during that session. Min-of-N removes noise *within* a run and removes
+nothing at all *between* runs, so two numbers taken ten minutes apart are two
+measurements of the machine, with the binary as a minor term.
+
+- **Time every variant you intend to compare inside one loop**, alternating, in
+  the same process invocation window — `for k in 1..N; do for v in old new t3;
+  do time ./$v; done; done`, then take each one's minimum. Three variants in
+  one run is comparable; the same three run one after another as separate
+  commands is not.
+- **A delta measured across runs is not evidence for a cause.** It is not
+  evidence for an effect either. The interleaved re-run comes *before* the fix,
+  never after it.
+- When you do revert an experiment, **verify the revert by rebuilding and
+  comparing the binary sha to the pre-experiment one.** Bit-identical is proof
+  the tree is back where it was; "I undid the edits" is not.
+
+The general shape, which is why this sits next to the bisect entry above: a
+change made to fix a measurement inherits every weakness of that measurement,
+and a *comment* asserting the cause outlives the measurement entirely. The
+comment would have been read for years as a finding. It was a load average.
+
+## Regenerate the baseline; never reuse one from earlier in the session
+
+The same slice checked that an `-O3`-gated pass had not disturbed `-O2`, by
+hashing a fixed corpus compiled for all six targets and diffing against hashes
+taken earlier that session. One program, `exc`, came back **changed on all six
+targets**.
+
+That result is impossible: the pass exits on `OptLevel < 3` and the corpus is
+compiled at the default level. The impossibility is what made it cheap —
+an implausible-but-conceivable delta would have been debugged for an hour.
+Direct comparison of the two compilers on that program showed `cmp` finding no
+difference at all, which located the fault in the harness rather than the
+compiler. `exc` is the only corpus program that `uses SysUtils`, and a
+`git pull` between the two hash runs — the v389 pin — had updated `lib/rtl`
+underneath it. Re-running **both** sides back to back gave 48/48 identical.
+
+- **A baseline is only valid against the tree that produced it.** In a repo
+  where a pin can land `lib/rtl` mid-session and other lanes push continuously,
+  "earlier today" is a different tree. Regenerate both sides, back to back,
+  from the state you are actually comparing.
+- **Say what you pinned, when, to whoever is mid-measurement.** A pin that moves
+  `lib/rtl` invalidates every in-flight before/after in every lane, silently.
+- The tell that saves you is the one above: **when a result is not merely
+  surprising but structurally impossible, suspect the harness first**, and go
+  find the shortest path that bypasses it.
