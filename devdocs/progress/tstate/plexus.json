@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-27T10:03:09Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "192906caf7f7a3e6684dc720884da75061a5339b",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-27T10:22:42Z",
    "fixed": [
     "test-nilpy#src:test/test_nilpy_star_unpack_into_a_collecting_callee.npy"
@@ -462,6 +453,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "3cd21608e041fc255190faf7cb28ffe1da577c56",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T19:48:42Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "8b2cc332791e5da7618f123cfb05f87b12bd13f3",
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
@@ -6958,14 +6958,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-27T19:42:10Z",
+  "date": "2026-08-27T19:48:42Z",
   "deadline": 7200.0,
-  "sha": "3cd21608e041fc255190faf7cb28ffe1da577c56",
+  "sha": "8b2cc332791e5da7618f123cfb05f87b12bd13f3",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 316.9
+  "wall": 318.3
  },
  "last_bench": {
   "conf_rows": 550,
