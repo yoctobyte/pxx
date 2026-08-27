@@ -6956,3 +6956,82 @@ first covering run per tier with commit distance, **and it prints the caveat
 rather than trusting the reader to supply it**, which is the failure mode this
 repo keeps paying for. On the original sha: `e7c0d1d2a` never swept, covered
 green at native +2, covered by a RED full at +36.
+
+## Coordinator cycle, 2026-08-27 ~23:00 — the three promotions LANDED; pin held on T's verdict
+
+Not a quiet tick. frankA pushed all three `-O2` promotions between 22:50 and
+22:58, one commit per pass as directed:
+
+| sha | pass | time |
+| --- | --- | --- |
+| `13d4bba0c` | div/mod by a constant power of two | 22:50 |
+| `e4fe576eb` | narrowing ordinal cast → one `movsx`/`movzx` | 22:54 |
+| `7767acc60` | cmp-immediate, both forms — **current HEAD** | 22:58 |
+
+**Verified before sending them to `frankT` this time.** Each flips a guard from
+`OptLevel >= 3` to `OptLevel >= 2` in `compiler/` and nothing else (pass 1 two
+sites, pass 2 one, pass 3 two). `e7c0d1d2a` is correctly **absent** — the
+residency refresh stays `-O3` because the mechanism it fixes does not exist
+below it. They are **not three consecutive shas**; docs commits are interleaved.
+
+**Method suggested to `frankT`, explicitly overrulable:** the question the pin is
+gated on is *"is the promoted `-O2` sound?"*, and **`7767acc60` alone answers it
+cumulatively** — all three promotions are live in it. Per-pass rows buy
+*attribution*, which only matters on a red. So: run HEAD first (~5 min), fan out
+only if red. Green at HEAD releases the pin in a fraction of the 15-25 min and
+keeps the box free for frankA. The counter-argument was handed over with it — a
+cumulative green could in principle mask two passes cancelling out — and the call
+left to the lane that owns the instrument.
+
+**PIN STATUS: HELD**, on `frankT`'s verdict and nothing else. `$(PXX_STABLE)`
+still points at the pre-promotion binary, so every Track B/D/E build is unaffected
+by what is now on master. That is the containment, and it is working as designed.
+
+### Fleet, this cycle
+
+| session | state |
+| --- | --- |
+| frankA | **busy** — finishing the ticket write-up after the promotions |
+| pxx-a5 (`frankT`) | **busy** — was holding for these shas |
+| frank-user | waiting |
+| frankB / frank-rust / frankwasm | idle, deliberately undispatched |
+| ianweb | idle; D+W, nothing blocked on it |
+
+Three dispatched, which is where it stays. `working/` holds exactly two locks —
+frankA's ticket and `feature-target-wasm` — and `urgent/` is empty.
+
+**Track T UP**, `--status` exit 0: plexus GREEN native at `b70c6f40c4c7`, full
+through `b898d0543fc8` RED, pin-verify v388 at `20664a1576d3` RED (2 red, 0 new).
+The status line's own caveat applies and is worth repeating because it reads like
+a contradiction otherwise: **those reds are AT THE PINNED TREE, 14 testable
+commits behind origin/master** — a job fixed since is still red there, and that is
+not a contradiction.
+
+### Carried items, corrected — the loop prompt is now stale on both
+
+The self-watch prompt still carries *"two one-line questions stacked with the
+human on Track W"*. **Both are closed** (deploy go/no-go was already DONE and
+verified live; the cross-host patch question is moot). And the `-O2` promotion is
+**decided**, not pending — three passes promoted, awaiting a verdict rather than
+a decision. Updated in the loop prompt so the next tick does not re-raise settled
+items; recorded here because a stale carried item is indistinguishable from a
+live one, which is the same failure this file logged three hours ago.
+
+**Genuinely open, and only these two:**
+
+1. **Two NilPy NEW-REDs** (`test_nilpy_parent_call_after_instantiation`,
+   `test_nilpy_startswith_tuple`, both p70, both `bad=b898d0543fc8` — a
+   **docs-only commit**, so the bound is an upper bound and not a lead).
+   **Not dispatched**: N is deprioritized by owner instruction and the owner
+   reserved the call to lift it. Deprioritized is not dropped — they are filed and
+   will head the N queue the moment it is lifted. `frankT` asked whether they are
+   genuine NEW-REDs or first-ever-reports, since `test-nilpy` runs in limited/full
+   only and an unseen job reports as a regression against a green history it never
+   had.
+2. **A hook false positive**, reported to the owner as an observation only.
+   `.claude/hooks/no-full-suite.sh` matches command text anywhere in a Bash
+   invocation, so it refused a file write whose heredoc merely *quoted* a
+   `testmgr --tier full` repro line. `frankT` reworded rather than using
+   `PXX_TRACK=T` — correct, the escape is for *running* suites — and did not touch
+   the hook. **Neither will I.** That file and `.claude/settings.json` are the
+   owner's; a peer reporting friction is not authorisation to edit them.
