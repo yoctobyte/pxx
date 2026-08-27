@@ -2443,6 +2443,21 @@ var
     Deliberately NOT ProcHdrTok: that one is compared against CurBodyHdrTok under
     RequireForward and means something else. }
   ProcPyDefTok: array of Integer;
+  { The token index of the first MODULE-LEVEL ASSIGNMENT that rebinds this
+    def's name after its own `def` statement, or -1 for none; -2 = not computed
+    yet. The other half of ProcPyDefTok's question.
+
+    `def f(): ...` followed by `f = D().f` or `f = lambda: 2` is two bindings of
+    one name, exactly as two `def f`s are, and Python's answer at any point is
+    whichever statement ran last. The def side of that comparison has had a
+    position since ProcPyDefTok; the ASSIGNMENT side had none, so a rebinding
+    written after a def could never win and `f("q")` still reached the def.
+
+    Filled lazily by PyDefRebindTok on first ask and reused, so a module whose
+    every identifier occurrence asks the question scans its token stream once
+    per def rather than once per occurrence.
+    bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name }
+  ProcPyRebindTok: array of Integer;
   ProcHdrTok  : array of Integer; { SOffset of a MAIN-program top-level header (pre-scan/forward stamp); 0 = always visible (builtins, units, interface, methods, nested). Compared against CurBodyHdrTok under RequireForward. }
   ProcRetRecId : array of Integer; { record id for tyRecord results }
   ProcAggregateDestSym : array of Integer; { hidden caller-result pointer local, or -1 }

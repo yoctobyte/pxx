@@ -5,10 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:22 blocked:7 backlog:264 backlog_new:2 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2516 rejected:45`
+`working:2 unfinished:22 blocked:7 backlog:265 backlog_new:2 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2516 rejected:45`
 
 ## Held now (working/ — do not touch these files)
 
+- `bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name` [A] — owner: unrecorded
 - `feature-target-wasm` [A+B] — owner: frankwasm
 
 ## unfinished (22) — parked mid-flight; re-claim, do not duplicate
@@ -46,7 +47,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 276, ranked
+## Ready — top 30 of 277, ranked
 
 - `[p 85] [O]` feature-opt-o3-register-pressure
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
@@ -79,4 +80,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
 - `[p 62] [B]` feature-b-the-module-shim-batch-blocking-the-python-corpus
 
-_246 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_247 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

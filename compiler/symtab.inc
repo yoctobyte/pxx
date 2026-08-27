@@ -7497,6 +7497,93 @@ end;
   candidate set), ParseFactorCore (the intrinsic guards' procIdx), and
   PyUserNameShadowsHere (`set(...)`'s own hook test).
   bug-nilpy-intrinsic-only-builtin-is-shadowed-from-the-top-of-the-module }
+{ Where this module-level def's name is REBOUND by an ordinary assignment, or
+  -1 if it never is. The assignment half of ProcPyDefTok's comparison.
+
+      def f(x):    return "MOD"
+      class D:
+          def f(self, x): return "METH"
+      f = D().f
+      print(f("q"))          # CPython METH, pxx MOD
+
+  The LOCAL arm of this was fixed long ago and needs no ordering at all —
+  Python's scoping makes a local binding win for the whole function body, so
+  `Syms[idx].Kind in [skLocal, skParam]` is the entire test. At module level the
+  answer is "whichever statement ran last", and the assignment had no position
+  to compare with. This gives it one.
+
+  Scanned rather than recorded at parse time because the module-level binding
+  pre-passes do not run for every shape this must cover (`f = lambda: 2` and
+  `f = D().f` reach different arms), and because the token stream is the one
+  record that is complete before any of them.
+
+  Only DEPTH 0 relative to the def counts: an assignment inside a nested suite
+  is conditional, and treating it as a rebinding would break the legal forward
+  case NilPy must accept, being upward compatible with CPython — `f = something`
+  guarded by a branch that never runs still leaves the def in place. The scan
+  starts just after the `def` token, so the def's own suite is depth 1 and is
+  skipped by the same test.
+
+  The FIRST rebinding after the def is enough: from its position onward the name
+  means the assignment, and a LATER def taking the name back is a separate
+  question that PyDefPosBeats already answers.
+
+  Cached in ProcPyRebindTok — this is asked once per identifier occurrence, and
+  scanning the module for each would be quadratic in a file like the uforth
+  corpus. }
+function PyDefRebindTok(pi: Integer): Integer;
+var i, depth: Integer; nm: AnsiString;
+begin
+  if ProcPyRebindTok[pi] <> -2 then
+  begin
+    Result := ProcPyRebindTok[pi];
+    Exit;
+  end;
+  Result := -1;
+  nm := Procs[pi].Name;
+  depth := 0;
+  i := ProcPyDefTok[pi];          { the `def` token itself; see defs.inc on the -1 }
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkIndent then Inc(depth)
+    else if Tokens[i].Kind = tkDedent then
+    begin
+      Dec(depth);
+      if depth < 0 then Break;    { left the level the def was written at }
+    end
+    else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
+            (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkAssign) and
+            (i > 0) and
+            (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent]) and
+            (GetTokenStr(i) = nm) then
+    begin
+      Result := i;
+      Break;
+    end;
+    Inc(i);
+  end;
+  ProcPyRebindTok[pi] := Result;
+end;
+
+{ Has an ordinary module-level assignment taken this def's name over, AT THE
+  CURSOR? The other half of "which binding ran last", asked the way the call
+  sites need it.
+
+  Inside a def BODY (CurProc >= 0) the position does not matter: the body runs
+  after the whole module has executed, so if the name is rebound anywhere at
+  module level, that rebinding is what it means by the time the body runs. In
+  the module body it is an ordinary lexical comparison.
+  bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name }
+function PyDefRebound(pi: Integer): Boolean;
+var rb: Integer;
+begin
+  Result := False;
+  if (pi < 0) or (ProcPyDefTok[pi] <= 0) then Exit;
+  rb := PyDefRebindTok(pi);
+  if rb < 0 then Exit;
+  Result := (CurProc >= 0) or (rb < TokPos);
+end;
+
 function PyDefBoundHere(pi: Integer): Boolean;
 begin
   Result := (pi < 0) or (ProcPyDefTok[pi] = 0) or (CurProc >= 0) or
@@ -8543,7 +8630,7 @@ begin
   SetLength(ProcFlexColumn, n);  SetLength(ProcExternal, n);  SetLength(ProcCModule, n);
   SetLength(ProcCaseSensitive, n);  SetLength(ProcLibrary, n);  SetLength(ProcExtName, n);
   SetLength(ProcCdecl, n);  SetLength(ProcVariadic, n);  SetLength(ProcNamedGP, n);
-  SetLength(ProcNamedFP, n);  SetLength(ProcUnitIdx, n);  SetLength(ProcPyDefTok, n);
+  SetLength(ProcNamedFP, n);  SetLength(ProcUnitIdx, n);  SetLength(ProcPyDefTok, n);  SetLength(ProcPyRebindTok, n);
   SetLength(ProcHdrTok, n);  SetLength(ProcRetRecId, n);  SetLength(ProcAggregateDestSym, n);
   SetLength(ProcRetIsDynArray, n);  SetLength(ProcRetFixedArrBytes, n);  SetLength(ProcRetArrAi, n);
   SetLength(ProcIsAsync, n);  SetLength(ProcIsGenerator, n);  SetLength(ProcIsStackless, n);
@@ -8599,6 +8686,7 @@ begin
   ProcCdecl[ProcCount]        := False;
   ProcUnitIdx[ProcCount]      := CurrentUnitIdx;
   ProcPyDefTok[ProcCount]     := 0;   { 0 = visible everywhere; see defs.inc }
+  ProcPyRebindTok[ProcCount]  := -2;  { -2 = not computed; see defs.inc }
   ProcHdrTok[ProcCount]       := 0;   { 0 = always visible; ParseSubroutine stamps main-program headers }
   ProcRetRecId[ProcCount]     := REC_NONE;
   ProcAggregateDestSym[ProcCount] := -1;

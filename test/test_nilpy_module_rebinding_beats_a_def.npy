@@ -1,0 +1,75 @@
+# A module-level assignment that rebinds a `def`'s name.
+#
+# bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name
+#
+# In Python a `def` is a name binding like any other, so at any point in a
+# module the name means whichever binding statement ran last. The LOCAL arm of
+# this was fixed long ago and needs no ordering — Python's scoping makes a local
+# binding win for the whole function body unconditionally. At module level the
+# answer is positional, and the assignment side of that comparison had no
+# position to compare with, so a rebinding written after a def could never win.
+#
+# The def side has had a position since ProcPyDefTok; ProcPyRebindTok gives the
+# assignment side one, and PyDefRebound compares them.
+#
+# Rows 3 and 5 are the reason the comparison has to be positional rather than a
+# blanket "is this name ever rebound": order matters, and a rebinding under a
+# branch that never runs must leave the def in place, since NilPy is upward
+# compatible with CPython and that program is legal there.
+
+# 1. the ticket's own repro — a bound method rebinding a def
+def f(x):
+    return "MOD"
+
+class D:
+    def f(self, x):
+        return "METH"
+
+f = D().f
+print(f("q"))
+
+# 2. the smallest form: no class, no bound method
+def g():
+    return 1
+
+g = lambda: 2
+print(g())
+
+# 3. ORDER: a call ABOVE the rebinding still reaches the def
+def h():
+    return 1
+
+print(h())
+h = lambda: 2
+print(h())
+
+# 4. def-vs-def ordering, which already worked and must keep working
+def m():
+    return 1
+
+def m():
+    return 2
+
+print(m())
+
+# 5. a rebinding inside a branch that never runs is NOT a rebinding — this is
+#    legal CPython and the def must survive it
+def k():
+    return 1
+
+if False:
+    k = lambda: 2
+
+print(k())
+
+# 6. seen from inside a def BODY, which runs after the whole module has
+#    executed: the rebinding always won there, whatever the positions
+def n():
+    return 1
+
+n = lambda: 2
+
+def caller():
+    return n()
+
+print(caller())

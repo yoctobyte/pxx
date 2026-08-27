@@ -1082,6 +1082,9 @@ test-nilpy: $(COMPILER)
 	# a nested def captures the PRIVATE SLOT of a rebound typed parameter
 	./$(COMPILER) test/test_nilpy_nested_def_captures_a_rebound_parameter.npy $(TESTTMP)/test_nilpy_capreb26
 	$(TESTTMP)/test_nilpy_capreb26 | diff -u test/test_nilpy_nested_def_captures_a_rebound_parameter.expected -
+	# a module-level assignment rebinds a def's name, positionally
+	./$(COMPILER) test/test_nilpy_module_rebinding_beats_a_def.npy $(TESTTMP)/test_nilpy_modreb26
+	$(TESTTMP)/test_nilpy_modreb26 | diff -u test/test_nilpy_module_rebinding_beats_a_def.expected -
 	./$(COMPILER) test/test_nilpy_ast_literal_eval.npy $(TESTTMP)/test_nilpy_ast_literal26
 	test "$$($(TESTTMP)/test_nilpy_ast_literal26)" = "$$(printf '0.7 0.7 0.5 3\n42 -3 hi\n2\nTrue None\n1 3')"
 	# atexit handlers run at exit (LIFO), io's in-memory buffers behave

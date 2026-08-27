@@ -45036,8 +45036,34 @@ begin
         representative whose SIGNATURE callers read types off. It is not a "what
         does this name call" query. The decision belongs here.
         bug-nilpy-a-callable-in-a-variable-loses-to-a-def-of-the-same-name }
+      { The MODULE-level arm of exactly that, split out when the local arm
+        landed because the answer here depends on which statement ran last and
+        this site could not see it. It can now: PyDefRebound compares the def's
+        ProcPyDefTok against the position of the assignment that rebinds it.
+
+            def f(x):    return "MOD"
+            class D:
+                def f(self, x): return "METH"
+            f = D().f
+            print(f("q"))        # CPython METH, pxx MOD
+
+        skGlobal is required and is not a formality — it is what says the name
+        really does denote a module-level VARIABLE here, so unbinding the def
+        leaves something for the ordinary variable path to claim. Without it the
+        name reaches the "nothing claimed the name" restore below and the def
+        simply comes back — which is what happened when this was first tried
+        through PyDefBoundHere alone: the funnel correctly answered "not bound",
+        and the def was handed back a few thousand lines later.
+
+        A rebinding inside a nested suite does NOT count — see PyDefRebindTok.
+        `f = something` under a branch that never runs must leave the def in
+        place, because NilPy is upward compatible with CPython and that program
+        is legal there.
+        bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name }
       if (qUnit < 0) and (procIdx >= 0) and
-         (idx >= 0) and (Syms[idx].Kind in [skLocal, skParam]) then
+         (idx >= 0) and
+         ((Syms[idx].Kind in [skLocal, skParam]) or
+          ((Syms[idx].Kind = skGlobal) and PyDefRebound(procIdx))) then
         procIdx := -1;
 
       pyLateDefPi := -1;
