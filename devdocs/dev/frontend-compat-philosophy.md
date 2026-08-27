@@ -195,21 +195,31 @@ The C section says *"gcc / ISO C is the oracle"* and *"a difference from gcc is 
 the second half of the first one survives: **a difference from the C standard is
 a bug; a difference from gcc is not automatically anything.**
 
-That is not a safe edit to make silently, because the C section's *reason* pulls
-the other way: the frontend's stated value is that **real-world C compiles
-unmodified**, and real-world C — busybox, zlib, QuickJS — is full of GNU
-extensions that no C standard describes. Spec-compliance-by-default and
-compiles-the-world are in genuine tension for C specifically.
+**But that is a distinction without a conflict, and the ticket filed to resolve
+it was rejected the same day** ([[decide-c-frontend-iso-c-or-gnu-c-by-default]],
+`rejected/`). Two things settle it:
 
-**Measured, not assumed:** `--strict-gcc` **does not exist.** The shipped family is
-`--strict-case`, `--strict-fpc`, `--strict-ir`, `--strict-operator`,
-`--strict-overload`, `--strict-overload-width`, `--strict-python`,
-`--strict-uses`, `--strict-visibility`, plus `--mimic-fpc` and
-`--mimic-fpc-compiler`. So C is the one frontend with **no flag** for its
-reference implementation, and the ruling's C half has no mechanism today.
+**The standard is the AUTHORITY; gcc is the INSTRUMENT.** Owner, 2026-08-27:
+*"C is well defined by formal standards. it may be that gcc is wrong, unlikely
+but.. so gcc is an oracle. we use it as. but. it has not been an issue so far
+since C is well defined."* If they ever disagree the standard wins — and they
+never have, which is why `tools/gcc_diff_probe.sh` settles arguments without
+anyone adjudicating.
 
-Which way that flag should point is a real fork with real consequences for the
-corpora, so it is **not** derived here: see
-[[decide-c-frontend-iso-c-or-gnu-c-by-default]] (Track U). Until it is answered,
-the C section above stands as written — do not start rejecting GNU extensions on
-the strength of this refinement.
+**Accepting a SUPERSET of the standard is not a divergence from it.** This was the
+framing error worth recording, because the project already states the same rule
+twice: Pascal — *"we accept a form FPC rejects → not a defect"*; NilPy —
+*"accepting something CPython rejects is a feature, not a defect."* C is the same
+shape. Accepting `__attribute__` takes nothing away from a program that does not
+use it.
+
+Measured, not assumed: `__attribute__`, `__extension__`, `__builtin_*`, statement
+expressions, `__asm__` and `__inline` are **already handled** in
+`clexer.inc`/`cparser.inc`/`cpreproc.inc`. **GNU-by-default is the shipped status
+quo**, and real-world C keeps compiling unmodified. No `--strict-gcc` is needed:
+being bug-compatible with a particular implementation is not something anyone has
+asked for. A `--strict-c` that *rejected* extensions would be an ordinary feature
+request, and no program needs it today.
+
+So the C section above stands exactly as written, with one word sharpened: **the
+formal C standard** is the oracle, and gcc is how we consult it.
