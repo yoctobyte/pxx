@@ -8390,3 +8390,74 @@ between slices. `urgent/` empty. **v389's `full` request is queued and not yet
 drained** — expected; the daemon needs an idle phase and pushes have been steady.
 Nudged frankwasm since it had declared Phase 2 and then stopped; did not nudge frankT,
 which has no pending ask and whose daemon is what matters.
+
+## Phase 2's grant is needed at the START, and the staged split dissolves the sequencing problem
+
+frankwasm asked for three edits and offered a fallback staging. **The fallback is
+the primary**, and the reason is better than caution:
+
+| edit | file | granted |
+| --- | --- | --- |
+| 1. `{$include ir_codegen_wasm32.inc}` | `compiler.pas` | **yes, now** |
+| 3. `forward` decl of `IRTopLevelStmt` | `compiler.pas` | **yes, now** |
+| 2. the `TARGET_WASM32` arm | `ir_codegen.inc` | **no — separate ask** |
+
+**(1) and (3) live entirely in `compiler.pas`, so this grant never touches
+`ir_codegen.inc` at all.** frank-optimize is not "clear right now" — it is *not
+involved*. And nothing calls the new file, so the behaviour change is exactly zero
+while the compile-check is full. Measured before granting: `compiler.pas` over 3h
+shows only the landed registration commit; `ir_codegen.inc` was last touched by
+`562965e1c`, committed and pushed.
+
+### The structural point, which generalises past wasm
+
+Phase 1 was provable with no shared edit **because `wasmenc.inc` depends on
+nothing** — built that way deliberately, and it earned a real proof.
+`ir_codegen_wasm32.inc` depends on `Syms`, `Procs`, `IRKind`, `CurProc`,
+`FrameSize`, so **there is no standalone harness for it that means anything**. It
+pushed the file as WIP saying in the commit message that it has never been compiled
+and cannot be, rather than letting "it's committed" imply otherwise.
+
+> **A lane can defer a shared edit exactly as long as its work is independently
+> verifiable, and not one line longer.** Accumulating a thousand lines of unverified
+> backend to protect a boundary trades a real property for a bookkeeping one.
+
+### "The pattern is established" — flagged by the lane as suspicious, and it survives
+
+frankwasm flagged its own argument for (3) as the same shape as *"it's only three
+lines"*. Right to flag; the analysis comes out differently. `compiler.pas:157`
+already forwards `IRNodeOwnsManagedStr`, with a comment, for **precisely** this
+structural reason — the cross backends are included before `ir_codegen.inc`. So this
+is not one more line by precedent, it is **using the mechanism the file already has
+for this exact situation instead of inventing a second one**. That is
+`normalise-dont-special-case`. The distinction worth keeping: *"it's small"* never
+carries; *"it's the same mechanism for the same reason"* does.
+
+### Three source facts verified rather than assumed — why granting at phase start is safe here
+
+- `IREmitMachineCode` is called **once per body** with `CurProc` in scope
+  (`ir_codegen.inc:10053`) — one call, one wasm function, which is what makes a stack
+  machine fit a compiler built on a flat `Code[]` with positional label fixups.
+- **`FrameSize` is final before codegen** (locals allocated during lowering,
+  `symtab.inc:4115`), so unlike every register backend there is no prologue to
+  backpatch. It checked **because it expected the opposite** — wasm's variable-length
+  LEB encoding would have forced building the body first and prepending the prologue.
+  That is the difference between a lucky design and a correct one.
+- `Syms[i].Offset` is negative and `[rbp-N]`-shaped while `$fp` points at the frame
+  bottom, so the conversion lives in exactly one function.
+
+Also landed green on the way past: `wasmenc.inc` gained `WasmAddTypeN`, a **counted**
+form — an open array carries its own `Length`, so building a signature from a fixed
+`Procs[].Params` array would have interned a **32-parameter signature for a
+two-parameter function**. The class of bug that produces a valid module which is
+quietly wrong. Fixedpoint `a5ba15590962`, both wasm suites green.
+
+Oracle for the phase: `test/wasm/phase2_slice.pas`, one source in two roles — native
+it prints 19, -3, 43, 1 (hand-checked); with `-dWASM_NOMAIN` an empty main, so the
+backend need not reach `writeln`, which is Phase 6.
+
+Optional note passed on, not a condition: aarch64/i386/arm32 includes carry
+`{$ifndef PXX_NO_*}` guards and riscv32/xtensa do not, so a `PXX_NO_WASM32` guard is
+free now and awkward to retrofit given
+`feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` sits in
+`unfinished/`.
