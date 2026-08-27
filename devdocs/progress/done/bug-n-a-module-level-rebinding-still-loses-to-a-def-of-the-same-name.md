@@ -198,4 +198,4 @@ conditional bindings stay untracked in BOTH directions — which is a Track U
 question, not one to settle in passing.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit d5a501b4e.
