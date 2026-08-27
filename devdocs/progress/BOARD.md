@@ -316,7 +316,7 @@ _none_
 | regression-test-emit-obj-cxtensa-obj | C | 70 | regression | regression: test-emit-obj#src:test/cxtensa_obj.c@1 red at 32fba2082684 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-parent-call-after-instantiation | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy red at b898d0543fc8 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-startswith-tuple | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_startswith_tuple.npy red at b898d0543fc8 (auto-filed by twatch) | — |
-| regression-tools-devtest-00-2 | T | 70 | regression | regression: tools-devtest#00 red at 8787cfe4235a (auto-filed by twatch) | — |
+| regression-tools-devtest-00-2 | N | 70 | regression | regression: tools-devtest#00 red at 8787cfe4235a — a new hardcoded /tmp path in a NilPy test | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-d-document-own-language-first-in-the-language-reference | D | 15 | task | The user-facing half of the name-resolution rules: 'a name from your own language wins, and an explicit foreign import overrides it'. Internal map is devdocs/dev/name-resolution.md; the language reference says nothing. Blocked until the symbol rule is actually built — documenting behaviour the compiler does not have is worse than documenting nothing. | feature-a-own-language-first-symbol-resolution |
 | task-d-document-the-strict-overload-width-flag | D | 20 | task | `--strict-overload-width` shipped 2026-08-15 with no row in docs/reference/cli.md, modes.md or directives.md. One table row each, plus the one sentence that explains why it is standalone rather than part of the --strict-fpc umbrella. | — |
@@ -628,7 +628,7 @@ _none_
 - [p 70] [C] regression-test-emit-obj-cxtensa-obj
 - [p 70] [N] regression-test-nilpy-test-nilpy-parent-call-after-instantiation
 - [p 70] [N] regression-test-nilpy-test-nilpy-startswith-tuple
-- [p 70] [T] regression-tools-devtest-00-2
+- [p 70] [N] regression-tools-devtest-00-2
 - [p 68] [E] feature-demo-songformatter-pxx-target
 - [p 68] [N] feature-nilpy-user-defined-decorators
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython [parked — re-claim, do not duplicate]

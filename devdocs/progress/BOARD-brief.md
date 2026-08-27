@@ -60,7 +60,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [C]` regression-test-emit-obj-cxtensa-obj
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-parent-call-after-instantiation
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-startswith-tuple
-- `[p 70] [T]` regression-tools-devtest-00-2
+- `[p 70] [N]` regression-tools-devtest-00-2
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
