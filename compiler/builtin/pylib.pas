@@ -4575,6 +4575,18 @@ begin
     { ...then a @property, CALLED, since it has no storage of its own }
     Result := PyPropertyGet(obj, name, declFound);
     if declFound then Exit;
+    { `obj.__class__` — the runtime twin of PyMakeClassRefOf, kept on BOTH
+      getters so the two agree. The compile-time route claims this name for a
+      statically class-typed receiver, so what arrives here is the residue: a
+      receiver typed as a class through a path that reaches the dynamic getter
+      instead. Same VT_CLASSREF, same blob, no retain (static data).
+      bug-n-self-class-cannot-be-called-as-a-constructor }
+    if name = '__class__' then
+    begin
+      PPyVarRec(@Result)^.VType := 11;
+      PPyVarRec(@Result)^.Payload := Int64(NativeInt(GetInstanceRTTI(obj)));
+      Exit;
+    end;
     { ...and LAST, the class's own __getattr__, which is defined precisely to
       answer for names that are not there. CPython's order is instance dict,
       class, then this. bug-nilpy-getattr-dunder-not-supported }
@@ -4650,6 +4662,23 @@ begin
       The RTTI Code address is safe to bind because a method whose name is read
       as a value is normalised to the all-variant function ABI by the frontend
       (PyMethodUsedAsValue), which keys on exactly this spelling. }
+    { `obj.__class__` where the receiver's tag is only known at RUN time — an
+      unannotated parameter, a for-loop element, a dict value. The compile-time
+      route (PyMakeClassRefOf) handles a STATICALLY class-typed receiver and
+      never reaches here; this is its runtime twin, and both hand back the same
+      VT_CLASSREF the class-as-a-value feature already defines, so `o.__class__`
+      compares, prints and CONSTRUCTS exactly like a class held in a variable.
+      One concept, two getters — the pairing this file's own comments keep
+      calling out. The blob is static data, so no retain.
+      A non-object tag (int/str/list) still raises: CPython answers a builtin
+      type object there and this frontend has no value for one.
+      bug-n-self-class-cannot-be-called-as-a-constructor }
+    if (name = '__class__') and (obj <> nil) then
+    begin
+      PPyVarRec(@Result)^.VType := 11;
+      PPyVarRec(@Result)^.Payload := Int64(NativeInt(GetInstanceRTTI(obj)));
+      Exit;
+    end;
     if obj <> nil then
     begin
       mi := PyFindMethByName(GetInstanceRTTI(obj), name);

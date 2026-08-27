@@ -1,0 +1,9 @@
+copy: 5 7
+dup: 10 14
+cls: A B
+is: True False True
+nm: A B
+attr: A B
+ident: True False
+outside: 11 B
+isinst: True False True

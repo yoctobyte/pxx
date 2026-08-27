@@ -2394,7 +2394,15 @@ begin
       refusing. Only reachable now that a type is a VALUE; before that there was
       nothing an expression could have evaluated TO.
       bug-n-a-type-name-is-not-a-first-class-value }
-    if (CurTok.Kind <> tkIdent) or QualifiedTypeAhead then
+    { ...and an identifier that CARRIES A SELECTOR — `isinstance(x, a.__class__)`,
+      `isinstance(x, self.__class__)`. It starts with tkIdent, so it used to miss
+      this arm by one token and fall into the name arms below, none of which
+      consume a '.', giving `unexpected token` for what CPython simply evaluates.
+      A module-qualified `mod.Class` was already routed here; every other
+      selector chain belongs here for the same reason.
+      bug-n-self-class-cannot-be-called-as-a-constructor }
+    if (CurTok.Kind <> tkIdent) or QualifiedTypeAhead or
+       ((TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot)) then
     begin
       if CurTok.Kind = tkRParen then
         Error('Nil Python: expected a type in isinstance');
@@ -14819,10 +14827,12 @@ end;
   reach the dynamic-attribute fallback and raise `'B' object has no attribute
   '__class__'` at RUN time, while `type(self).__name__` worked: two spellings
   of one question, one of them answered.
-  Only the full CHAIN is accepted. A bare `x.__class__` is a class OBJECT in
-  Python and this frontend has no such value (the same reason bare `type(x)` is
-  refused a few lines from here), so leaving it to the existing AttributeError
-  is the honest answer rather than inventing one.
+  Only the full CHAIN is accepted HERE. A bare `x.__class__` used to have no
+  answer at all — "this frontend has no class-object value", which was true when
+  this was written and stopped being true when feature-nilpy-class-as-a-value
+  landed VT_CLASSREF. PyMakeClassRefOf below is the bare form; this predicate
+  runs FIRST at every site so the `__name__` chain keeps its own direct lowering
+  rather than boxing a classref only to read a name off it.
   feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep }
 function PyIsClassNameChainAhead: Boolean;
 begin
@@ -14851,6 +14861,51 @@ begin
   ASTIVal[Result] := pi;
   ASTLeft[Result] := argNode;
   ASTTk[Result] := Ord(tyAnsiString);
+  ASTRight[Result] := -1;
+end;
+
+{ A BARE `x.__class__` — the class OBJECT, which since
+  feature-nilpy-class-as-a-value is an ordinary VT_CLASSREF variant and needs no
+  representation of its own. Tested only AFTER PyIsClassNameChainAhead at every
+  site, so `x.__class__.__name__` keeps its direct lowering.
+
+  `self.__class__(args)` is the shape that pays for this: Python's standard "make
+  another one of my own type", and what CPython's own xml.sax AttributesImpl.copy()
+  does. It used to be `error: A has no method __class__` at COMPILE time, so
+  lib/rtl/mimic_xml_sax_xmlreader.py names its class literally instead (registered
+  in track-b-workarounds.md, retire it now).
+
+  Deliberately the RUNTIME class, not the declaring one. In a base method
+  `self.__class__` must answer the SUBCLASS — that is the entire reason the idiom
+  exists, and a static `ci` would have silently constructed the base for every
+  descendant, which is a wrong VALUE rather than an error. So the blob comes from
+  __pxxRttiOf(x) (`[[x+0] - 8]`) exactly as `x.ClassType` does, and construction
+  then rides the classref path that already exists: pyvar_callvN -> PyClassRefNew,
+  which reflects `create` by name over the RTTI. No second construction path, and
+  `cls = self.__class__` / `print(self.__class__)` / `self.__class__ is B` come
+  along for free because they were never about `__class__` at all.
+  bug-n-self-class-cannot-be-called-as-a-constructor }
+function PyIsBareClassRefAhead: Boolean;
+begin
+  Result := isNilPy and (CurTok.Kind = tkIdent) and
+            CaseEqual(CurTok.SVal, '__class__') and
+            (not PyIsClassNameChainAhead);
+end;
+
+function PyMakeClassRefOf(node: Integer): Integer;
+var pi, blobNode, argNode: Integer;
+begin
+  Next;                            { __class__ }
+  blobNode := GenMakeRttiOfCall(node);
+  pi := FindProc('PyBoxClassRef');
+  if pi < 0 then Error('Nil Python: pyeval (PyBoxClassRef) not loaded');
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := blobNode;
+  ASTRight[argNode] := -1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := pi;
+  ASTLeft[Result] := argNode;
+  ASTTk[Result] := Ord(tyVariant);
   ASTRight[Result] := -1;
 end;
 
@@ -36700,6 +36755,14 @@ begin
         Result := node;
         Exit;
       end;
+      { ...and the BARE `x.__class__`. Same position, same one builder. }
+      if PyIsBareClassRefAhead and (tk = tyClass) then
+      begin
+        node := PyMakeClassRefOf(node);
+        tk := tyVariant; recId := REC_NONE; outTk := tk;
+        Result := node;
+        Exit;
+      end;
       mmi := -1;
       if ci >= 0 then mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
       if mmi >= 0 then
@@ -39105,6 +39168,15 @@ begin
       begin
         node := PyMakeClassNameOf(node);
         tk := tyAnsiString; recName := REC_NONE;
+        Result := node;
+        Exit;
+      end;
+      { ...and the BARE `x.__class__`, the class object itself. Same position,
+        same one builder — see PyMakeClassRefOf. }
+      if PyIsBareClassRefAhead and (tk = tyClass) then
+      begin
+        node := PyMakeClassRefOf(node);
+        tk := tyVariant; recName := REC_NONE;
         Result := node;
         Exit;
       end;

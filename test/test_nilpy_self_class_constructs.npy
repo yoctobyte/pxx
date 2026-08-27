@@ -1,0 +1,64 @@
+# `self.__class__` is the class OBJECT, and calling it constructs another one of
+# the receiver's OWN type -- Python's standard "make one like me", and what
+# CPython's xml.sax AttributesImpl.copy() does.
+#
+# It used to be a COMPILE error, `A has no method __class__`, while
+# `self.__class__.__name__` right beside it read fine: one spelling of the name
+# answered, the other refused. The refusal was honest when it was written --
+# this frontend had no class-object value -- and stopped being true when
+# feature-nilpy-class-as-a-value landed VT_CLASSREF.
+#
+# The RUNTIME class is the whole point: in a BASE method `self.__class__` must
+# answer the SUBCLASS, so every `B` below is load-bearing. A static "declaring
+# class" reading would construct an A for `b.copy()` -- a wrong value, silently,
+# which is worse than the error it replaced.
+# bug-n-self-class-cannot-be-called-as-a-constructor
+
+
+class A:
+    def __init__(self, v=0):
+        self.v = v
+
+    def copy(self):
+        return self.__class__(self.v)
+
+    def dup(self):
+        cls = self.__class__          # ...held in a variable first
+        return cls(self.v * 2)
+
+    def same(self, o):                # `o` is UNANNOTATED -> a variant receiver,
+        return self.__class__ is o.__class__   # which is the runtime route
+
+    def nm(self):
+        return self.__class__.__name__
+
+
+class B(A):
+    pass
+
+
+a = A(5)
+b = B(7)
+
+# construction through the class object, direct and via a variable
+print("copy:", a.copy().v, b.copy().v)
+print("dup:", a.dup().v, b.dup().v)
+
+# ...and the constructed object really is of the RECEIVER's class
+print("cls:", a.copy().nm(), b.copy().nm())
+
+# the class object as an ordinary value: identity, comparison, naming
+print("is:", a.same(A(9)), a.same(b), b.same(B(1)))
+print("nm:", a.nm(), b.nm())
+print("attr:", a.__class__.__name__, b.__class__.__name__)
+print("ident:", A(1).__class__ is A, B(1).__class__ is A)
+
+# off an arbitrary receiver, not just `self`
+c = b.__class__(11)
+print("outside:", c.v, c.nm())
+
+# and as a type argument -- isinstance's second operand is an expression here,
+# which used to miss its own expression arm by one token because it begins
+# with an identifier
+print("isinst:", isinstance(a, a.__class__), isinstance(a, b.__class__),
+      isinstance(b, a.__class__))

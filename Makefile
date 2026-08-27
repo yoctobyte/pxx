@@ -1410,6 +1410,13 @@ test-nilpy: $(COMPILER)
 	# makes this a normalise-dont-special-case defect and not a missing feature.
 	./$(COMPILER) test/test_nilpy_star_over_any_static_iterable.npy $(TESTTMP)/test_nilpy_staticstar26
 	$(TESTTMP)/test_nilpy_staticstar26 | diff -u test/test_nilpy_star_over_any_static_iterable.expected -
+	# `self.__class__(...)` -- construct another one of the receiver's OWN type.
+	# Was a COMPILE error while `self.__class__.__name__` beside it read fine.
+	# Every `B` row is load-bearing: in a BASE method the class object must be
+	# the SUBCLASS, so a static "declaring class" reading would build an A for
+	# b.copy() -- a silent wrong value, worse than the error it replaced.
+	./$(COMPILER) test/test_nilpy_self_class_constructs.npy $(TESTTMP)/test_nilpy_selfclass26
+	$(TESTTMP)/test_nilpy_selfclass26 | diff -u test/test_nilpy_self_class_constructs.expected -
 	./$(COMPILER) test/test_nilpy_genexpr_is_consumed_once.npy $(TESTTMP)/test_nilpy_genonce26
 	$(TESTTMP)/test_nilpy_genonce26 | diff -u test/test_nilpy_genexpr_is_consumed_once.expected -
 	./$(COMPILER) test/test_nilpy_str_format_keyword_fields.npy $(TESTTMP)/test_nilpy_fmtkw26
