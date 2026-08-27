@@ -192,4 +192,4 @@ arms were found in this session. The refusal row earns its place.
 compile there) and green now.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 49d47338e.
