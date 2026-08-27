@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-27T04:00:18Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "4461fd1d3802dc6d559ebe274d13f3535231ad74",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-27T04:07:30Z",
    "fixed": [],
    "new_red": [],
@@ -458,6 +449,15 @@
     "test-core#src:test/test_nilpy_unbound_builtin_method.npy"
    ],
    "sha": "c28e07a89f036f56d3bb860e62045b1103e22aae",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-27T14:11:14Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "839907f0a60f6848f9efa9adca2d879b436419e3",
    "tier": "native",
    "timed_out": false,
    "verdict": "RED"
@@ -6930,14 +6930,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-27T14:05:18Z",
+  "date": "2026-08-27T14:11:14Z",
   "deadline": 7200.0,
-  "sha": "c28e07a89f036f56d3bb860e62045b1103e22aae",
+  "sha": "839907f0a60f6848f9efa9adca2d879b436419e3",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "RED",
-  "wall": 316.2
+  "wall": 318.5
  },
  "last_bench": {
   "conf_rows": 550,
