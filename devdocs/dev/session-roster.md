@@ -8157,3 +8157,80 @@ Home is `debugging-playbook.md`, whose section titles are already exactly this s
 comment is an unverified claim, and tickets inherit it"*. The playbook's whole
 subject is readings that are confidently wrong, and this is one with a named cause
 and a one-line check.
+
+## The targeted-verdict queue exists and is USED — v389 requested at `full` (`b441acdb4`, request `00c0c38d6`)
+
+frankT built it same-night: `twatch.py --request <sha> [--request-tier …] [--why …]`,
+appended to `devdocs/progress/tstate/verify-requests.tsv`, which the requester
+commits and pushes because **the daemon reads the file from origin, not from a
+tree**. Drained **first** among the idle phases, above pin verify, judged out of
+band in `verify_pin`'s shape.
+
+**The design point worth reviewing, and it is the good one: completion needs no
+write.** A request is satisfied when `judged_tiers()` reports that tier for that
+sha — the same primitive `pin_verify_due()` already uses. So nothing deletes,
+nothing acknowledges, **two hosts can drain one file without coordinating**, a
+replay is a no-op, and **a RED answer satisfies it** — the request was for an
+answer, not for a green one, or a red sha re-runs forever. The 12-check devtest
+guards *that property* rather than the parsing, so a later change making the queue
+depend on deletion fails loudly instead of silently reintroducing an inbox.
+
+Placed above pin verify because every other idle phase is the watcher deciding what
+is worth testing and this is the only one where **someone asked**. Same
+`IDLE_YIELD_AFTER` guard as its neighbours — *"ahead of" must not become
+"instead of"* — and unlike an unfinishable phase the queue is finite and
+self-clearing, so it cannot hold the slot.
+
+### First use, done by the book
+
+`--covering ab51855df` first, per frankT's own sharp edge:
+
+> **Requests are keyed by SHA, not by tree content.** Asking about a sha whose
+> compiler-identical sibling was already judged buys a real run for a question
+> already answered. frankT caught itself queueing exactly that as a smoke test and
+> removed the row before committing — its `7767acc60` request would have re-run an
+> `opt` tier it had already answered at `03afd81fd`.
+
+`--covering` returned **no EXACT row**, only a covering `native` GREEN — and the
+tool says the caveat itself: a covering green means the change was *in the tree of*
+a green run, not that this commit alone was green, and a green `native` is silent
+about everything `full` adds. So the request is not a duplicate. Queued at `full`,
+pushed as `00c0c38d6`.
+
+**What it retires:** three things frankT did by hand tonight — the NilPy range, the
+cxtensa confirmation, the promotion verdict — were each *"get an answer about a
+specific sha"*, and two were answerable only because the job map happened to still
+hold the state.
+
+## The playbook note landed (`0840d7967`) — and frankwasm caught its own wrong number in the worst possible section
+
+Filed in `debugging-playbook.md` inside the confidently-wrong-reading cluster, and
+**added to the "Find your section" index**, on the grounds that a section not in the
+index is half-filed. Correct, and a detail most would skip.
+
+**It leads with the disproof, not the explanation** — compile the same construct
+standalone; works there and fails here → property of the translation unit, nothing
+to file — because that is the step people skip and it settles the question in ten
+seconds. Citations follow.
+
+It also carries the part my question surfaced, which is the generally useful half:
+
+> **This is what decides which form is platonic.** Blocked by a *defect* → platonic,
+> it stays, `blocked-by:`. Blocked because the *translation unit excludes the
+> surface* → it was never platonic **here**, both forms are correct in their own
+> translation unit, and nothing is owed a revert.
+
+That framing exists because I asked which form was platonic instead of accepting the
+first answer — worth recording as evidence that pushing back on a plausible answer
+is cheap and occasionally produces the general rule.
+
+**The catch worth the entry:** frankwasm had told me *"20 `sysopen` sites."* On
+master it is **18** — the 20 was counted on the wasm branch and included its own two
+new files. It verified every citation against master before committing and caught it
+there. A wrong number is bad anywhere; **in that section it would have been
+self-refuting**, since the section's whole subject is a confident reading taken from
+the wrong context. The commit message says why the number moved, so nobody
+re-derives 20 from the branch and concludes the doc is stale.
+
+Seventh instance of the day's pattern, second caught by its own author, and the
+first where the *document being written* was about the pattern itself.
