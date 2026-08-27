@@ -96,4 +96,4 @@ C conformance and the fgl corpus unchanged. fpc_diff_probe: 0 new divergences,
 known 8 -> 5.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit e1e5e863e.
