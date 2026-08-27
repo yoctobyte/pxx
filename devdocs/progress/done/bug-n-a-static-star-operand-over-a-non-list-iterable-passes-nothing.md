@@ -93,7 +93,7 @@ regression's cause (a compiler zero-init hole); it is a separate defect the
 same test file walks past.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 0db93df9b.
 
 ## Resolution (2026-08-27)
 
