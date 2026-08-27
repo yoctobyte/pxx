@@ -6257,3 +6257,87 @@ Checked before the owner's planned reboot, rather than assumed.
 
 Pre-existing and unrelated: `pxx-idf-install.service` is in `failed` (ESP-IDF
 install). Not part of this stack.
+
+## 2026-08-27 — FLEET RESTARTED into the per-topic trees; frankA dispatched
+
+First cycle of the coordinator session running from `~/frank-coordinator` (the
+tree the topology section above specifies). The reboot and `~/frank.sh` did what
+the audit predicted: six sessions came up, the Track T watcher restarted itself
+via its systemd user unit, and every tree carries `merge.ours.driver=true`.
+
+**Verified, not assumed** — branch and merge-driver checked per tree; `frankA`'s
+seed present (9.6 MB `compiler/pascal26`), tree clean.
+
+| session | lane | tree | branch | state at dispatch |
+| --- | --- | --- | --- | --- |
+| frank-coordinator | none | `~/frank-coordinator` | master | me |
+| frank-user | human interface | `~/frank-user` | master | idle |
+| **frankA** | **A (+P +C +N)** | `~/frankA` | master | **dispatched, busy** |
+| frankB | B (+E) | `~/frankB` | master | idle (deliberate) |
+| frank-rust | R | `~/frank-rust` | `rust` | idle (deliberate) |
+| frankwasm | A+B | `~/frankwasm` | `wasm` | idle; holds `feature-target-wasm` |
+| ianweb | D+W | `via` | — | idle |
+
+**Concurrency: one worker plus the coordinator.** Six sessions are UP; that is
+not the same as six dispatched, and the difference is the whole point. The
+owner's word was *"let's tread carefully"*, which matches the recorded
+constraints exactly — 1-2 workers (owner, 2026-08-17) and the hard ceiling of
+four concurrent sessions that died together on 2026-08-25. **An idle session
+costs nothing; a dispatched one costs the shared limit.** Do not fill slots.
+
+### Dispatch: frankA → `feature-opt-o3-register-pressure` (re-claim)
+
+Global ranked top, eff prio 85, parked in `unfinished/` since 2026-08-26 —
+briefed as **re-claim, do not restart**. frankA claimed it inside `~/frankA`
+(correct: claiming from the wrong tree is how a claim ends up in someone else's
+commit). Sole-A holds — frankwasm and frank-rust are on topic branches, nobody
+else is on master's shared core files.
+
+**Scope deliberately narrowed to the ticket's own next-slice item 1** — lower the
+residency eligibility threshold (currently *>3 loop accesses*, which excludes the
+accumulator at exactly 3), use all four free callee-saved registers rather than
+two, make a `for` induction variable resident unconditionally. **W2 proper (the
+linear-scan allocator) is explicitly out of scope**: it is the multi-session
+project that got the umbrella parked in the first place, and re-opening it is not
+what "tread carefully" means. If the experiments say W2 is the only way forward,
+frankA banks the finding and returns it.
+
+Briefed with the four facts that have cost time here before: `bench-o/` is NOT
+committed and has to be re-created; `perf` does not work on this box
+(`perf_event_paranoid = 4`) so it is FPC `-pg` + gprof reading **call counts**;
+every number names the sha of the binary it came from; and `IREmitNode`'s
+`IR_BINOP` guard chain and `IRFirstEvaluated`/`IRStmtFirstEvaluated` **must move
+together**.
+
+### OPEN WITH ME: the `-O2` promotion of the four `-O3` passes
+
+The parked ticket hands this to the coordinator explicitly, and it is where most
+of the banked **1.29x on the self-compile** still sits — at today's `-O2` default
+only the release-blob change is live, for **1.018x**.
+
+**Evidence path, corrected.** The ticket names Track T's sweep of `e7c0d1d2a` as
+the evidence. **`tstate/plexus.json` retains only 50 history entries and no
+longer reaches that sha** — so that sweep cannot be cited, and I will not cite
+it. What *is* true and better: the matrix carries real `-O3` coverage —
+`test-opt#src:compiler/compiler.pas@3`, twelve `optdiff#shard*/12` jobs, and
+`test-core#src:test/test_o3_residency_six_hot_locals.pas`. The decision is
+therefore re-derivable against a **current** sha rather than a lost one.
+Caveat for whoever picks this up: `Makefile:284`'s comment that *"-O2/-O3
+currently ALIAS -O1"* is **stale** — the passes in this ticket gate
+`OptLevel >= 3`. Do not reason from it.
+
+Not decided this cycle. Nothing is blocked on it — frankA lands behind `-O3`
+regardless, and `-O2` stays the proven default.
+
+### Self-watch installed (owner's request)
+
+The coordinator now runs a self-paced watch cycle: pull, `ListAgents`, relay
+worker findings, check `working/` and the ready queue for anything BLOCKED on me,
+and `twatch --status` for Track T (because every lane's gate widens when T is
+down). A tick that finds nothing blocked is a NOOP and dispatches nothing.
+
+**What it does and does not cover, stated rather than implied:** it recovers from
+transient API/network errors, a stalled cycle, or a worker going quiet, because
+the next tick simply retries. It does **not** survive this session's process
+dying — nothing in-session can. That recovery path is `~/frank.sh <role>`, and it
+is the human's.
