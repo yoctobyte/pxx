@@ -5663,6 +5663,13 @@ end;
   bug-nilpy-container-membership-ignores-the-eq-dunder }
 function PyUserObjEq(pobj, qobj: TObject; const qv: Variant;
                      var res: Boolean): Boolean; forward;
+{ The ONE binary-dunder dispatcher the equality/ordering helpers above are all
+  thin wrappers over. Forward-declared here because the mixed-tag arms in
+  PyVarEq/pyvar_gt/pycmp_v call it directly: those have only ONE object, so
+  there is no second operand to name a direct-then-reflected pair over.
+  bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly }
+function PyUserObjBoolDunder(selfObj, otherObj: TObject; const otherV: Variant;
+                             const dunder: AnsiString; var res: Boolean): Boolean; forward;
 { `a.__hash__()` on the same boxed handle — the consistency partner of the
   above. False when the class defines no usable __hash__, leaving the caller's
   identity hash. }
@@ -5751,6 +5758,30 @@ begin
   res := False;
 end;
 
+{ The USER-class instance behind a variant slot, or nil. "User class" is the
+  same thing PyUserObjBoolDunder means by it: an object that is not one of this
+  unit's own containers, whose value rules are its own and must not be routed
+  through a dunder lookup.
+
+  It exists because the four runtime comparison entry points below (PyVarEq,
+  pyvar_gt, pycmp_v, and pyvar_lt through pyvar_gt) each asked the SAME question
+  and each got it wrong the SAME way — `(pa^.VType = 7) and (pb^.VType = 7)`,
+  i.e. "both sides are objects". One side being a user object is what actually
+  licenses a dunder call, and requiring two is what made `2 in [M(2)]` False and
+  `g < 9` die with "expected a number, got object" on a class that declares
+  __lt__. Four copies of a predicate is how they drifted, so there is now one.
+  bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly }
+function PyVarUserObj(p: PPyVarRec): TObject;
+var o: TObject;
+begin
+  Result := nil;
+  if p^.VType <> 7 then Exit;
+  if p^.Payload = 0 then Exit;
+  o := TObject(Pointer(NativeInt(p^.Payload)));
+  if (o is TPyList) or (o is TPyDict) or (o is TPyBytes) then Exit;
+  Result := o;
+end;
+
 function PyVarEq(p, q: PPyVarRec): Boolean;
 var
   k: Integer;
@@ -5805,6 +5836,30 @@ begin
       Exit;
     end;
     Result := PyVarAsFloat(p) = PyVarAsFloat(q);
+    Exit;
+  end;
+  { ONE side is a user object and the other is a plain value — `2 in [M(2)]`,
+    `xs[0] == 3`, `obj == "s"`. CPython asks the object's __eq__ (and, when the
+    object is on the RIGHT, that same __eq__ as the reflected call, since int
+    returns NotImplemented). The equal-tags gate below used to end the question
+    here, so a container membership test against a user object answered by tag
+    mismatch alone — silently False, with the __eq__ sitting right there. Every
+    value comparison in this unit funnels through PyVarEq, so this is also
+    .index(), .count(), .remove(), `not in` and dict key lookup.
+    bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly }
+  if (p^.VType = 7) <> (q^.VType = 7) then
+  begin
+    pl := PyVarUserObj(p);
+    if pl <> nil then
+    begin
+      if PyUserObjBoolDunder(pl, nil, PVariant(q)^, '__eq__', userEq) then
+        Result := userEq;
+      Exit;
+    end;
+    ql := PyVarUserObj(q);
+    if ql <> nil then
+      if PyUserObjBoolDunder(ql, nil, PVariant(p)^, '__eq__', userEq) then
+        Result := userEq;
     Exit;
   end;
   if p^.VType <> q^.VType then Exit;
@@ -6730,7 +6785,7 @@ end;
   Ordering-only — `None == 3` is False in CPython, not an error, and `==`/`!=`
   never come here. }
 procedure PyOrdCheck(const a: Variant; const b: Variant; const op: AnsiString);
-var pa, pb: PPyVarRec; sa, sb: Boolean;
+var pa, pb: PPyVarRec; sa, sb: Boolean; ua, ub: TObject; dl, dr: AnsiString;
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b);
   if PyOrdIsNone(pa) or PyOrdIsNone(pb) then PyOrdRefuse(a, b, op);
@@ -6740,6 +6795,31 @@ begin
     string with a number' for this, which is both differently worded and wrong
     about a list; CPython names the two types. }
   if sa <> sb then PyOrdRefuse(a, b, op);
+  { EXACTLY ONE user object, e.g. `g < 9`. pyvar_gt below now dispatches this to
+    the object's own ordering dunder — but only if the dunder that would answer
+    is THERE, and the refusal has to happen HERE rather than there, because this
+    is the one place that still sees the operator and the operand order the
+    SOURCE wrote (pyvar_lt reaches pyvar_gt with them swapped). Without it a
+    class declaring only __lt__ answered `obj > 9` with a silent False, which is
+    strictly worse than the "expected a number, got object" it used to raise:
+    CPython raises here, so no working program can observe an answer.
+    Direction matters — CPython pairs `<` on the left with `__lt__` and `<` on
+    the RIGHT with the mirror `__gt__`, which is why both names are computed.
+    bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly }
+  ua := PyVarUserObj(pa);
+  ub := PyVarUserObj(pb);
+  if (ua <> nil) <> (ub <> nil) then
+  begin
+    if op = '<' then
+    begin dl := '__lt__'; dr := '__gt__'; end
+    else
+    begin dl := '__gt__'; dr := '__lt__'; end;
+    if ua <> nil then
+    begin
+      if not PyUserObjHasDunder(ua, dl) then PyOrdRefuse(a, b, op);
+    end
+    else if not PyUserObjHasDunder(ub, dr) then PyOrdRefuse(a, b, op);
+  end;
 end;
 
 { `a < b`, as CPython's sort/min actually spell it. Delegates to the `>`
@@ -6807,6 +6887,34 @@ begin
     begin
       pyvar_gt := pg2;
       Exit;
+    end;
+  end;
+  { …and the SAME question with only ONE user object: `g > 9`, `9 > g`. The arm
+    above wants two, which is the guard this ticket is about — a class that
+    declares __gt__/__lt__ still fell through to pyvar_to_int and died with
+    "expected a number, got object" the moment the other operand was a plain
+    number. Direct dunder when the object is on the LEFT, the mirror when it is
+    on the RIGHT, exactly as PyUserObjGt spells it for the two-object case.
+    bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly }
+  if (PyVarUserObj(pa) <> nil) <> (PyVarUserObj(pb) <> nil) then
+  begin
+    oa := PyVarUserObj(pa);
+    if oa <> nil then
+    begin
+      if PyUserObjBoolDunder(oa, nil, b, '__gt__', pg2) then
+      begin
+        pyvar_gt := pg2;
+        Exit;
+      end;
+    end
+    else
+    begin
+      ob := PyVarUserObj(pb);
+      if PyUserObjBoolDunder(ob, nil, a, '__lt__', pg2) then
+      begin
+        pyvar_gt := pg2;
+        Exit;
+      end;
     end;
   end;
   if ((pa^.VType = 6) or (pa^.VType = 5)) and ((pb^.VType = 6) or (pb^.VType = 5)) then
@@ -9277,6 +9385,48 @@ begin
     PyTypeError(pa^.VType, 'a number or a sequence');
     Result := 0;
     Exit;
+  end;
+  { ONE user object and one plain value — the three-way twin of pyvar_gt's arm
+    above, and the reason sorted()/min()/max() over a mixed list agreed with
+    neither CPython nor the `<` operator.
+    bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly }
+  if (PyVarUserObj(pa) <> nil) <> (PyVarUserObj(pb) <> nil) then
+  begin
+    oa := PyVarUserObj(pa);
+    ob := PyVarUserObj(pb);
+    if oa <> nil then
+    begin
+      if PyUserObjBoolDunder(oa, nil, b, '__lt__', cmpB) then
+      begin
+        if cmpB then begin Result := -1; Exit; end;
+        if PyUserObjBoolDunder(oa, nil, b, '__gt__', cmpB) then
+          if cmpB then begin Result := 1; Exit; end;
+        Result := 0;
+        Exit;
+      end;
+      if PyUserObjBoolDunder(oa, nil, b, '__gt__', cmpB) then
+      begin
+        if cmpB then Result := 1 else Result := 0;
+        Exit;
+      end;
+    end
+    else
+    begin
+      { the object is on the RIGHT, so every dunder is the MIRROR one }
+      if PyUserObjBoolDunder(ob, nil, a, '__gt__', cmpB) then
+      begin
+        if cmpB then begin Result := -1; Exit; end;
+        if PyUserObjBoolDunder(ob, nil, a, '__lt__', cmpB) then
+          if cmpB then begin Result := 1; Exit; end;
+        Result := 0;
+        Exit;
+      end;
+      if PyUserObjBoolDunder(ob, nil, a, '__lt__', cmpB) then
+      begin
+        if cmpB then Result := 1 else Result := 0;
+        Exit;
+      end;
+    end;
   end;
   if ((pa^.VType = 6) or (pa^.VType = 5)) and ((pb^.VType = 6) or (pb^.VType = 5)) then
   begin
@@ -18225,11 +18375,19 @@ function PyUserObjBoolDunder(selfObj, otherObj: TObject; const otherV: Variant;
 var cls: PClassRTTI; mi: PMethInfo; fn: TPyEqFn; fnObj: TPyEqObjFn; pk: PInt64;
 begin
   PyUserObjBoolDunder := False;
-  if (selfObj = nil) or (otherObj = nil) then Exit;
+  { `otherObj` may legitimately be NIL: the other operand is an int, a float, a
+    str — a value with no object behind it at all. `obj == 1` and `obj < 1` are
+    ordinary Python and the dunder takes them, so requiring an object on BOTH
+    sides refused half of what this routine exists to dispatch. Only the
+    class-POINTER parameter shape below actually needs an instance, and it
+    checks for one itself.
+    bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly }
+  if selfObj = nil then Exit;
   { this unit's own containers have their own value rules and must not come here
     (PyRecIsPylibOwnClass's runtime equivalent) }
   if (selfObj is TPyList) or (selfObj is TPyDict) or (selfObj is TPyBytes) then Exit;
-  if (otherObj is TPyList) or (otherObj is TPyDict) or (otherObj is TPyBytes) then Exit;
+  if otherObj <> nil then
+    if (otherObj is TPyList) or (otherObj is TPyDict) or (otherObj is TPyBytes) then Exit;
   cls := GetInstanceRTTI(Pointer(selfObj));
   if cls = nil then Exit;
   mi := PyFindDunder(cls, dunder);
@@ -18247,6 +18405,10 @@ begin
   end;
   if pk[1] = 6 then                           { `other` is a class pointer }
   begin
+    { …and THIS is the shape that genuinely needs an instance. A plain value on
+      the other side cannot be passed to a class-typed parameter at all, so
+      decline and let the caller keep its own answer. }
+    if otherObj = nil then Exit;
     { A class-typed `other` is only safe to pass an instance of THAT class: the
       body reads its fields at fixed offsets and would otherwise read an
       unrelated layout — the same wrong-offset failure as
