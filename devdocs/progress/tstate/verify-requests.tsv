@@ -4,3 +4,4 @@
 # when that sha has a verdict at that tier, so lines need no deletion and a
 # repeat is a no-op. Stale lines cost one archive lookup per cycle; tidy at
 # will, but nothing breaks if you never do.
+ab51855df8c0d626a12366a076242e1feae2df48	full	plexus	pin v389 (325b4479070a) is unverified ~5h after landing; pin_verify starved by push rate at five workers, tstate still reads v388. Three lanes are building on this binary. Covering check: no EXACT row, only a covering native GREEN which is silent about everything full adds.
