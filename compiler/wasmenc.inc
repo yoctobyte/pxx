@@ -177,11 +177,16 @@ begin
 end;
 
 { Intern a signature. Returns its type index, reusing an identical one — the
-  type section is a set, and emitting duplicates is legal but wasteful. }
-function WasmAddType(const params: array of Byte; const results: array of Byte): Integer;
-var i, j, np, nr: Integer; same: Boolean;
+  type section is a set, and emitting duplicates is legal but wasteful.
+
+  The counted form exists because a caller building a signature from
+  Procs[].Params has a FIXED array and a separate count: an open array carries
+  its own Length, so passing `ptypes` would intern a 32-parameter signature for
+  a two-parameter function. }
+function WasmAddTypeN(const params: array of Byte; np: Integer;
+                      const results: array of Byte; nr: Integer): Integer;
+var i, j: Integer; same: Boolean;
 begin
-  np := Length(params); nr := Length(results);
   for i := 0 to WasmTypeCount - 1 do
     if (WasmTypeNPar[i] = np) and (WasmTypeNRes[i] = nr) then
     begin
@@ -190,7 +195,7 @@ begin
         if WasmSigPool[WasmTypeParOfs[i] + j] <> params[j] then same := False;
       for j := 0 to nr - 1 do
         if WasmSigPool[WasmTypeResOfs[i] + j] <> results[j] then same := False;
-      if same then begin WasmAddType := i; Exit; end;
+      if same then begin WasmAddTypeN := i; Exit; end;
     end;
   if WasmTypeCount >= MAX_WASM_TYPES then WasmFail('wasm: too many function types');
   if WasmSigLen + np + nr > MAX_WASM_TYPESIG then WasmFail('wasm: signature pool full');
@@ -200,8 +205,13 @@ begin
   WasmTypeResOfs[WasmTypeCount] := WasmSigLen;
   WasmTypeNRes[WasmTypeCount] := nr;
   for j := 0 to nr - 1 do begin WasmSigPool[WasmSigLen] := results[j]; Inc(WasmSigLen); end;
-  WasmAddType := WasmTypeCount;
+  WasmAddTypeN := WasmTypeCount;
   Inc(WasmTypeCount);
+end;
+
+function WasmAddType(const params: array of Byte; const results: array of Byte): Integer;
+begin
+  WasmAddType := WasmAddTypeN(params, Length(params), results, Length(results));
 end;
 
 function WasmAddImportFunc(const modName, fldName: AnsiString; typeIdx: Integer): Integer;
