@@ -463,6 +463,11 @@
   }
  ],
  "host": "plexus",
+ "idle_yield": {
+  "aborts": 1,
+  "phase": "pin-verify",
+  "target": "0dafbae41cadc69d7c260353b0e637af30f0aa0f"
+ },
  "job_reason": {
   "test-emit-obj#src:test/cxtensa_obj.c@1": "in: $TMP | near:  Integer  __pxxrawsyscall  SYS_getuid >>> | pascal26:477: error: undefined variable (SYS_getgid) | in: $TMP | near:  Integer  __pxxrawsyscall  SYS_getgid >>> | pascal26: too many errors, stopping",
   "test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy": "(0, 1) | -xy | -(1, 2) | -17 | -(4, 3) | -11 pq",
