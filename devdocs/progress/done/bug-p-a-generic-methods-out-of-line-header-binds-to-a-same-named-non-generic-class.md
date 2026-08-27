@@ -192,4 +192,4 @@ each wall cleared exposes the next, so the "complete set for this unit" claim in
 **Status:** done
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit 042bcbb32.
