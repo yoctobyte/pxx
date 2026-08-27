@@ -11167,8 +11167,32 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_arm32_arg_runtime.pas $(TESTTMP)/test_rv32x_args
 	./$(COMPILER) test/test_arm32_arg_runtime.pas $(TESTTMP)/test_rv32x_args_x64
 	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_args alpha beta)" = "$$($(TESTTMP)/test_rv32x_args_x64 alpha beta)"
-	# SKIP test/test_cross_variant.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
-	# SKIP test/test_cross_variant_single.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# UN-SKIPPED 2026-08-27. The "backend feature gap" these two named was that
+	# riscv32 had no IR_VAR_STORE / IR_VAR_BOX / IR_VAR_BINOP arm at ALL, so
+	# `var v: Variant; v := 1;` did not compile for this target -- and any
+	# earlier claim that riscv32 "routes through PXXVarBinOpPas" described a
+	# path nothing could reach. bug-a-riscv32-codegen-has-no-variant-support
+	./$(COMPILER) --target=riscv32 test/test_cross_variant.pas $(TESTTMP)/test_rv32x_variant
+	./$(COMPILER) test/test_cross_variant.pas $(TESTTMP)/test_rv32x_variant_x64
+	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_variant)" = "$$($(TESTTMP)/test_rv32x_variant_x64)"
+	./$(COMPILER) --target=riscv32 test/test_cross_variant_single.pas $(TESTTMP)/test_rv32x_variant_single
+	./$(COMPILER) test/test_cross_variant_single.pas $(TESTTMP)/test_rv32x_variant_single_x64
+	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_variant_single)" = "$$($(TESTTMP)/test_rv32x_variant_single_x64)"
+	# ...and the differential this bug's own gate names: the stringy-operand
+	# coercion rule, which the other four targets already agree on. It is the
+	# row that proves PXXVarBinOpPas is now genuinely REACHED here.
+	./$(COMPILER) -Fulib/rtl --target=riscv32 test/test_variant_comparison_coerces_a_stringy_operand.pas $(TESTTMP)/test_rv32x_varcmpcoerce
+	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_varcmpcoerce | tail -1)" = "ALL OK"
+	# The payload hazards a 32-bit variant slot has and a 64-bit one does not:
+	# an Int64 must reach the 8-byte payload WHOLE, a signed 4-byte payload must
+	# sign-extend into the high word and an unsigned one must zero-fill (the
+	# i386/arm32 twins got exactly this wrong once), a Double must be widened to
+	# VT_DOUBLE's 8 bytes on a target with no FPU, and a boxed string must not
+	# leak a reference per store.
+	./$(COMPILER) -Fulib/rtl --target=riscv32 test/test_cross_variant_payload_widths.pas $(TESTTMP)/test_rv32x_varpay
+	./$(COMPILER) -Fulib/rtl test/test_cross_variant_payload_widths.pas $(TESTTMP)/test_rv32x_varpay_x64
+	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_varpay)" = "$$($(TESTTMP)/test_rv32x_varpay_x64)"
+	test "$$($(TESTTMP)/test_rv32x_varpay_x64 | tail -1)" = "ALL OK"
 	./$(COMPILER) --target=riscv32 test/test_cross_strresult.pas $(TESTTMP)/test_rv32x_strresult
 	./$(COMPILER) test/test_cross_strresult.pas $(TESTTMP)/test_rv32x_strresult_x64
 	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_strresult)" = "$$($(TESTTMP)/test_rv32x_strresult_x64)"

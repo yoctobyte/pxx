@@ -1087,6 +1087,141 @@ begin
   else if op = Ord(tkGe) then rv32_sltiu(reg_a0, reg_a0, 2);       { in {0,1} }
 end;
 
+{ ---- Variant support (bug-a-riscv32-codegen-has-no-variant-support) --------
+  riscv32 had NO arm for IR_VAR_STORE / IR_VAR_BOX / IR_VAR_BINOP, so
+  `var v: Variant; v := 1;` did not compile at all — which also means every
+  earlier ticket describing riscv32 as one of the targets whose variant binops
+  "route through PXXVarBinOpPas" was describing a path nothing could reach.
+
+  Modelled on the arm32 arms (the 32-bit peer with the same 16-byte layout:
+  tag at +0, a zero word at +4, an 8-byte payload at +8), not on aarch64's,
+  whose variant has an 8-byte payload in one register.
+
+  Payloads reach the fill on the STACK — which is also how riscv32 passes call
+  arguments here — with the lo word at [sp] and the hi word at [sp+4]. Every
+  push is 8 bytes wide even for a 4-byte payload, so the fill's shape does not
+  depend on the payload size and sp stays 8-aligned. }
+
+procedure EmitStrIncRefRISCV32;
+{ a0 = managed-string handle. a0-a3 preserved for expression callers. }
+var procIdx: Integer;
+begin
+  rv32_addi(reg_sp, reg_sp, -16);
+  rv32_sw(reg_a0, reg_sp, 0);  rv32_sw(reg_a1, reg_sp, 4);
+  rv32_sw(reg_a2, reg_sp, 8);  rv32_sw(reg_a3, reg_sp, 12);
+  procIdx := FindProc('PXXStrIncRef');
+  if procIdx < 0 then Error('compiler error: PXXStrIncRef not found');
+  EmitCallProc(procIdx);
+  rv32_lw(reg_a0, reg_sp, 0);  rv32_lw(reg_a1, reg_sp, 4);
+  rv32_lw(reg_a2, reg_sp, 8);  rv32_lw(reg_a3, reg_sp, 12);
+  rv32_addi(reg_sp, reg_sp, 16);
+end;
+
+procedure EmitVarHelperCallRISCV32(const name: AnsiString);
+{ a0 = variant slot address (the helper's only argument). a0-a3 preserved. }
+var procIdx: Integer;
+begin
+  rv32_addi(reg_sp, reg_sp, -16);
+  rv32_sw(reg_a0, reg_sp, 0);  rv32_sw(reg_a1, reg_sp, 4);
+  rv32_sw(reg_a2, reg_sp, 8);  rv32_sw(reg_a3, reg_sp, 12);
+  procIdx := FindProc(name);
+  if procIdx < 0 then Error('compiler error: variant helper ' + name + ' not found');
+  EmitCallProc(procIdx);
+  rv32_lw(reg_a0, reg_sp, 0);  rv32_lw(reg_a1, reg_sp, 4);
+  rv32_lw(reg_a2, reg_sp, 8);  rv32_lw(reg_a3, reg_sp, 12);
+  rv32_addi(reg_sp, reg_sp, 16);
+end;
+
+procedure EmitVariantPayloadRISCV32(valNode: Integer; tk: TTypeKind);
+{ Emit the payload for a boxing store and leave it pushed as 8 bytes,
+  lo at [sp] and hi at [sp+4]. }
+begin
+  if (tk = tyString) or (tk = tyAnsiString) then
+  begin
+    if tk = tyString then
+      EmitAnsiStringFromNodeRISCV32(valNode)     { a0 = new handle (owned) }
+    else
+    begin
+      IREmitNodeRISCV32(valNode);                { a0 = handle }
+      { A CALL result / concat BINOP is already OWNED (+1) — retaining again
+        leaks one handle per boxed call result. Same test as every other
+        backend's; bug-a-runtime-variant-heap-grows-unbounded. }
+      if not (((IRKind[valNode] = IR_BINOP) and
+               (IntToTypeKind(IRTk[valNode]) = tyAnsiString)) or
+              ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0))) then
+        EmitStrIncRefRISCV32;
+    end;
+    rv32_addi(reg_sp, reg_sp, -8);
+    rv32_sw(reg_a0, reg_sp, 0);
+  end
+  else if TypeIsFloat(tk) then
+  begin
+    { VT_DOUBLE's payload is 8 bytes of IEEE-754 DOUBLE bits whatever the
+      source width, and riscv32 has no FPU — EmitFloatOperandRISCV32 is the one
+      routine that both widens a Single and materialises an integer source, and
+      it leaves the bits in a0:a1. }
+    EmitFloatOperandRISCV32(valNode, tyDouble);
+    rv32_addi(reg_sp, reg_sp, -8);
+    rv32_sw(reg_a0, reg_sp, 0); rv32_sw(reg_a1, reg_sp, 4);
+  end
+  else if Is64BitRISCV32(tk) then
+  begin
+    { An Int64 payload must reach the slot WHOLE: EmitNode64RISCV32 is the one
+      routine that guarantees the full value in a0:a1, widening a narrow source
+      in place. The 32-bit twins got this wrong once —
+      bug-a-an-int64-assigned-to-a-variant-truncates-to-32-bits-on-i386-and-arm32. }
+    EmitNode64RISCV32(valNode);
+    rv32_addi(reg_sp, reg_sp, -8);
+    rv32_sw(reg_a0, reg_sp, 0); rv32_sw(reg_a1, reg_sp, 4);
+  end
+  else
+  begin
+    IREmitNodeRISCV32(valNode);                  { a0 = scalar }
+    rv32_addi(reg_sp, reg_sp, -8);
+    rv32_sw(reg_a0, reg_sp, 0);
+  end;
+end;
+
+procedure EmitVariantFillRISCV32(tag: Integer; payloadTk: TTypeKind);
+{ a0 = variant slot address, payload pushed by EmitVariantPayloadRISCV32.
+  Clears the old value, stores tag + payload, pops, leaves the slot addr in a0.
+
+  The HIGH word is chosen from the payload's TYPE, not from the tag: a 4-byte
+  signed payload sign-extends and an unsigned one zero-fills, because
+  tyNativeInt maps to VT_INT64 and a negative NativeInt zero-filled reads as a
+  huge unsigned. See EmitVariantFillArm32 for the incident. }
+begin
+  EmitVarHelperCallRISCV32('PXXVarClear');
+  EmitLoadImmRISCV32(reg_t1, tag);
+  rv32_sw(reg_t1, reg_a0, 0);
+  rv32_sw(reg_zero, reg_a0, 4);
+  if TypeIsFloat(payloadTk) or Is64BitRISCV32(payloadTk) then
+  begin
+    rv32_lw(reg_t1, reg_sp, 0); rv32_lw(reg_t2, reg_sp, 4);
+    rv32_sw(reg_t1, reg_a0, 8); rv32_sw(reg_t2, reg_a0, 12);
+  end
+  else
+  begin
+    rv32_lw(reg_t1, reg_sp, 0);
+    rv32_sw(reg_t1, reg_a0, 8);
+    if TypeSigned(payloadTk) then rv32_srai(reg_t2, reg_t1, 31)
+    else rv32_addi(reg_t2, reg_zero, 0);
+    rv32_sw(reg_t2, reg_a0, 12);
+  end;
+  rv32_addi(reg_sp, reg_sp, 8);
+end;
+
+procedure EmitLoadVariantAddrRISCV32(node: Integer);
+{ a0 = address of a variant slot for a value-position variant node. }
+begin
+  if IRKind[node] = IR_LOAD_SYM then
+    EmitSlotAddrRISCV32(reg_a0, IRA[node])
+  else if IRKind[node] = IR_LOAD_MEM then
+    IREmitNodeRISCV32(IRA[node])
+  else
+    IREmitNodeRISCV32(node);
+end;
+
 procedure IREmitNodeRISCV32(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, valNode, j: Integer;
@@ -1164,7 +1299,13 @@ begin
       end;
 
     IR_LOAD_SYM:
-      if Is64BitRISCV32(Syms[IRA[node]].TypeKind) or
+      { A VARIANT in value position yields its slot ADDRESS, not a load: the
+        slot is 16 bytes and every consumer (the write helper, PXXVarBinOp, a
+        variant-to-variant store) takes a pointer. Same rule as arm32/i386.
+        bug-a-riscv32-codegen-has-no-variant-support }
+      if Syms[IRA[node]].TypeKind = tyVariant then
+        EmitSlotAddrRISCV32(reg_a0, IRA[node])
+      else if Is64BitRISCV32(Syms[IRA[node]].TypeKind) or
          ((Syms[IRA[node]].TypeKind = tyRecord) and not Syms[IRA[node]].IsArray and
           (RecSize(Syms[IRA[node]].RecName) > 4) and
           (RecSize(Syms[IRA[node]].RecName) <= 8)) then
@@ -2705,6 +2846,17 @@ begin
               if procIdx < 0 then Error('compiler error: PXXWriteCStr not found');
               EmitCallProc(procIdx);
             end
+            else if tk = tyVariant then
+            begin
+              { The runtime picks the format from the slot's tag, so a variant
+                write is one call with the slot ADDRESS — no width form, exactly
+                as on arm32/i386.
+                bug-a-riscv32-codegen-has-no-variant-support }
+              EmitLoadVariantAddrRISCV32(valNode);      { a0 = slot addr }
+              procIdx := FindProc('PXXWriteVariant');
+              if procIdx < 0 then Error('compiler error: PXXWriteVariant not found');
+              EmitCallProc(procIdx);
+            end
             else if TypeIsFloat(tk) then
             begin
               { a0:a1 = double bits; pass their stack address to the portable
@@ -3367,6 +3519,86 @@ begin
         { the intrinsic is typed Int64 (a0:a1) — sign-extend the 32-bit old
           value into the high word, as IR_SYSCALL does }
         rv32_srai(reg_a1, reg_a0, 31);
+      end;
+
+    IR_VAR_STORE:
+      begin
+        { IRA = dest addr, IRB = value/src addr, IRC = source TTypeKind ord. }
+        tk := IntToTypeKind(IRC[node]);
+        if tk = tyVariant then
+        begin
+          { ARC-correct 16-byte variant-to-variant copy: retain the source
+            BEFORE clearing the destination, so `v := v` cannot free what it is
+            about to read. }
+          EmitLoadVariantAddrRISCV32(IRB[node]);        { a0 = src addr }
+          EmitVarHelperCallRISCV32('PXXVarRetain');
+          rv32_addi(reg_sp, reg_sp, -8); rv32_sw(reg_a0, reg_sp, 0);
+          IREmitNodeRISCV32(IRA[node]);                 { a0 = dest addr }
+          EmitVarHelperCallRISCV32('PXXVarClear');
+          rv32_lw(reg_t1, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 8);  { t1 = src }
+          rv32_lw(reg_t2, reg_t1, 0);  rv32_sw(reg_t2, reg_a0, 0);
+          rv32_lw(reg_t2, reg_t1, 4);  rv32_sw(reg_t2, reg_a0, 4);
+          rv32_lw(reg_t2, reg_t1, 8);  rv32_sw(reg_t2, reg_a0, 8);
+          rv32_lw(reg_t2, reg_t1, 12); rv32_sw(reg_t2, reg_a0, 12);
+        end
+        else
+        begin
+          j := VariantTagForTk(tk, 'Variant :=');
+          { A CODE ADDRESS overrides the type-kind answer — defs.inc's
+            VT_CALLABLE_TAG; the x86-64 arm carries the full note. }
+          if IRSrcIsCallable(IRB[node]) then j := VT_CALLABLE_TAG;
+          EmitVariantPayloadRISCV32(IRB[node], tk);
+          IREmitNodeRISCV32(IRA[node]);                 { a0 = dest addr }
+          EmitVariantFillRISCV32(j, tk);
+        end;
+      end;
+
+    IR_VAR_BOX:
+      begin
+        { Box a scalar into a temp variant (IRA = temp addr); addr -> a0. }
+        tk := IntToTypeKind(IRC[node]);
+        j := VariantTagForTk(tk, 'Variant operand');
+        if IRSrcIsCallable(IRB[node]) then j := VT_CALLABLE_TAG;
+        EmitVariantPayloadRISCV32(IRB[node], tk);
+        IREmitNodeRISCV32(IRA[node]);                   { a0 = temp addr }
+        EmitVariantFillRISCV32(j, tk);                  { leaves addr in a0 }
+      end;
+
+    IR_VAR_BINOP:
+      begin
+        { PXXVarBinOp(dest, left, right, opTk, isCompare) — five words, so all
+          five land in a0-a4 and none of them spills (riscv32 pushes call
+          arguments and then loads a0..a7 from the block; five is under the
+          eight-word line). }
+        sgn := IntToTypeKind(IRTk[node]) = tyBoolean;
+        IREmitNodeRISCV32(IRA[node]);                   { a0 = left addr }
+        rv32_addi(reg_sp, reg_sp, -8); rv32_sw(reg_a0, reg_sp, 0);
+        IREmitNodeRISCV32(IRB[node]);                   { a0 = right addr }
+        rv32_addi(reg_a2, reg_a0, 0);                   { a2 = right }
+        rv32_lw(reg_a1, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 8);  { a1 = left }
+        if sgn then
+          rv32_addi(reg_a0, reg_zero, 0)                { compare: dest unused }
+        else
+          EmitLoadGlobAddrRISCV32(reg_a0, Integer(IRIVal[node]));  { dest temp }
+        EmitLoadImmRISCV32(reg_a3, IRC[node]);          { a3 = opTk }
+        if sgn then rv32_addi(reg_a4, reg_zero, 1)
+        else rv32_addi(reg_a4, reg_zero, 0);            { a4 = isCompare }
+        { PASCAL selects PXXVarBinOpPas — the raw dispatch with FPC's string
+          rule in front of it. NilPy keeps the raw one: Python's rules for these
+          pairs differ in every case ('5' * 3 is '555'). Choosing WHICH helper
+          to call is how the language reaches a shared runtime that cannot see
+          PyProgramMode. Falls back to the raw one when no builtin unit is
+          loaded, rather than failing to compile.
+          bug-a-pxxvarbinop-carries-the-same-string-arithmetic-defect-as-x86-64-did }
+        if PyProgramMode then
+          procIdx := FindProc('PXXVarBinOp')
+        else
+        begin
+          procIdx := FindProc('PXXVarBinOpPas');
+          if procIdx < 0 then procIdx := FindProc('PXXVarBinOp');
+        end;
+        if procIdx < 0 then Error('compiler error: PXXVarBinOp not found');
+        EmitCallProc(procIdx);
       end;
 
     else
