@@ -149,4 +149,4 @@ does not compile.
 **`compiler/builtin/pylib.pas` changed, so this needs a PIN.**
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit c60cb62bc.
