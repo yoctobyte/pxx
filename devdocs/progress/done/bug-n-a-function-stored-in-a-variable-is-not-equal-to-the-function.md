@@ -158,4 +158,4 @@ against the module-level name was the broken one. It works now. Left to Track B,
 whose file it is.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 863092a91.
