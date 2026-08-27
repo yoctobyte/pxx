@@ -7885,6 +7885,8 @@ test-core: $(COMPILER)
 	# `math` mechanism), gated on threadsafe. Matches FPC 3.2.2 row for row.
 	./$(COMPILER) test/test_thread_api_no_uses.pas $(TESTTMP)/test_thread_api_no_uses26
 	test "$$($(TESTTMP)/test_thread_api_no_uses26)" = "$$(printf 'a 42\nb 15\nc ok\nd 8')"
+	./$(COMPILER) -Futest/units test/test_unit_ambient_system_surface.pas $(TESTTMP)/test_unit_ambient_sys26
+	test "$$($(TESTTMP)/test_unit_ambient_sys26)" = "$$(printf 'a 5.0000\nb 2.0000\nc 12.5664\nOK')"
 	./$(COMPILER) -Fulib/rtl test/test_assert_raises_with_sysutils.pas $(TESTTMP)/test_assert_raises26
 	test "$$($(TESTTMP)/test_assert_raises26)" = "$$(printf 'passed\ncaught: EAssertionFailed: boom\nnomsg: EAssertionFailed: Assertion failed\nstill running\nOK')"
 	./$(COMPILER) test/test_static_array_managed_scope_exit.pas $(TESTTMP)/test_static_array_managed_scope_exit26

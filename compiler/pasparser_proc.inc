@@ -3184,6 +3184,9 @@ var
   savedNestedComments, savedDelphiMode: Boolean;
   unitNeedsText: Boolean;
   unitNeedsRootMeth: Boolean;   { this unit calls .Equals/.GetHashCode/.ToString }
+  unitNeedsMath: Boolean;       { …and sqrt/ln/exp/sin/cos/arctan/pi }
+  unitNeedsThreads: Boolean;    { …and BeginThread/TThreadID/… }
+  unitTnm: AnsiString;
   savedPasDefineCount, savedPasDefineCharLen, pdi: Integer;
   savedPasDefineActive: array[0..MAX_PAS_DEFINES-1] of Boolean;
   savedPasDefineHasValue: array[0..MAX_PAS_DEFINES-1] of Boolean;
@@ -4298,6 +4301,8 @@ begin
     i := startPos;
     unitNeedsText := False;
     unitNeedsRootMeth := False;
+    unitNeedsMath := False;
+    unitNeedsThreads := False;
     while i < TokCount do
     begin
       if Tokens[i].Kind in [tkTry, tkRaise] then EnableExceptionRuntime;
@@ -4339,6 +4344,42 @@ begin
          (not ((i >= startPos + 3) and (Tokens[i - 2].Kind = tkIdent) and
                ((Tokens[i - 3].Kind = tkFunction) or (Tokens[i - 3].Kind = tkProcedure)))) then
         unitNeedsRootMeth := True;
+      { …and the elementary MATH functions, and the low-level THREAD API, for
+        exactly the same reason: FPC declares both in the System unit, so a
+        portable unit calls sqrt/ln/BeginThread with no `uses` line at all,
+        while pxx keeps them in `math` / `palthreadobj`. The program-level
+        pre-scan (ParseProgram) sees only the PROGRAM's tokens, so `sqrt(x)`
+        compiled fine in a program and was `undefined variable (sqrt)` in a
+        unit — which is where FPC's own cutils.pas stops.
+        bug-p-the-system-math-and-thread-surfaces-are-not-ambient-in-units.
+        Same triggers as the program-level scan, comments and all: a following
+        '(' for the functions (so `var ln: Integer` does not drag 35KB in),
+        bare for the paramless `pi`. A self-pull is harmless — this unit is
+        already in CompiledUnits by now, so `math` scanning its own sqrt calls
+        no-ops rather than recursing. }
+      if (Tokens[i].Kind = tkIdent) and
+         (Tokens[i].SLen >= 2) and (Tokens[i].SLen <= 6) then
+      begin
+        unitTnm := GetTokenStr(i);
+        if (CaseEqual(unitTnm, 'sqrt') or CaseEqual(unitTnm, 'exp') or
+            CaseEqual(unitTnm, 'ln') or CaseEqual(unitTnm, 'sin') or
+            CaseEqual(unitTnm, 'cos') or CaseEqual(unitTnm, 'arctan')) and
+           (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkLParen) then
+          unitNeedsMath := True;
+        if CaseEqual(unitTnm, 'pi') then unitNeedsMath := True;
+      end;
+      if ThreadSafeMode and (Tokens[i].Kind = tkIdent) and
+         (Tokens[i].SLen >= 9) and (Tokens[i].SLen <= 22) then
+      begin
+        unitTnm := GetTokenStr(i);
+        if (CaseEqual(unitTnm, 'BeginThread') or CaseEqual(unitTnm, 'EndThread') or
+            CaseEqual(unitTnm, 'WaitForThreadTerminate') or
+            CaseEqual(unitTnm, 'CloseThread')) and
+           (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkLParen) then
+          unitNeedsThreads := True;
+        if CaseEqual(unitTnm, 'TThreadID') or CaseEqual(unitTnm, 'TThreadFunc') then
+          unitNeedsThreads := True;
+      end;
       Inc(i);
     end;
 
@@ -4360,6 +4401,12 @@ begin
       ParseUsesUnitAmbient('builtin');
       ParseUsesUnitAmbient('textfile');
     end;
+
+    { Same gating and same idempotence as the textfile pull above. }
+    if unitNeedsMath and (not NoDefaultRtl) and (not TargetIsEspClass) then
+      ParseUsesUnitAmbient('math');
+    if unitNeedsThreads and (not NoDefaultRtl) and (not TargetIsEspClass) then
+      ParseUsesUnitAmbient('palthreadobj');
 
     { Point parser to first token of the unit }
     TokPos := startPos;
