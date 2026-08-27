@@ -3,7 +3,7 @@ track: A
 prio: 60
 type: bug
 blocked-by: []
-summary: "`make cross-bootstrap` for aarch64 fails at HEAD with `code overflow: emitted code exceeds MAX_CODE` in compiler/pyparser.inc. Same pinned stable, same source, only the target differs — x86-64 emits 9,343,257 B (56% of the 16 MiB cap) while aarch64 exceeds it, so that backend needs >1.8x the code density for identical input. The error's own suggested remedy does not apply: default and -O2 overflow identically. Unseen because cross-bootstrap runs ONLY on a manual tag dispatch in release.yml, never per-commit, so it can rot at HEAD indefinitely — while the website advertises aarch64 as a supported target."
+summary: "MEASURED — it is DENSITY, raise the cap. aarch64 codegen runs 2.295x x86-64 across four unrelated programs (spread 2.27-2.34); the compiler needs only 1.80x to breach MAX_CODE, so predicted aarch64 size is 20.4 MB against a 16 MB cap. Runaway ruled out. ~21 MB floor, 32 MB gives headroom, A's call. Originally: `make cross-bootstrap` for aarch64 fails at HEAD with `code overflow: emitted code exceeds MAX_CODE` in compiler/pyparser.inc. Same pinned stable, same source, only the target differs — x86-64 emits 9,343,257 B (56% of the 16 MiB cap) while aarch64 exceeds it, so that backend needs >1.8x the code density for identical input. The error's own suggested remedy does not apply: default and -O2 overflow identically. Unseen because cross-bootstrap runs ONLY on a manual tag dispatch in release.yml, never per-commit, so it can rot at HEAD indefinitely — while the website advertises aarch64 as a supported target."
 status: backlog
 ---
 
@@ -62,7 +62,59 @@ the site understated what works, here it may overstate it.
 real and larger question — it needs FPC and qemu in CI and it costs minutes per
 push — and it would swallow this. File it separately if it is wanted.
 
-## Scope — two candidate causes, and A picks
+## MEASURED 2026-08-27 — it is DENSITY, not runaway. Raise the cap.
+
+`ianweb` ran the per-proc comparison this ticket asked for. Four unrelated
+programs, same shim, same stable, `code=` bytes x86-64 → aarch64:
+
+| program | x86-64 | aarch64 | ratio |
+| --- | --- | --- | --- |
+| `hello.pas` | 64,110 | 150,064 | 2.34x |
+| `test_inline_expand.pas` | 116,756 | 264,708 | 2.27x |
+| `test_variant_class_cross.pas` | 111,770 | 256,980 | 2.30x |
+| `test_collections.pas` | 115,775 | 262,300 | 2.27x |
+
+Spread **2.27–2.34, mean 2.295x** — flat across a hello-world, an inliner
+stress, a variant/class cross case and a collections program, which have nothing
+in common but the backend. **Concentration would have shown as one program well
+off 2.3x. None is.**
+
+Against the compiler:
+
+```
+x86-64 compiler code        9,343,257 B
+MAX_CODE                   16,777,216 B
+ratio needed to overflow         1.796x
+observed baseline density        2.295x
+predicted aarch64 size     21,442,775 B   (20.4 MB)
+overflows by                4,665,559 B   (4.4 MB)
+```
+
+**The compiler needs only 1.80x to breach the cap and the backend's ordinary
+density is already 2.29x.** So the overflow is exactly what uniform density
+predicts — it would happen for *any* program of that size, and `pyparser.inc` is
+merely where the running total crossed the line. **The site of a cap breach is
+an accident of ordering, not a location**, which is why it reported somewhere
+uninteresting.
+
+**So cause 1 (growth/density) is confirmed and cause 2 (runaway) is ruled out on
+four samples.** The "don't raise a cap on a runaway" warning does not bite here.
+~21 MB is the floor; **32 MB gives real headroom**. Still A's call — a smaller
+bump may be preferred for reasons not visible from the measurement.
+
+**Caveat, stated so the numbers are not over-read:** these are the *pinned*
+stable's aarch64 codegen, not HEAD's. If that backend has improved since the
+pin, the real ratio is lower and 20.4 MB is an overestimate — but not by enough
+to fit, since even 1.80x breaches the cap and the observed floor is 2.27x.
+Someone on x86-64 can settle it exactly by building the compiler at HEAD for
+aarch64 with a raised cap and reading the actual `code=`.
+
+**Worth asking while in `defs.inc`:** this is the *second* fixed cap in that file
+to bite, and it bit next to the comment recording the first
+([[bug-a-string-table-cap-refuses-a-14k-line-c-program]], `defs.inc:25`). Does
+any remaining fixed cap there have a headroom check, or do we wait for the third?
+
+## SUPERSEDED — two candidate causes, and A picks
 
 1. **Growth**: 16 MiB is simply too small for aarch64's density and `MAX_CODE`
    should rise. Cheap, and there is precedent —
