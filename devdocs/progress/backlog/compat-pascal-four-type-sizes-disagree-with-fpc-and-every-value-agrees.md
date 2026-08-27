@@ -21,8 +21,20 @@ its own words: *the values are all correct, only the storage size is wrong.*
 | `SizeOf(packed record a: TSmall; b: TNeg; c: 0..255)` | 3 | **12** |
 | `SizeOf(array[0..3] of TSmall)` | 4 | **16** |
 | `SizeOf(ss)` where `ss: string[20]` | 21 | **8** |
-| `Ord(ss[0])` (shortstring length byte) | 5 | **0** |
+| ~~`Ord(ss[0])` (shortstring length byte)~~ | 5 | ~~**0**~~ **fixed** |
 | a `string[N]` field's contribution to a record's size | N+1 | 8 |
+
+**One row is now closed.** `Ord(ss[0])` was fixed 2026-08-27 by
+[[bug-p-index-0-of-a-frozen-string-is-not-the-length-byte]], and it is worth
+saying how, because it bears on the rest of this ticket: index 0 was given its
+own origin so it addresses the length word's LOW byte, rather than the storage
+being changed to a real byte-prefix. So the *observable* is FPC's while the
+*layout* is still pxx's — reads, writes, `inc(s[0])`, `var` parameters and
+record fields all match FPC 3.2.2 byte for byte, and `SizeOf(ss)` still says 8.
+That is deliberate: it makes the length byte usable today without paying the ABI
+churn this ticket is about, and it does not foreclose the real fix. When the
+byte-prefix lands, that origin becomes redundant and should be deleted, not
+kept alongside — two mechanisms for one index.
 
 Sets and subranges are **wider** than FPC; `string[N]` is **narrower**, because
 it is a 255-cap `tyFixedString` (word-prefix) rather than a true

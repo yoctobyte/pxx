@@ -75,3 +75,25 @@ message.
 Implementing typed files makes that program compile and reds `test-core` —
 which `gate.sh quick` does not run, so it would surface only via Track T.
 Re-point or retire that test in the same commit.
+
+
+## The FPC-compiler corpus march reached this, 2026-08-27
+
+`file of T` is now the **top blocker** for the FPC compiler-source march, not a
+hypothetical. After seven fixes this session, `cutils.pas`, `globtype.pas`,
+`constexp.pas` and `version.pas` all compile clean, and the next tier stops on
+exactly two things:
+
+| unit | stops on |
+| --- | --- |
+| `cclasses.pas`, `cfileutl.pas`, `cstreams.pas`, `comphook.pas`, `finput.pas` | `file types are not supported` — **this ticket** |
+| `cmsgs.pas` | `TMessage = object` — [[feature-p-legacy-value-object-types]], which [[decide-old-style-object-types]] chose NOT to build |
+
+Recorded as measurement, not as an argument to raise the priority.
+`frontend-compat-philosophy.md` says *"a corpus is a measuring instrument, not a
+dependency"*, and the same rule is what keeps `cmsgs.pas` from reopening the
+`object` decision. The scope note above still stands: the `string[N]` record
+layout question is the real gate, and it has NOT moved —
+[[bug-p-index-0-of-a-frozen-string-is-not-the-length-byte]] fixed the length
+byte's *observable* while leaving the *layout* at 8 bytes, precisely so it would
+not pre-empt that decision.
