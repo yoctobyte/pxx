@@ -460,11 +460,6 @@
   }
  ],
  "host": "plexus",
- "idle_yield": {
-  "aborts": 1,
-  "phase": "pin-verify",
-  "target": "1e49e4c54252ac6d047a5901d82d9df3ed3d872e"
- },
  "job_reason": {
   "test-emit-obj#src:test/cxtensa_obj.c@1": "in: $TMP | near:  Integer  __pxxrawsyscall  SYS_getuid >>> | pascal26:477: error: undefined variable (SYS_getgid) | in: $TMP | near:  Integer  __pxxrawsyscall  SYS_getgid >>> | pascal26: too many errors, stopping"
  },
