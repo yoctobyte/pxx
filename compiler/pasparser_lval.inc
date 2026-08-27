@@ -3872,6 +3872,7 @@ var sub, prevTok: Integer; fieldName, accName: AnsiString; tk: TTypeKind;
     pri, i, w, margIdx: Integer; isAssign: Boolean;
     cvIdx: Integer;
     thNode: Integer;   { a chained type-helper call on the value so far }
+    mcCi: Integer; mcFin: Boolean;   { a metaclass-valued step in the chain }
 begin
   { NilPy has its OWN copy of this routine (PyParseClassRecordSelectors,
     pyparser.inc), split out 2026-08-09 by
@@ -3894,6 +3895,39 @@ begin
         Error('expected field name after .');
       prevTok := TokPos - 1;
       fieldName := GetTokenStr(prevTok);
+
+      { A METACLASS-valued step is a RECEIVER, not something to walk into:
+        `TRec(q^).cr.NewN(3)` where `cr: class of TBase`. A `class of T` field
+        records REC_NONE (the class lives in UFldPtrElemRec), so recId is
+        REC_NONE here, ci stays -1, and every arm below declined — the walker
+        reported `"NewN": this value has no members`.
+
+        The three OTHER walkers that can reach a metaclass value each already
+        handle it, through the same shared pair: NodeMetaclassCi is the
+        five-spelling predicate, ParseMetaclassMemberTail the member parser.
+        This is the fourth caller, not a fourth mechanism.
+
+        Reached because the record-cast rvalue arm now delegates EVERY `.name`
+        here (it used to keep plain fields on its own hand-rolled builder, which
+        is what made `TLongWordRec(l).b[0]` read at the record's width). That
+        delegation is right; this is the arm it needed and did not have.
+        regression-test-core-test-pascal-cast-chain-method-call }
+      mcCi := NodeMetaclassCi(node);
+      if mcCi >= 0 then
+      begin
+        sub := ParseMetaclassMemberTail(node, mcCi, tk, recId, mcFin);
+        if sub < 0 then
+        begin
+          if FindUMeth(mcCi, fieldName) >= 0 then
+            Error('an INSTANCE method cannot be called through a class reference: '
+                  + fieldName);
+          Error('unknown member on a class reference: ' + fieldName);
+        end;
+        node := sub;
+        outTk := tk;
+        if mcFin then Break;
+        Continue;
+      end;
 
       ci := -1;
       if recId >= REC_UCLASS_BASE then ci := recId - REC_UCLASS_BASE;

@@ -2338,6 +2338,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-nilpy-sorted-pairs | T | 70 | regression | regression: test-core#src:test/test_nilpy_sorted_pairs.npy red at bb845b13ceb3 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-star-methods-and-targets | T | 70 | regression | regression: test-core#src:test/test_nilpy_star_methods_and_targets.npy red at 89dae725b972 (auto-filed by twatch) | — |
 | regression-test-core-test-operator-implicit-shortstring-b356 | P | 70 | regression | regression: test-core#src:test/test_operator_implicit_shortstring_b356.pas red at 203438d2cf63 (auto-filed by twatch) | — |
+| regression-test-core-test-pascal-cast-chain-method-call | P | 70 | regression | regression: test-core#src:test/test_pascal_cast_chain_method_call.pas red at 97f96a5cc766 (auto-filed by twatch) | — |
 | regression-test-core-test-platform-defines | T | 70 | regression | regression: test-core#src:test/test_platform_defines.pas@2 red at 96147f570d29 (auto-filed by twatch) | — |
 | regression-test-core-test-procedure-as-value-ok | P | 70 | regression | regression: test-core#src:test/test_procedure_as_value_ok.pas red at a76303231306 (auto-filed by twatch) | — |
 | regression-test-core-test-procvar-value-context-2 | P | 70 | regression | regression: test-core#src:test/test_procvar_value_context.pas red at a2ae11a64191 (auto-filed by twatch) | — |
