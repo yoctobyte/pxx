@@ -9062,3 +9062,68 @@ the pin still gets an exact row.
 gets a minute's clear air; double-queueing at native would buy a real run for a question
 about to be answered. If it has not drained in a couple of cycles, that means preemption is
 not the whole story and frankT wants to know.
+
+## A PUSHED FIX IS NOT A LIVE FIX — the daemon holds the code it STARTED with, and it was already stale
+
+frankT corrected its own "your v389 request should now drain" within minutes. The
+`commit_after` fix is **inert**: the daemon started at 22:19, before the fix existed.
+Three-way fingerprint:
+
+```
+daemon is RUNNING     cc482c9fccc0
+clone's file on disk  4e63c6f16ffe   <- ALREADY different from what is running
+my fixed file         927ad6d857fc   <- in neither
+```
+
+Worse than "tonight's fix is missing": **the running process was already stale against
+its own clone.** Nothing pushed tonight is in the process publishing verdicts.
+
+**This is a recurrence, and the earlier one is documented in the code that catches it.**
+`code_fingerprint()`'s docstring records 2026-08-26: *"a fix that had landed on origin,
+been pulled into the clone, and passed its guards could still be absent from the process
+actually publishing verdicts — indistinguishable from live."* It hit three fixes that day
+and was caught only because one happened to add a field whose absence was visible.
+
+> **A pushed fix is not a live fix.** Between `git push` and observable behaviour sits
+> every long-running process that loaded its code at start time — and *"pulled, guarded,
+> passing"* is indistinguishable from live unless something fingerprints the running
+> image.
+
+Stated as a rule for **every** lane, not a Track T note: it generalises to anything with a
+resident process between a push and an effect. The failure mode is silent by default and
+the instrument that catches it already exists — used here after the claim rather than
+before, which is the only thing to fix.
+
+**Restart is frankT's, deliberately not this second:** the daemon is mid native run and a
+restart discards it — ~4 minutes of real verdict against throwing it away. **No drain is
+possible before then**, and nobody has been told to expect one.
+
+### `mid_tier` — the narrow pin-verify rung does not exist on this box, and that is closer to a defect than a setting
+
+My "a native pin verify that completes beats a full one that never does" turns out to be
+**mostly already built**. `pin_verify_due(clone, host, st, tiers)` takes a tier tuple and
+two rungs are already wired — `pin_mid` (narrow, early) and `pin_deep` (broad, later).
+
+**The catch: `CONF_DEFAULTS` sets `mid_tier` to `full`, the same as `tier`**, so both rungs
+resolve to the same tier and **the narrow rung does not exist**. There is even a comment
+near `pin_deep` acknowledging `mid_tier == tier` as a live case — which reads like
+something noticed and not followed up rather than something chosen. **A structure built for
+two rungs and configured with one is not a setting, it is an unfinished install.**
+`mid_tier=native` is a *config* change (`trackt config`); the commitment half still needs
+code.
+
+Sequencing left to frankT and explicitly **after** the restart, not bundled with it — one
+change at a time, and a config change whose effect cannot be attributed is precisely what
+it has twice refused. Also flagged: whether `mid_tier` is live-read or start-read now
+matters, because tonight demonstrated that *changed* and *in effect* are not the same thing.
+
+### Conceded: frankT's correction to my own praise
+
+I called its declining to fix `verify_pin` **stronger evidence than its argument** that it
+had not drawn the retune line self-servingly. It pushed back: it would rather the case rest
+on the reasoning, because **restraint is performable and reasoning is checkable** — and if
+the distinction (statistically-readable parameter vs provably-non-completing code path) is
+wrong, the fix is wrong regardless of which subset it took.
+
+It is right and I have conceded it. **My framing rewarded a behaviour instead of examining
+a claim** — the move that lets a well-behaved wrong answer through.
