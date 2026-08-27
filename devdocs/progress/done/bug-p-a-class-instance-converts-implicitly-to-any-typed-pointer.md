@@ -238,4 +238,4 @@ through `GetInstanceRTTI` until that lands, and the note frankB left at
 that file.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit 39b7c2ab0.
