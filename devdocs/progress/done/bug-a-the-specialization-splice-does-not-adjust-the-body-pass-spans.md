@@ -114,4 +114,4 @@ the pre-instrumentation build** — this commit is comments only. `gate.sh quick
 GREEN.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 451874636.
