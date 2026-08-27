@@ -1,0 +1,68 @@
+# `_κ = 5` is legal Python 3 (PEP 3131) and the NilPy lexer said
+# `unexpected character`. Non-ASCII in a STRING literal already worked, so it
+# was the identifier path alone. tinycss2's color4.py names its CIE Lab
+# constants `_κ` and `_ε` — what the spec itself calls them — so renaming was
+# not open to us on unmodified third-party source.
+#
+# `Source` is a byte string, so a UTF-8 name arrives as a run of bytes >= 128
+# and is simply taken as part of the identifier. Names compare as bytes
+# everywhere downstream, which is the promise the getattr/hasattr rows below
+# check: same bytes match, an ASCII lookalike does not.
+# bug-n-a-unicode-identifier-is-rejected-by-the-lexer
+import nilpy_uniids
+from nilpy_uniids import λ, Ω, Größe
+
+# the ticket's own repro
+_κ = 5
+print(_κ + 1)
+
+# the tinycss2 shape that filed it
+κ = 24389 / 27
+ε = 216 / 24389
+x = 0.2
+f0 = x ** (1 / 3) if x > ε else (κ * x + 16) / 116
+print(round(f0, 6))
+print(int(κ))
+
+# every position a name can occupy: bare, def, class, method, attribute,
+# keyword argument, and a name with no ASCII prefix at all
+def λ_of(y):
+    return y * 2
+print(λ_of(21))
+
+g = Größe(41)
+print(g.ω)
+print(g.доступ())
+print(g.__class__.__name__)
+print(Größe.ünicode)
+
+def kw(ψ=7):
+    return ψ
+print(kw(), kw(ψ=9))
+
+# across a module boundary, qualified and from-imported
+print(nilpy_uniids.Ω, Ω)
+print(λ(1), nilpy_uniids.λ(2))
+
+# the byte-identity promise: a name reached by STRING must be the same name,
+# and an ASCII lookalike must not collide with it
+print(getattr(g, "ω"), hasattr(g, "ω"), hasattr(g, "w"))
+a = 1
+å = 2
+print(a, å)
+
+# non-ASCII in a literal and in a comment still works — the σ here is a comment
+s = "κ appears in a string"
+print(len(s) > 0, s[0] == "κ")
+
+# controls for the five OTHER sites that spell "is this an identifier byte".
+# They now share one predicate so they cannot drift from the scan; their
+# non-ASCII half is unreachable from valid Python (a name immediately followed
+# by a quote, or by `j`, is a syntax error in CPython too), so what these rows
+# pin is that the ASCII behaviour is unchanged.
+print(type(3j).__name__, (1j * 1j).real)     # imaginary suffix guard
+b = 2
+print(b"AB"[0], f"{b}")                       # b"/f" prefix vs a bare name b
+bf = 3
+print(bf, f"{bf}")                            # an identifier ENDING in f/b
+print(1. + 1, [1., 2.][1])                    # trailing-dot float lookahead

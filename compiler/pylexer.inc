@@ -1,6 +1,44 @@
 { SPDX-License-Identifier: MPL-2.0 }
 { ===== Nil Python Lexer ===== }
 
+function PyIsIdentStart(ch: Char): Boolean;
+{ What may BEGIN a NilPy identifier.
+
+  The non-ASCII half is PEP 3131: Python 3 identifiers are Unicode, and this
+  is unmodified third-party source we are not free to rename — tinycss2's
+  color4.py/color5.py name their CIE Lab constants `_κ` and `_ε`, which is what
+  the spec itself calls them. `Source` is a byte string, so a UTF-8 identifier
+  arrives as a run of bytes >= #128 and the whole run is simply taken as part
+  of the name. Names are compared as bytes everywhere downstream, so two
+  spellings of the same character compare equal exactly when they are the same
+  bytes — which is what a lexer that never decodes can promise.
+
+  This is DELIBERATELY laxer than CPython, which admits only XID_Start /
+  XID_Continue and would reject, say, an identifier starting with a combining
+  mark. Being laxer is not a defect under Track N's upward-compatibility rule
+  (CLAUDE.md): no program CPython accepts and runs can observe it. Classifying
+  the bytes properly would mean carrying a Unicode category table in the lexer
+  to buy nothing but a different error message on source that is already
+  invalid. Noted in devdocs/dev/nilpy-semantics-divergences.md.
+
+  It is a FUNCTION because the byte set was written out six times across this
+  file — the identifier scan, its continuation, the imaginary-suffix guard, the
+  two f-string/bytes-prefix "not the tail of a longer identifier" guards, and
+  the trailing-dot-float lookahead — in four different spellings. Teaching only
+  the scan about UTF-8 would leave the other five disagreeing with it, which is
+  exactly the second path that stays broken
+  (devdocs/dev/normalise-dont-special-case.md).
+  bug-n-a-unicode-identifier-is-rejected-by-the-lexer }
+begin
+  PyIsIdentStart := (ch in ['a'..'z', 'A'..'Z', '_']) or (Ord(ch) >= 128);
+end;
+
+function PyIsIdentCont(ch: Char): Boolean;
+{ ...and what may CONTINUE one: the same set plus digits. See PyIsIdentStart. }
+begin
+  PyIsIdentCont := PyIsIdentStart(ch) or (ch in ['0'..'9']);
+end;
+
 function PyKeyword(const s: AnsiString): TTokenKind;
 { Python keywords are case-SENSITIVE and all-lowercase (except the three
   capitalised literals True/False/None), so the comparison below is EXACT.
@@ -109,8 +147,7 @@ function PyImaginarySuffix(var P: Integer): Boolean;
 begin
   Result := (P <= Length(Source)) and ((Source[P] = 'j') or (Source[P] = 'J'));
   { A suffix must END the literal -- `1jj` and `1john` are not imaginaries. }
-  if Result and (P < Length(Source)) and
-     (Source[P+1] in ['a'..'z','A'..'Z','0'..'9','_']) then
+  if Result and (P < Length(Source)) and PyIsIdentCont(Source[P+1]) then
     Result := False;
   if Result then Inc(P);
 end;
@@ -484,7 +521,7 @@ begin
     { b"..." / b'...' — a BYTES literal, rewritten to bytes("...") so it lands
       on the pylib bytes(str) overload. Same not-tail-of-an-ident guard as f. }
     if ((c = 'b') or (c = 'B')) and (i + 1 <= n) and PyFStrIsQuote(Source[i + 1]) and
-       ((i = 1) or (not (Source[i - 1] in ['A'..'Z', 'a'..'z', '0'..'9', '_']))) then
+       ((i = 1) or (not PyIsIdentCont(Source[i - 1]))) then
     begin
       q := Source[i + 1];
       PyFsPut('bytes(');
@@ -508,7 +545,7 @@ begin
     end;
     { f"..." — the prefix must not be the tail of a longer identifier }
     if ((c = 'f') or (c = 'F')) and (i + 1 <= n) and PyFStrIsQuote(Source[i + 1]) and
-       ((i = 1) or (not (Source[i - 1] in ['A'..'Z', 'a'..'z', '0'..'9', '_']))) then
+       ((i = 1) or (not PyIsIdentCont(Source[i - 1]))) then
     begin
       q := Source[i + 1];
       if (i + 3 <= n) and (Source[i + 2] = q) and (Source[i + 3] = q) then
@@ -749,7 +786,7 @@ begin
                            (Source[P + 3] in ['0'..'9']));
     Exit;
   end;
-  PyTrailingDotFloat := not (Source[P + 1] in ['.', 'a'..'z', 'A'..'Z', '_', '0'..'9']);
+  PyTrailingDotFloat := not ((Source[P + 1] = '.') or PyIsIdentCont(Source[P + 1]));
 end;
 
 procedure PyLexAll(SupportLineNumbers: Boolean);
@@ -930,10 +967,10 @@ begin
       end;
 
       { Identifiers and Keywords }
-      if (not rawStr) and (c in ['a'..'z','A'..'Z','_']) then
+      if (not rawStr) and PyIsIdentStart(c) then
       begin
         s := '';
-        while (P <= Length(Source)) and (Source[P] in ['a'..'z','A'..'Z','0'..'9','_']) do
+        while (P <= Length(Source)) and PyIsIdentCont(Source[P]) do
         begin
           AppendChar(s, Source[P]);
           Inc(P);

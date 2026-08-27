@@ -549,6 +549,45 @@ it is a genuine divergence and not laxity — recorded here rather than filed
 because closing it needs a slice VALUE, which is a language-level addition.
 Landed with `bug-n-a-builtin-subclass-subscript-operator-skips-the-override`.
 
+## An identifier may contain ANY non-ASCII byte (2026-08-27)
+
+CPython follows PEP 3131 exactly: an identifier is `XID_Start XID_Continue*`,
+and every other non-ASCII character is `SyntaxError: invalid character
+'“' (U+201C)`. NilPy's lexer takes **any byte >= 128** as an identifier
+character, start and continue alike.
+
+```python
+_κ = 5          # both accept — this is the point of the change
+x = “hello”      # CPython: invalid character (U+201C)
+                #    NilPy: undefined variable (“hello”)
+```
+
+The lexer never decodes UTF-8. `Source` is a byte string, so a Unicode name
+arrives as a run of continuation bytes and is taken whole; names are compared as
+bytes everywhere downstream, so two names match exactly when they are the same
+bytes. That is a promise a non-decoding lexer can keep, and it is enough for
+every program CPython accepts.
+
+**Why this is not a defect.** No program CPython *accepts and runs* can observe
+it: the extra characters are precisely the ones CPython rejects at parse time.
+Under Track N's upward-compatibility rule (CLAUDE.md) — one direction only — a
+form we accept and CPython rejects is a dialect fact, not a bug. Classifying the
+bytes properly would mean carrying a Unicode category table in the lexer to buy
+a different *error message* on source that is already invalid, and error
+reporting is deferred by the same file's compat table.
+
+**The cost, stated plainly.** A pasted smart quote used to be `unexpected
+character: <?>` — a single unprintable byte — and is now `undefined variable
+(“hello”)`. Both are errors and both point at the same line; the new one at least
+shows the offending characters. Worth revisiting only if the confusable set
+(U+00A0, U+2010–U+201D, U+3000, the fullwidth forms) starts costing real users
+real time, and then as a *warning table*, not as a decoder.
+
+Implemented as `PyIsIdentStart` / `PyIsIdentCont` in `compiler/pylexer.inc` —
+one predicate, because the byte set had been written out six times in four
+spellings and teaching only the scan would have left the other five disagreeing.
+[[bug-n-a-unicode-identifier-is-rejected-by-the-lexer]]
+
 ## `sys.path` cannot work, and that is PERMANENT — the answer is `-Fu` (2026-08-17)
 
 **Not a bug, and not fixable.** `sys.path.insert(0, "/path/to/pkg")` before an

@@ -9943,6 +9943,20 @@ test-core: $(COMPILER)
 	# bug-n-isinstance-does-not-accept-a-qualified-class-name
 	./$(COMPILER) test/test_nilpy_isinstance_against_a_qualified_class_name.npy $(TESTTMP)/test_nilpy_qualisi26
 	$(TESTTMP)/test_nilpy_qualisi26 | diff -u test/test_nilpy_isinstance_against_a_qualified_class_name.expected -
+	# `_Îº = 5` is legal Python 3 (PEP 3131) and the lexer said `unexpected
+	# character`. Non-ASCII in a STRING literal already worked, so it was the
+	# identifier path alone. tinycss2's color4.py names its CIE Lab constants
+	# `_Îº`/`_Îµ` — what the spec calls them — so renaming unmodified third-party
+	# source was not open to us. Source is a byte string, so a UTF-8 name is a
+	# run of bytes >= 128 and is taken whole; names compare as bytes downstream,
+	# which the getattr/hasattr rows pin. The byte set was written out SIX times
+	# in four spellings across pylexer.inc, so it is now one predicate — the
+	# last four rows are the controls that those other sites' ASCII behaviour
+	# (imaginary suffix, b"/f" prefix guards, trailing-dot float) is unchanged.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-a-unicode-identifier-is-rejected-by-the-lexer
+	./$(COMPILER) test/test_nilpy_a_unicode_identifier.npy $(TESTTMP)/test_nilpy_uniid26
+	$(TESTTMP)/test_nilpy_uniid26 | diff -u test/test_nilpy_a_unicode_identifier.expected -
 	# `return lambda ...` — a closure factory, and the returned value was not
 	# CALLABLE while the same lambda bound to a local first was. The return-type
 	# scan's TUPLE detector counted the LAMBDA'S OWN PARAMETER COMMAS, so the
