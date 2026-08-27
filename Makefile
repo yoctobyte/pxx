@@ -3865,6 +3865,17 @@ test-core: $(COMPILER)
 	# bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly
 	./$(COMPILER) test/test_nilpy_cmp_dunder_nonclass_operand.npy $(TESTTMP)/test_nilpy_cmpnonclass26
 	$(TESTTMP)/test_nilpy_cmpnonclass26 | diff -u test/test_nilpy_cmp_dunder_nonclass_operand.expected -
+	# A member a PROVIDED module does not have raises CPython's AttributeError
+	# with CPython's own sentence. It used to raise a bare Exception whose text
+	# blamed "the import it came from could not be resolved" and a guard flag
+	# set in an except-branch — for `import sys`, which resolves, and which no
+	# such branch guards. The catchability is the load-bearing half: at the
+	# previous pin this row does not print a caught message, it takes the whole
+	# program down on line 1, because `except AttributeError` walks straight
+	# past a bare Exception. The .expected is CPython's own output.
+	# bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through
+	./$(COMPILER) test/test_nilpy_missing_module_attr_is_attributeerror.npy $(TESTTMP)/test_nilpy_missingattr26
+	$(TESTTMP)/test_nilpy_missingattr26 | diff -u test/test_nilpy_missing_module_attr_is_attributeerror.expected -
 	# ...and the other side of the same rule: a REBOUND name is refused, never
 	# resolved to its first binding. CPython prints "second"; a compile-time
 	# alias table cannot say that, so it must decline rather than answer "first".

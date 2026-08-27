@@ -2177,6 +2177,48 @@ begin
   PySkipOptionalMissingChain;
 end;
 
+{ `<module>.<attr>` where the MODULE is provided and the ATTRIBUTE is not —
+  `sys.version_info`. Deliberately NOT PyMakeOptionalMissingCall: that one
+  answers a different question (a name bound to None because its import could
+  not be resolved) and its message says so, which for a module that resolved
+  perfectly is a false sentence blaming a guard flag no such call has.
+
+  It also does not set PyExprHadOptionalMissing and does not swallow the
+  trailing chain, both of which belong to the optional-import concept: `sys` is
+  a real module, a name assigned from it is a real variant, and `.major` on the
+  result must compile to an ordinary runtime attribute access — CPython raises
+  at the first step here too, so there is nothing to skip.
+  bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through }
+function PyMakeAttrMissingCall(const owner: AnsiString;
+                               const attr: AnsiString): Integer;
+var procIdx, a1, a2, l1, l2: Integer;
+
+  function StrArg(const t: AnsiString): Integer;
+  begin
+    Result := AllocNode(AN_STR_LIT);
+    ASTSOffset[Result] := PyStoredName(t);
+    ASTSLen[Result] := Length(t);
+    ASTTk[Result] := Ord(tyString);
+  end;
+
+begin
+  procIdx := FindProc('pyattr_missing');
+  if procIdx < 0 then Error('Nil Python: pylib (pyattr_missing) not loaded');
+  l1 := StrArg(owner);
+  l2 := StrArg(attr);
+  a2 := AllocNode(AN_ARG);
+  ASTLeft[a2] := l2;
+  ASTRight[a2] := -1;
+  a1 := AllocNode(AN_ARG);
+  ASTLeft[a1] := l1;
+  ASTRight[a1] := a2;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTLeft[Result] := a1;
+  ASTTk[Result] := Ord(tyVariant);
+  LastExprTk := tyVariant;
+end;
+
 { isinstance(x, T) / isinstance(x, (T1, T2, ...)) — desugared to tag checks
   on variants (int also accepts bool, like CPython) and closed-world
   AN_IS_TEST class checks; a variant operand is unboxed via pylib pyvarobj.
@@ -11178,8 +11220,14 @@ begin
   end;
   if (nm <> 'stdout') and (nm <> 'stderr') and (nm <> 'stdin') then
   begin
-    { an attribute this sys does not have — raise, as CPython does }
-    Result := PyMakeOptionalMissingCall('sys.' + nm);
+    { An attribute this sys does not have — raise, as CPython does, and with
+      CPython's own AttributeError and CPython's own sentence. This used to go
+      through PyMakeOptionalMissingCall, whose message blames "the import it
+      came from could not be resolved" and a guard flag set in an except-branch
+      — for `import sys`, which resolves, and which no such branch guards. The
+      raise was right; only the explanation was borrowed from another concept.
+      bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through }
+    Result := PyMakeAttrMissingCall('sys', nm);
     LastExprTk := IntToTypeKind(ASTTk[Result]);
     Exit;
   end;

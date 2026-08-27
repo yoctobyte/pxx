@@ -1,0 +1,44 @@
+# A member a provided module does NOT have raises CPython's AttributeError,
+# with CPython's own sentence — not a bare Exception blaming an import that
+# resolved and a guard flag no such call has.
+#
+# The catchability is the load-bearing half: `except AttributeError` is how real
+# code probes for an optional member, and a bare Exception walks straight past
+# it. `sys.version_info` is the member that found this and is still absent —
+# see decide-nilpy-what-version-does-sys-version-info-claim — so this row uses
+# an attribute CPython does not have either, and so agrees with it exactly.
+# bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through
+
+import sys
+
+try:
+    sys.no_such_member_at_all
+    print("no raise")
+except AttributeError as e:
+    print("caught AttributeError:", e)
+
+# ...and it is catchable as the base Exception too, the way it always was
+try:
+    sys.another_missing_one
+    print("no raise")
+except Exception as e:
+    print("caught as Exception:", e)
+
+
+# a probe that swallows the AttributeError is the idiomatic shape, and must not
+# take the whole program down.  (Spelled without getattr(sys, ...) on purpose:
+# `sys` as a VALUE is a separate, still-open gap —
+# bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable.)
+def have_it():
+    try:
+        sys.definitely_not_here
+        return True
+    except AttributeError:
+        return False
+
+
+print(have_it())
+print("still running")
+
+# the members sys DOES provide must not have moved
+print(type(sys.argv).__name__, len(sys.argv) >= 1, sys.platform)

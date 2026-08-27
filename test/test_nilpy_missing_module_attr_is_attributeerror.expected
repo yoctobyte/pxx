@@ -1,0 +1,5 @@
+caught AttributeError: module 'sys' has no attribute 'no_such_member_at_all'
+caught as Exception: module 'sys' has no attribute 'another_missing_one'
+False
+still running
+list True linux

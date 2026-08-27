@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:23 blocked:7 backlog:267 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2484 rejected:45`
+`unfinished:23 blocked:7 backlog:267 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2485 rejected:45`
 
 ## Held now (working/ — do not touch these files)
 
@@ -56,7 +56,6 @@ _none — no lane is locked._
 - `[p 72] [N]` feature-nilpy-stdlib-coverage-gaps-measured
 - `[p 72] [B]` feature-typinfo-facade-unit
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
-- `[p 70] [N]` bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through
 - `[p 70] [N]` bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable
 - `[p 70] [N]` bug-n-an-augmented-subscript-on-a-dunder-class-is-refused
 - `[p 70] [N]` bug-nilpy-a-lambda-returned-directly-is-not-callable
@@ -79,5 +78,6 @@ _none — no lane is locked._
 - `[p 65] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - `[p 65] [B]` feature-b-text-file-surface-seekeof-rename-settextbuf
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
+- `[p 65] [N]` feature-nilpy-iter-and-next-over-a-container
 
 _248 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
