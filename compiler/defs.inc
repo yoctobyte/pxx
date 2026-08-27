@@ -102,6 +102,10 @@ const
     file whose first error cascades produces noise, not information, past a
     handful. feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
   MAX_REPORTED_ERRORS = 20;
+  { The widest OpConvSourceRank a USE site accepts -- an integer reaching a float
+    parameter, the last rank there is. A declaration-time duplicate check passes 0
+    (exact source kind) instead. }
+  OPCONV_RANK_MAX = 3;
   MAX_PENDING_INITS = 16384;  { constant global-var initializer assignments }
   MAX_LOCAL_INITS   = 4096;   { routine-local typed-const initializer assignments }
   { PendingInitElem / LocalInitElem carry an initializer element's array INDEX,

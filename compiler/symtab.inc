@@ -5870,6 +5870,145 @@ begin
   end;
 end;
 
+function TkIsIntegerFamily(tk: Integer): Boolean;
+{ The INTEGER family proper. Narrower than TypeIsOrdinal, which also answers
+  True for Boolean, Char, Pointer and the C/UTF ordinals -- widening a
+  conversion operator's source across THOSE is not something FPC does, and
+  quietly routing a Char through an `operator :=(u: Integer)` would be a wrong
+  answer rather than a missing one. }
+begin
+  TkIsIntegerFamily := (tk = Ord(tyInteger)) or
+                       ((tk >= Ord(tyInt8)) and (tk <= Ord(tyUInt64))) or
+                       (tk = Ord(tyNativeInt)) or (tk = Ord(tyNativeUInt));
+end;
+
+function OpConvSourceRank(paramTk, srcTk: Integer): Integer;
+{ How well a conversion operator's PARAMETER type accepts a source of kind
+  srcTk. Lower is better; -1 means not assignment-compatible at all, so the
+  candidate is out.
+
+  The ranks are FPC's answer, measured (fpc 3.2.2 -Mobjfpc) on the pair
+  constexp.pas itself declares -- `operator :=(u: qword): T` beside
+  `operator :=(s: int64): T` -- assigned from five different sources:
+
+    x := 10       -> int64    x := someByte  -> qword
+    x := someInt  -> int64    x := someQWord -> qword
+    x := someInt64-> int64
+
+  which is "exact kind, else same SIGNEDNESS, else any integer": a Byte prefers
+  the unsigned parameter even though the signed one would hold it, and a signed
+  Integer prefers the signed one. An integer reaching a float parameter is last,
+  because it is the only rank that changes representation. A float source
+  reaches only a float parameter -- FPC has no implicit float-to-integer. }
+begin
+  OpConvSourceRank := -1;
+  if paramTk = srcTk then
+  begin
+    OpConvSourceRank := 0;
+    Exit;
+  end;
+  if TkIsIntegerFamily(srcTk) then
+  begin
+    if TkIsIntegerFamily(paramTk) then
+    begin
+      if TypeSigned(IntToTypeKind(paramTk)) = TypeSigned(IntToTypeKind(srcTk)) then
+        OpConvSourceRank := 1
+      else
+        OpConvSourceRank := 2;
+      Exit;
+    end;
+    if TypeIsFloat(IntToTypeKind(paramTk)) then OpConvSourceRank := 3;
+    Exit;
+  end;
+  if TypeIsFloat(IntToTypeKind(srcTk)) and TypeIsFloat(IntToTypeKind(paramTk)) then
+    OpConvSourceRank := 1;
+end;
+
+function OpConvResultMatches(pi, dstTk, dstRec: Integer): Boolean;
+{ Does conversion operator `pi` produce the DESTINATION type?
+
+  dstTk = Ord(tyUnknown) is the wildcard: "any destination", which is what a
+  caller asking only whether a conversion EXISTS wants (AssignHasConversionOperator
+  -- it is deciding whether to refuse a store, not which routine to call).
+
+  The frozen-string kinds compare equal to each other: the SAME `string[N]` type
+  resolves to tyString in a var declaration but to tyFixedString as an operator
+  RETURN type, so a strict equality missed `class operator Implicit(...): string[N]`
+  and left `s := t` as a raw record-to-string store -- a garbage length byte and a
+  segfault in writeln (toperator93). }
+begin
+  OpConvResultMatches := False;
+  if dstTk = Ord(tyUnknown) then
+  begin
+    OpConvResultMatches := True;
+    Exit;
+  end;
+  if not ((Ord(Procs[pi].RetType) = dstTk) or
+          (TypeIsFrozenString(Procs[pi].RetType) and
+           TypeIsFrozenString(IntToTypeKind(dstTk)))) then Exit;
+  { a record/class destination is only the same type when the ID matches too --
+    this is what keeps a widened SOURCE lookup from answering with an operator
+    that converts to a completely different record }
+  if (dstRec <> REC_NONE) and (ProcRetRecId[pi] <> REC_NONE) and
+     (ProcRetRecId[pi] <> dstRec) then Exit;
+  OpConvResultMatches := True;
+end;
+
+function FindOpConvRanked(opKey, srcTk, srcRec, dstTk, dstRec, maxRank: Integer): Integer;
+{ CONVERSION-operator lookup: `operator :=` / `class operator Implicit`, and
+  their OPK_EXPLICIT twin. Keyed on the destination as well as the source, and
+  matching the source by ASSIGNMENT COMPATIBILITY rather than exact type kind.
+
+  Not FindOpOverload, which matches the source kind exactly. That failed on the
+  first line most users write -- `c := 10` against
+  `operator :=(const s: Int64): TCe` answered `cannot assign Integer to record`,
+  while `c := someInt64` worked
+  (bug-p-an-implicit-conversion-operator-needs-an-exact-type-kind-match).
+
+  Widening the source ALONE would be unsound: the table is keyed on the source,
+  so with `operator :=(a: Int64): TA` and `operator :=(b: Integer): TB` both in
+  scope, a widened lookup for `someTA := 10` could answer with TB's. The
+  DESTINATION is what disambiguates, and it costs no new column -- it is the
+  operator proc's own return type. Filter by destination first, then take the
+  best-ranked source among what is left.
+
+  maxRank caps how far the source may widen: 0 is "exact kind only", which is
+  what the DECLARATION-time duplicate check wants (two conversions from the same
+  source to the same destination are ambiguous; QWord and Int64 to one
+  destination are not, and constexp.pas declares exactly that pair). Use
+  OPCONV_RANK_MAX for a use site. }
+var i, pi, bestPi, bestRank, r: Integer;
+begin
+  bestPi := -1; bestRank := 99;
+  i := 0;
+  while i < OvrlCount do
+  begin
+    if (OvrlOpKind[i] = opKey) and (OvrlRecId[i] = srcRec) then
+    begin
+      pi := OvrlProcIdx[i];
+      if OpConvResultMatches(pi, dstTk, dstRec) then
+      begin
+        r := OpConvSourceRank(OvrlTypeKind[i], srcTk);
+        if (r >= 0) and (r <= maxRank) and (r < bestRank) then
+        begin
+          bestRank := r;
+          bestPi := pi;
+        end;
+      end;
+    end;
+    Inc(i);
+  end;
+  FindOpConvRanked := bestPi;
+end;
+
+function FindOpConvToDest(srcTk, srcRec, dstTk, dstRec: Integer): Integer;
+{ The use-site form: an IMPLICIT conversion, source widened as far as
+  assignment compatibility goes. }
+begin
+  FindOpConvToDest := FindOpConvRanked(Ord(tkAssign), srcTk, srcRec,
+                                       dstTk, dstRec, OPCONV_RANK_MAX);
+end;
+
 { UNARY-operator lookup: `-a` / `not a` on a record or class operand.
 
   Shares the table and the (opKind, leftKind, leftRec) key with the binary

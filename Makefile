@@ -8538,6 +8538,14 @@ test-core: $(COMPILER)
 	# (compiler/cutils.pas:303) is the row that found it. FPC 3.2.2's output.
 	./$(COMPILER) test/test_subrange_bound_stops_at_the_initialiser.pas $(TESTTMP)/test_subbound26
 	$(TESTTMP)/test_subbound26 | diff -u test/test_subrange_bound_stops_at_the_initialiser.expected -
+	# An implicit-conversion operator applies to any ASSIGNMENT-COMPATIBLE source,
+	# not only an exact type-kind match -- `c := 10` against `operator :=(const s:
+	# Int64): TCe` used to answer "cannot assign Integer to record". The
+	# destination is what makes widening the source sound, and the rank order
+	# (exact, then same signedness, then any integer, then float) is FPC's,
+	# measured on constexp.pas's own QWord/Int64 pair. FPC 3.2.2's output.
+	./$(COMPILER) test/test_implicit_conversion_operator_widens_source.pas $(TESTTMP)/test_implconv26
+	$(TESTTMP)/test_implconv26 | diff -u test/test_implicit_conversion_operator_widens_source.expected -
 	./$(COMPILER) test/test_ansistring_cast_extern_pchar.pas $(TESTTMP)/test_ansistring_cast_extern_pchar26
 	test "$$($(TESTTMP)/test_ansistring_cast_extern_pchar26)" = "$$(printf 'direct=hello len=5\nviavar=hello len=5')"
 	./$(COMPILER) test/test_ansistring_cast_fnptr.pas $(TESTTMP)/test_ansistring_cast_fnptr26

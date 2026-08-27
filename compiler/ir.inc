@@ -118,14 +118,20 @@ function AssignHasConversionOperator(srcNode, dstNode: Integer): Boolean;
   is by definition not one.
 
   Deliberately NOT extended to OPK_EXPLICIT: an explicit operator is what a
-  CAST invokes, and FPC refuses the bare assignment exactly as this does. }
+  CAST invokes, and FPC refuses the bare assignment exactly as this does.
+
+  The lookup is FindOpConvToDest with the WILDCARD destination, because this is
+  deciding whether to refuse a store, not which routine to call. It must widen
+  the source the same way the rewrite does, or the rewrite never gets the
+  chance: `c := 10` was refused here, one pass before the conversion that would
+  have handled it. }
 var tk: TTypeKind;
 begin
   AssignHasConversionOperator := True;
   if AssignSideKind(srcNode, tk) and
-     (FindOpOverload(Ord(tkAssign), Ord(tk), AssignSideRecOf(srcNode)) >= 0) then Exit;
+     (FindOpConvToDest(Ord(tk), AssignSideRecOf(srcNode), Ord(tyUnknown), REC_NONE) >= 0) then Exit;
   if AssignSideKind(dstNode, tk) and
-     (FindOpOverload(Ord(tkAssign), Ord(tk), AssignSideRecOf(dstNode)) >= 0) then Exit;
+     (FindOpConvToDest(Ord(tk), AssignSideRecOf(dstNode), Ord(tyUnknown), REC_NONE) >= 0) then Exit;
   AssignHasConversionOperator := False;
 end;
 
@@ -9294,19 +9300,15 @@ begin
       if (lhsTk <> tyUnknown) and (lhsTk <> tyAuto) and
          (IntToTypeKind(ASTTk[ASTRight[node]]) <> lhsTk) then
       begin
-        varIdx := FindOpOverload(Ord(tkAssign), ASTTk[ASTRight[node]],
-                                 ResolveNodeRec(ASTRight[node]));
-        { The result-type match must treat the frozen-string kinds as equivalent:
-          the SAME `string[N]` type resolves to tyString in a var declaration but
-          to tyFixedString as an operator return type, so a strict `RetType = lhsTk`
-          missed a `class operator Implicit(...): string[N]` and left `s := t` as a
-          raw record→string store — the shortstring's length byte was garbage and
-          writeln(s) segfaulted (toperator93). A plain function returning string[N]
-          already stored fine, so once the rewrite fires the ordinary frozen-string
-          store handles the result. }
-        if (varIdx >= 0) and
-           ((Procs[varIdx].RetType = lhsTk) or
-            (TypeIsFrozenString(Procs[varIdx].RetType) and TypeIsFrozenString(lhsTk))) then
+        { Keyed on the DESTINATION as well as the source. The destination is what
+          makes widening the source sound — see FindOpConvToDest — and it also
+          carries the frozen-string equivalence this site used to spell out
+          inline (toperator93: `string[N]` is tyString in a var declaration and
+          tyFixedString as an operator return type). }
+        varIdx := FindOpConvToDest(ASTTk[ASTRight[node]],
+                                   ResolveNodeRec(ASTRight[node]),
+                                   Ord(lhsTk), ResolveNodeRec(ASTLeft[node]));
+        if varIdx >= 0 then
         begin
           leftAddr := AllocNode(AN_ARG);
           ASTLeft[leftAddr] := ASTRight[node];

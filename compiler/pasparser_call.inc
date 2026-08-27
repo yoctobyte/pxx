@@ -365,15 +365,26 @@ begin
   if StrictOperator and (opTypeKind = Ord(tyClass)) and
      ((opKey = Ord(tkEq)) or (opKey = Ord(tkNeq))) then
     Error('impossible operator overload: = and <> are predefined for class types (reference equality)');
-  { A SECOND := / Implicit / Explicit from the same source type to a result of
-    the same TYPE KIND is ambiguous at every use site — String[80] vs
-    String[90] targets are indistinguishable (toperator92; toperator95 splits
-    the same pair across a class operator and a global one). Distinct result
-    kinds (-> Integer vs -> String) remain legal. }
+  { A SECOND := / Implicit / Explicit from the same source type to the same
+    RESULT type is ambiguous at every use site — String[80] vs String[90]
+    targets are indistinguishable (toperator92; toperator95 splits the same
+    pair across a class operator and a global one). Distinct results remain
+    legal.
+
+    "The same result type" used to mean the same type KIND, which made two
+    conversions to two different RECORDS a duplicate — `operator :=(Integer):
+    TA` and `operator :=(Integer): TB` are both `tyRecord`. FPC takes that pair,
+    and so does the lookup now that it keys on the destination's record id, so
+    the check asks the lookup rather than re-deciding what "same" means.
+
+    maxRank 0: only an EXACT source-kind clash is a duplicate. QWord and Int64
+    to one destination are two conversions, not one written twice — that is the
+    pair FPC's own constexp.pas declares. }
   if (opKey = Ord(tkAssign)) or (opKey = OPK_EXPLICIT) then
   begin
-    dupPi := FindOpOverload(opKey, opTypeKind, recId);
-    if (dupPi >= 0) and (Procs[dupPi].RetType = Procs[procIdx].RetType) then
+    dupPi := FindOpConvRanked(opKey, opTypeKind, recId,
+                              Ord(Procs[procIdx].RetType), ProcRetRecId[procIdx], 0);
+    if dupPi >= 0 then
       Error('duplicate conversion operator: this source type already converts to this result type');
   end;
   RegisterOpOverload(opKey, opTypeKind, recId, rightTk, rightRec, procIdx);
