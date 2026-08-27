@@ -153,4 +153,4 @@ verified, `converged after 1 round(s)`.
 (+`.expected`, registered) — the eight rows above.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit f811aa0d0.
