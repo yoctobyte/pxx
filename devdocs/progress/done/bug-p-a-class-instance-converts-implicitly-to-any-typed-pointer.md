@@ -224,5 +224,18 @@ That also explains the shape of the original report: the synthetic pairs pass
 because their parameter's element type *is* recorded, so the pointer arm was
 never viable for them in the first place.
 
-**Status:** consequence 1 done and landed; consequence 2 re-diagnosed and
-handed to a follow-up ticket.
+**Status:** done
+
+**On the Gate line's second clause** (`GetPropInfo(AnObject,'Num')` then selects
+the `TObject` overload): that is NOT met here, and it is not being quietly
+dropped. It turned out to rest on a *different* defect — a parameter's pointer
+element type is captured correctly and then lost before overload matching reads
+it — which is now
+[[bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching]]
+with both probe measurements. `test/lib_typinfo_props.pas` must keep routing
+through `GetInstanceRTTI` until that lands, and the note frankB left at
+`lib/rtl/typinfo.pas:523` should point at the new ticket when someone next edits
+that file.
+
+## Log
+- 2026-08-28 — resolved, commit PENDING-COMMIT.
