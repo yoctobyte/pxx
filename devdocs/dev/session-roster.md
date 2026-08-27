@@ -6463,3 +6463,83 @@ P`, `--track C` and pick from those. If the global `next` returns an N ticket,
 that is the ranker doing its job, not a dispatch instruction. Note frankA's
 current work (`feature-opt-o3-register-pressure`, Track O → file-owned by A) is
 plain A and sits inside the mandate — no change needed.
+
+## STANDING — `frank1` / `frank2` are LIVE ad-hoc trees, and `via` is a compute resource (owner, 2026-08-27)
+
+Owner: *"we also have frank1 and frank2 checkouts, user may use them at random.
+and we have the host via, ian@via, which may also be doing work for us, since,
+native aarch64."*
+
+Both corrections narrow claims this file made earlier today. Neither is cosmetic.
+
+### `frank1` and `frank2` are not retirable, and the owner may appear in them
+
+The topology section above says *"`~/frank2` (the coordinator's current tree,
+retire after the move)"* and lists `frank1` as merely pre-existing. **Read both
+as live.** The owner uses them at random, and an ad-hoc session there is a real
+agent on `master` that no dispatch of mine created.
+
+State measured now, after the reboot:
+
+| tree | branch | dirty | seed | lag vs real origin/master |
+| --- | --- | --- | --- | --- |
+| `frank1` | master | **clean** | present (9.6 MB) | 6 behind |
+| `frank2` | master | **clean** | present (9.6 MB) | 3 behind |
+
+Both are clean, seeded and immediately usable — which is exactly why the owner
+can walk into either and start. Note `frank1`'s earlier uncommitted
+`bug-b-sysutils-string-gaps-found-by-differential` edits are **gone in the good
+way**: its HEAD is an ancestor of master, not divergent, so that work was
+committed and pushed before the reboot rather than lost.
+
+**The lag is the trap, not the staleness.** Each tree's `origin/master` ref is
+whatever it last fetched, so `git status` there reports "up to date with
+origin/master" while sitting six commits behind the real one. That is the same
+instrument-answers-a-near-neighbour-question failure this file has now recorded
+five times: `status` answers *does my HEAD match my cached ref*, not *am I
+current*. **Anyone starting in `frank1`/`frank2` fetches first.**
+
+**Coordination consequence, and it is the important half.** An ad-hoc session in
+`frank1`/`frank2` is on `master`, holds no assignment from me, and may not be
+distinguishable in `ListAgents` from any other interactive session. So **I cannot
+maintain sole-A by tracking sessions.** The mechanism that still works is the one
+CLAUDE.md already names: the **`working/` ticket lock**. That is why the topology
+puts A, B and the coordinator on one trunk and handles collisions by lock rather
+than by branch. Practical rules:
+
+- **`working/` is the authority on who holds what**, not my roster table and not
+  `ListAgents`. Check it before dispatching anything that touches shared core.
+- **Workers pull often and push often** — a lock is only visible once it is
+  pushed, and an unpushed claim protects nobody.
+- **Do not "tidy" `frank1`/`frank2`**, do not move or rename them, and never
+  `git add -A` in them. A tree the owner may be sitting in is not litter.
+
+### `via` is a native aarch64 worker, not only the website host
+
+Recorded here as D+W and as *"a production web host"*. The owner adds the part
+that matters technically: **`via` is native aarch64 and may do work for us.**
+
+That is a capability the rest of the fleet does not have. Everything on plexus is
+x86-64; aarch64 currently reaches us only as a **cross** target, and `ianweb`
+runs the pinned x86-64 stable under `qemu-x86_64` via a shim — *compile emulated,
+run native*. So `via` is the only place a **native aarch64 execution** result can
+be observed, which is precisely the evidence class cross-compilation cannot
+produce.
+
+Two live items it bears directly on:
+
+- **`bug-a-cross-bootstrap-aarch64-overflows-max-code`** (p60, Track A) — the
+  reason `ianweb` could not build a native aarch64 stable. The qemu shim routes
+  around it; it does not fix it. A native aarch64 box is the natural place to
+  work or verify it.
+- **`bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture`** — found
+  on `via` for exactly this reason, and still open: the shim made `test -x`
+  honest there without fixing the guard.
+
+**The constraints that do not go away, and they are the owner's own:** `via`
+terminates a public tunnel and runs four gunicorn apps. It is a production host
+that happens to be aarch64, not a build farm. Deploys stay manual by design, and
+a long compile there competes with the site. **So route aarch64 *verification*
+to `via` — a run, an execution result, a "does this actually work on real
+hardware" question — and keep bulk building on plexus.** And ask `ianweb` rather
+than assuming capacity; it holds D+W and knows what else the box is doing.
