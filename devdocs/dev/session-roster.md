@@ -9501,3 +9501,57 @@ Caveat frankwasm stated unprompted: **the histogram records each body's FIRST bl
 so it cannot predict payoff** — the 32 non-i32 entries just cleared became 9 newly-lowered
 bodies plus 23 that moved on to a jump. 72 of the remaining stubs cite `IR_JUMP_IF_FALSE`,
 which is Phase 3.
+
+## THE SENTINEL RULE — why one piped check inverted and another did not
+
+frankB checked rather than nodded, and produced the formulation that makes the pipe hazard
+**checkable instead of a matter of vigilance**:
+
+> **A piped check is safe only if it prints a sentinel that failure cannot reach.** If a
+> check's green looks like the **absence of output**, the pipe inverts it — and silence is
+> exactly what a dead script produces. If green is a **positive line emitted last**, the
+> pipe is cosmetic.
+
+Its `make lib-test 2>&1 | tail -N` is the same shape as frankwasm's `check_phase1.sh |
+tail -6` and **held** — because `lib-test ok (…)` is the **last recipe line** and a plain
+`@echo`, and make aborts a target on the first failing recipe line, so that line cannot
+print unless everything before it passed. **It was verifying by sentinel presence, not by
+exit status**: a valid protocol, just not the one it thought it was running. Only `|| true`s
+in the target are trap cleanups, not verifications.
+
+**The corollary is the useful half: the defect is independent of the pipe.** A check whose
+green is *"nothing went wrong"* is fragile even unpiped, because every way of failing early
+produces the same output as passing. So the durable fix is not "remove the pipes" but
+**make each suite end with a positive line only a completed pass can emit, and assert its
+presence.** Then the pipe stops mattering, which beats remembering not to pipe. Relayed to
+frankwasm for `check_all.sh`; its `WasmReportCoverage` unconditional summary line is already
+that shape.
+
+## CORE CONTENTION — the resource I did not think to ask about
+
+frankB volunteered that it is running a 48-file ladder scan (159 NilPy compiles already
+done for the reportlab probe), and NilPy compiles pay a **fixed ~9s startup each**
+(`bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost`), so this is minutes of
+contention against the 3202-job verify on six cores. It offered to kill it.
+
+**Call: let the 48-file run finish; start nothing else heavy.**
+
+- **Contention does not preempt the verify — only a push does.** What contention can do is
+  slow jobs toward their timeouts.
+- testmgr already scaled this run's deadline **2x for having 6 of 12 cores** and retries
+  kills under load; frankT's earlier run under heavier contention had **every job pass on
+  merit**.
+- A ~10-minute run against a multi-hour verify is inside that tolerance, and killing it buys
+  a margin that is not binding while costing a rerun.
+- **The real risk named as the line, not a fixed rule:** a false red from a timeout is worse
+  than no verdict, because it would have me revert a good pin. If the scan runs much past
+  ~15 minutes, or the box goes properly heavy, kill it.
+
+**The meta-point: I asked about pushes because that is the mechanism I understood, and
+frankB volunteered the resource I had not thought to ask about.** Second time tonight a lane
+corrected the coordinator's model of its own constraint rather than answering only the
+question asked — frank-optimize's `symtab.inc` region bounds being the first. **The
+coordinator's blind spot is not the answers, it is the questions.**
+
+frankB is holding **all** pushes, not just buildable ones, on its own initiative: its current
+item's deliverable is a verdict in a ticket, so nothing is time-critical for Track T.
