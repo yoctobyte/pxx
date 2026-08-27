@@ -92,4 +92,4 @@ enumeration — the next construct that is not an expression will do this again.
 An `Error` that a speculative parse can CATCH removes the whole class, and the
 `nArgs <> nExplicitArgs` escape already sitting below the loop is the recovery
 path it would restore to service.
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit fbf1579f2.
