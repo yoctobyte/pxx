@@ -7885,6 +7885,8 @@ test-core: $(COMPILER)
 	# `math` mechanism), gated on threadsafe. Matches FPC 3.2.2 row for row.
 	./$(COMPILER) test/test_thread_api_no_uses.pas $(TESTTMP)/test_thread_api_no_uses26
 	test "$$($(TESTTMP)/test_thread_api_no_uses26)" = "$$(printf 'a 42\nb 15\nc ok\nd 8')"
+	./$(COMPILER) test/test_numeric_goto_labels.pas $(TESTTMP)/test_numeric_goto26
+	test "$$($(TESTTMP)/test_numeric_goto26)" = "$$(printf 'a 1\nb case-one\nc 10\nd 5\ne done\nOK')"
 	./$(COMPILER) test/test_set_low_high_element_bounds.pas $(TESTTMP)/test_set_low_high26
 	test "$$($(TESTTMP)/test_set_low_high26)" = "$$(printf 'a 0|255\nb 1|10\nc 0|2\nd 0|255\ne 1|10\nf 0|2\ng 10\nh 3\ni TRUE|FALSE\nj TRUE|FALSE\nOK')"
 	./$(COMPILER) test/test_bitscan_and_radix_str.pas $(TESTTMP)/test_bitscan_radix26
