@@ -108,4 +108,4 @@ Gate: `tools/gate.sh quick` GREEN, self-host fixedpoint, three corpora at
 baseline.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit ae2c3aae2.
