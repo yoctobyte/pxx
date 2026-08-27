@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-27T01:33:54Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "b7bd58c416470d5401b83d6416d0c143eff5d38f",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-27T01:38:31Z",
    "fixed": [],
    "new_red": [],
@@ -454,6 +445,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "ce085157994a98389a9eb0e6d0d8b19a5e5d1e6a",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T11:14:55Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "c8cc3ffdc3780479aff3c347fad02c6f41dddbf4",
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
@@ -1017,11 +1017,11 @@
   "test-core#168": "full",
   "test-core#169": "full",
   "test-core#170": "full",
-  "test-core#172": "native",
   "test-core#173": "native",
   "test-core#174": "native",
   "test-core#175": "native",
   "test-core#176": "native",
+  "test-core#177": "native",
   "test-core#src:compiler/.pascal26.fixedpoint": "native",
   "test-core#src:compiler/compiler.pas@2": "native",
   "test-core#src:examples/sudoku/sudoku.pas": "native",
@@ -2080,6 +2080,7 @@
   "test-core#src:test/test_nilpy_method_on_call_result.npy": "native",
   "test-core#src:test/test_nilpy_method_param_default.npy": "native",
   "test-core#src:test/test_nilpy_min_max_variadic.npy": "native",
+  "test-core#src:test/test_nilpy_missing_module_attr_is_attributeerror.npy": "native",
   "test-core#src:test/test_nilpy_module_first_import.npy": "native",
   "test-core#src:test/test_nilpy_multiple_inheritance_imported_base.npy": "native",
   "test-core#src:test/test_nilpy_nested_comp.npy": "native",
@@ -4245,11 +4246,11 @@
   "test-cjson#src:compiler/.pascal26.fixedpoint": "pass",
   "test-core#169": "pass",
   "test-core#170": "pass",
-  "test-core#172": "pass",
   "test-core#173": "pass",
   "test-core#174": "pass",
   "test-core#175": "pass",
   "test-core#176": "pass",
+  "test-core#177": "pass",
   "test-core#src:compiler/.pascal26.fixedpoint": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
@@ -5305,6 +5306,7 @@
   "test-core#src:test/test_nilpy_method_on_call_result.npy": "pass",
   "test-core#src:test/test_nilpy_method_param_default.npy": "pass",
   "test-core#src:test/test_nilpy_min_max_variadic.npy": "pass",
+  "test-core#src:test/test_nilpy_missing_module_attr_is_attributeerror.npy": "pass",
   "test-core#src:test/test_nilpy_module_first_import.npy": "pass",
   "test-core#src:test/test_nilpy_multiple_inheritance_imported_base.npy": "pass",
   "test-core#src:test/test_nilpy_nested_comp.npy": "pass",
@@ -6896,14 +6898,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-27T11:08:38Z",
+  "date": "2026-08-27T11:14:55Z",
   "deadline": 7200.0,
-  "sha": "ce085157994a98389a9eb0e6d0d8b19a5e5d1e6a",
+  "sha": "c8cc3ffdc3780479aff3c347fad02c6f41dddbf4",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 304.4
+  "wall": 302.5
  },
  "last_bench": {
   "conf_rows": 550,
