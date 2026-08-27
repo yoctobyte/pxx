@@ -9127,3 +9127,98 @@ wrong, the fix is wrong regardless of which subset it took.
 
 It is right and I have conceded it. **My framing rewarded a behaviour instead of examining
 a claim** — the move that lets a well-behaved wrong answer through.
+
+## A repro that passes on the FIX and on the BASELINE is a coincidence, not a verification
+
+frankA landed the memory-safety half (`8b75fcabd`) — `MatchParamCompatible` narrows the
+blanket `tyPointer <- tyClass` rule by the parameter's element type; the 14-line repro is
+a compile error; Pointer / TObject / descendants / nil / pointer-to-class all unaffected;
+fixedpoint `f2e90dedc75c`; scope held exactly to the grant.
+
+**Then it nearly banked a false verification, and caught it by running the "before".** It
+built two synthetic two-overload repros, watched both select the instance arm correctly on
+the new binary, and was a step from calling the overload half fixed — **then ran them on
+`pinned`, where both also pass.** They were never broken: their parameters' element types
+*are* recorded, so the pointer arm was never viable for them. **That is also why frankB's
+synthetic pairs all passed.**
+
+> **A repro that passes on the fix AND on the baseline verifies nothing.** The only step
+> that catches it is running the "before" — and the temptation to skip it is strongest
+> exactly when the "after" looks right.
+
+Only the real `typinfo.pas` call site is evidence; instrumenting the instance arm at
+`typinfo.pas:1479` is how to read it. Warning placed at the top of the new ticket.
+
+### The remaining half is a DIFFERENT defect wearing the same symptom
+
+Two probes at opposite ends of one parameter — `elemtk=5 elemrec=32` at registration
+(tyRecord, correct), `ptrelem=0` at overload matching (tyUnknown). **Captured right, read
+back as nothing.** `tyUnknown` is the untyped-`Pointer` sentinel, so the new narrowing *is*
+reached, reads *"takes anything"*, and correctly permits the class **by its own rule**.
+**The compatibility logic is now right; the data underneath it is missing.** Filed as
+`bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching`
+[P, 65], with both measurements, the likely direction (mirror `ProcRetPtrElemTk` for
+parameters — results have one, parameters route through `Params[j].SymIdx` into `TSym`,
+which is the hop where it is lost), and an explicit **"confirm whether the symbol is wrong
+or the field is before choosing, they have different fixes."** Stopped there rather than
+widening past the grant into `defs.inc`.
+
+### My `Blocks:` advice was wrong, and frankA's reason for refusing it is better than the mechanics
+
+The ranker reads **`blocked-by:` on the BLOCKED ticket**, so the edge cannot live where I
+implied. And inventing a P-side edge would have been **false**: rung 6 needs the *type-level*
+API (`GetTypeData(PTypeInfo)`), not the instance overloads this bug blocks, and that ticket
+is already prio 65 so it would propagate nothing.
+
+> **A false edge would rank correctly for the wrong reason and outlive the reason.**
+
+The accurate edges are on Track B's tickets (streams, classes_lite, lfm, pcl, fpjsonrtti)
+and point at the **NEW** ticket, not the closed one. Relayed to frankB.
+
+frankA also resolved the closed ticket while **recording that its Gate line's second clause
+is unmet**, rather than letting a closed ticket imply more than it delivered.
+
+## W1 slice 4 (`46c8cf47e`) — 1.15x against a sized 1.65x, and that is the slice, not a miss
+
+A register-resident BINOP right operand no longer needs `mov rcx, r12..r15`: the ALU reads
+r12..r15 directly, so `mov %r13,%rcx; xor %rcx,%rax` becomes `xor %r13,%rax`. `Run`'s body
+**21 → 19 instructions**, `three.pas` **1.12-1.17x** across three rounds of min-of-12, and
+**four neutral workloads in the same commit** — the house rule's first outing.
+
+**Safe by construction, not by argument:** a deleted *move*, not a recomputed value, resting
+on the residency contract `EmitLoadVarRcx`'s own resident arm already relies on. Whitelists
+the five plain-integer forms, so **unlisted ops keep the rcx contract and a new op or type is
+safe by default** — the allowlist shape the playbook already argues for, and the reason
+shifts (which need rcx *by name*) didn't have to be remembered.
+
+**The gap is reported in the same breath as the number:** the model deleted **all eight**
+staging moves, this slice deletes **two**, and the remaining ~1.4x needs a left operand and
+destination not forced through rax — a contract change, not a deletion. **Stopping at the
+provable one and naming the gap is what makes the next number believable.**
+
+### A THIRD measurement failure mode, and the three compose
+
+> **Interleaving fixes WHICH runs you may compare. Repetition fixes HOW CONFIDENTLY.
+> Amplification fixes WHETHER THE TIMER CAN SEE IT AT ALL.**
+
+`bt` measured 0.49 vs 0.51, then 0.55 vs 0.56 — *"2-4% slower", twice*, which is exactly the
+shape of a real small regression. Both were **one 10 ms tick on a ~0.5 s workload**.
+**Below ~2% of the workload, `/usr/bin/time` is quantisation, not measurement.** Dispatched
+to the playbook with those numbers.
+
+## PARKING TWO LANES — and this is the first moment the lull lever actually exists
+
+- **frankA: write up and stand down.** It flagged fatigue after two dense hours *and*, in
+  the same message, described nearly banking a false verification. Those two facts belong
+  together. No fresher P lane exists, so the answer is not hand-off but "the resourcestring
+  ticket already carries the measurement that picks the fix — it is a clean pickup for
+  whoever is next." Leaving it in `backlog/` costs nothing; starting it tired might.
+- **frank-optimize: write the third trap into the playbook, then park the umbrella.** The
+  larger half is a multi-session register-contract change and starting it now leaves it
+  half-done across a boundary. The umbrella is in a genuinely good state — three slices,
+  honest numbers, caveats attached, tree clean. **A good stopping point is a deliverable.**
+
+Two lanes parking drops the push rate, which is what the daemon needs after frankT's restart
+for v389's queued verdict to reach a commitment point. **The lever I said only works when
+several lanes free up together is now, for the first time tonight, available** — and it
+arrived from finishing rather than from anyone being idled.
