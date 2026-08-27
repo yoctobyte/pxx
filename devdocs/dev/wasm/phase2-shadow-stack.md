@@ -178,6 +178,16 @@ The savings are real but they are not free money — they move into Phase 1's
 does not need. The honest summary is that Phase 2 is *smaller and differently
 shaped*, not simply smaller.
 
+**When you do measure this lane's runtime cost — Phase 7 is where it matters —
+interleave the runs.** Established on this box 2026-08-28 by Track O: min-of-N
+across *separate invocations* is not comparable, only binaries timed inside one
+interleaved run are. The proof was an unchanged binary measuring 1.09s and then
+1.34s, after a fix and a causal explanation had already been written down as
+fact for a 7% "regression" that was the box. The BSS figures above are static
+and unaffected; any *timing* claim is not. Related, same day: regenerate a
+baseline rather than reusing one from earlier in a session — a pin landing
+`lib/rtl` between two hash runs made six targets look changed.
+
 ## Open, and not to be assumed
 
 * **`i32` vs `i64` for pointers in flight.** Pointers are 4 bytes, so `i32` —
