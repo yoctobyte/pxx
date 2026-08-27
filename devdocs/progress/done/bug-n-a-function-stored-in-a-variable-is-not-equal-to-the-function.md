@@ -5,6 +5,7 @@ type: bug
 owner: unassigned
 blocked-by: []
 summary: "`g = f` BOXES the function on the heap; every other path (a dict value, a return value, the bare name) keeps the raw code pointer. So `g == f` and `g is f` are False, two assignments of the same function are unequal to each other, and `id(g)` is a heap address while `id(f)` is the code address. CPython answers True to all of it."
+status: done
 ---
 
 # A function stored in a variable is not equal to the function
@@ -102,3 +103,59 @@ Track N: every row in the table above answers True, `id(g) == id(f)` for
 must include the *two-variable* row (`g = f; h = f; g == h`) and an `id()`
 row — a test comparing only `g == f` could be passed by making the bare name box
 too, which would keep two boxes unequal.
+
+## Resolution — 2026-08-27
+
+Fixedpoint `dcc5945d5048`, `tools/gate.sh quick` GREEN.
+Test: `test/test_nilpy_function_identity.npy` + `.expected`, registered in the
+Makefile. It carries both rows the Gate section demanded — the two-variable
+`g = f; h = f` row and an `id()` row — plus the sentinel pattern end to end.
+(The `Gate:` line's `make test-nilpy` is superseded by CLAUDE.md's per-fix
+loop, `decide-gate-line-convention`.)
+
+**Most of this ticket was already fixed and the table above is stale.** Every
+`==` row answers True on current master and did before this change: `pyvar_eqv`
+claims a callable pair and compares (code, recv), which is what the comment in
+its body describes. Re-measured 2026-08-27, only two of the nine rows were still
+wrong, and both on the same axis:
+
+| still wrong | pxx | CPython |
+| --- | --- | --- |
+| `g is f` (and every other `is` row) | False | True |
+| `id(f) == id(f)` | **False** | True |
+
+That `id(f)` was unstable *across two evaluations of the same bare name* is the
+tell, and it names the mechanism without guessing: the box is allocated fresh
+per evaluation, so identity was comparing two boxes that had never been the same
+object. `id(g)` was stable only because the box is stored in the variable.
+
+**Why `is` could not just reuse the `==` fix.** `is` lowers to the SAME tkEq
+node `==` does and is told apart only by `PY_BINOP_IDENTITY`; `IRPyVarEqTry`
+saw that marker and returned -1, deliberately, so the by-contents claimants
+(`pylist_eq`, `pyrange_eq`, `pyvar_eqv`) decline and the pointer compare stands
+— which is the whole reason `a is c` on two equal lists answers False
+([[bug-nilpy-is-on-two-lists-compares-contents]]). Routing `is` through
+`pyvar_eqv` would have undone that.
+
+So identity gets its own claimant, `pyvar_isv`, on the same 0/1/2 protocol:
+it answers ONLY for a pair of plain functions, comparing code addresses, and
+declines everything else so lists, objects and scalars keep the pointer compare
+untouched. `pyid_v` answers the code address for the same shape.
+
+**A bound method is declined on purpose, and the test asserts the `False`.**
+CPython builds a fresh bound-method object per attribute read, so `c.m is c.m`
+is False there — and the box-per-evaluation behaviour already gives that answer.
+Claiming bound methods would have swapped one wrong answer for another. This is
+the row a "make functions identity-stable" fix would most easily get wrong.
+
+**Verified unmoved** (all matching CPython): `[1] is [1]`, `l1 = [1]; l1 is l2`,
+`s is s`, `5 is 5`, `None is None`, `f is None`, and the whole `==` column.
+`test/lib_mimic_xml_etree_elementtree.npy` still passes.
+
+That lib test can now be STRENGTHENED — the note above says it "asserts the
+working spellings and does not assert the broken one" because `tag is Comment`
+against the module-level name was the broken one. It works now. Left to Track B,
+whose file it is.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.

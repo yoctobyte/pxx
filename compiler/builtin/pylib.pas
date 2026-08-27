@@ -996,6 +996,14 @@ function PyClassRefStr(const v: Variant): AnsiString;
   in the interface — ir.inc calls it by name. }
 function pyraise_check(const v: Variant): Variant;
 function pyvar_eqv(a, b: Pointer; neq: Int64): Int64;
+{ ...and the IDENTITY twin, same 0/1/2 protocol. `is` lowers to the same tkEq
+  node `==` does and is told apart only by PY_BINOP_IDENTITY, so it cannot share
+  pyvar_eqv — content equality is exactly what `is` must not do. This one claims
+  ONLY a pair of plain functions and declines everything else, leaving the
+  existing pointer compare in place for every other type.
+  Must stay in the interface — ir.inc calls it by name.
+  bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function }
+function pyvar_isv(a, b: Pointer; neg: Int64): Int64;
 function pyvar_repr(const v: Variant): AnsiString;
 { The message text for `raise SomeError(x)` where x is NOT a string. Every
   builtin exception below KeyError takes `const m: AnsiString`, so a bare
@@ -6070,6 +6078,38 @@ begin
   if eq then Result := 2 else Result := 1;
 end;
 
+function pyvar_isv(a, b: Pointer; neg: Int64): Int64;
+var ca, ra, cb, rb: Pointer; isa, isb, eq: Boolean;
+begin
+  { `f is f` answered FALSE, and `id(f)` was a different number on every
+    evaluation. A function used as a VALUE is boxed on the heap, a fresh box per
+    evaluation, and identity compared the BOX -- so a function lost against
+    itself, against a variable holding it, and against a call that returned it.
+    CPython guarantees all three, and the sentinel pattern rests on it:
+    xml.etree.ElementTree uses a function as its own tag marker and html5lib
+    compares against it, a comparison that fails SILENTLY (comments are simply
+    never recognised) rather than raising.
+
+    A function's identity is its CODE address, which is why this claims only the
+    plain-function pair. A BOUND METHOD (recv <> nil) is deliberately declined:
+    CPython builds a fresh bound-method object per attribute read, so `a.m is
+    a.m` is False there too, and the box-per-evaluation behaviour already gives
+    that answer. Claiming it would have replaced one wrong answer with another.
+
+    Everything that is not a callable declines to 0 and the caller's own pointer
+    compare stands, so no other type's `is` moves.
+    bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function }
+  Result := 0;
+  ca := nil; ra := nil; cb := nil; rb := nil;
+  isa := PyCallablePartsP(PPyVarRec(a), ca, ra);
+  isb := PyCallablePartsP(PPyVarRec(b), cb, rb);
+  if not (isa and isb) then Exit;
+  if (ra <> nil) or (rb <> nil) then Exit;      { bound methods: see above }
+  eq := ca = cb;
+  if neg <> 0 then eq := not eq;
+  if eq then Result := 2 else Result := 1;
+end;
+
 { Does this variant hold the given pylib container? k: 1=list, 2=dict,
   3=bytes. The runtime side of variant-method dual dispatch. }
 function pyvar_holds(const v: Variant; k: Int64): Boolean;
@@ -6533,8 +6573,19 @@ begin
 end;
 
 function pyid_v(const v: Variant): Int64;
+var code, recv: Pointer;
 begin
-  pyid_v := PPyVarRec(@v)^.Payload;
+  { A plain FUNCTION identifies by its code address, not by the heap box a
+    function-as-a-value is wrapped in — the box is freshly allocated per
+    evaluation, so `id(f) == id(f)` was False and CPython guarantees it True.
+    A bound method keeps the box: CPython rebuilds one per attribute read, so an
+    unstable id is the correct answer there.
+    bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function }
+  code := nil; recv := nil;
+  if PyCallablePartsP(PPyVarRec(@v), code, recv) and (recv = nil) then
+    pyid_v := Int64(NativeInt(code))
+  else
+    pyid_v := PPyVarRec(@v)^.Payload;
 end;
 
 function pyascii_v(const v: Variant): AnsiString;

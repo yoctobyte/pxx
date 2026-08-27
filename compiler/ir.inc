@@ -1193,8 +1193,18 @@ begin
   IRPyVarEqTry := -1;
   if not isNilPy then Exit;
   if (item <> Ord(tkEq)) and (item <> Ord(tkNeq)) then Exit;
-  if (node >= 0) and (ASTSLen[node] = PY_BINOP_IDENTITY) then Exit;
-  cpi := FindProc('pyvar_eqv');
+  { `is` used to Exit here — declining, so the compiler's own bitwise variant
+    compare stood. That is right for every type whose identity IS its payload,
+    and wrong for a callable, whose payload is a heap box allocated afresh per
+    evaluation: `f is f` was False. It gets its own claimant rather than sharing
+    pyvar_eqv, because content equality is precisely what `is` must not do.
+    pyvar_isv declines everything but a plain-function pair, so the pointer
+    compare below still stands for lists, objects and scalars.
+    bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function }
+  if (node >= 0) and (ASTSLen[node] = PY_BINOP_IDENTITY) then
+    cpi := FindProc('pyvar_isv')
+  else
+    cpi := FindProc('pyvar_eqv');
   if cpi < 0 then Exit;
 
   trySym := AllocVar('', tyInteger);

@@ -1,0 +1,9 @@
+is: True True True True True True
+isnot: False False False
+id: True True True True False
+eq: True True True True False
+bound: False True
+mixed: False False
+alias: True False False
+scalars: True True True
+sentinel: True True False

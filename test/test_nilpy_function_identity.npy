@@ -1,0 +1,72 @@
+# A function is ONE object however it is reached: `f is f`, `g = f; g is f`,
+# and a call that returns it are all the same object, and `id()` of it is
+# stable. CPython guarantees all of that and ordinary code relies on it.
+#
+# A function used as a VALUE is boxed on the heap here, and the box was
+# allocated fresh on every evaluation -- so identity compared two different
+# boxes and `f is f` was FALSE, while `id(f)` printed a different number each
+# time it was asked. Content EQUALITY was already fixed (pyvar_eqv claims a
+# callable pair); `is` deliberately declines pyvar_eqv, because comparing
+# contents is exactly what `is` must not do, so it kept the box compare.
+#
+# The pattern that pays for this is the function-as-its-own-sentinel, which is
+# ordinary Python: CPython's xml.etree.ElementTree uses `Comment` as a tag
+# marker and html5lib branches on `tag is Comment`. That comparison fails
+# SILENTLY -- comments are simply never recognised -- rather than raising.
+#
+# A BOUND METHOD is the deliberate exception, and the `False` rows below are the
+# point: CPython builds a fresh bound-method object per attribute read, so
+# `c.m is c.m` is False there too. Answering True would have replaced one wrong
+# answer with another.
+# bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
+
+
+def f(x):
+    return x
+
+
+def other(x):
+    return x
+
+
+def ret():
+    return f
+
+
+class C:
+    def m(self):
+        return 1
+
+
+g = f
+h = f
+d = {"k": f}
+c = C()
+
+# every route to the same function is the same object
+print("is:", f is f, g is f, h is f, g is h, ret() is f, d["k"] is f)
+print("isnot:", f is other, g is other, ret() is other)
+
+# ...and its id is stable across evaluations and across routes
+print("id:", id(f) == id(f), id(f) == id(g), id(g) == id(h),
+      id(h) == id(ret()), id(f) == id(other))
+
+# equality agrees with identity (this half already worked -- it must stay)
+print("eq:", f == f, g == f, g == d["k"], g == ret(), g == other)
+
+# a BOUND METHOD is fresh per read, as in CPython
+print("bound:", c.m is c.m, c.m == c.m)
+
+# nothing else moves: a callable against a non-callable, and the types whose
+# identity IS their payload
+print("mixed:", f is None, g is None)
+l1 = [1]
+l2 = l1
+print("alias:", l1 is l2, l1 is [1], [1] is [1])
+s = "ab"
+print("scalars:", s is s, 5 is 5, None is None)
+
+# the sentinel pattern, end to end: a function stored in a field, compared by
+# identity, and looked up in a list
+markers = [f, other]
+print("sentinel:", ret() is f, ret() in markers, C() in markers)

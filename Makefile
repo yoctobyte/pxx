@@ -1417,6 +1417,13 @@ test-nilpy: $(COMPILER)
 	# b.copy() -- a silent wrong value, worse than the error it replaced.
 	./$(COMPILER) test/test_nilpy_self_class_constructs.npy $(TESTTMP)/test_nilpy_selfclass26
 	$(TESTTMP)/test_nilpy_selfclass26 | diff -u test/test_nilpy_self_class_constructs.expected -
+	# a function is ONE object however it is reached -- `f is f`, `g = f; g is f`,
+	# a call that returns it -- and id() of it is stable. It is boxed on the heap
+	# as a value and the box was fresh per evaluation, so identity compared two
+	# different boxes. The `False` bound-method rows are deliberate: CPython
+	# rebuilds one per attribute read, so `c.m is c.m` is False there too.
+	./$(COMPILER) test/test_nilpy_function_identity.npy $(TESTTMP)/test_nilpy_fnident26
+	$(TESTTMP)/test_nilpy_fnident26 | diff -u test/test_nilpy_function_identity.expected -
 	./$(COMPILER) test/test_nilpy_genexpr_is_consumed_once.npy $(TESTTMP)/test_nilpy_genonce26
 	$(TESTTMP)/test_nilpy_genonce26 | diff -u test/test_nilpy_genexpr_is_consumed_once.expected -
 	./$(COMPILER) test/test_nilpy_str_format_keyword_fields.npy $(TESTTMP)/test_nilpy_fmtkw26
