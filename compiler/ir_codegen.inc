@@ -5759,14 +5759,14 @@ begin
           Exit;
         end;
 
-        { -O3 cmp-immediate, value-producing form. The branch form is folded in
+        { -O2 cmp-immediate, value-producing form. The branch form is folded in
           IREmitMachineCode's IR_JUMP_IF_FALSE arm; this is the same fold for a
           comparison whose result is a VALUE — which is where a short-circuit
           `and`/`or` puts every operand, so `if (c >= 'A') and (c <= 'Z')` paid
           `mov rcx, imm32` twice per character with the branch fold alone.
           CmpFusible is the shared predicate: it is exactly the set that lowers
           to a bare `cmp` + setcc. }
-        if (OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) and
+        if (OptLevel >= 2) and (IRKind[right] = IR_CONST_INT) and
            (IRIVal[right] >= -2147483648) and (IRIVal[right] <= 2147483647) and
            CmpFusible(node) then
         begin
@@ -9164,14 +9164,14 @@ begin
               reload in the condition is redundant. }
             cLeft := IRA[condNode];
             cRight := IRB[condNode];
-            { -O3 cmp-immediate: `cmp rax, imm32` exists, so a constant right
+            { -O2 cmp-immediate: `cmp rax, imm32` exists, so a constant right
               operand needs no register at all. The `mov rcx, imm32` this
               replaces sign-extends its immediate to 64 bits exactly as opcode
               3D does, so signed and unsigned comparisons both keep their
               meaning. A compiler compares against a literal constantly -- token
               kinds, character ranges, array bounds -- and CaseEqual's inner
               loop alone paid it four times per character. }
-            cmpImmOk := (OptLevel >= 3) and (IRKind[cRight] = IR_CONST_INT) and
+            cmpImmOk := (OptLevel >= 2) and (IRKind[cRight] = IR_CONST_INT) and
                         (IRIVal[cRight] >= -2147483648) and
                         (IRIVal[cRight] <= 2147483647);
             if cmpImmOk then
