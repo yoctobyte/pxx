@@ -109,6 +109,23 @@ allocator, no spills).
 
 - **Milestone:** a program with arithmetic, records and arrays, no control flow,
   produces the same value as its native build.
+- **Design done 2026-08-27, ahead of the phase:**
+  [`phase2-shadow-stack.md`](phase2-shadow-stack.md). It corrects the
+  model-on-riscv32 advice above, which is right about the frame and **wrong
+  about the values**: `Is64Bit*` is a *backend* function, so the IR hands the
+  backend `tyInt64` intact and wasm32 uses native `i64`/`f64` where every other
+  32-bit target this project has had was forced into register pairs and
+  soft-float. wasm32 is a 4-byte-pointer target with native 64-bit arithmetic —
+  a combination none of the six existing targets has. That deletes riscv32's
+  hardest ~480 lines (lines 436-915: the lo:hi model, the 64-iteration
+  restoring long division, the 128-bit checked multiply, the sltu carry
+  synthesis) rather than porting them. Frame/addressing → riscv32; value model
+  → x86-64/aarch64.
+- Also settled there: expression temporaries live on **wasm's operand stack**,
+  not the shadow stack (the backends' push/pop dance is deleted, not
+  translated); the shadow stack holds named slots only. And `IR_FRAME` should
+  Error like xtensa rather than link a chain nothing can walk — flagged as a
+  `decide-*` if the user wants otherwise.
 
 ## Phase 3 — control flow
 
