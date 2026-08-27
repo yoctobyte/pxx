@@ -183,4 +183,4 @@ refactor ticket, not to a registration ticket bound by acceptance #3.
 
 `frankwasm` is unblocked: the wasm branch can now add only new files, and
 touches no shared file until it emits.
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 290ee8ca4.
