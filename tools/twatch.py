@@ -1203,6 +1203,25 @@ def save_state(clone, host, st):
 # self-skips and reports success.
 # fpc-rtl (test-fgl) and fcl-json (test-fpjson) added 2026-08-26 with the
 # enrolment of those two rungs; see the note in testmgr.TIERS["limited"].
+# GATE WHAT CAN BE GREEN; DIAGNOSE WHAT CANNOT. A name added here makes the
+# watcher fetch the corpus and warn when it is absent — it does NOT make
+# anything compile it. So a name whose job is blocked buys a recurring download
+# and a startup banner people learn to ignore, in exchange for restating a block
+# we already know about. The one-shot diagnostic belongs in a dev tree instead.
+#
+# PENDING (2026-08-27, with frank-coordinator): `rtl-generics` is deliberately
+# ABSENT. Its ladder rung is blocked-by the typinfo gap, so "it does not compile"
+# is the reason the edge exists rather than a finding. Add it here when
+# `feature-typinfo-facade-unit` lands and the rung can plausibly go green — from
+# that point a recurring job catches regressions instead of restating a block,
+# which is when it earns the box's cycles. `tools/install_lib_candidates.sh
+# rtl-generics` already fetches it for a dev tree today.
+#
+# The contract every name here relies on: install_lib_candidates.sh takes the
+# name as a POSITIONAL ARG and leaves a directory at
+# `library_candidates/<that exact name>`, exit 0. missing_corpus() re-checks by
+# that path, and the fetch below WARNS rather than fails — so a violation of
+# this contract is silent on an unattended watcher.
 CORPUS_EXPECTED = ("lua", "sqlite", "zlib", "c-testsuite", "tcc", "cjson",
                    "tiny-regex-c", "fpc-testsuite", "fpc-rtl", "fcl-json")
 
