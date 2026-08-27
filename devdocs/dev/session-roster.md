@@ -5872,3 +5872,43 @@ asked, and nothing about it looked broken.
 and when a chain of reasoning rests on a fact you did not personally measure,
 price the check before building the workaround. A wrong reading announces
 itself; a correct reading of the wrong thing does not.
+
+### 2026-08-27 — `ianweb` assigned **D+W**; and the W lane's two-ended shape is now moot
+
+Owner: *"since ian@via has push rights now, it may as well work on track D+W."*
+
+**Sole holder of both.** Verified at assignment: nothing in `working/` is D or W,
+and the only parked D ticket is `docs-devnotes-ai-assisted-build` (p50,
+`unfinished/` — **re-claim, do not restart**). No collision.
+
+**This is the low-risk combined-track case**, and arguably the most natural pair
+in the whole scheme: CLAUDE.md says *"Track D writes the Markdown here that W's
+machinery publishes."* One agent holding both closes a loop that previously
+needed two sessions and a relay — which is exactly what cost half of 2026-08-27,
+when `docs/targets/nil-python.md` said NilPy was mainline while the website said
+Experimental and nobody owned the gap.
+
+**The W lane's "two ends" problem is now resolved by staffing, not by topology.**
+Earlier today this file recorded that W could not be held end to end because a
+push-capable session cannot see what the origin serves. `ianweb` is on `via`
+*and* can push, so one session now spans author → push → deploy → verify. The
+topology fact still holds for anyone else (only the origin observes the served
+result); it simply no longer splits this lane.
+
+**Boundaries that still bind:**
+
+- **D is `docs/**` in the pxx repo ONLY.** NOT `devdocs/**` — the dev docs, this
+  roster and the progress board belong to A/B. CLAUDE.md is explicit and the
+  names are one letter apart.
+- **D's gate:** docs stay internally consistent, and code snippets are verified
+  by **compiling them against `$(PXX_STABLE)`** — never by rebuilding the
+  compiler, and never by inventing behaviour. **Open question for `ianweb`:
+  does `via` have a full pxx checkout and a usable pinned binary?** If not, the
+  prose half of D is available and the snippet-verification half is not, and
+  that bound should be stated rather than discovered.
+- **The site's content mirror is not a working tree.** It is `--depth 1` and
+  re-synced every five minutes by a timer that re-clones on corruption. Editing
+  `docs/**` there gets clobbered on the next tick. D work needs a separate full
+  clone.
+- A compiler or library gap found while documenting → **file a ticket in the
+  owning lane**, do not fix code under D.
