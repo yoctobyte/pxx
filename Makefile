@@ -2777,6 +2777,18 @@ test-nilpy: $(COMPILER)
 	# unreachable -- uforth's two w_include defs, and its whole ANS FILE word set.
 	./$(COMPILER) test/test_nilpy_nested_def_redefined_in_one_scope.npy $(TESTTMP)/test_nilpy_redef26
 	test "$$($(TESTTMP)/test_nilpy_redef26)" = "$$(printf '%b' 'between: 11\nafter: 110\n11 110\n1 2 3 3\n[5, 7]\n42\n2')"
+	# ...and the same rule at MODULE level, which is the wider half: two
+	# module-level `def f` used to share ONE shell, so both call sites ran the
+	# LAST body and the earlier call could not see anything else. With differing
+	# return types that is not a wrong number but a corrupted read -- `g-before`
+	# printed a pointer as an integer. Covers: same-signature redefinition with
+	# calls on both sides, differing return type, differing ARITY (the separate-
+	# Proc overload path, which must keep working), three defs so the middle one
+	# is neither first nor last, a redefined pylib-builtin shadow (the positional
+	# shadowing rule shares ProcPyDefTok with this), a nested def (unaffected),
+	# and a call from INSIDE another def, which CPython resolves late.
+	./$(COMPILER) test/test_nilpy_def_redefined_rebinds_only_after.npy $(TESTTMP)/test_nilpy_modredef26
+	$(TESTTMP)/test_nilpy_modredef26 | diff -u test/test_nilpy_def_redefined_rebinds_only_after.expected -
 	./$(COMPILER) test/test_nilpy_escaping_closure.npy $(TESTTMP)/test_nilpy_escaping_closure26
 	test "$$($(TESTTMP)/test_nilpy_escaping_closure26)" = "$$(printf '42\n42\n13\n16\n42\n3\n6\n42\n42\n7')"
 	@# ...at EVERY arity. The bridge's per-arity table had gaps (no 10, no 12,

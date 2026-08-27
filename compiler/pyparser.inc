@@ -28987,6 +28987,35 @@ begin
     end;
 end;
 
+function PyShellForDefTok(const nm: AnsiString; tok: Integer): Integer;
+{ The main-program Proc PyRegisterDefShells registered for the def standing at
+  token `tok`. There is at most one: the pre-pass visits each module-level def
+  exactly once and stamps ProcPyDefTok with the def token it stood on, and
+  PyParseDef is entered with the same token as defTok0.
+
+  Asking by TOKEN rather than by NAME is the whole point. A name defined twice
+  has two shells, and every by-name query -- FindProc, FindProcInUnit -- answers
+  one of them by hash-chain order, so the second def could not reach its own.
+  Returns -1 for a nested def, a class method and every Pascal path, none of
+  which the shell pass registers; those callers keep the by-name lookup.
+  bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it }
+var i: Integer;
+begin
+  Result := -1;
+  if tok <= 0 then Exit;
+  i := ProcChainHead(nm);
+  while i >= 0 do
+  begin
+    if (ProcUnitIdx[i] = -1) and (Procs[i].Name = nm) and
+       (ProcPyDefTok[i] = tok + 1) then
+    begin
+      Result := i;
+      Exit;
+    end;
+    i := ProcHashNext[i];
+  end;
+end;
+
 procedure PyRegisterDefShells;
 var savedTok, i, depth, procIdx, savedHoist: Integer;
     isGenDef: Boolean;
@@ -29024,7 +29053,25 @@ begin
         because pylib already declares `len`, and everything downstream behaved
         as if the user had not written it
         (bug-nilpy-user-def-len-of-a-container-still-binds-the-builtin). }
-      if FindProcInUnit(PyHdrName, -1) < 0 then
+      { ONE SHELL PER DEF STATEMENT, not per NAME. `def q` written twice is two
+        BINDINGS of one name in Python, and they can differ in body, arity and
+        return type -- so they need two Procs, or the second def has nowhere to
+        land but on top of the first, and every call site written ABOVE it then
+        runs the later body (the whole of
+        bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it).
+
+        The `if FindProcInUnit(...) < 0` this replaces was the other end of the
+        same lever: one Proc per name meant the redefinition either overwrote
+        the first (every call reaches the second body) or got an unreachable
+        Proc of its own (no call reaches it,
+        bug-nilpy-redefining-a-def-is-ignored-the-first-body-still-runs). Both
+        were wrong because the question is positional and one Proc cannot
+        answer it.
+
+        Registering unconditionally is safe HERE and only here: this pass walks
+        module-level defs at depth 0, each exactly once, so "unconditional"
+        means one per def token and not one per visit. ProcPyDefTok below is
+        what makes the set orderable afterwards. }
       begin
         procIdx := RegisterProc(PyHdrName, not PyHdrIsProc, PyHdrRetType,
                                 PyHdrNParams, PyHdrPNames, PyHdrPTypes);
@@ -29037,7 +29084,7 @@ begin
           builtin is the builtin. test_nilpy_min_max_variadic pins exactly that:
           `min(3, 1, 2)` above a `def min(a, b, c, d, e)` is the builtin's 1.
           Only PyUserShadowsProc reads this, so it costs nothing anywhere else. }
-        ProcPyDefTok[procIdx] := i;
+        ProcPyDefTok[procIdx] := i + 1;   { ONE-BASED -- 0 is the sentinel, see defs.inc }
       end;
       { Resume at the body's INDENT, not past it. After PyParseDefHeader the
         cursor sits on the first BODY token, so TokPos-2 is the INDENT and the
@@ -29443,30 +29490,30 @@ begin
     parse registered a second one, and the shell PyRegisterDefShells had made
     was left bodyless: "unresolved forward: len". A def is a main-program
     routine; its own shell is the one to reuse. }
-  procIdx := FindProcInUnit(name, -1);
-  if procIdx < 0 then procIdx := FindProc(name);
+  { THIS def's own shell, keyed by its `def` TOKEN. PyRegisterDefShells makes
+    one shell per def STATEMENT, so a name defined twice has two, and asking
+    for it by NAME returns whichever the hash chain hands back first -- which
+    for the SECOND def is the FIRST def's Proc. That is how a redefinition used
+    to land on top of its predecessor. Keyed by token, each def fills the shell
+    the pre-pass made for it, at its own position, and neither touches the
+    other. bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it }
+  procIdx := PyShellForDefTok(name, defTok0);
+  if procIdx < 0 then
+  begin
+    procIdx := FindProcInUnit(name, -1);
+    if procIdx < 0 then procIdx := FindProc(name);
+  end;
   if (procIdx >= 0) and (Procs[procIdx].BodyAddr >= 0) and
      (Procs[procIdx].ParamCount = nparams) then
   begin
-    { SAY SO. Reusing the first def's Proc is what makes the redefinition win,
-      and it also makes it win for the calls written ABOVE it — which CPython
-      binds to the FIRST body, because a `def` is an assignment executed where
-      it stands. That divergence used to be entirely silent, and it is not
-      bounded by "you get the other function's answer": when the two bodies
-      return different TYPES the earlier call site was compiled for the first
-      signature and runs the second body, which printed kilobytes of raw memory
-      in the case that surfaced it.
-
-      A warning is not the fix — the fix is a Proc per def plus positional
-      binding, designed in the ticket and deliberately not attempted here — but
-      it converts a silent wrong value into a message naming both lines, which
-      is the difference between a debuggable program and a haunted one.
-      bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it }
-    if NilPyUserCode and (ProcPyDefTok[procIdx] >= 0) then
-      Warn('Nil Python: `' + name + '` is defined again here; calls written '
-        + 'ABOVE this line will run THIS body, not the earlier one (CPython '
-        + 'binds them to the earlier one). Rename one of the two if that is '
-        + 'not what you meant');
+    { The warning that used to stand here is GONE, and its absence is the
+      point: it announced that calls above this line would run THIS body, and
+      that is no longer true. A module-level def now gets its own Proc
+      (PyRegisterDefShells) and binds positionally (PyDefBoundHere +
+      PyDefSupersededHere), so this branch is reached only by a NESTED def or a
+      class method redefined in one scope -- shapes with no separate shell,
+      where overwriting really is the binding and there is nothing to warn
+      about. bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it }
     for i := 0 to nparams - 1 do
     begin
       Procs[procIdx].Params[i].Name := PyHdrPNames[i];

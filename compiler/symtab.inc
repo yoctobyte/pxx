@@ -6363,6 +6363,58 @@ function FindProcBound(const name: AnsiString): Integer; forward;
 function FindProcExactCase(const name: AnsiString): Integer; forward;
 function FindProcNilPyBound(const name: AnsiString): Integer; forward;
 
+function PyDefPosBeats(cand, cur: Integer): Boolean;
+{ Among two same-named MODULE-LEVEL NilPy defs, does `cand` bind here and
+  `cur` not? Python has no function declarations, only assignments: `def q`
+  binds the name where the statement STANDS, so a call above the second `def q`
+  runs the first body and a call below it runs the second. NilPy resolves names
+  statically, so the position of the CALL is what has to pick between the two
+  Procs PyRegisterDefShells made.
+
+  Two positions, two rules, and they are genuinely different:
+
+  * AT MODULE LEVEL (CurProc < 0) the call site IS the token cursor, so the
+    binding is the last def that stands at or above it. This is the half that
+    was wrong: every call, wherever it stood, reached the last definition in
+    the file, and when the two bodies returned different TYPES the earlier call
+    site -- compiled for the first signature -- printed raw memory.
+  * INSIDE A BODY the call runs whenever that body is called, which is after
+    the whole module has been executed, so the LAST definition is the binding
+    no matter where the call stands. CPython looks the global up at call time
+    and would see the same thing. This is what today's accidental behaviour
+    already does, and preserving it is what stops a naive "first wins" flip
+    from re-breaking bug-nilpy-redefining-a-def-is-ignored-the-first-body-
+    still-runs.
+
+  SAME ARITY ONLY. Different-arity same-name defs are how `def min(a,b,c,d,e)`
+  over pylib's builtin already works, and MatchProcCall ranks those by argument
+  fit; a positional preference layered on top of that ranking would decide a
+  question arity matching has already answered correctly. Leaving the ranking
+  alone is deliberate, not caution -- see the hazard note in FindProc about
+  what changing the representative of a same-named set has cost before.
+
+  ProcPyDefTok is 0 for everything that is not a module-level NilPy def -- a
+  class method, a nested def, every Pascal routine, every unit -- so this
+  predicate answers False for all of them and the shared path is untouched.
+  bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it }
+begin
+  PyDefPosBeats := False;
+  if not NilPyUserCode then Exit;
+  if (cand < 0) or (cur < 0) then Exit;
+  if (ProcPyDefTok[cand] <= 0) or (ProcPyDefTok[cur] <= 0) then Exit;
+  if Procs[cand].ParamCount <> Procs[cur].ParamCount then Exit;
+  if CurProc >= 0 then
+  begin
+    { in a body: the last definition wins outright }
+    PyDefPosBeats := ProcPyDefTok[cand] > ProcPyDefTok[cur];
+    Exit;
+  end;
+  { at module level: the last definition standing at or above the cursor }
+  if ProcPyDefTok[cand] - 1 > TokPos then Exit;
+  PyDefPosBeats := (ProcPyDefTok[cur] - 1 > TokPos) or
+                   (ProcPyDefTok[cand] > ProcPyDefTok[cur]);
+end;
+
 function FindProc(const name: AnsiString): Integer;
 var i, own, last: Integer; lo: AnsiString;
 begin
@@ -6400,7 +6452,11 @@ begin
           constructor rather than a SET, so preferring the last entry made the
           compiler fail to compile itself. The unit-vs-unit half is filed
           separately (bug-p-uses-order-does-not-decide-which-unit-wins). }
-        if (ProcUnitIdx[i] = CurrentUnitIdx) and (own < 0) then own := i;
+        if ProcUnitIdx[i] = CurrentUnitIdx then
+        begin
+          if own < 0 then own := i
+          else if PyDefPosBeats(i, own) then own := i;
+        end;
         if last < 0 then last := i;
       end;
     i := ProcHashNext[i];
@@ -6427,7 +6483,11 @@ begin
        not (RequireForward and (ProcHdrTok[i] > CurBodyHdrTok)) and
        DeclVisibleBareRoutine(ProcUnitIdx[i], name) then
     begin
-      if (ProcUnitIdx[i] = CurrentUnitIdx) and (own < 0) then own := i;
+      if ProcUnitIdx[i] = CurrentUnitIdx then
+      begin
+        if own < 0 then own := i
+        else if PyDefPosBeats(i, own) then own := i;
+      end;
       if last < 0 then last := i;
     end;
     i := ProcHashNext[i];
@@ -7440,7 +7500,52 @@ end;
 function PyDefBoundHere(pi: Integer): Boolean;
 begin
   Result := (pi < 0) or (ProcPyDefTok[pi] = 0) or (CurProc >= 0) or
-            (ProcPyDefTok[pi] <= TokPos);
+            (ProcPyDefTok[pi] - 1 <= TokPos);
+end;
+
+{ Has this module-level NilPy def been REPLACED by a later one that is also
+  bound at the cursor? `def q` twice is two assignments to one name, so at any
+  point in the file exactly one of them is what `q` means -- the last one whose
+  `def` statement has run. PyDefBoundHere above answers "has this one run yet";
+  this answers the other half, "has a later one run since".
+
+  Together they make the binding a REMOVAL rather than a preference, which is
+  what lets one test in MatchElig settle every matching phase at once -- the
+  same argument the scope-hiding rule next door makes, and the reason neither
+  lives in FindProc.
+
+  SAME ARITY ONLY, and that is the load-bearing restriction. Two same-named
+  defs of DIFFERENT arity are how `def min(a, b, c, d, e)` coexists with
+  pylib's `min`, and MatchProcCall ranks those by argument fit; superseding
+  across arities would delete a candidate that argument matching has already
+  chosen correctly. Python would disagree -- a second `def q(a, b)` really does
+  unbind `q(a)` -- but that divergence loses a working program nothing, while
+  the removal would break a working one (test_nilpy_redefine_def's third row,
+  and test_nilpy_min_max_variadic).
+
+  Cost: the chain walk runs only for a candidate that IS a module-level NilPy
+  def (ProcPyDefTok > 0), which is a handful per program, never for the long
+  pylib overload chains this predicate sits in front of.
+  bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it }
+function PyDefSupersededHere(pi: Integer): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if not NilPyUserCode then Exit;
+  if (pi < 0) or (ProcPyDefTok[pi] <= 0) then Exit;
+  i := ProcChainHead(Procs[pi].Name);
+  while i >= 0 do
+  begin
+    if (i <> pi) and (ProcUnitIdx[i] = -1) and (ProcPyDefTok[i] > ProcPyDefTok[pi]) and
+       (Procs[i].Name = Procs[pi].Name) and
+       (Procs[i].ParamCount = Procs[pi].ParamCount) and
+       PyDefBoundHere(i) then
+    begin
+      Result := True;
+      Exit;
+    end;
+    i := ProcHashNext[i];
+  end;
 end;
 
 { SCOPE RANK of a declaration, for Pascal's hiding rule: a declaration hides a
@@ -7562,6 +7667,16 @@ begin
     bug-nilpy-intrinsic-only-builtin-is-shadowed-from-the-top-of-the-module }
   if Result and dropLateDef and (ProcUnitIdx[idx] = -1) and
      (not PyDefBoundHere(idx)) then Result := False;
+  { ...and the OTHER half of the same rule, which needs no dropLateDef guard
+    because it can never empty the candidate set: a def is superseded only when
+    a later def of the same name and arity is bound here, so the replacement is
+    itself a candidate. Without this, two same-arity defs both stayed eligible
+    below the second one and first-in-chain decided -- which is registration
+    order, so every call ran the FIRST body
+    (bug-nilpy-redefining-a-def-is-ignored-the-first-body-still-runs) once each
+    def got its own Proc. bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it }
+  if Result and (ProcUnitIdx[idx] = -1) and PyDefSupersededHere(idx) then
+    Result := False;
 end;
 
 { ...plus Pascal's SCOPE HIDING: a declaration in a later/inner scope hides a
@@ -7631,7 +7746,7 @@ begin
         statement onward — Python rebinds the name when that statement RUNS.
         ProcPyDefTok is 0 for everything else, so this costs nothing there. }
       if ProcNameMatches(i, name) and (ProcUnitIdx[i] = -1) and
-         ((ProcPyDefTok[i] = 0) or (ProcPyDefTok[i] <= TokPos)) then
+         ((ProcPyDefTok[i] = 0) or (ProcPyDefTok[i] - 1 <= TokPos)) then
       begin
         PyUserShadowsProc := True;
         Break;

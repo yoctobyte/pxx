@@ -2420,7 +2420,20 @@ var
   ProcNamedGP  : array of Integer; { count of named (non-variadic) GP params, for va_start's initial gp_offset }
   ProcNamedFP  : array of Integer; { count of named (non-variadic) FP/XMM params, for va_start's initial fp_offset }
   ProcUnitIdx : array of Integer; { Strs[] unit name, or -1 for main }
-  { The token index of a NilPy module-level `def` that SHADOWS a builtin, or 0.
+  { ONE-BASED token index of a NilPy module-level `def`, or 0 for "not one".
+    One-based because the sentinel and a real position would otherwise collide
+    at token 0, and token 0 is not a rare case: it is the `def` of a file whose
+    FIRST statement is a def, which is how most modules start. The collision
+    reads as "visible everywhere", which is accidentally right for a def at the
+    top of the file and silently wrong the moment two defs share a name and the
+    first one is at position 0 -- it drops out of every positional comparison.
+    Exactly the overload this array was introduced to REPLACE (see the note in
+    PyRegisterDefShells about ProcPyDefTok's predecessor dropping a def that was
+    the module's first statement); it survived one level down in the encoding.
+    Readers compare `ProcPyDefTok[i] - 1` against TokPos.
+    bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
+
+    The token index of a NilPy module-level `def` that SHADOWS a builtin, or 0.
     Python rebinds the name when the `def` STATEMENT runs, so a call ABOVE it
     still reaches the builtin — `print(min(3,1,2))` before a `def min(a,b,c,d,e)`
     is the builtin's 1, and only the call below it is the user's. The shell that

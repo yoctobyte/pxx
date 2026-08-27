@@ -4,6 +4,8 @@ prio: 70
 type: bug
 blocked-by: []
 summary: "Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition."
+status: done
+owner: frank1-AN
 ---
 
 # Redefining a `def` rebinds the calls that came before it
@@ -180,3 +182,73 @@ So it needs the full sibling set green in one go — redefinition with calls on
 both sides, differing arity, a def shadowing a pylib builtin, a nested def's
 qualified name — exactly as the section above already said. Still not a
 between-tasks item; it is now a designed one.
+
+## Resolution — 2026-08-27
+
+The three-step design above was implemented as written. Fixedpoint
+`b2f0cd61af06`, `tools/gate.sh quick` GREEN.
+
+**1. One shell per DEF, not per name** (`compiler/pyparser.inc`,
+`PyRegisterDefShells`). The `if FindProcInUnit(PyHdrName, -1) < 0 then` guard is
+gone; each `def` token now gets its own Proc. That guard WAS the bug: two
+module-level `def f` shared one shell, so they were literally the same routine
+and the earlier call site had nothing else to resolve to.
+
+**2. `PyParseDef` picks its shell by def token**, via a new `PyShellForDefTok`
+(name + `ProcUnitIdx = -1` + exact `ProcPyDefTok`). Without this, step 1 breaks
+the build outright — `FindProcInUnit(name, -1)` returns the FIRST shell for both
+defs, so the second's shell never receives a body and the link fails with
+`unresolved forward`. The `Warn('... is defined again here')` block was deleted:
+a redefinition is now correct Python, not a diagnostic.
+
+**3. Positional preference** (`compiler/symtab.inc`). New `PyDefPosBeats(cand,
+cur)` gates on same arity — so the different-arity overload path (`def min(a,
+b, c, d, e)` over the builtin) keeps its existing ranking untouched — and then
+splits by call site: inside a def body (`CurProc >= 0`) the highest
+`ProcPyDefTok` wins outright, because that body runs later and CPython binds it
+then; at module level only candidates standing at or before `TokPos` are
+eligible. Both of `FindProc`'s own-scope picks call it. `MatchEligBase` drops a
+candidate that `PyDefSupersededHere` finds a later same-arity bound def for.
+
+**The bug inside the fix, which cost the most time here.** Step 3 had NO effect
+at first, and reasoning about why produced nothing — a `WriteLn(StdErr)` probe
+in `PyDefSupersededHere` showed only ONE candidate was ever tested. Cause:
+`ProcPyDefTok` was zero-based and the FIRST `def` in a file IS token 0, which
+collided with the array's own "not a def" sentinel. So the first def in every
+NilPy file was invisible to every reader of that array — including the two
+pre-existing ones, `PyDefBoundHere` and `PyUserShadowsProc`. It is now
+**ONE-BASED**, documented at the declaration in `compiler/defs.inc`, with all
+readers adjusted. Measure, do not reason: the probe found in one run what the
+reading had not.
+
+**Test:** `test/test_nilpy_def_redefined_rebinds_only_after.npy` +
+`.expected` (CPython-generated), registered in the Makefile beside
+`test_nilpy_nested_def_redefined_in_one_scope` — the same bug one scope down.
+14 rows, all matching CPython, covering every item the ticket demanded: calls on
+both sides of a same-signature redefinition; differing return TYPE; differing
+ARITY; three defs so the middle one is neither first nor last; a redefined
+pylib-builtin shadow; a nested def; and a call from inside another def.
+
+The pinned v384 binary fails 5 of those 14 rows, including the corrupting one
+this ticket was named for: `g-before` printed `135566536474856` — the later
+def's string pointer read as an integer through the earlier def's type.
+
+**Canaries run** (all green, all diffed against CPython or their `.expected`):
+`test_nilpy_nested_def_redefined_in_one_scope`,
+`test_nilpy_def_shadows_builtin_positionally`,
+`test_nilpy_def_shadows_pascal_intrinsic`, `test_nilpy_builtin_shadow_slice`,
+`test_nilpy_cast_user_shadow`, `test_nilpy_def_local_shadows_module_global`,
+`test_nilpy_redefine_def`, `test_nilpy_intrinsic_result_chain`. The first two
+are the ones the ticket named as must-not-regress, since the positional
+builtin-shadowing rule shares `ProcPyDefTok` with this change.
+
+**Deliberately out of scope**, both measured identical on pinned v384 and
+therefore pre-existing, both appended to
+[[bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name]]: `f =
+lambda: 2` after `def f` (no token position on a module-level assignment), and a
+`def` inside a taken `if True:` branch (`PyRegisterDefShells` walks depth 0
+only). The second carries a Track U question — what a conditionally-bound name
+should resolve to — and is noted as such rather than guessed at.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.

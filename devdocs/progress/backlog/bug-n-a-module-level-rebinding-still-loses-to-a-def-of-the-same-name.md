@@ -32,8 +32,10 @@ the WHOLE function body unconditionally, so `Syms[idx].Kind in [skLocal,
 skParam]` is the entire test.
 
 At module level that is not true — the answer is "whichever statement ran last",
-and the decision site (`compiler/parser.inc`, the bare-ident arm of
-`ParseFactorCore`) cannot see it. A `def` has `ProcPyDefTok` to compare against
+and the decision site (the bare-ident arm of `ParseFactorCore` — since the
+2026-08-20 parser split this is `compiler/pasparser_expr.inc`, NOT the
+`compiler/parser.inc` this ticket was filed against, which no longer exists)
+cannot see it. A `def` has `ProcPyDefTok` to compare against
 `TokPos`, which is exactly how the late-`def` rule a few lines below works; an
 ordinary module-level assignment has no equivalent record.
 
@@ -53,3 +55,49 @@ NilPy stdlib.
 Lower than the local arm was (p70 → p45): the third-party corpus wall that
 justified the urgency was the local shape, and it is cleared. This arm has no
 known corpus consumer yet.
+
+## Two more rows, measured 2026-08-27
+
+Found while fixing [[bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it]]
+(the def-vs-def ordering arm). Both are PRE-EXISTING — identical on the v384
+pinned binary and on the fixedpoint that carries that fix — so they were left
+out of it deliberately rather than missed.
+
+**A `lambda` rebinding is the same row as the `o.f` one above:**
+
+```python
+def f():
+    return 1
+f = lambda: 2
+print(f())           # pxx: 1        CPython: 2
+```
+
+Same mechanism, same fix: a module-level assignment carries no token position,
+so it cannot beat the def's `ProcPyDefTok`. Worth keeping in the repro set
+because it needs no class and no bound method — it is the smallest form.
+
+**A `def` inside a TAKEN branch does not rebind at all — different mechanism:**
+
+```python
+def g():
+    return 1
+if True:
+    def g():
+        return 2
+print(g())           # pxx: 1        CPython: 2
+```
+
+This one is NOT the missing-token-position problem: a `def` does have
+`ProcPyDefTok`. It is that `PyRegisterDefShells` walks **depth 0 only**, so a
+def one indent in never registers a module-level shell and never becomes a
+candidate. The complement of it is already right for the wrong reason — with
+`if False:` pxx prints `1`, matching CPython, because the def is invisible
+rather than because the branch was evaluated.
+
+Fixing this properly means deciding what a conditionally-bound module-level name
+resolves to when the compiler cannot know which branch runs, which is a Track U
+question, not a patch. The honest intermediate is that the LAST textual def
+wins from its position on, matching the unconditional rule — wrong for
+`if False:` (where it is currently accidentally right) and right for `if True:`.
+That trade is the decision, and it should be made before either behaviour is
+coded.
