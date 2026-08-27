@@ -4378,6 +4378,29 @@ var i, ci, si, procIdx, depth, smArgs, fci, fi, k2, rcvCi: Integer; tk: TTypeKin
 begin
   Result := tyUnknown;
   PyInferLastCi := -1;
+  { A LAMBDA is a CALLABLE VALUE, and a callable value travels as a variant.
+    First, before the paren strip and before every operator scan, because a
+    lambda's BODY is an expression and every one of those arms would otherwise
+    type the whole lambda by it: `lambda x, y: x + y` looked like an int
+    addition, `lambda p: p > 1` like a Boolean, `lambda n: n / 2` like a float.
+    The `lambda` keyword governs everything after it to the end of the
+    expression, so nothing further along can be the subject.
+
+    The return-type scan already carries this rule as its own arm
+    (PyInferDefRetTypeScan, "`return lambda ...` is a CALLABLE VALUE"); this is
+    the same rule for every OTHER position that asks — a field, a local, a
+    module global. Without it `self.h = lambda x, y: x + y` in a constructor was
+    "cannot infer the type of field self.h - annotate it", a compile error on
+    ordinary Python, while the ONE-parameter `self.h = lambda x: x + 1` compiled
+    (its body typed the field and happened to be harmless). One construct, two
+    answers, decided by whether the parameter list had a comma in it.
+    bug-nilpy-a-lambda-returned-directly-is-not-callable }
+  if (startIdx < endIdx) and (Tokens[startIdx].Kind = tkIdent) and
+     CaseEqual(GetTokenStr(startIdx), 'lambda') then
+  begin
+    Result := tyVariant;
+    Exit;
+  end;
   { REDUNDANT PARENTHESES first, once, for every rule below. Every arm of this
     scan looks for its operator at DEPTH 0, so a whole expression wrapped in
     parentheses hid all of them at once: `return (x > 1)` typed itself Integer
@@ -29772,6 +29795,7 @@ var j, pdepth, bdepth, e, k, e2, rec2, bodyScanStart, curRec: Integer;
     tupDepth, chainRec: Integer;
     t2, cur, chainCur: TTypeKind;
     seenAny, tupComma: Boolean;
+    tupLamHdr: Boolean;   { inside a lambda's PARAMETER list — its commas are not tuple commas }
     bigRet: Boolean;   { the return holds `**` or a wide literal — arbitrary precision }
 begin
   Result := tyInteger;
@@ -29865,11 +29889,37 @@ begin
         or a subscript does not count. }
       tupDepth := 0;
       tupComma := False;
+      tupLamHdr := False;
       for k := j + 1 to e - 1 do
       begin
         if Tokens[k].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(tupDepth)
         else if Tokens[k].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(tupDepth)
-        else if (Tokens[k].Kind = tkComma) and (tupDepth = 0) then tupComma := True;
+        { A LAMBDA'S OWN PARAMETER COMMAS ARE NOT TUPLE COMMAS. `return lambda
+          x, y=2: ...` has a bare comma at depth 0 — it separates the lambda's
+          parameters, not two returned values — so this scan concluded TUPLE,
+          answered tyClass/TPyList, and the arm below that types a returned
+          lambda as a variant never got the chance: it sits later in this
+          else-if chain and the tuple test had already won. The boxed callable
+          was then stored into a class-typed result, and the caller got
+          something it could not call ("object is not callable (no __call__)")
+          — at the CALL site, far from the return that caused it. Measured with
+          PXXDBG=n.ret: tk=6 rec=42 for `return lambda x, y=2: ...` against
+          tk=22 for the identical lambda bound to a local first, which is
+          exactly the two-line spelling the ticket noted as working.
+
+          Skipped from `lambda` to its `:`, NOT by moving the lambda arm above
+          the tuple test: `return lambda x: x, 1` really IS a tuple whose first
+          element is a lambda, and CPython reads it that way. Only the
+          PARAMETER list is exempt; commas in the lambda's BODY still count. A
+          default value containing a colon (`lambda x, y={1: 2}: ...`) is
+          inside brackets, so its depth is not 0 and it cannot end the header
+          early. bug-nilpy-a-lambda-returned-directly-is-not-callable }
+        else if (tupDepth = 0) and (Tokens[k].Kind = tkIdent) and
+                CaseEqual(GetTokenStr(k), 'lambda') then tupLamHdr := True
+        else if tupLamHdr and (tupDepth = 0) and (Tokens[k].Kind = tkColon) then
+          tupLamHdr := False
+        else if (Tokens[k].Kind = tkComma) and (tupDepth = 0) and
+                (not tupLamHdr) then tupComma := True;
       end;
       if tupComma then
       begin

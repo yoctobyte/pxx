@@ -9857,6 +9857,20 @@ test-core: $(COMPILER)
 	# bug-n-an-augmented-subscript-on-a-dunder-class-is-refused
 	./$(COMPILER) test/test_nilpy_augmented_dunder_subscript.npy $(TESTTMP)/test_nilpy_augdunsub26
 	$(TESTTMP)/test_nilpy_augdunsub26 | diff -u test/test_nilpy_augmented_dunder_subscript.expected -
+	# `return lambda ...` — a closure factory, and the returned value was not
+	# CALLABLE while the same lambda bound to a local first was. The return-type
+	# scan's TUPLE detector counted the LAMBDA'S OWN PARAMETER COMMAS, so the
+	# def was typed TPyList and the boxed callable stored into a class-typed
+	# result. The controls are the shapes that ARE tuples (`return lambda x: x,
+	# 1`), because only the parameter list is exempt — a comma in the lambda's
+	# BODY still separates two returned values. The class/dict/list/key= rows
+	# are the same rule in every other position that asks a token scan for a
+	# lambda's type; `self.h = lambda x, y: ...` was a compile error while the
+	# one-parameter spelling compiled.
+	# The .expected is CPython's own output, generated not written.
+	# bug-nilpy-a-lambda-returned-directly-is-not-callable
+	./$(COMPILER) test/test_nilpy_lambda_returned_directly.npy $(TESTTMP)/test_nilpy_lamret26
+	$(TESTTMP)/test_nilpy_lamret26 | diff -u test/test_nilpy_lambda_returned_directly.expected -
 	./$(COMPILER) test/test_nilpy_ast_literal_eval.npy $(TESTTMP)/test_nilpy_ast_literal26
 	test "$$($(TESTTMP)/test_nilpy_ast_literal26)" = "$$(printf '0.7 0.7 0.5 3\n42 -3 hi\n2\nTrue None\n1 3')"
 	# atexit handlers run at exit (LIFO), io's in-memory buffers behave

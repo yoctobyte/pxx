@@ -1,0 +1,120 @@
+# `return lambda ...` — the single most idiomatic way to write a closure factory
+# in Python. It yielded a value that was NOT callable, while the same lambda
+# bound to a local first and then returned worked, which is a difference no
+# Python author would predict.
+#
+# Root cause, measured with PXXDBG=n.ret: the return-type scan's TUPLE detector
+# counted the LAMBDA'S OWN PARAMETER COMMAS. `return lambda x, y=2: ...` has a
+# bare comma at depth 0, so the def was typed tyClass/TPyList, the boxed
+# callable was stored into a class-typed result, and the caller got something it
+# could not call — at the CALL site, far from the return.
+# bug-nilpy-a-lambda-returned-directly-is-not-callable
+
+
+def mk0(k):
+    return lambda: k * 2
+
+
+def mk1(k):
+    return lambda x: x + k
+
+
+def mk2(k):
+    return lambda x, y: x * 100 + y + k
+
+
+def mk_def(k):
+    return lambda x, y=2: x * 100 + y + k
+
+
+def mk_star(k):
+    return lambda *a: sum(a) + k
+
+
+def mk_nocap():
+    return lambda x, y: x - y
+
+
+print(mk0(3)())
+print(mk1(1)(5))
+print(mk2(1)(5, 9))
+print(mk_def(1)(5), mk_def(1)(5, 9), mk_def(1)(x=5))
+print(mk_star(1)(1, 2, 3))
+print(mk_nocap()(9, 4))
+
+# THE CONTROLS. Only the lambda's PARAMETER list is exempt from the tuple scan —
+# a comma in the lambda's BODY still separates two returned values, and CPython
+# reads these as tuples.
+def one_lambda_then_a_value():
+    return lambda x: x, 1
+
+
+t = one_lambda_then_a_value()
+print(len(t), t[0](7), t[1])
+
+
+def two_lambdas():
+    return lambda a, b: a + b, lambda a, b: a - b
+
+
+p = two_lambdas()
+print(len(p), p[0](3, 4), p[1](3, 4))
+
+
+# a dict default inside the parameter list: its colon is inside brackets, so it
+# cannot end the lambda header early
+def with_dict_default():
+    return lambda x, y={"a": 1}: x + y["a"]
+
+
+print(with_dict_default()(5))
+
+
+# an ordinary tuple return, untouched
+def plain():
+    return 1, 2, 3
+
+
+print(plain())
+
+
+# the two-line spelling that always worked must keep working
+def mk_local(k):
+    g = lambda x, y=k: x * 100 + y
+    return g
+
+
+print(mk_local(1)(5), mk_local(7)(5))
+
+
+# ...and the SAME rule in every other position that asks a token scan for a
+# lambda's type. `self.h = lambda x, y: x + y` in a constructor was "cannot
+# infer the type of field self.h - annotate it" — a compile error on ordinary
+# Python — while the one-parameter `self.h = lambda x: x + 1` compiled, because
+# its body typed the field and happened to be harmless. One construct, two
+# answers, decided by whether the parameter list had a comma in it.
+class C:
+    def __init__(self):
+        self.h = lambda x, y: x + y
+
+    def mk(self):
+        return lambda x, y: x - y
+
+
+c = C()
+print(c.h(1, 2), c.mk()(9, 4))
+
+d = {"f": lambda x, y: x + y}
+print(d["f"](1, 2))
+
+xs = [lambda x, y: x + y, lambda x, y: x - y]
+print(xs[0](5, 2), xs[1](5, 2))
+
+print(sorted([(2, "b"), (1, "a")], key=lambda p, q=0: p[0] + q))
+
+
+def call(fn):
+    return fn(3, 4)
+
+
+print(call(lambda a, b: a * b))

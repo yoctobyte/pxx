@@ -80,6 +80,7 @@ _none_
 | bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members | N | 65 | bug | A module that defines a name equal to its own module name makes every QUALIFIED access to the module's other members fail: `import bisect; bisect.bisect_left(...)` gives `no class declares a method or callable field .bisect_left()`, because `bisect` resolves to the module's member rather than the module. CPython's own Lib/bisect.py has `bisect = bisect_right`, so this is ordinary stdlib-shaped code. From-imports are unaffected. | — |
 | bug-n-a-short-circuit-or-returning-self-is-typed-as-a-number | N | 60 | bug | `def m(self): return self or 1` dies with `TypeError: expected a number, got object` — a top-level short-circuit `or` hands back an OPERAND, and the def-return-type scanner types it from the wrong side. The `and` spelling answers correctly only because its truthy arm happens to be the int. | — |
 | bug-n-a-staticmethod-read-through-an-instance-binds-a-receiver | N | 25 | bug | bug(N): a @staticmethod read through an INSTANCE binds a receiver, so `type(k.stat).__name__` says 'method' | — |
+| bug-n-a-tuple-unpacking-assignment-does-not-box-a-callable-value | N | 55 | bug | `a, b = lambda x: x + 1, lambda x: x + 2` compiles and then `a(1)` raises TypeError: object is not callable. The single-target spellings (`a = lambda ...`, `return lambda ...`) box the callable so the name is a variant; the tuple-UNPACK targets do not, so each name holds a raw pointer the dynamic-call path does not recognise. | — |
 | bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence | N | 55 | bug | Six `timeout N` literals are hardcoded inside the test-nilpy and test-uforth recipes. The three uforth ones are the damaging pair of shapes: `wait $pp \|\| true` discards timeout's exit 124, the kill truncates p.out mid-stream, and the truncation is then reported as `DIFF <corpus>` — a pxx-versus-CPython divergence — and counted into `bad`. A machine under load thus manufactures a Nil-Python frontend finding. Filed by Track T, which owns the harness but not the Makefile. | — |
 | bug-n-a-unicode-identifier-is-rejected-by-the-lexer | N | 65 | bug | `_κ = 5` is legal Python 3 and the NilPy lexer rejects it with `unexpected character`. Non-ASCII in a STRING literal already works, so this is the identifier path only. Two tinycss2 files (color4.py, color5.py) use Greek letters as names for colour-space constants. | — |
 | bug-n-abs-of-a-complex-raises-typeerror | N | 12 | bug | `abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set. | — |
@@ -104,7 +105,6 @@ _none_
 | bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind | N | 45 | bug | NilPy's TypeInfo path carries the same two defects Track A just fixed on the Pascal side: it reads GetTokenStr(TokPos) — one token PAST the type name, because Next already advanced — and it resolves the type from the TOKEN KIND rather than the spelling, so TypeInfo(byte) answers Integer (byte and integer share tkInteger_T). | — |
 | bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells | N | 35 | bug | A Nil Python generator instance leaks its locals and its argument cells | — |
 | bug-nilpy-a-keyword-call-through-a-statically-unknown-callee-does-not-compile | N | 60 | bug | `a = mk(1); a(x=5)` fails to COMPILE — `error: undefined variable (x)` — because the keyword-argument lowering only fires when the frontend can resolve the callee to a def/lambda by name. The runtime dispatcher handles this fine (a callee reached as a PARAMETER works), so it is the parse-time gate, not the call path. | — |
-| bug-nilpy-a-lambda-returned-directly-is-not-callable | N | 70 | bug | `return lambda x: ...` yields a value that is NOT callable — `TypeError: object is not callable (no __call__)` where CPython calls it. Binding the same lambda to a local first (`g = lambda ...; return g`) works, so the lift is fine and it is the RETURN of the lambda expression that loses the callable tag. | — |
 | bug-nilpy-an-extended-slice-cannot-be-assigned | N | 30 | bug | `l[::2] = [7, 8]` is a parse error. The READ form `l[::2]` works, and the plain-slice ASSIGN `l[1:3] = [9]` works; only the strided assignment is missing. | — |
 | bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds | N | 35 | bug | A dict VALUE as the `*=` target still rebinds, so an alias of it keeps the old contents. The parameter half landed 2026-08-15 (pymul_v_inplace); this is the residue, and `+=` has the same split. | — |
 | bug-nilpy-classmethod-constructors-on-builtin-types-are-absent | N | 25 | bug | `bytes.fromhex(\"6162\")` and `float.fromhex(\"0x1p3\")` are `undefined variable (bytes)` / `(float)` — the TYPE used as a namespace resolves only for the handful of names the stdlib table lists (int.from_bytes, dict.fromkeys, str.maketrans). | — |
@@ -556,9 +556,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2487)
+## done (2488)
 
-2487 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2488 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (45)
 
@@ -619,7 +619,6 @@ _none_
 - [p 72] [N] feature-nilpy-stdlib-coverage-gaps-measured
 - [p 72] [B] feature-typinfo-facade-unit
 - [p 70] [N] bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method [parked — re-claim, do not duplicate]
-- [p 70] [N] bug-nilpy-a-lambda-returned-directly-is-not-callable
 - [p 70] [N] bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
 - [p 70] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - [p 70] [N] feature-nilpy-staticmethod-and-classmethod
@@ -678,6 +677,7 @@ _none_
 - [p 55] [B] bug-b-inttostr-of-a-qword-prints-it-signed
 - [p 55] [B] bug-b-the-fpc-vartype-constants-are-missing
 - [p 55] [N] bug-n-a-field-assigned-from-a-module-global-expression-is-refused
+- [p 55] [N] bug-n-a-tuple-unpacking-assignment-does-not-box-a-callable-value
 - [p 55] [N] bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence
 - [p 55] [N] bug-n-hasattr-with-a-computed-name-cannot-see-a-builtin-method
 - [p 55] [N] bug-n-inline-cast-deref-loses-a-pointer-fields-pointee

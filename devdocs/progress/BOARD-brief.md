@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:23 blocked:7 backlog:267 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2487 rejected:45`
+`unfinished:23 blocked:7 backlog:267 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2488 rejected:45`
 
 ## Held now (working/ — do not touch these files)
 
@@ -56,7 +56,6 @@ _none — no lane is locked._
 - `[p 72] [N]` feature-nilpy-stdlib-coverage-gaps-measured
 - `[p 72] [B]` feature-typinfo-facade-unit
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
-- `[p 70] [N]` bug-nilpy-a-lambda-returned-directly-is-not-callable
 - `[p 70] [N]` bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
 - `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - `[p 70] [N]` feature-nilpy-staticmethod-and-classmethod
@@ -79,5 +78,6 @@ _none — no lane is locked._
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [N]` feature-nilpy-iter-and-next-over-a-container
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
+- `[p 65] [O]` feature-opt-bulk-copy-is-byte-at-a-time
 
 _248 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
