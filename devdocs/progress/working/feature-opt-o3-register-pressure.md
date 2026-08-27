@@ -1199,3 +1199,81 @@ moved this morning, by our own hand.
 
 Nothing built, nothing changed. Handing the inversion back to the coordinator
 rather than switching items unilaterally — the dispatch was item 3.
+
+## 2026-08-28 — W1 slice 4 LANDED at `-O3`: a resident right operand needs no `mov rcx`. **1.15x on the loop, neutral everywhere else**
+
+The first slice of the revived W1. Not the whole operand scheduler — one
+deletion, chosen because it is provably value-preserving.
+
+### What fires
+
+When a BINOP's right operand is a **register-resident** sym, `EmitLoadVarRcx`
+used to emit `mov rcx, r12..r15` purely to satisfy the "right operand is in
+rcx" contract, and the ALU op then read rcx. The ALU can read r12..r15
+directly, so the move is deleted and the op encodes the resident register:
+
+```
+  mov %r12,%rax          mov %r12,%rax
+  mov %r13,%rcx    ->    xor %r13,%rax
+  xor %rcx,%rax
+```
+
+`Run`'s `-O3` loop body: **21 -> 19 instructions.**
+
+**Why this is safe by construction, not by argument.** It is a deleted MOVE, not
+a recomputed value: the resident register and the frame slot hold the same value
+by the residency contract — the same fact `EmitLoadVarRcx`'s own resident arm
+already relies on. The only real question is whether the consuming arm reads
+`rcx` and nothing else, so `W1AluRightEligible` whitelists exactly the five
+plain-integer forms (`+ - and or xor`) and refuses everything else: float
+(xmm0/xmm1 + movq bridge), AnsiString `+` (pushes both operands, calls a
+helper), tyString/set (multi-register inline loops), comparisons (own fusion
+path), div/mod (rdx:rax) and shifts (need rcx *by name*). Anything unlisted
+keeps the rcx contract, so a new op or type is safe by default. `{$Q+}` forms
+are admitted deliberately: the overflow check emits AFTER the ALU op and reads
+flags and rax, never rcx.
+
+State is a **local** in `IREmitNode`, which is recursive, so it cannot leak into
+a nested binop.
+
+### Numbers — the loop AND the neutral workloads, as required
+
+Comparator is the item-1 build (`c264c81a0d5a`) vs this one (`2cc445cbd5f4`),
+interleaved in single runs. The loop figures use **3 runs per sample** (~1.9 s,
+so 10 ms timer resolution is 0.5% rather than 2%) after the single-run form
+proved to be at the resolution floor.
+
+| workload | before | after | |
+| --- | --- | --- | --- |
+| `three.pas`, 3 rounds of min-of-12 | 1.91 / 1.96 / 1.99 | **1.71 / 1.67 / 1.75** | **1.12x / 1.17x / 1.14x** |
+| `bt.pas` (boolean-heavy loop) | 1.46 | 1.45 | neutral |
+| mandelbrot | 1.05 | 1.04 | neutral |
+| **compile the stress program** | **0.64** | **0.64** | **neutral** |
+| **compile `bt.pas`** | **0.18** | **0.18** | **neutral** |
+
+**~1.15x, not the 1.65x the sizing model bounded** — and that is expected, not a
+miss: the model deleted **all eight** staging moves from the body, this slice
+deletes **two**. The rest of W1 (a left operand and a destination that are not
+forced through rax) is the remaining ~1.4x and is a much larger change to
+`IREmitNode`'s register contract.
+
+**Caveat, unchanged and still attached: this is one loop shape.** `three.pas` is
+the same benchmark that gave item 1 its 1.9x. It bounds tight scalar loops and
+says nothing about the corpus.
+
+**A resolution note that cost two wrong readings.** At single-run granularity
+`bt` measured 0.49 vs 0.51 and then 0.55 vs 0.56 — "2-4% slower", twice, which
+is exactly the shape of a real small regression. Both were **one 10 ms tick** on
+a ~0.5 s workload. Amplifying to three runs per sample resolved it to
+1.46 vs 1.45, neutral. Same for `hello.pas` (0.18 vs 0.19 -> 0.64 vs 0.64 on a
+longer compile). **Below ~2% of the workload, `/usr/bin/time` is quantisation,
+not measurement** — amplify the sample before believing a small delta, in either
+direction.
+
+### Gates
+`-O3` self-host fixedpoint byte-identical (`2cc445cbd5f4`); `-O0/-O1/-O2/-O3`
+agree with each other and with `fpc -O2` across ten programs including the
+residency stress, the boolean loop and both call-heavy shapes (only divergence
+is the pre-existing float print, identical on the pre-change compiler);
+**`-O2` and all four cross targets byte-identical, 48/48**; `gate.sh quick`
+GREEN.
