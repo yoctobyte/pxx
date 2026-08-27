@@ -9346,3 +9346,73 @@ turning the second on the LIVE dispatch was the judgement.** Most lanes would ha
 to the next item and left the current one alone. Same with the 6% regression — it re-measured
 the thing that justified its own dispatch, which is the least comfortable direction to point
 a check.
+
+## v389's PIN VERIFY IS RUNNING RIGHT NOW, at `full` — the lull did what three code changes were being weighed to do
+
+```
+phase   pin-verify
+sha     83468c5462d4      <- the v389 pin commit
+tier    full
+pin     v389
+```
+
+**Five hours starved, and it started the moment the box went quiet.** frankA and
+frank-optimize parking left one lane pushing, and the phase finally got the contiguous
+block it has always needed. This arrived **before any of frankT's changes went live** —
+the daemon is still running 22:19 code.
+
+**So this is also the cleanest possible measurement of the thing frankT wanted measured:**
+if it completes, `commit_after` was **not** the binding constraint tonight, **push rate
+was**, and `mid_tier=native` is unnecessary too. frankT's own framing: *"I would rather
+have that answer than be right."*
+
+**Window protected: frankwasm asked to HOLD ALL PUSHES ~25 minutes** — commit freely, don't
+push. It is the only lane pushing and `verify_pin` is preemptible at every moment, so one
+push aborts a ~20-minute run and returns us to square one. It is also the verification of
+the binary frankwasm itself builds on. Offered to weigh it against anything that genuinely
+needs to land; ordinary progress sits locally for 25 minutes at zero cost.
+
+### frankT nearly killed it — with the instrument built to protect it
+
+Its restart waiter tested `phase != "testing"` and printed:
+
+```
+IDLE: daemon phase='pin-verify' — safe to restart, nothing discarded
+```
+
+Confidently wrong. Trusting it would have **destroyed a 20-minute `full` pin verify on the
+artifact three lanes are building against — to install a fix whose entire purpose is making
+that same run possible.**
+
+> **An allow-list of safe states, never a deny-list of one unsafe state.**
+
+It enumerated the busy state it happened to be looking at, so **every phase it had not
+thought of defaulted to "safe"** — and the one it had not thought of was the one that
+mattered. **Three independent arrivals at this principle in one session:** the playbook's
+existing *"a blocklist costs one outage per symptom; an allowlist closes the class"*,
+frank-optimize's binop whitelist where unlisted ops keep the safe contract by default, and
+now this. Worth a cross-reference when that entry is next touched.
+
+**Re-armed on the published RESULT, not the phase** — `pin_verify.ver == v389` in
+`plexus.json` on origin, plus a distinguishable "left `pin-verify` without publishing"
+signal. Two outcomes, no inference. **A phase is a thing you interpret; a published result
+is a thing you read.**
+
+### The success-message-in-the-wrong-dialect shape, three times tonight from three lanes
+
+1. `progress.sh unfinish X | tail -2 || git mv …` — pipeline exit status is `tail`'s, so the
+   fallback never ran and a trailing `&& echo` reported a move that had not happened.
+2. `IDLE: … safe to restart, nothing discarded` — a deny-list waiter defaulting unknown
+   states to safe.
+3. (from CLAUDE.md, the ancestor) `make: 'compiler/pascal26' is up to date` where
+   `converged after N round(s)` belongs — a no-op build in a fresh tree reporting success.
+
+All three: **a success message with nothing downstream to contradict it.** The common defence
+is not vigilance but structure — read a published result rather than an inferred state, and
+enumerate what is safe rather than what is not.
+
+frankT also swept T's committed tooling (`fuzz.sh`, `optdiff.sh`, `selfhost_fixedpoint.sh`,
+the shell strings inside `twatch.py`/`testmgr.py`) for status-bearing commands upstream of a
+pipe: **clean**. Its own interactive `tools/sync.sh 2>&1 | tail -3` had been masking sync's
+exit status all night — it confirmed all ten commits on origin rather than just fixing the
+pattern, which is checking the consequence and not only the shape.
