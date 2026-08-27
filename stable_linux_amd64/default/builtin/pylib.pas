@@ -1507,6 +1507,15 @@ function pypow_cx(b: Double; e: Double): Variant;
 { Iterating one yields a CURSOR — a fresh one each time, which is what makes a
   range re-iterable where a cursor is not. }
 function pyiter_of_range(r: TPyRange): TPyIter;
+{ Iterating BYTES yields its bytes as INTs. pyiter_v has had this arm since
+  bytes existed; PyMakeIterOf -- the frontend's "wrap any iterable in a cursor"
+  normaliser -- did not, and swallowed a TPyBytes into its generic tyClass arm
+  (pyiter_of_list), which reads a byte buffer as a list header. That is why
+  `zip(b"ab", "xy")` and `enumerate(b"ab")` yielded empties while `for`,
+  `list()`, `sum()` and `in` over the same object were all correct: those go
+  through pyiter_v and this one did not exist for the frontend to call.
+  bug-n-a-static-star-operand-over-a-non-list-iterable-passes-nothing }
+function pyiter_of_bytes(b: TPyBytes): TPyIter;
 function pyrange_is(const v: Variant): Boolean;
 { `len(map(...))` — CPython's TypeError, word for word. A FUNCTION returning
   Int64 so it can stand in for the whole len() expression at the call site, the
@@ -1943,15 +1952,6 @@ function min(const v: Variant): Variant; overload;
 { `list(x)` — a shallow COPY, as Python's list() constructor makes. Overloads
   rather than one variant-taking function so the ordinary call path resolves
   them by argument type, like min/max (feature-nilpy-missing-builtins). }
-{ `list()` / `tuple()` / `bytes()` — the ZERO-ARGUMENT form, which Python
-  defines as that type's zero value. `bytearray` (above) has had its zero-arg
-  overload all along and is the reason it was the only one of the four that
-  compiled; its three siblings fell out of overload resolution with "no overload
-  of list matches these arguments".
-  bug-n-the-zero-argument-form-of-a-builtin-type-constructor-is-rejected }
-function list: TPyList; overload;
-function tuple: TPyList; overload;
-function bytes: TPyBytes; overload;
 function list(l: TPyList): TPyList;
 function list(const s: AnsiString): TPyList; overload;
 function list(const v: Variant): TPyList; overload;
@@ -13834,6 +13834,20 @@ begin
   Result.FPos := Integer(pyrange_len(r));
 end;
 
+function pyiter_of_bytes(b: TPyBytes): TPyIter;
+begin
+  { Exactly pyiter_v's own bytes arm, given a name so the frontend can reach
+    it: list(b) materialises the byte VALUES as ints, and the cursor walks
+    those. Not pyiter_of_list(b) -- a TPyBytes is not a TPyList and reading
+    one as the other is the whole bug. }
+  if b = nil then
+  begin
+    pyiter_of_bytes := pyiter_of_list(TPyList.Create);
+    Exit;
+  end;
+  pyiter_of_bytes := pyiter_of_list(list(b));
+end;
+
 function pyrange_is(const v: Variant): Boolean;
 var o: TObject;
 begin
@@ -16661,26 +16675,6 @@ function HexDigitChar(v: Int64): AnsiString;
 begin
   if v < 10 then Result := Chr(Ord('0') + v)
   else Result := Chr(Ord('a') + (v - 10));
-end;
-
-function list: TPyList; overload;
-{ The zero-argument constructors. Each is its type's zero value, and each is
-  spelled as the ONE-argument body would produce from an empty input, so a
-  future change to what an empty list/tuple/bytes IS lands in one place.
-  See the declaration block for why bytearray already had this. }
-begin
-  Result := TPyList.Create;
-end;
-
-function tuple: TPyList; overload;
-begin
-  Result := TPyList.Create;
-  Result.FKind := PYSEQ_TUPLE;
-end;
-
-function bytes: TPyBytes; overload;
-begin
-  Result := TPyBytes.Create(0);
 end;
 
 function list(l: TPyList): TPyList;
