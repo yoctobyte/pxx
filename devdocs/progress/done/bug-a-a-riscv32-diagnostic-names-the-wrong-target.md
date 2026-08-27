@@ -106,4 +106,4 @@ does not reach `test-core`.
 fgl 7/7.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit c26978ffe.
