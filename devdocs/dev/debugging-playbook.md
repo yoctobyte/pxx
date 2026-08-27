@@ -1237,3 +1237,51 @@ underneath it. Re-running **both** sides back to back gave 48/48 identical.
 - The tell that saves you is the one above: **when a result is not merely
   surprising but structurally impossible, suspect the harness first**, and go
   find the shortest path that bypasses it.
+
+## An optimisation's value is a property of the transform AGAINST A BASELINE — and the baseline moves, sometimes by your own hand
+
+Three items of one optimisation ticket were sized on 2026-08-27, ranked, and
+dispatched in that order. Within a day the ranking had inverted twice, and both
+times the cause was **another item of the same ticket landing**:
+
+- **An item was emptied.** Store->reload elimination for register-resident
+  destinations was filed when the value round-tripped through the frame, which
+  made it a real memory access to remove. By the time it was claimed, the
+  residency change had put that value in a register, and the "reload" was a
+  reg-reg move worth nothing. 6 instructions out of 13,483.
+- **An item was revived.** An emit-time operand scheduler had been *correctly*
+  disconfirmed at **1.4%** hours earlier — the loop body was then 12 cyc/iter
+  dominated by two frame round-trips, and every `mov %rN,%rax` sat in their
+  shadow. The residency change removed the memory traffic. The body became 6.5
+  cyc/iter with **zero memory reads**, the dependency chain now ran *through*
+  those staging moves, and the same transform measured **~1.6x**.
+
+**The same instructions that are free while they overlap a 5-cycle
+store-forward are the critical path once it is gone.** Neither measurement was
+wrong; each was a measurement of a different machine.
+
+So: **re-measure the prize before starting an item, not just the mechanism.**
+Disassemble what the compiler emits *today* and time it; the ticket's number
+describes a compiler that may no longer exist. A stale prize is more expensive
+than a stale number, because it does not look like a claim to re-check — it
+looks like work waiting to be done, and the backlog protects it.
+
+## An A/B comparison is only valid when B is A minus exactly ONE thing
+
+The same session's first model priced "make the register authoritative" at
+**2.15x** by comparing a variant that kept the frame dual-writes against an
+idealised body that had neither the dual-writes nor any of the operand staging.
+Two changes, one credited. Isolated properly — every variant transcribed from
+the *current* disassembly and differing from the baseline **by deletion only** —
+the store removal was **~5%** and the staging removal was the rest.
+
+The failure mode is not carelessness, it is that a variant table looks rigorous.
+Four rows of times with four descriptions reads as a decomposition whether or
+not the rows are separable. Two habits fix it:
+
+- **Build each variant by deleting from the previous one**, never by writing the
+  "ideal" version from scratch. If you cannot express B as "A minus X", you are
+  not measuring X.
+- **Calibrate the baseline against the real artifact** before trusting any row —
+  the transcribed A above had to reproduce the shipping binary's 0.61 s. A model
+  that does not reproduce the thing it models decomposes nothing.
