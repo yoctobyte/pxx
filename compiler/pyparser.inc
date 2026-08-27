@@ -31051,10 +31051,141 @@ end;
   Not covered, and deliberately: falling off the END of a def also yields None
   in Python, but recognising that needs flow analysis rather than a token scan.
   bug-nilpy-none-returned-beside-a-container-is-an-unusable-nil-handle }
+{ Does this def RETURN a typed parameter that it rebinds only on SOME path?
+
+  `def branch(x: int, go: int): if go: x /= 2; return x` returned 5.0 for the
+  untaken branch where CPython returns 5. The private slot the rebinding creates
+  is correct — it is a variant, and on the untaken path it holds VT_INT 5 — but
+  the def's registered RETURN type was the widened double, so the variant was
+  coerced on the way out and the int came back as a float.
+
+  The three options were weighed on the ticket. This is option 1, NARROWED:
+  option 1 as written answers tyVariant for `return <name>` whenever the body
+  rebinds that parameter at all, which also fires for the very common
+  `def f(n: int): n = n + 1; return n` and would hand back a variant where an
+  Int64 comes back today. The narrowing is that only a rebinding the def can
+  SKIP makes the result dynamic — if every path rebinds, the widened type is
+  reached unconditionally and is the right answer, which is the ticket's own
+  control row satisfied by construction rather than by a test.
+
+  It asks about CONTROL FLOW, not about types, which is what keeps it out of
+  option 2's ditch ("a second miniature type-inferencer inside a token scan").
+  The type answer stays the scan's; this only decides whether that answer is
+  reached on every path. Option 3 — deferring the signature until after the body
+  pre-pass — remains what the file actually wants, and would subsume this.
+
+  Three conditions, all necessary:
+    - the parameter is ANNOTATED. An unannotated parameter is already a variant,
+      so its slot carries its own tag and nothing coerces it.
+    - it is rebound at a DEEPER block level and nowhere at the body's top level.
+      A top-level rebinding anywhere makes the widened type unconditional, even
+      if a conditional one precedes it.
+    - the body actually contains `return <param>` as a bare name. A def that
+      rebinds a parameter conditionally and returns something else has no
+      quarrel with its own signature.
+  bug-n-a-parameter-rebound-on-one-path-returns-the-widened-type-on-every-path }
+function PyDefReturnsAConditionallyReboundParam(methodStart: Integer): Boolean;
+const MAXP = 32;
+var names: array[0..MAXP - 1] of AnsiString;
+    annot: array[0..MAXP - 1] of Boolean;
+    deep, top, ret: array[0..MAXP - 1] of Boolean;
+    n, i, j, pdepth, bdepth, bodyStart: Integer;
+    nm: AnsiString;
+begin
+  Result := False;
+  n := 0;
+  { pass 1 — the parameter names, and which of them carry an annotation }
+  j := methodStart + 2;
+  pdepth := 0;
+  while j < TokCount do
+  begin
+    if Tokens[j].Kind = tkLParen then Inc(pdepth)
+    else if Tokens[j].Kind = tkRParen then
+    begin
+      Dec(pdepth);
+      if pdepth = 0 then begin Inc(j); Break; end;
+    end
+    else if (pdepth = 1) and (Tokens[j].Kind = tkIdent) and (j > 0) and
+            (Tokens[j - 1].Kind in [tkLParen, tkComma]) then
+    begin
+      if n >= MAXP then Exit;          { out of room — no answer beats a guess }
+      names[n] := GetTokenStr(j);
+      annot[n] := (j + 1 < TokCount) and (Tokens[j + 1].Kind = tkColon);
+      deep[n] := False; top[n] := False; ret[n] := False;
+      Inc(n);
+    end;
+    Inc(j);
+  end;
+  if n = 0 then Exit;
+  { the body proper starts after this def's own INDENT }
+  while (j < TokCount) and (Tokens[j].Kind <> tkIndent) do Inc(j);
+  if j >= TokCount then Exit;
+  bodyStart := j + 1;
+  { pass 2 — where each parameter is rebound, and whether it is returned bare }
+  j := bodyStart;
+  bdepth := 1;
+  while j < TokCount do
+  begin
+    if Tokens[j].Kind = tkIndent then Inc(bdepth)
+    else if Tokens[j].Kind = tkDedent then
+    begin
+      Dec(bdepth);
+      if bdepth <= 0 then Break;
+    end
+    else if Tokens[j].Kind = tkFunction then
+    begin
+      { a nested def's rebindings and returns are its own, not this def's —
+        the same skip PyInferDefRetTypeScan makes for the identical reason }
+      i := PySkipNestedSuite(j);
+      if i < 0 then Break;
+      j := i;
+      Continue;
+    end
+    else if (Tokens[j].Kind = tkIdent) and (j + 1 < TokCount) and
+            (Tokens[j + 1].Kind in [tkAssign, tkPlusEq, tkMinusEq, tkStarEq,
+                                    tkSlashEq, tkModEq, tkTrueDivEq, tkAmpEq,
+                                    tkPipeEq, tkXorEq, tkShlEq, tkShrEq,
+                                    tkAtEq]) then
+    begin
+      nm := GetTokenStr(j);
+      for i := 0 to n - 1 do
+        if names[i] = nm then
+        begin
+          if bdepth > 1 then deep[i] := True else top[i] := True;
+        end;
+    end
+    else if (Tokens[j].Kind = tkExit) and (j + 2 < TokCount) and
+            (Tokens[j + 1].Kind = tkIdent) and
+            (Tokens[j + 2].Kind in [tkNewline, tkDedent, tkEOF]) then
+    begin
+      nm := GetTokenStr(j + 1);
+      for i := 0 to n - 1 do
+        if names[i] = nm then ret[i] := True;
+    end;
+    Inc(j);
+  end;
+  for i := 0 to n - 1 do
+    if annot[i] and deep[i] and (not top[i]) and ret[i] then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
 function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind;
 var sawNone: Boolean;
 begin
   Result := PyInferDefRetTypeScan(methodStart, retRec, sawNone);
+  { A typed parameter rebound on SOME path only: the value at the return is
+    either the parameter's declared type or the rebinding's, so the signature
+    has to be wide enough for both. See the helper for why this is narrower
+    than the ticket's option 1. }
+  if (Result <> tyVariant) and
+     PyDefReturnsAConditionallyReboundParam(methodStart) then
+  begin
+    Result := tyVariant;
+    retRec := REC_NONE;
+  end;
   if PxxDbgEnabled('n.ret') then
     WriteLn('PXXDBG n.ret def@', methodStart, ' ', GetTokenStr(methodStart + 1),
             ' tk=', Ord(Result), ' rec=', retRec, ' sawNone=', Ord(sawNone),

@@ -1076,6 +1076,9 @@ test-nilpy: $(COMPILER)
 	# variant instead of being refused as "too dynamic"
 	./$(COMPILER) test/test_nilpy_rebind_across_the_float_boundary.npy $(TESTTMP)/test_nilpy_rebindfloat26
 	$(TESTTMP)/test_nilpy_rebindfloat26 | diff -u test/test_nilpy_rebind_across_the_float_boundary.expected -
+	# a typed parameter rebound on SOME paths returns a value wide enough for both
+	./$(COMPILER) test/test_nilpy_conditionally_rebound_parameter_return.npy $(TESTTMP)/test_nilpy_condrebind26
+	$(TESTTMP)/test_nilpy_condrebind26 | diff -u test/test_nilpy_conditionally_rebound_parameter_return.expected -
 	./$(COMPILER) test/test_nilpy_ast_literal_eval.npy $(TESTTMP)/test_nilpy_ast_literal26
 	test "$$($(TESTTMP)/test_nilpy_ast_literal26)" = "$$(printf '0.7 0.7 0.5 3\n42 -3 hi\n2\nTrue None\n1 3')"
 	# atexit handlers run at exit (LIFO), io's in-memory buffers behave

@@ -1,0 +1,81 @@
+# A def that rebinds a TYPED parameter on some paths but not all: the value at
+# the `return` is either the parameter's declared type or the rebinding's, so
+# the def's signature has to be wide enough for both.
+#
+# bug-n-a-parameter-rebound-on-one-path-returns-the-widened-type-on-every-path
+#
+# The private slot a rebinding creates was already correct — a variant, holding
+# VT_INT 5 on the untaken path — but the def's registered RETURN type was the
+# widened double, so the variant was coerced on the way out and the untaken
+# branch handed back 5.0 where CPython gives 5.
+#
+# The rule that fixes it asks about CONTROL FLOW, not about types: only a
+# rebinding the def can SKIP makes the result dynamic. If every path rebinds,
+# the widened type is reached unconditionally and is the right answer — which
+# is what rows 3 and 4 below hold in place.
+
+def branch(x: int, go: int):
+    if go:
+        x /= 2
+    return x
+
+print(branch(5, 1), branch(5, 0))
+
+# a three-way branch, including a rebinding to a completely unrelated type
+def three(x: int, k: int):
+    if k == 1:
+        x /= 2
+    elif k == 2:
+        x = "s"
+    return x
+
+print(three(5, 0), three(5, 1), three(5, 2))
+
+# CONTROL: rebound on EVERY path, so the widened type is unconditional and the
+# def must keep returning it rather than degrading to a dynamic result
+def always(x: int):
+    x /= 2
+    return x
+
+print(always(5))
+
+# CONTROL: the very common accumulator shape. This is what the ticket's option 1
+# would have made variant across the whole tree; it stays an int.
+def acc(n: int):
+    n = n + 1
+    return n
+
+print(acc(5))
+
+# a rebinding inside a LOOP is conditional too — the loop may run zero times
+def loopy(x: int, n: int):
+    i = 0
+    while i < n:
+        x /= 2
+        i = i + 1
+    return x
+
+print(loopy(8, 2), loopy(8, 0))
+
+# the same shape on a METHOD: the header scan and the member pre-pass reach the
+# rule through one funnel, so they agree by construction rather than by two
+# copies matching
+class M:
+    def pick(self, x: int, go: int):
+        if go:
+            x /= 4
+        return x
+
+m = M()
+print(m.pick(8, 1), m.pick(8, 0))
+
+# a nested def's own rebindings belong to the nested def, not to this one
+def outer(x: int, go: int):
+    def helper(y: int):
+        y /= 2
+        return y
+    if go:
+        return helper(x)
+    return x
+
+print(outer(6, 1), outer(6, 0))

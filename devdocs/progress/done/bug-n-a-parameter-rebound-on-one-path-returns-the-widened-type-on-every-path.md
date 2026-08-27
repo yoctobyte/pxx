@@ -4,6 +4,8 @@ prio: 58
 type: bug
 blocked-by: []
 summary: "`def f(x: int, go): if go: x /= 2; return x` returns 5.0 for the UNTAKEN branch where CPython returns 5. The private slot is correctly a variant carrying VT_INT, but the def's RETURN type is the widened double and coerces it. Re-measured: the return scan runs at the def HEADER, before both the constraint table and the slot exist, so it reads neither — three options weighed in the ticket, none of them one line."
+status: done
+owner: frank1-AN
 ---
 
 # A parameter rebound on one path returns the widened type on every path
@@ -92,3 +94,94 @@ Do not take option 2.
 
 Both rows above match CPython, plus a three-way branch, plus the control that a
 def whose parameter is rebound on EVERY path still returns the widened type.
+
+## Resolution — option 1, narrowed to CONTROL FLOW
+
+Taken: **option 1 with one condition added**, that the rebinding be one the def
+can SKIP. New `PyDefReturnsAConditionallyReboundParam` (pyparser.inc), consulted
+by `PyInferDefRetType` right after the scan — the funnel both consumers already
+reach the type through, so the header and the member pre-pass agree by
+construction and the "silent ABI mismatch" the site warns about cannot open.
+
+```pascal
+if (Result <> tyVariant) and
+   PyDefReturnsAConditionallyReboundParam(methodStart) then
+begin
+  Result := tyVariant;
+  retRec := REC_NONE;
+end;
+```
+
+Three conditions, all necessary:
+
+- the parameter is **annotated** — an unannotated one is already a variant, so
+  its slot carries its own tag and nothing coerces it;
+- it is rebound at a **deeper block level and nowhere at the body's top level** —
+  a top-level rebinding anywhere makes the widened type unconditional, even when
+  a conditional one precedes it;
+- the body contains **`return <param>`** as a bare name — a def that rebinds a
+  parameter conditionally and returns something else has no quarrel with its own
+  signature.
+
+A nested def's rebindings and returns are skipped via `PySkipNestedSuite`, the
+same step `PyInferDefRetTypeScan` makes beside it for the identical reason.
+
+### On the ticket's instruction to measure option 1's cost first
+
+The cost named was that blanket option 1 *"also fires for `def f(n: int): n = n +
+1; return n`, which is very common and would return a variant where an Int64 does
+today."* It was not measured, because the narrowing **excludes that case by
+construction** rather than accepting and pricing it: `n = n + 1` is a top-level
+rebinding, so the widened type is reached on every path and stays the answer.
+`acc(5)` returns `6`, an int, and is a control row in the test.
+
+That also settles the ticket's own control row the same way — `def always(x:
+int): x /= 2; return x` still returns `2.5` through a double, not a variant —
+so the property holds by the shape of the rule instead of by a test that could
+drift away from it.
+
+### Why this is not option 2
+
+Option 2 was refused as *"a second miniature type-inferencer inside a token
+scan"*. This scan infers nothing: the type answer is still
+`PyInferDefRetTypeScan`'s, and the new question is only **whether that answer is
+reached on every path**. Control flow, not types.
+
+**Option 3 remains what the file actually wants** — deferring the signature until
+after the body pre-pass would subsume this rule and settle the same question with
+the measured type rather than a widening — and is untouched by this fix.
+
+## Gate — met, plus four rows the ticket did not ask for
+
+| | pxx | CPython |
+| --- | --- | --- |
+| `branch(5, 1)`, `branch(5, 0)` | `2.5 5` | `2.5 5` |
+| three-way branch incl. a rebind to `str` — `three(5,0/1/2)` | `5 2.5 s` | `5 2.5 s` |
+| CONTROL, rebound on every path — `always(5)` | `2.5` | `2.5` |
+| CONTROL, the accumulator — `acc(5)` | `6` | `6` |
+| a rebinding inside a LOOP (may run zero times) | `2.0 8` | `2.0 8` |
+| the same shape on a METHOD | `2.0 8` | `2.0 8` |
+| a NESTED def's rebinding stays its own | `3.0 6` | `3.0 6` |
+
+22 named rebinding / return-inference / closure canaries green
+(`a_rebound_parameter_widens`, `rebinding_a_parameter_is_local`,
+`return_type_inference`, `infer_return`, `call_return_infer`,
+`true_division_return_type`, `nested_def_own_local_not_a_capture`,
+`nonlocal_escaping_closure`, `block_nested_rebind_widens`, …).
+`test_nilpy_optional_int_none` has no `.expected` and CPython itself raises on
+it, so it was verified byte-identical to the **v387 pinned** binary's output
+instead.
+
+Self-host fixedpoint verified, `converged after 1 round(s)`.
+
+**Test:** `test/test_nilpy_conditionally_rebound_parameter_return.npy`
+(+`.expected`, registered) — seven rows, the four above plus the loop, method
+and nested-def shapes.
+
+**Not closed by this:**
+[[bug-n-a-nested-def-capturing-a-rebound-parameter-uses-the-parameters-type]]
+is a different mechanism (name resolution in the capture scan, not the
+signature) and still fails identically at this sha — re-measured.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.
