@@ -40,3 +40,49 @@ Segmentation fault (core dumped)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+---
+
+## Track T triage, 2026-08-27 — this IS a real NEW-RED, and here is a usable range
+
+**It is not a first-report.** The concern is legitimate in general —
+`diff_jobs()` asks the was-it-passing question with
+`prev_jobs.get(name, "pass")`, so a job never seen before arrives as a NEW-RED
+against a green history it never had. That is **not** what happened here.
+Walking the committed history of `tstate/plexus.json`, this job's recorded
+status was:
+
+| tstate commit | run date | status |
+|---|---|---|
+| `854c315fe` | 2026-08-27T20:26:39Z | **pass** |
+| `c0840ac21` | 2026-08-27T20:53:44Z | **fail** |
+
+A real recorded green immediately prior. The regression is genuine.
+
+**Ignore the `bad=` in the stub.** `b898d0543fc8` is docs-only
+(`devdocs/dev/session-roster.md`); nothing in it can break a NilPy test. It is
+the sha that was TESTED, not a cause — with buildable commits swept only
+incidentally, a bisect has no fine-grained ladder to land on.
+
+**The honest range, and it is short.** `test-nilpy` runs in the
+**limited/full** tiers only, so a `native` run does not refresh these job
+entries — the map carries them forward. The last-good is therefore the last
+*deep* run, not the last run of any tier:
+
+- last full run with **0** nilpy new-reds: `8b2cc332791e` @ 20:09:39Z
+- first full run reporting this red: `b898d0543fc8` @ 20:46:26Z
+
+Seventeen commits sit between them and **only two touch a buildable file**:
+
+| sha | commit | lane |
+|---|---|---|
+| `218ce1eaf` | fix(rtl): AnsiQuotedStr, and TryStr* zeroes its value on failure | B |
+| `19dc5586e` | fix(nilpy): type a method call by the METHOD, not a same-named intrinsic | N |
+
+**`19dc5586e` is the prime suspect** — it changes how a method call is typed
+when an intrinsic shares the name, which is the exact shape of both failing
+tests (a parent method call; `startswith`, which is both a string method and an
+intrinsic). Start there, and confirm by building at `8b2cc332791e` vs
+`19dc5586e` rather than by reading the diff.
+
+*Triaged by Track T (face 2) from tstate; the fix belongs to the owning lane.*
