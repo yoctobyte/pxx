@@ -5,11 +5,10 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:21 blocked:8 backlog:265 backlog_new:1 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2532 rejected:46`
+`working:2 unfinished:21 blocked:8 backlog:265 backlog_new:1 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2533 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-p-a-generic-methods-out-of-line-header-binds-to-a-same-named-non-generic-class` [P] — owner: frankA
 - `feature-opt-o3-register-pressure` [O] — owner: frank-optimize
 - `feature-target-wasm` [A+B] — owner: frankwasm
 

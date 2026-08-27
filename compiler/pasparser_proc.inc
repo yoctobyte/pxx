@@ -474,6 +474,7 @@ procedure ParseSubroutine;
 var
   pzi      : Integer;  { pFixedLen/pFixedLo entry-zero loop }
   nonGenCi : Integer;  { ordinary class sharing a generic template's name }
+  wasDelphiGenHdr : Boolean;  { this `X.M` header was `X<T>.M` in the source; the mode-Delphi rewrite deleted the group. See GenMethImplSOff. }
   isFunc   : Boolean;
   name     : AnsiString;
   retType  : TTypeKind;
@@ -623,14 +624,38 @@ begin
 
       Resolve it by asking which class actually DECLARES this method, rather
       than by the spelling -- the two are indistinguishable here by construction.
-      A `X<T>.M` header never reaches this branch (CurTok would be '<', not '.'),
-      so nothing is taken away from the generic side; when no ordinary class of
-      the name exists, FindUClass fails and the behaviour is exactly as before. }
+      In objfpc that is the whole story: the source spells both headers `X.M`
+      and they really are indistinguishable.
+
+      In mode Delphi it is NOT, and this comment used to claim otherwise -- "a
+      `X<T>.M` header never reaches this branch (CurTok would be '<', not '.')".
+      DelphiRewriteGenericUses deletes the `<T>` group before the parser gets
+      here, so such a header arrives spelled `X.M` and lands squarely in this
+      branch, where the FindUMeth test above then gives the template's body to
+      the ordinary class. The wasDelphiGenHdr test below restores what the
+      rewrite dropped; when no ordinary class of the name exists, FindUClass
+      fails and the behaviour is exactly as before. }
     if depth >= 0 then
     begin
-      nonGenCi := FindUClass(name);
-      if (nonGenCi >= 0) and (FindUMeth(nonGenCi, GetTokenStr(TokPos)) >= 0) then
-        depth := -1;
+      { ...unless the header DID say `<T>` and the mode-Delphi rewrite deleted it
+        (GenMethImplSOff, defs.inc). Then the source was never ambiguous and the
+        template is the answer by construction -- asking which class declares the
+        method would hand the template's body to the ordinary class, whose scope
+        lacks the template's class vars, and every one of them would be reported
+        undefined. The class-name token is Tokens[TokPos-2]: `Next` leaves CurTok
+        holding Tokens[TokPos-1], which is the dot.
+        bug-p-a-generic-methods-out-of-line-header-binds-to-a-same-named-non-generic-class }
+      wasDelphiGenHdr := False;
+      if TokPos >= 2 then
+        for i := 0 to GenMethImplCount - 1 do
+          if GenMethImplSOff[i] = Tokens[TokPos - 2].SOffset then
+            wasDelphiGenHdr := True;
+      if not wasDelphiGenHdr then
+      begin
+        nonGenCi := FindUClass(name);
+        if (nonGenCi >= 0) and (FindUMeth(nonGenCi, GetTokenStr(TokPos)) >= 0) then
+          depth := -1;
+      end;
     end;
     if depth >= 0 then
     begin
