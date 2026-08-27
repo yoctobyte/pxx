@@ -1,0 +1,49 @@
+# A member of a RESOLVED module, used as a VALUE rather than called. This is how
+# Python spells a callback drawn from a module — `sorted(xs, key=mod.keyfn)`,
+# `handlers = {"a": mod.on_a}`, `map(mod.parse, rows)` — and none of it
+# compiled: `mod.f(1)` worked one line earlier, but with no argument list the
+# qualifier was consumed and the member then failed BARE-name resolution, so the
+# diagnostic was `undefined variable (f)`, naming an identifier nobody wrote
+# alone. Compile-time, so every shape below was a wall rather than a wrong
+# answer.
+# bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable
+
+import nilpy_modhelper
+import nilpy_modhelper as mh
+
+# the CALL spelling, the control that always worked
+print(nilpy_modhelper.twice(4))
+
+# assignment — the shape the ticket was filed on
+h = nilpy_modhelper.twice
+print(h(5))
+
+# ...and through an ALIAS, which is a separate binding
+g = mh.twice
+print(g(6))
+
+# argument position
+print(list(map(nilpy_modhelper.twice, [1, 2, 3])))
+print(sorted([3, 1, 2], key=mh.twice))
+
+
+def apply_to(fn, v):
+    return fn(v)
+
+
+print(apply_to(nilpy_modhelper.twice, 7))
+
+# dict value and list element
+handlers = {"double": nilpy_modhelper.twice}
+print(handlers["double"](8))
+fns = [mh.twice, nilpy_modhelper.twice]
+print(fns[0](9), fns[1](10))
+
+# it is a real function OBJECT, not an address: str() of it renders as one
+print(str(h)[:10])
+
+# the members that are NOT procs must keep their own paths
+print(nilpy_modhelper.COUNT, mh.NAMES[1])
+print(nilpy_modhelper.Box(7).get())
+BoxRef = nilpy_modhelper.Box
+print(BoxRef(11).get())

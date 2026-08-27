@@ -13471,7 +13471,7 @@ function PyMakeFuncValue: Integer;
   a nil receiver and every consumer (pycallback_call*, the tkinter dispatcher)
   handles both. Returns -1 when the token is not a def name, so callers fall
   through to their existing handling. CurTok is the identifier. }
-var pi: Integer;
+var pi, quIdx, qpi: Integer; qMemb: AnsiString;
 begin
   Result := -1;
   if not isNilPy then Exit;
@@ -39724,6 +39724,7 @@ var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hois
     castTk2: TTypeKind;   { postfix tail on a record-factory result }
     helperPi, wrapperArg, wrapperCall, sci: Integer;
     isLiftedCall, isCStringCall: Boolean;
+    qvUnit, qvPi: Integer; qvMemb: AnsiString;   { `mod.f` as a VALUE — bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable }
     capSym: Integer;   { NilPy nested-def capture actual (feature-nilpy-nested-defs) }
     derefNode: Integer;   { ...through its frame cell, when it has one (SymCellPtr) }
     capIdx: Integer;   { PXXDBG=n.caps probe cursor }
@@ -41104,6 +41105,56 @@ begin
         CurASTNode := node;
         LastExprTk := tyPointer;
         Exit;
+      end;
+
+      { The same value, MODULE-QUALIFIED — `map(mod.parse, rows)`,
+        `{"a": mod.on_a}`, `sorted(xs, key=mod.keyfn)`, `[mod.f, mod.g]`,
+        `g(mod.f)`. This is how Python spells a callback drawn from a module,
+        and none of it compiled: the arm above excludes a following '.' (that
+        exclusion is right — `str.lower` is a different construct), and the
+        qualified paths further down all need a '(' to fire, so with no
+        argument list the qualifier was consumed and the member then failed
+        BARE-name resolution. The diagnostic was `undefined variable (f)`,
+        naming an identifier the programmer never wrote alone, which is what
+        made it read as a scoping bug rather than a spelling one.
+
+        Beside the bare arm and through the same builder, deliberately: `f`,
+        `str.lower`, `list` and now `mod.f` are four spellings of ONE construct
+        — the callable value of a name — and the copy of this logic that used
+        to live here drifted twice before it was deleted (see the note above).
+
+        Guards, in order: the member must not be CALLED (an ordinary qualified
+        call is untouched), the qualifier must not be a real symbol (a local
+        named like a module keeps its field access — ConsumeUnitQualifier's own
+        rule), the qualifier must name a unit, and the member must resolve to a
+        proc in THAT unit, exact case, because Python names are case-sensitive
+        and Pascal's proc lookup is not.
+        bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable }
+      if isNilPy and (CurTok.Kind = tkIdent) and (TokPos + 1 < TokCount) and
+         (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos + 1].Kind = tkIdent) and
+         ((TokPos + 2 >= TokCount) or (Tokens[TokPos + 2].Kind <> tkLParen)) and
+         (FindSym(name) < 0) then
+      begin
+        qvUnit := PyFindUnitDotted(name);
+        if qvUnit >= 0 then
+        begin
+          qvMemb := GetTokenStr(TokPos + 1);
+          qvPi := FindProcInUnit(qvMemb, qvUnit);
+          if (qvPi >= 0) and (Procs[qvPi].Name <> qvMemb) then qvPi := -1;
+          if qvPi >= 0 then
+          begin
+            node := PyMakeFuncValueFor(qvPi, qvMemb);
+            if node >= 0 then
+            begin
+              Next;                { the module name }
+              Next;                { '.' }
+              Next;                { the member }
+              CurASTNode := node;
+              LastExprTk := tyVariant;
+              Exit;
+            end;
+          end;
+        end;
       end;
 
       { A NilPy def nested in another def is registered QUALIFIED

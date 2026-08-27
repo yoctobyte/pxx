@@ -1048,6 +1048,18 @@ test-nilpy: $(COMPILER)
 	# `from mod import NAME as ALIAS` for a value, a def and a class
 	./$(COMPILER) -Futest test/test_nilpy_from_import_as_alias.npy $(TESTTMP)/test_nilpy_fromas26
 	$(TESTTMP)/test_nilpy_fromas26 | diff -u test/test_nilpy_from_import_as_alias.expected -
+	# ...and the same module's members used as VALUES rather than called —
+	# `h = mod.f`, `map(mod.f, xs)`, `key=mod.f`, `{"k": mod.f}`, `[mod.f]`,
+	# and passed as an argument. Every one of them was a COMPILE ERROR,
+	# `undefined variable (f)`, naming an identifier nobody wrote alone: the
+	# call spelling resolves through the unit qualifier, and with no '(' the
+	# qualifier was consumed and the member fell to bare-name resolution.
+	# The rows that are NOT procs (a const, a list, a class, a class used as a
+	# value) are controls: they had their own working paths and must keep them.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable
+	./$(COMPILER) test/test_nilpy_module_member_as_a_value.npy $(TESTTMP)/test_nilpy_modmemval26
+	$(TESTTMP)/test_nilpy_modmemval26 | diff -u test/test_nilpy_module_member_as_a_value.expected -
 	./$(COMPILER) test/test_nilpy_lambda_expression_body.npy $(TESTTMP)/test_nilpy_lamexpr26
 	$(TESTTMP)/test_nilpy_lamexpr26 | diff -u test/test_nilpy_lambda_expression_body.expected -
 	./$(COMPILER) test/test_nilpy_immediate_lambda_call.npy $(TESTTMP)/test_nilpy_iife26
@@ -9822,6 +9834,17 @@ test-core: $(COMPILER)
 	# a sibling .py MODULE: unit scoping, its own initialisation, both import forms
 	./$(COMPILER) test/test_nilpy_py_module_import.npy $(TESTTMP)/test_nilpy_py_module_import26
 	test "$$($(TESTTMP)/test_nilpy_py_module_import26)" = "$$(printf 'module init ran\nprogram body\n8\n8\n3 3 b\n9\n7')"
+	# ...and that same module's members used as VALUES rather than called —
+	# `h = mod.f`, `map(mod.f, xs)`, `key=mod.f`, `{"k": mod.f}`, `[mod.f]`, and
+	# passed as an argument. Every one was a COMPILE ERROR, `undefined variable
+	# (f)`, naming an identifier nobody wrote alone: the call spelling resolves
+	# through the unit qualifier, and with no '(' the qualifier was consumed and
+	# the member fell to bare-name resolution. The non-proc rows (a const, a
+	# list, a class, a class as a value) are controls with their own paths.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable
+	./$(COMPILER) test/test_nilpy_module_member_as_a_value.npy $(TESTTMP)/test_nilpy_modmemval26
+	$(TESTTMP)/test_nilpy_modmemval26 | diff -u test/test_nilpy_module_member_as_a_value.expected -
 	./$(COMPILER) test/test_nilpy_ast_literal_eval.npy $(TESTTMP)/test_nilpy_ast_literal26
 	test "$$($(TESTTMP)/test_nilpy_ast_literal26)" = "$$(printf '0.7 0.7 0.5 3\n42 -3 hi\n2\nTrue None\n1 3')"
 	# atexit handlers run at exit (LIFO), io's in-memory buffers behave
