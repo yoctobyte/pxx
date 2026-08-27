@@ -17,6 +17,9 @@
     f  the receiver reached through a cast/selector chain, not just a bare
        variable — the two member-lookup loops in the Pascal parser both have to
        ask about helpers, and this is the one that goes through the second
+    i  a helper method WRITES the extended class's field, unqualified and
+       through Self — a class helper's Self is the instance BY VALUE, and the
+       write has to land on the caller's object, not on a copy
     g  a helper for a BASE class serves a DESCENDANT receiver
     h  ...and the interleaving that makes g and b coexist: the search runs from
        the static type upward and asks, at each class, that class's helper
@@ -37,6 +40,8 @@ type
     function Doubled: Integer;
     function Scaled(k: Integer): Integer;
     function Twice: Integer;
+    procedure Bump;
+    procedure SetTo(v: Integer);
   end;
 
   TBase = class
@@ -73,6 +78,16 @@ end;
 function TBoxHelper.Twice: Integer;
 begin
   Twice := Self.Doubled;
+end;
+
+procedure TBoxHelper.Bump;
+begin
+  Value := Value + 1;
+end;
+
+procedure TBoxHelper.SetTo(v: Integer);
+begin
+  Self.Value := v;
 end;
 
 function TBase.Name: string;
@@ -117,6 +132,10 @@ begin
   WriteLn('a ', b.Doubled);
   WriteLn('e ', b.Scaled(3));
   WriteLn('d ', b.Twice);
+  b.Bump;
+  WriteLn('i  ', b.Value);
+  b.SetTo(7);
+  WriteLn('i2 ', b.Value);
 
   o := TBase.Create;
   WriteLn('b ', o.Name);

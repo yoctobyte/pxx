@@ -3,7 +3,7 @@ track: P
 prio: 58
 type: feature
 blocked-by: []
-status: backlog
+status: done
 summary: "`class helper for TC` is refused with `Expected: :, but got: for` while `record helper for T` and `type helper for T` both work — the third spelling of one concept was never wired. fpc compiles and runs it; the helper method sees the class's fields through Self."
 ---
 
@@ -58,3 +58,25 @@ afterwards.
 `make compiler/pascal26` + a test covering a class helper reading and writing
 the target's fields, a helper on an ancestor reached through a descendant, and
 the record/type helper rows kept as controls + `tools/gate.sh quick`.
+
+## Outcome (2026-08-27) — DUPLICATE, closed by the same change
+
+This is the same ticket as `compat-pascal-class-helpers` (opened 2026-08-05,
+found by the probe; this one 2026-08-22, found by the differential sweep). Both
+were closed by one change; see that ticket's Outcome for the design.
+
+Its two predictions were both right and both load-bearing: `Self` is the object
+pointer BY VALUE, not the target by reference; and the lookup has to resolve
+through the class's ANCESTRY, not an exact match. The ancestry part turned out
+to need more than a widened match — the walk must INTERLEAVE, asking at each
+class for that class's helper before that class's own members, or a descendant's
+own override loses to a base-class helper (FPC answers `d.Name` = the override
+and `TBase(o).Name` = the helper, on the same object).
+
+The gate this ticket asked for is what shipped: `test/test_class_helper_for_a_class.pas`
+covers reading AND writing the target's fields (rows i/i2, unqualified and
+through Self), a helper on an ancestor reached through a descendant (row g),
+and the record/type helper rows stay in test-core beside it as controls.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.
