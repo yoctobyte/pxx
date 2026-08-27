@@ -135,4 +135,4 @@ this ticket's:
 Track B can use the new spellings.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 5a996b4b2.
