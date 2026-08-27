@@ -1119,6 +1119,14 @@ begin
     if (Tokens[i].Kind = tkIdent) and
        (((i + 1 < TokCount) and (Tokens[i + 1].Kind = tkLParen) and
          (CaseEqual(GetTokenStr(i), 'random') or CaseEqual(GetTokenStr(i), 'hexstr') or
+          CaseEqual(GetTokenStr(i), 'octstr') or CaseEqual(GetTokenStr(i), 'binstr') or
+          { FPC System bit scan — one name per width, so eight names. Only the
+            call form: `bsfbyte` is not a plausible variable, but the '(' rule
+            is the one every other name here follows. }
+          CaseEqual(GetTokenStr(i), 'bsfbyte') or CaseEqual(GetTokenStr(i), 'bsrbyte') or
+          CaseEqual(GetTokenStr(i), 'bsfword') or CaseEqual(GetTokenStr(i), 'bsrword') or
+          CaseEqual(GetTokenStr(i), 'bsfdword') or CaseEqual(GetTokenStr(i), 'bsrdword') or
+          CaseEqual(GetTokenStr(i), 'bsfqword') or CaseEqual(GetTokenStr(i), 'bsrqword') or
           CaseEqual(GetTokenStr(i), 'runerror') or CaseEqual(GetTokenStr(i), 'uniquestring') or
           CaseEqual(GetTokenStr(i), 'lo') or CaseEqual(GetTokenStr(i), 'hi') or
           CaseEqual(GetTokenStr(i), 'swap'))) or

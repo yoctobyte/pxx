@@ -306,6 +306,29 @@ function __pxxHwRandom64(var v: UInt64): Boolean;
   (HexStr($1234, 2) = '34'), zero-padding on the right ('0012'). }
 function HexStr(Val: Int64; cnt: Integer): AnsiString;
 
+{ FPC System.OctStr/BinStr: the same shape as HexStr above, in base 8 and
+  base 2 — truncating on the left, zero-padding on the right. Measured against
+  FPC 3.2.2: OctStr(8,3)='010', OctStr(255,2)='77', BinStr(5,4)='0101'. }
+function OctStr(Val: Int64; cnt: Integer): AnsiString;
+function BinStr(Val: Int64; cnt: Integer): AnsiString;
+
+{ FPC System BIT SCAN: Bsf = index of the lowest set bit, Bsr = index of the
+  highest, both 0-based from the least significant bit. A ZERO argument answers
+  255 in every width — FPC's sentinel, not an index, and the reason these
+  cannot just be a log2. Measured against FPC 3.2.2. One name per width, as
+  FPC spells them (no overloading): the width decides the answer, so leaving it
+  out would silently widen and return a plausible wrong number, exactly as the
+  Lo/Hi note below records. FPC's own compiler uses BsfQWord for ispowerof2
+  (cutils.pas:960). }
+function BsfByte(v: Byte): Byte;
+function BsrByte(v: Byte): Byte;
+function BsfWord(v: Word): Byte;
+function BsrWord(v: Word): Byte;
+function BsfDWord(v: Cardinal): Byte;
+function BsrDWord(v: Cardinal): Byte;
+function BsfQWord(v: QWord): Byte;
+function BsrQWord(v: QWord): Byte;
+
 { FPC System.RunError(n): report a runtime error and terminate with exit code
   n. FPC also prints the faulting address; there is no portable way to get a
   meaningful one here, so just the number. }
@@ -487,6 +510,89 @@ begin
     Result[i] := digits[Integer(Val and $F) + 1];
     Val := Val shr 4;
   end;
+end;
+
+{ OctStr/BinStr: HexStr's loop with a different mask and shift. Kept as three
+  separate loops rather than one radix parameter because that is how FPC spells
+  the surface, and a shared helper would have to take the digit table anyway. }
+function OctStr(Val: Int64; cnt: Integer): AnsiString;
+const
+  digits = '01234567';
+var
+  i: Integer;
+begin
+  if cnt < 0 then cnt := 0;
+  SetLength(Result, cnt);
+  for i := cnt downto 1 do
+  begin
+    Result[i] := digits[Integer(Val and $7) + 1];
+    Val := Val shr 3;
+  end;
+end;
+
+function BinStr(Val: Int64; cnt: Integer): AnsiString;
+var
+  i: Integer;
+begin
+  if cnt < 0 then cnt := 0;
+  SetLength(Result, cnt);
+  for i := cnt downto 1 do
+  begin
+    if (Val and 1) <> 0 then Result[i] := '1' else Result[i] := '0';
+    Val := Val shr 1;
+  end;
+end;
+
+{ Bit scan. The zero case answers 255 BEFORE the loop, so the loop itself can
+  assume a set bit exists and needs no exhaustion guard. Each width scans only
+  its own bits: a wider loop on a narrower value would be correct but the
+  sentinel would not, which is the whole reason FPC names them by width. }
+function BsfQWord(v: QWord): Byte;
+var i: Integer;
+begin
+  if v = 0 then begin Result := 255; Exit; end;
+  i := 0;
+  while (v and 1) = 0 do begin v := v shr 1; Inc(i); end;
+  Result := Byte(i);
+end;
+
+function BsrQWord(v: QWord): Byte;
+var i: Integer;
+begin
+  if v = 0 then begin Result := 255; Exit; end;
+  i := 0;
+  while v > 1 do begin v := v shr 1; Inc(i); end;
+  Result := Byte(i);
+end;
+
+function BsfDWord(v: Cardinal): Byte;
+begin
+  if v = 0 then Result := 255 else Result := BsfQWord(QWord(v));
+end;
+
+function BsrDWord(v: Cardinal): Byte;
+begin
+  if v = 0 then Result := 255 else Result := BsrQWord(QWord(v));
+end;
+
+function BsfWord(v: Word): Byte;
+begin
+  if v = 0 then Result := 255 else Result := BsfQWord(QWord(v));
+end;
+
+function BsrWord(v: Word): Byte;
+begin
+  if v = 0 then Result := 255 else Result := BsrQWord(QWord(v));
+end;
+
+function BsfByte(v: Byte): Byte;
+begin
+  if v = 0 then Result := 255 else Result := BsfQWord(QWord(v));
+end;
+
+function BsrByte(v: Byte): Byte;
+begin
+  if v = 0 then Result := 255 else Result := BsrQWord(QWord(v));
 end;
 
 procedure RunError(errnum: Integer);
