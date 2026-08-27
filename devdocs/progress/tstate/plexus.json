@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-27T01:57:30Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "6261a8a5ad09e254d51de0c60f0101873179e5a7",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-27T02:03:51Z",
    "fixed": [],
    "new_red": [],
@@ -454,6 +445,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "2f24bc1cf6d595fc15f44e72dec31fb5371ba35a",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T11:48:43Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "03d293061f4019001b04bf21c25a4951e3f0466e",
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
@@ -2074,6 +2074,7 @@
   "test-core#src:test/test_nilpy_lambda_capture.npy": "native",
   "test-core#src:test/test_nilpy_lambda_container_result.npy": "native",
   "test-core#src:test/test_nilpy_lambda_default_override.npy": "native",
+  "test-core#src:test/test_nilpy_lambda_returned_directly.npy": "native",
   "test-core#src:test/test_nilpy_lazy_map_filter.npy": "native",
   "test-core#src:test/test_nilpy_loop_else.npy": "native",
   "test-core#src:test/test_nilpy_membership_bool_return.npy": "native",
@@ -5302,6 +5303,7 @@
   "test-core#src:test/test_nilpy_lambda_capture.npy": "pass",
   "test-core#src:test/test_nilpy_lambda_container_result.npy": "pass",
   "test-core#src:test/test_nilpy_lambda_default_override.npy": "pass",
+  "test-core#src:test/test_nilpy_lambda_returned_directly.npy": "pass",
   "test-core#src:test/test_nilpy_lazy_map_filter.npy": "pass",
   "test-core#src:test/test_nilpy_loop_else.npy": "pass",
   "test-core#src:test/test_nilpy_membership_bool_return.npy": "pass",
@@ -6902,14 +6904,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-27T11:39:45Z",
+  "date": "2026-08-27T11:48:43Z",
   "deadline": 7200.0,
-  "sha": "2f24bc1cf6d595fc15f44e72dec31fb5371ba35a",
+  "sha": "03d293061f4019001b04bf21c25a4951e3f0466e",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 309.2
+  "wall": 311.7
  },
  "last_bench": {
   "conf_rows": 550,
