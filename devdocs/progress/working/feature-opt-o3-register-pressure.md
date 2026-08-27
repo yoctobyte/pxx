@@ -1022,3 +1022,51 @@ SysUtils`, and a `git pull` between the two hash runs (the v389 pin) had updated
 `lib/rtl` underneath. Re-running **both** sides back to back gave 48/48.
 Compare against a baseline you regenerate now, not one from earlier in the
 session.
+
+### 2026-08-28 — CORRECTION to the entry above: the self-compile regression was not real either
+
+The `~2-6% slower self-compile` reported for item 1 does not survive a
+properly-powered measurement, and the number should not be used. It was
+produced the same way the mandelbrot artifact was — interleaved, but with only
+3-4 repetitions of a 17-second workload on a box whose load moved between 8 and
+16. "Reproduced in three runs" was three under-powered runs sharing a bias, not
+three confirmations.
+
+Re-measured, all interleaved in single runs:
+
+| workload | reps | before | after | |
+| --- | --- | --- | --- | --- |
+| self-compile of `compiler.pas` at `-O3` | **min of 6** | 16.92 s | 16.97 s | **+0.3%** |
+| compile `hello.pas` | min of 15 | 0.20 s | **0.16 s** | new is FASTER |
+| compile the residency stress program | min of 15 | 0.58 s | 0.58 s | identical |
+| `callheavy` (trip count 3, 20M calls) | min of 7 | 0.56 s (`-O2`), 0.56 s (old `-O3`) | **0.51 s** | new is FASTER |
+| `looplong` (same body, trip count 3000) | min of 7 | 0.23 s | **0.20 s** | new is FASTER |
+
+**So the honest summary of item 1 is: 1.9-2.1x on tight scalar loops, and
+neutral-to-slightly-positive everywhere else measured.** No workload measured
+here is slower.
+
+**The hypothesis the regression supported is also dead, and it was tested
+directly rather than abandoned.** `callheavy` was written specifically to be the
+shape the per-call-cost story predicts a loss for — a small body, a three-
+iteration loop, twenty million calls — and residency makes it 9% **faster**, not
+slower. Residency's save/init/restore is evidently cheap relative to what even
+three iterations of removed loads buy. The "benefit scales with trip count,
+cost is per call" model is not wrong in principle, but the per-call cost is too
+small to have produced the regression that motivated it, because there was no
+regression.
+
+What this does NOT change: the `loads >= 3` result (worse on both workloads)
+stands — it was measured inside a single interleaved run against both
+comparators. And `-O2` remains untouched and byte-identical, which was never a
+timing claim.
+
+**Method, now applied to itself.** The entry above this one records the lesson
+that only binaries timed inside one interleaved run are comparable. That was
+right and insufficient: this measurement WAS interleaved and still wrong,
+because **3-4 reps cannot resolve a 5% effect on a 17-second workload on a
+contended box.** The playbook entry has been extended accordingly. The
+generalisable form: interleaving fixes *which* runs you compare, repetition
+fixes *how confidently*, and a short workload with many reps beats a long
+workload with few. `hello.pas` at min-of-15 gave a cleaner answer in two
+minutes than `compiler.pas` at min-of-3 gave in ten.

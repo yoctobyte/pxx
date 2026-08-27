@@ -1199,6 +1199,19 @@ change made to fix a measurement inherits every weakness of that measurement,
 and a *comment* asserting the cause outlives the measurement entirely. The
 comment would have been read for years as a finding. It was a load average.
 
+**Interleaving alone is not enough, and the same slice proved that too.** Having
+adopted the rule above, the same session then reported a "~2-6% slower
+self-compile", *interleaved*, "reproduced in three runs" — and it evaporated at
+higher repetition (min of 6: +0.3%; and the same compiler was FASTER on a
+min-of-15 short-compile workload). Three under-powered runs share a bias; they
+do not confirm each other. **Interleaving fixes WHICH runs you may compare;
+repetition fixes how confidently.** Concretely, on this box: 3-4 reps cannot
+resolve a 5% effect on a 17-second workload, and **a short workload with many
+reps beats a long workload with few** — `hello.pas` at min-of-15 settled in two
+minutes what `compiler.pas` at min-of-3 had got wrong in ten. If the effect you
+are claiming is smaller than ~10%, say how many reps produced it, or do not
+claim it.
+
 ## Regenerate the baseline; never reuse one from earlier in the session
 
 The same slice checked that an `-O3`-gated pass had not disturbed `-O2`, by
