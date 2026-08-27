@@ -4857,6 +4857,10 @@ end;
   user object needs it HERE, where the receiver has no static class. }
 function PyUserArithCall1(selfObj, otherObj: TObject; const otherV: Variant;
                           const dunder: AnsiString; var res: Variant): Boolean; forward;
+{ ...and its arity-3 twin, for `obj[k] = v`. Same reason it is forward-declared
+  here: pyvar_setitem needs it and it is defined far below. }
+function PyUserSetitemCall(selfObj: TObject; const k: Variant;
+                           const val: Variant): Boolean; forward;
 
 function pyvar_getitem(const v: Variant; const key: Variant): Variant;
 var o: TObject; ki: Int64; tg: Int64; uv: Variant; nilo: TObject;
@@ -5016,6 +5020,13 @@ end;
 procedure pyvar_setitem(const v: Variant; const key: Variant; const val: Variant);
 var o: TObject; ki: Int64;
 begin
+  { CHECK THE TAG BEFORE CASTING, exactly as pyvar_getitem does — the same
+    predicate written in two places, and only one of them had it. An unguarded
+    cast dereferences a STRING's character data as an object and reads a VMT
+    pointer out of string bytes. `s[0] = "x"` is a TypeError in Python, so this
+    is the message CPython gives, not a crash. }
+  if pyvartag(v) <> 7 then
+    raise TypeError.Create('object does not support item assignment');
   o := TObject(pyvarobj(v));
   if o is TPyDict then
     TPyDict(o).store(key, val)
@@ -5024,6 +5035,13 @@ begin
     ki := PPyVarRec(@key)^.Payload;
     TPyList(o).put(ki, val);
   end
+  { A USER class arriving as a bare variant handle — the write side of the
+    __getitem__ arm pyvar_getitem already carries. A statically-typed receiver
+    dispatches __setitem__ in the frontend; this one has no static class, so a
+    list ELEMENT, a call RESULT and a fresh construction each raised the
+    TypeError below for a class that plainly declares the member.
+    bug-n-a-dunder-subscript-through-a-dynamically-typed-receiver-is-lost }
+  else if PyUserSetitemCall(o, key, val) then
   else
   begin
     raise TypeError.Create('object does not support item assignment');
@@ -18374,6 +18392,15 @@ type
   TPyArithD = function(self: Pointer; const other: Variant): Double;
   TPyArithB = function(self: Pointer; const other: Variant): Boolean;
   TPyArithO = function(self: Pointer; const other: Variant): Pointer;
+  { ...and the ARITY-3 shape, for `__setitem__(self, k, v)`. Both extra
+    parameters are unannotated in the ordinary spelling, so both arrive tk=22.
+    The RESULT is ignored — Python's __setitem__ returns nothing — but the ABI
+    still has to match what the frontend emitted, and an unannotated def with no
+    value-returning return registers as an Int64 (measured: `PXXDBG=n.ret` says
+    tk=1 for `def __setitem__(self, k, v)`), so both that and the Variant shape
+    are declared. bug-n-a-dunder-subscript-through-a-dynamically-typed-receiver-is-lost }
+  TPySet2I = function(self: Pointer; const k: Variant; const v: Variant): Int64;
+  TPySet2V = function(self: Pointer; const k: Variant; const v: Variant): Variant;
 
 { ONE dunder call, shared by every boolean binary dunder this unit dispatches
   at run time. Looks `dunder` up on selfObj's class and calls it with otherObj,
@@ -18680,6 +18707,53 @@ end;
   str, an int, a float, a bool, a list and a mixed pair — and an unrecognised
   kind answers False so the caller keeps its existing behaviour rather than
   calling through a pointer whose ABI has not been checked. }
+{ `obj[k] = v` on a USER class reached as a bare variant handle — the arity-3
+  twin of PyUserArithCall1, and the write side of the arm pyvar_getitem has
+  carried since bug-nilpy-a-chained-subscript-does-not-see-getitem. Without it
+  pyvar_setitem knew only TPyDict and TPyList, so every dynamically-typed
+  receiver — a list ELEMENT, a call RESULT, a fresh construction — raised
+  "object does not support item assignment" for a class that plainly declares
+  __setitem__, while the identical store through a NAMED receiver worked
+  (the frontend dispatches that one on the static class).
+  bug-n-a-dunder-subscript-through-a-dynamically-typed-receiver-is-lost }
+function PyUserSetitemCall(selfObj: TObject; const k: Variant;
+                           const val: Variant): Boolean;
+var cls: PClassRTTI; mi: PMethInfo; pk: PInt64; rk: Int64;
+    fi: TPySet2I; fv: TPySet2V; dummy: Variant;
+begin
+  PyUserSetitemCall := False;
+  if selfObj = nil then Exit;
+  { this unit's own containers have their own store rules and must not come
+    here — pyvar_setitem tests them first, and this is the belt to that brace }
+  if (selfObj is TPyList) or (selfObj is TPyDict) or (selfObj is TPyBytes) then Exit;
+  cls := GetInstanceRTTI(Pointer(selfObj));
+  if cls = nil then Exit;
+  mi := PyFindDunder(cls, '__setitem__');
+  if mi = nil then Exit;
+  if mi^.Arity <> 3 then Exit;
+  if mi^.ParamKinds = nil then Exit;
+  pk := PInt64(mi^.ParamKinds);
+  if (pk[1] <> 22) or (pk[2] <> 22) then Exit;   { key and value must be Variants }
+  rk := mi^.RetKind;
+  { The result is DISCARDED — Python's __setitem__ answers nothing — but the
+    return ABI still has to be the one the body was compiled with, so an
+    unrecognised RetKind declines rather than guessing. }
+  if (rk = 1) or (rk = 13) or (rk = 11) or (rk = 15) or (rk = 2) then
+  begin
+    fi := TPySet2I(mi^.Code);
+    if fi(Pointer(selfObj), k, val) = 0 then ;   { discarded }
+    PyUserSetitemCall := True;
+    Exit;
+  end;
+  if rk = 22 then
+  begin
+    fv := TPySet2V(mi^.Code);
+    dummy := fv(Pointer(selfObj), k, val);
+    PyUserSetitemCall := True;
+    Exit;
+  end;
+end;
+
 function PyUserArithCall1(selfObj, otherObj: TObject; const otherV: Variant;
                           const dunder: AnsiString; var res: Variant): Boolean;
 var cls: PClassRTTI; mi: PMethInfo; pk: PInt64; rk: Int64;
