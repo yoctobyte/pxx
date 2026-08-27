@@ -158,3 +158,4 @@
 2026-08-27T01:04:44Z	plexus	33576b46c7271a9b845e4682eecdf2c099e9df6d	would NOT pin 33576b46c727 — 1 red(s) the current pin does not have: test-nilpy#src:test/test_nilpy_star_unpack_into_a_collecting_callee.npy
 2026-08-27T01:33:54Z	plexus	b7bd58c416470d5401b83d6416d0c143eff5d38f	would NOT pin b7bd58c41647 — 1 red(s) the current pin does not have: test-nilpy#src:test/test_nilpy_star_unpack_into_a_collecting_callee.npy
 2026-08-27T02:23:23Z	plexus	8d22db657f99ba84980258e7a0170b31eae1556d	would NOT pin 8d22db657f99 — 1 red(s) the current pin does not have: test-nilpy#src:test/test_nilpy_star_unpack_into_a_collecting_callee.npy
+2026-08-27T02:55:39Z	plexus	1fccd96974e72e90ab6a0bf2806a4cfc95188663	would NOT pin 1fccd96974e7 — 1 red(s) the current pin does not have: test-nilpy#src:test/test_nilpy_star_unpack_into_a_collecting_callee.npy
