@@ -134,4 +134,4 @@ tables. `hasattr(b'ab', '__len__')` and `hasattr('s', '__getitem__')` were False
 ones matter most — change 3 touches a predicate every ambiguous call consults.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 2be0c863f.
