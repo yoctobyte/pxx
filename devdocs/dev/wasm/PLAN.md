@@ -116,6 +116,12 @@ The `br_table` dispatch loop; the 5 control-flow IR ops.
 
 - **Milestone:** `if`/`while`/`for`/`case`/`goto` all correct. This is where the
   differential probe starts earning its keep.
+- **Known cap, measured 2026-08-27:** the layout costs one nested `block` per
+  basic block, and `wat2wasm` (wabt 1.0.36) SIGSEGVs at ~9000 nesting while V8
+  accepts 9015 without complaint. The engine is not the limit; wabt's recursive
+  text parser is. Binary emission is unaffected — only the WAT debug oracle is
+  capped, exactly where a big function makes you want it. Details and the two
+  mitigations in [`phase5-exceptions.md`](phase5-exceptions.md).
 
 ## Phase 4 — calls and code addresses **(first shared-file escape)**
 
@@ -138,9 +144,21 @@ check after each call, branching to the frame's landing label.
 
 - **Milestone:** `try`/`except`/`finally`, nested, with the native build as
   oracle.
-- **Risk:** this is the one design that has not been prototyped. If nested
-  `try` does not compose cleanly with `br_table`, find out here, cheaply, on a
-  standalone prototype — not after Phase 4 is built on the assumption.
+- **~~Risk: not prototyped~~ — retired 2026-08-27. It is now prototyped**, and
+  the design holds: [`phase5-exceptions.md`](phase5-exceptions.md),
+  `test/wasm/proto/check.sh`. Five compositions (nested finally-in-except, an
+  exception across two frames, escape from a loop, catch-and-re-raise, and
+  `break`/`Exit` through a finally) produce a trace identical to the native
+  build, with `$sp` balanced across the unwind paths. Three things the plan did
+  not say, now known: the finally continuation is **one i32 local** that absorbs
+  normal/unwind/break/continue/Exit alike; there is **no runtime handler stack**
+  at all, in or across frames, because landing pads are statically known; and
+  the post-call check **must** dominate every use of the call's result — which
+  wasm's validator enforces structurally, so bad codegen fails validation rather
+  than returning a wrong answer.
+- **Still open** (see that doc's last section): raise-inside-finally, typed
+  handlers and the exception object's refcount lifecycle, and anything crossing
+  `call_indirect`, which waits on Phase 4.
 
 ## Phase 6 — the PAL
 
@@ -194,6 +212,11 @@ smaller than the C frontend was.
   the `IR_PROCADDR` question answered favourably, three fall-through chains
   found and handed to Track A. Phase 1 now waits on one thing only:
   `feature-a-wasm32-target-registration-skeleton` landing on `master`.
+- 2026-08-27 — **Phase 5 de-risked ahead of schedule.** With Phase 1 gated on
+  the registration skeleton landing on `master`, the branch spent the wait on
+  the one thing this plan flagged as unproven. Design confirmed against the
+  native build; the wabt nesting limit measured; write-up in
+  `phase5-exceptions.md`, prototype in `test/wasm/proto/`.
 - 2026-08-27 — **re-cut from `master`.** The branch was originally cut from
   `dev`, which had been retired the previous day (collapse `8b2a6bae6`) and was
   379 commits behind. The block on a prerequisite refactor was lifted in the
