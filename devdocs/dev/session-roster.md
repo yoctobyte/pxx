@@ -6221,3 +6221,39 @@ does not answer. **Before calling any tree disposable, run `pgrep -af <path>`.**
   checkout whose `CLAUDE.md` describes the retired `dev` branch model, which is
   exactly what produced four tickets filed to `dev` earlier today. So: no agent
   is dispatched there. `~/frank.sh` excludes it by name and now says why.
+
+### Reboot survival — what comes back on its own, and what does not
+
+Checked before the owner's planned reboot, rather than assumed.
+
+**Comes back by itself:**
+- **The Track T watcher daemon.** `trackt-watcher.service` is a systemd *user*
+  unit, `is-enabled` = enabled, `WantedBy=default.target`, `Restart=on-failure`,
+  and `loginctl show-user neo` reports `Linger=yes` — so it starts at boot
+  without anyone logging in.
+- **Credentials.** `~/.claude/.credentials.json`, mode 600, holds the OAuth
+  refresh token on disk. No keyring unlock in the path.
+- **The trees and their seeds.** Plain files.
+
+**Does NOT come back, and this is the one that would have been missed:**
+- **The twatch web dashboard (port 8377).** `trackt-watcher.service`'s ExecStart
+  is `twatch.py` *alone*; the Flask UI is spawned by `trackt`, and nothing runs
+  `trackt` at boot. Its config says `web=on(:8377)`, which makes the gap look
+  closed when it is not — the setting is honoured by `trackt up`, not by the
+  unit. Today it survives only as an orphaned process adopted by `systemd --user`
+  (parent PID 1904), started by hand at 07:26 on 2026-08-26.
+
+  Fixed in `~/frank.sh`, which now runs
+  `trackt --clone ~/trackt-watch up --no-daemon --no-attach` and then prints T's
+  health. `--no-daemon` so it does not race systemd; the call is idempotent and
+  was verified against the live, already-serving UI without disturbing it.
+
+  Printing T's health at fleet start is not decoration: **when Track T is down,
+  every lane's gate widens** from `make compiler/pascal26` to a full local run
+  (CLAUDE.md). That is worth knowing *before* dispatching six agents.
+
+- **Anything mid-flight.** A `testmgr --tier native` run was in progress; the
+  reboot kills it. The watcher re-runs on restart, so this costs time, not state.
+
+Pre-existing and unrelated: `pxx-idf-install.service` is in `failed` (ESP-IDF
+install). Not part of this stack.
