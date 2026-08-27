@@ -7512,3 +7512,74 @@ the compiler reproduces **itself at `-O2`** and is silent on `lib/rtl`, the
 reproductions is corroboration of the same narrow property, not breadth — exactly
 the claims-discipline distinction CLAUDE.md draws, where *the binary is identical
 to our own previous output* says nothing about anything the binary compiles.
+
+## frankA closed both nested-type defects with ONE change — and the method is the transferable part
+
+`7ee75329e` (fix + test + both tickets), `f89211022` (rung-6 status). Gate green,
+fgl corpus 7/7, the 17-program generics sweep unchanged.
+
+**The cause was the missing half of a rule that already existed.**
+`AddClassLikeType` registers a nested type under its **qualified** name once the
+bare name is taken in the unit — that is what keeps `TOuter.TInner` and
+`TOther.TInner` distinct — and its own comment says the qualified spelling and a
+bare one inside the owner's body should *"find the same entry"*. Only the
+qualified path was ever wired: every `FindNestedType` call site keys on a dot. A
+bare reference from inside the body fell through to the flat unit table and found
+whichever same-named type was registered **first**.
+
+For a generic, whose nested types are re-materialised per instantiation on
+purpose, that means **every instantiation after the first shares the first one's
+nested type**. Both symptoms are that one collision seen from two sides: *"no such
+member"* on a field that is plainly there, and a clean compile that runs
+specialization one and segfaults on two.
+
+**What identified it was ORDERING, not reading.** Whichever template was
+specialized *second* broke, and swapping the source order moved the error to the
+other one; distinct nested names always worked. That is the `debugging-playbook`
+rule paying out — two plausible stories collapsed into one measured cause by
+varying the shape, not by reasoning about the code.
+
+The fix is the lookup the registration side already assumed existed:
+`ParseTypeKind` consults `FindNestedType(ParsingClassBodyCi, name)` before the
+flat table for a bare name inside a class body, and takes record-vs-class from
+that entry rather than re-deriving it from the name. Qualified path untouched.
+**Not a new rule — the missing half of an existing one**, which is
+`normalise-dont-special-case.md` in its cheapest possible form.
+
+### frankA declined to call rung 6 ready, and was right
+
+All seven walls the generics ticket predicts are now clear locally — type-keyword
+method names, untyped `constref`, cross-unit generics, interface and class
+constraints, `TArray<T>`, nested types. frankA wrote into the ticket that **this
+is a statement about its probes, not about `rtl-generics`**, because the real
+9.5k-line corpus is not vendored. Exactly the stale-claim discipline the day kept
+teaching: *"all walls cleared"* must not be allowed to read as *"rung ready"*.
+
+## Two coordinator calls on frankA's asks — one filed already, one dispatched, neither escalated
+
+**(1) The Track B typinfo ask: DO NOT FILE. It exists.**
+`devdocs/progress/backlog/feature-typinfo-facade-unit.md`, prio 72, and its
+frontmatter already carries `Blocks: feature-pascal-corpus-generics`. The chain
+frankA wanted to create is modelled. frankB has it queued next after the
+workaround-revert batch. Filing it again would have been the day's stale-claim
+pattern in its fourth costume — a real gap, filed twice, ranked twice.
+
+**(2) The fetcher entry: frankA adds it, no hand-off.**
+`packages/rtl-generics` genuinely is not fetched — I checked. The one `generic`
+hit in `tools/install_lib_candidates.sh` is `fetch_fpc_rtl`'s comment about
+**`fgl.pp`**, a different unit for a different rung, and it is the kind of near-miss
+that reads as coverage. Ownership question resolved on the lanes' actual purpose:
+
+- `install_lib_candidates.sh` is **not in Track T's enumerated set** (testmgr,
+  twatch, `tstate/**`, `fuzz.sh`, `pasmith*`). It is corpus provisioning for a
+  **Track P** ladder rung.
+- The letters exist to stop two agents editing one file at once, and frankT is
+  provably in other files. **No collision, so no hand-off** — a hand-off here
+  would buy nothing and cost a round trip through a busy lane.
+- The work is mechanical and has a template in the same file: `fetch_fcl_json`
+  already pulls `packages/…` from the same pinned FPC commit.
+
+frankT told as a courtesy, not asked for permission. This is the "trivial
+judgement calls" the owner delegated, and the alternative — a Track T ticket to
+add nine lines to a file nobody is holding — is the ceremony the lane rules
+explicitly say the letters are *not* for.
