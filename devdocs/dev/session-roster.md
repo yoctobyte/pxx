@@ -7936,3 +7936,83 @@ to lift it.** Filed, ranked, repro'd, and waiting. Noting the count because *thr
 is a different conversation from *two* if the owner ever asks what N is holding —
 and one of them is a segfault that blocks a Track B revert, which is the highest-
 weight item the parked lane contains.
+
+## v389 IS UNVERIFIED — pin verify is STARVED, and the cause is the dial I own
+
+frankT confirmed rather than assumed, and the answer is not the reassuring one.
+~4h after the pin, tstate's `pin_verify` block still reads **`ver=v388`**. v389 has
+**no verification at all**, and three lanes are building on it — frankB has already
+landed three workaround reverts against it.
+
+**This is starvation, not a fault.** The watcher is healthy: `--status` exits 0,
+native is current, breadth is 33m old and 8 testable commits behind. Only pin
+verify is starved, and it is the documented shape — `IDLE_YIELD_AFTER`'s own note
+in `twatch.py` records that pin verify outranks breadth deliberately, wants ~21
+**contiguous** minutes, and is preempted by pushes round after round, so
+`pin_verify_due` never goes false and the phase below it is never reached. That
+note was written from a measured 5h13m window with the watcher idle 54% of it.
+Tonight's push rate is higher.
+
+**The uncomfortable part, stated plainly: the binary every track is building with
+is the one thing nobody has swept.**
+
+### This is a SECOND argument against the same dial, and it is not the one I already weighed
+
+I ruled out a sixth worker on **memory contention**. This is a **coverage**
+argument for the same dial, and it is sharper: at five workers the push rate keeps
+`do_test` true often enough that pin verify's contiguous block never arrives. The
+current five are already past the rate at which the pin gets checked.
+
+**I am still not culling** — killing a busy session destroys uncommitted work, the
+only state here with no backup. But the lever I already committed to turns out to
+be exactly the right one:
+
+> **The lull is created by NOT REFILLING**, which is already the standing policy.
+> As each lane finishes its current item, leave the slot empty. Pin verify takes
+> the first contiguous block it gets.
+
+That is the cheapest possible fix and it costs nothing extra, because the
+alternative — dispatch to fill capacity — was already forbidden. Worth noticing
+that the two constraints agree: the policy that protects the token cap also
+protects the pin's verification.
+
+### Coordinator call: BUILD the targeted-verdict queue, ahead of the fuzzing
+
+frankT offered it and asked. **Yes, top of its list.**
+
+The reasoning is about which cost expires. Fuzzing's value is real and does not
+decay — a differential oracle finds the same bugs next week. **The unverified-pin
+window does decay, and badly**: it is precisely the interval in which every lane
+compounds work on an unswept artifact. And pin verify is the *only* sweep whose
+subject is the thing all lanes depend on rather than a thing one lane produced.
+
+Structurally it is the better fix than waiting for a lull, because it removes the
+dependency on a lull entirely and pays out on **every future pin**, not just this
+one. `verify_pin` already proves the out-of-band shape, so pointing it at an
+arbitrary pin on request is small. Charter fit is clean: fuzzing is explicitly
+spare-cycle work; closing a hole under the blessed binary is not.
+
+### frankT declined to retune the idle ladder, for the second time tonight, on the same principle
+
+It could plausibly raise pin verify's yield budget or reserve it a slot the way
+`breadth_overdue()` does — and said doing that **while five workers are live**
+would be making a scheduling change under the exact load it is meant to be
+evaluated against. Same call as the `opt` row it left alone. Twice in one night it
+found a correct change and declined to land it under conditions that would have
+made the result unreadable. **That is the discipline that keeps a tuning change
+from being indistinguishable from the load that provoked it.**
+
+### A correction I asked for and am honoring: the estimator rule was NOT an unprompted insight
+
+I wrote up frankT's `mem` finding as looking at *what each number decides* rather
+than at the data. frankT corrected it: it looked at the **data first**, and the
+data said nothing (a 4% breach on one class). What pointed at admission was **the
+report's own phrasing** — *"admitted it on a promise the box did not have to
+keep."*
+
+The tool said the right thing in the right words, and the engineer followed it.
+Recorded that way deliberately, because the sub-lesson is more useful than the
+flattering version: **write diagnostics that name the DECISION that was made, not
+just the number that was wrong.** A message saying "521 MB exceeded a 500 MB
+estimate" would have produced a corrected constant. A message saying a job was
+*admitted* on a broken promise produced a fix to the learner.
