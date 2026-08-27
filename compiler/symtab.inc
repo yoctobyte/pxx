@@ -7082,8 +7082,41 @@ function MatchParamCompatible(i, j: Integer; aTk: TTypeKind): Boolean;
   `not (TypesCompatible(...) or ProcParamUntyped[...])` sites instead is how the
   previous additions went in, and two of them are already spelled slightly
   differently from the others. normalise-dont-special-case.md. }
+var si: Integer;
 begin
   Result := TypesCompatible(Procs[i].Params[j].TypeKind, aTk) or MatchArgNilOk(i, j);
+  { ...then NARROW the blanket `tyPointer <- tyClass` rule TypesCompatible grants,
+    which cannot narrow itself: it sees two KINDS and the answer needs the
+    pointer's ELEMENT. Same architectural gap MatchArgNilOk exists to close, and
+    for the same reason -- the kind channel is too coarse to decide with.
+
+    The rule is load-bearing and stays: the builtin TObject / `object` parameter
+    type IS a tyPointer whose element is a class, so `P(o: TObject)` must accept
+    any class, and an untyped `Pointer` formal legitimately takes anything. What
+    must NOT be accepted is a pointer to some unrelated RECORD -- there
+    `OnlyPointer(SomeObject)` compiled with no cast written anywhere and read the
+    object's header as the record's fields. Silently, and with no syntax at the
+    call site to warn a reader.
+
+    Second consequence, and the reason this outranks a diagnostic difference: a
+    pointer-taking overload was a VIABLE candidate for a class argument and was
+    then preferred over the exact class match, so typinfo's
+    `GetPropInfo(AnObject, 'Caption')` -- the spelling every FPC consumer uses --
+    bound to the PClassRTTI arm and segfaulted. One narrowing fixes both: a
+    single-candidate call walks this same path, a chain of length one.
+
+    tyUnknown is the untyped-pointer sentinel (`ProcRetPtrElemTk`'s "tyUnknown
+    otherwise"), so it stays permitted along with a class element.
+    bug-p-a-class-instance-converts-implicitly-to-any-typed-pointer }
+  if Result and (aTk = tyClass) and (j >= 0) and (j < MAX_PROC_PARAMS)
+     and (Procs[i].Params[j].TypeKind = tyPointer)
+     and (not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) then
+  begin
+    si := Procs[i].Params[j].SymIdx;
+    if (si >= 0) and (Syms[si].PtrElemTk <> tyUnknown)
+       and (Syms[si].PtrElemTk <> tyClass) then
+      Result := False;
+  end;
 end;
 
 function HasExactCaseSensitiveProc(const name: AnsiString): Boolean;

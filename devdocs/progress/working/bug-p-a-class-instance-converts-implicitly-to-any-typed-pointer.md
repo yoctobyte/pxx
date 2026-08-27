@@ -170,3 +170,59 @@ boundary this session was given while Track O runs in `~/frank-optimize`. Per
 CLAUDE.md a shared-internals change is a Track A change regardless of the Track P
 symptom. Raised with the coordinator rather than edited; analysis above is
 complete and the change is ~15 lines in one function.
+
+## Landed: consequence 1 fixed. Consequence 2 NOT fixed — read this before assuming it is.
+
+`MatchParamCompatible` now narrows the blanket rule by the parameter's element
+type. Verified against binary `f2e90dedc75c` (fixedpoint converged; `gate.sh
+quick` GREEN):
+
+- **The 14-line repro is now a compile error.** The silent memory-safety hole is
+  closed: an object can no longer be read as an unrelated record with no cast
+  written. Message is `no overload of OnlyPointer matches these arguments`
+  rather than FPC's `Incompatible type for arg no. 1` — an error in the same
+  substance, and message parity is low prio by CLAUDE.md's ruling.
+- `test/test_class_arg_to_pointer_param_boundary` still passes byte-identically:
+  `Pointer`, `TObject`, descendants, `nil`, and pointer-to-class all unaffected.
+
+**`GetPropInfo(AnObject, 'Num')` still binds to the `PClassRTTI` arm.** Measured,
+not assumed: instrumenting typinfo's instance arm shows it is still never
+entered, on this binary as on `pinned`.
+
+### Why, exactly — and it is a different defect
+
+A temporary probe inside `MatchParamCompatible` showed the guard **is** reached
+for `GetPropInfo`, and reads:
+
+```
+PXXDBG a.argptr proc=GetPropInfo j=0 symidx=362 ptrelem=0
+```
+
+`ptrelem=0` is `tyUnknown`, the untyped-pointer sentinel — so the narrowing
+treats `cls: PClassRTTI` as an untyped `Pointer` and correctly permits it *by its
+own rule*. **The parameter's pointer element type is simply not recorded.** The
+compatibility logic is now right; the data it reasons over is missing.
+
+So consequence 2 is not "the same bug, still there" — it is a second defect
+underneath: `Syms[Params[j].SymIdx].PtrElemTk` is `tyUnknown` for a parameter
+declared through a **named pointer alias** (`PClassRTTI = ^TClassRTTI`). Fixing
+it means populating that field where parameters are registered
+(`pasparser_proc.inc`, Track P's own file — not shared core), which is beyond
+this ticket's granted `symtab.inc` scope and is filed separately rather than
+smuggled in.
+
+### A caution for whoever picks this up: the synthetic repros prove nothing
+
+Both of mine — a two-overload pair in a program, and the same pair across a unit
+interface — select the instance arm correctly **on `pinned`**. They were never
+broken. I built them, watched them pass, and nearly recorded that as verification
+of the fix; they are the same class of passing probe frankB already warned about
+in the reduction note above. **Only the real `typinfo.pas` call site is
+evidence**, and the instrumented instance arm is how to read it.
+
+That also explains the shape of the original report: the synthetic pairs pass
+because their parameter's element type *is* recorded, so the pointer arm was
+never viable for them in the first place.
+
+**Status:** consequence 1 done and landed; consequence 2 re-diagnosed and
+handed to a follow-up ticket.
