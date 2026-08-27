@@ -4741,7 +4741,11 @@ begin
           EmitVarHelperCall386('PXXVarRetain');
           EmitB($50);                                { push src addr }
           IREmitNode386(IRA[node]);                  { eax = dest addr }
-          EmitVarHelperCall386('PXXVarClear');
+          { ReleasePayload, not Clear: Clear zeroes the 16 slot bytes, and
+            when src and dest alias that wipes what the copy below is about to
+            read — `v := v` came back Empty.
+            bug-a-a-variant-assigned-to-itself-becomes-empty }
+          EmitVarHelperCall386('PXXVarReleasePayload');
           EmitB($89); EmitB($C7);                    { mov edi, eax }
           EmitB($5E);                                { pop esi (src) }
           EmitB($B9); EmitI32(16);                   { mov ecx, 16 }

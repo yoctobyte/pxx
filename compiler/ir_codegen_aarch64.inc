@@ -546,7 +546,16 @@ begin
   EmitFloatCallWriterA64('PXXWriteFloatSci', fracdigits, expdigits, True);
 end;
 
-procedure EmitVariantClearA64;
+procedure EmitVariantClearA64Ex(zeroSlot: Boolean);
+{ x0 = variant slot address. Releases the managed payload and, when zeroSlot,
+  resets the slot to VT_EMPTY. Preserves x0.
+
+  zeroSlot=False is the ASSIGNMENT half — the Pascal twin is
+  PXXVarReleasePayload (builtinheap.pas), whose header carries the full note. In
+  short: a variant-to-variant store is retain(src) / release(dest) / copy 16
+  bytes, and zeroing dest when dest IS src wiped the bytes the copy was about to
+  read, so `v := v` came back Empty.
+  bug-a-a-variant-assigned-to-itself-becomes-empty }
 var pDone, pRel: Integer;
 begin
   { Managed payload = VT_STRING, or any tag in the promotable-int block (a promo
@@ -568,11 +577,24 @@ begin
   EmitStrDecRefA64;
   { .done }
   Patch32(pDone, $5400000B or (((CodeLen - pDone) div 4) and $7FFFF) shl 5);
-  EmitI32($F94003E0);                                           { ldr x0, [sp] }
-  EmitI32($D2800001);                                           { movz x1, #0 }
-  EmitI32($F9000001);                                           { str x1, [x0] }
-  EmitI32($F9000401);                                           { str x1, [x0, #8] }
+  if zeroSlot then
+  begin
+    EmitI32($F94003E0);                                         { ldr x0, [sp] }
+    EmitI32($D2800001);                                         { movz x1, #0 }
+    EmitI32($F9000001);                                         { str x1, [x0] }
+    EmitI32($F9000401);                                         { str x1, [x0, #8] }
+  end;
   EmitI32($F84107E0);                                           { ldr x0, [sp], #16 }
+end;
+
+procedure EmitVariantClearA64;
+begin
+  EmitVariantClearA64Ex(True);
+end;
+
+procedure EmitVariantReleasePayloadA64;
+begin
+  EmitVariantClearA64Ex(False);
 end;
 
 procedure EmitVariantRetainA64;
@@ -3479,7 +3501,10 @@ begin
           EmitVariantRetainA64;
           EmitI32($F81F0FE0);                           { str x0, [sp, #-16]! }
           IREmitNodeAarch64(IRA[node]);                 { x0 = dest addr }
-          EmitVariantClearA64;
+          { ReleasePayload, not Clear: Clear zeroes the 16 slot bytes, and when src and
+            dest alias that wipes what the copy below is about to read — `v := v`
+            came back Empty. bug-a-a-variant-assigned-to-itself-becomes-empty }
+          EmitVariantReleasePayloadA64;
           EmitI32($AA0003E1);                           { mov x1, x0 }
           EmitI32($F84107E0);                           { ldr x0, [sp], #16 }
           EmitI32($A9400C02);                           { ldp x2, x3, [x0] }

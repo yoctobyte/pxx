@@ -5986,6 +5986,16 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_recfldop26 | tail -1)" = "ALL OK"
 	./$(COMPILER) -Fulib/rtl test/test_class_var_of_a_managed_type.pas $(TESTTMP)/test_clsvarmgd26
 	test "$$($(TESTTMP)/test_clsvarmgd26 | tail -1)" = "ALL OK"
+	# `v := v` must leave the variant ALONE. It EMPTIED it instead, on every
+	# target, and leaked the payload while doing so: the retain-before-clear in
+	# each backend's variant-to-variant arm guards the payload's REFCOUNT, and
+	# PXXVarClear then PXXMemZero'd the 16 slot bytes the copy was about to
+	# read. Measured on the pinned binary: FAILED, and 7680kB peak RSS against
+	# 392kB here. Expectations are fpc -O1's own output.
+	# bug-a-a-variant-assigned-to-itself-becomes-empty
+	./$(COMPILER) -Fulib/rtl test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_varselfassign26
+	test "$$($(TESTTMP)/test_varselfassign26 | tail -1)" = "ALL OK"
+	test "$$($(TESTTMP)/test_varselfassign26 | tr '\n' '|')" = "ab|42|2.5|cd|ef|ef|xy|ALL OK|"
 	# A Variant comparison with exactly ONE stringy operand converts the text.
 	# Two implementations of one rule (EmitVarBinOp inline on x86-64,
 	# PXXVarBinOpPas for the other targets) -- this is what notices a drift.
@@ -10223,6 +10233,11 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_cross_float_return.pas $(TESTTMP)/test_i386_fret
 	./$(COMPILER) test/test_cross_float_return.pas $(TESTTMP)/test_i386_fret_x64
 	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fret)" = "$$($(TESTTMP)/test_i386_fret_x64)"
+	# `v := v` must leave the variant alone — it emptied it and leaked the
+	# payload on every target until the clear-vs-release split.
+	# bug-a-a-variant-assigned-to-itself-becomes-empty
+	./$(COMPILER) -Fulib/rtl --target=i386 test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_i386_varselfassign
+	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_varselfassign | tail -1)" = "ALL OK"
 	./$(COMPILER) --target=i386 test/test_cross_variant.pas $(TESTTMP)/test_i386_variant
 	./$(COMPILER) test/test_cross_variant.pas $(TESTTMP)/test_i386_variant_x64
 	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_variant)" = "$$($(TESTTMP)/test_i386_variant_x64)"
@@ -10622,6 +10637,11 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_cross_float_return.pas $(TESTTMP)/test_aarch64_fret
 	./$(COMPILER) test/test_cross_float_return.pas $(TESTTMP)/test_aarch64_fret_x64
 	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_fret)" = "$$($(TESTTMP)/test_aarch64_fret_x64)"
+	# `v := v` must leave the variant alone — it emptied it and leaked the
+	# payload on every target until the clear-vs-release split.
+	# bug-a-a-variant-assigned-to-itself-becomes-empty
+	./$(COMPILER) -Fulib/rtl --target=aarch64 test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_aarch64_varselfassign
+	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_varselfassign | tail -1)" = "ALL OK"
 	./$(COMPILER) --target=aarch64 test/test_cross_variant.pas $(TESTTMP)/test_aarch64_variant
 	./$(COMPILER) test/test_cross_variant.pas $(TESTTMP)/test_aarch64_variant_x64
 	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_variant)" = "$$($(TESTTMP)/test_aarch64_variant_x64)"
@@ -11189,6 +11209,11 @@ test-riscv32: $(COMPILER)
 	# i386/arm32 twins got exactly this wrong once), a Double must be widened to
 	# VT_DOUBLE's 8 bytes on a target with no FPU, and a boxed string must not
 	# leak a reference per store.
+	# ...and the self-assignment fix, which touched all five backends' variant
+	# arms, so riscv32 needs to say so too.
+	# bug-a-a-variant-assigned-to-itself-becomes-empty
+	./$(COMPILER) -Fulib/rtl --target=riscv32 test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_rv32x_varselfassign
+	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_varselfassign | tail -1)" = "ALL OK"
 	./$(COMPILER) -Fulib/rtl --target=riscv32 test/test_cross_variant_payload_widths.pas $(TESTTMP)/test_rv32x_varpay
 	./$(COMPILER) -Fulib/rtl test/test_cross_variant_payload_widths.pas $(TESTTMP)/test_rv32x_varpay_x64
 	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_varpay)" = "$$($(TESTTMP)/test_rv32x_varpay_x64)"
@@ -11463,6 +11488,11 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_arm32_arg_runtime.pas $(TESTTMP)/test_arm32_args
 	./$(COMPILER) test/test_arm32_arg_runtime.pas $(TESTTMP)/test_arm32_args_x64
 	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_args alpha beta)" = "$$($(TESTTMP)/test_arm32_args_x64 alpha beta)"
+	# `v := v` must leave the variant alone — it emptied it and leaked the
+	# payload on every target until the clear-vs-release split.
+	# bug-a-a-variant-assigned-to-itself-becomes-empty
+	./$(COMPILER) -Fulib/rtl --target=arm32 test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_arm32_varselfassign
+	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_varselfassign | tail -1)" = "ALL OK"
 	./$(COMPILER) --target=arm32 test/test_cross_variant.pas $(TESTTMP)/test_arm32_variant
 	./$(COMPILER) test/test_cross_variant.pas $(TESTTMP)/test_arm32_variant_x64
 	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_variant)" = "$$($(TESTTMP)/test_arm32_variant_x64)"

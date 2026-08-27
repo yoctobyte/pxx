@@ -3690,6 +3690,8 @@ var
     exactly as conditional as the status quo: the body calls AnsiStrReleaseAddr
     and ObjReleaseBlobAddr, so any program that can reach it already ran that. }
   VariantClearBlobAddr  : Integer;  { rax = variant slot address; preserves rax }
+  VariantRelPayloadBlobAddr : Integer;  { as above, minus the slot zeroing — the
+                                         assignment path; bug-a-a-variant-assigned-to-itself-becomes-empty }
   VariantRetainBlobAddr : Integer;  { same }
 
   TokChars   : array[0..STRING_CAP-1] of Char;

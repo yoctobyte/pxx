@@ -4074,7 +4074,11 @@ begin
           EmitVarHelperCallArm32('PXXVarRetain');
           EmitI32($E92D0001);                    { push {r0} (src) }
           IREmitNodeArm32(IRA[node]);            { r0 = dest addr }
-          EmitVarHelperCallArm32('PXXVarClear');
+          { ReleasePayload, not Clear: Clear zeroes the 16 slot bytes, and
+            when src and dest alias that wipes what the copy below is about to
+            read — `v := v` came back Empty.
+            bug-a-a-variant-assigned-to-itself-becomes-empty }
+          EmitVarHelperCallArm32('PXXVarReleasePayload');
           EmitI32($E8BD0002);                    { pop {r1} (src) }
           EmitI32($E5912000);                    { ldr r2, [r1] }
           EmitI32($E5802000);                    { str r2, [r0] }

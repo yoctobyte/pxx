@@ -3534,7 +3534,11 @@ begin
           EmitVarHelperCallRISCV32('PXXVarRetain');
           rv32_addi(reg_sp, reg_sp, -8); rv32_sw(reg_a0, reg_sp, 0);
           IREmitNodeRISCV32(IRA[node]);                 { a0 = dest addr }
-          EmitVarHelperCallRISCV32('PXXVarClear');
+          { ReleasePayload, not Clear: Clear zeroes the 16 slot bytes, and
+            when src and dest alias that wipes what the copy below is about to
+            read — `v := v` came back Empty.
+            bug-a-a-variant-assigned-to-itself-becomes-empty }
+          EmitVarHelperCallRISCV32('PXXVarReleasePayload');
           rv32_lw(reg_t1, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 8);  { t1 = src }
           rv32_lw(reg_t2, reg_t1, 0);  rv32_sw(reg_t2, reg_a0, 0);
           rv32_lw(reg_t2, reg_t1, 4);  rv32_sw(reg_t2, reg_a0, 4);

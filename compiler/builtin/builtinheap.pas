@@ -387,6 +387,7 @@ function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeI
 function PXXVarNot(dest: Pointer; src: Pointer): Int64;
 function PXXVarStrAppend(dest: Pointer; right: Pointer): Int64;
 procedure PXXVarClear(v: Pointer);
+procedure PXXVarReleasePayload(v: Pointer);
 procedure PXXVarRetain(v: Pointer);
 procedure PXXWriteVariant(v: Pointer);
 { Exact 17-significant-digit decimal expansion of a finite non-zero |Double|.
@@ -4055,12 +4056,39 @@ procedure PXXVarClear(v: Pointer);
   (bug-nilpy-bound-fn-closure-objects-are-never-freed,
   refactor-a-variant-object-tag-list-lives-in-four-places). }
 begin
+  PXXVarReleasePayload(v);
+  PXXMemZero(v, 16);
+end;
+
+procedure PXXVarReleasePayload(v: Pointer);
+{ PXXVarClear WITHOUT the zeroing — release the managed payload and leave the
+  16 slot bytes alone.
+
+  This is the half a variant-to-variant ASSIGNMENT wants, and calling the full
+  PXXVarClear there was a real bug: the emitters do
+
+      PXXVarRetain(src); PXXVarClear(dest); copy 16 bytes src -> dest
+
+  and the retain-before-release makes the ALIASED case safe for the payload's
+  REFCOUNT — which is what the comment at every one of those sites claimed was
+  the whole story. It is not: when src and dest are the same slot, PXXMemZero
+  wipes the bytes the copy is about to read, so `v := v` copied sixteen zeroes
+  over itself and the variant came back Empty, on every target, where FPC leaves
+  the value. It leaked too: the retain took the payload to +2, the release put
+  it back to +1, and then nothing referenced it.
+
+  Splitting the routine rather than branching on `src = dest` in six emitters:
+  the zeroing was never wanted on this path in the FIRST place — the bytes are
+  overwritten by the copy on the very next instruction — so removing it is the
+  fix and a self-assignment then falls out as the degenerate case (retain +1,
+  release -1, copy a slot onto itself) with no test to get wrong and no branch
+  in the hot path. bug-a-a-variant-assigned-to-itself-becomes-empty }
+begin
   if (PWord(v)^ = VT_STRING_TAG) or
      ((PWord(v)^ >= VT_PROMO_FIRST) and (PWord(v)^ <= VT_PROMO_LAST)) then
     PXXStrDecRef(Pointer(PWord(Int64(v) + 8)^))
   else if (PWord(v)^ >= VT_OBJ_FIRST) and (PWord(v)^ <= VT_OBJ_LAST) then
     PXXObjRelease(Pointer(PWord(Int64(v) + 8)^));
-  PXXMemZero(v, 16);
 end;
 
 procedure PXXVarRetain(v: Pointer);

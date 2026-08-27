@@ -2538,11 +2538,19 @@ begin
   Code[doneOutPatch] := Byte(CodeLen - (doneOutPatch + 1));
 end;
 
-procedure EmitVariantClearBody;
-{ rax = address of a 16-byte variant slot. Release a managed payload, then
-  reset the slot to VT_EMPTY. Preserves the slot address in rax. The jne
-  target is patched manually (not via EmitAsmX64's `.label` form) because it
-  jumps past IREmitCodeCall -- see EmitDynArrayReleaseLocked. }
+procedure EmitVariantClearBody(zeroSlot: Boolean);
+{ rax = address of a 16-byte variant slot. Release a managed payload and, when
+  zeroSlot, reset the slot to VT_EMPTY. Preserves the slot address in rax. The
+  jne target is patched manually (not via EmitAsmX64's `.label` form) because it
+  jumps past IREmitCodeCall -- see EmitDynArrayReleaseLocked.
+
+  zeroSlot=False is the ASSIGNMENT half — the Pascal twin is
+  PXXVarReleasePayload (builtinheap.pas), whose header carries the full note.
+  In short: a variant-to-variant store is retain(src) / release(dest) / copy 16
+  bytes, and zeroing dest when dest IS src wiped the bytes the copy was about to
+  read, so `v := v` came back Empty. The zeroing was never wanted here — the
+  copy overwrites those bytes on the next instruction.
+  bug-a-a-variant-assigned-to-itself-becomes-empty }
 var pDone, pDone2, pHit, pObj, pObj2, pSkip: Integer;
 begin
   { Managed payload = VT_STRING, or ANY tag in the promotable-int block: a promo
@@ -2581,11 +2589,12 @@ begin
   Patch32(pDone, CodeLen - (pDone + 4));
   Patch32(pDone2, CodeLen - (pDone2 + 4));
   Patch32(pSkip, CodeLen - (pSkip + 4));
-  EmitAsmX64([
-    'pop rax',
-    'mov qword [rax], %', VT_EMPTY,
-    'mov qword [rax+8], %', 0
-  ]);
+  EmitAsmX64(['pop rax']);
+  if zeroSlot then
+    EmitAsmX64([
+      'mov qword [rax], %', VT_EMPTY,
+      'mov qword [rax+8], %', 0
+    ]);
 end;
 
 { Does this IR node produce a managed string that is ALREADY owned (+1) by
@@ -2672,7 +2681,15 @@ end;
 procedure EmitVariantBlobs;
 begin
   VariantClearBlobAddr := CodeLen;
-  EmitVariantClearBody;
+  EmitVariantClearBody(True);
+  EmitB($C3);                                     { ret }
+  { The same body without the zeroing, for the assignment path — see
+    EmitVariantClearBody's header. A third blob rather than a flag at the call
+    site because these are position-independent code blobs, and one more of
+    them costs ~96 bytes of image ONCE against a branch at every variant
+    store. }
+  VariantRelPayloadBlobAddr := CodeLen;
+  EmitVariantClearBody(False);
   EmitB($C3);                                     { ret }
   VariantRetainBlobAddr := CodeLen;
   EmitVariantRetainBody;
@@ -2684,6 +2701,15 @@ procedure EmitVariantClear;
   flags, exactly as the inline body did. }
 begin
   IREmitCodeCall(VariantClearBlobAddr);
+end;
+
+procedure EmitVariantReleasePayload;
+{ rax = address of a variant slot. Releases the managed payload and leaves the
+  16 slot bytes ALONE — for the variant-to-variant assignment path, whose copy
+  overwrites them immediately. Preserves rax; clobbers rcx and flags.
+  bug-a-a-variant-assigned-to-itself-becomes-empty }
+begin
+  IREmitCodeCall(VariantRelPayloadBlobAddr);
 end;
 
 procedure EmitVariantRetain;
@@ -7963,12 +7989,16 @@ begin
             EmitB($0F); EmitB($85); pAppendDone := CodeLen; EmitI32(0); { jnz done }
           end;
           { ARC-correct 16-byte variant-to-variant copy. Retain before release
-            makes self-assignment safe. }
+            keeps the payload alive when src and dest alias; ReleasePayload
+            rather than Clear keeps the BYTES alive, which is the half the
+            comment here used to claim and the code did not do — Clear zeroed
+            the slot the copy below was about to read, so `v := v` came back
+            Empty. bug-a-a-variant-assigned-to-itself-becomes-empty }
           IREmitNode(IRB[node]);                 { rax = src addr }
           EmitVariantRetain;
           EmitB($50);
           IREmitNode(IRA[node]);                 { rax = dest addr }
-          EmitVariantClear;
+          EmitVariantReleasePayload;
           EmitB($48); EmitB($89); EmitB($C7);    { mov rdi, rax }
           EmitB($5E);                            { pop rsi }
           EmitB($48); EmitB($C7); EmitB($C1); EmitI32(16); { mov rcx, 16 }
