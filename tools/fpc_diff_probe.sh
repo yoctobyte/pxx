@@ -887,7 +887,12 @@ var arr: array[0..2] of Integer;
 begin arr[0]:=1; arr[1]:=2; arr[2]:=3; writeln(Total(arr),'|',Total([10,20])); end.
 P
 # filed: Low()/High() of an empty array constructor -- part of the same Track U call
-probe param-openarray-empty known <<'P'
+# Untagged and PASSING against a compiler built from master. It still shows as a
+# divergence against the default oracle until the next `chore(stable): pin`,
+# because that oracle is stable_linux_amd64/default/pinned and the pin predates
+# the fix (2026-08-27, Low/High/Length of a `[..]` open-array constructor).
+# Run with PXX_STABLE=./compiler/pascal26 to see it clean.
+probe param-openarray-empty <<'P'
 function Count(const a: array of Integer): Integer; begin Count := Length(a); end;
 begin writeln(Count([]),'|',Low([1,2]),'|',High([1,2])); end.
 P

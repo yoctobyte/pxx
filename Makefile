@@ -8553,6 +8553,22 @@ test-core: $(COMPILER)
 	# has the right ARITY for two arrays and the wrong types. FPC 3.2.2's output.
 	./$(COMPILER) -Fulib/rtl test/test_concat_survives_uses_sysutils.pas $(TESTTMP)/test_concatsu26
 	$(TESTTMP)/test_concatsu26 | diff -u test/test_concat_survives_uses_sysutils.expected -
+	# `[e1,..,en]` as the operand of Low/High/Length is an open-array CONSTRUCTOR,
+	# not a set. It was read as a set and Length answered the BITMASK -- 6 for
+	# [1,2], 544 for [5,9], 0 for a char set -- while Low/High refused it outright.
+	# FPC 3.2.2's output.
+	./$(COMPILER) test/test_open_array_constructor_bounds.pas $(TESTTMP)/test_oabounds26
+	$(TESTTMP)/test_oabounds26 | diff -u test/test_open_array_constructor_bounds.expected -
+	# ...and the neighbouring silent wrong answer, now a refusal: Length(<a set>)
+	# read the 32-byte bitset as a string handle. FPC says Type mismatch.
+	@rm -f $(TESTTMP)/test_lenset26
+	@out=$$(./$(COMPILER) test/test_length_of_a_set_fail.pas $(TESTTMP)/test_lenset26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:26: error: Length: a set has no length' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:27: error: Length: a set has no length' \
+	   && test ! -e $(TESTTMP)/test_lenset26 \
+	  || { echo "test_length_of_a_set_fail: FAIL - rc=$$rc (want rc=1, both set rows refused, no binary)"; printf '%s\n' "$$out"; exit 1; }
 	./$(COMPILER) test/test_ansistring_cast_extern_pchar.pas $(TESTTMP)/test_ansistring_cast_extern_pchar26
 	test "$$($(TESTTMP)/test_ansistring_cast_extern_pchar26)" = "$$(printf 'direct=hello len=5\nviavar=hello len=5')"
 	./$(COMPILER) test/test_ansistring_cast_fnptr.pas $(TESTTMP)/test_ansistring_cast_fnptr26

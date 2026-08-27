@@ -309,10 +309,58 @@ begin
   ASTTk[Result] := Ord(tyPointer);
 end;
 
+function TryFoldBracketCtorLen(var n: Integer): Boolean;
+{ `[e1, ..., en]` as the operand of Low / High / Length is an open-array
+  CONSTRUCTOR, not a set — that is FPC's reading — and the answer is a
+  compile-time COUNT whatever the elements are: Length = n, Low = 0,
+  High = n - 1. Measured against fpc 3.2.2 for `[]`, char elements, string
+  elements and non-constant elements; the count is the whole rule.
+
+  pxx read the brackets as a SET and then took Length of the bitmask, so
+  `Length([1,2])` answered 6 (bits 1 and 2 set), `Length([5,9])` answered 544,
+  `Length(['a','b'])` answered 0 (bits 97 and 98, past the low word) — and
+  Low/High refused the operand outright with `expected array variable or
+  ordinal type`. A silently wrong count is the expensive kind of wrong, and this
+  one looked plausible for small sets: `Length([1])` answered 2.
+
+  Consumes the bracket list, and returns False having consumed NOTHING when the
+  operand does not start with `[`. The element expressions are parsed for their
+  TOKENS and the nodes discarded: the result is a constant, so nothing in them
+  is evaluated — which is what FPC does too. }
+begin
+  TryFoldBracketCtorLen := False;
+  if CurTok.Kind <> tkLBrack then Exit;
+  Next;
+  n := 0;
+  if CurTok.Kind <> tkRBrack then
+  begin
+    ParseExpr;
+    n := 1;
+    while Eat(tkComma) do
+    begin
+      ParseExpr;
+      Inc(n);
+    end;
+  end;
+  Expect(tkRBrack, ']');
+  TryFoldBracketCtorLen := True;
+end;
+
+procedure FoldBracketCtorBound(n: Integer);
+{ The shared tail of the three arms: hand back `n` as a plain Integer constant. }
+begin
+  Expect(tkRParen, ')');
+  CurASTNode := AllocNode(AN_INT_LIT);
+  ASTIVal[CurASTNode] := n;
+  ASTTk[CurASTNode] := Ord(tyInteger);
+  LastExprTk := tyInteger;
+end;
+
 procedure ParseFactorCore;
 var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG node }
     lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
     rndRawArg: Integer;      { round(x, n): the argument node before the float unbox }
+    bcN: Integer;            { element count of a `[..]` open-array constructor operand }
     intBaseArg, atRecv, atFld, atDflt, atProp: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     supPi: Integer;   { __pxxGetInterface, for the three-argument Supports }
@@ -5110,6 +5158,12 @@ begin
          (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');
+        { `High([e1,..,en])` -- an open-array constructor, not a set. }
+        if TryFoldBracketCtorLen(bcN) then
+        begin
+          FoldBracketCtorBound(bcN - 1);
+          Exit;
+        end;
         { High(ordinalType) / High(enum) folds to a compile-time constant. }
         if TryFoldHighLowType(True, node) then
         begin
@@ -5326,6 +5380,12 @@ begin
          (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');
+        { `Low([e1,..,en])` -- an open-array constructor, not a set. }
+        if TryFoldBracketCtorLen(bcN) then
+        begin
+          FoldBracketCtorBound(0);
+          Exit;
+        end;
         if TryFoldHighLowType(False, node) then
         begin
           Expect(tkRParen, ')');
@@ -5464,6 +5524,12 @@ begin
          (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');
+        { `Length([e1,..,en])` -- an open-array constructor, not a set. }
+        if TryFoldBracketCtorLen(bcN) then
+        begin
+          FoldBracketCtorBound(bcN);
+          Exit;
+        end;
         { Length of a string LITERAL folds to its char count at compile time
           (FPC: Length('hello') = 5). Covers the common literal forms without
           the runtime [-8]-header path, which only an lvalue string/array has.
@@ -5493,6 +5559,30 @@ begin
         ParseExpr;
         valNode := CurASTNode;
         Expect(tkRParen, ')');
+        { A SET has no length, and FPC says so — `Type mismatch`. pxx fell
+          through to the runtime -tkLength path, which read the 32-byte bitset as
+          a string handle and answered the low word of the BITMASK: `s := [1,2];
+          Length(s)` printed 6, `[5,9]` printed 544, `['a','b']` printed 0. It
+          looked like a plausible small number for a small set, which is how it
+          survived. Refused rather than given a meaning: FPC has no Length(set),
+          so anything invented here would be pxx-only, and the caller almost
+          certainly meant the element COUNT, which is not what any spelling of
+          this used to return.
+          Excludes an ARRAY operand, and that exclusion is the whole subtlety: an
+          array symbol's TypeKind is its ELEMENT's, so `ds: array of TDays` with
+          `TDays = set of ...` reads as tySet on both the symbol and the node.
+          `Length(ds)` there is the array's length and is entirely legal —
+          test_dynarray_insert_delete has four of them, and they are what caught
+          the first version of this check.
+          bug-p-length-low-and-high-of-a-set-answer-the-bitmask }
+        if (not IsNodeArray(valNode)) and
+           (not ((ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] >= 0) and
+                 (ASTIVal[valNode] < SymCount) and Syms[ASTIVal[valNode]].IsArray)) and
+           ((IntToTypeKind(ASTTk[valNode]) = tySet) or
+            ((ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] >= 0) and
+             (ASTIVal[valNode] < SymCount) and
+             (Syms[ASTIVal[valNode]].TypeKind = tySet))) then
+          ErrorRecover('Length: a set has no length (did you mean the element count?)');
         { Length of a whole 1-D static array is a compile-time constant (FPC
           too): the runtime -tkLength path reads a [data-8] length header,
           which only a dyn array / open-array param has — a bare static array
