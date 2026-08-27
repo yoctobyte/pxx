@@ -432,5 +432,13 @@ begin
     ExcLongJmpAddr := CodeLen;
     ExcRaiseAddr := CodeLen;
     EmitExit(EXITCODE_UNHANDLED_EXCEPTION);
-  end;
+  end
+  else if TargetArch = TARGET_WASM32 then
+    Error('wasm32: exception runtime not implemented (setjmp/longjmp has no '
+          + 'wasm lowering — the module needs the exception-handling proposal '
+          + 'or a trampoline)')
+  else
+    Error('compiler error: no exception runtime for target '
+          + TargetArchName(TargetArch)
+          + ' — add an arm here when adding a target');
 end;

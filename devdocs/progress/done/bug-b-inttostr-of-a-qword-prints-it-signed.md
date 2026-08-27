@@ -4,13 +4,14 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "IntToStr(q) where q: QWord >= 2^63 prints a NEGATIVE number — IntToStr(High(QWord)) answers -1 — because sysutils declares only IntToStr(Int64) and the QWord argument is passed through it. WriteLn(q) is correct, so the same value prints two different ways in one program. UIntToStr does not exist at all. Overload resolution on QWord vs Int64 already works, so this is purely two RTL functions."
+owner: frankB
 ---
 
 # `IntToStr` of a QWord prints it signed
 
 - **Type:** bug (**silent wrong VALUE** in ordinary formatting) — Track B
   (`lib/rtl/sysutils.pas`).
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-21, from an integer-arithmetic differential against
   FPC 3.2.2 while working Track A.
 
@@ -79,3 +80,44 @@ rows and `High(QWord)`/`High(Cardinal)`/`High(Word)` round-tripping.
 `High(QWord)` is itself refused by the compiler today
 (`error: undefined variable (QWord)` inside `High(...)`), which is a separate
 Track A gap — file it if you need it for the test, or write the literal.
+
+## Log
+- 2026-08-27 — resolved, commit 0b2f731b6.
+
+## Resolution (2026-08-27, frankB)
+
+Fixed as one of a three-ticket cluster with
+[[bug-b-inttostr-of-a-qword-above-2-63-renders-negative]] and
+[[bug-b-format-percent-u-prints-a-signed-value]] — one missing mechanism, three
+symptoms. `lib/rtl/sysutils.pas` had **no** unsigned decimal renderer at all: it
+parsed unsigned (`StrToQWord`/`StrToQWordDef`/`TryStrToQWord` all present) and
+printed signed, through the single `IntToStr(Int64)`.
+
+Rather than teach each caller to handle signedness, ONE unsigned digit loop was
+added and everything routes through it
+(`devdocs/dev/normalise-dont-special-case.md`):
+
+- `function UIntToStr(value: QWord): AnsiString` — the loop. `div`/`mod` by 10
+  are unsigned because the operand type is QWord.
+- `function UIntToStr(value: Cardinal): AnsiString` — FPC's 32-bit spelling,
+  widens into the same loop.
+- `function IntToStr(value: QWord): AnsiString; overload` — delegates.
+  `IntToStr(Int64)` gained `overload` beside it.
+- `Format`'s `'d', 'u':` arm split; `%u` recovers the argument's width from the
+  variant tag exactly as `%x` already did, then renders through `UIntToStr`.
+
+`High(QWord)` compiles fine now, so the ticket's closing note about it being a
+Track A gap is stale — the test uses it.
+
+Regression: `test/lib_qword_render.pas` + `.expected`, wired into `make
+lib-test`. 29 rows, byte-identical to fpc 3.2.2, and it deliberately keeps the
+rows that were already RIGHT (`WriteLn`, `Str`, `IntToHex`, `%x`) as controls —
+the value was never wrong, only its rendering.
+
+Gate: `make lib-test` green, `make demos` 35/35 (both against stable v388).
+
+**Not touched, and deliberately:** `Format('%d', [q])` of a QWord prints signed
+in FPC too, and `IntToStr(Cardinal)` keeps picking the Int64 arm — both are
+asserted in the test as fpc's own answers. The sibling one lane up,
+`bug-p-qword-div-by-a-literal-above-2-63-is-signed`, is a compiler bug in
+`NormalizeUnsignedLiteralOperand` and stays Track A/P's.

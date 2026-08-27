@@ -1274,6 +1274,11 @@ const
   TARGET_ARM32   = 3;
   TARGET_XTENSA  = 4;
   TARGET_RISCV32 = 5;
+  { wasm32 is REGISTERED but has no backend: every dispatch chain it reaches
+    errors explicitly (feature-a-wasm32-target-registration-skeleton). The
+    registration lands ahead of the codegen so the wasm branch adds only new
+    files and never merges a shared one until it emits. }
+  TARGET_WASM32  = 6;
   XTENSA_ABI_CALL0    = 0;
   XTENSA_ABI_WINDOWED = 1;
   { Platform / OS axis — independent of the CPU axis above. posix = hosted
@@ -1765,6 +1770,9 @@ var
   { Active substitution set for SpecializeStream (param name -> concrete token),
     filled by each caller right before streaming. Multi-param generics
     substitute all entries in one pass. }
+  SpecSubShadowed : array[0..MAX_TEMPLATE_PARAMS-1] of Boolean;  { a type parameter whose name the TEMPLATE also declares (field/param/local/method). Accumulated across every SpecializeStream call for one template -- the class body and each method body are separate calls, and a field declared in the body is used in the methods. Keyed on the template, NOT the specialization: SetSpecSubs runs once per stream, so resetting per specialization cleared it between the class body and the methods. See SpecSubNamePosition. }
+  SpecSubShadowTi : Integer;  { the template SpecSubShadowed was accumulated for }
+  SpecSubShadowValid : Boolean;  { has SpecSubShadowTi been set at all? A Boolean rather than a -1 sentinel so BSS zero-init already means "not computed" -- template index 0 is a real index and would alias a sentinel. }
   SpecSubNames  : array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
   SpecSubValues : array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
   SpecSubKinds  : array[0..MAX_TEMPLATE_PARAMS-1] of TTokenKind;
@@ -4621,6 +4629,7 @@ begin
     TARGET_ARM32:   TargetArchName := 'arm32';
     TARGET_XTENSA:  TargetArchName := 'xtensa';
     TARGET_RISCV32: TargetArchName := 'riscv32';
+    TARGET_WASM32:  TargetArchName := 'wasm32';
   else
     TargetArchName := '<unknown target>';
   end;

@@ -7217,3 +7217,116 @@ against the boundary: `NormalizeUnsignedLiteralOperand` bails on
 `ASTIVal[lit] < 0`, and 2^63 stored in an Int64 **is** negative, so the literal
 keeps its signed type and QWord(−1) enters a signed divide. Same value through a
 variable is correct, which is what makes it silent.
+
+## 2026-08-27 — W1 SIZED AND DISCONFIRMED; the prize is a one-line admission rule. Four lanes running.
+
+The "size the prize before building it" instruction paid on its first use, and
+the answer inverts the umbrella's plan for the second time in one day.
+
+### W1 is worth ~1.4%. Do not build the operand scheduler for speed.
+
+`frank-optimize-b4` bounded W1 **before** writing any of it, by hand-writing
+`Run`'s actual `-O3` loop body as raw asm plus five progressively-optimized
+variants and timing them in one process. All from `591ae8160f69` (the seeded
+fixedpoint at HEAD), box at load 7-13, A/B alternating, min of 5, every variant
+returning the identical result and agreeing with `fpc -O2`.
+
+| variant | s | vs shipped |
+| --- | --- | --- |
+| V0 — shipped `-O3` body (17 insns) | 1.142 | 1.00x |
+| **V1 — W1 applied (11 insns)** | **1.133** | **1.01x** |
+| V4 — `s` also resident, dual-write kept | 0.702 | 1.63x |
+| V2 — W1 + store→reload elimination | 0.630 | 1.81x |
+| V5 — all three resident, dual-write kept | 0.368 | 3.10x |
+| V3 — true allocation, no frame traffic | 0.171 | 6.68x |
+
+**Deleting 6 of 17 instructions changed nothing measurable.** The 5-of-21 static
+share frankA measured is real and *irrelevant* — those instructions were never on
+the critical path. W1 drops to a code-size item.
+
+**Why the model is evidence and not a story: it was calibrated at BOTH ends before
+use.** The transcription of the shipped body runs 1.147s against the real `-O3`
+binary's 1.14s; the ideal-allocation variant runs 0.171s against real `fpc -O2`'s
+0.23s. A hand-written asm model that reproduces both the thing it models and the
+target it chases can carry a conclusion. One calibrated at neither end cannot.
+**Given the coordinator had just been caught trusting an uncalibrated 1.29x, this
+distinction is the whole reason to accept the result.**
+
+### The real prize: `s` misses the cut by one while three registers idle
+
+`PXXDBG=a.resid` — frankA's probe, committed this morning — on the same body:
+
+```
+TALLY proc=Run sym=i count=4  freegpr=4   ASSIGN sym=i reg=r12
+TALLY proc=Run sym=s count=3  freegpr=4
+TALLY proc=Run sym=j count=2  freegpr=4
+```
+
+Giving `s` a register is **1.63x** alone; all three **3.10x** — *keeping the
+dual-write exactly as designed*. **A loop-carried accumulator must never sit in
+the frame while GPRs idle.**
+
+**This EXPLAINS frankA's experiment rather than overturning it**, and the
+distinction matters for how the ticket reads: their `three.pas` already had `s`
+resident at count 5, so lowering the threshold only ever admitted `j` — the
+load-poor candidate, correctly worth ~0. Their conclusion *"threshold stays at
+> 3"* is true as measured. What the measurement actually contains is that **the
+METRIC is wrong, not the threshold** — and frankA's own corollary, *rank by
+LOADS not loads+stores*, written as a footnote for a hypothetical W2, **is the
+pass.**
+
+**Two agents measuring the same mechanism from different angles and converging is
+the system working.** Note also that this was findable only because frankA
+committed `PXXDBG=a.resid` rather than leaving it scratch: the thresholds are
+invisible in emitted bytes, since a local that just missed the cut and one that
+was never a candidate emit identical frame traffic. That call paid within hours.
+
+**Revised ranking, adopted:** (1) residency admission by loads + no idle GPRs —
+small, inside the shipped `UnifiedResidencyAssign`; (2) store→reload elimination
+for resident destinations, whose stated exclusion reason stopped being true at
+`e7c0d1d2a`; (3) dropping the dual-write inside a loop — the real W2, much bigger;
+(4) W1, size only.
+
+**Scope stated up front by the worker, unprompted:** this bounds tight scalar
+loops (mandelbrot-class), **not** the self-compile, which the ticket already
+measures as memory-bound. It explicitly declined to quote a self-compile figure it
+had not taken — the stale-1.29x lesson applied before anyone had to apply it. Item
+1 must be measured on `make compiler/pascal26` separately and reported as its own
+number even if it is ~1.0x.
+
+Item 1 changes *which programs get which registers*, so unlike today's promotions
+it is not gate-constant-only: lands behind `-O3`, full differential discipline,
+`-O2` promotion a separate later decision.
+
+### Dispatch state — four lanes, and the ordering rule that produced it
+
+| session | lane | on |
+| --- | --- | --- |
+| frankA | **P** | `feature-pascal-corpus-expansion` (p75); released the O umbrella at `7edd1dfca` |
+| frank-optimize-b4 | **O** | `feature-a-wasm32-target-registration-skeleton` FIRST, then item 1 |
+| frankB | **B** | the QWord-printed-signed cluster (3 tickets, one root cause) |
+| frankwasm | A+B | **blocked** on registration; told to expect it and not to land it itself |
+| frankT | T | holding for a quiet box to run the promotion verdict |
+
+**Registration went to `frank-optimize`, not frankA, and the reason is file
+ownership rather than priority.** It touches 9 shared files — `ir_codegen.inc`,
+`symtab.inc`, `defs.inc`, `lexer.inc`, `emit.inc`, `elfwriter.inc`,
+`exception_emit.inc`, `coroutine_emit.inc`, `parser.inc` — which is the slot
+frank-optimize now holds. Giving it to frankA would have put two agents back in
+`ir_codegen.inc`, the exact hazard the handover removed an hour earlier. Told
+explicitly that this is a one-off toll for holding the shared-file slot, not a
+redefinition of its lane.
+
+**Why it outranks a multi-hour optimization project:** `frankwasm` is fully
+blocked on it and nothing else, and it named that single blocker itself. **A
+blocked lane that names its one blocker gets unblocked; one that reports being
+blocked in general waits.** Worth saying to any lane that finds itself stuck.
+
+**Owner correction taken, and it stands:** *"i assigned you the task of
+coordinator yet you insist on asking the human."* Decisions taken rather than
+escalated this cycle — N stays deprioritized (the instruction already exists, no
+answer needed, stop re-raising it); *broad spectrum* for frank-optimize means the
+whole cost surface, spanning A-owned codegen and B-owned RTL/allocator perf, each
+ticket obeying the gate of the lane owning the file; concurrency is the owner's
+call, already made, dropped. The standing bar: escalate genuine forks, not
+questions the code or an existing instruction already answers.

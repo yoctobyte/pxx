@@ -204,7 +204,21 @@ function ExceptObject: TObject;
 function SysBackTraceStr(Addr: Pointer): string;
 
 { Int64 -> decimal string (covers Integer via widening). Handles negatives. }
-function IntToStr(value: Int64): AnsiString;
+function IntToStr(value: Int64): AnsiString; overload;
+
+{ QWord -> UNSIGNED decimal string. A family and not one Int64 routine for the
+  same reason IntToHex is one: without this arm a QWord argument widens into
+  the signed spelling and every value at or above 2^63 comes back negative --
+  IntToStr(High(QWord)) answered -1 while WriteLn of the same variable printed
+  18446744073709551615, so one program rendered one value two ways.
+  ([[bug-b-inttostr-of-a-qword-prints-it-signed]]) }
+function IntToStr(value: QWord): AnsiString; overload;
+
+{ FPC SysUtils.UIntToStr: the explicit unsigned spelling, and the one place the
+  unsigned digit loop lives -- IntToStr(QWord) and Format's '%u' both route
+  here, so signedness is decided once rather than per caller. }
+function UIntToStr(value: QWord): AnsiString; overload;
+function UIntToStr(value: Cardinal): AnsiString; overload;
 
 { Uppercase hexadecimal of value, left-zero-padded to at least Digits chars
   (FPC SysUtils.IntToHex). Negative values use their two's-complement bits —
@@ -987,6 +1001,39 @@ begin
   FMessage := Format(msg, args);
   FHelpContext := 0;
 end;
+{ The unsigned digit loop, and the only one in this unit. `div`/`mod` by 10
+  are UNSIGNED here because the operand type is QWord, which is exactly what the
+  signed body could not do for a value with the top bit set. }
+function UIntToStr(value: QWord): AnsiString;
+var s: AnsiString; d: QWord;
+begin
+  if value = 0 then
+  begin
+    Result := '0';
+    Exit;
+  end;
+  s := '';
+  while value > 0 do
+  begin
+    d := value mod 10;
+    s := Chr(Ord('0') + Integer(d)) + s;
+    value := value div 10;
+  end;
+  Result := s;
+end;
+
+{ Cardinal widens into the QWord loop losslessly; declared so FPC source that
+  spells the 32-bit call explicitly compiles unchanged. }
+function UIntToStr(value: Cardinal): AnsiString;
+begin
+  Result := UIntToStr(QWord(value));
+end;
+
+function IntToStr(value: QWord): AnsiString;
+begin
+  Result := UIntToStr(value);
+end;
+
 function IntToStr(value: Int64): AnsiString;
 var s: AnsiString; neg: Boolean; d: Int64;
 begin
@@ -3922,10 +3969,26 @@ begin
 
     piece := '';
     case c of
-      'd', 'u':
+      'd':
         begin
           if argIdx < Length(args) then
             piece := FmtIntPrec(IntToStr(FmtArgInt(args[argIdx])), hasPrec, prec);
+          Inc(argIdx);
+        end;
+      'u':
+        begin
+          { NOT a synonym for 'd': it shared that arm, so '%u' of any negative
+            bit pattern printed the signed value. Width is recovered from the
+            variant tag exactly as '%x' below does it -- FmtArgInt sign-extends
+            a 32-bit argument on the way in, and '%u' of Integer(-1) is
+            4294967295, not the 64-bit two's complement.
+            ([[bug-b-format-percent-u-prints-a-signed-value]]) }
+          if argIdx < Length(args) then
+          begin
+            iv := FmtArgInt(args[argIdx]);
+            if FmtArgIs32(args[argIdx]) then iv := Int64(LongWord(iv));
+            piece := FmtIntPrec(UIntToStr(QWord(iv)), hasPrec, prec);
+          end;
           Inc(argIdx);
         end;
       'x', 'X':

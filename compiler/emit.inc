@@ -197,7 +197,8 @@ begin
   Fixups[FixCount].CodePos := CodeLen; Fixups[FixCount].DataOff := dataOff;
   Inc(FixCount);
   if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
-     (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
+     (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) or
+     (TargetArch = TARGET_WASM32) then
     EmitI32(0)
   else
     EmitI64(0);

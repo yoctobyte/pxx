@@ -153,3 +153,38 @@ Recorded while closing the `High`/`Low` operand row of
 `bug-p-every-compile-time-intrinsic-hand-rolls-its-own-operand-parser`;
 `test/test_high_low_operand_shapes.pas` pins every row that DOES agree and says
 in its header which two do not.
+
+## A generic's own type-parameter name, reused as a member/param/local name
+
+**pxx accepts; FPC rejects.** Recorded 2026-08-27 while fixing
+`bug-p-a-nested-type-may-name-a-field-after-an-enclosing-type-parameter`.
+
+Inside `generic TG<T> = class ... end`, the type parameter `T` is in the class's
+scope, so FPC 3.2.2 treats a field, parameter, local or method also named `T` as
+a redeclaration:
+
+| shape | FPC 3.2.2 | pxx |
+| --- | --- | --- |
+| `generic TG<T> = class private t: T; ... end` | `Duplicate identifier "T"` | compiles |
+| `procedure TG.S(const t: T)` | `Duplicate identifier "T"` | compiles |
+| `procedure TG.S(...); var t: T;` | `Duplicate identifier "T"` | compiles |
+| `generic TG<T> = class procedure T(...); end` | `overloaded identifier "T" isn't a function` | compiles |
+| **`public type TRec = record t: T; end`** | **accepted** | **accepted** (this one was the bug) |
+
+The last row is the one that matters and is NOT a divergence: a nested type is
+its own scope, so `record t: T` is legal in both, and it is
+`TDictionary<K,V>.TPair`'s exact shape. pxx used to reject it, which is what the
+fix addressed.
+
+The first four rows fall out of that fix rather than being chosen: the
+substitution pass now recognises name positions, so it stops corrupting them,
+and there is no scope model at that layer to tell "nested type's scope" from
+"the class's own scope" and refuse only the latter. That is the
+**not-a-defect** direction of the compat table in CLAUDE.md — we accept a form
+FPC rejects — and the alternative was not "reject like FPC" but the previous
+behaviour, which SILENTLY MISCOMPILED all five rows.
+
+No correct FPC program can observe the difference: every program in rows 1-4 is
+one FPC refuses to build, so nothing portable depends on pxx refusing it too.
+Worth a diagnostic some day if a scope model appears at that layer; not worth
+inventing one for this.

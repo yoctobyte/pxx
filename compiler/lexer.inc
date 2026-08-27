@@ -983,7 +983,24 @@ begin
     PasDefine(name);
     name := 'CPU_RISCV32';
     PasDefine(name);
-  end;
+  end
+  else if TargetArch = TARGET_WASM32 then
+  begin
+    { A source file selecting its target with {$ifdef} sees wasm32 the same way
+      it sees every other 32-bit target. This chain is one of the three that
+      fail open (it sits inside the `<> TARGET_X86_64` guard, so a 7th target
+      would silently keep the x86-64 defines it just undefined and compile as
+      64-bit): feature-a-wasm32-target-registration-skeleton. }
+    name := 'CPU32';
+    PasDefine(name);
+    name := 'CPUWASM32';
+    PasDefine(name);
+    name := 'CPU_WASM32';
+    PasDefine(name);
+  end
+  else
+    Error('compiler error: target ' + TargetArchName(TargetArch)
+          + ' has no CPU defines — add an arm here when adding a target');
   end;   { …end of the non-x86-64 CPU-define swap }
   { Bare-metal ESP profile: let the source select UART MMIO output / drop the
     IDF externals via {$ifdef PXX_ESP_BARE}. }
