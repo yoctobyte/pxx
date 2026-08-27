@@ -107,4 +107,4 @@ that asserted only `and` would have passed before this change.
 — that arm was rewritten, not just added beside.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 9678afd7f.
