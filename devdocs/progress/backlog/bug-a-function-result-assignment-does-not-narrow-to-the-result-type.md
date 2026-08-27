@@ -82,3 +82,36 @@ Blast radius beyond the lane: the wasm Phase 2 differential
 range to avoid going red for this, so a real conversion path is currently
 covered only for values where the bug is invisible. That constraint lifts when
 this closes.
+
+# This is a class, not an instance — look for the other members
+
+Two bugs of this exact shape came out of one sitting on the wasm lane, and they
+are almost certainly not the only two:
+
+- this one — a value wider than its destination reaches a function result
+  unnarrowed;
+- [[bug-a-shr-on-a-32-bit-operand-is-evaluated-at-64-bits]] — an operator
+  evaluates at 64 bits regardless of its operand's declared width.
+
+The common cause is not a shared code path; it is a shared *permission*. On
+x86-64 a value's declared width does not have to be enforced, because a 64-bit
+register holds any narrower value correctly for most operations and the
+enforcement only shows up where something reads the register whole. So every
+place that could have narrowed and didn't is latent, silent, and passes every
+test whose values happen to fit.
+
+That is what makes a sweep worth more than these two tickets. The productive
+question is not "where else is this bug" but **"where does the compiler rely on
+a store to a correctly-sized slot to perform a narrowing it never emitted?"** —
+because those are the sites where removing or bypassing the store (a function
+result, an operator evaluated in a register, an argument passed in a register)
+turns a correct program into a quietly wrong one.
+
+A differential probe finds them cheaply: `tools/fpc_diff_probe.sh` over
+expressions that mix widths, with operands chosen ABOVE the destination's
+range, since in-range values make every instance of this class invisible. Both
+tickets above were found precisely because a target that cannot leave a width
+implicit was forced to state one.
+
+Track A's to run, and deliberately not filed as a third ticket — the point is
+that these two are examples of a search, not a list.
