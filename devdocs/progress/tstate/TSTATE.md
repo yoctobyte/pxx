@@ -3,9 +3,8 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `839305290bb4` | 2026-08-27T04:27:54Z | RED (full) | 1173.5s | `839305290bb4` RED |
+| plexus | `c76e43e50c50` | 2026-08-27T04:34:19Z | GREEN (native) | 312.4s | `839305290bb4` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
 - **test-nilpy#src:test/test_nilpy_star_unpack_into_a_collecting_callee.npy** — test/test_nilpy_star_unpack_into_a_collecting_callee.npy test/test_nilpy_star_unpack_into_a_collecting_callee.expected (plexus): bad `547163758314`, last good `90892318c94c`, 1 commit(s) in range
-- **test-core#src:test/test_pascal_cast_chain_method_call.pas** — test/test_pascal_cast_chain_method_call.pas (plexus): bad `97f96a5cc766`, last good `67a83ca0bb63`, 2 commit(s) in range
