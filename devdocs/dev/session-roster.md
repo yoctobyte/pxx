@@ -7724,3 +7724,61 @@ the `High(QWord)` assertion and the two aged-out "what next" lists — a written
 claim about a tree that moved — except this one was caught in minutes by its
 author, because a number was checked instead of a sentence being trusted. That is
 the counter-example: the pattern is beatable, and measuring after is how.
+
+## PROMOTION THREAD CLOSED — GREEN, 17/17. Pin v389 stands, no revert.
+
+frankT's verdict on the `-O2` promotions, by the one instrument aimed at the
+question:
+
+| | |
+| --- | --- |
+| sha | `03afd81fd94b` (compiler-identical to `7767acc60`; the delta touches zero buildable files) |
+| binary | `591ae8160f69` — fixedpoint, converged after 2 rounds, differs from `pinned` as required |
+| cap | 3 cores, `nice -n 10` |
+| wall | 1208.8s (~4x the median — contention, not the tier) |
+| result | **17/17 PASS** |
+
+**12/12 optimisation-agreement shards pass** — the ~900-program sweep demanding
+identical stdout, stderr and exit code at `-O0` vs `-O2` vs `-O3`. That is the
+direct test: with all three passes now firing at `-O2`, `-O2` still agrees with
+`-O0` everywhere. Plus three self-compile differential jobs on
+`compiler/compiler.pas`, and the fixedpoint / inline-strlit / atomic64 units.
+
+**Stated plainly, because it is the kind of thing that gets rounded up later:**
+this was the **cumulative** run at the tip of all three promotions, not per-pass
+rows. `13d4bba0c` and `e4fe576eb` have **no individual verdict and never will**
+unless someone asks. Attribution was not measured — it was not needed, because
+nothing came back red. If a regression surfaces here later, the fan-out is still
+the tool and the three commits are still separately revertable.
+
+### frankT put the decision AT THE CODE, not only in the roster — and that is better than what I did
+
+`6a8d4e974` records the `rtl-generics` call at `CORPUS_EXPECTED` itself: that
+adding a name makes the watcher fetch and warn but compile nothing, that the
+trigger is `feature-typinfo-facade-unit`, and the `install_lib_candidates.sh`
+contract written where a violation would otherwise surface only as a silent
+warning on an unattended box.
+
+This is **frankA's "state belongs in the runner's output, not in prose" applied to
+a decision** — put it where the person who needs it will already be looking. The
+roster is where decisions survive a context loss; the code site is where they
+survive a *stranger*. Both, not either. Every future coordinator call that
+constrains a specific line should land in both places.
+
+### The oversubscription tonight was partly MY call, and it is worth owning
+
+frankT's run flagged two things that compose:
+
+- It shared the box with two other test runs; long jobs got doubled timeouts and
+  retried kills. Every job passed **on merit** — none skipped, none timed out.
+- Its scheduler admitted a job against a **500 MB estimate that peaked at 521 MB**
+  on the heaviest class. Its words: *"the scheduler admitted it on a promise the
+  box did not have to keep."*
+
+Under-estimates are how a five-worker box gets oversubscribed — and five workers
+is **my** concurrency, above the owner's recorded ceiling, recorded earlier as a
+dial I would not turn down mid-flight. So the honest reading is that the tooling
+bug and the coordination call met each other tonight. The estimate fix is frankT's
+and in-lane; the concurrency remains the owner's dial. What I take from it: *do not
+add a sixth*, and treat "every job passed on merit" as the thing that made this
+survivable rather than as evidence the load was fine.
