@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-27T02:03:51Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "8d22db657f99ba84980258e7a0170b31eae1556d",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-27T02:23:23Z",
    "fixed": [],
    "new_red": [],
@@ -454,6 +445,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "03d293061f4019001b04bf21c25a4951e3f0466e",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-27T11:56:16Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "a683b7c3cd20881d34976263bc0e0768d71d501e",
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
@@ -2098,6 +2098,7 @@
   "test-core#src:test/test_nilpy_renamed_class_attrs.npy": "native",
   "test-core#src:test/test_nilpy_rtl_exception_surface.npy": "native",
   "test-core#src:test/test_nilpy_selfassigned_comprehension.npy": "native",
+  "test-core#src:test/test_nilpy_setitem_through_a_variant_receiver.npy": "native",
   "test-core#src:test/test_nilpy_shim_from_import_class_attrs.npy": "native",
   "test-core#src:test/test_nilpy_sorted_pairs.npy": "native",
   "test-core#src:test/test_nilpy_star_args.npy": "native",
@@ -5327,6 +5328,7 @@
   "test-core#src:test/test_nilpy_renamed_class_attrs.npy": "pass",
   "test-core#src:test/test_nilpy_rtl_exception_surface.npy": "pass",
   "test-core#src:test/test_nilpy_selfassigned_comprehension.npy": "pass",
+  "test-core#src:test/test_nilpy_setitem_through_a_variant_receiver.npy": "pass",
   "test-core#src:test/test_nilpy_shim_from_import_class_attrs.npy": "pass",
   "test-core#src:test/test_nilpy_sorted_pairs.npy": "pass",
   "test-core#src:test/test_nilpy_star_args.npy": "pass",
@@ -6899,9 +6901,9 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-27T11:48:43Z",
+  "date": "2026-08-27T11:56:16Z",
   "deadline": 7200.0,
-  "sha": "03d293061f4019001b04bf21c25a4951e3f0466e",
+  "sha": "a683b7c3cd20881d34976263bc0e0768d71d501e",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
