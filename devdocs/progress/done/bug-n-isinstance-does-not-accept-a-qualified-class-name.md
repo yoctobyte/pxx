@@ -110,4 +110,4 @@ can drop it once this lands in a pin — a Track B edit, not one to make from
 here. Same for `test/lib_mimic_bisect.npy`'s now-stale comment.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 6c9f8cd70.
