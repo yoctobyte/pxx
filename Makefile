@@ -9888,6 +9888,18 @@ test-core: $(COMPILER)
 	# bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 	./$(COMPILER) test/test_nilpy_import_case_folds_onto_a_class.npy $(TESTTMP)/test_nilpy_impcase26
 	$(TESTTMP)/test_nilpy_impcase26 | diff -u test/test_nilpy_import_case_folds_onto_a_class.expected -
+	# The MIRROR of that bug on the QUALIFIED path: `m.zz()` beside a local
+	# `class ZZ` CONSTRUCTED ZZ and returned the instance where CPython calls the
+	# module's function — silently, with a plausible-looking value, and with the
+	# module named right there in the source. The qualified-construction arm asked
+	# the case-INSENSITIVE FindUClassNonRecord while its bare-name twin has used
+	# the exact predicate since the lowercase-name-hijack fix. `m.zz` as a VALUE
+	# was always right, which is what pins it to the ctor guard. The qualified
+	# constructions (bare and aliased) are the controls that arm must keep serving.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-a-qualified-module-member-is-taken-by-a-case-folded-local-class
+	./$(COMPILER) test/test_nilpy_qualified_member_vs_case_folded_class.npy $(TESTTMP)/test_nilpy_qualfold26
+	$(TESTTMP)/test_nilpy_qualfold26 | diff -u test/test_nilpy_qualified_member_vs_case_folded_class.expected -
 	# `return lambda ...` — a closure factory, and the returned value was not
 	# CALLABLE while the same lambda bound to a local first was. The return-type
 	# scan's TUPLE detector counted the LAMBDA'S OWN PARAMETER COMMAS, so the

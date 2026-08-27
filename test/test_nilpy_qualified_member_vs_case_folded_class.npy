@@ -1,0 +1,38 @@
+# `m.zz()` beside a local `class ZZ` CONSTRUCTED ZZ and returned the instance
+# where CPython calls the module's function. Silent, a plausible-looking value,
+# and the module is named right there in the source. The qualified-construction
+# arm matched the class case-INSENSITIVELY while its bare-name twin has matched
+# exactly since the lowercase-name-hijack fix.
+# bug-n-a-qualified-module-member-is-taken-by-a-case-folded-local-class
+
+import nilpy_casector
+import nilpy_casector as cs
+
+
+class ZZ:
+    VAL = 1
+
+
+class QQ:
+    VAL = 2
+
+
+# the calls that were taken by the fold
+print(nilpy_casector.zz())
+print(cs.zz())
+print(nilpy_casector.qq())
+print(cs.qq())
+
+# ...as a VALUE it was always right, which is what pinned it to the ctor guard
+f = nilpy_casector.zz
+print(f())
+
+# ---- controls: qualified CONSTRUCTION must still work, bare and aliased ----
+a = nilpy_casector.Frame(3)
+print(a.get())
+b = cs.Frame(4)
+print(b.get())
+
+# ...and the local classes the fold was stealing from
+print(ZZ.VAL)
+print(QQ().VAL)

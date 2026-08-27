@@ -40122,11 +40122,23 @@ begin
     `tk.Tk_()` always worked) but cannot construct a class and does not do NilPy
     keyword arguments. Unit scope here is flat, so consuming the qualifier is
     enough — the class then resolves by its bare name.
-    (feature-nilpy-qualified-class-construction) }
+    (feature-nilpy-qualified-class-construction)
+
+    Matched EXACTLY (PyIsExactCtorName), not by the case-INSENSITIVE
+    FindUClassNonRecord this used to ask. `import m` beside a local `class ZZ`
+    made `m.zz()` construct ZZ and return the INSTANCE where CPython calls the
+    module's function and returns 7 — silently, with a plausible-looking value,
+    and with the module named right there in the source. The bare-name twin one
+    screen up has used the exact predicate since
+    bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class; this arm
+    was written afterwards and did not inherit it. `m.zz` as a VALUE was always
+    right — only the CALL was taken — which is what pins it to this guard rather
+    than to qualified resolution.
+    bug-n-a-qualified-module-member-is-taken-by-a-case-folded-local-class }
   if (CurTok.Kind = tkIdent) and (TokPos + 2 < TokCount) and
      (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos + 1].Kind = tkIdent) and
      (Tokens[TokPos + 2].Kind = tkLParen) and
-     (FindUClassNonRecord(GetTokenStr(TokPos + 1)) >= 0) and
+     PyIsExactCtorName(GetTokenStr(TokPos + 1)) and
      (FindSym(CurTok.SVal) < 0) and (FindUnitOrAlias(CurTok.SVal) >= 0) then
   begin
     { Remember WHICH unit was named: two libraries may export the same class

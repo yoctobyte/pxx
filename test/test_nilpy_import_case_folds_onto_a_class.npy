@@ -59,7 +59,7 @@ import nilpy_casehelper
 
 print(nilpy_casehelper.QQ.VAL)
 print(nilpy_casehelper.unrelated())
-# NOT asserted here: `nilpy_casehelper.zz()` beside a local `class ZZ` still
-# constructs the CLASS instead of calling the module's function — the mirror of
-# this bug on the QUALIFIED path, pre-existing and unchanged by this fix.
+# the MIRROR of this bug on the qualified path: `m.zz()` beside a local
+# `class ZZ` used to construct ZZ and return the instance
 # bug-n-a-qualified-module-member-is-taken-by-a-case-folded-local-class
+print(nilpy_casehelper.zz())
