@@ -170,4 +170,4 @@ container rows that must not move.
 build against the frozen copy.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit 2e2c5b939.
