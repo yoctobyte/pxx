@@ -9973,6 +9973,23 @@ test-core: $(COMPILER)
 	# bug-n-the-zero-argument-form-of-a-builtin-type-constructor-is-rejected
 	./$(COMPILER) test/test_nilpy_zero_argument_builtin_constructors.npy $(TESTTMP)/test_nilpy_zeroctor26
 	$(TESTTMP)/test_nilpy_zeroctor26 | diff -u test/test_nilpy_zero_argument_builtin_constructors.expected -
+	# A field's type was fixed by its FIRST assignment: `self.v = n` in the ctor
+	# then `self.v = 1.5` elsewhere stored a double into the Int64 slot the first
+	# one sized, printing 4609434218613702656 — the double's bits. A LOCAL never
+	# behaved this way (PyCollectLocalsAST unions every Syms[] entry for a name),
+	# so the field scan now takes the local scan's join, PyWidenBinding, rather
+	# than a second rule. A widened field changes SIZE (Int64 8 -> variant 16),
+	# so the class's own window is laid out again from the same formula that
+	# assigned it — the N/Many neighbour rows are what that re-layout is for, and
+	# what a widen-in-place without one would corrupt. The S1 accumulator, the
+	# subclass, the dataclass and the @property rows are the controls.
+	# A field declared in an ANCESTOR is deliberately NOT widened (the parent's
+	# layout is already final): bug-n-a-field-declared-in-an-ancestor-is-not-
+	# widened-by-a-descendants-rebind.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-a-fields-type-is-fixed-by-its-first-assignment-and-never-widened
+	./$(COMPILER) test/test_nilpy_a_field_widens_across_methods.npy $(TESTTMP)/test_nilpy_fldwiden26
+	$(TESTTMP)/test_nilpy_fldwiden26 | diff -u test/test_nilpy_a_field_widens_across_methods.expected -
 	# `return lambda ...` — a closure factory, and the returned value was not
 	# CALLABLE while the same lambda bound to a local first was. The return-type
 	# scan's TUPLE detector counted the LAMBDA'S OWN PARAMETER COMMAS, so the

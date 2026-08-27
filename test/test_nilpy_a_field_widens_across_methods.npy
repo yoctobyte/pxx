@@ -1,0 +1,150 @@
+# `self.v = n` in the ctor then `self.v = 1.5` in another method kept the Int64
+# field and printed 4609434218613702656 — the double's BITS read as an integer.
+# The field pre-pass only ADDED names: a name already registered by an earlier
+# method kept its first type, which is right about IDENTITY (a field declared in
+# __init__ and rebuilt in _build_layout is one field) and wrong about TYPE.
+#
+# A LOCAL never behaved this way — PyCollectLocalsAST unions the types of every
+# Syms[] entry for a name — so the field scan now takes the local scan's join,
+# PyWidenBinding, rather than a second rule. Int-then-float becomes a variant,
+# which is that function's decided answer for a numeric rebind across the float
+# boundary. The neighbour rows are the real test of the re-layout: a widened
+# field changes SIZE (Int64 8 -> variant 16), so the class's own window is laid
+# out again from the same size/alignment formula that assigned it in the first
+# place.
+# bug-n-a-fields-type-is-fixed-by-its-first-assignment-and-never-widened
+from dataclasses import dataclass
+
+
+class A:
+    def __init__(self):
+        self.k = 1
+
+
+class B:
+    def __init__(self):
+        self.k = 2
+
+
+# int -> float, with no division in sight: this is about FIELDS, not about `/`
+class E:
+    def __init__(self, n: int):
+        self.v = n
+    def scale(self):
+        self.v = 1.5
+        return self.v
+
+
+# ...and the same through a true division, which is how it was found
+class E2:
+    def __init__(self, n: int):
+        self.v = n
+    def scale(self):
+        self.v = self.v / 2
+        return self.v
+
+
+# int -> str, and class -> unrelated class
+class E3:
+    def __init__(self, n: int):
+        self.v = n
+    def rename(self):
+        self.v = "text"
+        return self.v
+
+
+class E4:
+    def __init__(self):
+        self.o = A()
+    def swap(self):
+        self.o = B()
+        return self.o.k
+
+
+# CONTROLS that must NOT widen: the same type assigned twice, and an
+# accumulator, which has its own (older) variant rule and must keep it.
+class S1:
+    def __init__(self):
+        self.n = 1
+    def bump(self):
+        self.n = self.n + 1
+        return self.n
+
+
+# a subclass adding its own field must still see the parent's
+class Base:
+    def __init__(self):
+        self.p = 10
+
+
+class Sub(Base):
+    def __init__(self):
+        Base.__init__(self)
+        self.q = 20
+    def both(self):
+        return (self.p, self.q)
+
+
+# the NEIGHBOURS of a widened field must keep their slots — this is what the
+# re-layout is for, and what a widen-in-place without one would corrupt
+class N:
+    def __init__(self):
+        self.a = 1
+        self.b = 2
+        self.c = 3
+    def widen(self):
+        self.b = 9.5
+        return (self.a, self.b, self.c)
+
+
+class Many:
+    def __init__(self):
+        self.a = 1
+        self.b = 2
+        self.c = 3
+        self.d = 4
+    def go(self):
+        self.b = "s"
+        self.d = 1.25
+        return (self.a, self.b, self.c, self.d)
+
+
+# a dataclass field rebound in a method, and a @property whose backing field is
+# rebound — the property must not gain a field of its own either way
+@dataclass
+class D:
+    x: int
+    def bump(self):
+        self.x = 0.5
+        return self.x
+
+
+class R:
+    def __init__(self):
+        self._n = 1
+    @property
+    def n(self):
+        return self._n
+    def set(self):
+        self._n = 2.5
+        return self.n
+
+
+print(E(5).scale())
+print(E2(5).scale())
+print(E3(5).rename())
+print(E4().swap())
+print(S1().bump())
+print(Sub().both())
+print(N().widen())
+print(Many().go())
+print(D(3).bump())
+print(R().set())
+
+# an untouched instance must still read its initial values, so the re-layout
+# agrees with what the constructor wrote
+n = N()
+print(n.a, n.b, n.c)
+print(n.widen(), n.a, n.b, n.c)
+m = Many()
+print(m.a, m.b, m.c, m.d)

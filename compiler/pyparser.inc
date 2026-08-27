@@ -31099,6 +31099,7 @@ end;
 procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer; isDC: Boolean;
                                  fieldsOnly: Boolean);
 var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, align, sz: Integer;
+    fi, baseOff: Integer; wtk: TTypeKind; fldWidened: Boolean;
     ovMmi, ovPi: Integer;   { the inherited method an override must match }
     fldAnn, rhsAt, k2, fldSig: Integer;
     origName, name, fullName, rhsName: AnsiString; isCtor: Boolean;
@@ -31131,6 +31132,7 @@ begin
     A's VMT slots, so an INHERITED method silently ran a subclass method with
     the same slot number (bug-a-nilpy-subclass-overlays-parent-layout). }
   curOff := 8;
+  fldWidened := False;
   if UClsParent[ci] >= 0 then
   begin
     curOff := UClsSize_[UClsParent[ci]];
@@ -31144,6 +31146,7 @@ begin
       feature-a-tobject-root-method-vmt-slots. }
     UClsVirtCount[ci] := RootVMTSlotCount;
   align := 8;
+  baseOff := curOff;          { where THIS class's own fields start — the re-layout below rewinds to it }
   ownBS := bodyStart; ownBE := bodyEnd;
   mixIx := 0; inMixin := False;
   { The span loop: the class's OWN body first, then each flattened base's body
@@ -32266,7 +32269,8 @@ begin
               instance, which is the divergence the whole lowering exists to
               avoid. Same rule as the class-attribute branches: a shared slot
               has no instance field, deliberately. }
-            if (FindUField(ci, GetTokenStr(j + 2)) < 0) and
+            fi := FindUField(ci, GetTokenStr(j + 2));
+            if (fi < 0) and
                (PyClsAttrOvrSlot(ci, GetTokenStr(j + 2)) < 0) then
             begin
               sz := TypeSize(tk);
@@ -32278,6 +32282,44 @@ begin
               AddUField(ci, Tokens[j + 2].SOffset, Tokens[j + 2].SLen, curOff, Ord(tk), fldRec);
               LastTypeProcSig := -1;
               Inc(curOff, sz);
+            end
+            { A field ALREADY registered by an earlier method, assigned again
+              with a different type. The scan used to keep the first answer —
+              right about IDENTITY (a field declared in `__init__` and rebuilt in
+              `_build_layout` is one field) and wrong about TYPE: the second
+              assignment stored a double into the Int64 slot the first one sized,
+              with no coercion and no diagnostic, so `self.v = 1.5` printed
+              4609434218613702656 — the double's BITS read as an integer.
+
+              A LOCAL never behaved this way: PyCollectLocalsAST unions the types
+              of every Syms[] entry for a name, which is why `n = 5; n = 1.5` is
+              fine. Two spellings of one concept answering differently is the
+              tell (devdocs/dev/normalise-dont-special-case.md), so the field
+              scan takes the local scan's join — PyWidenBinding, the same
+              function, not a second rule. Int-then-float becomes a VARIANT
+              rather than a double, which is that function's existing decided
+              answer for a numeric rebind across the float boundary and matches
+              what the accumulator case already does.
+
+              OWN window only: an inherited field found here belongs to the
+              parent, whose layout is already fixed and shared with every other
+              subclass. A class-attribute override slot is skipped for the same
+              reason the add arm skips it — it has no instance field at all.
+              bug-n-a-fields-type-is-fixed-by-its-first-assignment-and-never-widened }
+            else if (fi >= UClsFBase[ci]) and
+                    (fi < UClsFBase[ci] + UClsFCount[ci]) and
+                    (PyClsAttrOvrSlot(ci, GetTokenStr(j + 2)) < 0) then
+            begin
+              wtk := PyWidenBinding(IntToTypeKind(UFldTk[fi]), tk);
+              if wtk <> IntToTypeKind(UFldTk[fi]) then
+              begin
+                UFldTk[fi] := Ord(wtk);
+                { the class identity belongs to the narrow type; a widened
+                  field is no longer that class and must not claim to be }
+                if wtk <> tyClass then UFldRec_[fi] := REC_NONE;
+                if wtk <> tyClass then UFldProcSig[fi] := -1;
+                fldWidened := True;
+              end;
             end;
           end;
           Inc(j);
@@ -32375,6 +32417,24 @@ begin
         AddUMeth(ci, PyStoredName(name), Length(name), procIdx);
         PyDcCmpProc[ci * 4 + dcCmp] := procIdx;
       end;
+  end;
+  { A widened field may have changed SIZE (Int64 8 -> variant 16), and the
+    offsets above were handed out against the narrow type. Rewind to where this
+    class's own fields start and re-run the SAME size/alignment formula over its
+    own window — every field in it was laid out by exactly that formula, with no
+    array, bitfield or string-capacity marker in sight (every AddUField in this
+    procedure passes the plain six arguments), so with nothing widened this
+    reproduces the offsets it already assigned.
+    bug-n-a-fields-type-is-fixed-by-its-first-assignment-and-never-widened }
+  if fldWidened then
+  begin
+    curOff := baseOff;
+    for k := UClsFBase[ci] to UClsFBase[ci] + UClsFCount[ci] - 1 do
+    begin
+      curOff := AlignTo(curOff, TypeAlign(IntToTypeKind(UFldTk[k])));
+      UFldOff_[k] := curOff;
+      Inc(curOff, TypeSize(IntToTypeKind(UFldTk[k])));
+    end;
   end;
   UClsSize_[ci] := AlignTo(curOff, align);
 
