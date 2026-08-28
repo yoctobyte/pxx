@@ -12483,3 +12483,96 @@ sibling before closing the ticket."* The finding is that it applies identically 
 comments, refusal messages and stated causes get copied like code paths and nothing greps them.
 Sibling of *"applied the rule to the code and not to the test"*, not a subcase — that is a rule
 not carried across **kinds**, this is a correction not carried across **copies**.
+
+---
+
+## 2026-08-28 — the dynamic-array slice, and a histogram that measured the wrong quantity
+
+frankwasm shipped the dynamic-array family on `wasm` (`88d9e0709`, 18 checks green,
+fixedpoint `778510418022` byte-identical to native, arena slope zero on two probes).
+**Coverage 56% → 88% lowered (2056 → 3222 of 3650).** No new shared-file arm — and that
+was *verified* rather than assumed: `GetOrAllocSymRTTI` and `GetOrAllocNodeDynDesc` already
+forward on master, `EmitRTTI` fills descriptors untargeted, `WasmFillData` already applies
+`DataPtrFix`. **The merge set is unchanged — still the five arms in the ledger.**
+
+Three things worth keeping, none of them about dynamic arrays.
+
+### The histogram I wrote into a ticket was a FIRST-REFUSAL count
+
+I recorded the gap breakdown (dyn arrays 83%, `in` 8%, `IR_DEFAULT_MEM` 7%, record returns
+"five lines") as if it were **magnitude**. It is not. **A body reports its first refusal and
+stops**, so the histogram ranks what each body *reached*.
+
+After the slice: refused 1591 → 428, and **`in` went 68 → 267 while nothing about `in`
+changed.** 1163 bodies had been stopping at a dynamic array before they could discover they
+also needed `in`.
+
+**Removing the leader does not subtract its share — it promotes everything the leader was
+masking.** So "one feature at 83%, then a tail" was right about the leader and wrong about
+the tail *in the planning direction*: the tail was not small, it was **hidden**. The honest
+claim is *83% of what programs hit first* — and **the smallest number in such a table is the
+least trustworthy**, because it is the most masked. "Record returns are five lines" was the
+punchline of my version and is exactly the entry that carries no weight.
+
+> **A HISTOGRAM IS A MEASUREMENT AND IT STILL MISLED, because the quantity it counts is not
+> the quantity it appears to count. Measuring the right thing is a separate act from
+> measuring.**
+
+This is the sharpest form of the family yet: the fix for *"a name list carries no magnitude"*
+was to take a measurement — and then the measurement's **framing** was trusted without asking
+what it was a count OF. Corrected in
+`feature-a-a-refusal-is-a-claim-with-a-date-on-it`, wrong version left visible.
+frankwasm applies the same caution to its own successor number: `in` is now 62% of the
+remainder on identical reasoning, and it declined to call that 62% of the work.
+
+### Face twelve — a ONE-DIRECTIONAL instrument
+
+An arena-slope probe detects refcounts too **HIGH** (a leak). It is blind **by construction**
+to refcounts too **LOW** — a premature free, the direction that **corrupts** rather than
+wastes. Found because a deliberate break *passed*. And it stays invisible until the freed
+block is **reused**, so the assertion has to allocate a same-sized array between the free and
+the read.
+
+> **An instrument that can only be wrong in one direction reports "clean" for the entire
+> opposite half of the defect space, and nothing in its output says which half it covers.**
+
+Distinct from face seven (diffing against a buggy oracle): there the *reference* was wrong.
+Here instrument and reference are both sound and the **sensitivity is one-sided**.
+
+**Consequence, disclosed unprompted:** three phases of managed-string work shipped with only
+the leak half. frankwasm declined to claim a defect — *"I have not measured it"* — which is
+right about the claim and the wrong place for the finding, so I filed it as a **measurement
+task**: `chore-a-audit-the-managed-string-slices-for-the-premature-free-direction` [A, p40].
+It may well close as *"verified, no defect"*. That is a good outcome, not a wasted ticket —
+**the suite currently cannot distinguish those two states, which is the entire point.**
+
+### One command instead of four backends
+
+The IR dump changed the plan *before code was written*: the flat case emits no
+`IR_SETLEN_DYN`, no `IR_DYNUNIQUE`, no `IR_SLOTADDR` — those are nested/field-rooted only.
+It is `IR_LEA`, builtin -102, `IR_INDEX`, builtin -44. In frankwasm's words: *"I was one step
+from implementing two ops nothing emits, off the strength of reading four backends."*
+
+Also landed: five deliberate breaks with **five distinct signatures**, using two separate
+probe programs so that breaks 2 and 3 could not be one assertion wearing two names — the
+break-it-twice rule applied *while designing* rather than after. And `WasmIf` wrote the block
+type correctly into the binary and `if (result)` — no type — into the WAT; **`WasmLoop` had
+the identical defect one procedure down and was fixed in the same commit.** The
+correcting-across-copies rule (face eleven) applied **forward** for once instead of
+retroactively.
+
+### `PXXDBG=a.ir:*` cannot see a program's main body
+
+Cost frankwasm two runs that read as a bad invocation. `compiler/ir_codegen.inc:10106`:
+
+```pascal
+if DumpIR or ((CurProc >= 0) and PxxDbgWants('a.ir', Procs[CurProc].Name)) then
+```
+
+`--dump-ir` is **ungated**; every `PXXDBG=a.ir:…` form sits behind `CurProc >= 0`, and a main
+body has no `CurProc`. **And the comment at `:10105` states the equivalence the code does not
+have** — *"`a.ir:*` is --dump-ir."* Filed
+`bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body` [A, p30]. Low prio, but it lands
+on the repo's designated **alternative to reasoning**: a measurement tool whose most obvious
+first attempt returns silence pushes people back toward theorising, and no-match, misspelled
+topic and wrong flag all read identically.
