@@ -1610,4 +1610,44 @@ interleaved pairs are.
    body with `try/except` keeps every dual-write. Lifting it means teaching the
    landing pad to restore residents from somewhere other than the frame slot,
    which is its own ticket and was not attempted.
-4. 5a — measured and rejected at 1.02-1.04x. Do not rebuild.
+4. **Float residents were never covered and are a KNOWN-UNKNOWN, not a
+   non-issue.** Item 3 stops writing the frame slot for GPR residents only.
+   Float residents (xmm8/xmm9, `FloatResidentXmmOf`) keep their full dual-write
+   because `PXXDBG=a.poisonslot` never poisoned them — so the 16/16 green result
+   says **nothing whatever** about whether their slots are read. Extending item 3
+   to floats is a real slice, and its first step is extending the probe, not
+   extending the optimisation: *not covered is not the same as fine*, and a null
+   result is worth exactly what the probe's reach is worth. (Float work is also
+   Track F, i.e. low prio by definition — so this is likely to sit.)
+5. 5a — measured and rejected at 1.02-1.04x. Do not rebuild.
+
+### Known-unknowns, collected — the things a null result did NOT cover
+
+Every green number in this ticket has a reach, and these fall outside it:
+
+| not covered | by what | what would have to happen first |
+| --- | --- | --- |
+| float residents' frame slots | the poison probe fills GPR residents only | extend `PoisonResidentSlot` to `FloatResidentXmmOf`, re-run the 19 |
+| bodies with `try/except` | `RcProcHasExc` refuses them outright | teach the landing pad to restore residents from somewhere other than the frame slot |
+| `-O3` at large | nothing in the test matrix compiles at `-O3` | the Track T job — `chore-t-nothing-in-the-matrix-runs-o3-so-no-failures-is-unfalsifiable` |
+| aarch64 | every slice here is x86-64 | port item 1 first, then W2 / item 3 — see below |
+
+**The last row is bigger than "aarch64 lacks W2", and it was checked rather than
+assumed.** `UnifiedResidencyAssignA64` contains none of W2, item 3 or the poison
+probe — and `ir_codegen_aarch64.inc:757` still reads:
+
+```pascal
+if Counts[k] <= 3 then Continue;      { int threshold: > 3 loop accesses }
+```
+
+That is the **pre-item-1** rule: admission by TOTAL accesses with a `> 3`
+threshold, ranked on `Counts` rather than `LCounts`. So aarch64 is not at the
+pre-W2 shape, it is at the **pre-item-1** shape — it still excludes the
+loop-carried accumulator that item 1 was written to admit, which on x86-64 was
+worth **1.9-2.1x**, far more than everything landed since.
+
+**So the ranked next move for aarch64 is item 1, not W2.** It is also the
+cheapest of the three to port (a threshold and a ranking key, no new encodings),
+and Track O's per-backend rule explicitly covers aarch64 — this is in scope, not
+a stretch. Nobody should port W2 there first just because it is the most recent
+thing in this ticket.

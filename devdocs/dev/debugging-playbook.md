@@ -172,6 +172,7 @@ PXXDBG=a.ast:myproc compiler/pascal26 prog.py out  # its AST before lowering
 PXXDBG=a.symptr:p  compiler/pascal26 prog.pas out  # what a pointer DECL recorded
 PXXDBG=a.opovl     compiler/pascal26 prog.pas out  # operator lookups + candidates
 PXXDBG=a.srcmap:*  compiler/pascal26 prog.pas out  # token->file map + every plant
+PXXDBG=a.poisonslot compiler/pascal26 -O3 prog.pas out # does ANYTHING still read that slot?
 make pxx-debug && gdb --args compiler/pascal26-debug prog.py /tmp/out
 ```
 
@@ -184,6 +185,55 @@ each candidate for that operator with its stored right-operand key, and the
 answer; "my operator did not fire" otherwise has four indistinguishable causes.
 Both were added while chasing a bug whose FIRST fix attempt was written against
 an assumed layout, compiled, and changed nothing.
+
+`a.poisonslot` answers a DIFFERENT shape of question, and it is the one to reach
+for when the blocker is an audit rather than a bug: *does anything still read X?*
+
+At `-O3` a register-resident local is dual-written — register and frame slot
+both current — and the optimisation that stops writing the slot is safe only if
+nothing reads it. The readers you can find by grep are easy; the question that
+stops you is whether some direct `[rbp+off]` emit, somewhere in 10k lines, still
+does. **That is an audit with no completion criterion: unanswerable by grep,
+unfalsifiable by reading, and normally the point where the work gets parked.**
+
+The probe converts it into one experiment. It fills the slot with `$5EEDADAD`
+immediately after each dual-write, so a surviving reader returns *garbage*
+instead of a plausible value:
+
+> **A stale slot and a correct slot are indistinguishable. A poisoned one is
+> not.**
+
+Same trick as `-dPXX_HEAP_DEBUG`'s `$DD` fill, one level up — and it works for
+the same reason. Run the corpus under it and any reader announces itself.
+
+Measured on the run it was built for: **2 of 19 programs changed behaviour, and
+both were the ones with `try`/`except` in a loop** — one hung, the other printed
+`1592634797` (`$5EEDADAD`) straight back. The culprit was the exception landing
+pad, which re-syncs residents *from* the slot and so is the one reader residency
+cannot see through. No amount of careful reading had found it; the probe found
+it in one run, and the resulting gate (`RcProcHasExc`) is what made the
+optimisation land.
+
+**The rule that makes it evidence rather than decoration: a poison probe must
+call the SAME predicate as the change it is testing** — `PoisonResidentSlot`
+calls `ResidentSlotIsDead`, the function the optimisation itself gates on. Copy
+the condition instead and you poison a *neighbouring* set, so a green result is
+evidence about something you are not shipping. This is the whole reason the
+result can be trusted.
+
+Two things it does NOT tell you, which matter as much as what it does:
+
+- **It writes exactly `TypeSize` bytes.** A wider store would corrupt the
+  neighbouring slot and manufacture the bug it is hunting.
+- **It covers only what it poisons.** It fills GPR residents; float residents
+  (xmm8/xmm9) were never poisoned, so nothing is known about them and their
+  dual-write stayed. *Not covered is not the same as fine* — a null result is
+  only worth what the probe's reach is worth, so state the reach whenever you
+  report one.
+
+Generalise the shape, not the flag: when you are blocked on "is there a reader /
+writer / caller I have not found", **poison the thing rather than auditing for
+its users**, and make the poison match the change's own predicate.
 
 `a.srcmap:*` answers the third variant of the same question: *is the map wrong,
 or is the index into it wrong?* It prints the token->file range table (each

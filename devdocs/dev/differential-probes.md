@@ -34,6 +34,16 @@ differently is a target-dependent bug.
 a generated corpus instead of a curated one, and they belong to Track T — see
 `devdocs/dev/track-t.md`.
 
+**`PXXDBG=a.poisonslot` is a fifth shape and is documented in the playbook, not
+here**, because it has no external oracle at all: it compares a program against
+*itself* under a deliberate perturbation. Where the four above ask "does our
+answer match theirs", it asks **"does anything still READ this storage"** — the
+question you hit when an optimisation wants to stop maintaining something and
+the blocker is an audit with no completion criterion rather than a wrong value.
+It poisons the storage so a surviving reader returns garbage instead of a
+plausible value. Full note, including the rule that the probe must call the same
+predicate as the change it is testing, in `devdocs/dev/debugging-playbook.md`.
+
 ## The rules every one of these shares
 
 These are not style preferences. Each was learned by chasing a phantom.
