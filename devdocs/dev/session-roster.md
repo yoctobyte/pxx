@@ -12097,3 +12097,81 @@ last tick and is **2h old** now, while master took four commits in between. This
 lane widens its gate. If it reaches ~4h, check `tools/trackt.py health` before concluding
 anything, and remember `git fetch` first: `--status` reads the local `tstate/`, so without one
 it reports this checkout's staleness rather than Track T's.
+
+### 2026-08-28 — the wasm lane found a p70 leak in the DEFAULT target
+
+Slice 2 landed (216 of 236, from 195), and the leak assertion found a bug in the **oracle**,
+not in the lowering. **x86-64 leaks 40 bytes per evaluation of `if F(x) = 'lit'`** — default
+target, `-O0` and up, silent, unbounded, one of the most common idioms in the language.
+
+I counted the call sites myself rather than relaying:
+
+| backend | binop sites asking `IRNodeOwnsManagedStr` |
+| --- | --- |
+| aarch64, arm32, riscv32, i386 | **3 each** |
+| x86-64 (`ir_codegen.inc`) | **1** |
+
+Filed `bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64` [A, p70] on master. I
+confirmed it is **rankable and in Track A's top p70 band**, so the queue surfaces it without
+anyone being woken.
+
+**frankA was NOT woken for it**, deliberately. It parked on its own fatigue signal after
+nearly banking a false verification; the ticket is filed, ranked and top-band; and the leak is
+newly *discovered*, not newly *introduced* — the mirror half has been in `done/` for months.
+Nothing is lost by it waiting for whoever next holds Track A. Waking a session against its own
+signal to deliver work the queue already surfaces is capacity-filling with a justification
+attached.
+
+### The leak is the abi.inc disease with a SECOND mechanism
+
+Cross-referenced both tickets. `abi.inc`: an oracle exists and backends **re-derive instead of
+asking**. This: an oracle exists (`IRNodeOwnsManagedStr`) and a backend **forgets to ask at one
+of the sites where asking is required**. Both are *an obligation across a backend × site matrix
+with nothing enforcing completeness*, and in both a grep for the predicate's name returns
+plenty of hits and tells you nothing — **the defect is a hit that is absent.**
+
+The mirror ticket in `done/` fixed the opposite half of the same fifteen-cell matrix and its
+own comment said *"this was the FIFTH hand-written copy of that predicate."* **It fixed the
+copies without removing the need for copies**, so the other half stayed broken. Both tickets
+now say explicitly they may not be closed by adding more call sites.
+
+### FACE SEVEN: where the CORRECT build is the one that looks wrong
+
+Every earlier face is a check that cannot fail. This is a check that fails **on the right
+answer**. The leak surfaced because the wasm figure disagreed with native — and *native was
+wrong*.
+
+> **A diff against an oracle is only as good as the oracle. The only thing separating "my
+> backend agrees with the reference" from "my backend agrees with the reference's BUG" is
+> measuring something the bug has to SCALE with.**
+
+Fix: take the figure at two iteration counts and compare the **slope**, not the value — 0 →
+1032, 1000 → 41032, 10000 → 401032. A constant offset is allocator bookkeeping; a slope is a
+leak. Attempt one compared `PXXAlloc(64)` addresses and got 72 vs 112 with *neither* build
+leaking — free-list bookkeeping read as signal. **Three attempts to get one assertion that
+asserts the thing.**
+
+### Two checks failed by design and both failures were correct
+
+- `check_managed.sh` justified an `IR_LEA` answer with three refusals, one of which (concat)
+  was in the list **because it refused**, not because it was a write position. Slice 2
+  implemented concat and the check failed. **A support list assembled from "what currently
+  refuses" rather than "what this argument needs" contains everything that happens to be
+  missing.** Slice 3 will fail it again, and that time the entries are load-bearing — so the
+  argument must be replaced, not the list trimmed.
+- `check_strop.sh`'s negative control passed on first write only because the RTL's own
+  `PXXVarBinOp` was itself refused. The assertion was true, and true of the **wrong scope**
+  (module-wide, not `$main$0`). The `abi.inc` lesson landing on its author's own check within
+  the hour.
+
+### The IR_ATOMIC sentence went where the violator will read it
+
+`devdocs/dev/threading-model.md` §8, on master: replacing `WasmEmitAtomic` must happen **in the
+same change** as shared memory or the threads proposal, never as a follow-up ticket, because
+the window between the two is a program that compiles, runs, and is wrong only sometimes.
+riscv32 can refuse by asking `SocCoreCount`; wasm has nothing to ask, so a prose precondition
+is the only available guard — which is exactly why it must sit where the person adding threads
+will encounter it.
+
+Branch `wasm` at `4af569658`. 14 wasm checks green, `gate.sh quick` GREEN, fixedpoint
+byte-identical. Merge set unchanged: three shared-file arms, nothing pre-approved.
