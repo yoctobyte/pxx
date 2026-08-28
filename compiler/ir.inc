@@ -676,6 +676,7 @@ function IRLowerAST(node: Integer): Integer; forward;
 function IRLowerVariantAsScalar(argAST: Integer; target: TTypeKind): Integer; forward;
 function IRVariantAddr(argAST: Integer): Integer; forward;
 function IRMethodRefCode(mref: Integer): Integer; forward;
+function IRMethodRefToTemp(mref: Integer): Integer; forward;
 function IRMaterializeIntfCast(node: Integer; doTrap: Boolean): Integer; forward;
 { defined near IRWrapChkBounds, used from IRLowerAddress's AN_DEREF arm far above it
   — the FPC seed needs the forward (bug-a-fpc-seed-drift-emitasmx64-forward). }
@@ -1483,6 +1484,17 @@ begin
   if ASTKind[node] = AN_ADDR then
   begin
     Result := IRLowerAddress(ASTLeft[node]);
+    Exit;
+  end;
+  { A method REFERENCE in an ADDRESS position -- `TMethod(TSel(obj.M)).Code`,
+    which is how rtl-generics reads a comparer's code half. There was a VALUE
+    arm (the code half alone, in IRLowerAST) but no ADDRESS arm, so reading a
+    field through a method-pointer cast fell to the IR_UNSUPPORTED tail. Reading
+    `.Code`/`.Data` needs the 16-byte pair to exist somewhere, so materialise it.
+    bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults }
+  if ASTKind[node] = AN_METHODREF then
+  begin
+    Result := IRMethodRefToTemp(node);
     Exit;
   end;
   { A class/interface CAST is a pure reinterpret, so the address of the cast is
@@ -3414,19 +3426,7 @@ begin
      (pathIdx < Procs[cpi].ParamCount) and
      (Procs[cpi].Params[pathIdx].TypeKind = tyRecord) then
   begin
-    savedLastTypeRecId := LastTypeRecId;
-    LastTypeRecId := EnsureMethodPtrRec;
-    tmpSym := AllocVar('', tyRecord);
-    LastTypeRecId := savedLastTypeRecId;
-    tmpAddr := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
-    value := IRMethodRefCode(argAST);   { VMT-resolved for a virtual method }
-    IRAppend(IR_STORE_MEM, tmpAddr, value, -1, 0, Ord(tyPointer));   { Code @0 }
-    srcAddr := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
-    value := IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger));
-    srcAddr := IRAppend(IR_BINOP, srcAddr, value, Ord(tkPlus), 0, Ord(tyPointer));
-    value := IRLowerAST(ASTLeft[argAST]);                            { Data = Self }
-    IRAppend(IR_STORE_MEM, srcAddr, value, -1, 0, Ord(tyPointer));
-    Result := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
+    Result := IRMethodRefToTemp(argAST);
     Exit;
   end;
   { Implicit class -> interface coercion: a class argument given to an interface
@@ -5161,6 +5161,40 @@ begin
   slotK := IRAppend(IR_CONST_INT, -1, -1, -1, ASTRight[mref] * 8, Ord(tyInteger));
   codeAddr := IRAppend(IR_BINOP, vmt, slotK, Ord(tkPlus), 0, Ord(tyPointer));
   IRMethodRefCode := IRAppend(IR_LOAD_MEM, codeAddr, -1, -1, 0, Ord(tyPointer));
+end;
+
+{ Materialise an AN_METHODREF into a hidden 16-byte {Code, Data} temp and return
+  its ADDRESS.
+
+  A method reference is not a linear-lowerable value: it is a PAIR, and every
+  context that wants it as a value has to build that pair somewhere. Three
+  contexts do -- a method-pointer ARGUMENT, an ADDRESS position (`TMethod(TSel(
+  obj.M)).Code`, how rtl-generics reads a comparer's code half), and an
+  assignment, which differs in that it stores into an EXISTING destination
+  rather than a temp and so keeps its own store.
+
+  The first two were about to be two copies of the same eleven lines, which is
+  where root-cause-over-microfix.md says to stop and count. Code at +0, Data at
+  +TARGET_PTR_SIZE (8 on 64-bit, 4 on i386/arm32), matching the user TMethod's
+  layout; the code half is VMT-resolved for a virtual method so a reference
+  taken through a base-typed variable captures the override.
+  bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults }
+function IRMethodRefToTemp(mref: Integer): Integer;
+var savedRecId, tmpSym, tmpAddr, value, dataAddr, ofsNode: Integer;
+begin
+  savedRecId := LastTypeRecId;
+  LastTypeRecId := EnsureMethodPtrRec;
+  tmpSym := AllocVar('', tyRecord);
+  LastTypeRecId := savedRecId;
+  tmpAddr := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
+  value := IRMethodRefCode(mref);                                  { Code @ +0 }
+  IRAppend(IR_STORE_MEM, tmpAddr, value, -1, 0, Ord(tyPointer));
+  dataAddr := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
+  ofsNode := IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger));
+  dataAddr := IRAppend(IR_BINOP, dataAddr, ofsNode, Ord(tkPlus), 0, Ord(tyPointer));
+  value := IRLowerAST(ASTLeft[mref]);                              { Data = Self }
+  IRAppend(IR_STORE_MEM, dataAddr, value, -1, 0, Ord(tyPointer));
+  Result := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
 end;
 
 { Resolve an AN_FIELD node to (record id, field index). Returns True and sets the

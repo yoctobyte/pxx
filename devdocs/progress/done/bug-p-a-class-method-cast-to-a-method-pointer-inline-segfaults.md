@@ -1,7 +1,8 @@
 ---
 prio: 70
 track: P
-owner: unassigned
+owner: frankA
+status: done
 ---
 
 # Method pointers: a class method never works, and an inline cast never works
@@ -376,3 +377,49 @@ The remaining work is Track A (`ir.inc`), not the frontend: factor the
 method-reference materialisation out of `AN_ASSIGN` into a temp-producing
 helper, and lower `AN_METHODREF` in value position through it — the same
 normalisation, one level down.
+
+## RESOLVED — all seven rows match FPC
+
+The lowering gap is closed. `IRMethodRefToTemp` in `ir.inc` materialises a
+method reference into a hidden 16-byte Code/Data temp and returns its address;
+`IRLowerAddress` gained the `AN_METHODREF` arm it never had, which is what
+`TMethod(TSel(obj.M)).Code` needs — reading a field through the cast requires
+the pair to exist somewhere, and only a VALUE arm (the code half alone) existed.
+
+**Again a shared helper rather than a new copy.** The same eleven-line
+Code/Data store already existed in `IRLowerCallArg` (method-pointer argument)
+and in `AN_ASSIGN`. The address case would have been the third. `IRLowerCallArg`
+now delegates; `AN_ASSIGN` keeps its own store because it writes into an
+**existing** destination rather than a temp — a genuinely different operation,
+not a fourth copy.
+
+Final measurement, HEAD `3ec67df02aad`, self-host verified, against FPC 3.2.2:
+
+| # | shape | pinned | HEAD | FPC |
+| --- | --- | --- | --- | --- |
+| 1 | instance → var → call | 15 | 15 | 15 |
+| 2 | instance → var → record cast | TRUE | TRUE | TRUE |
+| 3 | instance, INLINE cast | SEGFAULT | **TRUE** | TRUE |
+| 4 | class → var → call | SEGFAULT | **10** | 10 |
+| 5 | class → var → record cast | SEGFAULT | **TRUE** | TRUE |
+| 6 | class, INLINE cast (the corpus shape) | SEGFAULT | **TRUE** | TRUE |
+| 7 | `@TSvc.CPick` | TRUE | TRUE | TRUE |
+
+Row 8 (`@s.IPick`) remains a deliberate divergence — we accept a form FPC
+rejects — and is why the test cannot pin it: its expectations come from the FPC
+oracle.
+
+**The blocking divergence the arity check opened is closed too.** Rows 3/6 no
+longer reject a form FPC accepts, so nothing is left parked behind a taxonomy.
+
+Pinned in `test/test_method_pointer_cast.{pas,expected}` — seven shapes, and
+**it segfaults on `pinned`**, so it is not a test that would have passed anyway.
+
+A note left in that file for whoever edits it next: no `{`/`}` appears inside
+its comments on purpose. An inner brace can end an FPC comment early — FPC and
+pxx disagree about nesting — silently turning the rest of a comment into code
+and disabling the oracle. It cost two oracle runs while writing the file, and
+a test whose oracle can be switched off by a comment edit is worse than no test.
+
+## Log
+- 2026-08-28 — resolved, commit PENDING-COMMIT.
