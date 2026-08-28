@@ -1613,6 +1613,43 @@ wasm32; filed as `bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-t
 that changes nothing observable are indistinguishable from the output**, and
 only chasing the second reading found the defect.
 
+### Phase 9e — open-array parameters — **PARKED with a diagnosis, 2026-08-28**
+
+27 refusal lines and the leader after op 52 went. Not started as work: one
+bounded experiment sized it, and the answer was "not a one-liner", so the
+diagnosis is banked here rather than half-applied.
+
+**The refusal's stated reason is stale.** It says the slot *"holds a
+dynamic-array handle, whose layout is not implemented on this target"* — and
+that layout landed in Phase 9a. This is the third instance in this file of the
+pattern it already documents: a refusal that stays correct while its stated
+cause stops being true, which nothing ever fails to make anyone re-check.
+
+**But the obvious fix from that reading is wrong, measured.** Treating an
+open-array param as a dyn-array handle — recognise `skParam and IsArray and not
+IsRef` in `WasmNodeIsDynArray`, deref it in the `IR_LEA` arm — compiles, reaches
+`124 of 124 bodies lowered`, and then **traps with `memory access out of
+bounds`** at run time. So the refusal is stale in its *reason* and still right
+in its *verdict*, which is the most expensive combination: it invites exactly
+the one-line fix that produces a module that looks complete and crashes.
+
+`ir.inc:3452` is where the truth is. A static array passed to an `array of T`
+param IS copied into a fresh dyn array with a length header and the handle
+passed — so the handle story is right for that path. What the experiment did not
+establish is what the OTHER paths pass (a real dyn array argument, an
+`array of const` constructor, a `var` open array which must alias rather than
+copy), and the trap says at least one of them is not a headered handle. That is
+where the next session starts: enumerate the argument paths in
+`IRLowerCallArg`, not the parameter.
+
+**Entangled with `Length of Pointer` (8 lines).** Every open-array probe written
+here refused on `Length`/`High` before reaching the parameter itself, so the two
+classes cannot be tested apart and should be taken together.
+
+Also worth knowing before starting: `array of const` needs this AND the
+method-pointer work, which is how `IR_DEFAULT_MEM`'s slice hunt kept colliding
+with it.
+
 - **Milestone:** the wasm-hosted compiler's **emitted output bytes are identical
   to the native compiler's** for the same input.
 - **State this claim precisely.** It is output parity across two hosts of the
