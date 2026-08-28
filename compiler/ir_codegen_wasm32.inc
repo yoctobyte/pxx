@@ -1040,12 +1040,28 @@ begin
   end;
   if vt = WT_I64 then WasmI64Const(IRIVal[node])
   else if vt = WT_I32 then WasmI32Const(WasmWrap32(IRIVal[node]))
+  else if vt = WT_F64 then
+  begin
+    { IRIVal holds the RAW IEEE bit pattern — that is why every register
+      backend loads a float constant with its integer immediate loader — so the
+      value crosses into the float domain by reinterpretation, not conversion.
+
+      Reinterpret rather than `f64.const`, whose immediate is eight raw IEEE
+      bytes. Not because the binary is harder (it is easier) but because the
+      TEXT is: a .wat `f64.const` needs the double printed back as a literal
+      that reparses to the identical bits, and this file's oracle compares the
+      two modules. An integer and a reinterpret print exactly, in both. }
+    WasmI64Const(IRIVal[node]);
+    WasmOp($BF, 'f64.reinterpret_i64');
+  end
+  else if vt = WT_F32 then
+  begin
+    WasmI32Const(WasmWrap32(IRIVal[node]));
+    WasmOp($BE, 'f32.reinterpret_i32');
+  end
   else
-    { An IR_CONST_INT carrying a float type would need f32.const/f64.const,
-      whose immediates are raw IEEE bytes rather than a LEB — a different
-      encoder, not a different opcode. Refused until there is a float constant
-      to test it with. }
-    WasmUnsupported('non-integer constant type ' + WasmIntStr(IRTk[node]));
+    WasmUnsupported('constant of value type ' + WasmIntStr(vt)
+                    + ' (Pascal type ' + WasmIntStr(IRTk[node]) + ')');
 end;
 
 { Emit a value node. The return is the Pascal type of what was ACTUALLY left on
@@ -1065,6 +1081,12 @@ begin
     IR_BINOP     : WasmEmitBinop(node);
     IR_CALL      : WasmEmitCall(node, False);
     IR_LEA       : WasmEmitLea(node);
+    { The RAW slot address, unconditionally — never WasmEmitLea, whose by-ref
+      auto-deref would hand back the CALLER's address for a var parameter.
+      That is the whole distinction between the two ops (defs.inc:748), and
+      the stackless save/restore path depends on it: it writes a by-ref
+      param's own slot. WasmSlotAddr is already exactly this. }
+    IR_SLOTADDR  : WasmSlotAddr(IRA[node]);
     IR_INDEX     : WasmEmitIndex(node);
     IR_FIELD     : WasmEmitField(node);
     IR_LOAD_MEM  : WasmEmitLoadMem(node);
@@ -1913,7 +1935,7 @@ function WasmWriteHelper(const nm: AnsiString): Integer;
 begin
   WasmWriteHelper := FindProc(nm);
   if WasmWriteHelper < 0 then
-    WasmUnsupported('write: RTL helper ' + nm + ' not found');
+    WasmUnsupported('RTL helper ' + nm + ' not found');
 end;
 
 { Push a compile-time integer as the callee's parameter i wants it. }
@@ -2036,6 +2058,26 @@ begin
   WasmCall(WasmSlotForProc(hp), Procs[hp].Name);
 end;
 
+{ Whole-record copy: PXXMemMove(dest, src, count) — the same RTL routine every
+  other backend calls, and here without any of the register juggling, because
+  wasm evaluates arguments straight onto the operand stack in order.
+
+  This is the UNMANAGED arm only. A record with ARC fields lowers to
+  IR_COPY_REC_MANAGED, a different op, which stays refused by name until this
+  target has ARC — refusing it is correct, because a plain byte move of a
+  managed record is a missed retain, i.e. a use-after-free later and far away. }
+procedure WasmEmitCopyRec(node: Integer);
+var mv: Integer;
+begin
+  mv := WasmWriteHelper('PXXMemMove');
+  if mv < 0 then Exit;
+  WasmWriteValueArg(mv, 0, IRA[node]);            { dest }
+  WasmWriteValueArg(mv, 1, IRB[node]);            { src }
+  WasmWriteConstArg(mv, 2, IRIVal[node]);         { count }
+  if WasmBodyBroken then Exit;
+  WasmCall(WasmSlotForProc(mv), 'PXXMemMove');
+end;
+
 procedure WasmEmitStmt(node, blk: Integer);
 var pvt: Byte;
 begin
@@ -2049,6 +2091,7 @@ begin
     IR_JUMP_IF_FALSE : WasmEmitJumpIfFalse(node, blk);
     IR_STORE_MEM     : WasmEmitStoreMem(node);
     IR_WRITE, IR_WRITELN : WasmEmitWrite(node);
+    IR_COPY_REC      : WasmEmitCopyRec(node);
     IR_STORE_SYM :
       if WasmSlotType(IRA[node], pvt) then
       begin
