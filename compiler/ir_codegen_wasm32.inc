@@ -1218,10 +1218,106 @@ begin
   p := IRA[node];
   if WasmCastKind(p, ctk) then WasmBuiltinResultType := ctk
   else if (p = -203) or (p = -204) then WasmBuiltinResultType := tyInt64
+  else if p = -Ord(tkGetMem) then WasmBuiltinResultType := tyPointer
   else if (p = -Ord(tkOrd)) and (IRB[node] <> -1) then
     WasmBuiltinResultType := WasmNodeResultType(IRA[IRB[node]])
   else
     WasmBuiltinResultType := IntToTypeKind(IRTk[node]);
+end;
+
+{ Call a named routine in the builtin unit with the arguments already on the
+  operand stack. Fails loudly rather than silently emitting nothing: a missing
+  allocator is a compiler bug, not a coverage gap. }
+function WasmCallRtl(const nm: AnsiString): Boolean;
+var p: Integer;
+begin
+  p := FindProc(nm);
+  if p < 0 then
+  begin
+    WasmUnsupported('the builtin unit has no ' + nm);
+    WasmCallRtl := False;
+    Exit;
+  end;
+  WasmCall(WasmFuncIndex(WasmSlotForProc(p)), nm);
+  WasmCallRtl := True;
+end;
+
+{ Push the address of a Data[] offset — the blob's base plus a displacement.
+  The same two instructions WasmSlotAddr uses for a data-resident global, and
+  for the same reason: the base is not known until the module is written. }
+procedure WasmDataAddr(off: Integer);
+begin
+  WasmGlobalGet(WasmGData);
+  WasmI32Const(off);
+  WasmOp($6A, 'i32.add');
+end;
+
+function WasmEmitGetMem(node: Integer): Boolean;
+var classIdx, alloc, ctor, argNode, obj: Integer; pvt: Byte;
+begin
+  WasmEmitGetMem := False;
+  argNode := IRB[node];                     { the size argument }
+  if argNode = -1 then Exit;
+  alloc := FindProc('PXXAlloc');
+  if alloc < 0 then
+  begin
+    WasmUnsupported('the builtin unit has no PXXAlloc');
+    Exit;
+  end;
+  if not WasmParamValType(alloc, 0, pvt) then pvt := WT_I32;
+  WasmEmitValueAs(IRA[argNode], pvt, 'size argument of PXXAlloc');
+  if WasmBodyBroken then Exit;
+  if not WasmParamValType(alloc, 1, pvt) then pvt := WT_I32;
+  if pvt = WT_I64 then WasmI64Const(8) else WasmI32Const(8);   { alignment }
+  if not WasmCallRtl('PXXAlloc') then Exit;
+
+  classIdx := IRC[node];
+  if classIdx < REC_UCLASS_BASE then
+  begin
+    { Plain GetMem/New: the payload pointer IS the result. }
+    WasmEmitGetMem := True;
+    Exit;
+  end;
+
+  obj := WasmAddLocal(WT_I32, 'newobj');
+  WasmLocalTee(obj);
+  WasmDataAddr(UClsVMTOffset[classIdx - REC_UCLASS_BASE]);
+  WasmMemOp($36, 'i32.store', 2, 0);        { [Self + 0] := VMT }
+
+  ctor := IRResolveCtorProc(node, classIdx);
+  if ctor >= 0 then
+  begin
+    WasmLocalGet(obj);                      { Self is parameter 0 }
+    if not WasmEmitIndArgs(ctor, IRB[argNode], 1, 'constructor '
+                           + Procs[ctor].Name) then Exit;
+    WasmCall(WasmFuncIndex(WasmSlotForProc(ctor)), Procs[ctor].Name);
+    { A constructor's own return value is not the instance — the INSTANCE is,
+      on every target. x86-64 saves Self across the call and returns it; here
+      the saved copy is already in a local, so the ctor's result is dropped and
+      the local is read back. }
+    if Procs[ctor].IsFunc then WasmOp($1A, 'drop');
+  end;
+  WasmLocalGet(obj);
+  WasmEmitGetMem := True;
+end;
+
+function WasmEmitFreeMem(node: Integer): Boolean;
+var argNode: Integer; pvt: Byte; f: Integer;
+begin
+  WasmEmitFreeMem := False;
+  argNode := IRB[node];
+  if argNode = -1 then Exit;
+  f := FindProc('PXXFree');
+  if f < 0 then
+  begin
+    WasmUnsupported('the builtin unit has no PXXFree');
+    Exit;
+  end;
+  if not WasmParamValType(f, 0, pvt) then pvt := WT_I32;
+  WasmEmitValueAs(IRA[argNode], pvt, 'pointer argument of PXXFree');
+  if WasmBodyBroken then Exit;
+  if not WasmCallRtl('PXXFree') then Exit;
+  WasmEmitFreeMem := True;
 end;
 
 { Builtins this backend can lower. Returns False for one it cannot, so the
@@ -1251,6 +1347,33 @@ begin
     if not WasmScalarType(atk, want) then Exit;
     WasmEmitValueAs(IRA[argNode], want, 'Ord');
     WasmEmitBuiltin := True;
+    Exit;
+  end;
+
+  { --- GetMem, New, and class instantiation ---
+
+    The allocator is NOT written here. `PXXAlloc(size, align)` is an ordinary
+    Pascal routine in the builtin unit, and every backend calls it — the x86-64
+    path spends its lines saving registers around the call, which is the whole
+    of what this target does not have to do. So the interesting part is not the
+    heap at all; it is the four steps AFTER it, which are the same on every
+    target and which wasm expresses with a scratch local instead of a stack
+    slot.
+
+    A FRESH local per allocation SITE, not one per body. `z[0] := A.Create;
+    z[1] := B.Create` is three sites in one body, and a constructor argument
+    may itself allocate — a shared local would be clobbered by the inner
+    allocation between the outer store and the outer read. One local per site
+    is correct by construction and costs a locals-vector entry. }
+  if p = -Ord(tkGetMem) then
+  begin
+    WasmEmitBuiltin := WasmEmitGetMem(node);
+    Exit;
+  end;
+
+  if p = -Ord(tkFreeMem) then
+  begin
+    WasmEmitBuiltin := WasmEmitFreeMem(node);
     Exit;
   end;
 
