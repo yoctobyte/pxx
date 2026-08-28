@@ -12255,3 +12255,31 @@ gives the right characters, and diffs byte-identical.
 
 Branch `wasm` at slice 3, 15 wasm checks green, `gate.sh quick` GREEN, fixedpoint
 byte-identical. Merge set unchanged at three arms, nothing pre-approved.
+
+### 2026-08-28 — the Track T breadth watch is CLOSED, and it was measuring the wrong thing
+
+I had a watch item to escalate if breadth reached ~4h. It went 1h → 2h → 3h while master took
+ten commits, which reads as a watcher falling steadily behind. **It was not.**
+
+`git log 0fbcbdebccd3..origin/master --name-only`, filtered to non-docs paths, returns **0
+files**. Every commit in that window was tickets, roster and tstate's own output. **Track T is
+fully caught up and had nothing to test.** The `--status` breadth line prints a `N testable
+commit(s) behind` clause only when N is nonzero, so its absence WAS the answer, and I read the
+age instead.
+
+> **An age is not a staleness measure when the input rate is zero.** A metric reporting
+> elapsed time rather than unprocessed work returns the same number whether the system is
+> STALLED or IDLE — and those need opposite responses.
+
+**Watch item closed, not escalated.** Filed
+`chore-t-the-breadth-line-omits-its-zero-instead-of-printing-it` [T, p25]: print the count
+unconditionally, because a reader currently has to know a clause exists in order to interpret
+its absence.
+
+This is the session's own recurring failure landing on me rather than on a lane: **a correct
+answer to the wrong question looks exactly like a correct answer.** "3h old" was true and told
+me nothing about health. Recording it here because the next coordinator will read the same
+line and reach for the same threshold.
+
+Otherwise quiet: nothing blocked, `urgent/` empty, all trees level with origin except
+frankwasm's 59 branch commits and 9 dirty files, which are its live Phase 8 working set.

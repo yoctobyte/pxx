@@ -55,7 +55,7 @@ _none_
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 | regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
 
-## backlog (278)
+## backlog (279)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -140,6 +140,7 @@ _none_
 | chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile | T | 20 | chore | The second, weaker half of the split_jobs lint: flag any job that RUNS a /tmp binary no line in that job produces. Prototyped and deliberately NOT shipped — it yields 5-7 candidates depending on how recipe lines are segmented, and every one needs individual adjudication. Shipping it half-tuned would produce exactly the noisy guard that gets muted. | — |
 | chore-t-split-lib-test-into-jobs-that-name-what-failed | T | 45 | chore | One lib-test job bundles several sources, so its tstate key names only the FIRST of them: `lib-test#src:test/crtl_exp2.c` is really `crtl_exp2.c examples/tk/hello.npy +5`, and a timeout in the tk step reads as a C-math regression. Split it so a job names what failed. Do it while lib-test is green — the baseline is recorded here. | — |
 | chore-t-test-binaries-hardcode-unsweepable-tmp-paths | T | 35 | chore | 60 /tmp paths are hardcoded in 37 COMPILED TEST SOURCES and written by the test binary at runtime, so no Makefile sweep can reach them and testmgr does not privatize them either. Two concurrent runs still share those files EVEN UNDER testmgr. Split out of chore-makefile-testtmp-parameterize, which closed the recipe half. | — |
+| chore-t-the-breadth-line-omits-its-zero-instead-of-printing-it | T | 25 | chore |  | — |
 | chore-t-the-tier-ladder-ratio-is-stale-by-its-own-criterion | T | 40 | chore | chore(T): re-measure the tier ladder ratio — the matrix grew 37% and the default's own trigger has fired | — |
 | chore-t-tools-devtest-is-one-job-that-runs-86-guards | T | 45 | chore | chore(T): `tools-devtest#00` is ONE job that serially runs 86 guards, and every number about it is now wrong | — |
 | chore-t-unit-class-est-mem-is-below-what-lib-test-00-actually-peaks-at | T | 25 | chore | testmgr's own advisory, printed at the end of every full tier: `lib-test#00 peaked at 596 MB against a 550 MB estimate` for class `unit`. The scheduler admitted it on a promise the box did not have to keep. Raise the CLASSES row to max*1.5, or give the outlier its own class. | — |
@@ -859,6 +860,7 @@ _none_
 - [p 25] [N] bug-nilpy-classmethod-constructors-on-builtin-types-are-absent
 - [p 25] [D] chore-doc-pascal-dialect-divergences-pointer-difference
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
+- [p 25] [T] chore-t-the-breadth-line-omits-its-zero-instead-of-printing-it
 - [p 25] [T] chore-t-unit-class-est-mem-is-below-what-lib-test-00-actually-peaks-at
 - [p 25] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees
 - [p 25] [U] decide-release-signing-key-custody
