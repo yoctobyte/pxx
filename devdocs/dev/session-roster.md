@@ -10762,3 +10762,84 @@ been true and worthless.
   behaviour is correct**; wasm noticed only because a target with no automatic
   startup makes "initialised by generated code" and "initialised data" observably
   different. Provenance is in the ticket.
+
+## A ticket's PREMISE is a recorded measurement, and it ages like one
+
+`compat-pascal-ioresult-returns-a-negative-errno` (frankB, `0a1b5cbd9`) had **three
+wrong premises, and the first changed the design.** That is the **fourth** recorded
+claim tonight that aged badly — a parked state's re-measure, a spec's *"four call
+sites"*, the `near:` evidence, and now a ticket's stated background.
+
+> **A ticket's premise is a claim about a measurement someone made once. It tells
+> you what was true THEN, not what is true now — and it inherits every blind spot of
+> the search behind it.** Same rule as the enumeration one, aimed at prose instead
+> of counts.
+
+| premise | measured | consequence |
+| --- | --- | --- |
+| *FPC translates errnos* | **FPC passes unmapped errnos through as the POSITIVE errno** (`ELOOP` → 40) | **load-bearing** — had it translated everything, an unmapped errno would need a code **invented**, and an invented code is a plausible wrong answer with no failure mode that reveals it. As it is, the `else` arm **is FPC's behaviour**, not a fallback. |
+| *`path not found` is 3* (documentation) | **2** (oracle) | a row silently wrong |
+| *the map might be an `abs()`* | `ENAMETOOLONG` (36) → **2** | proves a genuine map |
+
+Shipped: `{2 ENOENT, 36 ENAMETOOLONG} → 2`; `{13 EACCES, 20 ENOTDIR, 21 EISDIR} → 5`;
+`40 ELOOP → 40`. All ten measured rows match FPC exactly.
+
+### The line of the night
+> **"A row for them would be transcription wearing the appearance of measurement."**
+
+`EPERM` and `EROFS` are **deliberately absent** — unreproducible without root — and
+that is **stated in the source** rather than filled from documentation. **A table
+where nine rows are measured and two are copied looks exactly like a table where
+eleven are measured, and nothing downstream can tell them apart.** The absent rows
+are more trustworthy than present ones would have been.
+
+### Classification: frankB was right, the coordinator was half right
+I flagged it as an open question. The ticket had **already answered it** —
+`type: bug`, `track: B`, summary *"silently takes the wrong branch."* **Only the
+SLUG said compat**, and the slug is not what the ranker reads. Verified.
+**Filename deliberately not renamed:** the slug is the ticket's identity and other
+documents cite it, so renaming breaks citations to fix an appearance.
+
+Correct reading of the CLAUDE.md table, worth quoting because the deferrable row is
+adjacent: the *"our error number differs"* row is about **what a program prints when
+it dies**; `IOResult` is a value programs **branch on while running**. `if IOResult
+= 2 then` is ordinary Pascal and took the wrong branch — the silent-wrong-behaviour
+escape.
+
+### The `SetIO(-1)` sentinel was AMBIGUOUS as well as negative
+`-1` negated is `EPERM`, a real errno, so five "bad state" sites were
+indistinguishable from a genuine permission failure. **Translating without noticing
+would have converted a sentinel into a silently wrong errno — strictly worse than
+the negative number the ticket was filed to remove.** Now 103 (file not open) for
+the `Handle < 0` guards and 102 (not assigned) for `Erase` with no name and both
+`Rename` refusals, **102 measured** as FPC's answer for renaming an open handle.
+
+### The PASSLIKE lesson, turned on its own test within hours of being filed
+The test builds its own fixtures (`PalMkdir`/`PalSymlink`/`PalChmod`), covers all
+ten rows plus 102/103, and **asserts the invariant AS ITSELF** — no failure surfaces
+a negative code on either arm. The EACCES row is guarded for a user who can read a
+mode-000 file, **and that skip PRINTS**:
+
+> **An invisible skip is how a suite passes without testing anything.**
+
+That is the exact defect frankB filed against `twatch` this morning, found in its
+own work and fixed before it could matter. Negative control: restoring the
+passthrough fails with 9 errors including both invariant rows.
+
+## ALLOCATION, made visible rather than routed around
+
+**The highest-value unclaimed work in the repo is
+`bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream` [A, p70] — and it
+has no lane holder.** frankA declined it for good reason (fatigue on shared-core
+parser work) and is not being re-offered. Meanwhile Track B is working its **p45
+tail** (`feature-crtl-implement-libc-assumptions` dispatched; then the *parked*
+`feature-real-dynlib-loader`, then p40s).
+
+**This is the owner's allocation call, not the coordinator's.** Putting a Track B
+agent on a Track A ticket is a **combined-track assignment**, which CLAUDE.md is
+explicit is the user's decision — the coordinator owns the A/P *slot* (collision
+avoidance), not the authority to assign lanes. So it is recorded here where the
+owner will see it, rather than filled quietly past its value or left unmentioned.
+
+Track B is unaffected by the FPC seed blind spot — FPC never compiles `lib/crtl` or
+`lib/rtl`.
