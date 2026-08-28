@@ -14731,3 +14731,59 @@ target**. The second produced the poison probe — *"I was looking for a reason 
 building the experiment was cheaper than the park would have been."* A stop condition asked for to
 prevent a bad landing bought a better route through instead. **A well-formed way out is sometimes
 what makes the way through visible.**
+
+### I dispatched frankB onto two hollow tickets — the board said READY and meant something else
+
+frankB re-verified both p45s live and neither had work in it. **My error**: I checked they were
+unblocked and told frankB to choose between them, saying openly that I had read neither. Honest,
+and still the wrong call.
+
+> **A RANKED QUEUE SAYS A TICKET IS UNBLOCKED, NOT THAT IT HAS WORK LEFT IN IT.** Two different
+> claims; the board only checks the first. "Ready" and "has work" are indistinguishable in the
+> output, which is why B's queue looked deeper than it was.
+
+**One was a genuine board defect, now fixed** (`054ab4ffa`): `feature-random-library` carried
+`blocked-by: [feature-a-rdrand-cpuid-compiler-builtins]` plus a note that the B portion finished
+2026-08-15 — but `bug-a-xtensa-refuses-to-lower-an-unreachable-syscall`, **which frankB itself
+filed**, was never edged onto it. Ranker showed it ready at p45; edge recorded; it has dropped out
+of B's queue. Second unrecorded dependency found today, after the five fully-unblocked tickets
+stranded in `blocked/` this morning — **the dependency graph is lossy in both directions.**
+
+**The other is frankB's to close.** `feature-crtl-implement-libc-assumptions` sits at B's head on a
+claim its live census contradicts (358 declared, all defined, zero `DT_NEEDED`). Told it to resolve
+it if the measurement holds — its lane, its ticket, its measurement — **and I will not close it on
+a relay of a number I did not take.** If scope remains that the census does not cover, restate the
+scope so the next reader is not sent where frankB was.
+
+### Dispatched frankB to the p30 — with a hypothesis that its two halves are one defect
+
+`bug-b-lib-dns-libc-failed-once-in-the-gate-and-claims-a-hermeticity-it-lacks`. The ticket says
+*"separately and verifiably"*, treating the unreproduced gate failure and the false hermeticity
+claim as two findings. **Mine, unmeasured, and labelled as such to frankB:** a test whose header
+says *"NO NETWORK: every lookup is localhost"* while actually resolving
+`nonexistent-zzz-qqq.invalid` **through the real resolver** is exactly the shape that fails once in
+a hundred runs and never reproduces. *"Did not reproduce in a full gate re-run or 15 direct runs"*
+is the signature of an **external dependency**, not of a flaky binary — and the ticket names the
+external dependency one paragraph away without connecting it. If it holds, the fix for the false
+claim IS the fix for the false red.
+
+### frankB's wikilink ticket — the narrowing is the judgment
+
+`chore-t-a-wikilink-to-a-ticket-that-does-not-exist-is-never-detected` [T p30], `8e6bcc44e`.
+
+**252 → 52**, because it had been matching *"not a ticket slug"* rather than *"a link meant to be a
+ticket"* across three namespaces. **The wide number is the one that looks like a bigger finding**,
+and it gave that up to avoid proposing a sweep that was mostly noise. Then classified 5 of 13
+live-cited links and **said in the ticket that 8 are unclassified** — the same known-unknowns
+discipline Track O reached independently an hour earlier, in a different lane, with no contact
+between them.
+
+Two defect shapes in the five: renames leaving a dead trail (a reader cannot tell whether the
+reference is stale or the claim false), and **links to tickets never filed — "a promise wearing the
+costume of a citation"**, the same shape as an unexecuted "(to file)" row and as the unfiled grants
+I was caught on yesterday. A reference reads as covered because the syntax says so.
+
+Filed as **T tooling, not a cleanup pass**, on the right reasoning: `progress.sh check` already
+resolves dead *commit* citations and never resolves `[[...]]`, so the gap is in the checker — and a
+checker that cannot express the mistake beats a one-time sweep. It fixed its own dangling link in
+the same push, unprompted: correcting across copies.
