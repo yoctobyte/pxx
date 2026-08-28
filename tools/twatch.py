@@ -6020,9 +6020,28 @@ def report_running_code(clone_path):
         return
     try:
         with open(os.path.join(clone_path, WATCH_REL)) as f:
-            running = (json.load(f) or {}).get("code_fp") or ""
+            w = json.load(f) or {}
     except (OSError, ValueError):
         return
+    running = w.get("code_fp") or ""
+    # watch.json is a RECORD, not live state, and the difference bites exactly
+    # once per restart -- which is the moment this check is most likely to be
+    # run, because someone just restarted to make a fix live and wants to know
+    # it worked. The stopping daemon's last write survives it; a fresh daemon
+    # has not called set_phase yet. Measured 2026-08-28, 16 seconds after a
+    # restart: this printed the OLD fingerprint and told the operator to
+    # restart the daemon they had just restarted.
+    #
+    # So the record must be shown to belong to a process that still exists.
+    # Two ways it can fail to:
+    if (w.get("phase") or "") == "stopped":
+        return                  # a farewell note says nothing about a successor
+    pid = w.get("pid")
+    if isinstance(pid, int):
+        try:
+            os.kill(pid, 0)     # signal 0: existence check, no signal delivered
+        except OSError:
+            return              # the writer is gone; the record outlived it
     on_disk = code_fingerprint(os.path.join(clone_path, "tools", "twatch.py"))
     if not running or not on_disk or running == on_disk:
         return

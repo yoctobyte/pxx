@@ -85,6 +85,37 @@ def main():
             json.dump({"code_fp": "abc123abc123"}, f)
         check(run(tmp) == "", "code_fp but no twatch.py on disk -> silent")
 
+        # THE RESTART FALSE POSITIVE. watch.json is a RECORD, not live state:
+        # the stopping daemon's last write survives it, and a fresh daemon has
+        # not called set_phase yet. Measured 2026-08-28, 16 seconds after a
+        # restart -- this check printed the OLD daemon's fingerprint and told
+        # the operator to restart the daemon they had just restarted. That is
+        # the worst moment for it to be wrong: a restart is exactly when
+        # somebody runs it, precisely to confirm the fix went live.
+        make_clone(tmp, "deadbeef0000", "print('v9')\n")
+        with open(os.path.join(tmp, tw.WATCH_REL), "w") as f:
+            json.dump({"phase": "stopped", "code_fp": "deadbeef0000"}, f)
+        check(run(tmp) == "",
+              "phase=stopped -> silent; a farewell note says nothing about a "
+              "successor")
+        with open(os.path.join(tmp, tw.WATCH_REL), "w") as f:
+            json.dump({"phase": "testing", "code_fp": "deadbeef0000",
+                       "pid": 2 ** 22 - 1}, f)   # above any live pid_max
+        check(run(tmp) == "",
+              "a pid that no longer exists -> silent; the record outlived its "
+              "writer")
+        with open(os.path.join(tmp, tw.WATCH_REL), "w") as f:
+            json.dump({"phase": "testing", "code_fp": "deadbeef0000",
+                       "pid": os.getpid()}, f)
+        check("DAEMON is running" in run(tmp),
+              "a LIVE pid with a drifting fingerprint still warns — the pid "
+              "check must not swallow the real case")
+        with open(os.path.join(tmp, tw.WATCH_REL), "w") as f:
+            json.dump({"phase": "testing", "code_fp": "deadbeef0000"}, f)
+        check("DAEMON is running" in run(tmp),
+              "no pid recorded at all -> still warns, rather than going silent "
+              "on every older watch.json")
+
     check(run("") == "", "an empty clone hint -> silent")
     check(run("/nonexistent/path/xyz") == "", "a bogus clone path -> silent")
 
