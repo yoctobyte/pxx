@@ -10428,3 +10428,76 @@ call with no separate check.
 
 Shared-doc notes landed as `fd13ef648` (devdocs only): `ir-as-substrate.md` on IRTk
 being a hint not a guarantee, `debugging-playbook.md` on unreachable capabilities.
+
+## The parked state was itself stale — and my instruction to trust it was wrong
+
+I dispatched frankB to `feature-b-the-module-shim-batch-blocking-the-python-corpus`
+[B p62] with *"PARKED MID-FLIGHT — re-claim, do not restart from scratch."*
+**That instruction was wrong and neither of us could see it from outside:** the
+parked state's re-measure is dated **2026-08-18 at pin v352**, ten days and many
+pins back — *exactly as stale as the 2026-08-14 table it had replaced.* **The
+ticket's own first rule is that a count without a sha is a snapshot, and the rule
+applied to the ticket.**
+
+frankB re-measured row by row on v389 instead. **Reading the instruction's intent
+over its literal words was correct**; "do not restart from scratch" meant "do not
+duplicate finished work", not "trust a number with no sha."
+
+### Findings, in ascending cost-to-the-next-person
+- `codecs` and `urllib.request` have **no `mimic_*.py` of that name** but do
+  resolve — `import codecs` prints `note: codecs -> mimic_codecs (shim, subset)`.
+  > **A `ls lib/rtl/mimic_*` check would have called both open.** Same family as
+  > the wrong-key query: **a check on the artifact's NAME instead of on the
+  > BEHAVIOUR** — and the name check is always the one reached for, because it is
+  > cheaper.
+- **`xml.etree.ElementTree` is done** (fork decided Option A, re-filed, in `done/`,
+  `mimic-xml-etree` gated in `lib-test`) — so **the ticket's `blocked-by` edge was
+  stale too**, and the ranker was ranking it against a blocker that no longer
+  existed.
+- The re-measure step has now been run **twice with the same answer.**
+
+### DECISION: resolve it to `done/`. Its B scope IS complete.
+Every shim row resolves on v389. Residue is out of B's scope **by the ticket's own
+rules** — `genshi_core`/`lxml` are third-party (shimming one is impersonating a
+library), 32 language walls (`yield` at 18) are frontend work. **`weakref` is the
+one genuine residue** — a runtime facility, absent on v389, and `lib/` therefore
+B's; left to frankB whether it earns a ticket or just a line in the resolution.
+
+> **A stale ticket at the head of a lane's queue actively MISDIRECTS the next
+> agent.** That is a coordination harm, not untidiness — this one had frankB
+> re-measuring work finished ten days earlier.
+
+### The convergence cuts the OTHER way — my reading was wrong
+I read "the B batch is exhausted" as the shim work being done. frankB showed it is
+exhausted **for this ladder's three corpora only** — one family of self-contained
+web parsers. **`functools` still does not resolve on v389 and was reportlab's #2
+wall at 27 files; `pickle` was 18.** So **thin-stdlib-shim work of exactly the kind
+this ticket was filed for exists in quantity — it is aimed at the wrong corpus.**
+
+**And the action item lands in a closed lane:**
+`feature-nilpy-stdlib-coverage-gaps-measured` [p72] is **`track: N`** (verified).
+Track N is undispatched by owner call, so fresh ladder numbers would feed a ticket
+nobody can take — **which is exactly why the finding went to Track U rather than
+into a re-ranking I would have made myself.** Told frankB not to run the ladder;
+declining it at load 14.8 with Track T mid-tier was already right, and stating the
+limit — *"per-row checking answers the routing question, it does not produce
+today's wall counts, and the note doesn't claim it does"* — is what makes the rest
+of the note trustworthy.
+
+## Dispatched: `feature-b-buffered-text-io-one-syscall-per-byte-today` [B, p58]
+
+Filed by frankB before the U answer, as I asked, ranked on the **performance** case
+so the design is not shaped to satisfy `SetTextBuf`. `TFNextByte` does
+`PalRead(f.Handle, @one[0], 1)` — **one byte, one syscall**; a 100 KB file read
+line by line is ~100,000 `read(2)` calls.
+
+Hesitated only because the scoper implementing their own scope carries its blind
+spots forward. **Overruled by the ticket naming what is easy to get wrong instead
+of saying "add a buffer":** the peek slot must **collapse into** the buffer's cursor
+rather than sit in front of it (two lookahead mechanisms for one concept — the
+normalise smell, from the lane that had just refused a *wrong* merge on
+`TFIsSpace`); `Eof` does the lookahead itself so *when* the read happens changes;
+`Input`/`Output` are interactive, so read-ahead past a newline breaks
+line-at-a-time programs; and **the fd position after `Close`** — a reader that has
+read ahead leaves the descriptor somewhere the caller never asked for. That last
+is the trap found in production, not in review.
