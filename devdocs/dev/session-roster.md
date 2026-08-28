@@ -13016,3 +13016,71 @@ frankA acted on the wall-4 relay within the tick: `3a5529955` (one canonical wal
 other three marked snapshots), `eda8d7137` (the p80 arity ticket), `3f94b47d9` (the
 comment-nesting divergence entry now points at `fpc_diff_probe.sh`, so the lost oracle turns
 into the next person's shortcut).
+
+### The arity diagnostic: zero hits, and frankA labelled its own best number VACUOUS
+
+`2c5549642` on master — `PXXDBG=p.arity`, off by default, self-host verified. Counts, with
+frankA's own weights:
+
+| scope | measured | verdict |
+| --- | --- | --- |
+| `lib/rtl` | 110/110 units, 367 method impls | 0 hits — **strong** |
+| `lib/pcl` | 22/23 units, 412 method impls | 0 hits — **strong** |
+| `examples` | 38/41 programs | 0 hits — **strong** |
+| corpus | **12/55** files reached IR | 0 hits — **weak** |
+| `compiler/**` | full self-compile | 0 hits — **VACUOUS** |
+
+**The vacuous label is the finding, and frankA attached it to its own headline number before
+anyone could quote it back.** `compiler/**` declares no classes and no methods — it is purely
+procedural Pascal — so a **method**-arity probe over it can only return zero. A check that
+cannot fail, caught in its own result, in real time. **Verified independently:** all 7 `= class`
+matches are prose inside doc comments, and the single
+`function TNoRefCountObject.QueryInterface(...)` sits inside a `{ }` block at
+`pasparser_call.inc:1424-1437`.
+
+**But the same zero answers a second question non-vacuously, and frankA kept the two apart.**
+As a *detector* it learned nothing. As a *safety* result it is decisive: **the construct the fix
+restricts does not occur in the compiler's own source, so the arity fix cannot break the
+self-host fixedpoint.** The risk I raised is zero rather than small. No `lib/pcl` campaign, so
+frankB is not woken — trigger #2 does not fire.
+
+**Two blind spots found by asking what the probe could not see, rather than by trusting a
+zero.** `AN_CALL` is one of **three** lowering arms, so the first "zero across `compiler/**`"
+had silently excluded every virtual call. And method paths materialise trailing defaults as
+real `AN_ARG` nodes while the free-routine path leaves the chain short for codegen to fill —
+before that was accounted for, the probe flagged every defaulted free call (`urlopen(url)` in
+`mimic_urllib_request.pas` was the first false positive). **Both were the probe being wrong in
+the direction that produces a clean number.**
+
+Weak row stated as weak: only 12 of 55 corpus files lowered any IR, 43 blocked on fpcunit and
+softfloat internals — *close to no evidence, not evidence of absence.* Also unmeasured:
+`lib/pcl/tk`, 2 ESP mains, one example whose `klondike` unit is absent from the tree, and any
+generic method body never instantiated.
+
+frankA's own read of the zero — that this defect yields a **garbage value rather than a compile
+error**, so any *exercised* path hitting it would already be visibly broken and fixed, leaving
+the cost on code not yet written and on rarely-exercised paths — is right, and it argues for
+the check rather than against it.
+
+### Promotion approved, with one addition frankA did not name
+
+The hole is narrower than the ticket implied: too-few-args **inside parens** is already
+rejected; the only unchecked shape is **no parentheses at all**, at **seven sites sharing an
+`if CurTok.Kind = tkLParen then … end;` with no else.**
+
+**Seven identical missing elses is the same smell that stopped the fifth `AN_METHODREF` arm,
+pointing the other way.** Filling in seven `else` branches would be the microfix — it grows the
+count of places that decide "call or reference" from seven to seven-with-a-new-duty, and the
+next shape will need an eighth. The fix wants **one** place that answers *is this a call or a
+reference*, which is the `normalise-dont-special-case` shape and probably smaller than the
+seven-arm version.
+
+The constraint frankA already identified is the real hazard and it is sharp: `obj.Method`
+without parens is **legitimately not a call** in a method-pointer context — which is exactly
+what defect B depends on — so the check must fire only where a call was genuinely intended, or
+it breaks that construct while fixing this one. Testing both directions before landing is the
+right gate.
+
+Moving the real check parser-side is correct for a reason worth keeping: **`ASTLine` is 0 for
+every node from an appended unit**, so an IR-level error reports "line 0" and cannot tell
+anyone where the call is. A diagnostic that cannot name its location is barely a diagnostic.
