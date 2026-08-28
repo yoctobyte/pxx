@@ -14807,6 +14807,16 @@ endif
 	@out=$$($(TESTTMP)/lib_dns_libc 2>&1); \
 	  test "$$(printf '%s\n' "$$out" | tail -1)" = "DNSLIBC OK" \
 	  || { echo "FAIL: lib_dns_libc output was:"; printf '%s\n' "$$out"; exit 1; }
+	# RFC 6761 6.3: localhost always means loopback and must never reach a
+	# nameserver. The PREDICATE rows are the gate, not the resolution rows --
+	# this box's stub resolver is itself compliant and synthesises the whole
+	# localhost subtree, so reverting the fix still returned the right answer
+	# and differed only in emitting 20 DNS queries to get it. A value assertion
+	# would therefore be testing systemd-resolved rather than us.
+	$(PXX_STABLE) -Fulib/rtl test/lib_dns_localhost_rfc6761.pas $(TESTTMP)/lib_dns_localhost
+	@out=$$($(TESTTMP)/lib_dns_localhost 2>&1); \
+	  test "$$(printf '%s\n' "$$out" | tail -1)" = "DNSLOCALHOST OK" \
+	  || { echo "FAIL: lib_dns_localhost output was:"; printf '%s\n' "$$out"; exit 1; }
 	# A spawned child inherits the parent's environment (every spawn site used
 	# to hard-code an empty envp, i.e. handed each child `env -i`).
 	$(PXX_STABLE) -Fulib/rtl test/lib_child_env.pas $(TESTTMP)/lib_child_env
