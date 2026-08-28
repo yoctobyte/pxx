@@ -14,15 +14,23 @@
 #     PXXStrIncRef / PXXStrDecRef. Something that produced the right characters
 #     by storing a pointer would pass the diff on this slice and corrupt a
 #     longer one;
-#   * the three WRITE-POSITION shapes must still refuse BY NAME. IR_LEA of a
-#     managed string is position-dependent in the register backends (read =>
-#     the handle, write => the slot address) and this target does not model the
+#   * the WRITE-POSITION shapes must still refuse BY NAME. IR_LEA of a managed
+#     string is position-dependent in the register backends (read => the
+#     handle, write => the slot address) and this target does not model the
 #     position; it returns the handle, which is correct only while every write
 #     shape refuses somewhere else. That is an argument from what refuses, so
 #     it is CHECKED rather than trusted;
 #   * a POSITIVE TWIN for that negative: the slice itself must refuse nothing.
-#     "These three refuse" passes vacuously on a build where everything
-#     refuses, and that is exactly the state this phase started in.
+#     "These refuse" passes vacuously on a build where everything refuses, and
+#     that is exactly the state this phase started in.
+#
+# This check originally listed THREE refusals and one of them was wrong.
+# Concatenation was in the list because it refused, not because it was a write
+# position — an operand of `a + b` is read, and no answer here ever depended on
+# it. The slice-2 lowering made that check fail, which is how the mistake
+# surfaced: a list assembled from "what currently refuses" rather than from
+# "what this argument needs" contains everything that happens to be missing.
+# The two that remain are write positions and the reason is stated for each.
 #
 # HONEST SCOPE, and it expires mechanically. The wasm32 heap arena still starts
 # at address 0 — bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero,
@@ -118,9 +126,13 @@ fi
 echo "ok  a managed slot is zeroed in the prologue, ahead of anything that"
 echo "..  could read it as a live handle"
 
-# The three write-position shapes. Each must refuse, and each must refuse BY
-# NAME — a generic 'IR op 42' would mean the refusal moved and no longer covers
-# what this depends on.
+# The write-position shapes. Each must refuse, and each must refuse BY NAME —
+# a generic 'IR op 42' would mean the refusal moved and no longer covers what
+# this depends on. SetLength publishes a new handle into the slot; an indexed
+# write needs the slot address for PXXStrUnique's copy-on-write. The third
+# write position — a `var string` argument — is covered differently: it does
+# not lower through IR_LEA on this path at all, measured rather than refused,
+# and the slice passes `Fill(s)` to prove it lowers and gives the right answer.
 mk() { cat > "$work/neg.pas" <<EOF
 program Neg;
 var s: string;
@@ -141,9 +153,8 @@ check_neg() {
 }
 check_neg "  s := 'abc'; SetLength(s, 2);" "builtin SetLength"
 check_neg "  s := 'abc'; s[1] := 'z';"     "indexing a managed string"
-check_neg "  s := 'a'; s := s + 'b';"      '`+` on strings'
-echo "ok  SetLength, indexed write and concat still refuse by name — the"
-echo "..  three shapes IR_LEA's read-only answer depends on"
+echo "ok  SetLength and indexed write still refuse by name — the two write"
+echo "..  positions IR_LEA's read-only answer depends on"
 
 # The scope note above, made falsifiable. When the heap ticket lands this
 # fails, and the note has to be rewritten rather than outliving its cause.

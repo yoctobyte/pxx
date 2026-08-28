@@ -788,6 +788,126 @@ The unwind path still leaks managed locals — it returns without passing the
 epilogue — which is the wasm half of
 `bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa`, unchanged.
 
+## Phase 8b — managed strings, slice 2: concat and compare — **DONE 2026-08-28**
+
+The histogram picked this too: 20 of the 38 refusals left after slice 1 were
+`` `+` ``, `=` and `<>` on strings. Neither operation is an instruction on any
+target, so the whole slice is: split each operand into (length, characters),
+push four arguments in the callee's order, call, spill, release any operand
+that owned its reference, yield.
+
+**One predicate now answers "is this a string operation"**
+(`WasmBinopIsString`), and two consumers ask it: `WasmEmitBinop` refuses or
+dispatches on it, and `WasmBinopWidth` declines to unify a width on it so
+`WasmNodeResultType` falls through to the IR's own record and answers
+`tyAnsiString` rather than the ARITHMETIC width of two handles. That deletes
+the special case slice 1 had to add in `WasmStrTypeOf`, which is the tell that
+the predicate is in the right place.
+
+**`WasmStrParts` is the (length, characters) rule, once.** A handle carries its
+length below itself and must not be dereferenced when nil; a frozen buffer
+carries it inline at +0 with the characters at +8; a `Char` carries nothing and
+has to be spilled to frame scratch before anything can point at it. Same three
+rules as `EmitA64StringParts`, which is where they are written for the register
+backends. `WasmEmitLength` was folded onto it — the two were one phase old and
+had already diverged in one detail (the FIELD/INDEX deref existed in Length's
+managed arm and nowhere else), which is precisely how this drifts.
+
+**Ordered comparison landed with the rest on purpose.** It reached NO cross
+backend for a long time: only `=`/`<>` were special-cased, `a < b` fell through
+to the integer compare, and `'zzz' < 'aaa'` answered by allocation order —
+silently and identically wrongly on four targets. This backend refuses rather
+than guesses so it could not have shipped that bug; it could have shipped the
+refusal forever, which is the failure mode worth naming.
+
+**The leak assertion took three attempts and found a bug in the oracle.** An
+operand that owned its reference must be released after the RTL call, and a
+leak changes no output at all, so it needs a heap observable. Attempt one
+compared the arena advance against the native build's: wrong, because
+`PXXAlloc(64)` is served from a free list once the program has freed anything,
+so the two figures were allocator bookkeeping (72 native, 112 wasm, neither
+leaking). Attempt two probed with a size the loop never frees, so every call
+bumps — and then the two builds disagreed by 40 bytes per iteration.
+
+**They disagreed because x86-64 is the one that leaks.** It releases an owned
+managed-string operand after a concat (`ir_codegen.inc:6105/6110`) and not
+after a comparison, so `if F(x) = 'lit'` leaks F's result every evaluation:
+401032 bytes over 10000 iterations, against 1032 on wasm32 and 0 under FPC. The
+four cross backends all carry the release at all THREE sites; x86-64 carries it
+at one. That is the exact mirror of
+`bug-a-a-string-function-result-in-a-concat-leaks-on-every-cross-target`, which
+was the same predicate missing from the four cross backends while x86-64 had
+it. Filed as
+`bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64` [A, p70].
+
+So attempt three asserts the PROPERTY on wasm alone — the advance must not
+scale with the iteration count, 1000 and 9000 iterations giving the same
+figure — and separately asserts that native still has the bug, so the note
+expires when the ticket lands. **A diff against an oracle is only as good as
+the oracle**, and the only reason this surfaced is that the figures were
+compared at two iteration counts rather than once.
+
+**The Char scratch had to move to the shadow stack, and the frame version was
+wrong in a way only nesting shows.** A `Char` operand is a value, so it must be
+spilled to memory before an RTL routine can point at it. The first version
+reserved one 8-byte area per BODY, sized in the pre-pass — and string operands
+NEST: `a + (b + s)` put the inner Char at the same address as the outer and
+printed `BBS` for `ABS`. Reserving storage per body for a thing whose lifetime
+is per EXPRESSION is the whole mistake, and a shadow-stack push nests by
+construction, which is why every register backend spills its Char onto the
+machine stack. The frame reservation, its pre-pass scan and its frame-growth
+arithmetic all went away with it.
+
+**And the locals had to be pooled by depth**, because a fresh local per site —
+which is what makes nesting safe — hit the encoder's 288 params+locals per body
+on a slice with two dozen string operators. Depth is the real bound: an
+operand's parts are live from the split until the RTL call, and anything nested
+inside has already finished, so siblings share slots and only levels need their
+own. Sixteen levels, eight slots each, allocated lazily; deeper is refused by
+name.
+
+**Also landed: `IR_ATOMIC`.** A plain load / modify / store, because a wasm MVP
+module has exactly one thread of execution, so the sequence is indivisible by
+construction rather than by a prefix. The argument is semantic and it is
+riscv32's shape (masking interrupts IS the atomic on a single-core part, and it
+refuses on a multi-core one) with a stronger premise and no capability table to
+ask — whether a module is threaded is a module-level decision this compiler does
+not make yet. The precondition that follows is recorded in
+`devdocs/dev/threading-model.md` §8 **on master**, not only at the lowering
+site: whoever adds shared memory or the threads proposal to this target must
+replace `WasmEmitAtomic` in the same change, because the window between the two
+is a program that compiles, runs, and is wrong only sometimes.
+
+**Result:** 216 of 236, up from 195 — 211 from the string operators and five
+more from `IR_ATOMIC`, which had been five of the `value IR op 63` refusals.
+What is left is 17 real refusals and the mass is one cause again — **indexing a
+managed string, 12** — then `SetLength` at 3 and two assorted IR ops. Slice 3
+is indexing plus `SetLength`, which are the
+same mechanism from two directions: both need the SLOT's address so a
+copy-on-write (`PXXStrUnique`) or a resize (`PXXStrSetLen`) can publish a new
+handle into it. That is also the pair `check_managed.sh` asserts still refuses,
+so slice 3 will make that check fail by design — the second time this phase's
+own expiry has fired.
+
+**One check corrected itself this slice.** `check_managed.sh` listed THREE
+refusals as the support for `IR_LEA`'s read-position answer, and concatenation
+was in the list because it refused, not because it was a write position — an
+operand of `a + b` is read, and no answer ever depended on it. Slice 2 made
+that check fail, which is how the mistake surfaced. **A list assembled from
+"what currently refuses" rather than from "what this argument needs" contains
+everything that happens to be missing**, and only the failure distinguishes the
+two.
+
+**The other check corrected itself for the opposite reason.** `check_strop.sh`
+asserts the three RTL calls appear in the slice and in no program without
+string operators — and the negative half passed while it was written only
+because the RTL's own `PXXVarBinOp` (which calls `PXXStrConcat`) was itself
+refused and emitted as `unreachable`. The very change under test made the
+symbol appear module-wide. The check is now scoped to `$main$0`, the program's
+own body. Same lesson as the `abi.inc` grep calibrated against an empty result:
+**a negative control has to be measured on the tree the check will run on, not
+on the one it was written against.**
+
 ## Phase 8 — the PAL
 
 `lib/rtl/platform/wasi/platform_backend.pas`, sized like `esp/` (1,035 lines).
@@ -835,6 +955,13 @@ two contained shared-file changes above. Bigger than a frontend skeleton,
 smaller than the C frontend was.
 
 ## Log
+- 2026-08-28 — **managed strings, slice 2 (concat + compare) and IR_ATOMIC
+  done.** 211 of 236, up from 195. Two of this lane's own checks failed by
+  design and both were right to: one listed a refusal that was never load-
+  bearing, the other's negative control had been calibrated against a tree the
+  change under test invalidated. The leak assertion is the piece worth reusing
+  — a leak changes no output, so the slice prints the heap bump pointer's
+  advance and diffs THAT against native rather than against a threshold.
 - 2026-08-28 — **managed strings, slice 1 (publish) done; the plan's own
   ordering overruled by measurement.** 195 of 236 bodies on the string corpus,
   up from 182, and the single largest refusal cause is gone. Two findings
