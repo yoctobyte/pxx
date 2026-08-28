@@ -1512,3 +1512,102 @@ on the syntax that usually carries it.** The store narrows by `Syms[].TypeKind`
 and the refresh re-extends by it, so that is what the predicate must ask about;
 the node's type kind merely correlates, and stops correlating exactly where the
 compiler generates the code itself.
+
+---
+
+## 2026-08-28 — item 3: the resident's frame slot stops being written. LANDED.
+
+Re-sized first, and the ticket's own number was **wrong by 2-3x in our favour**:
+item 3 was carried at ~5% and measured **1.10-1.17x** against the post-W2 shape.
+
+| variant | insns | cyc/iter | vs current |
+| --- | --- | --- | --- |
+| A — current `-O3`, post-W2 | 15 | 4.96-5.19 | — |
+| **B — item 3: the three dual-write stores gone** | 12 | 4.43-4.51 | **1.10-1.17x** |
+| C — probe: re-extensions dropped instead (illegal, control only) | 12 | 4.05-4.27 | 1.18-1.28x |
+| D — floor: neither | 9 | 2.99-3.06 | 1.65-1.73x |
+
+**This is where the chain rule stops being the whole story, and the correction
+matters more than the slice.** Those three stores feed nothing and are entirely
+off the recurrence, so the rule that killed 5a predicts they are ~free. They are
+not. A loop this short is **throughput**-bound as well as latency-bound: three
+stores per iteration against one store port. The rule needs both halves:
+
+> A move or a store costs if it is on the recurrence (latency) **or** if the
+> loop is short enough that issue and port pressure bind (throughput). 5a was
+> neither. W2's bracket was the first. These stores are the second.
+
+Predicting ~0 here and measuring 1.10-1.17x is the second time in two slices
+that the model was wrong in the direction of *not building the thing*.
+
+### The blocker was found by measurement, not by audit
+
+The dual-write exists to keep the frame slot authoritative. Stopping it is only
+safe if nothing reads the slot — and the readers that can be found by grep are
+all fine (`EmitLoadVar`/`EmitLoadVarRcx` consult `ResidentRegOf`; the epilogue's
+result load goes through `EmitLoadVar`; captures are **lambda-lifted** into extra
+params so there is no uplevel frame access at all; address-taken and `absolute`
+locals are refused by `SymSlotEscapes`; `IR_ZERO_SYM` writes the slot itself and
+refreshes from it). The residual risk was a direct `[rbp+off]` emit somewhere in
+10k lines, and **enumerating those by hand is an audit with no completion
+criterion.**
+
+So it was turned into one experiment. **`PXXDBG=a.poisonslot`** (new, kept)
+fills a resident's slot with `$5EEDADAD` right after each dual-write, so a
+surviving reader returns garbage rather than a plausible value — the
+`-dPXX_HEAP_DEBUG` `$DD` trick one level up. A stale slot and a correct slot are
+indistinguishable; a poisoned one is not.
+
+Ungated, **2 of 19 programs changed behaviour** — both the ones with
+`try/except` in a loop. One hung; the other printed `1592634797` back, which is
+`$5EEDADAD`. That is the exception landing pad, which re-syncs every resident
+**from** its slot and is the one reader residency cannot see through. Gated on
+`RcProcHasExc`, **all 16 agree**, including a new case built specifically to
+attack the gate: a body with residents and no handler of its own, unwound
+THROUGH by a raising callee.
+
+`PoisonResidentSlot` calls **the same predicate** the optimisation uses
+(`ResidentSlotIsDead`), deliberately — the experiment is only evidence if it
+poisons exactly the set item 3 stops writing.
+
+GPR residents only. Float residents (xmm8/9) keep their dual-write: the
+experiment never poisoned them, so nothing is known about them.
+
+### Numbers — `pascal26.I3` vs `pascal26.W2` (same tree, item 3 the only difference)
+
+| workload | W2 | item 3 | |
+| --- | --- | --- | --- |
+| `three.pas` | 1.47/1.55/1.56 | 1.35/1.39/1.36 | **1.09-1.15x** |
+| `bt` (alloc-heavy) | 4.05/4.17 | 3.67/3.61 | **1.10-1.15x** |
+| `looplong` | 1.14/1.10 | 1.06/1.05 | 1.05-1.08x |
+| `fib`, `mandelbrot`, `nbody`, `raytracer` | — | — | neutral |
+| **neutral: compiling `hello.pas` x40, min-of-7 x3** | 2.00/2.08/2.02 | 1.96/2.02/2.01 | flat |
+
+`fib` first read as 4.7% SLOWER and is neutral on amplification — **fifth** false
+reading from this box today. Note also that the neutral batch took 2.0s here and
+11s during the W2 measurements: the box load dropped sharply mid-session, so
+absolute numbers are not comparable across entries in this ticket. Only the
+interleaved pairs are.
+
+### Correctness
+
+- self-host fixedpoint verified, `eee7e675e5e0`
+- poison experiment green 16/16 both gated AND with item 3 on (the slot is then
+  written *only* by the poison, which is the strongest form of the check)
+- 13 programs x 4 `-O` levels: every output identical to the pre-item-3 compiler
+- cross-target corpus 48/48 hashes identical
+- `test/test_o3_resident_inplace.pas` + `.expected` added to the repo — the
+  stress written for W2, extended with the unwind-through cases. All four `-O`
+  levels match the recorded expectation.
+
+### What is left
+
+1. **The rest of the register contract** (E minus G): ~1.10x, multi-session,
+   deliberately unopened — open it at the START of a session.
+2. **The promotion experiment** — blocked on
+   `chore-t-nothing-in-the-matrix-runs-o3-so-no-failures-is-unfalsifiable`.
+3. Item 3's **exception-frame gate is a real restriction**, not a formality: any
+   body with `try/except` keeps every dual-write. Lifting it means teaching the
+   landing pad to restore residents from somewhere other than the frame slot,
+   which is its own ticket and was not attempted.
+4. 5a — measured and rejected at 1.02-1.04x. Do not rebuild.

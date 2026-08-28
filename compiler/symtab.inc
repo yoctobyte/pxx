@@ -5117,6 +5117,92 @@ end;
   The frame slot stays authoritative: the dual-write still happens, in the same
   order, and R is re-extended with the identical size/sign rule
   RegcallRefreshResidentFromRax applies to rax. }
+{ -O3 item 3 -- is this resident's frame slot DEAD, i.e. can nothing read it?
+
+  The residency contract keeps the frame slot authoritative and dual-writes it on
+  every store. That store is pure overhead if nobody reads the slot, and on a
+  tight loop it is not free even though it feeds nothing: three stores per
+  iteration against one store port is throughput, not latency (measured
+  1.10-1.17x for removing them from the two-accumulator loop -- and note the
+  earlier chain rule does NOT predict this, because these stores are off the
+  recurrence entirely).
+
+  Every reader that residency can see through is already handled: EmitLoadVar and
+  EmitLoadVarRcx consult ResidentRegOf; the epilogue's result load goes through
+  EmitLoadVar; captures are lambda-lifted into extra params rather than reaching
+  up into the parent frame; address-taken and `absolute`-overlaid locals are
+  refused by SymSlotEscapes before residency is assigned; IR_ZERO_SYM writes the
+  slot itself and then refreshes from it, so it stays self-consistent.
+
+  The one reader that is NOT residency-aware is the exception landing pad, which
+  re-syncs every resident FROM its slot -- so a body containing an IR_EXC_ENTER
+  is refused outright.
+
+  That list was MEASURED, not reasoned: PXXDBG=a.poisonslot fills the slot with
+  $5EEDADAD right after each dual-write, so a surviving reader returns garbage
+  instead of a plausible value. Ungated, exactly two programs of nineteen changed
+  behaviour -- both the ones with try/except in a loop, one hanging and one
+  printing 1592634797 ($5EEDADAD) back. Gated on RcProcHasExc, all sixteen agree,
+  including a body whose residents are unwound THROUGH by a raising callee.
+
+  GPR residents only. Float residents (xmm8/xmm9, FloatResidentXmmOf) have their
+  own dual-write which this experiment never poisoned, so nothing here is known
+  about them and they keep the store. }
+function ResidentSlotIsDead(idx: Integer): Boolean;
+begin
+  ResidentSlotIsDead := False;
+  if OptLevel < 3 then Exit;
+  if RcProcHasExc then Exit;
+  if ResidentRegOf(idx) = 0 then Exit;
+  if not ((Syms[idx].Kind = skLocal) or (Syms[idx].Kind = skParam)) then Exit;
+  if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then Exit;
+  ResidentSlotIsDead := True;
+end;
+
+{ PXXDBG=a.poisonslot -- overwrite a RESIDENT local's frame slot with $AD bytes
+  immediately after the dual-write, so that anything which still READS that slot
+  gets a loudly wrong value instead of a plausible one.
+
+  It exists to answer one question that cannot be settled by reading the code:
+  the dual-write contract keeps the frame slot authoritative, and the proposed
+  next step (`item 3` on feature-opt-o3-register-pressure) is to stop writing it
+  inside loops -- which is only safe if NOTHING reads it. The readers that can be
+  found by grep are all residency-aware (EmitLoadVar / EmitLoadVarRcx consult
+  ResidentRegOf; the epilogue's result load goes through EmitLoadVar; captures
+  are lambda-lifted so there is no uplevel slot access; address-taken locals are
+  excluded by SymSlotEscapes). The residual risk is a direct `[rbp+off]` emit
+  somewhere in 10k lines that nobody thought to check, and enumerating those by
+  hand is an audit with no completion criterion.
+
+  Poisoning turns that audit into one experiment: build the corpus under this
+  flag, and any surviving reader produces garbage the differential catches
+  immediately. Same trick as -dPXX_HEAP_DEBUG's $DD fill, one level up -- a
+  stale slot and a correct one are indistinguishable, a poisoned one is not.
+
+  Writes EXACTLY TypeSize bytes: a wider store would corrupt the neighbouring
+  slot and manufacture the very bug it is looking for.
+
+  DIAGNOSTIC ONLY -- never on by default, and a program compiled with it is
+  expected to be wrong if anything reads the slot. That IS the signal. }
+procedure PoisonResidentSlot(idx: Integer);
+var sz: Integer;
+begin
+  if not PxxDbgEnabled('a.poisonslot') then Exit;
+  { Deliberately the SAME predicate the optimisation uses, not a copy of it: the
+    experiment is only evidence if it poisons exactly the slots item 3 stops
+    writing. }
+  if not ResidentSlotIsDead(idx) then Exit;
+  sz := TypeSize(Syms[idx].TypeKind);
+  if sz = 1 then
+    begin EmitB($C6); EmitB($85); EmitI32(Syms[idx].Offset); EmitB($AD); end
+  else if sz = 2 then
+    begin EmitB($66); EmitB($C7); EmitB($85); EmitI32(Syms[idx].Offset); EmitB($AD); EmitB($AD); end
+  else if sz = 4 then
+    begin EmitB($C7); EmitB($85); EmitI32(Syms[idx].Offset); EmitI32(Integer($5EEDADAD)); end
+  else if sz = 8 then
+    begin EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[idx].Offset); EmitI32(Integer($5EEDADAD)); end;
+end;
+
 { A plain integer/pointer scalar in a frame slot -- the only thing whose store
   narrows by TypeSize and whose reload re-extends by TypeSigned, which is the
   contract both halves of W2 rest on.
@@ -5224,7 +5310,9 @@ begin
     sequence, just sourced from R instead of rax. }
   sz := TypeSize(Syms[d].TypeKind);
   sgn := TypeSigned(Syms[d].TypeKind);
-  if sz = 1 then
+  if ResidentSlotIsDead(d) then
+    { -O3 item 3: nothing reads this slot, so W2 skips its dual-write too }
+  else if sz = 1 then
     begin EmitB($44); EmitB($88); EmitB($85 or ((r - 8) shl 3)); EmitI32(Syms[d].Offset); end
   else if sz = 2 then
     begin EmitB($66); EmitB($44); EmitB($89); EmitB($85 or ((r - 8) shl 3)); EmitI32(Syms[d].Offset); end
@@ -5252,6 +5340,7 @@ begin
     else begin EmitB($45); EmitB($89); EmitB($C0 or ((r - 8) shl 3) or (r - 8)); end;
   end;
   { sz = 8: R already holds the canonical value }
+  PoisonResidentSlot(d);
 end;
 
 procedure EmitLoadVarRcx(idx: Integer);
@@ -5588,7 +5677,13 @@ begin
   else case Syms[idx].Kind of
     skLocal, skParam:
       begin
-        if sz = 1 then
+        { -O3 item 3: the dual-write is skipped entirely when nothing can read
+          the slot. The refresh below is unaffected -- it re-extends from rax,
+          not from memory. }
+        if ResidentSlotIsDead(idx) then
+        begin
+        end
+        else if sz = 1 then
           begin EmitB($88); EmitB($85); EmitI32(Syms[idx].Offset); end
         else if sz = 2 then
           begin EmitB($66); EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end
@@ -5621,6 +5716,7 @@ begin
       RegcallRefreshResidentFromRax(idx)   { same value, no store-to-load forward }
     else
       RegcallRefreshResident(idx);
+    PoisonResidentSlot(idx);
   end;
 end;
 

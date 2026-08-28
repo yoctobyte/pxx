@@ -2041,6 +2041,7 @@ var
     where r14/r15 still hold the caller's pristine values. See
     bug-a-o2-miscompiles-disassembler. }
   RcSuppressAssign  : Boolean;
+  RcProcHasExc      : Boolean;  { this body contains an IR_EXC_ENTER. The exception landing pad re-syncs every resident FROM its frame slot (RegcallRefreshResident), so it is the one reader of a resident's slot that is NOT residency-aware -- which makes it the gate on any pass that stops keeping that slot current. Measured, not assumed: with PXXDBG=a.poisonslot the only two programs of 19 that changed behaviour were the two with try/except in a loop, and both read back $5EEDADAD. Set per body at the top of UnifiedResidencyAssign, before its early exits. }
   { --measure-inline: phase-0 opportunity probe for feature-inline-routines /
     auto-inline. Per compiled body records size + leaf/early-exit/addr-taken-param
     facts; per direct call target counts the call sites. Summary printed at end of

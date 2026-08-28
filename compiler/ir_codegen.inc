@@ -9659,6 +9659,13 @@ var k, j, t, best, bestCnt, lbl, si, nsyms: Integer;
     seen: Boolean;
 begin
   FrResidentCount := 0;
+  { Before any early exit: the exception landing pad refreshes residents FROM
+    their frame slots, so it is the one slot reader that residency cannot see
+    through. Anything that stops keeping the slot current must refuse a body
+    that has one. Conservative default is True. }
+  RcProcHasExc := False;
+  for k := 0 to IRCount - 1 do
+    if IRKind[k] = IR_EXC_ENTER then begin RcProcHasExc := True; Break; end;
   if OptLevel < 3 then Exit;
   if CurProc < 0 then Exit;
   if RcSuppressAssign then Exit;
