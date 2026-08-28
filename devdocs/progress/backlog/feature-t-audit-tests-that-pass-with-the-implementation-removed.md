@@ -102,3 +102,29 @@ Not full mutation testing. The tractable version:
 
 Related: `bug-b-lib-dns-libc-failed-once-in-the-gate-and-claims-a-hermeticity-it-lacks`,
 `bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-last-good`.
+
+---
+
+## Second instance, 2026-08-28 — and this one was CONSTRUCTED, which is the proof
+
+frankwasm applied this ticket's method to its own wasm host check within the hour of
+receiving it, and the control fired:
+
+`test/wasm/check_host.sh` asserted `afterWriteln === 0` — that `writeln` produced no
+output. **Silence is the environment's default.** frankwasm built the negative control
+deliberately: make the lowering a no-op that records nothing, and then
+
+- *"every routine in the slice lowered"* stays **TRUE**,
+- the import still works,
+- **both hosts agree on the output**,
+- and the suite reports **PASS on a compiler that drops every `writeln`.**
+
+The first instance (frankB's) was a routine control that happened to fire. This one was
+predicted, constructed, and confirmed — which upgrades the claim from *"this can happen"*
+to **"this is findable on demand, and the finding took under an hour."** That is the
+argument for running the audit across the suite rather than waiting for it to surface.
+
+Note what it cost to see: nothing was wrong with the test's *reasoning*. Every assertion
+in it was true, the mechanism it named was real, and it was written by someone who had the
+rule in hand. **Only reverting the implementation separates a test that checks the
+implementation from one that checks the environment.**

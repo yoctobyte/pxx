@@ -78,7 +78,7 @@ called by a builtin lowering sitting above the machinery it shares.
 
 ### Option 4 (now the recommendation): a static forward lint in the fast loop
 
-frankwasm built `forwardlint.py` — **~1 second**, reads the same files FPC reads and
+frankwasm built `forwardlint.py` — **4.1 seconds** (see the correction below), reads the same files FPC reads and
 asks FPC's question directly. **Verified against BOTH historical breaks**: deleting
 today's forward reports line 1313; deleting the *original* one — the break that cost
 several commits before the canary found it — reports line 1065; the fixed file is
@@ -96,9 +96,46 @@ unattractive, since a second is not a serial FPC build.
 | 1. targeted trigger | ~0 | **empirically: nothing** — missed twice | **disproven** |
 | 2. FPC build in the loop | serial FPC build per fix | everything | unattractive on cost |
 | 3. leave as-is | 0 | nothing | — |
-| **4. static forward lint** | **~1s** | the whole observed failure class, by design a miss not a false alarm | **built + verified** |
+| **4. static forward lint** | **4.1s** | the whole observed failure class, by design a miss not a false alarm | **built + verified** |
 
 **Still a Track U decision**, because putting anything in the mandatory loop touches
 the gating section of `CLAUDE.md`, which is the owner's file. But the question is no
 longer *"is it worth a serial FPC build?"* — it is *"should a verified one-second
 lint join the loop?"*, which is a materially easier call.
+
+### CORRECTION 2026-08-28: 4.1s, not ~1s — and the narrow version had to be thrown away
+
+**The ~1s figure was wrong and it was load-bearing**, so it is corrected in place above
+rather than quietly. It measured a three-file version that **does not work on this repo**:
+pointed at the whole compiler it reported **seventeen failures on a tree FPC builds clean**,
+because this codebase declares cross-file forwards in dedicated files (`forwards.inc`,
+`pyforwards.inc`, `frontend_forwards.inc`) that a per-file view cannot see.
+
+The shipped version (`tools/forwardlint.py`, `c7690064e`) expands `compiler.pas`'s
+`{$include}` chain in order and asks FPC's question over the real stream: **206,768 lines
+in 4.1s, 17 → 0**, re-verified in both directions against both historical breaks. Still
+**~11x faster than the 46-second FPC build**, so the cost argument survives — but the
+number in this ticket was wrong and the version it described is gone.
+
+Two further false-alarm sources had to be removed to get there, and both are worth reading
+before anyone writes a similar tool:
+
+- a declaration regex anchored at `^` cannot see `{$ifndef PXX_NO_ARM32}procedure Foo; forward;{$endif}`;
+- **braces nest in practice**: standard Pascal says the first `}` closes the comment, but
+  **both pxx and FPC** accept `{ ... span_{nd-1} ... }` as one comment. Measured with a
+  six-line program after the scanner ended a comment early and reported a name that appears
+  only in prose. **A tokenizer that disagrees with both compilers about where a comment ends
+  is not a check; it is a generator of plausible-looking failures.**
+
+### Whoever adopts this must expect ONE note on a clean tree
+
+`forwardlint` prints a NOTE (not a failure) on today's master, reproduced by the coordinator
+independently: `pasparser_expr.inc:1924` calls `LowerCase` before this codebase declares it
+at `pasparser_proc.inc:2384`, and it is forward-declared **nowhere**. It compiles either
+way — FPC resolves that call to its **own** system-unit routine — which is exactly why it is
+a note.
+
+**That note should be fixed before this joins any loop, not allowlisted.** A check that
+prints something permanent on a clean tree is on the path to being ignored, which is this
+repo's own recorded rule about checks that cry wolf. Filed separately as
+`bug-a-lowercase-resolves-to-two-different-routines-depending-on-the-seed`.
