@@ -159,5 +159,38 @@ hosts, and a `tail` of the concatenation is not a chronological tail. Sorting by
 `date` gives today. Same failure family as the rest of this ticket — a
 convenient read of an inventory, taken for the inventory.
 
+## Correction, same day: the promotion-evidence paragraph above is WRONG
+
+The section "What this does to the -O2 promotion gate" claims the campaign's
+landed passes "have been through opt sweeps as ordinary corpus coverage —
+including the GREEN 17/17 opt run at `03afd81fd`". **Both halves are false, and
+the paragraph stands above only because rewriting a landed record falsifies it.**
+
+Measured with `trackt optcov` (built afterwards, `e4c004a5e`):
+
+| pass | landed | opt coverage |
+| --- | --- | --- |
+| `562965e1c` | 2026-08-28 00:15 | **SWEPT GREEN** by the opt run at `0fbcbdebccd3` |
+| `46c8cf47e` | 2026-08-28 00:51 | **SWEPT GREEN**, same run |
+| `c93292fe4` | 2026-08-28 20:03 | **NOT swept** — it landed nine hours *after* that sweep |
+
+And `03afd81fd`, the run I cited as the evidence, is dated **2026-08-27 23:02**
+— it predates all three passes. I reached for a GREEN opt run I had personally
+watched and never checked its position relative to the commits it was supposed
+to vouch for. A green result about the wrong tree is not weaker evidence; it is
+no evidence.
+
+So the recommendation in that section — lift the hard precondition — was right
+for `562965e1c` and `46c8cf47e` and **too broad for `c93292fe4`**, which cannot
+cite a sweep and should not be promoted until the next `opt` phase includes it.
+The coordinator's per-pass citation rule catches exactly that case, which is the
+argument for the rule rather than against it.
+
+Note what caught it: not review, but building the instrument. `optcov`'s first
+live query contradicted a claim I had made an hour earlier and had no reason to
+doubt. Same lesson as the rest of the ticket, applied to me — a confident claim
+about an inventory is cheap to check and I checked the inventory I had just
+been arguing about, while taking my own supporting citation on trust.
+
 ## Log
 - 2026-08-28 — resolved, commit 48ea92a22.
