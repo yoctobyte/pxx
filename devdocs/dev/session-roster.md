@@ -10246,3 +10246,92 @@ about what a large number next to a parser bug usually is"* — and put item 4
 **Second time tonight a lane has refused credit and been right to** (frankT on the
 bisect refusal was the first); both times the refusal sharpened what the record
 actually says.
+
+## frankB hit the pipe hazard it had formulated hours earlier — and the rule was ALREADY WRITTEN DOWN
+
+`make lib-test 2>&1 | tail -25` reported exit 0. **make had aborted with `Error 1`;
+the pipeline's status was `tail`'s.** Worse than a wrong status: the failure came
+early, so **the run stopped before reaching the test being gated.** A "pass"
+covering a suite that never ran the thing under test. Caught only by grepping the
+log for its own test's name instead of trusting the exit code.
+
+**The rule was documented — `devdocs/dev/gating-and-waiting.md:52` — and violated
+anyway.** frankB generalised the entry rather than adding a second one: it was
+phrased with `tools/gate.sh quick | tail` as its example and *read* as a gate.sh
+rule, when it governs **any command whose exit status you intend to believe**.
+Verified in place; the edit is there.
+
+> **Third time tonight a written rule failed at the site where following it was
+> inconvenient** (frankwasm's IRTk-in-the-planner, frankA's concat-shaped grep,
+> this). **Writing the rule is not the fix; making the wrong form unavailable is.**
+> Where that is impossible, at least make the rule's SCOPE unmistakable — this one
+> failed partly because its example made it look narrower than it was.
+
+### The green has a caveat, stated rather than buried — and it is the T ticket's own mechanism, now aimed at frankB
+Fetching `external/synapse` to reproduce the Track A bug **flipped those jobs from
+SKIP to hard failure on that box**: frankB turned Track B's gate red by
+investigating. It moved the tree aside
+(`external/synapse-held-for-bug-a-spliced-token-stream`) to make the gate runnable,
+which means **the three synapse jobs SKIPPED in the passing run, and one of them is
+known-red.**
+
+**So: "lib-test green" from frankB's box is NOT evidence about synapse today.**
+Do not cite it as such. The Makefile's design — absence means skip, gate stays
+runnable — is working as intended; the false-green risk is in the *reading*, which
+is exactly `bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-last-good`
+operating one level up, on a human's inference instead of on a bisect anchor.
+
+**The vendor tree is HELD, not deleted** — whoever takes
+`bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream` has it ready at
+that path in `~/frankB`. Verified `external/` is gitignored (`.gitignore:30`) and
+`git ls-files external/` is empty: nothing leaked.
+
+## The skip set is not `c <= 32`, and NOT folding it into `TFIsSpace` was the right call
+
+Measured with an oracle writing each of `#1`..`#40` before an `'x'` and reading
+back the cursor — not assumed:
+
+```
+skipped:      #9 TAB, #26 SUB, #32 SPACE      (SeekEof also skips #10, #13)
+NOT skipped:  #1..#8, #11, #12, #14..#25, #27..#31, #33 and up
+```
+
+`c <= 32` — the rule anyone reaches for — **eats control bytes straight out of a
+data file.** `#26` is in the set because it is the DOS EOF marker and FPC steps
+over it like blank space (a file of just `#26` is `SeekEof`-empty; `'x'#26` still
+yields its `'x'`).
+
+**frankB deliberately did NOT fold this into the existing `TFIsSpace`, and said so
+at both sites** — because `normalise-dont-special-case` would otherwise read as an
+argument to merge them:
+
+> One is the **tokeniser's DELIMITER set**; this is the seek routines' **SKIP
+> set**. `#26` belongs only to the second, and `#10`/`#13` delimit a token but must
+> **stop** `SeekEoln`. **Merging makes one of the two wrong.**
+
+**That is the correct boundary of the normalise rule and worth propagating:
+normalise two paths to ONE CONCEPT; two sets that merely overlap are not one
+concept.** Recording the reasoning at both sites is what stops a later reader
+"cleaning up" the duplication.
+
+**Negative-controlled because it passed first run:** the test asserts the **cursor**
+on every row, not just the Boolean (one checking only the answer would pass an
+implementation that ate the token), and swapping in `c <= 32` fails it with 9
+errors on exactly the `#1`/`#31`/`#33` boundary rows and the `SeekEoln` terminator
+cases. **A test that passes first time has told you nothing until you have seen it
+fail.**
+
+No compiler change needed; the ticket predicted that correctly and nothing went to
+Track P.
+
+## `SetTextBuf` escalated, not implemented — `decide-settextbuf-needs-buffered-text-io-or-stays-missing` [U, p55, `backlog/`]
+
+`textfile.pas` has **no buffering at all — one `PalRead` syscall per byte** — so
+there is nothing for the routine to configure; it cannot be given its FPC meaning
+without first building the thing it configures. frankB's recommendation, which I
+endorse: **leave it missing, and file buffered Text I/O as its own Track B ticket
+ranked on the PERFORMANCE case**, so the design is not shaped to satisfy a
+rarely-used knob. Coordinator call: **file that ticket now, before the U answer
+returns** — it makes the fork cleaner for the owner (the real work item is visible
+separately from the knob) and one syscall per byte is a genuine defect independent
+of `SetTextBuf`.
