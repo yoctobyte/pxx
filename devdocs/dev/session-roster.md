@@ -10843,3 +10843,103 @@ owner will see it, rather than filled quietly past its value or left unmentioned
 
 Track B is unaffected by the FPC seed blind spot — FPC never compiles `lib/crtl` or
 `lib/rtl`.
+
+## FILING A TICKET ON A BRANCH IS FILING IT NOWHERE — frankwasm's Track A tickets are invisible
+
+**Caught 2026-08-28 ~10:00Z. Measured, not inferred:**
+
+```
+git merge-base --is-ancestor 75c0b7488 origin/master   ->  NO
+git branch -a --contains 75c0b7488                     ->  remotes/origin/wasm
+git ls-tree -r --name-only HEAD ... | grep heapmmap    ->  NOT in HEAD
+tools/progress.sh ready --track A                      ->  three p70s, none of them frankwasm's
+```
+
+`bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero` — **[A, p70],
+a heap that starts at address zero** — is invisible to the ranker, to `ready`/`next`,
+and to whoever takes Track A next. frankwasm also reported
+`bug-a-a-typed-const-record-is-built-by-startup-code-not-stored-as-data` as filed
+**"on master"**; it is not on master either.
+
+> **Ticket files are the fleet's shared INDEX, not lane artifacts. Lane CODE may
+> reasonably live on a branch; a TICKET that is not on master does not exist — and a
+> p70 you cannot rank is worse than an unfiled one, because you believe it is
+> handled.**
+
+frankwasm's model of where its ticket commits land was wrong, so **this has probably
+happened more than twice.** Asked it to cherry-pick them onto master itself (a
+coordinator must not push another lane's work) and to sweep the branch with
+`git log origin/master..origin/wasm --name-only -- 'devdocs/progress/**'`.
+
+**Not challenging the `wasm` branch itself** — a backend of this size may reasonably
+sit on one, and it predates this coordinator. **The tickets are the defect, not the
+branch.**
+
+**Nearly missed it in tonight's own signature way:** the first check was
+`find -name '*heapmmap*'`, which returned nothing — *and that zero looked exactly
+like "mid-push".* What kept it alive was a **contradiction, not an absence**: the
+commit was in the log while the file was not in the tree. Same shape as frankwasm's
+`f64.floor` — nothing looked wrong; two things merely disagreed.
+
+## "Needs the heap" was a GUESS — a diagnostic that names a cause asserts a root cause
+
+frankwasm self-corrected a measurement this coordinator had already propagated into
+an approved reordering.
+
+> **A diagnostic that names a CAUSE is asserting a root cause.**
+
+Its coverage report printed `needs the heap, Phase 6` for **every** unlowered
+builtin, generalised from the two members that were true (`GetMem`, `FreeMem`).
+**`PXXAlloc` — the allocator itself — was blocked on an `Integer()` cast; the write
+path on `Trunc`.** Neither touches the heap. Found by dumping the IR
+(`PXXDBG=a.ir:PXXAlloc` → `call a=-57` on `bin := Integer(size shr 3) - 1`) — the
+playbook working as written.
+
+Now names the **builtin** and lets the reader conclude. **Third instance in three
+different artifacts of one root: report the OBSERVATION, never the conclusion.** A
+report that helpfully summarises has silently done your reasoning for you.
+
+**The reordering stands on the corrected figure: the heap was 8 bodies with 4 cheap
+builtins in front, not "almost everything."**
+
+## The heap starts at address zero — and a guard that relies on hardware, on the one target with none
+
+Verified independently: `builtin/builtinheap.pas`'s `HeapMmap` `{$ifdef}` chain has
+arms for `PXX_ESP`, `CPUX86_64`, `CPUAARCH64`, `CPU_ARM32`, `CPU_I386`,
+`CPU_RISCV32` — **no `CPU_WASM32`**. `Result` never assigned; returns 0.
+
+**`PXXAlloc` not checking it is CORRECT for a hosted target** — a failed `mmap`
+returns a negative errno and the next access faults. **Linear memory has nothing to
+fault on**: address 0 is legal, loads return zero, no page protection. So the
+allocator bumps from 0, hands out 8/32/56, and is **correct until ~1 KB**, then
+writes into BSS at 1024. Phase 6's 7 values matched native *on that heap*.
+
+> **A written-down hazard is not a check.** This target's own null-guard note
+> predicted the failure in writing — *"a nil dereference on this target reads zeros
+> and keeps going where on x86-64 it segfaults"* — and nobody connected it to the
+> allocator until the allocator did it.
+
+**Third instance from this lane of one family**: the IRTk rule written at the emitter
+and violated in the planner; the pipe rule documented and violated; a hazard
+documented and not connected. **Writing it down moves nothing; making the wrong form
+unrepresentable does.**
+
+### A test that FAILS when the bug is fixed
+`check_calls.sh` asserts the limitation is still exactly this one and **goes red if
+the heap starts working**, because that means the ticket landed and the assertion
+block is stale.
+
+> **Green means "the known limitation is unchanged" — the only honest thing a test
+> can say about a defect it is not allowed to fix.**
+
+Strictly better than a comment nobody re-reads: it cannot rot silently, and its
+failure is a **notification** rather than a regression. **Worth copying for any
+lane's `blocked-by:` items.**
+
+Two smaller keepers: the plan's scope note did not survive contact **in the good
+direction** — there was no allocator to write (`PXXAlloc` is ordinary Pascal; every
+backend just calls it), so it was replaced with what mattered: **a fresh scratch
+local per allocation SITE, not per body.** And `$9C` is `f64.floor` where
+`f64.nearest` was meant — **visible only on an exact half** (`Round(3.5)` is 4 vs 3)
+— caught on first run because the slice deliberately picks halves either side of
+zero. *A test designed against the failure it later caught.*
