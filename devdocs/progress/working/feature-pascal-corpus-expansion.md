@@ -23,7 +23,7 @@ then reads whichever table they scroll to first. Wall 4 sat `filed` in one table
 and `(to file / relay to frankB)` in another while it was actually **done**.
 **Update THIS table. Leave the snapshots alone.**
 
-Last measured 2026-08-28 against binary `2c155cce2`, on the **pristine**
+Last measured 2026-08-28 against binary `c3cd377d5`, on the **pristine**
 corpus (no stubs).
 
 | # | wall | owner | status |
@@ -33,7 +33,8 @@ corpus (no stubs).
 | 3 | nested `specialize X<T>` in expression position | P | open, diagnosis banked, not reached by the probe yet |
 | 4 | SysUtils: `EArgumentOutOfRangeException`, `CreateRes`, `Error`/`TRuntimeError` | B | **DONE** — all three declared in `lib/rtl/sysutils.pas` (191, 154/155, 208/268); verified by compiling a `raise EArgumentOutOfRangeException` program, not by grep |
 | 5 | method pointers | P | **DONE** — defect A `9ab19fb21`, defect B `6d2a841a1` (parse) + `2c155cce2` (lowering). All 7 shapes match FPC |
-| 6 | generic class specialized by the ENCLOSING generic's type parameter | P | **the current blocker** — `TGOrdinalStringComparer<T, THashFactory>.Create` at `generics.defaults.pas:3250` |
+| 6 | generic class specialized by the ENCLOSING generic's type parameter | P | **partly done.** objfpc works (`c3cd377d5`); `:3250` no longer fails. **Delphi mode still blocked** — see below |
+| 7 | `SArgumentOutOfRange` not visible to the corpus | B | open — it EXISTS at `lib/rtl/rtlconsts.pas:13`, so this is visibility/export, not a missing constant. 5 sites |
 
 **Rung 6 is now behind wall 6 alone.** Wall 5 fell on 2026-08-28 and the compile
 advanced roughly 900 lines, from `generics.defaults.pas:2381` to `:3250`, where
@@ -42,11 +43,26 @@ it meets an ALREADY-DIAGNOSED ticket:
 parked in `unfinished/` with its repro and diagnosis banked. So the next step is
 to un-park that ticket, not to diagnose anything new.
 
-Wall 3 remains **"open, unverified against the current tree"** — it was never
-reached, first because wall 5 stopped the compile and now because wall 6 does.
-Re-probe before trusting it; it may already be fixed, and it may be the same
-defect as wall 6 (both are inline specialization in a position where the name is
-read as a variable). **Check that before treating them as two.**
+**Wall 3 IS wall 6 — resolved, not merely suspected.** The question was asked of
+the two DEFECTS rather than the two row numbers (the snapshot tables below number
+them inconsistently, and one snapshot already had them as a single row): wall 6's
+ticket concludes its real defect is *"a nested `specialize X<T>` group is not
+supported in EXPRESSION position"*, which is verbatim wall 3's subject. One
+defect, one ticket, no separate wall-3 ticket needed.
+
+**What is left on wall 6 is an ORDERING defect, not the scan.** `generics.defaults.pas`
+is `{$MODE DELPHI}`, and `--debug` shows `GenericMethodCount=0` at the moment the
+Delphi specialization runs: the rewrite emits its aliases near the top of the
+token stream, so `ParseSpecialization` executes before any method body has been
+buffered — even though those methods appear EARLIER in the source. Scanning more
+cannot help; there is nothing to scan yet. Full measurement in the ticket.
+
+Three defects fell on the way (`c3cd377d5`): the header test that read what
+FOLLOWS a group instead of what precedes it, the prerequisite scan that never
+looked in method bodies, and — with nothing to do with generics at all — **a
+method could not be named `Default`**, which is the name `TComparer<T>.Default`
+needs. Also newly exposed and filed:
+[[bug-p-two-different-nested-specializations-of-one-template-collide]].
 
 Under wall 5, the root cause is now
 [[bug-p-a-method-call-with-missing-arguments-is-accepted-and-reads-garbage]]
