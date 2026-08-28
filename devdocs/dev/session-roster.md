@@ -11956,3 +11956,41 @@ invalidates it.
 > code."*
 
 Now in the audit ticket above the rule it explains.
+
+### 2026-08-28 — Track T found a FIFTH face, and it invalidates a claim I made an hour earlier
+
+Quiet tick otherwise: fleet alive, `working/` holds only frankwasm's wasm lock, `urgent/`
+empty, Track T up with breadth 1h old. I checked the one open regression with a **pinpointed**
+bad commit (`tools-devtest#00` at `f3422cd14b99`) rather than assuming, and it is **already
+ticketed** as `regression-tools-devtest-00-2` — so no dispatch. (I misread my own grep output
+first: the "no output = unticketed" guard printed *after* seven matching filenames. A guard
+line placed after the thing it guards is decoration.)
+
+**The find is frankT's, pushed to master at `25cbb3a24`, and nobody relayed it to me — I
+found it by reading its tree.** It confirms `bug-t-a-skipped-job-is-passlike-so-it-becomes-a-
+false-last-good` as the **FIFTH face** of a defect family whose parent ticket sits in `done/`
+under a table headed **"All four faces, closed."**
+
+frankT's framing, and it is the important part:
+
+> Four faces were found, four were fixed, and the ticket says so honestly. **This defect
+> presents one face at a time, and each looks like the last.**
+
+Its substance: `skip` is **correct as a run verdict and catastrophic as a last-good anchor**,
+so the fix must *separate the two readings* rather than reclassify `skip` — and `diff_jobs`
+already publishes the literal status, so the information to split them exists. Prio 60.
+
+**Why this lands on me directly.** An hour earlier I cross-referenced four tickets as *"four
+faces of one generator."* That is the same claim shape frankT just demonstrated is
+unverifiable — **a closing enumeration is itself a check that cannot fail**, which makes it an
+instance of the generator it summarises. I have marked that cross-reference **OPEN** in the
+ticket rather than leaving a tidy count, and no "all N faces" line goes on the family.
+
+This is the second time in two days the same lesson has arrived from a lane I was not
+watching: **the tool checking an enumeration has its own blind spot**, and the enumeration
+you wrote yourself is the one you will not re-check.
+
+**No session was woken for this.** frankwasm is mid-phase and it changes nothing about
+managed strings; frankT wrote the analysis and does not need it relayed back. The durable
+form was the ticket edit, which costs nobody context — *file first, notify only if someone
+must act.*

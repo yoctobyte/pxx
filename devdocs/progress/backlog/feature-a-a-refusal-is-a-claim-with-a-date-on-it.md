@@ -69,3 +69,15 @@ vacuous-negative case in `feature-t-audit-tests-that-pass-with-the-implementatio
 **an absent symbol, a silent environment, a grep matching zero, and a refusal that outlived
 its cause are all states that are indistinguishable from correctness while carrying no
 information.**
+
+**This list is OPEN, and saying so is not a formality.** On the same day these four were
+grouped, Track T confirmed a **fifth face** of a *different* four-face family
+(`bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-last-good`) whose parent ticket sits
+in `done/` beneath a table headed **"All four faces, closed."** Four were found, four were
+fixed, and the ticket said so honestly — and a fifth existed the whole time.
+
+frankT's warning is the one that applies here: **this shape presents one face at a time, and
+each one looks like the last.** A closing table asserting an enumeration is complete is
+itself a check that cannot fail, which makes it an instance of the very generator it is
+summarising. So: no "all N faces" line goes on this family, and a new instance is expected
+rather than surprising.
