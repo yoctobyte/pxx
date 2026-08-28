@@ -3,9 +3,10 @@ slug: bug-t-a-skip-that-cannot-say-why-is-a-pass-in-the-verdict
 track: T
 type: bug
 prio: 50
-status: backlog
+status: working
 blocked-by: []
 summary: "testmgr records `reason: \"\"` on every skipped job. A full-tier sweep on 2026-08-26 skipped ~50 jobs — every conformance shard and every real-program corpus — and the report could not say why for any of them. The verdict line says RED/GREEN with no skip count, so a run that silently covered 3031 of 3081 jobs reports in the vocabulary of one that covered all of them."
+owner: pxx-a5
 ---
 
 # A skip that cannot say why is a pass in the verdict
