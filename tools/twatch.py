@@ -4668,6 +4668,160 @@ def covering_runs(repo, sha, branch, host=None):
     return exact, covering
 
 
+def job_selectors(repo, host=None):
+    """Every job selector the archive has ever recorded, with its run count."""
+    seen = {}
+    for h in ([host] if host else archive_hosts(repo)):
+        for r in archive_rows(repo, h):
+            for key in ("new_red", "still_red", "fixed"):
+                for sel in (r.get(key) or []):
+                    seen[sel] = seen.get(sel, 0) + 1
+    return seen
+
+
+def job_history(repo, sel, host=None):
+    """Every run that recorded job `sel`, oldest first, with what it recorded.
+
+    THE reason this exists, measured 2026-08-28. Asking "has this job been red
+    before?" by hand is a one-line scan of the archive, and I wrote that line
+    and got **0 hits in 1697 runs** for a job that was in its 13th consecutive
+    red run. The query was against the positional name `test-emit-obj#02`; the
+    archive stores the STABLE selector `test-emit-obj#src:test/cxtensa_obj.c@1`.
+    The two strings share no substring, so the scan was correct, exhaustive,
+    and false.
+
+    That is the worst shape a query can have: a confident zero. It reads as
+    "this is new" — the single most consequential thing a triage can get wrong,
+    because a first-seen red is a revert candidate and a 16-hour-old one is a
+    queue item. Nothing warned, because nothing was wrong; the question was
+    asked in a vocabulary the data does not use.
+
+    So the helper does two things a hand-rolled scan does not:
+      * accepts EITHER form and resolves the positional one via `red_src` /
+        the open-regression ledger, which carry both;
+      * when it finds nothing, says whether the selector is unknown to the
+        archive ENTIRELY or merely absent from this host — an empty result
+        that explains itself is not the same object as a zero.
+    """
+    hosts = [host] if host else archive_hosts(repo)
+    out = []
+    for h in hosts:
+        for r in archive_rows(repo, h):
+            for key in ("new_red", "still_red", "fixed"):
+                if sel in (r.get(key) or []):
+                    out.append((r.get("date") or "", h, r.get("sha") or "",
+                                r.get("tier") or "", key))
+    out.sort()
+    return out
+
+
+def positional(name):
+    """True for a recipe-index job name like `test-emit-obj#02`."""
+    return bool(re.search(r"#\d+$", name or ""))
+
+
+def resolve_selector(repo, name, host=None):
+    """(selectors to report, notes) for a job named either way.
+
+    Returns a LIST, and that is the whole point. A positional name is an index
+    into a Makefile recipe, so it names a different file as soon as a step is
+    inserted above it — and the archive spans months. `test-emit-obj#02` is
+    literally present twice over: as a July key from `borg`, back when the
+    positional form was what got recorded, AND as today's `#02`, which is a
+    different test entirely.
+
+    A first cut of this returned the literal match as soon as it found one, and
+    answered the July history: "2 runs, FIXED, a red now is a REOPEN". That is
+    strictly worse than the confident zero it was written to fix, because a
+    zero at least looks like an absence, while a wrong history looks like
+    research. Same failure family as everything else measured tonight — it
+    fails affirmatively.
+
+    So: for a positional name, report the literal matches AND the stable
+    selectors under the same target, always, and label which is which. The
+    caller can tell them apart; a silent choice between them cannot be
+    unmade.
+    """
+    known = job_selectors(repo, host)
+    notes, sels = [], []
+    if name in known:
+        sels.append(name)
+    stem = name.split("#")[0] + "#"
+    stable = sorted(k for k in known
+                    if k.startswith(stem) and k != name and not positional(k))
+    if positional(name):
+        # The ledger carries the name/job pair for anything currently open, so
+        # prefer its answer and say so; fall back to the target's stable set.
+        ledger = None
+        for h in ([host] if host else archive_hosts(repo)):
+            try:
+                with open(os.path.join(repo, TSTATE_REL, h + ".json")) as f:
+                    st = json.load(f)
+            except (OSError, ValueError):
+                continue
+            for reg in (st.get("open_regressions") or []):
+                if reg.get("name") == name and reg.get("job"):
+                    ledger = reg["job"]
+                    break
+            if ledger:
+                break
+        if ledger and ledger not in sels:
+            sels.append(ledger)
+            notes.append("`%s` is a POSITIONAL name; the open-regression "
+                         "ledger maps it to `%s`" % (name, ledger))
+        for k in stable:
+            if k not in sels:
+                sels.append(k)
+        if sels and name in sels and len(sels) > 1:
+            notes.append("`%s` matches BOTH a literal archive key and %d "
+                         "stable selector(s) under the same target. A "
+                         "positional name is a recipe INDEX and means "
+                         "different tests at different times — read the dates, "
+                         "do not assume one history." % (name, len(sels) - 1))
+        elif not sels:
+            notes.append("no job matching `%s` has ever been recorded, and no "
+                         "stable selector under `%s` exists either. That is a "
+                         "real absence, not a vocabulary mismatch."
+                         % (name, stem[:-1]))
+    elif not sels:
+        notes.append("`%s` is not a key the archive uses. %s"
+                     % (name,
+                        ("Stable selectors under `%s`:\n  %s"
+                         % (stem[:-1], "\n  ".join(stable))) if stable
+                        else "No selector under `%s` exists either." % stem[:-1]))
+    return sels, notes
+
+
+def show_job_history(repo, name, host=None):
+    """`--job-history NAME`: has this job been red before, and since when?"""
+    sels, notes = resolve_selector(repo, name, host)
+    for n in notes:
+        print("tstate: " + n)
+    if not sels:
+        return 1
+    rc = 1
+    for sel in sels:
+        rows = job_history(repo, sel, host)
+        if not rows:
+            print("tstate: `%s` — known selector, no run recorded it." % sel)
+            continue
+        rc = 0
+        print("tstate: `%s` — %d run(s) recorded it" % (sel, len(rows)))
+        for date, h, sha, tier, key in rows:
+            print("  %-20s %-8s %-7s %-9s %s"
+                  % (date or "?", h, sha[:12], tier, key))
+        firsts = [r for r in rows if r[4] == "new_red"]
+        if firsts:
+            print("  first recorded RED %s at %s — NOT new."
+                  % (firsts[0][0], firsts[0][2][:12]))
+        if rows[-1][4] == "fixed":
+            print("  last transition was FIXED; a red now is a REOPEN.")
+        else:
+            print("  last transition was %s — still open as of %s."
+                  % (rows[-1][4], rows[-1][0]))
+    return rc
+
+
 def covering(repo, sha, branch=None, host=None, fetch=True):
     """Report what tstate can and cannot say about one commit. Exit 0/1/2/3."""
     branch = branch or BRANCH or "master"
@@ -6536,6 +6690,14 @@ def main():
                     help="--retire-host --into: the two names are the SAME box "
                          "(xeon → plexus), not work moving between boxes. "
                          "Records renamed_from instead of migrated_from")
+    ap.add_argument("--job-history", dest="job_history", metavar="JOB",
+                    help="has this job been red before, and since when? Takes "
+                         "either the stable selector "
+                         "(test-emit-obj#src:test/cxtensa_obj.c@1) or the "
+                         "positional name (test-emit-obj#02) and resolves "
+                         "between them — the archive keys on the former, and "
+                         "a hand-rolled grep for the latter returns a "
+                         "confident, wrong zero")
     ap.add_argument("--fetch-corpus", action="store_true",
                     help="install any missing corpus trees at startup instead "
                          "of just warning (jobs whose corpus is absent SKIP, "
@@ -6544,7 +6706,7 @@ def main():
 
     global BRANCH
     if (args.status or args.follow is not None or args.retire_host
-            or args.covering or args.request):
+            or args.covering or args.request or args.job_history):
         repo = os.path.abspath(os.path.expanduser(args.clone)) if args.clone \
             else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         # A READER is about the branch it is standing on. A dev worker asking
@@ -6571,6 +6733,10 @@ def main():
         if args.request:
             return request_verdict(repo, args.request, args.request_tier,
                                    args.host, args.why)
+        if args.job_history:
+            named = ("--host" in sys.argv)
+            return show_job_history(repo, args.job_history,
+                                    args.host if named else None)
         if args.covering:
             # ALL hosts unless one was named. --host defaults to this box's
             # name, which is right for a daemon writing its own state and
@@ -6584,7 +6750,7 @@ def main():
         return status(repo, args.grace, fetch=not args.no_fetch)
     if not args.clone:
         ap.error("--clone is required (except with --status/--follow/"
-                 "--covering/--request)")
+                 "--covering/--request/--job-history)")
 
     def stop(*_):
         global STOP
