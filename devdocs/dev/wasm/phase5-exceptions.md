@@ -68,13 +68,75 @@ Case E exists specifically to show this: `EarlyExit`'s single finally block has
 three successors (fall through to after the try, return, and in the loop
 version, break) and needs nothing but a different constant.
 
-**2. There is no runtime handler stack, within a function or across one.**
-Landing pads are resolved at compile time — at every program point the compiler
-already knows the innermost enclosing `try` in the current frame. The only
-runtime state in the entire mechanism is two globals and one i32 local per
-finally block. Nothing is pushed, nothing is popped, and there is nothing to
-unwind, which is why `$sp` cannot leak: the restore is at the one epilogue that
-both the normal and the unwind path `br` to.
+**2. ~~There is no runtime handler stack, within a function or across one.~~
+CORRECTED 2026-08-28 — this was a property of the PROTOTYPE'S INPUT, not of the
+design.** The claim as written was: landing pads are resolved at compile time,
+because at every program point the compiler already knows the innermost
+enclosing `try` in the current frame. That is true of hand-written WAT, where
+the nesting is the source text. It is **not** true of the IR the compiler
+actually lowers, and the difference is not a detail — see the section below,
+which is the correction. The parts of the finding that survive: the only
+runtime state per finally block is one i32 local, and `$sp` cannot leak because
+the restore is at the one epilogue both the normal and the unwind path reach.
+
+## The correction: the landing pad is DYNAMIC, and the reason is the IR
+
+Traced against the real IR before writing any lowering (2026-08-28).
+
+**The IR gives a linear stream with runtime push/pop, not a nesting.** A
+`try`/`except` lowers to
+
+```
+EXC_ENTER L
+<body>
+EXC_LEAVE 1
+JUMP end
+LABEL L
+EXC_LEAVE 1
+<handlers>
+LABEL end
+```
+
+— **two** `EXC_LEAVE`s for one `EXC_ENTER`, because the frame is still on the
+chain when the landing pad is entered and the pad pops it itself. And
+`EXC_LEAVE n` with n > 1 exists: a `break` or `Exit` out of nested `try`s pops
+several frames at once, after which the *lexically following* code is still
+inside those `try`s.
+
+So a linear scan maintaining a stack — push on ENTER, pop on LEAVE — **derives
+the wrong nesting**. Worked through on the nested case, the inner pad's second
+LEAVE pops the OUTER entry, and every subsequent program point is then assigned
+a landing pad one level too far out. Nothing about that is visible: the module
+validates, the exception lands in a real pad, and the handler that runs is the
+wrong one only for inputs that exercise the nesting. **Silently** is what earns
+this paragraph.
+
+**The fix is not to reconstruct it.** Keep the runtime handler chain every
+register backend already has — `BSS_EXC_TOP`, allocated for every target by the
+shared `EnableExceptionRuntime`, so nothing new is needed to store it. Each
+frame holds `prev`, the pad, and the `$fp` that owns it. A raise then asks a
+question it can answer at runtime: *does the innermost handler belong to this
+invocation?* — `[$exc_top + 8] == $fp`. Yes → `$label := [$exc_top + 4];
+br $dispatch`. No → set the pending flag and take the epilogue, and the
+caller's post-call check asks exactly the same question of its own frame. Two
+answers, one comparison, no static analysis.
+
+**Why this costs nothing, and it is a property of the LAYOUT rather than of
+exceptions:** `$label` is already a variable. The br_table dispatch means a
+branch to a computed block is the same instruction as a branch to a constant
+one, so a dynamic landing pad is free where on a register target it would be an
+indirect jump. That is the second time this phase that the dispatch layout has
+paid for something it was not chosen for — the first was `Exit` from a nested
+block — and it is worth reading as a general property: **any control transfer
+whose target is data rather than syntax is free in this layout.**
+
+**What the prototype actually proved, stated accurately:** that the pending-flag
+mechanism composes with the dispatch layout, that `$sp` survives unwinds, and
+that the finally continuation is one local. It did not prove anything about pad
+RESOLUTION, because its input was hand-written WAT whose nesting was visible in
+the source. A conclusion drawn from a simplified input reads exactly like a
+conclusion drawn from the design once it is written down as a finding, which is
+why this correction is in the doc rather than in a commit message.
 
 **3. The post-call check must dominate every use of the call's result — and
 wasm's validator enforces this, so it is structure, not discipline.** This was
@@ -138,3 +200,11 @@ Named so the next session does not read "confirmed" as "complete":
 - 2026-08-27 — prototyped and confirmed. Five compositions, 22-line trace
   identical to the native build, `$sp` balanced across unwinds. Three findings
   recorded above; the wabt nesting limit measured at ~9000.
+- 2026-08-28 — **finding 2 corrected.** "No runtime handler stack" was a
+  property of the prototype's hand-written input, not of the design: against the
+  real IR, two `EXC_LEAVE`s per `EXC_ENTER` and a multi-frame `EXC_LEAVE n` make
+  a linear scan derive the wrong nesting, silently. The chain stays a runtime
+  chain, the pad becomes dynamic, and the br_table layout makes that free. The
+  shared-file escape did NOT dissolve — `exception_emit.inc`'s wasm32 arm had to
+  stop erroring — but it is four lines in a dead-on-every-other-target arm,
+  taken under a branch-only grant that is explicitly not merge permission.

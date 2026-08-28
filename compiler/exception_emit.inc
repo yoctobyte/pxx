@@ -434,20 +434,35 @@ begin
     EmitExit(EXITCODE_UNHANDLED_EXCEPTION);
   end
   else if TargetArch = TARGET_WASM32 then
-    { Erroring here is correct — exceptions genuinely are not implemented yet.
-      The REASON matters though, and the original text named the wrong one: it
-      said the module needs the exception-handling proposal or a trampoline.
-      It needs neither. wasm's Phase 5 design threads a PENDING FLAG instead —
-      a raise sets two globals and branches to the statically-known landing pad
-      of the enclosing try, and every call site checks the flag afterwards. No
-      engine proposal, no version dependency, no trampoline, and it composes
-      with the br_table dispatch layout. That is exactly why it was chosen over
-      the EH proposal, whose legacy-vs-final opcode split is live fragmentation.
-      Prototyped and diffed against a native build before this text was
-      written: devdocs/dev/wasm/phase5-exceptions.md, test/wasm/proto/check.sh.
-      What is missing is the lowering, not a language feature to wait for. }
-    Error('wasm32: exception runtime not implemented yet (the design needs no '
-          + 'engine proposal — see devdocs/dev/wasm/phase5-exceptions.md)')
+  begin
+    { NO RUNTIME, and that is the design rather than a gap. Every other arm of
+      this chain emits machine code — a setjmp, a longjmp, a raise stub that
+      walks the handler chain — because a raise has to reach a landing pad
+      through an address. wasm has no code addresses at all: its calls are
+      function INDICES and its branches are structural, so there is nothing an
+      emitted stub could be reached BY. The whole mechanism therefore lives in
+      the lowering — a raise sets a pending flag and two status slots, then
+      branches to the enclosing handler's pad through the br_table dispatch
+      the bodies already have, and every call site checks the flag afterwards.
+      No engine proposal, no version dependency, no trampoline.
+      devdocs/dev/wasm/phase5-exceptions.md, test/wasm/proto/check.sh.
+
+      -1, NOT CodeLen. The xtensa arm four lines above sets its three addresses
+      to CodeLen and follows them with EmitExit, which is right there: its
+      stub is REACHABLE — a `call` to that offset is expressible — so the trap
+      is the difference between a clean exit and running whatever follows.
+      Here nothing can reach these values, so the useful thing is not a trap
+      but a POISON: -1 is not a plausible code offset, so if a future shared
+      path ever does route wasm through IREmitCodeCall, it shows up as an
+      obviously wrong number rather than as a silent branch to offset 0.
+
+      Erroring here was correct until the lowering existed and is now wrong:
+      it would refuse every program containing `try`, including the ones the
+      lowering handles. }
+    ExcSetJmpAddr  := -1;
+    ExcLongJmpAddr := -1;
+    ExcRaiseAddr   := -1;
+  end
   else
     Error('compiler error: no exception runtime for target '
           + TargetArchName(TargetArch)

@@ -65,6 +65,23 @@ var
   WasmBodySerial    : Integer = 0;    { stamps WasmLabelStamp, see below }
   WasmHasTerminate  : Boolean = False;{ body contains an early Exit }
   WasmNeedDispatch  : Boolean = False;{ ... so the dispatch must exist }
+  WasmCurBlk        : Integer = 0;    { basic block being emitted, for the
+                                        post-call exception check, which is
+                                        needed in VALUE position where the
+                                        emitters take no block argument }
+  WasmGExcPend      : Integer = -1;   { the $exc_pending global, allocated on
+                                        first use so a program without a raise
+                                        emits a module without it }
+  WasmExcSites      : Integer = 0;    { IR_EXC_ENTER sites in this body }
+  WasmExcHasHandler : Boolean = False;{ ... any at all }
+  WasmExcTopLocal   : Integer = -1;   { scratch i32 holding the chain head }
+{ ONE reusable spill local per value type per body, not one per call site. A
+  call result's life here is three instructions — set, check, get — and the
+  check cannot itself contain a call, so nested calls cannot overlap. Per-site
+  locals would add one to the locals vector for every call in the program. }
+  WasmCRLocal       : array[0..3] of Integer;
+  WasmCurNRes       : Integer = 0;    { this body's result count (0 or 1) }
+  WasmCurResVt      : Byte = 0;       { ... and its wasm type when 1 }
 
 { Pascal proc index -> the wasm function slot it was given, or -1. A call may
   name a proc whose body has not been emitted yet, so the slot is reserved on
@@ -82,6 +99,13 @@ var
   impossible, so it is worth two arrays to keep it that way. }
   WasmLabelBlock    : array[0..MAX_IR-1] of Integer;
   WasmLabelStamp    : array[0..MAX_IR-1] of Integer;
+
+{ IR_EXC_ENTER node -> which handler frame in this body's shadow frame it owns.
+  One frame per SITE rather than per dynamic entry, which is correct for the
+  same reason a Pascal local is: a site cannot be active twice in one
+  invocation without being lexically nested inside itself, and recursion gets a
+  new $fp. }
+  WasmExcSlot       : array[0..MAX_IR-1] of Integer;
 
 { Mark the body being emitted as not-yet-lowerable. Deliberately NOT Error:
   Error aborts the compile, and one unimplemented op in a builtin would then
@@ -295,6 +319,26 @@ end;
   something to slip in here. }
 const
   WASM_BSS_BASE    = 1024;
+
+{ A HANDLER FRAME — one per `try` in the body, living in the shadow frame below
+  the Pascal slots. Three words, and the third is the one the register backends
+  do not need:
+
+    +0  prev   the BSS_EXC_TOP this frame displaced
+    +4  pad    the BASIC BLOCK the landing pad starts, not a code address —
+               there are no code addresses in a wasm module
+    +8  fp     the $fp of the invocation that pushed it
+
+  `fp` is what answers "is the innermost handler MINE?" at a raise. A register
+  target answers that with a longjmp, which simply lands wherever the setjmp
+  buffer says; wasm cannot jump into another frame at all, so the question has
+  to be asked explicitly and answered two ways — branch to the pad if the
+  handler is ours, set the pending flag and return if it is not. See
+  devdocs/dev/wasm/phase5-exceptions.md, "the landing pad is DYNAMIC". }
+  WASM_EXCF_PREV   = 0;
+  WASM_EXCF_PAD    = 4;
+  WASM_EXCF_FP     = 8;
+  WASM_EXCF_SIZE   = 12;
   WASM_STACK_BYTES = 65536;
   WASM_PAGE        = 65536;
 
@@ -453,6 +497,11 @@ function WasmEmitIndArgs(sigProc, firstArg, startIdx: Integer;
 procedure WasmEmitConstStr(node: Integer); forward;
 procedure WasmEmitFrozenStore(dstIsSym: Boolean;
                               dstRef, valNode, cap: Integer); forward;
+{ The post-call exception check and the spill that must precede it. Forward
+  because every call emitter needs them and the call emitters sit above the
+  block machinery they branch through. }
+procedure WasmEmitExcCheck; forward;
+procedure WasmEmitPostCall(spillVt: Byte; hasResult: Boolean); forward;
 
 { The address at which the PASCAL VARIABLE `si` lives, which is not always the
   address of its slot. A var/out parameter's slot holds the CALLER's address,
@@ -1852,6 +1901,11 @@ begin
     stack, and wasm requires the stack to be empty at the end of a statement.
     `drop` is that requirement, not a tidy-up. }
   if isStmt and Procs[p].IsFunc then WasmOp($1A, 'drop');
+  if impIdx < 0 then
+  begin
+    if not WasmProcResult(p, pvt) then pvt := WT_I32;
+    WasmEmitPostCall(pvt, Procs[p].IsFunc and not isStmt);
+  end;
 end;
 
 { ===== indirect calls =====
@@ -1947,7 +2001,7 @@ end;
   IRA = the callee value, IRB = the argument chain, IRIVal = the proc whose
   declaration is the SIGNATURE (not a callee — nothing calls it). }
 procedure WasmEmitCallInd(node: Integer; isStmt: Boolean);
-var sigProc: Integer;
+var sigProc: Integer; pvt: Byte;
 begin
   sigProc := Integer(IRIVal[node]);
   if (sigProc < 0) or (sigProc >= MAX_PROCS) then
@@ -1968,6 +2022,8 @@ begin
   if WasmBodyBroken then Exit;
   WasmCallIndirect(WasmSigForProc(sigProc));
   if isStmt and Procs[sigProc].IsFunc then WasmOp($1A, 'drop');
+  if not WasmProcResult(sigProc, pvt) then pvt := WT_I32;
+  WasmEmitPostCall(pvt, Procs[sigProc].IsFunc and not isStmt);
 end;
 
 { VMT dispatch. IRA = first arg (Self is argument 0), IRB chains them, IRC =
@@ -2023,6 +2079,8 @@ begin
   WasmMemOp($28, 'i32.load', 2, slot * 8);
   WasmCallIndirect(WasmSigForProc(sigProc));
   if isStmt and Procs[sigProc].IsFunc then WasmOp($1A, 'drop');
+  if not WasmProcResult(sigProc, pvt) then pvt := WT_I32;
+  WasmEmitPostCall(pvt, Procs[sigProc].IsFunc and not isStmt);
 end;
 
 { ===== control flow =====
@@ -2132,6 +2190,351 @@ begin
   end;
   { eqz answered "the condition was false", which is precisely when this jump
     is taken. }
+  WasmBrIf(WasmDepthToLoop(blk));
+end;
+
+{ ===== exceptions =====
+
+  THE WHOLE MECHANISM, because it is small and the reason it is small is the
+  interesting part.
+
+  Every other backend reaches a landing pad through an ADDRESS: a setjmp buffer
+  holds one, longjmp restores the stack and jumps to it, and a raise stub walks
+  the handler chain doing that. A wasm module has no code addresses at all —
+  calls are function indices, branches are structural — so none of that is
+  expressible, and `exception_emit.inc`'s wasm arm emits no runtime bytes.
+
+  What replaces it is two questions asked at two places:
+
+    at a RAISE, and after every CALL that could have raised:
+        is the innermost handler frame MINE?
+          yes -> $pc := its pad, br $dispatch          (handled here)
+          no  -> set $exc_pending, restore $sp, return (propagate outward)
+
+  "Mine" is `[$exc_top + FP] = $fp`, which is why a handler frame carries the
+  $fp that pushed it. The chain itself is the SAME runtime chain every register
+  backend keeps, in the same shared BSS slot (BSS_EXC_TOP), so nothing new is
+  stored and nothing in a shared file changed to store it.
+
+  The pad is a BASIC BLOCK NUMBER, and branching to a computed one costs
+  exactly what branching to a constant one costs, because $pc is already a
+  variable feeding a br_table. That is a property of the dispatch LAYOUT rather
+  than anything about exceptions — any control transfer whose target is data
+  instead of syntax is free here — and it is what makes the dynamic pad
+  affordable. The prototype assumed static pads; against the real IR they are
+  not reconstructible, because a `try` emits TWO EXC_LEAVEs per EXC_ENTER and
+  `EXC_LEAVE n` pops several frames at a point the lexically following code is
+  still inside. A linear scan derives the wrong nesting SILENTLY.
+  devdocs/dev/wasm/phase5-exceptions.md carries the worked case.
+
+  NOT IMPLEMENTED and filed rather than hidden: a proc CLEANUP frame, which is
+  what releases managed locals when an exception unwinds THROUGH a frame rather
+  than being caught in it. wasm32 sits outside TargetHasProcCleanupFrame
+  exactly as xtensa does, deliberately in xtensa's case and now in ours —
+  bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa. An unwind leak
+  prints nothing, which is why it is a ticket and not a comment. }
+
+{ The pending flag. A wasm GLOBAL rather than a BSS word: it is read after every
+  call in a program that uses exceptions, so it is the one piece of this that is
+  hot, and a global is a register where a BSS word is a load. Allocated on FIRST
+  USE so that a program containing no `raise` emits a module with no trace of
+  any of this — which is also what keeps every pre-existing slice byte-for-byte
+  what it was. }
+function WasmExcPendGlobal: Integer;
+begin
+  if WasmGExcPend < 0 then
+    WasmGExcPend := WasmAddGlobal('exc_pending', WT_I32, True, 0);
+  WasmExcPendGlobal := WasmGExcPend;
+end;
+
+{ The address of one of the compiler-owned status words. They are 8 bytes wide
+  because the shared allocator sizes them for a 64-bit target; here they are
+  WRITTEN as i64 (so the high half is never stale garbage from a previous
+  value) and READ as i32 (because that is the width of everything on this
+  target). Writing i32 and reading i32 would work today and would leave a
+  half-initialised word for the first 64-bit reader to find. }
+procedure WasmBssAddr(off: Integer);
+begin
+  WasmI32Const(WASM_BSS_BASE + off);
+end;
+
+procedure WasmBssLoad(off: Integer);
+begin
+  WasmBssAddr(off);
+  WasmMemOp($28, 'i32.load', 2, 0);
+end;
+
+{ value (i32) is already on the stack -> store it into the status word }
+procedure WasmBssStoreFromStack(off: Integer; scratch: Integer);
+begin
+  WasmLocalSet(scratch);
+  WasmBssAddr(off);
+  WasmLocalGet(scratch);
+  WasmOp($AD, 'i64.extend_i32_u');
+  WasmMemOp($37, 'i64.store', 2, 0);
+end;
+
+procedure WasmBssStoreConst(off: Integer; v: Integer);
+begin
+  WasmBssAddr(off);
+  WasmI64Const(v);
+  WasmMemOp($37, 'i64.store', 2, 0);
+end;
+
+{ The address of this body's handler frame number k. }
+procedure WasmExcFrameAddr(k: Integer);
+begin
+  WasmLocalGet(WasmLocalFp);
+  if k > 0 then
+  begin
+    WasmI32Const(k * WASM_EXCF_SIZE);
+    WasmOp($6A, 'i32.add');
+  end;
+end;
+
+function WasmExcTop: Integer;
+begin
+  if WasmExcTopLocal < 0 then
+    WasmExcTopLocal := WasmAddLocal(WT_I32, 'exctop');
+  WasmExcTop := WasmExcTopLocal;
+end;
+
+{ A zero of the body's result type, for the propagate path's `return`. The
+  value is DEAD — the caller spills it and then branches on the pending flag
+  before ever reading it — but wasm has no notion of a dead value, so a
+  function with a result must return one on every path. Floats go through
+  reinterpret because this encoder has no f32/f64 const emitter, the same route
+  IR_CONST_INT takes for a float literal. }
+procedure WasmPushZeroOf(vt: Byte);
+begin
+  if vt = WT_I64 then WasmI64Const(0)
+  else if vt = WT_F64 then
+  begin
+    WasmI64Const(0);
+    WasmOp($BF, 'f64.reinterpret_i64');
+  end
+  else if vt = WT_F32 then
+  begin
+    WasmI32Const(0);
+    WasmOp($BE, 'f32.reinterpret_i32');
+  end
+  else
+    WasmI32Const(0);
+end;
+
+{ Leave this invocation with the exception still armed: restore $sp, produce a
+  dead result if the signature needs one, and `return`.
+
+  `return` rather than a branch to the epilogue, and that choice is load-bearing
+  in a way worth stating: branching to the epilogue would need the dispatch
+  blocks to exist, so EVERY body containing a call would have to grow a
+  br_table it otherwise does not need. `return` restores nothing on its own —
+  hence the explicit $sp write here, which is the same two instructions the
+  epilogue does. }
+procedure WasmEmitExcPropagate;
+begin
+  WasmLocalGet(WasmLocalFp);
+  WasmI32Const(WasmCurFrame);
+  WasmOp($6A, 'i32.add');
+  WasmGlobalSet(WasmGSp);
+  if WasmCurNRes = 1 then WasmPushZeroOf(WasmCurResVt);
+  WasmReturn;
+end;
+
+{ Take the exception somewhere: into this body's innermost handler if the chain
+  head belongs to this invocation, otherwise out of the function.
+
+  `extra` is how many wasm blocks deep the caller has opened beyond the basic
+  block's own nesting — the `if` of a post-call check, for instance — because a
+  `br` depth counts wasm's structural nesting and not the IR's.
+
+  The `[top + FP]` load happens even when top is 0, reading address 8. That is
+  a legal read of a mapped page (linear memory starts at 0 and $sp starts at
+  65536), the AND discards it, and it costs one load instead of a branch. Note
+  the contrast with the frozen-string guard, where the equivalent trick would
+  read `handle - 8` at 0xFFFFFFF8 and trap: whether an eager load is free
+  depends on the ADDRESS it computes, not on the shape of the condition. }
+procedure WasmEmitUnwind(blk, extra: Integer);
+begin
+  if WasmExcHasHandler then
+  begin
+    WasmBssLoad(BSS_EXC_TOP);
+    WasmLocalTee(WasmExcTop);
+    WasmI32Const(0);
+    WasmOp($47, 'i32.ne');
+    WasmLocalGet(WasmExcTop);
+    WasmMemOp($28, 'i32.load', 2, WASM_EXCF_FP);
+    WasmLocalGet(WasmLocalFp);
+    WasmOp($46, 'i32.eq');
+    WasmOp($71, 'i32.and');
+    WasmIf(WT_VOID);
+      { This frame owns it, so it is no longer pending — it is being handled.
+        The OBJECT stays in BSS_EXC_OBJ, which is what a bare `raise;` re-arms
+        from and what IR_EXC_STORE binds to `on E: T do`. }
+      WasmI32Const(0);
+      WasmGlobalSet(WasmExcPendGlobal);
+      WasmLocalGet(WasmExcTop);
+      WasmMemOp($28, 'i32.load', 2, WASM_EXCF_PAD);
+      WasmLocalSet(WasmLocalPc);
+      WasmBr(WasmDepthToLoop(blk) + extra + 1);
+    WasmEnd;
+  end;
+  WasmEmitExcPropagate;
+end;
+
+{ After a call. Emitted only when the PROGRAM uses exceptions at all — if no
+  `raise` exists anywhere, no call can raise, and every module that existed
+  before this phase is unchanged byte for byte. ExceptionUsed is the frontend's
+  own flag, set by EnableExceptionRuntime, so this is the same question the
+  shared code already asked rather than a second answer to it. }
+procedure WasmEmitExcCheck;
+begin
+  if not ExceptionUsed then Exit;
+  if WasmBodyBroken then Exit;
+  WasmGlobalGet(WasmExcPendGlobal);
+  WasmIf(WT_VOID);
+    WasmEmitUnwind(WasmCurBlk, 1);
+  WasmEnd;
+end;
+
+{ Index into WasmCRLocal. The four wasm value types are $7F..$7C, descending,
+  so this is a subtraction rather than a case. }
+function WasmVtIndex(vt: Byte): Integer;
+begin
+  if (vt <= WT_I32) and (vt >= WT_F64) then WasmVtIndex := WT_I32 - vt
+  else WasmVtIndex := 0;
+end;
+
+{ Everything a call site owes the exception mechanism.
+
+  The RESULT IS SPILLED FIRST, and that is the rule the prototype found by
+  getting it wrong: the check ends in a `br` on the unwind path, and a branch
+  cannot carry a half-built expression with it. Landing the result in a local
+  before the check makes the check's control flow independent of whatever
+  expression the call sits inside.
+
+  An IMPORT is exempt. A wasm import is a host function; it cannot set our
+  pending flag, because the flag is a global of this module and the host has no
+  Pascal `raise`. Checking after one would be a check that can never fire. }
+procedure WasmEmitPostCall(spillVt: Byte; hasResult: Boolean);
+var k: Integer;
+begin
+  if not ExceptionUsed then Exit;
+  if WasmBodyBroken then Exit;
+  if hasResult then
+  begin
+    k := WasmVtIndex(spillVt);
+    if WasmCRLocal[k] < 0 then
+      WasmCRLocal[k] := WasmAddLocal(spillVt, 'callres');
+    WasmLocalSet(WasmCRLocal[k]);
+    WasmEmitExcCheck;
+    WasmLocalGet(WasmCRLocal[k]);
+  end
+  else
+    WasmEmitExcCheck;
+end;
+
+{ `try` — push a handler frame. No setjmp, no branch: entering the pad is the
+  raise site's job, not this one's. }
+procedure WasmEmitExcEnter(node: Integer);
+var k, pad: Integer;
+begin
+  k := WasmExcSlot[node];
+  if (k < 0) or (k >= WasmExcSites) then
+  begin
+    WasmUnsupported('exception frame slot out of range — the pre-pass and the '
+                    + 'emit pass disagree about this body');
+    Exit;
+  end;
+  pad := WasmTargetBlock(IRA[node]);
+  if WasmBodyBroken then Exit;
+
+  WasmExcFrameAddr(k);
+  WasmBssLoad(BSS_EXC_TOP);
+  WasmMemOp($36, 'i32.store', 2, WASM_EXCF_PREV);
+
+  WasmExcFrameAddr(k);
+  WasmI32Const(pad);
+  WasmMemOp($36, 'i32.store', 2, WASM_EXCF_PAD);
+
+  WasmExcFrameAddr(k);
+  WasmLocalGet(WasmLocalFp);
+  WasmMemOp($36, 'i32.store', 2, WASM_EXCF_FP);
+
+  WasmBssAddr(BSS_EXC_TOP);
+  WasmExcFrameAddr(k);
+  WasmOp($AD, 'i64.extend_i32_u');
+  WasmMemOp($37, 'i64.store', 2, 0);
+end;
+
+{ Pop n frames. n is a compile-time constant and is small — it is the nesting
+  depth a `break` or `Exit` jumps out of — so it is unrolled rather than
+  looped. }
+procedure WasmEmitExcLeave(node: Integer);
+var i, n: Integer;
+begin
+  n := IRA[node];
+  if n < 1 then n := 1;
+  for i := 1 to n do
+  begin
+    WasmBssAddr(BSS_EXC_TOP);
+    WasmBssLoad(BSS_EXC_TOP);
+    WasmMemOp($28, 'i32.load', 2, WASM_EXCF_PREV);
+    WasmOp($AD, 'i64.extend_i32_u');
+    WasmMemOp($37, 'i64.store', 2, 0);
+  end;
+end;
+
+{ `raise E` — arm the status words and unwind. A bare `raise;` inside a handler
+  arrives with IRA = -1 and re-arms from whatever is still in the slots, which
+  is the same contract every other backend reads. }
+procedure WasmEmitRaise(node, blk: Integer);
+begin
+  if IRA[node] <> -1 then
+  begin
+    WasmEmitValueAs(IRA[node], WT_I32, 'the raised value');
+    if WasmBodyBroken then Exit;
+    WasmBssStoreFromStack(BSS_EXC_OBJ, WasmExcTop);
+    WasmBssStoreConst(BSS_EXC_CLS, Integer(IRIVal[node]));
+  end;
+  WasmI32Const(1);
+  WasmGlobalSet(WasmExcPendGlobal);
+  WasmEmitUnwind(blk, 0);
+end;
+
+{ Bind a compiler-owned status word to a Pascal variable — `on E: T do` reads
+  the object, and the signal family reads four more. One load, a different
+  offset; IRExcStoreSlot picks which, and it is shared, so the signal three
+  cost this backend nothing. }
+procedure WasmEmitExcStore(node: Integer);
+var si: Integer; vt: Byte;
+begin
+  si := IRA[node];
+  if (si < 0) or not WasmSlotType(si, vt) then Exit;
+  WasmLValueAddr(si);
+  WasmBssLoad(IRExcStoreSlot(node));
+  if vt = WT_I64 then WasmOp($AD, 'i64.extend_i32_u');
+  WasmTypeStore(Syms[si].TypeKind, vt);
+end;
+
+procedure WasmEmitExcClear;
+begin
+  WasmBssStoreConst(BSS_EXC_OBJ, 0);
+  WasmBssStoreConst(BSS_EXC_CLS, 0);
+  WasmBssStoreConst(BSS_EXC_ADDR, 0);
+end;
+
+{ A handler arm's class test. MATCH jumps to the NEXT arm when the class does
+  not match; MATCH_HIT jumps to the BODY when it does — two opcodes for one
+  comparison with opposite senses, and the sense is the only difference. }
+procedure WasmEmitExcMatch(node, blk: Integer; hit: Boolean);
+begin
+  WasmI32Const(WasmTargetBlock(IRA[node]));
+  if WasmBodyBroken then Exit;
+  WasmLocalSet(WasmLocalPc);
+  WasmBssLoad(BSS_EXC_CLS);
+  WasmI32Const(Integer(IRIVal[node]));
+  if hit then WasmOp($46, 'i32.eq') else WasmOp($47, 'i32.ne');
   WasmBrIf(WasmDepthToLoop(blk));
 end;
 
@@ -2446,6 +2849,10 @@ end;
 procedure WasmEmitStmt(node, blk: Integer);
 var pvt: Byte;
 begin
+  { Published for the VALUE emitters. A post-call exception check branches
+    through this body's block nesting, and the call emitters — which run deep
+    inside an expression — take no block argument and never will. }
+  WasmCurBlk := blk;
   case IRKind[node] of
     IR_NOP, IR_BLOCK, IR_LABEL : ;
     IR_JUMP          : WasmEmitJump(node, blk);
@@ -2457,6 +2864,13 @@ begin
     IR_STORE_MEM     : WasmEmitStoreMem(node);
     IR_WRITE, IR_WRITELN : WasmEmitWrite(node);
     IR_COPY_REC      : WasmEmitCopyRec(node);
+    IR_EXC_ENTER     : WasmEmitExcEnter(node);
+    IR_EXC_LEAVE     : WasmEmitExcLeave(node);
+    IR_RAISE         : WasmEmitRaise(node, blk);
+    IR_EXC_STORE     : WasmEmitExcStore(node);
+    IR_EXC_CLEAR     : WasmEmitExcClear;
+    IR_EXC_MATCH     : WasmEmitExcMatch(node, blk, False);
+    IR_EXC_MATCH_HIT : WasmEmitExcMatch(node, blk, True);
     IR_STORE_SYM :
       { A managed string's SLOT is pointer-sized and its stores are therefore
         scalar-shaped, which is exactly the trap: `m := 'lit'` through the
@@ -2520,7 +2934,12 @@ begin
   curBlk := 0;
   nStmt := 0;
   pending := False;
-  if not emit then WasmHasTerminate := False;
+  if not emit then
+  begin
+    WasmHasTerminate := False;
+    WasmExcSites := 0;
+    WasmExcHasHandler := False;
+  end;
   for i := 0 to IRCount - 1 do
   begin
     if IRKind[i] = IR_LABEL then
@@ -2544,8 +2963,19 @@ begin
         if emit then WasmEnd;
       end;
       Inc(nStmt);
+      if (not emit) and (IRKind[i] = IR_EXC_ENTER) then
+      begin
+        WasmExcSlot[i] := WasmExcSites;
+        Inc(WasmExcSites);
+        WasmExcHasHandler := True;
+      end;
       if emit then WasmEmitStmt(i, curBlk);
-      if (IRKind[i] = IR_JUMP) or (IRKind[i] = IR_JUMP_IF_FALSE) then
+      if (IRKind[i] = IR_JUMP) or (IRKind[i] = IR_JUMP_IF_FALSE)
+         or (IRKind[i] = IR_EXC_MATCH) or (IRKind[i] = IR_EXC_MATCH_HIT) then
+        { A class test is a conditional jump wearing a different opcode, so it
+          ends its basic block exactly as IR_JUMP_IF_FALSE does. Without this
+          the arms of a multi-handler `except` share one block and the fallthrough
+          runs the next arm's body. }
         pending := True
       else if IRKind[i] = IR_TERMINATE then
       begin
@@ -2645,6 +3075,10 @@ begin
   { Open the body session BEFORE naming params or adding locals: they now
     accumulate in the per-body buffers that WasmBodyBegin resets. }
   WasmBodyBegin;
+  WasmExcTopLocal := -1;
+  for i := 0 to 3 do WasmCRLocal[i] := -1;
+  WasmCurNRes := nRes;
+  if nRes = 1 then WasmCurResVt := resVt;
 
   for i := 0 to nParams - 1 do
     WasmAddParamName(Procs[CurProc].Params[i].Name);
@@ -2657,7 +3091,11 @@ begin
   WasmWalkBody(False);
   WasmLocalPc := -1;
   WasmLocalSelf := -1;
-  WasmNeedDispatch := (WasmBlockCount > 1) or WasmHasTerminate;
+  { A handler frame's pad is a BLOCK NUMBER, so a body that owns one needs the
+    br_table to branch through even in the degenerate case where its own
+    control flow would not have produced a second block. }
+  WasmNeedDispatch := (WasmBlockCount > 1) or WasmHasTerminate
+                      or WasmExcHasHandler;
   if WasmNeedDispatch then
     WasmLocalPc := WasmAddLocal(WT_I32, 'pc');
 
@@ -2665,7 +3103,11 @@ begin
     allocated during lowering (symtab.inc), not here — so unlike the register
     backends there is no prologue to backpatch. Round up to 16 to keep the
     shadow stack aligned for anything that later cares. }
-  WasmCurFrame := ((FrameSize + 15) div 16) * 16;
+  { The handler frames sit BELOW the Pascal slots. A slot's address is
+    `$fp + WasmCurFrame + Offset` with Offset negative from the frame top, so
+    growing WasmCurFrame moves the slots up and opens exactly this much room at
+    $fp — which is where WasmExcFrameAddr puts frame 0. }
+  WasmCurFrame := ((FrameSize + WasmExcSites * WASM_EXCF_SIZE + 15) div 16) * 16;
 
   { prologue: $fp := $sp - frame ; $sp := $fp }
   WasmGlobalGet(WasmGSp);
@@ -2908,14 +3350,79 @@ end;
   -dWASM_NOMAIN and no const initialisers) gets no `main`, which is honest:
   there is nothing to run. }
 procedure WasmEmitMainWrapper;
-var i, slot: Integer;
+var i, slot, si, iov, fdw: Integer;
 begin
   if WasmMainChunkCount = 0 then Exit;
   slot := WasmAddFunc('main', WasmAddType([], []));
   WasmBodyBegin;
+  iov := -1;
+  si := -1;
+  fdw := -1;
+  if ExceptionUsed then
+  begin
+    { The message is interned as an ordinary literal, so it lands in Data[]
+      like every other one and needs no special segment. }
+    si := InternStr('Unhandled exception' + Chr(10));
+    iov := WasmAddLocal(WT_I32, 'iov');
+    fdw := WasmHostImport('wasi_snapshot_preview1', 'fd_write',
+                          [WT_I32, WT_I32, WT_I32, WT_I32], [WT_I32]);
+  end;
   for i := 0 to WasmMainChunkCount - 1 do
+  begin
     WasmCall(WasmMainChunk[i],
              'main$' + WasmIntStr(i));
+    { AN UNHANDLED EXCEPTION MUST NOT LOOK LIKE SUCCESS. Every body propagates
+      by returning with the flag set, so if it is still set here nothing caught
+      it and this is the end of the line: say so on stderr and exit 217, the
+      same code every other target uses (EXITCODE_UNHANDLED_EXCEPTION).
+
+      Checked after EACH chunk rather than once at the end, because the chunks
+      are the program's top-level statements in order and a raise in one must
+      not let the next one run.
+
+      Written through fd_write directly rather than through the RTL's console
+      family: those write to fd 1 and this belongs on fd 2, and reaching for
+      them here would make the wrapper depend on which RTL routines a given
+      program happens to have pulled in.
+
+      NOT the full x86-64 line. That one reads the object's class name and its
+      `msg` field out of RTTI — `Unhandled exception: EFoo: bad thing` — and
+      every field read there is range-guarded because raising a non-Exception
+      must degrade rather than fault. Worth having, and it is a separate piece
+      of work; a bare line with the right exit code is the honest version of
+      it, where silence is not. }
+    if ExceptionUsed then
+    begin
+      WasmGlobalGet(WasmExcPendGlobal);
+      WasmIf(WT_VOID);
+        { Scratch below $sp: this wrapper has no frame of its own, so the 16
+          bytes under the stack pointer are nobody's. iov is 8 bytes at
+          $sp-16, the nwritten word 4 bytes at $sp-8. }
+        WasmGlobalGet(WasmGSp);
+        WasmI32Const(16);
+        WasmOp($6B, 'i32.sub');
+        WasmLocalSet(iov);
+        WasmLocalGet(iov);
+        WasmDataAddr(Strs[si].Offset + 8);   { +8 skips the length prefix }
+        WasmMemOp($36, 'i32.store', 2, 0);
+        WasmLocalGet(iov);
+        WasmI32Const(Strs[si].Len);
+        WasmMemOp($36, 'i32.store', 2, 4);
+        WasmI32Const(2);                     { fd 2 }
+        WasmLocalGet(iov);
+        WasmI32Const(1);                     { one iovec }
+        WasmLocalGet(iov);
+        WasmI32Const(8);
+        WasmOp($6A, 'i32.add');              { where fd_write reports nwritten }
+        WasmCallImport(fdw, 'fd_write');
+        WasmOp($1A, 'drop');
+        WasmI32Const(EXITCODE_UNHANDLED_EXCEPTION);
+        WasmCallImport(WasmHostImport('wasi_snapshot_preview1', 'proc_exit',
+                                      [WT_I32], []), 'proc_exit');
+        WasmBodyUnreachable;
+      WasmEnd;
+    end;
+  end;
   WasmBodyTerminate;
   WasmBodyEnd(slot);
   WasmAddExport('main', WEK_FUNC, slot);

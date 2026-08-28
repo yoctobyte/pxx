@@ -647,6 +647,73 @@ check after each call, branching to the frame's landing label.
   handlers and the exception object's refcount lifecycle, and anything crossing
   `call_indirect`, which waits on Phase 5.
 
+### Phase 7 — **DONE 2026-08-28**
+
+- **Milestone:** `test/wasm/check_exc.sh` — nine compositions diffed against
+  the native build over 25 lines, plus an unhandled raise exiting 217 with a
+  line on fd 2, agreeing with the native build on both. `test_exception_finally`
+  and `test_exception_typed` from the main corpus are byte-identical too.
+
+**What the trace changed before a line was written.** The prototype's central
+finding — "there is no runtime handler stack, landing pads are resolved at
+compile time" — was a property of its INPUT, not of the design. Against the
+real IR a `try` emits **two** `EXC_LEAVE`s per `EXC_ENTER` (the pad pops the
+frame it was entered through), and `EXC_LEAVE n` pops several frames at a point
+the lexically following code is still inside all of them. A linear scan derives
+the wrong nesting *silently*: the module validates, the exception lands in a
+real pad, and the wrong handler runs only for inputs that exercise the nesting.
+The correction is in `phase5-exceptions.md`; the design that replaced it keeps
+the runtime chain every register backend already has, in the same shared BSS
+slot, with one extra word per frame — the `$fp` that pushed it.
+
+**Why that costs nothing, and it is about the LAYOUT rather than about
+exceptions.** `$pc` is already a variable feeding a `br_table`, so branching to
+a computed basic block is the same instruction as branching to a constant one.
+A dynamic landing pad is free here where on a register target it would be an
+indirect jump. Second time this phase that the dispatch layout has paid for
+something it was not chosen for. General form: **any control transfer whose
+target is data rather than syntax is free in this layout.**
+
+**The mechanism, in full, because it is small:** a raise sets a pending flag
+and the shared status words, then asks one question — `[$exc_top + 8] = $fp`?
+Yes, and it is ours: `$pc := [$exc_top + 4]; br $dispatch`. No, and it belongs
+to a caller: restore `$sp` and `return`, and the caller's post-call check asks
+the same question of its own frame. `return` rather than a branch to the
+epilogue, deliberately: branching there would force every body containing a
+call to grow a `br_table` it does not otherwise need.
+
+**The gate that keeps this free for everyone else.** Post-call checks are
+emitted only when `ExceptionUsed` — the frontend's own flag. A program with no
+`raise` anywhere emits a module with no pending flag and no checks, so every
+module that existed before this phase is unchanged. That property is invisible
+to a differential (the checks would be *correct*, merely universal), so
+`check_exc.sh` asserts it directly, and asserts it BOTH ways so the negative
+cannot pass by naming the wrong symbol.
+
+**The rule the prototype found by getting it wrong, now enforced structurally:**
+a call's result is spilled to a local before the check. The check ends in a
+`br` on the unwind path, and a branch cannot carry a half-built expression.
+
+**Refused and filed, not hidden:** the proc CLEANUP frame, which releases
+managed locals when an exception unwinds THROUGH a frame rather than being
+caught in it. wasm32 sits outside `TargetHasProcCleanupFrame` exactly as xtensa
+deliberately does. An unwind leak prints nothing — invisible to the very
+differential this phase is gated on, because both sides produce identical
+output and only the heap differs — which is why it is
+`bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa` and not a comment.
+
+**The shared-file escape did NOT dissolve** — the third one predicted, and the
+first to survive inspection. `exception_emit.inc`'s wasm32 arm had to stop
+erroring. It is four lines in an arm that is dead on every other target, and
+the in-file precedent was sitting four lines above it: xtensa already sets its
+three addresses and emits no runtime. One deliberate difference — xtensa
+follows them with `EmitExit`, because its stub is REACHABLE and the trap is the
+difference between a clean exit and running whatever follows; wasm's is not
+reachable by construction, since there is no way to express a jump to a code
+offset, so the useful value is a POISON (-1) rather than a trap. Taken under a
+branch-only grant that is explicitly **not** merge permission: all three of the
+branch's shared-file arms present as one reviewable set at merge time.
+
 ## Phase 8 — the PAL
 
 `lib/rtl/platform/wasi/platform_backend.pas`, sized like `esp/` (1,035 lines).
@@ -838,3 +905,29 @@ smaller than the C frontend was.
   a heap handle. Validated, ran, and every later read was off by eight bytes.
   It refuses by name now. A count that goes DOWN because a wrong lowering was
   withdrawn is worth more than the count that went up.
+- 2026-08-28 — **Phase 7 done: exceptions, nine compositions, 25 lines
+  identical to the native build on the first run.** The corpus's own
+  `test_exception_finally` and `test_exception_typed` match too.
+
+  **The most valuable thing in the phase happened before any code.** Tracing
+  the design against the real IR overturned the prototype's central finding.
+  "No runtime handler stack" was true of hand-written WAT, whose nesting is
+  visible in the source, and false of the IR, where a `try` emits two
+  `EXC_LEAVE`s per `EXC_ENTER` and `EXC_LEAVE n` pops frames the following code
+  is still inside. A linear scan reconstructs the wrong nesting and does it
+  silently. A conclusion drawn from a simplified input reads exactly like a
+  conclusion drawn from the design once it is written down as a finding — which
+  is why the correction went into the design doc rather than a commit message.
+
+  **The replacement was cheaper than the thing it replaced**, because `$pc` is
+  already a variable feeding a `br_table`: a dynamic landing pad costs what a
+  constant one costs. Worth generalising past exceptions — any control transfer
+  whose target is data rather than syntax is free in this layout.
+
+  **A check that cannot see a property must assert it directly.** The
+  post-call check is gated on `ExceptionUsed`, so a program with no `raise`
+  emits no pending flag and no checks. Losing that gate would leave every
+  module correct and every call carrying a check that can never fire — which no
+  differential can detect, since the output is unchanged. Asserted on a module
+  from another suite, and asserted in both directions so the negative cannot
+  pass by naming a symbol that no longer exists.
