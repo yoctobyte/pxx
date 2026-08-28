@@ -365,4 +365,4 @@ read as p40 of available Track B work while containing none: a dispatcher sees a
 slug and a prio, not a body, so a ticket whose contents are entirely elsewhere
 costs a real dispatch every time it surfaces. That happened tonight to two
 tickets in this lane.
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit ee2753bb4.
