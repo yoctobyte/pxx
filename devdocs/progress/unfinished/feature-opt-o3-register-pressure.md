@@ -1,5 +1,5 @@
 ---
-prio: 55
+prio: 70
 ---
 
 # -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator
@@ -1651,3 +1651,46 @@ cheapest of the three to port (a threshold and a ranking key, no new encodings),
 and Track O's per-backend rule explicitly covers aarch64 — this is in scope, not
 a stretch. Nobody should port W2 there first just because it is the most recent
 thing in this ticket.
+
+
+## Re-priced 55 -> 70 by the coordinator, 2026-08-28
+
+Track O re-priced this 85 -> 55 earlier tonight, correctly: the remaining x86-64
+work had been cut from ~1.4x to ~1.10x by its own decomposition, and the umbrella
+should not carry a prize a bounded slice had already collected.
+
+**Then, while writing the known-unknowns table on its way to parking, it found the
+aarch64 row is not what anyone assumed** — and that supersedes the premise the 55
+rested on, which is the one condition that re-opens a rank.
+
+**Verified independently before acting on it**, in the source rather than from the
+report, and from the *other* side as well:
+
+- `compiler/ir_codegen_aarch64.inc:757` — `if Counts[k] <= 3 then Continue;`,
+  admission by **total** accesses.
+- `compiler/ir_codegen.inc` ranks on **`LCounts`** (loads) at `:9755`, and the
+  comment at `:9771` says in its own words: *"The old test was `Counts[k] <= 3`
+  over loads."*
+
+So aarch64 is still on the **pre-item-1** rule and excludes the loop-carried
+accumulator that item 1 exists to admit — worth **1.9-2.1x on x86-64, more than W2
+and item 3 combined.** It is also the cheapest of the three to port: a threshold and
+a ranking key, **no new encodings and no new predicate**. Track O's per-backend rule
+names aarch64 explicitly, so it is in scope rather than a stretch.
+
+**Ranked next move for this umbrella is the aarch64 port, ahead of item 1 on
+x86-64's remaining ~1.10x.** p70 reflects a large prize at low cost; it is not p85
+because nothing is blocked on it and it is a port of a proven change rather than
+novel work. Track O may revise this when it resumes — it has the benches and I do
+not.
+
+**A note on how this was nearly missed, which is worth more than the ranking.** Its
+filer said it wrote the finding into the ticket *"so nobody ports the most recent
+thing in it first just because that is what the last section talks about."*
+
+> **A ticket's most recent section reads as its next action.** Document order becomes
+> work order, and the newest writing is the loudest regardless of what it ranks.
+
+Same family as *a diagnosis in the shape of the previous fix is confirmed by
+resemblance* — recency and resemblance both supply confidence that the content has
+not earned.

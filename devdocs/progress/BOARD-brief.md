@@ -55,6 +55,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero
 - `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - `[p 70] [N]` feature-nilpy-staticmethod-and-classmethod
+- `[p 70] [O]` feature-opt-o3-register-pressure
 - `[p 70] [P]` feature-p-delphi-string-helpers
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 70] [P]` regression-cascade-4e27dc2be114
@@ -75,6 +76,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
-- `[p 62] [N]` feature-nilpy-enum-class
 
 _278 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
