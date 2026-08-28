@@ -12283,3 +12283,78 @@ line and reach for the same threshold.
 
 Otherwise quiet: nothing blocked, `urgent/` empty, all trees level with origin except
 frankwasm's 59 branch commits and 9 dirty files, which are its live Phase 8 working set.
+
+### 2026-08-28 — Phase 8 milestone, and the merge accounting is WRONG in two ways
+
+A wasm32 program does real file I/O byte-identically to native under **node's own WASI** —
+`1fabd5c46` on `wasm`, 17 checks green, fixedpoint converged (`a3ac1b2bf63a`). The oracle is
+the native build and the harness is `node:wasi`, deliberately **not** our own shim, because a
+shim would agree with the backend by construction including where both are wrong.
+
+**I checked the merge set rather than accepting the summary, and it does not match.**
+
+frankwasm reported four arms in three files: `exception_emit.inc` ×2, `ir_codegen.inc` ×1, and
+a new `lib/rtl/platform.pas` ×1 (`PAL_PLATFORM_WASI = 3`, additive). Measured
+(`git diff --stat origin/master...origin/wasm`):
+
+**1. `compiler/compiler.pas` is changed and is not on the list** — 14 lines, five distinct
+edits: three `{$include}`s, a **forward declaration added to the shared forward block**
+(`IRTopLevelStmt`), and — the one that matters — a **replaced line**, `Error('wasm32: module
+writer not implemented…')` becoming `writeWasm(outFile)`. That is not additive, and it is the
+same shape as the `exception_emit.inc` arm which *is* counted. The forward-block edit is also
+in exactly the region that produced this lane's two FPC-seed REDs.
+
+It may be defensible — the comment cites `feature-a-wasm32-module-writer-wiring`, so the
+registration ticket may cover the includes. **But the standing ruling is that nothing on the
+branch is pre-approved**, and an unlisted shared file is precisely what that ruling exists to
+catch. Asked, not assumed.
+
+**2. The set now CROSSES LANES, and frankwasm classified it uniformly.** The first three arms
+are `compiler/**` = **Track A**. `lib/rtl/platform.pas` is `lib/rtl/**` = **Track B**, with a
+different gate (`make lib-test` / `demos`, built against `$(PXX_STABLE)`, never rebuilding the
+compiler). So the merge review spans **two lanes' gates, not one**, and frankB is parked clean
+and does not know this exists.
+
+New files are additive and collision-free and do not need arm treatment:
+`ir_codegen_wasm32.inc` (4412), `wasmenc.inc` (1321), `asmtext_wasm.inc`,
+`lib/rtl/platform/wasi/platform_backend.pas` (1120).
+
+**The compiler.pas edit I had NOT pre-authorised was never needed** — frankwasm confirmed
+`-Fulib/rtl/platform/wasi` wins as an explicit override, exactly as my check predicted, so that
+question closed without spending a ruling. The compiler.pas change on the branch is a
+*different* edit from the one we discussed.
+
+### FACE NINE: an inert flag, asserted in a COMMENT
+
+`-dWASM_NOMAIN` had been passed for weeks and **never changed a byte** — `host_slice.pas` does
+not contain the string. The check's node:wasi arm worked only because nothing we emitted
+exported `_start`, so every module looked like a reactor. **The comment justifying the check
+asserted a property of the build that the build did not have** — a new location for the family,
+the layer nothing tests.
+
+> **An inert flag is invisible from the outside.** A misspelled or unread define does not warn;
+> the build succeeds and produces a module that is not the one you asked for. The guard is the
+> vacuous-assertion guard: **if a flag is supposed to change the output, the check passing it
+> must be able to fail without it.**
+
+Making the define real turned **a second arm red**, because it had been relying on the same
+module still running its body — one inert flag propping up two arms. And the fix that was
+*refused* is the instructive half: suppressing `_start` under the define would have invented a
+compiler flag to serve a test's story, when the story was what was wrong.
+
+Second WASI instance, same family: **errno numbering is alphabetical** — WASI 2 is `EACCES`,
+Linux 2 is `ENOENT`. Passing the number through turns every missing file into a permission
+error, and **both are non-zero**, so anything asking only "did it fail" agrees with the bug.
+
+### The slice-2 mirror, from the opposite side
+
+`WasmBinopIsString` asked only about **operands**. A frozen string's value is its address, so
+`PChar('literal')` lowers to `bufferAddress + 8` — ordinary pointer arithmetic — and was
+refused as "concatenation producing Pointer", blocking most of the PAL. Split by operator: **a
+comparison is a string compare because of its OPERANDS; a `+` is a concatenation because of its
+RESULT.**
+
+> Slice 2 was a string operation **missed** because an unrelated check succeeded first. This
+> was a non-string operation **caught** because a related check was true of one operand. Same
+> disease, opposite side — **both from asking about the pieces instead of about the
+> operation.**
