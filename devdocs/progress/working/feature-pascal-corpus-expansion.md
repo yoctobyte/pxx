@@ -73,9 +73,17 @@ and parked in
 — not a new wall, and its ticket already carries the warning not to weaken the
 prerequisite scan to make the corpus advance.
 
-`generics.collections.pas` still holds **18** of the 25 `CreateRes(@…)` sites and
-has never been assessed past its `uses`; that unit is where this fix's remaining
-value is, and it is unmeasured. Do not size it from the defaults numbers.
+`generics.collections.pas` still holds **18** of the 25 `CreateRes(@…)` sites.
+Probed directly after this fix (2026-08-28): it still cannot be assessed, and now
+for a precisely known reason — it `uses Generics.Defaults`, so it dies at
+`generics.defaults.pas:3231`, **wall 6**, without reaching a line of its own.
+
+So this fix's value in collections is real but **unrealisable until wall 6
+falls**, and those 18 sites are not evidence collections is close — nothing about
+that unit has been measured. Wall 6 now gates both units, which raises what
+finishing it is worth without changing anything about how it should be done: its
+ticket's warning stands, and *do not weaken the prerequisite scan to make the
+corpus advance*.
 
 ## LIVE STATUS — rung 6 (`rtl-generics`). THE ONE CANONICAL TABLE.
 
