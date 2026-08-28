@@ -222,4 +222,4 @@ separately rather than folded in here — this ticket's defect (a false cycle) i
 fixed and tested, and that one is a different question about placement.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit 8b7f79470.
