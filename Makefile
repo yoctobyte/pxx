@@ -2572,6 +2572,17 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_generic_nested_specialize_in_method_body.pas $(TESTTMP)/test_gen_nested_spec26
 	@$(TESTTMP)/test_gen_nested_spec26 | diff -u test/test_generic_nested_specialize_in_method_body.expected - \
 	  || { echo 'test_generic_nested_specialize_in_method_body: FAIL'; exit 1; }
+	@# `resourcestring` is a runtime-replaceable VARIABLE in FPC, so `@S` is legal.
+	@# We parsed the section as plain consts, and a const has no address, so the
+	@# Delphi/FPC `Exception.CreateRes(@SArgumentOutOfRange)` idiom -- 28 sites in
+	@# rtl-generics -- was `error: undefined variable`. Both directions are pinned
+	@# here: the address must work, AND a one-character resourcestring must stay a
+	@# STRING (it used to collapse to a Char const, which took an address happily
+	@# and read garbage through it -- worse than the error).
+	@# bug-p-a-resourcestring-is-not-addressable
+	@./$(COMPILER) test/test_resourcestring_addressable.pas $(TESTTMP)/test_resstr26
+	@$(TESTTMP)/test_resstr26 | diff -u test/test_resourcestring_addressable.expected - \
+	  || { echo 'test_resourcestring_addressable: FAIL - @resourcestring broke'; exit 1; }
 	@# a SECOND class of the same name in one unit must be refused, naming it
 	@./$(COMPILER) test/test_pascal_duplicate_class_fail.pas $(TESTTMP)/test_pascal_dup_class26 2>&1 \
 	  | grep -q 'duplicate class name TFoo' \

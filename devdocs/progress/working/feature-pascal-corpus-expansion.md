@@ -53,6 +53,30 @@ were measured.
 *"The symbol is there"* and *"its address can be taken"* both fail with the
 symbol present, and only the second one is the bug.
 
+## 2026-08-28 (frankA) — wall 7 is DOWN; rung 6 is behind wall 6 alone, measured
+
+`bug-p-a-resourcestring-is-not-addressable` is resolved: a `resourcestring`
+section now declares initialised string storage, so `@SArgumentOutOfRange`
+compiles. Attribution is clean — `pinned` is the WRONG baseline here (it predates
+other landed-but-unpinned fixes and dies at `:2205` on an unrelated wall), so the
+before-measurement was taken by rebuilding this same tree with the change
+stashed:
+
+| | `generics.defaults.pas` stops at |
+| --- | --- |
+| before (same tree, change stashed) | `:2960` — `undefined variable (SArgumentOutOfRange)`, the first of the 7 `CreateRes` sites |
+| after | `:3231` — `undefined variable (specialize)`, the Delphi-mode ordering defect |
+
+~271 lines, past all seven sites. **The new stop is wall 6**, already diagnosed
+and parked in
+`unfinished/bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body`
+— not a new wall, and its ticket already carries the warning not to weaken the
+prerequisite scan to make the corpus advance.
+
+`generics.collections.pas` still holds **18** of the 25 `CreateRes(@…)` sites and
+has never been assessed past its `uses`; that unit is where this fix's remaining
+value is, and it is unmeasured. Do not size it from the defaults numbers.
+
 ## LIVE STATUS — rung 6 (`rtl-generics`). THE ONE CANONICAL TABLE.
 
 **Every other wall table in this file is a dated snapshot of what was true when it

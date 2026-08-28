@@ -50,7 +50,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
 
-## backlog (295)
+## backlog (294)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -118,7 +118,6 @@ _none_
 | bug-nilpy-four-remaining-absent-builtins | N | 12 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
 | bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching | P | 65 | bug | A parameter's pointer element type is lost between registration and overload matching | — |
-| bug-p-a-resourcestring-is-not-addressable | P | 65 | bug | `@SomeResourceString` is `error: undefined variable` — pxx parses a `resourcestring` section as a plain const section (pasparser_proc.inc:4783), and a const has no address. FPC makes resourcestrings addressable (they are runtime-replaceable variables), which is what `Exception.CreateRes(@SArgumentOutOfRange)` — the Delphi/FPC idiom — depends on. Measured 2026-08-28: **28 `CreateRes(@…)` sites** in the rtl-generics corpus, 18 of them in `generics.collections.pas` and 7 in `generics.defaults.pas`; the addressed symbol is the corpus's own resourcestring (`generics.strings.pas:26`), NOT our `lib/rtl/rtlconsts.pas` const, which `generics.defaults.pas` does not even use. Supersedes the earlier estimate of 3 sites. | — |
 | bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
 | bug-p-an-unknown-compiler-directive-is-silently-ignored | P | 35 | bug | compiler/lexer.inc's {$...} handler is an if/else chain of 34 CaseEqual(command, ...) arms with no terminal else, so ANY directive outside those 34 is silently ignored — no warning, no note, exit 0. {$FATAL} is one confirmed instance (bug-p-fatal-directive-is-silently-ignored) and the mechanism guarantees there are others. Filed separately from the {$FATAL} ticket on purpose: fixing {$FATAL} closes that ticket and leaves this generator intact. | — |
 | bug-p-fatal-directive-is-silently-ignored | P | 35 | bug | {$FATAL text} and {$MESSAGE FATAL text} are silently ignored: the frontend handles warning/message/error and treats every other directive as a no-op, so a guard block that means 'stop, this configuration is unsupported' compiles clean and produces a binary that should not exist. | — |
@@ -590,9 +589,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2557)
+## done (2558)
 
-2557 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2558 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (46)
 
@@ -667,7 +666,6 @@ _none_
 - [p 68] [N] feature-nilpy-user-defined-decorators
 - [p 65] [P] bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython [parked — re-claim, do not duplicate]
-- [p 65] [P] bug-p-a-resourcestring-is-not-addressable
 - [p 65] [P] bug-p-two-different-nested-specializations-of-one-template-collide
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source [parked — re-claim, do not duplicate]
 - [p 65] [N] feature-nilpy-iter-and-next-over-a-container

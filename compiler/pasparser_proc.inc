@@ -2182,7 +2182,7 @@ begin
         ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'label')) do
     case CurTok.Kind of
       tkVar:   ParseVarSection;
-      tkConst: ParseConstSection(-1, 0);
+      tkConst: ParseConstSection(-1, 0, False);
       tkType:  ParseTypeSection;
       tkProcedure, tkFunction: ParseNestedRoutine;
       tkIdent: ParseLabelSection;
@@ -4544,7 +4544,7 @@ begin
   while CurTok.Kind in [tkVar, tkConst, tkType] do
     case CurTok.Kind of
       tkVar:   ParseVarSection;
-      tkConst: ParseConstSection(-1, 0);
+      tkConst: ParseConstSection(-1, 0, False);
       tkType:  ParseTypeSection;
     end;
   for j := savedSC to SymCount - 1 do
@@ -4771,7 +4771,7 @@ begin
         Eat(tkSemicolon);
       end;
       tkVar:      ParseVarSection;
-      tkConst:    ParseConstSection(-1, 0);
+      tkConst:    ParseConstSection(-1, 0, False);
       tkType:     ParseTypeSection;
       tkClass,
       tkProcedure,
@@ -4780,7 +4780,7 @@ begin
         { `resourcestring` sections (FPC rtlconsts et al) register as plain
           string constants — pxx has no resource tables; the format-arg
           machinery lives in whoever consumes the string. }
-        if CaseEqual(CurTok.SVal, 'resourcestring') then ParseConstSection(-1, 0)
+        if CaseEqual(CurTok.SVal, 'resourcestring') then ParseConstSection(-1, 0, True)
         else if CaseEqual(CurTok.SVal, 'operator') then
           { An operator DECLARATION in the interface: a header with no body. pxx
             keys an operator on its operand types and registers it from the
@@ -4845,7 +4845,7 @@ begin
           Eat(tkSemicolon);
         end;
         tkVar:      ParseVarSection;
-        tkConst:    ParseConstSection(-1, 0);
+        tkConst:    ParseConstSection(-1, 0, False);
         tkType:     ParseTypeSection;
         tkClass,
         tkProcedure,
@@ -4918,7 +4918,7 @@ begin
             PreScanPass := True;
           end
           else if CaseEqual(CurTok.SVal, 'resourcestring') then
-            ParseConstSection(-1, 0)    { registers as plain string constants }
+            ParseConstSection(-1, 0, True)    { real storage: see the section parser }
           else
             UnitSectionStrayToken('implementation')
         else

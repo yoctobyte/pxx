@@ -3,9 +3,10 @@ slug: bug-p-a-resourcestring-is-not-addressable
 track: P
 prio: 65
 type: bug
-status: backlog
+status: done
 blocked-by: []
 summary: "`@SomeResourceString` is `error: undefined variable` — pxx parses a `resourcestring` section as a plain const section (pasparser_proc.inc:4783), and a const has no address. FPC makes resourcestrings addressable (they are runtime-replaceable variables), which is what `Exception.CreateRes(@SArgumentOutOfRange)` — the Delphi/FPC idiom — depends on. Measured 2026-08-28: **28 `CreateRes(@…)` sites** in the rtl-generics corpus, 18 of them in `generics.collections.pas` and 7 in `generics.defaults.pas`; the addressed symbol is the corpus's own resourcestring (`generics.strings.pas:26`), NOT our `lib/rtl/rtlconsts.pas` const, which `generics.defaults.pas` does not even use. Supersedes the earlier estimate of 3 sites."
+owner: frankA
 ---
 
 # A `resourcestring` is not addressable
@@ -155,3 +156,105 @@ confusion that produced the "5" elsewhere in this thread.
 
 The corrected figures above were taken by listing the matching lines rather than
 counting them, which is why they are quotable.
+
+## Resolved 2026-08-28 (frankA)
+
+**A `resourcestring` section now declares initialised string STORAGE instead of
+registering literal aliases** — which is what FPC's runtime-replaceable
+resourcestring is, and what makes `@S` legal. Parser-only; no `lexer.inc`, no
+Track A file, nothing in `ir*.inc` or the backends.
+
+### The fix was one arm of a double case that had already been fixed on the other arm
+
+`ParseConstSection`'s TYPED arm carried this exact defect until
+`bug-p-a-typed-string-constant-cannot-be-assigned`: `const S: string = 'x'` was a
+StrConst registration with no storage, and **the tell was the same
+name-resolution diagnostic** — `S := 'b'` answering *undefined variable (S)*
+rather than "cannot assign", because there was no storage to be read-only. That
+session fixed the typed arm. The untyped/`resourcestring` arm was its sibling and
+stayed broken for exactly as long as the two mechanisms existed separately —
+`devdocs/dev/normalise-dont-special-case.md`'s "if you fix a bug on one arm of a
+double case, grep for the sibling before closing the ticket", demonstrated at a
+distance of one ticket.
+
+So the fix is a shared `DeclareInitialisedStringVar` (storage + a kind-1 pending
+init), called by BOTH arms, rather than a second copy of the same four lines.
+
+### What changed
+
+| file | change |
+| --- | --- |
+| `pasparser_decl.inc` | `DeclareInitialisedStringVar` helper; `BareStringKind`; typed arm routed through the helper; the three untyped registration points honour `isResStr` |
+| `pasparser_decl/proc/prog.inc` | `ParseConstSection` gains `isResStr: Boolean` — 10 call sites, the 3 `resourcestring` ones pass `True` |
+| `lib/rtl/sysutils.pas` | comment-only: it claimed call sites were blocked, which stopped being true here (lane note below) |
+
+**A parameter, not a global.** The function's own comments record a state-leak
+bug (`bug-pascal-class-const-visibility`, the crtl-autopull leak) caused by a
+global here needing stack discipline against a nested on-demand unit compile
+firing mid-value. A parameter cannot leak that way.
+
+### Two arms that would have been missed, and how
+
+1. **A one-character resourcestring.** `SComma = ','` was collapsing to a *Char*
+   const. That arm did **not** error in the baseline — it took an address
+   happily and read garbage through it, which is strictly worse than the
+   diagnostic the ticket is named for. Now excluded from the Char collapse and
+   pinned in the test.
+2. **The concatenation form.** `S = 'a' + 'b'` registers at a different site from
+   the plain literal. Both are in the test.
+
+### Two wrong turns, both found by measuring rather than reasoning
+
+- **Blamed ambient `LastTypeRecId`.** `AllocVar` does read ambient `LastType*`
+  state, so a stale record id was a clean story — and rebuilding disproved it
+  (bss unchanged at 8.4 MB). The guard is kept because the dependency is real and
+  undefended, but it was **not** the bug. Recorded because the ticket would
+  otherwise carry a plausible wrong root cause, which is the failure this repo
+  has a playbook about.
+- **Hardcoded `tyString`.** Bare scalar `string` is **`tyAnsiString`** — managed
+  is the default model; `tyString` is the legacy frozen one behind
+  `-uPXX_MANAGED_STRING`. So `^string` (= `^AnsiString`) pointed at a frozen
+  buffer: an 8.4 MB bss for one string, an empty read, then a segfault on deref
+  — the value right and only the SHAPE wrong, far from the cause. Fixed by
+  adding `BareStringKind` and routing **both** `ParseTypeKind` and this path
+  through it, so the two cannot drift. Copying the condition would have
+  reproduced this bug's own shape one level up.
+
+### Verification
+
+- **Baseline first.** `test/test_resourcestring_addressable.pas` fails on
+  `pinned` with `undefined variable (SPlain)` — the ticket's symptom — and
+  matches FPC on all 7 rows after.
+- **Corpus, attributed cleanly.** `pinned` is NOT the right baseline here (it
+  predates other landed-but-unpinned fixes and dies at `:2205` on an unrelated
+  wall). Rebuilt this same tree with the change stashed:
+  `generics.defaults.pas` **before: `:2960` `undefined variable
+  (SArgumentOutOfRange)`** — the first of the seven `CreateRes` sites —
+  **after: `:3231`**, the already-ticketed Delphi-mode `specialize` ordering
+  defect (wall 6, parked). ~271 lines, past all seven sites.
+- Ordinary consts unaffected: `const C = 'z'` is still a Char (`Ord` = 122, set
+  membership TRUE), `'a' + 'b'` still folds — verified against FPC.
+- `make compiler/pascal26`: `converged after 1 round(s)`, `ea11fad25feb`. The
+  compiler's own sources are dense in const sections, so self-host is a real
+  regression signal here.
+- Test wired into the Makefile, pinning **both** directions: the address works,
+  and a one-char resourcestring stays a string.
+
+### Divergence recorded, not hidden
+
+pxx accepts `SFoo := 'x'`; FPC refuses it (*Variable identifier expected*).
+That is CLAUDE.md's "we accept a form FPC rejects" row — no compiling FPC program
+can observe it — so it went to `devdocs/dev/pascal-dialect-divergences.md`, with
+the note that it must never appear in an FPC-oracled test (the oracle dies on
+that line, and a dead oracle looks like an agreeing one).
+
+### Lane note
+
+`lib/rtl/sysutils.pas` is a **Track B** file and I hold P. The edit is
+comment-only: that comment asserted *"CALL SITES ARE BLOCKED TODAY"*, which this
+change falsified, and leaving it would have been the same stale-copy failure as
+the "3 sites" figure this session spent a thread correcting. No B ticket was
+held and `lib/` had no in-flight edits. Declared rather than done quietly.
+
+## Log
+- 2026-08-28 — resolved, commit PENDING-COMMIT.

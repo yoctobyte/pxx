@@ -138,19 +138,25 @@ type
 
       WHAT THIS ACTUALLY DOES, since the name promises more than it delivers:
       it DEREFERENCES the pointer and constructs. There is no resource-string
-      mechanism behind it — no translation table, no runtime replacement — and
-      pxx's `resourcestring` sections are parsed as plain const sections
-      (`compiler/pasparser_proc.inc:4783`), so a resourcestring here IS its
-      literal. That is a deliberate choice rather than a stub: the observable
-      behaviour is identical to FPC's for a program that never re-translates,
-      which is every program in the corpora, and a real mechanism can be slid
-      underneath without changing this signature.
+      mechanism behind it — no translation table, no runtime replacement. That
+      is a deliberate choice rather than a stub: the observable behaviour is
+      identical to FPC's for a program that never re-translates, which is every
+      program in the corpora, and a real mechanism can be slid underneath
+      without changing this signature.
 
-      CALL SITES ARE BLOCKED TODAY, and not by this code: `@SFoo` on a
-      resourcestring is `error: undefined variable`, because a const has no
-      address ([[bug-p-a-resourcestring-is-not-addressable]], filed). These
-      constructors work with any `^string`; the FPC spelling of the argument
-      does not compile until that lands. }
+      NO LONGER BLOCKED (2026-08-28). This paragraph used to say `@SFoo` was
+      `error: undefined variable` because a resourcestring section was parsed as
+      a plain const section and a const has no address. It is now parsed as
+      initialised string STORAGE — which is what FPC's runtime-replaceable
+      resourcestring actually is — so `CreateRes(@SArgumentOutOfRange)` compiles
+      and runs. [[bug-p-a-resourcestring-is-not-addressable]], resolved.
+      These constructors still work with any `^string`.
+
+      One deliberate divergence, in FPC's favour: FPC REFUSES a direct
+      `SFoo := 'x'` (*Variable identifier expected*) while pxx accepts it, since
+      ours is an ordinary initialised variable. That is the "we accept a form FPC
+      rejects" row of CLAUDE.md's compat table — not a defect, and writing
+      THROUGH the pointer works in both. }
     constructor CreateRes(ResString: PResStringRec);
     constructor CreateResFmt(ResString: PResStringRec; const args: array of const);
   end;

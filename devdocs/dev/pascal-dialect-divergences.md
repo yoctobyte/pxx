@@ -296,3 +296,38 @@ one-liner that runs `fpc` and diffs the output has no idea the compile failed,
 and a silently empty oracle looks identical to an oracle that agreed. That
 asymmetry is the whole argument for the probe: *an oracle that could not look and
 an oracle that found nothing must never print the same.*
+
+## A `resourcestring` is assignable in pxx; FPC refuses the direct store
+
+*Landed 2026-08-28 with [[bug-p-a-resourcestring-is-not-addressable]].*
+
+FPC treats a `resourcestring` as a runtime-replaceable variable — which is why
+`@SFoo` is legal there and why Delphi's `Exception.CreateRes(@SArgumentOutOfRange)`
+works — but it still refuses a direct store to the name:
+
+```pascal
+resourcestring SFoo = 'text';
+var p: ^string;
+...
+SFoo := 'other';    { fpc: Variable identifier expected    pxx: accepted }
+p := @SFoo; p^ := 'other';   { both: fine }
+```
+
+pxx gives a resourcestring ordinary initialised string storage, so the bare
+assignment compiles. This is the **"we accept a form FPC rejects"** row of
+CLAUDE.md's compat table: no program that compiles under FPC can observe it, so
+it is a dialect fact rather than a defect, and it is recorded here instead of in
+a ticket.
+
+**The reason it is worth writing down anyway** is that the two halves are easy to
+conflate when reading the code: the addressability (a real compatibility fix, 28
+call sites in rtl-generics depended on it) and the assignability (a side effect
+of how it was fixed, which FPC does not share). A future session tightening this
+to match FPC would be spending effort on the second half, which buys no corpus
+and no correctness — while a future session *relying* on the assignment would be
+writing code FPC cannot compile.
+
+**Do not use it in an FPC-oracled test.** The oracle dies on the assignment line
+with *Variable identifier expected*, and per the trap above, a dead oracle and an
+agreeing oracle look identical in a hand-rolled comparison. Write through the
+pointer instead — both accept that.
