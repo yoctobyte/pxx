@@ -5804,6 +5804,51 @@ begin
     ASTTk[node] := Ord(wantTk);
 end;
 
+{ MEASUREMENT PROBE, not a check (PXXDBG=p.arity, off by default).
+
+  A METHOD call with too few arguments is accepted and the missing parameter is
+  read as garbage: `s.IPick;` on a one-parameter method compiles, and the
+  callee reads whatever the register held. A FREE routine in the same position
+  is rejected. Measured on `pinned`, so this is not a regression.
+
+  It lives HERE rather than in the parser because the Pascal frontend writes
+  the method-call argument loop out EIGHT times (pasparser_call x1, _expr x2,
+  _lval x5) and pyparser six more; AN_CALL lowering is the one place every arm
+  converges, with both the proc index and the arg chain in hand. That makes the
+  COUNT cheap and complete, which is what is wanted before deciding whether the
+  real check is a fix or a campaign.
+
+  Deliberately writeln and not WarnAt: a measurement must not touch WarnCount
+  or interact with -Werror, or it changes the thing it is measuring.
+  bug-p-a-method-call-with-missing-arguments-is-accepted-and-reads-garbage }
+procedure PxxArityProbe(node, cpi: Integer);
+var cur, n: Integer;
+begin
+  if not PxxDbgEnabled('p.arity') then Exit;
+  if (cpi < 0) or (cpi >= ProcCount) then Exit;
+  if (cpi < Length(ProcVariadic)) and ProcVariadic[cpi] then Exit;
+  n := 0;
+  cur := ASTLeft[node];
+  while cur <> -1 do
+  begin
+    Inc(n);
+    cur := ASTRight[cur];
+  end;
+  { A short chain is NOT automatically a defect. The METHOD paths materialise
+    trailing defaults as real AN_ARG nodes (FillDefaultArgs), so a short chain
+    there means garbage; the FREE-routine path leaves the chain short and lets
+    codegen supply the defaults, which measured correct. So consult the
+    declared-default flag for the FIRST missing parameter — defaults are
+    trailing in Pascal, so that one flag settles the whole tail. Without this
+    the probe reports every defaulted free call (`urlopen(url)`), which is the
+    false positive it first produced. }
+  if (n < Procs[cpi].ParamCount) and
+     ((n >= MAX_PROC_PARAMS) or
+      (not ProcParamHasDefault[cpi * MAX_PROC_PARAMS + n])) then
+    writeln('PXX-ARITY: line ', ASTLine[node], ': ', Procs[cpi].Name,
+            ' wants ', Procs[cpi].ParamCount, ' got ', n);
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     seqBase, seqCur: Integer;       { iterative AN_SEQ spine walk — see the arm }
@@ -7331,6 +7376,7 @@ begin
       first := -1; last := -1;
       item := ASTLeft[node];
       pathIdx := 0;
+      PxxArityProbe(node, cpi);   { PXXDBG=p.arity measurement, no-op by default }
       while item <> -1 do
       begin
         IRCoerceCharArrayArg(cpi, pathIdx, item);
@@ -10572,6 +10618,7 @@ begin
       last := -1;
       cpi := ASTIVal[node];
       item := ASTLeft[node];
+      PxxArityProbe(node, cpi);   { PXXDBG=p.arity measurement, no-op by default }
       { Inline expansion (feature-inline-routines, -O2): splice a retained inline
         body in place of the call when the target is inline-eligible and all args
         are side-effect-free. Falls through to a normal call if IRInlineExpand
@@ -12682,6 +12729,7 @@ begin
       slot := ASTRight[node];
       item := ASTLeft[node];
       pathIdx := 0;
+      PxxArityProbe(node, cpi);   { PXXDBG=p.arity measurement, no-op by default }
       while item <> -1 do
       begin
         isRefArg := False;
