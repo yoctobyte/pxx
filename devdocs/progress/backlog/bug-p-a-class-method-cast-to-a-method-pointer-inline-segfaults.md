@@ -222,3 +222,56 @@ type being cast TO is the signal instead.
 **Rung 6 needs B, not A.** The corpus writes
 `TMethod(TSelectMethod(THashService<T>.SelectBinaryEqualityComparer)).Code` —
 row 6 — at all 28 sites, and `generics.defaults.pas` still stops at 2411.
+
+## STATE CHANGE 2026-08-28 — defect A is fixed; defect B now fails LOUDLY
+
+Re-measured at HEAD (`c70622013`, self-host verified) against FPC 3.2.2. **Do not
+work from the eight-row table above without reading this first** — five of its
+rows have moved.
+
+| # | shape | pinned (was) | HEAD (now) | FPC |
+| --- | --- | --- | --- | --- |
+| 1 | instance → var → call | 15 | **15** | 15 |
+| 2 | instance → var → record cast | TRUE | **TRUE** | TRUE |
+| 3 | instance, INLINE cast | SEGFAULT | **compile error** | TRUE |
+| 4 | class → var → call | SEGFAULT | **10** | 10 |
+| 5 | class → var → record cast | SEGFAULT | **TRUE** | TRUE |
+| 6 | class, INLINE cast (the corpus shape) | SEGFAULT | **compile error** | TRUE |
+| 7 | `@TSvc.CPick` | TRUE | **TRUE** | TRUE |
+
+**Defect A is fixed** (`9ab19fb21`, the RTTI-blob VMT offset). Rows 4/5 now agree
+with FPC.
+
+**Defect B changed failure mode rather than being fixed**, as a side effect of
+[[bug-p-a-method-call-with-missing-arguments-is-accepted-and-reads-garbage]]
+(`c70622013`). Rows 3 and 6 now report
+
+```
+pascal26:17: error: wrong number of parameters in call to TSvc.IPick
+```
+
+This is the mechanism that ticket predicted, arriving from the expected
+direction: `TSel(s.IPick)` segfaulted **because** `s.IPick` was silently read as
+a zero-argument call and the resulting integer was reinterpreted as a
+`Code`/`Data` pair. The arity check removes the silence. It does not yet supply
+the right reading.
+
+**So the remaining work is unchanged in substance and better in shape:** make
+`s.IPick` resolve as a method REFERENCE when the context is a cast to a
+method-pointer type, instead of as a call. What has changed is that the wrong
+reading is now a diagnostic rather than a crash — the failure announces itself
+and names the call, which is the whole difference between this and the class of
+bug that hides for months.
+
+**Honest cost, which is why this stays open at its own prio:** by CLAUDE.md's
+compat table we now *reject a form FPC accepts* on rows 3/6 — normally a compat
+item ranked by how much real code uses it. Here real code does use it: row 6 is
+the **rtl-generics corpus shape** (wall 5). A segfault and a compile error both
+block that corpus, so nothing regressed and the diagnostic is strictly more
+useful; but this is a blocking divergence, not a cosmetic one, and it is the
+reason to finish defect B rather than call the shape refused-by-design.
+
+The regression sweep that cleared the arity change (lib/rtl, lib/pcl, examples —
+unchanged compile counts, zero new diagnostics) did **not** cover this shape,
+because nothing swept uses an inline method-pointer cast. It was found by
+re-measuring this ticket's own table, not by the sweep.
