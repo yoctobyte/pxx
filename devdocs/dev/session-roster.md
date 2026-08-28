@@ -14073,3 +14073,41 @@ leads there, file and hand back.
 
 **Track N sits at p85 / p75 / p72 — above nearly everything ready — and stays undispatched.**
 The owner's reserved call. Recorded, not re-asked.
+
+### Tick — the locks did not match the fleet, in both directions at once
+
+Quiet tick for dispatch, not quiet for the board. Two workers busy, nothing new on origin/master
+since my last push, Track T **UP**. But `working/` was wrong twice, in opposite directions:
+
+- **A lock held by nobody.** `feature-target-wasm` sat in `working/` with `status: working` while
+  frankwasm was parked. Moved to `unfinished/` with its banked open-array diagnosis appended and
+  **the body otherwise untouched** — done by me rather than by waking a parked session for a file
+  move, which is the one asymmetry with how I handled frankA's umbrella earlier (frankA was awake
+  and mid-thread; frankwasm had already parked). Recorded in the ticket itself so it reads as a
+  decision, and frankwasm re-claims from `unfinished/` on resume.
+- **Two workers holding no lock at all.** frank-optimize-b4 has been landing commits against
+  `feature-opt-o3-register-pressure` and frankA is dispatched on `feature-pascal-corpus-expansion`,
+  and **both tickets were sitting in `unfinished/`**. `working/` was briefly *empty while two lanes
+  were active*. Claimed both on their behalf — a board operation, so it costs neither of them a
+  turn.
+
+> **The lock is only worth what it would tell a SECOND agent.** An empty `working/` during active
+> work does not read as "no information", it reads as "nothing is being touched" — which is the
+> answer that authorises a double-assignment. I own dispatch, so I own that being true.
+
+Worth noticing that I have been enforcing lock hygiene on others all day while the two tickets my
+own dispatches put people on carried no lock. Same shape as the stale copies in my roster this
+afternoon: **the rule I am enforcing is the one I do not apply to my own outputs.**
+
+**twatch's newest sha checked before relaying, per the rule.** `3da7c0217` is a *tstate commit*
+— `tstate(plexus): e11ff1b561cb GREEN (native)` — confirmed an ancestor of origin/master. So "UP,
+tested through 3da7c021783e" means T has swept through the last code commit, not that a new sha
+appeared. Five open regressions unchanged, all previously triaged; two still carry the
+*bad-touches-no-buildable-file* annotation that marks them as tested upper bounds rather than
+leads.
+
+**Dispatch: no change, and the reason is the cap, not the queue.** frankA and frank-optimize-b4
+are the two workers. frankB, frankwasm and pxx-a5 are idle **on the concurrency ceiling** —
+expiry is mechanical: the next park line frees exactly one, and the ranked head takes it.
+Track N still sits at p85/p75/p72 above nearly everything, undispatched, owner's reserved call,
+not re-asked.
