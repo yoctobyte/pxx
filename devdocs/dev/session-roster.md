@@ -12924,3 +12924,58 @@ confirmation instead**, which is worth more than the finding: B's queue really i
 (documented empty), p45 random (documented not-B), p30 dns (intermittent only), then
 p25/p20/p12. Both p45s are hollow and say so in their own text. Idle stands, four triggers
 unchanged.
+
+### Wall 5 is the last one — and under defect B sits a p80 in the default target
+
+frankA re-verified wall 4 by **compiling** a program that raises and catches
+`EArgumentOutOfRangeException` rather than by grepping, and closed it. **Live state: walls 1,
+2 and 4 done; wall 5 alone blocks rung 6.**
+
+**It was three tables, not two** — original stubbed partition, "current state of the five
+walls", and the re-probe, one per session, each appended rather than edited. Appending was
+right for the record and wrong for anyone asking *where is this now*, who reads whichever they
+scroll to first. Fixed by adding **one canonical LIVE STATUS table at the top** and marking the
+three historical ones `SNAPSHOT — superseded`, with an explicit line that they disagree by
+design. Deleting them would have falsified what was measured when; leaving them unmarked is
+what let wall 4 rot in two places at once.
+
+frankA also refused to inherit a status it had not measured: **wall 3 is "open, UNVERIFIED
+against the current tree", not "next"** — the probe never reaches it because wall 5 stops the
+compile first, so its state is an assumption. The pristine-versus-stubbed trap in a smaller
+costume.
+
+**The find of the session, filed at p80:**
+`bug-p-a-method-call-with-missing-arguments-is-accepted-and-reads-garbage` [P, unassigned]. A
+method mentioned without its arguments compiles as a **zero-argument call reading whatever is
+in the argument register**. Free routines are arity-checked; methods are not, in every position
+tried — `s.IDo;`, method-fn-to-var, method-fn-in-expression, all producing plausible garbage
+where FPC rejects. **One arm of a double case, second arm broken:** the
+`normalise-dont-special-case` shape exactly. **Pre-existing on `pinned`.**
+
+It explains defect B rather than sitting beside it: `TSel(s.IPick)` is unambiguous in FPC
+because `s.IPick` cannot be a call there; in pxx it can, so the parser takes the call reading,
+produces an `Int64`, and the cast reinterprets that integer as a Code/Data pair. Sequencing is
+therefore fix-arity-first, and **frankA stopped before writing a fifth near-identical
+`AN_METHODREF` arm** because four is already past where `root-cause-over-microfix` says to
+count mechanisms instead of adding one. Verified: 14 `AN_METHODREF` mentions across
+`pasparser_expr` (7), `_stmt` (5), `_lval` (2).
+
+### The cross-lane risk frankA did not raise: this fix is a STRICTNESS change
+
+Adding the arity check turns a silent wrong value into a compile error, and **206,824 lines of
+the compiler's own Pascal plus 23 `lib/pcl` units currently compile under a compiler that does
+not perform it.** Two consequences a lane-local view does not weigh:
+
+1. **Self-host.** If `compiler/**` contains such a call, the fix breaks the fixedpoint — the
+   one failure that poisons every lane at once.
+2. **Track B's ground.** `lib/pcl` and the demos build against `$(PXX_STABLE)`; new errors
+   there are B work under B's gate, and would trip frankB's expiry trigger #2.
+
+**Advised: land it as a DIAGNOSTIC first — warn or a flag — count the hits across
+`compiler/**`, `lib/**` and the corpus, and only then promote it to an error.** That converts
+a risky strictness change into a measurement, at no cost to the fix.
+
+And the framing worth more than the safety: **the check is also a detector.** Every hit inside
+`compiler/**` is a method call that has been silently reading a garbage argument in the
+compiler itself, for as long as the hole has existed. Those are not build breakage — they are
+live bugs the fix would surface, each deserving its own ticket.
