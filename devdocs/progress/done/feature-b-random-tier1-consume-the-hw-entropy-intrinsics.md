@@ -101,4 +101,4 @@ and halts 1, and the Makefile compares the whole output rather than the tail, so
 the FAIL lines survive as the diagnostic.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit bf967b627.
