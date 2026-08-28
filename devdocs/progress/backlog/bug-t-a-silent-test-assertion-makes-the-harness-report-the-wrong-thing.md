@@ -115,3 +115,75 @@ other A edits to `Makefile`.
 ## Log
 - 2026-08-26 — found while triaging the aarch64 red whose reason it corrupted;
   measured; filed. Nothing landed: the fix edits A's file-lane.
+
+---
+
+## Adjacent instance, 2026-08-28 — an assertion that could not fail at all
+
+Added by Track T on the coordinator's ask, with the relationship stated
+precisely rather than assumed, because the two are **not the same mechanism**:
+
+| | this ticket | the instance below |
+| --- | --- | --- |
+| the assertion | **fails silently** | **never fails** |
+| what you see | a red job with a wrong reason | a green suite |
+| what it costs | hours chasing the wrong lead | a defect ships |
+
+The fix proposed above — a helper that prints both operands on mismatch — does
+**not** address the instance below, because there is no mismatch to print. They
+belong to one family (*an assertion that does not assert what it appears to*)
+and want two different fixes. Recorded here so the family has one place, not
+because one fix covers both.
+
+### The instance
+
+While landing
+[[bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-last-good]]
+(`0dec0194a`), a guard asserted that an execution check ran *before* the
+tier-coverage fallback in `range_for()`:
+
+```python
+assert body.index("job_anchor") < body.index("parent_ran_job")
+```
+
+`job_anchor` also appears in the **block comment above the call**. So
+`body.index("job_anchor")` found the *prose*, not the call, and the assertion
+passed no matter where the call actually sat. Deliberately moving
+`parent_ran_job` above the call — restoring the original bug with the fix still
+visibly present in the file — fired **zero of twelve** guards.
+
+It is now anchored on the expression:
+
+```python
+call = body.index("aname, why = job_anchor(st, name)")
+assert call < body.index("parent_ran_job")
+```
+
+### The rule, and the reason it survived a careful read
+
+> **An assertion that matches TEXT can be satisfied by PROSE.** Anchor a guard
+> on the expression, never on a name that also appears in a comment.
+
+This applies to every source-inspecting guard in `tools/*devtest*.py`, of which
+there are now several — including three added the same night, in the ticket that
+found this. Those inspect source precisely because the property under test is
+structural (ordering, which predicate a statement uses, whether a warning
+precedes a signal), and a structural property is exactly the kind a substring
+can appear to satisfy.
+
+**It was found by running a mutation, not by reading the test.** That is the
+transferable half: reading a test to check whether it can fail draws on the
+same understanding that wrote it, so it shares the test's blind spots by
+construction. Breaking the code and watching which guard fires does not.
+
+The four mutations run against that ticket, and what each caught:
+
+| break | guards fired |
+| --- | --- |
+| drop the skip branch (the original bug) | 2 |
+| `PASSLIKE = ("pass",)` (the mirror image) | 4 |
+| map advances on `PASSLIKE` (bug one level deeper) | 1 |
+| **call moved below the coverage path** | **0 → 1 after the fix** |
+
+The one that caught nothing is the one where the fix is still in the file and
+merely unreachable — the variant least likely to be noticed in review.
