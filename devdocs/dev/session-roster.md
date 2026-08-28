@@ -12076,3 +12076,24 @@ lands in the same size bin, pops the block release-first would have freed.
 still blind**, because the broken and working states produce identical bytes for a while. The
 procedure is: break it; if the test still passes, ask what makes the broken state
 *observable*, and assert that.
+
+### 2026-08-28, quiet tick — two negatives verified so the next sweep need not repeat them
+
+Nothing blocked, `urgent/` empty, `working/` holding only frankwasm's wasm lock, no session
+died. Recording only what a future sweep would otherwise re-investigate:
+
+- **`~/frank-rust` shows `origin/rust MISSING — local-only branch`, and that is NOT invisible
+  work.** `rev-list --count origin/master..HEAD` is **0**: the local `rust` branch is a name
+  pointing at `e02417b83`, master's tip when the session started ~15h ago. Nothing is at risk
+  and nothing needs pushing. The alarming-looking line is a branch name with no commits behind
+  it. (Track R is X-tagged and unranked, so an idle frank-rust is correct, not a stall.)
+- **Every tree is clean and level with origin** — `frankA`, `frankB`, `~/pxx` (frankT),
+  `frank-optimize` all at `ahead=0 dirty=0`. frankwasm is `dirty=7`, which is its live slice-2
+  working set, not uncommitted work at risk.
+
+**Watch item, not yet actionable: Track T breadth is drifting.** Newest full tier was 1h old
+last tick and is **2h old** now, while master took four commits in between. This is **not**
+"proven down" by the standing definition — `twatch.py --status` answers and publishes — so no
+lane widens its gate. If it reaches ~4h, check `tools/trackt.py health` before concluding
+anything, and remember `git fetch` first: `--status` reads the local `tstate/`, so without one
+it reports this checkout's staleness rather than Track T's.
