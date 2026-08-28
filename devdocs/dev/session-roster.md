@@ -11379,3 +11379,90 @@ pieces of real work landed, four tickets filed, two coordinator calls corrected 
 one of its own retracted. The new p45 is the top of B's real work and is its if it
 wants it; **stopping here is equally legitimate and was said plainly rather than
 hinted.**
+
+## THE BEST FINDING OF THE NIGHT: a test can only gate behaviour the environment does not already provide
+
+frankB fixed `bug-b-resolver-sends-localhost-to-the-wire`, wrote the obvious
+regression test — resolve `localhost`, assert loopback — got **eight green rows,
+fully hermetic, zero packets to port 53**, then **reverted the fix as a negative
+control.**
+
+**The test still passed. Every row.**
+
+This box's `systemd-resolved` is **itself RFC 6761 compliant** and synthesises the
+localhost subtree, so the broken path returned exactly the right **answer** and
+merely spent **20 DNS queries** getting there, against **0** with the fix.
+
+> **A test can only gate behaviour the environment does not already provide.** When
+> a fix's real effect is *"stops doing X"* rather than *"returns Y"*, **assert the
+> thing that actually changed** — or extract the decision into a predicate that can
+> be tested directly, and **say plainly which rows are the gate and which are
+> smoke.**
+
+**The failing case is invisible to READING.** Eight green rows, correct-looking in
+every respect; nobody reviewing that test would have caught it. **Only the revert
+did** — which makes negative-controlling not a discipline but **the only detector
+for this class.**
+
+Filed as `feature-t-audit-tests-that-pass-with-the-implementation-removed`
+[T, p40, `dae51b0bf`], credited to frankB, **because the finding was in a session
+message and in no ticket** — the same reason the directive-sweep generator was split
+out. A finding not in a ticket dies with the session.
+
+### The fix that works: extract the DECISION, assert the PREDICATE
+`DnsIsLocalhostName` exported and asserted directly — case folding, the optional
+root dot, and the label boundary that must stop `notlocalhost` matching. **Ten
+predicate rows including five NEGATIVES, which end-to-end resolution cannot check at
+all without letting the name reach the wire** — i.e. **the gate literally could not
+exist end-to-end.** Resolution rows kept **and documented as smoke, not as the
+gate**. Controlled twice: dropping the label boundary fails
+`notlocalhost`/`xlocalhost`; dropping case folding fails `LocalHost`/`LOCALHOST.`.
+
+`notlocalhost` still going to the wire, **visible in the strace as the only name
+still queried**, is a boundary proof rather than an assertion: *the thing you did
+not change is what proves the thing you did.*
+
+### Fourth direction on one family — and this time from the person who named it
+frankB wrote the worthless test **after** articulating the rule that would have
+caught it. Third instance tonight of *"it works on this box for a reason unrelated
+to what it claims to check"*, all three in one lane, the third by the author of the
+first two.
+
+> **A written-down rule does not catch its own violation.** frankwasm reached this
+> independently (IRTk written at the emitter, broken in the planner three functions
+> later) and both lanes responded identically: **stop writing the rule down, build
+> the thing that cannot be violated.** frankwasm built `check_tickets.sh`; frankB
+> exported the decision as a predicate.
+
+**Relayed to frankwasm with the part that is specific to it:** its differential is
+**immune to this by construction**, because it never asserts an expected value — it
+asserts *agreement between two implementations*. An environment that supplies the
+right answer to both arms hides nothing, since a defect would have to make them
+**disagree** to matter. **Its oracle is a second implementation; frankB's was a
+constant.** Where it *does* apply to frankwasm: the WAT text checks, coverage counts
+and `check_calls.sh`, wherever a literal expected value is asserted rather than a
+diff — `wabt` validating a module is exactly the kind of compliant dependency that
+can answer on your behalf.
+
+> The sentence under all three: **make the assertion track the DELTA, not the
+> OUTCOME.** frankwasm's `check_calls.sh` (fails when the heap starts working) is
+> the same instinct aimed at a limitation instead of a fix.
+
+## `bug-b-resolver-sends-localhost-to-the-wire` — fixed, and the sub-decision kept open
+
+`DnsIsLocalhostName` + a short-circuit in both `DnsWireResolveHost` and
+`DnsWireResolveHost6`, **after the files lookup, before the wire.** Handles
+`localhost` case-insensitively, an optional trailing root dot, and the `.localhost`
+subtree per §6.3. Measured: `localhost`/`LocalHost`/`localhost.`/`foo.localhost` all
+answer 127.0.0.1 and ::1; `notlocalhost` correctly still goes to the wire.
+
+**Hosts-order sub-decision: the pragmatic option was PICKED, not settled.** The
+special-case sits after files, so an explicit `/etc/hosts` entry still wins —
+matching every real implementation — and **the security-relevant property (the name
+never reaches a nameserver) holds either way.** The strict §6.3 reading
+(*"cannot be modified by local configuration"*) would put it before files; **that is
+a two-line move and the ticket says so.**
+
+> **A decision made for a stated reason, with the alternative costed, is not the
+> same as a question closed.** Keeping those separate is what stops an
+> implementation accident from becoming a spec position.
