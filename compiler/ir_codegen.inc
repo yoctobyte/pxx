@@ -5131,6 +5131,16 @@ begin
         end
         else
         begin
+          { -O3 W2: `x := x <op> y` with x register-resident does the ALU on the
+            resident register itself, deleting the two reg-reg moves that
+            bracket it -- and that bracket is the loop-carried recurrence when x
+            is an accumulator. See W2InPlaceEligible in symtab.inc for why rax
+            may be left dead here and why the frame slot stays authoritative. }
+          if (OptLevel >= 3) and (not InLValueWrite) and W2InPlaceEligible(node) then
+          begin
+            EmitW2InPlace(node);
+            Exit;
+          end;
           IREmitNode(IRB[node]);
           { {$Q+}: integer arithmetic runs at 64-bit register width by design,
             so a Q-tagged binop's own flags check is exact and never fires for

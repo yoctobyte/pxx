@@ -1336,3 +1336,131 @@ safe place to stop.
 Land the **neutral workload in the same commit as the flattering one** — a
 speedup reported without it is half a measurement. Every entry above from
 `562965e1c` onward follows that.
+
+---
+
+## 2026-08-28 (resumed) — W2: in-place ALU on a resident destination. LANDED.
+
+Re-measured the prize first, per this ticket's own standing rule, and the
+ranking above **inverted**. Item 1 above says W1's larger half is a
+multi-session register-contract project worth ~1.4x. That is still true, but it
+**decomposes**, and one bounded slice collects most of it.
+
+### Sizing — hand-written asm, A/B by deletion only, at `ba79fbeb2b0c`
+
+The `-O3` body of `three.pas`'s loop was byte-for-byte what was recorded at
+parking (19 instructions), so the model's A is the real compiler's output, not
+an idealisation. Variants differ from A by exactly one deletion each.
+
+| variant | insns | cyc/iter | vs A |
+| --- | --- | --- | --- |
+| A — current `-O3` output | 19 | 6.13-6.50 | — |
+| B — 5a: the loop-bottom `cmp` reads the resident directly | 18 | 6.10-6.25 | 1.02-1.04x |
+| C — 5b: in-place ALU, ONE of the two sites | 17 | 5.32-5.52 | 1.15x |
+| G — 5b, BOTH sites | 15 | 4.88-5.07 | **1.25-1.31x** |
+| H — G + 5a | 14 | 4.91-5.36 | 1.20-1.29x |
+| E — the full register-contract change | 13 | 4.43-4.61 | 1.37-1.41x |
+
+Three readings that changed the plan:
+
+- **5a is worth nothing and was dropped.** H is not better than G — twice it was
+  worse. Folding a resident into a `cmp` deletes a real instruction and buys
+  ~0, exactly as W1's operand funnel did.
+- **G gets 70% of E's win for a fraction of the work.** The multi-session
+  contract change was the wrong next move; ~1.10x of it is left, not 1.4x.
+- **The first run said `D=4.17` (1.47x) and it was noise.** Three runs of 21
+  put it at 4.96-5.19 and made the ordering monotonic. Reported here because
+  believing run 1 would have oversold the slice by a third.
+
+### The rule that came out of it, and it generalises past this ticket
+
+**Instruction count is not the signal; which dependency chain the instruction
+lands on is.** Every reg-reg move this campaign has deleted or declined splits
+cleanly on that one test, and nothing else predicts them:
+
+| move | on the loop-carried chain? | measured |
+| --- | --- | --- |
+| W1 slice 4's operand funnel (`mov rcx, r13`) | no | ~0 at the time; 1.12-1.17x only after item 1 |
+| 5a's `mov rax, r12` feeding `cmp` | no | 1.02-1.04x — **dropped** |
+| W2's `mov rax, R` / `mov R, rax` bracket | **yes** | **1.25-1.31x** |
+
+The bracket IS the recurrence: next iteration's `mov rax, R` waits on this
+iteration's `mov R, rax`. Chain length 4 -> 2.
+
+### What landed
+
+`x := x <op> y` with `x` register-resident now does the ALU on the resident
+register itself, for `+ - and or xor`, with an imm32 or another resident as the
+right operand:
+
+    mov rax,R / <op> rax,y / mov [x],eax / movsxd rax,eax / mov R,rax   (5, four on the chain)
+    <op> R,y  / mov [x],R32 / movsxd R,R32                              (3, two on the chain)
+
+`W2InPlaceEligible` + `EmitW2InPlace` in `symtab.inc`; one gated call in
+`IR_STORE_SYM`. The frame slot stays authoritative — same dual-write, same
+order, and R is re-extended by the identical size/sign rule
+`RegcallRefreshResidentFromRax` applies to rax.
+
+**Two things worth keeping from the build:**
+
+- **rax is left dead after the store, and that doubles the win.** Keeping rax
+  live costs half of it (1.17x vs 1.27x, measured — it is not a free move
+  either). Safe because an `IR_STORE_SYM` is always a statement root: `ir.inc`'s
+  `IRDropManagedStrResult` note says a store consumed by a parent would be
+  emitted twice, and `PXXDBG=a.ir` on C's `x = (y = 3)` confirms it — that
+  lowers to `store_sym y` then a **separate** `load_sym y`, and the outer store
+  consumes the load. No store is ever a value operand.
+- **The first version silently refused the hottest shape in the language.** It
+  guarded on IR *node* types, and a for loop's own increment carries
+  `tyUnknown` (`i := i + 1` lowers to binop/store with `IRTk = 0`, while the
+  same expression in the loop BODY carries the real type). It fired on
+  `s := s + j` and not on `i := i + 1` — half the modelled win, and the
+  disassembly is the only reason that was caught rather than shipped. The
+  predicate now guards on `Syms[].TypeKind`, which is what the store and the
+  refresh actually narrow and extend by.
+
+### Numbers — binary `3e26c10fbad9`, baseline `ba79fbeb2b0c` (same tree, W2 the only difference)
+
+All interleaved, amplified, min-of-N, both binaries built at HEAD.
+
+| workload | base | W2 | |
+| --- | --- | --- | --- |
+| `three.pas` — tight scalar accumulator loop | 1.86/1.81/1.84 | 1.48/1.45/1.53 | **1.20-1.26x** |
+| `looplong` | 1.21/1.19 | 1.15/1.12 | 1.05-1.06x |
+| `bt` (binary trees, alloc-heavy) | 4.40/4.28 | 4.17/4.19 | 1.02-1.05x |
+| `fib`, `mandelbrot`, `nbody`, `raytracer` | — | — | neutral (float/call-bound; W2 excludes float) |
+| **neutral: compiling `hello.pas`, x40/sample, min-of-7 x3** | 11.45/11.35/10.78 | 11.56/11.60/10.91 | **+1-2%** |
+
+The neutral number is a real +1-2%, consistent in direction across three runs,
+and it is **not work done**: `and` short-circuits (verified — a side-effecting
+right operand is not called), so at the default `-O` the `OptLevel >= 3` gate
+means `W2InPlaceEligible` is never reached. Attributable to code layout. Stated
+rather than rounded away.
+
+**`bt` was read as a 10% REGRESSION on single runs (0.79 -> 0.87) and is
+actually a small speedup.** Fourth false reading from this box, same cause as
+the other three, caught by the amplification rule this ticket already carries.
+
+### Correctness
+
+- self-host fixedpoint verified, `converged after 1 round(s)`, `3e26c10fbad9`
+- `w2stress.pas` written for this pass — all five ops in-place, every integer
+  width driven past its wrap point, signed and unsigned narrowing, `x := x + x`
+  self-reference, non-commutative `x := x - y`, `{$Q+}`, in-place stores inside
+  `try/except`, `var` and value params, pointer arithmetic
+- `-O0/-O1/-O2/-O3` all agree, and all 8 outputs (4 levels x 2 binaries) are
+  byte-identical to the baseline compiler's
+- cross-target corpus: **48/48 (corpus x target) hashes identical** to baseline
+- one FPC divergence, **pre-existing and not W2's**: under `{$Q+}` pxx detects a
+  LongInt overflow that `fpc -O2` misses. Baseline says the same. pxx is the
+  stricter side; error-reporting parity, not this lane.
+
+### What is left, re-ranked
+
+1. **The rest of the register contract** (E minus G): **~1.10x**, and it is the
+   multi-session `IREmitNode` change. Still the largest single item, now
+   correctly priced — it was being credited with G's share.
+2. **Item 3** — register authoritative inside the loop, ~5%, hardest build.
+3. **The promotion experiment** — coordinator's call, unchanged.
+4. 5a (`cmp` reads the resident) — **measured and rejected**, 1.02-1.04x. Do not
+   rebuild it; the entry exists so it is not re-proposed.

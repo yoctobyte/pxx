@@ -5084,6 +5084,176 @@ begin
   end;
 end;
 
+{ -O3 W2 -- in-place ALU on a REGISTER-RESIDENT destination.
+
+  `x := x <op> y`, with x resident in R, currently lowers to five instructions:
+
+      mov rax, R  /  <op> rax, <y>  /  mov [x], eax  /  movsxd rax, eax  /  mov R, rax
+
+  Four of them sit on the loop-carried dependency chain whenever x is an
+  accumulator, because the two reg-reg moves BRACKETING the ALU are the
+  recurrence itself, not decoration -- the next iteration's `mov rax, R` waits
+  on this iteration's `mov R, rax`. Doing the ALU on R directly deletes both:
+
+      <op> R, <y>  /  mov [x], R32  /  movsxd R, R32
+
+  and the chain goes 4 -> 2. Measured 1.25-1.31x on a two-accumulator integer
+  loop (three.pas, 2e8 iterations, min-of-21 interleaved).
+
+  Why this is not the same "free move" W1 slice 4 already deleted: it is the
+  opposite case of the same rule. A move OFF the recurrence costs ~nothing --
+  W1's operand funnel measured at zero, and so did folding a resident straight
+  into a `cmp` (measured 1.02x and dropped). A move ON the recurrence costs its
+  full latency every iteration. The instruction count is not the signal; which
+  chain it lands on is.
+
+  Safe to leave rax dead: an IR_STORE_SYM is always a statement root -- a store
+  consumed by a parent would be emitted twice (ir.inc's IRDropManagedStrResult
+  note says exactly this), and assignment-as-a-VALUE in C lowers to the store
+  followed by a separate IR_LOAD_SYM rather than to a consumed store, which
+  `PXXDBG=a.ir` confirms on `x = (y = 3)`. Keeping rax live costs half the win
+  (1.17x vs 1.27x measured), so this is worth stating rather than assuming.
+
+  The frame slot stays authoritative: the dual-write still happens, in the same
+  order, and R is re-extended with the identical size/sign rule
+  RegcallRefreshResidentFromRax applies to rax. }
+{ A plain integer/pointer scalar in a frame slot -- the only thing whose store
+  narrows by TypeSize and whose reload re-extends by TypeSigned, which is the
+  contract both halves of W2 rest on.
+
+  Asked about SYMBOLS, not about IR node types, and deliberately so: a for
+  loop's own increment nodes carry tyUnknown (`i := i + 1` lowers to
+  binop/store with IRTk = 0, while the same expression written in the body
+  carries the real type), so a node-type guard silently refuses exactly the
+  hottest shape in the language. The emitter itself narrows and extends by
+  Syms[].TypeKind, never by the node's, so this is the type that governs. }
+function W2ScalarSymOk(idx: Integer): Boolean;
+var t: TTypeKind;
+begin
+  W2ScalarSymOk := False;
+  if idx < 0 then Exit;
+  if Syms[idx].IsArray then Exit;
+  if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then Exit;
+  t := Syms[idx].TypeKind;
+  if TypeIsFloat(t) then Exit;
+  if (t = tyString) or (t = tyAnsiString) or TypeIsFrozenString(t) then Exit;
+  if not (TypeIsOrdinal(t) or (t = tyPointer)) then Exit;
+  W2ScalarSymOk := True;
+end;
+
+function W2InPlaceEligible(node: Integer): Boolean;
+var d, v, lf, rt: Integer; op: TTokenKind;
+begin
+  W2InPlaceEligible := False;
+  d := IRA[node];
+  v := IRB[node];
+  if (d < 0) or (v < 0) then Exit;
+  if ResidentRegOf(d) = 0 then Exit;
+  { The destination must be the plain scalar frame slot the dual-write contract
+    assumes. Same line RegcallEligibleSym draws, restated because symtab.inc
+    precedes it -- and because this asks about a STORE destination. }
+  if not ((Syms[d].Kind = skLocal) or (Syms[d].Kind = skParam)) then Exit;
+  if not W2ScalarSymOk(d) then Exit;
+  if IRKind[v] <> IR_BINOP then Exit;
+  { {$Q+}-checked ops carry their own overflow + narrowing checks around the
+    value in rax; leave those on the general path. }
+  if IRIVal[v] <> 0 then Exit;
+  op := IntToTokenKind(IRC[v]);
+  if not ((op = tkPlus) or (op = tkMinus) or
+          (op = tkAnd) or (op = tkOr) or (op = tkXor)) then Exit;
+  { The left operand must BE the destination -- that is what makes it in-place.
+    tkMinus is the only non-commutative op here and `sub R, Q` computes
+    R := R - Q, the destination minus the right operand. Correct by
+    construction, not by luck.
+
+    It also settles the one thing the node type would have told us: with an
+    ordinal/pointer destination on the left, the op cannot be a concat or a set
+    operation, so the symbol types above are a complete guard. }
+  lf := IRA[v];
+  if (lf < 0) or (IRKind[lf] <> IR_LOAD_SYM) or (IRA[lf] <> d) then Exit;
+  { The right operand is an imm32 constant, or another resident scalar. Both
+    reach the ALU with the identical 64-bit value the rax form would have used:
+    an imm32 sign-extends the same way, and a resident register holds the
+    canonically extended value by the residency contract. }
+  rt := IRB[v];
+  if rt < 0 then Exit;
+  if IRKind[rt] = IR_CONST_INT then
+  begin
+    if (IRIVal[rt] < -2147483648) or (IRIVal[rt] > 2147483647) then Exit;
+  end
+  else if IRKind[rt] = IR_LOAD_SYM then
+  begin
+    if ResidentRegOf(IRA[rt]) = 0 then Exit;
+    if not W2ScalarSymOk(IRA[rt]) then Exit;
+  end
+  else
+    Exit;
+  W2InPlaceEligible := True;
+end;
+
+{ Emit the W2 form. Precondition: W2InPlaceEligible(node). }
+procedure EmitW2InPlace(node: Integer);
+var d, v, rt, r, q, sz, dig: Integer; op: TTokenKind; sgn: Boolean; opc: Byte;
+begin
+  d := IRA[node];
+  v := IRB[node];
+  rt := IRB[v];
+  r := ResidentRegOf(d);
+  op := IntToTokenKind(IRC[v]);
+  opc := $31; dig := 6;                                    { tkXor }
+  if op = tkPlus then begin opc := $01; dig := 0; end
+  else if op = tkMinus then begin opc := $29; dig := 5; end
+  else if op = tkAnd then begin opc := $21; dig := 4; end
+  else if op = tkOr then begin opc := $09; dig := 1; end;
+
+  if IRKind[rt] = IR_CONST_INT then
+  begin
+    { <op> R, imm32 -- REX.W|REX.B, 81 /dig id, mod=11 rm=R }
+    EmitB($49); EmitB($81); EmitB($C0 or (dig shl 3) or (r - 8));
+    EmitI32(Integer(IRIVal[rt]));
+  end
+  else
+  begin
+    { <op> R, Q -- REX.W|REX.R|REX.B, opc /r, mod=11 reg=Q rm=R }
+    q := ResidentRegOf(IRA[rt]);
+    EmitB($4D); EmitB(opc); EmitB($C0 or ((q - 8) shl 3) or (r - 8));
+  end;
+
+  { Dual-write: the frame slot stays authoritative, exactly as EmitStoreVar
+    leaves it -- the low sz bytes of the result, at the same point in the
+    sequence, just sourced from R instead of rax. }
+  sz := TypeSize(Syms[d].TypeKind);
+  sgn := TypeSigned(Syms[d].TypeKind);
+  if sz = 1 then
+    begin EmitB($44); EmitB($88); EmitB($85 or ((r - 8) shl 3)); EmitI32(Syms[d].Offset); end
+  else if sz = 2 then
+    begin EmitB($66); EmitB($44); EmitB($89); EmitB($85 or ((r - 8) shl 3)); EmitI32(Syms[d].Offset); end
+  else if sz = 4 then
+    begin EmitB($44); EmitB($89); EmitB($85 or ((r - 8) shl 3)); EmitI32(Syms[d].Offset); end
+  else
+    begin EmitB($4C); EmitB($89); EmitB($85 or ((r - 8) shl 3)); EmitI32(Syms[d].Offset); end;
+
+  { Re-extend R in place. Byte-for-byte the rule RegcallRefreshResidentFromRax
+    applies to rax, with R substituted -- so the register ends byte-equal to a
+    fresh load of the slot, which is the whole residency contract. }
+  if sz = 1 then
+  begin
+    if sgn then begin EmitB($4D); EmitB($0F); EmitB($BE); EmitB($C0 or ((r - 8) shl 3) or (r - 8)); end
+    else begin EmitB($4D); EmitB($0F); EmitB($B6); EmitB($C0 or ((r - 8) shl 3) or (r - 8)); end;
+  end
+  else if sz = 2 then
+  begin
+    if sgn then begin EmitB($4D); EmitB($0F); EmitB($BF); EmitB($C0 or ((r - 8) shl 3) or (r - 8)); end
+    else begin EmitB($4D); EmitB($0F); EmitB($B7); EmitB($C0 or ((r - 8) shl 3) or (r - 8)); end;
+  end
+  else if sz = 4 then
+  begin
+    if sgn then begin EmitB($4D); EmitB($63); EmitB($C0 or ((r - 8) shl 3) or (r - 8)); end
+    else begin EmitB($45); EmitB($89); EmitB($C0 or ((r - 8) shl 3) or (r - 8)); end;
+  end;
+  { sz = 8: R already holds the canonical value }
+end;
+
 procedure EmitLoadVarRcx(idx: Integer);
 var tk: TTypeKind; sz: Integer; sgn: Boolean; rreg: Integer;
 begin
