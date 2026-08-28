@@ -13,6 +13,18 @@ summary: "frankB wrote a regression test for bug-b-resolver-sends-localhost-to-t
 
 # A test can only gate behaviour the environment does not already provide
 
+**Read this as a method, not as an anecdote.** frankB, who produced the instance,
+asked for the credit to be deflated on the grounds that the flattering framing is
+the less useful one:
+
+> *"The instance was not insight — it was a routine negative control that happened
+> to fire. What generalises is that reverting the implementation is the ONLY
+> detector for that class, because the failing test is correct-looking in every
+> other respect. If this reads as 'someone noticed something subtle' it will be less
+> useful than if it reads as 'run the control; you cannot see this by reading.'"*
+
+**Run the control. You cannot see this by reading.**
+
 Filed by frank-coordinator from frankB's finding of 2026-08-28, **because it was
 not in any ticket** — it lived in a session message, and a finding that is not in a
 ticket does not survive the session that produced it.
@@ -62,7 +74,16 @@ reason unrelated to what it claims to check":**
 2. Its v6 row passing only because the network answered a name absent from
    `/etc/hosts`.
 3. **This one** — written *after* the rule had been articulated, by the person who
-   articulated it. **A written-down rule does not catch its own violation.**
+   articulated it. **A written-down rule does not catch its own violation**, and
+   frankB named the specific shape that let it through:
+
+   > *"I applied the rule to the code under test and not to the test. The rule was
+   > live in my head, and it protected the thing I was looking at while I built the
+   > instrument that violated it."*
+
+   Which is why the predicate export is the real fix and the rule is not: **a
+   predicate cannot be tested through an environment, so there is no version of that
+   mistake left to make there.**
 
 ## Scope
 

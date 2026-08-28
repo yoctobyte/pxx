@@ -58,3 +58,47 @@ documented loop on its own initiative, and no peer can authorise it.
 Track A ticket, which is a `compiler/**` edit), and the finding is in
 `devdocs/dev/session-roster.md`. Track B is unaffected — FPC never compiles
 `lib/rtl`.
+
+---
+
+## UPDATE 2026-08-28: a fourth option now exists, built and verified
+
+The seed broke **a second time, in the same file, hours after the first** —
+`WasmEmitIndArgs` called at 1309, defined at 1620. That settles option 1's stated
+weakness empirically: **the targeted trigger does not work**, because the lane
+recognised neither instance of its own edit shape.
+
+Worse, and this is the finding: **the forward block already carried a written rule**
+— *"every routine the dispatchers dispatch to belongs here"* — and the break walked
+straight past it, because `WasmEmitIndArgs` is **not** a dispatch target; it is
+called by a builtin lowering sitting above the machinery it shares.
+
+> **A rule that is slightly wrong is worse than no rule: it reads as complete.**
+> frankwasm read it *while writing the code that violated it.*
+
+### Option 4 (now the recommendation): a static forward lint in the fast loop
+
+frankwasm built `forwardlint.py` — **~1 second**, reads the same files FPC reads and
+asks FPC's question directly. **Verified against BOTH historical breaks**: deleting
+today's forward reports line 1313; deleting the *original* one — the break that cost
+several commits before the canary found it — reports line 1065; the fixed file is
+clean.
+
+**Deliberately narrow, with the failure mode chosen rather than accepted: it misses
+rather than false-alarms**, because the gate's real FPC build remains the backstop
+either way. That satisfies the criterion this repo settled on the same night — **a
+check whose worst case is LATENESS can live in a fast loop; one whose worst case is
+a WRONG ANSWER cannot** — and it also answers the cost objection that made option 2
+unattractive, since a second is not a serial FPC build.
+
+| option | cost | catches | status |
+| --- | --- | --- | --- |
+| 1. targeted trigger | ~0 | **empirically: nothing** — missed twice | **disproven** |
+| 2. FPC build in the loop | serial FPC build per fix | everything | unattractive on cost |
+| 3. leave as-is | 0 | nothing | — |
+| **4. static forward lint** | **~1s** | the whole observed failure class, by design a miss not a false alarm | **built + verified** |
+
+**Still a Track U decision**, because putting anything in the mandatory loop touches
+the gating section of `CLAUDE.md`, which is the owner's file. But the question is no
+longer *"is it worth a serial FPC build?"* — it is *"should a verified one-second
+lint join the loop?"*, which is a materially easier call.
