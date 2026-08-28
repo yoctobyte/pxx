@@ -1,5 +1,5 @@
 ---
-track: T
+track: U
 prio: 25
 type: decide
 blocked-by: []
@@ -55,13 +55,7 @@ reasoning would have been quietly falsified.
 1. **Keep it.** A skip closes. Cost: a regression can vanish without being
    fixed, and nothing says so. Cheapest, and the status quo has not visibly
    burned anyone — though see the note on observability below.
-2. **Close, but say so.** A skip still closes, and the closure is recorded as
-   `closed_by: "skip"` rather than as FIXED, so the stub-retirement path and
-   any reader can tell "stopped failing" from "stopped running". Keeps the
-   anti-immortality property; removes the false claim. **Recommended** — it is
-   the same split that fixed the anchor case (separate the two readings rather
-   than reclassify the status), and it is additive.
-3. **Do not close on skip.** Requires a real pass. Correct in the abstract and
+2. **Do not close on skip.** Requires a real pass. Correct in the abstract and
    reintroduces exactly the immortal-entry problem the current rule exists to
    prevent — on a box whose corpus is permanently absent, every such
    regression becomes eternal.
@@ -69,13 +63,41 @@ reasoning would have been quietly falsified.
 ## What is NOT known, and it bears on the ranking
 
 **Nobody knows how often this fires.** A closure by skip is currently
-indistinguishable in the record from a closure by pass, which is the defect
-option 2 fixes and also the reason the frequency cannot be measured today. So
-the honest position is: prio **25**, because there is no evidence of cost — and
-option 2 is the change that would let a future reader find out.
+indistinguishable in the record from a closure by pass — which is simultaneously
+the defect and the reason its frequency cannot be measured. Counting it needs
+[[chore-t-record-how-a-regression-closed]], which is split out precisely so this
+question is not blocked behind its own instrument.
 
-Filed at low prio on purpose. It is real, it is small, and it should not
-outrank work with a measured cost.
+Filed at low prio on purpose: real, small, and it should not outrank work with a
+measured cost.
+
+## What was split out, and why it is not an option here
+
+An earlier draft of this ticket listed a third option — *"close, but record
+`closed_by: skip`"* — and recommended it. That was a category error, caught by
+the coordinator: recording how a closure happened is **strictly additive and
+loses nothing in either direction**, so it is not a horn of the dilemma. It is
+the instrument that makes the dilemma measurable. As written, this was a
+decision whose deciding data the same ticket proposed to gather.
+
+It is now [[chore-t-record-how-a-regression-closed]] [T, p30], and it should be
+done whether or not this question is ever answered.
+
+## Track U, not T — and that is a deliberate correction
+
+Filed originally as `track: T`, on the reasoning that Track T self-governs its
+own tooling. That was wrong, and the queue said so: **12 of the 13 `decide-*`
+tickets are `track: U`**, including [[decide-t-refuse-unscoped-pattern-kills-in-a-hook]],
+which is likewise a decision about Track T's own tooling. The precedent is
+clear and it is the right one — **U is about who DECIDES, not who owns the
+file.**
+
+The consequence of getting it wrong was concrete rather than cosmetic: at p25
+behind T's p55/p50/p45, a `track: T` decision would never be reached, and
+never-reached is not neutral here. It silently selects option 1, which is the
+status quo — a decision made by queue position instead of by judgment. That is
+the same shape as the trigger-with-no-observer that caused this ticket to be
+split out of `0dec0194a` in the first place.
 
 ## Sibling
 
@@ -93,12 +115,14 @@ merging them would produce one ticket that is three half-descriptions:
 One root — *a skip means the job did not run, and "did not run" is not
 "passed"* — reached through three independent code paths, none of which knows
 about the others. That is the `normalise-dont-special-case` smell at the level
-of a concept rather than a construct, and it is the strongest argument for
-option 2: it is the option that makes the three consistent.
+of a concept rather than a construct — and it is the strongest argument for
+doing [[chore-t-record-how-a-regression-closed]] regardless of how this is
+decided, since making the record honest is what the three paths have in
+common.
 
 ## Gate
 
-Track T's own tooling gate. If option 2 is chosen it is additive to the ledger
-(a new key, absent-means-unknown) like `never_passed` before it, so no reader
-breaks — but the coordinator should be told, since that is the second ledger
-field added in as many days.
+None — this is a decision, not a change. Whichever way it goes, the resulting
+work is re-filed into Track T with T's own tooling gate, per the rule that a U
+item which turns out to be plain work once decided goes back to the owning
+lane.
