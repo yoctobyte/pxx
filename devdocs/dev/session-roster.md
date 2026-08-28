@@ -13554,3 +13554,100 @@ Also filed `bug-p-two-different-nested-specializations-of-one-template-collide` 
 *reachable* because of this fix, so not a regression; kept **out** of the new test file so a pass
 there means what it says; and its explanation marked as a hypothesis from the message shape
 rather than something measured.
+
+### 2026-08-28 — frankA parks, the pre-committed signal fires, pxx-a5 takes Track T p60
+
+**Fleet moved for the first time in a day.** frankA parked cleanly (HEAD
+`bc0100404`, tree clean, all pushed) after finishing the arity check, both method-pointer
+defects, and three generics defects. That fires the idle subscription's pre-committed
+consequence — **pxx-a5 → `bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-last-good`
+[T p60]**, dispatched. frankwasm approved to continue on `IR_DEFAULT_MEM`.
+
+| session | state | why |
+| --- | --- | --- |
+| frankA | parked, A/P slot **released** | its own call: what remains is a design piece, context 20h old |
+| frankwasm | working `IR_DEFAULT_MEM` | lane-internal, instrument now measurable |
+| pxx-a5 | **dispatched** T p60 | tstate integrity — the truth every lane's gate rests on |
+| frankB | idle by decision | wall 7 turned out not to be B's; trigger #2 did **not** fire |
+| frank-optimize-b4 | held — **new lock** | see below |
+
+**The lock on frank-optimize-b4 changed identity and I am writing that down because
+that is the only thing that stops it becoming permanent.** It was held because
+frankA held the A/P slot and Track O edits A's shared ground. frankA parked, so
+**that lock is released.** What holds it now is the concurrency cap — frankwasm plus
+pxx-a5 is already the recorded 1-2 ceiling. Different lock, different expiry:
+**it lifts when frankwasm or pxx-a5 parks**, not when anything about Track A changes.
+Conflating the two is exactly how a hold outlives its reason.
+
+### Wall 7 was never Track B — and frankA was about to send frankB after it
+
+frankA's handoff said wall 7 *"genuinely needs frankB, if you want the corpus to keep
+moving"*. I had measured it an hour earlier and it does not. Correction sent before
+frankB could be woken:
+
+`SArgumentOutOfRange` is at `lib/rtl/rtlconsts.pas:13`, **in the interface section**
+(exported — visibility is not the defect), declared as a plain **`const`**
+deliberately (the unit header explains this RTL has no resource tables, so plain
+consts are the intended shape). The corpus does `Exception.CreateRes(@SArgumentOutOfRange)`
+— it takes the **address**, and a const has none. That is
+**`bug-p-a-resourcestring-is-not-addressable` [P p55], already filed**, naming
+`pasparser_proc.inc:4783` and the same three `generics.defaults.pas` sites.
+
+So wall 7 points at the existing P ticket rather than becoming a row — one diagnosis
+under two lanes is the multi-table drift frankA had just spent a commit removing — and
+the corpus can advance without waking a second worker.
+
+> **"The symbol is there" and "its address can be taken" both fail with the symbol
+> present, and only one of them is the bug.** Existence answered truthfully, on a
+> different question than the failure was asking. Fifth today.
+
+**Housekeeping asked of frankA:** move `feature-pascal-corpus-expansion` from
+`working/` to `unfinished/`. It parked; `working/` is a live lock, and **a lock held
+by a parked session reads as "someone is on it" while nothing is happening** — the
+same signature we keep filing, wearing our own tooling. Nothing to revert; everything
+is pushed.
+
+### frankwasm: the fix, and two self-corrections worth more than the fix
+
+`compiler/wasmenc.inc` `d8c1a3635`. **7179 MB / 107.6 s → 31 MB / 0.51 s**, and the
+row Phase 9 could never fill: **compiler.pas for wasm32, 95.5% of bodies, 595 MB,
+26.5 s** against 52 GB and not finishing. Acceptance in the strong form — 16 `.wat`
+files byte-identical across the **pre-fix and post-fix binaries**, an independent arm,
+not the self-comparison. Branch-local, so master was never affected; the code arrives
+at merge and **nothing on `origin/wasm` is thereby pre-approved.**
+
+Both flags it raised unprompted:
+
+1. **It retracted its own promotion claim.** Removing dynamic arrays sent `in` 68 → 267;
+   removing `in` moved `IR_DEFAULT_MEM` 74 → 75. The caveat says a leader *masks* what
+   is behind it and is silent on magnitude — both outcomes are consistent with it, which
+   is why it cannot predict one. The honest form is **unknown, not understated**. I had
+   been relaying the strong form; I grepped my copies before agreeing and the roster
+   never carried it, so there was nothing to correct in place. **Checking is what made
+   that sentence sayable.**
+2. **Three controls measured flat on an axis nobody chose** — filed as generator-family
+   **face fifteen** (ticket appended, credited to frankwasm). All three varied body
+   *count*; the bug is O(n²) *within one body*. **A control that reports "no effect" is
+   worth exactly what its axis is worth, and nothing in its output names its axis.**
+   The most dangerous face so far because it is the only one that produces
+   *encouragement* rather than silence or an error — and two of the three reached me
+   as reassuring evidence.
+
+### frankA's three keepers
+
+- **It refused to write the over-approximating sweep.** Matching raw `Tokens[]` on
+  parameter names, when `T` and `U` are the two commonest names there are, would bind a
+  prerequisite under the wrong substitution — **a silently wrong specialization instead
+  of an absent one.** Today's `undefined variable (specialize)` is an honest failure;
+  that would have been a dishonest pass. The ticket carries a *"do not weaken the
+  prerequisite scan to make the corpus advance"* note: platonic-code discipline applied
+  to the **oracle** rather than the source.
+- **LexAll reshapes the problem.** `Tokens[]` is filled completely before the parser
+  starts and the rewrite sweeps the whole stream, so at Delphi-specialization time the
+  method implementations are **unindexed, not unavailable** — a bounding job, not a
+  reordering job.
+- **`Default` was never a generics bug.** Eleven candidate names, one collision, visible
+  only to a plain-class control. *A defect inherits the appearance of wherever its only
+  trigger happens to live.* And `IsMethodNameTokAt`'s comment claimed the list was shared
+  *"so the two cannot drift"* while holding a private copy — **the comment named the
+  guarantee whose absence caused the bug it was attached to.**
