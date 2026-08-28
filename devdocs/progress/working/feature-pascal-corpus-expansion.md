@@ -53,6 +53,34 @@ were measured.
 *"The symbol is there"* and *"its address can be taken"* both fail with the
 symbol present, and only the second one is the bug.
 
+## 2026-08-28 (frankA, park) — the third ordering defect is DIAGNOSED, not fixed
+
+Parked deliberately with **no code changed**, per the stopping boundary agreed
+with the coordinator. `generics.defaults.pas` stands at `:3250`.
+
+The ticket's own direction — "emit the prerequisite at the end of the type
+section" — was **refuted by measurement before being acted on**: in the failing
+order the scan finds nothing at all (`nested=0`), so there is no emission to
+move. Discovery is not merely mis-placed, it is impossible at that time: the
+referenced template is not yet declared, so its use has not been rewritten, and
+marking it would require knowing it is a template.
+
+The replacement direction (discover at *materialisation* time, where all
+templates are known) is sound but not small: `NestedSpecKnown` consults
+REGISTERED specializations, not inserted tokens, so emitting a declaration
+around the stream cannot work in either order — the method's streaming has to be
+deferred and retried once the declaration is parsed, without breaking
+`BufferGenericMethod`'s "materialised exactly once" invariant. Both dead
+variants are written into the ticket so they are not re-attempted.
+
+**Three ordering defects fell today and the remaining count is unknown, not
+small.** Each was invisible until its predecessor fell. Whoever picks this up
+should decide whether rung 6 deserves a fourth on its own merits — the test the
+coordinator set is the right one: *stop when a defect is only worth fixing
+because it advances the corpus.* None of today's three was that; all three are
+plain-Pascal bugs with short repros that FPC compiles, and they would bite anyone
+writing that code with no corpus in sight.
+
 ## 2026-08-28 (frankA, later still) — the false cycle is gone; rung 6's wall is a THIRD ordering defect
 
 `bug-p-mutually-referencing-generics-are-rejected-as-circular` resolved. A

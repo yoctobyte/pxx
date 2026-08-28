@@ -5,19 +5,20 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:20 blocked:4 backlog:296 backlog_new:7 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2560 rejected:46`
+`working:2 unfinished:21 blocked:4 backlog:295 backlog_new:7 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2560 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-opt-o3-register-pressure` [O] — owner: frank-optimize-b4
 - `feature-pascal-corpus-expansion` [P] — owner: frankA
 
-## unfinished (20) — parked mid-flight; re-claim, do not duplicate
+## unfinished (21) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
+- `bug-p-a-generic-prerequisite-is-emitted-before-the-referenced-template-exists` [P]
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A]
 - `feature-c-import-a-pascal-unit-under-a-mangled-name` [C]
