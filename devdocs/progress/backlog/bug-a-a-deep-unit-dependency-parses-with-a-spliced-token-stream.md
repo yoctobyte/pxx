@@ -103,3 +103,73 @@ Track A: `make compiler/pascal26` (self-host fixedpoint) + the 4-line repro
 above compiling. Worth adding the minimal `uses` triple as a regression test
 once fixed — it needs `external/synapse`, so guard it the way `lib_synapse` is
 guarded, but see the sibling ticket first: that guard is what hid this.
+
+---
+
+## CORRECTION to the `near:` evidence — measured by frank-coordinator, 2026-08-28
+
+**Do not chase "`FlushGroup$126591` is a generated name that appears in no source
+file."** That premise is false, and so is the negative result offered against it.
+Four measurements, all one grep each:
+
+1. **`FlushGroup` is a real routine** — `lib/rtl/sockets.pas:448`,
+   `procedure FlushGroup(var arr: array of Integer; var cnt: Integer);`, a
+   **nested** routine inside an enclosing one. It is not absent from the sources;
+   only the `$126591` is appended.
+
+2. **There IS a Pascal-side minter of the `Name$<number>` shape**, at
+   `compiler/pasparser_decl.inc:6409`:
+   ```pascal
+   mangled := nestedName;
+   AppendChar(mangled, '$');
+   mangled := mangled + MangleSuffix(nestedStart);
+   mOff := NestStrOff(mangled); mLen := Length(mangled);
+   Tokens[nameTokIdx].SOffset := mOff;
+   Tokens[nameTokIdx].SLen := mLen;
+   ```
+   A `+ '$' +` grep misses it because it uses `AppendChar`. Its own comment: *"Mangle
+   the routine to a unique name so the lift descriptor and forward-completion
+   can't collide with another routine (the in-place forward decl and the stashed
+   definition share this single rewritten name token)."*
+
+3. **`MangleSuffix(n: Integer)` renders an integer as decimal**
+   (`pasparser_decl.inc:5979`) and is called with `nestedStart` — **a token
+   index.** So `FlushGroup$126591` is the ordinary, expected mangled name of a
+   real nested routine, and `126591` is its starting token index in the combined
+   stream. Nothing about it is anomalous.
+
+4. **Both reported lines are exactly EOF+1**:
+
+   | file | length | reported |
+   | --- | --- | --- |
+   | `lib/rtl/sockets.pas` | 633 | **634** |
+   | `lib/rtl/dns_cache.pas` | 269 | **270** |
+
+### What this does to the ticket
+
+**The `near:` context is NOT evidence of reading another unit's token stream** —
+it is a correctly-mangled local nested routine, and the "generated name in no
+source file" reading should be struck. **The real evidence of splicing is item 4:
+the parser runs a unit to exhaustion and reports the line after the last one**,
+i.e. an unexpected-EOF position, in a *different* file from the one whose tokens
+are in view.
+
+**The machinery to suspect is the one in item 2**, and it is the tighter lead:
+that mangler **mutates the token array in place** (`Tokens[nameTokIdx].SOffset`,
+`.SLen`) and is exercised by `sockets.pas`, which has nested routines, while the
+failure is *attributed* to `dns_cache.pas`, which is a different file in the same
+`uses` chain. In-place token rewriting plus a wrong file attribution at EOF is a
+much narrower hypothesis than "the parser wandered into another unit."
+
+**Credit where the reasoning was right:** frankA (standing down, two greps, offered
+with its uncertainty attached) predicted that if the number were not a
+specialization alias it would be *"a token index or source offset rather than a
+counter."* **It is a token index.** The prediction was right and the negative
+result was wrong — the greps missed `AppendChar`. Recorded because the prediction
+is the reusable half.
+
+**Still unverified and NOT to be repeated as fact:** whether the in-place rewrite
+is what desynchronises the file attribution. That is the next measurement, not a
+finding. The ordering table above (only the triple, only with `blcksock` last,
+cured by moving it or by prepending `sysutils`) remains the strongest constraint
+on any explanation.
