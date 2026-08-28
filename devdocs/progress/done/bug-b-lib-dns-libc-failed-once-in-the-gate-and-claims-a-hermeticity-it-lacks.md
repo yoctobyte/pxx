@@ -3,7 +3,9 @@ track: B
 prio: 30
 type: bug
 blocked-by: []
-summary: "lib_dns_libc's default build failed one `make lib-test` run on 2026-08-28 and did not reproduce in a full gate re-run or 15 direct runs of the same binary — cause undiagnosed, recorded so the next false red is not rediscovered from scratch. Separately and verifiably: the test's header claims `NO NETWORK: every lookup is localhost`, which is false in the PXX_DNS_LIBC build — it resolves `nonexistent-zzz-qqq.invalid`, which goes to the resolver."
+summary: "lib_dns_libc claimed `NO NETWORK` and both its builds went to the wire — 6 contacts in the default build, 12 in the libc build. Both are now 0, measured by strace on the binaries. The two rows had opposite polarity: the v6 localhost row passed only because the network answered, the NXDOMAIN row could fail only because it did not, and EAI_AGAIN maps to rcode 2 rather than 3, so a slow resolver turned it red with a plausible number. The unreproduced 2026-08-28 red is NOT diagnosed; what changed is that its leading mechanism is gone and the gate now captures output."
+status: done
+owner: frankB
 ---
 
 # `lib_dns_libc`: one unreproduced gate failure, and a hermeticity claim that is not true
@@ -168,3 +170,93 @@ The intermittent itself. One failure, not reproduced in a full re-run or fifteen
 direct runs. What has changed is that the leading candidate mechanism is now
 identified and removed, so if it recurs, it recurs against a hermetic default
 build — and with the diagnostic preserved.
+
+
+## 2026-08-28 (2) — the second row, and the two findings were closer than this ticket said
+
+Picked back up on frank-coordinator's hypothesis that the two findings are one
+defect. **The hypothesis is right about the shape and wrong about the row it
+named**, and checking which was the whole of the work.
+
+The coordinator's mechanism was the `.invalid` row: a test that resolves through
+the real resolver is exactly the shape that fails once and never reproduces. But
+that row sits behind `{$ifdef PXX_DNS_LIBC}` and the build that went red was the
+default one — which this ticket's original text already said, and which is still
+true. What the ticket did NOT say, until the 2026-08-28 update, is that the
+default build was reaching the wire by a *different* row.
+
+So: same class, different member. Both halves of this ticket are the same defect
+in the sense that matters — **a row whose verdict depends on the environment can
+only gate the environment** — and neither is the row the hypothesis named.
+
+### The second row, fixed here
+
+The libc half's NXDOMAIN row was still live and still network-dependent, and it
+had a mechanical path to a red gate that the v6 row's fix did nothing about:
+
+```
+lib/rtl/dns_libc.pas:132   EAI_NONAME / EAI_NODATA -> rcode 3
+lib/rtl/dns_libc.pas:133   EAI_AGAIN  / EAI_FAIL   -> rcode 2
+```
+
+The row asserts `ChkI('libc_nxdomain_rcode', rc, 3)`. A slow, absent or
+SERVFAIL-ing resolver gives EAI_AGAIN, hence rcode 2, hence `DNSLIBC FAILED 1` —
+a red with a plausible number and nothing pointing at the cause. This is the
+mirror image of the v6 row, which asserted `rc = 0` and passed only because the
+network answered. Passing for the wrong reason and failing for the wrong reason
+are the same defect seen from either side.
+
+**Fixed by changing the name, not the assertion.** `invalid..name` has an empty
+label, so getaddrinfo rejects it before consulting nsswitch. Measured with a gcc
+`getaddrinfo` probe under strace:
+
+| name | rc | contacts to port 53 |
+| --- | --- | --- |
+| `nonexistent-zzz-qqq.invalid` | -2 EAI_NONAME | **6** |
+| `invalid..name` | -2 EAI_NONAME | **0** |
+| an 80-character label | -2 EAI_NONAME | 0 |
+| `.` | -5 EAI_NODATA | 2 |
+
+Same errno, same mapping under test, no wire. Then measured on the actual
+binaries rather than the probe — the mistake this ticket already records once:
+
+| build | before | after |
+| --- | --- | --- |
+| default | 6 | **0** |
+| `-dPXX_DNS_LIBC -dPXX_DYNLIB_LIBC` | 6 (12 before the v6 fix) | **0** |
+
+Negative-controlled: with the expectation changed to 99 the row prints
+`libc_nxdomain_rcode FAIL got=3 want=99` and the program reports
+`DNSLIBC FAILED 1`, so the row is live and `rc` genuinely is 3 — not a vacuous
+pass from a skipped branch.
+
+**What this stops covering, said out loud:** that a real NXDOMAIN off the wire
+arrives as EAI_NONAME rather than EAI_AGAIN. That is glibc's behaviour, not
+ours. The network was in the path incidentally; the subject of the row is our
+mapping, and the row still tests it. The header says this too.
+
+### The intermittent — still not diagnosed, and this does not claim to be a fix
+
+One failure, four gate runs, fifteen direct runs of the same binary. That
+evidence has not changed and no cause has been established. What has changed:
+
+- the leading candidate mechanism in the failing build (the v6 localhost row)
+  is gone, measured;
+- the equivalent mechanism in the sibling build is gone too, measured;
+- both gate lines capture stdout on mismatch, so a recurrence leaves the
+  evidence this one did not.
+
+If it recurs it recurs against two hermetic builds with output captured, which
+is a genuinely new observation and deserves its own ticket rather than a
+reopening — the mechanism it would have to be is now a different one.
+
+### Resolved
+
+Everything actionable in this ticket is done and measured. Closing it rather
+than holding it open for a recurrence that may never come, for the reason the
+crtl collector was parked the same day: a ticket kept in the ranked queue on the
+strength of something that *might* happen is a queue entry that asserts work
+where there is none.
+
+## Log
+- 2026-08-28 — resolved, commit PENDING-COMMIT.
