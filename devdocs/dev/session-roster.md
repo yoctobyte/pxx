@@ -15078,3 +15078,78 @@ One more staleness hop worth having: the clone already had the new `twatch.py` o
 disk; **only the resident process held the old code.** A `git pull` cannot fix
 that, and a deploy that is correct on disk and stale in memory will report the
 disk version if anyone asks it.
+
+### CORRECTION to the section above: the "no oracle" limit is withdrawn
+
+I recorded, and relayed to frankB as a constraint, that **FPC rejected frankA's
+`Equals`/`GetHashCode` override probe** and that the check therefore had no
+oracle. **FPC did not reject it — the probe did.** Under `{$mode objfpc}{$H+}` it
+compiles and runs on FPC 3.2.2; frankA's probe carried no `{$mode}`, where `class`
+is unavailable at all. frankB built the oracle while driving rung 3: five rows,
+and FPC *does* reject `GetHashCode: Integer; override` ("no method in an ancestor
+class to be overridden: GetHashCode:LongInt") while accepting the `PtrInt` form.
+
+**frankA's conclusion stands and is now oracle-backed.** Only the "parity
+unverified" qualifier is dead. The *other* limit — `feature-pascal-builtin-tobject-class`
+open for wider scope — is unaffected.
+
+Marked in place at the point a reader meets it (`a8745196d`), **not rewritten**:
+frankA's paragraph is an accurate record of what that session ran, and falsifying
+a session record to clear a stale claim trades one defect for a worse one. It had
+been sitting **sixty lines above its own correction, in the same file**, reading
+as live — the stall-note failure, inside the ticket where we named it.
+
+> **What cleared it was not a closer reading of the probe.** It was someone
+> re-running it in a different mode. Fourth instance today: the first instrument
+> is not *wrong*, it simply cannot report its own aperture, and only a second
+> instrument of a different kind gets past it.
+
+A divergence fell out, and frankB checked whether it was the silent kind rather
+than assuming: pxx accepts the narrow `Integer` override FPC rejects, and a narrow
+override returning `-7` reads back as `-7` through a `TObject` variable —
+**sign-extended, not truncated.** By CLAUDE.md's table that is *"we accept a form
+FPC rejects"*: not a defect, a line for the divergences doc.
+
+### Rung 3 drove, and parked correctly
+
+The wall moved **2082 → 3250** (`2c179ea5b`). *A wall that moves is the best
+available evidence that the thing under it was the blocker* — so frankA's
+edge-clearing was productive, and the corpus says so more strongly than any probe
+could.
+
+New: `bug-p-a-generic-specialized-before-its-declaration-is-unresolvable` [P p55]
+— `generics.defaults.pas:3250`, reduced to a **14-line repro whose only difference
+from a compiling program is the ORDER OF TWO TYPE DECLARATIONS**, with fpc 3.2.2
+accepting *both* orderings, so there is an oracle on **both arms** rather than only
+the failing one. Seven variations ruled out and listed so nobody re-walks the
+ladder; every one that first looked load-bearing was an artifact of the repro also
+reordering the declarations. Two further measurements put it at instantiation time.
+
+**Parked rather than microfixed**, and the reason is the strongest form of it: the
+mechanism is in `DelphiRewriteGenericUses`, whose own comments record a previous
+runaway — and **the entry directly above it on that rung is itself a corrected
+wrong root cause.** The ticket separates measured from inferred and labels the
+sweep-ordering story a lead. Stopping where the measurements stop, in a file that
+already contains the cost of not doing so.
+
+Environment note for whoever resumes: this was a **Track B checkout that had never
+bootstrapped** — no corpus, no compiler, `make compiler/pascal26` answering
+*"self-hosted compiler seed missing"*. frankB fetched at the same `release_3_2_2`
+commit the previous drives used **so line numbers stay comparable**, and confirmed
+*"converged after 1 round(s)"* plus a sha differing from `pinned` — both halves of
+the fresh-tree check, since a copied-in seed makes that build a silent no-op.
+
+### State: back to TWO workers, as conditioned — no backfill
+
+frankB parked, `owner` reset to unassigned, nothing claimed. Per the exception
+recorded above, I am **not** dispatching into the freed slot: frank-optimize-b4
+(aarch64 port) and pxx-a5 (`bug-t-a-skip-that-cannot-say-why-is-a-pass-in-the-verdict`,
+now the only entry in `working/`). frankA, frankB, frankwasm parked clean.
+
+frankB's own named error extends a rule I already carry: it wrote a probe log to
+`$name.o` and **FPC's object output silently overwrote it**, so it read an ELF
+binary as a diagnostic.
+
+> **`2>/dev/null` and a filename collision are the same defect.** Both destroy the
+> evidence and leave something *plausible* in its place — which is worse than
+> leaving nothing, because nothing prompts a second look.
