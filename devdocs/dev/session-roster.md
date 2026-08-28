@@ -12576,3 +12576,57 @@ have** — *"`a.ir:*` is --dump-ir."* Filed
 on the repo's designated **alternative to reasoning**: a measurement tool whose most obvious
 first attempt returns silence pushes people back toward theorising, and no-match, misspelled
 topic and wrong flag all read identically.
+
+### The audit closed clean — and the reason has a date on it
+
+frankwasm ran the control (`dc39645c9`, on origin/master, ticket in `done/`): deleted the
+retain in `WasmEmitOwnedStr`'s `tyAnsiString` arm and **two of three string checks caught
+it**, with distinct diffs. **Verified, no defect** — the string slices do cover the
+premature-free direction, and no reuse-forcing assertion was needed.
+
+Its generalisation, which is the output worth keeping:
+
+> **A one-directional instrument's blind half is covered only when the defect has a SECOND
+> OBSERVABLE ROUTE into the output.**
+
+A managed string's refcount is read **by the code under test** — copy-on-write asks "am I
+sole owner?" before every write, so a too-low refcount changes behaviour on the next line and
+an ordinary correctness diff finds it free. A dynamic array's is read **only by the release
+path**, so nothing observes it until the block is freed *and* reused — which is exactly why
+`check_dyn` needed the reuse-forcing control and why its first version passed a removed
+retain.
+
+**I verified the consequence and then found the reason is more fragile than stated.**
+Interfaces and managed records really are the second kind (0 uniqueness/COW paths; 35
+interface refcount sites, all retain/release). But **dynamic arrays used to be the FIRST
+kind.** `IR_DYNUNIQUE` survives in four backends and its own comment opens *"The name is now
+historical"* — the nested clone was **deliberately deleted** when
+`decide-dynamic-array-value-vs-reference-semantics` settled on FPC reference semantics.
+
+So the category is **a property of the current semantics, not of the type** — and the two
+crossings are not symmetric. Adding COW makes a reuse-forcing control redundant: harmless.
+**Removing COW deletes the second observable route, and every existing test keeps passing.**
+Dynamic arrays took that direction.
+
+> **A COVERAGE ARGUMENT THAT RESTS ON "THE CODE UNDER TEST READS THIS VALUE" DEPENDS ON A
+> DESIGN DECISION, AND DESIGN DECISIONS ARE NOT VERSIONED AGAINST THE TESTS THAT ASSUME
+> THEM.**
+
+That is the audit's own finding one level up: not a green suite that cannot distinguish
+covered from uncovered, but the **semantics** the coverage rested on moving underneath it.
+Practical rule added to the ticket: where it is cheap, design the reuse-forcing control in
+even for a first-kind type — it is the only witness that does not depend on the semantics
+staying put.
+
+**Third comment-borne false claim today** (after the `a.ir:*` comment and `abi.inc`'s
+greppable-invariant clause): `ir_codegen.inc:5358` still reads *"COW check for managed
+strings and dynamic arrays"* over a block that only ever computes `isAnsiStr`. It misleads
+precisely the reader doing the right thing — the one auditing whether a dyn array's refcount
+has a non-release observer. Filed
+`bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted` [A, p25]. One copy
+only. **A deletion has copies too: the comments that described the deleted thing.**
+
+frankwasm also named the pattern in itself unprompted — an unfiled grant, an unfiled ledger,
+an unfiled finding, all in one day, all cases where *"the thinking was done and the record
+treated as the optional part."* And it wrote a control **before** the code it guards exists
+(interfaces, managed records), which is the first time that has run forward this session.
