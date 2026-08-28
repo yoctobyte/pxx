@@ -502,3 +502,44 @@ Kin to face thirteen: there, two arms that share an upstream agree without evide
 arm and a stale claim agree without evidence. Both are **agreement carrying no information**;
 thirteen is structural, fourteen is procedural — and fourteen is worse, because it recruits
 the investigator into stopping.
+
+## Face fifteen — a control that reports "no effect" on an axis nobody chose
+
+Contributed by frankwasm, 2026-08-28, out of the wasm32 `WasmText` memory fix —
+and volunteered as a self-correction, not extracted from it.
+
+Three synthetics were built to reproduce a 7 GB blowup and **all three measured
+flat**: 3200 procedures, 1600 `in` expressions, a library-heavy program. Two of
+them were reported to the coordinator as controls. The fourth attempt found the
+bug immediately. The difference was not scale or luck:
+
+> All three varied body **count** and held body **size** near zero. The defect is
+> O(n²) accumulation *within a single procedure body*, so its magnitude is set by
+> the largest one body — an axis none of the three touched.
+
+Each synthetic executed correctly and reported truthfully. There was simply no
+relationship between what they varied and what the bug depends on.
+
+**A control that reports "no effect" is worth exactly what its axis is worth, and
+nothing in its output names its axis.**
+
+The family signature in its purest form so far — a flat reading from a control on
+the right axis and a flat reading from a control on the wrong one are the same
+bytes. And it is the most dangerous face yet for a reason the others do not
+share: **face twelve produces silence, face fourteen produces a wrong-looking
+right answer, but this one produces ENCOURAGEMENT.** A blind instrument fails
+inside its own axis; these succeeded perfectly, elsewhere. "We tested it and saw
+nothing" is how three wrong-axis controls sound, and it is also how three
+right-axis controls sound.
+
+Distinct from face twelve (an instrument blind in one direction), which is about
+a gap *within* the axis under test. Here the axis itself was never chosen — it
+was inherited from whichever knob was easiest to turn, which for a compiler
+synthetic is almost always *count*, because generating 3200 of something is one
+loop and generating one enormous something is a different generator.
+
+**Practical form:** before a null result is allowed to reassure anyone, state the
+axis it varied and the axis the hypothesis depends on, in the same sentence. If
+they are not the same word, the control has not been run yet.
+
+Fifteen faces. **Still open — never write "all fifteen".**
