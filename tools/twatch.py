@@ -1557,6 +1557,43 @@ def cascade_still_red(r, st):
 # than by treating a third state as non-gating. Green must mean "ran and
 # passed". Now made worse by test-uforth, which self-skips on any box without
 # ~/projects/uforth (feature-t-enroll-uforth-in-the-tiers).
+def closure_status(r, authoritative, gone=frozenset()):
+    """WHY an open regression closed: "pass", "skip", "gone", or "mixed".
+
+    `reg_open()` asks one question — is the merged status still red — and both
+    `pass` and `skip` answer no. So an entry closes identically whether the job
+    started PASSING or merely stopped RUNNING, and until now the record could
+    not tell them apart. That is the same information gap as
+    bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-last-good, one level
+    up in the data model: a skip and a pass are both simply "not red".
+
+    It is not academic. The auto-close writes "`<job>` passes at <sha>" into the
+    ticket it retires, and a `done/` ticket is where a finding stops being
+    looked at. A job whose corpus went missing got a permanent written claim
+    that it passed.
+
+    Deliberately does NOT change what closes. Whether a skip SHOULD close an
+    open regression is a live question with real costs on both sides
+    (decide-t-should-a-skip-close-an-open-regression, Track U) and this is the
+    instrument that would let it be answered with a count instead of a
+    principle. Recording the reason loses nothing either way, which is exactly
+    why it is not one of that decision's options.
+
+    "gone" outranks the rest: an entry closed because its job no longer exists
+    did not pass and did not skip, it stopped being a job.
+    """
+    jobs = r["cascade"] if r.get("cascade") else [r.get("job")]
+    live = [j for j in jobs if j and j not in gone]
+    if not live:
+        return "gone"
+    seen = {authoritative.get(j, "red") for j in live}
+    if seen == {"pass"}:
+        return "pass"
+    if seen == {"skip"}:
+        return "skip"
+    return "mixed"          # a cascade closing on a mixture of both
+
+
 PASSLIKE = ("pass", "skip")
 
 
@@ -2540,6 +2577,12 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # one rule, not a second invented one that could disagree with it.
     closed_regs = [r for r in st["open_regressions"]
                    if not reg_open(r, authoritative, gone)]
+    # Stamped here, where `authoritative` and `gone` are both in hand, rather
+    # than re-derived by the consumer -- the stub closer would otherwise have to
+    # reconstruct the merged map and could disagree with the predicate that
+    # actually closed the entry.
+    for r in closed_regs:
+        r["closed_by"] = closure_status(r, authoritative, gone)
     srcmap = {job_key(j): j.get("src", "") for j in report["jobs"]}
     namemap = {job_key(j): j["name"] for j in report["jobs"]}
     # The FAILURE KIND, carried onto the ledger entry. A `timeout` is a DURATION
@@ -3993,13 +4036,40 @@ def close_stub_tickets(clone, host, closed, sha, report):
         # Name the sha the job PASSED at and the tier that judged it: a close
         # with no evidence is indistinguishable from a lost ticket, and
         # progress.sh check requires done/ tickets to log something citable.
+        # WHAT the close is evidence of, in the ticket's own words. This line
+        # used to say "`<job>` passes at <sha>" unconditionally, and a
+        # regression closed because its job stopped RUNNING got a permanent
+        # written claim that it passed -- in `done/`, which is where a finding
+        # stops being read. The status that closed it is now carried on the
+        # entry (closure_status); absent means an entry stamped by an older
+        # watcher, and reads as the old wording rather than guessing.
+        why = r.get("closed_by")
+        if why == "skip":
+            what = ("`%s` is no longer red at %s (tier %s) — but it SKIPPED "
+                    "rather than passed, so this is evidence that the job "
+                    "stopped running here, NOT that the bug is fixed. It was "
+                    "red at %s. Re-check before trusting the close"
+                    % (r.get("job") or slug, sha[:12], report["tier"],
+                       (r.get("bad") or "?")[:12]))
+        elif why == "gone":
+            what = ("`%s` no longer exists as a job at %s (renamed, removed, "
+                    "or a selector shift), so nothing can report it. It was "
+                    "red at %s; the close records disappearance, not a fix"
+                    % (r.get("job") or slug, sha[:12],
+                       (r.get("bad") or "?")[:12]))
+        elif why == "mixed":
+            what = ("the jobs this cascade swept are no longer red at %s "
+                    "(tier %s), but not all of them PASSED — some only "
+                    "skipped. It was red at %s; treat the close as partial"
+                    % (sha[:12], report["tier"], (r.get("bad") or "?")[:12]))
+        else:
+            what = ("`%s` passes at %s (tier %s); it was red at %s"
+                    % (r.get("job") or slug, sha[:12], report["tier"],
+                       (r.get("bad") or "?")[:12]))
         body = (body.rstrip("\n") + "\n- %s — auto-closed by the %s watcher: "
-                "`%s` passes at %s (tier %s); it was red at %s. Reopening is "
-                "by a fresh NEW-RED stub, since a second red is a second "
-                "finding with its own range.\n"
-                % (utcnow()[:10], host,
-                   r.get("job") or slug, sha[:12], report["tier"],
-                   (r.get("bad") or "?")[:12]))
+                "%s. Reopening is by a fresh NEW-RED stub, since a second red "
+                "is a second finding with its own range.\n"
+                % (utcnow()[:10], host, what))
         dst = os.path.join(pdir, "done", slug + ".md")
         with open(dst, "w") as f:
             f.write(body)
