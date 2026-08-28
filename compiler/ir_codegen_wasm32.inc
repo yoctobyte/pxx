@@ -186,6 +186,36 @@ begin
   end;
 end;
 
+{ An operator's SPELLING, for a message. The refusal used to read
+  `binary operator 70`, which is a token ordinal — the same thing
+  WasmTypeKindName was written to stop doing for types, and for the same
+  reason: an ordinal is read precisely when nobody has the enum in front of
+  them. Only the operators this backend can emit are listed; anything else is
+  already a compiler bug and its number is the useful thing to see. }
+function WasmBinopName(op: TTokenKind): AnsiString;
+begin
+  case op of
+    tkPlus:  WasmBinopName := '+';
+    tkMinus: WasmBinopName := '-';
+    tkStar:  WasmBinopName := '*';
+    tkDiv:   WasmBinopName := 'div';
+    tkMod:   WasmBinopName := 'mod';
+    tkAnd:   WasmBinopName := 'and';
+    tkOr:    WasmBinopName := 'or';
+    tkXor:   WasmBinopName := 'xor';
+    tkShl:   WasmBinopName := 'shl';
+    tkShr:   WasmBinopName := 'shr';
+    tkEq:    WasmBinopName := '=';
+    tkNeq:   WasmBinopName := '<>';
+    tkLt:    WasmBinopName := '<';
+    tkGt:    WasmBinopName := '>';
+    tkLe:    WasmBinopName := '<=';
+    tkGe:    WasmBinopName := '>=';
+  else
+    WasmBinopName := 'operator ' + WasmIntStr(Ord(op));
+  end;
+end;
+
 { A symbol for a message. Compiler temporaries have no name, and 'assignment
   to ' followed by nothing is a message that has lost the only thing it was
   carrying — met exactly once, in the refusal that named the variant engine. }
@@ -1104,18 +1134,35 @@ var
   what: AnsiString;
 begin
   op := WasmBinopOp(node);
-  what := 'binary operator ' + WasmIntStr(IRC[node]);
+  what := 'binary operator ' + WasmBinopName(op);
   if not WasmBinopWidth(node, want, sgn) then
   begin
-    { Name the operand TYPES and IR KINDS, not just the operator. "operand type
-      in binary operator 67" says a comparison was refused and nothing about
-      which side or why; with the numbers the report is a diagnosis rather than
-      a pointer to one. }
-    WasmUnsupported(what + ': operand types '
-                    + WasmIntStr(Ord(WasmNodeResultType(IRA[node]))) + '/'
-                    + WasmIntStr(Ord(WasmNodeResultType(IRB[node])))
-                    + ', IR kinds ' + WasmIntStr(IRKind[IRA[node]]) + '/'
-                    + WasmIntStr(IRKind[IRB[node]]));
+    { STRINGS FIRST, and by name. Both string kinds are pointer-shaped, so
+      every operator on them has an integer instruction that would compile and
+      run: `a = b` becomes an i32.eq of two ADDRESSES, which answers "the same
+      buffer" where Pascal asked "the same characters", and `a + b` becomes an
+      i32.add of two pointers. The width oracle refuses them — that is what
+      keeps this correct — but a message about operand ORDINALS sends the
+      reader looking for a type-mapping gap instead of at the two RTL routines
+      that are missing (PXXStrConcat, PXXStrCmp3/PXXStrEq). }
+    if TypeIsFrozenString(WasmNodeResultType(IRA[node]))
+       or TypeIsFrozenString(WasmNodeResultType(IRB[node]))
+       or (WasmNodeResultType(IRA[node]) = tyAnsiString)
+       or (WasmNodeResultType(IRB[node]) = tyAnsiString)
+       or (IntToTypeKind(IRTk[node]) = tyAnsiString) then
+      WasmUnsupported('`' + WasmBinopName(op) + '` on strings — concatenation '
+                      + 'and comparison are RTL calls, not instructions, and '
+                      + 'this target does not make them yet')
+    else
+      { Name the operand TYPES and the IR KINDS. "operand type in binary
+        operator 67" says a comparison was refused and nothing about which side
+        or why; with both named the report is a diagnosis rather than a pointer
+        to one. }
+      WasmUnsupported(what + ': operand types '
+                      + WasmTypeKindName(WasmNodeResultType(IRA[node])) + '/'
+                      + WasmTypeKindName(WasmNodeResultType(IRB[node]))
+                      + ', IR kinds ' + WasmIntStr(IRKind[IRA[node]]) + '/'
+                      + WasmIntStr(IRKind[IRB[node]]));
     Exit;
   end;
 
