@@ -276,7 +276,7 @@ being blocked.
   validated, ran, and matched the native build while the `.wat` named locals it
   never declared.
 
-## Phase 5 — calls through a table — **no shared-file escape after all**
+## Phase 5 — calls through a table — **DONE 2026-08-28** (virtual dispatch emits, does not yet run)
 
 Table section + element section + `call_indirect` with type indices. VMT slots
 and RTTI method entries resolve to **table indices**.
@@ -320,11 +320,37 @@ as an address on any path wasm32 takes.
   every proc whose address is taken (`MethodFixups` ∪ `ProcAddrFix`) with index
   0 reserved null, so a nil procvar traps on call and needs no separate check.
 - **Milestone:** virtual dispatch, interfaces, procedural variables.
-- **`gate.sh quick` runs ONCE at the end of this phase**, not per fix, and it
-  runs as the **falsification of the scoping claim above** — not as a gate on
-  the work. The six targets cannot move without a shared edit; that is a
-  conclusion four phases now rest on, and thirty seconds to test it is a good
-  trade. Ritual per-fix runs are not.
+  **Half met, and the half is the point.** Procedural variables run and are
+  diffed against the native build — `test/wasm/check_calls.sh`, 7 values: a
+  procvar in a global, one chosen at run time, one passed as an argument and
+  called by the callee, two functions through one parameter, and a nil procvar
+  through `Assigned`. **Virtual dispatch is written, emits, and validates, and
+  cannot be RUN**: every path to a virtual call starts with a class
+  instantiation, which is a heap allocation. `virtual_slice.pas` — three
+  levels, an override at each, dispatch through the base type, a non-virtual
+  method calling two virtual ones on `Self`, `inherited`, and a virtual call in
+  a loop over an array of different classes — is compiled and validated by the
+  check, which says in as many words that it does not prove dispatch. A check
+  that goes green while proving less than it looks like is what this suite
+  exists to avoid.
+- **So the HEAP gates this phase's milestone**, the way the data segment gated
+  the last one — the same finding twice, and worth stating as a pattern rather
+  than as two incidents: **the ordering in this plan was derived from what wasm
+  makes DIFFERENT, and the real order is set by what every program NEEDS.**
+  Nothing runs without allocation.
+- **`gate.sh quick` ran ONCE at the end of this phase** as the **falsification
+  of the scoping claim above** — not as a gate on the work — and the scoping
+  claim **held**: GREEN, the six targets did not move, because nothing shared
+  was edited.
+  **The run found something else, and that is the better argument for it.** The
+  FPC seed canary was RED, and had been for several commits: pxx accepts a call
+  to a routine defined later in the same include and FPC does not, so
+  `ir_codegen_wasm32.inc` broke *bootstrapping* the day direct calls landed
+  while self-hosting perfectly. Nothing in the per-fix loop can see it —
+  `make compiler/pascal26` compiles with pxx. Fixed with forwards (`cd878f9ca`),
+  verified by building `compiler.pas` with `fpc` directly. **Run this gate once
+  per phase**: a narrow loop is blind by construction, and what it is blind to
+  is not what you were looking for.
 
 ### What the blocker histogram says about the ORDER of this phase
 
@@ -439,3 +465,12 @@ smaller than the C frontend was.
   survives one grep and a non-existence claim does not** — ask what
   construction your search was structurally blind to. Phases renumbered: the
   data segment took the Phase 4 slot it should always have had.
+- 2026-08-28 — **Phase 5 (the function table) done.** No shared file touched, as
+  scoped. `@Proc`, procvars, VMT slots and RTTI method entries are all table
+  indices; index 0 is never handed out, so a nil procvar traps on call for
+  free. Two bugs found by building it — a hand-computed section length that is
+  right for every module small enough to check by eye, and a write-time
+  ordering that is the reverse of the obvious one, because resolving a VMT
+  relocation RESERVES a function slot. `gate.sh quick` GREEN on the scoping
+  claim and RED on something else entirely: the FPC seed had been broken for
+  days.
