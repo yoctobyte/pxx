@@ -1376,6 +1376,128 @@ one. It was retired in one place and left standing in two others. **Correcting a
 wrong reason where you found it does not correct it where it was copied to** —
 grep the phrase, not the site.
 
+### Phase 9b — set membership `in` — **DONE 2026-08-28**
+
+62% of what was left. `WasmEmitSetIn` lowers `x in [items]` as a single
+expression: the test value into a scratch local, an i32 accumulator, then per
+item either an equality or a `ge_s`/`le_s` pair `and`ed together, `or`ed into
+the accumulator. Width follows the test value — i64 compares for a 64-bit one.
+
+**Branchless, and not by cleverness.** Every register backend jumps around each
+range (i386 `jl`/`jg` past a `mov edx,1`, arm32 `blt`/`bgt`, aarch64 `b.lt`/`b.gt`,
+x86-64 a shared true-label jump table capped at 128 entries). They do that
+because they accumulate in a *register*, so skipping the store needs a branch.
+wasm has an operand stack, so the same accumulation is an expression and the
+control flow disappears. `check_set.sh` asserts the absence — no `if`, `loop` or
+`br` in the lowering — because "we happen to emit no branches today" and "this
+construct does not need branches" are different claims and only the second one
+survives an edit.
+
+Falsified with four breaks: a range read as a scalar, an exclusive upper bound,
+the width choice forced to i32, and an off-by-one on the accumulator's initial
+value.
+
+**The four-signature check nearly passed for the wrong reason.** Breaks 1 and 2
+printed identical `-` lines. That looked like the failure the rule warns about —
+one assertion wearing two names — but the `-` side of a diff is the *native*
+build, which is by construction the same for every break. The signatures live on
+the `+` side, and there they differ twice over: on the interior of `[2..4]`
+(break 1 leaves only 2, break 2 leaves 2 and 3), and again in the opposite
+direction on the degenerate range `[3..3]`, which break 1 leaves intact and
+break 2 empties. Four breaks, four signatures — but the check that established
+that is "read the side of the diff that varies", not "read the diff".
+
+### Two silent wrong answers found by asking how wide the compare should be
+
+Filed on master, neither fixed here — neither is this lane's file:
+
+- **`bug-p-set-membership-item-constant-truncated-to-32-bits`** [P, p25].
+  `ParseSetMembershipAST` declares `loVal, hiVal: Integer` between a
+  `ParseSetConst: Int64` and an `ASTIVal: array of Int64`. One `var` line, 64-bit
+  ends, 32-bit middle. `1 in [4294967297]` is TRUE **on every target**, wasm32
+  and x86-64 included.
+- **`bug-a-set-membership-truncates-the-test-value-on-32-bit-backends`** [A, p25].
+  i386 `mov ecx, eax` and arm32 `mov r1, r0` keep only the low half.
+  `4294967297 in [1,2,3]` is TRUE there, FALSE on x86-64, aarch64 and wasm32.
+
+Five targets, every cell run — x86-64 and i386 natively, arm32 and aarch64 under
+qemu, wasm32 under node. An earlier note in this session had arm32 and aarch64
+"by inspection"; `qemu-arm` and `qemu-aarch64` were on PATH the whole time, and
+checking cost one command. **Inspection would have been half wrong**: arm32
+answers TRUE on `2^32 in [2^32..2^32+4]` — the correct answer — because the two
+defects cancel, while the two *correct* backends answer FALSE.
+
+**And the differential oracle is blind to the first one by construction.** Both
+sides of a wasm-vs-native diff are wrong identically, because the defect is
+upstream of every backend. This slice's 64-bit row passes and proves nothing
+about it.
+
+That is not a fact about `in`. It is **face thirteen**, and it now lives in
+`devdocs/dev/differential-probes.md` — *"when two arms share an upstream, their
+AGREEMENT carries no information about that upstream"* — with these two bugs as
+the worked example, one on each side of the line. It bears directly on this
+lane, because **every check in `test/wasm/` is a pxx-vs-pxx diff.** The rule the
+doc gives is the one to apply here: *name what the two arms share, and treat
+everything above that line as untested by it.* For this suite the shared part is
+the entire Pascal frontend, the AST and the IR; what the diff actually tests is
+`ir_codegen_wasm32.inc` against the other backends. That is exactly what it was
+built to test — but it is not "wasm32 is correct", and the slices should not be
+read as saying so.
+
+Kin to face twelve and distinct from it: twelve is blind in one *direction* (an
+arena slope sees refcounts too high, never too low), thirteen is blind over a
+*region* (everything the two arms hold in common).
+**Applying it to this suite, which is the point of a check.** `test/wasm/` was
+audited against face thirteen the same day. Four checks — `check_data`,
+`check_phase2`, `check_phase3`, `check_phase4` — have exactly **one** assertion
+each and it is a native diff; every other check pairs its diff with at least one
+absolute claim (`check_managed` five, `check_pal` and `check_wasi` four, and so
+on). Read by grep first and then by eye, because a paragraph about misleading
+instruments should not rest on a regex.
+
+Those four are diff-only for a defensible reason — they cover Phases 1-4, where
+the subject really is the backend and a shared-frontend defect would be a Track P
+bug rather than a wasm one. So this is a **scope statement, not a gap**: their
+green means *wasm32 agrees with the other backends*, which is what they were
+built to say. It does not mean *wasm32 is correct*, and nothing in their output
+distinguishes the two. Anyone tempted to cite them for the second claim should
+read this paragraph instead.
+
+The checks that carry absolute assertions are the ones that can speak above the
+IR, and they were added for unrelated reasons — the retain control in
+`check_dyn`, the alias control in `check_managed`, the branchless assertion in
+`check_set`, the capability claims in `check_wasi`. That they now double as
+face-thirteen coverage is luck, not design, and worth noticing before the luck
+runs out.
+
+### The coverage number for this phase is currently unobtainable, and that is the finding
+
+Phase 9a ended with a re-measurement. Phase 9b cannot have one yet:
+`pascal26 --target=wasm32 … compiler/compiler.pas` was observed at **52.1 GB RSS
+and still climbing** after 26 minutes, on a 60 GB box with 1 GB left, and it
+**SIGSEGVs at 7.6 GB** under an 8 GB cap. Filed as
+`bug-wasm-compiling-compiler-pas-for-wasm32-needs-tens-of-gb`.
+
+**It is not the `in` work.** The pre-`in` backend on the same input under the
+same cap: 7600540 KB / 144 s, against 7600416 KB / 128 s for the current one.
+Identical. Three further controls — 1600 `in` expressions flat at 300 MB, the
+same program with `in` rewritten as comparisons *higher* at 1378 MB, and
+200/800/3200 bodies at 302/304/326 MB — rule out set density and body count too.
+The suspect was mine and the measurement cleared it, which is the only reason
+the ticket does not say "probably the new lowering".
+
+Two consequences for how this phase is run:
+
+- **Cap this command.** At 58 of 60 GB the box had no headroom and background
+  jobs were being killed — including this lane's own, which read as arbitrary
+  harness behaviour for several turns before anyone measured the memory. The
+  kills were the *symptom*; `free -g` was the diagnosis, and it was one command
+  away the whole time.
+- **The phase's own instrument is gated on the finding.** Coverage for Phase 9
+  can only be measured when the box happens to have ~55 GB free, so the number
+  after `in` is *not recorded here* rather than estimated. An estimate would
+  have looked like the 9a row and carried none of its evidence.
+
 - **Milestone:** the wasm-hosted compiler's **emitted output bytes are identical
   to the native compiler's** for the same input.
 - **State this claim precisely.** It is output parity across two hosts of the
