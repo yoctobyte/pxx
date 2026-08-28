@@ -222,3 +222,42 @@ consumer for `Error(re` and check whether any caller wraps it in a handler.
 
 Verified against FPC 3.2.2: `test/lib_sysutils_delphi_exceptions.pas` runs
 identically under both for its first 18 rows and diverges at exactly this point.
+
+## `VarType` of an integer LITERAL is `varInteger`, where FPC says `varShortInt`
+
+`lib/rtl/variants.pas` now speaks FPC's public `varXxx` numbering (the internal
+`VT_*` tags stay private — the same facade seam as `decide-rtti-kind-numbering`).
+Measured against fpc 3.2.2, **11 of the 12 rows agree exactly**. One does not:
+
+```pascal
+var v: Variant; i: Integer;
+v := 1;         { pxx: varInteger (3)   FPC: varShortInt (16) }
+i := 1; v := i; { pxx: varInteger (3)   FPC: varInteger  (3)  — agree }
+```
+
+**FPC narrows an integer LITERAL to the smallest type that holds it**, so the
+variant's reported type depends on the literal's magnitude: `v := 1` is
+`varShortInt`, and a larger literal would report something else again. pxx has
+one integer tag and does not narrow, so it reports `varInteger` throughout.
+
+**Deliberate, and the cheap side of the trade.** Matching FPC here means
+narrowing integer literals at the assignment — a language change with
+consequences far beyond `VarType`, to buy parity on a value that changes with
+the *literal* rather than with the program's meaning. The line that real code
+writes, `v := someInteger`, agrees with FPC exactly; it is the bare-literal form
+that differs, and it differs in the direction of being more predictable.
+
+**The symptom to look for:** *code that switches on `VarType` and has a separate
+`varShortInt` / `varByte` / `varSmallint` arm will take its `varInteger` arm
+instead under pxx.* That is only a bug if the arms disagree about more than
+width. FPC-portable code that wants "is this an integer at all" should use
+`VarIsNumeric`, or test against the set, not a single sized code.
+
+**Not a divergence, despite looking like one:** a `Char` and a one-character
+string both report `varString` (256). FPC has no char variant at all — `v := c`
+with `c: Char` reports 256 there too — so this is parity. pxx reaches it by
+folding its private `VT_CHAR` tag onto `varString` at the seam, which is also
+what stopped `VarType(v) = varString` from being false for `'x'`.
+
+Verified against FPC 3.2.2: `test/lib_variants_vartype_codes.pas` asserts every
+row above, and marks the divergent one in place next to the row that agrees.
