@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-27T15:25:08Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "652c3d891e861df9437edf4a0acb306931b82075",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-27T15:45:35Z",
    "fixed": [
     "test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy",
@@ -457,15 +448,24 @@
    "tier": "opt",
    "timed_out": false,
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-28T06:24:53Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "04fea146119af040ed73a195f82d9345d0ecf57a",
+   "tier": "full",
+   "timed_out": false,
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
   "lib-test#src:test/lib_synapse.pas": "pascal26:270: error: expected implementation section | in: stable_linux_amd64/default/../../lib/rtl/dns_cache.pas | near: n  end  end  >>>",
   "test-emit-obj#src:test/cxtensa_obj.c@1": "in: $TMP | near:  Integer  __pxxrawsyscall  SYS_getuid >>> | pascal26:477: error: undefined variable (SYS_getgid) | in: $TMP | near:  Integer  __pxxrawsyscall  SYS_getgid >>> | pascal26: too many errors, stopping",
-  "test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy": "+++ -\t2026-08-28 01:41:09.668576583 +0200 | @@ -1,4 +1,2 @@ | E:A A | F:B B | -C G:C | -H:G:C",
+  "test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy": "+++ -\t2026-08-28 08:19:07.095336387 +0200 | @@ -1,4 +1,2 @@ | E:A A | F:B B | -C G:C | -H:G:C",
   "test-nilpy#src:test/test_nilpy_startswith_tuple.npy": "plain      True True | window     True True | winmiss    False | -param      True False | -platform   False True | Segmentation fault (core dumped)",
-  "tools-devtest#00": "tools-devtest: tools/twatch_stub_track_devtest.py | tools-devtest: tools/twatch_timeout_staleness_devtest.py | tools-devtest: tools/twatch_timeout_verdict_devtest.py | tools-devtest: tools/twatch_verify_request_devtest.py | tools-devtest: tools/whokilled_devtest.py | tools-devtest: 83 green, 1 RED -- tools/testmgr_hardcoded_tmp_devtest.py"
+  "tools-devtest#00": "tools-devtest: tools/twatch_stub_track_devtest.py | tools-devtest: tools/twatch_timeout_staleness_devtest.py | tools-devtest: tools/twatch_timeout_verdict_devtest.py | tools-devtest: tools/twatch_verify_request_devtest.py | tools-devtest: tools/whokilled_devtest.py | tools-devtest: 85 green, 1 RED -- tools/testmgr_hardcoded_tmp_devtest.py"
  },
  "job_tier": {
   "demos#00": "full",
@@ -6964,14 +6964,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-27T23:57:52Z",
+  "date": "2026-08-28T06:24:53Z",
   "deadline": 7200.0,
-  "sha": "c52fc389fd976e2333282adc22a2ca49c7ee000f",
-  "tier": "opt",
+  "sha": "04fea146119af040ed73a195f82d9345d0ecf57a",
+  "tier": "full",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "GREEN",
-  "wall": 452.6
+  "verdict": "RED",
+  "wall": 1247.6
  },
  "last_bench": {
   "conf_rows": 550,
@@ -6983,18 +6983,18 @@
   "sha": "c52fc389fd976e2333282adc22a2ca49c7ee000f"
  },
  "last_breadth_try": {
-  "date": "2026-08-25T19:49:35Z",
-  "sha": "44193e547f6d4ca77453770378b710d8af82f5df"
+  "date": "2026-08-28T06:02:38Z",
+  "sha": "04fea146119af040ed73a195f82d9345d0ecf57a"
  },
  "last_full": {
-  "date": "2026-08-27T23:45:45Z",
+  "date": "2026-08-28T06:24:53Z",
   "deadline": 7200.0,
-  "sha": "c52fc389fd976e2333282adc22a2ca49c7ee000f",
+  "sha": "04fea146119af040ed73a195f82d9345d0ecf57a",
   "tier": "full",
   "timed_out": false,
   "unreached": 0,
   "verdict": "RED",
-  "wall": 1155.7
+  "wall": 1247.6
  },
  "last_opt": {
   "date": "2026-08-27T23:57:56Z",
@@ -7114,7 +7114,7 @@
   ]
  },
  "pin_shadow": {
-  "at": "2026-08-27T23:45:45Z",
+  "at": "2026-08-28T06:24:53Z",
   "inherited": 4,
   "pin": "v389",
   "qualifies": false,
@@ -7126,7 +7126,7 @@
    "tools-devtest#00"
   ],
   "reds": 5,
-  "sha": "c52fc389fd976e2333282adc22a2ca49c7ee000f",
+  "sha": "04fea146119af040ed73a195f82d9345d0ecf57a",
   "streak": 0,
   "unexpected": [
    "lib-test#src:test/lib_synapse.pas"
