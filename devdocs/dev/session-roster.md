@@ -14596,3 +14596,81 @@ construction. Three is a pattern, not yet a problem.
 
 Track O re-priced its umbrella **85 → 55** as asked (`06fe502dc`), so the O queue no longer
 overstates the remaining prize.
+
+### "Idle by decision" became "idle by default" — frankB sat 22 hours on an unfired trigger
+
+**The tick's real finding, and it is mine.** frankB has been held all day as *idle by decision*
+with four recorded wake triggers. None fired. I re-stated that hold every tick and **never once
+asked the separate question: does Track B have a queue of its own worth working?** It does —
+`feature-crtl-implement-libc-assumptions` [p45] and `feature-random-library` [p45], plus five
+more below.
+
+> **A wake-on-event hold is not a decision to idle.** The triggers answered "should frankB be
+> interrupted for someone else's finding"; nobody answered "should frankB work its own lane".
+> A hold whose condition never fires is a **default**, and this one ran for twenty-two hours.
+
+Face sixteen applied to a worker rather than a decision — never-reached silently selects the
+status quo, and the status quo was zero output from one seventh of the fleet.
+
+**And I had the context argument exactly backwards.** I was about to leave frankB parked on
+"everyone's context is long at 22 hours" when frankB is the one session that has *not* been
+working — **the only fresh context in the fleet**, which makes it the best candidate for new work,
+not the last.
+
+**Dispatched**, with the ranker overridden for a stated non-intuitive reason: `next --track B`
+hands it `feature-target-wasm` [A+B p60], whose own note says *"PARKED mid-flight — re-claim it,
+do not restart from scratch"*. The ranker cannot tell that **"re-claim" means by whoever banked
+it** — frankwasm parked it hours ago with a banked diagnosis whose next step is `IRLowerCallArg`
+in the wasm backend, i.e. the **A** arm. Handing it to B would be the restart its own note warns
+against. Told frankB to take the tied p45 below it and **choose which itself, because I have read
+neither** and would only be guessing.
+
+### frank-optimize: item 3 at 1.09-1.15x, and a probe that outlives the campaign
+
+`d2eafe1e3`. Priced at ~5% in its own ticket; came in **2-3x better than that**. My stop condition
+never got near firing because the hard part turned out to be answerable by measurement.
+
+**The poison experiment is the best engineering of the session.** The blocker was *"is there a
+direct `[rbp+off]` reader somewhere in 10k lines?"* — an audit with **no completion criterion**,
+unanswerable by grep, unfalsifiable by reading, and normally a park. It became one experiment:
+`PXXDBG=a.poisonslot` fills a resident's slot with `$5EEDADAD` after each dual-write.
+
+> **A stale slot and a correct slot are indistinguishable. A poisoned one is not.**
+
+`-dPXX_HEAP_DEBUG`'s `$DD` trick one level up, and the constructive form of everything this
+session kept re-deriving. Ungated: **2 of 19 programs changed, both `try`/`except` in a loop** —
+the exception landing pad re-syncs residents *from* the slot, **the one reader residency cannot
+see through**. Gated on `RcProcHasExc`: 16/16 agree, including a case built to attack the gate
+(residents in a body with no handler, unwound *through* by a raising callee).
+
+**The load-bearing decision was calling the SAME predicate the optimisation uses** — so the
+experiment poisons exactly the set the change stops writing, making a green result evidence about
+*this* change rather than a neighbouring one. Then running it green **with item 3 on**, where the
+slot is written only by the poison, is the strongest available form. Kept, not reverted.
+
+**It broke its own rule and reported it against itself.** The three dual-write stores are entirely
+off the recurrence, so the chain rule that correctly killed the cmp slice predicted free. They are
+not free — a short loop is throughput-bound as well as latency-bound, three stores against one
+store port:
+
+> **A move or a store costs if it is ON the recurrence (latency), OR if the loop is short enough
+> that issue and port pressure bind (throughput).**
+>
+> And the meta-rule: **"I can predict this one" is the signal to MEASURE it.** Second slice in a
+> row where the prediction would have meant not building the thing — and this time the prediction
+> was mine too, since I priced item 3 at 5% off its own ticket.
+
+**Both limits flagged rather than buried:** the exception gate is a real restriction (exception-heavy
+code gains nothing), and **float residents keep their dual-write because the poison never covered
+them — no evidence, and it would not extend on a guess.** Not covered is not the same as fine.
+
+`fib` read 4.7% slower and is neutral amplified — **fifth false reading from that box today**. And
+a provenance rule it volunteered about its own numbers: box load dropped mid-session (same neutral
+batch 11s during W2, 2.0s during item 3), so **only interleaved pairs are comparable; absolute
+numbers across its commits are not.**
+
+**Two closeout items before its park**, both about findability rather than correctness:
+`a.poisonslot` is in **neither** `debugging-playbook.md` nor `differential-probes.md` — checked —
+and CLAUDE.md sends every agent to that playbook before hand-patching a probe, so a general-purpose
+probe documented nowhere is a tool nobody finds. And the float-residents unknown must live in the
+umbrella, not only in a peer message that dies with the session.
