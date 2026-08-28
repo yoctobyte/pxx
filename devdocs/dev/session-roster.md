@@ -13169,3 +13169,55 @@ is what the queue said, but the name alone would not have told me. Track T's ran
 remains `bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-last-good` [p60], unclaimed, in
 `backlog/`. tstate **UP** through `2c5549642225` — frankA's arity probe — so T is currently
 sweeping live work.
+
+### Arity check landed — and it converted a segfault into a BLOCKING DIVERGENCE
+
+`c70622013`, `gate.sh quick` green, self-host verified. Shape confirmed: **one
+`CheckMethodCallArity` at `pasparser_call.inc:716`, seven one-line delegations.** Regression
+sweep re-run with the check live — compile counts unchanged (compiler 1, rtl 110, pcl 22,
+examples 38), zero new diagnostics.
+
+**My "seven missing elses" reading was partly wrong and frankA corrected it.** It had already
+built one helper, not seven inlined copies, so the shape I asked for was what shipped. The part
+that actually mattered was different from what I said: **the seven sites had *divergent*
+no-paren behaviour already** — one filled defaults, one tried, five did nothing — *and that
+inconsistency is how a single defect hid in seven places at once.* Worth keeping over my
+version, which was a guess about the code from a description of it.
+
+frankA also took the guard: a rejection test alone would pass just as well **if the check were
+far too strict**, so the positive test's expectations are diffed against the **FPC oracle**,
+not against us. Both directions pinned permanently in the suite.
+
+**The cost, which frankA surfaced rather than buried.** Defect B changed failure mode, not
+status: rows 3 and 6 went from SEGFAULT to `error: wrong number of parameters in call to
+TSvc.IPick`. Exactly the mechanism the arity ticket predicted, from the predicted direction —
+`TSel(s.IPick)` crashed *because* `s.IPick` was silently read as a zero-arg call. **The check
+removes the silence; it does not supply the right reading.**
+
+So **we now reject a form FPC accepts, and real code uses it** — row 6 *is* the rtl-generics
+corpus shape, wall 5. Nothing regressed (segfault and compile error block that corpus equally,
+and the diagnostic is strictly more useful), but this is blocking, not cosmetic.
+
+> **A REFUSAL LOOKS DELIBERATE IN A WAY A CRASH DOES NOT.** The old state was obviously broken;
+> the new one reads as a design decision. That is precisely why it must not be left standing —
+> the improvement in honesty is also an increase in the chance of being mistaken for intent.
+
+**Ruled: this is NOT a compat item.** frankA raised the compat framing and argued past it, and
+it is right. We reject it because of a known parser defect with an open ticket, not because of
+a dialect choice — filing it under compat would park a half-finished fix behind a taxonomy,
+which is the exact leak CLAUDE.md's escape rule exists to stop.
+
+**And the sweep did not catch this** — nothing in `lib/rtl`, `lib/pcl` or `examples` uses an
+inline method-pointer cast. It surfaced from re-measuring the ticket's own table.
+
+> **A CLEAN SWEEP MEANS "NOTHING I SWEPT USES THIS", WHICH IS WEAKER THAN IT READS.**
+
+Second time today frankA caught its own clean number — after labelling the `compiler/**` zero
+vacuous. Same shape one level out: there the population had no methods, here the population had
+no instances of the construct.
+
+### Dispatch: defect B, and the corpus lock stays held
+
+Not a switch. **Wall 5 is defect B** — the corpus ticket cannot advance past rung 6 without it,
+so they are one thread from two ends and finishing the blocker *is* the corpus work. The lock
+in `working/` stays where it is.
