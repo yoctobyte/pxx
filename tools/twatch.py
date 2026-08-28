@@ -1296,6 +1296,34 @@ def covered_tiers(tier):
     return {tier}                     # opt (and any future disjoint tier)
 
 
+def last_run_at_tier(st, tier):
+    """Newest COMPLETE run at EXACTLY `tier`, or {}.
+
+    `last_full` cannot answer this. It is the last REPLACING run (full=True),
+    which excludes the disjoint tiers entirely -- `opt` and `slow` run
+    full=False and so never touch it -- and under a configured `mid_tier` it
+    names a tier that is not `full` at all. So "this tree was swept at -O3" and
+    "opt has never visited this sha" were indistinguishable to every consumer,
+    which is the same absent-signal-read-as-a-negative-result defect as a
+    skipped job scoring as a pass, one level up in tier composition.
+
+    EXACT match, never `covered_tiers`: coverage is not execution, and a
+    `native` run cannot vouch for a `full` tier's jobs.
+
+    Falls back to scanning `history` for state written before `last_by_tier`
+    existed, so the answer self-heals instead of reporting "never" for a host
+    with months of runs. History is capped, so the fallback can OVERSTATE the
+    age of the last run; it can never invent coverage that did not happen.
+    """
+    hit = (st.get("last_by_tier") or {}).get(tier)
+    if hit:
+        return hit
+    for h in reversed(st.get("history") or []):
+        if (h.get("tier") or "") == tier:
+            return h
+    return {}
+
+
 def job_bounding_tier(st, name, report_tier):
     """The tier whose last run bounds this job's blame range.
 
@@ -1755,6 +1783,34 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
                       "tree. A `%s` verdict covers x86-64 only — do not read it "
                       "as matrix coverage."
                       % (fmt_age(age), fmt_age(age), report["tier"]), ""]
+
+    # -O3 coverage: the breadth note's question, one tier over. `opt` is
+    # DISJOINT from the quick<native<limited<full chain and runs only as idle
+    # watcher work, so a GREEN verdict here is silent about every optimisation
+    # level above the default -- and silence read as absence is how "no -O3
+    # failures" and "nobody swept -O3" came to produce identical evidence.
+    # Measured 2026-08-28 across the archive: 690 of 2296 shas with a gate-tier
+    # verdict had ever been swept by `opt` (30%), with nothing in any report
+    # saying which 30%.
+    if st is not None and report["tier"] != "opt":
+        lo = last_run_at_tier(st, "opt")
+        if not lo.get("sha"):
+            lines += ["> **-O3: this host has never completed an `opt` tier.** "
+                      "Nothing here compiled above the default `-O`.", ""]
+        elif lo.get("sha") != sha:
+            age = secs_since(lo.get("date") or "")
+            lines += ["> **-O3 IS UNTESTED ON THIS TREE.** The newest `opt` "
+                      "sweep is %s old and ran at `%s` (%s). `opt` is disjoint "
+                      "from `%s`, so no optimisation level above the default "
+                      "has seen this sha."
+                      % (fmt_age(age) if age is not None else "of unknown age",
+                         (lo.get("sha") or "?")[:12], lo.get("verdict") or "?",
+                         report["tier"]), ""]
+        else:
+            # The citable positive. An -O3 -> -O2 promotion needs to point at a
+            # verdict and say "this sha's -O3 was swept"; this line is that.
+            lines += ["> `-O3`: swept on THIS sha by the `opt` tier (%s)."
+                      % (lo.get("verdict") or "?"), ""]
 
     # stable key -> source file(s), so a reader sees WHICH test without
     # mapping job numbers back to Makefile lines (numbers shift with edits)
@@ -2886,6 +2942,18 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                   "timed_out": bool(report.get("timed_out")),
                   "deadline": report.get("deadline"),
                   "unreached": report.get("unreached")}
+    # Newest COMPLETE run at each tier, so a consumer can ask "did tier X see
+    # this tree?" without a cross-file join into runs-<host>.ndjson. Written
+    # for EVERY tier including the disjoint ones, which is the whole point:
+    # `last_full` is the last REPLACING run and the disjoint tiers run
+    # full=False, so before this key nothing in the state could say whether a
+    # sha had been swept above the default -O.
+    #
+    # Incomplete (torn-down) runs are excluded on the same ground the report
+    # banner states: what a run did not reach is UNKNOWN, not covered.
+    if not incomplete:
+        st["last_by_tier"] = dict(st.get("last_by_tier", {}),
+                                  **{report["tier"]: dict(st["last"])})
     if full and not incomplete:
         # Evict by COVERAGE, not wholesale.
         #
