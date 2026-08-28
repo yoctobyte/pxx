@@ -1485,6 +1485,72 @@ IR, and they were added for unrelated reasons — the retain control in
 face-thirteen coverage is luck, not design, and worth noticing before the luck
 runs out.
 
+### Phase 9c — the O(n^2) that made the phase unmeasurable — **DONE 2026-08-28**
+
+`WasmText` appended the .wat text with `WFText := WFText + …` once per emitted
+instruction. Each append allocates a fresh AnsiString of the whole accumulated
+length and copies it: sum(i) for n instructions. `WFText` resets per function,
+so the peak was set by the **largest single body** — which is exactly why it
+survived eight phases. Every slice in `test/wasm` has small bodies.
+
+| 300 if/else in ONE procedure | peak | wall |
+| --- | --- | --- |
+| before | 7179 MB | 107.6 s |
+| after | **31 MB** | **0.51 s** |
+| x86-64, same input | 29 MB | 0.40 s |
+
+Now the grow-by-doubling pool `WasmDataSeg` already used in the same file, with
+the AnsiString materialised once per body in `WasmBodyEnd`. All 16 `*_slice.pas`
+compiled to .wat by the pre-fix binary (`2e68d018ccac`) and the fixed one
+(`966177c0b3f2`) are **byte-identical** — compared against the OLD compiler, not
+against the same build, because for a pure accumulation refactor output
+preservation *is* the requirement.
+
+**Three synthetics measured reassuringly flat before one caught it, and they were
+flat because they varied the wrong quantity.** 3200 procedures: 326 MB. 1600 `in`
+expressions: 300 MB. A library-heavy program: 315 MB. Body COUNT was never the
+variable; body SIZE was, and the first three tests all held it near zero. A
+control that reports "no effect" is only worth what its axis is worth.
+
+**And native-flat-on-identical-input is what localised it**, before a line of code
+was read: 30 MB on x86-64 and i386 where wasm32 took 827/3213/7180. The two
+mechanisms guessed in the ticket — the encoder holding all bodies, an O(n^2) over
+patch sites — were both wrong. Naming neither as the cause is why nothing had to
+be retracted.
+
+### Re-measured after `in` and the fix — the row Phase 9b could not produce
+
+`compiler.pas` for wasm32, probe build `c5f9a6672751`, **peak 595 MB, 26.5 s**
+(it was 52 GB and did not finish):
+
+| | after 9a | after 9b+9c |
+| --- | --- | --- |
+| bodies lowered | 3222 of 3650 (88%) | **3494 of 3657 (95.5%)** |
+| bodies refused | 428 | **163** |
+| refusal lines | 431 | **166** |
+
+| lines | refusal | was |
+| --- | --- | --- |
+| 75 | `IR_DEFAULT_MEM` (statement IR op 52) | 74 |
+| 27 | open-array parameter | 30 |
+| 26 | builtin unrecognised (15× -50, 6× -52, 3× -56, …) | 15 |
+| 8 | `LoadFile` (-100) | 5 |
+| 8 | `Length` of Pointer | 10 |
+| 5 | record via `RetViaHiddenDest` | 5 |
+| 5 | record in a `PXXMemMove` write argument | — |
+| — | **set membership, `in`** | **267 → gone** |
+
+**The promotion effect did not happen this time, and that is worth recording
+because last time it dominated.** Removing dynamic arrays sent `in` from 68 to
+267. Removing `in` moved `IR_DEFAULT_MEM` from 74 to 75. The first-refusal
+caveat says a leader MASKS what is behind it — it does not say how much, and
+here the answer was almost nothing, because the bodies blocked on `in` mostly
+had nothing else wrong with them. **The caveat names a possible effect, not a
+law**, and the honest form of it is that a first-refusal histogram's tail is
+*unknown*, not *understated*.
+
+### What the unobtainable-number note said, kept because it was right
+
 ### The coverage number for this phase is currently unobtainable, and that is the finding
 
 Phase 9a ended with a re-measurement. Phase 9b cannot have one yet:
