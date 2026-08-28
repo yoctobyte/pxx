@@ -150,4 +150,4 @@ Second ledger field in two days (`never_passed` was the first). Additive,
 absent-means-unknown. No lane reads these yet, but they are accumulating.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit 0fc679056.
