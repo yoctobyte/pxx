@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-27T22:18:53Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "8070d5e9c7b3ad02388b82216e85850a7dc73af5",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-27T22:25:40Z",
    "fixed": [],
    "new_red": [],
@@ -451,6 +442,15 @@
    "tier": "full",
    "timed_out": false,
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-28T20:51:03Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "eb1b200ee92fdaeef2c60d1b90237a75beec739d",
+   "tier": "slow",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
@@ -3652,6 +3652,7 @@
   "test-threads#src:test/threadsafe_define.pas@2": "eb1b200ee92fdaeef2c60d1b90237a75beec739d",
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "eb1b200ee92fdaeef2c60d1b90237a75beec739d",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "eb1b200ee92fdaeef2c60d1b90237a75beec739d",
+  "test-uforth#src:compiler/.pascal26.fixedpoint": "eb1b200ee92fdaeef2c60d1b90237a75beec739d",
   "test-uforth#src:compiler/.pascal26.fixedpoint@1": "eb1b200ee92fdaeef2c60d1b90237a75beec739d",
   "test-uforth#src:compiler/.pascal26.fixedpoint@10": "eb1b200ee92fdaeef2c60d1b90237a75beec739d",
   "test-uforth#src:compiler/.pascal26.fixedpoint@11": "eb1b200ee92fdaeef2c60d1b90237a75beec739d",
@@ -10196,14 +10197,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-28T20:46:42Z",
+  "date": "2026-08-28T20:51:03Z",
   "deadline": 7200.0,
   "sha": "eb1b200ee92fdaeef2c60d1b90237a75beec739d",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "RED",
-  "wall": 1186.4
+  "verdict": "GREEN",
+  "wall": 252.6
  },
  "last_bench": {
   "conf_rows": 550,
@@ -10238,6 +10239,16 @@
    "unreached": 0,
    "verdict": "GREEN",
    "wall": 305.5
+  },
+  "slow": {
+   "date": "2026-08-28T20:51:03Z",
+   "deadline": 7200.0,
+   "sha": "eb1b200ee92fdaeef2c60d1b90237a75beec739d",
+   "tier": "slow",
+   "timed_out": false,
+   "unreached": 0,
+   "verdict": "GREEN",
+   "wall": 252.6
   }
  },
  "last_full": {
