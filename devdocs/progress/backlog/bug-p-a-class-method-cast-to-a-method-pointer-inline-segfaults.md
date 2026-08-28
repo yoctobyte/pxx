@@ -275,3 +275,48 @@ The regression sweep that cleared the arity change (lib/rtl, lib/pcl, examples �
 unchanged compile counts, zero new diagnostics) did **not** cover this shape,
 because nothing swept uses an inline method-pointer cast. It was found by
 re-measuring this ticket's own table, not by the sweep.
+
+## Defect B — located, and the shape the fix should take
+
+**Where.** A cast through a user-declared procedural type goes through the alias
+cast arm in `pasparser_expr.inc` (~6436), which is `Next; Expect(tkLParen);
+ParseExpr; Expect(tkRParen);`. That site's own docstring already establishes it
+is the single cast path a procedural type can reach ("ONE site, and that is the
+whole answer to the question this ticket was parked on"), and that a procedural
+type is always user-DECLARED so the builtin/scalar/PChar/enum cast flavours can
+never produce a callable value.
+
+*Verified:* the error surfaces on the cast's own source line, so the operand is
+being parsed as a call. *Inferred from that docstring rather than instrumented:*
+that this specific arm is the one `TSel(...)` takes. Cheap to confirm with a
+probe before editing, and worth confirming — a plausible-but-unverified location
+is how a wrong root cause got recorded in this repo before.
+
+**Why it reads as a call.** `ParseExpr` has no notion of the cast's target type,
+so `s.IPick` is resolved by the ordinary expression path. The `@`-less
+method-reference reading exists only in the ASSIGNMENT arm
+(`pasparser_stmt.inc` ~6797), and it is driven by the LHS symbol being a
+method-pointer variable (`SymProcSig[idx] >= 0` and `TypeKind = tyRecord`). A
+cast has no LHS symbol — it has a target TYPE — so that arm cannot fire, and the
+call reading wins by default.
+
+**The shape the fix should take, and the trap to avoid.** The obvious move is to
+special-case the cast arm and build an `AN_METHODREF` there. That would be the
+**fifth** near-identical `AN_METHODREF` construction site (`pasparser_expr` ×2
+for the `@` forms, `pasparser_stmt` ×2 for the `@`-less Delphi forms), which is
+past the point where `root-cause-over-microfix.md` says to stop adding
+mechanisms and start counting them.
+
+What the two contexts actually share is one question — *"is this mention a call
+or a reference?"* — asked from two different sources of context (an assignment's
+LHS type; a cast's target type). So the fix is to extract the `@`-less
+method-reference reading into **one** helper that both arms call, parameterised
+by the receiver, rather than to copy it a fifth time. That reduces the site count
+instead of raising it, and it is the same normalisation that
+[[bug-p-a-method-call-with-missing-arguments-is-accepted-and-reads-garbage]]
+applied to the arity decision.
+
+**Do not simply relax the arity check to make this pass.** The check is what
+turned this from a segfault into a diagnostic; weakening it restores the silence
+and re-opens the garbage-argument hole everywhere. The call reading is not "too
+strict" here — it is the *wrong reading*, and the fix is to supply the right one.
