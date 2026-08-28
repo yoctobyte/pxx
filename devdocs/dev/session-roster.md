@@ -11994,3 +11994,85 @@ you wrote yourself is the one you will not re-check.
 managed strings; frankT wrote the analysis and does not need it relayed back. The durable
 form was the ticket edit, which costs nobody context — *file first, notify only if someone
 must act.*
+
+### 2026-08-28 — managed strings slice 1, and the family gained a sixth face in under an hour
+
+Branch `wasm` at `fc02443c1`, master at `118270612` (verified on master), **195 of 236** on
+the string corpus (from 182), largest refusal cause gone. 13 wasm checks, `gate.sh quick`
+green, self-host fixedpoint byte-identical.
+
+**Face six arrived within the hour of the list being marked OPEN**, which is as good a
+vindication of not writing "all N faces" as the entry could have asked for.
+
+`WasmEmitBinop` refused string operands from **inside the arm that runs when the width
+oracle fails** — but `s + 'x'` is a handle and a Char, both i32, so the oracle agreed and
+**the guard was never reached**. `writeln(t + 'x')` lowered to `handle + 120`. Valid module,
+plausible garbage. It appeared to work only because the managed-store refusal fired first in
+the common shape.
+
+> **Face five: a refusal that OUTLIVED its cause. Face six: a refusal that NEVER HAD one**,
+> masked by an unrelated check happening to fail earlier.
+
+Six is worse than five: there is no date at which it became wrong — it was always wrong and
+always covered. Neither the slug convention nor a mechanical expiry can see it. **The
+detector is removing the OTHER check and seeing what still refuses** — the audit ticket's
+negative-control method pointed at guards instead of at tests.
+
+frankwasm then caught itself relying on the same argument two hours later for `IR_LEA`
+(`InLValueWrite` is permanently False on wasm because no shared code assigns it), wrote the
+reasoning down, and made `check_managed.sh` assert all three refusals still fire — **with the
+slice's own zero-refusal count as the positive twin.** The rule applied to its own reasoning
+inside one session.
+
+### The terminal-else ticket now has an in-repo POSITIVE CONTROL
+
+This is the strongest thing in the report and I verified it directly. `EmitZeroFrameSlot`
+(`ir_codegen.inc`) has the **same missing wasm32 arm** as `PXXSysOpenRO`/`PXXSysLseek` — and
+ends with `else Error('compiler error: EmitZeroFrameSlot: unhandled target')`.
+
+| | terminal `else` | no terminal `else` |
+| --- | --- | --- |
+| result | compiler error naming routine + target | uninitialised return, arbitrary allocation |
+| found by | the first program that hit it | a deliberate audit, weeks later |
+| prio it earned | **55** | **70** |
+
+**The 15-point gap IS the value of the terminal `else`, priced by this repo's own triage
+rather than asserted.** Added to `bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open` — the
+fix no longer needs arguing from first principles, because the codebase contains both
+outcomes of one shape.
+
+### HeapMmap stays ungranted, and the real reason is better than mine
+
+I refused it on evidence strength (an arena is new storage, so "sha identical" is a weaker
+claim about a larger change). The re-measurement gives a stronger reason: the module declares
+`(memory 2)` and **never calls `memory.grow`, so past ~128 KB live it TRAPS** — and the
+correct diagnosis only arrives after everything that could have reported it is overwritten.
+
+So the fix has **two halves**: an RTL arm (Track A) and a backend intrinsic exposing
+`memory.grow`, which no Pascal-reachable intrinsic offers. frankwasm asked that the arm not
+land before the growth question is settled, which is the right call and the opposite of what
+a priority-driven grant would have done. **Correct refusal, better reason — worth noting that
+my stated rule reached the right answer for an incomplete reason.**
+
+### A mechanical expiry beats the convention I proposed
+
+`check_managed.sh` asserts `PXXAlloc` still returns an address **below 1024**, so **the day
+the heap ticket lands, the check fails by design** and the scope note must be rewritten
+rather than quietly outliving its cause. That is `a-refusal-is-a-claim-with-a-date-on-it`
+solved with a mechanism instead of a convention — it tells **the person whose change
+invalidated the note**, at the moment of invalidation, and its failure mode is "the build
+stops" rather than "nobody runs the checker." Recorded in that ticket as the preferred form,
+with the convention kept as the fallback for claims no test can express.
+
+### "Verify by breaking it" needed TWO rounds, and round two is the lesson
+
+Added to the audit ticket as a worked example. `s := s` after `s := t` proves nothing (two
+references, the refcount recovers). Dropping `t` to make `s` sole owner and swapping the
+emitter's two steps **still passed — a freed block keeps its bytes until something reuses
+them.** The assertion had to become the reuse: `ten charac` matches `sole owner`'s length,
+lands in the same size bin, pops the block release-first would have freed.
+
+**Round 1 is the mistake everyone expects. Round 2 is a test correct in its reasoning and
+still blind**, because the broken and working states produce identical bytes for a while. The
+procedure is: break it; if the test still passes, ask what makes the broken state
+*observable*, and assert that.
