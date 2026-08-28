@@ -71,6 +71,28 @@ question is not blocked behind its own instrument.
 Filed at low prio on purpose: real, small, and it should not outrank work with a
 measured cost.
 
+**And a low prio on a DECISION means something a low prio on work does not, so
+it is stated rather than left to be inferred.** Work at p25 is work deferred.
+A decision at p25 is an answer already given — the status quo runs meanwhile,
+and "nobody reached it" and "we looked and kept the behaviour" leave an
+identical repository behind. So, explicitly: **until this is answered, option 1
+is in force — a skip closes an open regression — and that is a default, not a
+judgement.** Nobody has weighed it.
+
+What would change the ranking, in order of how much it would move it:
+
+1. **An observed cost.** A regression that closed by skip and was later found
+   still broken. [[chore-t-record-how-a-regression-closed]] is what would make
+   that visible; today it would be invisible even if it happened.
+2. **A count.** Once closures record how they happened, "this fires N times a
+   month" turns a principle argument into an arithmetic one.
+3. **A box that permanently cannot run a corpus.** That makes option 2's
+   immortal-entry cost concrete rather than hypothetical, and it is the
+   scenario the current rule was written against.
+
+Absent any of the three, low is the honest rank and the status quo is the
+honest answer. This paragraph exists so that a reader can tell that was chosen.
+
 ## What was split out, and why it is not an option here
 
 An earlier draft of this ticket listed a third option — *"close, but record
