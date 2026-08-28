@@ -12891,3 +12891,36 @@ Someone already learned this and hardened the tool.
 **The hardening does not travel to hand-rolled comparisons**, which is where frankA met it. So
 the remedy is a pointer, not a ticket: the divergences entry should say *use the probe, which
 already refuses to score a case whose oracle died.*
+
+### Sixth stale premise — and this one the ticket disagrees with itself about
+
+frankB, while verifying it held no `working/` locks, found its own name in frankA's live p75
+ticket as a relay target for a relay that never happened. Wall #4 of
+`feature-pascal-corpus-expansion` lists three SysUtils gaps as open Track B work.
+
+**Verified as declarations, not grep counts** — all three are present in `lib/rtl/sysutils.pas`:
+`EArgumentOutOfRangeException` at 191 (`= class(EArgumentException)`), `Exception.CreateRes`
+declared 154 / implemented 1077 (`CreateResFmt` too, 155/1084), `TRuntimeError` at 208 with
+`procedure Error(RuntimeError: TRuntimeError)` at 268/1093. The wall is gone.
+
+**The sharper finding, visible only from inside the file: the ticket contradicts itself.**
+Line 298 says `(to file / relay to frankB)`; line 359 says `filed`. **Two wall tables tracking
+the same four walls, disagreeing** — and neither says *done*, which is the actual state. Two
+mechanisms for one concept, drifting exactly as that smell predicts. frankA's to resolve; it
+holds the lock.
+
+**I did NOT generalise this into a sweep, and the reason is the measurement.** A repo-wide grep
+for unexecuted cross-lane action items buried in ticket bodies (`relay to frank…`,
+`to file / relay`, `hand off to…`) returns **exactly one hit — this one.** One instance is not
+a pattern, and filing a sweep ticket off a single case would have been the same error as
+ranking a gap list without magnitudes. The `blocked-by` sweep stays filed because that one
+measured **14**.
+
+**frankB did the right thing twice over:** it refused to edit a ticket in `working/` — a live
+lock belonging to another lane — and routed it through me instead. And it went looking for
+this specifically because *"B work sitting unfiled in another lane's ticket"* would have made
+its own thin-queue report wrong. **It went hunting for its own refutation and found
+confirmation instead**, which is worth more than the finding: B's queue really is p45 crtl
+(documented empty), p45 random (documented not-B), p30 dns (intermittent only), then
+p25/p20/p12. Both p45s are hollow and say so in their own text. Idle stands, four triggers
+unchanged.
