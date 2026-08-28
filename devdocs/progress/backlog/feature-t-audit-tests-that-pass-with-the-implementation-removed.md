@@ -227,3 +227,33 @@ a question about the whole module when it meant to ask about one function. Now s
 Same shape as `bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire`: **the
 assertion was true, and true of the wrong scope.** When a negative control passes on first
 write, check what unit it is quantified over before believing it.
+
+---
+
+## Knowing WHICH line catches WHICH break — the coverage argument, 2026-08-28
+
+"Break it and watch it fail" proves a test can see *a* defect. This is the refinement that
+proves a suite covers the **mechanism** rather than the **feature**: break each mechanism
+separately and record which assertion catches it.
+
+Worked example, four mechanisms and four deliberate breaks producing four distinct failures:
+
+| break | how it surfaces |
+| --- | --- |
+| skip `PXXStrUnique` | caught by exactly **two lines of twenty-four** |
+| the `IR_LEA` write arm | **traps** |
+| the index reset | **one silent line** — `a?c!` instead of `abcd` |
+| hand `PXXStrSetLen` the handle | **no output at all** |
+
+Four different failure signatures means four independent assertions, not one assertion
+firing four times. **If two breaks produce the same failure, the suite has one assertion
+wearing two names** — and the second mechanism is untested.
+
+Note the strongest item is the one-silent-line case: a break whose only evidence is a single
+wrong character is precisely the one a coarser suite reports as passing.
+
+**And the check that replaced a trimmed list is the same idea.** `check_index.sh` asserts the
+two positions emit *different code* — `c := s[1]` calls `PXXStrUnique` zero times, `s[1] :=
+'z'` once, same source one line apart. Verified to be an assertion **a diff cannot make**:
+collapsing the model to "always write" clones on reads, produces the right characters, and
+diffs byte-identical. Measured, not reasoned.

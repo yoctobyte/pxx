@@ -170,3 +170,54 @@ get one assertion that asserts the thing.**
 violate (a slope, an invariant, a bound), never equality with the reference.** Equality
 inherits the reference's defects silently, and this repo has now been on both sides of that:
 the reference was right when it caught face six, and wrong here.
+
+---
+
+## FACE EIGHT — an assertion wrong in BOTH directions at once
+
+Previous faces are wrong in one direction: they cannot fail, or they fail on the right
+answer. This one is vacuous **and** false-positive simultaneously, and it was green on first
+run.
+
+frankwasm wrote a grep for an `i32.load` before a `PXXStrSetLen` call, intending to catch
+slot-vs-handle confusion. Measured:
+
+- **Vacuous for both shapes it could see**: a global's slot address is an `i32.const` and a
+  local's is `fp+N`, so **no load ever appears** — the assertion could never fire.
+- **False-positive for the one shape it could not see**: a `var s: string` parameter's slot
+  address legitimately *is* a load, so correct code would have failed it.
+
+An assertion can be simultaneously unable to detect the defect and able to reject the fix.
+Neither half is visible from reading it; both came out of asking what it was quantified over.
+
+**It was caught by the rule from the previous slice** — *when a negative control passes on
+first write, check what unit it is quantified over before believing it.* That is now two
+consecutive slices where "passed immediately" was the tell, which makes it a reliable trigger
+rather than an anecdote.
+
+---
+
+## The family has TWO POLARITIES, and the second one was hiding in plain sight
+
+Every face above is **a check that cannot fail**. The same defect exists inverted: **a signal
+that can never go clean.**
+
+Three `IInterface` methods are declared without implementations. The RTTI names them, so a
+function index must exist, and each gets `unreachable` because calling one must trap. **That
+is correct code, not missing code** — and it was counted into the broken total and announced
+under *"op coverage is incomplete"* on every program linking the interface RTTI. The per-body
+reason already said *"normal for a method DECLARED without an implementation."* **The headline
+did not, and the headline is the half that gets read.**
+
+The consequence is structural, not cosmetic: the completion criterion for that backend is the
+count reading N of N, and three permanent non-defects made N of N **unreachable by
+construction**. A signal that can never go clean is a signal nobody reads — the slow version
+of crying wolf, arriving from the opposite side.
+
+> **A check that cannot fail and a signal that cannot go clean are one defect in two
+> polarities. Both are states that carry no information, and both train the reader to stop
+> looking.**
+
+Fixed by splitting the line rather than hiding the stubs: gaps claim incompleteness,
+declaration-only stubs do not, both stay listed. Two corpus programs now report *"op coverage
+is complete for this program"* — **which was true before the change and which nothing said.**
