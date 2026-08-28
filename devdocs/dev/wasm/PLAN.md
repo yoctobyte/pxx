@@ -360,7 +360,36 @@ as an address on any path wasm32 takes.
   per phase**: a narrow loop is blind by construction, and what it is blind to
   is not what you were looking for.
 
-### What the blocker histogram says about the ORDER of this phase
+### Where the phase ended: 121 of 126, and what the last five are
+
+**Final measurement at `cc0680a08`**, `writeln(42)`:
+
+| body | blocker |
+| --- | --- |
+| `PXXVarBinOp`, `PXXVarNot` | assignment of a **frozen string** to a slot |
+| `IInterface.QueryInterface` / `._AddRef` / `._Release` | declared without a body — **not a defect, and never will be** |
+
+So the honest count is **two**, and the honest statement is not "two bodies
+left" but **"frozen strings are read-only on wasm32"**. Reading works —
+`PXXWriteFrozenW` takes a literal's blob whole, and the data slice has covered
+const strings since Phase 4 — but `s: string[15]; s := 'hello'` refuses with
+*"slot s has no wasm value type"*. The variant engine's two bodies are the
+RTL's instance of that gap, not a tail-end cleanup, and chasing them
+individually would have been wasted work.
+
+That statement exists because the REFUSAL was fixed first. It read
+`value of type 4 in assignment to ` — an enum ordinal to go look up, and a name
+that had vanished because the destination is a compiler temporary. A message is
+read precisely when nobody has the enum in front of them. It now names the type
+and says `an unnamed temporary (symbol 144)`, and that is what turned two
+mystery bodies into a measured property of the target.
+
+`IR_STORE_SYM` of a `tyString` is the work: on x86-64 it is three cases
+(char→string, AnsiString→frozen, frozen→frozen) with capacity clamping. It is
+phase-sized, it is needed for every `string[N]`, `ShortString` and record string
+field — not just for variants — and it is the natural next phase.
+
+### What the blocker histogram said about the ORDER of this phase
 
 **Re-measured at `3f99f2034`** against `w0.pas` (`writeln(42)`), 17 unlowered of
 126 — and the interesting part is not the count, it is that **six bodies changed
@@ -395,7 +424,7 @@ bodies:
 by an order of magnitude.** The indirect-call table is worth nine bodies, the
 VMT path one — and the VMT path falls out of the same mechanism for free.
 
-## Phase 6 — the heap and the host — **backend side DONE 2026-08-28; blocked on two Track A tickets**
+## Phase 6 — the heap and the host — **BOTH MILESTONES MET 2026-08-28** (the heap runs on a bad arena; see below)
 
 `PXXAlloc` and its siblings: the builtin lowerings spelled as a NEGATIVE proc
 index on `IR_CALL` (`-Ord(tkGetMem)` and friends), plus `memory.grow` as the
@@ -665,3 +694,44 @@ smaller than the C frontend was.
   existed before today.** The `.wat` oracle then caught the same shape one
   level up, in the type numbering — an oracle fed a module from the same
   generator still finds this, because the two encodings disagree about it.
+- 2026-08-28 — **Phase 6 complete: a wasm module prints, exits with a code, and
+  matches the native build doing both.** `writeln` diffed against native over
+  fifteen lines — literals, signed and unsigned, both 64-bit extremes, char,
+  boolean, three field widths — read through a hand-written host that decodes
+  the iovec AND through node's real WASI on the actual process stdout.
+  `Halt(7)` exits 7, agreed by three sources. 105 → **121 of 126 bodies**, and
+  three of the five remaining are `IInterface` methods declared without bodies.
+
+  The shared arm this phase was blocked on landed under a **narrow grant**
+  rather than by waiting: the evidence offered — the self-host fixedpoint sha is
+  identical with and without the patch — *is* the property Track A's
+  file-and-wait rule protects, so waiting bought nothing. The grant's condition
+  was falsifiable in twelve seconds and was re-verified on the tree actually
+  pushed. `HeapMmap` was deliberately NOT granted on the same terms, because its
+  fix adds storage and so cannot make the same claim — the line was drawn at the
+  strength of the evidence, not the ticket's priority. That distinction is worth
+  more than either fix.
+
+  Three things this phase taught that outlive it:
+
+  **A guard that asserts a LIMITATION has to be written to fail when the
+  limitation ends.** `check_host.sh` asserted that `writeln` printed nothing,
+  and failed on the merge that made it print. That is the assertion tracking
+  the delta rather than the outcome, and it is why the replacement differential
+  was written in the same hour instead of noticed six weeks later.
+
+  **A check can only gate behaviour its environment does not already supply.**
+  Relayed from a sibling lane and immediately true here: `afterWriteln === 0`
+  asserted silence, and silence is the default — delete the lowering and the
+  assertion still passes. Proven with a negative control that records nothing,
+  where every other check in the file stayed green on a compiler that dropped
+  every `writeln`. The silence is now asserted together with the mechanism
+  meant to produce it.
+
+  **A rule that is slightly wrong reads as complete, which makes it worse than
+  no rule.** The forward block said "every routine the dispatchers dispatch to
+  belongs here"; the break was a routine that is not a dispatch target, and the
+  rule was read while the violating code was written. It is
+  `tools/forwardlint.py` now — on master, over the whole `compiler.pas` include
+  chain, verified against both historical breaks — and it caught this phase's
+  THIRD instance the second it was written, seconds instead of a phase.
