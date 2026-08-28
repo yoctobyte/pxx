@@ -1604,8 +1604,35 @@ interleaved pairs are.
 
 1. **The rest of the register contract** (E minus G): ~1.10x, multi-session,
    deliberately unopened — open it at the START of a session.
-2. **The promotion experiment** — blocked on
-   `chore-t-nothing-in-the-matrix-runs-o3-so-no-failures-is-unfalsifiable`.
+2. **The promotion experiment — UNBLOCKED 2026-08-28. My premise was false.**
+   I filed `chore-t-nothing-in-the-matrix-runs-o3-so-no-failures-is-unfalsifiable`
+   arguing that nothing gates `OptLevel>=3` and therefore nothing exercises it.
+   Track T resolved it **by refutation** (`c8ec8a1b3`): `tools/optdiff.sh` has
+   compiled **and run** every standalone test program at `-O0`/`-O2`/`-O3`,
+   comparing stdout+stderr and exit code, since its creation commit
+   `597e4ab05` (2026-07-11) — one day after this umbrella opened. Verified here
+   from the file's HISTORY rather than its current contents: `git show
+   597e4ab05:tools/optdiff.sh` already carries the `-O0 / -O2 / -O3` header and
+   the `for L in 2 3` run loop. 701 runs, 30 non-GREEN, four `-O3` findings in
+   `done/` — one of which,
+   `bug-o-o3-diverges-on-cmath-sign-bits-and-pascal-hijack`, was filed against
+   this very track.
+
+   **By this ticket's own standard — a control is not a control until it has
+   failed once — `-O3` differential coverage is the best-evidenced control in
+   the campaign.** "First exposure wearing a promotion's clothes" does not
+   survive that. What replaces the gate is a citation: a promotion cites the
+   opt-tier run that swept a sha *containing* the pass. Real coverage is ~30% of
+   shas (opt runs only as idle watcher work), so a pass that landed after the
+   last sweep genuinely has zero exposure — ordinary, not exotic.
+
+   **The boundary, which matters here more than anywhere: optdiff is a
+   CORRECTNESS instrument. It proves `-O3` is not WRONG. It cannot prove a pass
+   FIRES.** A pass promoted to `-O2` that silently stops firing passes optdiff
+   perfectly — which is this ticket's own central lesson wearing the other hat.
+   Read promotion evidence as *"not wrong"*, never as *"works"*. The benches are
+   the only thing that says a pass still does anything, and the disassembly is
+   the only thing that says it fired.
 3. Item 3's **exception-frame gate is a real restriction**, not a formality: any
    body with `try/except` keeps every dual-write. Lifting it means teaching the
    landing pad to restore residents from somewhere other than the frame slot,
