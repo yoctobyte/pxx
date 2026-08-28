@@ -14348,3 +14348,77 @@ is honest rather than parked. It becomes blocking the moment anyone proposes a p
 **Dispatch unchanged.** frankB, frankwasm and pxx-a5 idle on the **concurrency cap**, not on
 judgment; expiry is mechanical — the next park line frees exactly one slot and the ranked head
 takes it. Track N still at p85/p75/p72, undispatched, owner's reserved call, not re-asked.
+
+### p60 resolved — and the third clause of the control rule arrives from a mistake
+
+frankA landed `bug-p-mutually-referencing-generics-are-rejected-as-circular`, gate GREEN, corpus
+**`:994` → `:3250`** (2256 lines) past the false circularity.
+
+**The fix needed no new state, and that is what kept it in P.** The scans already run class body
+first and method bodies after, so the declaration-time / materialisation-time distinction was
+already encoded in **insertion order**; `nDeclEdges` names what was true anyway. A per-edge flag
+would have gone into the `NSpec*` arrays in `defs.inc` — **A's ground, with frank-optimize live
+in it** — and this would have been a request for the A slot instead of a landed fix.
+
+> *Look for the fact already present* paid a second time today, and the first time it paid by
+> **avoiding a lane crossing** rather than by saving design work. That is a better argument for
+> the habit than elegance.
+
+**The root cause was the deferral itself** — it re-emits the declaration *behind* its
+prerequisites, so on the re-parse the method-body reference is still undeclared, the scan defers
+again, and the round counter calls it a cycle. **The mechanism was generating the symptom it
+existed to prevent.** Materialisation-time-only sets are now emitted without deferring.
+
+**Control run before and after, as directed:** `test_generic_cycle_fail` confirmed failing
+*before* the work and still failing after (both edges of a genuine cycle are declaration-time, so
+the deferral path still runs). The two tests are now a pair, and the Makefile comment says so —
+**turning the new one green by disabling the detector turns the old one red.** A construction that
+cannot express the mistake, not a documented trap.
+
+### The control rule is now complete, and its third clause came from an error
+
+I had two thirds of it. frankA supplied the last from a mistake rather than a success: two of its
+minimal repros failed for reasons unrelated to the defect — a parenthesised class reference and a
+method-local type section, both unsupported generally — and either would have read as *"the fix
+does not work"*.
+
+1. **A control is not a control until it has failed once.**
+2. **It must fire on the feature's TOTAL ABSENCE** — one that fires only on a subtle break may
+   still be measuring the wrong axis.
+3. **When a repro FAILS, confirm the failure is the one you are hunting.** An unsupported
+   construct in the scaffolding looks exactly like a broken fix.
+
+Symmetric at last: a control that cannot fail proves nothing; a control that fails for the wrong
+reason disproves nothing. And the cheap discriminator came with it — **one of the two failed
+identically on `pinned`**, which settles it in a single run. Both recorded in the ticket so they
+are not re-tried.
+
+### Slot ruling: take the third ordering ticket, then PARK
+
+`bug-p-a-generic-prerequisite-is-emitted-before-the-referenced-template-exists` [P p60] —
+measured, not assumed: the rewrite emits a template's alias behind *that template's own*
+declaration, so `TGStringComparer` (~985) emits a prerequisite naming `TGOrdinalStringComparer`,
+undeclared until 1002, referenced from a body at 3250. 8-line Delphi repro; FPC prints 7.
+
+**I checked the ranker first and it does not settle this**, and I said so rather than dressing a
+judgment as a measurement: P's head is `feature-pascal-corpus-oop` [p75] and the umbrella is also
+p75 but claimed, so the ranker declines between two p75-class paths.
+
+The reframe that does settle it: **the corpus is an INSTRUMENT for finding dialect bugs, not a
+destination.** All three of today's defects are real in ordinary Pascal — 22-line and 8-line
+plain-Delphi repros that FPC compiles and we do not — so anyone writing that code hits them,
+corpus or no corpus. **The line number is the readout; the fixes are the yield.** Three real bugs
+closed is a good day, and the wall count is not the score.
+
+> **Stopping condition is NOT "rung 6 falls" — it is "stop when a defect is only worth fixing
+> because it advances the corpus."** None of the three has been that.
+
+**Boundary set: park when the third lands, regardless of what it reveals.** frankA's own warning
+earned it — *the wall count has never been a work estimate here*; three in a row, each invisible
+until its predecessor fell, means the remaining count is **unknown, not small**. Same shape as
+frankwasm's masked histogram leader this morning. A fresh session decides whether rung 6 deserves
+a fourth.
+
+Flagged as unmeasured: switching to `feature-pascal-corpus-oop` may land in the same
+emission-ordering code from another door, so a switch might buy a context change and nothing else.
+Not checked — labelled as my speculation, not a finding.
