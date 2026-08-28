@@ -3257,6 +3257,35 @@ begin
   WasmCall(WasmSlotForProc(mv), 'PXXMemMove');
 end;
 
+{ Zero a block: destination address in IRA, byte count in IRIVal. Calls the
+  same RTL routine the other backends use, for the same reason WasmEmitCopyRec
+  calls PXXMemMove — the arguments go straight onto the operand stack in order.
+
+  x86-64 carries a second arm here: when the node names a record with managed
+  fields it releases those fields before zeroing, because zeroing an ARC field
+  in place drops a reference without decrementing it. All 14 sites that build
+  this node today pass REC_NONE, so that arm is not reachable from the current
+  IR — but the guard is kept rather than assumed away. It costs one comparison,
+  and "unreachable by inspection" is exactly the kind of claim that stops being
+  true without anything going red. If it ever fires, the refusal names the real
+  missing piece instead of silently leaking. }
+procedure WasmEmitDefaultMem(node: Integer);
+var mz: Integer;
+begin
+  if (IRC[node] >= 0) and RecordHasManagedFields(IRC[node]) then
+  begin
+    WasmUnsupported('zeroing a record with managed fields — the ARC fields '
+                    + 'must be released before the bytes go away');
+    Exit;
+  end;
+  mz := WasmWriteHelper('PXXMemZero');
+  if mz < 0 then Exit;
+  WasmWriteValueArg(mz, 0, IRA[node]);        { dest }
+  WasmWriteConstArg(mz, 1, IRIVal[node]);     { count }
+  if WasmBodyBroken then Exit;
+  WasmCall(WasmSlotForProc(mz), 'PXXMemZero');
+end;
+
 { ===== frozen strings =====
 
   A `string[N]` / ShortString is not a VALUE on this target, it is a BUFFER: an
@@ -3666,6 +3695,7 @@ begin
     IR_STORE_MEM     : WasmEmitStoreMem(node);
     IR_WRITE, IR_WRITELN : WasmEmitWrite(node);
     IR_COPY_REC      : WasmEmitCopyRec(node);
+    IR_DEFAULT_MEM   : WasmEmitDefaultMem(node);
     IR_EXC_ENTER     : WasmEmitExcEnter(node);
     IR_EXC_LEAVE     : WasmEmitExcLeave(node);
     IR_RAISE         : WasmEmitRaise(node, blk);
