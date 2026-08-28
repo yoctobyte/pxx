@@ -11297,3 +11297,85 @@ DNS servers. If so:
 
 **The test fix lands regardless: the test is wrong even if the resolver is also
 wrong.**
+
+## The RFC steer held: `bug-b-resolver-sends-localhost-to-the-wire` [B, p45] — filed as a BUG
+
+frankB verified RFC 6761 against the text and **overturned its own lean**:
+
+- §6.3 (localhost): *"Name resolution APIs and libraries SHOULD recognize localhost
+  names as special and SHOULD always return the IP loopback address for address
+  queries"*
+- §6.4 (invalid): *"SHOULD always return immediate negative responses"*
+
+**Different prescriptions, as steered.** frankB's own verdict on its earlier
+inference: *"my inference from 'glibc happily queries .invalid' to 'therefore
+querying localhost is fine' was worthless — it was in fact the whole of my lean."*
+
+**Two measurements settled the ticket TYPE:**
+- `grep -rni localhost lib/rtl/dns*.pas` → **nothing.** No special-case at all, so
+  **structural, not an edge case.** *(Coordinator widened the search rather than
+  repeating it: `localhost` appears nowhere in **any** `lib/rtl/*.pas`.)*
+- **glibc, the reference, complies**: 0 contacts to port 53, answers
+  `::ffff:127.0.0.1`.
+
+### "Masked, not correct" — the load-bearing insight
+**The v4 case is not right either; it is hidden by a hosts line almost every box
+happens to ship.** Remove `127.0.0.1 localhost`, or ask for AAAA, and the name goes
+to the wire. **That is what makes it a bug rather than a Debian packaging quirk** —
+and it is the argument anyone looking only at the v6 failure would have missed.
+
+Hijack consequence stated in the ticket: a hostile or misconfigured server, **or a
+wildcard search domain**, can answer `localhost` with a non-loopback address, and a
+program connecting to localhost expecting a local service connects elsewhere.
+Silent-wrong-behaviour escape.
+
+**Open sub-decision noted rather than guessed:** whether an explicit `/etc/hosts`
+entry may override the built-in answer. §6.3's *"cannot be modified by local
+configuration"* argues the special-case wins outright; every real implementation
+reads hosts first; **no in-tree caller depends on either order.** A decision with no
+forcing function — left visible rather than settled by implementation accident.
+
+### NEW PRACTICE worth propagating: record the WRONG PATH in the ticket
+frankB wrote the `.invalid` inference into the ticket **as a thing not to repeat.**
+
+> Most tickets record the conclusion and drop the wrong path as embarrassing. **But
+> the next reader will take that path too — it is the natural inference, not a
+> careless one — and a ticket that names the dead end saves them the walk.**
+
+### Q1 went further than the coordinator's suggestion, for a better reason
+Recommended: a printed skip. **frankB resolved the LITERAL `::1` instead**, which
+short-circuits without network, because **a skip-guarded name row could still fall
+through to the wire if a wildcard resolver answered it** — *"the same hazard wearing
+a smaller hat."* **A guard that depends on the environment behaving is the thing
+being removed all night.**
+
+Measured after: **default build 6 → 0 contacts to port 53**; libc 12 → 6, the
+remainder being the deliberate `.invalid` row behind `PXX_DNS_LIBC`. **The header's
+claim now matches a measurement rather than an intention**, and the header also
+records the proxy mistake itself, *because the file is where the next person will
+look.*
+
+## FOR THE OWNER: a prio set by a ticket's own author needs a second opinion
+
+frankB filed `bug-b-resolver-sends-localhost-to-the-wire` at **p45** — above
+everything else left in B — and **asked for the same "record, don't set" treatment
+the coordinator has applied to others**, on a ticket it filed itself.
+
+> **A prio set by a ticket's author on their own discovery is the one most worth a
+> second opinion — not because authors inflate, but because they have no comparison
+> set.** An hour inside the bug, minutes with the rows it is ranked against. **A
+> calibration problem, not a bias problem** — which is exactly what the owner's
+> field exists to correct.
+
+**Coordinator view, offered and explicitly NOT ratifying:** defensible — spec
+violation, structural, platform-independent, real hijack path — and tempered,
+because the misroute needs a wildcard resolver or a missing hosts line. Against a
+p70 that blocks a backend or a parser that cannot compile Synapse, p45 reads about
+right. **Recorded as "filed at p45 by its author, flagged for owner review", not as
+an endorsement.**
+
+**frankB's session state:** seven premises measured (five stale, two real), four
+pieces of real work landed, four tickets filed, two coordinator calls corrected and
+one of its own retracted. The new p45 is the top of B's real work and is its if it
+wants it; **stopping here is equally legitimate and was said plainly rather than
+hinted.**
