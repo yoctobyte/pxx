@@ -13931,6 +13931,15 @@ lib-test: pxx-stable-check
 	# (bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line).
 	$(PXX_STABLE) -Fulib/rtl test/lib_textreadnumtok.pas $(TESTTMP)/lib_textreadnumtok
 	test "$$($(TESTTMP)/lib_textreadnumtok | tail -n 1)" = "TEXTNUMTOK OK"
+	# SeekEof/SeekEoln (the whitespace-tolerant loop conditions the tokeniser
+	# above needs) and Rename. The skip set is the subject and it is NOT
+	# `c <= 32`: measured against FPC 3.2.2 byte by byte, exactly #9, #26 and
+	# #32 are stepped over, plus #10/#13 for SeekEof. The test pins #1, #31 and
+	# #33 so that simplification fails here rather than silently eating control
+	# bytes out of a data file
+	# (feature-b-text-file-surface-seekeof-rename-settextbuf).
+	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_text_seek_rename.pas $(TESTTMP)/lib_text_seek_rename
+	test "$$($(TESTTMP)/lib_text_seek_rename | tail -n 1)" = "TEXTSEEK OK"
 	# The PChar family (StrPCopy/StrNew/StrAlloc/StrECopy/StrMove/StrUpper...).
 	# Half of it existed and half did not, which is the worst shape: code
 	# compiles up to its second call. Expectations measured against FPC by

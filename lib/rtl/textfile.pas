@@ -42,6 +42,31 @@ function Eof(var f: Text): Boolean;
   each other. Non-destructive: it uses the same one-byte lookahead Eof does, so
   the cursor does not move. }
 function Eoln(var f: Text): Boolean;
+
+{ Skip whitespace, then answer "is there nothing left but whitespace?" — the
+  loop condition for reading a whitespace-separated table without tripping on
+  the blank tail of the last line:
+
+    while not SeekEof(f) do begin Read(f, n); Sum := Sum + n; end;
+
+  Eof is still False while a trailing newline remains, so that same loop
+  written with Eof reads one junk value at the end. SeekEof CONSUMES the
+  whitespace it skips but never the token after it: the byte that stops the
+  scan goes back into the one-slot lookahead, so the next Read sees it. }
+function SeekEof(var f: Text): Boolean;
+
+{ Skip blanks, then answer "is the rest of this LINE empty?" — SeekEof's
+  companion, and identical to it except that line terminators STOP the scan
+  instead of being skipped. So it answers True at the end of a line as well as
+  at the end of the file, and leaves the terminator unconsumed for Readln. }
+function SeekEoln(var f: Text): Boolean;
+
+{ Rename the assigned file and carry the handle over to the new name, FPC's
+  Rename(f, newname). The file must be CLOSED — FPC refuses on an open handle
+  and leaves the file alone, and that restriction is copied rather than
+  relaxed. After a successful call, Reset(f) opens the NEW name. }
+procedure Rename(var f: Text; const NewName: AnsiString);
+
 function IOResult: Integer;
 
 procedure TextWrite(var f: Text; const s: AnsiString);
@@ -317,6 +342,87 @@ begin
     Result := True
   else
     Result := (f.Peek = 10) or (f.Peek = 13);
+end;
+
+{ The bytes SeekEof and SeekEoln step over. MEASURED against FPC 3.2.2 rather
+  than inferred — each of #1..#40 was written in front of an 'x' and the
+  cursor's landing place read back:
+
+    skipped:      #9 TAB, #26 SUB, #32 SPACE  (SeekEof also skips #10 and #13)
+    NOT skipped:  #1..#8, #11, #12, #14..#25, #27..#31, #33 and up
+
+  So the intuitive rule `c <= 32` is WRONG: it would swallow every other
+  control byte. #26 is in the set because it is the DOS end-of-file marker and
+  FPC steps over it exactly like blank space — a file holding only #26 is
+  SeekEof-empty, while 'x'#26 still yields its 'x'.
+
+  Deliberately NOT unified with TFIsSpace above. That one is the numeric
+  tokeniser's DELIMITER set (blank, tab, and both halves of a line ending);
+  this one is the seek routines' SKIP set. They overlap without being the same
+  concept — #26 belongs only here, and #10/#13 delimit a token but must stop
+  SeekEoln — so folding them together would make one of the two wrong. }
+function TFIsSeekSpace(c: Byte): Boolean;
+begin
+  Result := (c = 9) or (c = 26) or (c = 32);
+end;
+
+function SeekEof(var f: Text): Boolean;
+var c: Byte;
+begin
+  while TFNextByte(f, c) do
+    if not (TFIsSeekSpace(c) or (c = 10) or (c = 13)) then
+    begin
+      TFPushBack(f, c);
+      Result := False;
+      Exit;
+    end;
+  { TFNextByte answers False at end of file AND on an I/O error, leaving the
+    code in LastIOResult — the same conflation Eof makes, on purpose. }
+  Result := True;
+end;
+
+function SeekEoln(var f: Text): Boolean;
+var c: Byte;
+begin
+  while TFNextByte(f, c) do
+    if not TFIsSeekSpace(c) then
+    begin
+      { The terminator is not ours to eat: push it back so Readln still sees a
+        complete line. Measured — FPC leaves the cursor ON the #10 (or the #13
+        of a CRLF) and answers True. }
+      TFPushBack(f, c);
+      Result := (c = 10) or (c = 13);
+      Exit;
+    end;
+  Result := True;
+end;
+
+procedure Rename(var f: Text; const NewName: AnsiString);
+var rc: Integer;
+begin
+  { An open handle is refused and the file left alone (FPC answers IOResult
+    102 here; the code is ours, the refusal is FPC's). Same shape as Erase: a
+    name-level operation on a closed, assigned handle. }
+  if f.Handle >= 0 then
+  begin
+    SetIO(-1);
+    Exit;
+  end;
+  if (f.Name = '') or (NewName = '') then
+  begin
+    SetIO(-1);
+    Exit;
+  end;
+  rc := PalRename(PChar(f.Name), PChar(NewName));
+  if rc < 0 then
+  begin
+    SetIO(rc);
+    Exit;
+  end;
+  { The handle follows the file — measured: Reset(f) straight after a Rename
+    opens the NEW name and reads its contents. }
+  f.Name := NewName;
+  SetIO(TF_OK);
 end;
 
 function IOResult: Integer;
