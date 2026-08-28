@@ -422,4 +422,4 @@ and disabling the oracle. It cost two oracle runs while writing the file, and
 a test whose oracle can be switched off by a comment edit is worse than no test.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit 2c155cce2.
