@@ -11466,3 +11466,90 @@ a two-line move and the ticket says so.**
 > **A decision made for a stated reason, with the alternative costed, is not the
 > same as a question closed.** Keeping those separate is what stops an
 > implementation accident from becoming a spec position.
+
+### 2026-08-28 — a narrow grant, and why the line fell where it did
+
+**frankwasm was granted `bug-a-pxxsyswrite-has-no-wasm32-arm` [A, p70] to do itself**,
+with no Track A holder to hand it to (frankA parked clean on its own fatigue signal).
+The grant is worth recording as a *criterion*, not as a decision, because the next
+coordinator will face the same shape:
+
+> Track A's file-and-wait rule protects exactly one property — that the compiler can
+> reproduce itself. frankwasm's evidence WAS that property: the self-host fixedpoint
+> sha is `c9817ce01cbc` **with and without** the patch, because `CPU_WASM32` is never
+> defined while building for any other target. **When the evidence offered is the
+> invariant the rule exists to protect, waiting buys nothing.**
+
+I verified the shape before granting rather than after — `builtinheap.pas:1528` sets
+`Result := 0` *before* the ifdef chain, so every arm is additive and a target with no
+arm reports *"wrote nothing, and no error."* **The defect is not a missing entry in a
+list; it is a list with no terminal else, failing OPEN in a syscall wrapper.** That is
+the *second* instance of that generator in one day — the other is
+`bug-p-an-unknown-compiler-directive-is-silently-ignored` (34 arms, no final else).
+Two in a day makes it a class worth grepping for, not a coincidence.
+
+**HeapMmap was NOT granted, and the difference is the whole point.** Same lane, same
+priority, same author, same file — refused because the *evidence* is weaker, not
+because the ticket is. PXXSysWrite adds a syscall arm behind an ifdef that is never
+true elsewhere; HeapMmap adds a BSS arena and a size constant, i.e. new storage in a
+file every target compiles, so "the sha is identical" would be a smaller claim about a
+larger change. Offered on the same terms if the same before/after sha identity is
+produced. **Draw the line at the strength of the evidence, never at the priority of
+the ticket** — otherwise "p70 and urgent" starts doing the work that "provably inert"
+should be doing.
+
+### `forwardlint.py` is on the branch, not on master — again
+
+`test/wasm/forwardlint.py` exists **only on `origin/wasm`** (verified by
+`git ls-tree`). Same shape as last night's invisible Track A tickets: the work is done,
+it is just not where the people who need it will look. Relayed as its own request —
+**it must reach master independently of the wasm series**, because a lint that reads
+what FPC reads is fleet-wide value and Track P needs it now, not when a frontend lands.
+
+This makes it twice in ~12h that a general-value artefact was parked behind a branch's
+own schedule. The generalisation for the roster: **"is it committed?" is the wrong
+question — ask "is it on the branch everyone builds from?"** A branch is a place work
+goes to be finished, and anything on it is invisible until it is not.
+
+### The seed-canary U ticket was rewritten, and my own recommendation is marked disproven
+
+`decide-should-the-fpc-seed-canary-be-in-the-mandatory-loop` [U, p55]: I had recommended
+**option 1** (a trigger keyed to the edit shape). frankwasm's second RED disproved it —
+the lane recognised its own edit shape *neither* time — so option 1 is now labelled
+**disproven, in place, with the recommendation visibly moved** rather than quietly
+swapped. `forwardlint.py` is option 4 and the new recommendation.
+
+What qualifies it is not the ~1s runtime but the *failure mode chosen*: it misses rather
+than false-alarms, with the gate's real FPC build as backstop. **A check whose worst case
+is LATENESS can live in a fast loop; one whose worst case is a WRONG ANSWER cannot.**
+The timing number is why it is cheap; the failure mode is why it is safe, and only the
+second one is an argument.
+
+It stays Track U: the mandatory loop is defined in `CLAUDE.md`, the owner's file, which
+is not edited on any agent's say-so **including the coordinator's own**.
+
+frankwasm's line, now in the ticket verbatim and the most useful thing either RED
+produced: the forward block *already carried* a rule, `WasmEmitIndArgs` is not a dispatch
+target, and it read the rule while writing the code that broke it. **A rule that is
+slightly wrong is worse than no rule: it reads as complete.**
+
+### frankB closed clean, and corrected how I credited it
+
+Pushed green `a47aaac17`, nothing half-applied. It then asked for its own credit to be
+**deflated** on the grounds that the flattering framing is the less useful one — *"if this
+reads as 'someone noticed something subtle' it will be less useful than 'run the control;
+you cannot see this by reading'."* Applied: the audit ticket now leads with the method.
+
+Its diagnosis of the miss is in the ticket too, because it is what makes the ticket
+predictive: **it applied the rule to the code under test and not to the test**, with the
+rule live in its head at the time. Which is the argument for the structural fix over the
+written one — **a predicate cannot be tested through an environment, so there is no
+version of that mistake left available there.**
+
+I pushed back on its self-diagnosis ("treating *told the coordinator* as equivalent to
+*recorded*") because the accurate lesson is smaller and more useful: **it did report both
+times; a coordinator is transport, not storage.** Both findings survived only because I
+happened to file them, and "the coordinator happened to notice" is not a mechanism. A
+finding is recorded when it is in a ticket on master — every other location, including a
+complete and correct report to the coordinator, is transport. I have taken the same
+correction myself this session, twice.
