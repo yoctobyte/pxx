@@ -178,13 +178,30 @@ allocator, no spills).
   identical case, so this is derivation. It becomes a decision only when a real
   program calling `get_frame` must work here, with that program named.
 
-## Phase 3 — control flow
+## Phase 3 — control flow — **DONE 2026-08-28**
 
 The `br_table` dispatch loop; the 5 control-flow IR ops.
 
 - **Milestone:** `if`/`while`/`for`/`case`/`goto` all correct, *and* no coverage
   entry cites a control-flow op. This is where the differential probe starts
   earning its keep.
+- **Met.** Coverage 41 → 66 of 147 bodies, no control-flow op left in the
+  report, and `test/wasm/check_phase3.sh` diffs 26 values against the native
+  build: nested if/else, while, repeat/until, `for` in both directions, `case`
+  with a value / a list / a range / an else, break, continue, short-circuit
+  and/or, a loop inside a loop, early `Exit`, and `goto`. Construction and the
+  two properties that make it work (fallthrough is free; a stale `$pc` is never
+  read) are documented in `ir_codegen_wasm32.inc`'s control-flow section.
+- **The differential is not a formality for this phase specifically.** A
+  dispatch bug — a block index off by one, a branch depth counted from the
+  wrong nesting — produces a module that VALIDATES and runs the wrong code.
+  `wasm-validate` has nothing to say about any of them. That is the same
+  boundary CHARTER.md now records: the validator makes the *width* class
+  unrepresentable, not the *meaning* class.
+- **The `goto` case is in the slice on purpose.** Every other form has the
+  reducible CFG the frontend built; `goto` has whatever the programmer wrote,
+  and it is the one form the milestone names that would otherwise have been
+  claimed without evidence.
 - **Known cap, measured 2026-08-27:** the layout costs one nested `block` per
   basic block, and `wat2wasm` (wabt 1.0.36) SIGSEGVs at ~9000 nesting while V8
   accepts 9015 without complaint. The engine is not the limit; wabt's recursive

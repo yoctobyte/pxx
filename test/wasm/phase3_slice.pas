@@ -34,7 +34,12 @@
                rather than to an operator.
     EarlyExit  `Exit` — a branch clean out of the dispatch to the epilogue.
     NestLoop   a loop inside a loop, where an outer-loop branch has to count
-               past the inner loop's blocks to find its target. }
+               past the inner loop's blocks to find its target.
+    GotoSum    an explicit `goto`, which is the only construct here that can
+               produce a CFG the structured forms cannot — every other function
+               has a reducible shape the frontend built, this one has whatever
+               the programmer wrote. It is in the phase's milestone and would
+               otherwise be the one form claimed without evidence. }
 program Phase3Slice;
 
 function Max3(a, b, c: Integer): Integer;
@@ -141,6 +146,20 @@ begin
   NestLoop := s;
 end;
 
+function GotoSum(n: Integer): Integer;
+label top, done;
+var i, s: Integer;
+begin
+  s := 0; i := 1;
+top:
+  if i > n then goto done;
+  s := s + i;
+  i := i + 1;
+  goto top;
+done:
+  GotoSum := s;
+end;
+
 {$ifndef WASM_NOMAIN}
 begin
   writeln(Max3(3, 1, 2));
@@ -167,6 +186,8 @@ begin
   writeln(EarlyExit(21));
   writeln(NestLoop(3));
   writeln(NestLoop(100));
+  writeln(GotoSum(10));
+  writeln(GotoSum(0));
 end.
 {$else}
 begin

@@ -45,6 +45,7 @@ const out = [
   e.ShortC(1, 1), e.ShortC(1, -1), e.ShortC(-1, -1),
   e.EarlyExit(-5), e.EarlyExit(21),
   e.NestLoop(3), e.NestLoop(100),
+  e.GotoSum(10), e.GotoSum(0),
 ];
 // The shadow stack must come back to where it started. A loop that leaks a
 // frame per iteration still returns the right answer for a while.
