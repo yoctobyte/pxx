@@ -11553,3 +11553,16 @@ happened to file them, and "the coordinator happened to notice" is not a mechani
 finding is recorded when it is in a ticket on master — every other location, including a
 complete and correct report to the coordinator, is transport. I have taken the same
 correction myself this session, twice.
+
+frankB's own generalisation on accepting that correction is the better statement of it,
+and it belongs here rather than in a message that dies with the session:
+
+> *"I was reaching for a resolution where a mechanism was available. Mine collapsed a
+> structural property of the fleet into a personal failing, which would have produced the
+> wrong fix — I'd have resolved to write better messages, when the actual fix is to file
+> the ticket first and treat the message as notification that it exists."*
+
+**File first, then notify.** Same shape as predicate-versus-rule, one level up: when a
+post-mortem lands on *"I will be more careful"*, that is the tell that a mechanism was
+available and went unlooked-for. A resolution is what you reach for when you have stopped
+looking for a mechanism.
