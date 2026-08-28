@@ -931,6 +931,20 @@ mode) is unverified, and by the dead-oracle rule that probe proves the capabilit
 exists in pxx and nothing about whether it matches FPC. Anyone relying on parity
 should re-probe with a compiling FPC control first.
 
+> **SUPERSEDED 2026-08-28 (coordinator), by frankB's section below —
+> "One free result on the way".** The second limit is withdrawn: **FPC did not
+> reject the override, the PROBE did.** Under `{$mode objfpc}{$H+}` it compiles
+> and runs on FPC 3.2.2, and the oracle now exists as a five-row table. frankA's
+> *conclusion* stands and is no longer oracle-less; only the "unverified"
+> qualifier is dead. The **first** limit — `feature-pascal-builtin-tobject-class`
+> staying open for its wider scope — is unaffected and still holds.
+>
+> The paragraph above is left intact because it is an accurate record of what
+> that session ran and concluded. It is marked here rather than rewritten,
+> because a reader who stops at this section would otherwise act on a limit that
+> no longer exists — which is the same failure as a stall note outliving its
+> blocker, sixty lines earlier in the same file.
+
 ## 2026-08-28 (frankB) — the wall moved 2082 → 3250, and the new one is reduced to 14 lines
 
 Picked up from frankA's edge-clearing. Verified the coordinator's framing against
