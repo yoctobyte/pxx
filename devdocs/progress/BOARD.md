@@ -50,7 +50,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
 
-## backlog (293)
+## backlog (294)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -64,6 +64,7 @@ _none_
 | bug-a-lowercase-resolves-to-two-different-routines-depending-on-the-seed | A | 35 | bug |  | — |
 | bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa | A | 25 | bug | A proc's managed locals (AnsiString, interfaces, dynamic arrays) are released by a proc CLEANUP FRAME that five targets have and two do not. wasm32 and xtensa both fall outside TargetHasProcCleanupFrame, so an exception unwinding THROUGH a frame leaks everything that frame owned. Silent by construction: an unwind leak prints nothing. | — |
 | bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice | A | 55 | bug | ManagedLocalZeroBytes is a chain of per-kind arms, each of which has to remember to ask IsArray. Two arms have already shipped without it — interfaces (2026) and Variants (2026-08-27, a5 memory-corruption fix). Two more arms explicitly say `not IsArray` and nothing says whether that is a decision or the same omission a third time. | — |
+| bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets | A | 20 | bug |  | — |
 | bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse | A | 40 | bug | `C(**d)` and `C(*lst)` on a class with an ordinary `__init__` fail with `expected expression` — on the PINNED compiler too, so this is not a regression. The ctor path in pyparser.inc:45097 builds its own AN_ARG chain and never consults the star-forwarding branch that plain calls use. Routing it there needs the receiver prepended, which PyStarForwardCall's signature does not take. | — |
 | bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open | A | 50→60 | bug |  | — |
 | bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body | A | 30 | bug |  | — |
@@ -901,6 +902,7 @@ _none_
 - [p 22] [C] compat-c-printf-p-of-null-prints-0x0-not-nil
 - [p 22] [A] refactor-a-seven-frontends-borrow-rust-parser-helpers
 - [p 20] [A] bug-a-irtoplevelstmt-parameter-is-a-node-index-named-k
+- [p 20] [A] bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets
 - [p 20] [A] bug-a-shr-reaches-the-ir-spelled-as-tkident
 - [p 20] [N] bug-n-exec-ignores-a-caller-supplied-builtins-mapping
 - [p 20] [N] bug-n-name-on-a-builtin-type-is-unimplemented
