@@ -1,7 +1,8 @@
 ---
 prio: 80
 track: P
-owner: unassigned
+owner: frankA
+status: done
 ---
 
 # A METHOD called with missing arguments compiles and reads garbage (free routines are checked)
@@ -219,3 +220,68 @@ intended, or it breaks the very construct
 [[bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults]] depends on.
 That interaction is the reason this ticket and that one are entangled, and it
 must be tested in both directions before the error lands.
+
+## Fixed (2026-08-28)
+
+`CheckMethodCallArity` in `pasparser_call.inc` — **one** procedure holding the
+call-or-reference decision, delegated to from the seven no-paren sites rather
+than seven sites each deciding for themselves. The seven call sites are one line
+apiece with no logic in them, so there is nothing at those sites to drift.
+
+All four shapes from the table now report with a real source line and agree with
+FPC; `rc=1`, no binary emitted:
+
+```
+pascal26:42: error: wrong number of parameters in call to TSvc.IPick
+pascal26:43: error: wrong number of parameters in call to TSvc.IDo
+pascal26:44: error: wrong number of parameters in call to TSvc.VDo
+pascal26:45: error: wrong number of parameters in call to TSvc.CDo
+```
+
+It shares `ExpectCallRParen`'s wording deliberately: it is the same defect
+reported from the other side, and two messages for one concept is how the two
+paths drifted apart in the first place.
+
+**A sibling defect I predicted and the measurement refuted.** Reading
+`CanFillDefaultsFrom` (which requires `CurTok.Kind = tkRParen`, false when there
+are no parens at all), I concluded the static class-method path would fail to
+fill defaults for a parenless all-defaulted call — the unfixed sibling of
+[[bug-p-a-parenless-call-to-an-all-defaulted-virtual-method-segfaults]]. It does
+not: `TD.Baz` against `Baz(a: Integer = 7)` prints `Baz 7` and matches FPC, as do
+the instance and virtual spellings. The defaults arrive by another route. The
+reasoning was clean and wrong, which is the case `debugging-playbook.md` is
+about; no scope was expanded on the strength of it.
+
+### Both directions pinned in the suite, permanently
+
+- `test/test_method_missing_args_report_fail.pas` — the deficit direction, all
+  four call paths, asserted by line number with "no binary produced".
+- `test/test_method_parenless_still_valid.{pas,expected}` — the must-NOT-break
+  direction: method pointers, parameterless methods, and all-defaulted methods
+  on the instance, virtual and class paths. Output verified against the FPC
+  oracle, not just against ourselves.
+
+The second file is the one that earns its keep: **a rejection test alone would
+pass just as well if the check were far too strict**, and the method-pointer
+shape it pins is the construct
+[[bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults]] depends on —
+the thing most at risk from this very change.
+
+### Regression evidence
+
+Re-ran the identical sweep with the check live and diffed against the
+pre-change run: **compiles per section unchanged** (compiler 1, lib/rtl 110,
+lib/pcl 22, examples 38) and **zero** new arity diagnostics anywhere. Nothing
+that compiled before stopped compiling. `gate.sh quick` GREEN; self-host
+fixedpoint verified.
+
+### Still open, deliberately
+
+The 8× duplicated method-call argument loop (`pasparser_call` ×1,
+`pasparser_expr` ×2, `pasparser_lval` ×5, plus `pyparser` ×6) is untouched. That
+duplication is the reason this defect could hide in seven places at once, and
+collapsing it is a real Track P/A refactor — worth its own ticket, not worth
+smuggling into a bug fix.
+
+## Log
+- 2026-08-28 — resolved, commit PENDING-COMMIT.

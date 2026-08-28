@@ -117,7 +117,6 @@ _none_
 | bug-nilpy-four-remaining-absent-builtins | N | 12 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
 | bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults | P | 70 | bug | Method pointers: a class method never works, and an inline cast never works | — |
-| bug-p-a-method-call-with-missing-arguments-is-accepted-and-reads-garbage | P | 80 | bug | A METHOD called with missing arguments compiles and reads garbage (free routines are checked) | — |
 | bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching | P | 65 | bug | A parameter's pointer element type is lost between registration and overload matching | — |
 | bug-p-a-resourcestring-is-not-addressable | P | 55 | bug | `@SomeResourceString` is `error: undefined variable` — pxx parses a `resourcestring` section as a plain const section (pasparser_proc.inc:4783), and a const has no address. FPC makes resourcestrings addressable (they are runtime-replaceable variables), which is what `Exception.CreateRes(@SArgumentOutOfRange)` — the Delphi/FPC idiom, 3 sites in generics.defaults.pas — depends on. | — |
 | bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
@@ -135,6 +134,7 @@ _none_
 | bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-last-good | T | 60 | bug | PASSLIKE = (pass, skip), so a job that SKIPped because its corpus was absent counts as the last GOOD sha. When the corpus later appears and the job runs for the first time, the range is computed from a sha where it never executed — manufacturing a regression window full of innocent commits. Cost a real hypothesis and four wrongly-implicated commits on 2026-08-27. | — |
 | bug-t-fpc-seed-canary-red-cited-lines-that-cannot-contain-the-identifier | T | 30 | bug | One gate.sh quick run reported the FPC seed canary RED with 'symtab.inc(5934,30) Identifier not found ByRefArgNeedsLvalue' — but line 5934 of that file contains an unrelated loop, and the real call sites are at 6185/6186, AFTER the definition at 6099. Not reproducible: fpc compiled the identical tree rc=0 twice by hand and the next gate.sh run was GREEN. Evidence points at the canary reading a stale/other tree state, the same class the fixedpoint step already defends against; a false RED costs an agent a full investigation. | — |
 | bug-t-twatch-web-lists-a-target-that-cannot-be-built | T | 15 | bug | tools/twatch_web.py lists riscv64 in CROSS_TARGETS, but no compiler backend can produce a riscv64 binary and the test manager never mentions the target. The dashboard therefore carries a column that is structurally empty, and an empty column reads as 'no news' rather than 'impossible'. | — |
+| bug-wasm-compiling-compiler-pas-for-wasm32-needs-tens-of-gb | A | 50 | bug |  | — |
 | chore-a-delete-the-dead-pascal-lvalue-statement-path | A | 30 | chore | `ParseLValue` and `CompileLValueAddress` in pasparser_lval.inc have no callers anywhere in compiler/** — ~130 lines of pre-AST statement-assignment parsing, including direct machine-code emission, that nothing reaches. | — |
 | chore-a-re-include-bench-timing-in-tools-devtest | A | 30 | chore | One line: `tools-devtest` skips `bench_timing_devtest.py` with an explicit `case ... continue`, added by a1fd5715e because the guard was load-sensitive. It has been fixed (c194b01e9) and is green under load average 14. Deleting the skip re-arms the only guard for bug-t-bench-sub-second-timings-quantized-to-50ms, which has not run in the fleet since the family was wired up. | — |
 | chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments | A | 15 | chore | compiler/builtin/pylib.pas still carries a no-op `pyexec` stub, plus comments in pylib.pas and pyeval.pas saying things SEGFAULT 'because pyexec is a stub'. Engine 1 landed 2026-07-31 and `exec` lowers to pyeval's EvalPyStmts — nothing calls the stub. The stale prose is the cost: it reads as an unimplemented feature and made a reader doubt a done, gated one. | — |
@@ -589,9 +589,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2552)
+## done (2553)
 
-2552 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2553 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (46)
 
@@ -648,7 +648,6 @@ _none_
 
 - [p 85] [N] bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
 - [p 85] [O] feature-opt-o3-register-pressure [parked — re-claim, do not duplicate]
-- [p 80] [P] bug-p-a-method-call-with-missing-arguments-is-accepted-and-reads-garbage
 - [p 75] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 75] [P] feature-pascal-corpus-oop
 - [p 72] [N] feature-nilpy-stdlib-coverage-gaps-measured
@@ -746,6 +745,7 @@ _none_
 - [p 50] [N] bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base
 - [p 50] [T] bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio
 - [p 50] [T] bug-t-a-skip-that-cannot-say-why-is-a-pass-in-the-verdict
+- [p 50] [A] bug-wasm-compiling-compiler-pas-for-wasm32-needs-tens-of-gb
 - [p 50] [D] docs-devnotes-ai-assisted-build [parked — re-claim, do not duplicate]
 - [p 50] [C] feature-c-import-a-pascal-unit-under-a-mangled-name [parked — re-claim, do not duplicate]
 - [p 50] [A] feature-nested-routine-fixed-array-capture

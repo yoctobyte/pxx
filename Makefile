@@ -2530,6 +2530,27 @@ test-nilpy: $(COMPILER)
 	   && printf '%s\n' "$$out" | grep -q '^pascal26:43: error: no overload of P1' \
 	   && test ! -e $(TESTTMP)/test_bad_arity26 \
 	  || { echo "test_bad_arity_and_noncallable_all_report_fail: FAIL - rc=$$rc (want rc=1, four diagnostics on lines 40-43, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	@# A METHOD mentioned WITHOUT its arguments -- the deficit direction of the
+	@# arity check. The surplus direction is pinned just above; too few args
+	@# INSIDE parens was always caught by Expect(tkComma), so the hole was the
+	@# no-paren shape, on all four call paths (instance fn/proc, virtual, class).
+	@# bug-p-a-method-call-with-missing-arguments-is-accepted-and-reads-garbage
+	@out=$$(./$(COMPILER) test/test_method_missing_args_report_fail.pas $(TESTTMP)/test_method_missing_args26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:42: error: wrong number of parameters in call to TSvc.IPick' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:43: error: wrong number of parameters in call to TSvc.IDo' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:44: error: wrong number of parameters in call to TSvc.VDo' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:45: error: wrong number of parameters in call to TSvc.CDo' \
+	   && test ! -e $(TESTTMP)/test_method_missing_args26 \
+	  || { echo "test_method_missing_args_report_fail: FAIL - rc=$$rc (want rc=1, four diagnostics on lines 42-45, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	@# ...and the other direction: the parenless mentions that must STAY legal.
+	@# A rejection test alone would pass just as well if the check were far too
+	@# strict, and the method-POINTER shape here is the one with real regression
+	@# risk -- it is the basis of the method-pointer cast ticket.
+	@./$(COMPILER) test/test_method_parenless_still_valid.pas $(TESTTMP)/test_method_parenless26
+	@$(TESTTMP)/test_method_parenless26 | diff -u test/test_method_parenless_still_valid.expected - \
+	  || { echo 'test_method_parenless_still_valid: FAIL - a legitimate parenless method mention was broken'; exit 1; }
 	@# a SECOND class of the same name in one unit must be refused, naming it
 	@./$(COMPILER) test/test_pascal_duplicate_class_fail.pas $(TESTTMP)/test_pascal_dup_class26 2>&1 \
 	  | grep -q 'duplicate class name TFoo' \

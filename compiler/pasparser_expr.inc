@@ -1119,7 +1119,8 @@ begin
                 Inc(mai);
               end;
               ExpectCallRParen(mpi);
-            end;
+            end
+            else CheckMethodCallArity(mpi);
             node := mcallNode;
           end
           else if mmi >= 0 then
@@ -1209,7 +1210,8 @@ begin
                 ASTRight[ASTLeft[mcallNode]] := margSeq;
               end;
               ExpectCallRParen(mpi);
-            end;
+            end
+            else CheckMethodCallArity(mpi);
             { result type for chaining (e.g. (o as T).GetChild.M) }
             if (Procs[mpi].RetType = tyClass) or (Procs[mpi].RetType = tyRecord) then
               ASTTk[mcallNode] := Ord(Procs[mpi].RetType);

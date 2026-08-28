@@ -692,6 +692,36 @@ begin
             ProcParamHasDefault[mpi * MAX_PROC_PARAMS + nextIdx];
 end;
 
+{ A method mentioned with NO argument list at all, where the method REQUIRES
+  arguments: `s.IPick;` on `IPick(A: LongInt)`. Every method-call site shares the
+  shape `if CurTok.Kind = tkLParen then begin ...parse args... end;` with no
+  else, so the call node was returned holding only Self and the callee read
+  whatever the argument register happened to contain. FPC rejects it; a FREE
+  routine in the same position was already rejected here. One concept, two
+  paths, and the second path is the one that stayed broken
+  (normalise-dont-special-case.md).
+
+  Too-few arguments INSIDE parens was never the hole -- Expect(tkComma) and
+  ExpectCallRParen already catch that -- so this fires only on the no-paren
+  shape, and shares ExpectCallRParen's wording because it is the same defect
+  reported from the other side.
+
+  What it must NOT reject: `p := s.Act` (a method POINTER, which is legitimately
+  not a call) and `n := s.NoArgs` (parameterless). The first never reaches a call
+  site at all -- it is resolved to AN_METHODREF earlier -- and the second is
+  excluded by the ParamCount test. A trailing default is likewise not missing:
+  Pascal defaults are trailing, so the flag on the FIRST unsupplied parameter
+  settles the whole tail.
+  bug-p-a-method-call-with-missing-arguments-is-accepted-and-reads-garbage }
+procedure CheckMethodCallArity(mpi: Integer);
+begin
+  if (mpi < 0) or (mpi >= ProcCount) then Exit;
+  if Procs[mpi].ParamCount <= 1 then Exit;          { Self only: nothing required }
+  if (1 < MAX_PROC_PARAMS) and
+     ProcParamHasDefault[mpi * MAX_PROC_PARAMS + 1] then Exit;
+  ErrorRecover('wrong number of parameters in call to ' + Procs[mpi].Name);
+end;
+
 { A call written with FEWER arguments than any overload declares, where the
   missing ones all carry defaults — `filedialog.askopenfilename()` against
   `askopenfilename(title=''; filetypes=...; ...)`. The method paths have filled
@@ -1357,7 +1387,9 @@ begin
     ASTLeft[callNode] := kwHead;
   end
   else if CanFillDefaultsFrom(mpi, 1) then
-    FillDefaultArgs(mpi, 1, callNode, lastArg);
+    FillDefaultArgs(mpi, 1, callNode, lastArg)
+  else
+    CheckMethodCallArity(mpi);
 
   Result := callNode;
 end;

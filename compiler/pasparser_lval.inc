@@ -2566,7 +2566,8 @@ begin
               Inc(mai);
             end;
             ExpectCallRParen(mpi);
-          end;
+          end
+          else CheckMethodCallArity(mpi);
           node := mcallNode;
           Result := node; Exit;
         end;
@@ -2781,7 +2782,9 @@ begin
               a method whose parameters plainly do have defaults. Two questions
               wearing one name; this arm needs only the second half.
               bug-p-a-parenless-call-to-an-all-defaulted-virtual-method-segfaults }
-            FillDefaultArgs(mpi, 1, mcallNode, mlastArg);
+            FillDefaultArgs(mpi, 1, mcallNode, mlastArg)
+          else
+            CheckMethodCallArity(mpi);
           { Continue the selector loop (not Exit) so trailing `.field` / `[i]` on
             the method result are parsed: obj.M(args).field, obj.M.field, chained
             obj.M1.M2. The result's record (ProcRetRecId) drives field
@@ -3011,7 +3014,8 @@ begin
       Inc(mai);
     end;
     ExpectCallRParen(mpi);
-  end;
+  end
+  else CheckMethodCallArity(mpi);
   Result := mcallNode;
 end;
 
@@ -4309,7 +4313,8 @@ begin
             Inc(mai);
           end;
           ExpectCallRParen(mpi);
-        end;
+        end
+        else CheckMethodCallArity(mpi);
         tk := Procs[mpi].RetType;
         if (tk = tyClass) or (tk = tyRecord) then recId := ProcRetRecId[mpi]
         else recId := REC_NONE;
