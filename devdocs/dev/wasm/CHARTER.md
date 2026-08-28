@@ -206,6 +206,26 @@ This was found by writing it wrong first — the prototype's draft printed garba
 on the unwind path — which is the honest way to have learned it and the reason
 to trust it.
 
+### Where the claim stops — and it stops sooner than it reads
+
+**The validator makes the WIDTH class unrepresentable, not the MEANING class.
+Its guarantees end exactly where two things are the same width.**
+
+Measured, 2026-08-28. A `var` parameter's slot holds the CALLER's address, so
+the variable lives at `[slot]` and not `&slot`. The deref went into the
+address-of path and was left out of load and store, so `o := o + n` on a var
+parameter read the address as if it were the value, added to it, and wrote the
+sum over the reference. Every one of those is an `i32`. The module validated,
+ran, balanced its shadow stack, and returned a plausible number. Only the
+differential against the native build caught it.
+
+So the section above is true and load-bearing, and it is true of a *class*: an
+`i64` loaded as an `i32`, a signature that disagrees with its body, a value
+left on the stack across a branch. It says nothing at all about a correct-width
+pointer that points at the wrong thing. That half is what
+`test/wasm/check_phase2.sh` is buying, and it is worth saying what the
+differential buys rather than that running one is prudent.
+
 The general form: wasm's type-checked operand stack, explicit block types and
 structured control flow make several whole categories of emitter bug
 *unrepresentable* rather than merely wrong. That makes this target useful as a
