@@ -14062,6 +14062,17 @@ lib-test: pxx-stable-check
 	# per-stream PRNG state: reproducibility + independent split streams (no lock)
 	$(PXX_STABLE) test/lib_randomstate.pas $(TESTTMP)/lib_randomstate
 	test "$$($(TESTTMP)/lib_randomstate | tail -n 1)" = "RANDOMSTATE OK"
+	# Tier 1 (hardware entropy) wiring: random.pas consuming __pxxCpuHasHwRandom
+	# and __pxxHwRandom64. Asserts CONTRACTS, not values -- RDRAND is present on
+	# this box but not on every box the suite runs on -- so both branches of the
+	# availability probe print the same lines and the expected output is
+	# machine-independent. The line with teeth is seeded-reproducible: tier 1 must
+	# not leak into the deterministic path, where a change would look random and
+	# be catastrophic. Compared whole rather than by tail: the sentinel is
+	# unreachable on failure and the program exits 1, but the FAIL lines are the
+	# diagnostic and a tail would discard them.
+	$(PXX_STABLE) test/lib_random_hw_tier1.pas $(TESTTMP)/lib_random_hw_tier1
+	test "$$($(TESTTMP)/lib_random_hw_tier1)" = "$$(printf 'probe-stable=ok\ncontract=ok\nseeded-reproducible=ok\nrandomize-varies=ok\nHWTIER1 OK')"
 	# IPv6 over the PAL: sockaddr_in6 layout + loopback round trip (skips if the
 	# host has no AF_INET6 — a broken layout is the target, not the CI netstack)
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_ipv6.pas $(TESTTMP)/lib_ipv6
