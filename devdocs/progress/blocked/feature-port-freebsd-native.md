@@ -54,9 +54,18 @@ zero-work smoke on a real BSD kernel before writing a line of code.
 
 ## Test infra
 
-qemu FreeBSD image (pre-built qcow2 exists) + linuxulator. The per-OS image/runner
-harness may live in a Track T clone (see portability-axes.md) — the compiler work is
-here.
+qemu FreeBSD image (**FreeBSD.org publishes pre-built qcow2 VM images**, unlike
+OpenBSD — cf. the parallel line in [[feature-port-openbsd-libc]], *"qemu OpenBSD
+via `autoinstall` (no pre-built qcow2)"*, filed in the same commit) +
+linuxulator. The per-OS image/runner harness may live in a Track T clone (see
+portability-axes.md) — the compiler work is here.
+
+> **Wording clarified 2026-08-28 by Track T (pxx-a5).** This line previously
+> read *"(pre-built qcow2 exists)"* and was read below, and in
+> [[feature-t-freebsd-image-and-runner]], as a claim that an image existed **on
+> our infrastructure**. It never said that: it is one half of an
+> obtain-the-image comparison with OpenBSD. The sentence was true; its subject
+> was upstream. Nothing about the plan changed — only the reading it invites.
 
 ## 2026-08-20 — not started: the test infra this needs is not on plexus
 
@@ -71,6 +80,16 @@ Measured on plexus (the dev box, `frank1`):
   infra" section above says "pre-built qcow2 exists"; it does not exist on this
   machine. It may exist on another box, or the claim may be stale — worth
   confirming before anyone plans around it.
+
+> **Resolved 2026-08-28 by Track T (pxx-a5): neither.** Re-measured on plexus
+> (nothing changed in eight days — no `qemu-system-*` of any kind, no libvirt,
+> no `*.qcow2` / `*.iso` / `*.img` anywhere reachable). The claim is **not
+> stale and not about another box**: it is a true statement about what
+> FreeBSD.org publishes, misread as an inventory. See the clarified wording
+> above and [[feature-t-freebsd-image-and-runner]] for the full measurement.
+> **The practical consequence is unchanged** — there is still no kernel to boot
+> here, and this ticket stays blocked — but the lead "go find the existing
+> image" is closed, and nobody should spend time on it again.
 
 Both acceptance criteria are unrunnable here: the native `--platform=freebsd`
 run *and* the linuxulator smoke need a FreeBSD kernel. The ticket's own plan
