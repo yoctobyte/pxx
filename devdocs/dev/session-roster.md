@@ -12979,3 +12979,40 @@ And the framing worth more than the safety: **the check is also a detector.** Ev
 `compiler/**` is a method call that has been silently reading a garbage argument in the
 compiler itself, for as long as the hole has existed. Those are not build breakage — they are
 live bugs the fix would surface, each deserving its own ticket.
+
+### The held-back sessions now have a MECHANICAL expiry, not a note
+
+Tick state, 2026-08-28 ~18:00: `urgent/` empty; `working/` holds exactly the two live locks
+(`feature-pascal-corpus-expansion` frankA, `feature-target-wasm` frankwasm); Track T **UP**
+through `8c0c9b366999`; frankA and frankwasm **busy**; frankB idle by decision; frank-optimize-b4
+and pxx-a5 held.
+
+The hold on frank-optimize-b4 and pxx-a5 is the account-session ceiling — **1-2 workers, and
+four concurrent workers died at once on 2026-08-25, indifferent to which machine.** Two are
+busy, so we are at it. That reason was sound and its expiry was a sentence, which is exactly
+the shape that became "PARKED and that is correct" earlier today.
+
+**So the expiry is now a signal rather than a sentence.** One-shot idle subscriptions armed on
+**frankA** and **frankwasm**: whichever finishes first wakes this session, and that is the
+moment a slot frees. Then, in order — **pxx-a5 → Track T
+`bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-last-good` [p60]**, the highest-leverage
+unclaimed item in the repo because tstate is the truth every other lane's gate rests on; and
+**frank-optimize-b4 stays held while frankA holds the A/P slot**, since Track O edits A's shared
+ground — that one clears when frankA's lane does, not when a session slot does. **Two different
+locks, two different expiries, and conflating them is how one becomes permanent.**
+
+*Prefer a mechanical expiry to a convention* — my own rule, previously applied to everyone
+else's tickets and not to my own dispatch state.
+
+### An instrument note: "peer commits" does not show who authored anything
+
+The tick's per-tree `git log --since` shows what each tree has **pulled**, not what it wrote —
+frankA and frankB printed byte-identical lists because both are on `master` and both had
+synced. It is still useful as *"has master moved"*, and useless as *"who did what"*. Recorded
+so a future tick does not read authorship into it, which is the same error as reading coverage
+into a green cross-target sweep.
+
+frankA acted on the wall-4 relay within the tick: `3a5529955` (one canonical wall table, the
+other three marked snapshots), `eda8d7137` (the p80 arity ticket), `3f94b47d9` (the
+comment-nesting divergence entry now points at `fpc_diff_probe.sh`, so the lost oracle turns
+into the next person's shortcut).
