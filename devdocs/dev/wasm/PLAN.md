@@ -1449,11 +1449,19 @@ arena slope sees refcounts too high, never too low), thirteen is blind over a
 *region* (everything the two arms hold in common).
 **Applying it to this suite, which is the point of a check.** `test/wasm/` was
 audited against face thirteen the same day. Four checks — `check_data`,
-`check_phase2`, `check_phase3`, `check_phase4` — have exactly **one** assertion
-each and it is a native diff; every other check pairs its diff with at least one
-absolute claim (`check_managed` five, `check_pal` and `check_wasi` four, and so
-on). Read by grep first and then by eye, because a paragraph about misleading
-instruments should not rest on a regex.
+`check_phase2`, `check_phase3`, `check_phase4` — assert nothing about program
+BEHAVIOUR except a native diff; every other check pairs its diff with at least
+one absolute claim (`check_managed` five, `check_pal` and `check_wasi` four, and
+so on).
+
+The first version of this paragraph said "exactly one assertion each", and that
+was wrong: each also prints `ok  .wasm and .wat describe the same module`, from
+the shared `wat_oracle.sh` helper rather than from the check's own body, so a
+grep of the file misses it and a glance at the file agrees with the grep. It
+does not change the conclusion — that line compares the encoder's two output
+paths against **each other**, which is pxx against itself and shared even more
+tightly than the native diff — but the sentence claimed a count, and the count
+was wrong. Fixed here, and in the note the four checks now print.
 
 Those four are diff-only for a defensible reason — they cover Phases 1-4, where
 the subject really is the backend and a shared-frontend defect would be a Track P
@@ -1462,6 +1470,13 @@ green means *wasm32 agrees with the other backends*, which is what they were
 built to say. It does not mean *wasm32 is correct*, and nothing in their output
 distinguishes the two. Anyone tempted to cite them for the second claim should
 read this paragraph instead.
+
+**Each of the four now prints what it does not claim**, six `..` lines naming
+the shared frontend/AST/IR and pointing at face thirteen. That is the cheap
+half of the fix: it costs nothing, and it removes the ambiguity without waiting
+for a second suite to show the same shape. Accidental coverage and designed
+coverage read identically from the outside; a line saying which one this is
+turns that back into something a reader can check.
 
 The checks that carry absolute assertions are the ones that can speak above the
 IR, and they were added for unrelated reasons — the retain control in

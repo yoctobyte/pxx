@@ -71,6 +71,13 @@ JS
 node "$work/run.js" "$work/d.wasm" > "$work/wasm.txt"
 if diff -u "$work/native.txt" "$work/wasm.txt"; then
   echo "ok  wasm matches the native build ($(wc -l < "$work/native.txt") values), \$sp balanced"
+  echo "..  this is a pxx-vs-pxx diff, and it is the only assertion here about program"
+  echo "..  BEHAVIOUR (the wat-oracle line below compares the encoder against itself). It claims"
+  echo "..  BACKEND PARITY, not correctness. Both arms share the Pascal frontend,"
+  echo "..  the AST and the IR, so a defect above that line is wrong identically on"
+  echo "..  both sides and this check stays green. See face thirteen in"
+  echo "..  devdocs/dev/differential-probes.md. For a claim above the IR the oracle"
+  echo "..  has to be foreign (FPC), or the assertion absolute — neither is used here."
 else
   echo "FAIL wasm diverges from native"; exit 1
 fi
