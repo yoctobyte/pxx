@@ -14178,3 +14178,76 @@ banked warning repeated back rather than softened — do not weaken the prerequi
 the corpus advance; the over-approximating `Tokens[]` sweep yields a *silently wrong
 specialization*, worse than today's honest refusal. Escape if it needs `lexer.inc` or A ground.
 Two workers, unchanged.
+
+### frank-optimize lands W2 and inverts its own recommendation by re-measuring the prize
+
+`c93292fe4`, **1.20-1.26x on tight scalar loops**, behind `-O3`, `-O2` untouched, self-host
+fixedpoint verified, 48/48 cross-target hashes identical.
+
+**The decomposition is the judgment call of the session.** Its own parked note said the next
+move was "W1's larger half, ~1.4x, multi-session". The number was right (measured 1.37-1.41x)
+and it **decomposes**:
+
+| | insns | cyc/iter | vs current |
+| --- | --- | --- | --- |
+| A current `-O3` | 19 | 6.13-6.50 | — |
+| B fold resident into loop cmp | 18 | 6.10-6.25 | 1.02-1.04x |
+| **G in-place ALU, both sites** | **15** | **4.88-5.07** | **1.25-1.31x** |
+| E full register contract | 13 | 4.43-4.61 | 1.37-1.41x |
+
+G collects ~70% of E for a fraction of the work, leaving ~1.10x for the multi-session change.
+**It built G and told me the project it had recommended was no longer the right next move.**
+
+**Rulings.** *Item 1 (rest of the register contract): NO for now* — its premise was superseded by
+its own author's measurement, 1.4x → ~1.10x, which is the one condition that re-opens a rank. A
+multi-session project is opened at its correct price at the START of a session, not the tail of
+one; it remains the largest single item. Told it to re-price the p85 umbrella in-lane, same as
+frankA's p65. *Item 3 (~5%, hardest build): yes, with a stop condition* — park in the good state
+rather than push, because the marginal fourth slice is worth less than the risk of landing
+something unsure on A's shared ground.
+
+**The promotion experiment is blocked on a hole worth naming.** New passes land behind `-O3`
+because nothing gates `OptLevel>=3` — which is exactly why nothing **exercises** it.
+
+> **"No failures at `-O3`" cannot be distinguished from "nobody ran `-O3`."** The free tier is
+> free because it is unobserved. Same shape as the skip-counted-as-pass bug T fixed this
+> afternoon, one level up in tier composition.
+
+Promoting a pass from `-O3` to `-O2` today would move it from an unobserved tier to the proven
+default in one step — a first exposure wearing a promotion's clothes. **Directed to file it as a
+Track T ticket** (tier composition is T's tool; O found the gap; its `w2stress.pas` running
+`-O0/-O1/-O2/-O3` with all eight outputs compared is the seed of what the matrix needs). Not to
+be built under O.
+
+**`{$Q+}`: no ticket, but DO record it.** pxx detects a LongInt overflow `fpc -O2` misses — under
+`{$Q+}` that is us correct and FPC gapped, the mirror of the *we accept a form FPC rejects* row,
+so not a defect. But **seen-and-written-down-nowhere is the worst of the three states**: the next
+reader rediscovers it and files it as noise. One line in `pascal-dialect-divergences.md`, same
+place frankA filed `SFoo := 'x'` an hour earlier, noting it predates W2.
+
+### An optimisation's failure mode is invisible to every correctness test you own
+
+frank-optimize's first W2 build **silently refused the hottest shape in the language.** It
+guarded on IR node types, and a for loop's own increment carries `tyUnknown` — so it fired on
+`s := s + j` and not on `i := i + 1`. Half the win, no error anywhere, every output still
+byte-identical, every test still green. **Only disassembling the output caught it.**
+
+> **A missing optimisation is not a wrong answer, so no correctness suite can see it.** The suite
+> proves you did not break anything; nothing in it proves you did anything at all.
+
+The fix generalises: **narrow on the property the operation depends on, not on the syntax that
+usually carries it** — symbol types, which the store and refresh actually narrow by, rather than
+node types. Same lesson as finding a dead guard by running the mutation instead of reading the
+test, and it lands in the same week as frankwasm's `124 of 124 bodies lowered` trap.
+
+**Measuring slice B and DROPPING it is worth as much as building G.** B deletes a real
+instruction and buys nothing — third confirmation that **instruction count is not the signal;
+which dependency chain the instruction lands on is.** W1's operand funnel and B's cmp operand are
+off the recurrence and measured ~0; W2's two moves bracket the ALU and *are* the recurrence. The
+rejection is recorded in the ticket so nobody re-proposes it.
+
+Two measurement notes on the record: `bt` read as a 10% regression on single runs and is a
+speedup when amplified — **fourth false reading from that box**, caught by the playbook rule; and
+a real +1-2% on the neutral compile bench was **explained rather than rounded away** (`and`
+short-circuits — verified, not assumed — so at default `-O` the `OptLevel>=3` predicate is never
+reached; it is code layout).
