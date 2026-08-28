@@ -10335,3 +10335,25 @@ rarely-used knob. Coordinator call: **file that ticket now, before the U answer
 returns** — it makes the fork cleaner for the owner (the real work item is visible
 separately from the knob) and one syscall per byte is a genuine defect independent
 of `SetTextBuf`.
+
+### Lane state at 2026-08-28 ~07:00Z
+
+| lane | state |
+| --- | --- |
+| **frankB** | files the buffered-Text-I/O ticket (perf-ranked), then **`feature-b-the-module-shim-batch-blocking-the-python-corpus`** [B p62, `unfinished/`] — **PARKED MID-FLIGHT, re-claim, do not restart.** Told to stop and report if the remaining work is really in `pyparser.inc`: that would be **N work wearing a B ticket's clothes** and N is undispatched by owner call. |
+| **frankwasm** | scoping Phase 4 (calls). Owes me a **file list and the shape of the change, not a patch** — VMT slots / RTTI fixups → table indices instead of the 32-bit code addresses patched at `elfwriter.inc:1937`. |
+| **frankA** | parked for the night, clean. Track P queue stands: symbol-or-field first. |
+| **frankT** | parked, four reasoned deferrals. Daemon live at pid 1991398 on current code. |
+| **frank-optimize** | parked, `-O3` umbrella in `unfinished/`, nothing half-applied. |
+| **frank-rust** | idle, correct. |
+| **Track A p70** | `bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream` **unclaimed by design** — offered, reasonably declined. Evidence corrected; vendor tree held in `~/frankB`. |
+
+**Convergence worth noting:** frankB's reportlab finding (library surface leads,
+compile count lags) and the ranker independently agree that the module-shim batch
+is B's top item. **No re-ranking done** — that is the owner's, filed as
+`decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample` [U, p55].
+
+> **A rule's EXAMPLE silently narrows its scope.** `gating-and-waiting.md`'s pipe
+> rule was ignored because it was illustrated with `gate.sh quick | tail` and read
+> as a gate.sh rule. Worth auditing other reference docs for the same shape: a
+> rule stated generally but exampled narrowly will be applied narrowly.
