@@ -36,7 +36,8 @@ pointer width at the `compiler.pas:1508` arm like every other target.
 
 - [x] **Does anything need `IR_PROCADDR` values to be comparable or
       arithmetic-able?** No — and this was the one answer that could have
-      reshaped Phase 4. Grepped `lib/`, `examples/`, `compiler/`: the only code
+      reshaped the call phase (then numbered 4, now 5). Grepped `lib/`,
+      `examples/`, `compiler/`: the only code
       treating a procedure address as a number is `lib/rtl/scheduler.pas`
       (`Int64(@CoStart)` into a hand-built stack frame, four times, one per
       arch). Nothing orders procvars; nothing does arithmetic on one. That
@@ -54,7 +55,7 @@ pointer width at the `compiler.pas:1508` arm like every other target.
       equipped. `wabt 1.0.36` (`wat2wasm`, `wasm-validate`, `wasm2wat`) and
       `node v22.22.1` are installed; **`wasmtime` is not**, but node is a
       complete runtime for Phases 1-5 and `node:wasi` covers preview1 for
-      Phase 6. Install wasmtime before Phase 6 as the reference standalone
+      Phase 7. Install wasmtime before Phase 7 as the reference standalone
       runtime; nothing before that needs it.
 
       A hand-written probe was validated and run end to end, deliberately
@@ -80,14 +81,25 @@ dispatch chain gets an explicit `Error('wasm32: not implemented')`.
 
 This is the whole conflict-avoidance strategy in one move. Registration is the
 only part of this work that lives in files other lanes edit constantly. Land it
-on `master` first and **the branch touches zero shared files until Phase 4**.
-Let the branch do it instead and every `master` merge conflicts in exactly the
-hottest files in the tree.
+on `master` first and **the branch touches no shared files at all** — a claim
+made here as a prediction and, as of 2026-08-28, one that has held through five
+phases. Let the branch do the registration instead and every `master` merge
+conflicts in exactly the hottest files in the tree.
 
 **So the standing rule for this branch: if a phase needs a shared-file edit,
 that is a signal to file a Track A ticket and wait — never to make the edit
-here.** The two known ones are Phase 4 (VMT fixups) and Phase 5 (exceptions);
-anything else appearing on that list is a surprise worth stopping for.
+here.** Two were predicted: the call phase (VMT fixups) and exceptions. **The
+first one turned out not to exist** — scoped 2026-08-28, see Phase 5, where the
+predicted patch site is correct for ELF and irrelevant to a target that never
+calls `elfwriter`. That leaves exceptions as the only one still expected, and
+it should be scoped the same way before it is believed. Anything else appearing
+on that list is a surprise worth stopping for.
+
+**PHASE NUMBERS SHIFTED BY ONE ON 2026-08-28**, from Phase 4 onward: the data
+segment took the Phase 4 slot it should always have had, and everything after
+it moved up. Text elsewhere in this file that predates the shift has been
+updated where it points FORWARD; where it records what a past session measured
+or decided it is left alone, because rewriting a record falsifies it.
 
 ## Phase 1 — module writer + WAT emitter, no codegen
 
@@ -148,7 +160,7 @@ allocator, no spills).
     Phase 2 actually owes is that the four wasm value types all work; what it
     does not owe is aggregates — a record or set parameter has no wasm value
     type at all and goes by pointer, which is an ABI question and therefore
-    Phase 4's.
+    the call phase's (Phase 5).
 
   A milestone stated as "the report no longer says X" is only as good as X, and
   X here was a message this lane wrote about itself. Prefer stating what must
@@ -209,20 +221,127 @@ The `br_table` dispatch loop; the 5 control-flow IR ops.
   capped, exactly where a big function makes you want it. Details and the two
   mitigations in [`phase5-exceptions.md`](phase5-exceptions.md).
 
-## Phase 4 — calls and code addresses **(first shared-file escape)**
+## Phase 4 — the initialised blob — **DONE 2026-08-28**
 
-Table section + `call_indirect` with type indices. VMT slots and RTTI fixups
-resolve to **table indices** instead of the 32-bit code addresses patched at
-`elfwriter.inc:1937`. The mechanism is centralized — one fixup list, one patch
-site — so this is contained, but it is Track A's shared ground.
+`Data[]` — string literals, typed consts, VMT and RTTI blobs — reaches the
+module as one active data segment.
 
-- **Requires:** a Track A ticket on `master` and coordination before the first
-  edit. Do not start this phase quietly.
+**This phase was not in the plan, and its absence was a plan defect worth
+naming.** Phase 5's milestone below is virtual dispatch; VMTs live in `Data[]`;
+nothing was emitting those bytes at all. "Resolve VMT slots to table indices"
+presupposes the slots exist, so the milestone was unsatisfiable before this
+phase existed — **a milestone that presupposes unbuilt scaffolding is the same
+failure as one defined by the absence of a symptom** (the trap Phase 2's note
+records). Both are unreachable in a way that only shows up when you try to
+satisfy them. This one was found by scoping; the next would have been found by
+being blocked.
+
+- **Milestone:** a typed const reads back under wasm what it reads natively.
+  Met — `test/wasm/check_data.sh`, 18 values.
+- **Layout.** BSS keeps its fixed base at 1024, unchanged; the blob follows it,
+  and a data-resident global goes through a new immutable `$data` global. Both
+  region sizes are still growing while bodies are emitted, so whichever region
+  sits second cannot have its base written as an `i32.const` where the
+  reference is emitted. One of the two costs an indirection and it should be
+  the rare one: every global variable is a BSS reference, only a typed const is
+  a blob reference. The alternative — a padded 5-byte LEB placeholder patched
+  at write time, as the ELF writers patch code — is faster and worse here,
+  because the WAT is generated alongside the bytes and a patched constant is
+  invisible in a text stream already written.
+- **`DATA_SYM_BIAS` is decoded here for the first time** (`defs.inc:1682`).
+  Missing it computes an address near `0x20000400`, which traps — the good
+  failure mode, and still a failure, arriving the first time a program declares
+  a typed const array.
+- **The program body arrives in PIECES**, and this is the one place a wasm
+  module cannot mirror a register target for free. A frontend emits top-level
+  code with `CurProc = -1` more than once — every typed const built by startup
+  code emits its stores as another such call. On a register target those land
+  in `Code[]` one after another and *are* one function. Here they became N
+  functions all named `main`, none of them called: it surfaced as
+  `duplicate export "main"`, a complaint about the symptom, while the defect
+  was that the bodies were unreachable and every global they initialise read
+  zero. Each chunk now keeps its own slot and `main` is synthesised as a call
+  to each in order.
+- **The typed const that forced it is a Track A ticket, not a wasm bug:**
+  [[bug-a-a-typed-const-record-is-built-by-startup-code-not-stored-as-data]] —
+  the sibling the array fix did not reach. 116 bytes of code per 16-byte record
+  against zero code for an Integer array of the same total size.
+- **The WAT oracle now runs on every slice** (`test/wasm/wat_oracle.sh`). It had
+  run on one hand-built four-function module for four phases and passed, and it
+  was hiding two bugs that both need more than four functions to show: a
+  local-name lookup keyed to "the most recently declared function", and an
+  export order that followed function order in the text and insertion order in
+  the binary. Only the TEXT module was ever wrong, which is why it survived —
+  the binary encodes indices and never asks for a name, so the `.wasm`
+  validated, ran, and matched the native build while the `.wat` named locals it
+  never declared.
+
+## Phase 5 — calls through a table — **no shared-file escape after all**
+
+Table section + element section + `call_indirect` with type indices. VMT slots
+and RTTI method entries resolve to **table indices**.
+
+**The shared-file escape this plan predicted at `elfwriter.inc:1937` does not
+exist.** That patch site is correct for ELF and irrelevant here, because wasm
+never calls `elfwriter`. Scoped 2026-08-28; five things had to be true and each
+was checked rather than inferred from the first:
+
+- `AddMethodFix(dataPos, procIdx)` (`emit.inc:103`) is the **one** append point,
+  and it records a *relocation*, not an address: "the 8-byte slot at
+  `Data[dataPos]` names `Procs[procIdx]`". Target-independent by construction —
+  a code address does not exist when `Data[]` is built. wasm consumes the same
+  list at write time and writes a table index where `elfwriter` writes
+  `entry + BodyAddr`. Sole-appender confirmed by grepping the ARRAY and the
+  COUNT, not the call sites: `Inc(MethodFixCount)` appears once in the tree.
+- `ProcAddrFix` (`@proc` in code) is recorded **per-backend**, in each
+  `ir_codegen_*.inc`'s `IR_PROCADDR` arm. Ours lives in our file.
+- The VMT slot stride is `*8` on **every** target already, decided and
+  documented at `ir.inc:7332`, address in the low dword, with the three 32-bit
+  backends doing a 4-byte indirect read of it. wasm32 has `PtrSize = 4`, so an
+  `IR_LOAD` at `[vmt + slot*8]` already reads exactly the four bytes we write
+  the index into. No layout change.
+- `AN_CLASS_VIRTUAL_CALL` and interface dispatch already lower to loads +
+  `IR_CALL_IND` in shared `ir.inc` (5130, 11676, 11750) with no backend op.
+- DCE is already off for wasm32 (`dce.inc:224`), so its `MethodFixups` /
+  `ProcAddrFix` roots and `CodePos` compaction never run here.
+
+`Procs[].BodyAddr` was the other loose end and it is closed the same way: of its
+111 mentions, every one resolves to a frontend writing `CodeLen`, `EmitCallProc`'s
+per-arch rel-branch math (register backends only), DWARF (`-g`, not wired), the
+ELF writer, DCE, the x64 disassembler, or two cosmetic printers. Nothing reads it
+as an address on any path wasm32 takes.
+
+- **File list: `ir_codegen_wasm32.inc` and `wasmenc.inc`.** Both ours. No grant,
+  nothing to sequence.
+- **Shape:** the three missing sections (table id 4, element id 9) plus the
+  `call_indirect` opcode ($11); one function `WasmTableIndex(procIdx)` as the
+  single place a proc becomes an index, called by both the `IR_PROCADDR` arm and
+  the `MethodFixups` loop so the two cannot disagree; the element segment lists
+  every proc whose address is taken (`MethodFixups` ∪ `ProcAddrFix`) with index
+  0 reserved null, so a nil procvar traps on call and needs no separate check.
 - **Milestone:** virtual dispatch, interfaces, procedural variables.
-- **From here on, `gate.sh quick` on the six existing targets is mandatory** —
-  this is the first phase that can move them.
+- **`gate.sh quick` runs ONCE at the end of this phase**, not per fix, and it
+  runs as the **falsification of the scoping claim above** — not as a gate on
+  the work. The six targets cannot move without a shared edit; that is a
+  conclusion four phases now rest on, and thirty seconds to test it is a good
+  trade. Ritual per-fix runs are not.
 
-## Phase 5 — exceptions **(second shared-file escape)**
+### What the blocker histogram says about the ORDER of this phase
+
+Measured at `f2c0ca849` against `phase4_slice.pas`, 22 unlowered bodies:
+
+| blocker | count | who |
+| --- | --- | --- |
+| `IR_CALL_IND` | **9** | 8 are RTL error hooks calling an installed procvar handler — `PXXDivZero`, `PXXOverflow`, `PXXRangeError`, `PXXNilRef`, `PXXInvalidCast`, `PXXVariantError`, `PXXObjRelease` — plus the two interface refcount helpers. **Not user procvars.** |
+| `IR_VIRTUAL_CALL` | **1** | `TInterfacedObject._Release`. One, in the whole RTL. |
+| `IR_WRITE` + `IR_SLOTADDR` | 5 + 2 | all seven in the float writers |
+| heap / `Halt` | 5 | Phase 7 |
+
+**The plan's assumption that this phase is where virtual dispatch matters is off
+by an order of magnitude.** The indirect-call table is worth nine bodies, the
+VMT path one — and the VMT path falls out of the same mechanism for free.
+
+## Phase 6 — exceptions **(the one remaining shared-file escape)**
 
 Pending-flag threading: within a function a longjmp is `$label := N; continue`
 (free in the dispatch layout); across functions it is an early return plus a
@@ -244,9 +363,9 @@ check after each call, branching to the frame's landing label.
   than returning a wrong answer.
 - **Still open** (see that doc's last section): raise-inside-finally, typed
   handlers and the exception object's refcount lifecycle, and anything crossing
-  `call_indirect`, which waits on Phase 4.
+  `call_indirect`, which waits on Phase 5.
 
-## Phase 6 — the PAL
+## Phase 7 — the PAL
 
 `lib/rtl/platform/wasi/platform_backend.pas`, sized like `esp/` (1,035 lines).
 ~35 of ~90 entries implemented, ~55 returning `PAL_ERR_UNSUPPORTED` — the same
@@ -257,7 +376,7 @@ not `mmap`.
 - **Milestone:** a program that opens, writes, reads back and closes a file
   under `wasmtime --dir=.`, and prints to stdout.
 
-## Phase 7 — the anchor: `pascal26` under wasmtime
+## Phase 8 — the anchor: `pascal26` under wasmtime
 
 The compiler itself: single-threaded, file I/O only, no sockets, no fork. It is
 the one large program that fits this platform exactly.
@@ -269,10 +388,10 @@ the one large program that fits this platform exactly.
   as one — see the third row added to the claims table in
   `../wasm-target-findings.md`.
 
-## Phase 8 — browser profile (hand off)
+## Phase 9 — browser profile (hand off)
 
 The second import profile (`write` → console, no fs) and a playground. That is
-Track W/E work, proposed to the user when Phase 7 is green. Not ours to scope.
+Track W/E work, proposed to the user when Phase 8 is green. Not ours to scope.
 
 ## What does not exist under wasm, and is not a defect
 
@@ -308,3 +427,15 @@ smaller than the C frontend was.
   379 commits behind. The block on a prerequisite refactor was lifted in the
   same pass: that ticket rested on a premise (`no single answer for pointer
   width`) that measurement disproved. Both caught by frank1-80.
+- 2026-08-28 — **Phase 3 (control flow) and Phase 4 (the data segment) done;
+  Phase 5 scoped and its shared-file escape dissolved.** The scoping is the
+  result worth recording: the escape this plan predicted at
+  `elfwriter.inc:1937` is correct for ELF and irrelevant to a target that never
+  calls `elfwriter`, and the producer side was target-independent by
+  construction all along. Five independent facts had to hold and each was
+  checked; the two non-existence claims (`AddMethodFix` is the sole appender,
+  `BodyAddr` is never read as an address here) were closed by grepping the
+  array and the field rather than the call sites, because **an existence claim
+  survives one grep and a non-existence claim does not** — ask what
+  construction your search was structurally blind to. Phases renumbered: the
+  data segment took the Phase 4 slot it should always have had.
