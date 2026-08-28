@@ -1327,3 +1327,29 @@ So before believing any delta under ~5%: is it interleaved, is the rep count
 enough to resolve it, and **is the effect larger than one tick of the timer?**
 The last question is the cheapest of the three to ask and the easiest to skip,
 because the number already looks like a measurement.
+
+## A capability that exists and cannot be asked for costs you at the worst moment
+
+`compiler/asmtext_wasm.inc` could write a `.wat` — the text form of a wasm
+module, the oracle you diff the binary against — from the day it landed. The
+compiler had no way to ask for it: the only caller was a standalone test.
+
+That was invisible for weeks and then cost an hour, because the moment it
+mattered was `0001db0: error: unable to read i32 leb128` — a *parse* failure,
+which reports a byte offset and no function name, on a module of 124 functions,
+with no way to look at what had been emitted. The gap and the need arrived
+together, which is the shape: **an unreachable capability is only ever
+discovered from inside the problem it would have solved.**
+
+Two things to take from it:
+
+- **When a tool grows an output the maintainer uses by hand, wire it to the
+  command line the same day.** The fix here was one branch on the output
+  extension. Deciding it was not worth a flag was correct and irrelevant — the
+  cost was not the flag, it was that nothing could reach the code.
+- **When a diagnostic reports a byte offset, the first move is to make the
+  thing readable, not to read the bytes.** The actual root cause (an
+  `i32.const` of 4294967295, unencodable as a 32-bit signed LEB) was five
+  minutes' work once the `.wat` could be produced and the WAT/binary pair could
+  be compared. Decoding the binary by hand first was the slow path, and it is
+  the one you take when the fast path does not exist yet.

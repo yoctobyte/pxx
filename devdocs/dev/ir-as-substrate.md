@@ -106,3 +106,49 @@ more frontends become cheap → more parallel work can start → each new fronte
 exercises the IR and surfaces the next gap. The better the core, the more "funny
 parallel works" (new languages, new targets) can run at once without touching
 each other. Invest there first.
+
+## `IRTk` is a hint, not a guarantee — and nothing noticed until wasm32
+
+Recorded 2026-08-28 by the wasm32 lane, descriptively: this is a fact about the
+IR as it stands, not a proposal to change it.
+
+`IRTk[node]` records a node's type, and it is not reliably populated. A
+for-loop's bound comparison arrives with an `IR_LOAD_SYM` whose `IRTk` is
+`tyUnknown` while the symbol it loads is plainly an `Integer`.
+
+**Six backends never noticed, and could not have.** A register backend decides
+an instruction from a register width, not from a type: an `Integer` added to an
+`Int64` is already sitting in the low half of a 64-bit register, `IRTk` is
+never consulted to pick the opcode, and an unpopulated one is therefore
+unobservable. By this repo's own rule — an observable no compiling program can
+reach is not a defect — "IRTk is sometimes tyUnknown" was not a bug anyone
+could point at a wrong program for.
+
+**wasm32 is the first type-DIRECTED consumer.** wasm has four value types, no
+sub-registers, and separate instructions for each width, so the backend must
+name a type before it can emit anything. Reading `IRTk` to do it refused every
+`for` loop in the compiler with a message that was a true statement about
+`IRTk` and a false one about the program.
+
+What that backend does instead, in case a future one wants it: **one pure
+function answers what a node produces**, and it takes the answer from the thing
+that actually determines the value — the SYMBOL for a load, the unified operand
+width for a binop, the CALLEE's declared result for a call — with `IRTk` as the
+fallback only for nodes whose type is nothing but what the IR recorded
+(constants, loads through a pointer). Every emitter's declared result is that
+same function, so the planner and the emitter cannot disagree and an emitter
+cannot report a type it did not produce.
+
+That is worth generalising past the one field. The `IRTk` slip was preceded by
+the rule being written down in the same file, at the emitter — *where IRTk and
+what was emitted disagree, believe what was emitted* — and then broken three
+functions later in the planner, because the planner runs before anything is
+emitted and `IRTk` was the only thing available. **A rule you have to remember
+at each site gets broken at the site where following it is inconvenient, which
+is exactly the site where it matters.** The fix was not a better comment; it
+was making the two sites call the same function.
+
+Making `IRTk` a guarantee is a decision with a cost, not a repair, and nothing
+needs it today. But a second type-directed frontend or backend will meet this,
+and it should meet it here rather than rediscovering it from a refused `for`
+loop.
