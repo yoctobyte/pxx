@@ -97,3 +97,27 @@ Per sub-ticket. Frontend/IR changed → `make test` + self-host byte-identical �
   a 22k-LOC campaign to route around a pending decision is a scope call for the
   user, not something an agent should start on its own. Until either lands, this
   umbrella has no work despite ranking at 65.
+- 2026-08-28 — **the 2026-08-20 stall note above is STALE in both of its clauses,
+  and this umbrella has been heading Track P's ranked queue at p75 while its own
+  body says it has no work.** Corrected by the coordinator:
+  - [[decide-tobject-root-methods-dispatch-model]] was **answered by the user on
+    2026-08-21** and is in `decided/`. It has not blocked anything for a week.
+  - [[feature-pascal-builtin-tobject-class]] records itself *"unblocked
+    2026-08-22 (the decide is answered and implemented)"*; only `UnitName` and
+    `ClassInfo` remain.
+  - Rung 3 [[feature-pascal-corpus-generics]] has moved to `unfinished/` and its
+    remaining `blocked-by`, `gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo`,
+    **is in `done/`.** So rung 3 is fully unblocked and is the actionable item —
+    the ladder is not stalled and has not been for days.
+  - The fcl-xml route-around, opened as a scope call for the user, is therefore
+    **moot** and should not be raised again on this ticket's authority.
+
+  > **A stalled-because note ages into a false claim, and it ages invisibly.**
+  > Every clause here was true when written. Nothing re-reads a stall note when
+  > its blocker resolves, because resolving a blocker is an event on the
+  > *blocker*, and the note lives on the dependent. This is the same missing-edge
+  > family as a `blocked-by` pointing at a closed ticket — sixth instance found
+  > on 2026-08-28 — except that prose is invisible to `progress.sh check`, which
+  > only reads frontmatter. An umbrella that ranks above every rung it contains
+  > and then tells the reader it has no work is the worst shape of it: the
+  > ranker promotes it, and only a human who opens it learns it is empty.
