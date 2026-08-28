@@ -84,6 +84,27 @@ of a ticket. The first two members swallow a *status* and invert a
 *verification*; this one deletes the *evidence*, and precisely where evidence is
 irreplaceable.
 
+**Fourth member, and it strikes one stage earlier than the others: `sort -u`
+under a UTF-8 locale silently MERGES distinct identifiers.** Glibc's `en_US.UTF-8`
+collation ignores punctuation, so
+
+```sh
+printf '_longjmp\nlongjmp\n' | sort -u     # prints ONE line
+printf '_longjmp\nlongjmp\n' | LC_ALL=C sort -u   # prints two
+```
+
+Both names are declared in `lib/crtl/include/setjmp.h`, and on 2026-08-28 a crtl
+declaration census dropped `_longjmp` exactly this way — no error, no warning,
+a shorter list. The first three members corrupt the VERDICT of a check; this one
+corrupts its INPUT, so the check then runs perfectly on a set that quietly lost a
+member and reports an honest all-clear about the wrong thing. **Put `LC_ALL=C` on
+any `sort` whose elements are identifiers, paths, or shas**, and when a tool
+enumerates something, give it a floor it must clear (`test "$n" -ge 300`) so a
+collapsed search fails loudly instead of passing trivially. The same census,
+written a second time in Python, dropped `atexit` instead — for an unrelated
+reason — which is the argument for diffing two independent enumerations against
+each other rather than trusting either.
+
 ### `pgrep` matches your own watcher
 
 ```bash
