@@ -55,7 +55,7 @@ pointer width at the `compiler.pas:1508` arm like every other target.
       equipped. `wabt 1.0.36` (`wat2wasm`, `wasm-validate`, `wasm2wat`) and
       `node v22.22.1` are installed; **`wasmtime` is not**, but node is a
       complete runtime for Phases 1-5 and `node:wasi` covers preview1 for
-      Phase 7. Install wasmtime before Phase 7 as the reference standalone
+      Phase 8. Install wasmtime before Phase 8 as the reference standalone
       runtime; nothing before that needs it.
 
       A hand-written probe was validated and run end to end, deliberately
@@ -95,11 +95,19 @@ calls `elfwriter`. That leaves exceptions as the only one still expected, and
 it should be scoped the same way before it is believed. Anything else appearing
 on that list is a surprise worth stopping for.
 
-**PHASE NUMBERS SHIFTED BY ONE ON 2026-08-28**, from Phase 4 onward: the data
-segment took the Phase 4 slot it should always have had, and everything after
-it moved up. Text elsewhere in this file that predates the shift has been
-updated where it points FORWARD; where it records what a past session measured
-or decided it is left alone, because rewriting a record falsifies it.
+**PHASE NUMBERS SHIFTED TWICE ON 2026-08-28**, both times because a phase that
+every program needs had been scheduled behind phases that are merely unusual.
+The data segment took the Phase 4 slot; the heap took Phase 6, ahead of
+exceptions, having previously been one line inside the PAL phase. Everything
+after each insertion moved up. Text elsewhere in this file that predates a
+shift has been updated where it points FORWARD; where it records what a past
+session measured or decided it is left alone, because rewriting a record
+falsifies it.
+
+**If it happens a third time, stop renumbering and fix the ordering rule
+instead.** Both shifts have the same cause and the rule is already written down
+in Phase 6: this plan was ordered by what wasm makes *different*, and the real
+order is set by what every program *needs*.
 
 ## Phase 1 — module writer + WAT emitter, no codegen
 
@@ -361,13 +369,56 @@ Measured at `f2c0ca849` against `phase4_slice.pas`, 22 unlowered bodies:
 | `IR_CALL_IND` | **9** | 8 are RTL error hooks calling an installed procvar handler — `PXXDivZero`, `PXXOverflow`, `PXXRangeError`, `PXXNilRef`, `PXXInvalidCast`, `PXXVariantError`, `PXXObjRelease` — plus the two interface refcount helpers. **Not user procvars.** |
 | `IR_VIRTUAL_CALL` | **1** | `TInterfacedObject._Release`. One, in the whole RTL. |
 | `IR_WRITE` + `IR_SLOTADDR` | 5 + 2 | all seven in the float writers |
-| heap / `Halt` | 5 | Phase 7 |
+| heap / `Halt` | 5 | Phase 6 |
 
 **The plan's assumption that this phase is where virtual dispatch matters is off
 by an order of magnitude.** The indirect-call table is worth nine bodies, the
 VMT path one — and the VMT path falls out of the same mechanism for free.
 
-## Phase 6 — exceptions **(the one remaining shared-file escape)**
+## Phase 6 — the heap **(moved ahead of exceptions, 2026-08-28)**
+
+`PXXAlloc` and its siblings: the builtin lowerings spelled as a NEGATIVE proc
+index on `IR_CALL` (`-Ord(tkGetMem)` and friends), plus `memory.grow` as the
+only way linear memory gets bigger.
+
+**Why this moved.** It was not a phase at all — it was one line inside the PAL
+phase ("heap growth goes through `memory.grow`, not `mmap`") — and it is the
+single largest thing standing between this target and running real programs.
+The measurement, at `72b31f73f`: class instantiation, `writeln`, the variant
+engine and every float writer are all blocked on it, and **nothing else is**.
+
+The argument, and it is the second time this plan has met it:
+
+> **The ordering in this plan was derived from what wasm makes DIFFERENT. The
+> real order is set by what every program NEEDS.**
+
+The data segment gated Phase 4's milestone; the heap gates Phase 5's. Two
+incidents make a pattern and a pattern makes a reordering. Everything this plan
+put early is early because it is *unusual* on this target — the dispatch loop,
+the shadow stack, the value model — and every one of those is now done, while
+the ordinary machinery a program cannot start without was scheduled last
+because it is boring.
+
+- **Milestone:** `virtual_slice.pas` **runs**, and its 7 values match the
+  native build. That slice already exists, already compiles, and already
+  validates (Phase 5); it is not run because every path to a virtual call
+  begins with a class instantiation. So this milestone is stated as *the
+  previous phase's unfinished half becoming true*, which is a milestone nothing
+  can satisfy by deleting a message.
+- **Second milestone:** `writeln` of an integer, diffed against native. That is
+  `IR_WRITE` plus `PXXWriteUIntD`, both heap-blocked today, and it is the point
+  at which a wasm program can report its own answer instead of being
+  interrogated through exports.
+- **Scope note.** A bump allocator over linear memory with `memory.grow` and no
+  reuse is the classic bring-up answer and is NOT throwaway — it is genuinely
+  how a wasm heap starts. But `Free` becoming a no-op is a decision with
+  consequences for the RTL's refcounting, so state which allocator is being
+  built and why, in the file, at the top. Do not let "temporary" be implied.
+- **Still in our own files.** Builtin lowering is backend work; the RTL side is
+  Track B's `lib/rtl`, and if this phase needs something there it is a Track B
+  ticket, not an edit.
+
+## Phase 7 — exceptions **(the one remaining shared-file escape)**
 
 Pending-flag threading: within a function a longjmp is `$label := N; continue`
 (free in the dispatch layout); across functions it is an early return plus a
@@ -391,18 +442,19 @@ check after each call, branching to the frame's landing label.
   handlers and the exception object's refcount lifecycle, and anything crossing
   `call_indirect`, which waits on Phase 5.
 
-## Phase 7 — the PAL
+## Phase 8 — the PAL
 
 `lib/rtl/platform/wasi/platform_backend.pas`, sized like `esp/` (1,035 lines).
 ~35 of ~90 entries implemented, ~55 returning `PAL_ERR_UNSUPPORTED` — the same
 deliberate refusal Track S established for ESP, inverted: ESP has sockets and no
-files, WASI has files and no sockets. Heap growth goes through `memory.grow`,
-not `mmap`.
+files, WASI has files and no sockets. **Heap growth is no longer here** — it
+was one line in this section and it turned out to gate everything, so it is
+Phase 6 now.
 
 - **Milestone:** a program that opens, writes, reads back and closes a file
   under `wasmtime --dir=.`, and prints to stdout.
 
-## Phase 8 — the anchor: `pascal26` under wasmtime
+## Phase 9 — the anchor: `pascal26` under wasmtime
 
 The compiler itself: single-threaded, file I/O only, no sockets, no fork. It is
 the one large program that fits this platform exactly.
@@ -414,10 +466,10 @@ the one large program that fits this platform exactly.
   as one — see the third row added to the claims table in
   `../wasm-target-findings.md`.
 
-## Phase 9 — browser profile (hand off)
+## Phase 10 — browser profile (hand off)
 
 The second import profile (`write` → console, no fs) and a playground. That is
-Track W/E work, proposed to the user when Phase 8 is green. Not ours to scope.
+Track W/E work, proposed to the user when Phase 9 is green. Not ours to scope.
 
 ## What does not exist under wasm, and is not a defect
 
@@ -474,3 +526,8 @@ smaller than the C frontend was.
   relocation RESERVES a function slot. `gate.sh quick` GREEN on the scoping
   claim and RED on something else entirely: the FPC seed had been broken for
   days.
+- 2026-08-28 — **the heap moved ahead of exceptions** (coordinator decision,
+  on the lane's measurement). Second reordering of the day with the same cause,
+  now stated as a rule rather than an incident. The heap was not a phase at
+  all — one line inside the PAL phase — while being the only thing blocking
+  class instantiation, `writeln`, variants and the float writers.
