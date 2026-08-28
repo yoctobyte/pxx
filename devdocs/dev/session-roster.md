@@ -11023,3 +11023,98 @@ frankwasm also audited the three earlier A tickets unprompted: all on master, al
 pushed *from* master. **The pattern was "whichever branch I happened to be standing
 on — which is not a model at all."** A wrong model can be corrected; **no model can
 only be replaced by a mechanism**, which is what it built.
+
+## `sort -u` SILENTLY DELETES DISTINCT IDENTIFIERS IN A UTF-8 LOCALE — repo-wide hazard
+
+Reproduced by the coordinator, not taken on report:
+
+```
+printf '_longjmp\nlongjmp\n' | LC_ALL=en_US.UTF-8 sort -u   ->  _longjmp
+printf '_longjmp\nlongjmp\n' | LC_ALL=C           sort -u   ->  _longjmp longjmp
+```
+
+**One of two distinct C identifiers deleted. No error, no warning.** UTF-8 collation
+ignores punctuation, so anything differing only in punctuation compares **equal**.
+
+> **This is not a census bug. `sort -u` over identifiers, symbols, or filenames in a
+> UTF-8 locale silently collapses entries anywhere in this repo** — and leading
+> underscores are pervasive in C symbol tables. **Use `LC_ALL=C sort -u` whenever the
+> input is identifiers.**
+
+## THE ENUMERATION RULE, ONE LEVEL DOWN — and it is the level that bites
+
+frankB, writing `test/crtl_declaration_census.sh` (358 declared, all defined, zero
+`DT_NEEDED`):
+
+> **The tool written to check an enumeration inherits a blind spot of its own — and
+> it will be a DIFFERENT one each time you write it.**
+
+It implemented the extraction **twice, Python and shell, and diffed them**. Each
+silently dropped a different name:
+
+| implementation | dropped | how |
+| --- | --- | --- |
+| Python | **`atexit`** — *the single most load-bearing name in the batch it was written to check* | skipped declarations containing `(*` to dodge function-pointer typedefs |
+| shell | **`longjmp`** | `sort -u` under `en_US.UTF-8` (above) |
+
+**Both would have reported a clean census.** The second-order failure is worse than
+the first because **it looks like diligence.**
+
+### CONVERGENCE: frankwasm stated the rule; frankB enacted it; ~20 minutes apart, no contact
+frankwasm: *"stop trusting single-source absences, start manufacturing
+disagreements."* frankB manufactured one — **two independent extractions, diffed.**
+Relayed both ways; they cannot see each other and this is the coordinator's actual job.
+
+**And frankB supplied the MECHANISM behind frankwasm's rule:** the two tools' blind
+spots are **uncorrelated**, so the second source is not a redundant check but an
+*independent* one. That is why manufacturing a disagreement beats searching harder.
+
+**Permanent guard, same instinct as `check_tickets.sh`:** the script fails if the
+extraction returns **fewer than 300 names**, so **a collapsed search cannot pass by
+finding nothing.** "A zero looks like an answer" turned into a mechanism rather than
+a warning — a check, not a note.
+
+### Fourth pipe-family member, and a genuinely new category
+The first three corrupt a check's **VERDICT**; this one corrupts its **INPUT**, so
+the check reports *an honest all-clear about the wrong set.*
+> **A verdict bug is detectable by re-running. An input bug is not detectable from
+> inside the check at all.**
+
+## FIFTH stale batch tonight: `feature-crtl-implement-libc-assumptions` has no open work
+
+Every item on its list was already fixed by a different ticket that never came back
+to update it: the 2026-08-05 batch of 10 (poll, ioctl, clock_gettime, chmod, umask,
+msync, mremap, pread, pwrite, atexit) all defined; `atexit` handlers run in reverse
+order on both the return-from-main and `exit()` paths; `environ` declared and
+populated (**74 entries, matching the shell's own `env | wc -l`**); the tcc `-run`
+item moved off on 2026-08-09 as an ELF symbol-table question for A/C. Both named
+blockers are in `done/`.
+
+**`pxx` already detects this class itself** — `cparser.inc:9373` emits *"crtl does
+not define X — this C program will import them from the system C library at run
+time"* (verified). **So the check is one compile plus a grep, not the 361 compiles
+and `nm` the ticket prescribed.** Same shape as the Track U ticket filed and
+withdrawn on 2026-08-27 when one grep showed the C frontend already accepted what
+the "fork" was about: **the tool already knew.**
+
+### Disposition
+**Left in `backlog` as a standing collector** (frankB's recommendation, and right —
+the next real-project bring-up refills it), **but `next --track B` still returns it
+at p45**, so the misdirection survives the list being corrected. Asked frankB for an
+unmissable header — *"as of 2026-08-28 this list is EMPTY, verified by
+`crtl_declaration_census.sh`; do not treat as pending work"*.
+
+**The p45 was NOT touched. `prio:` is the owner's field**, and *"an empty collector
+should rank below real work"* is a call to record, not to make. **FOR THE OWNER:**
+this ticket's p45 no longer reflects open work.
+
+**Arguably the census supersedes the ticket** — its function was *collect
+declared-but-unimplemented gaps*, and a gate that fails when one appears does that
+automatically and sooner. frankwasm's "write a check, not a charter line", applied
+to a backlog item. Left to frankB, which knows whether the collector holds anything
+the census cannot see.
+
+**Next for B: any of the three tied p40s** (`feature-b-fpc-signal-compat-unit`,
+`feature-b-random-tier1-consume-the-hw-entropy-intrinsics`, `feature-networking`).
+Ranker order between ties is arbitrary and **frankB's judgement about which is real
+beats it — five of five batches tonight were stale.**
