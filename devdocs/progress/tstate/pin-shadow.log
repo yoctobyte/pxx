@@ -196,3 +196,4 @@
 2026-08-28T17:02:50Z	plexus	84ddb6fc1209bda4992d13bfded4319f12015880	would NOT pin 84ddb6fc1209 — 1 red(s) the current pin does not have, 4 inherited from the current pin: lib-test#src:test/lib_synapse.pas
 2026-08-28T17:51:34Z	plexus	3da7c021783eaa8d09a23c0b4d964b7647085c0d	would NOT pin 3da7c021783e — 1 red(s) the current pin does not have, 4 inherited from the current pin: lib-test#src:test/lib_synapse.pas
 2026-08-28T18:29:44Z	plexus	f27a727ee02aa4301b7a2565862e9baec4470c79	would NOT pin f27a727ee02a — 1 red(s) the current pin does not have, 4 inherited from the current pin: lib-test#src:test/lib_synapse.pas
+2026-08-28T19:22:47Z	plexus	df301577799ddba5b5b5342f0924ffb7933fdf02	would NOT pin df301577799d — 1 red(s) the current pin does not have, 4 inherited from the current pin: lib-test#src:test/lib_synapse.pas
