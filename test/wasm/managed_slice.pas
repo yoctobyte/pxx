@@ -59,9 +59,26 @@ begin
   s := t;
   writeln(s, '|', t, '|', Length(s));
 
-  { Aliasing: release-before-retain would free the block this reads. }
+  { Aliasing, and it only bites when s is the SOLE owner: after `s := t` the
+    block has two references, so the wrong order (release, then retain) would
+    take it to 1 and back to 2 and look correct. Dropping t first makes s the
+    only holder, so release-first frees the block that retain-then-read is
+    about to touch. Verified by swapping the two steps: this line prints
+    garbage and the diff fails. }
+  t := '';
+  s := 'sole owner';
   s := s;
-  writeln(s, '|', Length(s));
+  { The reuse is what makes the aliasing case OBSERVABLE, and without it the
+    test cannot fail. Under the wrong order (release, then retain) s's block —
+    it is the sole reference now that t is empty — goes on the free list, and
+    the next same-sized allocation pops it and overwrites the characters s is
+    still pointing at. `ten charac` is ten bytes, exactly `sole owner`'s
+    length, so it lands in the same size bin. Verified by swapping the two
+    steps in WasmEmitManagedStore: this prints `ten charac|10` and the diff
+    fails. Without this line the wrong order still prints the right answer,
+    because a freed block keeps its bytes until something reuses it. }
+  t := 'ten charac';
+  writeln(s, '|', Length(s), '|', t);
 
   { A function result arrives already owned — retaining it again leaks, and
     NOT retaining a plain variable double-frees. Both shapes, adjacent. }
