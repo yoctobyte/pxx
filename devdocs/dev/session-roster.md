@@ -13493,3 +13493,64 @@ and prio when it lands the fix.
 
 **Payoff:** this restores the lane's measurability, which was the entire reason I chose it over
 the refusal tail. Phase 9's coverage row can be filled once it lands.
+
+### Wall 7 is NOT Track B — it is an already-filed Track P ticket at p55
+
+frankA reported the remaining 5 `SArgumentOutOfRange` failures as *"a Track B visibility/export
+question, not a missing constant"*, reasoning from the symbol existing at
+`lib/rtl/rtlconsts.pas:13`. **Measured, and it is neither.**
+
+- The symbol exists **and is exported** — line 13 sits in the `interface` section.
+- It is declared as a plain **`const`**, deliberately: the file's own header says FPC uses
+  `resourcestring` but this RTL has no resource tables.
+- The corpus does `Exception.CreateRes(@SArgumentOutOfRange)` — it takes the **address**, and a
+  const has none.
+
+That is **`bug-p-a-resourcestring-is-not-addressable` [P, p55]**, already in `backlog/`, whose
+summary names `pasparser_proc.inc:4783`, the `CreateRes(@…)` idiom, and *three sites in
+generics.defaults.pas*. It is in frankA's own lane and already second in its own P queue.
+
+> **The existence check answered a different question than the failure was asking.** "Is the
+> symbol there?" and "can its address be taken?" both fail with the symbol present, and only one
+> of them is the bug. A correct answer to the wrong question, one more time.
+
+**Consequences:** do not route wall 7 to Track B — **frankB's expiry trigger #2 does not fire**
+and it stays idle by decision. Wall 7 folds into the existing p55 rather than becoming a new
+row, the same way wall 3 folded into wall 6. And the corpus's remaining blockers are now *both*
+already filed and ranked in frankA's lane: the ordering defect, and this.
+
+### Wall 3 folded, and a comment that was the drift it warned about
+
+frankA settled wall 3 ≡ wall 6 **of the defects, not the numbers**, as advised: wall 6's banked
+analysis concludes the real bug is *"a nested `specialize X<T>` group is not supported in
+EXPRESSION position"* — verbatim wall 3's subject. Prose folded into wall 6's ticket, live table
+updated. **No homeless diagnosis left**, which closes the finding I raised.
+
+Three defects fixed (`c3cd377d5`, `2b60837ac`, `3975b3cab`), and the third is the one worth
+keeping:
+
+**(c) was not a generics bug at all — a method could not be NAMED `Default`.** Eight lines, no
+generic in sight. `default` lexes as its own token kind and `IsMethodNameTok` did not accept it.
+It *looked* like a generics defect for exactly one reason: the colliding name is the one
+`TComparer<T>.Default` uses, so every occurrence sat inside generic code. **The control case — a
+plain class — is what collapsed it.** Of eleven candidate names only `Default` collided.
+
+> **A DEFECT INHERITS THE APPEARANCE OF WHEREVER ITS ONLY TRIGGER HAPPENS TO LIVE.**
+
+And the self-referential part: `IsMethodNameTokAt`'s comment claimed it shared the predicate
+*"so the two cannot drift"* while carrying a **private copy of the list**. `default` was
+precisely the drift the comment existed to prevent. Fourth comment-borne false claim today, and
+the sharpest — **the comment did not merely fail to describe the code, it described a guarantee
+whose absence caused the bug it was attached to.** There is now one list, genuinely shared.
+
+**What remains is an ORDERING defect, written up as a direction rather than a diagnosis.**
+`--debug` shows `GenericMethodCount=0` when the Delphi specialization runs: the rewrite emits
+aliases near the top of the token stream, so `ParseSpecialization` executes before any method
+body is buffered, even though those methods appear *earlier in the source*. **Extending the scan
+cannot help — there is nothing to scan yet.** frankA labelled the existing deferral path "a
+direction, not a diagnosis", which is the right register for an unmeasured lead.
+
+Also filed `bug-p-two-different-nested-specializations-of-one-template-collide` [p65] — newly
+*reachable* because of this fix, so not a regression; kept **out** of the new test file so a pass
+there means what it says; and its explanation marked as a hypothesis from the message shape
+rather than something measured.
