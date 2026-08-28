@@ -355,6 +355,24 @@ end;
 
 function WasmEmitNode(node: Integer): TTypeKind; forward;
 
+{ FORWARDS FOR THE FPC SEED, and they are not optional decoration.
+
+  pxx accepts a call to a routine defined later in the same include; FPC does
+  not, and FPC is what BOOTSTRAPS this compiler. So a file that self-hosts
+  perfectly can still break the seed build, and nothing in the per-fix loop
+  looks: `make compiler/pascal26` compiles with pxx. This file broke the seed
+  the day direct calls landed and stayed broken for several commits, until
+  `gate.sh quick`'s FPC canary was run — which is the argument for running that
+  gate once at the end of a phase rather than never.
+
+  Every routine WasmEmitNode and WasmEmitStmt dispatch to belongs here, because
+  the dispatchers sit above the emitters and always will.
+  See bug-a-fpc-seed-drift-emitasmx64-forward. }
+procedure WasmEmitCall(node: Integer; isStmt: Boolean); forward;
+procedure WasmEmitProcAddr(node: Integer); forward;
+procedure WasmEmitCallInd(node: Integer; isStmt: Boolean); forward;
+procedure WasmEmitVirtualCall(node: Integer; isStmt: Boolean); forward;
+
 { The address at which the PASCAL VARIABLE `si` lives, which is not always the
   address of its slot. A var/out parameter's slot holds the CALLER's address,
   so the variable is at [slot] and the extra load is the whole difference
