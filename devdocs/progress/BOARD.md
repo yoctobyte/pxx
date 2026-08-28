@@ -8,13 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| feature-target-wasm | A+B | 60 | feature | NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim. | — |
+_none_
 
-## unfinished (22)
+## unfinished (23)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -38,6 +36,7 @@ _none_
 | feature-port-rtl-over-libc | A | 55 | feature | RTL-over-libc lowering mode — route runtime primitives through a system C library instead of raw syscalls | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dlopen loader: DONE on x86-64 (PAL primitives, opt-in -dPXX_DYNLIB_LIBC, truthful PalHasDynlib, OpenSSL 3 loaded and answering). Two items open: (b) an arm32/aarch64 RUN, blocked on this host having no cross ld-linux/libc, and (d) Synapse SSL end-to-end, now past the connect wall and stopped in SSLDoConnect. | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
+| feature-target-wasm | A+B | 60 | feature | NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim. | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | refactor-a-two-dyn-array-depth-functions-that-drift | A | 30 | refactor | Two functions answer 'how many `array of` levels does this expression have': NodeDynDepth (ast_arena.inc) and DynArrayNodeDepth (symtab.inc). They have diverged at least twice and each divergence produced a silent wrong VALUE, not an error. Merge them. | — |
 
@@ -693,6 +692,7 @@ _none_
 - [p 60] [N] feature-nilpy-process-exec-binding
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application
 - [p 60] [O] feature-opt-emitasmx64-reparses-fixed-strings
+- [p 60] [A+B] feature-target-wasm [parked — re-claim, do not duplicate]
 - [p 60] [C] idea-c-realworld-test-targets
 - [p 60] [A] perf-a-cache-the-compiled-nilpy-runtime-unit-image
 - [p 60] [P] perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor

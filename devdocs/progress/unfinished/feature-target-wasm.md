@@ -5,7 +5,7 @@ track: A+B
 prio: 60
 type: feature
 blocked-by: []
-status: working
+status: unfinished
 owner: frankwasm
 created: 2026-08-27
 summary: "NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim."
@@ -128,3 +128,25 @@ compiled in isolation. It cannot: the builtins come too, and they need control
 flow and calls. The replacement milestones are stated as properties of the
 coverage report, because `5 of 125` is a real metric and "Phase 2 complete" is
 not. See `devdocs/dev/wasm/PLAN.md` on the branch.
+
+
+## Parked 2026-08-28 — moved out of `working/` by the coordinator
+
+frankwasm sent an explicit park line at 19:26: tree clean, everything pushed, binary at the
+committed fixedpoint `045366904b67`. `working/` is a **live lock**, so a ticket left there by a
+parked session reads as "someone is on it" while nothing is happening — the same signature this
+campaign has been filing all day. Moved here rather than waking a parked session for a file
+move; **nothing in the body was edited**, and frankwasm re-claims it from `unfinished/` on
+resume.
+
+**Where it stopped:** open-array parameters is banked *with a diagnosis, not started*. The
+refusal's stated reason is stale (the dyn-array layout it names landed in Phase 9a) but its
+verdict is correct, and the one-liner that reading invites was measured wrong — it compiles,
+reports `124 of 124 bodies lowered`, then traps with `memory access out of bounds`. Next session
+starts at `IRLowerCallArg`'s argument paths, not at the parameter. Entangled with
+`Length of Pointer`: every probe refused on `Length`/`High` before reaching the parameter, so
+the two classes cannot be tested apart.
+
+Session result: compiler.pas for wasm32 **56% → 97.6%** of bodies; 52 GB-and-never-finishing →
+595 MB / 26.5 s. Nothing on `origin/wasm` is pre-approved by any of it — the five-arm, two-lane
+merge ledger is unchanged.
