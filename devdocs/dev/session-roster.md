@@ -12407,3 +12407,79 @@ rather than the report — counting `IRNodeOwnsManagedStr` call sites, diffing
 `origin/master...origin/wasm`. frankwasm's own framing: *the summary and the diff agreed on
 everything except the thing that mattered.* Same discipline as taking the slope instead of the
 value. Neither summary was careless; summaries are simply not the artefact.
+
+### 2026-08-28 — Phase 9 measured, and my own positive control was a member of the family
+
+`compiler.pas` compiled for wasm32 **completed and wrote a .wasm**: 3647 bodies, 2056 lowered,
+1591 refused, 881 distinct refusal lines. The gap list I had been given — and had been treating
+as five comparable items — is **one feature at 83%**:
+
+| gap | share |
+| --- | --- |
+| dynamic-array family (incl. open-array params, SetLength, Length of a Pointer) | **83%** (729) |
+| set membership `in` | 8% (68) |
+| `IR_DEFAULT_MEM` | 7% (59) |
+| record via `RetViaHiddenDest` | **5 lines** |
+
+**Record returns read as a peer of dynamic arrays and are five lines.** Ordering the phase off
+the name list would have spent it on sub-1% items. `in` was hidden behind **`builtin
+unrecognised (-999)`** — the one label that tells a reader nothing about the size of a gap.
+
+> **A list of gap NAMES carries no magnitude, and magnitude is the only thing that orders
+> work.** Diff-versus-summary, pointed at planning.
+
+### I CORRECTED MY OWN TICKET — the positive control was wrong twice
+
+This morning I built a table in `bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open` calling
+`EmitZeroFrameSlot` the in-repo **fail-loud** counter-example, and wrote that *"the 15-point gap
+IS the value of the terminal else, priced by this repo's own triage."* I verified it by reading
+the tail of the routine. Both halves of my verification were wrong.
+
+I re-measured at **`compiler/symtab.inc:10074`** — note the file: I had written `ir_codegen.inc`,
+because my original grep ranged over `compiler/*.inc` and I never checked which file answered.
+
+There are **TWO** chains, one per size class:
+
+- **wide** (`nBytes > TARGET_PTR_SIZE`) — five named targets, terminal `Error`. **Fails loud.**
+  This is the one I read.
+- **narrow** (`nBytes <= TARGET_PTR_SIZE`) — five named targets, then a **bare `else` that IS
+  the x86-64 implementation**. **Falls open.** This is the one **every managed scalar** runs.
+
+**The routine I offered as the family's counter-example is a member of it.** Corrected on
+master with the wrong version left visible, because someone may already have read it.
+
+**The corrected argument is stronger**, which is why it was worth restating rather than
+deleting: both behaviours live in **one routine, forty lines apart**, so the comparison is now
+controlled instead of cross-file. **A reader sees the loud arm; every program runs the silent
+one.**
+
+New general rule, frankwasm's:
+
+> **A dispatch chain whose last arm is a REAL TARGET rather than an error is a fall-open chain
+> wearing the shape of an exhaustive one.**
+
+Six named arms and an unnamed seventh reads as "the default" when it is x86-64 — the bytes are
+`mov qword [rbp+off], 0`. Third instance of `refactor-a-target-dispatch-chains-fail-open`.
+
+Severity **measured**: a probe emitting nothing there gives byte-identical `.wasm` for three
+slices, because `Code[]` is unread on that target. **Latent, not active — prio stays 55 for the
+opposite reason to the one recorded.** And the guarantee whose header says it has one owner has
+**three** mechanisms on wasm32, which `root-cause-over-microfix.md` calls a design flaw: the fix
+is plausibly deleting an arm, not adding one.
+
+### FACE ELEVEN: a correction that did not travel to its copies
+
+*"Needs the heap, Phase 6"* survived Phase 6 shipping the heap — and what is actually missing is
+the **layout**, which the heap does not provide. The sharp part is that **the file already
+carried a note retiring that exact phrase**, written by the same author on finding it was an
+assumed rather than measured cause. Retired in one place, left standing in two.
+
+> **Correcting a wrong reason where you found it does not correct it where it was copied to.
+> Grep the phrase, not the site.**
+
+**This repo already has that rule for CODE** — `CLAUDE.md:338`, from
+`normalise-dont-special-case.md`: *"if you fix a bug on one arm of a double case, grep for the
+sibling before closing the ticket."* The finding is that it applies identically to **prose**:
+comments, refusal messages and stated causes get copied like code paths and nothing greps them.
+Sibling of *"applied the rule to the code and not to the test"*, not a subcase — that is a rule
+not carried across **kinds**, this is a correction not carried across **copies**.
