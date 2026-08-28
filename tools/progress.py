@@ -1239,6 +1239,81 @@ pre code{background:none;padding:0}
                 )
                 problems = 1
 
+        # --- a blocked-by edge is a claim about the world at FILING time ----
+        #
+        # Nothing re-checks it. Resolving a blocker is an event on the BLOCKER,
+        # and the edge lives on the DEPENDENT, so at the moment the claim goes
+        # stale nobody is standing where it is written.
+        #
+        # Measured repo-wide 2026-08-28: 14 live tickets named a closed blocker;
+        # FIVE were fully unblocked and all five sat in blocked/, which
+        # ready/next never scan. One of them was p85. A stale edge in that
+        # direction is SILENT — the ticket is not surfaced, so it never ages
+        # into anyone's view and no one notices the absence of something they
+        # were not expecting.
+        #
+        # The two polarities are reported apart because they cost different
+        # things. Fully-clear is actionable now (move it and it ranks).
+        # Partially-stale is only a nudge to re-read: some blockers closing is
+        # the normal life of a ticket, not a defect, and failing on it would
+        # make `check` cry wolf on ordinary progress.
+        #
+        # This is a FRONTMATTER scan and it covers half the family; see the
+        # aperture note printed with the findings.
+        closed_st = {"done", "rejected", "decided"}
+        for t in self.tickets:
+            if t.status in closed_st or not t.blockers:
+                continue
+            closed = [b for b in t.blockers
+                      if b in exists and self.by_slug[b].status in closed_st]
+            if not closed:
+                continue
+            if len(closed) == len(t.blockers):
+                # SEVERITY, measured rather than assumed. `ready_tickets` keeps
+                # a ticket whose blockers are all in `resolved_slugs`, so a
+                # cleared edge in a RANKED folder suppresses nothing — the
+                # ticket ranks normally and the stale edge is untidy, not
+                # harmful. Failing on those would report 17 findings of which
+                # 12 cost nobody anything, which is how a check earns the habit
+                # of being scrolled past.
+                #
+                # `blocked/` is different in kind: the folder MEANS "has an
+                # unmet blocker" and ready/next never scan it, so a
+                # fully-cleared ticket there is a contradiction that also hides
+                # it. That is the case worth failing on, and it is the one the
+                # ticket measured — a p85 invisible to the ranker.
+                #
+                # rainy-day/ float/ experimental/ are also unranked but
+                # DELIBERATELY so; a cleared ticket parked there is parked on
+                # purpose, not hidden by accident, so it stays a warning.
+                if t.status == "blocked":
+                    lines.append(
+                        f"STALE-EDGE-HIDDEN: {t.slug} [{t.track} p{t.prio}] is "
+                        f"in blocked/ but every blocker it names is closed "
+                        f"({', '.join(sorted(closed))}) — ready/next never scan "
+                        f"blocked/, so it is invisible to the ranker; move it"
+                    )
+                    problems = 1
+                else:
+                    warning_count += 1
+                    if strict:
+                        lines.append(
+                            f"STALE-EDGE-CLEAR: {t.slug} [{t.track} p{t.prio}] "
+                            f"in {t.status}/ names only closed blockers "
+                            f"({', '.join(sorted(closed))}) — it ranks "
+                            f"normally; the edge is stale, not harmful"
+                        )
+            else:
+                warning_count += 1
+                if strict:
+                    rest = sorted(set(t.blockers) - set(closed))
+                    lines.append(
+                        f"STALE-EDGE-PARTIAL: {t.slug} [{t.track} p{t.prio}] — "
+                        f"{len(closed)} of {len(t.blockers)} blockers closed "
+                        f"({', '.join(sorted(closed))}); still waiting on "
+                        f"{', '.join(rest)}"
+                    )
+
         # The mirror: filed as a decision without writing DOWN the answer.
         # Dependents reach the decision by following their blocked-by slug into
         # decided/ (or legacy done/), so a decide- ticket parked there without
@@ -1409,6 +1484,35 @@ pre code{background:none;padding:0}
                 lines.append(f"STALE-BOARD: devdocs/progress/BOARD-{st}.md out of date — run: tools/progress.sh board-md")
                 problems = 1
 
+        # THE APERTURE, printed with every verdict including a clean one.
+        #
+        # The stale-edge scan above reads frontmatter. Three instances found on
+        # 2026-08-28 alone were in PROSE and no frontmatter query can see them:
+        # a stall note heading a queue at p75 whose three clauses had each been
+        # false for a week; a body asserting a blocked-by edge that had never
+        # existed; and a limit sitting sixty lines above its own withdrawal in
+        # the same file. Six instances in one day across four sessions is a
+        # rate, not a run of bad luck.
+        #
+        # Deliberately NOT a second query. There is no reliable scan for "a
+        # paragraph that is no longer true", and a body-grep for slug mentions
+        # would be mostly noise plus one more instrument whose reach nobody can
+        # see. So the reach of THIS one is stated instead — an instrument that
+        # does not report its own aperture is how "no findings" and "did not
+        # look" come to print the same thing.
+        #
+        # The prose half is the expensive half: a stale edge is SILENT and
+        # merely hides a ticket, while stale prose is BELIEVED — it reads as
+        # prior investigation and pre-empts the check that would have caught
+        # it.
+        lines.append(
+            "NOTE stale-edge scan reads FRONTMATTER only. A blocking claim "
+            "made in a ticket's PROSE is not checked and cannot be; a clean "
+            "run means the frontmatter half is clean, not the family. "
+            "Convention that keeps them in sync: prose stating a blocking "
+            "relationship must also carry the frontmatter edge, and the commit "
+            "that closes a blocker marks its dependents' prose."
+        )
         if problems == 0:
             if warning_count == 0:
                 lines.append("board OK")

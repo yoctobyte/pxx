@@ -4,9 +4,10 @@ title: "A blocked-by edge is a claim about the world at filing time, and nothing
 track: T
 type: chore
 prio: 45
-status: backlog
+status: working
 found: 2026-08-28
 found-by: frankB (second instance in one night), measured repo-wide by frank-coordinator
+owner: pxx-a5
 ---
 
 ## Measured, not suspected
