@@ -12736,3 +12736,48 @@ at p60 is the highest-leverage item left, since tstate is the truth every other 
 rests on — but the owner's recorded ceiling is 1-2 workers, and **four concurrent workers died
 on an account session limit on 2026-08-25**; frankwasm plus these two is already three).
 That ceiling is the owner's to lift, not mine to test.
+
+### frankB refused the dispatch, and was right three times
+
+It declined `feature-crtl-implement-libc-assumptions` — that ticket's first line reads *"AS OF
+2026-08-28 THIS COLLECTOR'S LIST IS EMPTY"*, the census script is wired into `lib-test` (358
+declared, all defined, zero libc imports), and executing would have been hours of re-deriving
+a closed result. **The header did not stop me because I never opened the file:** `ready` prints
+slug and prio, and I dispatched off the ranker's line. The header is not badly placed; it is
+in a body the ranker does not read.
+
+It also read the contradiction correctly — my "you were idle because I stopped dispatching"
+against my earlier "I am not waking you to fill capacity" — and named it as a context roll
+rather than a change of mind. It was. **Told it plainly and asked it to re-send state whenever
+it sees me contradict myself:** a message costs less than my acting on stale state.
+
+### 14 stale dependency edges, five of them invisible
+
+frankB's second instance of the night (`feature-real-dynlib-loader`: blocker resolved, so the
+ranker surfaced it, while *both* remaining items are blocked by things the ticket never names
+— no cross loader on this host, and the Synapse tree held aside; corrected in `3769f474f`)
+prompted a repo-wide measurement.
+
+**14 live tickets name a closed blocker. Five are fully unblocked — and all five were in
+`blocked/`, which `ready`/`next` never scan.** Including a **p85**. Promoted to `backlog/`:
+
+`bug-n-an-import-alias…` [N p85] · `regression-cascade-4e27dc2be114` [P p70] ·
+`bug-nilpy-songformatter…` [N p60] · `bug-n-a-subpackage-directory…` [N p55] ·
+`feature-random-library` [B p45]. The three N ones carry a note not to auto-claim them on a
+cold-start "global top", since the owner's N deprioritization stands.
+
+**One broken edge, two opposite lies:** *reads ready, is blocked* costs a dispatch and an
+agent's session; *reads blocked, is ready* is silent and never surfaces at all. Filed as
+`chore-t-nothing-re-checks-a-blocked-by-edge-after-its-blocker-closes` [T p45] — the fix is a
+query, not a judgement, and belongs in `progress.sh check` beside the existing unfinished-A
+failure.
+
+**And it cut against me.** `feature-random-library` looked like the real B work that would
+contradict frankB's "the queue is thin" — but its own blocked-by comment says the B portion
+landed 2026-08-15 and the remainder is HW tiers needing `builtinheap` intrinsics, which is
+**Track A**. I went looking for work to answer a worker with and confirmed the worker. B is not
+dispatched; it has been asked to make the `feature-networking` split-or-demote call, which is
+real planning work in its own lane, and to idle openly if that is not real either.
+
+Third instance in one day of **state recorded once and never re-derived**: a refusal with no
+date, a `blocked-by` nothing re-checks, and a parked flag nothing can clear.
