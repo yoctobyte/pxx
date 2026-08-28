@@ -1188,6 +1188,77 @@ inferred from the constant.
 below, one level up in the IR: zeroing a managed aggregate. Whoever takes either
 should look at both.
 
+### Phase 9a — dynamic arrays, the flat case — **DONE 2026-08-28**
+
+The 83%. `SetLength`, index read and write, `Length`, aliasing, shrink and
+grow, an `array of string`, and both releases — byte-identical to the native
+build, arena slope zero on two independent probes.
+
+**The IR dump changed the plan before a line was written.** The flat case emits
+no `IR_SETLEN_DYN`, no `IR_DYNUNIQUE` and no `IR_SLOTADDR` — those are for
+nested and field-rooted targets. It is `IR_LEA`, builtin `-102`, `IR_INDEX` and
+builtin `-44`, which is four things and not the op-set the histogram's names
+suggested. `PXXDBG=a.ir:<proc>` cost one command; reading the backends and
+guessing would have cost an afternoon and produced two ops nothing emits.
+(Note it is gated on `CurProc >= 0`, so a program's MAIN body can never match,
+`a.ir:*` included — put the code in a named routine.)
+
+**No shared-file arm was needed, and that was checked rather than assumed.**
+`GetOrAllocSymRTTI` and `GetOrAllocNodeDynDesc` are already forwarded in
+`compiler.pas` on master; `EmitRTTI` fills the descriptors and is not
+target-gated; `WasmFillData` already applies `DataPtrFix`. All three were
+verified before the arm was written, because the alternative is discovering at
+run time that a descriptor is twenty zero bytes.
+
+**The slot-versus-handle rule, again, one type over.** `IR_LEA` on a dynamic
+array yields the DATA pointer in read and write position alike — no
+copy-on-write, because a dynamic array is a reference type at every depth and
+`b := a` is meant to alias. So `SetLength` cannot go through `IR_LEA`: it needs
+the slot, and `PXXDynSetLen` treats a nil `arrSlot` as *nothing to do*, so a
+build handed the handle of a fresh array reports success and allocates nothing.
+riscv32 shipped exactly that.
+
+**The leak probe earned its place again.** The first working version passed the
+diff completely and leaked 10512 bytes per 1000 iterations where native was flat
+at 1032; at 9000 it exhausted linear memory and trapped. `b := a` was falling
+into the SCALAR store path, which copies the handle — correct aliasing, absent
+refcount. Nothing in the output ever looked wrong.
+
+**Five breaks, five signatures — and the fourth of them exposed a hole in the
+suite rather than confirming it.**
+
+| break | signature |
+| --- | --- |
+| retain removed from the store | the diff: `a0=7777`, a use-after-free |
+| scope-exit release removed | probe B leaks 26432 bytes/1000 |
+| the store's release removed | probe A leaks 10464 bytes/1000 |
+| `SetLength` handed the handle | the diff: every length reads zero |
+| the `Length` nil guard defeated | trap, `memory access out of bounds` |
+
+The two leak probes are deliberately separate programs — one with no local
+arrays, one with no assignments between arrays — because a single probe
+exercising both would go red for either, which is one assertion wearing two
+names. Breaks 2 and 3 hitting *different* probes is what makes them two.
+
+**The retain break PASSED the first version of the check, and that is the
+finding.** A missing retain makes refcounts too LOW, which is a premature free,
+not a leak — the opposite direction from everything an arena slope measures.
+Worse, it is invisible even in the output until the freed block is REUSED: the
+stale bytes survive and the wrong build prints the right answer. The assertion
+that catches it allocates a same-sized array between the free and the read.
+**A leak probe is a one-directional instrument** — it sees refcounts that are
+too high and is blind by construction to refcounts that are too low, which is
+the direction that corrupts rather than wastes. Every refcount check needs both
+halves, and this suite had only one for three phases.
+
+**A latent encoder bug fell out of it.** `WasmIf(bt)` wrote the block type
+correctly into the BINARY and emitted `if (result)` — with no type — into the
+WAT. Not valid WAT, so a typed `if` would have produced a module whose `.wasm`
+and `.wat` disagreed, which `wat_oracle.sh` would have caught as a mystery. No
+caller had ever passed anything but `WT_VOID`, so it had never fired. `WasmLoop`
+had the identical defect one procedure below and was fixed at the same time
+rather than when someone reached it.
+
 ### The blocker Phase 9 actually starts at, and a correction it forced
 
 The unprobed compile stops at `compiler error: EmitZeroFrameSlot: unhandled

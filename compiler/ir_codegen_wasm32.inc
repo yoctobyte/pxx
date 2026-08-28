@@ -467,7 +467,7 @@ begin
   WasmModuleStarted := True;
   WasmReset;
   { One page to start; the module grows it via memory.grow when the heap
-    arrives in Phase 6. Exported so a test harness can inspect linear memory. }
+    arrived in Phase 6. Exported so a test harness can inspect linear memory. }
   WasmSetMemory(1, -1);
   WasmAddExport('memory', WEK_MEM, 0);
   { The shadow-stack pointer. Exported so a harness can assert it balances —
@@ -567,6 +567,7 @@ function WasmStrParts(node, scrLoc, scratchOfs: Integer;
 procedure WasmEmitAtomic(node: Integer); forward;
 function WasmStrSlot(k: Integer): Integer; forward;
 function WasmCallRtl(const nm: AnsiString): Boolean; forward;
+procedure WasmEmitDynStore(dstSym, valNode: Integer); forward;
 
 { The address at which the PASCAL VARIABLE `si` lives, which is not always the
   address of its slot. A var/out parameter's slot holds the CALLER's address,
@@ -899,10 +900,25 @@ begin
     the refusal lines are this one feature and its immediate family (dynamic
     arrays, SetLength on one, open-array parameters, Length of a non-string).
     It is not a list of gaps; it is one gap. }
+  { A DYNAMIC ARRAY's slot holds a handle; IR_LEA on one yields the DATA
+    pointer, in read and write position alike. That is not the string rule one
+    line down, and the difference is the language's, not this backend's: a
+    dynamic array is a reference type at every depth, so `b := a` aliases and
+    there is no copy-on-write to decide between positions. The four register
+    backends all deref unconditionally here and say so
+    (ir_codegen_riscv32.inc's IR_DYNUNIQUE: "one deref, in read AND write mode
+    alike").
+
+    The consequence is that SetLength cannot go through IR_LEA — it needs the
+    SLOT, and this hands it the contents. Its arm bypasses this by asking
+    WasmLValueAddr directly, exactly as riscv32 does, and for the same reason
+    riscv32 wrote a ticket about: handing PXXDynSetLen the current handle
+    reads as `arrSlot = nil` on a fresh array, so SetLength silently does
+    nothing and the first index segfaults. }
   if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
   begin
-    WasmUnsupported('dynamic array ' + Syms[si].Name
-                    + ' — dynamic-array layout is not implemented on this target');
+    WasmLValueAddr(si);
+    WasmMemOp($28, 'i32.load', 2, 0);   { slot -> data pointer }
     Exit;
   end;
   if (Syms[si].Kind = skParam) and Syms[si].IsArray and not Syms[si].IsRef then
@@ -1856,6 +1872,24 @@ end;
   of shapes for how the pointer is reached, and guessing at it would produce a
   plausible number rather than a refusal. It is refused BY TYPE below and names
   the type in the message. }
+{ Is this node a DYNAMIC ARRAY — the reference-typed one with a heap block and
+  a length word, not a fixed `array[0..9] of Integer` whose storage is the
+  frame? Both answer IsArray; ArrLen = -1 is what separates them, and asking
+  only IsArray is what an earlier version of the IR_LEA arm did, which refused
+  `a[i]` on a static array where nothing is on the heap at all.
+
+  Only the LEA-of-a-symbol shape is recognised. A dynamic array reached through
+  a record field or another array element is a slot address needing its own
+  deref — the same distinction the string arms make — and it is not implemented
+  yet, so it must not be silently treated as a root. Answering False here
+  refuses it by name downstream, which is the direction that cannot produce a
+  wrong number. }
+function WasmNodeIsDynArray(n: Integer): Boolean;
+begin
+  WasmNodeIsDynArray := (IRKind[n] = IR_LEA) and (IRA[n] >= 0)
+                        and Syms[IRA[n]].IsArray and (Syms[IRA[n]].ArrLen = -1);
+end;
+
 function WasmEmitLength(valNode: Integer): Boolean;
 var tk: TTypeKind; lv, ll, ls: Integer; ok: Boolean;
 begin
@@ -1869,6 +1903,36 @@ begin
     would have drifted. Arrays are refused BY TYPE below, before the splitter
     sees them, because Length of a dynamic array is a THIRD layout and a
     plausible number is worse than a refusal. }
+  { A DYNAMIC ARRAY is the third layout, and it is now implemented rather than
+    refused. Its data pointer is what IR_LEA yields, and its element count sits
+    where a string's character count does — one word below the data, written by
+    PXXDynSetLen as `PWord(block + PXX_HDR_LEN)^` with data at
+    `block + PXX_HDR_SIZE`. Sharing that offset with the string arm is the
+    layout's doing, not a coincidence worth collapsing the two arms over: they
+    reach the pointer differently and only agree from there on.
+
+    nil is 0 elements, and the guard is required rather than defensive — a
+    declared-but-never-SetLength array holds nil, `Length(a)` on it is legal
+    Pascal and must answer 0, and without the guard it reads address -8. }
+  if WasmNodeIsDynArray(valNode) then
+  begin
+    WasmEmitValueAs(valNode, WT_I32, 'Length of a dynamic array');
+    if WasmBodyBroken then Exit;
+    lv := WasmStrSlot(1);
+    WasmLocalSet(lv);
+    WasmLocalGet(lv);
+    WasmOp($45, 'i32.eqz');
+    WasmIf(WT_I32);
+    WasmI32Const(0);
+    WasmElse;
+    WasmLocalGet(lv);
+    WasmI32Const(8);
+    WasmOp($6B, 'i32.sub');
+    WasmMemOp($28, 'i32.load', 2, 0);
+    WasmEnd;
+    WasmEmitLength := True;
+    Exit;
+  end;
   if (tk <> tyAnsiString) and not TypeIsFrozenString(tk) then
   begin
     WasmUnsupported('Length of ' + WasmTypeKindName(tk)
@@ -1977,8 +2041,8 @@ begin
 
     SetLength is builtin -102 for BOTH a dynamic array and a managed string,
     and the two are different routines with different arguments; the lvalue's
-    type is what tells them apart. The array half needs the heap and is refused
-    below by the same name it always was.
+    type is what tells them apart. Both halves are implemented; the array one
+    is below, and it takes a third argument the string one does not.
 
     PXXStrSetLen(slotAddr, n) takes the SLOT's address, not the handle: it
     allocates a fresh block, copies min(old, new) bytes, and PUBLISHES the new
@@ -2007,8 +2071,49 @@ begin
       if not WasmCallRtl('PXXStrSetLen') then Exit;
       WasmEmitBuiltin := True;
     end;
-    { A dynamic array falls through and is refused by WasmEmitCall under the
-      name it has always carried — it needs the heap, not a position model. }
+    { --- SetLength on a DYNAMIC ARRAY ---
+
+      PXXDynSetLen(slotAddr, n, desc) — the same slot-not-handle rule as the
+      string call above, plus a DESCRIPTOR, because the routine has to know the
+      element size to allocate and the element kind to release. The descriptor
+      is `GetOrAllocSymRTTI(si)`, the SYMBOL's, which is what riscv32 uses on
+      this flat path; the node-derived `GetOrAllocNodeDynDesc` is for a NESTED
+      target (`SetLength(m[0], n)`), where the row has one fewer dimension than
+      the symbol and the symbol's descriptor would say the wrong stride.
+
+      WasmLValueAddr and NOT the IR_LEA node: LEA on a dynamic array yields the
+      data pointer (see its arm), and PXXDynSetLen takes `arrSlot = nil` as
+      "nothing to do", so handing it a fresh array's nil handle makes SetLength
+      silently succeed and do nothing. riscv32 shipped exactly that bug
+      (bug-a-riscv32-nested-dynamic-array-element-write-segfaults).
+
+      The descriptor lands in Data[] and is filled by EmitRTTI, which is not
+      target-gated, and relocated by WasmFillData, which already applies
+      DataPtrFix. Both were checked before this arm was written rather than
+      after it failed. --- }
+    if (IRKind[IRA[argNode]] = IR_LEA)
+       and (IRA[IRA[argNode]] >= 0)
+       and Syms[IRA[IRA[argNode]]].IsArray
+       and (Syms[IRA[IRA[argNode]]].ArrLen = -1) then
+    begin
+      if IRB[argNode] = -1 then
+      begin
+        WasmUnsupported('SetLength on a dynamic array with no length argument');
+        Exit;
+      end;
+      WasmLValueAddr(IRA[IRA[argNode]]);
+      WasmEmitValueAs(IRA[IRB[argNode]], WT_I32, 'SetLength count');
+      if WasmBodyBroken then Exit;
+      WasmDataAddr(GetOrAllocSymRTTI(IRA[IRA[argNode]]));
+      if not WasmCallRtl('PXXDynSetLen') then Exit;
+      WasmEmitBuiltin := True;
+      Exit;
+    end;
+    { Anything else falls through and is refused by WasmEmitCall under the
+      name it has always carried. What reaches here is a SetLength whose target
+      is neither a scalar managed string nor a root dynamic array — a nested
+      row, or a dyn array behind a field or an element — each of which is a
+      slot address needing its own deref and its own descriptor. }
     Exit;
   end;
 
@@ -2820,7 +2925,7 @@ end;
   same split). Exit is a branch out of the dispatch to the epilogue, which is
   what every register backend spells as "jump to the procedure epilogue". Halt
   is a process-level operation with no wasm instruction at all — it needs WASI's
-  proc_exit import, which is Phase 6 — so it is refused by name rather than
+  proc_exit import, which arrived in Phase 6 — so it is refused by name rather than
   quietly returning, which would turn `Halt(1)` into success. }
 procedure WasmEmitTerminate(node, blk: Integer);
 begin
@@ -3291,6 +3396,64 @@ end;
   is reached: through the symbol (which routes by-ref parameters to the
   caller's slot via the ABI oracle, so `procedure P(var s: string)` publishes
   where it should) or through an already-lowered address expression. }
+{ `b := a` on a DYNAMIC ARRAY. Pointer-sized, so the scalar path compiles it
+  and the program even behaves — aliasing is correct, because a dynamic array
+  IS a reference type and copying the handle is the semantics. What the scalar
+  path omits is the refcount, and that is invisible in a diff: measured as an
+  arena advancing 10512 bytes per 1000 iterations where the native build was
+  flat at 1032, and at 9000 iterations the module exhausted linear memory and
+  trapped. Nothing in the output ever looked wrong.
+
+  Retain-then-publish-then-release, and the ORDER is the whole of it: releasing
+  first would free the block `a` still points at when a and b are already the
+  same handle (`a := a`), and retaining after publishing would lose the old
+  handle. This is the shape riscv32's IR_STORE_SYM dyn arm uses and the reason
+  it gives (bug-a-no-dyn-array-scope-exit-release-on-four-backends).
+
+  THE RETAIN IS SKIPPED for a fresh function result, which arrives already
+  carrying its +1 — retaining it too would pin the block forever. That is the
+  same `IRKind = IR_CALL and IRA >= 0` test riscv32 makes; `IRA >= 0` is what
+  separates a real call from a builtin, whose result is not a new reference. }
+procedure WasmEmitDynStore(dstSym, valNode: Integer);
+var hpRel, hpInc: Integer;
+begin
+  if WasmStrLocN < 0 then WasmStrLocN := WasmAddLocal(WT_I32, 'msnew');
+  if WasmStrLocS < 0 then WasmStrLocS := WasmAddLocal(WT_I32, 'msslot');
+  if WasmStrLocO < 0 then WasmStrLocO := WasmAddLocal(WT_I32, 'msold');
+  hpRel := WasmWriteHelper('PXXDynArrayRelease');
+  if hpRel < 0 then Exit;
+  hpInc := WasmWriteHelper('PXXDynArrayIncRef');
+  if hpInc < 0 then Exit;
+
+  WasmEmitValueAs(valNode, WT_I32, 'dynamic-array assignment');
+  if WasmBodyBroken then Exit;
+  WasmLocalSet(WasmStrLocN);
+
+  if not ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0)) then
+  begin
+    WasmLocalGet(WasmStrLocN);
+    WasmCall(WasmSlotForProc(hpInc), 'PXXDynArrayIncRef');
+  end;
+
+  WasmLValueAddr(dstSym);
+  WasmLocalSet(WasmStrLocS);
+
+  WasmLocalGet(WasmStrLocS);
+  WasmMemOp($28, 'i32.load', 2, 0);
+  WasmLocalSet(WasmStrLocO);
+
+  WasmLocalGet(WasmStrLocS);
+  WasmLocalGet(WasmStrLocN);
+  WasmMemOp($36, 'i32.store', 2, 0);
+
+  { Element-aware, hence the descriptor: an `array of string` releases every
+    element before the block. PXXDynArrayRelease ignores nil, so the
+    first-assignment case needs no guard. }
+  WasmLocalGet(WasmStrLocO);
+  WasmDataAddr(GetOrAllocSymRTTI(dstSym));
+  WasmCall(WasmSlotForProc(hpRel), 'PXXDynArrayRelease');
+end;
+
 procedure WasmEmitManagedStore(dstIsSym: Boolean; dstRef, valNode: Integer);
 var hp: Integer; savedLVW: Boolean;
 begin
@@ -3399,7 +3562,9 @@ begin
         (ir_codegen.inc:4988-5060). That is a phase, and until it is done the
         honest answer is a refusal that names itself. READING a managed string
         stays supported: a load hands back the handle and takes no ownership. }
-      if Syms[IRA[node]].TypeKind = tyAnsiString then
+      if Syms[IRA[node]].IsArray and (Syms[IRA[node]].ArrLen = -1) then
+        WasmEmitDynStore(IRA[node], IRB[node])
+      else if Syms[IRA[node]].TypeKind = tyAnsiString then
         WasmEmitManagedStore(True, IRA[node], IRB[node])
       else if TypeIsFrozenString(Syms[IRA[node]].TypeKind) then
         WasmEmitFrozenStore(True, IRA[node], IRB[node], SymStrCap[IRA[node]])
@@ -3901,26 +4066,42 @@ end;
   them is still refused by name elsewhere on this target — so the honest scope
   is what can actually be stored. }
 procedure WasmEmitManagedLocals(release: Boolean; retSym: Integer);
-var i, hp: Integer;
+var i, hp, hpDyn: Integer;
 begin
   if CurProc < 0 then Exit;    { a program-body chunk: its variables are BSS,
                                  which the module's own memory image zeroes }
-  hp := -1;
+  hp := -1; hpDyn := -1;
   if release then
   begin
     hp := WasmWriteHelper('PXXStrDecRef');
     if hp < 0 then Exit;
+    hpDyn := WasmWriteHelper('PXXDynArrayRelease');
+    if hpDyn < 0 then Exit;
   end;
+  { A DYNAMIC ARRAY local joins the same two loops, and the release takes a
+    descriptor where a string's does not. Zeroing it matters for the same
+    reason it matters for a string and for one more: the FIRST assignment to
+    the slot reads the old handle to release it, so an unzeroed slot hands
+    PXXDynArrayRelease whatever the previous call left on the shadow stack.
+    A string local was already zeroed here; a dyn-array local was not, and it
+    was the store arm's arrival that made that reachable. }
   for i := Procs[CurProc].ScopeBase to SymCount - 1 do
-    if (Syms[i].Kind = skLocal) and (Syms[i].TypeKind = tyAnsiString)
-       and not Syms[i].IsArray and not Syms[i].IsRef then
+    if (Syms[i].Kind = skLocal) and not Syms[i].IsRef
+       and (((Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray)
+            or (Syms[i].IsArray and (Syms[i].ArrLen = -1))) then
     begin
       if release then
       begin
         if i = retSym then Continue;
         WasmSlotAddr(i);
         WasmMemOp($28, 'i32.load', 2, 0);
-        WasmCall(WasmSlotForProc(hp), 'PXXStrDecRef');
+        if Syms[i].IsArray then
+        begin
+          WasmDataAddr(GetOrAllocSymRTTI(i));
+          WasmCall(WasmSlotForProc(hpDyn), 'PXXDynArrayRelease');
+        end
+        else
+          WasmCall(WasmSlotForProc(hp), 'PXXStrDecRef');
       end
       else
       begin

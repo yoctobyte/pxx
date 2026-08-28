@@ -742,16 +742,37 @@ end;
 { `if` consumes an i32 condition and opens a block, closed by WasmEnd. Used
   where `select` cannot be: select evaluates BOTH arms, so a guard whose false
   arm would fault — a load through a nil handle, say — needs a real branch. }
+{ WasmValTypeName lives in asmtext_wasm.inc, included after this file. The
+  forward is what the single-pass FPC seed needs; the alternative was a second
+  copy of the WT_* -> name mapping here, which is the thing that drifts. }
+function WasmValTypeName(vt: Byte): AnsiString; forward;
+
 procedure WasmIf(bt: Byte);
 begin
   WasmBodyB($04); WasmBodyB(bt);
-  if bt = WT_VOID then WasmText('if') else WasmText('if (result)');
+  { The BINARY was always right — the block type is one byte and it is written
+    above. The TEXT said `if (result)` with no type, which is not valid WAT, so
+    a typed `if` produced a module whose .wasm and .wat disagreed. No caller had
+    ever passed anything but WT_VOID, so nothing had ever emitted it: a broken
+    path that cost nothing until the first user, which is the shape of every
+    latent defect this backend has found in itself. }
+  if bt = WT_VOID then WasmText('if')
+  else WasmText('if (result ' + WasmValTypeName(bt) + ')');
+end;
+
+procedure WasmElse;
+begin
+  WasmBodyB($05);
+  WasmText('else');
 end;
 
 procedure WasmLoop(bt: Byte);
 begin
   WasmBodyB($03); WasmBodyB(bt);
-  if bt = WT_VOID then WasmText('loop') else WasmText('loop (result)');
+  { Same defect as WasmIf's, one procedure down, and fixed at the same time
+    rather than when someone reaches it — grep the shape, not the site. }
+  if bt = WT_VOID then WasmText('loop')
+  else WasmText('loop (result ' + WasmValTypeName(bt) + ')');
 end;
 
 procedure WasmEnd;
