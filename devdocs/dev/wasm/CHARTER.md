@@ -48,15 +48,21 @@ in-progress code stays here.
 and the lane still read the whole set as A anyway) and coordination before it
 is touched here:**
 
-| what | where | status |
-| --- | --- | --- |
-| module-writer wiring | `compiler.pas` (2 includes + the `TARGET_WASM32` output arm) | **taken 2026-08-27**, `feature-a-wasm32-module-writer-wiring` |
-| the wasm error message's stated reason | `exception_emit.inc` (text only) | **taken 2026-08-27**, same grant |
-| Phase 2 backend include + `IRTopLevelStmt` forward | `compiler.pas` | **taken 2026-08-27**, `feature-a-wasm32-compile-check-the-phase-2-backend` (filed 2026-08-28 — the grant existed only in a branch commit) |
-| codegen dispatch arm: `Error` → `IREmitMachineCodeWasm32; Exit;` | `ir_codegen.inc` | **taken**, granted, **no ticket** — see the ledger |
-| exception mechanism: `Error` → three `-1` poison values | `exception_emit.inc` (the arm) | **taken Phase 7**, granted, **no ticket** — see the ledger |
-| `PAL_PLATFORM_WASI = 3` | `lib/rtl/platform.pas` | **taken Phase 8e**, additive, **no ticket** — and this one is **Track B**, not A |
-| VMT slots hold code addresses → must hold table indices | `elfwriter.inc:1937`, `emit.inc:105` | not taken; not needed so far |
+The **lane** column is repeated here on purpose. It is in the ownership table
+three lines above as well, and on 2026-08-28 the lane read that table, then read
+this one, and still reported the whole set as Track A. A column you need while
+reading a row belongs in the row.
+
+| lane | what | where | status |
+| --- | --- | --- | --- |
+| **A** | module-writer wiring | `compiler.pas` (2 includes + the `TARGET_WASM32` output arm) | **taken 2026-08-27**, `feature-a-wasm32-module-writer-wiring` |
+| **A** | the wasm error message's stated reason | `exception_emit.inc` (text only) | **taken 2026-08-27**, same grant |
+| **A** | Phase 2 backend include + `IRTopLevelStmt` forward | `compiler.pas` | **taken 2026-08-27**, `feature-a-wasm32-compile-check-the-phase-2-backend` (filed 2026-08-28 — the grant existed only in a branch commit) |
+| **A** | codegen dispatch arm: `Error` → `IREmitMachineCodeWasm32; Exit;` | `ir_codegen.inc` | **taken**, granted, **no ticket** — see the ledger |
+| **A** | exception mechanism: `Error` → three `-1` poison values | `exception_emit.inc` (the arm) | **taken Phase 7**, granted, **no ticket** — see the ledger |
+| **B** | `PAL_PLATFORM_WASI = 3` | `lib/rtl/platform.pas` | **taken Phase 8e**, additive, **no ticket** |
+| **B** | the WASI backend itself | `lib/rtl/platform/wasi/**` | new file, but **B's gate applies to it** |
+| **A** | VMT slots hold code addresses → must hold table indices | `elfwriter.inc:1937`, `emit.inc:105` | not taken; not needed so far |
 
 **THE LEDGER IS ON `master`, NOT HERE:
 `feature-a-merge-the-wasm-branch-the-shared-file-arms`.** This table is a
