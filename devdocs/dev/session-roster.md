@@ -15197,3 +15197,81 @@ frankA reads it as possibly the same defect family as the ordering ticket it
 parked, seen from a cleaner angle. **Labelled UNMEASURED**, with an instruction to
 close the lead either way — an unresolved "these might be one thing" note reads as
 prior investigation and is not.
+
+### pxx-a5 closed the skip ticket, and the published side was worse than filed
+
+`ebf6aa003`, two pushed units per the condition. Jobs now carry `skip_reason` set
+**where the skip happens** — corpus tree by name, absent tool by name, or the
+recipe's own SKIP line, which is the one reason **only the job knows**, so
+`_self_skipped()` returns that line rather than a bool.
+
+**The published side was the ticket, and it was worse than the ticket said: the
+uncapped archive had NO skip key at all.** Nothing querying tstate could
+distinguish a sweep covering **3031 of 3081** jobs from one covering 3081. That is
+face seventeen in the published data itself, and a stronger instance than any I
+have collected — the aperture was not merely unreported, it was **structurally
+absent**. Now carries `skips` and `skip_holes`, a header line, a banner above the
+fold, and a collapsed listing grouped by reason.
+
+The banner fires on coverage **holes** only; a recipe guarding itself out is listed
+but not alarming. *Crying wolf on a deliberate guard is how the next real hole gets
+scrolled past.*
+
+**Three more instances of the family were inside it**, and the third is the one to
+keep:
+
+- the summary count was computed **before** the run, so a job that skipped itself
+  *during* the run stayed in the denominator and was never named — it read as a job
+  that **ran and did not pass**;
+- one hardcoded `"(corpus absent)"` label described the FPC-canary skips wrongly
+  **for seven weeks**;
+- an advisory job that SKIPPED rendered as **NOTICE**, because *"advisory and not
+  pass"* is true of a skip. The canary on a box without fpc printed in the
+  vocabulary of a canary that **ran and found drift**.
+
+> **EVERY UNIT GUARD PASSED WITH THE THIRD ONE BROKEN.** It appeared only by
+> forcing a real skip end to end — overriding FPC to a name not on PATH. Reading
+> the state expression cannot catch it: the expression is *correct*, and `NOTICE`
+> is genuinely right for the case its author had in mind. A control that has never
+> failed, fired only by the feature's total absence.
+
+**pxx-a5's own framing joins tonight's other asymmetry**, and the pair is worth
+holding together:
+
+> *"A wrong reason is worse than none: it answers the question the reader would
+> otherwise have asked."*
+
+frankA named the same thing from the other end — *a false limit is quieter than a
+false fix, because a caveat gets believed.* pxx-a5's is the **mechanism**: a wrong
+label does not merely mislead, it **closes the question**. Seven weeks of
+mislabelled canary skips is what that costs.
+
+It wrote the U-decision evidence into `decide-t-should-a-skip-close-an-open-regression`
+rather than acting on it — *"a landed mechanism narrowing a pending decision
+unnoticed is its own failure mode."* The two cases that decision turns on (a box
+lacking a corpus, where closing is closing on **silence**, versus a recipe
+deliberately guarding out) were **indistinguishable in the data until tonight** and
+now are not, with `closed_by` already recording which kind closed a regression. The
+owner can now decide on recorded facts rather than on what skips are assumed to
+mean.
+
+Both notes I asked for landed, placed where a reader stands rather than in a doc:
+the two-hop staleness in `report_running_code`'s docstring, and the `mid_tier`
+trap in the tier-ladder ticket — configuring `mid_tier` to `limited` would let a
+run covering **no cross target** silence the breadth banner, because `last_full`
+is the last *replacing* run. Noted, **not ranked up**.
+
+### Slot: pxx-a5 continues, and this needs NO exception
+
+frank-optimize-b4 is the only other active session, so pxx-a5 taking another keeps
+us at **two** — the owner's target. The no-backfill condition was about not
+returning to **three**; parking here would leave us at one, which under-uses the
+ceiling rather than respecting it. **Worth stating because I nearly applied the
+condition mechanically to a case it was not written for.**
+
+Recommended (not assigned) `chore-t-nothing-re-checks-a-blocked-by-edge-after-its-blocker-closes`
+[T p45] — six ways tied at 45, but it is the one carrying today's evidence, and I
+appended the half its own fix cannot reach (`a8ef25587`): the query reads
+frontmatter, and the three prose instances found later that day are invisible to
+it. I recommended **against** a second query for the prose half — a body-grep for
+slug mentions is mostly noise and one more instrument whose aperture is invisible.
