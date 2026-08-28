@@ -423,3 +423,33 @@ instrument's **sensitivity is one-sided**.
 with only the leak half of that pair. Filed as
 `chore-a-audit-the-managed-string-slices-for-the-premature-free-direction` — as a measurement
 task, not as a bug, because nobody has measured it.
+
+---
+
+## FACE THIRTEEN — two arms that share an upstream
+
+Polarity: **a signal that cannot go dirty.** A differential test compares two
+implementations and reports disagreement. When the two arms share an upstream — a parser, an
+AST, an IR — a defect in that upstream makes **both sides wrong identically**, and the
+differential is green.
+
+Measured the same hour as its own counter-example. A set-membership item constant funnels
+`Int64 → Integer → Int64` through one `var` line in the Pascal parser: `1 in [4294967297]` is
+TRUE on **all five targets**, so no cross-target diff can see it
+(`bug-p-set-membership-item-constant-truncated-to-32-bits`). Its sibling — i386 and arm32
+truncating the *test value* — is a genuine cross-target divergence and a diff catches it at
+once (`bug-a-set-membership-truncates-the-test-value-on-32-bit-backends`). **Same feature,
+same session: one visible to the method, one invisible to it, and nothing in the output
+distinguishes the two cases.**
+
+> **AGREEMENT BETWEEN TWO ARMS THAT SHARE AN UPSTREAM CARRIES NO INFORMATION ABOUT THAT
+> UPSTREAM** — so a green pxx-vs-pxx run is evidence about the backends and about nothing
+> above them.
+
+Kin to face twelve and distinct from it. Face twelve: an instrument sensitive in only one
+**direction**. This: an instrument blind over a **region** — everything the two arms hold in
+common. Both answer "clean" for a defect class while looking exactly like a passing run.
+
+The caution now lives where the violator will open it — the limits section of
+`devdocs/dev/differential-probes.md` — because in a ticket it is a fact, and in that file it
+is a check.
