@@ -14422,3 +14422,71 @@ a fourth.
 Flagged as unmeasured: switching to `feature-pascal-corpus-oop` may land in the same
 emission-ordering code from another door, so a switch might buy a context change and nothing else.
 Not checked — labelled as my speculation, not a finding.
+
+### frankA parks with NO CODE CHANGED — and refutes its own ticket's direction
+
+`911cc25fc`. The p60 follow-on ticket said *"the prerequisite is emitted before the referenced
+template exists, so emit it later."* Measured: in the failing order the scan finds **nothing at
+all** (`nested=0`). There is no emission to move. Discovery is not mis-placed, it is **impossible**
+at that time — the referenced template is not yet declared, so its `TDel<T>` has not been
+rewritten to `specialize TDel<T>`, and marking it would require already knowing it is a template.
+
+**Why the wrong direction was persuasive, in its author's own words:**
+
+> *"It was persuasive because it was shaped like the previous two fixes."*
+
+> **A DIAGNOSIS IN THE SHAPE OF THE PREVIOUS FIX IS CONFIRMED BY RESEMBLANCE, NOT BY EVIDENCE.**
+
+Nastier than most, because the resemblance is genuinely informative — the previous two really
+were ordering defects — so the prior is not wrong, merely not evidence about *this* one. Three in
+a row make the fourth look inevitable.
+
+The refutation is **kept in the ticket** rather than the direction being replaced, same discipline
+as the labelled `LastTypeRecId` story this afternoon: a later reader would otherwise spend a
+session rediscovering that the thing to move is empty. Both dead variants are written in with an
+explicit *do not attempt these* — **"each looks like a five-line change and produces no behaviour
+change at all"**, which is a change indistinguishable from one that never happened.
+
+**It parked BEFORE opening the mechanism, against my wording and with my purpose.** I said "park
+when it lands"; the honest reading was that a method-level deferral analogue — new machinery in
+the most delicate code in the file, without breaking `BufferGenericMethod`'s materialised-exactly-
+once invariant — is precisely what the boundary existed to stop it starting late. **Following the
+purpose over the letter is the right call and better than compliance.**
+
+**Correction accepted:** I said switching to `corpus-oop` *might* land in the same
+emission-ordering code. frankA notes it did not check either, so it is unmeasured on **both**
+sides and a coordinator's hedge can still read as soft verification. Neither guess should be
+inherited.
+
+**Lane tally for the day:** four defects closed (`resourcestring`, wall 6, the false cycle, the
+p65 re-rank), one fully diagnosed and parked, three tickets filed, `generics.defaults.pas`
+**`:2960 → :3250`**. frankA applied the instrument/stopping test to the parked ticket itself and
+got the right answer — it keeps its own merit, an 8-line Delphi repro FPC compiles and we reject,
+independent of whether anyone advances this corpus again.
+
+### Dispatch: pxx-a5 → the FreeBSD ticket, FIRST STEP ONLY, install nothing
+
+`feature-t-freebsd-image-and-runner`. **Its frontmatter says `prio: 20`; the ranker shows p55**
+because it is the sole blocker of `feature-port-freebsd-native` and inherits down the dep edge —
+propagation working as designed, not a contradiction.
+
+Dispatched as a **claim-verification, not a build**. The A ticket's infra section claims *"pre-built
+qcow2 exists"*; the 2026-08-20 measurement on plexus found no qemu, no `/var/lib/libvirt/images`,
+no `*freebsd*` on the filesystem. Either answer lands something: if it exists elsewhere the A
+ticket needs the *location*; if it never existed, **a claim in a high-prio A ticket has been
+quietly untrue for eight days** while that ticket was "repeatedly picked up and put back down"
+partly on its strength — a refusal-with-a-date-on-it in the plainest form. Told it to **re-take**
+the measurement rather than cite it, since the original is eight days old and box-specific.
+
+**HARD STOP given: install nothing.** No `apt install` of qemu, no creating
+`/var/lib/libvirt/images`, no downloading an OS image, no booting a VM. **plexus is the owner's
+workstation as well as the test box** — pxx-a5 already declined a sweep on it tonight at load 27
+on 12 cores, and this is the same instinct applied to packages and disk. Changing the system
+configuration of the owner's machine is the owner's call, not mine to delegate. If the answer is
+"the image must be built here", the deliverable is **a costed request the owner can approve in
+one line**, not a fait accompli.
+
+Follow-on if it proves short: `chore-t-record-how-a-regression-closed` [T p30], the cheap
+self-contained item pxx-a5 flagged itself. Two workers with frank-optimize-b4 — at the ceiling.
+frankA stays parked and keeps the umbrella; `feature-pascal-corpus-oop` [P p75] is P's head
+whenever it resumes.
