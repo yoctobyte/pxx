@@ -146,4 +146,4 @@ The sentinel is unreachable on failure (`SIGNALS FAIL`, halt 1) and the Makefile
 compares the whole output, so the FAIL lines survive as the diagnostic.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit ef0be57fd.
