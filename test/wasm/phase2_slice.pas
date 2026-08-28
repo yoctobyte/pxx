@@ -224,6 +224,41 @@ begin
   RecField := GRec.b + GRec.a;
 end;
 
+
+{ Casts and Trunc/Round. On a register target a cast is nothing at all — the
+  value is already in the low half of the register it sits in — so five
+  backends emit no instruction for `Integer(x)`. Here the four value types are
+  distinct and it is an `i32.wrap_i64`: omitting it is a validation failure
+  rather than a silent truncation, which is the good direction, but only the
+  diff shows the SIGN was handled right.
+
+  Trunc and Round exist here rather than in a float slice because their subject
+  is the CONVERSION, not the accuracy: the coercion layer refuses to insert
+  float->int on its own precisely because toward-zero and nearest-even are
+  different answers, and these two nodes are how a program asks for one. The
+  values are chosen at exact halves and either side of zero, where the two
+  disagree. }
+function CastI(w: Int64): Integer;
+begin CastI := Integer(w); end;
+
+function CastU(w: Int64): Integer;
+begin CastU := Integer(LongWord(w)); end;
+
+function CastC(n: Integer): Integer;
+begin CastC := Ord(Chr(n)); end;
+
+function CastB(n: Integer): Integer;
+begin if Boolean(n) then CastB := 1 else CastB := 0; end;
+
+function TruncD(d: Double): Int64;
+begin TruncD := Trunc(d); end;
+
+function RoundD(d: Double): Int64;
+begin RoundD := Round(d); end;
+
+function TruncS(f: Single): Int64;
+begin TruncS := Trunc(f); end;
+
 {$ifndef WASM_NOMAIN}
 begin
   writeln(AddMul(3, 4));
@@ -266,6 +301,18 @@ begin
   writeln(ArrSum(0));
   writeln(GlobArr(5));
   writeln(RecField(7));
+  writeln(CastI(10000000000));
+  writeln(CastI(-1));
+  writeln(CastU(4294967295));
+  writeln(CastC(65));
+  writeln(CastB(0));
+  writeln(CastB(7));
+  writeln(TruncD(2.7));
+  writeln(TruncD(-2.7));
+  writeln(RoundD(2.5));
+  writeln(RoundD(3.5));
+  writeln(RoundD(-2.5));
+  writeln(TruncS(9.9));
 end.
 {$else}
 begin

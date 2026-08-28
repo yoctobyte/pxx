@@ -852,6 +852,12 @@ begin
   end;
 end;
 
+{ A builtin IR_CALL's result type, for the oracle. Same rule as everywhere
+  else: it is what the emitter PRODUCES, so a cast answers its cast type and
+  Trunc/Round answers Int64 — never IRTk, which for these nodes records the
+  frontend's intent rather than the emitted width. }
+function WasmBuiltinResultType(node: Integer): TTypeKind; forward;
+
 { The oracle's body, now that WasmRepType exists. Every emitter's declared
   result is this function, so an emitter cannot report a type it did not
   produce. }
@@ -871,7 +877,7 @@ begin
     IR_CALL          : if (IRA[node] >= 0) and (IRA[node] < MAX_PROCS) then
                          WasmNodeResultType := Procs[IRA[node]].RetType
                        else
-                         WasmNodeResultType := IntToTypeKind(IRTk[node]);
+                         WasmNodeResultType := WasmBuiltinResultType(node);
     { Same rule for the indirect forms — the type comes from the SIGNATURE, and
       the signature is where the call's shape came from. They differ only in
       which field holds the proc: IRIVal for an indirect call, IRC for a
@@ -1154,14 +1160,156 @@ end;
     pointer parameter, exactly as the register targets do), but choosing the
     convention is an ABI decision and belongs with the rest of Phase 4, not
     inferred here from one call site. }
+{ WHAT a negative proc index IS, for the coverage report.
+
+  The message this replaces said `needs the heap, Phase 6` for every one of
+  them. That was not measured, it was assumed from the two members of the set
+  that are true — GetMem and FreeMem — and it was WRONG for the ones that
+  mattered most: `PXXAlloc` itself is blocked on an `Integer()` CAST, and the
+  write path on `Trunc`. Neither has anything to do with the heap, and the
+  message said they did, in a report that is then read as evidence. A
+  diagnostic that names a CAUSE is asserting a root cause; this one names the
+  BUILTIN and lets the reader decide.
+
+  Only the ones this backend has met are spelled out. An unnamed code is
+  reported as its number, which is honest and greppable. }
+function WasmBuiltinName(p: Integer): AnsiString;
+begin
+  if p = -Ord(tkGetMem) then WasmBuiltinName := 'GetMem / class instantiation'
+  else if p = -Ord(tkFreeMem) then WasmBuiltinName := 'FreeMem'
+  else if p = -Ord(tkLength) then WasmBuiltinName := 'Length'
+  else if p = -Ord(tkOrd) then WasmBuiltinName := 'Ord (type pun)'
+  else if p = -Ord(tkChr) then WasmBuiltinName := 'Chr (type pun)'
+  else if p = -Ord(tkInteger_T) then WasmBuiltinName := 'Integer() cast'
+  else if p = -Ord(tkLongWord_T) then WasmBuiltinName := 'LongWord() cast'
+  else if p = -Ord(tkChar_T) then WasmBuiltinName := 'Char() cast'
+  else if p = -Ord(tkBoolean_T) then WasmBuiltinName := 'Boolean() cast'
+  else if p = -Ord(tkString_T) then WasmBuiltinName := 'String() cast'
+  else if p = -100 then WasmBuiltinName := 'LoadFile'
+  else if p = -101 then WasmBuiltinName := 'SetLength on a frozen string'
+  else if p = -102 then WasmBuiltinName := 'SetLength'
+  else if p = -103 then WasmBuiltinName := 'ReallocMem'
+  else if p = -203 then WasmBuiltinName := 'Trunc'
+  else if p = -204 then WasmBuiltinName := 'Round'
+  else WasmBuiltinName := 'unrecognised';
+end;
+
+{ The TYPE a cast builtin produces. A cast is a passthrough on a register
+  target — `Integer(x)` is already in the low half of the register the value
+  sits in, so five backends emit nothing at all for it. Here the four value
+  types are distinct and `Integer(someInt64)` is an `i32.wrap_i64`: a real
+  instruction, and omitting it is a validation failure rather than a silent
+  truncation, which is the good direction. Returns False for a code that is not
+  a cast. }
+function WasmCastKind(p: Integer; var tk: TTypeKind): Boolean;
+begin
+  WasmCastKind := True;
+  if p = -Ord(tkInteger_T) then tk := tyInt32
+  else if p = -Ord(tkLongWord_T) then tk := tyUInt32
+  else if p = -Ord(tkChar_T) then tk := tyChar
+  else if p = -Ord(tkBoolean_T) then tk := tyBoolean
+  else if p = -Ord(tkChr) then tk := tyChar
+  else WasmCastKind := False;
+end;
+
+function WasmBuiltinResultType(node: Integer): TTypeKind;
+var p: Integer; ctk: TTypeKind;
+begin
+  p := IRA[node];
+  if WasmCastKind(p, ctk) then WasmBuiltinResultType := ctk
+  else if (p = -203) or (p = -204) then WasmBuiltinResultType := tyInt64
+  else if (p = -Ord(tkOrd)) and (IRB[node] <> -1) then
+    WasmBuiltinResultType := WasmNodeResultType(IRA[IRB[node]])
+  else
+    WasmBuiltinResultType := IntToTypeKind(IRTk[node]);
+end;
+
+{ Builtins this backend can lower. Returns False for one it cannot, so the
+  caller reports it by NAME rather than this function inventing a reason. }
+function WasmEmitBuiltin(node, p: Integer; isStmt: Boolean): Boolean;
+var argNode: Integer; ctk: TTypeKind; atk: TTypeKind; want: Byte; wide: Boolean;
+begin
+  WasmEmitBuiltin := False;
+  argNode := IRB[node];
+  if argNode = -1 then Exit;
+
+  { --- casts and Ord: a value conversion, not a no-op --- }
+  if WasmCastKind(p, ctk) then
+  begin
+    if not WasmScalarType(ctk, want) then Exit;
+    WasmEmitValueAs(IRA[argNode], want, WasmBuiltinName(p));
+    WasmEmitBuiltin := True;
+    Exit;
+  end;
+
+  { Ord: the ORDINAL of its argument, which is the value itself for every type
+    that has one. Its width is the argument's, not a fixed i32 — `Ord` of an
+    Int64-backed enum would otherwise be wrapped silently. }
+  if p = -Ord(tkOrd) then
+  begin
+    atk := WasmNodeResultType(IRA[argNode]);
+    if not WasmScalarType(atk, want) then Exit;
+    WasmEmitValueAs(IRA[argNode], want, 'Ord');
+    WasmEmitBuiltin := True;
+    Exit;
+  end;
+
+  { --- Trunc / Round: the float->int conversion the coercion layer REFUSES to
+    insert on its own, and this is why. Which one you get is a language
+    decision (toward zero vs nearest-even), so it has to be asked for, and
+    these two nodes are the ask.
+
+    Both yield Int64, matching what the other backends' soft-float kernels
+    return. Round is `nearest` then `trunc`: wasm's f64.nearest is
+    round-half-to-EVEN, which is Pascal's Round exactly, so no correction
+    follows it.
+
+    DIVERGENCE, stated because it is real and not a bug to be fixed here: wasm's
+    trunc_*_s TRAPS on NaN and on a value outside Int64, where x86-64 returns
+    $8000000000000000 and aarch64 saturates. Our own targets already disagree
+    about this, so there is no behaviour to match; a trap is the loudest of the
+    three and the easiest to reason about. The non-trapping `trunc_sat` forms
+    exist and would need a post-MVP feature; revisit if a real program depends
+    on the value rather than on not crashing. --- }
+  if (p = -203) or (p = -204) then
+  begin
+    atk := WasmNodeResultType(IRA[argNode]);
+    if TypeIsFloat(atk) then
+    begin
+      wide := (atk = tyDouble);
+      if wide then WasmEmitValueAs(IRA[argNode], WT_F64, 'Trunc/Round')
+      else WasmEmitValueAs(IRA[argNode], WT_F32, 'Trunc/Round');
+      if WasmBodyBroken then Exit;
+      if p = -204 then
+      begin
+        { $9E, not $9C. $9C is f64.floor, and the difference shows only on an
+          exact half: Round(2.5) is 2 under both, Round(3.5) is 4 under nearest
+          and 3 under floor. The slice picks halves either side of zero for
+          exactly this reason, and it caught it on the first run. }
+        if wide then WasmOp($9E, 'f64.nearest') else WasmOp($90, 'f32.nearest');
+      end;
+      if wide then WasmOp($B0, 'i64.trunc_f64_s')
+      else WasmOp($AE, 'i64.trunc_f32_s');
+    end
+    else
+    begin
+      { Trunc/Round of an integer is identity, widened to the Int64 result. }
+      WasmEmitValueAs(IRA[argNode], WT_I64, 'Trunc/Round of an integer');
+    end;
+    WasmEmitBuiltin := True;
+    Exit;
+  end;
+end;
+
 procedure WasmEmitCall(node: Integer; isStmt: Boolean);
 var p, argNode, i, nParams: Integer; pvt: Byte;
 begin
   p := IRA[node];
   if p < 0 then
   begin
-    WasmUnsupported('builtin call (IR_CALL with proc index '
-                    + WasmIntStr(p) + ') — needs the heap, Phase 6');
+    if WasmEmitBuiltin(node, p, isStmt) then Exit;
+    WasmUnsupported('builtin ' + WasmBuiltinName(p) + ' (IR_CALL with proc '
+                    + 'index ' + WasmIntStr(p) + ')');
     Exit;
   end;
   if (p < Length(ProcExternal)) and ProcExternal[p] then

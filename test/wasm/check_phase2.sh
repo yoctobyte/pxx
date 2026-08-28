@@ -85,6 +85,21 @@ out.push(inst.exports.ArrSum(3));
 out.push(inst.exports.ArrSum(0));
 out.push(inst.exports.GlobArr(5));
 out.push(inst.exports.RecField(7));
+// Casts and Trunc/Round: the conversion instructions no register backend needs
+// to emit. The Round values sit on exact halves either side of zero, where
+// round-half-to-even and round-half-away-from-zero give different answers.
+out.push(inst.exports.CastI(10000000000n));
+out.push(inst.exports.CastI(-1n));
+out.push(inst.exports.CastU(4294967295n));
+out.push(inst.exports.CastC(65));
+out.push(inst.exports.CastB(0));
+out.push(inst.exports.CastB(7));
+out.push(inst.exports.TruncD(2.7));
+out.push(inst.exports.TruncD(-2.7));
+out.push(inst.exports.RoundD(2.5));
+out.push(inst.exports.RoundD(3.5));
+out.push(inst.exports.RoundD(-2.5));
+out.push(inst.exports.TruncS(9.9));
 if (inst.exports.sp.value !== sp0) {
   console.error(`FAIL shadow stack leaked: ${sp0} -> ${inst.exports.sp.value}`);
   process.exit(1);
