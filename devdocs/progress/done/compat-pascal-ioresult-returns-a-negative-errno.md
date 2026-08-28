@@ -130,4 +130,4 @@ errors, including both invariant rows.
 (tree held aside under the Track A bug), standing caveat.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit 89fec8bdf.
