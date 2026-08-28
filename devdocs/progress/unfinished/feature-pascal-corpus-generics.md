@@ -1,7 +1,7 @@
 ---
 track: P
 prio: 65
-owner: claude-A
+owner: unassigned
 blocked-by: []
 status: unfinished
 type: feature
@@ -11,7 +11,7 @@ type: feature
 
 - **Type:** feature (compat — generics × classes × interfaces)
 - **Track:** P — tag: compat
-- **Status:** unfinished — parked 2026-08-25, blocked on the Track B typinfo/PTypeData gap (see the last recon entry)
+- **Status:** working
   runs, fpjson's suite is 203/203).
 - **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
   [[feature-pascal-corpus-oop]].
@@ -930,3 +930,82 @@ there is no oracle behind it: signature parity with FPC (`PtrInt` vs `Integer`,
 mode) is unverified, and by the dead-oracle rule that probe proves the capability
 exists in pxx and nothing about whether it matches FPC. Anyone relying on parity
 should re-probe with a compiling FPC control first.
+
+## 2026-08-28 (frankB) — the wall moved 2082 → 3250, and the new one is reduced to 14 lines
+
+Picked up from frankA's edge-clearing. Verified the coordinator's framing against
+HEAD before starting, on its own instruction — `blocked-by: []`, both limits
+recorded as relayed, and nothing else claimed in `working/`.
+
+### Environment: this checkout had neither the corpus nor a compiler
+
+Recorded because the ticket's re-stage note has now been true three times and the
+next session will hit it again. `/tmp/generics-stage` was gone (a fourth
+machine), `library_candidates/rtl-generics` was absent, and this is a Track B
+checkout that had **never bootstrapped** — `make compiler/pascal26` answered
+*"self-hosted compiler seed missing. Run: make bootstrap"*. Fetched the corpus
+with `tools/install_lib_candidates.sh rtl-generics` (release_3_2_2, the same
+commit the previous drives used, so the line numbers below are comparable), then
+`make bootstrap` and `make compiler/pascal26` → **converged after 1 round**,
+sha `c786d570e173`, which differs from `pinned` `325b4479` — both halves of
+CLAUDE.md's fresh-tree check, since a copied-in seed makes that build a silent
+no-op.
+
+### The RTTI blocker really is cleared, by the corpus rather than by a probe
+
+frankA verified `GetTypeData` on a subrange directly. The corpus now agrees:
+driving `uses generics.defaults` no longer stops at **2082**, it stops at
+**3250**. A wall that moves is the strongest available evidence that the thing
+under it was the blocker.
+
+### The new wall, reduced
+
+`generics.defaults.pas:3250` — `FOrdinal := TGOrdinalStringComparer<T, THashFactory>.Create;`
+inside a generic class function. Filed as
+[[bug-p-a-generic-specialized-before-its-declaration-is-unresolvable]] with a
+14-line repro whose **only** difference from a compiling program is the order of
+two type declarations, and with fpc 3.2.2 accepting both orderings.
+
+Seven variations were ruled out one at a time (mode, inheritance, arity, arity
+overloading, `class var`, `class function`, statement nesting); the ticket lists
+them so the ladder is not re-walked. Two further measurements put the failure at
+**instantiation time**: with nothing instantiating the outer template it
+compiles, and with a concrete type argument in place of the parameter it
+compiles.
+
+The ticket's own standing advice paid off twice here. The `in:` line named
+`generics.defaults.pas` for a diagnostic whose `near:` window showed a token
+stream from elsewhere — trust `near:`, as the entry above says. And the wall
+looked novel and was the same family the entry above names: one path working and
+its sibling missing.
+
+### Parked, not blocked
+
+Handing this back to `unfinished/` with the diagnosis banked rather than
+microfixing it. The mechanism lives in `DelphiRewriteGenericUses`, delicate
+enough that its own comments record a previous runaway, and a wrong root cause
+written into a ticket is this rung's documented failure mode — the entry above
+this one is a corrected one. The next session on this rung should take the P
+bug first: the corpus cannot advance past 3250 until it is fixed, and it is now
+a 14-line problem rather than a 9,550-line one.
+
+**One free result on the way.** frankA recorded that FPC rejected its
+`Equals`/`GetHashCode` override probe, leaving that check without an oracle.
+That was a probe defect, not an FPC limitation — under `{$mode objfpc}{$H+}` the
+override compiles and runs on FPC 3.2.2. The oracle now exists:
+
+| probe | fpc 3.2.2 | pxx |
+| --- | --- | --- |
+| no `{$mode}` | rejected — `class` unavailable in default mode | — |
+| `GetHashCode: Integer; override` | **rejected** — *"no method in an ancestor class to be overridden: GetHashCode:LongInt"* | **compiles** |
+| `GetHashCode: PtrInt; override` (objfpc) | OK | compiles, prints 42 |
+| same under `{$mode delphi}` | OK | compiles |
+| `Equals(Obj: TObject): Boolean; override` | OK | compiles, prints TRUE |
+
+So the parity form matches the oracle exactly and frankA's conclusion stands —
+now with an oracle behind it. The one divergence is that pxx accepts the
+`Integer` return where FPC demands `PtrInt`; checked whether that is the silent
+kind, and it is not — a narrow override returning `-7` reads back as `-7`
+through a `TObject`-typed variable, so it is sign-extended rather than
+truncated. By CLAUDE.md's table that is *we accept a form FPC rejects* → not a
+defect, a line for the divergences doc.
