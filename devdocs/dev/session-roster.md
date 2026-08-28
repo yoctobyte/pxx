@@ -13134,3 +13134,38 @@ side effect, not a design.
 **Not enshrined as a fifteenth face**, deliberately: that is one measured instance in one
 suite, and my own rule is to measure the population before generalising a single case into a
 sweep. Recorded as a candidate. If a second suite shows the same shape, it earns the number.
+
+### The free-slot signal is an EVENT, not a state — and it lied within the minute
+
+The idle subscription armed on frankwasm fired at 18:16. **By the time I read it, frankwasm was
+busy again.** frankA busy too, so the ceiling was never actually free and **no dispatch
+happened.** Checked before acting; acting on it would have put a third worker on a box already
+at the limit that killed four sessions on 2026-08-25.
+
+> **A ONE-SHOT IDLE NOTICE SAYS A SLOT *WAS* FREE, NOT THAT IT *IS* FREE.** It is a prompt to
+> look, never a trigger to act.
+
+Worth being honest about: this is a flaw in the mechanism I congratulated myself for two ticks
+ago. *Prefer a mechanical expiry to a convention* was right, and the mechanical expiry I built
+reports an **event** while the decision it feeds needs a **state**. Same family as everything
+else tonight — a reading that carries less information than its shape suggests. The fix is
+cheap and already applied: **re-verify with `ListAgents` on every notice, and treat the
+subscription as an alarm clock rather than an answer.** Subscription re-armed (it is one-shot
+and was consumed); frankA's remains live and unfired.
+
+### Session-name to tree mapping, so a future tick does not guess
+
+`ListAgents` names and tmux window names do **not** match, and the dispatch decision depends on
+which tree a session is in:
+
+| ListAgents | tmux window | tree |
+| --- | --- | --- |
+| `pxx-a5` | **frankT** | `/home/neo/pxx` — the Track T tree |
+| `frank-optimize-b4` | `claude` | `/home/neo/frank-optimize` |
+| frankA / frankB / frankwasm / frank-rust / frank-user | same | `/home/neo/<name>` |
+
+So **`pxx-a5` IS the Track T session** and Track T work is the right thing to hand it — which
+is what the queue said, but the name alone would not have told me. Track T's ranked head
+remains `bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-last-good` [p60], unclaimed, in
+`backlog/`. tstate **UP** through `2c5549642225` — frankA's arity probe — so T is currently
+sweeping live work.
