@@ -15363,3 +15363,76 @@ indistinguishable in it.** It was *right to refuse on what it could see.* Face
 seventeen, in a guard rather than an instrument — and here the un-reportable
 aperture is the correct engineering trade, which is the counterexample worth
 keeping so the face is not read as "always fixable".
+
+### CORRECTION to my own measurement's framing — the edge alone is harmless
+
+`8a02b8651` / `11ad14c38`. pxx-a5 corrected the ticket I helped shape, and it
+corrected **my causal story, not my data.** I verified it in source rather than
+accepting it — `tools/progress.py:643`, `ready_tickets`:
+
+```python
+done = self.resolved_slugs        # done/ OR decided/ satisfies a blocker
+...
+if self.track_matches(...) and all(b in done for b in t.blockers):
+```
+
+**A closed blocker SATISFIES its edge.** So a fully-cleared ticket sitting in
+`backlog/` ranks completely normally, and its stale edge is *untidy, not harmful.*
+Running the first draft over the real board settled it: **17 findings, 12 of them
+in `backlog/`, `rainy-day/` or `done-followup/`, costing nobody anything.**
+
+What was right and what was wrong, precisely:
+
+- **Right:** the count, and the five fully-cleared tickets **all sitting in
+  `blocked/`** — including the p85. That folder is not in `RANKED_STATUSES`, so
+  `ready`/`next` never scan it.
+- **Wrong:** the implied mechanism. I framed it as *the stale edge suppresses the
+  ticket.* It does not. **The suppression is the FOLDER**, and the defect is the
+  *compounding*: a cleared edge **plus** a folder nothing scans, which is a
+  contradiction that also hides the ticket.
+- **Also conflated, and worth separating:** `resolved_slugs` is `done | decided`
+  and **excludes `rejected/`** — so a *rejected* blocker never satisfies an edge
+  in any folder, and those tickets are genuinely stuck rather than untidy. My "14"
+  lumped two categories with **opposite** behaviour.
+
+> **A correct measurement carrying a wrong causal story is more dangerous than a
+> wrong number**, because the number survives review and the story is what gets
+> built on. Here the story would have produced a check that was **70% noise on day
+> one** — and a check that cries wolf earns the habit of being scrolled past,
+> which is the same failure the skip banner avoided by firing on coverage holes
+> only.
+
+So severity splits **by folder, not by edge**: `blocked/` fails, everything else
+is a strict warning, and `rainy-day/`/`float/`/`experimental/` stay warnings
+because they are unranked **deliberately** rather than by accident. 8 guards over
+a throwaway board tree, so the `blocked/` case is proven to fire even though live
+data has no instance right now.
+
+**The aperture note ships on every verdict, including a clean one**, in the form I
+asked for: it reads frontmatter, a prose claim is not checked and cannot be, and a
+clean run means the frontmatter half is clean and **not** the family. No second
+query. Its own words for why: *"shipping an instrument that does not report its
+own reach, to catch a family defined by instruments that do not report their own
+reach, would have been embarrassing."*
+
+### Two recursions inside that work, both self-caught
+
+1. **It implemented a check that already existed** — `BLOCKER-REJECTED`, duplicating
+   `BLOCKED-BY-REJECTED` sixty lines further down the same function, whose
+   reasoning was **better** (it explains why *not* to auto-unblock: rejecting a
+   decision often moots the dependent). Its own is removed. It found this only
+   because a mutation run printed an assertion message **containing a string it had
+   not written.** Reading the function first would have been cheaper, and *"two
+   mechanisms for one concept, the second stays broken"* is the thing it says it
+   would have caught in someone else's diff. Worth what the detour cost: the
+   incumbent **had no test and now has one.**
+
+2. **Its own mutation harness had the aperture defect it was built to catch** — one
+   break first read as catching nothing, because the mutation was a *syntax error*
+   and **the harness scored a crashed run identically to a passing one.** Fixed by
+   checking the return code.
+
+> The instrument that tests the guard against un-reportable apertures had an
+> un-reportable aperture. This is not irony to file away — it is the reason the
+> family keeps recurring: **the checking layer is written with less suspicion than
+> the layer being checked**, because it is "just the harness".
