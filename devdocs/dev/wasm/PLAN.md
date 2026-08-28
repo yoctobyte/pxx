@@ -1579,6 +1579,40 @@ Two consequences for how this phase is run:
   after `in` is *not recorded here* rather than estimated. An estimate would
   have looked like the 9a row and carried none of its evidence.
 
+### Phase 9d — `IR_DEFAULT_MEM` (op 52), the leader at 75 lines — **DONE 2026-08-28**
+
+A `PXXMemZero` call, the way `WasmEmitCopyRec` already calls `PXXMemMove`.
+x86-64's managed-record arm (release the ARC fields, then zero) is guarded but
+not implemented: all 14 construction sites pass `REC_NONE`, so it is
+unreachable from today's IR. The guard stays — "unreachable by inspection" is a
+claim that expires with nothing going red.
+
+`compiler.pas`: **3494 → 3570 of 3658 (95.5% → 97.6%)**, refused 163 → 88, op 52
+gone from the histogram.
+
+**The first slice tested nothing, and all three breaks passed it.** It dirtied
+memory with `$5A5A5A5A` and called `Take(nil)` from the main body — but
+`Dirty`'s frame is DEEPER than main's and never overlaps it, so every temp
+landed on memory that was already zero. Deleting the zeroing outright changed
+no output. The `One`/`Two`/`Both`/`Twice` wrappers exist to put each temp at
+`Dirty`'s own call depth; only then does the break show `data=1515870810`.
+
+That is **face fifteen a third time in one session**, and the axis was different
+each time: body size, then a helper's output not being in the file that was
+grepped, now one stack frame. Knowing the rule did not prevent it. The header of
+`defmem_slice.pas` says so, because the wrappers look like ceremony a later
+reader would simplify away.
+
+**Two of the three breaks are still not caught, and the second one led somewhere.**
+Halving the byte count is invisible — and the reason is not that the check is
+weak. `symtab.inc`'s `EnsureMethodPtrRec` hard-codes `UClsSize_ := 16`, so a
+`procedure of object` is declared 16 bytes on every target while a 32-bit
+payload is 8; half of 16 still covers all of it. Measured on i386, arm32 and
+wasm32; filed as `bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets`
+[A, p20], not fixed here — shared file. **A break a check cannot see and a break
+that changes nothing observable are indistinguishable from the output**, and
+only chasing the second reading found the defect.
+
 - **Milestone:** the wasm-hosted compiler's **emitted output bytes are identical
   to the native compiler's** for the same input.
 - **State this claim precisely.** It is output parity across two hosts of the
