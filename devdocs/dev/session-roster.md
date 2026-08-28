@@ -14951,3 +14951,65 @@ instance is not a sweep.
 My count has now been wrong twice in the lane I exist to feed. The correct move is
 to count them at the tick rather than carry the number — carrying it is what made
 it wrong both times.
+
+### The third bad dispatch, and it is the worst-shaped of the three
+
+`bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults` was **already in
+`done/`**, resolved as `2c155cce2` earlier the same day **by frankA, in the
+session I dispatched it to.** frankA did not take that from the file's location —
+it ran the test at HEAD (7/7 rows matching the FPC oracle, all three inline casts
+TRUE) — and pointed out the honest-exit sibling I mentioned was the *interim*
+state for defect B, long since replaced by real lowering.
+
+**How it happened is the part that matters.** I read the corpus umbrella's tail,
+saw *"Full table, repro and direction: [[bug-p-a-class-method-cast…]] (p70)"*,
+took the slug, and dispatched. I never opened the ticket. So on the same evening I
+wrote down *read it for content, not just for blockers*, I applied that rule to
+`feature-pascal-corpus-oop` — the candidate I was **suspicious** of — and skipped
+it on the candidate I **accepted**.
+
+> **The rule gets applied to the candidate you doubt, not to the one you like.**
+> Verification is spent where suspicion already points, which is where it is least
+> needed. The check that would have cost one command was skipped precisely because
+> the dispatch felt well-founded — it came from the worker's own writing, in the
+> worker's own lane, with a full table behind it.
+
+And the reference I trusted was itself a **snapshot that had moved**: a live
+ticket citing a sibling as open, still true when written. Same aperture problem as
+face seventeen, with the umbrella as the instrument.
+
+### frankA sharpened my prose-edge finding, in the direction I did not have
+
+I found a `blocked-by` **outliving** its blocker. frankA found the mirror: rung 3's
+body claimed the edge to `feature-pascal-builtin-tobject-class` was *"recorded as
+a `blocked-by:` edge"* — **it never was.** Frontmatter carried only the typinfo
+one.
+
+> **Prose can INVENT an edge as well as outlive one**, and `progress.sh check`
+> cannot see either. A body asserting that an edge exists reads exactly like a
+> body describing one that does — and the inventing case is worse, because it
+> makes the ticket look *more* carefully maintained.
+
+frankA measured that blocker rather than assuming it was stale too, and added no
+edge. It also cleared the typinfo edge (`72a21f264`) by verifying the capability's
+**behaviour** — `GetTypeData` on `-128..127` giving `OrdType 4 / MinValue -128 /
+MaxValue 127` — rather than by the gap's `done/` location, on the grounds that
+*"filed as done" and "the capability works" are different claims.* Correct, and it
+is the same distinction as my own `-O3` error one level down.
+
+**Two limits it recorded rather than glossed**, both carried into frankB's
+dispatch: `feature-pascal-builtin-tobject-class` stays open in `backlog/` for its
+wider scope; and **FPC rejected its override probe**, so that check has **no
+oracle** — it shows the capability exists in pxx and says nothing about signature
+parity, and by the dead-oracle rule cannot be cited for parity.
+
+### State
+
+`working/` is **empty**. frankA parked clean, everything pushed, and moved
+`feature-pascal-corpus-expansion` to `unfinished/` itself rather than holding the
+ranker's top slot. **frankB dispatched cross-lane to `feature-pascal-corpus-generics`
+[P p65]** — it explicitly asked for another lane's overflow rather than
+manufacturing B work, which is the right instinct: *a thin queue is information,
+not a gap to fill.* frank-optimize-b4 is on the aarch64 port with the W2 citation
+correction relayed. pxx-a5 parked by the cap, holding a watcher restart until the
+breadth run clears (1642/3217 at last check) — its timing, not mine.
