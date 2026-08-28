@@ -884,19 +884,32 @@ begin
     frame or in BSS. The shapes refused here are the ones whose slot holds a
     HEAP HANDLE rather than the data: a dynamic array (ArrLen = -1) and an
     open-array value parameter, where the caller passed the handle. Loading the
-    handle is one more instruction and is not the hard part; what it points at
-    is the heap, which is Phase 6. Refusing every array — which is what this
-    did first — also refused `a[i]` on a plain `array[0..9] of Integer`, where
-    nothing is on the heap at all. }
+    handle is one more instruction and is not the hard part. Refusing every
+    array — which is what this did first — also refused `a[i]` on a plain
+    `array[0..9] of Integer`, where nothing is on the heap at all.
+
+    THE REASON HERE WAS STALE UNTIL 2026-08-28. It said "needs the heap, Phase
+    6" and Phase 6 shipped the heap; the refusal stayed correct and its stated
+    cause stopped being true, which is the most durable kind of wrong, because
+    nothing ever fails to make anyone check it. What is actually missing is the
+    dynamic-array LAYOUT — the descriptor, its refcount and length, the
+    element-address arithmetic, SetLength and the copy-on-write unique — none
+    of which the heap provides. Measured the day the reason was corrected:
+    compiling `compiler.pas` for wasm32 refuses 1591 of 3647 bodies, and 83% of
+    the refusal lines are this one feature and its immediate family (dynamic
+    arrays, SetLength on one, open-array parameters, Length of a non-string).
+    It is not a list of gaps; it is one gap. }
   if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
   begin
-    WasmUnsupported('dynamic array ' + Syms[si].Name + ' — needs the heap, Phase 6');
+    WasmUnsupported('dynamic array ' + Syms[si].Name
+                    + ' — dynamic-array layout is not implemented on this target');
     Exit;
   end;
   if (Syms[si].Kind = skParam) and Syms[si].IsArray and not Syms[si].IsRef then
   begin
     WasmUnsupported('open-array parameter ' + Syms[si].Name
-                    + ' — the slot holds a heap handle, Phase 6');
+                    + ' — the slot holds a dynamic-array handle, whose layout'
+                    + ' is not implemented on this target');
     Exit;
   end;
   if (Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray then
@@ -1608,8 +1621,13 @@ end;
 
   * The BUILTIN encodings. IR_CALL doubles as the node for GetMem, FreeMem,
     class instantiation, SetLength and the rest, spelled as a NEGATIVE proc
-    index (`-Ord(tkGetMem)`). Each is a small program, not a call, and each
-    needs the heap — Phase 6.
+    index (`-Ord(tkGetMem)`). Each is a small program, not a call. The clause
+    that used to end this sentence — "and each needs the heap, Phase 6" — was
+    the same unmeasured cause the note below `WasmBuiltinName` was written to
+    retire, and it outlived both Phase 6 and several of the builtins it
+    described: `SetLength` on a string lowers here today. What each one needs
+    is its own answer, and the report now names the builtin instead of
+    asserting a cause.
   * EXTERNAL procs, which need a wasm import and a host to provide it.
   * The hidden-destination return ABI for aggregates. wasm can express it (a
     pointer parameter, exactly as the register targets do), but choosing the
@@ -1646,6 +1664,13 @@ begin
   else if p = -103 then WasmBuiltinName := 'ReallocMem'
   else if p = -203 then WasmBuiltinName := 'Trunc'
   else if p = -204 then WasmBuiltinName := 'Round'
+  { -SPECIAL_IN. Confirmed by repro rather than inferred from the constant:
+    `if i in [1,2,3]` refuses with exactly this code. It was 68 of the 881
+    refusal lines when compiling `compiler.pas` — the largest single item after
+    the dynamic-array family — and it was reading as `unrecognised`, which is
+    the one label that tells a reader nothing about how big the gap is. Every
+    register backend handles it (`j = SPECIAL_IN`). }
+  else if p = -SPECIAL_IN then WasmBuiltinName := 'set membership (`in`)'
   else WasmBuiltinName := 'unrecognised';
 end;
 

@@ -1146,6 +1146,87 @@ the ones that are simply not written yet — `stat` and its family, `readdir`,
 The compiler itself: single-threaded, file I/O only, no sockets, no fork. It is
 the one large program that fits this platform exactly.
 
+### Measured first, 2026-08-28 — Phase 9 is ONE feature, not a list
+
+`compiler.pas` compiled for wasm32 (`-Fulib/rtl/platform/wasi`), on a **probe
+build** whose only change was stubbing `EmitZeroFrameSlot`'s two wasm-reaching
+arms so the run would not stop at the first hard error. That probe is a
+measuring instrument and nothing else: the module it emits has no zero-init and
+must never be run for a correctness claim.
+
+**3647 bodies, 2056 lowered, 1591 refused** — and the compile *completed* and
+wrote a `.wasm`. 881 distinct refusal lines. The histogram:
+
+| lines | refusal | share |
+| --- | --- | --- |
+| 681 | dynamic array — layout not implemented | |
+| 23 | open-array parameter (the slot holds a dynamic-array handle) | |
+| 15 | `SetLength` (builtin -102) on one | |
+| 10 | `Length` of a Pointer | |
+| **729** | **the dynamic-array family** | **83%** |
+| 68 | set membership, `in` (`-SPECIAL_IN`) | 8% |
+| 59 | `IR_DEFAULT_MEM` (op 52) — zero a managed aggregate | 7% |
+| 5 | record returned through a hidden destination (`RetViaHiddenDest`) | |
+| 5 | `LoadFile` (builtin -100) | |
+| ~10 | the tail: `FloatToStr`, `PXXMemMove` of a non-string, `IR_SETLEN_DYN`/`IR_DYNUNIQUE` as statements | |
+
+**The list of remaining gaps was the wrong shape and this is why it is worth
+measuring rather than planning.** Carried into this phase as five roughly
+comparable items — dynamic arrays, record returns, `FloatToStr`, `IR_VAR_STORE`,
+SetLength — it is in fact one feature at 83%, a second at 8%, and a tail. Record
+returns, which read as a peer of dynamic arrays on the gap list, are **five
+lines**. Ordering the work off that list would have spent the phase on items
+worth under a percent each.
+
+`in` is the surprise and the cheap one: 68 bodies, every register backend
+already handles it (`j = SPECIAL_IN`), and it was reporting as
+`builtin unrecognised (-999)` — the one label that tells a reader nothing about
+how big a gap is. Now named, confirmed by repro (`if i in [1,2,3]`) rather than
+inferred from the constant.
+
+`IR_DEFAULT_MEM` at 59 is the same guarantee as the `EmitZeroFrameSlot` finding
+below, one level up in the IR: zeroing a managed aggregate. Whoever takes either
+should look at both.
+
+### The blocker Phase 9 actually starts at, and a correction it forced
+
+The unprobed compile stops at `compiler error: EmitZeroFrameSlot: unhandled
+target` — `bug-a-emitzeroframeslot-has-no-wasm32-arm`, already filed. Measuring
+it corrected that ticket.
+
+`EmitZeroFrameSlot` has **two** per-target chains, one per size class. The wide
+one (`> TARGET_PTR_SIZE`) ends in `Error` and fails loud, which is what the
+ticket described and what its priority rested on. The narrow one
+(`<= TARGET_PTR_SIZE`, i.e. **every managed scalar**) ends in an **unguarded
+`else` that is the x86-64 arm** — so wasm32 has been silently emitting
+`mov qword [rbp+off], 0` for every managed local since the managed-string phase.
+
+Found by probe, not by reading, and the reason a read missed it generalises: six
+named target arms and an unnamed seventh reads as "the default" when it *is*
+x86-64. **A dispatch chain whose last arm is a real target rather than an error
+is a fall-open chain wearing the shape of an exhaustive one.**
+
+Severity measured rather than assumed: a second probe build emitting nothing
+there produces **byte-identical** `.wasm` for `managed_slice`, `index_slice` and
+`wasi_slice`. `Code[]` is not read on this target, so nothing wrong has ever come
+out of it — latent, not active. It stops being latent the moment anything here
+reads `Code[]` or its length.
+
+### A reason that outlived its phase, twice in one file
+
+The dynamic-array refusal said **"needs the heap, Phase 6"**. Phase 6 shipped the
+heap. The refusal stayed correct and its stated cause stopped being true — and
+what is actually missing is the dynamic-array *layout* (descriptor, refcount,
+length, element arithmetic, `SetLength`, copy-on-write), none of which the heap
+provides. The same phrase was still in the calls note, asserting that every
+builtin "needs the heap, Phase 6" when `SetLength` on a string lowers here today.
+
+This file already carried a note retiring that exact phrase for the builtin
+report, written when it was found to be an assumed cause rather than a measured
+one. It was retired in one place and left standing in two others. **Correcting a
+wrong reason where you found it does not correct it where it was copied to** —
+grep the phrase, not the site.
+
 - **Milestone:** the wasm-hosted compiler's **emitted output bytes are identical
   to the native compiler's** for the same input.
 - **State this claim precisely.** It is output parity across two hosts of the
