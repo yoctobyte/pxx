@@ -50,7 +50,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
 
-## backlog (293)
+## backlog (294)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -117,6 +117,7 @@ _none_
 | bug-nilpy-four-remaining-absent-builtins | N | 12 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
 | bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults | P | 70 | bug | Method pointers: a class method never works, and an inline cast never works | — |
+| bug-p-a-method-call-with-missing-arguments-is-accepted-and-reads-garbage | P | 80 | bug | A METHOD called with missing arguments compiles and reads garbage (free routines are checked) | — |
 | bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching | P | 65 | bug | A parameter's pointer element type is lost between registration and overload matching | — |
 | bug-p-a-resourcestring-is-not-addressable | P | 55 | bug | `@SomeResourceString` is `error: undefined variable` — pxx parses a `resourcestring` section as a plain const section (pasparser_proc.inc:4783), and a const has no address. FPC makes resourcestrings addressable (they are runtime-replaceable variables), which is what `Exception.CreateRes(@SArgumentOutOfRange)` — the Delphi/FPC idiom, 3 sites in generics.defaults.pas — depends on. | — |
 | bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
@@ -647,6 +648,7 @@ _none_
 
 - [p 85] [N] bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
 - [p 85] [O] feature-opt-o3-register-pressure [parked — re-claim, do not duplicate]
+- [p 80] [P] bug-p-a-method-call-with-missing-arguments-is-accepted-and-reads-garbage
 - [p 75] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 75] [P] feature-pascal-corpus-oop
 - [p 72] [N] feature-nilpy-stdlib-coverage-gaps-measured
