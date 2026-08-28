@@ -14490,3 +14490,109 @@ Follow-on if it proves short: `chore-t-record-how-a-regression-closed` [T p30], 
 self-contained item pxx-a5 flagged itself. Two workers with frank-optimize-b4 — at the ceiling.
 frankA stays parked and keeps the umbrella; `feature-pascal-corpus-oop` [P p75] is P's head
 whenever it resumes.
+
+### THERE ARE FOURTEEN OPEN TRACK U DECISIONS, NOT TWO
+
+**The worst carried-state failure of the session, and it is in the lane I exist to feed.** I have
+been reporting "two Track U items awaiting the owner" all evening. Enumerated:
+
+| decision | prio |
+| --- | --- |
+| `decide-nilpy-what-version-does-sys-version-info-claim` | 62 |
+| `decide-does-nilpy-random-seed-itself-at-import` | 60 |
+| `decide-should-the-fpc-seed-canary-be-in-the-mandatory-loop` | 55 |
+| `decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample` | 55 |
+| `decide-settextbuf-needs-buffered-text-io-or-stays-missing` | 55 |
+| `decide-install-qemu-system-and-a-freebsd-image-on-plexus` | 55 (new tonight) |
+| `decide-t-refuse-unscoped-pattern-kills-in-a-hook` | 45 |
+| `decide-c-crtl-rand-max-is-conforming-but-breaks-real-code` | 40 |
+| `decide-two-devdocs-directories-make-a-wrong-grep-look-like-a-refutation` | 30 |
+| `decide-where-a-persistent-fpc-trunk-oracle-lives` | 30 |
+| `decide-is-real-a-double-or-fpcs-80-bit-extended` | 30 |
+| `decide-release-signing-key-custody` | 25 |
+| `decide-t-should-a-skip-close-an-open-regression` | 25 |
+| `decide-should-writeableconst-off-be-honoured` | 20 |
+
+**Face sixteen at scale, and I am the instrument that failed.** Routing decisions to Track U is
+one of the four things the coordinator does; I never enumerated the lane, so twelve decisions —
+four of them p55+ — have been silently selecting their status quo while I reported the queue as
+two items deep. `ready --track U` does not surface them the way a work queue does, and I never
+looked. **The rule I wrote yesterday about never-reached decisions applies hardest to the person
+who wrote it.**
+
+Surfaced to the owner in full this tick. No re-ask, no chasing — an enumerated list is the whole
+deliverable; the owner answers what the owner wants to answer.
+
+### I filed a duplicate ticket, defeated by a directory I did not type
+
+`bug-t-nothing-exercises-o3-so-its-clean-record-is-empty` [p50] duplicated Track O's
+`chore-t-nothing-in-the-matrix-runs-o3-so-no-failures-is-unfalsifiable` [p60], filed an hour
+earlier in **`backlog_new/`**. My two greps and mtime sweep covered `backlog/` and `unfinished/`
+only. `ready`/`next` scan four directories; I typed two.
+
+> **A search across sibling directories is only as complete as the list of siblings the searcher
+> happened to type.** Nothing in the empty result names the directories it did not visit, so a
+> blind search and a true absence produce the same output.
+
+Folded my content into the p60 (the W2 silent-refusal evidence, the open questions, the
+nothing-is-blocked-today framing), removed mine, attached the instance to
+`decide-two-devdocs-directories-make-a-wrong-grep-look-like-a-refutation` — whose subject turns
+out **not** to be two doc folders but any sibling-directory search, and whose real fix is
+`progress.sh` knowing its own status directories rather than a human remembering four paths.
+*A construction that cannot express the mistake, versus a documented trap.*
+
+Ironic in the useful way: I audited my own directive last tick precisely because directives go
+unobserved, and the audit's non-existence finding was wrong for the exact reason the ticket it
+concerned is about.
+
+### pxx-a5: the qcow2 claim was TRUE, about the wrong subject
+
+`27b2e7d23` + `0fc679056`, both landed, nothing installed, downloaded, created or booted — step 1
+was read-only, as bounded.
+
+**Neither answer I offered was right.** *"pre-built qcow2 exists"* appears twice in the repo's
+whole history, filed in one commit as a **pair**: FreeBSD has an official upstream qcow2, OpenBSD
+does not and needs `autoinstall`. **It was an upstream-availability comparison, and it was true.**
+Three readers in sequence supplied a subject it never had. Found by looking for a second
+occurrence.
+
+> **A claim with one occurrence has no context to fix its subject** — and nothing in the lone
+> sentence tells you a sibling exists. Note the symmetry with this afternoon's "3 sites": *two*
+> occurrences that looked like corroboration were one measurement. **Count occurrences, then ask
+> whether they are independent** — both directions fail silently.
+
+**Sharper than the ticket it corrects:** `qemu-user` IS installed (1:10.2.1); `qemu-system` is
+not. That is exactly why cross-target tiers work — foreign *binaries* under user-mode emulation —
+while nothing here can boot a *kernel*. The eight-day note's bare "no qemu" was true and hid which
+gap it named. 2.0T free on `/data`, so disk was never it.
+
+**The ticket does not shrink**, reported plainly rather than salvaged. Deliverable is the bounded
+request: `decide-install-qemu-system-and-a-freebsd-image-on-plexus` [U p55] with three usable
+answers, T ticket in `blocked/` — **blocked on a one-line reply, not on work.**
+
+### The `closed_by` cost moved DOWN, not up — inverted pxx-a5's read
+
+Implementing the instrument found `close_stub_tickets()` writing *"passes at `<sha>`"*
+**unconditionally**, so a job that stopped *running* got a fabricated observation permanently in
+`done/`. Real, and worse than the decision knew — but **pre-fix**. After the change a skip-close is
+*labelled*, so the outcome the decision is about is **visible instead of disguised as a pass**.
+The sharp edge was the false prose and it is gone, so **p25 stands for a better reason than "no
+evidence of cost"**. Written into the ticket with the one residual: pre-`0fc679056` stubs may
+assert a pass nobody observed and cannot now be classified — not a sweep, and *not* the archive
+case, since a wrong range was a true record of belief while this prose asserts an observation
+never made.
+
+**Break B is a rule:** making the pass wording hedge too was rejected because *"if every close
+hedges, the honest ones stop carrying information."* **A signal applied everywhere stops being a
+signal** — the fix defeating itself by universal application, found by mutation-testing a
+*wording* change, which almost nobody bothers to do.
+
+**Ledger fields, pattern named rather than counted:** `never_passed`, `closed_by`, beside five
+others — all **provenance**, each added because a recorded state proved reachable two ways. **The
+ledger is accumulating provenance because its states keep turning out ambiguous**; the generator
+family driving a schema, one field per discovered ambiguity. If a fourth arrives, stop adding
+fields and file a design ticket asking whether every state should carry its cause by
+construction. Three is a pattern, not yet a problem.
+
+Track O re-priced its umbrella **85 → 55** as asked (`06fe502dc`), so the O queue no longer
+overstates the remaining prize.
