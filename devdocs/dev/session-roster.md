@@ -12175,3 +12175,83 @@ will encounter it.
 
 Branch `wasm` at `4af569658`. 14 wasm checks green, `gate.sh quick` GREEN, fixedpoint
 byte-identical. Merge set unchanged: three shared-file arms, nothing pre-approved.
+
+### 2026-08-28 — slice 3, and I checked a hazard that turned out not to exist
+
+231 of 233 bodies (from 216 of 236 — **the denominator moved and frankwasm flagged it
+proactively**, which is the discipline the earlier count question was meant to install).
+`check_managed.sh`'s support list was **deleted rather than trimmed**, exactly as the trap
+required: with both entries lowering there was no argument left to support, and a trimmed
+list would have been an empty assertion under a paragraph claiming a property the build no
+longer has.
+
+**I suspected a coordination hazard in the PAL finding and was wrong.** frankwasm reported
+that a `lib/rtl/platform/wasi/` backend needs **no shared-file edit**, because selection is
+`-Fu` on the unit search path. I doubted it: `compiler.pas` adds `lib/rtl/platform/posix/` to
+the path **unconditionally in four places** (lines 246-265), and the search iterates ascending
+(`lexer.inc:2822`, `for j := 0 to PasUnitDirCount - 1`), so **first match wins** — which would
+mean posix shadows an explicit override.
+
+Checked instead of warning. `AddDefaultPasUnitDirs` is called at **line 1657, after the `-Fu`
+loop at 1457**, and both the function header and the call site say so outright: *"appended
+AFTER any user -Fu so an explicit override still wins."* **frankwasm's claim is correct and
+the behaviour is deliberate and documented.** Recording the negative so nobody re-derives it.
+
+**Bonus fact the check turned up, better than the precedent frankwasm cited:**
+`AddDefaultPasUnitDirs` already contains *"ESP targets pick their own backend and are
+excluded"* — a **target-conditional exclusion living in that exact function**. So if the
+default-selection form is ever wanted, the shape already exists rather than needing invention.
+It would still be a `compiler.pas` edit and therefore a **fourth shared-file arm**, and
+frankwasm has correctly declined to take it unless the explicit form proves unworkable.
+
+Measured PAL hole: **no program that touches a file compiles for wasm32 at all** —
+`Assign/Rewrite/writeln(f,...)` dies at parse time with `undefined variable (SYS_openat)`
+because posix is the compiled-in default and has no wasm arm. 178 PAL entry points; the ESP
+backend is 1035 lines (verified) and is the precedent for a second non-posix backend. (Note:
+I measured **79** occurrences of `PAL_ERR_UNSUPPORTED` there against frankwasm's "refuses 33
+of them" — those are different quantities, mentions vs entry points, not a contradiction.)
+
+### FACE EIGHT: an assertion wrong in BOTH directions at once
+
+A grep for an `i32.load` before `PXXStrSetLen` was **vacuous for both shapes it could see** (a
+global's slot address is an `i32.const`, a local's is `fp+N`, so no load ever appears) **and
+false-positive for the shape it could not** (a `var s: string` parameter's slot address
+legitimately *is* a load, so correct code would have failed it). Simultaneously unable to
+detect the defect and able to reject the fix. Green on first run.
+
+Caught by the previous slice's own rule — *when a negative control passes on first write,
+check what unit it is quantified over.* **Two consecutive slices where "passed immediately"
+was the tell**, which makes it a trigger rather than an anecdote.
+
+### The family has TWO POLARITIES — the second was hiding in plain sight
+
+Three `IInterface` methods declared without implementations get `unreachable` because calling
+one must trap. **Correct code, not missing code** — and counted into the broken total under
+*"op coverage is incomplete"* on every program linking the interface RTTI. The per-body reason
+already said "normal for a method declared without an implementation"; **the headline did not,
+and the headline is the half that gets read.**
+
+Structural, not cosmetic: the backend's completion criterion is the count reading N of N, and
+three permanent non-defects made that **unreachable by construction**.
+
+> **A check that cannot fail and a signal that cannot go clean are one defect in two
+> polarities.** Both carry no information; both train the reader to stop looking.
+
+Fixed by splitting the line, not hiding the stubs. Two corpus programs now report "op coverage
+is complete for this program" — **true before the change, and nothing said it.**
+
+### The coverage argument: which line catches which break
+
+Four mechanisms, four deliberate breaks, four *distinct* failure signatures — skipping
+`PXXStrUnique` caught by two lines of twenty-four; the `IR_LEA` write arm traps; the index
+reset shows as **one silent character** (`a?c!` for `abcd`); handing `PXXStrSetLen` the handle
+produces no output. **Four different signatures means four independent assertions, not one
+assertion firing four times** — if two breaks fail identically, the suite has one assertion
+wearing two names.
+
+And `check_index.sh` asserts the two positions emit *different code*, verified to be an
+assertion **a diff cannot make**: collapsing the model to "always write" clones on reads,
+gives the right characters, and diffs byte-identical.
+
+Branch `wasm` at slice 3, 15 wasm checks green, `gate.sh quick` GREEN, fixedpoint
+byte-identical. Merge set unchanged at three arms, nothing pre-approved.
