@@ -13221,3 +13221,39 @@ no instances of the construct.
 Not a switch. **Wall 5 is defect B** — the corpus ticket cannot advance past rung 6 without it,
 so they are one thread from two ends and finishing the blocker *is* the corpus work. The lock
 in `working/` stays where it is.
+
+### The idle subscription measures the wrong thing — retired after two for two
+
+Second notice (18:20), and again frankwasm was **busy by the time it was read**. Two for two.
+That is no longer an anecdote about timing; it is a statement about what the instrument
+measures.
+
+**A harness idle event fires in the GAP BETWEEN TURNS.** For a productive session those gaps
+occur constantly and mean nothing. What the dispatch decision needs is *"has this session
+stopped working on its phase"* — a **claim by the worker**, not an inter-turn gap. The two are
+not approximations of each other; they are different quantities that happen to share a name.
+
+> **AN "IDLE" EVENT AND AN IDLE WORKER ARE DIFFERENT THINGS, AND THE SIGNAL IS NAMED AFTER THE
+> ONE I WANTED RATHER THAN THE ONE IT REPORTS.**
+
+Same session theme, now aimed at my own tooling: I built a mechanical expiry two ticks ago, was
+pleased with it, and it has been wrong every time it has fired. **Re-arming it a third time
+would be repeating an action while expecting a different result** — so it is retired for this
+purpose rather than re-armed.
+
+**Replacement: ask the worker.** frankwasm and frankA are asked to say explicitly when they
+park a phase, which is the event that actually frees a slot. That is a convention rather than a
+mechanism, which I would normally rank lower — but a convention measuring the right quantity
+beats a mechanism measuring the wrong one, and the earlier preference assumed both measured the
+same thing.
+
+**Honest consequence for pxx-a5: it may stay held for hours, and that is correct.** The ceiling
+is two workers; both are busy and productive. The hold is not a park with no reason — its
+reason is live and its expiry is now a signal a human or a worker sends, not a clock.
+
+**One premise worth flagging as ageing, not acted on:** the 1-2 worker ceiling rests on a
+single measurement from **2026-08-25** — four concurrent workers dying at once on an account
+session limit. That is three days old and it is the only thing gating a third lane. It is the
+owner's to re-test, they know pxx-a5 is held on it, and they are weighing a subscription change
+right now, so it is on their desk already. **Not re-asking** — but if it turns out the ceiling
+has moved, Track T's p60 is the immediate beneficiary.
