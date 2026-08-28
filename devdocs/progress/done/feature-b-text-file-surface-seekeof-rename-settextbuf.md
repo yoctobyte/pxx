@@ -150,4 +150,4 @@ errors, on exactly those rows plus the `SeekEoln` terminator cases. A test that
 passes on the first run has not yet been shown to be able to fail.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit fa667c98a.
