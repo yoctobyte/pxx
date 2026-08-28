@@ -13371,3 +13371,73 @@ probe to run on the pristine corpus, and the pristine-versus-stubbed lesson is t
   or frankwasm (the retired idle-subscription is not coming back).
 - **frank-optimize-b4** — holds; Track O edits A's shared ground and frankA holds A/P. Expiry:
   frankA releasing the lane, **not** a session slot.
+
+### Wall 5 down, corpus +900 lines — and two things visible only from across the tables
+
+frankA closed defect B (`6d2a841a1` the reading, `2c155cce2` the lowering), all seven rows
+match FPC including the two that segfaulted on `pinned`, `gate.sh quick` green, self-host
+verified. **The blocking divergence the arity check opened yesterday is closed** — rows 3/6 no
+longer reject a form FPC accepts. `generics.defaults.pas` now compiles :2381 → :3250.
+
+Verified before endorsing the plan: wall 6's ticket is real — **24-line repro, FPC prints `8`,
+diagnosis banked** — so "un-parking, not diagnosing" is accurate and the next step is cheap.
+**Continue approved, no redirect.**
+
+**Finding 1 — the wall NUMBERING is inconsistent across the snapshot tables, and frankA is
+about to reason with those numbers.** In `feature-pascal-corpus-expansion`:
+
+- line 33 and line 405: row **3** = *nested `specialize X<T>` in expression position*
+- line 342: row **3** = *`TGeneric<T>.ClassMethod` inside another generic's body*, pointing at
+  **the wall-6 ticket**
+
+So "wall 3 vs wall 6" is not a stable pair of names — one snapshot has already identified them
+as the same row. frankA's hypothesis that they may be one defect is therefore **half-recorded
+already**, in a table it is not reading. The canonical live table fixed *where the truth is*;
+it did not reconcile the numbering inside the superseded snapshots. **The identity question has
+to be asked of the two DEFECTS, never of the two numbers.**
+
+**Finding 2 — wall 3 has no ticket at all.** Searched by subject rather than slug: the only
+file matching *nested specialize / expression position* is **wall 6's** ticket. Its "diagnosis
+banked" lives solely in the corpus ticket's prose — inside a container that will close. Same
+shape as the homeless design frankB split out of `feature-networking`, and the rule is the same:
+**a design or diagnosis dies silently in a closing container, because unlike a finding it leaves
+no symptom when it goes.**
+
+Sequencing advised, to avoid churn: **do the same-defect check first.** If they are one, fold
+the wall-3 diagnosis into the wall-6 ticket and the prose has a home. If they are two, file wall
+3 its own ticket. Either way the diagnosis leaves the container — but filing first and closing
+immediately would be churn, so the check comes first.
+
+### Restraint worth affirming: not every duplication is a copy
+
+frankA's ticket had prescribed *"factor the materialisation out of AN_ASSIGN"* and that was
+**wrong** — it corrected its own prescription from the code. There was already a VALUE arm for
+`AN_METHODREF`; the actual gap was that **`IRLowerAddress` had no arm at all**, which is what
+`TMethod(TSel(obj.M)).Code` needs. Exactly `root-cause-over-microfix`'s premise: a ticket names
+a plausible cause and the real fix is deeper.
+
+Then, having found the eleven-line store already existed twice, it made `IRMethodRefToTemp`
+shared, delegated `IRLowerCallArg` — and **deliberately left `AN_ASSIGN` its own**, because it
+writes into an existing destination rather than a temp: a different operation, not a fourth
+copy.
+
+**That restraint was correct and I am recording it because I have been pushing the opposite
+rule hard all session.** *Three mechanisms for one concept is a design flaw* has a failure mode
+— collapsing things that merely look alike. **The count that matters is mechanisms serving ONE
+operation, not call sites that resemble each other.** An over-eager coordinator rule is how a
+wrong merge gets authorised.
+
+### A documented trap is not a guard
+
+FPC's brace-comment handling bit frankA **twice in one file, after it had documented the
+divergence itself** — an inner brace ends the comment early and silently turns the rest into
+code, disabling the oracle with no error. Its fix was not more documentation: the test file now
+contains **no braces in comments at all**.
+
+> **A DOCUMENTED TRAP IS NOT A GUARD. Only a construction that cannot express the mistake is.**
+> *A test whose oracle can be switched off by a comment edit is worse than no test.*
+
+One level beyond *a rule lives in the file the violator will open* — better than a rule in the
+right file is a file that cannot hold the error. Both new tests were also confirmed to **fail on
+`pinned`** (the method-pointer one segfaults there), because a test that would have passed
+anyway proves nothing.
