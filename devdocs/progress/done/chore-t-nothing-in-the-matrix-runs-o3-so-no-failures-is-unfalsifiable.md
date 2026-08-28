@@ -160,4 +160,4 @@ hosts, and a `tail` of the concatenation is not a chronological tail. Sorting by
 convenient read of an inventory, taken for the inventory.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit 48ea92a22.
