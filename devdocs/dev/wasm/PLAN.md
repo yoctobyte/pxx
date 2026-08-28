@@ -1259,6 +1259,45 @@ caller had ever passed anything but `WT_VOID`, so it had never fired. `WasmLoop`
 had the identical defect one procedure below and was fixed at the same time
 rather than when someone reached it.
 
+### The coverage argument had a date on it, and dynamic arrays had already crossed
+
+The audit above concluded that the string slices cover the premature-free
+direction because a string's refcount is READ by the code under test — COW asks
+"am I sole owner?" — while a dynamic array's is read only on release. True, and
+the wrong kind of true: **that is a property of the current semantics, not of
+the type.**
+
+`IR_DYNUNIQUE` still exists in four backends and its own comment opens *"The
+name is now historical"*. Dynamic arrays USED TO have copy-on-write; the clone
+was deleted when `decide-dynamic-array-value-vs-reference-semantics` settled on
+FPC reference semantics. So dyn arrays were once the first kind and became the
+second kind by a decision made elsewhere — and the two directions are not
+symmetric:
+
+* second → first (COW added): the reuse-forcing control becomes redundant.
+* **first → second (COW removed): the second observable route disappears, the
+  diff stops witnessing a too-low refcount, and every existing test keeps
+  passing.**
+
+Dynamic arrays took the dangerous one. A suite written while COW existed became
+an uncovered suite, and nothing in any output changed. **A coverage argument
+that rests on "the code under test reads this value" depends on a design
+decision, and design decisions are not versioned against the tests that assume
+them.**
+
+So the rule gains a clause rather than being replaced: *ask which kind you have
+before trusting a green suite* still holds, and **where the reuse-forcing
+control is cheap, design it in even for a first-kind type** — it costs one
+allocation and it is the only witness that survives a category change in either
+direction.
+
+Applied rather than noted: `check_managed.sh` now carries that control as its
+own assertion, aliasing a string, dropping one reference, forcing the allocator
+to hand the block out again, and reading through the surviving name. It does not
+go through COW at all. Falsified with the retain removed: it prints sixteen Z's
+where the correct build prints the string, and it fires independently of the
+diff lines that were already catching it.
+
 ### Re-measured after the slice — and the histogram was a ranking of what is REACHED
 
 `compiler.pas` for wasm32, same probe build, after Phase 9a:

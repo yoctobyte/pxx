@@ -185,6 +185,52 @@ if [ "$base" -ge 1024 ]; then
 fi
 echo "ok  heap arena still at $base (< 1024): the scope note above still holds"
 
+# --- the retain, witnessed WITHOUT relying on copy-on-write ------------------
+# The diff above already catches a missing retain, because a string's refcount
+# is READ by the code under test: copy-on-write asks "am I sole owner?" before
+# every write, so a too-low count makes the next write mutate a buffer it should
+# have cloned, and the slice's aliasing lines show it.
+#
+# That coverage is a property of the CURRENT SEMANTICS, not of the type, and it
+# is exactly the kind that disappears without a sound. Dynamic arrays used to
+# have copy-on-write too; IR_DYNUNIQUE's clone was deleted when
+# decide-dynamic-array-value-vs-reference-semantics settled on FPC reference
+# semantics. At that moment every dyn-array test that had been witnessing a
+# too-low refcount through the diff silently stopped witnessing it, and nothing
+# in any output changed. A suite written under COW became an uncovered suite by
+# a design decision made elsewhere.
+#
+# So this assertion does not go through COW at all. It aliases, drops one
+# reference, forces the allocator to hand the block to someone else, and reads
+# through the surviving name. It costs one allocation and it is the witness that
+# survives a semantics change in either direction — which is the only reason to
+# have it when the diff already passes.
+cat > "$work/retain.pas" <<'EOF'
+program Retain;
+var s, t, u: string; i: Integer;
+begin
+  s := 'abcdefghijklmnop';
+  t := s;              { shares; the refcount must become 2 }
+  t := '';             { drops t's reference — must NOT free the block }
+  u := '';
+  for i := 1 to 16 do u := u + 'Z';   { same size: reuses the block if freed }
+  writeln(s);
+end.
+EOF
+"$root/compiler/pascal26" --target=wasm32 "$work/retain.pas" "$work/retain.wasm" \
+    > /dev/null 2>&1
+got=$(node "$work/run.js" "$work/retain.wasm")
+if [ "$got" != "abcdefghijklmnop" ]; then
+  echo "FAIL a shared string was freed while another name still held it."
+  echo "     Expected [abcdefghijklmnop], got [$got]. If the answer is sixteen"
+  echo "     Z's the block was released on the second name's reassignment and"
+  echo "     handed straight back out."
+  exit 1
+fi
+echo "ok  a shared string survives the other name being reassigned, proven by"
+echo "..  forcing the allocator to reuse the block rather than by copy-on-write"
+echo "..  — a witness that outlives the semantics the diff's version rests on"
+
 sh "$here/wat_oracle.sh" "$root/compiler/pascal26" "$here/managed_slice.pas" "$work" m
 
 # A POSITIVE sentinel, last line, reachable only after every check above
