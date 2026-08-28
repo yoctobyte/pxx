@@ -614,3 +614,59 @@ marker on the dishonest state.
 The honest instrument was none of those: **state in the ticket that option 1 is in
 force until answered, that this is a default rather than a judgement, and what would
 move it.** A reader can then tell that low was *chosen*.
+
+## Face seventeen — an instrument's SCOPE is invisible in its own output
+
+Three instances on 2026-08-28, from **three sessions that did not coordinate**,
+found within about an hour of each other. Each is a different instrument; the
+shape is identical, and it is the family signature in its plainest form — *two
+different conditions produce the same reading.*
+
+| the instrument | its reading | the two conditions that produce it |
+| --- | --- | --- |
+| a census over `include/**` (Track B, crtl) | "358 declared, all defined" | the symbol is **defined**, and the symbol was **never declared** so there was nothing to enumerate |
+| a survey of the four gate tiers (coordinator, `-O3`) | "no `-O3` failures" | `-O3` **passed**, and `-O3` **was never run by the tiers I read** |
+| a design log read instead of the tree (Track B, socket facades) | "never built" | it was **never built**, and it was **built by a route the design does not describe** |
+
+In every case the reading is *true of what the instrument measured* and false of
+the question asked. And in every case **nothing in the output names the
+boundary** — the census does not say "declared symbols only", the tier reports
+did not say "in these four tiers", the design log does not say "as of when I was
+last edited". The scope exists, it is knowable, and it is simply not carried
+alongside the result.
+
+**Why this is a face and not just an error.** The other faces are about a
+*signal* that cannot distinguish two states. This one is about the **instrument**
+being unable to report its own aperture, so a correct reading arrives with no
+handle by which to doubt it. It generalises the two-arms-one-upstream problem
+(face thirteen) one level up: there, the shared upstream was hidden; here, the
+aperture is.
+
+**What actually caught all three:** in each case someone reached for a *second
+instrument of a different kind* — a live re-run rather than a recalled number, a
+file's **history** rather than its contents, an `ls` rather than a design log.
+Not a more careful read of the first instrument. A more careful read cannot find
+this, because the first instrument is not wrong.
+
+**The operational form**, and the reason this is worth a face rather than a
+sentence: *before trusting an absence, state what the instrument could not have
+seen.* If that sentence cannot be written, the absence has not been measured. It
+is the same rule as *an existence claim survives one grep; a non-existence claim
+does not*, but pointed at the tool instead of at the searcher.
+
+Instances: the crtl census (parked in `rainy-day/` rather than closed, precisely
+on this reasoning); this repo's `-O3` promotion block, lifted in
+`feature-opt-o3-register-pressure` after `chore-t-nothing-in-the-matrix-runs-o3-so-no-failures-is-unfalsifiable`
+resolved **by refutation** (`c8ec8a1b3`); and
+`feature-b-posix-and-fpc-named-socket-facades` (`f2d76bc30`), whose own filer
+corrected it the same day it was filed.
+
+A fourth, adjacent and from the same day, is worth listing here because it is the
+**prose** variant: a *"stalled because X"* note in a ticket body ages into a false
+claim invisibly — `feature-pascal-corpus-oop` headed Track P at p75 on a stall
+note whose three clauses had each been false for a week (`cc36aeb5a`). Resolving
+a blocker is an event on the **blocker**; the note lives on the **dependent**; and
+`progress.sh check` reads frontmatter, so it cannot see prose. Same aperture
+problem, with time rather than file-set as the axis.
+
+**Seventeen faces, and the family is still open.**
