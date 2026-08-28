@@ -64,39 +64,23 @@ const inst = h.bind(new WebAssembly.Instance(
   new WebAssembly.Module(fs.readFileSync(process.argv[2])), h.imports));
 const sp0 = inst.exports.sp.value;
 
+// Path 1: the raw import. One 5-byte iovec, decoded by the host rather than
+// merely counted — a wrong pointer or length is a wrong STRUCTURE, and only
+// something that reads the structure can tell.
 const n = inst.exports.Emit();
 if (h.writes.length !== 1 || h.writes[0].bytes.length !== 5) {
-  console.error(`FAIL expected one 5-byte iovec, got ` +
+  console.error('FAIL expected one 5-byte iovec, got ' +
                 JSON.stringify(h.writes.map(w => w.bytes.length)));
   process.exit(1);
 }
 const text = h.text();
 const fds  = [...new Set(h.writes.map(w => w.fd))];
-
-// writeln(42) must produce NOTHING — PXXSysWrite has no wasm32 arm. Asserted
-// as loudly as the output above, because the day it starts working is the day
-// this file's claim about it stops being true.
-h.reset();
-inst.exports.TryWriteln();
-const afterWriteln = h.writes.length;
-
 if (inst.exports.sp.value !== sp0) {
   console.error(`FAIL shadow stack leaked: ${sp0} -> ${inst.exports.sp.value}`);
   process.exit(1);
 }
-process.stdout.write(JSON.stringify(
-  { n, text, fds, afterWriteln }) + '\n');
+process.stdout.write(JSON.stringify({ n, text, fds }) + '\n');
 JS
-
-res=$(node "$work/run.js" "$work/w.wasm")
-expect='{"n":5,"text":"wasm\n","fds":[1],"afterWriteln":0}'
-if [ "$res" = "$expect" ]; then
-  echo "ok  the module wrote 5 bytes of 'wasm' to fd 1 through its own import"
-else
-  echo "FAIL host saw: $res"
-  echo "     expected: $expect"
-  exit 1
-fi
 
 # ---- host 2: node's real WASI ---------------------------------------------
 # An independent implementation of the same interface. A hand-written shim can
@@ -131,48 +115,76 @@ else
   exit 1
 fi
 
-# ---- writeln, and the one thing between it and working ---------------------
-# `writeln` LOWERS on this target: IR_WRITE dispatches to the RTL's
-# target-neutral console family (PXXWriteDecW / PXXWriteNL / PXXWriteCharW /
-# PXXWriteBoolW / PXXWriteStrMW / PXXWriteFrozenW / PXXWriteCStr), written for
-# hosted riscv32 with the comment "any backend could adopt them". This one
-# adopts them unchanged.
+# ---- writeln, diffed against the native build ------------------------------
+# `writeln` takes the long way: IR_WRITE dispatches to the RTL's target-neutral
+# console family (PXXWriteDecW / PXXWriteNL / PXXWriteCharW / PXXWriteBoolW /
+# PXXWriteStrMW / PXXWriteFrozenW / PXXWriteCStr), written for hosted riscv32
+# with the comment "any backend could adopt them"; this one adopts them
+# unchanged. They bottom out in PXXSysWrite, whose wasm32 arm is itself an
+# `external` declaration of the same kind path 1 uses directly.
 #
-# They all bottom out in PXXSysWrite, an ifdef chain over __pxxrawsyscall with
-# an arm per target and no wasm32 arm — so it returns 0 having written nothing.
-# builtinheap.pas is a SHARED file: bug-a-pxxsyswrite-has-no-wasm32-arm.
+# This block used to assert the OPPOSITE — that writeln printed nothing —
+# because PXXSysWrite had no wasm32 arm, and it was written to FAIL the day
+# that stopped being true. It did, on the merge that brought the arm in
+# (bug-a-pxxsyswrite-has-no-wasm32-arm). That is the assertion-tracks-the-delta
+# pattern working on its first real occasion, and it is the reason this
+# replacement was written deliberately rather than noticed six weeks later.
 #
-# `afterWriteln === 0` alone would be a WORTHLESS assertion, and it is worth
-# saying why, because it is the exact shape a sibling lane hit today: a check
-# can only gate behaviour its environment does not already supply. Silence is
-# supplied here by default. Delete the IR_WRITE arm entirely and the write is
-# skipped, TryWriteln returns normally, and `afterWriteln === 0` still passes —
-# the assertion would be testing that nothing happened, which is what happens
-# when nothing works.
-#
-# So the silence is asserted TOGETHER with the mechanism that is supposed to
-# produce it. TryWriteln must actually contain the call chain: format the
-# integer, then the newline. The pair distinguishes "lowered correctly and
-# PXXSysWrite is inert" from "silently dropped", which the silence alone cannot.
-# The .wat is the only readable view of what was emitted, and wat_oracle.sh
-# below proves it describes the same module as the binary — so reading the
-# text here is reading the binary, not a second thing that might disagree.
-"$root/compiler/pascal26" --target=wasm32 -dWASM_NOMAIN \
-    "$here/host_slice.pas" "$work/w.wat" >/dev/null 2>&1
-body=$(awk '/\(func \$TryWriteln/,/^  \)/' "$work/w.wat")
-if echo "$body" | grep -q 'call \$PXXWriteDecW' &&
-   echo "$body" | grep -q 'call \$PXXWriteNL'; then
-  echo "ok  writeln LOWERED: TryWriteln calls PXXWriteDecW then PXXWriteNL"
+# Now it is an ordinary differential, which is the strongest form available: no
+# expected value is written down anywhere, so no part of the environment can
+# supply the answer to both arms without the defect having to make them
+# DISAGREE. The battery covers every helper with a field-width argument,
+# because a dropped width is invisible in a single-value test.
+"$root/compiler/pascal26" "$here/host_slice.pas" "$work/hs_native" >/dev/null
+"$work/hs_native" > "$work/native.txt"
+
+cat > "$work/speak.js" <<'JS'
+const fs = require('fs');
+const host = require('./wasmhost.js');
+const h = host();
+const inst = h.bind(new WebAssembly.Instance(
+  new WebAssembly.Module(fs.readFileSync(process.argv[2])), h.imports));
+const sp0 = inst.exports.sp.value;
+inst.exports.Speak();
+if (inst.exports.sp.value !== sp0) {
+  console.error(`FAIL shadow stack leaked: ${sp0} -> ${inst.exports.sp.value}`);
+  process.exit(1);
+}
+// fd 1 only: anything the RTL sent to stderr is not this program's output.
+process.stdout.write(h.text(1));
+JS
+node "$work/speak.js" "$work/w.wasm" > "$work/wasm.txt"
+if diff -u "$work/native.txt" "$work/wasm.txt"; then
+  echo "ok  writeln matches the native build \
+($(wc -l < "$work/native.txt") lines): literals, signed and unsigned, the"
+  echo "..  64-bit extremes, char, boolean, and field widths"
 else
-  echo "FAIL TryWriteln does not contain the write call chain — the silence"
-  echo "     above is the write being DROPPED, not the write reaching an inert"
-  echo "     PXXSysWrite. Body was:"
-  echo "$body"
+  echo "FAIL writeln diverges from native"; exit 1
+fi
+
+# And the same module through node's real WASI, which routes fd 1 to the actual
+# process stdout — an independent implementation of the interface, so a
+# structurally wrong iovec that the hand-written host tolerates does not
+# survive here.
+cat > "$work/speakwasi.js" <<'JS'
+const fs = require('fs');
+const { WASI } = require('node:wasi');
+const wasi = new WASI({ version: 'preview1', args: [], env: {},
+                        returnOnExit: true });
+const inst = new WebAssembly.Instance(
+  new WebAssembly.Module(fs.readFileSync(process.argv[2])),
+  wasi.getImportObject());
+wasi.initialize(inst);
+inst.exports.Speak();
+JS
+node "$work/speakwasi.js" "$work/w.wasm" 2>/dev/null > "$work/wasi.txt"
+if diff -u "$work/native.txt" "$work/wasi.txt" > /dev/null; then
+  echo "ok  node's real WASI produces the same bytes on the real stdout"
+else
+  echo "FAIL node:wasi output differs from native:"
+  diff -u "$work/native.txt" "$work/wasi.txt" | head -20
   exit 1
 fi
-echo "ok  KNOWN LIMITATION unchanged: writeln lowers and prints nothing —"
-echo "..  PXXSysWrite has no wasm32 arm. bug-a-pxxsyswrite-has-no-wasm32-arm"
-echo "..  The import path above is what that arm will be built on."
 
 # ---- Halt(n) must EXIT WITH n --------------------------------------------
 # `Halt` is a process-level operation with no wasm instruction behind it, so it

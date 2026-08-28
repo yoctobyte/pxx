@@ -298,8 +298,45 @@ begin
   WasmAddType := WasmAddTypeN(params, Length(params), results, Length(results));
 end;
 
-function WasmAddImportFunc(const modName, fldName: AnsiString; typeIdx: Integer): Integer;
+{ A stable, unique label for an import, used by BOTH the .wat's import line and
+  every call site in it. Derived from the module and field rather than from the
+  Pascal routine that happened to declare it, because two Pascal routines may
+  declare the same host function — builtinheap's __wasi_fd_write and a test
+  program's own fd_write both name wasi_snapshot_preview1.fd_write — and the
+  import is ONE thing. Naming it after either declarer produced a .wat that
+  defined `$fd_write` twice and called `$__wasi_fd_write`, which is not
+  defined: two names for one entity, disagreeing. }
+function WasmImportLabel(i: Integer): AnsiString;
+var s: AnsiString; j: Integer; c: Char;
 begin
+  s := WasmImpModule[i] + '$' + WasmImpName[i];
+  for j := 1 to Length(s) do
+  begin
+    c := s[j];
+    if not (((c >= 'a') and (c <= 'z')) or ((c >= 'A') and (c <= 'Z'))
+            or ((c >= '0') and (c <= '9')) or (c = '_') or (c = '$')) then
+      s[j] := '_';
+  end;
+  WasmImportLabel := s;
+end;
+
+function WasmAddImportFunc(const modName, fldName: AnsiString; typeIdx: Integer): Integer;
+var i: Integer;
+begin
+  { One host function is one import, however many Pascal declarations name it.
+    Duplicating the entry is legal wasm and still wrong: it hands a host two
+    slots for one function and makes the .wat ambiguous. A same-name import
+    with a DIFFERENT signature is a real conflict and says so. }
+  for i := 0 to WasmImpCount - 1 do
+    if (WasmImpKind[i] = WEK_FUNC) and (WasmImpModule[i] = modName)
+       and (WasmImpName[i] = fldName) then
+    begin
+      if WasmImpType[i] <> typeIdx then
+        WasmFail('wasm: import "' + modName + '"."' + fldName
+                 + '" declared with two different signatures');
+      WasmAddImportFunc := i;
+      Exit;
+    end;
   if WasmImpCount >= MAX_WASM_IMPORTS then WasmFail('wasm: too many imports');
   { v1 keeps all function imports contiguous and first, so the low function
     index space is exactly [0, WasmImpFuncCount). A non-function import
@@ -738,8 +775,14 @@ end;
 procedure WasmCallImport(impIndex: Integer; const nm: AnsiString);
 begin
   WasmBodyB($10); WasmBodyU32(impIndex);
-  if nm <> '' then WasmText('call $' + nm)
-  else WasmText('call ' + WasmIntStr(impIndex));
+  { The label is looked up, never taken from the caller — the .wat's import
+    line reads it from the same place, so the two cannot disagree. `nm` stays
+    in the signature for callers that pass the Pascal name; it is ignored on
+    purpose rather than removed, so a call site reads as what it is. }
+  if (impIndex >= 0) and (impIndex < WasmImpCount) then
+    WasmText('call $' + WasmImportLabel(impIndex))
+  else
+    WasmText('call ' + WasmIntStr(impIndex));
 end;
 
 { An indirect call. The type index is CHECKED at run time against the callee's

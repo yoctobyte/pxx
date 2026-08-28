@@ -1,29 +1,21 @@
 #!/bin/sh
-# The FPC-seed hazard, checked in a second instead of found in a gate.
+# The FPC-seed hazard, checked in seconds instead of found in a gate.
 #
-# pxx accepts a call to a routine defined LATER in the same include; FPC — the
-# bootstrap seed — does not. So a file can self-host perfectly and still break
-# the seed build, and NOTHING in the per-fix loop looks, because
-# `make compiler/pascal26` compiles with pxx. It has happened twice in this
-# file, both times found by `gate.sh quick`'s FPC canary, which runs once at
-# the end of a phase — so the window each time was a whole phase of commits.
+# pxx resolves names across a whole unit; FPC — the bootstrap seed — resolves
+# them in SOURCE ORDER. So a file can self-host perfectly and still break the
+# seed build, and nothing in the per-fix loop looks, because
+# `make compiler/pascal26` compiles with pxx. It has happened twice in
+# ir_codegen_wasm32.inc, both times found only by `gate.sh quick`'s FPC canary,
+# which runs once at the end of a phase.
 #
-# The forward block carried a written-down rule ("every routine the dispatchers
-# dispatch to belongs here"), and the second break walked straight past it:
-# WasmEmitIndArgs is not a dispatch target, it is called by a BUILTIN lowering
-# that happens to sit above the machinery it shares. A rule that is slightly
-# wrong is worse than no rule, because it is read as complete.
-#
-# So this is a check rather than a rule. It reads the same file FPC does and
-# asks FPC's question — is every call to a routine of this file preceded by
-# either its definition or a forward — in about a second.
+# The lint itself is tools/forwardlint.py, on master, because it reads the whole
+# compiler.pas include chain and is worth as much to every other lane as to
+# this one. This file is just the wasm suite's caller. Its history is in that
+# script's header, including why a per-file version had to be thrown away.
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 
-python3 "$here/forwardlint.py" \
-    "$root/compiler/ir_codegen_wasm32.inc" \
-    "$root/compiler/wasmenc.inc" \
-    "$root/compiler/asmtext_wasm.inc"
+python3 "$root/tools/forwardlint.py" "$root/compiler/compiler.pas"
 
 echo "PASS check_forwards"

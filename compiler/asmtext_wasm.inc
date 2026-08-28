@@ -185,7 +185,8 @@ begin
   { imports next — they define the low function index space }
   for i := 0 to WasmImpCount - 1 do
     WTLn('  (import "' + WasmImpModule[i] + '" "' + WasmImpName[i]
-         + '" (func $' + WasmImpName[i] + WasmSigText(WasmImpType[i]) + '))');
+         + '" (func $' + WasmImportLabel(i) + WasmSigText(WasmImpType[i])
+         + '))');
 
   if WasmMemPresent then
   begin
