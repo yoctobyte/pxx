@@ -107,3 +107,73 @@ works, only the inline cast is broken." That was wrong: it had not tried
 that separate the defects. Four shapes looked like a boundary and were not one.
 Recorded because the fix that first table implied — "handle the inline cast" —
 would have left defect A untouched and row 4 still crashing.
+
+---
+
+## Root cause for defect A, measured (frankA, `ea689da902bb`)
+
+`PXXDBG=a.ast` on the two forms side by side is decisive.
+
+**Instance (works)** — `m := s.IPick`:
+
+```
+kind=12 (AN_ASSIGN)
+  kind=3  (AN_IDENT)      m
+  kind=45 (AN_METHODREF)  <- a method REFERENCE
+    kind=3 (AN_IDENT)     s
+```
+
+**Class (segfaults)** — `m := TSvc.CPick`:
+
+```
+kind=12 (AN_ASSIGN)
+  kind=3  (AN_IDENT)      m
+  kind=8  (AN_CALL)       <- a CALL, not a reference
+    kind=9  (AN_ARG)
+      kind=46 (AN_CLASSREF)
+```
+
+So `TSvc.CPick` is **called**, with the class reference passed as its hidden
+self, and the returned `Int64` is stored into the 16-byte method-pointer
+variable. `m(5)` then jumps to that integer. That is the SIGSEGV — the pointer
+was never a pointer.
+
+### Where the choice is made
+
+`pasparser_stmt.inc:6797`, the Delphi `@`-optional method-pointer path
+(`p := obj.M` == `@obj.M`). Its guard opens with:
+
+```pascal
+argIdx := FindSym(CurTok.SVal);
+... and (argIdx >= 0) and (Syms[argIdx].RecName >= REC_UCLASS_BASE) ...
+```
+
+`FindSym` resolves a **variable**. For `TSvc.CPick` the receiver is a *type*, so
+`argIdx < 0`, the arm is skipped, the next arm wants `FindProc` (also no), and
+the expression falls through to the ordinary path — which parses `Type.Method`
+as a call. The arm was written for instance receivers and a class receiver was
+never added.
+
+### What a fix has to get right
+
+`AN_ASSIGN` writes `{Code, Data}`. For an instance, `Data` is the object. For a
+class method, `Data` must be the **class reference**, which is what a
+`class function` expects as its hidden self — so an `AN_CLASSREF` in `ASTLeft`
+is the right shape, not a special case.
+
+**The virtual half needs care and is where silent wrongness would enter.**
+`IRMethodRefCode` (`ir.inc:5126`) resolves a virtual method as
+`vmt := LOAD_MEM(selfVal); code := [vmt + slot*8]` — it *dereferences the object*
+to reach the vmt. For a class reference the value **is** the vmt already, so that
+deref is one indirection too many. Any fix must branch on receiver kind there, or
+it will produce a plausible-looking wrong code pointer rather than a crash.
+
+**And the corpus needs exactly the virtual path**: `generics.defaults.pas`
+declares `SelectIntegerEqualityComparer ... override`, so all 28 sites are
+virtual class methods. A non-virtual-only fix does not unblock rung 6.
+
+### Defect B is not diagnosed
+
+Everything above concerns defect A. The inline-cast failure (row 3, an *instance*
+method) has not been traced and may or may not share this mechanism. Do not
+assume it falls out of the same fix.
