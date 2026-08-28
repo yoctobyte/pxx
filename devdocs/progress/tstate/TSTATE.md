@@ -8,7 +8,7 @@
 
 ## Open regressions
 - **test-emit-obj#src:test/cxtensa_obj.c@1** — test/cxtensa_obj.c (plexus): bad `32fba2082684`, last good `457bda75412e`, 1 commit(s) in range
-- **tools-devtest#00** (plexus): bad `97b865e0bed0`, last good `62a4242203a3`, 5 commit(s) in range
+- **tools-devtest#00** (plexus): bad `cba47d112560`, last good `62a4242203a3`, 2 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy** — test/test_nilpy_parent_call_after_instantiation.npy test/test_nilpy_parent_call_after_instantiation.expected (plexus): bad `b898d0543fc8`, last good `8b2cc332791e`, 2 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_startswith_tuple.npy** — test/test_nilpy_startswith_tuple.npy test/test_nilpy_startswith_tuple.expected (plexus): bad `b898d0543fc8`, last good `8b2cc332791e`, 2 commit(s) in range
 - **lib-test#src:test/lib_synapse.pas** — test/lib_synapse.pas (plexus): bad `c52fc389fd97`, last good `aca7f699288e`, 9 commit(s) in range
