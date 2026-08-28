@@ -9874,8 +9874,32 @@ was not running.
 
 > **Sharper than "a pushed fix is not a live fix": when a resident process is the
 > consumer, its behaviour is not evidence about the code you are reading.** Check
-> `code_fp` against origin BEFORE theorising about scheduling. Two of my three
-> diagnoses were unfalsifiable for the same reason and neither of us noticed.
+> `code_fp` against **the clone's disk** BEFORE theorising about scheduling. Two
+> of my three diagnoses were unfalsifiable for the same reason and neither of us
+> noticed.
+
+**Corrected by frankT after this was first written — the rule said "against
+origin" and that closes the wrong hop.** There are TWO gaps stacked:
+
+```
+origin  ->  clone disk  ->  resident process
+          (a git pull)     (a restart)
+```
+
+`code_fp` answers **the second hop only**. Last night both were open at once: the
+daemon ran `cc482c9fccc0`, the clone's disk held `927ad6d857fc`, and origin was
+ahead of both. **Comparing the process against origin shows drift and attributes
+it to the wrong hop** — "we need to pull" when the pull had already happened and
+the restart had not. `--status` prints both fingerprints for exactly this reason,
+and the disk one is the actionable half: `trackt restart` pulls *and* restarts,
+while a bare pull does nothing to a resident process. The wrong version is left
+visible above rather than silently swapped, because "I checked the fingerprint"
+would otherwise read as sufficient when it can be done against the wrong baseline.
+
+**Not a solo failure, frankT's own note:** it told me `commit_after` was inert and
+then reasoned about the queue's ordering itself, in the same message, without
+noticing they shared a cause. **The rule had to be general to catch it, and
+neither of us made it general until afterwards.**
 
 The corollary is the good news: **the lull lever is real and it was the whole
 story.** Five hours of starvation ended when lanes finished, not when anything
@@ -9923,3 +9947,23 @@ half the job; naming the candidate the unsoundness was hiding is the half that
 moves it.** Recorded because the split matters — the refusal was the harder call
 and the one that preserved the evidence; the inference was cheap once the refusal
 existed. Neither half works alone.
+
+## Track T stood down 2026-08-28 ~06:15Z — deliberately, with three deferrals on the record
+
+Daemon healthy at pid `1991398`, sweeping, on current code. frankT is idle by its
+own call, not stalled. **Three items deferred with reasons, all of which are the
+right call and none of which should be re-raised without new information:**
+
+| deferred | reason |
+| --- | --- |
+| `verify_pin`'s commitment point | **no measurement, and last night argues the ladder was never the problem** — the queue's code was not running, so the starvation had a different cause entirely |
+| the `opt` class memory estimate | correcting it **raises** concurrency; wrong to land while lanes are live |
+| `mid_tier` | a config change plus another restart, and it changes ladder behaviour **on the owner's workstation** — the owner's call, not a lane's |
+
+The one measurement its own ticket asks for — per-file devtest durations — needs
+an idle box; this one is at load 6.7 under a full tier. **It waits for the same
+reason it waited last night**, which is the correct reason and not a slip.
+
+Note the shape of the second and third: **a fix that increases resource pressure,
+and a change to the human's own machine's behaviour, are both things a lane
+should decline to land on its own initiative even when the change is right.**
