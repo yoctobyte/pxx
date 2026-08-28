@@ -11885,3 +11885,74 @@ but the PAL is `external` declarations and expected to be small, while managed s
 the variant engine, real string programs and eventually `pascal26` itself. Picking on
 measured mass rather than plan numbering is the same call that moved the heap ahead of
 exceptions.
+
+### 2026-08-28 — the count question resolved, and it was worth asking
+
+**Per-program, and the coincidence was real rather than meaningless.** The denominator is
+the bodies that module contains — RTL set plus its own routines. `frozen_slice` adds
+`ShowConst` and `Mut` (126+2=128); `exc_slice` adds four (130). And `test_class.pas` is 126
+**for a reason**: it declares a class with two fields and **no methods**, so it contributes
+exactly one body, same as `writeln(42)`. I verified it — zero `procedure`/`function`
+occurrences in the file. Same RTL set, same single `main$0`, same five unlowered. **It is
+the same measurement twice**, which is why it matches Phase 6.
+
+Worth recording *that I asked*: frankwasm said it nearly answered *"per-program, nothing to
+see"* — the plausible-not-checked version. **The question cost one line and the answer was
+load-bearing**; the identity of the two numbers turned out to be evidence, not noise.
+
+### Phase 8 measured: managed strings by 4:1, and one cause rather than a spread
+
+On a deliberately string-heavy program (concat, compare, index, `Copy`, `Pos`, `SetLength`,
+`Length`): **182 of 236 bodies lowered, 51 real refusals**, of which **32 are "assignment to
+managed string"** — one cause, four fifths of the mass. Remainder: 2 string binops, 3
+`SetLength`, 5 `IR_ATOMIC`. **One cause makes it a phase rather than a list.** Taken.
+
+That is `re-measure the PRIZE, not the mechanism` executed properly — the plan said PAL, the
+measurement said strings, and the measurement won.
+
+### "A refusal is a claim with a date on it" — the generator's fourth face
+
+**9 of the 51 refusals read "needs the heap, Phase 6." The heap landed that morning.** True
+when written, false now, and nothing in the build can tell the difference. An obsolete
+refusal keeps working perfectly: it compiles, it is not a test failure, and it costs
+whoever next measures that surface — the measurement reports mass that no longer exists.
+
+I checked whether this is a wasm-branch quirk: it is not. **~19 sites on master** across
+`ir_codegen386`, `ir_codegen_arm32`, `asmfront`, `lexer`, `pylexer`, `cparser`, `rparser`,
+`zparser`, `pasparser_stmt`, `defs` carry *"not implemented … yet"* refusals, several naming
+ticket slugs. Whether any is stale **today** is unmeasured, and the ticket says so.
+
+Filed `feature-a-a-refusal-is-a-claim-with-a-date-on-it` [A, p35], **myself, so the lane does
+not stop mid-phase for it.** frankwasm's position — *"it does not want a mechanism, it wants
+the phase that removes it"* — is right about the nine and wrong about the generator: the
+phase removes the instances, and every future phase leaves refusals citing a phase that has
+since landed.
+
+The ticket's actual content is a spelling decision: **"Phase 6" is not machine-checkable;
+a ticket slug is.** A refusal naming a slug that now sits in `done/` is stale by
+construction, so the convention change makes a ~15-line check possible and its absence makes
+it impossible.
+
+**Fourth face this week**, now cross-referenced in all four tickets: an absent symbol, a
+silent environment, a grep matching zero, and a refusal that outlived its cause are all
+states indistinguishable from correctness while carrying no information.
+
+### The IR_ATOMIC five are free for a SEMANTIC reason, and that is the risk
+
+wasm without the threads proposal is single-threaded, so an atomic read-modify-write and a
+plain one are observationally identical. frankwasm: *"that is a semantic argument, not a
+codegen one, and it stops being true the day this target grows threads. It gets a comment
+saying so or it does not get written."*
+
+Correct and self-policing — with one gap I raised: **a comment at the lowering site is a
+rule, and the person who adds threads reads a design doc, not `IR_ATOMIC`'s lowering.** The
+note belongs in both places, and the doc is the one that gets read by the person who
+invalidates it.
+
+### A better statement of the both-directions rule, from its author
+
+> *"The positive twin is not a second test — it is what makes the first one falsifiable. A
+> negative assertion alone is a claim about the world; paired, it is a claim about the
+> code."*
+
+Now in the audit ticket above the rule it explains.

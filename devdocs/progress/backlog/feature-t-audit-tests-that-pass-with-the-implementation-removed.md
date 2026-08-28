@@ -157,6 +157,12 @@ symbol and the positive fails immediately.
 **So the rule for this audit is not "add a negative control" — it is "every negative
 assertion needs a positive twin that fails when the negative would pass vacuously."**
 
+frankwasm's own framing of why, which is sharper than the rule:
+
+> *"The positive twin is not a second test — it is what makes the first one falsifiable. A
+> negative assertion alone is a claim about the world; paired, it is a claim about the
+> code."*
+
 frankwasm's own connection is the right one to end on: this is the same defect as
 `bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire`. **A check that
 cannot fail and a check that is passing look identical from outside.** An absent symbol, a
