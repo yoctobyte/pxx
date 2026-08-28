@@ -15,7 +15,7 @@ _none_
 | feature-opt-o3-register-pressure | O | 85 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-pascal-corpus-expansion | P | 75 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 
-## unfinished (21)
+## unfinished (20)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -23,7 +23,6 @@ _none_
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
 | bug-nilpy-shared-nonlocal-frame-cell-is-never-freed | N | 40 | bug | A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted | — |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
-| bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body | P | 60 | bug | `TGeneric<T>.ClassMethod` is "undefined variable" inside another generic's body | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets | A | 55 | feature | Build-time selection of frontends and targets, so `only-pascal` + `only-esp-riscv` yields a small Pascal-for-ESP compiler instead of the megalith. The umbrella build stays the default. Filed with a measurement: C is nearly separable already (16 references in shared files), NilPy is NOT (1281) — so this doubles as a falsifiable test of the frontend-separation design, and NilPy already fails it. | — |
 | feature-c-import-a-pascal-unit-under-a-mangled-name | C | 50 | feature | Give C an explicit import site for a Pascal unit: `#include \"math.pas\"` declares its routines under mangled C identifiers (`math_pas_Sqrt`), case preserved from the Pascal declaration, path-qualified on collision. Overloads resolve by the declared C signature. AnsiString-bearing signatures are refused by name. Design settled by the user 2026-08-19; this ticket is a SPEC, not a discussion. | — |
@@ -50,7 +49,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
 
-## backlog (294)
+## backlog (295)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -121,6 +120,7 @@ _none_
 | bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
 | bug-p-an-unknown-compiler-directive-is-silently-ignored | P | 35 | bug | compiler/lexer.inc's {$...} handler is an if/else chain of 34 CaseEqual(command, ...) arms with no terminal else, so ANY directive outside those 34 is silently ignored — no warning, no note, exit 0. {$FATAL} is one confirmed instance (bug-p-fatal-directive-is-silently-ignored) and the mechanism guarantees there are others. Filed separately from the {$FATAL} ticket on purpose: fixing {$FATAL} closes that ticket and leaves this generator intact. | — |
 | bug-p-fatal-directive-is-silently-ignored | P | 35 | bug | {$FATAL text} and {$MESSAGE FATAL text} are silently ignored: the frontend handles warning/message/error and treats every other directive as a no-op, so a guard block that means 'stop, this configuration is unsupported' compiles clean and produces a binary that should not exist. | — |
+| bug-p-mutually-referencing-generics-are-rejected-as-circular | P | 60 | bug | Two generics that reference each other are refused with `circular generic specialization`, but only one direction is a real declaration-time dependency: the other is a reference from inside a METHOD BODY, which FPC resolves when the method is compiled. `TDelegatedEqualityComparerEvents<T> = class(TEqualityComparer<T>)` (inheritance, genuine) plus `TEqualityComparer<T>`'s method body constructing a `TDelegatedEqualityComparerEvents<T>` (materialisation-time) is rtl-generics' shape, and it is now rung 6's wall in BOTH units. FPC compiles the 22-line repro and prints 7. | — |
 | bug-p-qword-div-by-a-literal-above-2-63-is-signed | P | 55 | bug | `QWord div` / `mod` by a literal >= 2^63 divides SIGNED and returns a wrong value | — |
 | bug-p-set-membership-item-constant-truncated-to-32-bits | P | 25 | bug |  | — |
 | bug-p-sysopen-intrinsic-shadows-a-user-function-name | P | 15 | bug | sysopen/syswrite/sysclose/sysfchmod are compiler INTRINSICS with dedicated tokens (tkSysOpen &c), so the lexer never produces an identifier for them and a user program cannot declare a function with one of those names. The diagnostic is `expected name`, which does not mention the reservation. Real but nearly unreachable: prio 15. | — |
@@ -589,9 +589,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2558)
+## done (2559)
 
-2558 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2559 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (46)
 
@@ -684,7 +684,7 @@ _none_
 - [p 60] [A] bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open
 - [p 60] [N] bug-n-os-environ-and-os-sep-are-not-values
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
-- [p 60] [P] bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body [parked — re-claim, do not duplicate]
+- [p 60] [P] bug-p-mutually-referencing-generics-are-rejected-as-circular
 - [p 60] [N] feature-a-declaration-phase
 - [p 60] [N] feature-nilpy-process-exec-binding
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application

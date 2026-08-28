@@ -185,7 +185,7 @@ in the way, and fails on `pinned`.
 different defect: that one was about *which class* a genuine header binds to;
 this one is about a use that is not a header at all.
 
-**Status:** unfinished — diagnosis banked, no partial code landed.
+**Status:** done
 
 ---
 
@@ -299,3 +299,90 @@ part still to work out.
 a wrong specialization is the failure mode this whole area produces — a plausible
 alias built from the wrong substitution — and it would be far harder to see than
 the current honest `undefined variable (specialize)`.
+
+## Resolved 2026-08-28 (frankA) — the Delphi ordering defect
+
+The banked diagnosis was right and its one open question turned out to be
+already answered in the code.
+
+**What was wrong.** `DelphiRewriteGenericUses` emits its alias declaration right
+behind the template declaration, so `ParseSpecialization` runs while
+`GenericMethodCount` is still 0. The prerequisite scan swept the class body and
+every *buffered* method body — and in mode Delphi there were none yet, so it
+reported `nested=0` where objfpc reported `nested=1`, and the literal word
+`specialize` survived into the stream.
+
+**The fix.** The scan gains a third source: this template's method impls that the
+parser has not reached yet, read straight out of `Tokens[]` (which `LexAll` has
+already filled completely) into the template arena as **scratch**, scanned, and
+rolled back.
+
+### The open question was not open
+
+The ticket recorded *"`GenMethImplSOff` gives you the start and the end is the
+part still to work out."* The end never needed working out: `BufferGenericMethod`
+already computes it — scan forward to `begin`, then match `begin`/`case`/`end`
+depth. It was inline in that procedure, so it read as part of buffering rather
+than as a reusable fact about method extents. Factored out as
+`GenericMethodBodyEnd` and now used by both. A second, independently written
+range finder would have been the drift this file has already been bitten by.
+
+Same for the copy: `AppendTokenRangeToTemplateArena` is `BufferGenericMethod`'s
+own copy loop, shared. And the scan body itself is now
+`ScanRangeForNestedSpecs` — one body, three callers (class body, buffered
+method, not-yet-buffered Delphi impl), because a second copy per source is
+precisely how the method-body arm came to be missing in the first place.
+
+### The hazard was avoided, not braved
+
+The banked warning — **do not weaken the prerequisite scan to make the corpus
+advance** — is the reason this is bounded by `GenMethImplSOff`, the class-name
+token offsets the rewrite *recorded* when it deleted a `<T>` from a method-impl
+header. A range is scanned only when its offset is a recorded header **of this
+template**. Attribution is by construction.
+
+The rejected alternative is the one that would have looked simpler: sweep raw
+`Tokens[]` for `specialize X<...>` whose arguments match this template's
+parameter names. `T` and `U` being the commonest parameter names there are, that
+matches inside *other* templates' methods too and registers a prerequisite under
+the wrong substitution — a silently wrong specialization, strictly worse than the
+honest error it replaces.
+
+**The copy is scratch, and that is load-bearing.** `BufferGenericMethod` keeps
+"each (method, specialization) pair is materialised exactly once" via a
+before/after split: methods buffered before a specialization go to the pending
+queue, ones buffered after are streamed immediately. Registering these scans as
+buffered methods would make the parser's own later call the *second* buffering of
+the same body, and emit it twice. `TemplateTokenCount` is restored instead.
+
+### Verification
+
+- Repro: FPC prints `8`; pxx now prints `8`. The Delphi trace matches objfpc
+  exactly — `SPEC TOrd$Int64$LongInt = TOrd nested=1` → `needs TCmp$Int64`.
+- `test_generic_cycle_fail` still correctly **refused**; five other Delphi/generic
+  tests named individually still pass.
+- **`tools/gate.sh quick`: GREEN**, and it earned its keep — `make
+  compiler/pascal26` was green while the **FPC seed build was not**.
+  `GenericMethodBodyEnd` is defined below `ParseSpecialization` in the file and
+  pxx resolves that either way; FPC does not (`Identifier not found`). Forwards
+  added, with the reason in a comment. This is
+  `bug-a-fpc-seed-drift-emitasmx64-forward`'s shape, and the per-fix loop alone
+  would have pushed it broken.
+
+### Corpus: the wall moved, and the next one is filed
+
+`generics.defaults.pas` no longer fails at `:3231`. It now stops at **`:994`**
+with `circular generic specialization` — **earlier in the file, and a truer
+error**: before, the prerequisite was silently never discovered at all.
+
+That is **pre-existing and not caused by this fix** — measured by rebuilding this
+tree with the change stashed, where the same objfpc repro gives the identical
+circular error. Filed as
+[[bug-p-mutually-referencing-generics-are-rejected-as-circular]] (p60) with the
+real distinction it turns on: `TDel<T> = class(TEq<T>)` is a genuine
+declaration-time dependency, while `TEq<T>`'s method body constructing a
+`TDel<T>` is materialisation-time, and we treat both as blocking. FPC compiles
+it.
+
+## Log
+- 2026-08-28 — resolved, commit PENDING-COMMIT.

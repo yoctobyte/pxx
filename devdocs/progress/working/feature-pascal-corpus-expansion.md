@@ -53,6 +53,32 @@ were measured.
 *"The symbol is there"* and *"its address can be taken"* both fail with the
 symbol present, and only the second one is the bug.
 
+## 2026-08-28 (frankA, later) — wall 6 is DOWN; rung 6's wall is now ONE defect, in both units
+
+`bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body` is
+resolved — the mode-Delphi ordering defect. The prerequisite scan now also reads
+this template's not-yet-buffered method impls, bounded by the header offsets the
+rewrite recorded (`GenMethImplSOff`), never by argument shape. The banked warning
+held: the tempting raw-token sweep over-approximates on `T`/`U` and would have
+registered a silently wrong specialization.
+
+| | `generics.defaults.pas` stops at |
+| --- | --- |
+| before | `:3231` — `undefined variable (specialize)` |
+| after | `:994` — `circular generic specialization` |
+
+**Earlier in the file, and better.** The old error meant a prerequisite was never
+discovered; the new one means it *is* discovered and our machinery cannot order
+it. The circularity is **pre-existing** — the same objfpc repro gives the
+identical error on this tree with the fix stashed — and is filed as
+[[bug-p-mutually-referencing-generics-are-rejected-as-circular]] (p60).
+
+`generics.collections.pas` dies at the same `defaults:994`, still without
+reaching a line of its own. So rung 6 is now behind **one** defect in both units,
+and it is a real one: `TDel<T> = class(TEq<T>)` is a declaration-time dependency
+while `TEq<T>`'s method body constructing a `TDel<T>` is materialisation-time,
+and we treat both as blocking. FPC compiles it and prints 7.
+
 ## 2026-08-28 (frankA) — wall 7 is DOWN; rung 6 is behind wall 6 alone, measured
 
 `bug-p-a-resourcestring-is-not-addressable` is resolved: a `resourcestring`
