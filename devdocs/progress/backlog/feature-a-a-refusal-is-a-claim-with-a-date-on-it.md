@@ -260,3 +260,53 @@ turns every missing file into a permission error, and **both are non-zero**, so 
 asking only *"did it fail?"* agrees with the bug. Same shape as the coverage count that
 measured lowering rather than correctness: the predicate is true, and true of the wrong
 question.
+
+---
+
+## FACE TEN — an unfiled GRANT, which reads as covered
+
+Face nine was an inert flag asserted in a comment. This is its sibling one level up, and it
+was found by pulling on face nine's thread.
+
+A shared-file edit on a branch was authorised in conversation and **its only record was the
+commit message of the change it authorised.**
+
+> **A grant recorded only in the commit that used it is not a record. The commit is the thing
+> being justified; it cannot also be the justification's index.**
+
+Why it is this family and not mere untidiness: **an unfiled grant does not read as missing —
+it reads as covered**, because a neighbouring ticket covers the same *file*. `compiler.pas`
+had a real ticket authorising three of its five edits, so a reviewer checking "is compiler.pas
+accounted for?" gets **yes**, and the two unauthorised edits are invisible. The absence is
+indistinguishable from presence, which is the family's signature exactly.
+
+Measured outcome when the thread was pulled: **master's record covered three of eight arms.**
+The report said four arms in three files; the diff said eight arms in four files; and the two
+agreed on everything except the thing that mattered.
+
+**`check_tickets.sh` makes an unfiled TICKET unrepresentable. It cannot see an unfiled GRANT.**
+
+### The enabling condition: a ledger that lives on the branch is not a ledger
+
+The lane's merge set was read off an escapes table in the branch's own `CHARTER.md`, untouched
+since Phase 1 — still saying the exception mechanism was "not yet taken" three phases after it
+was taken, with no row for two of the files. **Invisible to master, to the ranker, and to a
+merge reviewer.** Exactly what `check_tickets.sh` exists to prevent for tickets, one level up.
+
+Fix in place: the master ticket is the ledger
+(`feature-a-merge-the-wasm-branch-the-shared-file-arms`, p40, ranked); CHARTER's table is
+marked a convenience copy; and the ordering rule is written down — **when you take an arm it
+goes to the master ticket in the SAME PUSH, then it is mirrored to the branch.**
+
+### The coordinator's half, which is the half that generalises
+
+**The grants were mine, and I never required a ticket for any of them.** All session I have
+enforced *"a finding is recorded when it is in a ticket on master; a message is transport"* —
+on two lanes and on myself. I applied it to **findings** and exempted **my own
+authorisations**, which is the same shape as applying a rule to the code under test and not to
+the test.
+
+**An authorisation is a finding about what is permitted.** It decays the same way, is invisible
+in the same places, and needs filing by the same rule. A coordinator who grants an exception
+without filing it has produced exactly the artefact this ticket family is about: a permission
+whose absence from the record is indistinguishable from its presence.

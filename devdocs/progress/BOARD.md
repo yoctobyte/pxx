@@ -55,7 +55,7 @@ _none_
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 | regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
 
-## backlog (279)
+## backlog (280)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -177,6 +177,7 @@ _none_
 | feature-a-getinterface-refcounting | A | 45 | feature | __pxxGetInterface stores the instance pointer into the caller's interface variable without an AddRef, so the slot holds a borrowed reference while the compiler treats the variable as managed and releases it at scope exit. Every Supports/GetInterface hit is therefore one release the object never got a retain for. Nothing observed to crash yet, which is why it is a ticket and not an urgent bug — but the asymmetry is real and worth settling deliberately. | — |
 | feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle | S | 25 | feature | xtensa is the one target whose output nothing here can RUN, so every xtensa ticket ends in 'do not land this on inspection'. Stock `qemu-xtensa` (user mode) IS installed, but xtensa has no IR_SYSCALL arm and TargetIsEspClass hardcodes it as bare-metal ALWAYS. Installing ESP-IDF (its qemu fork) is the CHEAPER first move and is worth doing regardless — but it does NOT make the blocked tickets' gates reachable, because those tests need the builtin unit, which no ESP-class target gets. | — |
 | feature-a-io-lock-owner-from-tls-not-gettid | A | 40 | feature | The --threadsafe I/O lock issues a gettid SYSCALL on every I/O statement (measured: 43% overhead, one syscall per Writeln; caching it in TLS removed the whole penalty). The naive version is WRONG -- foreign threads (glibc pthread_create) inherit the creator's block and would answer 'lock already mine', silently losing mutual exclusion. Needs the stack-bounds validation design recorded in the ticket. | — |
+| feature-a-merge-the-wasm-branch-the-shared-file-arms | A | 40 | feature | Branch `wasm` modifies four existing files: compiler.pas (5 edits), exception_emit.inc (1 arm), ir_codegen.inc (1 arm), and lib/rtl/platform.pas (1 additive constant). The last is Track B and carries B's gate, so the merge review spans two lanes, not one. Nothing on the branch is pre-approved. This ticket is the ledger; the branch's own CHARTER table is not visible from master and was stale. | — |
 | feature-a-promoint-variant-esp-targets | S | 20 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
 | feature-a-reentrant-heap-lock-and-per-thread-arenas | A+O | 45 | feature | Split out of decide-interface-members-in-aggregates-lock-strategy, where a reentrant heap lock was proposed as a means to fix an ARC leak. That is not what it is for: EmitAcquireHeapLock's own comment says the allocator does not scale because the lock is global, and that per-thread arenas need TLS the runtime lacked. TLS landed 2026-08-20, so both are now open — judged as allocator work, not as a prerequisite for a bug fix. | — |
 | feature-a-shrink-managed-header-on-32-bit | A | 10 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
@@ -579,9 +580,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2549)
+## done (2550)
 
-2549 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2550 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (46)
 
@@ -789,6 +790,7 @@ _none_
 - [p 40] [U] decide-c-crtl-rand-max-is-conforming-but-breaks-real-code
 - [p 40] [A] feature-a-emit-obj-record-class-abi-mode
 - [p 40] [A] feature-a-io-lock-owner-from-tls-not-gettid
+- [p 40] [A] feature-a-merge-the-wasm-branch-the-shared-file-arms
 - [p 40] [C] feature-c-csmith-differential-fuzzing
 - [p 40] [C] feature-c-diagnostics-name-the-module-they-are-in
 - [p 40] [O] feature-inline-nonleaf-and-branch-locals

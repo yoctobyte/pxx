@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:22 blocked:9 backlog:279 backlog_new:6 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2549 rejected:46`
+`working:1 unfinished:22 blocked:9 backlog:280 backlog_new:6 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2550 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
@@ -48,7 +48,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 - `regression-lib-test-lib-synapse` [B] — blocked-by: bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream
 
-## Ready — top 30 of 294, ranked
+## Ready — top 30 of 295, ranked
 
 - `[p 85] [O]` feature-opt-o3-register-pressure
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
@@ -81,4 +81,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
 
-_264 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_265 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
