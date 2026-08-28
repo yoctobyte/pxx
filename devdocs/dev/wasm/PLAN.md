@@ -548,6 +548,81 @@ because it is boring.
   allocation between the outer store and the outer read. One local per site is
   correct by construction and costs a locals-vector entry.
 
+## Phase 6.5 — frozen strings — **DONE 2026-08-28**
+
+Named by Phase 6's closing measurement rather than by this plan, which is the
+point: `IR_STORE_SYM` of a `tyString` was the blocker under the variant
+engine's last two bodies, and it is needed for every `string[N]`, `ShortString`
+and record string field.
+
+- **Milestone:** `test/wasm/check_frozen.sh` — twelve lines diffed against the
+  native build, covering the literal, `Char`, frozen→frozen and empty sources;
+  truncation in three shapes; `Length`; indexing; a record field and the
+  neighbour an overrun would hit; and `const` and by-value frozen parameters.
+  123 of 128 bodies, the five being three bodiless `IInterface` methods and the
+  two managed-string refusals below.
+
+**The general statement, which is what made it small:** a frozen string
+EVALUATES TO ITS ADDRESS. That is the IR's own convention, not this backend's
+invention — the x86-64 arm for a string-valued expression is a bare
+`IREmitNode` and a comment saying the address is in rax
+(`ir_codegen.inc:6765`). Stating it once in `WasmEmitValueAs` (accepting a
+frozen type where an i32 is wanted, and only there) rather than at each
+consumer is what let the write path, the store path, `Length`, indexing and
+argument passing all arrive together. Three IR shapes evaluate to an address
+and report their own type as `Pointer` — `IR_LEA`, `IR_FIELD`, `IR_INDEX` — so
+`WasmStrTypeOf` answers what is THERE rather than how it is reached, in one
+place, for the same reason.
+
+**The ABI oracle was already the answer to the parameter half, and this lane
+was not consulting it.** `abi.inc` opens by naming the exact shape it exists to
+delete — a `Syms[...].IsRef or` chain inside an `ir_codegen*.inc` — and this
+backend had two of them. They were not merely stylistic: a frozen-string VALUE
+parameter is passed as the address of a buffer on every target, and the flag
+that says so lives on the parameter's SYMBOL, not on the proc's declaration
+record. So `const x: ShortString` came back with *no wasm value type*, and the
+callee plus every call site went unreachable — a missing convention reported as
+a missing type. Two calls to `ABIParamSlotHoldsValueAddr` / `ABIParamSlotIsPointer`
+replaced them, and frozen parameters worked immediately, by-value copy
+semantics included (`bug-a-set-and-shortstring-value-params-alias-the-caller`
+is the shape that would have failed; `Mut` in the slice is the check).
+
+**What this phase REMOVED from the lowered count, deliberately.** `PXXVarBinOp`
+and `PXXVarNot` lowered for about an hour, and they were lowering *wrongly*:
+a managed string's slot is pointer-sized, so `m := 'lit'` went down the scalar
+path and stored the address of the literal's frozen `[len][chars]` blob AS IF
+it were a heap handle. The module validated and ran; every later read was off
+by the 8-byte prefix, measured as `s := m` copying
+`0c 00 00 00 00 00 00 00 from ma` into a `string[15]` where FPC and the x86-64
+build both give `from managed`. Assigning a managed string is
+materialise-from-literal, or retain, or move-without-retain, then release the
+old handle — a phase. It now refuses by name, and the two variant bodies went
+back to unlowered, which is the honest number.
+
+**Two findings worth more than the code:**
+
+- **The `.wat` oracle caught a defect the `.wasm` could not have.** Locals are
+  INDICES in the binary and NAMES in the text, so a local allocated per SITE
+  rather than per body — `$fzdst` for a second frozen store, `$newobj` for a
+  second allocation — costs the binary nothing and makes the text module
+  invalid (`redefinition of local`). The `.wasm` validated, ran, and matched
+  the native build throughout. Fixed in `WasmAddLocal`, not at the callers: the
+  callers are right to want a fresh local per site, and asking each of them to
+  invent a distinct name is asking every future one to remember.
+- **A silent `Exit` in a value path is a stack underflow reported at the wrong
+  line.** `WasmEmitLoadSym` used to Exit without pushing anything when the slot
+  had no wasm value type. The module then fails validation at some later
+  instruction, naming a line that is fine. It reports now.
+
+**What is refused, by name, and why the message says which:** a frozen string
+as a RESULT. That is `abi.inc`'s `RetViaHiddenDest` — the caller allocates the
+destination, the callee copies its Result local into it and returns the
+pointer — and it is ONE mechanism shared with records, sets, variants and
+promotable ints. All five arrive together when the extra i32 parameter is
+threaded through `WasmSigForProc`, the call sites and the epilogue. The
+refusal names the convention rather than the type, because "no wasm value type"
+sends the reader looking for a type mapping that does not exist.
+
 ## Phase 7 — exceptions **(the one remaining shared-file escape)**
 
 Pending-flag threading: within a function a longjmp is `$label := N; continue`
@@ -735,3 +810,31 @@ smaller than the C frontend was.
   `tools/forwardlint.py` now — on master, over the whole `compiler.pas` include
   chain, verified against both historical breaks — and it caught this phase's
   THIRD instance the second it was written, seconds instead of a phase.
+- 2026-08-28 — **frozen strings, and the ABI oracle this lane had not been
+  asking.** `string[N]`, `ShortString`, the record field and the parameter, all
+  diffed against the native build; 123 of 128 bodies. Three findings.
+
+  **The general statement is what made it small.** A frozen string EVALUATES TO
+  ITS ADDRESS — the IR's own convention, visible in the x86-64 arm as a bare
+  `IREmitNode` — so saying it once in the coercion layer delivered the write
+  path, the store path, `Length`, indexing and argument passing together
+  instead of five arms that would each have been the one left broken.
+
+  **`abi.inc` already answered the parameter half and this backend was
+  re-deriving it.** That file opens by naming the exact shape it exists to
+  delete, a `Syms[...].IsRef or` chain inside an `ir_codegen*.inc`, and there
+  were two here. The consequence was not cosmetic: a frozen VALUE parameter's
+  by-reference convention is flagged on the parameter's SYMBOL and not on the
+  proc's declaration record, so `const x: ShortString` reported *no wasm value
+  type* — a missing convention wearing a missing type's message. The oracle's
+  success metric is that a new pass-by-pointer kind costs one edit; the
+  corollary this lane just paid for is that a backend which does not consult it
+  gets the wrong answer silently.
+
+  **Two bodies stopped lowering on purpose, and that is the honest number.**
+  `PXXVarBinOp` and `PXXVarNot` lowered for an hour by taking a managed
+  string's assignment down the scalar path — the slot is pointer-sized, so
+  `m := 'lit'` stored the address of a frozen `[len][chars]` blob as if it were
+  a heap handle. Validated, ran, and every later read was off by eight bytes.
+  It refuses by name now. A count that goes DOWN because a wrong lowering was
+  withdrawn is worth more than the count that went up.

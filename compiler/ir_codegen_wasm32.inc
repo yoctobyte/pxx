@@ -138,6 +138,25 @@ begin
     tyDouble:  WasmTypeKindName := 'Double';
     tyVariant: WasmTypeKindName := 'Variant';
     tyAnsiString: WasmTypeKindName := 'AnsiString';
+    tyInt8:    WasmTypeKindName := 'ShortInt';
+    tyUInt8:   WasmTypeKindName := 'Byte';
+    tyInt16:   WasmTypeKindName := 'SmallInt';
+    tyUInt16:  WasmTypeKindName := 'Word';
+    tyInt32:   WasmTypeKindName := 'LongInt';
+    tyUInt32:  WasmTypeKindName := 'LongWord';
+    tyInt64:   WasmTypeKindName := 'Int64';
+    tyUInt64:  WasmTypeKindName := 'QWord';
+    tyNativeInt:  WasmTypeKindName := 'NativeInt';
+    tyNativeUInt: WasmTypeKindName := 'NativeUInt';
+    tyExtended: WasmTypeKindName := 'Extended';
+    tySet:     WasmTypeKindName := 'set';
+    tyAuto:    WasmTypeKindName := 'an inferred type';
+    { The two kinds tyString was split into. A message that says `type kind 26`
+      sends the reader to the enum; one that says ShortString sends them to the
+      code. Both are frozen — the distinction is the width of the length
+      prefix, which is why the store path treats them alike. }
+    tyShortString: WasmTypeKindName := 'ShortString (frozen)';
+    tyFixedString: WasmTypeKindName := 'string[N] (frozen)';
   else
     WasmTypeKindName := 'type kind ' + WasmIntStr(Ord(tk));
   end;
@@ -432,6 +451,8 @@ function WasmEmitIndArgs(sigProc, firstArg, startIdx: Integer;
 { Caught by tools/forwardlint.py the second it was written, which is the third
   time this file has needed one and the first time it cost nothing. }
 procedure WasmEmitConstStr(node: Integer); forward;
+procedure WasmEmitFrozenStore(dstIsSym: Boolean;
+                              dstRef, valNode, cap: Integer); forward;
 
 { The address at which the PASCAL VARIABLE `si` lives, which is not always the
   address of its slot. A var/out parameter's slot holds the CALLER's address,
@@ -453,7 +474,13 @@ procedure WasmEmitConstStr(node: Integer); forward;
 procedure WasmLValueAddr(si: Integer);
 begin
   WasmSlotAddr(si);
-  if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+  { THE ORACLE, not a flag test. abi.inc calls this exact question SLOT-HOLDS
+    and names `(Syms[...].Kind = skParam) and Syms[...].IsRef` — which is what
+    stood here — as the copy it exists to remove. It is not a stylistic
+    difference: the set also contains open arrays, variants, and frozen-string
+    VALUE parameters, so the hand-written version read a `const s: ShortString`
+    parameter's buffer contents as if they were the buffer's address. }
+  if ABIParamSlotHoldsValueAddr(si) then
     WasmMemOp($28, 'i32.load', 2, 0);
 end;
 
@@ -469,7 +496,23 @@ end;
 procedure WasmEmitLoadSym(si: Integer);
 var vt: Byte;
 begin
-  if not WasmSlotType(si, vt) then Exit;
+  { Reading a frozen string yields its ADDRESS — see WasmEmitValueAs. There is
+    no load: the variable IS the buffer. }
+  if TypeIsFrozenString(Syms[si].TypeKind) then
+  begin
+    WasmLValueAddr(si);
+    Exit;
+  end;
+  if not WasmSlotType(si, vt) then
+  begin
+    { Reported, not skipped. This used to Exit silently, which pushed NOTHING
+      where the consumer expects a value: the module then fails validation with
+      a stack-underflow at some later instruction, and the diagnostic names a
+      line that is fine. }
+    WasmUnsupported('read of ' + WasmSymLabel(si) + ', of type '
+                    + WasmTypeKindName(Syms[si].TypeKind));
+    Exit;
+  end;
   WasmLValueAddr(si);
   WasmTypeLoad(Syms[si].TypeKind, vt);
 end;
@@ -559,6 +602,19 @@ var got: TTypeKind; gvt: Byte;
 begin
   got := WasmEmitNode(node);
   if WasmBodyBroken then Exit;
+  { A frozen string is NOT a scalar and yet it is already an i32: every node
+    whose type is one evaluates to the ADDRESS of its [len][chars] buffer, and
+    that is the IR's own convention rather than this backend's invention — the
+    x86-64 arm for a string-valued expression is a bare IREmitNode and a
+    comment saying the address is in rax (ir_codegen.inc:6765).
+
+    Stating it HERE rather than at each consumer is deliberate. The two callers
+    that need it today are the write path and the frozen store, and the ones
+    that need it tomorrow (a string argument, a string comparison) would each
+    have grown their own arm — which is the second path that stays broken.
+    Only WT_I32 is accepted: a frozen string asked for as an i64 or an f64 is a
+    real type error and still refused. }
+  if TypeIsFrozenString(got) and (want = WT_I32) then Exit;
   if not WasmScalarType(got, gvt) then
   begin
     WasmUnsupported('value of type ' + WasmTypeKindName(got) + ' in ' + ctx);
@@ -797,9 +853,17 @@ procedure WasmEmitLoadMem(node: Integer);
 var tk: TTypeKind; vt: Byte;
 begin
   tk := IntToTypeKind(IRTk[node]);
+  if TypeIsFrozenString(tk) then
+  begin
+    { A frozen string through an address — a string[N] record field. Its value
+      is the address, so the address computation IS the whole load. }
+    WasmEmitValueAs(IRA[node], WT_I32, 'address of a frozen string');
+    Exit;
+  end;
   if not WasmScalarType(tk, vt) then
   begin
-    WasmUnsupported('load through a pointer of type ' + WasmIntStr(IRTk[node]));
+    WasmUnsupported('load through a pointer of type '
+                    + WasmTypeKindName(tk));
     Exit;
   end;
   WasmEmitValueAs(IRA[node], WT_I32, 'address of a load');
@@ -811,9 +875,26 @@ procedure WasmEmitStoreMem(node: Integer);
 var tk: TTypeKind; vt: Byte;
 begin
   tk := IntToTypeKind(IRTk[node]);
+  if TypeIsFrozenString(tk) then
+  begin
+    { A frozen string through an ADDRESS — a string[N] record field, or `p^`.
+      Capacity comes from the IR node here rather than from a symbol, because
+      there is no symbol: the destination is an expression. }
+    WasmEmitFrozenStore(False, IRA[node], IRB[node], Integer(IRIVal[node]));
+    Exit;
+  end;
+  if tk = tyAnsiString then
+  begin
+    { Same reason as IR_STORE_SYM above: the slot is pointer-sized and the
+      store is not a pointer store. }
+    WasmUnsupported('store of a managed string through an address — '
+                    + 'refcounting is its own phase');
+    Exit;
+  end;
   if not WasmScalarType(tk, vt) then
   begin
-    WasmUnsupported('store through a pointer of type ' + WasmIntStr(IRTk[node]));
+    WasmUnsupported('store through a pointer of type '
+                    + WasmTypeKindName(tk));
     Exit;
   end;
   { ADDRESS FIRST, then the value — wasm's i32.store pops them in that order.
@@ -1154,7 +1235,19 @@ end;
   reason. }
 function WasmParamValType(p, i: Integer; var vt: Byte): Boolean;
 begin
-  if Procs[p].Params[i].IsRef or Procs[p].Params[i].IsArray then
+  { THE ORACLE ANSWERS THIS, not a flag test written out here. abi.inc's opening
+    note names the exact shape it exists to stop — a `Syms[...].IsRef or` chain
+    inside an ir_codegen file — and the chain this replaced was one, reading
+    Procs[p].Params[i].IsRef. It was also WRONG in a way the oracle is not: a
+    frozen-string value parameter is passed as the address of a buffer on every
+    target, and the flag that says so lives on the parameter's SYMBOL, not on
+    the proc's declaration record. So `const x: ShortString` came back with no
+    wasm value type at all and both the callee and every call site went
+    unreachable — a missing convention reported as a missing type. }
+  if ABIParamSlotIsPointer(Procs[p].Params[i].TypeKind,
+                           Procs[p].Params[i].IsRef,
+                           Procs[p].Params[i].IsArray)
+     or TypeIsFrozenString(Procs[p].Params[i].TypeKind) then
   begin
     vt := WT_I32;
     WasmParamValType := True;
@@ -1198,7 +1291,24 @@ begin
     if not WasmProcResult(p, rtypes[0]) then
     begin
       rtypes[0] := WT_I32;
-      WasmUnsupported('result of ' + Procs[p].Name + ' has no wasm value type');
+      if RetViaHiddenDest(Procs[p].RetType) then
+        { Not a missing type — a missing CONVENTION, and naming which one is
+          the difference between a reader who knows what to build and one who
+          goes looking for a type mapping that does not exist. abi.inc's
+          RetViaHiddenDest is the shared rule: the CALLER allocates the
+          destination, the callee copies its Result local into it and returns
+          the pointer. Records, sets, variants, promotable ints and the frozen
+          strings are all one mechanism, so all five arrive together when the
+          extra i32 parameter is threaded through WasmSigForProc, the call
+          sites and the epilogue. }
+        WasmUnsupported('result of ' + Procs[p].Name + ', of type '
+                        + WasmTypeKindName(Procs[p].RetType)
+                        + ', is returned through a caller-owned hidden'
+                        + ' destination (abi.inc RetViaHiddenDest) and this'
+                        + ' target does not thread one yet')
+      else
+        WasmUnsupported('result of ' + Procs[p].Name + ' has no wasm value'
+                        + ' type');
     end;
   end;
   if nParams = 0 then
@@ -1302,6 +1412,7 @@ begin
   if WasmCastKind(p, ctk) then WasmBuiltinResultType := ctk
   else if (p = -203) or (p = -204) then WasmBuiltinResultType := tyInt64
   else if p = -Ord(tkGetMem) then WasmBuiltinResultType := tyPointer
+  else if p = -Ord(tkLength) then WasmBuiltinResultType := tyInt32
   else if (p = -Ord(tkOrd)) and (IRB[node] <> -1) then
     WasmBuiltinResultType := WasmNodeResultType(IRA[IRB[node]])
   else
@@ -1405,6 +1516,98 @@ end;
 
 { Builtins this backend can lower. Returns False for one it cannot, so the
   caller reports it by NAME rather than this function inventing a reason. }
+{ The STRING type a node denotes.
+
+  Three IR shapes evaluate to an ADDRESS and report their own type as Pointer —
+  IR_LEA of a symbol, IR_FIELD, IR_INDEX — so for them the node type says how
+  the value is REACHED and not what is there. What is there is in the symbol
+  (IR_LEA) or in IRTk (IR_FIELD, IR_INDEX), which is where the x86-64 arms read
+  it too (ir_codegen.inc:7386, :7396). Everything else answers for itself.
+
+  IsArray is excluded from the IR_LEA case on purpose: an open-array
+  parameter's symbol carries its ELEMENT type, so a bare type test on one reads
+  the element's layout — the confusion behind
+  bug-open-array-param-length-high-zero. }
+function WasmStrTypeOf(node: Integer): TTypeKind;
+begin
+  WasmStrTypeOf := WasmNodeResultType(node);
+  if node < 0 then Exit;
+  if IRKind[node] = IR_LEA then
+  begin
+    if not Syms[IRA[node]].IsArray then
+      WasmStrTypeOf := Syms[IRA[node]].TypeKind;
+  end
+  else if (IRKind[node] = IR_FIELD) or (IRKind[node] = IR_INDEX) then
+    WasmStrTypeOf := IntToTypeKind(IRTk[node]);
+end;
+
+{ Length. Both string representations keep their length in a machine word next
+  to the characters, so this is one load in each case — but the word is at a
+  DIFFERENT place and a different width for each, and the width is the target's,
+  not x86-64's:
+
+    AnsiString   handle points AT the chars; the length is the NativeInt at
+                 handle-8 (builtinheap.pas: PXX_HDR_LEN = 16, PXX_HDR_SIZE = 24,
+                 PWord = ^NativeInt). NativeInt is FOUR bytes here, so this is an
+                 i32.load where the x86-64 arm reads a qword. The header LAYOUT
+                 is target-independent; the field width is not.
+    frozen       the value IS the buffer address and the length is the low word
+                 of the 8-byte inline prefix, so an i32.load at offset 0 reads
+                 it on a little-endian target.
+
+  nil is length 0 and needs a real branch, not a select: the false arm loads
+  from handle-8, which for a nil handle is 0xFFFFFFF8.
+
+  Arrays are NOT here yet. Length of a dynamic array or an open-array parameter
+  is a third layout (the element count below the data pointer) with its own set
+  of shapes for how the pointer is reached, and guessing at it would produce a
+  plausible number rather than a refusal. It is refused BY TYPE below and names
+  the type in the message. }
+function WasmEmitLength(valNode: Integer): Boolean;
+var tk: TTypeKind; lh, ln: Integer;
+begin
+  WasmEmitLength := False;
+  tk := WasmStrTypeOf(valNode);
+
+  if TypeIsFrozenString(tk) then
+  begin
+    WasmEmitValueAs(valNode, WT_I32, 'Length of a frozen string');
+    if WasmBodyBroken then Exit;
+    WasmMemOp($28, 'i32.load', 2, 0);
+    WasmEmitLength := True;
+    Exit;
+  end;
+
+  if tk = tyAnsiString then
+  begin
+    lh := WasmAddLocal(WT_I32, 'lenhandle');
+    ln := WasmAddLocal(WT_I32, 'lenval');
+    WasmEmitValueAs(valNode, WT_I32, 'Length of a managed string');
+    if WasmBodyBroken then Exit;
+    { A managed string reached through a FIELD or an ELEMENT yields the address
+      of the handle SLOT, not the handle; one more load reaches the handle. The
+      x86-64 arm inserts the same deref for the same two shapes
+      (ir_codegen.inc:7396). }
+    if (IRKind[valNode] = IR_FIELD) or (IRKind[valNode] = IR_INDEX) then
+      WasmMemOp($28, 'i32.load', 2, 0);
+    WasmLocalSet(lh);
+    WasmI32Const(0);
+    WasmLocalSet(ln);
+    WasmLocalGet(lh);
+    WasmIf(WT_VOID);
+      WasmLocalGet(lh); WasmI32Const(8); WasmOp($6B, 'i32.sub');
+      WasmMemOp($28, 'i32.load', 2, 0);
+      WasmLocalSet(ln);
+    WasmEnd;
+    WasmLocalGet(ln);
+    WasmEmitLength := True;
+    Exit;
+  end;
+
+  WasmUnsupported('Length of ' + WasmTypeKindName(tk)
+                  + ' — only strings are implemented on this target so far');
+end;
+
 function WasmEmitBuiltin(node, p: Integer; isStmt: Boolean): Boolean;
 var argNode: Integer; ctk: TTypeKind; atk: TTypeKind; want: Byte; wide: Boolean;
 begin
@@ -1457,6 +1660,12 @@ begin
   if p = -Ord(tkFreeMem) then
   begin
     WasmEmitBuiltin := WasmEmitFreeMem(node);
+    Exit;
+  end;
+
+  if p = -Ord(tkLength) then
+  begin
+    WasmEmitBuiltin := WasmEmitLength(IRA[argNode]);
     Exit;
   end;
 
@@ -2135,6 +2344,105 @@ begin
   WasmCall(WasmSlotForProc(mv), 'PXXMemMove');
 end;
 
+{ ===== frozen strings =====
+
+  A `string[N]` / ShortString is not a VALUE on this target, it is a BUFFER: an
+  8-byte length prefix (low word the length, high word zero) followed by the
+  chars. So `s := 'hello'` cannot go through the scalar store path, which asks
+  the slot for its wasm value type and correctly answers that it has none.
+
+  Three source shapes, the same three every register backend handles:
+
+      Char         length 1, the ordinal at +8
+      AnsiString   a HANDLE: length at [h-8], chars AT h; nil means empty
+      frozen       length at [src], chars at src+8
+
+  and one rule they share: the length is CLAMPED to the destination's capacity,
+  because `string[N]` TRUNCATES. That rule is not decoration — the register
+  backends learned it as bug-pascal-shortstring-no-truncation-buffer-overrun,
+  where the generic word store dropped the source ADDRESS into the field.
+
+  Everything goes through locals rather than the operand stack: the destination
+  and the source are each needed twice and wasm yields a value once. Fresh
+  locals per SITE, for the reason WasmEmitGetMem allocates fresh ones — a
+  source expression may itself contain a store.
+
+  The nil-handle guard is a real `if`, not a `select`: select evaluates both
+  arms, and the false arm here is a load from `handle - 8`, which for a nil
+  handle is address 0xFFFFFFF8 and traps. This is the one place so far where
+  wasm's eager `select` is the wrong tool, and it is worth naming because
+  `select` is otherwise the cheaper answer to every two-way choice here. }
+procedure WasmEmitFrozenStore(dstIsSym: Boolean; dstRef, valNode, cap: Integer);
+var lDst, lSrc, lLen, mv: Integer; stk: TTypeKind;
+begin
+  if cap <= 0 then cap := DEFAULT_STR_CAP;
+  mv := WasmWriteHelper('PXXMemMove');
+  if mv < 0 then Exit;
+  stk := WasmStrTypeOf(valNode);
+  lDst := WasmAddLocal(WT_I32, 'fzdst');
+  lSrc := WasmAddLocal(WT_I32, 'fzsrc');
+  lLen := WasmAddLocal(WT_I32, 'fzlen');
+
+  { VALUE first, then the destination — the order the register backends use
+    (they evaluate the value and spill it), so a side effect on either side
+    sees the same world here as there. }
+  WasmEmitValueAs(valNode, WT_I32, 'value assigned to a frozen string');
+  WasmLocalSet(lSrc);
+  if dstIsSym then WasmLValueAddr(dstRef)
+  else WasmEmitValueAs(dstRef, WT_I32, 'address of a frozen string store');
+  WasmLocalSet(lDst);
+  if WasmBodyBroken then Exit;
+
+  if stk = tyChar then
+  begin
+    { One i64.store writes BOTH words of the prefix, which is what keeps the
+      high half zero without a second instruction. }
+    WasmLocalGet(lDst); WasmI64Const(1);
+    WasmMemOp($37, 'i64.store', 2, 0);
+    WasmLocalGet(lDst); WasmLocalGet(lSrc);
+    WasmMemOp($3A, 'i32.store8', 0, 8);
+    Exit;
+  end;
+
+  if stk = tyAnsiString then
+  begin
+    WasmI32Const(0);
+    WasmLocalSet(lLen);
+    WasmLocalGet(lSrc);
+    WasmIf(WT_VOID);
+      WasmLocalGet(lSrc); WasmI32Const(8); WasmOp($6B, 'i32.sub');
+      WasmMemOp($28, 'i32.load', 2, 0);
+      WasmLocalSet(lLen);
+    WasmEnd;
+    { chars are AT the handle — no +8 }
+  end
+  else
+  begin
+    WasmLocalGet(lSrc);
+    WasmMemOp($28, 'i32.load', 2, 0);
+    WasmLocalSet(lLen);
+    WasmLocalGet(lSrc); WasmI32Const(8); WasmOp($6A, 'i32.add');
+    WasmLocalSet(lSrc);
+  end;
+
+  { len := min(len, cap). Both arms are plain values here, so select is right. }
+  WasmI32Const(cap);
+  WasmLocalGet(lLen);
+  WasmLocalGet(lLen); WasmI32Const(cap); WasmOp($4A, 'i32.gt_s');
+  WasmOp($1B, 'select');
+  WasmLocalSet(lLen);
+
+  WasmLocalGet(lDst);
+  WasmLocalGet(lLen); WasmOp($AD, 'i64.extend_i32_u');
+  WasmMemOp($37, 'i64.store', 2, 0);
+
+  { PXXMemMove(dst + 8, chars, len) }
+  WasmLocalGet(lDst); WasmI32Const(8); WasmOp($6A, 'i32.add');
+  WasmLocalGet(lSrc);
+  WasmLocalGet(lLen);
+  WasmCall(WasmSlotForProc(mv), 'PXXMemMove');
+end;
+
 procedure WasmEmitStmt(node, blk: Integer);
 var pvt: Byte;
 begin
@@ -2150,7 +2458,29 @@ begin
     IR_WRITE, IR_WRITELN : WasmEmitWrite(node);
     IR_COPY_REC      : WasmEmitCopyRec(node);
     IR_STORE_SYM :
-      if WasmSlotType(IRA[node], pvt) then
+      { A managed string's SLOT is pointer-sized and its stores are therefore
+        scalar-shaped, which is exactly the trap: `m := 'lit'` through the
+        scalar path stores the address of the literal's frozen [len][chars]
+        blob AS IF it were a heap handle. The module validates, the program
+        runs, and every later read of m is off by the 8-byte prefix — measured
+        as `s := m` copying `0c 00 00 00 00 00 00 00 from ma` into a string[15]
+        where FPC and the x86-64 build both give `from managed`.
+
+        Assigning a managed string is not one store. It is materialise-from-
+        literal (PXXStrFromLit), or retain, or move-without-retain for a value
+        that already owns its reference, then release the old handle — and a
+        var parameter publishes into the CALLER's slot, not the local one
+        (ir_codegen.inc:4988-5060). That is a phase, and until it is done the
+        honest answer is a refusal that names itself. READING a managed string
+        stays supported: a load hands back the handle and takes no ownership. }
+      if Syms[IRA[node]].TypeKind = tyAnsiString then
+        WasmUnsupported('assignment to managed string ' + WasmSymLabel(IRA[node])
+                        + ' — refcounting and literal materialisation are their'
+                        + ' own phase, and a bare pointer store here is a wrong'
+                        + ' handle rather than a missing feature')
+      else if TypeIsFrozenString(Syms[IRA[node]].TypeKind) then
+        WasmEmitFrozenStore(True, IRA[node], IRB[node], SymStrCap[IRA[node]])
+      else if WasmSlotType(IRA[node], pvt) then
       begin
         WasmLValueAddr(IRA[node]);
         { The value is brought to the SLOT's width before the store, not
@@ -2358,8 +2688,11 @@ begin
           today, and the day they stop agreeing is the day a store of the wrong
           width silently corrupts the slot next door. }
         psym := Procs[CurProc].Params[i].SymIdx;
-        if Procs[CurProc].Params[i].IsRef
-           or Procs[CurProc].Params[i].IsArray then
+        { The same oracle query WasmLValueAddr asks, on the same SYMBOL, so the
+          store here and the load back there cannot disagree about what is in
+          the slot — they did when one read the proc's declaration record and
+          the other the symbol. }
+        if ABIParamSlotHoldsValueAddr(psym) then
           { The incoming value is an ADDRESS, so four bytes go into the slot
             whatever the slot was sized for. WasmLValueAddr reads them back
             with the matching i32.load. }

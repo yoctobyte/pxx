@@ -406,14 +406,42 @@ end;
   Returns the local INDEX (params first), which is what local.get/set take. }
 { Add a local to the body being built; returns its index in the params-then-
   locals numbering. }
+function WasmIntStr(v: Int64): AnsiString; forward;
+
+{ Add a local and NAME it uniquely within this body.
+
+  The uniqueness is not cosmetic. Locals are INDICES in the binary, so a
+  repeated name costs the .wasm nothing and the module runs — but the .wat
+  spells them, and `(local $fzdst i32)` twice is a text module wabt refuses
+  with `redefinition of local`. Any local allocated PER SITE rather than per
+  body repeats the moment a body has two of those sites: two allocations
+  ($newobj), or two frozen-string assignments ($fzdst/$fzsrc/$fzlen), which is
+  ordinary code and not an edge case.
+
+  Fixed here rather than at each caller because the callers are right: a fresh
+  local per site is what makes nesting safe, and asking each of them to invent
+  a distinct name is asking every future one to remember. WFVarLen is unique
+  within the body by construction, so the suffix cannot collide with another
+  generated name.
+
+  Found by the .wat oracle on the first body with two frozen stores in it —
+  the .wasm validated, ran, and matched the native build throughout. }
 function WasmAddLocal(vt: Byte; const nm: AnsiString): Integer;
+var i: Integer; unique: AnsiString;
 begin
   if (WFLocLen > High(WFLoc)) or (WFVarLen > High(WFVar)) then
     WasmFail('wasm: too many params+locals');
+  unique := nm;
+  for i := 0 to WFVarLen - 1 do
+    if WFVar[i] = nm then
+    begin
+      unique := nm + '_' + WasmIntStr(WFVarLen);
+      Break;
+    end;
   WFLoc[WFLocLen] := vt;
   Inc(WFLocLen);
   WasmAddLocal := WFVarLen;
-  WFVar[WFVarLen] := nm;
+  WFVar[WFVarLen] := unique;
   Inc(WFVarLen);
 end;
 
@@ -709,6 +737,15 @@ procedure WasmBlock(bt: Byte);
 begin
   WasmBodyB($02); WasmBodyB(bt);
   if bt = WT_VOID then WasmText('block') else WasmText('block (result)');
+end;
+
+{ `if` consumes an i32 condition and opens a block, closed by WasmEnd. Used
+  where `select` cannot be: select evaluates BOTH arms, so a guard whose false
+  arm would fault — a load through a nil handle, say — needs a real branch. }
+procedure WasmIf(bt: Byte);
+begin
+  WasmBodyB($04); WasmBodyB(bt);
+  if bt = WT_VOID then WasmText('if') else WasmText('if (result)');
 end;
 
 procedure WasmLoop(bt: Byte);
