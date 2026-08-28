@@ -267,3 +267,35 @@ that one is a visibility/export question for **Track B**, not a frontend bug.
 
 **Status:** still unfinished — retitle when picked up; the Delphi ordering
 defect is the whole of what is left.
+
+### The enabling fact for the Delphi fix, and the hazard that comes with it
+
+**The whole file is already tokenised when the Delphi specialization runs.**
+`LexAll` (`lexer.inc:2618`) fills `Tokens[]` completely before parsing begins —
+its own comment says *"the parser has not started"* — and `DelphiRewriteGenericUses`
+sweeps that entire stream, so by the time `ParseSpecialization` executes, the
+method implementations are **present as tokens** and already rewritten to
+`specialize TCmp<T>`. They are merely not yet *buffered* into `GenericMethods[]`.
+
+So the missing prerequisites are not unavailable, only unindexed. That is a much
+better position than "defer until the parser gets there", and it means the fix
+does not require reordering the parse.
+
+**The hazard, which is why this was not just done:** the obvious move — sweep
+raw `Tokens[]` for `specialize X<...>` whose arguments are this template's
+parameter names — **over-approximates**. `T` and `U` are the most common
+parameter names in existence, so `specialize TCmp<T>` inside a *different*
+template's method matches just as well, and would register a prerequisite under
+THIS template's substitution: a specialization that is silently wrong rather
+than absent. Any fix therefore has to bound the sweep to the token ranges that
+are genuinely this template's method implementations.
+
+`GenMethImplSOff` (`defs.inc`) already records the class-name token offset of
+every Delphi method-impl header the rewrite touched, which is the beginning of
+such a range and the obvious starting point. Finding each range's END is the
+part still to work out.
+
+**Do not weaken the prerequisite scan to make the corpus advance.** Registering
+a wrong specialization is the failure mode this whole area produces — a plausible
+alias built from the wrong substitution — and it would be far harder to see than
+the current honest `undefined variable (specialize)`.
