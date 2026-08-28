@@ -43,15 +43,41 @@ in-progress code stays here.
 | `test/wasm/**` | own |
 | `devdocs/dev/wasm/**` | own |
 
-**Shared — the escapes. Each needs a Track A ticket on `master` and
-coordination before it is touched here:**
+**Shared — the escapes. Each needs a ticket on `master` **in its owning lane**
+(A for `compiler/**`, B for `lib/rtl/**` — the table above already says which,
+and the lane still read the whole set as A anyway) and coordination before it
+is touched here:**
 
 | what | where | status |
 | --- | --- | --- |
-| module-writer wiring | `compiler.pas` (2 includes + the `TARGET_WASM32` output arm) | **taken 2026-08-27**, coordinator-granted, `feature-a-wasm32-module-writer-wiring` |
-| the wasm error message's stated reason | `exception_emit.inc:437` | **taken 2026-08-27**, same grant, message text only |
-| VMT slots hold code addresses → must hold table indices | `elfwriter.inc:1937`, `emit.inc:105` | Phase 4, not yet taken |
-| exception model | `exception_emit.inc` (the mechanism) | Phase 5, not yet taken |
+| module-writer wiring | `compiler.pas` (2 includes + the `TARGET_WASM32` output arm) | **taken 2026-08-27**, `feature-a-wasm32-module-writer-wiring` |
+| the wasm error message's stated reason | `exception_emit.inc` (text only) | **taken 2026-08-27**, same grant |
+| Phase 2 backend include + `IRTopLevelStmt` forward | `compiler.pas` | **taken 2026-08-27**, `feature-a-wasm32-compile-check-the-phase-2-backend` (filed 2026-08-28 — the grant existed only in a branch commit) |
+| codegen dispatch arm: `Error` → `IREmitMachineCodeWasm32; Exit;` | `ir_codegen.inc` | **taken**, granted, **no ticket** — see the ledger |
+| exception mechanism: `Error` → three `-1` poison values | `exception_emit.inc` (the arm) | **taken Phase 7**, granted, **no ticket** — see the ledger |
+| `PAL_PLATFORM_WASI = 3` | `lib/rtl/platform.pas` | **taken Phase 8e**, additive, **no ticket** — and this one is **Track B**, not A |
+| VMT slots hold code addresses → must hold table indices | `elfwriter.inc:1937`, `emit.inc:105` | not taken; not needed so far |
+
+**THE LEDGER IS ON `master`, NOT HERE:
+`feature-a-merge-the-wasm-branch-the-shared-file-arms`.** This table is a
+convenience copy and has already been wrong once in the way that matters: on
+2026-08-28 it still said the exception mechanism was "not yet taken", three
+phases after it was taken, and the lane reported a merge set from it that
+omitted `compiler.pas` and its five edits entirely. The coordinator caught that
+by diffing the branch rather than reading the summary.
+
+A ledger that lives on the branch is invisible to `master`, to the ranker and to
+whoever reviews the merge — the same defect `test/wasm/check_tickets.sh` makes
+unrepresentable for tickets, recurring for the record of what was *granted*.
+**When you take an arm, add it to the master ticket in the same push, then
+mirror it here.** In that order.
+
+**The merge crosses TWO lanes' gates.** `compiler/**` is Track A (`make test` +
+self-host fixedpoint). `lib/rtl/**` is **Track B** — `make lib-test` / `demos`,
+built against `$(PXX_STABLE)`, never rebuilding the compiler. `platform.pas` and
+everything under `lib/rtl/platform/wasi/` are B's files and carry B's gate; a
+reviewer running only A's has not reviewed them. This branch ran as an A-lane
+effort from Phase 1 and stopped being one the moment it touched `lib/rtl`.
 
 **The branch now touches shared files, and that changes its risk profile.** It
 was true until 2026-08-27 that a `master` merge could not conflict in
