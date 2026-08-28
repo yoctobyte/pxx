@@ -12639,3 +12639,59 @@ what my evidence changed is the part worth keeping: *"my audit had just conclude
 suite was fine on exactly the argument that had already silently expired for dyn arrays."*
 The asymmetry has **no symptom** — that is why it is not reachable by reasoning and why the
 control, not the argument, is the deliverable.
+
+### `in` landed, and its two side-findings outrank it
+
+`f3116b244` on `wasm` — set membership, branchless, 267 of 431 refusal lines. Touches
+`compiler/ir_codegen_wasm32.inc`, which is one of the **branch's own files** (merge ledger
+line 47), not a shared arm: **no grant needed, and none is missing.** Merge set still five
+arms.
+
+**The commit's subject says "62% of the remaining refusals" and that is literally accurate** —
+it is a share of refusal lines, not of work — and the body carries the first-refusal caveat in
+full, unprompted. No correction was needed and I am recording that, because the last two ticks
+each found one and the absence is the datum.
+
+Two **silent wrong answers** fell out of the width work, both filed on master rather than
+fixed in-lane (neither is the wasm lane's file), both measured on five targets by *running*,
+qemu for arm32/aarch64:
+
+- `bug-p-set-membership-item-constant-truncated-to-32-bits` [P, p25] — a set ITEM constant
+  funnels `Int64 → Integer → Int64` through one `var` line in the Pascal parser, so
+  `1 in [4294967297]` is **TRUE on every target**.
+- `bug-a-set-membership-truncates-the-test-value-on-32-bit-backends` [A, p25] — i386 and arm32
+  truncate the TEST value, so `4294967297 in [1,2,3]` is TRUE there and FALSE on
+  x86-64/aarch64/wasm32.
+
+**Prios left alone at 25.** Both are rare shapes, frankwasm measured them, and over-ruling a
+measured ranking with an unmeasured intuition is the thing I tell other lanes not to do.
+
+**I nearly filed a false gap here.** The P ticket carries a caution the A ticket lacks — and
+that is correct, not an omission: the P defect is upstream of both backends so a diff cannot
+see it, while the A defect *is* a cross-target divergence a diff finds instantly.
+
+### Face thirteen, and the caution moved to where it is a check
+
+That asymmetry is a limit on the repo's most-used debugging method, so it should not live only
+in one bug ticket. Verified before asserting it was undocumented: `differential-probes.md`
+states the sound half — *"anything a cross target prints differently is a target-dependent
+bug"* — and leaves the converse to the reader; `fuzz.sh` line 3 calls itself a
+cross-target-differential **IR** correctness fuzzer, which is honestly scoped and silent on
+this.
+
+> **AGREEMENT BETWEEN TWO ARMS THAT SHARE AN UPSTREAM CARRIES NO INFORMATION ABOUT THAT
+> UPSTREAM.**
+
+Filed as **face thirteen** (`feature-a-a-refusal-is-a-claim-with-a-date-on-it`) and, more
+usefully, added as a limits section to `devdocs/dev/differential-probes.md` — *a rule lives in
+the file the violator will open*; in a ticket it is a fact, in that file it is a check. The
+tools are not accused: the failure is in reading a green cross-target sweep as coverage of the
+compiler rather than of the part below the frontend.
+
+Kin to face twelve, distinct from it: twelve is blind in one **direction**, thirteen is blind
+over a **region** — everything the two arms hold in common.
+
+**Not dispatched.** Track P's ranked head is `feature-pascal-corpus-expansion` (parked
+mid-flight, effective prio 75) and Track A's is a p70 parse bug, but frankA is parked by
+record and a non-empty queue is not new information — it was non-empty when the park was
+recorded.
