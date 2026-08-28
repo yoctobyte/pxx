@@ -8,7 +8,7 @@ prio: 70
   file-ownership **Track A** — edits the shared `ir_codegen.inc` / `symtab.inc` /
   backends, so it obeys A's no-concurrent-edit rule + self-host gate) — umbrella
   for the next optimization campaign.
-- **Status:** unfinished (parked in a good state 2026-08-28 — nothing half-applied; every slice landed green and pushed)
+- **Status:** working
   section at the bottom for what landed, what is left and what to read first).
   Nothing is half-applied. Worked from a
   dedicated optimization checkout (`~/frank-optimize`), because Track O is
