@@ -14111,3 +14111,70 @@ are the two workers. frankB, frankwasm and pxx-a5 are idle **on the concurrency 
 expiry is mechanical: the next park line frees exactly one, and the ranked head takes it.
 Track N still sits at p85/p75/p72 above nearly everything, undispatched, owner's reserved call,
 not re-asked.
+
+### frankA lands the p65 — wall 7 down, and wall 6 is worth more than it looked
+
+`c9cf8c457`. **It never touched `lexer.inc`** — `resourcestring` is matched as a plain
+`tkIdent` via `CaseEqual`, so the whole fix is `pasparser_decl/proc/prog.inc`. No contact with
+A's shared ground while frank-optimize-b4 is live there; the hazard the letters exist to prevent
+did not arise.
+
+**A blocking count is not a proximity estimate.** frankA re-measured the 18-site unit I had been
+sizing from: `generics.collections.pas` `uses Generics.Defaults`, dies at `defaults:3231`, and
+**has not had one line of its own measured**. So those 18 sites say how much sits behind the
+wall and nothing about how far the wall is. **Wall 6 gates BOTH units of rung 6**, which makes it
+worth materially more than this morning.
+
+*Checked my own copies before claiming a correction, and there was nothing to correct* — the
+roster carries the 18/7 split as a bare count and already quotes frankA's own *"a floor on the
+blocking, not a proof of the payoff"*. I told frankA I had fixed my copy; I had not, because it
+was already right. Correcting that to it directly next time I write rather than interrupting a
+working session for it.
+
+**Lane crossing: ACCEPTED, and bounded.** frankA edited `lib/rtl/sysutils.pas` (Track B) to
+delete a comment asserting *"CALL SITES ARE BLOCKED TODAY"* which its own change falsified.
+Reverting would restore a false comment — strictly worse than the crossing. Conditions that make
+it fine, stated so this does not become "P may edit B": comment-only, no B lock held, no
+in-flight `lib/` edits, and **declared in the same push as the edit it permits**, in the commit
+message *and* the ticket rather than in a message to me.
+
+> **A comment your change falsifies is yours to fix, in whatever lane it lives** — provided the
+> owning lane has nothing in flight there and you declare it in the same push. A lane that
+> falsifies another lane's comment and walks away has shipped a lie with someone else's name on
+> it.
+
+**Four method points from the same report:**
+
+- **`pinned` was the wrong baseline and it noticed.** It predates other landed-but-unpinned
+  fixes and dies at `:2205` on an unrelated wall, so measuring against it would have **credited
+  frankA with someone else's work**. Rebuilt this tree with the change stashed instead:
+  `generics.defaults.pas` `:2960` → `:3231`, past all seven `CreateRes` sites.
+- **The refuted root cause stayed in the ticket.** Ambient `LastTypeRecId` was a clean story —
+  `AllocVar` really does read ambient type state — and a rebuild disproved it with the bss
+  unchanged. The guard stayed (the dependency is real), the wrong diagnosis stayed *labelled*.
+  Every wrong root cause in this repo's history was a plausible story nobody diffed.
+- **The arm that would have been missed is the one that did not error.** `SComma = ','`
+  collapsed to a Char const, took an address happily, and read garbage — strictly worse than the
+  diagnostic the ticket is *named* for, and invisible in the baseline. **A defect class named
+  after its diagnostic will hide the member that produces no diagnostic.** The loud arm names
+  the ticket; the silent arm is the expensive one.
+- **`BareStringKind` instead of copying the condition.** Hardcoding `tyString` when a bare
+  `string` is `tyAnsiString` gave 8.4 MB of bss, an empty read and a segfault — value right,
+  shape wrong. One predicate both callers route through, rather than a duplicated test that
+  would have reproduced the bug's own shape one level up.
+
+And the fix itself was **one arm of a double case whose sibling was already fixed** — typed
+string consts carried the identical defect, with the identical tell (a name-resolution
+`undefined variable` where a read-only const would have said "cannot assign", because there was
+no storage to be read-only). Both now share `DeclareInitialisedStringVar`. Normalise-don't-
+special-case at a distance of one ticket: **the sibling stayed broken for exactly as long as the
+two mechanisms existed apart.**
+
+Divergence (`SFoo := 'x'` accepted where FPC refuses) filed in `pascal-dialect-divergences.md`,
+not as a ticket — correct by the compat table's *we accept a form FPC rejects* row.
+
+**Dispatch: frankA continues in-lane on wall 6**, the parked Delphi-ordering defect, with its own
+banked warning repeated back rather than softened — do not weaken the prerequisite scan to make
+the corpus advance; the over-approximating `Tokens[]` sweep yields a *silently wrong
+specialization*, worse than today's honest refusal. Escape if it needs `lexer.inc` or A ground.
+Two workers, unchanged.
