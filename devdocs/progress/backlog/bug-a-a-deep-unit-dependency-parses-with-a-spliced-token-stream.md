@@ -94,7 +94,7 @@ mine and **all are innocent**:
   compiled by v388, the pin actually in force then — **also fails**.
 
 The bug predates the range. See
-[[bug-t-a-skipped-lib-test-job-reports-green-and-manufactures-a-false-last-good]]
+[[bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-last-good]]
 for why it looked like one.
 
 ## Gate
