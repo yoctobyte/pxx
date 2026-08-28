@@ -152,3 +152,48 @@ Making `IRTk` a guarantee is a decision with a cost, not a repair, and nothing
 needs it today. But a second type-directed frontend or backend will meet this,
 and it should meet it here rather than rediscovering it from a refused `for`
 loop.
+
+## A body's identity is a range of bytes, and that is a target's property
+
+Same category as the `IRTk` note above, found the same way and worth reading
+beside it: an invariant the IR relies on which is true only because of an
+incidental layout property of every backend that existed when it was written.
+
+A frontend emits top-level code by calling the per-body entry point with
+`CurProc = -1`, and it does so **more than once**. Every typed constant that is
+built by startup code rather than stored in the blob — a record, an array of
+records — emits its stores as another such call. Nothing announces that the
+pieces belong together.
+
+**On a register target they do not need to.** A body is a range of bytes in
+`Code[]`; consecutive emissions land one after another; `Procs[].BodyAddr` is
+simply overwritten by the last one, and the pieces genuinely ARE one function,
+with no seam and nothing to reconcile. Six backends have relied on that, and
+none of them could have noticed it was a *contract* rather than a fact, because
+in a byte-stream it is not expressible any other way.
+
+**wasm32 is the first target where a function is a closed structure**, with its
+own locals vector, its own type, and its own terminating `end`. The same
+sequence of calls produces N functions rather than one, and the pieces have no
+relationship the emitter can see. That backend got N functions all named `main`,
+none of them called.
+
+The failure mode is the part worth carrying, because it is the shape this file
+keeps documenting. It surfaced as `duplicate export "main"` — a complaint about
+a *name collision*, which is a symptom of the symptom — and making the names
+unique makes the module validate. **The actual defect is that every global those
+chunks initialise reads zero**, and nothing says so: the module is well-formed,
+every function is present, and the program is silently missing its
+initialisation. A validator has no opinion about a function nobody calls.
+
+That backend's answer, for the next non-linear target: each chunk keeps its own
+slot and the entry point is **synthesised** as a call to each in order.
+Concatenation and sequential calls are equivalent as long as a chunk balances
+its own stack pointer — it allocates a frame, does its work, frees it — so there
+is nothing to carry across the seam. What made the fix easy is exactly what made
+the bug invisible: the pieces really were independent, and the register targets
+were joining them by accident rather than by design.
+
+Nothing needs changing today. But "the frontend may emit one logical body in
+several calls" is a fact about the IR's interface that was recorded nowhere, and
+the next backend to meet it should meet it here.
