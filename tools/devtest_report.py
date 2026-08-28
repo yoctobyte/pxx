@@ -16,6 +16,27 @@ So a failure with no message must say that it has no message, and then say the
 one thing that is always available and cannot drift: the source line that
 failed. A hand-written assert message can go stale against the assert it
 describes; the assert's own text cannot.
+
+IF YOU ARE MUTATION-TESTING THESE GUARDS, READ THIS SECOND PART.
+================================================================
+
+The way to know a guard can fail is to break the code and watch it fire. The
+way that goes wrong is subtle and cost a wrong conclusion on 2026-08-28: a
+harness that counts `FAIL` lines in stdout scores a CRASHED run and a PASSING
+run identically, because both produce zero of them. A mutation that is a syntax
+error therefore reads as "the guard caught nothing" — which is the precise
+opposite of what happened, and it points the author at rewriting a guard that
+was fine.
+
+    Count the RETURN CODE and the emptiness of stdout, not just FAIL lines.
+    A mutation run that printed nothing did not pass; it did not run.
+
+The general form is worth stating because it is why this family keeps
+recurring: **the checking layer gets written with less suspicion than the layer
+being checked, because it is "just the harness".** The instrument built that
+day to catch instruments whose reach is invisible had, itself, an invisible
+reach. Six instances of that shape were found across the repo in one day and
+the seventh was in the test rig for the fix to the sixth.
 """
 
 import linecache

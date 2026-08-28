@@ -158,6 +158,23 @@ mechanism: the compounding of a cleared edge *with* a folder nothing scans, not
 the edge alone. That matters for the fix, because a check that fails on the edge
 alone would have been 70% noise on day one.
 
+**And the headline "14" is two categories, not one.** `resolved_slugs` is
+`done | decided` and **excludes `rejected/`**, so the 14 split by how the blocker
+was closed, and the halves behave oppositely:
+
+| the blocker ended in | effect on the dependent | handled by |
+| --- | --- | --- |
+| `done/` or `decided/` | edge is **satisfied** — ranks normally unless the folder hides it | the severity split above |
+| `rejected/` | edge can **never** be satisfied, in any folder; moving it does not help | the incumbent `BLOCKED-BY-REJECTED` |
+
+Between the two the ground is covered, but they should not be reported as one
+finding: "untidy" and "permanently stuck" are different verdicts and a reader who
+sees them merged will triage both at the weaker one. Zero of the 14 were of the
+rejected kind on the day this was measured, which is why the distinction did not
+surface in the count.
+
+*(Corrected here by the coordinator, who filed the original measurement.)*
+
 ### The aperture, printed with every verdict including a clean one
 
 Per this ticket's own second half, the scan reads frontmatter and cannot see the
