@@ -31,7 +31,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-pascal-corpus-generics` [P] — blocked-by: gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo
 - `feature-pascal-type-helpers` [A]
 - `feature-port-rtl-over-libc` [A]
-- `feature-real-dynlib-loader` [B] — blocked-by: bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert
+- `feature-real-dynlib-loader` [B] — blocked-by: bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream
 - `feature-signal-siginfo-ucontext` [A]
 - `feature-threadsafe-heap-optimize` [A]
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
@@ -48,13 +48,13 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 - `regression-lib-test-lib-synapse` [B] — blocked-by: bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream
 
-## Ready — top 30 of 298, ranked
+## Ready — top 30 of 297, ranked
 
 - `[p 85] [O]` feature-opt-o3-register-pressure
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 72] [N]` feature-nilpy-stdlib-coverage-gaps-measured
-- `[p 70] [A]` bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream (unblocks 1)
+- `[p 70] [A]` bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream (unblocks 2)
 - `[p 70] [A]` bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64
 - `[p 70] [A]` bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero
 - `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
@@ -81,4 +81,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
 - `[p 62] [A]` feature-unicodestring-model
 
-_268 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_267 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

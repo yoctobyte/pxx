@@ -2,7 +2,7 @@
 track: B
 prio: 45  # auto
 type: feature
-blocked-by: [bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert]
+blocked-by: [bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream]
 summary: "Real dlopen loader: DONE on x86-64 (PAL primitives, opt-in -dPXX_DYNLIB_LIBC, truthful PalHasDynlib, OpenSSL 3 loaded and answering). Two items open: (b) an arm32/aarch64 RUN, blocked on this host having no cross ld-linux/libc, and (d) Synapse SSL end-to-end, now past the connect wall and stopped in SSLDoConnect."
 ---
 
@@ -405,3 +405,27 @@ recorded: (b) needs a box, (d) needs the compiler fix.
 **Not added to the suite:** a real handshake assertion. It would be red today for
 a reason that belongs to another ticket, and `lib_synapse_ssl.pas` says so in its
 header so the omission is visible rather than silent.
+
+## 2026-08-28 (frankB) — blocker state corrected; still not actionable
+
+Not claimed and not worked: only the `blocked-by` was wrong, and a ticket that
+looks unblocked when it is not is worse than one that looks blocked.
+
+**The declared blocker is resolved.**
+`bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert` is in
+`done/`. So this ticket reads as ready to the ranker, which is presumably why it
+keeps surfacing at p45.
+
+**Both remaining items are still blocked, by things this ticket did not name:**
+
+| item | real blocker, measured today |
+| --- | --- |
+| (b) arm32/aarch64 RUN | still no cross loader on this host — `/usr/arm-linux-gnueabihf/lib/ld-linux*` and `/usr/aarch64-linux-gnu/lib/ld-linux*` are both absent. Environmental, not code. |
+| (d) Synapse SSL end-to-end | needs the Synapse tree, which is currently held aside as `external/synapse-held-for-bug-a-spliced-token-stream`. Restoring it turns Track B's gate from a clean skip into a hard failure, which is why it was moved. |
+
+`blocked-by` now names the Synapse one, since that is the blocker a fix could
+actually clear. Item (b) is a host-provisioning gap rather than a ticket
+dependency, and is recorded here rather than as an edge, because no ticket
+resolving will make a cross libc appear.
+
+Nothing else changed; the ticket stays `unfinished/` under its existing owner.

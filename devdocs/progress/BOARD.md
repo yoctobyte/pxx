@@ -36,7 +36,7 @@ _none_
 | feature-pascal-corpus-generics | P | 65 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo |
 | feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
 | feature-port-rtl-over-libc | A | 55 | feature | RTL-over-libc lowering mode — route runtime primitives through a system C library instead of raw syscalls | — |
-| feature-real-dynlib-loader | B | 45 | feature | Real dlopen loader: DONE on x86-64 (PAL primitives, opt-in -dPXX_DYNLIB_LIBC, truthful PalHasDynlib, OpenSSL 3 loaded and answering). Two items open: (b) an arm32/aarch64 RUN, blocked on this host having no cross ld-linux/libc, and (d) Synapse SSL end-to-end, now past the connect wall and stopped in SSLDoConnect. | bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert |
+| feature-real-dynlib-loader | B | 45 | feature | Real dlopen loader: DONE on x86-64 (PAL primitives, opt-in -dPXX_DYNLIB_LIBC, truthful PalHasDynlib, OpenSSL 3 loaded and answering). Two items open: (b) an arm32/aarch64 RUN, blocked on this host having no cross ld-linux/libc, and (d) Synapse SSL end-to-end, now past the connect wall and stopped in SSLDoConnect. | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | refactor-a-two-dyn-array-depth-functions-that-drift | A | 30 | refactor | Two functions answer 'how many `array of` levels does this expression have': NodeDynDepth (ast_arena.inc) and DynArrayNodeDepth (symtab.inc). They have diverged at least twice and each divergence produced a silent wrong VALUE, not an error. Merge them. | — |
@@ -645,7 +645,7 @@ _none_
 - [p 75] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 75] [P] feature-pascal-corpus-oop
 - [p 72] [N] feature-nilpy-stdlib-coverage-gaps-measured
-- [p 70] [A] bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream (unblocks 1)
+- [p 70] [A] bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream (unblocks 2)
 - [p 70] [A] bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64
 - [p 70] [A] bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero
 - [p 70] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
@@ -768,7 +768,6 @@ _none_
 - [p 45] [N] feature-nilpy-threadsafe-containers
 - [p 45] [O] feature-opt-inline-float-and-record-returning-leaves
 - [p 45] [P] feature-p-defineglobal-a-define-that-crosses-unit-boundaries
-- [p 45] [B] feature-real-dynlib-loader [parked — re-claim, do not duplicate]
 - [p 45] [T] feature-t-fail-when-a-test-file-is-wired-into-no-build-rule
 - [p 45] [T] feature-t-nilpy-cpython-differential-fuzzer
 - [p 45] [A] refactor-a-one-program-driver-prologue-for-every-frontend
@@ -944,8 +943,8 @@ _none_
 
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
+- **2** — bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream
 - **2** — feature-web-track-w-bootstrap
-- **1** — bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching
 - **1** — decide-does-nilpy-random-seed-itself-at-import
