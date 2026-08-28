@@ -103,7 +103,23 @@ var
     That is what makes the .wat and the .wasm descriptions of one body rather
     than two emitters that have to be kept agreeing. asmtext_wasm.inc renders
     the module structure around these strings and never decodes an opcode. }
-  WFText  : AnsiString;
+  { The text was `WFText: AnsiString` appended to with `WFText := WFText + ...`
+    once per emitted instruction. That is O(n^2): each append allocates a fresh
+    string of the whole accumulated length and copies it, so a body of n
+    instructions costs sum(i) bytes. It reset per function, so the peak was set
+    by the LARGEST single body — which is why 3200 tiny bodies measured flat at
+    302 MB while 300 statements in ONE body reached 7180 MB, and why
+    compiler.pas (whose emitters are thousands of statements each) took tens of
+    GB and SIGSEGVed under an 8 GB cap. The native backends are 30 MB flat on
+    the same input; the whole gap was this line.
+
+    Now the same grow-by-doubling pool `WasmDataSeg` already uses below, with
+    the AnsiString materialised once per body in WasmBodyEnd. Capacity is
+    deliberately NOT released on reset: bodies are emitted back to back, so the
+    high-water mark is reached once and reused. }
+  WFT     : array of Byte;
+  WFTLen  : Integer;
+  WFTCap  : Integer;
   WFIndent: Integer;
 
   { ---- type section: function signatures ---- }
@@ -526,7 +542,7 @@ end;
 procedure WasmBodyBegin;
 begin
   WFBLen := 0;
-  WFText := '';
+  WFTLen := 0;
   WFIndent := 4;
   WFLocLen := 0;
   WFVarLen := 0;
@@ -540,7 +556,7 @@ end;
 procedure WasmBodyDiscard;
 begin
   WFBLen := 0;
-  WFText := '';
+  WFTLen := 0;
   WFIndent := 4;
   { The discarded bytes carried the relocations; keeping them would patch
     whatever `unreachable` leaves behind. }
@@ -599,9 +615,40 @@ begin
   WasmIndentStr := r;
 end;
 
+procedure WFTPut(const s: AnsiString);
+var i, need, n: Integer;
+begin
+  need := WFTLen + Length(s);
+  if need > WFTCap then
+  begin
+    if WFTCap = 0 then n := 4096 else n := WFTCap;
+    while n < need do n := n * 2;
+    SetLength(WFT, n);
+    WFTCap := n;
+  end;
+  for i := 1 to Length(s) do
+  begin
+    WFT[WFTLen] := Ord(s[i]);
+    Inc(WFTLen);
+  end;
+end;
+
 procedure WasmText(const t: AnsiString);
 begin
-  WFText := WFText + WasmIndentStr + t + LineEnding;
+  WFTPut(WasmIndentStr);
+  WFTPut(t);
+  WFTPut(LineEnding);
+end;
+
+{ The body's text as one string, built in a single pass at seal time. This is
+  the only place the pool becomes an AnsiString — the point of the pool is that
+  it is NOT one while it is being appended to. }
+function WFTStr: AnsiString;
+var r: AnsiString; i: Integer;
+begin
+  SetLength(r, WFTLen);
+  for i := 1 to WFTLen do r[i] := Chr(WFT[i - 1]);
+  WFTStr := r;
 end;
 
 function WasmIntStr(v: Int64): AnsiString;
@@ -887,7 +934,7 @@ end;
 procedure WasmBodyEnd(slot: Integer);
 var i: Integer;
 begin
-  WasmFuncText[slot] := WFText;
+  WasmFuncText[slot] := WFTStr;
   { Flush the per-body locals and names into the pools, recording THIS slot's
     offsets — so pool order follows body-COMPLETION order and a slot reserved
     earlier by a call is filled in correctly. }
