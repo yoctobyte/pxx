@@ -374,3 +374,35 @@ as a failure of ours.
 Found 2026-08-28 while writing `w2stress.pas` for the `-O3` W2 pass
 (`c93292fe4`). It **predates that work and is unrelated to it**: the pre-W2
 baseline compiler produces the identical `ovf = TRUE`, at all four `-O` levels.
+
+## A narrowed `GetHashCode: Integer; override` is accepted; FPC requires `PtrInt`
+
+*Found 2026-08-28 by frankB while driving rung 3; verified independently here.*
+
+```pascal
+type TFoo = class
+  function GetHashCode: Integer; override;   { fpc: rejected   pxx: accepted }
+end;
+```
+
+FPC: *There is no method in an ancestor class to be overridden:
+"GetHashCode:LongInt;"* — the ancestor returns `PtrInt`, and FPC matches the
+override on the full signature. pxx accepts the narrowed return type.
+
+**Not a defect**, by CLAUDE.md's *"we accept a form FPC rejects"* row: no program
+that compiles under FPC can observe it. And it is not the silent-wrong-behaviour
+escape either — checked rather than assumed, which is the part worth copying. A
+narrow override returning `-7` reads back as `-7` through a `TObject` variable,
+so the value is **sign-extended, not truncated**. A wrong value here would have
+made it a bug in Track P's lane at its own prio instead of a line in this file.
+
+`GetHashCode: PtrInt; override` — the parity form — compiles on both and gives
+identical results, as does the `Equals` form, under `{$mode objfpc}` and
+`{$mode delphi}` alike.
+
+**The `{$mode}` line is load-bearing in any probe of this.** With no `$mode` at
+all, FPC rejects the program for an unrelated reason (`class` is unavailable in
+the default mode), and that rejection looks exactly like FPC refusing the
+override. It cost one wrong conclusion here on 2026-08-28: the failure was read
+as evidence about the construct when it was evidence about the scaffolding.
+Confirm the failure is the one you are hunting before recording a limit from it.
