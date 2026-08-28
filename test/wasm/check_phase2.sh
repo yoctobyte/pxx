@@ -81,6 +81,10 @@ out.push(inst.exports.Poke(scratch, 1234));
 out.push(inst.exports.Poke(scratch, -7));
 inst.exports.AddTo(scratch, 100);
 out.push(inst.exports.GetScratch());
+out.push(inst.exports.ArrSum(3));
+out.push(inst.exports.ArrSum(0));
+out.push(inst.exports.GlobArr(5));
+out.push(inst.exports.RecField(7));
 if (inst.exports.sp.value !== sp0) {
   console.error(`FAIL shadow stack leaked: ${sp0} -> ${inst.exports.sp.value}`);
   process.exit(1);

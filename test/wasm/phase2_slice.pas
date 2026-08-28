@@ -36,11 +36,14 @@ program Phase2Slice;
 
 type
   PInt = ^Integer;
+  TRec = record a: Integer; b: Int64; end;
 
 var
   GCounter: Integer;
   GWide: Int64;
   Scratch: Integer;
+  GArr: array[0..9] of Integer;
+  GRec: TRec;
 
 function AddMul(a, b: Integer): Integer;
 begin
@@ -185,6 +188,42 @@ begin
   GetScratch := Scratch;
 end;
 
+{ Array indexing is address arithmetic — base + (i - low) * stride, with the
+  low bound and the stride already resolved by the frontend — so a STATIC array
+  needs no heap and belongs here rather than in Phase 6. A local array
+  exercises the frame path, a global one the BSS path, and the non-zero low
+  bound is the part an off-by-one gets wrong silently: with low = 1 and stride
+  4, forgetting the subtraction reads four bytes past the end of the array and
+  four bytes into whatever follows it. }
+function ArrSum(n: Integer): Integer;
+var a: array[1..8] of Integer;
+    i, s: Integer;
+begin
+  for i := 1 to 8 do a[i] := i * n;
+  s := 0;
+  for i := 1 to 8 do s := s + a[i];
+  ArrSum := s;
+end;
+
+function GlobArr(n: Integer): Integer;
+var i, s: Integer;
+begin
+  for i := 0 to 9 do GArr[i] := i + n;
+  s := 0;
+  for i := 0 to 9 do s := s + GArr[i] * 2;
+  GlobArr := s;
+end;
+
+{ A record field at a non-zero offset, with the two fields at different widths
+  so a wrong offset or a wrong load width shows up as a wrong number rather
+  than as a validation failure. }
+function RecField(n: Integer): Int64;
+begin
+  GRec.a := n;
+  GRec.b := Int64(n) * 1000000000;
+  RecField := GRec.b + GRec.a;
+end;
+
 {$ifndef WASM_NOMAIN}
 begin
   writeln(AddMul(3, 4));
@@ -223,6 +262,10 @@ begin
   writeln(Poke(@Scratch, -7));
   AddTo(Scratch, 100);
   writeln(GetScratch);
+  writeln(ArrSum(3));
+  writeln(ArrSum(0));
+  writeln(GlobArr(5));
+  writeln(RecField(7));
 end.
 {$else}
 begin

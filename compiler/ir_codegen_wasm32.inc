@@ -540,17 +540,72 @@ procedure WasmEmitLea(node: Integer);
 var si: Integer;
 begin
   si := IRA[node];
-  if Syms[si].IsArray then
+  { A STATIC array's address is just its slot address — the elements are in the
+    frame or in BSS. The shapes refused here are the ones whose slot holds a
+    HEAP HANDLE rather than the data: a dynamic array (ArrLen = -1) and an
+    open-array value parameter, where the caller passed the handle. Loading the
+    handle is one more instruction and is not the hard part; what it points at
+    is the heap, which is Phase 6. Refusing every array — which is what this
+    did first — also refused `a[i]` on a plain `array[0..9] of Integer`, where
+    nothing is on the heap at all. }
+  if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
   begin
-    WasmUnsupported('address of array ' + Syms[si].Name);
+    WasmUnsupported('dynamic array ' + Syms[si].Name + ' — needs the heap, Phase 6');
     Exit;
   end;
-  if Syms[si].TypeKind = tyAnsiString then
+  if (Syms[si].Kind = skParam) and Syms[si].IsArray and not Syms[si].IsRef then
   begin
-    WasmUnsupported('address of managed string ' + Syms[si].Name);
+    WasmUnsupported('open-array parameter ' + Syms[si].Name
+                    + ' — the slot holds a heap handle, Phase 6');
+    Exit;
+  end;
+  if (Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray then
+  begin
+    WasmUnsupported('address of managed string ' + Syms[si].Name
+                    + ' — needs the heap, Phase 6');
     Exit;
   end;
   WasmLValueAddr(si);
+end;
+
+{ `a[i]` — base + (i - low) * elemSize, with the low bound in IRC and the
+  element stride in IRIVal, both already resolved by the frontend. Same
+  contract riscv32 reads (ir_codegen_riscv32.inc:1580); the arithmetic is
+  identical and only the spilling is gone, because the base can simply sit on
+  the operand stack while the index is computed.
+
+  The managed-string shapes are refused: indexing a string in WRITE position is
+  a copy-on-write call (PXXStrUnique), not address arithmetic, and getting that
+  wrong stores a character into the handle slot rather than into the string —
+  a bug riscv32 shipped and had to fix twice. It needs the heap regardless. }
+procedure WasmEmitIndex(node: Integer);
+var left, lo, elemSize: Integer;
+begin
+  left := IRA[node];
+  lo := IRC[node];
+  elemSize := Integer(IRIVal[node]);
+  if ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString)
+      and not Syms[IRA[left]].IsArray)
+     or (((IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX))
+         and (IRTk[left] = Ord(tyAnsiString)) and (elemSize = 1)) then
+  begin
+    WasmUnsupported('indexing a managed string — needs the heap, Phase 6');
+    Exit;
+  end;
+  WasmEmitValueAs(left, WT_I32, 'array base');
+  WasmEmitValueAs(IRB[node], WT_I32, 'array index');
+  if WasmBodyBroken then Exit;
+  if lo <> 0 then
+  begin
+    WasmI32Const(lo);
+    WasmOp($6B, 'i32.sub');
+  end;
+  if elemSize <> 1 then
+  begin
+    WasmI32Const(elemSize);
+    WasmOp($6C, 'i32.mul');
+  end;
+  WasmOp($6A, 'i32.add');
 end;
 
 { A field's address: the base address plus a constant byte offset. IRIVal
@@ -698,7 +753,8 @@ begin
   case IRKind[node] of
     { A load's type is the SYMBOL's — the one place it is certainly right. }
     IR_LOAD_SYM      : WasmNodeResultType := Syms[IRA[node]].TypeKind;
-    IR_LEA, IR_FIELD : WasmNodeResultType := tyPointer;
+    IR_LEA, IR_FIELD,
+    IR_INDEX         : WasmNodeResultType := tyPointer;
     { A call's type is the CALLEE's declared result, which is the same place
       the signature came from. IRTk would usually agree and has no reason to be
       the authority. }
@@ -855,6 +911,7 @@ begin
     IR_BINOP     : WasmEmitBinop(node);
     IR_CALL      : WasmEmitCall(node, False);
     IR_LEA       : WasmEmitLea(node);
+    IR_INDEX     : WasmEmitIndex(node);
     IR_FIELD     : WasmEmitField(node);
     IR_LOAD_MEM  : WasmEmitLoadMem(node);
     IR_NEG       : WasmEmitUnary(node, True);
