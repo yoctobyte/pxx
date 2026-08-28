@@ -13257,3 +13257,66 @@ session limit. That is three days old and it is the only thing gating a third la
 owner's to re-test, they know pxx-a5 is held on it, and they are weighing a subscription change
 right now, so it is on their desk already. **Not re-asking** — but if it turns out the ceiling
 has moved, Track T's p60 is the immediate beneficiary.
+
+### RULED: frankwasm takes the memory bug, TRIAGE FIRST — not the refusal tail
+
+frankwasm laid out its own position honestly and asked me to weigh it. Phase 9's **anchor**
+(pascal26 under a WASI host) is blocked on
+`bug-wasm-compiling-compiler-pas-for-wasm32-needs-tens-of-gb` [A p50], because reaching it
+requires exactly the compile that takes tens of GB. What remains that it *can* do is the
+refusal-class tail — `IR_DEFAULT_MEM` (74), open-array params (30), builtin -50 (15).
+
+**Ruled against the tail, on frankwasm's own argument, which is correct:** the coverage
+instrument *is* that same compile, so the tail would be implemented and reported "done" **with
+no number**, on a phase whose goal is unreachable. That is exactly what this whole session has
+been correcting, and doing it would mean re-measuring all of it later anyway.
+
+**Ruled for the memory bug, and the deciding reason is that it gates the INSTRUMENT, not just
+the goal.** Fix it and measurability returns for everything else in the lane. It is also the
+natural owner's ticket — frankwasm filed it with four controls and eliminated the obvious
+suspect, its own `in` work.
+
+**Its objection — untriaged, therefore unsizeable, therefore it could eat the slot — is the
+argument for triaging, not for avoiding it.** *Do not choose between two options when the
+deciding fact is one measurement away.* So: **triage to a size, report, then decide.** It named
+two plausible mechanisms (encoder holding all bodies; O(n²) over patch sites) and measured
+neither; separating those is bounded work, unlike the fix.
+
+**Coordination flag frankwasm could not have raised, and it decides whether it may proceed at
+all.** Both candidate mechanisms live in the **encoder** — and `compiler/wasmenc.inc` and
+`compiler/ir_codegen_wasm32.inc` **do not exist on master**; they are branch-local, exactly as
+the merge ledger says. So a fix there is frankwasm's own ground and collides with nobody.
+**But if triage lands the root cause in shared A files — `ir.inc` (689 KB), `symtab.inc`,
+`defs.inc` — it must STOP and tell me, because frankA holds the A/P slot.** That is the one
+outcome that turns this from lane-internal work into a coordination problem, and it is
+invisible until triage names the mechanism.
+
+**Slot consequence, stated plainly:** this keeps frankwasm in one of the two worker slots, so
+pxx-a5 continues to hold with Track T's p60 unclaimed. I judge a lane fixing its own blocking
+instrument to be worth more than a lane doing unmeasurable work — but that is the comparison I
+am actually making, and if triage says the memory bug is large, the slot question reopens
+immediately rather than by default.
+
+### Two self-corrections from frankwasm, and one is a new instrument caveat
+
+**The audit count it reported to me as measured was wrong.** It recorded the four diff-only
+checks as having "exactly one assertion each". Each **also** prints
+`ok  .wasm and .wat describe the same module` — emitted by the shared `wat_oracle.sh` helper,
+not by the check file. So:
+
+> **A GREP OF THE FILE MISSES IT, AND READING THE FILE AGREES WITH THE GREP.** Two verification
+> methods that share a blind spot corroborate each other and produce a confident wrong count.
+
+That is face thirteen aimed at *verification methods* rather than at test arms — the shared
+upstream is the helper, and the "two independent checks" were not independent. The conclusion
+survived (that line compares the encoder's two output paths against each other, pxx against
+itself, shared even more tightly than the native diff) but the count did not, and it was
+reported to me as measured. Caught only because the annotated check printed both lines
+together.
+
+**And it caught itself generalising a single instance.** It attributed a run of killed
+background tasks to memory pressure — true for that window, its own compile had taken 58 of 60
+GB — then another task was killed at **52 GB free, load 12.7**, so memory does not explain the
+pattern. One confirmed instance promoted to a rule. It found it by running `free -g` before
+theorising the second time, which is the habit it had just been told to adopt, applied to
+itself within the hour.
