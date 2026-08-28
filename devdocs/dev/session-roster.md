@@ -14787,3 +14787,113 @@ Filed as **T tooling, not a cleanup pass**, on the right reasoning: `progress.sh
 resolves dead *commit* citations and never resolves `[[...]]`, so the gap is in the checker — and a
 checker that cannot express the mistake beats a one-time sweep. It fixed its own dangling link in
 the same push, unprompted: correcting across copies.
+
+## 2026-08-28 late — a refutation, a resolve, and a rule I buried
+
+### The `-O3` promotion block was mine, and its premise was false
+
+pxx-a5 resolved `chore-t-nothing-in-the-matrix-runs-o3-so-no-failures-is-unfalsifiable`
+**by refutation** (`c8ec8a1b3`) — it checked the premise against the archive before
+building anything, and every clause of it is contradicted. `tools/optdiff.sh` has
+run every standalone test at `-O2` and `-O3` against an `-O0` baseline since its
+creation commit **`597e4ab05`, 2026-07-11**; 701 runs, 30 non-GREEN, four `-O3`
+findings in `done/`.
+
+I verified it from a path pxx-a5 did not choose — the file's **history** rather
+than its current contents, because the one way its report could have been
+self-confirming is if pxx-a5 had *added* `-O3` today and then described it as
+pre-existing. It did not: the July 11 version already reads `-O0 / -O2 / -O3`.
+And `bug-o3-inline-breaks-frame-walk-intrinsics` names its finder in its own first
+line — *"Track T NEW-RED (`optdiff#shard0/6`, sha 69f7bda93ac4)"*. Block lifted in
+`feature-opt-o3-register-pressure` (`783648d53`), replaced by a citation
+requirement: each per-pass promotion cites the opt run that swept a sha containing
+that pass. Coverage is 30%, so that gap is ordinary rather than exotic — and item 2
+of pxx-a5's work is what makes it citable at all.
+
+**How I got it wrong is the part to keep.** I surveyed the four gate tiers, found
+no `-O3` job, and concluded nothing runs `-O3`. Every observation true; the survey
+was blind to exactly one tier, `opt`, **disjoint from all four**. That is this
+repo's own rule turned on me — *an existence claim survives one grep; a
+non-existence claim does not* — and I never asked what the survey could not see.
+Plainest possible generator instance: *"no `-O3` failures in the reports I read"*
+and *"no `-O3` runs"* gave the same reading, and nothing in a report named its own
+scope. **That is what pxx-a5's item 2 fixes**, which is why the narrow finding
+under my wrong statement was still worth its p60. A wrong reason for a correct
+priority.
+
+The refutation does **not** buy what it might look like it buys: optdiff is a
+correctness instrument. It proves `-O3` is not *wrong*; it cannot prove a pass
+**fires**. Recorded in the ticket, because the promotion evidence will be read
+later by someone who did not watch this.
+
+### frankB — DNS resolved, crtl parked, and it corrected me
+
+My hypothesis was **right about the shape, wrong about the row**, and frankB
+checked which rather than accepting it. The `.invalid` row I named is behind
+`{$ifdef PXX_DNS_LIBC}` and the red build was the default one — but the default
+build reached the wire by a *different* row (`DnsResolveHost6('localhost')` missing
+`/etc/hosts`, since Debian spells the v6 loopback `ip6-localhost`, asserting rc=0
+and passing only because the network answered). Already fixed. The `.invalid` row
+had its own path to red: `dns_libc.pas:132-133` maps `EAI_AGAIN`/`EAI_FAIL` to
+rcode 2 while the row asserts 3, so a SERVFAILing resolver reds it with a plausible
+number and no cause.
+
+frankB's framing is better than mine and belongs here: *"one row passed only
+because the network answered, the other could fail only because it did not — a row
+whose verdict depends on the environment can only gate the environment."* Fixed by
+changing the **name**, not the assertion (`invalid..name` has an empty label, so
+getaddrinfo rejects it before nsswitch), negative-controlled, measured on the
+binaries rather than a getaddrinfo probe. The intermittent is still undiagnosed and
+the ticket says so. `ccf4a3e3b`, `ea3a7c43e`, `b2d7eeece`.
+
+It **declined to close** `feature-crtl-implement-libc-assumptions` despite its own
+live census coming back clean (358 declared, all defined, no libc imports), because
+the census gates *declared-but-undefined* and the class that has cost most is *not
+declared at all* — `environ` compiled to a silent NULL because the name was never
+in the headers to enumerate, and **no census over `include/**` can see an absence.**
+Parked in `rainy-day/` rather than `done/` or `prio: 10`. Correct on both counts,
+and it is the same instrument-scope failure as my `-O3` one, arrived at
+independently within the hour.
+
+### The rule I buried, which frankB caught
+
+I wrote the dispatch rule into `feature-random-library` — a **live ticket that will
+close and take it with it.** That is the burial shape I corrected frankB on twice
+today, applied to myself, and it is the fourth instance of *the rule you are
+enforcing is the one you will not apply to yourself.* It lives here now:
+
+> **A ranked queue says a ticket is UNBLOCKED, not that it has WORK LEFT IN IT.**
+> Two different claims; the board only checks the first, so "ready" and "has work"
+> are indistinguishable in its output. Read the ticket before dispatching onto it.
+
+It is the direct counterweight to *an idle worker is not a neutral state* — that
+rule pushes toward dispatch, this one prices a bad dispatch. Both are needed; the
+first one alone is what sent frankB to two hollow tickets.
+
+frankB also filed the tooling gap behind it: `chore-t-a-standing-collector-cannot-say-so-to-the-ranker`
+[T p30], recommending a `standing: true` frontmatter field. Worth noting the two
+tickets got there by **different mechanisms** — `feature-random-library` was a
+missing edge, a data error the board already models and I fixed; the crtl one is
+not an error at all, and only that half needs tooling.
+
+### New, unclaimed
+
+- `task-o-hand-w2stress-to-the-corpus-so-optdiff-sweeps-it` [O p40] — pxx-a5's,
+  correctly handed to Track O rather than placed by T. Once in the corpus, optdiff
+  sweeps it at every level forever with no new machinery.
+- `bug-n-a-nilpy-test-writes-a-fixed-tmp-path-so-concurrent-runs-race` [N p45] —
+  a `.npy` test opens/removes a fixed `/tmp` path chosen at **runtime**, so the
+  Makefile sweep cannot reach it and testmgr cannot privatize it. Several clones
+  run concurrently on this box, so runs race over one file and it surfaces as an
+  unrelated NilPy assertion. **`tools-devtest` is red on master for this alone**
+  (88 green, 1 red). Not re-asking about N staffing — that is the owner's reserved
+  call — but a known red gate stops being read, and this one is a filename.
+
+### pxx-a5's self-caveat, worth more than it looks
+
+Its first archive read reported opt's last run as 2026-07-31; the NDJSON archive is
+**not date-ordered across hosts**, so a tail of the concatenation is not a
+chronological tail. It caught this before anything was written into the ticket. Had
+it not, the correction to me would have arrived carrying a stale date that made my
+position look *more* defensible than it was — and I would have had no reason to
+question a number that agreed with me.
