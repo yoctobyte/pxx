@@ -7,11 +7,45 @@ prio: 75
 - **Type:** feature — umbrella (frontend stress corpus)
 - **Track:** P (Pascal frontend; shares `lexer.inc`/`parser.inc` with A, so bugs
   found land as Track P — A-gated — or Track A core)
-- **Status:** working
+- **Status:** unfinished — parked 2026-08-28, see PARKED below
   neglected by comparison — user call).
 - **Owner:** frankA
 
 ---
+
+## PARKED 2026-08-28 (frankA) — what the next holder needs
+
+Moved out of `working/` because `working/` is a **live lock**, and a lock held by
+a parked session reads as "someone is on it" while nothing is happening.
+Everything is pushed; HEAD at park was `bc0100404`. Nothing is reverted or
+half-applied.
+
+**Two open items, both Track P, both unclaimed:**
+
+1. **Wall 6, Delphi half — an ORDERING defect**, in
+   [[bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body]]
+   (`unfinished/`). `GenericMethodCount=0` when the Delphi specialization runs.
+   The enabling fact is banked there: `LexAll` fills `Tokens[]` before the parser
+   starts, so the method bodies are **unindexed, not unavailable** — a bounding
+   job, not a reordering one. **Read the "do not weaken the prerequisite scan"
+   note before touching it**; the obvious sweep over-approximates on `T`/`U` and
+   would produce a silently wrong specialization instead of an absent one.
+2. **[[bug-p-two-different-nested-specializations-of-one-template-collide]]**
+   (p65, new). Newly reachable, not a regression. Its "where to start" is
+   explicitly a hypothesis from the error's shape, **not** a measurement.
+
+Wall 7 is a third, independent, and smaller: [[bug-p-a-resourcestring-is-not-addressable]]
+(p55) — it moves the corpus without touching either of the above.
+
+**A correction worth keeping, because it was wrong in a way that looked right:**
+wall 7 was first recorded here as Track B, "the constant exists at
+`lib/rtl/rtlconsts.pas:13`, so it is a visibility/export gap". The constant does
+exist and it *is* exported — and neither fact is the defect. The corpus writes
+`CreateRes(@SArgumentOutOfRange)`, which takes an **address**, and a plain
+`const` has none. Worse, our copy is not even the symbol in play: the corpus
+declares its own under a `resourcestring` section in `generics.strings.pas:24`.
+*"The symbol is there"* and *"its address can be taken"* both fail with the
+symbol present, and only the second one is the bug.
 
 ## LIVE STATUS — rung 6 (`rtl-generics`). THE ONE CANONICAL TABLE.
 
@@ -34,7 +68,7 @@ corpus (no stubs).
 | 4 | SysUtils: `EArgumentOutOfRangeException`, `CreateRes`, `Error`/`TRuntimeError` | B | **DONE** — all three declared in `lib/rtl/sysutils.pas` (191, 154/155, 208/268); verified by compiling a `raise EArgumentOutOfRangeException` program, not by grep |
 | 5 | method pointers | P | **DONE** — defect A `9ab19fb21`, defect B `6d2a841a1` (parse) + `2c155cce2` (lowering). All 7 shapes match FPC |
 | 6 | generic class specialized by the ENCLOSING generic's type parameter | P | **partly done.** objfpc works (`c3cd377d5`); `:3250` no longer fails. **Delphi mode still blocked** — see below |
-| 7 | `SArgumentOutOfRange` not visible to the corpus | B | open — it EXISTS at `lib/rtl/rtlconsts.pas:13`, so this is visibility/export, not a missing constant. 5 sites |
+| 7 | `@SArgumentOutOfRange` — a `resourcestring` is not addressable | **P** | open — **not a new row's worth**: it is [[bug-p-a-resourcestring-is-not-addressable]] (p55, backlog). 5 corpus sites |
 
 **Rung 6 is now behind wall 6 alone.** Wall 5 fell on 2026-08-28 and the compile
 advanced roughly 900 lines, from `generics.defaults.pas:2381` to `:3250`, where
