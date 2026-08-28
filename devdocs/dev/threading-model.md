@@ -193,3 +193,41 @@ native-int reduction default in `feature-nilpy-parallel-for-in`.
   value under `--threadsafe`. A parallel loop reading one shared list still
   hammers one refcount line from every core. Before promising scaling to anyone,
   benchmark it.
+
+## 8. wasm32 has NO atomics, and its correctness rests on that
+
+Added 2026-08-28 by the wasm32 lane, and placed here rather than only at the
+lowering site because the person who adds threads to this target will be
+reading a threading document and has no reason to open an atomics backend.
+
+`__pxxatomic_xchg/cas/add` on wasm32 lower to a plain load, a plain modify and
+a plain store (`WasmEmitAtomic` in `compiler/ir_codegen_wasm32.inc` — on branch
+`wasm` until the target merges; this section is on `master` ahead of it because
+a precondition on somebody else's future change is worth nothing where they
+cannot see it). There is no
+lock prefix, no AMO, no interrupt mask — and nothing is missing, because **a
+wasm MVP module has exactly one thread of execution.** No other core, no
+interrupt, no second agent can observe the middle of the sequence, so it is
+indivisible by construction. That is a stronger premise than riscv32's
+single-core-with-interrupts-masked argument, and it is the same KIND of
+argument: correct because of the execution model, not because of the
+instruction.
+
+**It stops being true the moment a wasm module gets threads.** The threads
+proposal gives a module a `shared` memory and real concurrent agents, and every
+one of those sequences becomes a race — silently, because the code that would
+then be wrong is code that already exists and already works. riscv32 can refuse
+by asking a capability table (`SocCoreCount(TargetSoc) > 1`); there is nothing
+equivalent to ask on wasm, because whether a module is threaded is a
+module-level decision this compiler does not yet make.
+
+So there is no guard, only a precondition: **whoever adds shared memory or the
+threads proposal to the wasm32 target must replace `WasmEmitAtomic` in the same
+change**, with `memory.atomic.*` from the threads proposal, before anything can
+create a second agent. Not afterwards, and not as a follow-up ticket — the
+window between the two is a program that compiles, runs, and is wrong only
+sometimes.
+
+This is also why `--threadsafe` being x86-64 only (section 7) is not the whole
+of the question. wasm32 is the second target whose atomics are correct for a
+reason that a future feature would quietly invalidate.
