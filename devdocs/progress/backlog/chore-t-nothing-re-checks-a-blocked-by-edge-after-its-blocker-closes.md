@@ -61,3 +61,56 @@ a date on it**, applied to dependency edges: a `blocked-by` was true when writte
 re-dates it. And the same shape as the coordinator's own halt the same day
 (`session-roster.md`, 2026-08-28): **a parked flag that nothing can clear is a check that
 cannot fail.** Three instances in one day of *state recorded once and never re-derived*.
+
+## The query catches HALF the family — three prose instances found later the same day
+
+The fix above is right and should ship. But it reads **frontmatter**, and by the
+end of 2026-08-28 three more instances had turned up that no frontmatter query can
+see. Whoever implements this should know that a green `check` will not mean the
+family is handled.
+
+1. **A stall note that outlived its blocker.** `feature-pascal-corpus-oop` headed
+   Track P's queue at **p75** on a 2026-08-20 note whose three clauses had each
+   been false for a week: the decision it named was answered 2026-08-21 and sits
+   in `decided/`; the ticket it named records itself unblocked 2026-08-22; the
+   rung's remaining blocker was in `done/`. Its **frontmatter was clean** — this
+   was a paragraph. Corrected in `cc36aeb5a`. Worst shape of it: an umbrella that
+   outranks every rung it contains and then tells the reader it has no work.
+
+2. **Prose that INVENTED an edge that never existed.** `feature-pascal-corpus-generics`
+   said the edge to `feature-pascal-builtin-tobject-class` was *"recorded as a
+   `blocked-by:` edge"*. It never was — frontmatter carried only the typinfo one.
+   Found by frankA, `72a21f264`.
+
+   > **Prose can invent an edge as well as outlive one, and the inventing case is
+   > worse: it makes the ticket look MORE carefully maintained.** A body asserting
+   > that an edge exists reads exactly like a body describing one that does.
+
+3. **A limit that outlived its own refutation, sixty lines above the refutation, in
+   the same file.** The same ticket carried *"FPC rejected my override probe, so
+   there is no oracle"* — withdrawn later that day (the probe lacked `{$mode}`;
+   FPC accepts the override under `{$mode objfpc}{$H+}`), with the correction
+   written **below** it. A reader stopping at the first section would act on a
+   dead limit. Marked in place rather than rewritten, `a8745196d`.
+
+**Why the prose half is the expensive half.** A stale `blocked-by` is *silent* —
+it hides a ticket. Stale prose is *believed* — it reads as prior investigation and
+pre-empts the check that would have caught it. Same asymmetry frankA named the
+same night: **a false limit is quieter than a false fix and survives longer,
+because a wrong fix gets re-tested and a caveat gets believed.**
+
+**What to do about it — not a second query.** There is no reliable scan for "a
+paragraph that is no longer true", and building a heuristic that greps bodies for
+slug mentions would produce mostly noise and one more instrument whose aperture is
+invisible. Two cheaper things:
+
+- **A convention, enforceable by review rather than by tooling:** a body that
+  states a blocking relationship must ALSO carry the frontmatter edge, so the
+  query above covers it. Instance 2 is exactly the case where prose and
+  frontmatter disagreed and only the prose was read.
+- **When you close a blocker, the same commit marks the dependents' prose** —
+  because *resolving a blocker is an event on the blocker, and the note lives on
+  the dependent.* That is why nothing re-reads it: no one is standing there.
+
+Six instances in one day across four sessions, so this is a rate, not a run of bad
+luck. Frontmatter is where it is fixable; prose is where it is expensive.
