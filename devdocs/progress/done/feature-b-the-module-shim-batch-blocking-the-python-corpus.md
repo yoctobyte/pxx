@@ -5,7 +5,7 @@ type: feature
 owner: frank3-fc
 blocked-by: [decide-xml-etree-thin-tree-model-or-a-real-xml-library]
 summary: "RE-MEASURED on pinned v352: the batch this ticket was filed to attack no longer exists — six, warnings, codecs, colorsys, copy, bisect, xml.sax.*, urllib.parse, six.moves, urllib.request and xml.dom all shipped during 2026-08-18 and are gated by make lib-test. Eight missing-module files remain and none is a thin stdlib shim: xml.etree (4, now a Track U decision), genshi_core (2) and lxml (1) are third-party packages, weakref (1) is a runtime facility. The language walls are 32, with yield alone at 18 — Track N is the bottleneck for this ladder again."
-status: unfinished
+status: done
 ---
 
 # The module-shim batch blocking the Python corpus
@@ -241,3 +241,61 @@ Close or re-scope this ticket rather than leave it at the head of B's queue: as
 written it promises a batch that no longer exists, and its re-measure step has
 now been performed twice with the same answer. The `blocked-by` edge on the
 xml.etree decision is also stale — that decision is made and its work is done.
+
+## RESOLVED 2026-08-28 (frankB) — Track B scope complete. The residue is named and routed below, not left implied.
+
+Resolved on the coordinator's call after the verification above. `done/` rather
+than `rejected/`: the batch this ticket was filed to attack **was delivered**,
+across the tickets named in the 2026-08-18 re-measure, and every row of it
+resolves on v389. What is left was never in B's scope. **The re-measure step
+this ticket mandates as step one has now been run twice, ten days apart, with
+the same answer** — which is the disposition argument.
+
+Leaving it open was an active harm, not untidiness: it sat at the head of B's
+queue describing work finished ten days earlier, with a `blocked-by` edge on a
+decision that has since been made and shipped, so the ranker was ranking it
+against a blocker that no longer exists. It cost one agent a re-measure. It
+would have cost the next one the same.
+
+### The residue, measured — and why it is one line here rather than a ticket
+
+`weakref` is the only remaining row that would be `lib/` and therefore Track B.
+Measured rather than estimated:
+
+- **3 files total** — `html5lib/treebuilders/dom.py`, and 2 in reportlab.
+- **3 members between them**: `weakref.ref` (2 uses), `weakref.proxy`,
+  `weakref.WeakKeyDictionary`.
+
+That is too small to earn its own ticket, so it is recorded here instead of
+filed as a p20 nobody takes. **But it should not be shimmed casually, and the
+reason is worth more than the row is**: a weak reference that is not actually
+weak is a **lie about lifetime**, the same category of dishonesty that kept
+`SetTextBuf` out of `textfile.pas` today. A `mimic_weakref` holding a strong
+reference would work — `ref()` returns the object, the corpus files compile and
+run — while quietly changing two observable things: `ref() is None` becomes
+unreachable, so the collected branch is dead code, and a `WeakKeyDictionary`
+never evicts, so it grows without bound. Both are silent.
+
+So if `weakref` is ever wanted, it is the shape that needs a Track U `decide-*`
+first — exactly like `decide-settextbuf-needs-buffered-text-io-or-stays-missing`
+— and not a shim job. Filing that decision now would be premature: nothing
+ranked is blocked on it, and it is 3 files.
+
+### Where the real shim work went
+
+Not gone — aimed elsewhere. See the verification section above: the batch is
+exhausted for **this ladder's three corpora only**, which are one family of
+self-contained web parsers with almost no stdlib footprint. `functools` still
+does not resolve on v389 and was reportlab's #2 wall at 27 files; `pickle` was
+18. The measurement is in
+`feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise`
+(`b125395e2`) and the ranking question it raises is
+`decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample` [U, p55].
+
+**Note for whoever picks that thread up:** `feature-nilpy-stdlib-coverage-gaps-measured`
+[p72] is `track: N`, not B — so the obvious next step lands in a lane the owner
+has deprioritized and reserved the call on. That is why the finding went to
+Track U rather than into a re-ranking.
+
+## Log
+- 2026-08-28 — resolved, commit PENDING-COMMIT.
