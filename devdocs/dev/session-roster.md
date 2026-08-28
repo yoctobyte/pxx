@@ -14251,3 +14251,67 @@ speedup when amplified — **fourth false reading from that box**, caught by the
 a real +1-2% on the neutral compile bench was **explained rather than rounded away** (`and`
 short-circuits — verified, not assumed — so at default `-O` the `OptLevel>=3` predicate is never
 reached; it is code layout).
+
+### Wall 6 down — rung 6 is behind exactly one pre-existing defect
+
+`35f485537`, `gate.sh quick` GREEN, all in `pasparser_generic.inc`. **It stayed in P** — no
+`lexer.inc`, no `defs.inc`, re-checked rather than assumed to repeat, escape never fired.
+
+**The ticket's one open question was already answered in the code.** It recorded *"`GenMethImplSOff`
+gives the start; the end is the part still to work out."* The end was never open —
+`BufferGenericMethod` already computed it (scan to `begin`, match depth) **inline**, where it read
+as part of buffering rather than as a reusable fact about method extents. Factored out; one body,
+three callers.
+
+> **Before designing the missing piece, look for it already existing inline and unnamed.** What
+> made this look hard was a fact wearing the wrong clothes.
+
+**The hazard was made unrepresentable, not merely avoided.** Ranges come from header offsets the
+rewrite *recorded*, and a range is scanned only when it is a recorded header of *this* template —
+attribution by construction. Better than bounding the raw `Tokens[]` sweep we both flagged: **a
+documented trap is not a guard; a construction that cannot express the mistake is.**
+
+**`:3231` → `:994` reads like a regression and is not** — the number moves *earlier* in the file
+because a prerequisite that was previously never discovered is now discovered and cannot be
+ordered. frankA rebuilt this tree with the change stashed and got the identical
+`circular generic specialization` from the objfpc repro: pre-existing. Its change made Delphi
+reach the wall objfpc was already standing at. **Second time today it refused a baseline that
+would have flattered it** (the first was declining `pinned`).
+
+Filed `bug-p-mutually-referencing-generics-are-rejected-as-circular` [P p60]: `TDel<T> = class(TEq<T>)`
+is a **declaration-time** dependency while `TEq<T>`'s body constructing a `TDel<T>` is
+**materialisation-time**; we treat both as blocking and manufacture a cycle out of a program that
+has none. FPC compiles the 22-line repro and prints 7. The detector itself is right and stays —
+`test_generic_cycle_fail` asserts a genuine cycle and must keep failing.
+
+**Ruled: the p60 is lane work, NOT Track U.** There is no fork — real Pascal source fails to
+compile, which the compat table puts in the owning lane at its own prio. Escalating it would
+spend the owner's scarcest resource on a question the code already answers. Gave frankA one
+**unmeasured hypothesis, labelled as mine**: the two edge kinds arrive from two *different scans*,
+so the distinction may already be available at the point the edge is recorded — tag at insertion
+rather than recover the kind later. Same shape as the fact-wearing-wrong-clothes it just found.
+Plus two invariants: keep both scans (dropping the method-body scan reopens the ticket just
+closed — rtl-generics' comparer idiom lives in a class-constructor body and nowhere else), and
+confirm `test_generic_cycle_fail` FAILS before starting, so a green run afterwards means
+something.
+
+### The mandatory loop has a blind spot it cannot close — evidence attached to the open U decision
+
+**`make compiler/pascal26` was GREEN while the FPC seed build was RED.** `GenericMethodBodyEnd`
+is defined below its caller: pxx resolves it either way, FPC does not. The **optional**
+`gate.sh quick` caught it.
+
+> **The fixedpoint only exercises pxx compiling pxx.** A construct pxx accepts and FPC rejects is
+> invisible to it **by construction**, not by oversight — the instrument does not read that axis
+> at all. No amount of care inside the per-fix loop surfaces it.
+
+Second time in one day the optional gate caught something the mandatory one structurally could
+not. **Attached as a worked example to `decide-should-the-fpc-seed-canary-be-in-the-mandatory-loop`
+[U p55]** (`4bdd3a017`), which had been arguing in the abstract — including what it does *not*
+settle: the cost of lengthening the one step deliberately kept at ~12s on every fix's critical
+path, when the loop's whole design offloads breadth to Track T. **Still the owner's** — it changes
+CLAUDE.md's own text. I added evidence, not a verdict.
+
+`generics.collections.pas` still dies at `defaults:994` without reaching a line of its own, so
+**one defect now gates the whole rung in both units** — worth more than wall 6 was, by this
+morning's own argument.
