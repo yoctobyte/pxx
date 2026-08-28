@@ -14,9 +14,47 @@
   order, the reverse of how POSIX reference pages commonly list them, and the
   single easiest field pair to get backwards.
 
-  NO NETWORK: every lookup is `localhost`. SKIPS its libc half where glibc or
-  the loader is absent — that is a supported configuration, covered by the
-  facade falling back to wire. }
+  NETWORK — measured with strace on THESE binaries, not on a proxy. An earlier
+  version of this comment said "NO NETWORK: every lookup is `localhost`", and
+  a first attempt to correct it straced glibc's getaddrinfo, which was a clean
+  and irrelevant answer: the default build does not use glibc at all, it uses
+  our own wire resolver. On the real binaries the default build made 6 contacts
+  to port 53 and the libc build 12. After the fix below: 0 and 6, the remaining
+  six being the deliberate `.invalid` row.
+
+  The cause is one row, and it is now fixed. `/etc/hosts` on Debian/Ubuntu maps
+  `127.0.0.1 localhost` but spells the v6 loopback `ip6-localhost`, so there is
+  no `::1 localhost` line. `DnsResolveHost('localhost')` therefore hits files
+  and stays local, while `DnsResolveHost6('localhost')` MISSED files, fell
+  through to the wire, and queried `localhost.home`, `localhost.<search>` and
+  `localhost.` against the configured nameserver — and the row then asserted
+  rc = 0, so it passed only because the network answered.
+
+  That is the same defect as the header lie one level in: a row that works on
+  this box for a reason unrelated to what it claims to check. The v6 row now
+  resolves the LITERAL `::1`, which short-circuits without network (measured:
+  zero contacts to port 53). The v4 row keeps `localhost`, which is a files hit
+  on any box with the conventional /etc/hosts line.
+
+  Underneath this sits a real resolver defect, filed separately: our resolver
+  has no `localhost` special-case at all, so it sends the name to the wire and
+  uses whatever comes back. RFC 6761 section 6.3 says name resolution APIs
+  SHOULD recognise localhost names as special and SHOULD always return the
+  loopback address. glibc complies (zero port-53 contacts, answers
+  ::ffff:127.0.0.1); we do not. See bug-b-resolver-sends-localhost-to-the-wire.
+  Note that `.invalid` carries a DIFFERENT prescription (section 6.4: immediate
+  negative responses), so glibc's willingness to query `.invalid` says nothing
+  about `localhost` — an inference worth not repeating.
+
+  The libc half's NXDOMAIN row still resolves `nonexistent-zzz-qqq.invalid`
+  through getaddrinfo and that DOES go to the network (6 contacts to port 53 in
+  this binary; 9 in a standalone getaddrinfo probe),
+  by design: it is testing that EAI_NONAME maps onto rcode 3. On a box with no
+  resolver, or a slow one, that row can see EAI_AGAIN instead and fail. It is
+  guarded behind PXX_DNS_LIBC, so the default build never reaches it.
+
+  SKIPS its libc half where glibc or the loader is absent — that is a supported
+  configuration, covered by the facade falling back to wire. }
 program lib_dns_libc;
 uses dns, dns_wire_core, sysutils
 {$ifdef PXX_DNS_LIBC}
@@ -54,7 +92,10 @@ begin
   rc := DnsResolveHost('localhost', ips, n);
   Chk('facade_v4_rc', rc = 0, True);
   Chk('facade_v4_loopback', (n > 0) and (ips[0] = $7F000001), True);
-  rc := DnsResolveHost6('localhost', ip6, n);
+  { The literal, NOT the name: `localhost` has no AAAA in /etc/hosts on
+    Debian/Ubuntu, so asserting rc = 0 for it passed only because the wire
+    answered. A literal short-circuits without network. }
+  rc := DnsResolveHost6('::1', ip6, n);
   Chk('facade_v6_rc', rc = 0, True);
   Chk('facade_v6_loopback', (n > 0) and (ip6[0][0] = 0) and (ip6[0][15] = 1), True);
 

@@ -14794,10 +14794,19 @@ endif
 	# wrong address rather than a failure. -dPXX_DYNLIB_LIBC is required with
 	# -dPXX_DNS_LIBC and the build refuses without it; running the libc variant
 	# unconditionally follows the existing test_dynlib precedent in `make test`.
+	# Capture the output instead of asserting through a bare pipe. These two rows
+	# went red exactly once and left NO record of what the last line actually said,
+	# because `test "$$(prog | tail -1)"` discards stdout on mismatch. On a
+	# reproducible failure that costs nothing; on an intermittent it costs the one
+	# run you needed. The assertion is unchanged -- only the diagnostic survives now.
 	$(PXX_STABLE) -Fulib/rtl test/lib_dns_libc.pas $(TESTTMP)/lib_dns_libc_default
-	test "$$($(TESTTMP)/lib_dns_libc_default | tail -1)" = "DNSLIBC OK"
+	@out=$$($(TESTTMP)/lib_dns_libc_default 2>&1); \
+	  test "$$(printf '%s\n' "$$out" | tail -1)" = "DNSLIBC OK" \
+	  || { echo "FAIL: lib_dns_libc_default output was:"; printf '%s\n' "$$out"; exit 1; }
 	$(PXX_STABLE) -dPXX_DNS_LIBC -dPXX_DYNLIB_LIBC -Fulib/rtl -Fulib/rtl/platform/posix test/lib_dns_libc.pas $(TESTTMP)/lib_dns_libc
-	test "$$($(TESTTMP)/lib_dns_libc | tail -1)" = "DNSLIBC OK"
+	@out=$$($(TESTTMP)/lib_dns_libc 2>&1); \
+	  test "$$(printf '%s\n' "$$out" | tail -1)" = "DNSLIBC OK" \
+	  || { echo "FAIL: lib_dns_libc output was:"; printf '%s\n' "$$out"; exit 1; }
 	# A spawned child inherits the parent's environment (every spawn site used
 	# to hard-code an empty envp, i.e. handed each child `env -i`).
 	$(PXX_STABLE) -Fulib/rtl test/lib_child_env.pas $(TESTTMP)/lib_child_env
