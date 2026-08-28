@@ -9,7 +9,7 @@ summary: "VarIsStr answers FALSE for a ONE-CHARACTER string variant. It tests `V
 # `VarIsStr` is False for a one-character string variant
 
 - **Type:** bug (silent wrong answer) — Track B (`lib/rtl/variants.pas`)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-22, by a 30-program Variant differential against fpc 3.2.2
 
 ## Measured
@@ -86,3 +86,23 @@ because this unit does not declare those constants. Do not "fix" that.
 Track B's: build with `$(PXX_STABLE)` (working again as of the v373 pin),
 `make lib-test`. Plus the three rows above matching fpc 3.2.2, one-char case
 included.
+
+## RESOLVED 2026-08-28 (frankB) — landed as part of one job
+
+Done together with `bug-b-the-fpc-vartype-constants-are-missing`, which carries
+the full write-up. The three tickets were one defect and one already-fixed twin,
+and doing the headline one alone would have broken this one rather than left it
+stale: after `VarType` translates, a comparison against an internal `VT_` tag is
+false for *every* value of that kind, not just the reported case.
+
+Landed in `lib/rtl/variants.pas` only, no compiler change: FPC's `varXxx`
+constants exported (measured from fpc 3.2.2, not transcribed), a private
+`RawTag` for the eight internal call sites, and `VarType` translating at the
+facade seam. 11 of 12 rows now match FPC exactly; the documented divergence is
+`v := 1` (FPC narrows the literal to `varShortInt`).
+
+Gated by `test/lib_variants_vartype_codes.pas` in `make lib-test`, sentinel
+`VARTYPECODES OK`, negative-controlled.
+
+## Log
+- 2026-08-28 — resolved, commit fb75a3d57.

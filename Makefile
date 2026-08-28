@@ -13931,6 +13931,23 @@ lib-test: pxx-stable-check
 	# (bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line).
 	$(PXX_STABLE) -Fulib/rtl test/lib_textreadnumtok.pas $(TESTTMP)/lib_textreadnumtok
 	test "$$($(TESTTMP)/lib_textreadnumtok | tail -n 1)" = "TEXTNUMTOK OK"
+	# SeekEof/SeekEoln (the whitespace-tolerant loop conditions the tokeniser
+	# above needs) and Rename. The skip set is the subject and it is NOT
+	# `c <= 32`: measured against FPC 3.2.2 byte by byte, exactly #9, #26 and
+	# #32 are stepped over, plus #10/#13 for SeekEof. The test pins #1, #31 and
+	# #33 so that simplification fails here rather than silently eating control
+	# bytes out of a data file
+	# (feature-b-text-file-surface-seekeof-rename-settextbuf).
+	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_text_seek_rename.pas $(TESTTMP)/lib_text_seek_rename
+	test "$$($(TESTTMP)/lib_text_seek_rename | tail -n 1)" = "TEXTSEEK OK"
+	# IOResult reports FPC's codes, never a raw negative errno. Measured against
+	# fpc 3.2.2, and FPC is NOT a clean translation: it maps a known set and
+	# passes the rest through as the positive errno (ELOOP comes back as 40).
+	# The ELOOP row is load-bearing — it proves the else-arm is FPC's behaviour
+	# and not a fallback we invented. `path not found` is 2, not the 3 DOS
+	# heritage predicts. compat-pascal-ioresult-returns-a-negative-errno.
+	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_ioresult_fpc_codes.pas $(TESTTMP)/lib_ioresult_fpc_codes
+	test "$$($(TESTTMP)/lib_ioresult_fpc_codes | tail -n 1)" = "IORESULTCODES OK"
 	# The PChar family (StrPCopy/StrNew/StrAlloc/StrECopy/StrMove/StrUpper...).
 	# Half of it existed and half did not, which is the worst shape: code
 	# compiles up to its second call. Expectations measured against FPC by
@@ -13970,6 +13987,17 @@ lib-test: pxx-stable-check
 	# implementation gets wrong ("a"b is TWO items; a"b" is one literal item).
 	$(PXX_STABLE) -Fulib/rtl test/lib_commatext.pas $(TESTTMP)/lib_commatext
 	test "$$($(TESTTMP)/lib_commatext | tail -n 1)" = "COMMATEXT OK"
+	# VarType speaks FPC's varXxx codes, and the constants exist at all. Numbers
+	# MEASURED from fpc 3.2.2, not transcribed — the set is irregular (varBoolean
+	# = 11, sized ints from 16, strings at 256) so a guessed one would look right
+	# and be wrong. 11 of 12 rows are FPC's answer exactly; the documented
+	# divergence is `v := 1` (FPC narrows the LITERAL to varShortInt, we do not).
+	# Both text tags fold onto varString, which is what makes VarType(v) =
+	# varString true for a one-char string — FPC has no char variant either.
+	# The predicates are asserted to AGREE with VarType on every row: that is the
+	# real regression risk, since they read the private tag.
+	$(PXX_STABLE) -Fulib/rtl test/lib_variants_vartype_codes.pas $(TESTTMP)/lib_variants_vartype_codes
+	test "$$($(TESTTMP)/lib_variants_vartype_codes | tail -n 1)" = "VARTYPECODES OK"
 	# The Python math surface (NilPy's `import math` resolves against lib/rtl's
 	# math unit): e/tau/inf/nan, isnan/isinf, pow, log(x,base), atan2,
 	# degrees/radians, copysign's sign-bit rule, isclose, factorial, comb.
@@ -14034,6 +14062,24 @@ lib-test: pxx-stable-check
 	# per-stream PRNG state: reproducibility + independent split streams (no lock)
 	$(PXX_STABLE) test/lib_randomstate.pas $(TESTTMP)/lib_randomstate
 	test "$$($(TESTTMP)/lib_randomstate | tail -n 1)" = "RANDOMSTATE OK"
+	# Tier 1 (hardware entropy) wiring: random.pas consuming __pxxCpuHasHwRandom
+	# and __pxxHwRandom64. Asserts CONTRACTS, not values -- RDRAND is present on
+	# this box but not on every box the suite runs on -- so both branches of the
+	# availability probe print the same lines and the expected output is
+	# machine-independent. The line with teeth is seeded-reproducible: tier 1 must
+	# not leak into the deterministic path, where a change would look random and
+	# be catastrophic. Compared whole rather than by tail: the sentinel is
+	# unreachable on failure and the program exits 1, but the FAIL lines are the
+	# diagnostic and a tail would discard them.
+	$(PXX_STABLE) test/lib_random_hw_tier1.pas $(TESTTMP)/lib_random_hw_tier1
+	test "$$($(TESTTMP)/lib_random_hw_tier1)" = "$$(printf 'probe-stable=ok\ncontract=ok\nseeded-reproducible=ok\nrandomize-varies=ok\nHWTIER1 OK')"
+	# FPC-compatible Signal(sig, handler) over pxx's PARAMETERLESS hook. The row
+	# with teeth is per-signal-number: ONE handler registered for TWO signals,
+	# each asserting its own number. A single-signal test passes even with the
+	# trampoline hard-wired to a constant, which is the bug this unit could have
+	# had -- the control produced usr1=3 usr2=0.
+	$(PXX_STABLE) test/lib_signals_fpc.pas $(TESTTMP)/lib_signals_fpc
+	test "$$($(TESTTMP)/lib_signals_fpc)" = "$$(printf 'prev-initial=ok\nper-signal-number=ok\nprev-returned=ok\nrange=ok\nignore=ok\nSIGNALS OK')"
 	# IPv6 over the PAL: sockaddr_in6 layout + loopback round trip (skips if the
 	# host has no AF_INET6 — a broken layout is the target, not the CI netstack)
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_ipv6.pas $(TESTTMP)/lib_ipv6
@@ -14117,6 +14163,12 @@ lib-test: pxx-stable-check
 	  test "$$n" = "0" || (echo "FAIL: crtl_atexit has $$n DT_NEEDED — atexit bound to libc"; exit 1); \
 	  echo "  lib-test: crtl_atexit is self-contained (no DT_NEEDED)"; \
 	else echo "  lib-test: readelf absent, skipping the atexit linkage check"; fi
+	# Whole-surface generalisation of the two DT_NEEDED spot-checks above: every
+	# function crtl DECLARES must also be DEFINED, or a C program that calls it
+	# silently binds to the system libc and cannot run off this box. The name list
+	# is generated from the headers on every run rather than checked in, because a
+	# frozen list goes stale exactly where the next such gap appears.
+	sh test/crtl_declaration_census.sh $(PXX_STABLE) $(TESTTMP)
 	# Payne-Hanek huge-argument trig: sin/cos/tan past 1e8, expected values are
 	# the correctly-rounded doubles judged against 400-digit references.
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_trig_huge.c $(TESTTMP)/crtl_trig_huge
@@ -14579,6 +14631,16 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_typinfo_props.pas $(TESTTMP)/lib_typinfo_props
 	test "$$($(TESTTMP)/lib_typinfo_props | grep -c '=ok')" = "63"
 	test "$$($(TESTTMP)/lib_typinfo_props | tail -1)" = "TYPINFO-PROPS OK"
+	# the three Delphi/FPC exception-API gaps a vendored rtl-generics hits:
+	# EArgumentOutOfRangeException (a DESCENDANT of EArgumentException, so
+	# `on E: EArgumentException` catches it), Exception.CreateRes/CreateResFmt,
+	# and System.Error over TRuntimeError -- whose tail is FPC's, not Delphi's.
+	# The first 18 rows run identically under fpc 3.2.2; the file then diverges
+	# deliberately at Error(), which halts there and raises here (our domain by
+	# the error-handling ruling; see devdocs/dev/pascal-dialect-divergences.md).
+	$(PXX_STABLE) -Fulib/rtl test/lib_sysutils_delphi_exceptions.pas $(TESTTMP)/lib_sysutils_delphi_exc
+	test "$$($(TESTTMP)/lib_sysutils_delphi_exc | grep -c '=ok')" = "21"
+	test "$$($(TESTTMP)/lib_sysutils_delphi_exc | tail -1)" = "SYSUTILS-DELPHI-EXC OK"
 	# the date PARSE direction (StrToDate/StrToDateTime/TryStrTo*). Rows are
 	# read off FPC 3.2.2, including the ones nobody guesses: ISO input raises
 	# under the d/m/y default, and a two-digit year uses a SLIDING window.
@@ -14732,10 +14794,29 @@ endif
 	# wrong address rather than a failure. -dPXX_DYNLIB_LIBC is required with
 	# -dPXX_DNS_LIBC and the build refuses without it; running the libc variant
 	# unconditionally follows the existing test_dynlib precedent in `make test`.
+	# Capture the output instead of asserting through a bare pipe. These two rows
+	# went red exactly once and left NO record of what the last line actually said,
+	# because `test "$$(prog | tail -1)"` discards stdout on mismatch. On a
+	# reproducible failure that costs nothing; on an intermittent it costs the one
+	# run you needed. The assertion is unchanged -- only the diagnostic survives now.
 	$(PXX_STABLE) -Fulib/rtl test/lib_dns_libc.pas $(TESTTMP)/lib_dns_libc_default
-	test "$$($(TESTTMP)/lib_dns_libc_default | tail -1)" = "DNSLIBC OK"
+	@out=$$($(TESTTMP)/lib_dns_libc_default 2>&1); \
+	  test "$$(printf '%s\n' "$$out" | tail -1)" = "DNSLIBC OK" \
+	  || { echo "FAIL: lib_dns_libc_default output was:"; printf '%s\n' "$$out"; exit 1; }
 	$(PXX_STABLE) -dPXX_DNS_LIBC -dPXX_DYNLIB_LIBC -Fulib/rtl -Fulib/rtl/platform/posix test/lib_dns_libc.pas $(TESTTMP)/lib_dns_libc
-	test "$$($(TESTTMP)/lib_dns_libc | tail -1)" = "DNSLIBC OK"
+	@out=$$($(TESTTMP)/lib_dns_libc 2>&1); \
+	  test "$$(printf '%s\n' "$$out" | tail -1)" = "DNSLIBC OK" \
+	  || { echo "FAIL: lib_dns_libc output was:"; printf '%s\n' "$$out"; exit 1; }
+	# RFC 6761 6.3: localhost always means loopback and must never reach a
+	# nameserver. The PREDICATE rows are the gate, not the resolution rows --
+	# this box's stub resolver is itself compliant and synthesises the whole
+	# localhost subtree, so reverting the fix still returned the right answer
+	# and differed only in emitting 20 DNS queries to get it. A value assertion
+	# would therefore be testing systemd-resolved rather than us.
+	$(PXX_STABLE) -Fulib/rtl test/lib_dns_localhost_rfc6761.pas $(TESTTMP)/lib_dns_localhost
+	@out=$$($(TESTTMP)/lib_dns_localhost 2>&1); \
+	  test "$$(printf '%s\n' "$$out" | tail -1)" = "DNSLOCALHOST OK" \
+	  || { echo "FAIL: lib_dns_localhost output was:"; printf '%s\n' "$$out"; exit 1; }
 	# A spawned child inherits the parent's environment (every spawn site used
 	# to hard-code an empty envp, i.e. handed each child `env -i`).
 	$(PXX_STABLE) -Fulib/rtl test/lib_child_env.pas $(TESTTMP)/lib_child_env

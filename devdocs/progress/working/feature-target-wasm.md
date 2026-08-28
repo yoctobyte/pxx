@@ -81,3 +81,50 @@ sockets, no fork), and it is absolutely checkable.
   and the original landed on a branch 379 commits behind. Unblocked in the same
   pass: the prerequisite was based on a wrong premise.
   Findings: `devdocs/dev/wasm-target-findings.md`.
+
+## Phase 2 scaffolding: `unreachable` bodies, and the condition for removing it
+
+Recorded here 2026-08-28 rather than only in the file that carries it, because a
+scaffold whose retirement condition lives only where the scaffold lives is how
+temporary things become permanent — the person who would remove it is the person
+who stopped reading that file.
+
+**What it is.** In `compiler/ir_codegen_wasm32.inc`, a body the backend cannot
+yet lower is emitted as a single `unreachable` instead of aborting the compile,
+and is recorded. `WasmReportCoverage` prints unconditionally before the module is
+written:
+
+```
+wasm32: 5 of 125 bodies lowered; 120 emitted as `unreachable` (Phase 2 is incomplete):
+    PXXHdrInit — non-i32 parameter base
+    ...
+```
+
+**Why it exists.** Discovered by running, not by planning: even a trivial `.pas`
+pulls `compiler/builtin/builtinheap.pas`, whose bodies use `IR_STORE_MEM`, calls
+and control flow. The backend's first ever run stopped there, not in the test
+program, and `-dPXX_NODEFAULTRTL` does not suppress it. Without the scaffold,
+*nothing* is verifiable until most of Phases 2-4 exists at once.
+
+**Why it is safe.** It reports itself unconditionally, so a module with trapping
+holes can never be mistaken for a complete one; and an unlowered body traps
+loudly at run time rather than computing quietly, which is the failure direction
+this lane cares about.
+
+**REMOVAL CONDITION — the reason this paragraph is on the ticket.** The scaffold
+comes out when the coverage line reads `N of N`, i.e. `WasmBrokenCount = 0` for
+the builtin set plus a real program. At that point `WasmUnsupported`,
+`WasmReportCoverage`, `WasmBodyBroken` and the `unreachable` fallback are all
+inert and should be deleted, and an unlowerable op should go back to being a
+hard `Error`. **If this ticket closes with that code still present, the scaffold
+outlived its purpose and the close is wrong.**
+
+## Phase boundaries are now expressed in the coverage counter
+
+`PLAN.md`'s original Phase 2 milestone — *"a program with arithmetic, records and
+arrays, no control flow, produces the same value as its native build"* — is
+**known-unreachable** and has been rewritten. It assumed a program could be
+compiled in isolation. It cannot: the builtins come too, and they need control
+flow and calls. The replacement milestones are stated as properties of the
+coverage report, because `5 of 125` is a real metric and "Phase 2 complete" is
+not. See `devdocs/dev/wasm/PLAN.md` on the branch.

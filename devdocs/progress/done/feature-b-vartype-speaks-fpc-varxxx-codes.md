@@ -5,7 +5,7 @@ track: B
 prio: 45
 type: feature
 blocked-by: []
-status: backlog
+status: done
 owner: ""
 created: 2026-08-25
 summary: "Re-filed from decide-vartype-returns-pxx-tags-not-fpc-codes, decided 2026-08-25 (option A). VarType currently returns pxx's internal tag (VT_INT=1, VT_DOUBLE=3, ...) and the unit exports no varXxx constants at all, so the FPC idiom `if VarType(v) = varInteger` does not compile. Measured: zero in-tree consumers compare VarType against a VT_ constant outside variants.pas itself, so the ticket's own gating condition for option A is met."
@@ -52,3 +52,23 @@ ticket.
 - `test/test_variant_bitwise_and_not.pas` line 72's existing comment
   (*"varBoolean = 11 in the FPC-compatible VarType() codes"*) becomes true
   rather than aspirational.
+
+## RESOLVED 2026-08-28 (frankB) — landed as part of one job
+
+Done together with `bug-b-the-fpc-vartype-constants-are-missing`, which carries
+the full write-up. The three tickets were one defect and one already-fixed twin,
+and doing the headline one alone would have broken this one rather than left it
+stale: after `VarType` translates, a comparison against an internal `VT_` tag is
+false for *every* value of that kind, not just the reported case.
+
+Landed in `lib/rtl/variants.pas` only, no compiler change: FPC's `varXxx`
+constants exported (measured from fpc 3.2.2, not transcribed), a private
+`RawTag` for the eight internal call sites, and `VarType` translating at the
+facade seam. 11 of 12 rows now match FPC exactly; the documented divergence is
+`v := 1` (FPC narrows the literal to `varShortInt`).
+
+Gated by `test/lib_variants_vartype_codes.pas` in `make lib-test`, sentinel
+`VARTYPECODES OK`, negative-controlled.
+
+## Log
+- 2026-08-28 — resolved, commit fb75a3d57.

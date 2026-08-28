@@ -302,6 +302,11 @@ def code_fingerprint(path=None):
 
 
 CODE_FP = ""            # set once at daemon start; "" for short-lived readers
+# Set by a READER that was told (or could find) the watcher clone, so
+# report_running_code() can compare the resident image against disk. Empty
+# means "we do not know where the daemon lives" -> the check stays silent
+# rather than guessing, because an unreadable watch.json is not evidence.
+CLONE_HINT = ""
 
 
 def set_phase(clone, host, phase, **kw):
@@ -4663,6 +4668,160 @@ def covering_runs(repo, sha, branch, host=None):
     return exact, covering
 
 
+def job_selectors(repo, host=None):
+    """Every job selector the archive has ever recorded, with its run count."""
+    seen = {}
+    for h in ([host] if host else archive_hosts(repo)):
+        for r in archive_rows(repo, h):
+            for key in ("new_red", "still_red", "fixed"):
+                for sel in (r.get(key) or []):
+                    seen[sel] = seen.get(sel, 0) + 1
+    return seen
+
+
+def job_history(repo, sel, host=None):
+    """Every run that recorded job `sel`, oldest first, with what it recorded.
+
+    THE reason this exists, measured 2026-08-28. Asking "has this job been red
+    before?" by hand is a one-line scan of the archive, and I wrote that line
+    and got **0 hits in 1697 runs** for a job that was in its 13th consecutive
+    red run. The query was against the positional name `test-emit-obj#02`; the
+    archive stores the STABLE selector `test-emit-obj#src:test/cxtensa_obj.c@1`.
+    The two strings share no substring, so the scan was correct, exhaustive,
+    and false.
+
+    That is the worst shape a query can have: a confident zero. It reads as
+    "this is new" — the single most consequential thing a triage can get wrong,
+    because a first-seen red is a revert candidate and a 16-hour-old one is a
+    queue item. Nothing warned, because nothing was wrong; the question was
+    asked in a vocabulary the data does not use.
+
+    So the helper does two things a hand-rolled scan does not:
+      * accepts EITHER form and resolves the positional one via `red_src` /
+        the open-regression ledger, which carry both;
+      * when it finds nothing, says whether the selector is unknown to the
+        archive ENTIRELY or merely absent from this host — an empty result
+        that explains itself is not the same object as a zero.
+    """
+    hosts = [host] if host else archive_hosts(repo)
+    out = []
+    for h in hosts:
+        for r in archive_rows(repo, h):
+            for key in ("new_red", "still_red", "fixed"):
+                if sel in (r.get(key) or []):
+                    out.append((r.get("date") or "", h, r.get("sha") or "",
+                                r.get("tier") or "", key))
+    out.sort()
+    return out
+
+
+def positional(name):
+    """True for a recipe-index job name like `test-emit-obj#02`."""
+    return bool(re.search(r"#\d+$", name or ""))
+
+
+def resolve_selector(repo, name, host=None):
+    """(selectors to report, notes) for a job named either way.
+
+    Returns a LIST, and that is the whole point. A positional name is an index
+    into a Makefile recipe, so it names a different file as soon as a step is
+    inserted above it — and the archive spans months. `test-emit-obj#02` is
+    literally present twice over: as a July key from `borg`, back when the
+    positional form was what got recorded, AND as today's `#02`, which is a
+    different test entirely.
+
+    A first cut of this returned the literal match as soon as it found one, and
+    answered the July history: "2 runs, FIXED, a red now is a REOPEN". That is
+    strictly worse than the confident zero it was written to fix, because a
+    zero at least looks like an absence, while a wrong history looks like
+    research. Same failure family as everything else measured tonight — it
+    fails affirmatively.
+
+    So: for a positional name, report the literal matches AND the stable
+    selectors under the same target, always, and label which is which. The
+    caller can tell them apart; a silent choice between them cannot be
+    unmade.
+    """
+    known = job_selectors(repo, host)
+    notes, sels = [], []
+    if name in known:
+        sels.append(name)
+    stem = name.split("#")[0] + "#"
+    stable = sorted(k for k in known
+                    if k.startswith(stem) and k != name and not positional(k))
+    if positional(name):
+        # The ledger carries the name/job pair for anything currently open, so
+        # prefer its answer and say so; fall back to the target's stable set.
+        ledger = None
+        for h in ([host] if host else archive_hosts(repo)):
+            try:
+                with open(os.path.join(repo, TSTATE_REL, h + ".json")) as f:
+                    st = json.load(f)
+            except (OSError, ValueError):
+                continue
+            for reg in (st.get("open_regressions") or []):
+                if reg.get("name") == name and reg.get("job"):
+                    ledger = reg["job"]
+                    break
+            if ledger:
+                break
+        if ledger and ledger not in sels:
+            sels.append(ledger)
+            notes.append("`%s` is a POSITIONAL name; the open-regression "
+                         "ledger maps it to `%s`" % (name, ledger))
+        for k in stable:
+            if k not in sels:
+                sels.append(k)
+        if sels and name in sels and len(sels) > 1:
+            notes.append("`%s` matches BOTH a literal archive key and %d "
+                         "stable selector(s) under the same target. A "
+                         "positional name is a recipe INDEX and means "
+                         "different tests at different times — read the dates, "
+                         "do not assume one history." % (name, len(sels) - 1))
+        elif not sels:
+            notes.append("no job matching `%s` has ever been recorded, and no "
+                         "stable selector under `%s` exists either. That is a "
+                         "real absence, not a vocabulary mismatch."
+                         % (name, stem[:-1]))
+    elif not sels:
+        notes.append("`%s` is not a key the archive uses. %s"
+                     % (name,
+                        ("Stable selectors under `%s`:\n  %s"
+                         % (stem[:-1], "\n  ".join(stable))) if stable
+                        else "No selector under `%s` exists either." % stem[:-1]))
+    return sels, notes
+
+
+def show_job_history(repo, name, host=None):
+    """`--job-history NAME`: has this job been red before, and since when?"""
+    sels, notes = resolve_selector(repo, name, host)
+    for n in notes:
+        print("tstate: " + n)
+    if not sels:
+        return 1
+    rc = 1
+    for sel in sels:
+        rows = job_history(repo, sel, host)
+        if not rows:
+            print("tstate: `%s` — known selector, no run recorded it." % sel)
+            continue
+        rc = 0
+        print("tstate: `%s` — %d run(s) recorded it" % (sel, len(rows)))
+        for date, h, sha, tier, key in rows:
+            print("  %-20s %-8s %-7s %-9s %s"
+                  % (date or "?", h, sha[:12], tier, key))
+        firsts = [r for r in rows if r[4] == "new_red"]
+        if firsts:
+            print("  first recorded RED %s at %s — NOT new."
+                  % (firsts[0][0], firsts[0][2][:12]))
+        if rows[-1][4] == "fixed":
+            print("  last transition was FIXED; a red now is a REOPEN.")
+        else:
+            print("  last transition was %s — still open as of %s."
+                  % (rows[-1][4], rows[-1][0]))
+    return rc
+
+
 def covering(repo, sha, branch=None, host=None, fetch=True):
     """Report what tstate can and cannot say about one commit. Exit 0/1/2/3."""
     branch = branch or BRANCH or "master"
@@ -5835,6 +5994,65 @@ def pin_verify_corroboration(pv, st, now):
             "gap": (pv_age - lf_age) if fresher else None}
 
 
+def report_running_code(clone_path):
+    """Warn when the RESIDENT daemon is not running the code on its own disk.
+
+    A pushed fix is not a live fix. Between `git push` and observable behaviour
+    sits a long-running process that loaded its source at start time, and
+    "landed on origin, pulled into the clone, passed its guards" is
+    indistinguishable from live unless something compares the running image.
+
+    That is not hypothetical: it hid three fixes on 2026-08-26 and was noticed
+    only because one of them happened to add a FIELD whose absence showed up in
+    a report. It recurred on 2026-08-27 — a scheduler fix was pushed, announced
+    as live, and the daemon had been running older code for hours.
+
+    `code_fp` is already published in watch.json for exactly this question. The
+    only thing missing was that somebody had to remember to ask it, which is a
+    poor place to put a silent failure mode. So --status asks.
+
+    Deliberately advisory: it never changes the exit code. UP/DOWN is about
+    whether the matrix is being covered; running-stale-but-covering is a real
+    state and not the same as down. Says nothing at all when it cannot tell,
+    rather than guessing — an unreadable watch.json is not evidence of drift.
+    """
+    if not clone_path:
+        return
+    try:
+        with open(os.path.join(clone_path, WATCH_REL)) as f:
+            w = json.load(f) or {}
+    except (OSError, ValueError):
+        return
+    running = w.get("code_fp") or ""
+    # watch.json is a RECORD, not live state, and the difference bites exactly
+    # once per restart -- which is the moment this check is most likely to be
+    # run, because someone just restarted to make a fix live and wants to know
+    # it worked. The stopping daemon's last write survives it; a fresh daemon
+    # has not called set_phase yet. Measured 2026-08-28, 16 seconds after a
+    # restart: this printed the OLD fingerprint and told the operator to
+    # restart the daemon they had just restarted.
+    #
+    # So the record must be shown to belong to a process that still exists.
+    # Two ways it can fail to:
+    if (w.get("phase") or "") == "stopped":
+        return                  # a farewell note says nothing about a successor
+    pid = w.get("pid")
+    if isinstance(pid, int):
+        try:
+            os.kill(pid, 0)     # signal 0: existence check, no signal delivered
+        except OSError:
+            return              # the writer is gone; the record outlived it
+    on_disk = code_fingerprint(os.path.join(clone_path, "tools", "twatch.py"))
+    if not running or not on_disk or running == on_disk:
+        return
+    print("tstate: !! the DAEMON is running twatch.py %s, but %s is on disk "
+          "(%s). A fix that landed, was pulled, and passed its guards is NOT "
+          "live until the daemon restarts — `trackt restart`. This does not "
+          "affect the UP/DOWN verdict above; coverage is real, it is the CODE "
+          "producing it that is behind."
+          % (running, on_disk, os.path.join(clone_path, "tools", "twatch.py")))
+
+
 def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
     """Is Track T covering this repo?  No ping, no network: a watcher is
     considered UP iff every commit older than the grace window is tested by
@@ -6283,6 +6501,7 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
     else:
         print("tstate: UP — only fresh commits pending (within %d min grace)%s"
               % (grace_min, stale))
+    report_running_code(CLONE_HINT)
     return STATUS_UP
 
 
@@ -6490,6 +6709,14 @@ def main():
                     help="--retire-host --into: the two names are the SAME box "
                          "(xeon → plexus), not work moving between boxes. "
                          "Records renamed_from instead of migrated_from")
+    ap.add_argument("--job-history", dest="job_history", metavar="JOB",
+                    help="has this job been red before, and since when? Takes "
+                         "either the stable selector "
+                         "(test-emit-obj#src:test/cxtensa_obj.c@1) or the "
+                         "positional name (test-emit-obj#02) and resolves "
+                         "between them — the archive keys on the former, and "
+                         "a hand-rolled grep for the latter returns a "
+                         "confident, wrong zero")
     ap.add_argument("--fetch-corpus", action="store_true",
                     help="install any missing corpus trees at startup instead "
                          "of just warning (jobs whose corpus is absent SKIP, "
@@ -6498,7 +6725,7 @@ def main():
 
     global BRANCH
     if (args.status or args.follow is not None or args.retire_host
-            or args.covering or args.request):
+            or args.covering or args.request or args.job_history):
         repo = os.path.abspath(os.path.expanduser(args.clone)) if args.clone \
             else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         # A READER is about the branch it is standing on. A dev worker asking
@@ -6506,6 +6733,15 @@ def main():
         # about master's frozen snapshot. --branch overrides for the rare case
         # of asking about somebody else's.
         BRANCH = args.branch or repo_branch(repo)
+        # Where the resident daemon lives, for the running-code check. --clone
+        # when we were told; otherwise the repo we are standing in, which is
+        # right when --status is run INSIDE the watcher clone and simply finds
+        # no watch.json anywhere else. Deliberately no guessing at a
+        # conventional path: a wrong clone would compare the wrong image, and a
+        # confident wrong answer is worse here than no answer.
+        global CLONE_HINT
+        CLONE_HINT = os.path.abspath(os.path.expanduser(args.clone)) \
+            if args.clone else repo
         if args.retire_host:
             if args.renamed and not args.into:
                 sys.exit("twatch: --renamed needs --into (renamed into WHAT?)")
@@ -6516,6 +6752,10 @@ def main():
         if args.request:
             return request_verdict(repo, args.request, args.request_tier,
                                    args.host, args.why)
+        if args.job_history:
+            named = ("--host" in sys.argv)
+            return show_job_history(repo, args.job_history,
+                                    args.host if named else None)
         if args.covering:
             # ALL hosts unless one was named. --host defaults to this box's
             # name, which is right for a daemon writing its own state and
@@ -6529,7 +6769,7 @@ def main():
         return status(repo, args.grace, fetch=not args.no_fetch)
     if not args.clone:
         ap.error("--clone is required (except with --status/--follow/"
-                 "--covering/--request)")
+                 "--covering/--request/--job-history)")
 
     def stop(*_):
         global STOP
@@ -6701,8 +6941,29 @@ def main():
                 #
                 # Same IDLE_YIELD_AFTER guard as the rest, for the same reason:
                 # "ahead of" must not become "instead of".
+                # A COMMITMENT POINT, and it is the difference between this
+                # phase working and not working. Measured 2026-08-27, 90
+                # minutes after this queue shipped: a `full` request sat
+                # undrained while the log showed the phase being ENTERED and
+                # then "preempted by a push — will resume", 15 times. The
+                # queue's position was never the problem — it is reached fine
+                # and cannot FINISH, because make_preempted() with no
+                # commit_after is abortable at every moment and pushes never
+                # stop at four workers.
+                #
+                # Same value and same reasoning as the idle full backfill
+                # below: a push in the first `full_commit_secs` still
+                # preempts, so a genuinely fresh sha is not starved by a run
+                # that just started; after that the run is allowed to finish.
+                # NOT breadth's commit_after=0 — that is for a RESERVED slot
+                # taken deliberately, and a request should still yield to a
+                # brand-new push in its first minute.
                 r = verify_requested(clone, host, *req_due,
-                                     abort_check=make_preempted(clone, tested))
+                                     abort_check=make_preempted(
+                                         clone, tested,
+                                         commit_after=(
+                                             CONF.get("full_commit_secs")
+                                             or None)))
                 if r == "aborted":
                     n = note_idle_abort(clone, host, "verify-request",
                                         req_due[0])

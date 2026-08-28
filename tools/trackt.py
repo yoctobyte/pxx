@@ -656,12 +656,72 @@ def cmd_start(clone, remote=None, web=True, local_code=False):
     return 0
 
 
+def describe_running(clone):
+    """One line on what a stop would DESTROY, or "" when nothing is at risk.
+
+    `trackt stop` sends SIGTERM and then says "aborting any running gate" —
+    after the signal, and without saying WHAT. That is fine when the daemon is
+    idle and expensive when it is not: a `full` pin verify is ~20 minutes on
+    the artifact every other track is building against, and it is exactly the
+    run that is hardest to get, because it needs a contiguous block the push
+    rate rarely leaves.
+
+    Written after nearly doing it (2026-08-28). A scratch waiter of mine tested
+    `phase != "testing"` and reported `pin-verify` as "safe to restart, nothing
+    discarded" — a deny-list of the one busy state I happened to think of, so
+    every state I had not thought of defaulted to safe. GATE_PHASES is the
+    allow-list that was already correct, sitting in this file; the fix is to
+    USE it here rather than re-derive it, and to say what is at stake before
+    the signal rather than after.
+
+    Information only. It does not block, because `trackt stop` is called from
+    scripts and a prompt that hangs a teardown is worse than a loud line.
+    """
+    try:
+        w = json.load(open(os.path.join(clone, twatch.WATCH_REL)))
+    except (OSError, ValueError):
+        return ""
+    if (w.get("phase") or "") not in GATE_PHASES:
+        return ""
+    what = w.get("phase")
+    if w.get("pin"):
+        what += " of PIN %s" % w["pin"]
+    head = "%s%s at %s" % (what, (" (%s)" % w["tier"]) if w.get("tier") else "",
+                           (w.get("sha") or "?")[:12])
+    # Progress comes from live.json, NOT from watch.json's `ts`. That field
+    # looks like a phase-start stamp and is not: run_gate refreshes it every
+    # 30s for the whole run (twatch.py, "keep the heartbeat fresh mid-run"), so
+    # `now - ts` is at most 30 seconds no matter how long the gate has run.
+    # A first cut of this function printed exactly that, and a 90-minute pin
+    # verify came out as "running 0 min" -- an error in the one direction that
+    # matters here, since the whole point of the line is to say how much is
+    # about to be thrown away. Measured before shipping: `stat` twice, 12s
+    # apart, saw no drift and looked like confirmation. The interval was 30.
+    live = read_json(os.path.join(clone, ".testmgr", "live.json"))
+    try:
+        done, total = int(live["done"]), int(live["total"])
+        mins = float(live["elapsed"]) / 60.0
+        eta = float(live.get("eta") or 0) / 60.0
+        return ("%s -- %d/%d jobs, %.0f min in%s" %
+                (head, done, total, mins,
+                 (", ~%.0f min left" % eta) if eta > 0 else ""))
+    except (KeyError, TypeError, ValueError):
+        return head
+
+
 def cmd_stop(clone):
     rc = 0
     pid, _ = daemon_pid(clone)
     if not pid:
         print("daemon not running")
     else:
+        # BEFORE the signal, and naming what is at stake. See describe_running.
+        busy = describe_running(clone)
+        if busy:
+            print("%strackt: this stop DISCARDS work in flight: %s%s"
+                  % (RED, busy, OFF))
+            print("trackt: it will be re-run, but a long gate may wait a long "
+                  "time for another contiguous block — pin verify especially.")
         os.kill(pid, signal.SIGTERM)
         print("SIGTERM sent (pid %d) — aborting any running gate" % pid)
         for _ in range(60):

@@ -3,11 +3,12 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `f43d37076ce7` | 2026-08-27T22:25:40Z | GREEN (native) | 330.6s | `aca7f699288e` RED |
+| plexus | `0903356895f0` | 2026-08-28T08:42:10Z | GREEN (native) | 317.2s | `239bdf790d93` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
 - **test-emit-obj#src:test/cxtensa_obj.c@1** — test/cxtensa_obj.c (plexus): bad `32fba2082684`, last good `457bda75412e`, 1 commit(s) in range
-- **tools-devtest#00** (plexus): bad `8787cfe4235a`, last good `62a4242203a3`, 10 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy** — test/test_nilpy_parent_call_after_instantiation.npy test/test_nilpy_parent_call_after_instantiation.expected (plexus): bad `b898d0543fc8`, last good `8b2cc332791e`, 2 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_startswith_tuple.npy** — test/test_nilpy_startswith_tuple.npy test/test_nilpy_startswith_tuple.expected (plexus): bad `b898d0543fc8`, last good `8b2cc332791e`, 2 commit(s) in range
+- **tools-devtest#00** (plexus): bad `f3422cd14b99`, last good `62a4242203a3`, 1 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy** — test/test_nilpy_parent_call_after_instantiation.npy test/test_nilpy_parent_call_after_instantiation.expected (plexus): bad `19dc5586e384`, last good `8b2cc332791e`, 1 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_startswith_tuple.npy** — test/test_nilpy_startswith_tuple.npy test/test_nilpy_startswith_tuple.expected (plexus): bad `19dc5586e384`, last good `8b2cc332791e`, 1 commit(s) in range
+- **lib-test#src:test/lib_synapse.pas** — test/lib_synapse.pas (plexus): bad `c52fc389fd97`, last good `aca7f699288e`, 9 commit(s) in range

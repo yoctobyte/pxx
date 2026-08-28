@@ -8,7 +8,9 @@ prio: 85
   file-ownership **Track A** — edits the shared `ir_codegen.inc` / `symtab.inc` /
   backends, so it obeys A's no-concurrent-edit rule + self-host gate) — umbrella
   for the next optimization campaign.
-- **Status:** working
+- **Status:** unfinished — parked 2026-08-28 in a clean state (see the PARKED
+  section at the bottom for what landed, what is left and what to read first).
+  Nothing is half-applied. Worked from a
   dedicated optimization checkout (`~/frank-optimize`), because Track O is
   implicitly Track A and two agents in `ir_codegen.inc` at once is the hazard the
   track letters exist to prevent. Nothing is half-applied; every commit passed
@@ -1118,3 +1120,219 @@ in this ticket with measured value behind it.
 
 So the ordering the sizing proposed survives contact: item 1 landed and was
 worth 1.9-2.1x; item 2 is empty *because* item 1 landed; item 3 is the job.
+
+## STANDING RULE for this umbrella: re-measure the PRIZE before starting an item, not just the mechanism
+
+Every item in this ticket was sized against a compiler that has since changed.
+Twice in one session an item's stated prize turned out to have been consumed or
+created by a *different* item landing:
+
+- **item 2 was emptied by item 1.** Filed when the boolean temp lived in the
+  frame and its store/reload was a real memory round trip; by the time it was
+  claimed the temp was resident and there was no reload left to remove.
+- **W1 was REVIVED by item 1** (below). Correctly disconfirmed at 1.4% against
+  the compiler as it stood; the same transform is now worth ~1.6x, because item
+  1 removed the memory traffic that had been hiding it.
+
+A stale prize is more expensive than a stale number, because it does not look
+like a claim to re-check — it looks like work waiting to be done. So: before
+starting an item, disassemble the current output and re-measure. It costs
+minutes.
+
+## 2026-08-28 (frank-optimize) — item 3 sized before building: worth **~5%**, and W1 is now worth **~1.6x**. The order inverts
+
+Dispatched to item 3 (make the register authoritative inside the loop, re-sync
+the frame at exits). Sized it first per the rule above. **Do not build item 3
+next; build W1.**
+
+### Why the old 2.15x was wrong — it measured two changes at once
+
+The V5 -> V3 step in the sizing entry above (0.368 -> 0.171 s) was read as the
+price of the dual-write stores. It is not. V5 and V3 differ by the stores **and**
+by all the operand staging through rax; V3 was an idealised 6-instruction body,
+not V5-minus-stores. The 2.15x is the two transforms together.
+
+### The isolated measurement
+
+`Run`'s **current** `-O3` body, transcribed from today's disassembly (21
+instructions, and note it now contains **zero memory reads** — item 1 removed
+them all; the only frame traffic left is three dual-write stores). Variants
+differ from A by deletion only. Interleaved in one process, min of 9-12, four
+independent runs agreeing.
+
+| variant | s | cyc/iter | vs current |
+| --- | --- | --- | --- |
+| **A — current `-O3`** (21 insns, calibrates: real binary 0.61 s) | 0.616-0.654 | 6.5 | 1.00x |
+| **B — item 3 exactly: the three dual-write stores deleted, nothing else** | 0.593-0.618 | 6.3 | **1.04-1.06x** |
+| **C — item 3 + W1: staging through rax also gone** (11 insns) | 0.365-0.385 | 3.9 | **~1.65x** |
+| D — ideal, fpc-like (6 insns) | 0.193-0.216 | 2.1 | 3.0x |
+
+**Item 3 alone is ~5%.** Stores retire into the store buffer and are off the
+loop-carried dependency chain, so deleting them buys close to nothing — the
+same reason the *loads* mattered so much is why the stores do not.
+
+**B -> C is ~1.6x, and that is W1** — the emit-time operand scheduler this
+ticket deprioritised this morning on my own measurement.
+
+### Why W1's value changed, which is the transferable part
+
+W1 was sized at **1.4%** against the pre-item-1 compiler and that number was
+correct. At the time the body was 12 cyc/iter dominated by two frame
+round-trips; every `mov %rN,%rax` sat in their shadow, and deleting six of them
+moved nothing. Item 1 removed the memory traffic. The body is now 6.5 cyc/iter
+and the dependency chain runs **through the staging moves themselves** — the
+value is threaded `r13 -> rax -> r14 -> rcx -> rax` between the xor and the add.
+The same instructions that were free when they overlapped a 5-cycle
+store-forward are the critical path once the store-forward is gone.
+
+**An optimisation's value is not a property of the transform. It is a property
+of the transform against a specific baseline** — and this ticket's baseline
+moved this morning, by our own hand.
+
+### Recommendation
+
+1. **W1 — emit-time operand scheduler.** ~1.6x on this shape, now measured
+   twice from opposite directions. Un-deprioritise it; it is the item that
+   inherits item 1's win.
+2. **Item 3 — register authoritative.** ~5%, and it is the *harder* of the two
+   (exit re-sync, exception landing pads, every path that reads the frame slot
+   as authoritative). Worst effort-to-payoff ratio in the ticket right now.
+3. The far end (D) is another ~1.8x beyond C, and is a real allocator.
+
+Nothing built, nothing changed. Handing the inversion back to the coordinator
+rather than switching items unilaterally — the dispatch was item 3.
+
+## 2026-08-28 — W1 slice 4 LANDED at `-O3`: a resident right operand needs no `mov rcx`. **1.15x on the loop, neutral everywhere else**
+
+The first slice of the revived W1. Not the whole operand scheduler — one
+deletion, chosen because it is provably value-preserving.
+
+### What fires
+
+When a BINOP's right operand is a **register-resident** sym, `EmitLoadVarRcx`
+used to emit `mov rcx, r12..r15` purely to satisfy the "right operand is in
+rcx" contract, and the ALU op then read rcx. The ALU can read r12..r15
+directly, so the move is deleted and the op encodes the resident register:
+
+```
+  mov %r12,%rax          mov %r12,%rax
+  mov %r13,%rcx    ->    xor %r13,%rax
+  xor %rcx,%rax
+```
+
+`Run`'s `-O3` loop body: **21 -> 19 instructions.**
+
+**Why this is safe by construction, not by argument.** It is a deleted MOVE, not
+a recomputed value: the resident register and the frame slot hold the same value
+by the residency contract — the same fact `EmitLoadVarRcx`'s own resident arm
+already relies on. The only real question is whether the consuming arm reads
+`rcx` and nothing else, so `W1AluRightEligible` whitelists exactly the five
+plain-integer forms (`+ - and or xor`) and refuses everything else: float
+(xmm0/xmm1 + movq bridge), AnsiString `+` (pushes both operands, calls a
+helper), tyString/set (multi-register inline loops), comparisons (own fusion
+path), div/mod (rdx:rax) and shifts (need rcx *by name*). Anything unlisted
+keeps the rcx contract, so a new op or type is safe by default. `{$Q+}` forms
+are admitted deliberately: the overflow check emits AFTER the ALU op and reads
+flags and rax, never rcx.
+
+State is a **local** in `IREmitNode`, which is recursive, so it cannot leak into
+a nested binop.
+
+### Numbers — the loop AND the neutral workloads, as required
+
+Comparator is the item-1 build (`c264c81a0d5a`) vs this one (`2cc445cbd5f4`),
+interleaved in single runs. The loop figures use **3 runs per sample** (~1.9 s,
+so 10 ms timer resolution is 0.5% rather than 2%) after the single-run form
+proved to be at the resolution floor.
+
+| workload | before | after | |
+| --- | --- | --- | --- |
+| `three.pas`, 3 rounds of min-of-12 | 1.91 / 1.96 / 1.99 | **1.71 / 1.67 / 1.75** | **1.12x / 1.17x / 1.14x** |
+| `bt.pas` (boolean-heavy loop) | 1.46 | 1.45 | neutral |
+| mandelbrot | 1.05 | 1.04 | neutral |
+| **compile the stress program** | **0.64** | **0.64** | **neutral** |
+| **compile `bt.pas`** | **0.18** | **0.18** | **neutral** |
+
+**~1.15x, not the 1.65x the sizing model bounded** — and that is expected, not a
+miss: the model deleted **all eight** staging moves from the body, this slice
+deletes **two**. The rest of W1 (a left operand and a destination that are not
+forced through rax) is the remaining ~1.4x and is a much larger change to
+`IREmitNode`'s register contract.
+
+**Caveat, unchanged and still attached: this is one loop shape.** `three.pas` is
+the same benchmark that gave item 1 its 1.9x. It bounds tight scalar loops and
+says nothing about the corpus.
+
+**A resolution note that cost two wrong readings.** At single-run granularity
+`bt` measured 0.49 vs 0.51 and then 0.55 vs 0.56 — "2-4% slower", twice, which
+is exactly the shape of a real small regression. Both were **one 10 ms tick** on
+a ~0.5 s workload. Amplifying to three runs per sample resolved it to
+1.46 vs 1.45, neutral. Same for `hello.pas` (0.18 vs 0.19 -> 0.64 vs 0.64 on a
+longer compile). **Below ~2% of the workload, `/usr/bin/time` is quantisation,
+not measurement** — amplify the sample before believing a small delta, in either
+direction.
+
+### Gates
+`-O3` self-host fixedpoint byte-identical (`2cc445cbd5f4`); `-O0/-O1/-O2/-O3`
+agree with each other and with `fpc -O2` across ten programs including the
+residency stress, the boolean loop and both call-heavy shapes (only divergence
+is the pre-existing float print, identical on the pre-change compiler);
+**`-O2` and all four cross targets byte-identical, 48/48**; `gate.sh quick`
+GREEN.
+
+---
+
+## PARKED 2026-08-28 (frank-optimize) — state of the umbrella, and what the next agent should do first
+
+Nothing is half-applied. Every slice below landed green with an `-O3` self-host
+fixedpoint, and `-O2` is byte-identical to where the day started (48/48 corpus
+hashes across all six targets, re-verified after each landing). The tree is a
+safe place to stop.
+
+### What landed today
+
+| sha | slice | measured |
+| --- | --- | --- |
+| `562965e1c` | **item 1** — residency admits and ranks on LOADS, not accesses | **1.9-2.1x** tight scalar loops; neutral elsewhere |
+| `46c8cf47e` | **W1 slice 4** — a resident BINOP right operand needs no `mov rcx` | **1.12-1.17x** on the loop; neutral elsewhere |
+| `cb5e2f564` | item 2 closed as **disconfirmed** (comment corrected, no pass change) | 6 insns of 13,483 |
+
+### What is left, ranked, with the numbers behind each
+
+1. **W1's larger half — a left operand and a destination not forced through
+   rax.** The sizing model bounds the *whole* of W1 at ~1.65x on the loop shape
+   and slice 4 collected ~1.15x of it, so roughly **1.4x remains**. This is a
+   change to `IREmitNode`'s register contract (every arm assumes rax = value),
+   not a deletion — a multi-session project, which is why it was not started
+   here. Model variant C in the 2026-08-28 sizing entry is the target shape.
+2. **Item 3 — register authoritative inside the loop** (~5%, and the harder
+   build: exit re-sync, exception landing pads, every path treating the frame
+   slot as authoritative). Worst effort-to-payoff in the ticket. Re-sized today
+   from a bad 2.15x that had compared two changes at once.
+3. **The promotion experiment** (coordinator's call, deliberately not started):
+   a `-O2` build with the passes promoted, the optimisation-agreement tier, and
+   a corpus-wide timing story — proposed as ONE experiment, not a request to
+   Track T. Blocked on nothing but Track T's queue depth.
+4. Parked, not scoped: beyond model variant C is another ~1.8x and that is a
+   real register allocator.
+
+### Read these two things before touching anything
+
+- **The standing rule at the top of this ticket: re-measure the PRIZE, not just
+  the mechanism.** It fired twice in one session — item 2 was emptied by item 1
+  landing, and W1 was *revived* by it (correctly disconfirmed at 1.4% in the
+  morning, measured at ~1.6x in the evening, because item 1 removed the memory
+  traffic that had been hiding the staging moves). Every remaining number above
+  describes the compiler as of `46c8cf47e` and has a shelf life.
+- **The three measurement traps**, now in `devdocs/dev/debugging-playbook.md`:
+  interleaving fixes WHICH runs you may compare, repetition fixes HOW
+  CONFIDENTLY, amplification fixes WHETHER THE TIMER CAN SEE IT AT ALL. This box
+  produced three false readings in one night and two of them were briefly
+  believed. Every number in this ticket dated 2026-08-28 was taken under all
+  three; numbers dated earlier were not.
+
+### Standing condition on any future slice here
+
+Land the **neutral workload in the same commit as the flattering one** — a
+speedup reported without it is half a measurement. Every entry above from
+`562965e1c` onward follows that.

@@ -5025,6 +5025,65 @@ begin
   end;
 end;
 
+{ -O3 W1 slice 4: may this BINOP take its right operand straight out of the
+  resident register, with no `mov rcx, r12..r15` in between?
+
+  The transform is a DELETED MOVE, not a recomputation — the resident register
+  and the frame slot hold the same value by the residency contract, which is
+  exactly what EmitLoadVarRcx's own resident arm already relies on. So the only
+  question is whether the arm that consumes the operand reads `rcx` and nothing
+  else. That is true of the plain integer add/sub/and/or/xor forms and of
+  nothing else in the binop:
+  - float results run through xmm0/xmm1 and a movq bridge;
+  - tyAnsiString `+` pushes both operands and calls a concat helper;
+  - tyString and set operands run multi-register inline loops;
+  - comparisons take the cmp/fusion path, which has its own operand handling;
+  - div/mod need rdx:rax and cl shifts need rcx BY NAME.
+  Anything not on the whitelist keeps the rcx contract, so a new op or type is
+  safe by default and stays that way until someone adds it here deliberately.
+
+  The {$Q+} overflow-checked forms (IRIVal[node] = 1) are admitted: the check
+  is emitted AFTER the ALU op and reads flags and rax, not rcx. }
+function W1AluRightEligible(node, left, right: Integer): Boolean;
+var op: TTokenKind; nt, lt, rt: TTypeKind;
+begin
+  W1AluRightEligible := False;
+  if ResidentRegOf(IRA[right]) = 0 then Exit;
+  op := IntToTokenKind(IRC[node]);
+  if not ((op = tkPlus) or (op = tkMinus) or
+          (op = tkAnd) or (op = tkOr) or (op = tkXor)) then Exit;
+  nt := IntToTypeKind(IRTk[node]);
+  lt := IntToTypeKind(IRTk[left]);
+  rt := IntToTypeKind(IRTk[right]);
+  if TypeIsFloat(nt) or TypeIsFloat(lt) or TypeIsFloat(rt) then Exit;
+  if (nt = tyString) or (nt = tyAnsiString) then Exit;
+  if (lt = tyString) or (lt = tyAnsiString) then Exit;
+  if (rt = tyString) or (rt = tyAnsiString) then Exit;
+  if TypeIsFrozenString(nt) or TypeIsFrozenString(lt) or TypeIsFrozenString(rt) then Exit;
+  if not (TypeIsOrdinal(nt) or (nt = tyPointer)) then Exit;
+  if not (TypeIsOrdinal(lt) or (lt = tyPointer)) then Exit;
+  if not (TypeIsOrdinal(rt) or (rt = tyPointer)) then Exit;
+  W1AluRightEligible := True;
+end;
+
+{ `<op> rax, <right>` for the five ALU forms whose right operand is rcx by
+  contract. reg = 0 keeps that contract (REX.W, ModRM /r with reg=rcx);
+  reg = 12..15 encodes the resident register directly (REX.W+REX.R, reg=N-8).
+  ModRM is mod=11 rm=rax throughout, so the two forms differ only in REX.R and
+  the reg field — `$C0 or ((reg - 8) shl 3)` gives $C8 for rcx as well, which
+  is why the encodings agree by construction rather than by coincidence. }
+procedure EmitAluRaxRight(opcode: Byte; reg: Integer);
+begin
+  if reg = 0 then
+  begin
+    EmitB($48); EmitB(opcode); EmitB($C8);
+  end
+  else
+  begin
+    EmitB($4C); EmitB(opcode); EmitB($C0 or ((reg - 8) shl 3));
+  end;
+end;
+
 procedure EmitLoadVarRcx(idx: Integer);
 var tk: TTypeKind; sz: Integer; sgn: Boolean; rreg: Integer;
 begin
@@ -7082,8 +7141,41 @@ function MatchParamCompatible(i, j: Integer; aTk: TTypeKind): Boolean;
   `not (TypesCompatible(...) or ProcParamUntyped[...])` sites instead is how the
   previous additions went in, and two of them are already spelled slightly
   differently from the others. normalise-dont-special-case.md. }
+var si: Integer;
 begin
   Result := TypesCompatible(Procs[i].Params[j].TypeKind, aTk) or MatchArgNilOk(i, j);
+  { ...then NARROW the blanket `tyPointer <- tyClass` rule TypesCompatible grants,
+    which cannot narrow itself: it sees two KINDS and the answer needs the
+    pointer's ELEMENT. Same architectural gap MatchArgNilOk exists to close, and
+    for the same reason -- the kind channel is too coarse to decide with.
+
+    The rule is load-bearing and stays: the builtin TObject / `object` parameter
+    type IS a tyPointer whose element is a class, so `P(o: TObject)` must accept
+    any class, and an untyped `Pointer` formal legitimately takes anything. What
+    must NOT be accepted is a pointer to some unrelated RECORD -- there
+    `OnlyPointer(SomeObject)` compiled with no cast written anywhere and read the
+    object's header as the record's fields. Silently, and with no syntax at the
+    call site to warn a reader.
+
+    Second consequence, and the reason this outranks a diagnostic difference: a
+    pointer-taking overload was a VIABLE candidate for a class argument and was
+    then preferred over the exact class match, so typinfo's
+    `GetPropInfo(AnObject, 'Caption')` -- the spelling every FPC consumer uses --
+    bound to the PClassRTTI arm and segfaulted. One narrowing fixes both: a
+    single-candidate call walks this same path, a chain of length one.
+
+    tyUnknown is the untyped-pointer sentinel (`ProcRetPtrElemTk`'s "tyUnknown
+    otherwise"), so it stays permitted along with a class element.
+    bug-p-a-class-instance-converts-implicitly-to-any-typed-pointer }
+  if Result and (aTk = tyClass) and (j >= 0) and (j < MAX_PROC_PARAMS)
+     and (Procs[i].Params[j].TypeKind = tyPointer)
+     and (not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) then
+  begin
+    si := Procs[i].Params[j].SymIdx;
+    if (si >= 0) and (Syms[si].PtrElemTk <> tyUnknown)
+       and (Syms[si].PtrElemTk <> tyClass) then
+      Result := False;
+  end;
 end;
 
 function HasExactCaseSensitiveProc(const name: AnsiString): Boolean;

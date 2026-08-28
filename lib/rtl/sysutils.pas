@@ -120,9 +120,39 @@ type
     So `msg`, `FHelpContext`, `HelpContext`, `FMessage` and `Message` are NOT
     redeclared here — they are inherited, and redeclaring any of them would
     reintroduce the two-layouts-one-name bug this replaced. }
+  { Delphi's PResStringRec. FPC spells the same parameter `PString`; this unit
+    does NOT, because `lib/rtl/typinfo.pas` already exports a `PString` that is
+    `^string[255]` — a FROZEN string pointer for reading RTTI name blobs — and a
+    program doing `uses typinfo, sysutils` would silently get whichever came
+    last. Two incompatible meanings for one name in one RTL is the kind of thing
+    that produces a wrong answer rather than an error, so the Delphi spelling is
+    used here and the FPC one is left alone. Callers write `@SSomeString` and
+    never name the type. }
+  PResStringRec = ^string;
+
   Exception = class(ExceptionBase)
     constructor Create(const msg: string);
     constructor CreateFmt(const msg: string; const args: array of const);
+    { The resource-string constructors. `CreateRes(@SArgumentOutOfRange)` is the
+      Delphi/FPC idiom and the shape vendored code uses.
+
+      WHAT THIS ACTUALLY DOES, since the name promises more than it delivers:
+      it DEREFERENCES the pointer and constructs. There is no resource-string
+      mechanism behind it — no translation table, no runtime replacement — and
+      pxx's `resourcestring` sections are parsed as plain const sections
+      (`compiler/pasparser_proc.inc:4783`), so a resourcestring here IS its
+      literal. That is a deliberate choice rather than a stub: the observable
+      behaviour is identical to FPC's for a program that never re-translates,
+      which is every program in the corpora, and a real mechanism can be slid
+      underneath without changing this signature.
+
+      CALL SITES ARE BLOCKED TODAY, and not by this code: `@SFoo` on a
+      resourcestring is `error: undefined variable`, because a const has no
+      address ([[bug-p-a-resourcestring-is-not-addressable]], filed). These
+      constructors work with any `^string`; the FPC spelling of the argument
+      does not compile until that lands. }
+    constructor CreateRes(ResString: PResStringRec);
+    constructor CreateResFmt(ResString: PResStringRec; const args: array of const);
   end;
 
   { FPC System.TMethod: the two words a method pointer is made of. A `procedure of
@@ -155,6 +185,10 @@ type
   EAssertionFailed  = class(Exception) end;
   ENotImplemented   = class(Exception) end;
   EArgumentException = class(Exception) end;
+  { Delphi/FPC make this a DESCENDANT of EArgumentException, not a sibling, so
+    `on E: EArgumentException` catches it. Generics.Defaults raises it 3 times;
+    Generics.Collections many more. }
+  EArgumentOutOfRangeException = class(EArgumentException) end;
   EListError        = class(Exception) end;
   { Raised when a Variant cannot be brought to the requested type — text that
     is not numeric read as a number, a Null read as a string. Declared HERE and
@@ -164,6 +198,21 @@ type
     optional in pxx — variant support is in the compiler — while sysutils is
     what every program that catches anything already has. }
   EVariantError     = class(Exception) end;
+
+  { FPC's System.TRuntimeError, in FPC 3.2.2's own declared order — read off a
+    running FPC program rather than recalled, because the tail is NOT Delphi's
+    (FPC ends reQuit / reCodesetConversion / reNoDynLibsSupport / reThreadError
+    where Delphi has the monitor errors). 29 members; `reRangeError` is 4.
+    Ordinals are faithful so a vendored `case` or a raw Ord() comparison means
+    the same thing unmodified. }
+  TRuntimeError = (
+    reNone, reOutOfMemory, reInvalidPtr, reDivByZero, reRangeError,
+    reIntOverflow, reInvalidOp, reZeroDivide, reOverflow, reUnderflow,
+    reInvalidCast, reAccessViolation, rePrivInstruction, reControlBreak,
+    reStackOverflow, reVarTypeCast, reVarInvalidOp, reVarDispatch,
+    reVarArrayCreate, reVarNotArray, reVarArrayBounds, reAssertionFailed,
+    reExternalException, reIntfCastError, reSafeCallError, reQuit,
+    reCodesetConversion, reNoDynLibsSupport, reThreadError);
 
   { The metaclass of Exception. FPC declares it in System, but our Exception lives
     here, so here is where `class of` it can be formed. Code that catches by class
@@ -198,6 +247,25 @@ var
   -- which is exactly the shape FPC code that predates `on ... do` uses. }
 function ExceptAddr: Pointer;
 function ExceptObject: TObject;
+
+{ FPC's System.Error: signal a runtime error. Declared here rather than in System
+  because our Exception hierarchy is here and this raises through it.
+
+  IT RAISES, IT DOES NOT HALT SILENTLY, AND THE ERROR NUMBERS ARE NOT FPC'S.
+  Both halves are deliberate. Raising is the faithful behaviour in effect: an
+  FPC program that has `uses sysutils` gets its runtime errors converted to
+  exceptions by the RTL's error hook, so `Error(reRangeError)` there surfaces as
+  a catchable ERangeError, which is exactly what this does directly. Not matching
+  FPC's numbering is CLAUDE.md's standing ruling — a strict flag governs how
+  source is COMPILED, not how a program DIES; "we seek LANGUAGE compliance, not
+  error-handling compliance". So the mapping below is to OUR exception classes.
+
+  Every one of the 7 call sites in `generics.defaults.pas` is the `else` arm of
+  a case over a type kind — "this cannot happen" — so none of them depends on a
+  code, only on the program stopping and saying something. A kind with no closer
+  class raises a plain Exception naming the TRuntimeError member, which is more
+  than a bare halt would say. }
+procedure Error(RuntimeError: TRuntimeError);
 
 { The default BackTraceStrFunc: '  $00000000004012AB'. A nil address renders as
   $0, which is what the callers' "no address known" path already expects. }
@@ -1000,6 +1068,60 @@ constructor Exception.CreateFmt(const msg: string; const args: array of const);
 begin
   FMessage := Format(msg, args);
   FHelpContext := 0;
+end;
+
+{ Dereference and construct — see the declaration for why that is the whole
+  implementation and why the name promises more. A nil pointer yields an empty
+  message rather than a fault: these are raised on an error path, and a crash
+  inside the reporting of an error destroys the information the error carried. }
+constructor Exception.CreateRes(ResString: PResStringRec);
+begin
+  if ResString = nil then FMessage := ''
+  else FMessage := ResString^;
+  FHelpContext := 0;
+end;
+
+constructor Exception.CreateResFmt(ResString: PResStringRec; const args: array of const);
+begin
+  if ResString = nil then FMessage := ''
+  else FMessage := Format(ResString^, args);
+  FHelpContext := 0;
+end;
+
+{ The TRuntimeError -> our-exception mapping. See the declaration: raising is
+  faithful in effect, the numbers are deliberately ours. }
+procedure Error(RuntimeError: TRuntimeError);
+begin
+  case RuntimeError of
+    reNone:              Exit;
+    reOutOfMemory:       raise EOutOfMemory.Create('Out of memory');
+    reInvalidPtr:        raise EInvalidPointer.Create('Invalid pointer operation');
+    reDivByZero:         raise EDivByZero.Create('Division by zero');
+    reRangeError:        raise ERangeError.Create('Range check error');
+    reIntOverflow:       raise EIntOverflow.Create('Arithmetic overflow');
+    reInvalidOp:         raise EInvalidOp.Create('Invalid floating point operation');
+    reZeroDivide:        raise EDivByZero.Create('Floating point division by zero');
+    reOverflow:          raise EIntOverflow.Create('Floating point overflow');
+    reUnderflow:         raise EMathError.Create('Floating point underflow');
+    reInvalidCast:       raise EInvalidCast.Create('Invalid type cast');
+    reAccessViolation:   raise EAccessViolation.Create('Access violation');
+    reStackOverflow:     raise EOutOfMemory.Create('Stack overflow');
+    reVarTypeCast:       raise EVariantError.Create('Invalid variant type cast');
+    reVarInvalidOp:      raise EVariantError.Create('Invalid variant operation');
+    reVarDispatch:       raise EVariantError.Create('Variant dispatch error');
+    reVarArrayCreate:    raise EVariantError.Create('Variant array creation error');
+    reVarNotArray:       raise EVariantError.Create('Variant is not an array');
+    reVarArrayBounds:    raise EVariantError.Create('Variant array bounds error');
+    reAssertionFailed:   raise EAssertionFailed.Create('Assertion failed');
+    reIntfCastError:     raise EInvalidCast.Create('Interface cast error');
+  else
+    { rePrivInstruction, reControlBreak, reExternalException, reSafeCallError,
+      reQuit, reCodesetConversion, reNoDynLibsSupport, reThreadError — no closer
+      class here. Naming the member beats a bare halt, and beats mapping it to a
+      class that would then be caught by a handler that did not mean it. }
+    raise Exception.Create('Runtime error ' +
+      IntToStr(Ord(RuntimeError)) + ' (TRuntimeError)');
+  end;
 end;
 { The unsigned digit loop, and the only one in this unit. `div`/`mod` by 10
   are UNSIGNED here because the operand type is QWord, which is exactly what the

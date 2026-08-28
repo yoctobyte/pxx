@@ -188,3 +188,76 @@ No correct FPC program can observe the difference: every program in rows 1-4 is
 one FPC refuses to build, so nothing portable depends on pxx refusing it too.
 Worth a diagnostic some day if a scope model appears at that layer; not worth
 inventing one for this.
+
+## `SysUtils.Error(TRuntimeError)` raises where FPC halts
+
+*Recorded 2026-08-28, with
+[[feature-sysutils-delphi-exception-api-gaps-found-by-rtl-generics]].*
+
+FPC's `Error(reRangeError)` produces an **uncatchable** runtime error 201 and
+terminates. Ours raises a catchable exception mapped to the nearest SysUtils
+class (`ERangeError` here), so a surrounding `try..except` sees it.
+
+**Deliberate, on two grounds.** It is inside the "error handling stays ours"
+ruling — a strict flag governs how source is compiled, not how a program dies.
+And it matches our own runtime, which is the consistency that matters more than
+parity here: pxx already surfaces a division by zero as a catchable
+`EDivByZero` and a malformed `StrToInt` as `EConvertError`, so a halting
+`Error` would be the odd one out in its own RTL.
+
+**The cost, stated so it is not rediscovered as a surprise:** a catchable
+`Error` can be swallowed. Every call site that motivated this — 7 in
+`generics.defaults.pas` — is the `else` arm of a `case` over a type kind, i.e.
+"this cannot happen"; if one ever does happen inside a `try..except`, FPC would
+stop the program and we would continue. If that bites, the fix is to halt, and
+this entry is the record that the choice was made knowingly rather than by
+default.
+
+**The symptom to look for**, since an entry you must already suspect to go read
+is not findable: *if a vendored consumer appears to CONTINUE PAST AN IMPOSSIBLE
+STATE — an `else` arm that says "cannot happen" is reached and the program keeps
+running, or a `try..except` reports an error it has no business seeing — suspect
+a swallowed `Error`.* Under FPC the program would have stopped there. Grep the
+consumer for `Error(re` and check whether any caller wraps it in a handler.
+
+Verified against FPC 3.2.2: `test/lib_sysutils_delphi_exceptions.pas` runs
+identically under both for its first 18 rows and diverges at exactly this point.
+
+## `VarType` of an integer LITERAL is `varInteger`, where FPC says `varShortInt`
+
+`lib/rtl/variants.pas` now speaks FPC's public `varXxx` numbering (the internal
+`VT_*` tags stay private — the same facade seam as `decide-rtti-kind-numbering`).
+Measured against fpc 3.2.2, **11 of the 12 rows agree exactly**. One does not:
+
+```pascal
+var v: Variant; i: Integer;
+v := 1;         { pxx: varInteger (3)   FPC: varShortInt (16) }
+i := 1; v := i; { pxx: varInteger (3)   FPC: varInteger  (3)  — agree }
+```
+
+**FPC narrows an integer LITERAL to the smallest type that holds it**, so the
+variant's reported type depends on the literal's magnitude: `v := 1` is
+`varShortInt`, and a larger literal would report something else again. pxx has
+one integer tag and does not narrow, so it reports `varInteger` throughout.
+
+**Deliberate, and the cheap side of the trade.** Matching FPC here means
+narrowing integer literals at the assignment — a language change with
+consequences far beyond `VarType`, to buy parity on a value that changes with
+the *literal* rather than with the program's meaning. The line that real code
+writes, `v := someInteger`, agrees with FPC exactly; it is the bare-literal form
+that differs, and it differs in the direction of being more predictable.
+
+**The symptom to look for:** *code that switches on `VarType` and has a separate
+`varShortInt` / `varByte` / `varSmallint` arm will take its `varInteger` arm
+instead under pxx.* That is only a bug if the arms disagree about more than
+width. FPC-portable code that wants "is this an integer at all" should use
+`VarIsNumeric`, or test against the set, not a single sized code.
+
+**Not a divergence, despite looking like one:** a `Char` and a one-character
+string both report `varString` (256). FPC has no char variant at all — `v := c`
+with `c: Char` reports 256 there too — so this is parity. pxx reaches it by
+folding its private `VT_CHAR` tag onto `varString` at the seam, which is also
+what stopped `VarType(v) = varString` from being false for `'x'`.
+
+Verified against FPC 3.2.2: `test/lib_variants_vartype_codes.pas` asserts every
+row above, and marks the divergent one in place next to the row that agrees.

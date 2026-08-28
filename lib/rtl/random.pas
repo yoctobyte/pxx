@@ -5,8 +5,10 @@ unit random;
 
   Tier 1 — HW instruction (RDRAND/x86; RNDR/aarch64; ESP RNG register).
            Runtime CPUID probe; zero-overhead when supported.
-           STUB: requires __rdrand/__cpuid compiler builtins
-           (Track A: feature-rdrand-cpuid-compiler-builtins). Falls to tier 2.
+           LIVE on x86-64 via __pxxCpuHasHwRandom/__pxxHwRandom64. Every other
+           target answers False from the probe and falls to tier 2, which is the
+           correct answer rather than a stub. RNDR/ESP are not implemented
+           compiler-side yet; when they land this file needs no change.
 
   Tier 2 — OS CSPRNG (getrandom(2) syscall / /dev/urandom fallback on Linux).
            Cryptographic quality; no asm. Used by Randomize on hosted targets.
@@ -24,6 +26,18 @@ unit random;
   Track B (libraries); built only with the pinned stable compiler. }
 
 interface
+
+{ --- Tier 1: hardware entropy --- }
+
+{ True if this CPU has a usable hardware RNG instruction. x86-64 answers from a
+  cached CPUID probe; every other target answers False today and the library
+  falls to tier 2 on its own. }
+function HWEntropyAvailable: Boolean;
+
+{ One 64-bit word of hardware entropy, retried a bounded number of times.
+  False means "no entropy this time", which is NORMAL under load — the caller
+  must fall to tier 2 and must not use v, which is zeroed on that path. }
+function HWEntropy64(out v: UInt64): Boolean;
 
 { --- Tier 2: OS entropy --- }
 
@@ -64,7 +78,7 @@ function LCGNext: LongWord;
 
   Seed xoshiro with XoshiroSeed (declared above); draw with Random64 / RandRange. }
 
-{ Reseed xoshiro from OS entropy (or HW when tier 1 lands). Non-reproducible. }
+{ Reseed xoshiro from HW entropy, falling to OS then time. Non-reproducible. }
 procedure XoshiroRandomize;
 
 { Inclusive lo..hi, drawn from xoshiro, and UNBIASED — masked rejection rather
@@ -282,13 +296,48 @@ begin
   OSEntropy64 := OSEntropyBytes(@v, 8);
 end;
 
-{ ===== Tier 1: HW RNG (stub — wired once Track A adds __rdrand/__cpuid) ===== }
+{ ===== Tier 1: HW RNG (RDRAND on x86-64, via the compiler builtins) ===== }
 
-{ When the builtins land: replace body with CPUID probe + RDRAND loop.
-  For now always returns False → falls through to tier 2. }
+{ __pxxHwRandom64 answering False is NORMAL, not an error: RDRAND clears CF and
+  leaves its destination ZERO when the on-chip pool is momentarily exhausted, so
+  a busy machine sees occasional failures. Intel's guidance is to retry a bounded
+  number of times and then use another source, which is what falling to tier 2
+  below does.
+
+  The value alone is never evidence. `v` is trusted only when the call reports
+  True, and is re-zeroed on the give-up path — a silent zero reaching a CSPRNG
+  seed is the invisible catastrophic failure this Boolean exists to prevent.
+
+  No per-target branching: __pxxCpuHasHwRandom answers truthfully on x86-64 and
+  False everywhere else, which routes those targets to tier 2 on its own. When
+  aarch64 (MRS RNDR, gated on FEAT_RNG) and the ESP RNG register land
+  compiler-side, this code should need no change. }
+
+const
+  HW_ENTROPY_RETRIES = 10;   { Intel's guidance; then fall to tier 2 }
+
+function HWEntropyAvailable: Boolean;
+begin
+  HWEntropyAvailable := __pxxCpuHasHwRandom;
+end;
+
 function HWEntropy64(out v: UInt64): Boolean;
+var
+  i: Integer;
 begin
   v := 0;
+  if not __pxxCpuHasHwRandom then
+  begin
+    HWEntropy64 := False;
+    Exit;
+  end;
+  for i := 1 to HW_ENTROPY_RETRIES do
+    if __pxxHwRandom64(v) then
+    begin
+      HWEntropy64 := True;
+      Exit;
+    end;
+  v := 0;   { RDRAND zeroes its destination on failure; do not leak that as a value }
   HWEntropy64 := False;
 end;
 
@@ -552,6 +601,6 @@ end;
 
 initialization
   lcg_state := 2463534242;
-  XoshiroRandomize;   { seed xoshiro from OS entropy (or HW when tier 1 wired) }
+  XoshiroRandomize;   { seed xoshiro from HW entropy, falling to OS then time }
 
 end.

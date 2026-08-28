@@ -11,13 +11,31 @@ interface
 
 uses platform;
 
+const
+  { One page. Big enough that a line-at-a-time read of an ordinary file costs
+    one syscall per few dozen lines instead of one per character; small enough
+    that `var f: Text` stays a reasonable local. }
+  TF_BUFSIZE = 4096;
+
 type
   Text = record
     Handle: Integer;
     Name: AnsiString;
     HitEof: Boolean;
-    HasPeek: Boolean;
-    Peek: Byte;
+    { Read-ahead buffer. BufPos is the next byte to hand out, BufLen the number
+      of valid bytes behind it.
+
+      There is deliberately NO separate one-byte peek slot any more: pushback is
+      `Dec(BufPos)`, because the only byte anyone ever pushes back is the one
+      TFNextByte just handed over, and it is still sitting right there. The slot
+      this replaced was a SECOND lookahead mechanism for the same concept, which
+      every reader then had to keep in sync with the first.
+
+      Buffered is False for handles we must not read ahead on — see TFOpened. }
+    Buffered: Boolean;
+    BufPos: Integer;
+    BufLen: Integer;
+    Buf: array[0..TF_BUFSIZE - 1] of Byte;
   end;
 
 procedure Assign(var f: Text; const path: AnsiString);
@@ -42,6 +60,31 @@ function Eof(var f: Text): Boolean;
   each other. Non-destructive: it uses the same one-byte lookahead Eof does, so
   the cursor does not move. }
 function Eoln(var f: Text): Boolean;
+
+{ Skip whitespace, then answer "is there nothing left but whitespace?" — the
+  loop condition for reading a whitespace-separated table without tripping on
+  the blank tail of the last line:
+
+    while not SeekEof(f) do begin Read(f, n); Sum := Sum + n; end;
+
+  Eof is still False while a trailing newline remains, so that same loop
+  written with Eof reads one junk value at the end. SeekEof CONSUMES the
+  whitespace it skips but never the token after it: the byte that stops the
+  scan goes back into the one-slot lookahead, so the next Read sees it. }
+function SeekEof(var f: Text): Boolean;
+
+{ Skip blanks, then answer "is the rest of this LINE empty?" — SeekEof's
+  companion, and identical to it except that line terminators STOP the scan
+  instead of being skipped. So it answers True at the end of a line as well as
+  at the end of the file, and leaves the terminator unconsumed for Readln. }
+function SeekEoln(var f: Text): Boolean;
+
+{ Rename the assigned file and carry the handle over to the new name, FPC's
+  Rename(f, newname). The file must be CLOSED — FPC refuses on an open handle
+  and leaves the file alone, and that restriction is copied rather than
+  relaxed. After a successful call, Reset(f) opens the NEW name. }
+procedure Rename(var f: Text; const NewName: AnsiString);
+
 function IOResult: Integer;
 
 procedure TextWrite(var f: Text; const s: AnsiString);
@@ -130,50 +173,121 @@ begin
   Halt(code);
 end;
 
-procedure SetIO(code: Integer);
+const
+  { FPC's codes for the two states that are not errnos at all. Measured:
+    renaming an OPEN handle answers 102 on fpc 3.2.2. }
+  TF_ERR_NOT_ASSIGNED = 102;
+  TF_ERR_NOT_OPEN     = 103;
+
+{ A POSITIVE errno -> the code FPC's IOResult reports. MEASURED against fpc
+  3.2.2 by producing each condition and reading IOResult back, because FPC does
+  NOT simply translate: it maps a known set and passes everything else through
+  as the positive errno.
+
+    errno                     FPC IOResult
+    2  ENOENT                 2
+    36 ENAMETOOLONG           2      <- mapped, not passthrough (36 <> 2)
+    13 EACCES                 5
+    20 ENOTDIR                5
+    21 EISDIR                 5
+    40 ELOOP                  40     <- PASSTHROUGH: FPC leaves it alone
+
+  ELOOP is the row that settles the design. Had FPC translated everything, an
+  unmapped errno would need a code invented for it, and an invented code is a
+  plausible wrong answer with no failure mode that reveals it. It does not, so
+  the `else` here is FPC's own behaviour rather than a fallback of ours.
+
+  The mapped rows are exactly the ones measured. Others that look like they
+  belong (EPERM, EROFS) are deliberately NOT listed: they could not be produced
+  on this box without root, so listing them would be transcription. They take
+  the passthrough path, which may differ from FPC -- an unverified guess in the
+  table would be worse, because it would look measured. }
+function ErrnoToIOResult(e: Integer): Integer;
 begin
-  LastIOResult := code;
+  case e of
+    2, 36: Result := 2;
+    13, 20, 21: Result := 5;
+  else
+    Result := e;
+  end;
 end;
 
-{ One byte from the cursor, False at end of file (or on an I/O error, with the
-  code in LastIOResult). The parked lookahead comes first: Eof reads one byte
-  ahead and leaves it in f.Peek, so every reader in this unit has to drain that
-  slot before touching the fd or they would disagree about where the cursor is.
-
-  TextReadLn deliberately still carries its own copy of this loop: it is the one
-  reader that does NOT set LastIOResult when it satisfies a byte from the peek
-  slot, and folding it in here would start clearing a stale I/O code that a
-  {$I+} region's PXXIoCheck can currently still see. Same shape, different
-  contract — worth a note rather than a silent unification. }
-function TFNextByte(var f: Text; var c: Byte): Boolean;
-var one: array[0..0] of Byte; n: Int64;
+{ The one place a raw errno becomes a public IOResult. Negative in, FPC's
+  numbering out -- so no caller has to know, and no call site can forget.
+  Non-negative values are already final codes (TF_OK, TF_ERR_NOT_OPEN...) and
+  pass straight through. }
+procedure SetIO(code: Integer);
 begin
-  if f.HasPeek then
+  if code < 0 then
+    LastIOResult := ErrnoToIOResult(-code)
+  else
+    LastIOResult := code;
+end;
+
+{ Every reader in this unit goes through the buffer below — there is no second
+  place a byte can be hiding, which is the property the old one-byte peek slot
+  cost us: it was a parked lookahead that each reader had to remember to drain
+  before touching the fd, or they would disagree about where the cursor was.
+
+  TextReadLn still carries its own copy of the loop, and still for its original
+  reason: it is the one reader that must NOT set LastIOResult when it succeeds,
+  because folding it in would clear a stale I/O code a {$I+} region's
+  PXXIoCheck can still see. That distinction now lives in TFFillEx's `quiet`
+  flag rather than in a duplicated read — same contract, one mechanism. }
+{ Drop whatever is buffered. Called wherever the cursor moves for a reason the
+  buffer cannot see (a fresh Assign, a Reset, a Close). }
+procedure TFResetBuf(var f: Text);
+begin
+  f.BufPos := 0;
+  f.BufLen := 0;
+end;
+
+{ Decide whether this handle may be read ahead on, and start it empty. Only a
+  SEEKABLE handle qualifies, for two reasons that happen to coincide: a pipe or
+  a terminal cannot be rewound, so Close could not hand the descriptor back
+  where the caller left it; and reading ahead on an interactive handle would
+  swallow input the program has not asked for yet. PalSeek's own failure on a
+  non-seekable fd is the test — no separate isatty is needed. }
+procedure TFOpened(var f: Text);
+begin
+  TFResetBuf(f);
+  f.Buffered := (f.Handle >= 0) and (PalSeek(f.Handle, 0, PAL_SEEK_CUR) >= 0);
+end;
+
+{ Make at least one byte available at f.Buf[f.BufPos]. False at end of file or
+  on an I/O error, with the code in LastIOResult.
+
+  `quiet` suppresses the success-path SetIO. TextReadLn needs that and is the
+  only caller that does: it must not clear a stale I/O code that a {$I+}
+  region's PXXIoCheck can still see. FAILURE always records, quiet or not. }
+function TFFillEx(var f: Text; quiet: Boolean): Boolean;
+var n: Int64; want: Integer;
+begin
+  if f.BufPos < f.BufLen then
   begin
-    c := f.Peek;
-    f.HasPeek := False;
-    SetIO(TF_OK);
     Result := True;
     Exit;
   end;
   if f.HitEof then
   begin
-    SetIO(TF_OK);
+    if not quiet then SetIO(TF_OK);
     Result := False;
     Exit;
   end;
   if f.Handle < 0 then
   begin
-    SetIO(-1);
+    SetIO(TF_ERR_NOT_OPEN);
     f.HitEof := True;
     Result := False;
     Exit;
   end;
-  n := PalRead(f.Handle, @one[0], 1);
-  if n = 1 then
+  TFResetBuf(f);
+  if f.Buffered then want := TF_BUFSIZE else want := 1;
+  n := PalRead(f.Handle, @f.Buf[0], want);
+  if n > 0 then
   begin
-    c := one[0];
-    SetIO(TF_OK);
+    f.BufLen := Integer(n);
+    if not quiet then SetIO(TF_OK);
     Result := True;
   end
   else
@@ -184,12 +298,45 @@ begin
   end;
 end;
 
-{ Put a byte back into the one-slot lookahead. Only ever a byte TFNextByte just
-  handed over, so HitEof is False and Eof's HitEof-first test stays honest. }
+function TFFill(var f: Text): Boolean;
+begin
+  Result := TFFillEx(f, False);
+end;
+
+{ One byte from the cursor, False at end of file (or on an I/O error, with the
+  code in LastIOResult). }
+function TFNextByte(var f: Text; var c: Byte): Boolean;
+begin
+  if not TFFill(f) then
+  begin
+    Result := False;
+    Exit;
+  end;
+  c := f.Buf[f.BufPos];
+  Inc(f.BufPos);
+  SetIO(TF_OK);
+  Result := True;
+end;
+
+{ Un-read the byte TFNextByte just handed over. That byte is still in the
+  buffer at BufPos-1, so stepping the cursor back IS the whole operation — there
+  is nothing to store and nothing to keep in sync.
+
+  `c` is therefore ignored in the normal case, and that is deliberate rather
+  than sloppy: the parameter documents the contract (you may only push back what
+  you just took) and keeps every call site readable. The else-branch below is
+  the defensive path for a caller that broke it — park the byte rather than lose
+  it, so a bug upstream costs a wrong cursor and not a vanished character. }
 procedure TFPushBack(var f: Text; c: Byte);
 begin
-  f.Peek := c;
-  f.HasPeek := True;
+  if f.BufPos > 0 then
+    Dec(f.BufPos)
+  else
+  begin
+    f.Buf[0] := c;
+    f.BufPos := 0;
+    f.BufLen := 1;
+  end;
 end;
 
 { The delimiter set FPC's numeric reader uses: blank, tab, and both halves of a
@@ -205,8 +352,8 @@ begin
   f.Handle := -1;
   f.Name := path;
   f.HitEof := False;
-  f.HasPeek := False;
-  f.Peek := 0;
+  f.Buffered := False;
+  TFResetBuf(f);
   SetIO(TF_OK);
 end;
 
@@ -219,7 +366,7 @@ procedure Reset(var f: Text);
 begin
   f.Handle := PalOpen(PChar(f.Name), PAL_OPEN_READ, 0);
   f.HitEof := False;
-  f.HasPeek := False;
+  TFOpened(f);
   if f.Handle < 0 then SetIO(f.Handle) else SetIO(TF_OK);
 end;
 
@@ -228,7 +375,7 @@ begin
   f.Handle := PalOpen(PChar(f.Name),
     PAL_OPEN_WRITE or PAL_OPEN_CREATE or PAL_OPEN_TRUNC, 438);
   f.HitEof := False;
-  f.HasPeek := False;
+  TFOpened(f);
   if f.Handle < 0 then SetIO(f.Handle) else SetIO(TF_OK);
 end;
 
@@ -237,22 +384,31 @@ begin
   f.Handle := PalOpen(PChar(f.Name),
     PAL_OPEN_WRITE or PAL_OPEN_CREATE or PAL_OPEN_APPEND, 438);
   f.HitEof := False;
-  f.HasPeek := False;
+  TFOpened(f);
   if f.Handle < 0 then SetIO(f.Handle) else SetIO(TF_OK);
 end;
 
 procedure Close(var f: Text);
-var rc: Integer;
+var rc, unread: Integer;
 begin
   if f.Handle >= 0 then
   begin
+    { THE trap of buffering, and the reason Buffered is gated on seekability:
+      read-ahead leaves the descriptor past what the caller actually consumed.
+      Anything that inherits or shares this fd — a child process, a dup — would
+      then start from a position nobody asked for. Rewind by whatever is still
+      sitting in the buffer before the handle goes away. }
+    unread := f.BufLen - f.BufPos;
+    if f.Buffered and (unread > 0) then
+      PalSeek(f.Handle, -Int64(unread), PAL_SEEK_CUR);
     rc := PalClose(f.Handle);
     if rc < 0 then SetIO(rc) else SetIO(TF_OK);
   end
   else
     SetIO(TF_OK);
   f.Handle := -1;
-  f.HasPeek := False;
+  f.Buffered := False;
+  TFResetBuf(f);
 end;
 
 procedure CloseFile(var f: Text);
@@ -266,7 +422,7 @@ begin
   { Classic Erase: delete the assigned (closed) file by name. }
   if f.Name = '' then
   begin
-    SetIO(-1);
+    SetIO(TF_ERR_NOT_ASSIGNED);
     Exit;
   end;
   rc := PalDelete(PChar(f.Name));
@@ -274,49 +430,100 @@ begin
 end;
 
 function Eof(var f: Text): Boolean;
-var one: array[0..0] of Byte; n: Int64;
 begin
-  if f.HitEof then
-  begin
-    Result := True;
-    Exit;
-  end;
-  if f.HasPeek then
-  begin
-    Result := False;
-    Exit;
-  end;
-  if f.Handle < 0 then
-  begin
-    SetIO(-1);
-    f.HitEof := True;
-    Result := True;
-    Exit;
-  end;
-  n := PalRead(f.Handle, @one[0], 1);
-  if n = 1 then
-  begin
-    f.Peek := one[0];
-    f.HasPeek := True;
-    SetIO(TF_OK);
-    Result := False;
-  end
-  else
-  begin
-    if n < 0 then SetIO(Integer(n)) else SetIO(TF_OK);
-    f.HitEof := True;
-    Result := True;
-  end;
+  { "Is there a byte" is exactly "can the buffer produce one", and asking does
+    not move the cursor — the byte stays where it is instead of being parked in
+    a slot every other reader then has to remember to drain. }
+  Result := not TFFill(f);
 end;
 
 function Eoln(var f: Text): Boolean;
 begin
-  { Eof does the lookahead and parks the byte in f.Peek, so asking it first
-    both answers the end-of-file case and guarantees Peek is loaded. }
-  if Eof(f) then
+  if not TFFill(f) then
     Result := True
   else
-    Result := (f.Peek = 10) or (f.Peek = 13);
+    Result := (f.Buf[f.BufPos] = 10) or (f.Buf[f.BufPos] = 13);
+end;
+
+{ The bytes SeekEof and SeekEoln step over. MEASURED against FPC 3.2.2 rather
+  than inferred — each of #1..#40 was written in front of an 'x' and the
+  cursor's landing place read back:
+
+    skipped:      #9 TAB, #26 SUB, #32 SPACE  (SeekEof also skips #10 and #13)
+    NOT skipped:  #1..#8, #11, #12, #14..#25, #27..#31, #33 and up
+
+  So the intuitive rule `c <= 32` is WRONG: it would swallow every other
+  control byte. #26 is in the set because it is the DOS end-of-file marker and
+  FPC steps over it exactly like blank space — a file holding only #26 is
+  SeekEof-empty, while 'x'#26 still yields its 'x'.
+
+  Deliberately NOT unified with TFIsSpace above. That one is the numeric
+  tokeniser's DELIMITER set (blank, tab, and both halves of a line ending);
+  this one is the seek routines' SKIP set. They overlap without being the same
+  concept — #26 belongs only here, and #10/#13 delimit a token but must stop
+  SeekEoln — so folding them together would make one of the two wrong. }
+function TFIsSeekSpace(c: Byte): Boolean;
+begin
+  Result := (c = 9) or (c = 26) or (c = 32);
+end;
+
+function SeekEof(var f: Text): Boolean;
+var c: Byte;
+begin
+  while TFNextByte(f, c) do
+    if not (TFIsSeekSpace(c) or (c = 10) or (c = 13)) then
+    begin
+      TFPushBack(f, c);
+      Result := False;
+      Exit;
+    end;
+  { TFNextByte answers False at end of file AND on an I/O error, leaving the
+    code in LastIOResult — the same conflation Eof makes, on purpose. }
+  Result := True;
+end;
+
+function SeekEoln(var f: Text): Boolean;
+var c: Byte;
+begin
+  while TFNextByte(f, c) do
+    if not TFIsSeekSpace(c) then
+    begin
+      { The terminator is not ours to eat: push it back so Readln still sees a
+        complete line. Measured — FPC leaves the cursor ON the #10 (or the #13
+        of a CRLF) and answers True. }
+      TFPushBack(f, c);
+      Result := (c = 10) or (c = 13);
+      Exit;
+    end;
+  Result := True;
+end;
+
+procedure Rename(var f: Text; const NewName: AnsiString);
+var rc: Integer;
+begin
+  { An open handle is refused and the file left alone (FPC answers IOResult
+    102 here; the code is ours, the refusal is FPC's). Same shape as Erase: a
+    name-level operation on a closed, assigned handle. }
+  if f.Handle >= 0 then
+  begin
+    SetIO(TF_ERR_NOT_ASSIGNED);
+    Exit;
+  end;
+  if (f.Name = '') or (NewName = '') then
+  begin
+    SetIO(TF_ERR_NOT_ASSIGNED);
+    Exit;
+  end;
+  rc := PalRename(PChar(f.Name), PChar(NewName));
+  if rc < 0 then
+  begin
+    SetIO(rc);
+    Exit;
+  end;
+  { The handle follows the file — measured: Reset(f) straight after a Rename
+    opens the NEW name and reads its contents. }
+  f.Name := NewName;
+  SetIO(TF_OK);
 end;
 
 function IOResult: Integer;
@@ -330,7 +537,7 @@ var n: Int64;
 begin
   if f.Handle < 0 then
   begin
-    SetIO(-1);
+    SetIO(TF_ERR_NOT_OPEN);
     Exit;
   end;
   n := PalWrite(f.Handle, PChar(s), Length(s));
@@ -348,29 +555,23 @@ begin
 end;
 
 procedure TextReadLn(var f: Text; var s: AnsiString);
-var one: array[0..0] of Byte; n: Int64; c: Byte; done: Boolean;
+var n: Int64; c: Byte; done: Boolean;
 begin
   s := '';
   done := False;
   while not done do
   begin
-    if f.HasPeek then
+    { The quiet fill: on SUCCESS this must not touch LastIOResult, or a stale
+      code a {$I+} region can still see would be cleared here. That is the whole
+      reason this loop is not just TFNextByte. }
+    if TFFillEx(f, True) then
     begin
-      c := f.Peek;
-      f.HasPeek := False;
+      c := f.Buf[f.BufPos];
+      Inc(f.BufPos);
       n := 1;
     end
     else
-    begin
-      if f.Handle < 0 then
-      begin
-        SetIO(-1);
-        f.HitEof := True;
-        Exit;
-      end;
-      n := PalRead(f.Handle, @one[0], 1);
-      c := one[0];
-    end;
+      n := 0;
 
     if n = 1 then
     begin
@@ -381,22 +582,20 @@ begin
     end
     else
     begin
-      if n < 0 then SetIO(Integer(n)) else SetIO(TF_OK);
+      { TFFillEx has already recorded the reason (end of file, bad handle, or a
+        read error) — do not overwrite it with TF_OK. }
       f.HitEof := True;
       done := True;
     end;
   end;
-  if LastIOResult = TF_OK then SetIO(TF_OK);
 end;
 
 procedure TextReadChar(var f: Text; var c: Char);
-{ The pushback this needs already exists: Eof reads one byte ahead and parks it
-  in f.Peek, and TextReadLn drains it before touching the fd. Consuming from the
-  same slot is what makes the two agree about where the cursor is — which is the
-  whole point, since a Char arm that read a LINE and took [1] would be right for
-  the first read and silently wrong for every one after it. That drain is now
-  TFNextByte, shared with the two tokenisers below; this procedure is exactly
-  it plus the end-of-file substitution. }
+{ Reads through TFNextByte like every other reader, which is what makes them all
+  agree about where the cursor is — the whole point, since a Char arm that read a
+  LINE and took [1] would be right for the first read and silently wrong for
+  every one after it. This procedure is exactly TFNextByte plus the
+  end-of-file substitution. }
 const
   TF_EOF_CHAR = 26;   { FPC yields ^Z at and past end of file, with no I/O error }
 var b: Byte;
@@ -463,12 +662,21 @@ begin
 end;
 
 initialization
+  { Input and Output are deliberately NEVER buffered, even when stdin happens to
+    be a redirected regular file and would pass the seekability test. Read-ahead
+    on a shared descriptor is not ours to do: a program that reads a line and
+    then execs a child sharing fd 0 would hand it a position it never asked for,
+    and there is no Close on stdin at which to rewind. So the interactive path
+    keeps exactly today's one-byte reads — this change buys file I/O, and buys
+    it without touching the case where read-ahead is observable. }
   Input.Handle := 0;
   Input.Name := '';
   Input.HitEof := False;
-  Input.HasPeek := False;
+  Input.Buffered := False;
+  TFResetBuf(Input);
   Output.Handle := 1;
   Output.Name := '';
   Output.HitEof := False;
-  Output.HasPeek := False;
+  Output.Buffered := False;
+  TFResetBuf(Output);
 end.

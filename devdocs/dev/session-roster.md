@@ -8601,3 +8601,2968 @@ convention on slot offsets, whether the program body arrives with `CurProc < 0` 
 all reasoned about and none observed. **Which is the argument for granting now
 rather than after another thousand lines**, and the same argument that moved the
 Phase 2 grant to the start.
+
+## typinfo facade LANDED (`cfa72767f`) — and the relayed list changed the work, not just its scope
+
+frankA's named list arrived while frankB had the file open, and it produced a
+**concrete change**: `elSize`, `MinInt64Value`, `MaxInt64Value` — three of the five
+fields named — were **unspellable** in our `TTypeData`, which had `ElemSize`,
+`MinValue`, `MaxValue`.
+
+> **A facade whose field NAMES differ from FPC's is not a facade**, because the
+> consumer would need editing — the one thing the design exists to avoid.
+
+Fixed with a variant part carrying FPC's spellings at identical offsets: same
+storage, nothing keyed on a tag, so it is not the kind-keyed variance that record
+deliberately refuses. Without the measurement, a facade that **reads correctly and
+cannot be written against** would have shipped.
+
+**The hard requirement is diffed, not assumed:** all twelve `OrdType`/`FloatType`
+values identical to FPC 3.2.2, ShortInt through QWord, Boolean, Char, Single,
+Double — as checked-in rows. Both fields are *only* case selectors picking a
+comparer, so a wrong ordinal silently picks the wrong one: a bug with no symptom at
+the site. Also measured rather than recalled: **FPC's `GetSetProp` returns
+`clRed,clBlue` with NO brackets by default** (`[...]` only with `brackets=True`).
+The first cut always bracketed — a quiet divergence in the direction that *feels*
+right, since the bracketed form is what an .lfm shows.
+
+**Bug one (frankB's own, fixed):** `GetOrdProp`/`GetStrProp` handled only
+direct-field properties and answered **0 / ''** for a property with a read *method*,
+while the write half already dispatched through setter methods. One arm of a double
+case, and the missing arm is the one nobody round-trips — `property Num: Integer
+read GetI` read 0 through RTTI and 107 directly. Same edit fixed a second: the
+setter trampoline was `procedure(Self; v: Integer)` for every width, **truncating
+every Int64 property with a setter method.**
+
+`FindPropInfo` deliberately absent and named at the declaration rather than faked —
+raising needs `Exception`, needs a `uses`, and typinfo has none by design (`streams`,
+`classes_lite`, `lfm` and all of `lib/pcl` sit on it).
+
+### BUG TWO — Track P, and it is the serious class: `bug-p-a-class-instance-converts-implicitly-to-any-typed-pointer` [p65]
+
+pxx lets a class instance convert implicitly to **any** typed pointer; FPC errors.
+Two consequences:
+
+1. **A silent memory-safety hole with no cast written anywhere** — an object read as
+   an unrelated record.
+2. A pointer-taking overload becomes a viable and **preferred** candidate for a class
+   argument, so `GetPropInfo(AnObject, 'Caption')` — *the spelling every FPC consumer
+   uses* — binds to the `PClassRTTI` arm and segfaults. Proven by instrumenting the
+   `TObject` arm and showing it is never entered.
+
+**So the facade landed today but its real-consumer path is unreachable until this is
+fixed** — it gates `streams`, `classes_lite`, `lfm`, all of `lib/pcl`, fpjsonrtti.
+Relayed to frankA to take after its current #3, with the note that the frontmatter
+number is its call, not mine.
+
+**It did not reduce, and frankB stopped varying the input.** Every synthetic
+two-overload repro passes — unit or program, bare `TObject` or descendant,
+declarations adjacent or separated, self-recursive inner call — so the ticket **drops
+overloading entirely** and demonstrates the underlying conversion in 14 lines.
+**Second time tonight, second lane:** when a passing probe is not evidence, stop
+varying the input and go after the mechanism.
+
+Platonic handling correct: instance overloads left in place with the hazard stated at
+the declaration, test routed via `GetInstanceRTTI` with a pointer to the ticket. And
+the resolution carries my scope warning in its own words — one of four walls,
+collections unassessed — so nobody infers a green rung from a p72 resolve.
+
+## Item 2 disconfirmed — and item 1 ATE ITS PRIZE (`cb5e2f564`, comment-only)
+
+The ticket said the resident exclusion rests on a reason that died at `e7c0d1d2a`.
+**Right about the reason, wrong about the conclusion: the exclusion had two reasons
+and only one died.**
+
+- dead: *"the refresh reloads via `EmitLoadVar` and clobbers rax"* — it re-extends
+  from rax now.
+- **alive:** a resident load is *already* a reg-reg move, so eliminating it removes a
+  register move, not a memory access.
+
+Measured rather than reasoned: dropping the exclusion removes **6 instructions out of
+13,483**, every one a reg-reg move — the class W1's sizing already priced at ~0.
+
+> **A ticket can be factually correct that a mechanism died and still wrong about what
+> follows, because it recorded one of the reasons and not both.** Checking whether a
+> stale rationale was the *only* rationale is a cheap step nobody takes.
+
+**And the reason it is empty is item 1.** When item 2 was filed, the boolean temp
+lived in the frame and the sequence was a genuine memory round trip. At `-O3` today
+the temp is resident in r14 and the whole `Upcount` body contains **exactly one memory
+read** — the string byte. **Item 1 consumed item 2's prize.**
+
+That is the day's stale-claim pattern in its most expensive form: unlike a wrong
+number, a stale optimisation ticket looks like *work waiting to be done* rather than a
+claim to re-check. Asked for a line on the umbrella: **before starting any item,
+re-measure the prize, not just the mechanism.**
+
+What survives is the **dual-write stores**, not reloads — making the register
+authoritative inside the loop and re-syncing the frame at exits, the V5→V3 step the
+sizing measured at a further **2.15x**. That is the real W2 and the only unclaimed item
+with a measured number. **Dispatched as item 3.**
+
+## Dispatch state after this round
+
+- **frankwasm — GRANTED the `ir_codegen.inc` dispatch arm.** frank-optimize answered
+  option 1 and said *why* it got safer, not just "still free": its entire footprint in
+  that file since is one comment ~1500 lines from the ladder. That is a fact anyone can
+  check; "it's free" is a claim that expires.
+- **frank-optimize — item 3** (the real W2).
+- **frankB — the SysUtils ticket** (`feature-sysutils-delphi-exception-api-gaps-found-by-rtl-generics`),
+  on the rung-6 critical path, with the reminder that `Error`'s numbers are explicitly
+  not chased.
+- **frankA — #3 now, then the pointer-conversion bug.** Both are about which candidate a
+  name resolves to, so worth a moment's thought rather than treating them as unrelated.
+
+## THE DISPATCH INVERTED AGAIN, and my own instruction caught it: W1 is worth ~1.6x, item 3 is worth ~5%
+
+I asked frank-optimize to write down *"re-measure the prize before starting an item."*
+It applied that to item 3 first. **Item 3 is ~5%, not 2.15x**, and the item that
+inherited the prize is **W1 — the one I deprioritised this morning.** Sized and banked
+at `d02b9e3eb`; nothing built, no item switched unilaterally.
+
+**Why the 2.15x was wrong: it measured two changes at once.** The morning sizing's V5
+and V3 differ by the dual-write stores **and** by all the operand staging through rax
+— V3 was an *idealised* 6-instruction body, not V5-minus-stores — so the whole delta
+was credited to the stores.
+
+Re-isolated on the **current** `-O3` body transcribed from today's disassembly,
+variants differing from A **by deletion only**, interleaved, min of 9-12, four
+independent runs agreeing:
+
+| variant | s | vs current |
+| --- | --- | --- |
+| A — current `-O3`, 21 insns (calibrates: real binary 0.61 s) | 0.62 | 1.00x |
+| B — item 3 exactly: three dual-write stores deleted, nothing else | 0.60 | **1.04-1.06x** |
+| C — item 3 + W1: staging through rax also gone, 11 insns | 0.38 | **~1.65x** |
+| D — ideal, fpc-like, 6 insns | 0.20 | 3.0x |
+
+> **An A/B comparison is only valid when B is A minus exactly one thing.** Obvious
+> stated; the failure mode is that a plausible variant table hides it.
+
+**Why item 3 is small, and it is the mirror of item 1's finding:** stores retire into
+the store buffer and sit **off** the loop-carried chain. *The very reason loads
+mattered so much to item 1 is the reason stores do not.* It is also the harder build
+— exit re-sync, exception landing pads, every path treating the frame slot as
+authoritative — so it is currently the worst effort-to-payoff item in the ticket.
+
+### The ranking history, stated plainly rather than smoothed
+
+**I deprioritised W1 this morning on frank-optimize's disconfirmation at 1.4%. That
+disconfirmation was correct. It is now stale — and item 1 is what made it stale.**
+The body was 12 cyc/iter dominated by two frame round-trips, and every `mov %rN,%rax`
+sat in their shadow. Item 1 removed the memory traffic: 6.5 cyc/iter, **zero memory
+reads**, and the chain now runs *through* the staging moves
+(`r13 → rax → r14 → rcx → rax`). **The same instructions that were free while they
+overlapped a 5-cycle store-forward are the critical path once it is gone.** Nobody was
+wrong at either moment.
+
+> **An optimisation's value is not a property of the transform. It is a property of the
+> transform against a baseline — and a baseline moves, sometimes by your own hand.**
+
+Two instances in one session, both caused by item 1: **item 2 emptied by it, W1 revived
+by it.** The pair is what makes the rule credible; either alone reads as a one-off.
+
+**Dispatched: W1, with the lane's own caveat promoted to a condition** — build behind
+`-O3` and land `hello.pas` at min-of-15 **in the same commit** as the loop benchmark,
+so the neutral number and the flattering one arrive together. All of this is one loop
+shape (`three.pas`, the same benchmark that gave item 1 its 1.9x) and a hand-transcribed
+model, not a built pass: it bounds tight scalar loops and says nothing about the compiler
+or the corpus. "Beyond C is another ~1.8x and that is a real allocator" — parked, not scoped.
+
+## frankA: #2 fixed, #3 parked and reclassified, and a fifth wall that is not a generics bug
+
+**#2 FIXED (`042bcbb32`)** — root cause upstream of the symptom.
+`DelphiRewriteGenericUses` rewrites `TSvc<T>.Sel` to objfpc by **deleting the `<T>`
+group**, which was also the only thing distinguishing it from a same-named non-generic
+class's method impl. The resolver's tie-break then did exactly what it should. **The
+tie-break stays; what was wrong was a comment** — *"a `X<T>.M` header never reaches this
+branch"* — **true in objfpc, false in Delphi mode because the rewrite runs first.**
+Corrected in place, because leaving it would re-authorise the same reasoning. Keyed on
+the class-name token's **SOffset, not token index**, since the rewrite runs to a fixed
+point per template and every round shifts indices.
+
+Rung-6 effect measured: the wall moves **2173 → 2351**. The next wall is a **fifth**,
+still not typinfo — `AN_CLASS_VIRTUAL_CALL` fails to lower when a virtual class method's
+**address is taken as a value**. Filed with an 18-line repro **containing no generics at
+all**, and saying so, because rung-6 context makes it read as a generics bug to everyone
+who meets it.
+
+**#3 PARKED to `unfinished/`, diagnosis banked, no partial code, tree at a verified
+fixedpoint — and it RECLASSIFIED.** It is **not a Delphi-surface bug**: hand-written
+objfpc fails on `pinned`. The real defect is that a nested `specialize X<T>` group is
+unsupported in **expression position**; the Delphi spelling merely arrives by another
+route with another message. Two stacked defects located — (a) the rewrite decides "is
+this a method impl header?" by what **follows** the group rather than what **precedes**
+the name, and an expression use has a dot too; (b) the nested-specialization prerequisite
+scan sweeps only the class body, never the separately-buffered method bodies. **Fixing
+(a) alone routes the use straight into (b)**, so it is not an improvement — reverted
+rather than shipping a change that swaps one error message for another, and said plainly
+that a third failure it saw is not yet understood.
+
+### Ranking: express dependence as an EDGE, never as a number
+
+frankA's call on the pointer bug's prio, and it is better than the alternative I would
+have accepted: leave it at 65 and add a **`Blocks:` edge** to
+`feature-typinfo-facade-unit`. *"This doesn't outrank things on its own merits, it
+outranks them because of what sits behind it."* The ranker propagates down edges by
+design; hand-inflating the number **double-counts** the moment the edge exists.
+
+### The symtab.inc boundary — asked, not guessed
+
+The pointer-conversion fix is ~15 lines at `symtab.inc:6963`, in
+`TypesCompatible`/`MatchParamCompatible`, with an **exact in-repo precedent beside it**
+(`MatchArgNilOk`, whose comment names the same architectural gap almost verbatim:
+the kind channel never sees identities). frankA **stopped rather than edit a file I
+fenced off for Track O**, and asked.
+
+Measured: nothing has touched `symtab.inc` tonight, and frankA's site is ~2,200 lines from
+the residency region W1 might use. Asked frank-optimize directly anyway. **Option 3
+(park it) was correctly named and correctly rejected** — parking costs the facade's whole
+consumer path (`streams`, `classes_lite`, `lfm`, all of `lib/pcl`, fpjsonrtti) against a
+hypothetical collision.
+
+### Two habits that appeared independently in two lanes tonight
+
+- **Regression tests that keep the already-working shapes as controls**, so the test
+  cannot be narrowed later. frankB did it with the QWord rows; frankA did it with #2's
+  two working header shapes.
+- **Stop varying the input; go after the mechanism**, when a passing probe is not
+  evidence. frankB's `keys()` and overload findings; frankA credits it with saving real
+  time on the pointer bug.
+
+### The symtab.inc grant: answered with REGION BOUNDS, not a yes — and that is the better answer
+
+frank-optimize cleared frankA for `symtab.inc:6963` and did it the right way: it
+checked and reported that W1 **does** put it in `symtab.inc` — at **4700-5030**
+(`ResidentRegOf` 4706, `LeafSymRcxLoadable` 4965, `ScratchSafeSubtree` 4998) — just
+1,900+ lines from frankA's site, in a different function, reading no residency state.
+
+**A bare "yes, it's free" would have been true and much less useful.** Bounds let me
+grant without re-asking next time, and let the next lane check for itself. It added two
+things nobody asked for:
+
+- **It has not opened the file yet** (playbook write-up finished, W1 editing not
+  started), so frankA landing promptly is in *before* it opens the file at all —
+  strictly the safest ordering — and it said explicitly not to wait on it.
+- **W1 may not touch `symtab.inc` at all.** The first transform is emitter-side —
+  use a resident sym's register directly as a binop/compare operand instead of copying
+  through rcx/rax — which is `ir_codegen.inc` work *reading* `ResidentRegOf`, not
+  changing it. It only edits 4965-5030 if the operand whitelist needs widening, known
+  within the hour.
+
+**Made binding for both lanes:** *if either hits a rebase conflict in `symtab.inc`
+today, report it rather than resolving it quietly.* At 1,900 lines of separation a
+conflict would mean one of them is not where they think they are — the same class as
+tonight's impossible `exc` result, where the impossibility is what saved the
+measurement. **A conflict that should not be possible is evidence, not a chore.**
+
+## MILESTONE: pxx compiles Pascal to wasm, and it answers what the native build answers (`10fbc7ec7`)
+
+```
+wasm32: 5 of 125 bodies lowered; 120 emitted as `unreachable`
+ok  wasm matches the native build (4 values), $sp balanced
+```
+
+Gate: converged, `044add345f88`, differing from pinned. 20/20 hashes across 4
+programs × 6 targets, **both sides regenerated back-to-back**. All three wasm suites
+green. Scope stayed the one arm — and the `Exit` beside it is not extra scope but the
+point: **that ladder falls through to the x86-64 emitter**, so replacing an `Error`
+with a call is what turns the `Exit` from implied into required.
+
+### 1. A trivial program cannot be compiled in isolation — and that invalidates Phase 2's milestone
+
+The backend's **first run** stopped at IR op 21 in `compiler/builtin/builtinheap.pas`,
+not in the test program. A `.pas` pulls the builtin heap unconditionally
+(`-dPXX_NODEFAULTRTL` does **not** suppress it), and those bodies use stores, calls and
+control flow long before user code does.
+
+> *"Implement the ops my test needs"* was never a reachable milestone. **"Implement the
+> ops the builtins need" is most of Phases 2-4 at once.**
+
+Answer: an unlowerable body is emitted as a single `unreachable` and **recorded**, with
+an unconditional summary line. Lowered bodies diff against native today; an unlowered
+one **traps loudly instead of computing quietly**. Approved as-is — own file,
+self-reporting, self-retiring at zero — with one condition: **the scaffold and its
+removal condition go on the wasm ticket, not only in the file's comment.** A scaffold
+whose retirement lives only where the scaffold lives is how temporary things become
+permanent, because the person who would remove it is the person who stopped reading
+that file. PLAN.md's Phase 2 milestone is now known-unreachable and gets rewritten
+against the coverage counter: **5 of 125 is a real metric; "Phase 2 complete" is not.**
+
+### 2. Lowered bodies went 14 → 5 — the number went DOWN because it got more honest
+
+The validator caught a real bug **unprompted**: slot loads hardcoded `i32` while
+`WasmValType` correctly gave `Int64` bodies an `i64` signature — *"type mismatch in
+implicit return, expected [i64] but got [i32]"*, **with a byte offset**. On a register
+backend that same bug loads 32 bits of a 64-bit slot and returns a plausible wrong
+number far from the cause.
+
+**frankwasm wrote that exact argument into `CHARTER.md` this morning and had it
+demonstrated on its own code by lunchtime.**
+
+And note what it did *not* do: widen the load to match. That would have been guessing at
+a type model Phase 2 has not built. It made the backend **refuse** what it cannot honour
+— non-`i32` signatures and slots marked unsupported before a contradicting body is
+emitted — and the count fell. Same instinct as `writeWasm`'s empty-module guard and the
+`IR_FRAME` call. **A metric that goes down when you get more honest is a metric worth
+trusting.**
+
+### 3. All three flagged-unobserved assumptions held — and the one that would have bitten was found by READING
+
+Parameter homing, the negative `[rbp-N]` offset conversion, and the program body arriving
+with `CurProc < 0` all held. The trap was elsewhere: **`IRTopLevelStmt` takes a node index
+despite its parameter being named `k`**, and it was about to pass a kind. **Compiles fine,
+then indexes the IR array with an opcode number** — a silently-wrong-value trap with no
+diagnostic, in a function every backend author calls. Found by reading the riscv32 arms
+rather than by trusting its own reasoning about them.
+
+**Asked frankwasm to FILE it (Track A, low prio, don't take it):** a rename plus a one-line
+comment is nearly free and closes the class. The next person may not read the riscv32 arms.
+
+## SysUtils ticket landed (`a6b06ebc1`) — and item 2 is only half-unblocked, for a Track P reason
+
+**`CreateRes`/`CreateResFmt` work with any `^string`. The call-site spelling every real
+site uses does not compile** — `@SSomeResourceString` is `error: undefined variable`,
+because pxx parses `resourcestring` as a plain const section and a const has no address.
+Filed as **`bug-p-a-resourcestring-is-not-addressable` [P, p55]**, and frankB measured the
+boundary rather than filing the first thing that failed: **of the four ways to declare a
+string, only `resourcestring` differs** — untyped `const` refuses `@` in *both* pxx and
+FPC. So the fix is emphatically **not** "let `@` take a const"; it is one row, **give
+resourcestrings storage**, which is what they are in FPC (runtime-replaceable variables —
+the whole point of the construct). Checking all four spellings is what made the ticket name
+the *right* change instead of the plausible one.
+
+### Three checks that each caught something a reasonable person would have assumed
+
+- **`EArgumentOutOfRangeException` descends from `EArgumentException`** — confirmed by
+  running FPC 3.2.2. A sibling would make `on E: EArgumentException` **silently not fire**:
+  a handler that does nothing rather than an error.
+- **`TRuntimeError` read off a RUNNING FPC program, not written from Delphi.** The tails
+  differ: FPC ends `reQuit`/`reCodesetConversion`/`reNoDynLibsSupport`/`reThreadError`
+  where Delphi has the monitor errors. 29 members, `reRangeError` = 4 — and a vendored
+  `case` compares against those ordinals. Writing it from memory would have been wrong from
+  member 25 on.
+- **The parameter is `PResStringRec` (Delphi's name), NOT FPC's `PString`** — because
+  `typinfo` already exports a `PString` that is `^string[255]` for RTTI name blobs.
+  `uses typinfo, sysutils` would take whichever came last: **two incompatible meanings for
+  one name in one RTL is a wrong answer, not an error.**
+
+### `Error` RAISES rather than halts — a deliberate divergence, upheld, with its cost recorded
+
+The ticket said *"exists and halts"*. frankB made it raise, flagged the call rather than
+burying it, and asked whether "halts" was binding. **It was setting a low bar, not writing a
+spec** — it meant *don't chase FPC's numbers* — and frankB correctly read past the literal
+word. The stronger argument is its own: error handling is explicitly ours, pxx already
+surfaces div-by-zero as a catchable `EDivByZero` and a bad `StrToInt` as `EConvertError`, so
+a halting `Error` would be **the odd one out in its own RTL**. Internal consistency beats
+matching a reference we have been told not to match.
+
+**What makes it a decision rather than a preference is the recorded cost, and it is real:**
+a catchable `Error` can be swallowed by a surrounding handler, turning a "cannot happen"
+arm into a handled path — and all seven call sites are exactly such arms. Asked for the
+divergences entry to **name the symptom** as well as the mechanism: *"if a vendored consumer
+appears to continue past an impossible state, suspect a swallowed `Error`"* is findable by
+someone debugging; a mechanism description is only findable by someone who already suspects it.
+
+**Differential claim stated precisely, because *"checked against FPC"* decays into folklore
+inside a week:** the test's first **18 rows run byte-identically under FPC 3.2.2**, then
+diverge at `Error()` **by design**, where the FPC run terminates. The header states that
+boundary rather than claiming the file is portable.
+
+## Tick: the targeted-verdict queue is starved by the very thing it was built to escape
+
+v389's request has been queued ~1.5h; `--covering ab51855df` still reports **no EXACT row**.
+Breadth is 1h old and 16 testable commits behind. The shape: **the queue drains first among
+the IDLE phases, and an idle phase is not being reached.** frankT built it with the same
+`IDLE_YIELD_AFTER` guard as its neighbours — *"'ahead of' must not become 'instead of'"* —
+which is right; what may not have been anticipated is the degree. **"First in a queue that
+never runs" and "not in the queue" are the same outcome from outside.**
+
+Reported as an observation, explicitly **not** a request to retune, because frankT has twice
+declined to change scheduling under the load it would be evaluated against and that reasoning
+is stronger here than in either previous case. The open question left with it: **is a
+targeted request an idle phase at all, or is it a job?** Every other idle phase is the
+watcher deciding what is worth testing; a request is someone having already decided.
+
+### And I declined to pull the one lever I had been claiming — because it would not have worked
+
+I have been telling Track T that the lull comes from not refilling lanes as they finish.
+frankB finishing was the first moment that lever existed, **and I did not pull it**: with
+frankA, frankwasm and frank-optimize all mid-work the push rate stays high regardless, so
+idling frankB would have bought nothing while costing real work. Said so to frankB in those
+words. **A lever that only works when several lanes free up together is not a lever you can
+pull on one.** Better to name that than to keep implying I am holding something back.
+
+## CORRECTION: the queue was NOT starved by position. It was starved by PREEMPTION — and my design question was the wrong question (`3d90849d8`)
+
+I reported that the targeted queue drains first among the idle phases and an idle phase
+is never reached. **frankT measured it and that is wrong.** From `~/trackt-watch.log`:
+
+```
+twatch: verifying PIN v389 (83468c5462d4) at full
+twatch: pin verify preempted by a push — will resume      × 15
+```
+
+**The idle chain is entered constantly. Every run inside it is torn down before it
+completes.** So "first in a queue that never runs" was never the situation, and the
+change I was circling toward — promote a request to sit alongside `do_test` — would
+have made it **start sooner and be preempted just the same.**
+
+**Root cause one level down:** `make_preempted()` with no `commit_after` is abortable at
+*every* moment. Such a run only finishes if the gaps between pushes exceed its wall, and
+at four workers they do not. The request phase inherited this from `verify_pin` verbatim
+— **the abort_check was copied along with the shape, and the defect came with it.**
+
+Fixed with the mechanism already in the same file and already proven against this exact
+failure: the idle full backfill passes `commit_after=full_commit_secs`, and reserved
+breadth passes `commit_after=0` with a comment saying that letting a push abort it
+*"rebuilds the starvation the reservation exists to end"*. frankT took the **backfill's**
+value, not breadth's `0`, for a stated reason: a push in the first minute still preempts,
+so a genuinely fresh sha is not starved by a run that just started; after that the
+request finishes. Breadth's `0` is for a deliberately reserved slot, **which a request is
+not.**
+
+### The reframing — record it in these terms, because the priority framing actively misleads
+
+> **The axis is COMMITMENT, not PRIORITY.** Every phase here is preemptible-forever or
+> committed-after-N, and *that* choice — not its position in the chain — determines
+> whether it can ever complete under sustained pushes.
+
+My framing would have sent the next person to reorder the chain, which is precisely the
+change that would have done nothing. *"Is a request an idle phase or a job?"* was a
+well-formed question about the wrong variable.
+
+### Squaring this against twice declining to retune under load — and why it is not self-serving
+
+frankT raised the objection against itself and asked to be checked on it. **The line
+holds, and the strongest evidence is not its argument but its restraint:**
+
+- What it declined before were **tuning parameters whose effect can only be read
+  statistically** — a memory estimate, a yield budget. Under varying load you cannot tell
+  whether the change or the load produced the result.
+- This is **a code path that provably cannot complete**, fixed with the value the file
+  already uses for the identical purpose, and the outcome is **binary and directly
+  observable**: the request drains or it does not.
+
+**And it declined to fix `verify_pin`, which has the identical defect and is why v389 has
+sat unverified ~5h.** That is the phase whose starvation is the actual problem and the fix
+that would most vindicate the reasoning. Someone rationalising would have taken both and
+called it one change. Taking the one it could justify and leaving the one it could not is
+the opposite of self-serving.
+
+**Left deliberately open, correctly:** committing `verify_pin` means ~20 minutes in which
+the fast *native* verdict lanes actually steer by is blocked. That is a real trade for a
+quiet box with a measurement, not something to ride along with a bug fix. Passed one
+thought for whenever it is made, not an action: **a native pin verify that COMPLETES is
+worth more than a full one that never does** — the same shape as *gate what can be green*.
+If commitment can apply at native while full stays best-effort, nobody waits 20 minutes and
+the pin still gets an exact row.
+
+**Not queueing a second request for v389.** The `full` one should now drain once the phase
+gets a minute's clear air; double-queueing at native would buy a real run for a question
+about to be answered. If it has not drained in a couple of cycles, that means preemption is
+not the whole story and frankT wants to know.
+
+## A PUSHED FIX IS NOT A LIVE FIX — the daemon holds the code it STARTED with, and it was already stale
+
+frankT corrected its own "your v389 request should now drain" within minutes. The
+`commit_after` fix is **inert**: the daemon started at 22:19, before the fix existed.
+Three-way fingerprint:
+
+```
+daemon is RUNNING     cc482c9fccc0
+clone's file on disk  4e63c6f16ffe   <- ALREADY different from what is running
+my fixed file         927ad6d857fc   <- in neither
+```
+
+Worse than "tonight's fix is missing": **the running process was already stale against
+its own clone.** Nothing pushed tonight is in the process publishing verdicts.
+
+**This is a recurrence, and the earlier one is documented in the code that catches it.**
+`code_fingerprint()`'s docstring records 2026-08-26: *"a fix that had landed on origin,
+been pulled into the clone, and passed its guards could still be absent from the process
+actually publishing verdicts — indistinguishable from live."* It hit three fixes that day
+and was caught only because one happened to add a field whose absence was visible.
+
+> **A pushed fix is not a live fix.** Between `git push` and observable behaviour sits
+> every long-running process that loaded its code at start time — and *"pulled, guarded,
+> passing"* is indistinguishable from live unless something fingerprints the running
+> image.
+
+Stated as a rule for **every** lane, not a Track T note: it generalises to anything with a
+resident process between a push and an effect. The failure mode is silent by default and
+the instrument that catches it already exists — used here after the claim rather than
+before, which is the only thing to fix.
+
+**Restart is frankT's, deliberately not this second:** the daemon is mid native run and a
+restart discards it — ~4 minutes of real verdict against throwing it away. **No drain is
+possible before then**, and nobody has been told to expect one.
+
+### `mid_tier` — the narrow pin-verify rung does not exist on this box, and that is closer to a defect than a setting
+
+My "a native pin verify that completes beats a full one that never does" turns out to be
+**mostly already built**. `pin_verify_due(clone, host, st, tiers)` takes a tier tuple and
+two rungs are already wired — `pin_mid` (narrow, early) and `pin_deep` (broad, later).
+
+**The catch: `CONF_DEFAULTS` sets `mid_tier` to `full`, the same as `tier`**, so both rungs
+resolve to the same tier and **the narrow rung does not exist**. There is even a comment
+near `pin_deep` acknowledging `mid_tier == tier` as a live case — which reads like
+something noticed and not followed up rather than something chosen. **A structure built for
+two rungs and configured with one is not a setting, it is an unfinished install.**
+`mid_tier=native` is a *config* change (`trackt config`); the commitment half still needs
+code.
+
+Sequencing left to frankT and explicitly **after** the restart, not bundled with it — one
+change at a time, and a config change whose effect cannot be attributed is precisely what
+it has twice refused. Also flagged: whether `mid_tier` is live-read or start-read now
+matters, because tonight demonstrated that *changed* and *in effect* are not the same thing.
+
+### Conceded: frankT's correction to my own praise
+
+I called its declining to fix `verify_pin` **stronger evidence than its argument** that it
+had not drawn the retune line self-servingly. It pushed back: it would rather the case rest
+on the reasoning, because **restraint is performable and reasoning is checkable** — and if
+the distinction (statistically-readable parameter vs provably-non-completing code path) is
+wrong, the fix is wrong regardless of which subset it took.
+
+It is right and I have conceded it. **My framing rewarded a behaviour instead of examining
+a claim** — the move that lets a well-behaved wrong answer through.
+
+## A repro that passes on the FIX and on the BASELINE is a coincidence, not a verification
+
+frankA landed the memory-safety half (`8b75fcabd`) — `MatchParamCompatible` narrows the
+blanket `tyPointer <- tyClass` rule by the parameter's element type; the 14-line repro is
+a compile error; Pointer / TObject / descendants / nil / pointer-to-class all unaffected;
+fixedpoint `f2e90dedc75c`; scope held exactly to the grant.
+
+**Then it nearly banked a false verification, and caught it by running the "before".** It
+built two synthetic two-overload repros, watched both select the instance arm correctly on
+the new binary, and was a step from calling the overload half fixed — **then ran them on
+`pinned`, where both also pass.** They were never broken: their parameters' element types
+*are* recorded, so the pointer arm was never viable for them. **That is also why frankB's
+synthetic pairs all passed.**
+
+> **A repro that passes on the fix AND on the baseline verifies nothing.** The only step
+> that catches it is running the "before" — and the temptation to skip it is strongest
+> exactly when the "after" looks right.
+
+Only the real `typinfo.pas` call site is evidence; instrumenting the instance arm at
+`typinfo.pas:1479` is how to read it. Warning placed at the top of the new ticket.
+
+### The remaining half is a DIFFERENT defect wearing the same symptom
+
+Two probes at opposite ends of one parameter — `elemtk=5 elemrec=32` at registration
+(tyRecord, correct), `ptrelem=0` at overload matching (tyUnknown). **Captured right, read
+back as nothing.** `tyUnknown` is the untyped-`Pointer` sentinel, so the new narrowing *is*
+reached, reads *"takes anything"*, and correctly permits the class **by its own rule**.
+**The compatibility logic is now right; the data underneath it is missing.** Filed as
+`bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching`
+[P, 65], with both measurements, the likely direction (mirror `ProcRetPtrElemTk` for
+parameters — results have one, parameters route through `Params[j].SymIdx` into `TSym`,
+which is the hop where it is lost), and an explicit **"confirm whether the symbol is wrong
+or the field is before choosing, they have different fixes."** Stopped there rather than
+widening past the grant into `defs.inc`.
+
+### My `Blocks:` advice was wrong, and frankA's reason for refusing it is better than the mechanics
+
+The ranker reads **`blocked-by:` on the BLOCKED ticket**, so the edge cannot live where I
+implied. And inventing a P-side edge would have been **false**: rung 6 needs the *type-level*
+API (`GetTypeData(PTypeInfo)`), not the instance overloads this bug blocks, and that ticket
+is already prio 65 so it would propagate nothing.
+
+> **A false edge would rank correctly for the wrong reason and outlive the reason.**
+
+The accurate edges are on Track B's tickets (streams, classes_lite, lfm, pcl, fpjsonrtti)
+and point at the **NEW** ticket, not the closed one. Relayed to frankB.
+
+frankA also resolved the closed ticket while **recording that its Gate line's second clause
+is unmet**, rather than letting a closed ticket imply more than it delivered.
+
+## W1 slice 4 (`46c8cf47e`) — 1.15x against a sized 1.65x, and that is the slice, not a miss
+
+A register-resident BINOP right operand no longer needs `mov rcx, r12..r15`: the ALU reads
+r12..r15 directly, so `mov %r13,%rcx; xor %rcx,%rax` becomes `xor %r13,%rax`. `Run`'s body
+**21 → 19 instructions**, `three.pas` **1.12-1.17x** across three rounds of min-of-12, and
+**four neutral workloads in the same commit** — the house rule's first outing.
+
+**Safe by construction, not by argument:** a deleted *move*, not a recomputed value, resting
+on the residency contract `EmitLoadVarRcx`'s own resident arm already relies on. Whitelists
+the five plain-integer forms, so **unlisted ops keep the rcx contract and a new op or type is
+safe by default** — the allowlist shape the playbook already argues for, and the reason
+shifts (which need rcx *by name*) didn't have to be remembered.
+
+**The gap is reported in the same breath as the number:** the model deleted **all eight**
+staging moves, this slice deletes **two**, and the remaining ~1.4x needs a left operand and
+destination not forced through rax — a contract change, not a deletion. **Stopping at the
+provable one and naming the gap is what makes the next number believable.**
+
+### A THIRD measurement failure mode, and the three compose
+
+> **Interleaving fixes WHICH runs you may compare. Repetition fixes HOW CONFIDENTLY.
+> Amplification fixes WHETHER THE TIMER CAN SEE IT AT ALL.**
+
+`bt` measured 0.49 vs 0.51, then 0.55 vs 0.56 — *"2-4% slower", twice*, which is exactly the
+shape of a real small regression. Both were **one 10 ms tick on a ~0.5 s workload**.
+**Below ~2% of the workload, `/usr/bin/time` is quantisation, not measurement.** Dispatched
+to the playbook with those numbers.
+
+## PARKING TWO LANES — and this is the first moment the lull lever actually exists
+
+- **frankA: write up and stand down.** It flagged fatigue after two dense hours *and*, in
+  the same message, described nearly banking a false verification. Those two facts belong
+  together. No fresher P lane exists, so the answer is not hand-off but "the resourcestring
+  ticket already carries the measurement that picks the fix — it is a clean pickup for
+  whoever is next." Leaving it in `backlog/` costs nothing; starting it tired might.
+- **frank-optimize: write the third trap into the playbook, then park the umbrella.** The
+  larger half is a multi-session register-contract change and starting it now leaves it
+  half-done across a boundary. The umbrella is in a genuinely good state — three slices,
+  honest numbers, caveats attached, tree clean. **A good stopping point is a deliverable.**
+
+Two lanes parking drops the push rate, which is what the daemon needs after frankT's restart
+for v389's queued verdict to reach a commitment point. **The lever I said only works when
+several lanes free up together is now, for the first time tonight, available** — and it
+arrived from finishing rather than from anyone being idled.
+
+## frankA stood down clean — and reframed the near-miss better than I did
+
+Final act was `ceb42945c`: **a stale claim in the repo with its own name on it.** The rung-6
+section still said four walls and *"complete set for this unit"* — made false by its own fix
+to wall 2, which exposed a fifth. **Appended rather than edited**, so the original
+measurement stays readable as what it was, and the section now says plainly: *don't treat the
+wall list as a work estimate; re-run the probe after each wall lands.* It also records that
+**the typinfo chain does NOT block rung 6** — that rung needs the type-level API, not the
+instance overloads — because the two are newly easy to conflate.
+
+Final state: tree clean, HEAD == origin/master, no ticket in `working/`, binary
+`f2e90dedc75c` a verified fixedpoint at the pushed sha.
+
+### The correction worth keeping: a default, not a virtue
+
+I had filed the near-miss next to fatigue. frankA rejected that framing:
+
+> The transferable part is not *"be careful when tired"*. It is that **a baseline run is
+> cheap and should be the DEFAULT step, not a suspicion-triggered one.**
+
+**A rule that only fires when you are already suspicious protects you exactly when you least
+need it.** That is the version in the tickets and the version to carry.
+
+And it credited frankB's *"it did not reduce, stop varying the input"* note for priming it to
+distrust a passing probe — *"without that message in the thread I'd probably have shipped the
+claim."* Worth recording as evidence the relay does something: neither lane can see the
+other, and a message about `keys()` two hours earlier is what stopped a false claim about
+overload resolution.
+
+### Track P queue, in frankA's own order, for whoever picks it up
+
+1. **`bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching`**
+   — unblocks typinfo's consumer path, and **it is a five-minute question before it is a fix**:
+   confirm whether the *symbol* is wrong or the *field* is, because they have different fixes.
+2. `bug-p-a-resourcestring-is-not-addressable` — ticket already carries the boundary
+   measurement that picks the fix (only `resourcestring` differs; untyped `const` refuses `@`
+   in both pxx and FPC).
+3. The vmt-address wall (`AN_CLASS_VIRTUAL_CALL`, 18-line repro with **no generics in it**).
+4. Nested `specialize` in expression position — the biggest, and its ticket now starts from
+   the **objfpc** repro rather than the Delphi symptom.
+
+### Why the sole-A check was worth its cost even though it came back clean
+
+frankA thanked me for asking frank-optimize rather than waving it through. The reason it was
+worth the message: **frank-optimize DID end up in `symtab.inc` after saying it might not, and
+told me unprompted.** A check that returns "no problem" is not wasted — it is the only way to
+know the difference between separation and luck, and the arrangement works only because both
+sides treated it as a real question rather than a formality.
+
+**Session tally for frankA:** five rung-6 walls found where the ticket said one, two real
+defects fixed, three filed with the analysis banked, one false claim caught before it shipped.
+
+## frank-optimize parked clean — and left the one line that makes its numbers safely reusable
+
+Playbook trap #3 landed (`7c5e3dfd0`) as a **table**, because the three look identical from
+outside and each needs a different fix:
+
+| | fixes | symptom when missing |
+| --- | --- | --- |
+| Interleaving | WHICH runs you may compare | the same binary measures 1.09 and 1.34 |
+| Repetition | HOW CONFIDENTLY | three under-powered runs share a bias and read as confirmation |
+| Amplification | WHETHER THE TIMER CAN SEE IT AT ALL | a one-tick difference reads as a consistent few-percent effect |
+
+Fix given as a copy-pasteable line, with the note that **amplification is the cheapest
+question to ask and the easiest to skip, because the number already looks like a
+measurement.**
+
+Umbrella parked to `unfinished/` (`2584e211c`), body status corrected to match the folder,
+`progress.sh check` clean. **Nothing half-applied:** every slice landed with an `-O3`
+self-host fixedpoint, and **`-O2` is byte-identical to where the day started** — 48/48
+corpus hashes across six targets, re-verified after each landing.
+
+**The line that makes the whole umbrella safely reusable:** *numbers dated 2026-08-28 were
+taken under all three traps and earlier ones were not.* **A stale number with no provenance
+is worse than no number** — that sentence is what makes the earlier ones safely ignorable
+rather than quietly load-bearing.
+
+Left with its number *and its shape*: W1's larger half ~1.4x but a **contract change rather
+than a deletion**; item 3 ~5% and the harder build; the promotion experiment as one
+experiment, still my call and still unmade until there is corpus evidence rather than seven
+programs.
+
+### NEVER PUT A STATUS-BEARING COMMAND UPSTREAM OF A PIPE
+
+frank-optimize's park command was `progress.sh unfinish X | tail -2 || git mv ...`. There is
+no `unfinish` subcommand — but **a pipeline's exit status is the last command's**, so `||`
+never fired, the `git mv` never ran, and a trailing `&& echo "moved"` **printed a success
+message for work that had not happened.** Caught only because the next command could not find
+the file.
+
+**Same failure class as CLAUDE.md's silent no-op `make`: a success message in the wrong
+dialect, with nothing downstream to contradict it.** Broadcast to every remaining lane —
+frankwasm especially, since a `check_*.sh` that pipes a compile into `grep` or `head` reports
+the **filter's** success, not the compile's. I use that shape constantly myself, which is why
+it is here rather than in a ticket.
+
+## THE LULL HAS ARRIVED — and it came from finishing, not from idling anyone
+
+frankA and frank-optimize both parked within minutes of each other: trees clean, nothing
+unpushed, `working/` holds **only frankwasm's ticket**, and `ir_codegen.inc` / `symtab.inc`
+are both free. **One lane is pushing.**
+
+This is the quiet box Track T twice said its deferred decisions needed, and it arrived exactly
+as predicted — from **not refilling as lanes finish**, which was already policy for a
+different reason. Reported to frankT with the three things now available that were not:
+
+1. the restart, which makes `commit_after` live;
+2. `mid_tier=native`, **if** the post-restart measurement says `commit_after` alone was not
+   enough — measured rather than reasoned, because reasoning from the shape is exactly what
+   sent me at the idle chain;
+3. `verify_pin`'s own commitment question, deliberately deferred to a quiet box.
+
+State at the time of writing: `--covering ab51855df` still shows **no EXACT row**, status
+still reads **`pin verify — v388`**. Both expected while the fix is not in the running process.
+
+### On credit for the two instructions that produced the most value
+
+frank-optimize credited *"bank the measurement before you start"* and *"re-measure the prize
+before starting an item"*. The honest accounting is narrower: **the instructions were free;
+turning the second on the LIVE dispatch was the judgement.** Most lanes would have applied it
+to the next item and left the current one alone. Same with the 6% regression — it re-measured
+the thing that justified its own dispatch, which is the least comfortable direction to point
+a check.
+
+## v389's PIN VERIFY IS RUNNING RIGHT NOW, at `full` — the lull did what three code changes were being weighed to do
+
+```
+phase   pin-verify
+sha     83468c5462d4      <- the v389 pin commit
+tier    full
+pin     v389
+```
+
+**Five hours starved, and it started the moment the box went quiet.** frankA and
+frank-optimize parking left one lane pushing, and the phase finally got the contiguous
+block it has always needed. This arrived **before any of frankT's changes went live** —
+the daemon is still running 22:19 code.
+
+**So this is also the cleanest possible measurement of the thing frankT wanted measured:**
+if it completes, `commit_after` was **not** the binding constraint tonight, **push rate
+was**, and `mid_tier=native` is unnecessary too. frankT's own framing: *"I would rather
+have that answer than be right."*
+
+**Window protected: frankwasm asked to HOLD ALL PUSHES ~25 minutes** — commit freely, don't
+push. It is the only lane pushing and `verify_pin` is preemptible at every moment, so one
+push aborts a ~20-minute run and returns us to square one. It is also the verification of
+the binary frankwasm itself builds on. Offered to weigh it against anything that genuinely
+needs to land; ordinary progress sits locally for 25 minutes at zero cost.
+
+### frankT nearly killed it — with the instrument built to protect it
+
+Its restart waiter tested `phase != "testing"` and printed:
+
+```
+IDLE: daemon phase='pin-verify' — safe to restart, nothing discarded
+```
+
+Confidently wrong. Trusting it would have **destroyed a 20-minute `full` pin verify on the
+artifact three lanes are building against — to install a fix whose entire purpose is making
+that same run possible.**
+
+> **An allow-list of safe states, never a deny-list of one unsafe state.**
+
+It enumerated the busy state it happened to be looking at, so **every phase it had not
+thought of defaulted to "safe"** — and the one it had not thought of was the one that
+mattered. **Three independent arrivals at this principle in one session:** the playbook's
+existing *"a blocklist costs one outage per symptom; an allowlist closes the class"*,
+frank-optimize's binop whitelist where unlisted ops keep the safe contract by default, and
+now this. Worth a cross-reference when that entry is next touched.
+
+**Re-armed on the published RESULT, not the phase** — `pin_verify.ver == v389` in
+`plexus.json` on origin, plus a distinguishable "left `pin-verify` without publishing"
+signal. Two outcomes, no inference. **A phase is a thing you interpret; a published result
+is a thing you read.**
+
+### The success-message-in-the-wrong-dialect shape, three times tonight from three lanes
+
+1. `progress.sh unfinish X | tail -2 || git mv …` — pipeline exit status is `tail`'s, so the
+   fallback never ran and a trailing `&& echo` reported a move that had not happened.
+2. `IDLE: … safe to restart, nothing discarded` — a deny-list waiter defaulting unknown
+   states to safe.
+3. (from CLAUDE.md, the ancestor) `make: 'compiler/pascal26' is up to date` where
+   `converged after N round(s)` belongs — a no-op build in a fresh tree reporting success.
+
+All three: **a success message with nothing downstream to contradict it.** The common defence
+is not vigilance but structure — read a published result rather than an inferred state, and
+enumerate what is safe rather than what is not.
+
+frankT also swept T's committed tooling (`fuzz.sh`, `optdiff.sh`, `selfhost_fixedpoint.sh`,
+the shell strings inside `twatch.py`/`testmgr.py`) for status-bearing commands upstream of a
+pipe: **clean**. Its own interactive `tools/sync.sh 2>&1 | tail -3` had been masking sync's
+exit status all night — it confirmed all ten commits on origin rather than just fixing the
+pattern, which is checking the consequence and not only the shape.
+
+## A PIPE OVER A VERIFICATION DOES NOT WEAKEN IT — IT INVERTS IT
+
+The hazard I broadcast on the strength of one instance found **two more within twenty
+minutes**, in frankwasm's lane, and its case is materially worse than frank-optimize's
+because **the masked command was the verification itself**:
+
+- `bash check_phase1.sh | tail -6` printed nothing. Silence read as "no failures". The
+  script had **died on a compile error at line 1**.
+- It was chained with `&&` after another check whose own `| tail` had turned a
+  **wasm-validate failure into a success** — so the chain ran to completion looking clean.
+
+**Net effect: three wasm suites were reported green in a handoff while `check_phase1.sh`
+had been RED since the Phase 2 wiring landed.** frankwasm corrected it here rather than
+quietly, which is the only reason I am not still citing "all three suites green" as
+evidence.
+
+> **A masked build step gives you a wrong status. A masked CHECK gives you a green you will
+> act on.** And an `&&` chain of piped checks cannot fail at all — each link reports its
+> filter's success, so the chain reports the health of `tail`.
+
+**The root cause is the alarming half:** `wasmenc.inc` had grown
+`procedure WasmReportCoverage; forward;` for a body living in the backend file. Harmless
+inside the compiler where both are included — **fatal in `test/wasm/wasmenc_selftest.pas`,
+which includes `wasmenc.inc` alone, and that standalone-ness is the entire reason Phase 1
+was provable without touching a shared file.** The property the phase was designed around
+was silently spent by an unrelated convenience. Entry point moved to the backend;
+`check_all.sh` now gives one verdict for three suites, pipes removed. Asked for a CHARTER
+line: **`wasmenc.inc` depends on nothing, and that is load-bearing, not incidental.**
+
+## Two corrections I owe, both mine
+
+1. **I told frankwasm "~25 minutes". It is a 3202-job `full` tier with a 7200s deadline on
+   six cores** — hours. I quoted a figure from the wrong tier's shape without checking: the
+   exact error class I have spent the night flagging in other people's work. Corrected
+   directly, and the ask narrowed to **buildable-file pushes only** (`compiler/**`,
+   `lib/**`, `test/**`).
+2. **I am holding my own pushes too.** I told frankwasm docs-only pushes are *probable, not
+   established* — pushing roster commits under that caveat would be exactly the double
+   standard I would flag in a lane. Asked frankT the precise question: does the abort check
+   use the same `testable_only()` filter as `do_test`? **One data point only** — my roster
+   push at ~01:5x did not kill the run, which was at job 15 immediately after. That is a
+   data point, not an answer. If docs are *not* filtered, I have been part of the
+   starvation all night, pushing roughly every ten minutes.
+
+## Wasm Phase 2: 5 → 30 of 141, and the type model earns itself immediately
+
+The refusals Phase 2's milestone names — non-i32 slots, signatures, results — are gone,
+replaced by a model that **separates a type's wasm value type from its memory width**. Not
+pedantry: **symtab packs a frame by `TypeSize` with no padding**, so a Boolean local is one
+byte with another local against it, and a 4-byte store into it **destroys the neighbour**.
+The register backends never have to notice.
+
+### Three Track A findings, all measured against fpc 3.2.2 — and the PATTERN is worth more than the three
+
+- **Assigning a wider value to a function RESULT does not narrow.**
+  `function F(a: Int64): Integer; begin F := a; end` returns all 64 bits — FPC gives 3, we
+  give 4294967299. Six shapes measured; the three targeting the *result* are wrong, the
+  variable / var-parameter / cast arms are right. **prio 40.**
+- **`shr` on a 32-bit operand is evaluated at 64 bits.** `i shr 1` for `i: Integer = -8`
+  gives 9223372036854775804 against FPC's 2147483644 — **and storing it back truncates to a
+  THIRD answer, -4.** The untyped-constant case agrees with FPC, which is the control
+  isolating width from the shift itself. **prio 40.**
+- **`shr` reaches the IR spelled `Ord(tkIdent)`** — there is no `tkShr` token (`ir.inc:8867`
+  says so) and `ir.inc:8878` substitutes it for exactly one consumer; the wasm backend is now
+  the second arm. **prio 20, and the fix deletes code.**
+
+> **The class: a value's declared width is not enforced wherever a 64-bit register makes
+> enforcing it optional.** Second and third native wrong-value bugs this lane has surfaced,
+> same shape. **That is the CHARTER's wasm-as-cross-check claim paying out twice in one
+> sitting** — and it argues for a search rather than two fixes.
+
+Asked frankwasm to put the class framing on one of the prio-40 tickets and **not** to sweep
+for members itself: it is mid-phase and the sweep is Track A's.
+
+**Keeping `phase2_slice.pas`'s arguments in range is NOT a workaround** — it is isolating a
+variable. The slice exists to test the backend; admitting a known frontend defect would test
+two things and prove neither. Legitimate precisely because the defect is filed with a repro
+and the constraint is noted in both the ticket and the slice. **The platonic-code rule bites
+when you reshape code to make a bug invisible; this is the opposite.**
+
+Caveat frankwasm stated unprompted: **the histogram records each body's FIRST blocker only,
+so it cannot predict payoff** — the 32 non-i32 entries just cleared became 9 newly-lowered
+bodies plus 23 that moved on to a jump. 72 of the remaining stubs cite `IR_JUMP_IF_FALSE`,
+which is Phase 3.
+
+## THE SENTINEL RULE — why one piped check inverted and another did not
+
+frankB checked rather than nodded, and produced the formulation that makes the pipe hazard
+**checkable instead of a matter of vigilance**:
+
+> **A piped check is safe only if it prints a sentinel that failure cannot reach.** If a
+> check's green looks like the **absence of output**, the pipe inverts it — and silence is
+> exactly what a dead script produces. If green is a **positive line emitted last**, the
+> pipe is cosmetic.
+
+Its `make lib-test 2>&1 | tail -N` is the same shape as frankwasm's `check_phase1.sh |
+tail -6` and **held** — because `lib-test ok (…)` is the **last recipe line** and a plain
+`@echo`, and make aborts a target on the first failing recipe line, so that line cannot
+print unless everything before it passed. **It was verifying by sentinel presence, not by
+exit status**: a valid protocol, just not the one it thought it was running. Only `|| true`s
+in the target are trap cleanups, not verifications.
+
+**The corollary is the useful half: the defect is independent of the pipe.** A check whose
+green is *"nothing went wrong"* is fragile even unpiped, because every way of failing early
+produces the same output as passing. So the durable fix is not "remove the pipes" but
+**make each suite end with a positive line only a completed pass can emit, and assert its
+presence.** Then the pipe stops mattering, which beats remembering not to pipe. Relayed to
+frankwasm for `check_all.sh`; its `WasmReportCoverage` unconditional summary line is already
+that shape.
+
+## CORE CONTENTION — the resource I did not think to ask about
+
+frankB volunteered that it is running a 48-file ladder scan (159 NilPy compiles already
+done for the reportlab probe), and NilPy compiles pay a **fixed ~9s startup each**
+(`bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost`), so this is minutes of
+contention against the 3202-job verify on six cores. It offered to kill it.
+
+**Call: let the 48-file run finish; start nothing else heavy.**
+
+- **Contention does not preempt the verify — only a push does.** What contention can do is
+  slow jobs toward their timeouts.
+- testmgr already scaled this run's deadline **2x for having 6 of 12 cores** and retries
+  kills under load; frankT's earlier run under heavier contention had **every job pass on
+  merit**.
+- A ~10-minute run against a multi-hour verify is inside that tolerance, and killing it buys
+  a margin that is not binding while costing a rerun.
+- **The real risk named as the line, not a fixed rule:** a false red from a timeout is worse
+  than no verdict, because it would have me revert a good pin. If the scan runs much past
+  ~15 minutes, or the box goes properly heavy, kill it.
+
+**The meta-point: I asked about pushes because that is the mechanism I understood, and
+frankB volunteered the resource I had not thought to ask about.** Second time tonight a lane
+corrected the coordinator's model of its own constraint rather than answering only the
+question asked — frank-optimize's `symtab.inc` region bounds being the first. **The
+coordinator's blind spot is not the answers, it is the questions.**
+
+frankB is holding **all** pushes, not just buildable ones, on its own initiative: its current
+item's deliverable is a verdict in a ticket, so nothing is time-critical for Track T.
+
+## ANSWERED: docs-only pushes do NOT arm the preemption — same predicate, not a parallel one
+
+frankT traced it end to end. Both `verify_pin` call sites pass
+`abort_check=make_preempted(clone, tested)`, whose check is
+`any(needs_test(path, c) for c in commits_between(tested, h))`, and `needs_test`
+(twatch.py:5071) is a `git diff-tree` filtered by
+`NOTEST_PREFIXES = ("devdocs/", "docs/")`. **There is no second, coarser abort filter.**
+
+Measured over the last 16 first-parent commits: **two preempt out of sixteen**, and one of
+them is frankT's own. **Every roster commit on the list is safe.** The current testmgr
+started 01:04:59, right after the daemon walked HEAD past the two testable commits
+(`d9ad65c79` and `46c8cf47e`); my `42cb4837d` landed 01:07, two minutes in — *"job 15,
+survived"* fits exactly. **Evidence, not luck.**
+
+### Four boundaries, exactly, because these get relayed and rounded
+
+1. **All-or-nothing per commit.** The predicate is `any(not docs)` over the commit's whole
+   file list — **one commit touching a roster file AND one `tools/` file preempts.** Keep
+   them separate commits.
+2. **`devdocs/progress/tstate/**` is safe** (it is under `devdocs/`) — deliberate, so the
+   daemon's own publishes cannot abort the work they were queued by. Ticket moves and
+   `resolve` are safe too.
+3. **Everything else preempts** — `tools/`, `Makefile`, `test/`, `.claude/`, even a
+   root-level `README.md`. The prefix list is two entries and **there is no
+   "looks-like-docs" heuristic.**
+4. **Evaluated over the whole range `tested..HEAD`, not the newest commit.** One testable
+   push arms it and it **stays armed until the daemon re-tests HEAD** — a later docs push
+   does not disarm it, and waiting does not make the run safe again. **So ordering matters
+   more than rate:** after a testable push, the next several minutes are lost regardless of
+   what else lands.
+
+**Hold narrowed and relayed: buildable files only. Roster, tickets, `docs/`, tstate all
+flow.** My two held roster commits pushed.
+
+## ⚠ THE v389 VERDICT WILL COME BACK **RED**, AND THAT RED IS KNOWN AND NOT ABOUT v389
+
+`tools-devtest#00` is **already red in this run** — it is
+`regression-tools-devtest-00-2`, the Track N `TESTTMP` regression frankT re-laned and
+filed, culprit `f3422cd14`, fix `os.environ.get("TESTTMP", "/tmp")`.
+
+**DO NOT `make revert` on this verdict.** The pin-verify record publishes a **whole-tier**
+verdict, and this is exactly the case where **the headline is wrong and the job list is
+right**. The part of the run that speaks to the binary is the self-host fixedpoint, already
+banked: **`325b4479070a`**, v389 reproducing itself.
+
+Carried into the loop's open items so a later tick cannot misread it.
+
+### My "~25 minutes" was closer than my correction
+
+Live at 01:15: **622/3202 jobs, 42.6% by cost, 9 min elapsed, ~13 min ETA.** I over-corrected
+to "hours" from the job count without weighting: **the cost-weighted head of a full tier is
+much heavier than its tail.** A raw job count is not a duration. One-liner for cost-weighted
+progress at any moment, no guessing:
+
+```
+python3 -c "import json;l=json.load(open('/home/neo/trackt-watch/.testmgr/live.json'));print('%d/%d %.0f%% %.0f min in, ~%.0f min left'%(l['done'],l['total'],l['pct'],l['elapsed']/60,(l.get('eta') or 0)/60))"
+```
+
+### A THIRD member of the quiet-affirmative family, from frankT, caught by measuring
+
+Its `trackt stop` printed a run's age from `watch.json`'s `ts`, which reads like a
+phase-start stamp. **It is a 30-second mid-run heartbeat**, so a 90-minute run prints as
+**"running 0 min"** — wrong in the one direction that matters for a line whose whole job is
+to say how much is about to be thrown away. It `stat`ed the file twice **12 seconds apart**,
+saw no drift, and read that as confirmation. **The interval was 30.**
+
+> **A check whose sampling window is shorter than the thing it samples returns "no change"
+> and looks like evidence.**
+
+Same family as `| tail` inverting a verification and a deny-list defaulting unknown states
+to safe: **all three fail quietly and affirmatively**, which is why none of them surfaces as
+an error. Duration now comes from `live.json`, and when that is missing the line **says
+nothing about time rather than something false** — which is the right repair for the whole
+family.
+
+`GATE_PHASES` was already correct in `trackt stop`; the bug was saying "safe" **before** the
+signal rather than after. Fixed, committed, **not pushed** — because pushing `tools/` is
+exactly what this section says not to do while the run is live.
+
+## Milestones defined as the absence of a symptom are closeable by deleting the symptom (frankwasm, 2026-08-28)
+
+frankwasm hit Phase 2's milestone and found, by *running* it rather than reading
+it, that two of its clauses were unsatisfiable or self-referential:
+
+- *"no entry cites a value op"* could not be satisfied before Phase 4 at all — a
+  call in value position is **both** a value op and an `IR_CALL`, so the two rows
+  overlapped and the phase could never close on its own wording.
+- *"non-i32"* was phrased as **the absence of the then-current refusal message** —
+  a limitation the lane had written about itself, baked into the thing measuring
+  it. *"Reaching it meant deleting the refusal, not satisfying it."*
+
+> **State what must WORK. Keep the report as the evidence, never as the definition.**
+
+Broadcast-worthy well past wasm: **a ticket whose done-condition is "the error
+message is gone" can be closed by deleting the error message.** The backlog has
+many tickets phrased as the absence of a symptom and every one is closeable that
+way. This is only ever found by executing the milestone; reading it, it looks fine.
+
+## The validator makes the WIDTH class unrepresentable, not the MEANING class (frankwasm, 2026-08-28)
+
+The CHARTER's claim — wasm catches what a register backend turns into a plausible
+wrong number — got its boundary tonight, from a bug that is its **complement**:
+
+A `var` parameter's slot holds the caller's address, so the variable lives at
+`[slot]`, not `&slot`. The deref was in the address-of path but **not** in
+load/store, so `o := o + n` on a var parameter read the address as the value,
+added to it, and wrote the sum over the reference. **Both are i32.** The module
+validated, ran, and returned a plausible number. Only the differential caught it.
+
+> The validator's guarantees stop exactly where two things are the same width. It
+> makes the **width** class unrepresentable, not the **meaning** class.
+
+To be amended into `CHARTER.md` beside the original claim rather than filed as a
+separate note — the claim is load-bearing (the coordinator has been citing it all
+night) and this is its edge, not a footnote. It is also what the phase2
+differential *buys*, stated concretely instead of as prudence.
+
+## v389's verify has TWO known reds, not one — and the second was nearly filed as new (frankT, 2026-08-28)
+
+**Widening the pre-emption before the verdict lands.** `test-emit-obj#02` joined
+`tools-devtest#00` at ~57%. Both known, both ticketed. **The "known red, no
+revert" call still holds — it just covers two jobs.** A pre-emption that names
+one of two reds is *worse than none*: it primes the reader to treat the unnamed
+one as the surprise.
+
+**Fifth member of tonight's quiet-affirmative family, and the cleanest specimen.**
+Querying the run archive for `test-emit-obj` under the `red` key returned **0 hits
+in 1697 runs** — which reads exactly like "genuinely new". Wrong key. tstate
+stores reds under the **stable selector** (`test-emit-obj#src:test/cxtensa_obj.c@1`)
+while `#02` is a *positional index into the recipe*; the two strings share no
+substring. The right key: **13 runs, NEW_RED at `32fba2082684` 2026-08-27T09:35Z,
+`still_red` in every deep-tier run since.**
+
+> **A query against the wrong key returns zero and looks like an answer.** No
+> error, no empty-result warning — just a number that happens to be false.
+
+Saved by `live.json`'s `red_src` naming `test/cxtensa_obj.c`: the stable selector
+was one field away the whole time. The tell was the *cleanliness* — "0 of 1697"
+felt too clean to be true, and that suspicion is the only thing that fired.
+
+### It was mislaned, and the rule that mislaned it should not be changed
+Auto-laned **C** because the test file is `test/cxtensa_obj.c`. The failure is
+`undefined variable (SYS_openat)` raised inside
+`lib/rtl/platform/posix/platform_backend.pas` — a Track C agent opening
+`cparser.inc` on that evidence finds nothing, which plausibly explains 13
+consecutive deep runs red and unclaimed.
+
+Reproduced in **0.6s against the pinned v389 binary, no suite**, and a 2×2
+localises it to one cell:
+
+| | xtensa | riscv32 | x86-64 |
+| --- | --- | --- | --- |
+| **Pascal** | ok (211180B, 172 procs) | — | — |
+| **C** | **FAIL** — posix backend, 7 undefined `SYS_*` | ok (332952B, 432 procs) | the file's own deliberate `LONG_MAX` `#error` |
+
+Not "C is broken", not "xtensa is broken" — **C + xtensa specifically**: the
+Pascal arm reaches the ESP platform class for that target and the C arm does not.
+One-commit range `cbfdb5de8` *"xtensa reaches the IDF profile — profile-aware ESP
+class"* (+16 `pasparser_prog.inc`, +5 `cparser.inc`) matches the shape. Re-laned
+**A+S**, prio 70, with the honest caveat written into the ticket that if the fix
+lives entirely in `cparser.inc` it is C's file after all and A hands it over.
+
+> **The lane-guess rule is weakest exactly where a test SOURCE and a FAILURE SITE
+> are in different languages.** Left unchanged deliberately — it must guess or
+> everything parks in T's queue, and it is right most of the time. What must not
+> repeat is routing by the test's **file extension** rather than by the mechanism.
+
+## "Docs-only pushes are safe" is a property of the PUSH, not of the COMMIT (frankT, 2026-08-28)
+
+A wrinkle in the rule this coordinator gave every lane during the hold. frankT has
+three local commits: the `trackt stop` guard (`tools/`, buildable, must wait) and
+**two `devdocs/` ticket commits stacked behind it**. The safe two inherit the
+buildable one's cost; reordering means a rebase for no gain, so all three wait.
+
+> **A safe commit stacked behind a buildable one is not safe to push.** If a lane
+> wants ticket work to flow during a long run, it must commit the docs **first**,
+> not merely separately.
+
+Correction to the guidance as issued: I told lanes docs-only pushes stay open
+during a hold, which is true of the *push* and says nothing about *ordering*. The
+usable form is **"commit docs first, then code"** — cheap when done up front,
+a rebase when discovered later.
+
+## v389 PIN VERIFY PUBLISHED — RED, **0 new**. Hold cleared 2026-08-28 ~06:00Z
+
+```
+pin verify — v389 at 83468c5462d4 RED (full), 4 red, 0 new vs the v389 baseline
+```
+
+**`0 new` is the answer; `RED` is the headline and it is the wrong one.** Four
+jobs red at the pinned tree, every one pre-existing and ticketed:
+`tools-devtest#00`, `test-emit-obj#src:test/cxtensa_obj.c@1`, and two
+`test-nilpy`. **Nothing v389 introduced is red. No revert.** Three lanes built on
+that binary for hours; the binary is sound.
+
+Hold released on both conditions, verified rather than assumed: a published
+result, **and** no live run (`pgrep` for testmgr/verify_pin — nothing; the
+watcher is in idle phases running a throttled fuzz recheck). frankwasm, frankB
+and frankT all told, all cleared for `compiler/**` `lib/**` `test/**` `tools/**`.
+
+### frankT's four-and-four call held, and it was falsifiable
+It named the red set **before the run finished** and staked it: four reds, the
+open-regression ledger agrees exactly, **and a fifth job means the pre-emption
+stops covering it.** No fifth in the verify. That is a better artifact than four
+separate "this one is known" notes because it could be checked in advance and it
+was — the standard to hold pre-emptions to from here.
+
+### UNRECONCILED, handed to frankT rather than smoothed over
+frankT observed the run live at 1898/3202 with ~8 min left. At 05:58Z the newest
+report in `tstate/reports/` is `20260827T234545Z-c52fc38-plexus.md` and the
+pin-verify record reads **6h old**. Those do not obviously fit. Either the record
+predates the run being watched, or a completed 3202-job run published nothing.
+frankT has `live.json`; the coordinator does not. **It matters: if that run
+published nothing, the hold imposed on three lanes bought less than was charged
+for it.**
+
+### Against myself: the targeted request asked the wrong question
+The queued request was a `full` sweep of the pin **commit** `ab51855df`. What was
+actually wanted was the pin **tree** `83468c5462d4` — which `verify_pin` produces
+on its own. Whether the request *caused* the run or was redundant with it cannot
+be told from here, and the flattering reading is not being claimed. **Check this
+before anyone queues another targeted request:** the mechanism may already exist
+for the question being asked.
+
+## A FIFTH red, outside the verify — and the pin is the obvious suspect
+
+`lib-test#src:test/lib_synapse.pas`, bad `c52fc389fd97`, 9 in range — from the
+full tier 20m **after** the pinned tree, so outside the pin verify and no
+falsification of the four-and-four call.
+
+```
+pascal26:270: error: expected implementation section
+  in: stable_linux_amd64/default/../../lib/rtl/dns_cache.pas
+```
+
+The watcher refused to bisect it and said why: *the job builds only with the pin,
+and `c52fc389fd97` moved no pinned binary, so that commit cannot be causal — the
+range is unsound.* **That refusal is what made the real candidate visible.** A
+test that builds only with the pin has one obvious suspect when it goes red:
+**the pin.** v389 moved the pinned binary and is in the range. A bisect would
+have produced a confident wrong commit.
+
+Range narrowed to the five commits touching `lib/` or the stable dir
+(`a6b06ebc1` exception-API, `cfa72767f` typinfo facade, `1091cd0ff` workaround
+reverts, **`ab51855df` pin v389**, `0b2f731b6` unsigned renderer). **`dns_cache.pas`
+itself is unchanged in the range** — last touched at `28bd01e11`, below the lower
+bound. So a source that did not change stopped parsing, and the error resolves
+the *live* `lib/rtl` through the *pinned* binary: a live-source × pinned-binary
+cross product, exactly where a pin move bites.
+
+Dispatched to frankB [B, p70, `backlog/`] with the falsification ordered first —
+**compile `dns_cache.pas` under v388's binary and v389's; one command, no
+bisect.** If they differ it is a Track A parser regression the pin carried in and
+the coordinator files it. Told frankB explicitly: test hypothesis 1 before
+touching any source, and if it is the pin, **do not work around it.**
+
+## Track U: the NilPy 55-70 ranking was derived from a low-dependency sample
+
+Filed `backlog/decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample.md`
+[U, p55] from frankB's fourth-corpus verdict (`b125395e2`). reportlab 4.2.5,
+421 `.py`, at pin v389: 36/159 compile, 123 failures over 30 distinct first walls,
+**not one of them a wall the family produced.**
+
+The weak reading is "different walls". The real one: **89% of its failures are
+library surface** (16 of 17 named stdlib modules have no shim), so it stops at its
+first missing import and **never reaches the mechanism layer**. The 55-70 cluster
+is therefore **conditional** — what a corpus hits *once its import surface is
+covered*. webencodings/html5lib/tinycss2 are self-contained web parsers with
+almost no stdlib footprint, so **the ranking was derived from a sample chosen,
+accidentally, for having nothing to rank.**
+
+`six` is the precedent at file scale: gated 15 files, landing `mimic_six` moved
+4/48 → 4/48. **Compile count lags, walls-cleared leads.** The campaign has no
+measurement of library surface at all and
+`feature-nilpy-stdlib-coverage-gaps-measured` [p72] — top-ranked NilPy feature —
+has never been started while items below it get worked. Escalated, not acted on:
+`prio:` is the owner's field, and Track N is undispatched by owner call anyway.
+Filed so the evidence outlives the session that measured it.
+
+## Both open questions answered — and the causal story is simpler than either guess (frankT, 2026-08-28)
+
+### 1. The timing was not a discrepancy. It was six hours of my own elapsed time.
+The pin verify published at **23:25:33Z**, ~3 minutes after frankT last reported
+it at 84%. It landed exactly as forecast. "The record is 6h old" was true and
+unremarkable — the gap is in *reading* it, not in the daemon. The `23:45:45Z`
+report is 20 minutes **later** and is the `c52fc38` full tier that produced the
+fifth red. **The hold bought what was charged for it: a completed 3202-job run
+published its verdict.**
+
+> **`verify_pin` publishes no `reports/` entry BY DESIGN** — its docstring says it
+> publishes exactly one thing, a run record, and touches no state another phase
+> reads, because feeding a days-old pin through the HEAD progression would set
+> "last tested" backwards and manufacture NEW-RED/FIXED pairs out of time travel.
+
+So "no report for the pin verify" is the design, not a loss. The verdict lives in
+the `pin_verify` block. **Worth knowing before it costs someone else an hour** —
+the reports directory is the wrong place to look and looks authoritative.
+
+### 2. The request never drained, and it never could have. **The lull did it.**
+```
+request queue landed   2026-08-28 00:09  (b441acdb4)
+daemon started         2026-08-27 22:19:53
+running code_fp        cc482c9fccc0
+```
+**The resident daemon never contained the code that drains the queue.** It could
+not have read the request. `--covering` agrees from the other end: *EXACT: none.*
+What ran was `verify_pin` off its own idle ladder, unprompted.
+
+**This is the third wrong diagnosis of the same phenomenon, and the third was
+mine again.** First: "starved by position, an idle phase is never reached" —
+frankT measured the phase being entered constantly. Second: reframed to "the axis
+is COMMITMENT, not PRIORITY" — right about `verify_pin`, but still a theory about
+the queue's *behaviour*. Third and actual: **the queue's code was never
+executing.** I spent a night reasoning about the scheduling of a mechanism that
+was not running.
+
+> **Sharper than "a pushed fix is not a live fix": when a resident process is the
+> consumer, its behaviour is not evidence about the code you are reading.** Check
+> `code_fp` against **the clone's disk** BEFORE theorising about scheduling. Two
+> of my three diagnoses were unfalsifiable for the same reason and neither of us
+> noticed.
+
+**Corrected by frankT after this was first written — the rule said "against
+origin" and that closes the wrong hop.** There are TWO gaps stacked:
+
+```
+origin  ->  clone disk  ->  resident process
+          (a git pull)     (a restart)
+```
+
+`code_fp` answers **the second hop only**. Last night both were open at once: the
+daemon ran `cc482c9fccc0`, the clone's disk held `927ad6d857fc`, and origin was
+ahead of both. **Comparing the process against origin shows drift and attributes
+it to the wrong hop** — "we need to pull" when the pull had already happened and
+the restart had not. `--status` prints both fingerprints for exactly this reason,
+and the disk one is the actionable half: `trackt restart` pulls *and* restarts,
+while a bare pull does nothing to a resident process. The wrong version is left
+visible above rather than silently swapped, because "I checked the fingerprint"
+would otherwise read as sufficient when it can be done against the wrong baseline.
+
+**Not a solo failure, frankT's own note:** it told me `commit_after` was inert and
+then reasoned about the queue's ordering itself, in the same message, without
+noticing they shared a cause. **The rule had to be general to catch it, and
+neither of us made it general until afterwards.**
+
+The corollary is the good news: **the lull lever is real and it was the whole
+story.** Five hours of starvation ended when lanes finished, not when anything
+was tuned — and frankT twice declining to retune scheduling under load was right
+both times, for a better reason than either of us had.
+
+### Struck the request line myself (`verify-requests.tsv`, unserved)
+It is live code now and would be served. It asked for the pin **commit**
+`ab51855df`; the question was about the pin **tree** `83468c5462d4`, already
+answered RED/0-new. Serving it would spend a **3202-job full tier on the binding
+box, at a sha 20+ testable commits stale, to re-answer an answered question.**
+Struck with the reasoning left in the file as a comment. Ownership was clean:
+requesters write their own lines and frankT explicitly declined to touch another
+lane's request.
+
+> **Before queueing a targeted request: `--covering` first, AND check whether an
+> existing phase already produces that verdict.** `verify_pin` did.
+
+## watch.json is a RECORD, not live state — the sixth quiet-affirmative, and the only one authoring care could not have caught
+
+Sixteen seconds after restarting the daemon, `--status` reported it was running
+stale code and advised `trackt restart`. It was reading the **stopping** daemon's
+final `watch.json` write; the fresh daemon had not called `set_phase` yet.
+
+**Wrong in the direction that wastes the fix**: it says "still stale" about a
+daemon that is current, so the natural response is to restart again and see the
+same message. Fixed by requiring the record to belong to a process that still
+exists — `phase == "stopped"` is a farewell note, and a recorded pid is checked
+with `os.kill(pid, 0)`. Two devtest cases guard the over-correction, because a
+check that goes silent on the real case is worse than a false positive.
+
+> Same sentence as the heartbeat bug, one layer up. **A record of state is not
+> state.** And this one was found *by using the tool*, not by reasoning about it —
+> the only one of the six that no care at authoring time would have caught, and
+> the argument for the restart being worth doing independent of `commit_after`.
+
+Daemon now verified rather than assumed: pid 1991398 under systemd,
+`code_fp 35cc8e1ba1a3` matching clone and origin, already running a `full` tier at
+`04fea1461`. **`commit_after` and the request queue are live for the first time.**
+
+## Credit correction, in the other direction
+frankT: *"your reading of my log line is better than my log line."* It wrote that
+the synapse range was unsound and stopped there. **Refusing an unsound bisect is
+half the job; naming the candidate the unsoundness was hiding is the half that
+moves it.** Recorded because the split matters — the refusal was the harder call
+and the one that preserved the evidence; the inference was cheap once the refusal
+existed. Neither half works alone.
+
+## Track T stood down 2026-08-28 ~06:15Z — deliberately, with three deferrals on the record
+
+Daemon healthy at pid `1991398`, sweeping, on current code. frankT is idle by its
+own call, not stalled. **Three items deferred with reasons, all of which are the
+right call and none of which should be re-raised without new information:**
+
+| deferred | reason |
+| --- | --- |
+| `verify_pin`'s commitment point | **no measurement, and last night argues the ladder was never the problem** — the queue's code was not running, so the starvation had a different cause entirely |
+| the `opt` class memory estimate | correcting it **raises** concurrency; wrong to land while lanes are live |
+| `mid_tier` | a config change plus another restart, and it changes ladder behaviour **on the owner's workstation** — the owner's call, not a lane's |
+
+The one measurement its own ticket asks for — per-file devtest durations — needs
+an idle box; this one is at load 6.7 under a full tier. **It waits for the same
+reason it waited last night**, which is the correct reason and not a slip.
+
+Note the shape of the second and third: **a fix that increases resource pressure,
+and a change to the human's own machine's behaviour, are both things a lane
+should decline to land on its own initiative even when the change is right.**
+
+## My synapse hypothesis was WRONG — v389 is innocent, and the RANGE was a false window (frankB, `6940eed2e`)
+
+I dispatched frankB with "hypothesis 1, and it is mine: v389 parses
+`dns_cache.pas` differently than v388." **Falsified in one command, no bisect:
+v388 `e8b72f8afeb6` and v389 `325b4479070a` fail identically.** Hypothesis 2 (the
+typinfo/exception RTL work) fell too — frankB built each in-range state's own
+`lib/`+`test/` into a scratch dir with `git archive` (no tree mutation) and every
+one fails, **including `aca7f699288e` itself, the declared LAST GOOD, compiled
+with v388, the pin actually in force at that sha.** The defect predates the range
+entirely.
+
+**Worth being explicit that the dispatch was still right.** Ordering the
+falsification first, as one command before touching any source, is what made a
+wrong hypothesis cost five minutes instead of a session. **A hypothesis you own
+is the one to test first precisely because you are the worst-placed person to
+weigh the evidence for it.**
+
+### Why it looked like a regression — the sentinel rule, one level up
+`twatch.py:1514` has `PASSLIKE = ("pass", "skip")`, and the red predicate
+everywhere (`:1729`, `:5028`, `:5206`, `:5496`) is `status not in
+("pass","skip")`. `external/synapse` is corpus-gated in `testmgr.py`'s
+`CORPUS_ROOTS`, so with the tree absent the job SKIPs — correct on its own terms.
+**But a SKIP is then indistinguishable from a PASS when the LAST-GOOD sha is
+chosen.** The corpus landed on plexus before `c52fc38`, the job ran **for the
+first time ever**, and a first-ever run was published as a regression over nine
+innocent commits.
+
+> **Green that means "did not fail" cannot anchor a bisect. Only green that means
+> "ran and passed" can.**
+
+Corroborated rather than argued: `plexus.json` shows `lib_synapse_ssl` and
+`lib_synapse_transitive_unit` both `pass` now, so the corpus is present and only
+one `uses` shape fails. Filed `bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-last-good`
+[T, p60, `backlog/`] with a suggested direction (last-good per job on `pass` only;
+keep `skip` PASSLIKE for the *run* verdict) — **filed, not prescribed**; it is T's
+tool and T's call.
+
+**This is the seventh member of the quiet-affirmative family and the most
+expensive**: it did not merely hide a failure, it *manufactured* a regression and
+pointed nine commits and two lanes at it.
+
+## The real defect: `bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream` [A, p70, `backlog/`]
+
+Not Track B. `dns_cache.pas` and `sockets.pas` compile standalone under
+`--mimic-fpc`, as does every unit in the chain individually. Four-line
+deterministic repro, `-O`-independent:
+
+```pascal
+program z;
+uses synacode, synaip, blcksock;
+begin
+end.
+```
+
+**The tell is in the `near:` context — `n end end >>> procedure FlushGroup$126591`.
+`FlushGroup$126591` is a GENERATED name that appears in no source file**, so the
+parser ran off the end of one unit and kept reading into another's token stream.
+And the reported `dns_cache.pas:270` is **past EOF — the file is 269 lines.**
+
+> Told frankB that 270 was the symptom's location and not the defect's. It is
+> worse than that: **the reported FILE is not merely the wrong one, it is just
+> where the parser gave up.** Different `uses` lists report against different
+> files (`dns_cache.pas:270`, `sockets.pas:634`) with the identical `n end end >>>`
+> shape.
+
+All three *pairs* pass; **only the triple fails, and only with `blcksock` last.**
+Moving it first or middle cures it; so does prepending `sysutils`. Two of our own
+units in front (`dns_wire_core`, `typinfo`) do NOT trigger it — **so it is the
+state of the unit table when `blcksock`'s deep chain is entered, not the identity
+of the units.** Ordering table is in the ticket.
+
+Now the head of Track A's queue (p70, unblocks 1). `regression-lib-test-lib-synapse`
+moved to `blocked/`.
+
+**Housekeeping frankB did right and stated:** fetched `external/synapse`
+(gitignored, nothing committed); extracted historical pinned binaries into the
+tracked `stable_linux_amd64/default/` for the v388 comparison and **removed
+them**, tree clean; landed `29d93c969` (`nilpy_ladder --probe`) once cleared; and
+took the docs-first rule — the triage went out as its own docs-only commit.
+
+## Phase 3 landed (frankwasm, `ebf3f818a`) — and the transferable finding is about RULES, not about IRTk
+
+Coverage 41 → 66 of 147, four suites green, `check_phase3.sh` (26 values) green
+first run. Control flow is a `br_table` dispatch loop: body cut into basic blocks,
+a `$pc` local holds the next block, one `br_table` at the top of a loop jumps to
+it, blocks nested so that breaking out of exactly k lands on block k. `if`,
+`while`, `repeat`, `for` both directions, `case` (value / list / range / else),
+`break`, `continue`, short-circuit `and`/`or`, nested loops, early `Exit`, `goto`.
+
+**`goto` was put in the slice deliberately because the milestone named it and it
+was the one form about to be claimed without evidence** — and it is the only
+construct there that can produce a CFG the frontend did not build, everything
+else being reducible by construction. Self-applied scepticism in the hardest
+direction.
+
+### The milestone rule earned its keep within the hour, in the unexpected direction
+*"No coverage entry cites a control-flow op"* would have been **fully satisfiable
+by a backend that branches to the wrong blocks.** An off-by-one block index or a
+branch depth counted from the wrong nesting produces a module that **validates
+perfectly and runs the wrong code.** The report cannot see it; the validator
+cannot see it; only the diff can. **Same boundary as the var-parameter bug: same
+width class, different meaning.** Now recorded in PLAN.md next to the phase.
+
+### `IRTk[node]` is a HINT, not a guarantee — and no register backend can observe that
+A `for` loop's bound comparison arrives with an `IR_LOAD_SYM` whose `IRTk` is
+`tyUnknown` while the symbol it loads is plainly an Integer. **Register backends
+never notice: they read a register width, and nothing consults `IRTk` to choose an
+instruction.** A type-directed backend is the first consumer that ever cared — it
+refused every `for` loop in the compiler with *"operand type in binary operator
+67"*, a true statement about `IRTk` and a false one about the program.
+
+**Agreed with frankwasm: do NOT file a `decide-` yet.** "IRTk is sometimes
+tyUnknown" is not a defect any current consumer can point at a wrong program for;
+making it a guarantee is **a decision with a cost, not a repair**. One notch off
+the repo's "an observable no compiling program can reach" rule — a *future*
+type-directed consumer would reach it — so it is **"not yet", not "never"**. Asked
+for a descriptive note in `devdocs/dev/ir-as-substrate.md` so the next consumer
+does not rediscover it from scratch.
+
+### **The actual finding: a rule you must REMEMBER will be broken where following it is inconvenient**
+frankwasm had already written the rule into its own file, at the emitter —
+*where IRTk and what was emitted disagree, believe what was emitted* — and then
+consulted `IRTk` in the **planner** three functions later, because the planner
+runs before anything is emitted and `IRTk` was the only thing available.
+
+> **Writing a rule down does not make you follow it at the site where following it
+> is inconvenient** — and the inconvenient site is the one that matters, because
+> that is where the shortcut is tempting.
+
+The fix is the general form: **one pure function that both sites must call.**
+Result type from the SYMBOL for a load, from the unified operand width for a
+binop, `IRTk` only as fallback for nodes whose type is nothing but what the IR
+recorded — and every emitter's declared result is now that function, so **the
+planner and the emitter cannot disagree, and an emitter cannot report a type it
+did not produce.** That is `normalise-dont-special-case` applied to a *rule*
+rather than a construct: **don't document the invariant, make violating it
+unrepresentable.**
+
+### An unreachable capability is paid for at the moment you need it most
+`asmtext_wasm.inc` could emit a `.wat` from Phase 1 and **nothing could ask for
+it** — discovered while staring at a wabt byte offset with no way to see what had
+been emitted. An output path ending in `.wat` now gets the text module. (Also
+fixed: an `i32.const` of 4294967295 — a `$FFFFFFFF` mask in an `Int64 IRIVal` —
+is unencodable, and wabt reports it as a *parse* failure with a byte offset and no
+function name. Same width class as the var-parameter bug, but the friendly end:
+it cannot ship.)
+
+### Phase 4 is the first shared-file escape — grant protocol engaged, not issued
+VMT slots and RTTI fixups must resolve to table indices instead of the 32-bit code
+addresses patched at `elfwriter.inc:1937`. frankwasm will scope and come to the
+coordinator before touching anything outside its own file. **Asked for a file list
+and the shape of the change, not a patch** — and any grant must be sequenced
+against frankA possibly taking Track A (`bug-a-a-deep-unit-dependency-...`, p70),
+not issued blind. Told frankwasm explicitly that "this is bigger than a grant,
+hand it to A as a ticket" is a normal outcome of scoping, not a failure of it.
+
+## frankA declined the A ticket — correctly — and its hand-off note was half right in a useful way
+
+**Declined and parked for the night, using my own argument back at me:** the
+failure mode of a tired agent on shared-core parser work is a bad self-host gate,
+and that poisons every lane at once; the ticket is in the best state a bug can be
+in and loses nothing by waiting. **The asymmetry really is that stark, and making
+the out real rather than nominal is what produced a clean no instead of a hedge.**
+`bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream` stays at the
+head of Track A's queue, unclaimed, p70.
+
+### I checked its two greps before letting the note into the ticket. Prediction right, negative result wrong.
+frankA offered *"treat this as a two-grep observation from someone standing down,
+not as analysis — I have not read the ticket, only your summary"*. **That framing
+is what made it safe to check rather than propagate**; a confident version would
+have sent someone into `pyparser.inc`. Four measurements, one grep each:
+
+| # | measured | consequence |
+| --- | --- | --- |
+| 1 | **`FlushGroup` is a REAL nested routine** — `lib/rtl/sockets.pas:448` | frankB's "generated name that appears in no source file" premise is **false** |
+| 2 | **`compiler/pasparser_decl.inc:6409` IS a Pascal-side `Name$<n>` minter** | frankA's greps missed it — it builds with `AppendChar`, not `+ '$' +` |
+| 3 | `MangleSuffix(n: Integer)` renders decimal, called with `nestedStart` — **a token index** | `$126591` is ordinary and expected; **NilPy's minter is a dead end** |
+| 4 | `sockets.pas` is 633 lines → reported **634**; `dns_cache.pas` is 269 → reported **270** | **both reports are exactly EOF+1** |
+
+> **A concat-shaped grep misses a builder-shaped construction of the same string.**
+> `+ '$' +` will not find `AppendChar(s, '$')`. That is the entire gap in frankA's
+> negative result — not a reasoning error, an idiom mismatch.
+
+**frankA predicted the right thing anyway:** *"would predict the number is a token
+index or source offset rather than a counter."* **It is a token index.** The
+prediction is the reusable half and is recorded as frankA's.
+
+### What the correction does to the ticket (appended, `5ac07bb1d`)
+The `near:` context is **not** evidence of reading another unit's token stream —
+it is a correctly-mangled local nested routine. **The real splice evidence is
+row 4: the parser runs a unit to exhaustion and reports an unexpected-EOF position
+in a DIFFERENT file from the one whose tokens are in view.**
+
+And the tighter lead is the mangler itself: **it mutates the token array in place**
+(`Tokens[nameTokIdx].SOffset/.SLen`, with its own comment about the in-place
+forward decl and the stashed definition sharing one rewritten name token) and is
+exercised by `sockets.pas`, which has nested routines, while the failure is
+*attributed* to `dns_cache.pas`. **In-place token rewriting plus a wrong file
+attribution at EOF is far narrower than "the parser wandered into another unit."**
+Written in as **the next measurement, explicitly not a finding.**
+
+## The FIFTH face — and why a closing table is a claim about your search (frankT)
+
+frankT verified frankB's PASSLIKE diagnosis from the ledger before standing down,
+and placed it: it is the **fifth** face of
+`bug-t-a-blame-range-is-computed-from-what-changed-not-from-what-the-job-can-see`,
+closed 2026-08-26 (`4672796d0`) under a table headed **"All four faces, closed."**
+
+> **A table enumerating "all N faces" of a defect is a claim about your SEARCH,
+> not about the defect.** Four found and four fixed is honest work; *"all four"* is
+> an inference from having stopped looking. **Discount the closing table's
+> confidence, not its content.**
+
+The general statement under it was correct and complete the whole time — *the
+range is computed from what CHANGED without asking whether the job could SEE it* —
+and face five is only that a job which did not **run** also could not see it;
+`skip` is how "did not run" is spelled. **Rank the general statement above the
+enumeration in any closure.**
+
+**Neighbour ruled out rather than assumed:** `first_seen: false` means the job was
+in the previous per-job map carrying `skip`, so it did *not* take `diff_jobs`'s
+other route to the same false regression (`prev_jobs.get(n, "pass")` defaulting an
+unseen job to pass), which is already guarded. **Two routes to one symptom, and
+which one fired was shown, not assumed** — the difference between a diagnosis and
+a story.
+
+**Cheaper than it reads:** the four prior faces already built the machinery —
+`first_seen`, `pin_axis`, `pin_built`, `bad_untestable`, `no_testable_change`, five
+fields whose whole purpose is to say *this range cannot mean what it appears to
+mean*. Face five is a sixth field of that kind plus a last-good selector requiring
+`pass`. `twatch_first_seen_devtest.py` is the pattern; the guard belongs beside it.
+And `diff_jobs` already keeps the literal status in `now`, so **the information
+needed to split the two readings is already published** and nothing must be
+re-derived.
+
+### Credit reassigned, at frankT's insistence and correctly
+I wrote that the triage cost hours instead of a week because frankT refused to
+bisect an unsound range. Its correction: **it declined to act on bad evidence;
+frankB went and got good evidence.** Building each in-range state's own tree and
+testing the *declared last-good* is what converts "this range is unsound" into
+"the defect predates the range". **Refusing a bad bisect protects you; producing
+the counter-measurement ends the question.**
+
+## Tonight's own headline: three of four load-bearing claims needed correcting, all checkable in under a minute
+
+`code_fp` against origin (wrong hop) · `FlushGroup` appears in no source file
+(false) · no Pascal-side `Name$<n>` minter (false) — plus the four-faces closure.
+**None cost more than a minute to check and none had been checked.** The pattern
+is not carelessness; it is that each was *plausible, load-bearing, and adjacent to
+something the author genuinely knew*. That is exactly the profile of a claim that
+does not get checked.
+
+### frankA's own sharpening — the rule is about NEGATIVES, not about grep
+
+frankA's follow-up is better than my version of the lesson. Mine was *a
+concat-shaped grep misses a builder-shaped construction*. Its own:
+
+> **"No Pascal-side minter produces this shape" is a UNIVERSAL claim, and a
+> universal claim needs a search whose shape cannot hide the answer — which mine
+> structurally could. The hedge is the only reason it was safe, and a hedge is not
+> a substitute for a search that could have found it."**
+
+That is the binding form and it applies to every lane. **An existence claim
+survives one grep; a non-existence claim does not.** If the answer is "I found
+none", the question to ask before saying it is *what construction would my search
+have been blind to* — not *am I confident*.
+
+Not an unlucky one-off, and frankA measured that too rather than assuming it:
+`AppendChar` appears **70× in `cpreproc.inc`, 53× in `pyparser.inc`, 42× in
+`asmenc.inc`.** Building strings char-wise is a normal idiom in this tree, so a
+`+ 'x' +` grep has a **systematic** blind spot here, not a rare one.
+
+frankA also declined the weighting I gave its token-index prediction — *"a guess
+about what a large number next to a parser bug usually is"* — and put item 4
+(both reports EOF+1) as the finding that moves the ticket. Recorded as it asked.
+**Second time tonight a lane has refused credit and been right to** (frankT on the
+bisect refusal was the first); both times the refusal sharpened what the record
+actually says.
+
+## frankB hit the pipe hazard it had formulated hours earlier — and the rule was ALREADY WRITTEN DOWN
+
+`make lib-test 2>&1 | tail -25` reported exit 0. **make had aborted with `Error 1`;
+the pipeline's status was `tail`'s.** Worse than a wrong status: the failure came
+early, so **the run stopped before reaching the test being gated.** A "pass"
+covering a suite that never ran the thing under test. Caught only by grepping the
+log for its own test's name instead of trusting the exit code.
+
+**The rule was documented — `devdocs/dev/gating-and-waiting.md:52` — and violated
+anyway.** frankB generalised the entry rather than adding a second one: it was
+phrased with `tools/gate.sh quick | tail` as its example and *read* as a gate.sh
+rule, when it governs **any command whose exit status you intend to believe**.
+Verified in place; the edit is there.
+
+> **Third time tonight a written rule failed at the site where following it was
+> inconvenient** (frankwasm's IRTk-in-the-planner, frankA's concat-shaped grep,
+> this). **Writing the rule is not the fix; making the wrong form unavailable is.**
+> Where that is impossible, at least make the rule's SCOPE unmistakable — this one
+> failed partly because its example made it look narrower than it was.
+
+### The green has a caveat, stated rather than buried — and it is the T ticket's own mechanism, now aimed at frankB
+Fetching `external/synapse` to reproduce the Track A bug **flipped those jobs from
+SKIP to hard failure on that box**: frankB turned Track B's gate red by
+investigating. It moved the tree aside
+(`external/synapse-held-for-bug-a-spliced-token-stream`) to make the gate runnable,
+which means **the three synapse jobs SKIPPED in the passing run, and one of them is
+known-red.**
+
+**So: "lib-test green" from frankB's box is NOT evidence about synapse today.**
+Do not cite it as such. The Makefile's design — absence means skip, gate stays
+runnable — is working as intended; the false-green risk is in the *reading*, which
+is exactly `bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-last-good`
+operating one level up, on a human's inference instead of on a bisect anchor.
+
+**The vendor tree is HELD, not deleted** — whoever takes
+`bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream` has it ready at
+that path in `~/frankB`. Verified `external/` is gitignored (`.gitignore:30`) and
+`git ls-files external/` is empty: nothing leaked.
+
+## The skip set is not `c <= 32`, and NOT folding it into `TFIsSpace` was the right call
+
+Measured with an oracle writing each of `#1`..`#40` before an `'x'` and reading
+back the cursor — not assumed:
+
+```
+skipped:      #9 TAB, #26 SUB, #32 SPACE      (SeekEof also skips #10, #13)
+NOT skipped:  #1..#8, #11, #12, #14..#25, #27..#31, #33 and up
+```
+
+`c <= 32` — the rule anyone reaches for — **eats control bytes straight out of a
+data file.** `#26` is in the set because it is the DOS EOF marker and FPC steps
+over it like blank space (a file of just `#26` is `SeekEof`-empty; `'x'#26` still
+yields its `'x'`).
+
+**frankB deliberately did NOT fold this into the existing `TFIsSpace`, and said so
+at both sites** — because `normalise-dont-special-case` would otherwise read as an
+argument to merge them:
+
+> One is the **tokeniser's DELIMITER set**; this is the seek routines' **SKIP
+> set**. `#26` belongs only to the second, and `#10`/`#13` delimit a token but must
+> **stop** `SeekEoln`. **Merging makes one of the two wrong.**
+
+**That is the correct boundary of the normalise rule and worth propagating:
+normalise two paths to ONE CONCEPT; two sets that merely overlap are not one
+concept.** Recording the reasoning at both sites is what stops a later reader
+"cleaning up" the duplication.
+
+**Negative-controlled because it passed first run:** the test asserts the **cursor**
+on every row, not just the Boolean (one checking only the answer would pass an
+implementation that ate the token), and swapping in `c <= 32` fails it with 9
+errors on exactly the `#1`/`#31`/`#33` boundary rows and the `SeekEoln` terminator
+cases. **A test that passes first time has told you nothing until you have seen it
+fail.**
+
+No compiler change needed; the ticket predicted that correctly and nothing went to
+Track P.
+
+## `SetTextBuf` escalated, not implemented — `decide-settextbuf-needs-buffered-text-io-or-stays-missing` [U, p55, `backlog/`]
+
+`textfile.pas` has **no buffering at all — one `PalRead` syscall per byte** — so
+there is nothing for the routine to configure; it cannot be given its FPC meaning
+without first building the thing it configures. frankB's recommendation, which I
+endorse: **leave it missing, and file buffered Text I/O as its own Track B ticket
+ranked on the PERFORMANCE case**, so the design is not shaped to satisfy a
+rarely-used knob. Coordinator call: **file that ticket now, before the U answer
+returns** — it makes the fork cleaner for the owner (the real work item is visible
+separately from the knob) and one syscall per byte is a genuine defect independent
+of `SetTextBuf`.
+
+### Lane state at 2026-08-28 ~07:00Z
+
+| lane | state |
+| --- | --- |
+| **frankB** | files the buffered-Text-I/O ticket (perf-ranked), then **`feature-b-the-module-shim-batch-blocking-the-python-corpus`** [B p62, `unfinished/`] — **PARKED MID-FLIGHT, re-claim, do not restart.** Told to stop and report if the remaining work is really in `pyparser.inc`: that would be **N work wearing a B ticket's clothes** and N is undispatched by owner call. |
+| **frankwasm** | scoping Phase 4 (calls). Owes me a **file list and the shape of the change, not a patch** — VMT slots / RTTI fixups → table indices instead of the 32-bit code addresses patched at `elfwriter.inc:1937`. |
+| **frankA** | parked for the night, clean. Track P queue stands: symbol-or-field first. |
+| **frankT** | parked, four reasoned deferrals. Daemon live at pid 1991398 on current code. |
+| **frank-optimize** | parked, `-O3` umbrella in `unfinished/`, nothing half-applied. |
+| **frank-rust** | idle, correct. |
+| **Track A p70** | `bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream` **unclaimed by design** — offered, reasonably declined. Evidence corrected; vendor tree held in `~/frankB`. |
+
+**Convergence worth noting:** frankB's reportlab finding (library surface leads,
+compile count lags) and the ranker independently agree that the module-shim batch
+is B's top item. **No re-ranking done** — that is the owner's, filed as
+`decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample` [U, p55].
+
+> **A rule's EXAMPLE silently narrows its scope.** `gating-and-waiting.md`'s pipe
+> rule was ignored because it was illustrated with `gate.sh quick | tail` and read
+> as a gate.sh rule. Worth auditing other reference docs for the same shape: a
+> rule stated generally but exampled narrowly will be applied narrowly.
+
+## Phase 4 scoping DISSOLVED the shared-file escape — no grant issued (frankwasm)
+
+**Approved to proceed in `compiler/ir_codegen_wasm32.inc` + `compiler/wasmenc.inc`,
+both its own. Nothing to sequence against frankA.**
+
+**Scoping that dissolves an escape is a better result than scoping that justifies
+one.** The plan named `elfwriter.inc:1937` as the patch site — **correct for ELF
+and irrelevant here, because wasm never calls elfwriter.** The producer side is
+target-independent by construction: `AddMethodFix(dataPos, procIdx)`
+(`emit.inc:103`, one append point, 10 call sites) records a **relocation, not an
+address** — *"the 8-byte slot at `Data[dataPos]` names `Procs[procIdx]`"* — and wasm
+consumes the same list, writing a table index where elfwriter writes
+`entry + BodyAddr`. **The generality had been pushed down long before this lane
+needed it; `ir-as-substrate` paying off rather than being cited.**
+
+Five independent things had to be true and each was checked, not inferred:
+`ProcAddrFix` is per-backend (inside each `ir_codegen_*.inc`'s `IR_PROCADDR` arm);
+VMT slot stride is `*8` on **every** target already (`ir.inc:7332`, address in the
+low dword); `wasm32` has `PtrSize=4`, so an `IR_LOAD` at `[vmt + slot*8]` already
+reads exactly the four bytes the index goes in — **no layout change**;
+`AN_CLASS_VIRTUAL_CALL` and interface dispatch already lower to loads +
+`IR_CALL_IND` in shared `ir.inc` (5130, 11676, 11750) with no backend op; and DCE
+is already off for wasm32 (`dce.inc:224`).
+
+### frankwasm reached frankA's universal-negative rule independently, from the other side
+> *"grep found nothing" is weaker than "the mechanism forbids it."*
+
+frankA got there by **asserting** a universal negative that its grep idiom could
+not see; frankwasm got there by **noticing the weakness in its own evidence before
+anyone challenged it** — the harder direction. Two lanes, no contact, same night,
+same rule.
+
+**And here the mechanism argument is actually available.** A code address does not
+exist when `Data[]` is built (`BodyAddr` is not patched until link time), so **no
+path can write a code address into `Data[]` at parse time — it can only record a
+fixup.** That narrows the open question to one grep whose shape cannot hide the
+answer: **is `AddMethodFix` the only APPENDER to the MethodFixups array?** (Grep the
+array, not its call sites.) Sole appender ⇒ the typed-const worry is *closed*, not
+deferred. A second writer ⇒ Track A ticket, not a quiet edit. Passed back.
+
+### Three coordinator calls made
+1. **`gate.sh quick` once at the END of Phase 4, not per-fix — and as the
+   falsification of the scoping claim, not a gate on the work.** "No shared edit ⇒
+   the six targets cannot move" is a *conclusion* four phases are being built on;
+   30s to test it is a good trade, per-fix is ritual.
+2. **The missing data segment is a real plan defect**, and it is the milestone rule
+   again: `writeWasm` emits no data section, `Data[]` (string literals, typed
+   consts, VMT blobs, RTTI) is entirely unemitted, BSS sized but never initialised —
+   so "resolve VMT slots to table indices" is **unsatisfiable before those bytes
+   exist**. > **A milestone that presupposes unbuilt scaffolding is the same failure
+   as one defined by the absence of a symptom** — both unreachable in a way that
+   only appears when you try to satisfy them. Made its own phase.
+3. **The measurement reorders the phase and PLAN.md must say so.** Of 22 unlowered
+   bodies at HEAD (117/139 with `-dWASM_NOMAIN`): **9 × `IR_CALL_IND`** — eight are
+   RTL error hooks calling an installed procvar (`PXXDivZero`, `PXXOverflow`,
+   `PXXRangeError`, `PXXNilRef`, `PXXInvalidCast`, `PXXVariantError`,
+   `PXXObjRelease`, plus two interface refcount helpers), **not user procvars** —
+   **1 × `IR_VIRTUAL_CALL`** (`TInterfacedObject._Release`, one in the whole RTL),
+   7 float writers, 5 heap/`Halt` (Phase 6). **The plan's assumption that Phase 4 is
+   where virtual dispatch matters is off by an order of magnitude**, and the VMT
+   path falls out of the indirect-call mechanism for free.
+
+**Design note worth copying:** `WasmTableIndex(procIdx)` as the single place a proc
+becomes an index, called by *both* the `IR_PROCADDR` arm and the MethodFixups loop —
+**the same move that fixed the IRTk planner/emitter split, applied BEFORE the
+divergence rather than after.** And index 0 reserved null so a nil procvar traps on
+call with no separate check.
+
+Shared-doc notes landed as `fd13ef648` (devdocs only): `ir-as-substrate.md` on IRTk
+being a hint not a guarantee, `debugging-playbook.md` on unreachable capabilities.
+
+## The parked state was itself stale — and my instruction to trust it was wrong
+
+I dispatched frankB to `feature-b-the-module-shim-batch-blocking-the-python-corpus`
+[B p62] with *"PARKED MID-FLIGHT — re-claim, do not restart from scratch."*
+**That instruction was wrong and neither of us could see it from outside:** the
+parked state's re-measure is dated **2026-08-18 at pin v352**, ten days and many
+pins back — *exactly as stale as the 2026-08-14 table it had replaced.* **The
+ticket's own first rule is that a count without a sha is a snapshot, and the rule
+applied to the ticket.**
+
+frankB re-measured row by row on v389 instead. **Reading the instruction's intent
+over its literal words was correct**; "do not restart from scratch" meant "do not
+duplicate finished work", not "trust a number with no sha."
+
+### Findings, in ascending cost-to-the-next-person
+- `codecs` and `urllib.request` have **no `mimic_*.py` of that name** but do
+  resolve — `import codecs` prints `note: codecs -> mimic_codecs (shim, subset)`.
+  > **A `ls lib/rtl/mimic_*` check would have called both open.** Same family as
+  > the wrong-key query: **a check on the artifact's NAME instead of on the
+  > BEHAVIOUR** — and the name check is always the one reached for, because it is
+  > cheaper.
+- **`xml.etree.ElementTree` is done** (fork decided Option A, re-filed, in `done/`,
+  `mimic-xml-etree` gated in `lib-test`) — so **the ticket's `blocked-by` edge was
+  stale too**, and the ranker was ranking it against a blocker that no longer
+  existed.
+- The re-measure step has now been run **twice with the same answer.**
+
+### DECISION: resolve it to `done/`. Its B scope IS complete.
+Every shim row resolves on v389. Residue is out of B's scope **by the ticket's own
+rules** — `genshi_core`/`lxml` are third-party (shimming one is impersonating a
+library), 32 language walls (`yield` at 18) are frontend work. **`weakref` is the
+one genuine residue** — a runtime facility, absent on v389, and `lib/` therefore
+B's; left to frankB whether it earns a ticket or just a line in the resolution.
+
+> **A stale ticket at the head of a lane's queue actively MISDIRECTS the next
+> agent.** That is a coordination harm, not untidiness — this one had frankB
+> re-measuring work finished ten days earlier.
+
+### The convergence cuts the OTHER way — my reading was wrong
+I read "the B batch is exhausted" as the shim work being done. frankB showed it is
+exhausted **for this ladder's three corpora only** — one family of self-contained
+web parsers. **`functools` still does not resolve on v389 and was reportlab's #2
+wall at 27 files; `pickle` was 18.** So **thin-stdlib-shim work of exactly the kind
+this ticket was filed for exists in quantity — it is aimed at the wrong corpus.**
+
+**And the action item lands in a closed lane:**
+`feature-nilpy-stdlib-coverage-gaps-measured` [p72] is **`track: N`** (verified).
+Track N is undispatched by owner call, so fresh ladder numbers would feed a ticket
+nobody can take — **which is exactly why the finding went to Track U rather than
+into a re-ranking I would have made myself.** Told frankB not to run the ladder;
+declining it at load 14.8 with Track T mid-tier was already right, and stating the
+limit — *"per-row checking answers the routing question, it does not produce
+today's wall counts, and the note doesn't claim it does"* — is what makes the rest
+of the note trustworthy.
+
+## Dispatched: `feature-b-buffered-text-io-one-syscall-per-byte-today` [B, p58]
+
+Filed by frankB before the U answer, as I asked, ranked on the **performance** case
+so the design is not shaped to satisfy `SetTextBuf`. `TFNextByte` does
+`PalRead(f.Handle, @one[0], 1)` — **one byte, one syscall**; a 100 KB file read
+line by line is ~100,000 `read(2)` calls.
+
+Hesitated only because the scoper implementing their own scope carries its blind
+spots forward. **Overruled by the ticket naming what is easy to get wrong instead
+of saying "add a buffer":** the peek slot must **collapse into** the buffer's cursor
+rather than sit in front of it (two lookahead mechanisms for one concept — the
+normalise smell, from the lane that had just refused a *wrong* merge on
+`TFIsSpace`); `Eof` does the lookahead itself so *when* the read happens changes;
+`Input`/`Output` are interactive, so read-ahead past a newline breaks
+line-at-a-time programs; and **the fd position after `Close`** — a reader that has
+read ahead leaves the descriptor somewhere the caller never asked for. That last
+is the trap found in production, not in review.
+
+## Buffered Text I/O landed (frankB, `60ce87f79`) — and the normalise boundary now has a canonical worked example
+
+**1,088,892 `read(2)` calls → 268. 1.56s → 0.30s. Byte-identical output.** Same
+program, 1,088,890-byte file, `lib/rtl` before and after on v389, best of 3.
+1,088,892 calls for 1,088,890 bytes is one syscall per byte plus two — **the
+filing's claim confirmed on the nose**, which is the point of ranking it on the
+performance case rather than on `SetTextBuf`'s signature.
+
+Verified from the coordinator side: `HasPeek`/`Peek` are genuinely **gone** from
+`textfile.pas` (not shadowed, not left behind), and the shim batch is in `done/`.
+
+### THE WORKED EXAMPLE — same doctrine, opposite answers, one lane, one session
+| | verdict | why |
+| --- | --- | --- |
+| `TFIsSpace` vs the seek **skip** set | **refused the merge** | tokeniser's DELIMITER set vs the seek routines' SKIP set — `#26` belongs only to the second; `#10`/`#13` must **stop** `SeekEoln`. They merely **overlap**. |
+| peek slot vs buffer cursor | **forced the merge** | the only byte anyone may push back is the one `TFNextByte` just handed over, still at `BufPos-1`. Nothing to store, nothing to sync. **One concept.** |
+
+> **`normalise-dont-special-case` gets misread in exactly one direction — as an
+> argument to merge whatever looks similar. Two sets that OVERLAP are not one
+> concept; two mechanisms answering the SAME QUESTION are.**
+
+**The real work was DELETING `HasPeek`/`Peek`, not adding a buffer.** A buffer
+placed *underneath* a retained peek slot would have produced the identical
+speedup and left the defect — two lookahead mechanisms for one concept. Applied as
+a **single asserted transaction**, because half-applying it produces the bug it
+removes: **permission to bank partial work is not permission to bank a partial
+INVARIANT.**
+
+`TextReadLn` keeps its own loop for its original reason (it must not set
+`LastIOResult` on success, or it clears a stale code a `{$I+}` region's
+`PXXIoCheck` can still see) — but that distinction moved into `TFFillEx`'s `quiet`
+flag instead of a duplicated read. **Same contract, one mechanism.**
+
+### The seekability probe: one test that cannot drift out of sync with what it gates
+Buffering is gated on `PalSeek(h,0,SEEK_CUR) >= 0`. A pipe or terminal **cannot be
+rewound** *and* **must not be read ahead on** — so **the probe's failure IS the
+answer** and no `isatty` is needed. Same property as the merged cursor: nothing to
+keep consistent.
+
+**fd trap closed at the syscall level, not by reading the code** — `lseek(3, -4045,
+SEEK_CUR) = 51` for a 50-char line plus newline. Exact, not approximately right.
+
+### Two limits stated against itself, before anyone asked
+- **`Input`/`Output` are never buffered**, even when stdin is a redirected regular
+  file that would pass the probe — there is no `Close` at which to rewind, and a
+  program that reads a line then execs a child sharing fd 0 would hand it a
+  position nobody asked for. **So the numbers above are FILE-READ numbers only.**
+- **The write side is untouched; `Flush` is still a no-op.** Mixing buffered writes
+  into the same handle is where a half-migration silently corrupts output.
+
+Gate read correctly: REAL EXIT redirected not piped; the four Text suites asserting
+**cursor position** rather than values all pass — *the* property a buffering change
+threatens, and the reason writing them that way this morning paid off within hours;
+synapse caveat repeated unprompted; one `FAILED` hit chased to a Makefile comment
+rather than waved through.
+
+## `weakref` NAMED AND NOT FILED — a real disposition, and the right one
+
+3 files (`html5lib/treebuilders/dom.py` + 2 reportlab), 3 members (`ref`, `proxy`,
+`WeakKeyDictionary`). frankB declined to file it:
+
+> **A weak reference that isn't weak is a lie about lifetime.**
+
+Same category that kept `SetTextBuf` out the same day, reached independently. A
+strong-ref `mimic_weakref` would work while making `ref() is None` unreachable and
+letting `WeakKeyDictionary` grow unbounded — **a shim that passes its tests by
+removing the semantics it exists to provide.** If ever wanted it needs a U decide
+first; at 3 files with nothing ranked behind it, filing that now is noise.
+
+> **Not filing, with the reason recorded in the resolution, is a real disposition
+> and lanes should do more of it.** The backlog's cost is not per-ticket — it is
+> per-ticket-that-must-be-read-and-skipped.
+
+## Dispatched: `bug-b-the-fpc-vartype-constants-are-missing` [B, p55, `backlog/`]
+
+Flagged the adjacency without prescribing scope: `feature-b-vartype-speaks-fpc-varxxx-codes`
+and `bug-b-varisstr-is-false-for-a-one-character-string` sit at p45 behind it.
+**If the constants are the same defect as the codes, take them together rather than
+closing one and leaving its twin ranked** — the double-case rule, and `varisstr`
+being wrong for a one-character string smells like a possible third arm.
+
+## THE UNIFYING RULE OF THE NIGHT: an enumeration is a claim about the SEARCH that produced it
+
+frankB's vartype work (`5b65c475c`) supplied the third instance in one day, from
+three unrelated lanes, and the general form is what makes it catchable:
+
+| the enumeration | the blind spot | cost |
+| --- | --- | --- |
+| decided spec: *"the four internal call sites that compare against `VT_` constants"* | **there are eight** — `VarIsEmpty`/`VarIsNull` compare a bare `0`, `VarIsNumeric` bare `1`/`2`/`3`; **a `VT_` grep cannot see a raw literal** | would have broken 4 more callers |
+| frankT: *"All four faces, closed"* | a **fifth** face existed the whole time (`skip` is how "did not run" is spelled) | a false regression over 9 commits |
+| *"no `mimic_*.py` of that name, therefore missing"* | `codecs`/`urllib.request` **resolve** under a differently-named shim | would have re-implemented two working shims |
+
+> **"The four call sites", "all four faces", "no file of that name" — each is a
+> count that inherits the blind spot of the query behind it.** Every one looked
+> like ordinary diligence at the time. **Before writing a count, ask what
+> construction the search was structurally blind to** — the same question frankA's
+> universal-negative rule asks, applied to enumerations instead of to absences.
+
+## The vartype trio was ONE job — and doing the p55 alone would have BROKEN the p45
+
+Not "arms of one defect" as I flagged, but worse: once `VarType` translates,
+`VarType(V) = VT_STRING` is false for **every** string, so eight callers
+(`VarIsClear`, `VarIsEmpty`, `VarIsNull`, `VarIsNumeric`, `VarIsStr`, `VarToStr`,
+`VarToStrDef`, `VarCompareValue`) turn a narrow known bug into a total one.
+**The double-case rule with teeth — and an argument for reading the neighbours
+BEFORE starting, not after finishing.**
+
+**Ticket three was already fixed in the source with its ticket left open** — the
+backlog and the tree disagreed and nothing detected it. But it is now fixed **by
+construction**: both text tags fold onto `varString`, so a caller *cannot observe*
+that `'x'` and `'xy'` are tagged differently — the only route by which `VarIsStr`
+could disagree with `VarCompareValue`. **Deleting the class, not the instance.**
+FPC has no char variant either (`v := c` with `c: Char` reports 256 there too,
+measured), so the fold is **parity, not a compromise**.
+
+**Constants printed from FPC 3.2.2, not transcribed from documentation** — the set
+is irregular (`varBoolean` 11, sized integers from 16, `varString` 256, `varUString`
+258) and **a guessed constant looks plausible and is wrong, with no failure mode
+that tells you which one you got.** 11 of 12 rows match exactly. The one divergence
+(`v := 1` → our `varInteger` vs FPC `varShortInt`) is **recorded and deliberately
+not escalated**: chasing it means narrowing integer *literals* at assignment — a
+language change, to buy parity on a value that varies with the literal rather than
+with the program's meaning. The test asserts the divergent row **immediately beside**
+`v := someInteger`, which agrees exactly, so a future reader cannot "fix" the wrong
+one. Negative control: reverting `VarType` to the raw tag fails with 11 errors on
+exactly the 11 `VarType` rows.
+
+## A new — and the worst — member of the pipe family: the pipe destroys the EVIDENCE
+
+`bug-b-lib-dns-libc-failed-once-in-the-gate-and-claims-a-hermeticity-it-lacks`
+[B, p30, `backlog/`]. `lib_dns_libc`'s **default** build failed once in the gate;
+did **not** reproduce in a full gate re-run (REAL EXIT=0) or in 15 direct runs of
+the very binary that failed.
+
+> `test "$(prog | tail -1)" = "SENTINEL"` **discards the output on failure**, so an
+> intermittent leaves **no evidence whatsoever.**
+
+The earlier members swallowed a *status* or inverted a *verification*. **This one
+destroys the DIAGNOSTIC, and precisely in the case where the diagnostic is
+irreplaceable** — the run you cannot reproduce is the one whose stdout you needed.
+A gate line capturing stdout on mismatch would have made this a diagnosis instead
+of a ticket. Belongs in `gating-and-waiting.md` beside the entry frankB generalised
+this morning.
+
+**Filed without a diagnosis, and the tempting adjacency RULED OUT rather than left
+unproven:** the `.invalid` lookup is inside the libc ifdef and the failing build is
+the **default** one. Saying so stops the next person re-deriving a dead end. *One
+failure is not a cause; fifteen non-reproductions are not an absence either*, and
+neither was claimed.
+
+**Verified independently by the coordinator:** `test/lib_dns_libc.pas:17` says
+*"NO NETWORK: every lookup is `localhost`"* and line 108 calls
+`DnsLibcResolveHost('nonexistent-zzz-qqq.invalid', ...)`. **The header claim is
+false.** That is certain, unlike the flake.
+
+## Dispatched: `compat-pascal-ioresult-returns-a-negative-errno` [B, p55]
+
+**Classification flag raised, which may change the ticket rather than the work.**
+It is tagged compat, and CLAUDE.md defers "our error number differs" as *error
+reporting*. But **`IOResult` is a value programs BRANCH ON** — real code compares
+against specific codes. If correct Pascal source behaves *wrongly* because we
+return a negative errno where it expects FPC's code, **that is the
+silent-wrong-behaviour escape and it is a `bug-` in B's lane, not a compat item.**
+The work is likely identical either way; the framing decides whether it can be
+deferred later. Left to frankB after looking. **No re-ranking — `prio:` is the
+owner's.**
+
+After it, B's queue drops to a p45 tail (`feature-crtl-implement-libc-assumptions`,
+the parked `feature-real-dynlib-loader`, then p40s).
+
+## THE FPC SEED BLIND SPOT — the one whole-fleet failure the documented loop cannot see
+
+**Verified by the coordinator before propagating.** `tools/gate.sh:219` carries an
+FPC seed canary; **`make compiler/pascal26` does not, and structurally cannot** —
+it compiles with **pxx**, which accepts a call to a routine defined later in the
+same include. **FPC rejects it, and FPC is what bootstraps this compiler.**
+
+> **Adding a call above its definition in `compiler/**` breaks the bootstrap seed
+> while every commit stays green on the documented per-fix loop.** Unlike a broken
+> fixedpoint, it produces **no signal at all.**
+
+**Measured (frankwasm):** `WasmEmitCall` used at `ir_codegen_wasm32.inc:912`,
+defined at 1030 — the seed was broken **the day direct calls landed** and stayed
+broken across several commits, all green on the loop. Caught only by the canary.
+Fixed in 18 lines of forwards (`cd878f9ca`), **verified by building `compiler.pas`
+with `fpc` directly rather than by inference** — the only reason the fix is known
+to be a fix.
+
+**The loop is not to blame:** `gate.sh:228` says the canary is affordable
+*precisely because it is concurrent* — started first, in the background, overlapping
+the rest. Serially in a per-fix loop it would not be free. **That cost is the whole
+question**, which is why it is a decision and not a repair.
+
+**Propagated three ways, none of which touches the owner's files:**
+1. A **BEFORE YOU START** warning appended to
+   `bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream` — the unclaimed
+   A ticket is a `compiler/**` edit on a token rewriter with helpers, i.e. exactly
+   the shape at risk.
+2. `decide-should-the-fpc-seed-canary-be-in-the-mandatory-loop` [U, p55, `backlog/`]
+   — three options costed, recommendation **option 1** (targeted trigger), with its
+   weakness stated: it relies on a lane recognising its own edit shape, **and
+   frankwasm's edit was exactly that shape and went unnoticed for days.**
+3. Here.
+
+**Track B is unaffected** — FPC never compiles `lib/rtl`. The exposed lanes are
+A/P/C/N/R/Z and wasm.
+
+### frankwasm's framing of the periodic gate beats mine, and is recorded as its own
+I said: run `gate.sh quick` once at phase end **as the falsification of your
+no-shared-edit claim**. The claim held — the six targets did not move. But:
+
+> **It paid for itself on an unrelated failure, in exactly the class a narrow loop
+> is blind to by construction.**
+
+That is the stronger argument, because **it does not depend on the conclusion being
+wrong.** A periodic wide gate is not insurance against your reasoning; it is
+coverage of the classes your loop cannot represent.
+
+## DECISION: the heap moves ahead of exceptions in the wasm plan
+
+frankwasm asked rather than reordering quietly. Approved, in its words:
+
+> **The ordering in this plan was derived from what wasm makes DIFFERENT. The real
+> order is set by what every program NEEDS.**
+
+Nothing runs without allocation; the blocker list is almost entirely heap (class
+instantiation, `writeln`, variants, the float writers). **And it is the same
+finding twice** — the data segment gated Phase 4's milestone exactly as the heap now
+gates Phase 5's. *Two incidents make a pattern; a pattern makes a reordering.*
+
+**Phase 5's milestone is recorded as HALF met**, which is the milestone rule
+surviving its hardest test: procedural variables run and diff against native (7
+values); **virtual dispatch emits, validates, and CANNOT BE RUN**, because every
+path to a virtual call begins with a heap allocation. `virtual_slice.pas` compiles
+and validates, and **the check says in as many words that it does not prove
+dispatch.** The tempting version — *"virtual dispatch: validates ✓"* — would have
+been true and worthless.
+
+### Three keepers from Phases 4-5
+- **The program body arrives in PIECES.** A frontend calls the per-body entry with
+  `CurProc = -1` more than once, and **on a register target those pieces land
+  contiguously in `Code[]` and genuinely ARE one function.** On wasm they became N
+  functions named `main`, none called — surfacing as `duplicate export "main"`, *a
+  complaint about the symptom*, while the defect was **every global those chunks
+  initialise reading zero.** An IR invariant that holds only because of a target's
+  incidental layout property; asked for it in `ir-as-substrate.md` beside the IRTk
+  note, same category.
+- **An oracle with ONE FIXED INPUT tests the oracle against that input, not the
+  system.** The WAT oracle ran on a single hand-built four-function module for four
+  phases and hid two bugs that both need more than four functions. **Only the TEXT
+  form was ever wrong** — the binary encodes indices and never asks for a name, so
+  the `.wasm` validated, ran and matched native while the `.wat` named locals it
+  never declared. **Two representations, one exercised, and the unexercised one is
+  the one humans read.**
+- `bug-a-a-typed-const-record-is-built-by-startup-code-not-stored-as-data` [A, p35]
+  — 116 bytes of code per 16-byte record vs zero for an equivalent Integer array.
+  **Ranked as codegen efficiency, not a correctness escalation, because native
+  behaviour is correct**; wasm noticed only because a target with no automatic
+  startup makes "initialised by generated code" and "initialised data" observably
+  different. Provenance is in the ticket.
+
+## A ticket's PREMISE is a recorded measurement, and it ages like one
+
+`compat-pascal-ioresult-returns-a-negative-errno` (frankB, `0a1b5cbd9`) had **three
+wrong premises, and the first changed the design.** That is the **fourth** recorded
+claim tonight that aged badly — a parked state's re-measure, a spec's *"four call
+sites"*, the `near:` evidence, and now a ticket's stated background.
+
+> **A ticket's premise is a claim about a measurement someone made once. It tells
+> you what was true THEN, not what is true now — and it inherits every blind spot of
+> the search behind it.** Same rule as the enumeration one, aimed at prose instead
+> of counts.
+
+| premise | measured | consequence |
+| --- | --- | --- |
+| *FPC translates errnos* | **FPC passes unmapped errnos through as the POSITIVE errno** (`ELOOP` → 40) | **load-bearing** — had it translated everything, an unmapped errno would need a code **invented**, and an invented code is a plausible wrong answer with no failure mode that reveals it. As it is, the `else` arm **is FPC's behaviour**, not a fallback. |
+| *`path not found` is 3* (documentation) | **2** (oracle) | a row silently wrong |
+| *the map might be an `abs()`* | `ENAMETOOLONG` (36) → **2** | proves a genuine map |
+
+Shipped: `{2 ENOENT, 36 ENAMETOOLONG} → 2`; `{13 EACCES, 20 ENOTDIR, 21 EISDIR} → 5`;
+`40 ELOOP → 40`. All ten measured rows match FPC exactly.
+
+### The line of the night
+> **"A row for them would be transcription wearing the appearance of measurement."**
+
+`EPERM` and `EROFS` are **deliberately absent** — unreproducible without root — and
+that is **stated in the source** rather than filled from documentation. **A table
+where nine rows are measured and two are copied looks exactly like a table where
+eleven are measured, and nothing downstream can tell them apart.** The absent rows
+are more trustworthy than present ones would have been.
+
+### Classification: frankB was right, the coordinator was half right
+I flagged it as an open question. The ticket had **already answered it** —
+`type: bug`, `track: B`, summary *"silently takes the wrong branch."* **Only the
+SLUG said compat**, and the slug is not what the ranker reads. Verified.
+**Filename deliberately not renamed:** the slug is the ticket's identity and other
+documents cite it, so renaming breaks citations to fix an appearance.
+
+Correct reading of the CLAUDE.md table, worth quoting because the deferrable row is
+adjacent: the *"our error number differs"* row is about **what a program prints when
+it dies**; `IOResult` is a value programs **branch on while running**. `if IOResult
+= 2 then` is ordinary Pascal and took the wrong branch — the silent-wrong-behaviour
+escape.
+
+### The `SetIO(-1)` sentinel was AMBIGUOUS as well as negative
+`-1` negated is `EPERM`, a real errno, so five "bad state" sites were
+indistinguishable from a genuine permission failure. **Translating without noticing
+would have converted a sentinel into a silently wrong errno — strictly worse than
+the negative number the ticket was filed to remove.** Now 103 (file not open) for
+the `Handle < 0` guards and 102 (not assigned) for `Erase` with no name and both
+`Rename` refusals, **102 measured** as FPC's answer for renaming an open handle.
+
+### The PASSLIKE lesson, turned on its own test within hours of being filed
+The test builds its own fixtures (`PalMkdir`/`PalSymlink`/`PalChmod`), covers all
+ten rows plus 102/103, and **asserts the invariant AS ITSELF** — no failure surfaces
+a negative code on either arm. The EACCES row is guarded for a user who can read a
+mode-000 file, **and that skip PRINTS**:
+
+> **An invisible skip is how a suite passes without testing anything.**
+
+That is the exact defect frankB filed against `twatch` this morning, found in its
+own work and fixed before it could matter. Negative control: restoring the
+passthrough fails with 9 errors including both invariant rows.
+
+## ALLOCATION, made visible rather than routed around
+
+**The highest-value unclaimed work in the repo is
+`bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream` [A, p70] — and it
+has no lane holder.** frankA declined it for good reason (fatigue on shared-core
+parser work) and is not being re-offered. Meanwhile Track B is working its **p45
+tail** (`feature-crtl-implement-libc-assumptions` dispatched; then the *parked*
+`feature-real-dynlib-loader`, then p40s).
+
+**This is the owner's allocation call, not the coordinator's.** Putting a Track B
+agent on a Track A ticket is a **combined-track assignment**, which CLAUDE.md is
+explicit is the user's decision — the coordinator owns the A/P *slot* (collision
+avoidance), not the authority to assign lanes. So it is recorded here where the
+owner will see it, rather than filled quietly past its value or left unmentioned.
+
+Track B is unaffected by the FPC seed blind spot — FPC never compiles `lib/crtl` or
+`lib/rtl`.
+
+## FILING A TICKET ON A BRANCH IS FILING IT NOWHERE — frankwasm's Track A tickets are invisible
+
+**Caught 2026-08-28 ~10:00Z. Measured, not inferred:**
+
+```
+git merge-base --is-ancestor 75c0b7488 origin/master   ->  NO
+git branch -a --contains 75c0b7488                     ->  remotes/origin/wasm
+git ls-tree -r --name-only HEAD ... | grep heapmmap    ->  NOT in HEAD
+tools/progress.sh ready --track A                      ->  three p70s, none of them frankwasm's
+```
+
+`bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero` — **[A, p70],
+a heap that starts at address zero** — is invisible to the ranker, to `ready`/`next`,
+and to whoever takes Track A next. frankwasm also reported
+`bug-a-a-typed-const-record-is-built-by-startup-code-not-stored-as-data` as filed
+**"on master"**; it is not on master either.
+
+> **Ticket files are the fleet's shared INDEX, not lane artifacts. Lane CODE may
+> reasonably live on a branch; a TICKET that is not on master does not exist — and a
+> p70 you cannot rank is worse than an unfiled one, because you believe it is
+> handled.**
+
+frankwasm's model of where its ticket commits land was wrong, so **this has probably
+happened more than twice.** Asked it to cherry-pick them onto master itself (a
+coordinator must not push another lane's work) and to sweep the branch with
+`git log origin/master..origin/wasm --name-only -- 'devdocs/progress/**'`.
+
+**Not challenging the `wasm` branch itself** — a backend of this size may reasonably
+sit on one, and it predates this coordinator. **The tickets are the defect, not the
+branch.**
+
+**Nearly missed it in tonight's own signature way:** the first check was
+`find -name '*heapmmap*'`, which returned nothing — *and that zero looked exactly
+like "mid-push".* What kept it alive was a **contradiction, not an absence**: the
+commit was in the log while the file was not in the tree. Same shape as frankwasm's
+`f64.floor` — nothing looked wrong; two things merely disagreed.
+
+## "Needs the heap" was a GUESS — a diagnostic that names a cause asserts a root cause
+
+frankwasm self-corrected a measurement this coordinator had already propagated into
+an approved reordering.
+
+> **A diagnostic that names a CAUSE is asserting a root cause.**
+
+Its coverage report printed `needs the heap, Phase 6` for **every** unlowered
+builtin, generalised from the two members that were true (`GetMem`, `FreeMem`).
+**`PXXAlloc` — the allocator itself — was blocked on an `Integer()` cast; the write
+path on `Trunc`.** Neither touches the heap. Found by dumping the IR
+(`PXXDBG=a.ir:PXXAlloc` → `call a=-57` on `bin := Integer(size shr 3) - 1`) — the
+playbook working as written.
+
+Now names the **builtin** and lets the reader conclude. **Third instance in three
+different artifacts of one root: report the OBSERVATION, never the conclusion.** A
+report that helpfully summarises has silently done your reasoning for you.
+
+**The reordering stands on the corrected figure: the heap was 8 bodies with 4 cheap
+builtins in front, not "almost everything."**
+
+## The heap starts at address zero — and a guard that relies on hardware, on the one target with none
+
+Verified independently: `builtin/builtinheap.pas`'s `HeapMmap` `{$ifdef}` chain has
+arms for `PXX_ESP`, `CPUX86_64`, `CPUAARCH64`, `CPU_ARM32`, `CPU_I386`,
+`CPU_RISCV32` — **no `CPU_WASM32`**. `Result` never assigned; returns 0.
+
+**`PXXAlloc` not checking it is CORRECT for a hosted target** — a failed `mmap`
+returns a negative errno and the next access faults. **Linear memory has nothing to
+fault on**: address 0 is legal, loads return zero, no page protection. So the
+allocator bumps from 0, hands out 8/32/56, and is **correct until ~1 KB**, then
+writes into BSS at 1024. Phase 6's 7 values matched native *on that heap*.
+
+> **A written-down hazard is not a check.** This target's own null-guard note
+> predicted the failure in writing — *"a nil dereference on this target reads zeros
+> and keeps going where on x86-64 it segfaults"* — and nobody connected it to the
+> allocator until the allocator did it.
+
+**Third instance from this lane of one family**: the IRTk rule written at the emitter
+and violated in the planner; the pipe rule documented and violated; a hazard
+documented and not connected. **Writing it down moves nothing; making the wrong form
+unrepresentable does.**
+
+### A test that FAILS when the bug is fixed
+`check_calls.sh` asserts the limitation is still exactly this one and **goes red if
+the heap starts working**, because that means the ticket landed and the assertion
+block is stale.
+
+> **Green means "the known limitation is unchanged" — the only honest thing a test
+> can say about a defect it is not allowed to fix.**
+
+Strictly better than a comment nobody re-reads: it cannot rot silently, and its
+failure is a **notification** rather than a regression. **Worth copying for any
+lane's `blocked-by:` items.**
+
+Two smaller keepers: the plan's scope note did not survive contact **in the good
+direction** — there was no allocator to write (`PXXAlloc` is ordinary Pascal; every
+backend just calls it), so it was replaced with what mattered: **a fresh scratch
+local per allocation SITE, not per body.** And `$9C` is `f64.floor` where
+`f64.nearest` was meant — **visible only on an exact half** (`Round(3.5)` is 4 vs 3)
+— caught on first run because the slice deliberately picks halves either side of
+zero. *A test designed against the failure it later caught.*
+
+## THE HEADLINE RULE OF 2026-08-27/28 — absences vs contradictions
+
+frankwasm's generalisation of the coordinator's near-miss, and it reframes the
+whole night:
+
+> **An absence is consistent with too many stories; a contradiction is consistent
+> with almost none.**
+
+`find -name '*heapmmap*'` returning nothing fit four live, benign stories — not
+filed, mid-push, different slug, mistyped. **The commit being in the log while the
+file was not in the tree fit almost nothing except the truth.**
+
+**It is the REVERSE of the rule frankA and frankwasm reached from the other side.**
+A non-existence claim does not survive one search — so the remedy is not a better
+search:
+
+> **Stop trusting single-source absences. Start manufacturing disagreements.** Two
+> cheap sources that must agree beat one thorough search, because the thorough
+> search still has exactly one blind spot and no way to notice it.
+
+**Every one of tonight's misses was a single source reporting an absence, and every
+one was caught by a SECOND SOURCE DISAGREEING — never by looking harder at the
+first:**
+
+| the absence | the contradiction that caught it |
+| --- | --- |
+| `test-emit-obj` : 0 hits in 1697 runs | `live.json`'s `red_src` naming the file |
+| `ls lib/rtl/mimic_*` : `codecs` missing | compiling `import codecs` and getting a resolution note |
+| spec: *"the four call sites"* | the bare-literal comparisons the `VT_` grep could not see |
+| *"all four faces, closed"* | the ledger's `first_seen: false` |
+| `find '*heapmmap*'` : nothing | the commit present in the log |
+| `f64.nearest` looked right | native disagreeing on an exact half |
+
+## frankwasm wrote a CHECK, not a CHARTER line — the family closing on itself
+
+Both tickets are on master (`7cee9147e`) and **verified by the coordinator rather
+than taken on report**: `ready --track A` shows the heap bug at **p70, second row**,
+typed-const at p35. The branch can no longer hide one (`678aa0ee3`).
+
+> *"Writing it down is what failed the first time. Adding 'tickets go on master' to
+> CHARTER.md would have been the fourth."*
+
+Three of the four instances are frankwasm's own — the IRTk rule written at the
+emitter and broken in the planner, the pipe hazard documented then walked into, the
+null-guard hazard written in the backend's own memory-map note and never connected
+to the allocator. **It applied the lesson to the lesson.**
+
+`test/wasm/check_tickets.sh` runs in the ordinary loop and fails if any file under
+`devdocs/progress/**` exists on the branch and not on `origin/master`. **Verified in
+both directions** — a planted branch-only ticket fails it, removing it passes.
+
+### Two design details that mattered more than the check
+- **Compares by SLUG, not path.** A ticket's directory *is* its state and master
+  moves tickets between `backlog`/`working`/`done` constantly; the path-wise version
+  named **eleven** files, none of them frankwasm's, all resolved by master since its
+  last merge.
+  > **A check that cries wolf is worse than no check — for the same reason a
+  > diagnostic that names a cause is: it does your reasoning for you, wrongly.**
+  That unifies two of tonight's findings under one mechanism.
+- **Reads the WORKING TREE (`--cached --others`), not `HEAD`** — it fires the moment
+  the file exists. *"The real incident was a committed ticket only because nothing
+  looked earlier."* The difference between a check and a post-mortem.
+
+**And the no-fetch decision is safe because its failure mode is named:** a stale
+`origin/master` ref makes it **late, never wrong**; the remedy is a fetch.
+> **A check whose worst case is LATENESS can live in a fast loop; one whose worst
+> case is a WRONG ANSWER cannot.** Reusable criterion for anything proposed for the
+> per-fix path.
+
+**The coordinator's own verification command was the naive version:**
+`git log origin/master..origin/wasm --name-only` still names both files, because the
+cherry-pick leaves the *commits* branch-only while the *content* is on master —
+**exactly the false positive frankwasm designed around, reproduced by me ten minutes
+after it explained it.** Its check is right; mine would have cried wolf on first run.
+
+frankwasm also audited the three earlier A tickets unprompted: all on master, all
+pushed *from* master. **The pattern was "whichever branch I happened to be standing
+on — which is not a model at all."** A wrong model can be corrected; **no model can
+only be replaced by a mechanism**, which is what it built.
+
+## `sort -u` SILENTLY DELETES DISTINCT IDENTIFIERS IN A UTF-8 LOCALE — repo-wide hazard
+
+Reproduced by the coordinator, not taken on report:
+
+```
+printf '_longjmp\nlongjmp\n' | LC_ALL=en_US.UTF-8 sort -u   ->  _longjmp
+printf '_longjmp\nlongjmp\n' | LC_ALL=C           sort -u   ->  _longjmp longjmp
+```
+
+**One of two distinct C identifiers deleted. No error, no warning.** UTF-8 collation
+ignores punctuation, so anything differing only in punctuation compares **equal**.
+
+> **This is not a census bug. `sort -u` over identifiers, symbols, or filenames in a
+> UTF-8 locale silently collapses entries anywhere in this repo** — and leading
+> underscores are pervasive in C symbol tables. **Use `LC_ALL=C sort -u` whenever the
+> input is identifiers.**
+
+## THE ENUMERATION RULE, ONE LEVEL DOWN — and it is the level that bites
+
+frankB, writing `test/crtl_declaration_census.sh` (358 declared, all defined, zero
+`DT_NEEDED`):
+
+> **The tool written to check an enumeration inherits a blind spot of its own — and
+> it will be a DIFFERENT one each time you write it.**
+
+It implemented the extraction **twice, Python and shell, and diffed them**. Each
+silently dropped a different name:
+
+| implementation | dropped | how |
+| --- | --- | --- |
+| Python | **`atexit`** — *the single most load-bearing name in the batch it was written to check* | skipped declarations containing `(*` to dodge function-pointer typedefs |
+| shell | **`longjmp`** | `sort -u` under `en_US.UTF-8` (above) |
+
+**Both would have reported a clean census.** The second-order failure is worse than
+the first because **it looks like diligence.**
+
+### CONVERGENCE: frankwasm stated the rule; frankB enacted it; ~20 minutes apart, no contact
+frankwasm: *"stop trusting single-source absences, start manufacturing
+disagreements."* frankB manufactured one — **two independent extractions, diffed.**
+Relayed both ways; they cannot see each other and this is the coordinator's actual job.
+
+**And frankB supplied the MECHANISM behind frankwasm's rule:** the two tools' blind
+spots are **uncorrelated**, so the second source is not a redundant check but an
+*independent* one. That is why manufacturing a disagreement beats searching harder.
+
+**Permanent guard, same instinct as `check_tickets.sh`:** the script fails if the
+extraction returns **fewer than 300 names**, so **a collapsed search cannot pass by
+finding nothing.** "A zero looks like an answer" turned into a mechanism rather than
+a warning — a check, not a note.
+
+### Fourth pipe-family member, and a genuinely new category
+The first three corrupt a check's **VERDICT**; this one corrupts its **INPUT**, so
+the check reports *an honest all-clear about the wrong set.*
+> **A verdict bug is detectable by re-running. An input bug is not detectable from
+> inside the check at all.**
+
+## FIFTH stale batch tonight: `feature-crtl-implement-libc-assumptions` has no open work
+
+Every item on its list was already fixed by a different ticket that never came back
+to update it: the 2026-08-05 batch of 10 (poll, ioctl, clock_gettime, chmod, umask,
+msync, mremap, pread, pwrite, atexit) all defined; `atexit` handlers run in reverse
+order on both the return-from-main and `exit()` paths; `environ` declared and
+populated (**74 entries, matching the shell's own `env | wc -l`**); the tcc `-run`
+item moved off on 2026-08-09 as an ELF symbol-table question for A/C. Both named
+blockers are in `done/`.
+
+**`pxx` already detects this class itself** — `cparser.inc:9373` emits *"crtl does
+not define X — this C program will import them from the system C library at run
+time"* (verified). **So the check is one compile plus a grep, not the 361 compiles
+and `nm` the ticket prescribed.** Same shape as the Track U ticket filed and
+withdrawn on 2026-08-27 when one grep showed the C frontend already accepted what
+the "fork" was about: **the tool already knew.**
+
+### Disposition
+**Left in `backlog` as a standing collector** (frankB's recommendation, and right —
+the next real-project bring-up refills it), **but `next --track B` still returns it
+at p45**, so the misdirection survives the list being corrected. Asked frankB for an
+unmissable header — *"as of 2026-08-28 this list is EMPTY, verified by
+`crtl_declaration_census.sh`; do not treat as pending work"*.
+
+**The p45 was NOT touched. `prio:` is the owner's field**, and *"an empty collector
+should rank below real work"* is a call to record, not to make. **FOR THE OWNER:**
+this ticket's p45 no longer reflects open work.
+
+**Arguably the census supersedes the ticket** — its function was *collect
+declared-but-unimplemented gaps*, and a gate that fails when one appears does that
+automatically and sooner. frankwasm's "write a check, not a charter line", applied
+to a backlog item. Left to frankB, which knows whether the collector holds anything
+the census cannot see.
+
+**Next for B: any of the three tied p40s** (`feature-b-fpc-signal-compat-unit`,
+`feature-b-random-tier1-consume-the-hw-entropy-intrinsics`, `feature-networking`).
+Ranker order between ties is arbitrary and **frankB's judgement about which is real
+beats it — five of five batches tonight were stale.**
+
+## Track B is DRY of real work down to and including p40
+
+frankB landed both genuine p40s (`264ea52ab` random tier-1, `bd8293f07` FPC signal
+compat) and **correctly refused the third as an umbrella.** Remaining: p30 (the dns
+ticket, split below), p20 minidom, p12 string-template — plus two tickets that
+**mis-signal as work**.
+
+### The night's tally, and the heuristic frankB drew from it
+> **Seven premises measured, five stale, two real — and both real ones were "the
+> compiler half landed, the RTL half is a few lines". A shape worth trusting on
+> sight.**
+
+**Third instance today of "the capability existed; the premise was a claim about a
+search":** `PalIgnoreSignal` already exported from `lib/rtl/platform.pas` (so the
+ticket's *"if the runtime cannot express ignore, file a Track A ticket"* branch was
+never reachable), after `codecs`/`urllib.request` resolving under different shim
+names, and `cparser.inc:9373` already emitting the crtl warning.
+
+### What made the two landings finished rather than plausible
+Negative controls **aimed at each ticket's own stated risk** — the version that
+cannot be gamed:
+- Pinning the signal trampoline to a constant → `per-signal-number=FAIL usr1=3
+  usr2=0`, **the ticket's predicted bug produced on demand.**
+- Mapping `SIG_IGN` onto `SIG_DFL` → killed by SIGPIPE, **exit 141**, `ignore=`
+  never printed. Turns "implement this honestly" from a worry into an observation.
+- RDRAND verified exercised **for the right reason** (probe TRUE, `rdrand` in
+  `/proc/cpuinfo`, three distinct draws) — **passing through the not-available
+  branch looks identical from outside.** And `v` is re-zeroed on the give-up path
+  because **RDRAND leaves its destination zero on failure**, which is exactly the
+  case the Boolean exists to prevent.
+- `{$error}` guard: the define is `CPUX86_64`, not `CPU_X86_64` (measured). **The
+  half that mattered was what the else branch must NOT do** — an empty unit would
+  satisfy a `uses` clause and provide no dispositions at all, *worse than not
+  building.*
+
+## Two tickets that MIS-SIGNAL as work — both recorded for the owner, neither re-ranked
+
+| ticket | prio | reality |
+| --- | --- | --- |
+| `feature-crtl-implement-libc-assumptions` | p45 | empty collector; census now guards the class automatically |
+| `feature-networking` | p40 | **umbrella, mostly already delivered** |
+
+`net.pas` exposes `TNetSocket`/`TNetAddress` with **IPv4 and IPv6**,
+`NetTcpListen`/`Connect`; `asyncnet.pas`, `sockets.pas`, `baseunix.pas` all exist;
+lib-test carries 66 net-related lines exercising async DNS, IPv6, TLS and
+cross-target net PAL; its **First Milestone (TCP client/server, UDP loopback) is
+met**. What remains is spread across lanes and partly blocked — Synapse compat
+behind `feature-mimic-fpc` and `{$mode delphi}` **plus tonight's spliced-token-stream
+bug**; the ESP backend is Track S; the `Posix.*` dual-facade is a design programme
+whose decision log stops at **2026-06-19**.
+
+> **That is a programme to split or demote, not a Track B ticket to open.**
+
+**`prio:` untouched on both — the owner's field.** But a p40/p45 that is not work is
+the same defect as a stale ticket at the head of a queue: it misdirects whoever
+ranks next.
+
+## The generator vs the instance — filed separately on purpose
+
+frankB filed `bug-p-fatal-directive-is-silently-ignored` [P, p35] and **flagged, but
+did not file, the sweep behind it.** Verified:
+
+```
+grep -c "else if CaseEqual(command" compiler/lexer.inc   ->  34   (no terminal else)
+```
+
+So **any directive outside those 34 is silently consumed — no warning, exit 0.**
+Filed as `bug-p-an-unknown-compiler-directive-is-silently-ignored` [P, p35]
+(`2440206d2`), deliberately separate:
+
+> **Fixing `{$FATAL}` closes that ticket and leaves the generator intact.** The
+> double-case rule with an *unbounded* sibling: normally you grep for the other arm,
+> here the other arms are however many directives exist that we do not handle. **A
+> finding buried in the ticket that carried it dies when that ticket dies.**
+
+frankB's reasoning for why this is not a diagnostic-parity nit generalises to the
+whole class:
+> **Ignoring a directive does not change a MESSAGE — it changes whether an ARTIFACT
+> EXISTS.** A source saying *"this configuration is unsupported, do not build"* gets
+> built.
+
+Silent-wrong-behaviour escape, not the deferrable "our diagnostic differs" row. The
+sweep ticket also carries the design fork (hard error breaks sources using inert
+vendor pragmas; silence is the current bug; a naming warning plus a small
+known-inert allow-list is the likely answer) and the instruction to **manufacture a
+disagreement** rather than trust one extraction of either side.
+
+## Last B dispatch: the CERTAIN half of the dns ticket, split from the uncertain half
+
+`bug-b-lib-dns-libc-failed-once-in-the-gate-and-claims-a-hermeticity-it-lacks`
+[B, p30] holds two claims of very different quality. **Dispatched the certain one
+only:** `test/lib_dns_libc.pas:17` claims *"NO NETWORK: every lookup is
+`localhost`"* while line 108 resolves `nonexistent-zzz-qqq.invalid` — **verified by
+the coordinator**, small, and a real hazard (it behaves differently on a box with no
+resolver, and it misleads anyone diagnosing the very intermittent the ticket is also
+about).
+
+**The flake stays open.** *One failure is not a cause; fifteen non-reproductions are
+not an absence.* Chasing it tonight is not worth it; fixing the false header is.
+
+**After that B is genuinely dry** (p20 minidom, p12 string-template). **That is a
+legitimate stopping point, and whether frankB continues past it is the owner's call
+rather than work for the coordinator to manufacture.**
+
+## A MEASUREMENT OF A PROXY IS NOT A MEASUREMENT OF THE SYSTEM
+
+frankB's dns work produced the night's last general rule, and it caught it on
+itself. It straced **glibc's `getaddrinfo`** and got a clean, correct answer —
+`localhost` 0 contacts to port 53, `nonexistent-zzz-qqq.invalid` 9 — and wrote a
+header correction on it.
+
+**The default build does not use glibc at all. It uses pxx's own wire resolver.**
+
+> **A measurement of a proxy is not a measurement of the system. Ask what the
+> system actually calls before straceing something else.**
+
+It was caught by noticing **what had been measured**, not by the numbers looking
+wrong: 0 vs 9 was entirely plausible. Straceing the **actual binaries**:
+
+| build | contacts to port 53 |
+| --- | --- |
+| default | **6** |
+| libc | **12** |
+
+**Neither is hermetic.** That is the contradiction rule turned on one's own method
+rather than on a search result.
+
+### Fully explained — and it overturns the exclusion the ticket rested on
+Verified by the coordinator:
+```
+/etc/hosts:1  127.0.0.1 localhost
+/etc/hosts:5  ::1       ip6-localhost ip6-loopback     <- localhost is NOT on this line
+getent ahostsv6 localhost -> ::ffff:127.0.0.1 only     <- no native AAAA from files
+```
+- line 72 `DnsResolveHost('localhost')` → **files hit → no network.** The header's
+  claim is true for this row.
+- line 75 `DnsResolveHost6('localhost')` → **files MISS → wire → six DNS queries**,
+  full search-list expansion (`localhost.home`, `localhost.tail…ts.net`,
+  `localhost.`) against 127.0.0.53.
+- line 76 asserts `facade_v6_rc: rc = 0` — **so a transient resolver failure there
+  produces exactly a one-off `DNSLIBC FAILED` in the DEFAULT build.**
+
+**Not a diagnosis** — one failure is still not a cause — **but it removes the
+exclusion.** The original write-up ruled network out because the `.invalid` row sits
+behind `{$ifdef PXX_DNS_LIBC}` while the failing build was the default: **sound for
+that ROW, false for the BUILD.**
+
+> **The coordinator repeated that exclusion in the dispatch and called it "ruled out
+> rather than merely unproven."** frankB caught my reasoning, not only its own. A
+> dependency on a tailscale search domain resolving through a systemd-resolved stub
+> is exactly what is fine 999 runs in 1000.
+
+### Coordinator calls
+**Q1 — make the v6 row hermetic. Not optional.** A suite whose header declares NO
+NETWORK cannot have a row that passes *because the network answered*; it is the
+header lie one level in, and it is now the leading candidate mechanism for a red.
+Shape left to frankB; the fit is its own **printed-skip** pattern from this morning.
+What must go either way is asserting `rc = 0` for a name that legitimately has no
+AAAA in files.
+
+**Q2 — file it, but the steer leans AGAINST frankB's instinct, and it may be a
+`bug-` rather than a `decide-`.** frankB leaned *"the resolver is right, the test is
+wrong."* **RFC 6761 §6.3 (to be VERIFIED, not asserted — the coordinator could not
+fetch it)** is recalled as: name-resolution APIs SHOULD treat `localhost` as
+special, SHOULD always return loopback, SHOULD NOT send such queries to configured
+DNS servers. If so:
+
+1. **`.invalid` and `localhost` are both RFC 6761 reserved but carry DIFFERENT
+   prescriptions** — NXDOMAIN locally vs loopback locally. So *"glibc doesn't
+   special-case `.invalid`"* is evidence about `.invalid` and **says nothing about
+   `localhost`** — an inference doing quiet work in the current lean.
+2. **A resolver that sends `localhost` to the wire can be ANSWERED by the network**,
+   and a hostile or merely misconfigured server can return a non-loopback address.
+   That is a behaviour a correct program observes — the silent-wrong-behaviour
+   escape, not a preference.
+
+**The test fix lands regardless: the test is wrong even if the resolver is also
+wrong.**
+
+## The RFC steer held: `bug-b-resolver-sends-localhost-to-the-wire` [B, p45] — filed as a BUG
+
+frankB verified RFC 6761 against the text and **overturned its own lean**:
+
+- §6.3 (localhost): *"Name resolution APIs and libraries SHOULD recognize localhost
+  names as special and SHOULD always return the IP loopback address for address
+  queries"*
+- §6.4 (invalid): *"SHOULD always return immediate negative responses"*
+
+**Different prescriptions, as steered.** frankB's own verdict on its earlier
+inference: *"my inference from 'glibc happily queries .invalid' to 'therefore
+querying localhost is fine' was worthless — it was in fact the whole of my lean."*
+
+**Two measurements settled the ticket TYPE:**
+- `grep -rni localhost lib/rtl/dns*.pas` → **nothing.** No special-case at all, so
+  **structural, not an edge case.** *(Coordinator widened the search rather than
+  repeating it: `localhost` appears nowhere in **any** `lib/rtl/*.pas`.)*
+- **glibc, the reference, complies**: 0 contacts to port 53, answers
+  `::ffff:127.0.0.1`.
+
+### "Masked, not correct" — the load-bearing insight
+**The v4 case is not right either; it is hidden by a hosts line almost every box
+happens to ship.** Remove `127.0.0.1 localhost`, or ask for AAAA, and the name goes
+to the wire. **That is what makes it a bug rather than a Debian packaging quirk** —
+and it is the argument anyone looking only at the v6 failure would have missed.
+
+Hijack consequence stated in the ticket: a hostile or misconfigured server, **or a
+wildcard search domain**, can answer `localhost` with a non-loopback address, and a
+program connecting to localhost expecting a local service connects elsewhere.
+Silent-wrong-behaviour escape.
+
+**Open sub-decision noted rather than guessed:** whether an explicit `/etc/hosts`
+entry may override the built-in answer. §6.3's *"cannot be modified by local
+configuration"* argues the special-case wins outright; every real implementation
+reads hosts first; **no in-tree caller depends on either order.** A decision with no
+forcing function — left visible rather than settled by implementation accident.
+
+### NEW PRACTICE worth propagating: record the WRONG PATH in the ticket
+frankB wrote the `.invalid` inference into the ticket **as a thing not to repeat.**
+
+> Most tickets record the conclusion and drop the wrong path as embarrassing. **But
+> the next reader will take that path too — it is the natural inference, not a
+> careless one — and a ticket that names the dead end saves them the walk.**
+
+### Q1 went further than the coordinator's suggestion, for a better reason
+Recommended: a printed skip. **frankB resolved the LITERAL `::1` instead**, which
+short-circuits without network, because **a skip-guarded name row could still fall
+through to the wire if a wildcard resolver answered it** — *"the same hazard wearing
+a smaller hat."* **A guard that depends on the environment behaving is the thing
+being removed all night.**
+
+Measured after: **default build 6 → 0 contacts to port 53**; libc 12 → 6, the
+remainder being the deliberate `.invalid` row behind `PXX_DNS_LIBC`. **The header's
+claim now matches a measurement rather than an intention**, and the header also
+records the proxy mistake itself, *because the file is where the next person will
+look.*
+
+## FOR THE OWNER: a prio set by a ticket's own author needs a second opinion
+
+frankB filed `bug-b-resolver-sends-localhost-to-the-wire` at **p45** — above
+everything else left in B — and **asked for the same "record, don't set" treatment
+the coordinator has applied to others**, on a ticket it filed itself.
+
+> **A prio set by a ticket's author on their own discovery is the one most worth a
+> second opinion — not because authors inflate, but because they have no comparison
+> set.** An hour inside the bug, minutes with the rows it is ranked against. **A
+> calibration problem, not a bias problem** — which is exactly what the owner's
+> field exists to correct.
+
+**Coordinator view, offered and explicitly NOT ratifying:** defensible — spec
+violation, structural, platform-independent, real hijack path — and tempered,
+because the misroute needs a wildcard resolver or a missing hosts line. Against a
+p70 that blocks a backend or a parser that cannot compile Synapse, p45 reads about
+right. **Recorded as "filed at p45 by its author, flagged for owner review", not as
+an endorsement.**
+
+**frankB's session state:** seven premises measured (five stale, two real), four
+pieces of real work landed, four tickets filed, two coordinator calls corrected and
+one of its own retracted. The new p45 is the top of B's real work and is its if it
+wants it; **stopping here is equally legitimate and was said plainly rather than
+hinted.**
+
+## THE BEST FINDING OF THE NIGHT: a test can only gate behaviour the environment does not already provide
+
+frankB fixed `bug-b-resolver-sends-localhost-to-the-wire`, wrote the obvious
+regression test — resolve `localhost`, assert loopback — got **eight green rows,
+fully hermetic, zero packets to port 53**, then **reverted the fix as a negative
+control.**
+
+**The test still passed. Every row.**
+
+This box's `systemd-resolved` is **itself RFC 6761 compliant** and synthesises the
+localhost subtree, so the broken path returned exactly the right **answer** and
+merely spent **20 DNS queries** getting there, against **0** with the fix.
+
+> **A test can only gate behaviour the environment does not already provide.** When
+> a fix's real effect is *"stops doing X"* rather than *"returns Y"*, **assert the
+> thing that actually changed** — or extract the decision into a predicate that can
+> be tested directly, and **say plainly which rows are the gate and which are
+> smoke.**
+
+**The failing case is invisible to READING.** Eight green rows, correct-looking in
+every respect; nobody reviewing that test would have caught it. **Only the revert
+did** — which makes negative-controlling not a discipline but **the only detector
+for this class.**
+
+Filed as `feature-t-audit-tests-that-pass-with-the-implementation-removed`
+[T, p40, `dae51b0bf`], credited to frankB, **because the finding was in a session
+message and in no ticket** — the same reason the directive-sweep generator was split
+out. A finding not in a ticket dies with the session.
+
+### The fix that works: extract the DECISION, assert the PREDICATE
+`DnsIsLocalhostName` exported and asserted directly — case folding, the optional
+root dot, and the label boundary that must stop `notlocalhost` matching. **Ten
+predicate rows including five NEGATIVES, which end-to-end resolution cannot check at
+all without letting the name reach the wire** — i.e. **the gate literally could not
+exist end-to-end.** Resolution rows kept **and documented as smoke, not as the
+gate**. Controlled twice: dropping the label boundary fails
+`notlocalhost`/`xlocalhost`; dropping case folding fails `LocalHost`/`LOCALHOST.`.
+
+`notlocalhost` still going to the wire, **visible in the strace as the only name
+still queried**, is a boundary proof rather than an assertion: *the thing you did
+not change is what proves the thing you did.*
+
+### Fourth direction on one family — and this time from the person who named it
+frankB wrote the worthless test **after** articulating the rule that would have
+caught it. Third instance tonight of *"it works on this box for a reason unrelated
+to what it claims to check"*, all three in one lane, the third by the author of the
+first two.
+
+> **A written-down rule does not catch its own violation.** frankwasm reached this
+> independently (IRTk written at the emitter, broken in the planner three functions
+> later) and both lanes responded identically: **stop writing the rule down, build
+> the thing that cannot be violated.** frankwasm built `check_tickets.sh`; frankB
+> exported the decision as a predicate.
+
+**Relayed to frankwasm with the part that is specific to it:** its differential is
+**immune to this by construction**, because it never asserts an expected value — it
+asserts *agreement between two implementations*. An environment that supplies the
+right answer to both arms hides nothing, since a defect would have to make them
+**disagree** to matter. **Its oracle is a second implementation; frankB's was a
+constant.** Where it *does* apply to frankwasm: the WAT text checks, coverage counts
+and `check_calls.sh`, wherever a literal expected value is asserted rather than a
+diff — `wabt` validating a module is exactly the kind of compliant dependency that
+can answer on your behalf.
+
+> The sentence under all three: **make the assertion track the DELTA, not the
+> OUTCOME.** frankwasm's `check_calls.sh` (fails when the heap starts working) is
+> the same instinct aimed at a limitation instead of a fix.
+
+## `bug-b-resolver-sends-localhost-to-the-wire` — fixed, and the sub-decision kept open
+
+`DnsIsLocalhostName` + a short-circuit in both `DnsWireResolveHost` and
+`DnsWireResolveHost6`, **after the files lookup, before the wire.** Handles
+`localhost` case-insensitively, an optional trailing root dot, and the `.localhost`
+subtree per §6.3. Measured: `localhost`/`LocalHost`/`localhost.`/`foo.localhost` all
+answer 127.0.0.1 and ::1; `notlocalhost` correctly still goes to the wire.
+
+**Hosts-order sub-decision: the pragmatic option was PICKED, not settled.** The
+special-case sits after files, so an explicit `/etc/hosts` entry still wins —
+matching every real implementation — and **the security-relevant property (the name
+never reaches a nameserver) holds either way.** The strict §6.3 reading
+(*"cannot be modified by local configuration"*) would put it before files; **that is
+a two-line move and the ticket says so.**
+
+> **A decision made for a stated reason, with the alternative costed, is not the
+> same as a question closed.** Keeping those separate is what stops an
+> implementation accident from becoming a spec position.
+
+### 2026-08-28 — a narrow grant, and why the line fell where it did
+
+**frankwasm was granted `bug-a-pxxsyswrite-has-no-wasm32-arm` [A, p70] to do itself**,
+with no Track A holder to hand it to (frankA parked clean on its own fatigue signal).
+The grant is worth recording as a *criterion*, not as a decision, because the next
+coordinator will face the same shape:
+
+> Track A's file-and-wait rule protects exactly one property — that the compiler can
+> reproduce itself. frankwasm's evidence WAS that property: the self-host fixedpoint
+> sha is `c9817ce01cbc` **with and without** the patch, because `CPU_WASM32` is never
+> defined while building for any other target. **When the evidence offered is the
+> invariant the rule exists to protect, waiting buys nothing.**
+
+I verified the shape before granting rather than after — `builtinheap.pas:1528` sets
+`Result := 0` *before* the ifdef chain, so every arm is additive and a target with no
+arm reports *"wrote nothing, and no error."* **The defect is not a missing entry in a
+list; it is a list with no terminal else, failing OPEN in a syscall wrapper.** That is
+the *second* instance of that generator in one day — the other is
+`bug-p-an-unknown-compiler-directive-is-silently-ignored` (34 arms, no final else).
+Two in a day makes it a class worth grepping for, not a coincidence.
+
+**HeapMmap was NOT granted, and the difference is the whole point.** Same lane, same
+priority, same author, same file — refused because the *evidence* is weaker, not
+because the ticket is. PXXSysWrite adds a syscall arm behind an ifdef that is never
+true elsewhere; HeapMmap adds a BSS arena and a size constant, i.e. new storage in a
+file every target compiles, so "the sha is identical" would be a smaller claim about a
+larger change. Offered on the same terms if the same before/after sha identity is
+produced. **Draw the line at the strength of the evidence, never at the priority of
+the ticket** — otherwise "p70 and urgent" starts doing the work that "provably inert"
+should be doing.
+
+### `forwardlint.py` is on the branch, not on master — again
+
+`test/wasm/forwardlint.py` exists **only on `origin/wasm`** (verified by
+`git ls-tree`). Same shape as last night's invisible Track A tickets: the work is done,
+it is just not where the people who need it will look. Relayed as its own request —
+**it must reach master independently of the wasm series**, because a lint that reads
+what FPC reads is fleet-wide value and Track P needs it now, not when a frontend lands.
+
+This makes it twice in ~12h that a general-value artefact was parked behind a branch's
+own schedule. The generalisation for the roster: **"is it committed?" is the wrong
+question — ask "is it on the branch everyone builds from?"** A branch is a place work
+goes to be finished, and anything on it is invisible until it is not.
+
+### The seed-canary U ticket was rewritten, and my own recommendation is marked disproven
+
+`decide-should-the-fpc-seed-canary-be-in-the-mandatory-loop` [U, p55]: I had recommended
+**option 1** (a trigger keyed to the edit shape). frankwasm's second RED disproved it —
+the lane recognised its own edit shape *neither* time — so option 1 is now labelled
+**disproven, in place, with the recommendation visibly moved** rather than quietly
+swapped. `forwardlint.py` is option 4 and the new recommendation.
+
+What qualifies it is not the ~1s runtime but the *failure mode chosen*: it misses rather
+than false-alarms, with the gate's real FPC build as backstop. **A check whose worst case
+is LATENESS can live in a fast loop; one whose worst case is a WRONG ANSWER cannot.**
+The timing number is why it is cheap; the failure mode is why it is safe, and only the
+second one is an argument.
+
+It stays Track U: the mandatory loop is defined in `CLAUDE.md`, the owner's file, which
+is not edited on any agent's say-so **including the coordinator's own**.
+
+frankwasm's line, now in the ticket verbatim and the most useful thing either RED
+produced: the forward block *already carried* a rule, `WasmEmitIndArgs` is not a dispatch
+target, and it read the rule while writing the code that broke it. **A rule that is
+slightly wrong is worse than no rule: it reads as complete.**
+
+### frankB closed clean, and corrected how I credited it
+
+Pushed green `a47aaac17`, nothing half-applied. It then asked for its own credit to be
+**deflated** on the grounds that the flattering framing is the less useful one — *"if this
+reads as 'someone noticed something subtle' it will be less useful than 'run the control;
+you cannot see this by reading'."* Applied: the audit ticket now leads with the method.
+
+Its diagnosis of the miss is in the ticket too, because it is what makes the ticket
+predictive: **it applied the rule to the code under test and not to the test**, with the
+rule live in its head at the time. Which is the argument for the structural fix over the
+written one — **a predicate cannot be tested through an environment, so there is no
+version of that mistake left available there.**
+
+I pushed back on its self-diagnosis ("treating *told the coordinator* as equivalent to
+*recorded*") because the accurate lesson is smaller and more useful: **it did report both
+times; a coordinator is transport, not storage.** Both findings survived only because I
+happened to file them, and "the coordinator happened to notice" is not a mechanism. A
+finding is recorded when it is in a ticket on master — every other location, including a
+complete and correct report to the coordinator, is transport. I have taken the same
+correction myself this session, twice.
+
+frankB's own generalisation on accepting that correction is the better statement of it,
+and it belongs here rather than in a message that dies with the session:
+
+> *"I was reaching for a resolution where a mechanism was available. Mine collapsed a
+> structural property of the fleet into a personal failing, which would have produced the
+> wrong fix — I'd have resolved to write better messages, when the actual fix is to file
+> the ticket first and treat the message as notification that it exists."*
+
+**File first, then notify.** Same shape as predicate-versus-rule, one level up: when a
+post-mortem lands on *"I will be more careful"*, that is the tell that a mechanism was
+available and went unlooked-for. A resolution is what you reach for when you have stopped
+looking for a mechanism.

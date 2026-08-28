@@ -4373,6 +4373,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     asmGfK: Integer; asmGfFound: Boolean;
     searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil, pNotDouble, pDone: Integer;
     pUnsNeg, pUnsDone, pAppendDone: Integer;
+    w1RightReg: Integer;   { -O3 W1: 0 = the normal rcx contract, else r12..r15 }
     pAnsiAlloc, pAnsiShared, pAnsiTooSmall, pAnsiNoZeroGrow, pAnsiFastDone: Integer;
     pAnsiUseNeededNil, pAnsiUseNeededSmall, pAnsiMinDone, pAnsiCapDone: Integer;
     pDynZero, pDynNoOld, pDynKeepCopy, pDynNoRetain, pDynNoRetainCount: Integer;
@@ -5749,6 +5750,10 @@ begin
         left := IRA[node];
         right := IRB[node];
         op := IntToTokenKind(IRC[node]);
+        { W1 slice 4 state, per BINOP and per recursion level (IREmitNode is
+          recursive, so a local cannot leak into a nested binop). 0 = the right
+          operand is in rcx, which is every path but the one below. }
+        w1RightReg := 0;
 
         { -O3 in-tree XMM fusion: a call-free float arithmetic tree evaluates
           straight into xmm2..xmm6 and bridges to the rax value model once. }
@@ -5944,7 +5949,21 @@ begin
             left is order-safe; loading directly into rcx (not rax then mov)
             avoids clobbering the left value in rax. }
           IREmitNode(left);
-          EmitLoadVarRcx(IRA[right]);
+          { -O3 W1 slice 4: if that right operand is REGISTER-RESIDENT, the load
+            EmitLoadVarRcx would emit is `mov rcx, r12..r15` — a move whose only
+            purpose is to satisfy the rcx contract. The ALU can read r12..r15
+            directly, so skip the move and tell the op arm which register to
+            encode. This is the move DELETED, not a value recomputed: the
+            resident register and the frame slot hold the same value by the
+            residency contract, which is the same fact EmitLoadVarRcx's own
+            resident arm relies on.
+            Gated to the plain integer ops that read rcx as `<op> rax, rcx` and
+            nothing else — the string/set/float arms below run their own
+            multi-register sequences and keep the normal contract. }
+          if (OptLevel >= 3) and W1AluRightEligible(node, left, right) then
+            w1RightReg := ResidentRegOf(IRA[right])
+          else
+            EmitLoadVarRcx(IRA[right]);
         end
         else if (OptLevel >= 2) and (not InLValueWrite) and
                 ((IRKind[left] = IR_CONST_INT) or
@@ -6241,7 +6260,7 @@ begin
           case op of
           tkPlus:
             begin
-              EmitB($48); EmitB($01); EmitB($C8);                    { add rax, rcx }
+              EmitAluRaxRight($01, w1RightReg);                      { add rax, rcx|r12..r15 }
               if IRIVal[node] = 1 then                               { {$Q+}: trap a wrapped result }
               begin
                 { sub-64-bit result: the 64-bit flags never fire for a narrow
@@ -6254,7 +6273,7 @@ begin
             end;
           tkMinus:
             begin
-              EmitB($48); EmitB($29); EmitB($C8);                    { sub rax, rcx }
+              EmitAluRaxRight($29, w1RightReg);                      { sub rax, rcx|r12..r15 }
               if IRIVal[node] = 1 then
               begin
                 if TypeSize(IntToTypeKind(IRTk[node])) < 8 then
@@ -6320,9 +6339,9 @@ begin
                 begin EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9); end;
               EmitB($48); EmitB($89); EmitB($D0); { mov rax, rdx }
             end;
-          tkAnd:   begin EmitB($48); EmitB($21); EmitB($C8); end; { and rax, rcx }
-          tkOr:    begin EmitB($48); EmitB($09); EmitB($C8); end; { or rax, rcx }
-          tkXor:   begin EmitB($48); EmitB($31); EmitB($C8); end; { xor rax, rcx }
+          tkAnd:   EmitAluRaxRight($21, w1RightReg);   { and rax, rcx|r12..r15 }
+          tkOr:    EmitAluRaxRight($09, w1RightReg);   { or  rax, rcx|r12..r15 }
+          tkXor:   EmitAluRaxRight($31, w1RightReg);   { xor rax, rcx|r12..r15 }
           { Logical `shr` on a <=32-bit operand: the value is sign-extended in rax,
             so a 64-bit shr leaks the sign bits down (bug-shr-signed-integer-width:
             Integer(-8) shr 1 gave a 64-bit result). Zero-extend the operand to 32

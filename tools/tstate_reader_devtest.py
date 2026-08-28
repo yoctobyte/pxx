@@ -57,6 +57,12 @@ ALLOWED = {
     # JUST CREATED under tempfile, so there is no live watcher tree to be stale
     # about. A devtest that could not build its own tstate fixture could not
     # test the readers at all.
+    "twatch_job_history_devtest.py":
+        "same fixture case: repo_with() makes a tempfile.mkdtemp() and joins "
+        "TSTATE_REL onto THAT to write the runs-<host>.ndjson and state file "
+        "the query is tested against. It never opens the repo's own tstate — "
+        "which matters here more than usual, since the whole subject of the "
+        "test is a query returning the wrong answer from the right file",
     "devtest_pin_shadow.py":
         "joins TSTATE_REL onto the throwaway root it makes at line 46",
     "devtest_pin_verify.py":

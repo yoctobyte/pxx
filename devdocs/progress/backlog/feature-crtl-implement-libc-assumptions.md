@@ -5,6 +5,14 @@ prio: 45
 
 # crtl: implement the libc assumptions real-world C leans on
 
+> **AS OF 2026-08-28 THIS COLLECTOR'S LIST IS EMPTY — do not treat it as pending
+> work.** Every gap it had collected is closed, verified by measurement, not by
+> reading: `test/crtl_declaration_census.sh` (in `lib-test`) reports 358
+> declared, all defined, zero libc imports. The ticket stays open because it is a
+> standing collector and the next real-project bring-up will refill it — but
+> right now there is nothing here to pick up. Details at the bottom
+> (2026-08-28). Its `prio: 45` reflects the collector, not a queue of work.
+
 - **Type:** feature (libraries) — Track B (`lib/crtl`).
 - **Status:** backlog, ongoing collector — 2026-07-06.
 - **Premise (user, 2026-07-06):** gcc has its own libc; we have our own
@@ -378,7 +386,7 @@ and faking the rest would hide the real gap.
 
 | class | state |
 | --- | --- |
-| header symbols declared-but-unimplemented | swept — census misleading, link-probe instead; `strnlen`, `div`/`ldiv`/`lldiv`/`llabs` were the real gaps |
+| header symbols declared-but-unimplemented | **now GATED** — `test/crtl_declaration_census.sh` regenerates the census every `lib-test` run (2026-08-28); 358 declared, all defined |
 | `<limits.h>` / `<stdint.h>` / `<inttypes.h>` completeness | swept — correct; inttypes closed earlier |
 | errno values + names | swept — **39 of 71 missing**, fixed |
 | `<ctype.h>` assumptions | swept — correct |
@@ -409,7 +417,7 @@ out of the middle of the enclosing function, so folding it into a large `main()`
 with many live locals would make the test about that `main()` rather than about
 `longjmp`.
 
-## Batch filed 2026-08-05 — 10 declared-but-unimplemented, all needing PAL work
+## Batch filed 2026-08-05 — 10 declared-but-unimplemented, all needing PAL work (CLOSED 2026-08-28)
 
 Found by probing all 361 crtl declarations for an implementation (take the
 function's ADDRESS in a program including only its header; an unimplemented one
@@ -496,7 +504,7 @@ skips the copy.
 `test/crtl_longjmp_as_value.c` in `make lib-test` checks both spellings (through
 a function pointer, and as an ordinary call); `crtl_setjmp_oracle` still passes.
 
-### tcc, second gap: `environ` is undeclared (silently 0)
+### tcc, second gap: `environ` is undeclared (silently 0) — FIXED, verified 2026-08-28
 
 With the `longjmp` fix in, `tcc.c` builds and runs, but emits:
 
@@ -605,3 +613,101 @@ worth changing is a Track A/C question about ELF emission, not a library gap.
 `tcc -c` and full `tcc -o` linking both work; `-run` is the only affected mode.
 Recorded rather than guessed at a second time — the first guess (a missing
 stdout flush) was disproven by crtl's `puts` being unbuffered.
+
+## 2026-08-28 (Track B) — premise re-measured: every collected gap is closed, and the census is now a gate
+
+Re-measured this collector's open list before designing to any of it. **Nothing
+on it is still open.** Each item had been fixed by a different ticket that never
+came back to update this one, so the ticket read as ten-plus pending items while
+the library had none.
+
+| the ticket's open item | measured today |
+| --- | --- |
+| the 2026-08-05 batch of 10 (`poll` `ioctl` `clock_gettime` `chmod` `umask` `msync` `mremap` `pread` `pwrite` `atexit`) | **all defined** — none appears in the census below |
+| `atexit` "declared but the entry stub has no fini phase" | **handlers run, in reverse order** — `main-returns / h3 / h2 / h1`, and via `exit()` too |
+| `environ` "silently NULL" | **declared and populated** — 74 entries, and the shell's own `env \| wc -l` is 74 |
+| `tcc -run` output | already moved off this ticket on 2026-08-09 — an ELF-symbol-table question for A/C, not a library gap |
+
+Both blockers named above — [[feature-c-entry-stub-must-run-finalizers]] and
+[[feature-c-entry-stub-must-run-initializers-for-environ]] — are in `done/`, as
+is [[feature-b-crtl-last-seven-unimplemented-declarations]].
+
+### The census is now generated and gated, not a probe someone must remember
+
+The ticket said "reproduce the probe any time: it is a dozen lines of shell". It
+was, and that is the problem — this exact gap class has recurred four times
+(`strtoimax`/`strtoumax`, an 18-function batch, this 10-function batch,
+`environ`) and each time it was found by a hand-run probe, months later.
+
+It is now `test/crtl_declaration_census.sh`, run from `lib-test` beside the
+`crtl_poll_set` and `crtl_atexit` DT_NEEDED spot-checks it generalises: take the
+address of every function declared in `lib/crtl/include/**`, in one TU, and
+assert no gap. **Today: 358 declared, all defined, zero DT_NEEDED.**
+
+Two things make it cheaper than the 2026-08-05 version, which compiled one
+program per declaration:
+
+- **pxx detects this itself.** It emits `warning: crtl does not define X — this
+  C program will import them from the system C library at run time, and its ABI
+  need not match pxx's`. So the check is one compile and a `grep`, not 361
+  compiles and `nm`.
+- **The name list is generated on every run, never checked in.** A frozen list
+  of 358 names is a claim about the search that produced it, and would go stale
+  precisely where the next declared-but-unimplemented function appears.
+
+Negative-controlled three ways, because a probe that reports all-clear has
+proven nothing: a declaration appended to a real header is caught by name and
+the script exits 1; the generator picks the new name up (359 vs 358); and the
+script fails if its own extraction returns fewer than 300 names, so a broken
+generator cannot pass by finding nothing.
+
+### Worth remembering: two censuses, two different silent omissions
+
+I wrote the census twice — once in Python, once in shell — and **each silently
+dropped a different name**, neither with any error:
+
+- The Python one skipped every declaration containing `(*`, to avoid function
+  pointer typedefs. That dropped **`atexit`** — the single most load-bearing
+  name in the batch it was written to check — along with `qsort`, `bsearch` and
+  `pthread_once`.
+- The shell one ended in `sort -u` under the ambient `en_US.UTF-8` locale, where
+  collation ignores punctuation, so **`_longjmp` and `longjmp` compare equal**
+  and one of two distinct C identifiers was deduped away. `LC_ALL=C` on that
+  sort is load-bearing and is commented as such in the script.
+
+Both would have reported a clean census. The defect this ticket exists to catch
+is a name that is missing without saying so, and the tooling written to find it
+failed the same way twice — which is the argument for the >=300 sanity floor and
+for the differential between the two extractions that found both.
+
+### Status of this collector
+
+No known open Track B gap. It stays in `backlog` as the standing collector it
+was designed to be — the next real-project bring-up is what refills it — but its
+list is now accurate rather than three weeks stale.
+
+### Does the census supersede this ticket? No — and the reason sharpens what it is for
+
+Asked when the census landed, and the honest answer is that a gate over
+declarations covers exactly ONE of the classes this ticket lists, and it is not
+the one that has hurt most.
+
+**The census enumerates what crtl DECLARES. It is structurally blind to what
+crtl fails to declare at all.** `environ` is the worked example and it is the
+one that cost the most: it was never declared-but-undefined, it was *undeclared*,
+so `char **envp = environ;` compiled to a silent NULL. No census over
+`lib/crtl/include/**` could ever have found it, because the name it needed to
+check was not in the headers to be enumerated. That is an absence, and an
+absence is invisible to any enumeration of what is present.
+
+So the three defences do different work and none replaces another:
+
+| what finds it | class |
+| --- | --- |
+| `crtl_declaration_census.sh` | declared but not defined — now permanently gated |
+| `crtl_libc_oracle.c` + friends, against gcc | declared, defined, and *behaves differently* — wrong macro value, wrong struct layout, wrong printf conversion |
+| **this ticket** — bring up a real project | **not declared at all**, and every assumption no one has thought to write a check for yet |
+
+The third is the collector's real remaining function, and it is the one that
+cannot be automated, because the input is "what does real C code turn out to
+assume", which is discovered by compiling real C code and by nothing else.

@@ -1237,3 +1237,119 @@ underneath it. Re-running **both** sides back to back gave 48/48 identical.
 - The tell that saves you is the one above: **when a result is not merely
   surprising but structurally impossible, suspect the harness first**, and go
   find the shortest path that bypasses it.
+
+## An optimisation's value is a property of the transform AGAINST A BASELINE — and the baseline moves, sometimes by your own hand
+
+Three items of one optimisation ticket were sized on 2026-08-27, ranked, and
+dispatched in that order. Within a day the ranking had inverted twice, and both
+times the cause was **another item of the same ticket landing**:
+
+- **An item was emptied.** Store->reload elimination for register-resident
+  destinations was filed when the value round-tripped through the frame, which
+  made it a real memory access to remove. By the time it was claimed, the
+  residency change had put that value in a register, and the "reload" was a
+  reg-reg move worth nothing. 6 instructions out of 13,483.
+- **An item was revived.** An emit-time operand scheduler had been *correctly*
+  disconfirmed at **1.4%** hours earlier — the loop body was then 12 cyc/iter
+  dominated by two frame round-trips, and every `mov %rN,%rax` sat in their
+  shadow. The residency change removed the memory traffic. The body became 6.5
+  cyc/iter with **zero memory reads**, the dependency chain now ran *through*
+  those staging moves, and the same transform measured **~1.6x**.
+
+**The same instructions that are free while they overlap a 5-cycle
+store-forward are the critical path once it is gone.** Neither measurement was
+wrong; each was a measurement of a different machine.
+
+So: **re-measure the prize before starting an item, not just the mechanism.**
+Disassemble what the compiler emits *today* and time it; the ticket's number
+describes a compiler that may no longer exist. A stale prize is more expensive
+than a stale number, because it does not look like a claim to re-check — it
+looks like work waiting to be done, and the backlog protects it.
+
+## An A/B comparison is only valid when B is A minus exactly ONE thing
+
+The same session's first model priced "make the register authoritative" at
+**2.15x** by comparing a variant that kept the frame dual-writes against an
+idealised body that had neither the dual-writes nor any of the operand staging.
+Two changes, one credited. Isolated properly — every variant transcribed from
+the *current* disassembly and differing from the baseline **by deletion only** —
+the store removal was **~5%** and the staging removal was the rest.
+
+The failure mode is not carelessness, it is that a variant table looks rigorous.
+Four rows of times with four descriptions reads as a decomposition whether or
+not the rows are separable. Two habits fix it:
+
+- **Build each variant by deleting from the previous one**, never by writing the
+  "ideal" version from scratch. If you cannot express B as "A minus X", you are
+  not measuring X.
+- **Calibrate the baseline against the real artifact** before trusting any row —
+  the transcribed A above had to reproduce the shipping binary's 0.61 s. A model
+  that does not reproduce the thing it models decomposes nothing.
+
+## Interleaving, repetition, amplification — three different fixes for three different lies
+
+One optimisation session produced three separate false readings in one night, on
+one box, with the same command. They are worth stating together because they
+look identical from the outside — a number that is wrong — and each needs a
+different fix. The two entries above cover the first two; this is the third,
+and it is the one that survives both of them.
+
+**Amplification: below ~2% of the workload, `/usr/bin/time` is quantisation, not
+measurement.** A boolean-heavy loop benchmark measured **0.49 vs 0.51**, and on
+a re-run **0.55 vs 0.56** — "2-4% slower", twice, interleaved, min-of-15 both
+times. That is exactly the shape of a real small regression: consistent sign,
+survives repetition, plausible mechanism available if you go looking for one.
+It was **one 10 ms tick** on a ~0.5 s workload. `%U` is reported to 10 ms, so at
+half a second the quantum *is* 2%, and the "consistent" sign was one tick
+landing the same way twice.
+
+The fix is to make the sample long enough that the timer's resolution is small
+against it — run the binary several times inside one timed command:
+
+```sh
+/usr/bin/time -f "%U" sh -c './bench >/dev/null; ./bench >/dev/null; ./bench >/dev/null'
+```
+
+At ~1.9 s per sample the same comparison resolved to **1.46 vs 1.45** — neutral,
+and the regression had never existed. The same correction turned a compile
+workload's "0.18 vs 0.19" into "0.64 vs 0.64" on a longer input.
+
+The three compose, and the order matters because each is invisible to the one
+before it:
+
+| | fixes | symptom when missing |
+| --- | --- | --- |
+| **Interleaving** | WHICH runs you may compare | the same binary measures 1.09 and 1.34 |
+| **Repetition** | HOW CONFIDENTLY | three under-powered runs share a bias and read as confirmation |
+| **Amplification** | WHETHER THE TIMER CAN SEE IT AT ALL | a one-tick difference reads as a consistent few-percent effect |
+
+So before believing any delta under ~5%: is it interleaved, is the rep count
+enough to resolve it, and **is the effect larger than one tick of the timer?**
+The last question is the cheapest of the three to ask and the easiest to skip,
+because the number already looks like a measurement.
+
+## A capability that exists and cannot be asked for costs you at the worst moment
+
+`compiler/asmtext_wasm.inc` could write a `.wat` — the text form of a wasm
+module, the oracle you diff the binary against — from the day it landed. The
+compiler had no way to ask for it: the only caller was a standalone test.
+
+That was invisible for weeks and then cost an hour, because the moment it
+mattered was `0001db0: error: unable to read i32 leb128` — a *parse* failure,
+which reports a byte offset and no function name, on a module of 124 functions,
+with no way to look at what had been emitted. The gap and the need arrived
+together, which is the shape: **an unreachable capability is only ever
+discovered from inside the problem it would have solved.**
+
+Two things to take from it:
+
+- **When a tool grows an output the maintainer uses by hand, wire it to the
+  command line the same day.** The fix here was one branch on the output
+  extension. Deciding it was not worth a flag was correct and irrelevant — the
+  cost was not the flag, it was that nothing could reach the code.
+- **When a diagnostic reports a byte offset, the first move is to make the
+  thing readable, not to read the bytes.** The actual root cause (an
+  `i32.const` of 4294967295, unencodable as a 32-bit signed LEB) was five
+  minutes' work once the `.wat` could be produced and the WAT/binary pair could
+  be compared. Decoding the binary by hand first was the slow path, and it is
+  the one you take when the fast path does not exist yet.
