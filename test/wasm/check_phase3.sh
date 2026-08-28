@@ -63,6 +63,8 @@ else
   echo "FAIL wasm diverges from native"; exit 1
 fi
 
+sh "$here/wat_oracle.sh" "$root/compiler/pascal26" "$here/phase3_slice.pas" "$work" p3
+
 # A POSITIVE sentinel, last line, reachable only after every check above
 # passed: `set -e` kills the script before here on any failure. check_all.sh
 # asserts this line is PRESENT rather than asserting nothing went wrong —

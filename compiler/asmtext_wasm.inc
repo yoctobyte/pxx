@@ -74,20 +74,6 @@ begin
   else WasmExportKindName := 'global';
 end;
 
-{ The exported name of a function index, or '' — used to give an export its
-  (export "x") clause inline on the func, which is how wasm2wat renders it. }
-function WasmExportNameOf(kind, idx: Integer): AnsiString;
-var i: Integer;
-begin
-  WasmExportNameOf := '';
-  for i := 0 to WasmExpCount - 1 do
-    if (WasmExpKind[i] = kind) and (WasmExpIdx[i] = idx) then
-    begin
-      WasmExportNameOf := WasmExpName[i];
-      Exit;
-    end;
-end;
-
 { Output goes through sysopen/syswrite/sysfchmod/sysclose, exactly as
   WriteMapFile (asmdisasm_x64.inc) and writeELF do — 20 sites in the compiler
   use this path and none uses Text.
@@ -156,10 +142,19 @@ begin
   WasmIntTxt := s;
 end;
 
+{ One byte as exactly two lowercase hex digits — a WAT string escape is
+  `\HH` and a single digit is a syntax error, so the leading zero is not
+  cosmetic. }
+function WasmHex2(b: Byte): AnsiString;
+const HEXD: AnsiString = '0123456789abcdef';
+begin
+  WasmHex2 := HEXD[(b shr 4) + 1] + HEXD[(b and $0F) + 1];
+end;
+
 procedure WasmWriteText(const path: AnsiString);
 var
   i, j, gi: Integer;
-  ex, loc, nm: AnsiString;
+  loc, nm: AnsiString;
 begin
   WTFd := sysopen(path, 577);        { O_WRONLY | O_CREAT | O_TRUNC }
   if WTFd < 0 then WasmFail('wasm: cannot open ' + path + ' for writing');
@@ -175,9 +170,7 @@ begin
 
   if WasmMemPresent then
   begin
-    ex := WasmExportNameOf(WEK_MEM, 0);
-    if ex <> '' then WT('  (memory (export "' + ex + '") ')
-    else WT('  (memory ');
+    WT('  (memory ');
     if WasmMemMax >= 0 then
       WTLn(WasmIntTxt(WasmMemMin) + ' ' + WasmIntTxt(WasmMemMax) + ')')
     else
@@ -187,8 +180,6 @@ begin
   for gi := 0 to WasmGlobCount - 1 do
   begin
     WT('  (global $' + WasmGlobName[gi]);
-    ex := WasmExportNameOf(WEK_GLOBAL, gi);
-    if ex <> '' then WT(' (export "' + ex + '")');
     if WasmGlobMut[gi] then
       WT(' (mut ' + WasmValTypeName(WasmGlobType[gi]) + ')')
     else
@@ -202,8 +193,6 @@ begin
   for i := 0 to WasmFuncCount - 1 do
   begin
     WT('  (func $' + WasmFuncName[i]);
-    ex := WasmExportNameOf(WEK_FUNC, WasmFuncIndex(i));
-    if ex <> '' then WT(' (export "' + ex + '")');
     WTLn(WasmSigTextFor(WasmFuncType[i], i));
     for j := 0 to WasmFuncNLoc[i] - 1 do
     begin
@@ -219,11 +208,34 @@ begin
     WTLn('  )');
   end;
 
+  { The data segment, every byte as \HH. Escaping unconditionally rather than
+    passing printable ASCII through is the difference between an oracle and a
+    quoting bug: a blob holds string literals AND raw structure bytes, and the
+    ones that would need escaping anyway (quote, backslash, newline) are
+    exactly the ones a literal is most likely to contain. }
+  if WasmDataSegLen > 0 then
+  begin
+    WT('  (data (i32.const ' + WasmIntTxt(WasmDataSegBase) + ') "');
+    for i := 0 to WasmDataSegLen - 1 do
+      WT('\' + WasmHex2(WasmDataSeg[i]));
+    WTLn('")');
+  end;
+
+  { EVERY export, as its own form, in the order the export table holds them —
+    not as an inline attribute on the func/global/memory it names.
+
+    Inline is the idiomatic WAT and it was wrong here for a reason worth
+    keeping: an inline export is emitted where its TARGET sits, so the text's
+    export order follows function order while the binary's follows insertion
+    order. The two modules were identical in every way a program can observe
+    and differed in the one way the oracle compares them, which cost a
+    debugging session that started out looking like a missing export. An
+    oracle should mirror the structure it is checking, not the prettier
+    spelling of it. }
   for i := 0 to WasmExpCount - 1 do
-    if WasmExpKind[i] = WEK_TABLE then
-      WTLn('  (export "' + WasmExpName[i] + '" ('
-           + WasmExportKindName(WasmExpKind[i]) + ' '
-           + WasmIntTxt(WasmExpIdx[i]) + '))');
+    WTLn('  (export "' + WasmExpName[i] + '" ('
+         + WasmExportKindName(WasmExpKind[i]) + ' '
+         + WasmIntTxt(WasmExpIdx[i]) + '))');
 
   WTLn(')');
   WTFlush;

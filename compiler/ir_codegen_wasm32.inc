@@ -210,7 +210,26 @@ end;
                            an skGlobal is a positive offset from the start of
                            BSS. Zero-initialised for free — wasm linear memory
                            starts zeroed, so a .bss needs no data segment.
+    WasmDataBase ..        the initialised blob: DataLen bytes of Data[],
+                           loaded by one active data segment.
     ... WasmStackTop       the shadow stack, growing DOWN from the top.
+
+  WHY BSS COMES FIRST, AND WHY THAT DECIDES WHICH BASE IS A CONSTANT. Both
+  region sizes are unknown while bodies are being emitted — BSSSize and DataLen
+  are still growing — so whichever region sits second has a base that cannot be
+  written as an `i32.const` at the point the reference is emitted. One of the
+  two therefore costs an indirection, and it should be the rarer one: every
+  global variable is a BSS reference, while a Data[]-resident global is only a
+  typed const. So BSS keeps the fixed base and its addressing is unchanged, and
+  a data-resident reference goes through the `$data` global — whose initialiser
+  is written in the global section at module-write time, when the layout is
+  finally known. That is the same late-binding `sp` already uses.
+
+  The alternative was to emit a padded 5-byte LEB placeholder and patch it, the
+  way the ELF writers patch code. It is faster and it is worse here: the WAT
+  oracle is generated alongside the bytes, and a patched constant is invisible
+  in a text stream that was already written. Two instructions on the rare path
+  buys an oracle that cannot drift from the binary.
 
   The null guard is a CONVENTION and nothing more, which is a genuine
   difference from every other target here. Address 0 is a perfectly legal wasm
@@ -227,6 +246,39 @@ const
   WASM_STACK_BYTES = 65536;
   WASM_PAGE        = 65536;
 
+const
+  { Program-body chunks. See WasmMainChunk below — 10 for a program with three
+    typed const records, so the headroom is not theoretical. }
+  MAX_WASM_MAIN_CHUNKS = 4096;
+
+var
+  WasmGData   : Integer;   { global index of $data, the blob's base address }
+  WasmDataBase: Integer;   { its value — resolved in WasmFinishMemory }
+
+  { THE PROGRAM BODY ARRIVES IN PIECES, and this is the one place a wasm module
+    cannot mirror a register target for free.
+
+    A frontend emits top-level code by calling the per-body entry point with
+    CurProc = -1, and it does so more than once: every typed const that is
+    built by startup code rather than stored in the blob — a record, an array
+    of records — emits its stores as another such call. On a register target
+    those pieces land in Code[] one after another and ARE one function; there
+    is no seam, because a function is a range of bytes. A wasm function is a
+    closed structure with its own locals vector and its own `end`, so the same
+    sequence produces N functions, all named `main`, none of them called.
+
+    That failed as `duplicate export "main"`, which is a validator complaint
+    about the SYMPTOM. The bodies being unreachable is the defect, and it is
+    silent: the module validates the moment the names are made unique, and
+    every global those chunks were supposed to initialise reads zero.
+
+    So each chunk keeps its own slot and `main` is synthesised at write time as
+    a call to each in order. Concatenation and sequential calls are equivalent
+    here because a chunk balances its own $sp — it allocates a frame, does its
+    work and frees it — so there is nothing to carry across the seam. }
+  WasmMainChunk     : array[0..MAX_WASM_MAIN_CHUNKS-1] of Integer;
+  WasmMainChunkCount: Integer;
+
 procedure WasmBeginModuleOnce;
 var i: Integer;
 begin
@@ -242,6 +294,12 @@ begin
   for i := 0 to MAX_PROCS - 1 do WasmProcSlot[i] := -1;
   WasmGSp := WasmAddGlobal('sp', WT_I32, True, 65536);
   WasmAddExport('sp', WEK_GLOBAL, WasmGSp);
+  { Immutable, and its initialiser is back-filled by WasmFinishMemory once
+    BSSSize has stopped growing. Declared here rather than on first use so its
+    global index is stable no matter which body happens to touch Data[] first. }
+  WasmDataBase := 0;
+  WasmMainChunkCount := 0;
+  WasmGData := WasmAddGlobal('data', WT_I32, False, 0);
 end;
 
 { Load the address of a slot onto the operand stack. A global's address is a
@@ -252,7 +310,25 @@ end;
 procedure WasmSlotAddr(si: Integer);
 begin
   if Syms[si].Kind = skGlobal then
-    WasmI32Const(WASM_BSS_BASE + Syms[si].Offset)
+  begin
+    { A global whose STORAGE is in the initialised blob rather than in BSS
+      carries DATA_SYM_BIAS + dataOffset, so that offset ARITHMETIC downstream
+      (`+ 8` for a field, an array element) survives the tag — defs.inc:1682.
+      Every backend has to decode it; the ELF writers do it in their fixup
+      loops, and this is where wasm does it. Missing it does not produce a
+      wrong address so much as an address near 0x20000400, which is past the
+      end of linear memory and traps — the good failure mode, but still a
+      failure, and it arrives the first time a program declares a typed const
+      array. }
+    if SymOffIsData(Syms[si].Offset) then
+    begin
+      WasmGlobalGet(WasmGData);
+      WasmI32Const(SymOffDataPart(Syms[si].Offset));
+      WasmOp($6A, 'i32.add');
+    end
+    else
+      WasmI32Const(WASM_BSS_BASE + Syms[si].Offset);
+  end
   else
   begin
     WasmLocalGet(WasmLocalFp);
@@ -1368,12 +1444,17 @@ begin
   end
   else
   begin
-    { the program body: no params, no result, and it is what the host calls }
-    nm := 'main';
+    { A chunk of the program body — see WasmMainChunk. Named for what it is;
+      the `main` a host calls is synthesised from these at write time. }
+    if WasmMainChunkCount >= MAX_WASM_MAIN_CHUNKS then
+      WasmFail('wasm: too many program-body chunks');
+    nm := 'main$' + WasmIntStr(WasmMainChunkCount);
     nParams := 0;
     nRes := 0;
     retSym := -1;
     WasmCurSlot := WasmAddFunc(nm, WasmAddType([], []));
+    WasmMainChunk[WasmMainChunkCount] := WasmCurSlot;
+    Inc(WasmMainChunkCount);
   end;
 
   { Open the body session BEFORE naming params or adding locals: they now
@@ -1472,10 +1553,21 @@ begin
   WasmBodyTerminate;
   WasmBodyEnd(WasmCurSlot);
 
-  { Every routine is exported for now. Phase 4 narrows this to what the host
-    profile actually needs; until then an exported function is how the test
-    harness reaches a body at all. }
-  WasmAddExport(nm, WEK_FUNC, WasmFuncIndex(WasmCurSlot));
+  { Every routine is exported for now. A later phase narrows this to what the
+    host profile actually needs; until then an exported function is how the
+    test harness reaches a body at all.
+
+    Pascal names are not unique and wasm export names must be: overloads, two
+    classes' methods of the same name, and — the case that found this — the
+    anonymous bodies the frontend emits for typed-const initialisers, all
+    called `main`. A colliding name is suffixed with its slot, so the FIRST
+    routine of a given name keeps the plain name a test can reach it by and
+    the rest stay addressable rather than being dropped. }
+  if WasmExportTaken(nm) then
+    WasmAddExport(nm + '$' + WasmIntStr(WasmCurSlot), WEK_FUNC,
+                  WasmFuncIndex(WasmCurSlot))
+  else
+    WasmAddExport(nm, WEK_FUNC, WasmFuncIndex(WasmCurSlot));
 end;
 
 { Printed once, from the module writer, before the .wasm is saved. Unconditional
@@ -1502,11 +1594,54 @@ end;
   final until the last body has been lowered. So the two numbers that depend on
   it — the memory's minimum size and $sp's initial value — are written here,
   overwriting the placeholders WasmBeginModuleOnce installed. }
+{ Copy Data[] into the module's one data segment, resolving the relocations
+  the frontends recorded against it.
+
+  Two of the three relocation tables are ours to resolve and the third is not:
+
+    DataPtrFix   data->data pointers inside RTTI and layout blobs. An 8-byte
+                 slot holding an absolute address; on a 32-bit target the ELF
+                 writers put the address in the low dword and leave the high
+                 dword zero, and so do we — the same shape, a different base.
+    MethodFixups a code address in a VMT slot or an RTTI method entry. wasm has
+                 no code addresses; these become table indices, and until the
+                 table exists they stay zero, which is index 0 — the reserved
+                 null element, so a call through an unresolved slot traps
+                 rather than dispatching somewhere plausible.
+    Fixups /     code->data and code->BSS references. These name a position in
+    GlobFix      Code[], the register backends' instruction stream, which this
+                 backend never writes to: it reaches a global through
+                 WasmSlotAddr and emits the address inline. Inert here by
+                 construction, not by omission.
+
+  Data[] is patched IN PLACE and then copied. Patching a copy would leave the
+  blob and the segment disagreeing about what was resolved, and this runs once,
+  at write time, after the last emitter. }
+procedure WasmFillData;
+var i, pos, v: Integer;
+begin
+  WasmDataSegReset(WasmDataBase);
+  if DataLen = 0 then Exit;
+  for i := 0 to DataPtrFixCount - 1 do
+  begin
+    pos := DataPtrFix[i].DataPos;
+    v := WasmDataBase + DataPtrFix[i].TargetOff;
+    Data[pos]     := Byte(v and $FF);
+    Data[pos + 1] := Byte((v shr 8) and $FF);
+    Data[pos + 2] := Byte((v shr 16) and $FF);
+    Data[pos + 3] := Byte((v shr 24) and $FF);
+  end;
+  for i := 0 to DataLen - 1 do WasmDataSegByte(Data[i]);
+end;
+
 procedure WasmFinishMemory;
 var top: Integer;
 begin
   if WasmGSp < 0 then Exit;
-  top := ((WASM_BSS_BASE + BSSSize + 15) div 16) * 16 + WASM_STACK_BYTES;
+  WasmDataBase := ((WASM_BSS_BASE + BSSSize + 15) div 16) * 16;
+  WasmGlobInit[WasmGData] := WasmDataBase;
+  WasmFillData;
+  top := ((WasmDataBase + DataLen + 15) div 16) * 16 + WASM_STACK_BYTES;
   WasmGlobInit[WasmGSp] := top;
   WasmSetMemory((top + WASM_PAGE - 1) div WASM_PAGE, -1);
 end;
@@ -1537,8 +1672,30 @@ begin
     end;
 end;
 
+{ `main`: the chunks above, called in the order the frontend emitted them.
+
+  Emitted here rather than at the first chunk because the count is not known
+  until the last body has been seen — a typed const declared late adds a chunk
+  late. A program with no top-level code at all (a unit, or a slice built with
+  -dWASM_NOMAIN and no const initialisers) gets no `main`, which is honest:
+  there is nothing to run. }
+procedure WasmEmitMainWrapper;
+var i, slot: Integer;
+begin
+  if WasmMainChunkCount = 0 then Exit;
+  slot := WasmAddFunc('main', WasmAddType([], []));
+  WasmBodyBegin;
+  for i := 0 to WasmMainChunkCount - 1 do
+    WasmCall(WasmFuncIndex(WasmMainChunk[i]),
+             'main$' + WasmIntStr(i));
+  WasmBodyTerminate;
+  WasmBodyEnd(slot);
+  WasmAddExport('main', WEK_FUNC, WasmFuncIndex(slot));
+end;
+
 procedure writeWasm(const outPath: AnsiString);
 begin
+  WasmEmitMainWrapper;
   WasmFillEmptyBodies;
   WasmFinishMemory;
   WasmReportCoverage;

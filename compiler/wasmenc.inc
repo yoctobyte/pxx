@@ -157,6 +157,23 @@ var
   WasmCodePool   : array[0..MAX_WASM_CODE-1] of Byte;
   WasmCodeLen    : Integer;
 
+  { ---- the data segment ----
+
+    One active segment at WasmDataSegBase. The bytes are a COPY, made at write
+    time, of whatever the caller hands over a byte at a time -- deliberately
+    not a reference into the caller's blob, because this file depends on
+    nothing (CHARTER) and a `Data[]` from defs.inc would be exactly the
+    dependency that broke the standalone selftest once already.
+
+    A DYNAMIC array, unlike every other pool here: the caller's blob can be
+    2 MB and this file's fixed arrays are carried by every pxx invocation on
+    every target. Geometric growth, the same shape as emit.inc's two
+    relocation tables. }
+  WasmDataSeg    : array of Byte;
+  WasmDataSegLen : Integer;
+  WasmDataSegCap : Integer;
+  WasmDataSegBase: Integer;
+
   { ---- memory ---- }
   WasmMemPresent : Boolean;
   WasmMemMin     : Integer;
@@ -197,6 +214,7 @@ begin
   WasmMemPresent := False; WasmMemMin := 0; WasmMemMax := -1;
   WasmGlobCount := 0;
   WasmExpCount := 0;
+  WasmDataSegLen := 0; WasmDataSegBase := 0;
 end;
 
 { Intern a signature. Returns its type index, reusing an identical one — the
@@ -305,15 +323,28 @@ begin
   Inc(WFVarLen);
 end;
 
-{ The name of local index `idx` in the function currently being emitted. }
+{ The name of param/local index `idx` in the body being built.
+
+  It reads the PER-BODY buffer, not the pool. Reading the pool was wrong twice
+  over: `WasmFuncCount - 1` names the most recently DECLARED function, which
+  stopped being the one under construction the moment a call could reserve a
+  callee's slot early; and `WasmFuncVarOfs[slot]` is not written until
+  WasmBodyEnd, so mid-body it points at whatever the previous occupant left.
+  The result was a body that printed `local.set $baseKind` for a local the
+  declaration loop then named something else — a WAT that names a variable it
+  never declares.
+
+  Only the TEXT module was affected: the binary encodes indices and never asks
+  for a name. That is exactly why it survived — the .wasm validated, ran, and
+  matched the native build, and the .wat was checked against it on a
+  hand-built four-function module where "most recently declared" happened to
+  be right. }
 function WasmVarNameOf(idx: Integer): AnsiString;
-var slot: Integer;
 begin
-  slot := WasmFuncCount - 1;
-  if (slot < 0) or (idx < 0) or (idx >= WasmFuncNVar[slot]) then
+  if (idx < 0) or (idx >= WFVarLen) then
     WasmVarNameOf := ''
   else
-    WasmVarNameOf := WasmVarNames[WasmFuncVarOfs[slot] + idx];
+    WasmVarNameOf := WFVar[idx];
 end;
 
 procedure WasmSetMemory(minPages, maxPages: Integer);
@@ -334,9 +365,33 @@ begin
   Inc(WasmGlobCount);
 end;
 
+{ Is this export name already claimed? Export names are a module-wide SET
+  across all four kinds — a function and a global cannot share one either — so
+  this asks about the name alone. }
+function WasmExportTaken(const name: AnsiString): Boolean;
+var i: Integer;
+begin
+  WasmExportTaken := False;
+  for i := 0 to WasmExpCount - 1 do
+    if WasmExpName[i] = name then
+    begin
+      WasmExportTaken := True;
+      Exit;
+    end;
+end;
+
 procedure WasmAddExport(const name: AnsiString; kind, idx: Integer);
 begin
   if WasmExpCount >= MAX_WASM_EXPORTS then WasmFail('wasm: too many exports');
+  { A duplicate export name is not a module. Refusing here rather than
+    documenting the rule is the difference between a compile-time message
+    naming the name and `wasm-validate: duplicate export "main"` at a byte
+    offset — which is how this was actually found, and only because the
+    differential happens to run the validator. Two anonymous typed-const
+    initialisers both called `main` are enough to produce it, so it is not an
+    exotic case. }
+  if WasmExportTaken(name) then
+    WasmFail('wasm: duplicate export "' + name + '"');
   WasmExpName[WasmExpCount] := name;
   WasmExpKind[WasmExpCount] := kind;
   WasmExpIdx[WasmExpCount] := idx;
@@ -805,6 +860,26 @@ begin
   WPatchSize(p, WBLen - p - 5);
 end;
 
+{ Set the address the data segment loads at, and drop whatever was staged. }
+procedure WasmDataSegReset(base: Integer);
+begin
+  WasmDataSegLen := 0;
+  WasmDataSegBase := base;
+end;
+
+procedure WasmDataSegByte(b: Byte);
+var n: Integer;
+begin
+  if WasmDataSegLen >= WasmDataSegCap then
+  begin
+    if WasmDataSegCap = 0 then n := 4096 else n := WasmDataSegCap * 2;
+    SetLength(WasmDataSeg, n);
+    WasmDataSegCap := n;
+  end;
+  WasmDataSeg[WasmDataSegLen] := b;
+  Inc(WasmDataSegLen);
+end;
+
 procedure WasmEmitGlobalSection;
 var i, p: Integer;
 begin
@@ -883,6 +958,27 @@ begin
   WPatchSize(p, WBLen - p - 5);
 end;
 
+{ The data section. One ACTIVE segment: memory index 0, an `i32.const` offset
+  expression, then the raw bytes. Active rather than passive because a passive
+  segment needs `memory.init` from bulk-memory and an explicit start function to
+  run it -- a runtime dependency for something the engine can do at
+  instantiation for free. }
+procedure WasmEmitDataSection;
+var i, p: Integer;
+begin
+  if WasmDataSegLen = 0 then Exit;
+  WOutB(WSEC_DATA);
+  p := WOutSizePlaceholder;
+  WOutU32(1);                  { one segment }
+  WOutU32(0);                  { memory index 0 -- the MVP's only memory }
+  WOutB(WOP_I32_CONST);
+  WOutS32(WasmDataSegBase);
+  WOutB(WOP_END);
+  WOutU32(WasmDataSegLen);
+  for i := 0 to WasmDataSegLen - 1 do WOutB(WasmDataSeg[i]);
+  WPatchSize(p, WBLen - p - 5);
+end;
+
 { ===== the whole module ===== }
 
 procedure WasmEmitModule;
@@ -898,6 +994,7 @@ begin
   WasmEmitGlobalSection;
   WasmEmitExportSection;
   WasmEmitCodeSection;
+  WasmEmitDataSection;
 end;
 
 { Binary output goes through the house sysopen/syswrite/sysfchmod/sysclose
