@@ -366,3 +366,26 @@ slug and a prio, not a body, so a ticket whose contents are entirely elsewhere
 costs a real dispatch every time it surfaces. That happened tonight to two
 tickets in this lane.
 - 2026-08-28 — resolved, commit ee2753bb4.
+
+---
+
+## Coordinator ratification, 2026-08-28 — the one judgement call in this closure
+
+frankB surfaced the single call rather than burying it, so it is recorded here with the
+sentence to disagree with named.
+
+The residual *"async/blocking facade unification"* was treated as **superseded, not
+outstanding**. Verified: `devdocs/developer/plan-networking.md:117` reads *"shaped compat
+surfaces — they coexist with the async transport, they do not merge"*. The line carrying
+unification forward is a **backlog sweep note**, which postdates the design decision but is a
+weaker source than it: a mechanical carry-forward is not a decision to revisit.
+
+**Ratified.** A design document beats a sweep note, and the remedy if this is wrong is one
+reopened ticket — cheap enough that it does not warrant a Track U decision. **If the intent
+genuinely was to revisit `coexist`, `plan-networking.md:117` is the sentence to disagree
+with**, and reopening is one ticket.
+
+Note on the verification itself: the first check looked in `devdocs/dev/` and returned
+nothing. The file is in `devdocs/developer/`. **A search in the wrong directory returns silence
+that reads exactly like a refuted claim** — the mirror image of face fourteen, filed the same
+hour under `feature-a-a-refusal-is-a-claim-with-a-date-on-it`.

@@ -453,3 +453,35 @@ common. Both answer "clean" for a defect class while looking exactly like a pass
 The caution now lives where the violator will open it — the limits section of
 `devdocs/dev/differential-probes.md` — because in a ticket it is a fact, and in that file it
 is a check.
+
+---
+
+## FACE FOURTEEN — a CONFIRMING measurement of the wrong configuration
+
+The known hazard is that a proxy can mislead. The sharper one, and the reason this is a face
+rather than a footnote:
+
+> **A PROXY WILL OFTEN AGREE WITH THE STALE CLAIM YOU WERE CHECKING, AND AGREEMENT ENDS THE
+> INVESTIGATION.**
+
+Measured 2026-08-28. `feature-random-library` claimed *"riscv32 cannot build this unit at
+all"*. The re-measurement **confirmed it** — and was wrong: it used the default platform units,
+while the Makefile builds that target with `--platform=esp`. Under the shipping configuration
+the unit builds, exit 0; the atomics refusal is specific to **hosted** riscv32. Caught only by
+re-reading what had been measured, not because anything looked odd.
+
+**Confirmation and refutation are not symmetric in cost.** A wrong-configuration measurement
+that *disagrees* provokes a second look and corrects itself. One that *agrees* is absorbed as
+verification and closes the question — so the wrong-config measurements that survive are
+precisely the ones that happened to agree. Nothing in the output distinguishes *"the claim is
+true"* from *"I measured something else and it happened to match."*
+
+Practical form: **name the configuration before reading the result**, and treat a
+re-measurement that confirms an old claim as the case needing a second read, not the case that
+just closed. The same day produced the coordinator's mirror image — a search in the wrong
+directory returning silence, which reads exactly like a refuted claim.
+
+Kin to face thirteen: there, two arms that share an upstream agree without evidence. Here, one
+arm and a stale claim agree without evidence. Both are **agreement carrying no information**;
+thirteen is structural, fourteen is procedural — and fourteen is worse, because it recruits
+the investigator into stopping.
