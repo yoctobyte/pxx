@@ -385,4 +385,4 @@ declaration-time dependency, while `TEq<T>`'s method body constructing a
 it.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit 35f485537.
