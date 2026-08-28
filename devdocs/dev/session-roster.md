@@ -10047,3 +10047,79 @@ moved to `blocked/`.
 tracked `stable_linux_amd64/default/` for the v388 comparison and **removed
 them**, tree clean; landed `29d93c969` (`nilpy_ladder --probe`) once cleared; and
 took the docs-first rule — the triage went out as its own docs-only commit.
+
+## Phase 3 landed (frankwasm, `ebf3f818a`) — and the transferable finding is about RULES, not about IRTk
+
+Coverage 41 → 66 of 147, four suites green, `check_phase3.sh` (26 values) green
+first run. Control flow is a `br_table` dispatch loop: body cut into basic blocks,
+a `$pc` local holds the next block, one `br_table` at the top of a loop jumps to
+it, blocks nested so that breaking out of exactly k lands on block k. `if`,
+`while`, `repeat`, `for` both directions, `case` (value / list / range / else),
+`break`, `continue`, short-circuit `and`/`or`, nested loops, early `Exit`, `goto`.
+
+**`goto` was put in the slice deliberately because the milestone named it and it
+was the one form about to be claimed without evidence** — and it is the only
+construct there that can produce a CFG the frontend did not build, everything
+else being reducible by construction. Self-applied scepticism in the hardest
+direction.
+
+### The milestone rule earned its keep within the hour, in the unexpected direction
+*"No coverage entry cites a control-flow op"* would have been **fully satisfiable
+by a backend that branches to the wrong blocks.** An off-by-one block index or a
+branch depth counted from the wrong nesting produces a module that **validates
+perfectly and runs the wrong code.** The report cannot see it; the validator
+cannot see it; only the diff can. **Same boundary as the var-parameter bug: same
+width class, different meaning.** Now recorded in PLAN.md next to the phase.
+
+### `IRTk[node]` is a HINT, not a guarantee — and no register backend can observe that
+A `for` loop's bound comparison arrives with an `IR_LOAD_SYM` whose `IRTk` is
+`tyUnknown` while the symbol it loads is plainly an Integer. **Register backends
+never notice: they read a register width, and nothing consults `IRTk` to choose an
+instruction.** A type-directed backend is the first consumer that ever cared — it
+refused every `for` loop in the compiler with *"operand type in binary operator
+67"*, a true statement about `IRTk` and a false one about the program.
+
+**Agreed with frankwasm: do NOT file a `decide-` yet.** "IRTk is sometimes
+tyUnknown" is not a defect any current consumer can point at a wrong program for;
+making it a guarantee is **a decision with a cost, not a repair**. One notch off
+the repo's "an observable no compiling program can reach" rule — a *future*
+type-directed consumer would reach it — so it is **"not yet", not "never"**. Asked
+for a descriptive note in `devdocs/dev/ir-as-substrate.md` so the next consumer
+does not rediscover it from scratch.
+
+### **The actual finding: a rule you must REMEMBER will be broken where following it is inconvenient**
+frankwasm had already written the rule into its own file, at the emitter —
+*where IRTk and what was emitted disagree, believe what was emitted* — and then
+consulted `IRTk` in the **planner** three functions later, because the planner
+runs before anything is emitted and `IRTk` was the only thing available.
+
+> **Writing a rule down does not make you follow it at the site where following it
+> is inconvenient** — and the inconvenient site is the one that matters, because
+> that is where the shortcut is tempting.
+
+The fix is the general form: **one pure function that both sites must call.**
+Result type from the SYMBOL for a load, from the unified operand width for a
+binop, `IRTk` only as fallback for nodes whose type is nothing but what the IR
+recorded — and every emitter's declared result is now that function, so **the
+planner and the emitter cannot disagree, and an emitter cannot report a type it
+did not produce.** That is `normalise-dont-special-case` applied to a *rule*
+rather than a construct: **don't document the invariant, make violating it
+unrepresentable.**
+
+### An unreachable capability is paid for at the moment you need it most
+`asmtext_wasm.inc` could emit a `.wat` from Phase 1 and **nothing could ask for
+it** — discovered while staring at a wabt byte offset with no way to see what had
+been emitted. An output path ending in `.wat` now gets the text module. (Also
+fixed: an `i32.const` of 4294967295 — a `$FFFFFFFF` mask in an `Int64 IRIVal` —
+is unencodable, and wabt reports it as a *parse* failure with a byte offset and no
+function name. Same width class as the var-parameter bug, but the friendly end:
+it cannot ship.)
+
+### Phase 4 is the first shared-file escape — grant protocol engaged, not issued
+VMT slots and RTTI fixups must resolve to table indices instead of the 32-bit code
+addresses patched at `elfwriter.inc:1937`. frankwasm will scope and come to the
+coordinator before touching anything outside its own file. **Asked for a file list
+and the shape of the change, not a patch** — and any grant must be sequenced
+against frankA possibly taking Track A (`bug-a-a-deep-unit-dependency-...`, p70),
+not issued blind. Told frankwasm explicitly that "this is bigger than a grant,
+hand it to A as a ticket" is a normal outcome of scoping, not a failure of it.
