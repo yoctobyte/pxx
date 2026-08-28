@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-27T18:32:53Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "f723dd9dac9e20597b273eecf226372a3651672f",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-27T18:38:49Z",
    "fixed": [],
    "new_red": [],
@@ -454,6 +445,15 @@
    "tier": "opt",
    "timed_out": false,
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-28T15:55:22Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "8c0c9b366999a353a23bb797630a156c565043ae",
+   "tier": "full",
+   "timed_out": false,
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -6973,14 +6973,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-28T09:41:46Z",
+  "date": "2026-08-28T15:55:22Z",
   "deadline": 7200.0,
-  "sha": "0fbcbdebccd3443a0a6f37513f707a0ca0d205fa",
-  "tier": "opt",
+  "sha": "8c0c9b366999a353a23bb797630a156c565043ae",
+  "tier": "full",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "GREEN",
-  "wall": 473.6
+  "verdict": "RED",
+  "wall": 1253.3
  },
  "last_bench": {
   "conf_rows": 550,
@@ -6992,18 +6992,18 @@
   "sha": "0fbcbdebccd3443a0a6f37513f707a0ca0d205fa"
  },
  "last_breadth_try": {
-  "date": "2026-08-28T06:02:38Z",
-  "sha": "04fea146119af040ed73a195f82d9345d0ecf57a"
+  "date": "2026-08-28T15:33:40Z",
+  "sha": "8c0c9b366999a353a23bb797630a156c565043ae"
  },
  "last_full": {
-  "date": "2026-08-28T09:29:21Z",
+  "date": "2026-08-28T15:55:22Z",
   "deadline": 7200.0,
-  "sha": "0fbcbdebccd3443a0a6f37513f707a0ca0d205fa",
+  "sha": "8c0c9b366999a353a23bb797630a156c565043ae",
   "tier": "full",
   "timed_out": false,
   "unreached": 0,
   "verdict": "RED",
-  "wall": 1185.3
+  "wall": 1253.3
  },
  "last_opt": {
   "date": "2026-08-28T09:41:51Z",
@@ -7123,7 +7123,7 @@
   ]
  },
  "pin_shadow": {
-  "at": "2026-08-28T09:29:21Z",
+  "at": "2026-08-28T15:55:22Z",
   "inherited": 4,
   "pin": "v389",
   "qualifies": false,
@@ -7135,7 +7135,7 @@
    "tools-devtest#00"
   ],
   "reds": 5,
-  "sha": "0fbcbdebccd3443a0a6f37513f707a0ca0d205fa",
+  "sha": "8c0c9b366999a353a23bb797630a156c565043ae",
   "streak": 0,
   "unexpected": [
    "lib-test#src:test/lib_synapse.pas"
