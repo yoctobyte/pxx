@@ -23,7 +23,7 @@ then reads whichever table they scroll to first. Wall 4 sat `filed` in one table
 and `(to file / relay to frankB)` in another while it was actually **done**.
 **Update THIS table. Leave the snapshots alone.**
 
-Last measured 2026-08-28 against binary `4157f75831bb`, on the **pristine**
+Last measured 2026-08-28 against binary `2c155cce2`, on the **pristine**
 corpus (no stubs).
 
 | # | wall | owner | status |
@@ -32,12 +32,21 @@ corpus (no stubs).
 | 2 | generic method header binds to same-named non-generic class | P | **DONE** — `042bcbb32` |
 | 3 | nested `specialize X<T>` in expression position | P | open, diagnosis banked, not reached by the probe yet |
 | 4 | SysUtils: `EArgumentOutOfRangeException`, `CreateRes`, `Error`/`TRuntimeError` | B | **DONE** — all three declared in `lib/rtl/sysutils.pas` (191, 154/155, 208/268); verified by compiling a `raise EArgumentOutOfRangeException` program, not by grep |
-| 5 | method pointers | P | **the current blocker.** Defect A fixed `9ab19fb21`; defect B open, 28 sites |
+| 5 | method pointers | P | **DONE** — defect A `9ab19fb21`, defect B `6d2a841a1` (parse) + `2c155cce2` (lowering). All 7 shapes match FPC |
+| 6 | generic class specialized by the ENCLOSING generic's type parameter | P | **the current blocker** — `TGOrdinalStringComparer<T, THashFactory>.Create` at `generics.defaults.pas:3250` |
 
-**Rung 6 is behind wall 5 alone.** Walls 3 and 4 are not reached by the probe —
-4 because it is done, 3 because 5 stops the compile first, so **3's status is
-"open, unverified against the current tree"** rather than "next". Re-probe before
-trusting it.
+**Rung 6 is now behind wall 6 alone.** Wall 5 fell on 2026-08-28 and the compile
+advanced roughly 900 lines, from `generics.defaults.pas:2381` to `:3250`, where
+it meets an ALREADY-DIAGNOSED ticket:
+[[bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body]],
+parked in `unfinished/` with its repro and diagnosis banked. So the next step is
+to un-park that ticket, not to diagnose anything new.
+
+Wall 3 remains **"open, unverified against the current tree"** — it was never
+reached, first because wall 5 stopped the compile and now because wall 6 does.
+Re-probe before trusting it; it may already be fixed, and it may be the same
+defect as wall 6 (both are inline specialization in a position where the name is
+read as a variable). **Check that before treating them as two.**
 
 Under wall 5, the root cause is now
 [[bug-p-a-method-call-with-missing-arguments-is-accepted-and-reads-garbage]]
