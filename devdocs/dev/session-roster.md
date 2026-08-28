@@ -14315,3 +14315,36 @@ CLAUDE.md's own text. I added evidence, not a verdict.
 `generics.collections.pas` still dies at `defaults:994` without reaching a line of its own, so
 **one defect now gates the whole rung in both units** — worth more than wall 6 was, by this
 morning's own argument.
+
+### Tick — checking that my own directives landed, and filing the one that had not
+
+Quiet on dispatch: frankA and frank-optimize-b4 both busy mid-ticket, nothing new on
+origin/master, `working/` correct in **both** directions for the first time today, Track T UP,
+**5** open regressions (counted in full, not off a truncated tail), all previously triaged.
+
+The useful part was auditing the three directives I issued this evening rather than assuming
+they took:
+
+| directive | state |
+| --- | --- |
+| frankA — record the `SFoo := 'x'` divergence | **landed**, `pascal-dialect-divergences.md:300` |
+| frank-optimize — record the `{$Q+}` divergence | **landed**, and deeper than asked — it names `bug-a-qplus-misses-32bit-overflow` (we had FPC's own gap and closed it) and adds a warning against using `{$Q+}` on a 32-bit type in an FPC-oracled differential probe |
+| frank-optimize — file the `-O3` observability gap as a T ticket | **not filed** — two greps on different wording, plus an mtime sweep showing only two tickets touched since 20:00 |
+
+**So I filed it myself:** `bug-t-nothing-exercises-o3-so-its-clean-record-is-empty` [T p50]
+(`0fb7d82ff`), evidence credited to frank-optimize-b4. Not a reprimand — it is mid-build on the
+hardest item in its umbrella and the directive was one paragraph inside a long message about
+something else. **That is exactly the trigger-with-no-observer shape**, and the observer was
+supposed to be me, so checking was the job. A finding lives in a ticket on master; until then it
+was only in my roster and one message.
+
+The ticket states the gap plainly — *"no failures at `-O3`" cannot be distinguished from "nobody
+ran `-O3`"*, the same shape as the skip-as-pass bug one level up in tier composition — carries
+the W2 silent-refusal as the concrete risk, points at `w2stress.pas` as the seed of a
+per-optimisation-level differential, and says out loud that **nothing is blocked today**, so p50
+is honest rather than parked. It becomes blocking the moment anyone proposes a promotion to
+`-O2`, and whoever does should be sent here first.
+
+**Dispatch unchanged.** frankB, frankwasm and pxx-a5 idle on the **concurrency cap**, not on
+judgment; expiry is mechanical — the next park line frees exactly one slot and the ranked head
+takes it. Track N still at p85/p75/p72, undispatched, owner's reserved call, not re-asked.
