@@ -1694,3 +1694,71 @@ thing in it first just because that is what the last section talks about."*
 Same family as *a diagnosis in the shape of the previous fix is confirmed by
 resemblance* — recency and resemblance both supply confidence that the content has
 not earned.
+
+## The promotion block is LIFTED — its premise was false (coordinator, 2026-08-28)
+
+`chore-t-nothing-in-the-matrix-runs-o3-so-no-failures-is-unfalsifiable` is
+**resolved** (`c8ec8a1b3`), and it resolved by **refutation**: Track T checked the
+premise against the archive before building anything, and every clause of it is
+contradicted. The block recorded above at *"The promotion experiment is blocked"*
+therefore does not survive, and I am lifting it rather than letting it sit as a
+precondition nobody can meet because it was already met.
+
+**What is actually true**, verified here from a path Track T did not choose — the
+file's own history rather than its current contents:
+
+- `tools/optdiff.sh` compiles and **runs** every standalone test program at
+  `-O2` and `-O3` against an `-O0` baseline, comparing stdout + stderr + exit
+  code. It has done so since its creation commit `597e4ab05`, **2026-07-11** —
+  one day *after* this ticket was opened, and seven weeks before I called `-O3`
+  unexercised.
+- That tier has run 701 times, 30 of them non-GREEN.
+- Four `-O3` findings in `done/` came from it, and one names its finder in its own
+  first line: `bug-o3-inline-breaks-frame-walk-intrinsics` opens *"Track T
+  NEW-RED (`optdiff#shard0/6`, sha 69f7bda93ac4)"* — a silent miscompile at
+  `-O3`, caught by the sweep I said did not exist. `bug-o-o3-diverges-on-cmath-sign-bits-and-pascal-hijack`
+  is a second, filed against **this track**.
+
+So the instrument has failed thirty times and produced four real bugs. By this
+ticket's own standard — *a control is not a control until it has failed once* —
+`-O3` differential coverage is the best-evidenced control in the campaign, and
+"first exposure wearing a promotion's clothes" does not survive contact with it.
+
+**How I got it wrong, which is the part that generalises.** I surveyed the gate
+tiers — quick / native / limited / full — found no `-O3` job in any of them, and
+concluded *nothing runs `-O3`*. Each observation was true. The survey was
+structurally blind to exactly one tier, `opt`, which is **disjoint from all four**
+and runs only as idle watcher work. That is this repo's own rule, applied to me:
+**an existence claim survives one grep; a non-existence claim does not** — and I
+never asked what my survey could not have seen. It is also the generator signature
+in its plainest form: *"no `-O3` failures in the reports I read"* and *"no `-O3`
+runs"* produced the same reading, and nothing in the reports named their own
+scope.
+
+**What was real, and what replaces the block.** The narrow finding underneath was
+worth its p60: opt is disjoint from every gate tier, so of 2296 shas carrying a
+gate verdict only 690 — **30%** — had ever been swept at `-O3`, and no report said
+which 30%. That is **attribution, not absence**. Track T has now made it citable:
+reports state whether opt covered *this* sha, and when it did not, how stale the
+newest sweep is and which sha it ran at (takes effect at the next watcher
+restart). `-O1`, which genuinely was unswept anywhere, is now swept too.
+
+So the hard precondition becomes a **citation requirement**, which is cheap and is
+the thing that was actually missing:
+
+> Each per-pass `-O3` → `-O2` promotion cites the opt-tier run that swept a sha
+> **containing that pass**. Aggregate exposure of the campaign is not exposure of
+> a pass that landed after the last sweep, and at 30% coverage that gap is
+> ordinary rather than exotic.
+
+**One thing the refutation does not buy, and must not be read as buying.** optdiff
+is a **correctness** instrument: it proves `-O3` does not produce a *wrong answer*.
+It cannot prove a pass **fires**, and a pass promoted to `-O2` that silently stops
+firing passes it perfectly — which is this ticket's own central lesson, recorded
+two sections above under *"the characteristic failure mode is invisible to every
+correctness test you own."* The promotion evidence is "not wrong", never "works".
+Benches remain Track O's, and Track O has them.
+
+The `55 -> 70` re-price below stands unchanged — it rests on the aarch64
+divergence verified in source from both sides, which this correction does not
+touch.
