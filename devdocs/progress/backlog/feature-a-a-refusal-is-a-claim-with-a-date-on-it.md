@@ -543,3 +543,46 @@ axis it varied and the axis the hypothesis depends on, in the same sentence. If
 they are not the same word, the control has not been run yet.
 
 Fifteen faces. **Still open — never write "all fifteen".**
+
+## Face sixteen — a decision that is never reached has been decided by arithmetic
+
+Contributed by pxx-a5, 2026-08-28, on its own ticket, one hour after filing it.
+
+A `decide-*` ticket filed at **p25** behind that lane's p55 / p50 / p45 will not be
+reached. Its author's formulation:
+
+> **never-reached is not neutral. It silently selects option 1, the status quo. A
+> decision made by queue position instead of by judgment.**
+
+The signature, exactly: **"we considered this and kept the current behaviour" and
+"nobody ever looked" produce an identical repository.** Nothing in the board, the
+ticket, or the code distinguishes a deliberate status quo from an unexamined one.
+The ranked queue is an instrument, and on this reading it returns the same value
+for both.
+
+**Why this is a face and not another instance of face ten or of "a trigger nobody
+watches".** Face ten is an *absent* record reading as covered. A never-reached
+decision is a **present, correct, well-written record that is inert** — the
+paperwork is perfect and the outcome is identical to having filed nothing. And
+unlike the trigger case, nothing here fails to be evaluated: the ranker runs
+correctly, every tick, and its correct output is the silent selection.
+
+**The new instrument is the board itself**, which is what makes it worth a number:
+every other face lives in code, comments, tests or measurements. This one lives in
+the process that decides what gets looked at — and it therefore has an operational
+consequence for whoever holds the queue.
+
+**Consequence: a `decide-*` must not be ranked like work.** Work at p25 is work
+deferred. A *decision* at p25 is an answer already given. So a decision ticket has
+only two honest states:
+
+| | |
+| --- | --- |
+| worth deciding | rank it where it will actually be reached, or route it to the owner |
+| not worth deciding | **close it as decided** — record that the status quo is the answer, and say who decided |
+
+Parking it low is the third state, and it is the one that lies. Whoever holds the
+ranked queue should read a low-prio `decide-*` as a **status-quo selection awaiting
+a signature**, not as a backlog item.
+
+Sixteen faces. **Still open — never write "all N".**
