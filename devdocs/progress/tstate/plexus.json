@@ -7044,7 +7044,7 @@
   },
   {
    "bad": "19dc5586e384b5881f03509233f74437c08d4472",
-   "bad_untestable": true,
+   "bad_untestable": false,
    "first_seen": false,
    "good": "8b2cc332791e5da7618f123cfb05f87b12bd13f3",
    "job": "test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy",
