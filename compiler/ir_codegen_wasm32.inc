@@ -1129,13 +1129,13 @@ begin
   WasmBinopOp := op;
 end;
 
-{ Pure: the single width both operands are brought to, and its signedness.
-  Shared by the planner and the type oracle so the two cannot disagree about
-  what a binop yields. }
-{ Is either side of this binop a STRING? One predicate, because two consumers
-  need the same answer and disagreeing is how the wrong instruction gets
-  emitted: WasmEmitBinop refuses on it, and WasmBinopWidth declines to unify a
-  width on it so WasmNodeResultType falls through to the IR's own record
+{ WHERE this predicate is asked, and why it is not inside a failure arm. What
+  it should ANSWER is the note below — this one is about placement.
+
+  One predicate, because two consumers need the same answer and disagreeing is
+  how the wrong instruction gets emitted: WasmEmitBinop refuses on it, and
+  WasmBinopWidth declines to unify a width on it so WasmNodeResultType falls
+  through to the IR's own record
   (tyAnsiString for a concat) rather than reporting the ARITHMETIC width of two
   handles.
 
@@ -1149,16 +1149,56 @@ end;
   `writeln(t + 'x')` lowered to `handle + 120` and passed it to PXXWriteStrMW.
   A refusal that depends on a different check happening to fail is not a
   refusal. }
+{ Is this binop a STRING operation — one that has to go through the RTL rather
+  than through an instruction?
+
+  The two cases key on different things and that is the whole content of this
+  predicate:
+
+    COMPARISON  keys on the OPERANDS. `a = b` yields a Boolean whatever a and
+                b are, so the result type says nothing; what makes it a string
+                compare is that the things being compared are strings.
+    `+`         keys on the RESULT. An operand being a string is NOT enough,
+                because a frozen string's VALUE is its address — so
+                `frozenString + 8` is ordinary pointer arithmetic, which is
+                exactly how `PChar('literal')` lowers (measured: operands
+                `String (frozen)` and `Integer`, result `Pointer`). The first
+                version of this predicate asked only about operands and
+                therefore refused that as "concatenation producing Pointer",
+                which is a true statement about one operand and a false one
+                about the operation. It made every program passing a string
+                literal to a PChar parameter fail — which is most of the PAL.
+
+  Every other operator is not a string operation. There is no string `-`, `*`
+  or `and`, and claiming one would route an arithmetic node into
+  WasmEmitStrBinop, which refuses by name rather than mis-lowering — a loud
+  failure, but a failure on correct code.
+
+  This is the same defect as the guard slice 2 fixed, in the opposite
+  direction. There, a string operation was not recognised because an unrelated
+  check happened to succeed first; here, a non-string operation IS recognised
+  because a related check happens to be true of one operand. Both come from
+  asking a question about the pieces instead of about the operation. }
 function WasmBinopIsString(node: Integer): Boolean;
+var op: TTokenKind; rtk: TTypeKind;
 begin
-  WasmBinopIsString :=
-    TypeIsFrozenString(WasmNodeResultType(IRA[node]))
-    or TypeIsFrozenString(WasmNodeResultType(IRB[node]))
-    or (WasmNodeResultType(IRA[node]) = tyAnsiString)
-    or (WasmNodeResultType(IRB[node]) = tyAnsiString)
-    or (IntToTypeKind(IRTk[node]) = tyAnsiString);
+  op := WasmBinopOp(node);
+  rtk := IntToTypeKind(IRTk[node]);
+  if WasmIsCompare(op) then
+    WasmBinopIsString :=
+      TypeIsFrozenString(WasmNodeResultType(IRA[node]))
+      or TypeIsFrozenString(WasmNodeResultType(IRB[node]))
+      or (WasmNodeResultType(IRA[node]) = tyAnsiString)
+      or (WasmNodeResultType(IRB[node]) = tyAnsiString)
+  else if op = tkPlus then
+    WasmBinopIsString := (rtk = tyAnsiString) or TypeIsFrozenString(rtk)
+  else
+    WasmBinopIsString := False;
 end;
 
+{ Pure: the single width both operands are brought to, and its signedness.
+  Shared by the planner and the type oracle so the two cannot disagree about
+  what a binop yields. }
 function WasmBinopWidth(node: Integer; var want: Byte; var sgn: Boolean): Boolean;
 var tkA, tkB: TTypeKind; vtA, vtB, vtN: Byte;
 begin
@@ -1166,8 +1206,16 @@ begin
   if WasmBinopIsString(node) then Exit;
   tkA := WasmNodeResultType(IRA[node]);
   tkB := WasmNodeResultType(IRB[node]);
-  if not WasmScalarType(tkA, vtA) then Exit;
-  if not WasmScalarType(tkB, vtB) then Exit;
+  { A FROZEN string is not a scalar type, but its VALUE in an expression is its
+    ADDRESS — that is what WasmEmitValueAs already produces for one, and what
+    makes `PChar('lit')` lower as `bufferAddress + 8`. So it unifies as an i32
+    here rather than declining the whole binop. Only the arithmetic reaches
+    this point: a string CONCAT or COMPARE was taken by WasmBinopIsString
+    above, so the remaining uses of a frozen operand are pointer arithmetic. }
+  if TypeIsFrozenString(tkA) then vtA := WT_I32
+  else if not WasmScalarType(tkA, vtA) then Exit;
+  if TypeIsFrozenString(tkB) then vtB := WT_I32
+  else if not WasmScalarType(tkB, vtB) then Exit;
   { The node's own recorded type joins the unification when it HAS one. It can
     only widen the result (WasmUnify never narrows), and it is there to stop a
     plan that would truncate a value the IR expects whole. When it is unset —
@@ -4323,6 +4371,13 @@ begin
   WasmBodyTerminate;
   WasmBodyEnd(slot);
   WasmAddExport('main', WEK_FUNC, slot);
+  { AND `_start`, which is what a WASI COMMAND module is required to export.
+    `main` is our own convention and is what the JS test harness calls; every
+    real WASI host — wasmtime, wasmer, node's WASI — looks for `_start` and
+    refuses to run a module without it. Two exports of one function costs a
+    name and makes the same module runnable by both, which is the difference
+    between a module a harness can drive and a module a host can run. }
+  WasmAddExport('_start', WEK_FUNC, slot);
 end;
 
 procedure writeWasm(const outPath: AnsiString);

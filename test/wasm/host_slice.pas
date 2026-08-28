@@ -89,5 +89,16 @@ begin
 end;
 
 begin
+  { -dWASM_NOMAIN empties the program body, so a build made with it prints
+    nothing when it is started and stdout carries only what a hand-called
+    export writes. check_host.sh's node:wasi arm needs that isolation to test
+    the raw fd_write import without writeln writing to the same fd.
+
+    It does NOT make the module a reactor. Every wasm32 program exports
+    `_start`, this one included, so node's `wasi.initialize` refuses it and
+    `wasi.start` is what runs it. The isolation comes from main having nothing
+    to do, not from main being absent. }
+{$ifndef WASM_NOMAIN}
   Speak;
+{$endif}
 end.

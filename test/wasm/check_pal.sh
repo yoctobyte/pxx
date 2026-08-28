@@ -1,19 +1,18 @@
 #!/bin/sh
 # The WASI PAL backend — the SEAM, not the syscalls.
 #
-# WHAT THIS STAGE IS. lib/rtl/platform/wasi/platform_backend.pas declares all
-# 87 PAL entry points and implements none of them: every one returns
-# PAL_ERR_UNSUPPORTED. That is not a placeholder for missing work, it is the
-# ESP backend's own model — a POSIX-shaped program meets a clear error rather
-# than a wrong answer — and it is worth landing on its own because of what it
-# unblocks. Before this file existed, `uses SysUtils` did not compile for
-# wasm32 AT ALL: posix is the compiled-in default PAL, it reaches the kernel
-# through a per-architecture table of Linux syscall NUMBERS, and wasm32 fell
-# into it and died at PARSE time on `undefined variable (SYS_openat)`.
+# WHAT THIS CHECKS: the SEAM, not the syscalls. check_wasi.sh owns the file
+# operations; this one owns "a program that pulls the PAL compiles and runs".
 #
+# Those are worth separating because the seam is what actually unblocked the
+# target. Before lib/rtl/platform/wasi existed, `uses SysUtils` did not compile
+# for wasm32 AT ALL: posix is the compiled-in default PAL, it reaches the
+# kernel through a per-architecture table of Linux syscall NUMBERS, and wasm32
+# fell into it and died at PARSE time on `undefined variable (SYS_openat)`.
 # So the primary assertion is a diff of a SysUtils program against the native
 # build, and its value is that every line of it was unreachable on this target
-# for that one reason.
+# for that one reason — before any PAL entry point was implemented, and still
+# true of the ones that are not.
 #
 # WHY A THIRD BACKEND AND NOT AN ARM OF POSIX: wasm has no syscall instruction
 # and no number space. A host call is an IMPORT, named by module and field,
@@ -34,8 +33,6 @@ root=$(cd "$here/../.." && pwd)
 work=${TMPDIR:-/tmp}/pxx-wasm-pal.$$
 mkdir -p "$work"
 trap 'rm -rf "$work"' EXIT
-
-cp "$here/wasmhost.js" "$work/"
 
 # --- the interface must stay in lockstep with the other backends ------------
 # platform.pas calls 87 PalBackend* entry points and binds whichever backend is
@@ -86,23 +83,14 @@ echo "..  the default PAL is unchanged and the override is what selects wasi"
 head -1 "$work/cov.txt"
 wasm-validate "$work/p.wasm"
 
-cat > "$work/run.js" <<'JS'
-const fs = require('fs');
-const host = require('./wasmhost.js');
-const h = host();
-const inst = h.bind(new WebAssembly.Instance(
-  new WebAssembly.Module(fs.readFileSync(process.argv[2])), h.imports));
-const sp0 = inst.exports.sp.value;
-try { inst.exports.main(); }
-catch (e) { if (!(e instanceof h.HostExit)) throw e; }
-if (inst.exports.sp.value !== sp0) {
-  console.error(`FAIL shadow stack leaked: ${sp0} -> ${inst.exports.sp.value}`);
-  process.exit(1);
-}
-process.stdout.write(h.text());
-JS
-
-node "$work/run.js" "$work/p.wasm" > "$work/wasm.txt"
+# Run against node's own WASI, not wasmhost.js. The moment anything calls a PAL
+# entry point the module imports the WASI surface, and a shim that provided
+# only what the backend happened to need would agree with the backend by
+# construction. wasihost.js checks $sp for a normal return, same as the other
+# slices.
+mkdir -p "$work/sandbox"
+node --no-warnings "$here/wasihost.js" "$work/p.wasm" "$work/sandbox" \
+    > "$work/wasm.txt"
 if diff -u "$work/native.txt" "$work/wasm.txt"; then
   echo "ok  a SysUtils program matches the native build ($(wc -l < "$work/native.txt") lines)"
   echo "..  — every one of them unreachable on this target before the seam"
@@ -131,30 +119,27 @@ end.
 EOF
 "$root/compiler/pascal26" --target=wasm32 -Fulib/rtl/platform/wasi \
     "$work/io.pas" "$work/io.wasm" > /dev/null 2>&1
-# NOT the $sp-checking runner: this program TERMINATES rather than returning,
-# and an exiting program does not unwind its frames — on any target. $sp being
-# stale at proc_exit is correct, and the balance check is a statement about
-# programs that return.
-cat > "$work/runx.js" <<'JS'
-const fs = require('fs');
-const host = require('./wasmhost.js');
-const h = host();
-const inst = h.bind(new WebAssembly.Instance(
-  new WebAssembly.Module(fs.readFileSync(process.argv[2])), h.imports));
-try { inst.exports.main(); }
-catch (e) { if (!(e instanceof h.HostExit)) throw e; }
-process.stdout.write(h.text());
-JS
-node "$work/runx.js" "$work/io.wasm" > "$work/io.txt" 2>&1
-if ! grep -q 'Runtime error 38' "$work/io.txt"; then
-  echo "FAIL opening a file does not refuse cleanly. An unimplemented PAL must"
-  echo "     produce PAL_ERR_UNSUPPORTED (ENOSYS, 38), not a trap or a wrong"
-  echo "     answer. Got:"
+# Run with NO preopened directory, which is what makes this a refusal test
+# rather than a filesystem test: a WASI program given no grant can open
+# nothing, whatever the backend does. wasihost.js skips the $sp check when the
+# program exits non-zero, which this one does.
+#
+# `|| true` here does not hide anything: the assertion is the grep below, and a
+# node crash or a module that failed to instantiate leaves io.txt without the
+# expected line, so the check still fails — with node's own error printed. The
+# non-zero exit being tolerated is the POINT of the case, not an inconvenience
+# being suppressed.
+node --no-warnings "$here/wasihost.js" "$work/io.wasm" "" > "$work/io.txt" 2>&1 || true
+if ! grep -q 'Runtime error 2' "$work/io.txt"; then
+  echo "FAIL opening a file with NO preopened directory does not refuse"
+  echo "     cleanly. A program that was granted nothing must meet a plain"
+  echo "     ENOENT (2) — the path does not exist in the namespace it was"
+  echo "     given — not a trap and not a wrong answer. Got:"
   cat "$work/io.txt"
   exit 1
 fi
-echo "ok  a program that opens a file refuses with runtime error 38 (ENOSYS)"
-echo "..  — the deliberate failure mode, not a trap and not a wrong answer"
+echo "ok  with no preopened directory, opening a file refuses with runtime"
+echo "..  error 2 (ENOENT) — the capability model's failure, not a trap"
 
 sh "$here/wat_oracle.sh" "$root/compiler/pascal26" "$here/pal_slice.pas" "$work" p \
    -Fulib/rtl/platform/wasi

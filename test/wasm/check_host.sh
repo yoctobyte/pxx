@@ -95,12 +95,23 @@ const wasi = new WASI({ version: 'preview1', args: [], env: {},
 const inst = new WebAssembly.Instance(
   new WebAssembly.Module(fs.readFileSync(process.argv[2])),
   wasi.getImportObject());
-// Not a WASI command (there is no _start), so it is initialised as a reactor
-// and its exports called directly.
-wasi.initialize(inst);
+// This arm tests path 1 (the raw fd_write import) on its own, with path 2
+// (writeln) not writing to the same fd. The caller compiles a second module
+// with -dWASM_NOMAIN, which empties host_slice's program body, so starting it
+// prints nothing and stdout below carries only Emit's bytes.
+//
+// `wasi.start`, not `wasi.initialize`. Every wasm32 program we emit exports
+// `_start`, so node classifies all of them as commands and `initialize`
+// refuses them by design. The isolation comes from main having nothing to do,
+// not from the module being a reactor — an earlier version of this comment
+// claimed -dWASM_NOMAIN made it one, and the slice did not even read the
+// define.
+wasi.start(inst);
 process.stdout.write(String(inst.exports.Emit()) + '\n');
 JS
-if node "$work/wasi.js" "$work/w.wasm" 2>/dev/null > "$work/wasi.txt"; then
+"$root/compiler/pascal26" --target=wasm32 -dWASM_NOMAIN \
+    "$here/host_slice.pas" "$work/reactor.wasm" > /dev/null 2>&1
+if node "$work/wasi.js" "$work/reactor.wasm" 2>/dev/null > "$work/wasi.txt"; then
   if [ "$(cat "$work/wasi.txt")" = "wasm
 5" ]; then
     echo "ok  node's real WASI agrees: same 5 bytes, same fd"
@@ -111,7 +122,7 @@ if node "$work/wasi.js" "$work/w.wasm" 2>/dev/null > "$work/wasi.txt"; then
   fi
 else
   echo "FAIL node:wasi could not instantiate or run the module"
-  node "$work/wasi.js" "$work/w.wasm" 2>&1 | tail -5
+  node "$work/wasi.js" "$work/reactor.wasm" 2>&1 | tail -5
   exit 1
 fi
 
@@ -174,7 +185,11 @@ const wasi = new WASI({ version: 'preview1', args: [], env: {},
 const inst = new WebAssembly.Instance(
   new WebAssembly.Module(fs.readFileSync(process.argv[2])),
   wasi.getImportObject());
-wasi.initialize(inst);
+// Started, then Speak called by hand — the same shape as speak.js above, so
+// the two hosts are compared on the same export rather than on two different
+// entry points. w.wasm is built with -dWASM_NOMAIN, so starting it runs an
+// empty program body and stdout below is Speak's output alone.
+wasi.start(inst);
 inst.exports.Speak();
 JS
 node "$work/speakwasi.js" "$work/w.wasm" 2>/dev/null > "$work/wasi.txt"
@@ -218,8 +233,7 @@ const wasi = new WASI({ version: 'preview1', args: [], env: {},
 const inst = new WebAssembly.Instance(
   new WebAssembly.Module(fs.readFileSync(process.argv[2])),
   wasi.getImportObject());
-wasi.initialize(inst);
-inst.exports.main();
+wasi.start(inst);       // `_start`, the real command entry point
 process.exit(99);   // reached only if Halt did NOT exit
 JS
 set +e; node "$work/halt1.js" "$work/halt.wasm" 2>/dev/null; wasi_code=$?; set -e

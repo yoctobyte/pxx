@@ -1069,6 +1069,78 @@ records returned through a caller-owned hidden destination (`RetViaHiddenDest`
 — a new class, and the reason `PalIn6Any` and `DateTimeToTimeStamp` do not
 lower), two `SetLength` on a dynamic array, and assorted singles.
 
+### Phase 8e — the WASI file core — **DONE 2026-08-28. MILESTONE MET.**
+
+`open / read / write / seek / close / sync / flush`, `unlink / mkdir / rmdir`,
+`rename`, and both clocks, over WASI preview1 imports. **A program writes a
+file, closes it, reopens it, reads it back, appends, truncates, seeks from both
+ends, renames, erases and removes a directory — and its output is byte-identical
+to the native build's, with the sandbox left empty.** That is the Phase 8
+milestone, reached against node's own WASI rather than against `wasmtime`,
+which is not installed on this box; both are preview1 hosts and the point of the
+milestone is the host being independent, not which one it is.
+
+**The oracle is deliberately not ours.** `wasmhost.js` is a shim this project
+wrote, and a shim written alongside the backend it tests agrees with that
+backend by construction — including where both are wrong. It also has no
+filesystem, so there is nothing for it to disagree about. `node:wasi` is an
+independent preview1 implementation with real preopens, which is also what
+makes the capability model testable at all.
+
+**What has no posix counterpart: path resolution.** There is no `open(path)`. A
+program may only reach directories the host PREOPENED, arriving as descriptors
+3, 4, ... each with a name, and every path call is `(dirfd, relative)`. So the
+backend scans the grants once and resolves each path against them, longest
+match wins. A path under no grant is **ENOENT, not EPERM** — in the namespace
+this program was given it genuinely does not exist, and EPERM would suggest a
+permission that could be raised.
+
+**Two things that are invisible to a happy path and were falsified rather than
+assumed:**
+
+| break | what the slice reported |
+| --- | --- |
+| WASI errno passed through unmapped | every line diverges from the first |
+| read rights not requested at open | `read=-1`, then `Runtime error 1` — the fd OPENS and fails on first use |
+| `SEEK_CUR`/`SEEK_END` transposed | `seek-end-2=4` (want 8), `tell=10` (want 9) — every read still returns SOMETHING |
+
+The last two produce *different* failures, which is the point of running both:
+identical signatures would have meant one assertion wearing two names.
+
+**Errno numbering is a real hazard, not a formality.** WASI's errno list is
+alphabetical and Linux's is not, so WASI 2 is EACCES where Linux 2 is ENOENT.
+Both are non-zero, so a build that passed them through turns every missing file
+into a permission error and anything asking only "did it fail" agrees. Only the
+codes a file API can produce are mapped; the rest become `-5` (EIO) — "the host
+refused and we have no better name for it" — rather than a plausible wrong code.
+
+**Modules now export `_start` as well as `main`.** `main` is our own convention
+and what the JS harness calls; every real WASI host — wasmtime, wasmer, node —
+looks for `_start` and refuses to run a module without it. Two exports of one
+function is the difference between a module a harness can drive and a module a
+host can run.
+
+**And a mirror of slice 2's bug, found by this slice.** `WasmBinopIsString`
+asked only about the OPERANDS, so `frozenString + 8` — which is exactly how
+`PChar('literal')` lowers — was refused as "concatenation producing Pointer".
+True about one operand, false about the operation, and it made every program
+that passes a string literal to a `PChar` parameter fail, which is most of the
+PAL. The fix splits the question by operator, because the two cases key on
+different things: a **comparison** keys on the operands (`a = b` is Boolean
+whatever a and b are), a **`+`** keys on the result (an operand being a string
+is not enough, because a frozen string's value is its address). Slice 2's bug
+was a string operation not recognised because an unrelated check succeeded
+first; this is a non-string operation recognised because a related check is
+true of one operand. Both come from asking about the pieces instead of about
+the operation.
+
+**Still refusing, and honestly:** everything WASI has no answer for — no fork,
+exec, wait, kill or pipes; no `socket()`, `connect()` or `bind()` (preview1 has
+`sock_send`/`sock_recv` for descriptors a host hands in, and no way to create
+one); no users, so no `getuid`/`chmod`/`chown`; no `mmap`; no `dlopen`. Plus
+the ones that are simply not written yet — `stat` and its family, `readdir`,
+`poll`. `PAL_ERR_UNSUPPORTED`, as with ESP.
+
 ## Phase 9 — the anchor: `pascal26` under wasmtime
 
 The compiler itself: single-threaded, file I/O only, no sockets, no fork. It is
@@ -1374,3 +1446,90 @@ worth stating as a rule: **a check that greps emitted text is coupled to the
 emitter's naming**, so it should match the whole identifier, not a prefix that
 happens to be unique today. A pattern too tight fails loudly; a pattern too
 loose passes for the wrong reason, and only the first kind tells you anything.
+
+### 2026-08-28 — the WASI file core, and the mirror of slice 2's bug
+
+**Choose an oracle you did not write.** The obvious way to test the WASI PAL
+was to extend `wasmhost.js` with the filesystem calls. That would have been a
+shim written alongside the backend it tests, agreeing with it by construction —
+and the failure mode of this whole branch is a check that cannot fail.
+`node:wasi` is an independent preview1 implementation, so a disagreement is
+evidence about the backend rather than about the shim, and it is the only way
+the capability model gets exercised at all: there is a real directory to
+preopen and paths outside it genuinely cannot be reached.
+
+**Falsify two mechanisms and compare the failures to EACH OTHER.** Removing the
+read right and transposing SEEK_CUR/SEEK_END both broke the slice — but they
+broke it differently (`read=-1` and EPERM versus a wrong offset and a wrong
+tell). Identical signatures would have meant one assertion wearing two names,
+with the second mechanism untested. Checking that the failures DIFFER is a
+cheap step and it is what turns "the suite went red" into "these two things are
+each covered".
+
+**The same defect can arrive from either side.** Slice 2 fixed a string guard
+that was never reached, because an unrelated width check succeeded first. This
+slice fixed a string guard that was reached for something that is not a string,
+because a related check was true of one operand. Both came from asking about
+the OPERANDS when the question is about the OPERATION — and the fix is the same
+shape both times: split by operator, and key each case on the thing that
+actually determines it. A comparison is a string compare because of what is
+being compared; a `+` is a concatenation because of what it produces.
+
+**A comment that names the wrong cause is worse than no comment.** The slice
+carried a note saying SysUtils was pulled out because its unit-init contained a
+frozen concat this target refuses. The trap survived removing SysUtils, so the
+note was false — and it was false in the most expensive way, by pointing the
+next reader at an innocent dependency. Rewritten to say only what is true.
+
+**Bisect with a pattern you have checked.** The search for that cause spent
+several rounds reporting `0` for every input, because `grep -c "main\$2"` in a
+double-quoted shell string is `grep -c 'main$2'`, and `$` in a BRE means
+end-of-line — so the pattern could never match. Every measurement was of
+nothing, and the shape was the same one this branch keeps finding in its own
+checks: an assertion that passes (or here, reports absence) for a reason
+unrelated to the thing it names. `grep -F` from the start would have cost
+nothing.
+
+### 2026-08-28 — `_start`, and a define that was never read
+
+Exporting `_start` (Phase 8e — a WASI command module has to have it, or no WASI
+host will start it) turned `check_host.sh` red, and the failure was worth more
+than the export.
+
+That check's node:wasi arm called `wasi.initialize`, which node refuses on a
+module that exports `_start`. Its comment explained that this was fine because
+the caller compiled a *second* module with `-dWASM_NOMAIN`, and that
+reactor-ness "is a property of how it is COMPILED, and now it says so".
+
+`host_slice.pas` did not contain the string `WASM_NOMAIN`. The define was inert.
+Both builds were the same program, and the arm worked only because *no* module
+we emitted exported `_start`, so every one of them looked like a reactor to
+node. The comment asserted a property of the build that the build did not have —
+the same family as the refusal list that stopped refusing and the assertion that
+could never fire, arriving this time as prose rather than as a check.
+
+Three things follow, and the third is the general one:
+
+**The define was made real.** `host_slice.pas` now guards its program body with
+`{$ifndef WASM_NOMAIN}`, so the flag empties main and the isolation the arm
+needs — path 1's raw `fd_write` tested without path 2 writing to the same fd —
+comes from main having nothing to do. Falsified by building without the define:
+the arm's exact match against `wasm\n5` then sees the program's fifteen lines
+first. The moment the flag became load-bearing, a *second* arm went red, because
+it had been relying on the same module still running its body.
+
+**The module is a command and the checks now say so.** All three node:wasi arms
+use `wasi.start`. Nothing we emit is a reactor: every wasm32 program has a main
+wrapper (const initialisers alone are enough to produce one) and now exports
+`_start`, so `initialize` is refused by design rather than by accident. Calling
+that refusal a bug and suppressing the export under `-dWASM_NOMAIN` would have
+invented a compiler flag to keep a test's framing alive; the framing was what
+was wrong.
+
+**An inert flag is invisible from the outside.** A misspelled or unread define
+does not warn — the build succeeds and produces a module that is simply not the
+one the caller asked for. `-dWASM_NOMAIN` had been passed for weeks and had
+never once changed a byte. If a flag is supposed to change the output, the check
+that passes it should be able to fail without it; here that took one line and
+one rebuild, and it is the only thing separating "compiled with the define" from
+"compiled".

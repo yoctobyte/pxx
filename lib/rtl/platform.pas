@@ -18,6 +18,12 @@ const
 
   PAL_PLATFORM_POSIX = 1;
   PAL_PLATFORM_ESP_IDF = 2;
+  { WASI (preview1). Distinct from POSIX and not a subset of it: no fork or
+    exec, no users, no sockets, and no absolute paths — a program reaches only
+    the directories its host preopened for it. A caller that branches on this
+    value is asking exactly the question those differences answer, so a third
+    backend needs a third id rather than borrowing POSIX's. }
+  PAL_PLATFORM_WASI = 3;
 
   PAL_NET_AF_UNIX = 1;        { Linux AF_UNIX/AF_LOCAL — filesystem sockets }
   PAL_NET_AF_INET = 2;
