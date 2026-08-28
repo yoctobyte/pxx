@@ -379,3 +379,50 @@ and a `blocked-by:` edge between them would rank correctly for the wrong reason.
 synthetic overload repros written during this session passed on both and were
 never broken; they were a step away from being recorded as proof that the
 overload half was fixed. Run the "before". It is the only thing that catches it.
+
+---
+
+## Rung 6 re-probed on the PRISTINE corpus (2026-08-28, later)
+
+Re-ran the diagnostic as this section said to, now that the typinfo facade
+(`cfa72767f`) has landed and wall 2 is fixed. **This time with no stubs at all** —
+the earlier partition was measured through a stubbed copy, and stubs are what
+made it a partition rather than a compile.
+
+**Binary `ea689da902bb`. `generics.defaults.pas` now reaches line 2411.**
+
+| wall | status now |
+| --- | --- |
+| 1 — typinfo | **gone**: the facade covers it; no stub needed anywhere |
+| 2 — generic method header binding | **gone**: fixed `042bcbb32` |
+| 3 — nested `specialize` in expression position | not reached yet |
+| 4 — SysUtils gaps | not reached yet |
+| 5 — method pointers | **the current blocker**, 28 sites |
+
+So two of the five walls are genuinely down, and rung 6 is now behind **one**
+defect rather than a list. That is a materially better position than the
+partition described, and it was worth re-measuring rather than assuming.
+
+### Wall 5 turned out to be bigger than filed, and the first boundary was wrong
+
+Filed as "the address of a virtual class method cannot be lowered". Measuring
+eight shapes instead of four shows it is **two independent defects**, and
+neither is really about `virtual`:
+
+- **a CLASS method cannot become a method pointer at all** — `m := TSvc.CPick;
+  m(5)` segfaults with no cast anywhere, while the instance twin works;
+- **an inline cast of a method reference fails even for an instance method** —
+  going through a variable works, casting in expression position does not.
+
+Full table, repro and direction:
+[[bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults]] (p70). The
+`virtual` ticket is its honest-exit sibling — same shape, `IR_UNSUPPORTED`
+instead of a bad pointer.
+
+**Worth recording how the first table went wrong**, since this section is where
+the method gets described: four shapes looked like a clean boundary
+("everything adjacent works, only the inline cast is broken") and the two rows
+that separate the defects — `class → var`, and `instance` with an inline cast —
+had not been tried. The fix that boundary implied would have left half the bug
+in place. Vary the shape until the table has no untested neighbours, not until
+it looks tidy.
