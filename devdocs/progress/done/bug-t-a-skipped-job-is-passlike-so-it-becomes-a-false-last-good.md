@@ -284,4 +284,4 @@ to say *this range cannot mean what it appears to mean*, joining `first_seen`,
 mechanism was needed, exactly as the triage predicted.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit 0dec0194a.
