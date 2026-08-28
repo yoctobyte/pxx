@@ -20,11 +20,21 @@ surface that corpus needs.
 
 ## 1. `EArgumentOutOfRangeException` — 3 sites in `defaults`, many in `collections`
 
+> **[annotation 2026-08-28, frankA — the measurement below is left as recorded;
+> only this pointer is added]** The site count is **7**, not 3, in
+> `generics.defaults.pas`. See `bug-p-a-resourcestring-is-not-addressable`.
+
 `lib/rtl/sysutils.pas:157` has `EArgumentException = class(Exception) end;` but
 not the out-of-range descendant. Delphi/FPC declare it as a descendant of
 `EArgumentException`. One line.
 
 ## 2. `Exception.CreateRes(@ResourceString)` — 3 sites
+
+> **[annotation 2026-08-28, frankA — same]** Also **7**, and it is *the same
+> seven lines* as §1 (2960, 3049, 3075, 3078, 3182, 3218, 3221): each spells
+> both symbols, so these two sections are **one measurement filed twice**, not
+> two counts agreeing. Corpus-wide: **28** `CreateRes(@…)` sites, 18 of them in
+> `generics.collections.pas`. See `bug-p-a-resourcestring-is-not-addressable`.
 
 The resource-string constructor, called as
 `EArgumentOutOfRangeException.CreateRes(@SArgumentOutOfRange)`. It takes a
