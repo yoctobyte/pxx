@@ -11118,3 +11118,107 @@ the census cannot see.
 `feature-b-random-tier1-consume-the-hw-entropy-intrinsics`, `feature-networking`).
 Ranker order between ties is arbitrary and **frankB's judgement about which is real
 beats it — five of five batches tonight were stale.**
+
+## Track B is DRY of real work down to and including p40
+
+frankB landed both genuine p40s (`264ea52ab` random tier-1, `bd8293f07` FPC signal
+compat) and **correctly refused the third as an umbrella.** Remaining: p30 (the dns
+ticket, split below), p20 minidom, p12 string-template — plus two tickets that
+**mis-signal as work**.
+
+### The night's tally, and the heuristic frankB drew from it
+> **Seven premises measured, five stale, two real — and both real ones were "the
+> compiler half landed, the RTL half is a few lines". A shape worth trusting on
+> sight.**
+
+**Third instance today of "the capability existed; the premise was a claim about a
+search":** `PalIgnoreSignal` already exported from `lib/rtl/platform.pas` (so the
+ticket's *"if the runtime cannot express ignore, file a Track A ticket"* branch was
+never reachable), after `codecs`/`urllib.request` resolving under different shim
+names, and `cparser.inc:9373` already emitting the crtl warning.
+
+### What made the two landings finished rather than plausible
+Negative controls **aimed at each ticket's own stated risk** — the version that
+cannot be gamed:
+- Pinning the signal trampoline to a constant → `per-signal-number=FAIL usr1=3
+  usr2=0`, **the ticket's predicted bug produced on demand.**
+- Mapping `SIG_IGN` onto `SIG_DFL` → killed by SIGPIPE, **exit 141**, `ignore=`
+  never printed. Turns "implement this honestly" from a worry into an observation.
+- RDRAND verified exercised **for the right reason** (probe TRUE, `rdrand` in
+  `/proc/cpuinfo`, three distinct draws) — **passing through the not-available
+  branch looks identical from outside.** And `v` is re-zeroed on the give-up path
+  because **RDRAND leaves its destination zero on failure**, which is exactly the
+  case the Boolean exists to prevent.
+- `{$error}` guard: the define is `CPUX86_64`, not `CPU_X86_64` (measured). **The
+  half that mattered was what the else branch must NOT do** — an empty unit would
+  satisfy a `uses` clause and provide no dispositions at all, *worse than not
+  building.*
+
+## Two tickets that MIS-SIGNAL as work — both recorded for the owner, neither re-ranked
+
+| ticket | prio | reality |
+| --- | --- | --- |
+| `feature-crtl-implement-libc-assumptions` | p45 | empty collector; census now guards the class automatically |
+| `feature-networking` | p40 | **umbrella, mostly already delivered** |
+
+`net.pas` exposes `TNetSocket`/`TNetAddress` with **IPv4 and IPv6**,
+`NetTcpListen`/`Connect`; `asyncnet.pas`, `sockets.pas`, `baseunix.pas` all exist;
+lib-test carries 66 net-related lines exercising async DNS, IPv6, TLS and
+cross-target net PAL; its **First Milestone (TCP client/server, UDP loopback) is
+met**. What remains is spread across lanes and partly blocked — Synapse compat
+behind `feature-mimic-fpc` and `{$mode delphi}` **plus tonight's spliced-token-stream
+bug**; the ESP backend is Track S; the `Posix.*` dual-facade is a design programme
+whose decision log stops at **2026-06-19**.
+
+> **That is a programme to split or demote, not a Track B ticket to open.**
+
+**`prio:` untouched on both — the owner's field.** But a p40/p45 that is not work is
+the same defect as a stale ticket at the head of a queue: it misdirects whoever
+ranks next.
+
+## The generator vs the instance — filed separately on purpose
+
+frankB filed `bug-p-fatal-directive-is-silently-ignored` [P, p35] and **flagged, but
+did not file, the sweep behind it.** Verified:
+
+```
+grep -c "else if CaseEqual(command" compiler/lexer.inc   ->  34   (no terminal else)
+```
+
+So **any directive outside those 34 is silently consumed — no warning, exit 0.**
+Filed as `bug-p-an-unknown-compiler-directive-is-silently-ignored` [P, p35]
+(`2440206d2`), deliberately separate:
+
+> **Fixing `{$FATAL}` closes that ticket and leaves the generator intact.** The
+> double-case rule with an *unbounded* sibling: normally you grep for the other arm,
+> here the other arms are however many directives exist that we do not handle. **A
+> finding buried in the ticket that carried it dies when that ticket dies.**
+
+frankB's reasoning for why this is not a diagnostic-parity nit generalises to the
+whole class:
+> **Ignoring a directive does not change a MESSAGE — it changes whether an ARTIFACT
+> EXISTS.** A source saying *"this configuration is unsupported, do not build"* gets
+> built.
+
+Silent-wrong-behaviour escape, not the deferrable "our diagnostic differs" row. The
+sweep ticket also carries the design fork (hard error breaks sources using inert
+vendor pragmas; silence is the current bug; a naming warning plus a small
+known-inert allow-list is the likely answer) and the instruction to **manufacture a
+disagreement** rather than trust one extraction of either side.
+
+## Last B dispatch: the CERTAIN half of the dns ticket, split from the uncertain half
+
+`bug-b-lib-dns-libc-failed-once-in-the-gate-and-claims-a-hermeticity-it-lacks`
+[B, p30] holds two claims of very different quality. **Dispatched the certain one
+only:** `test/lib_dns_libc.pas:17` claims *"NO NETWORK: every lookup is
+`localhost`"* while line 108 resolves `nonexistent-zzz-qqq.invalid` — **verified by
+the coordinator**, small, and a real hazard (it behaves differently on a box with no
+resolver, and it misleads anyone diagnosing the very intermittent the ticket is also
+about).
+
+**The flake stays open.** *One failure is not a cause; fifteen non-reproductions are
+not an absence.* Chasing it tonight is not worth it; fixing the false header is.
+
+**After that B is genuinely dry** (p20 minidom, p12 string-template). **That is a
+legitimate stopping point, and whether frankB continues past it is the owner's call
+rather than work for the coordinator to manufacture.**
