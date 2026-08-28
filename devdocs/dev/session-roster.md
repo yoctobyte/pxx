@@ -9967,3 +9967,83 @@ reason it waited last night**, which is the correct reason and not a slip.
 Note the shape of the second and third: **a fix that increases resource pressure,
 and a change to the human's own machine's behaviour, are both things a lane
 should decline to land on its own initiative even when the change is right.**
+
+## My synapse hypothesis was WRONG — v389 is innocent, and the RANGE was a false window (frankB, `6940eed2e`)
+
+I dispatched frankB with "hypothesis 1, and it is mine: v389 parses
+`dns_cache.pas` differently than v388." **Falsified in one command, no bisect:
+v388 `e8b72f8afeb6` and v389 `325b4479070a` fail identically.** Hypothesis 2 (the
+typinfo/exception RTL work) fell too — frankB built each in-range state's own
+`lib/`+`test/` into a scratch dir with `git archive` (no tree mutation) and every
+one fails, **including `aca7f699288e` itself, the declared LAST GOOD, compiled
+with v388, the pin actually in force at that sha.** The defect predates the range
+entirely.
+
+**Worth being explicit that the dispatch was still right.** Ordering the
+falsification first, as one command before touching any source, is what made a
+wrong hypothesis cost five minutes instead of a session. **A hypothesis you own
+is the one to test first precisely because you are the worst-placed person to
+weigh the evidence for it.**
+
+### Why it looked like a regression — the sentinel rule, one level up
+`twatch.py:1514` has `PASSLIKE = ("pass", "skip")`, and the red predicate
+everywhere (`:1729`, `:5028`, `:5206`, `:5496`) is `status not in
+("pass","skip")`. `external/synapse` is corpus-gated in `testmgr.py`'s
+`CORPUS_ROOTS`, so with the tree absent the job SKIPs — correct on its own terms.
+**But a SKIP is then indistinguishable from a PASS when the LAST-GOOD sha is
+chosen.** The corpus landed on plexus before `c52fc38`, the job ran **for the
+first time ever**, and a first-ever run was published as a regression over nine
+innocent commits.
+
+> **Green that means "did not fail" cannot anchor a bisect. Only green that means
+> "ran and passed" can.**
+
+Corroborated rather than argued: `plexus.json` shows `lib_synapse_ssl` and
+`lib_synapse_transitive_unit` both `pass` now, so the corpus is present and only
+one `uses` shape fails. Filed `bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-last-good`
+[T, p60, `backlog/`] with a suggested direction (last-good per job on `pass` only;
+keep `skip` PASSLIKE for the *run* verdict) — **filed, not prescribed**; it is T's
+tool and T's call.
+
+**This is the seventh member of the quiet-affirmative family and the most
+expensive**: it did not merely hide a failure, it *manufactured* a regression and
+pointed nine commits and two lanes at it.
+
+## The real defect: `bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream` [A, p70, `backlog/`]
+
+Not Track B. `dns_cache.pas` and `sockets.pas` compile standalone under
+`--mimic-fpc`, as does every unit in the chain individually. Four-line
+deterministic repro, `-O`-independent:
+
+```pascal
+program z;
+uses synacode, synaip, blcksock;
+begin
+end.
+```
+
+**The tell is in the `near:` context — `n end end >>> procedure FlushGroup$126591`.
+`FlushGroup$126591` is a GENERATED name that appears in no source file**, so the
+parser ran off the end of one unit and kept reading into another's token stream.
+And the reported `dns_cache.pas:270` is **past EOF — the file is 269 lines.**
+
+> Told frankB that 270 was the symptom's location and not the defect's. It is
+> worse than that: **the reported FILE is not merely the wrong one, it is just
+> where the parser gave up.** Different `uses` lists report against different
+> files (`dns_cache.pas:270`, `sockets.pas:634`) with the identical `n end end >>>`
+> shape.
+
+All three *pairs* pass; **only the triple fails, and only with `blcksock` last.**
+Moving it first or middle cures it; so does prepending `sysutils`. Two of our own
+units in front (`dns_wire_core`, `typinfo`) do NOT trigger it — **so it is the
+state of the unit table when `blcksock`'s deep chain is entered, not the identity
+of the units.** Ordering table is in the ticket.
+
+Now the head of Track A's queue (p70, unblocks 1). `regression-lib-test-lib-synapse`
+moved to `blocked/`.
+
+**Housekeeping frankB did right and stated:** fetched `external/synapse`
+(gitignored, nothing committed); extracted historical pinned binaries into the
+tracked `stable_linux_amd64/default/` for the v388 comparison and **removed
+them**, tree clean; landed `29d93c969` (`nilpy_ladder --probe`) once cleared; and
+took the docs-first rule — the triage went out as its own docs-only commit.
