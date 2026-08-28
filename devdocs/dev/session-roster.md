@@ -10501,3 +10501,84 @@ normalise smell, from the lane that had just refused a *wrong* merge on
 line-at-a-time programs; and **the fd position after `Close`** — a reader that has
 read ahead leaves the descriptor somewhere the caller never asked for. That last
 is the trap found in production, not in review.
+
+## Buffered Text I/O landed (frankB, `60ce87f79`) — and the normalise boundary now has a canonical worked example
+
+**1,088,892 `read(2)` calls → 268. 1.56s → 0.30s. Byte-identical output.** Same
+program, 1,088,890-byte file, `lib/rtl` before and after on v389, best of 3.
+1,088,892 calls for 1,088,890 bytes is one syscall per byte plus two — **the
+filing's claim confirmed on the nose**, which is the point of ranking it on the
+performance case rather than on `SetTextBuf`'s signature.
+
+Verified from the coordinator side: `HasPeek`/`Peek` are genuinely **gone** from
+`textfile.pas` (not shadowed, not left behind), and the shim batch is in `done/`.
+
+### THE WORKED EXAMPLE — same doctrine, opposite answers, one lane, one session
+| | verdict | why |
+| --- | --- | --- |
+| `TFIsSpace` vs the seek **skip** set | **refused the merge** | tokeniser's DELIMITER set vs the seek routines' SKIP set — `#26` belongs only to the second; `#10`/`#13` must **stop** `SeekEoln`. They merely **overlap**. |
+| peek slot vs buffer cursor | **forced the merge** | the only byte anyone may push back is the one `TFNextByte` just handed over, still at `BufPos-1`. Nothing to store, nothing to sync. **One concept.** |
+
+> **`normalise-dont-special-case` gets misread in exactly one direction — as an
+> argument to merge whatever looks similar. Two sets that OVERLAP are not one
+> concept; two mechanisms answering the SAME QUESTION are.**
+
+**The real work was DELETING `HasPeek`/`Peek`, not adding a buffer.** A buffer
+placed *underneath* a retained peek slot would have produced the identical
+speedup and left the defect — two lookahead mechanisms for one concept. Applied as
+a **single asserted transaction**, because half-applying it produces the bug it
+removes: **permission to bank partial work is not permission to bank a partial
+INVARIANT.**
+
+`TextReadLn` keeps its own loop for its original reason (it must not set
+`LastIOResult` on success, or it clears a stale code a `{$I+}` region's
+`PXXIoCheck` can still see) — but that distinction moved into `TFFillEx`'s `quiet`
+flag instead of a duplicated read. **Same contract, one mechanism.**
+
+### The seekability probe: one test that cannot drift out of sync with what it gates
+Buffering is gated on `PalSeek(h,0,SEEK_CUR) >= 0`. A pipe or terminal **cannot be
+rewound** *and* **must not be read ahead on** — so **the probe's failure IS the
+answer** and no `isatty` is needed. Same property as the merged cursor: nothing to
+keep consistent.
+
+**fd trap closed at the syscall level, not by reading the code** — `lseek(3, -4045,
+SEEK_CUR) = 51` for a 50-char line plus newline. Exact, not approximately right.
+
+### Two limits stated against itself, before anyone asked
+- **`Input`/`Output` are never buffered**, even when stdin is a redirected regular
+  file that would pass the probe — there is no `Close` at which to rewind, and a
+  program that reads a line then execs a child sharing fd 0 would hand it a
+  position nobody asked for. **So the numbers above are FILE-READ numbers only.**
+- **The write side is untouched; `Flush` is still a no-op.** Mixing buffered writes
+  into the same handle is where a half-migration silently corrupts output.
+
+Gate read correctly: REAL EXIT redirected not piped; the four Text suites asserting
+**cursor position** rather than values all pass — *the* property a buffering change
+threatens, and the reason writing them that way this morning paid off within hours;
+synapse caveat repeated unprompted; one `FAILED` hit chased to a Makefile comment
+rather than waved through.
+
+## `weakref` NAMED AND NOT FILED — a real disposition, and the right one
+
+3 files (`html5lib/treebuilders/dom.py` + 2 reportlab), 3 members (`ref`, `proxy`,
+`WeakKeyDictionary`). frankB declined to file it:
+
+> **A weak reference that isn't weak is a lie about lifetime.**
+
+Same category that kept `SetTextBuf` out the same day, reached independently. A
+strong-ref `mimic_weakref` would work while making `ref() is None` unreachable and
+letting `WeakKeyDictionary` grow unbounded — **a shim that passes its tests by
+removing the semantics it exists to provide.** If ever wanted it needs a U decide
+first; at 3 files with nothing ranked behind it, filing that now is noise.
+
+> **Not filing, with the reason recorded in the resolution, is a real disposition
+> and lanes should do more of it.** The backlog's cost is not per-ticket — it is
+> per-ticket-that-must-be-read-and-skipped.
+
+## Dispatched: `bug-b-the-fpc-vartype-constants-are-missing` [B, p55, `backlog/`]
+
+Flagged the adjacency without prescribing scope: `feature-b-vartype-speaks-fpc-varxxx-codes`
+and `bug-b-varisstr-is-false-for-a-one-character-string` sit at p45 behind it.
+**If the constants are the same defect as the codes, take them together rather than
+closing one and leaving its twin ranked** — the double-case rule, and `varisstr`
+being wrong for a one-character string smells like a possible third arm.
