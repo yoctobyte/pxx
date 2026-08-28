@@ -11665,3 +11665,80 @@ Worth recording why the second instance is stronger than the first: frankB's was
 control that **happened** to fire; frankwasm's was **predicted, constructed, and confirmed
 within the hour.** That upgrades the claim from *"this can happen"* to *"this is findable on
 demand"*, which is the actual argument for auditing the whole suite.
+
+### 2026-08-28 — a coverage count that went DOWN, and the grep that could not fire
+
+**frankwasm withdrew a lowering and reported the smaller number.** `PXXVarBinOp` and
+`PXXVarNot` lowered for about an hour and lowered **wrongly**: a managed string's slot is
+pointer-sized, so `m := 'lit'` took the scalar store path and wrote the address of the
+literal's frozen `[len][chars]` blob as a heap handle. **The module validated, ran, and
+every later read was off by the 8-byte prefix** — `s := m` yielding
+`0c 00 00 00 00 00 00 00 from ma` where FPC and x86-64 both give `from managed`. It now
+refuses by name and those two bodies went back to unlowered.
+
+Its own verdict on the earlier report to me: *"true and worthless."* The coverage metric
+counted **lowering**, not **correctness** — a fresh instance of a rule already on this
+list (*a measurement of a proxy is not a measurement of the system*), and the first one
+caught by the lane that owned the proxy rather than by a reviewer.
+
+> **A count that falls because a wrong lowering was withdrawn is the only kind of falling
+> count worth reporting.** Shipped: `string[N]`, `ShortString`, record field, parameter —
+> literal/Char/frozen-to-frozen/empty sources, truncation in three shapes, `Length`,
+> indexing, const and by-value params, twelve lines diffed against native. **123 of 128**,
+> `gate.sh quick` GREEN.
+
+### The ABI oracle's invariant is enforced by a grep that matches nothing
+
+frankwasm hit this in one backend; I checked whether it generalised, and it does.
+`abi.inc` states the invariant — *"Backends consult the oracle and never re-derive the
+convention from `Syms[]`"* — and names its own enforcement: grep `ir_codegen*.inc` for a
+`Syms[...].IsRef or` chain.
+
+```
+grep -rn "IsRef or" compiler/ir_codegen*.inc | wc -l   →   0
+```
+
+**The declared review clause cannot fire.** Meanwhile `ir_codegen_riscv32.inc:1549-1566`
+decides `IR_LEA`'s parameter-address question — verbatim what `ABIParamSlotHoldsValueAddr`
+exists to answer — with a hand-written chain over `IsArray`/`IsRef`/`TypeKind`, spelled
+`and ... and not`. The grep is calibrated to a **spelling**, not to a **shape**.
+
+The file predicted its own failure mode (*"no test would have caught a ninth drifting"*),
+proposed a detector, and the detector reports clean on a tree where drift has begun. Filed
+`bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire` [A, p45], written
+around making the check able to fail first and auditing second — **with the requirement
+that its first run produce a non-empty baseline, because a new check whose first run is
+clean has proved nothing.**
+
+The cost frankwasm actually paid is the part that makes it p45: reading the proc's
+declaration record instead of the parameter's SYMBOL made `const x: ShortString` report
+**"no wasm value type"**, so callee and call sites went unreachable. **A missing
+CONVENTION reported as a missing TYPE** — the next person follows the message and hunts a
+type mapping that does not exist.
+
+**Third structural instance this week** of one generator: the ifdef chains with no
+terminal else, the directive chain with no final else, and now a review clause that cannot
+match. **A check that cannot fail and a check that is passing are the same observation.**
+
+### The .wat oracle caught what the .wasm structurally could not
+
+Locals are **indices** in the binary and **names** in the text. A local allocated per SITE
+rather than per body (`$fzdst` for a second frozen store, `$newobj` for a second
+allocation) costs the binary nothing and makes the text module invalid. The `.wasm`
+validated, ran, and matched native throughout; only the second encoding disagreed.
+
+Second instance of the type-numbering catch: **two encodings from one generator still
+disagree, and that is the cheapest manufactured disagreement available** — not a second
+implementation, a second *representation* the same code must satisfy. Fixed in
+`WasmAddLocal`, not at the callers, because the callers are right to want a fresh local
+per site and making each invent a distinct name asks every future one to remember.
+
+Refused by name and correctly **not** attempted: a frozen string as a RESULT. That is
+`abi.inc`'s `RetViaHiddenDest`, **one mechanism shared by records, sets, variants and
+promotable ints** — all five arrive together when the extra i32 param is threaded through
+signature, call sites and epilogue. The refusal names the convention, not the type.
+
+**Phase 7 watch item for the coordinator:** frankwasm is tracing the design doc's
+shared-file escape before writing code, and it concerns `exception_emit.inc` — a **shared
+Track A file**. Both previously predicted escapes dissolved on inspection. If this one
+does not, it is an A ticket and I need to know before anything is edited.
