@@ -14,23 +14,37 @@
 #     PXXStrIncRef / PXXStrDecRef. Something that produced the right characters
 #     by storing a pointer would pass the diff on this slice and corrupt a
 #     longer one;
-#   * the WRITE-POSITION shapes must still refuse BY NAME. IR_LEA of a managed
-#     string is position-dependent in the register backends (read => the
-#     handle, write => the slot address) and this target does not model the
-#     position; it returns the handle, which is correct only while every write
-#     shape refuses somewhere else. That is an argument from what refuses, so
-#     it is CHECKED rather than trusted;
-#   * a POSITIVE TWIN for that negative: the slice itself must refuse nothing.
+#   * a POSITIVE TWIN for the negatives: the slice itself must refuse nothing.
 #     "These refuse" passes vacuously on a build where everything refuses, and
 #     that is exactly the state this phase started in.
 #
-# This check originally listed THREE refusals and one of them was wrong.
-# Concatenation was in the list because it refused, not because it was a write
-# position — an operand of `a + b` is read, and no answer here ever depended on
-# it. The slice-2 lowering made that check fail, which is how the mistake
-# surfaced: a list assembled from "what currently refuses" rather than from
-# "what this argument needs" contains everything that happens to be missing.
-# The two that remain are write positions and the reason is stated for each.
+# THE REFUSAL LIST IS GONE, and how it went is the point. It listed the write
+# positions — SetLength and `s[i] := c` — because IR_LEA of a managed string
+# answered HANDLE unconditionally, which is right only while no write can
+# reach it. That was an argument from what refuses, so it was checked rather
+# than trusted, and it failed twice.
+#
+# The FIRST failure was a mistake in the list: concatenation was in it because
+# it refused, not because it was a write position, and slice 2 exposed that a
+# list assembled from "what currently refuses" rather than from "what this
+# argument needs" contains everything that happens to be missing.
+#
+# The SECOND failure was the list working exactly as designed. Slice 3 lowered
+# both remaining entries, so the check went red on a correct change — which is
+# what it was for. The response is NOT to trim the list to green: with both
+# entries gone there is no argument left to support, and a trimmed list would
+# have been an empty assertion sitting under a paragraph claiming a property
+# the build no longer has. The argument was REPLACED. This target now models
+# the position with InLValueWrite, the way the other four backends do, and the
+# assertion that it does — PXXStrUnique present in write position, absent in
+# read — lives in check_index.sh, which owns those shapes.
+#
+# What still guards it HERE is the diff above, and not by accident: removing
+# the write arm of IR_LEA makes this slice TRAP rather than diverge (measured
+# — a store lands in the handle slot and scope exit releases the wreckage), so
+# the read-position answer this script depends on is load-bearing in its own
+# output. That is a stronger guard than the refusal list ever was, because it
+# fails on the mechanism rather than on the mechanism's absence elsewhere.
 #
 # HONEST SCOPE, and it expires mechanically. The wasm32 heap arena still starts
 # at address 0 — bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero,
@@ -67,8 +81,8 @@ if grep -qE '^    (Make|Fill|Local|main\$0) ' "$work/cov.txt"; then
   grep -E '^    (Make|Fill|Local|main\$0) ' "$work/cov.txt"
   exit 1
 fi
-echo "ok  every routine in the slice lowered — the refusal checks below are"
-echo "..  therefore about those shapes and not about a broken build"
+echo "ok  every routine in the slice lowered — the mechanism checks below are"
+echo "..  therefore about real code and not about a broken build"
 
 cat > "$work/run.js" <<'JS'
 const fs = require('fs');
@@ -126,35 +140,23 @@ fi
 echo "ok  a managed slot is zeroed in the prologue, ahead of anything that"
 echo "..  could read it as a live handle"
 
-# The write-position shapes. Each must refuse, and each must refuse BY NAME —
-# a generic 'IR op 42' would mean the refusal moved and no longer covers what
-# this depends on. SetLength publishes a new handle into the slot; an indexed
-# write needs the slot address for PXXStrUnique's copy-on-write. The third
-# write position — a `var string` argument — is covered differently: it does
-# not lower through IR_LEA on this path at all, measured rather than refused,
-# and the slice passes `Fill(s)` to prove it lowers and gives the right answer.
-mk() { cat > "$work/neg.pas" <<EOF
-program Neg;
-var s: string;
-begin
-$1
-end.
-EOF
-"$root/compiler/pascal26" --target=wasm32 "$work/neg.pas" "$work/neg.wasm" \
-    > "$work/neg.txt" 2>&1 || true
-}
-check_neg() {
-  mk "$1"
-  if ! grep -qF "$2" "$work/neg.txt"; then
-    echo "FAIL '$1' no longer refuses with: $2"
-    cat "$work/neg.txt"
-    exit 1
-  fi
-}
-check_neg "  s := 'abc'; SetLength(s, 2);" "builtin SetLength"
-check_neg "  s := 'abc'; s[1] := 'z';"     "indexing a managed string"
-echo "ok  SetLength and indexed write still refuse by name — the two write"
-echo "..  positions IR_LEA's read-only answer depends on"
+# The read-position answer, asserted directly rather than through what refuses.
+# Reading a managed string must NOT clone it: PXXStrUnique is the write-side
+# call, and its appearance in a body that only reads would mean the position
+# model had collapsed to "always write" — which is invisible in output, since
+# cloning a string you are about to read gives the right characters and merely
+# leaks. Scoped to this slice's own bodies: a module-wide grep would start
+# answering about the RTL the moment anything in it uses the routine, which is
+# the exact way check_strop's negative control went vacuous.
+if awk '/\(func \$(Make|Fill|Local|main\$0) /,/^  \)/' "$work/m.wat" \
+     | grep -q 'call \$PXXStrUnique'; then
+  echo "FAIL a read of a managed string clones it — PXXStrUnique appears in a"
+  echo "     body of this slice, which only reads. Read position must hand back"
+  echo "     the handle."
+  exit 1
+fi
+echo "ok  reading a managed string does not clone it — the write-side call is"
+echo "..  absent from every body here (check_index.sh owns the positive half)"
 
 # The scope note above, made falsifiable. When the heap ticket lands this
 # fails, and the note has to be rewritten rather than outliving its cause.

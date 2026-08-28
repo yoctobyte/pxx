@@ -334,11 +334,13 @@ _none_
 | task-d-document-warn-ignored-directives | D | 20 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (4)
+## backlog_new (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64 | A | 70 | bug | x86-64 releases an owned managed-string operand after a CONCAT (ir_codegen.inc:6105/6110) and not after a COMPARISON, so `if F(x) = 'lit'` leaks F's result on every evaluation — 40 bytes per iteration, measured as 401032 bytes over 10000 iterations against 1032 on wasm32 and 0 under FPC. Present on x86-64 ALONE: i386, arm32, aarch64 and riscv32 each carry the release at all THREE sites (concat, equality, ordered), x86-64 at one. Exact mirror of bug-a-a-string-function-result-in-a-concat-leaks-on-every-cross-target, which was the same predicate missing from the four cross backends while x86-64 had it. Silent, unbounded, and in one of the most common idioms in the language. | — |
 | bug-a-a-typed-const-record-is-built-by-startup-code-not-stored-as-data | A | 35 | bug | The sibling of bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data, which fixed the SCALAR array case only. A typed const whose element or type is a RECORD is still BSS plus generated stores: measured at 116 bytes of code per 16-byte record — the same ~29 bytes per field the original ticket measured — while an Integer array of identical total size costs zero code and lands in .data. Found by the wasm32 lane, where it is not a size issue but a correctness one: the emitted stores are top-level chunks, and a target whose startup does not run reads zeros. | — |
+| bug-a-emitzeroframeslot-has-no-wasm32-arm | A | 55 | bug | EmitZeroFrameSlot (compiler/symtab.inc:10074) is the single owner of the zero-init contract and dispatches per target with a terminal else that calls Error. There is no wasm32 arm, so any program whose lowering mints a hidden managed temp dies with `compiler error: EmitZeroFrameSlot: unhandled target` before codegen — measured on test/test_dynarray_insert_delete.pas. It FAILS LOUD, which is the correct failure mode and the reason this is prio 55 rather than 70: unlike HeapMmap and PXXSysWrite (two chains in the same family that fail OPEN), nothing silently produces a wrong answer. Carries one open design question: the wasm32 backend now zeroes its own managed scalars in its prologue, so the arm may need to cover only the kinds that pass does not. | — |
 | bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero | A | 70 | bug | HeapMmap in compiler/builtin/builtinheap.pas is a chain of per-target {$ifdef}s with no wasm32 arm, so on wasm32 it assigns Result nothing and returns 0. PXXAlloc does not check the result (on Linux a failed mmap returns a negative errno that faults on access), so the heap bump pointer starts at 0 and hands out addresses 8, 32, 56... Measured: two objects at 8 and 32, both readable and correct. It works until roughly 1 KB has been allocated and then silently overwrites BSS, because address 0 is a legal wasm address with no page protection. Fix is one additive arm, exactly the shape the PXX_ESP static arena already has. | — |
 | bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open | A | 60 | bug | The per-CPU {$ifdef} chains in compiler/builtin/builtinheap.pas have no terminal {$else}, so a target with no arm gets whatever the pre-chain default was — and for PXXSysOpenRO and PXXSysLseek there is no default at all: Result is NEVER ASSIGNED. Both are guarded only by {$ifndef PXX_ESP} and have arms for x86-64/i386/arm32/aarch64 only, so on HOSTED RISCV32 and on wasm32 they compile and return the return slot's leftover contents. PXXStrLoadFile then does `if fd < 0 then Exit` on that garbage and, if it happens to be non-negative, calls PXXAlloc(size + ...) with an equally garbage size. Four instances of the same generator shape in this one file; the systemic fix is a terminal else that fails LOUD, not four more arms. | — |
 | refactor-a-target-dispatch-chains-fail-open | A | 50 | refactor | Not a missing-helper ticket: TARGET_PTR_SIZE exists and is read at 129 sites. The narrow, verified gap is that several per-target if/else-if chains have no final else, so adding target #7 (wasm32) or #8 (riscv64) matches no arm and configures nothing, silently. lexer.inc:936 is the worked example. Fix is a mandatory else that Errors, not a collapse of the 180 TargetArch sites — util.inc:87 already documents why collapsing is wrong. | — |
@@ -635,6 +637,7 @@ _none_
 - [p 75] [P] feature-pascal-corpus-oop
 - [p 72] [N] feature-nilpy-stdlib-coverage-gaps-measured
 - [p 70] [A] bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream (unblocks 1)
+- [p 70] [A] bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64
 - [p 70] [A] bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero
 - [p 70] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - [p 70] [N] feature-nilpy-staticmethod-and-classmethod
@@ -679,6 +682,7 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3) [parked — re-claim, do not duplicate]
 - [p 55] [A] feature-nilpy-object-reclamation (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 55] [T] feature-t-freebsd-image-and-runner (unblocks 1)
+- [p 55] [A] bug-a-emitzeroframeslot-has-no-wasm32-arm
 - [p 55] [A] bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice
 - [p 55] [N] bug-n-a-field-assigned-from-a-module-global-expression-is-refused
 - [p 55] [N] bug-n-a-keyword-argument-through-a-class-value-is-refused-at-runtime

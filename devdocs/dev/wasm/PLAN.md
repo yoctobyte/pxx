@@ -898,6 +898,83 @@ that check fail, which is how the mistake surfaced. **A list assembled from
 everything that happens to be missing**, and only the failure distinguishes the
 two.
 
+## Phase 8c — managed strings, slice 3: indexing and SetLength — **DONE 2026-08-28**
+
+The histogram picked this a third time: 15 of the 17 refusals left after slice
+2 were `indexing a managed string` (12) and `builtin SetLength` (3). They are
+one question asked from two ends — both need the **slot's address**, so that
+`PXXStrUnique` (copy-on-write) or `PXXStrSetLen` (resize) can publish a NEW
+handle into it — which is why they landed together and why neither could land
+before a position model existed.
+
+**The `IR_LEA` argument was replaced, not extended.** Slices 1 and 2 answered
+HANDLE for every `IR_LEA` of a scalar managed string, and the justification was
+never that reads are the only position: it was that every write-position
+consumer refused *somewhere else*, so no write could reach that line. That is
+an argument from what currently refuses, so it was written down rather than
+trusted — and slice 3 is what invalidated it, because `s[i] := c` and
+`SetLength(s, n)` are precisely the two shapes it named. With both lowering,
+there is nothing left to support; trimming the list would have left an empty
+assertion under a paragraph claiming a property the build no longer has.
+
+**The position model is the shared global `InLValueWrite`, not a private
+flag.** `defs.inc` states the IR contract for `IR_LEA`, `IR_INDEX` and
+`IR_DYNUNIQUE` in terms of that global (`defs.inc:747`), so a second flag would
+have been a second, undocumented contract. It is safe as a global because no
+backend ever leaves it set: every site saves and restores, and it is False
+between statements. Set at the three destination walks (`WasmEmitStoreMem`,
+`WasmEmitManagedStore`, `WasmEmitFrozenStore`) and at `IR_SETLEN_STR`'s slot
+node; **reset** around `WasmEmitIndex`'s index sub-expression, because the index
+is a READ even when the whole `IR_INDEX` is a write target.
+
+**Both non-scalar shapes were handled from the start.** A managed string that
+is itself a record field or an array element is a slot address in *both*
+positions, so the read case needs its own load — riscv32 and arm32 each shipped
+the scalar-only version and had to fix it a second time
+(`bug-a-riscv32-setlength-on-string-array-element-loses-length`). Writing the
+second shape in the same change costs three lines here and cost them a ticket
+each.
+
+**Every mechanism was falsified before it was believed.** Four deliberate
+breaks, each run against the slice:
+
+| break | what happened |
+| --- | --- |
+| write case skips `PXXStrUnique` | `Xhared\|Xhared` — **only** the two aliasing lines caught it |
+| `IR_LEA` answers handle in write position | the slice **traps** |
+| no reset around the index expression | `a?c!` → `abcd`, one silent line |
+| `PXXStrSetLen` handed the handle | the program produces **no output at all** |
+
+**And one assertion was vacuous on first write — again.** The check meant to
+catch that last row grepped for an `i32.load` before the `PXXStrSetLen` call. A
+global's slot address is an `i32.const` and a local's is `fp+N`, so no load
+appears in either shape and the grep asserted nothing — while a `var s: string`
+parameter's slot address legitimately *is* a load, so the first one to reach
+the grep would have failed correct code. It was quantified over the wrong
+thing, in both directions at once. **Passing on first write is not evidence
+that an assertion is about what you think it is** — the second time this phase
+has learned that, after `check_strop`'s module-wide negative control.
+
+**The assertion that survived is the one a diff cannot make.** Collapsing the
+model to "always write" — cloning on reads too — gives the *right characters*
+and merely leaks: the slice diffs byte-identical (measured). So
+`check_index.sh` asserts the two positions emit **different code**: the same
+source one line apart, `c := s[1]` calling `PXXStrUnique` zero times and
+`s[1] := 'z'` calling it once. `check_managed.sh` keeps the negative half for
+its own bodies, scoped to them rather than module-wide.
+
+**The leak probe was taken at two counts by habit now, and both builds are
+clean** — 1000 and 9000 iterations of COW-plus-SetLength advance the arena by
+the same 1032 bytes on wasm32 *and* on x86-64. That agreement is evidence only
+because both slopes are zero; slice 2's lesson is that agreement with the
+reference is not the same as correctness, and the check says so where the
+figure is printed.
+
+**Result:** 231 of 236, up from 216. What remains is two real refusals —
+`IR_VAR_STORE` (a variant store) and builtin `-205` (`FloatToStr`) — plus three
+`IInterface` stubs that are declarations without bodies and not refusals at
+all. The `unreachable` scaffold comes out when the count reads N of N.
+
 **The other check corrected itself for the opposite reason.** `check_strop.sh`
 asserts the three RTL calls appear in the slice and in no program without
 string operators — and the negative half passed while it was written only
@@ -1140,3 +1217,38 @@ smaller than the C frontend was.
   differential can detect, since the output is unchanged. Asserted on a module
   from another suite, and asserted in both directions so the negative cannot
   pass by naming a symbol that no longer exists.
+
+### 2026-08-28 — slice 3: an argument replaced, and an assertion that was vacuous in both directions
+
+**When a check fails on a correct change, the check was doing its job — and
+the fix is upstream of the check.** `check_managed.sh` asserted that
+`SetLength` and `s[i] := c` still refused, because `IR_LEA` answered HANDLE
+unconditionally and that is sound only while no write can reach it. Slice 3
+made both lower, so the check went red. Trimming the list to green was
+available and would have been wrong twice over: with both entries gone the
+*argument* has no support left, and the paragraph above the list would have
+gone on claiming a property the build no longer had. Deleting the assertion
+without replacing the reasoning is how a design note quietly becomes false.
+
+**Reuse the shared mechanism unless you can say why not.** The position model
+is `InLValueWrite` — a global four other backends already use, and one `defs.inc`
+names when it states the IR contract for `IR_LEA` and `IR_INDEX`. A private
+wasm flag would have been tidier locally and would have been a second,
+undocumented contract for the same question. Sharing the mechanism means the
+wasm arm reads like the other four to whoever is comparing them, which is the
+whole value: this file's neighbours are what a reviewer diffs it against.
+
+**Falsify every mechanism, and record what each break actually broke.** Four
+deliberate breaks, four different failures — one caught by exactly two lines of
+a twenty-four line slice, one a trap, one a single silent line, one total
+silence. Knowing *which* line catches which break is what tells you the slice
+covers the mechanism rather than the feature.
+
+**An assertion that passes on first write has not yet been tested.** The
+`i32.load`-before-`PXXStrSetLen` grep was vacuous for both shapes it could see
+(a global's slot is a constant, a local's is `fp+N`) and would have failed
+*correct* code for the one shape it could not (a var parameter's slot address
+genuinely is a load). Wrong in both directions simultaneously, and green.
+That is the same failure as `check_strop`'s module-wide negative control one
+slice earlier: **check what an assertion is quantified over before believing
+it**, and prefer the property the diff cannot make over the one it can.

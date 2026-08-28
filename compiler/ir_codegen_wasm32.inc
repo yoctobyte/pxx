@@ -564,6 +564,7 @@ function WasmStrParts(node, scrLoc, scratchOfs: Integer;
                       valLoc, lenLoc, srcLoc: Integer): Boolean; forward;
 procedure WasmEmitAtomic(node: Integer); forward;
 function WasmStrSlot(k: Integer): Integer; forward;
+function WasmCallRtl(const nm: AnsiString): Boolean; forward;
 
 { The address at which the PASCAL VARIABLE `si` lives, which is not always the
   address of its slot. A var/out parameter's slot holds the CALLER's address,
@@ -898,30 +899,35 @@ begin
   end;
   if (Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray then
   begin
-    { A scalar managed string. IR_LEA on one is POSITION-DEPENDENT in the
-      register backends: read position yields the HANDLE, write position yields
-      the SLOT's address so a store can publish a new handle into it
-      (ir_codegen_aarch64.inc:1351). They tell the two apart with the global
-      InLValueWrite, which the shared walker never sets — every backend that
-      reads it also writes it, so on this target it is permanently False and
-      cannot be believed.
+    { A scalar managed string. IR_LEA on one is POSITION-DEPENDENT: read
+      position yields the HANDLE, write position yields the SLOT's address so
+      a store can publish a new handle into it (ir_codegen_aarch64.inc:1351).
 
-      This backend does not model the flag, and reaches the same answer another
-      way: the write-position consumers do not get here at all. `SetLength`
-      is builtin -102 and refused by name; `s[i] := c` is refused by
-      WasmEmitIndex; and a `var string` argument does not lower through IR_LEA
-      on this path (measured: `Fill(s)` lowers with this arm refusing). So
-      every IR_LEA of a scalar managed string that reaches this line is a READ,
-      and the handle is the right answer.
+      Until slice 3 this arm answered HANDLE unconditionally, and the argument
+      for that was not that reads are the only position — it was that every
+      write-position consumer refused somewhere ELSE, so no write could reach
+      here. That argument was written down rather than trusted precisely
+      because it is an argument from what currently refuses, and slice 3 is
+      what invalidated it: `s[i] := c` and `SetLength(s, n)` are exactly the
+      two shapes it named, and both now lower.
 
-      That is an argument from what currently refuses, which is the same shape
-      as the guard in WasmEmitBinop that held only by coincidence — so it is
-      written down rather than assumed: when SetLength or indexed assignment
-      lands on this target, the FIRST thing that change must do is decide how
-      write position reaches the slot address, not add a case beside this one.
-      check_managed.sh asserts the three refusals above still fire. }
+      So the argument is REPLACED, not extended. The position is modelled, and
+      it is modelled with the SAME mechanism the other four backends use —
+      the global InLValueWrite, set by whoever walks a destination and
+      restored after. Not a private wasm flag: defs.inc states the IR contract
+      for IR_LEA, IR_INDEX and IR_DYNUNIQUE in terms of that global
+      (defs.inc:747), so a second flag would be a second, undocumented
+      contract. It is safe as a global because no backend ever leaves it set —
+      every site saves and restores, and it is False between statements.
+
+      The set sites on this target are the three destination walks:
+      WasmEmitStoreMem's address, WasmEmitManagedStore's address, and
+      WasmEmitFrozenStore's address; plus IR_SETLEN_STR's slot node. The reset
+      site is WasmEmitIndex's INDEX sub-expression, which is a READ even when
+      the whole IR_INDEX is a write target (`b[Length(b)] := c`). }
     WasmLValueAddr(si);
-    WasmMemOp($28, 'i32.load', 2, 0);
+    if not InLValueWrite then
+      WasmMemOp($28, 'i32.load', 2, 0);
     Exit;
   end;
   WasmLValueAddr(si);
@@ -933,26 +939,57 @@ end;
   identical and only the spilling is gone, because the base can simply sit on
   the operand stack while the index is computed.
 
-  The managed-string shapes are refused: indexing a string in WRITE position is
-  a copy-on-write call (PXXStrUnique), not address arithmetic, and getting that
-  wrong stores a character into the handle slot rather than into the string —
-  a bug riscv32 shipped and had to fix twice. It needs the heap regardless. }
+  Indexing a managed string is the one shape where the base is not already an
+  address. It is POSITION-DEPENDENT and the two positions call for different
+  code, which is why it waited for a position model rather than an extra case:
+
+    read   the base is the HANDLE, which IS the char pointer. `s[i]` is
+           handle + (i - lo), no call.
+    write  the base is the SLOT's address, and the string may be SHARED —
+           `t := s; s[1] := 'z'` must not edit t. PXXStrUnique(slotAddr)
+           clones when the refcount says so and publishes the clone back into
+           the slot, returning a handle the caller may write through.
+
+  Getting the write case wrong does not fail loudly: it stores the character
+  INTO the handle slot, so the string reads back with length 0 and a malformed
+  handle that segfaults at scope exit. riscv32 and arm32 both shipped that and
+  fixed it twice — once for the scalar shape, once for a managed string that is
+  itself a field or an array element, where the base is a slot address in BOTH
+  positions and the read case needs its own load
+  (bug-a-riscv32-setlength-on-string-array-element-loses-length). Both shapes
+  are handled here from the start, and strop/managed cover both. }
 procedure WasmEmitIndex(node: Integer);
-var left, lo, elemSize: Integer;
+var left, lo, elemSize: Integer; isStr, savedLVW: Boolean;
 begin
   left := IRA[node];
   lo := IRC[node];
   elemSize := Integer(IRIVal[node]);
-  if ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString)
-      and not Syms[IRA[left]].IsArray)
-     or (((IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX))
-         and (IRTk[left] = Ord(tyAnsiString)) and (elemSize = 1)) then
-  begin
-    WasmUnsupported('indexing a managed string — needs the heap, Phase 6');
-    Exit;
-  end;
+  isStr := ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString)
+            and not Syms[IRA[left]].IsArray)
+           or (((IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX))
+               and (IRTk[left] = Ord(tyAnsiString)) and (elemSize = 1));
+  savedLVW := InLValueWrite;
   WasmEmitValueAs(left, WT_I32, 'array base');
+  if WasmBodyBroken then Exit;
+  if isStr then
+  begin
+    if savedLVW then
+    begin
+      { The base is the slot address in write position for BOTH shapes: IR_LEA
+        answers slot-address under the flag, and a FIELD/INDEX base is a slot
+        address to begin with. }
+      if not WasmCallRtl('PXXStrUnique') then Exit;
+    end
+    else if (IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX) then
+      WasmMemOp($28, 'i32.load', 2, 0);   { slot -> handle }
+  end;
+  { The INDEX is a READ even when the whole IR_INDEX is a write target:
+    `b[Length(b)] := c` otherwise emits Length against the SLOT address rather
+    than the handle and stores at a wild offset. Same reset every register
+    backend does (ir_codegen_riscv32.inc:1633). }
+  InLValueWrite := False;
   WasmEmitValueAs(IRB[node], WT_I32, 'array index');
+  InLValueWrite := savedLVW;
   if WasmBodyBroken then Exit;
   if lo <> 0 then
   begin
@@ -1005,7 +1042,7 @@ begin
 end;
 
 procedure WasmEmitStoreMem(node: Integer);
-var tk: TTypeKind; vt: Byte;
+var tk: TTypeKind; vt: Byte; savedLVW: Boolean;
 begin
   tk := IntToTypeKind(IRTk[node]);
   if TypeIsFrozenString(tk) then
@@ -1038,7 +1075,10 @@ begin
     can be written, and at that point this needs a scratch local to evaluate
     the value first and keep the register backends' order — not a reshuffle of
     these two lines, which wasm's stack discipline will not allow. }
+  savedLVW := InLValueWrite;
+  InLValueWrite := True;
   WasmEmitValueAs(IRA[node], WT_I32, 'address of a store');
+  InLValueWrite := savedLVW;
   WasmEmitValueAs(IRB[node], vt, 'value of a store');
   if WasmBodyBroken then Exit;
   WasmTypeStore(tk, vt);
@@ -1858,6 +1898,45 @@ begin
     three and the easiest to reason about. The non-trapping `trunc_sat` forms
     exist and would need a post-MVP feature; revisit if a real program depends
     on the value rather than on not crashing. --- }
+  { --- SetLength on a managed string ---
+
+    SetLength is builtin -102 for BOTH a dynamic array and a managed string,
+    and the two are different routines with different arguments; the lvalue's
+    type is what tells them apart. The array half needs the heap and is refused
+    below by the same name it always was.
+
+    PXXStrSetLen(slotAddr, n) takes the SLOT's address, not the handle: it
+    allocates a fresh block, copies min(old, new) bytes, and PUBLISHES the new
+    handle into the slot before releasing the old one. Handing it the handle
+    would compile — every argument here is an i32 — and would write a heap
+    pointer over the first word of the string's own characters.
+
+    So the argument is WasmLValueAddr, which already answers slot-address for
+    a `var s: string` parameter too (the ABI oracle derefs the frame slot).
+    That is the whole of the var-param case the register backends spell out by
+    hand (ir_codegen_riscv32.inc:2350). --- }
+  if p = -102 then
+  begin
+    if (IRKind[IRA[argNode]] = IR_LOAD_SYM)
+       and (Syms[IRA[IRA[argNode]]].TypeKind = tyAnsiString)
+       and not Syms[IRA[IRA[argNode]]].IsArray then
+    begin
+      if IRB[argNode] = -1 then
+      begin
+        WasmUnsupported('SetLength on a managed string with no length argument');
+        Exit;
+      end;
+      WasmLValueAddr(IRA[IRA[argNode]]);
+      WasmEmitValueAs(IRA[IRB[argNode]], WT_I32, 'SetLength count');
+      if WasmBodyBroken then Exit;
+      if not WasmCallRtl('PXXStrSetLen') then Exit;
+      WasmEmitBuiltin := True;
+    end;
+    { A dynamic array falls through and is refused by WasmEmitCall under the
+      name it has always carried — it needs the heap, not a position model. }
+    Exit;
+  end;
+
   if (p = -203) or (p = -204) then
   begin
     atk := WasmNodeResultType(IRA[argNode]);
@@ -2899,7 +2978,7 @@ end;
   wasm's eager `select` is the wrong tool, and it is worth naming because
   `select` is otherwise the cheaper answer to every two-way choice here. }
 procedure WasmEmitFrozenStore(dstIsSym: Boolean; dstRef, valNode, cap: Integer);
-var lDst, lSrc, lLen, mv: Integer; stk: TTypeKind;
+var lDst, lSrc, lLen, mv: Integer; stk: TTypeKind; savedLVW: Boolean;
 begin
   if cap <= 0 then cap := DEFAULT_STR_CAP;
   mv := WasmWriteHelper('PXXMemMove');
@@ -2915,7 +2994,13 @@ begin
   WasmEmitValueAs(valNode, WT_I32, 'value assigned to a frozen string');
   WasmLocalSet(lSrc);
   if dstIsSym then WasmLValueAddr(dstRef)
-  else WasmEmitValueAs(dstRef, WT_I32, 'address of a frozen string store');
+  else
+  begin
+    savedLVW := InLValueWrite;
+    InLValueWrite := True;
+    WasmEmitValueAs(dstRef, WT_I32, 'address of a frozen string store');
+    InLValueWrite := savedLVW;
+  end;
   WasmLocalSet(lDst);
   if WasmBodyBroken then Exit;
 
@@ -3132,7 +3217,7 @@ end;
   caller's slot via the ABI oracle, so `procedure P(var s: string)` publishes
   where it should) or through an already-lowered address expression. }
 procedure WasmEmitManagedStore(dstIsSym: Boolean; dstRef, valNode: Integer);
-var hp: Integer;
+var hp: Integer; savedLVW: Boolean;
 begin
   if WasmStrLocZ < 0 then WasmStrLocZ := WasmAddLocal(WT_I32, 'msval');
   if WasmStrLocN < 0 then WasmStrLocN := WasmAddLocal(WT_I32, 'msnew');
@@ -3150,7 +3235,13 @@ begin
   WasmLocalSet(WasmStrLocN);
 
   if dstIsSym then WasmLValueAddr(dstRef)
-  else WasmEmitValueAs(dstRef, WT_I32, 'address of a managed string store');
+  else
+  begin
+    savedLVW := InLValueWrite;
+    InLValueWrite := True;
+    WasmEmitValueAs(dstRef, WT_I32, 'address of a managed string store');
+    InLValueWrite := savedLVW;
+  end;
   if WasmBodyBroken then Exit;
   WasmLocalSet(WasmStrLocS);
 
@@ -3167,6 +3258,28 @@ begin
     and a nil old handle is the normal first-assignment case. }
   WasmLocalGet(WasmStrLocO);
   WasmCall(WasmSlotForProc(hp), 'PXXStrDecRef');
+end;
+
+{ SetLength through ANY lvalue that is not a plain symbol — a record field, a
+  var-param's field, an array element, a deref. IRA is already the SLOT-ADDRESS
+  node (the frontend lowered the lvalue with IRLowerAddress), IRB the count, so
+  there is no symbol to reconstruct and no shape to classify: the two operands
+  push in the order PXXStrSetLen wants them.
+
+  The address node is walked in WRITE position for the same reason every other
+  destination is — if it bottoms out in an IR_LEA of a scalar managed string,
+  the slot address is what PXXStrSetLen needs and the handle is what it must
+  not get. }
+procedure WasmEmitSetLenStr(node: Integer);
+var savedLVW: Boolean;
+begin
+  savedLVW := InLValueWrite;
+  InLValueWrite := True;
+  WasmEmitValueAs(IRA[node], WT_I32, 'slot address of SetLength');
+  InLValueWrite := savedLVW;
+  WasmEmitValueAs(IRB[node], WT_I32, 'SetLength count');
+  if WasmBodyBroken then Exit;
+  if not WasmCallRtl('PXXStrSetLen') then Exit;
 end;
 
 procedure WasmEmitStmt(node, blk: Integer);
@@ -3194,6 +3307,7 @@ begin
     IR_EXC_CLEAR     : WasmEmitExcClear;
     IR_EXC_MATCH     : WasmEmitExcMatch(node, blk, False);
     IR_EXC_MATCH_HIT : WasmEmitExcMatch(node, blk, True);
+    IR_SETLEN_STR    : WasmEmitSetLenStr(node);
     IR_STORE_SYM :
       { A managed string's SLOT is pointer-sized and its stores are therefore
         scalar-shaped, which is exactly the trap: `m := 'lit'` through the
