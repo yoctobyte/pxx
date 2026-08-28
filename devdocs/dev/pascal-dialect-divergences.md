@@ -280,3 +280,19 @@ by FPC, so the FPC oracle silently disappears and the expectation ends up
 unverified against anything. Met on 2026-08-28 writing
 `test/test_class_method_to_method_pointer.pas`; the giveaway is FPC reporting a
 syntax error at a line and column inside what looks like a comment.
+
+**Use `tools/fpc_diff_probe.sh` rather than a hand-rolled FPC comparison — it
+already refuses to score a case whose oracle died.** It prints
+
+```
+SKIP        <name>    no oracle: fpc cannot compile it, so this case proves nothing
+```
+
+and its summary adds `(a SKIP is not a pass -- fix the case or drop it)`. Someone
+hit a dead oracle before and hardened the tool for it; the hardening is real and
+it is the reason this trap is survivable. **What it cannot do is travel to a
+comparison you write by hand**, which is exactly where it bit here — a shell
+one-liner that runs `fpc` and diffs the output has no idea the compile failed,
+and a silently empty oracle looks identical to an oracle that agreed. That
+asymmetry is the whole argument for the probe: *an oracle that could not look and
+an oracle that found nothing must never print the same.*
