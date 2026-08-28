@@ -10357,3 +10357,74 @@ is B's top item. **No re-ranking done** — that is the owner's, filed as
 > rule was ignored because it was illustrated with `gate.sh quick | tail` and read
 > as a gate.sh rule. Worth auditing other reference docs for the same shape: a
 > rule stated generally but exampled narrowly will be applied narrowly.
+
+## Phase 4 scoping DISSOLVED the shared-file escape — no grant issued (frankwasm)
+
+**Approved to proceed in `compiler/ir_codegen_wasm32.inc` + `compiler/wasmenc.inc`,
+both its own. Nothing to sequence against frankA.**
+
+**Scoping that dissolves an escape is a better result than scoping that justifies
+one.** The plan named `elfwriter.inc:1937` as the patch site — **correct for ELF
+and irrelevant here, because wasm never calls elfwriter.** The producer side is
+target-independent by construction: `AddMethodFix(dataPos, procIdx)`
+(`emit.inc:103`, one append point, 10 call sites) records a **relocation, not an
+address** — *"the 8-byte slot at `Data[dataPos]` names `Procs[procIdx]`"* — and wasm
+consumes the same list, writing a table index where elfwriter writes
+`entry + BodyAddr`. **The generality had been pushed down long before this lane
+needed it; `ir-as-substrate` paying off rather than being cited.**
+
+Five independent things had to be true and each was checked, not inferred:
+`ProcAddrFix` is per-backend (inside each `ir_codegen_*.inc`'s `IR_PROCADDR` arm);
+VMT slot stride is `*8` on **every** target already (`ir.inc:7332`, address in the
+low dword); `wasm32` has `PtrSize=4`, so an `IR_LOAD` at `[vmt + slot*8]` already
+reads exactly the four bytes the index goes in — **no layout change**;
+`AN_CLASS_VIRTUAL_CALL` and interface dispatch already lower to loads +
+`IR_CALL_IND` in shared `ir.inc` (5130, 11676, 11750) with no backend op; and DCE
+is already off for wasm32 (`dce.inc:224`).
+
+### frankwasm reached frankA's universal-negative rule independently, from the other side
+> *"grep found nothing" is weaker than "the mechanism forbids it."*
+
+frankA got there by **asserting** a universal negative that its grep idiom could
+not see; frankwasm got there by **noticing the weakness in its own evidence before
+anyone challenged it** — the harder direction. Two lanes, no contact, same night,
+same rule.
+
+**And here the mechanism argument is actually available.** A code address does not
+exist when `Data[]` is built (`BodyAddr` is not patched until link time), so **no
+path can write a code address into `Data[]` at parse time — it can only record a
+fixup.** That narrows the open question to one grep whose shape cannot hide the
+answer: **is `AddMethodFix` the only APPENDER to the MethodFixups array?** (Grep the
+array, not its call sites.) Sole appender ⇒ the typed-const worry is *closed*, not
+deferred. A second writer ⇒ Track A ticket, not a quiet edit. Passed back.
+
+### Three coordinator calls made
+1. **`gate.sh quick` once at the END of Phase 4, not per-fix — and as the
+   falsification of the scoping claim, not a gate on the work.** "No shared edit ⇒
+   the six targets cannot move" is a *conclusion* four phases are being built on;
+   30s to test it is a good trade, per-fix is ritual.
+2. **The missing data segment is a real plan defect**, and it is the milestone rule
+   again: `writeWasm` emits no data section, `Data[]` (string literals, typed
+   consts, VMT blobs, RTTI) is entirely unemitted, BSS sized but never initialised —
+   so "resolve VMT slots to table indices" is **unsatisfiable before those bytes
+   exist**. > **A milestone that presupposes unbuilt scaffolding is the same failure
+   as one defined by the absence of a symptom** — both unreachable in a way that
+   only appears when you try to satisfy them. Made its own phase.
+3. **The measurement reorders the phase and PLAN.md must say so.** Of 22 unlowered
+   bodies at HEAD (117/139 with `-dWASM_NOMAIN`): **9 × `IR_CALL_IND`** — eight are
+   RTL error hooks calling an installed procvar (`PXXDivZero`, `PXXOverflow`,
+   `PXXRangeError`, `PXXNilRef`, `PXXInvalidCast`, `PXXVariantError`,
+   `PXXObjRelease`, plus two interface refcount helpers), **not user procvars** —
+   **1 × `IR_VIRTUAL_CALL`** (`TInterfacedObject._Release`, one in the whole RTL),
+   7 float writers, 5 heap/`Halt` (Phase 6). **The plan's assumption that Phase 4 is
+   where virtual dispatch matters is off by an order of magnitude**, and the VMT
+   path falls out of the indirect-call mechanism for free.
+
+**Design note worth copying:** `WasmTableIndex(procIdx)` as the single place a proc
+becomes an index, called by *both* the `IR_PROCADDR` arm and the MethodFixups loop —
+**the same move that fixed the IRTk planner/emitter split, applied BEFORE the
+divergence rather than after.** And index 0 reserved null so a nil procvar traps on
+call with no separate check.
+
+Shared-doc notes landed as `fd13ef648` (devdocs only): `ir-as-substrate.md` on IRTk
+being a hint not a guarantee, `debugging-playbook.md` on unreachable capabilities.
