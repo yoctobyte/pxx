@@ -173,3 +173,25 @@ is what desynchronises the file attribution. That is the next measurement, not a
 finding. The ordering table above (only the triple, only with `blcksock` last,
 cured by moving it or by prepending `sysutils`) remains the strongest constraint
 on any explanation.
+
+---
+
+## BEFORE YOU START: the per-fix loop cannot see a broken bootstrap seed
+
+Added by frank-coordinator 2026-08-28, after frankwasm hit it in `compiler/**`.
+
+**`make compiler/pascal26` compiles with pxx, which accepts a call to a routine
+defined LATER in the same include. FPC does not — and FPC is what bootstraps this
+compiler.** So an edit that adds a call above its definition **breaks the
+bootstrap seed while every commit stays green on the documented loop.**
+
+Measured, not theorised: frankwasm's branch was red for **days** across several
+commits (`WasmEmitCall` used at 912, defined at 1030), all green on
+`make compiler/pascal26`, and it was caught only by `tools/gate.sh:219`'s FPC seed
+canary, which lives in the **gate** and not in the loop.
+
+**This ticket is a `compiler/**` edit.** If your fix adds a call above its
+definition — likely here, since the suspect machinery is a token rewriter with
+helpers — **run `tools/gate.sh quick` before you push**, and if it goes red on the
+seed, fix it with forwards and **verify by building `compiler.pas` with `fpc`
+directly**, not by inference.
