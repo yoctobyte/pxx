@@ -19,10 +19,11 @@
   a first attempt to correct it straced glibc's getaddrinfo, which was a clean
   and irrelevant answer: the default build does not use glibc at all, it uses
   our own wire resolver. On the real binaries the default build made 6 contacts
-  to port 53 and the libc build 12. After the fix below: 0 and 6, the remaining
-  six being the deliberate `.invalid` row.
+  to port 53 and the libc build 12. Both builds are now 0, verified by strace
+  on the built binaries; two separate rows had to be fixed to get there and
+  they are described below.
 
-  The cause is one row, and it is now fixed. `/etc/hosts` on Debian/Ubuntu maps
+  The first row. `/etc/hosts` on Debian/Ubuntu maps
   `127.0.0.1 localhost` but spells the v6 loopback `ip6-localhost`, so there is
   no `::1 localhost` line. `DnsResolveHost('localhost')` therefore hits files
   and stays local, while `DnsResolveHost6('localhost')` MISSED files, fell
@@ -46,12 +47,19 @@
   negative responses), so glibc's willingness to query `.invalid` says nothing
   about `localhost` — an inference worth not repeating.
 
-  The libc half's NXDOMAIN row still resolves `nonexistent-zzz-qqq.invalid`
-  through getaddrinfo and that DOES go to the network (6 contacts to port 53 in
-  this binary; 9 in a standalone getaddrinfo probe),
-  by design: it is testing that EAI_NONAME maps onto rcode 3. On a box with no
-  resolver, or a slow one, that row can see EAI_AGAIN instead and fail. It is
-  guarded behind PXX_DNS_LIBC, so the default build never reaches it.
+  The libc half's NXDOMAIN row was the second one, and it was the same defect
+  wearing the other polarity: the v6 row above passed only because the network
+  answered, this one could fail only because the network did not. It resolved
+  `nonexistent-zzz-qqq.invalid` through getaddrinfo — 6 contacts to port 53 in
+  this binary, 9 in a standalone probe — to reach an assertion that is really
+  about OUR mapping, not about the wire. The mapping is not uniform: EAI_NONAME
+  and EAI_NODATA give rcode 3, EAI_AGAIN and EAI_FAIL give rcode 2, so a slow
+  or absent resolver made this row red with a plausible number and no cause.
+  It now uses a name with an empty label, which getaddrinfo rejects locally
+  (measured: zero contacts). See the row for what that stops covering.
+
+  Both rows are the same lesson as the header lie itself: a row whose verdict
+  depends on the environment can only ever gate the environment.
 
   SKIPS its libc half where glibc or the loader is absent — that is a supported
   configuration, covered by the facade falling back to wire. }
@@ -145,8 +153,19 @@ begin
     Chk('libc_agrees_with_wire', same > 0, True);
 
     { getaddrinfo's EAI_NONAME/EAI_NODATA map onto NXDOMAIN's rcode 3, which is
-      what lets the facade treat a libc failure exactly like a wire failure }
-    rc := DnsLibcResolveHost('nonexistent-zzz-qqq.invalid', ips2, n2);
+      what lets the facade treat a libc failure exactly like a wire failure.
+
+      The name has an EMPTY LABEL, which getaddrinfo rejects locally: measured
+      zero contacts to port 53, against six for the `.invalid` name this row
+      used to carry. That matters because the mapping is not uniform —
+      EAI_AGAIN and EAI_FAIL map to rcode 2, not 3 — so a slow or absent
+      resolver turned this row red with a plausible number and no cause.
+
+      What is no longer covered: that a real NXDOMAIN off the wire arrives as
+      EAI_NONAME rather than EAI_AGAIN. That is glibc's behaviour, not ours;
+      the network was in the path incidentally, and the subject of the row is
+      the mapping below it. }
+    rc := DnsLibcResolveHost('invalid..name', ips2, n2);
     ChkI('libc_nxdomain_rcode', rc, 3);
     ChkI('libc_nxdomain_empty', n2, 0);
   end;
