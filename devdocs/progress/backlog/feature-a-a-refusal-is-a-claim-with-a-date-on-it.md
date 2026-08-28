@@ -81,3 +81,61 @@ each one looks like the last.** A closing table asserting an enumeration is comp
 itself a check that cannot fail, which makes it an instance of the very generator it is
 summarising. So: no "all N faces" line goes on this family, and a new instance is expected
 rather than surprising.
+
+---
+
+## A STRONGER pattern than this ticket proposes: give the note a mechanical expiry
+
+frankwasm invented a better form of this while writing a scope note, and it should be
+preferred wherever it is available.
+
+`check_managed.sh` documents that the wasm32 managed-string slice passes only because its
+live set is a handful of short strings the free list recycles inside the first kilobyte —
+i.e. **"this is not 'managed strings work'."** A prose note saying so would go stale exactly
+the way the nine "needs the heap, Phase 6" refusals did. So the script's last check asserts
+`PXXAlloc` still returns an address **below 1024**.
+
+**The day the heap ticket lands, that check FAILS BY DESIGN**, and whoever lands it must
+rewrite the scope note instead of letting it quietly outlive its cause.
+
+That is this ticket's generator solved with a **mechanism** rather than a **convention**:
+
+| | slug convention (this ticket) | mechanical expiry (better) |
+| --- | --- | --- |
+| detects staleness | when someone runs the checker | at the moment the cause is removed |
+| who is told | whoever runs the tool | the person whose change invalidated it |
+| failure mode | nobody runs it | none — the build stops |
+
+**Prefer the mechanical expiry when the claim's cause is observable from a test.** Fall back
+to the slug convention when it is not — a refusal in the compiler cannot easily assert
+against `done/`, which is why the convention still earns its place.
+
+Note the pattern's own precondition: it works because the expiring check is attached to a
+condition that a *future correct change* must violate. A note whose cause cannot be
+expressed as a failing assertion gets the convention instead.
+
+---
+
+## FACE SIX, within the hour of this list being marked OPEN
+
+The family above was marked open rather than closed on 2026-08-28. A sixth face arrived the
+same hour, and it is genuinely distinct: **a refusal that never had a cause at all.**
+
+`WasmEmitBinop` refused string operands from **inside the arm that runs when the width
+oracle fails**. But `s + 'x'` is a handle and a Char — pointer-sized and ordinal — so the
+oracle agreed on i32 and **the guard was never reached**. Measured on a body with no managed
+store: `writeln(t + 'x')` lowered to `handle + 120`, passed to `PXXWriteStrMW`. **Valid
+module, plausible garbage.**
+
+It appeared to work only because a **different** check — the managed-store refusal — fired
+first in the common shape. So:
+
+> **Face five is a refusal that outlived its cause. Face six is a refusal that never had
+> one, and was masked by an unrelated check happening to fail earlier.**
+
+The second is worse, because there is no date at which it became wrong. It was always wrong
+and always covered. Nothing in this ticket's slug convention or the mechanical expiry
+detects it — **the detector for face six is removing the OTHER check and seeing what still
+refuses**, which is the negative-control method from
+`feature-t-audit-tests-that-pass-with-the-implementation-removed` pointed at guards instead
+of at tests.

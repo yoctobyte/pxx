@@ -167,3 +167,33 @@ frankwasm's own connection is the right one to end on: this is the same defect a
 `bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire`. **A check that
 cannot fail and a check that is passing look identical from outside.** An absent symbol, a
 silent environment, and a grep matching zero are three faces of one thing.
+
+---
+
+## How far "verify by breaking it" actually has to go — worked example, 2026-08-28
+
+Two rounds, and the first round's test looked completely sound.
+
+frankwasm needed to prove that a managed-string publish releases the old handle before
+overwriting it. The attempts, in order:
+
+1. **`s := s` after `s := t`.** Proves nothing — two references, so a release-first
+   implementation goes to 1 and back to 2 and prints the right answer. The bug is invisible
+   because the refcount recovers.
+2. **Drop `t` first, making `s` the sole owner, then swap the two steps in the emitter to
+   confirm the test fails.** *It still passed* — **a freed block keeps its bytes until
+   something reuses them.** The test was now correct about ownership and still could not see
+   the defect.
+3. **Make the reuse the assertion.** `ten charac` is exactly `sole owner`'s length, lands in
+   the same size bin, and pops the block release-first would have freed. Only then does the
+   swapped emitter print `ten charac|10|ten charac` and the diff fail.
+
+**The lesson is the second round, not the first.** Round 1 is the mistake everyone expects.
+Round 2 is a test that is *correct in its reasoning about the system* and still blind,
+because the failure state and the success state produce identical bytes for a while. Getting
+from "a comment claiming a property" to "a test asserting one" took two separate acts of
+deliberately breaking the implementation.
+
+**So the audit's procedure is: break it, and if the test still passes, ask what makes the
+broken state observable — then assert THAT.** Stopping after round 1 yields a test that
+passes for the wrong reason, which is exactly what this ticket is about.
