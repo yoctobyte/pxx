@@ -13084,3 +13084,53 @@ right gate.
 Moving the real check parser-side is correct for a reason worth keeping: **`ASTLine` is 0 for
 every node from an appended unit**, so an IR-level error reports "line 0" and cannot tell
 anyone where the call is. A diagnostic that cannot name its location is barely a diagnostic.
+
+### SHARED-BOX HAZARD: a wasm32 self-compile can take 58 of 60 GB
+
+`pascal26 --target=wasm32 … compiler/compiler.pas` consumed **58 of this box's 60 GB**, leaving
+1 GB available, and **killed three unrelated background tasks**. Filed by frankwasm as
+`bug-wasm-compiling-compiler-pas-for-wasm32-needs-tens-of-gb` [A p50] (`70bdfd685`, on master):
+52.1 GB RSS still climbing after 26 min at 100% CPU; SIGSEGV at 7.6 GB under an 8 GB cap.
+Extreme but **finite** — it completes given enough memory. **Mitigation: `ulimit -v` before
+running it.** Checked at 18:16 — 52 GB available, so the hazard is latent, not live.
+
+**How it was found is the transferable part.** Three background tasks were killed in a row and
+frankwasm read it as harness behaviour — *and wrote a paragraph rationalising it* — while its
+own compile was eating the machine. `free -g` was one command away from the first kill.
+
+> **A SYMPTOM IN THE TOOLING AND A CAUSE IN YOUR OWN WORK LOOK LIKE TWO UNRELATED PROBLEMS.**
+> When you are running a long job on a shared box, suspect yourself before the harness.
+
+It filed the ticket with **four controls instead of a hypothesis**, because the obvious suspect
+was its own recent `in` work and that suspect was wrong: pre-`in` vs current backend on the same
+input and cap — 7600540 KB / 144 s vs 7600416 KB / 128 s, identical; 1600 `in` expressions flat
+at 300 MB; the same program with `in` rewritten as explicit comparisons **higher** at 1378 MB;
+200/800/3200 bodies at 302/304/326 MB. Not the new lowering, not set density, not body count.
+The ticket names both binaries, notes the `EmitZeroFrameSlot` probe is common to both A/B arms
+so it cannot be read as a probe artefact, and **deliberately names no root cause** — two
+mechanisms are plausible and neither was measured.
+
+**Consequence, stated rather than papered over: Phase 9's coverage number after `in` is NOT
+recorded** and cannot be until the box has ~55 GB free. frankwasm left the row out rather than
+estimate it, *because an estimate renders identically to a measured row and carries none of its
+evidence.*
+
+### Face thirteen audited — and its coverage turns out to be LUCK
+
+frankwasm audited `test/wasm/` against face thirteen rather than citing it. Four checks
+(`check_data`, `check_phase2/3/4`) assert nothing but a native diff. That is defensible —
+Phases 1-4's subject really is the backend — so it is a scope statement, not a gap. **But their
+green means "wasm32 agrees with the other backends", not "wasm32 is correct", and nothing in
+the output distinguishes those.**
+
+The sharp part: every check that *can* speak above the IR — the retain control in `check_dyn`,
+the alias control in `check_managed`, the branchless assertion in `check_set`, the capability
+claims in `check_wasi` — **exists for an unrelated reason.** Their face-thirteen coverage is a
+side effect, not a design.
+
+> **ACCIDENTAL COVERAGE READS EXACTLY LIKE DESIGNED COVERAGE, right up until the next check
+> added under time pressure is diff-only by default and nothing notices.**
+
+**Not enshrined as a fifteenth face**, deliberately: that is one measured instance in one
+suite, and my own rule is to measure the population before generalising a single case into a
+sweep. Recorded as a candidate. If a second suite shows the same shape, it earns the number.

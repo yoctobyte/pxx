@@ -92,3 +92,34 @@ Every cell in the table above was run; none is by inspection.
 Same caveat as the sibling ticket: a set item list is normally 0..255 and a
 64-bit test value against one is rare. prio 25 reflects reach, not severity —
 it is a silent wrong answer, which is why it is filed at all.
+
+---
+
+## WARNING for whoever fixes this: on arm32 two defects CANCEL on the range shape
+
+Added 2026-08-28 by the coordinator, from frankwasm's re-measurement **under qemu** (its
+earlier cross-target claim was made "by inspection"; `qemu-arm` and `qemu-aarch64` were on
+`PATH` the whole time, and inspection would have been half wrong).
+
+The table above is the **scalar** shape — `q in [1,2,3]` with a large `q` — and it is correct:
+arm32 answers TRUE and TRUE is wrong.
+
+On the **range** shape it is the other way round. `2^32 in [2^32..2^32+4]` answers **TRUE on
+arm32, which is the correct answer** — reached because the truncation of the test value and
+the truncation on the bound side cancel.
+
+**So a correct partial fix makes a currently-passing case start failing.** Repair the test
+value alone and the range shape breaks; repair the bound alone and it breaks the other way.
+Whoever takes this must:
+
+1. pin **both** shapes — scalar and range — before touching anything;
+2. expect the range row to go red mid-fix, and **not read that as a regression introduced by
+   the fix**; it is a compensating error becoming visible;
+3. only judge the work by both rows green together.
+
+> **A PASSING RESULT PRODUCED BY TWO ERRORS THAT CANCEL IS INDISTINGUISHABLE FROM A PASSING
+> RESULT PRODUCED BY CORRECTNESS** — and it converts the first honest half-fix into what looks
+> like a regression.
+
+Related: `feature-a-a-refusal-is-a-claim-with-a-date-on-it` — same signature as the rest of that
+family, a state carrying no information because two conditions read identically.
