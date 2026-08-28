@@ -27,9 +27,26 @@ THE PATH RULE. For each fetched corpus two directories go on -Fu:
 That is what CPython's sys.path gives you for a source checkout, and a
 cross-package import is ordinary Python rather than an edge case.
 
+PROBES ARE NOT RUNGS. `--probe=<package-dir>` runs the identical method over one
+arbitrary package and labels the result a PROBE. It exists because the three
+tracked corpora are one family -- same domain, overlapping lineage, and tinycss2
+imports webencodings outright -- so a wall they share may be a family idiom
+rather than a general gap
+(feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise).
+
+A probe deliberately does NOT enter `corpora()` and does NOT change `compile:
+N/48`. That denominator is a time series across pins and changing it destroys
+comparability with every reading already taken. Sharing the METHOD is the point;
+sharing the total would defeat it.
+
+A probe also puts only its OWN two directories on -Fu, never the ladder's: a
+distant corpus that could suddenly `import webencodings` would be measuring the
+path, not the corpus.
+
 Usage:
   tools/nilpy_ladder.py              # compile count + ranked wall table
   tools/nilpy_ladder.py --files      # add the per-file first error
+  tools/nilpy_ladder.py --probe=library_candidates/reportlab/src/reportlab
 """
 import os
 import re
@@ -161,16 +178,32 @@ def main():
     md5, base = pin_provenance()
     if fixes and not require_ancestors(fixes, base):
         return 2
-    corp = corpora()
-    if not corp:
-        print("no corpora fetched — run: tools/install_lib_candidates.sh webencodings html5lib tinycss2")
-        return 77
+    probe = None
+    for a in sys.argv[1:]:
+        if a.startswith("--probe="):
+            probe = a.split("=", 1)[1]
+
+    if probe:
+        pkg = os.path.abspath(probe)
+        if not os.path.isfile(os.path.join(pkg, "__init__.py")):
+            print("--probe: %s is not a package (no __init__.py)" % probe)
+            return 2
+        # dist = the directory the package sits IN, which is what `import <name>`
+        # needs on the path; pkg itself is what a bare sibling import needs.
+        corp = [(os.path.basename(pkg), os.path.dirname(pkg), pkg)]
+    else:
+        corp = corpora()
+        if not corp:
+            print("no corpora fetched — run: tools/install_lib_candidates.sh webencodings html5lib tinycss2")
+            return 77
 
     incl = []
     for _name, dist, pkg in corp:
         incl += ["-Fu" + dist, "-Fu" + pkg]
     incl.append("-Fu" + os.path.join(ROOT, "lib", "rtl"))
 
+    if probe:
+        print("PROBE (not a ladder rung — its total is its own baseline)")
     print("roots: " + ", ".join(os.path.relpath(d, ROOT) for _n, d, _p in corp))
     # Provenance in the artifact, so a result read next week carries the pin it
     # was taken on instead of relying on whoever reads it to remember.
