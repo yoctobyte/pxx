@@ -586,3 +586,31 @@ ranked queue should read a low-prio `decide-*` as a **status-quo selection await
 a signature**, not as a backlog item.
 
 Sixteen faces. **Still open — never write "all N".**
+
+### Boundary on face sixteen — it is about DECISIONS, not about work
+
+Marked by pxx-a5 immediately after the face was filed, and it belongs here because
+without it the face argues for exactly the thing the ranker exists to prevent.
+
+**"Never-reached is not neutral" is true of decisions and false of work.** A p25
+*bug* that nobody reaches stays a p25 bug: the repository is honestly worse, and
+visibly so. A p25 *decision* is different because **the status quo executes while
+you wait** — the option is being taken, continuously, by everyone who runs the
+code.
+
+> **The distinguishing property is whether waiting produces an outcome.** Only
+> decisions have that.
+
+Read without this boundary, face sixteen becomes an argument for inflating every
+low-ranked item, and a `prio:` used to buy attention stops meaning anything. **The
+value of the field is that it is not a volume knob.**
+
+Two nearby mechanisms, both considered and both rejected by the same author on its
+own ticket: a **prio bump** (no evidence of cost — see above), and **`keep-open:`**,
+which `progress.py:1232` shows is for a `decide-` that *records an answer* while
+gating a dependent. On a genuinely undecided question it would be the honest-looking
+marker on the dishonest state.
+
+The honest instrument was none of those: **state in the ticket that option 1 is in
+force until answered, that this is a default rather than a judgement, and what would
+move it.** A reader can then tell that low was *chosen*.

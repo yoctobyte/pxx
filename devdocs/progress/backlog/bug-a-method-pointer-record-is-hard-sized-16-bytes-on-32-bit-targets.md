@@ -80,3 +80,17 @@ is weak". The real reason is this ticket: the record declares 16 bytes where the
 cannot see and a break that changes nothing observable look identical from the
 check's output**, and only chasing the second one turned up a real defect two
 files away.
+
+## What would raise this above p20
+
+Added by the coordinator 2026-08-28, at the filer's request that the low number not
+be read as "not real". The p20 is honest **today** because the cost is eight wasted
+bytes per value on 32-bit and a `SizeOf` a program can read back wrong — no
+corruption, and the store already uses the target's pointer size.
+
+It stops being p20 the moment a **32-bit record layout has to match a binary this
+compiler did not produce**: interop with an FPC-built unit, a serialized struct
+read back by another toolchain, or any on-disk/on-wire format containing a
+`procedure of object`. There, eight bytes of over-declaration is a field-offset
+mismatch rather than waste. Nobody has hit that; if anyone does, this is not a p20
+and the ticket should say so rather than being re-argued from scratch.
