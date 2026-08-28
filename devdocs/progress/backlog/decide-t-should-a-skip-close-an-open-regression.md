@@ -148,3 +148,35 @@ None — this is a decision, not a change. Whichever way it goes, the resulting
 work is re-filed into Track T with T's own tooling gate, per the rule that a U
 item which turns out to be plain work once decided goes back to the owning
 lane.
+
+## What `closed_by` changed — and the direction it moved the cost
+
+Added by the coordinator 2026-08-28, after `0fc679056`.
+
+Implementing the instrument turned up something the decision did not know: before
+the fix, `close_stub_tickets()` wrote *"`<job>` passes at `<sha>` (tier X); it was
+red at `<sha>`"* **unconditionally**. So a regression closed because its job stopped
+*running* got a permanent written claim that it **passed** — a fabricated observation,
+in prose, in `done/`, which is where findings stop being looked at.
+
+**The filer read this as raising the cost of one occurrence. It lowers it going
+forward, and that is the more useful reading.** `closed_by` is now
+`pass`/`skip`/`gone`/`mixed`, so a skip-close is *labelled* a skip-close. The
+outcome the decision is about — a regression retired that nobody fixed — is now
+**visible in the record instead of disguised as a pass**. The sharp edge was the
+false prose, not the closure, and the sharp edge is gone.
+
+**So p25 stands, and for a better reason than "no evidence of cost".** The decision
+is now genuinely deferrable: whichever way it is eventually answered, nothing is
+being silently mislabelled in the meantime.
+
+**One residual, small and NOT a sweep.** `done/` tickets closed before `0fc679056`
+may carry a "passes at `<sha>`" line asserting a pass that never happened, and
+because `closed_by` is built forward they cannot be classified now — the same
+circularity the ticket already describes. This is **not** the tstate-archive case:
+a wrong regression *range* was a true record of what the tool believed, whereas
+this prose asserts an observation that was never made. Not worth rewriting history
+over, and not countable. Worth exactly one line of warning, which is this one:
+
+> **Do not treat a close-stub's "passes at `<sha>`" line as evidence if the stub
+> predates `0fc679056`.** It may be describing a job that stopped running.
