@@ -66,6 +66,13 @@ var
   WasmHasTerminate  : Boolean = False;{ body contains an early Exit }
   WasmNeedDispatch  : Boolean = False;{ ... so the dispatch must exist }
 
+{ Pascal proc index -> the wasm function slot it was given, or -1. A call may
+  name a proc whose body has not been emitted yet, so the slot is reserved on
+  first mention and filled in when the body arrives. Any slot still unfilled
+  when the module is written gets an `unreachable` body and is REPORTED — a
+  declared wasm function with no body is not a module. }
+  WasmProcSlot      : array[0..MAX_PROCS-1] of Integer;
+
 { Label id -> the basic block it starts, stamped with the body that defined it.
   The stamp is not defensive clutter: these arrays outlive a body, Pascal has no
   cross-procedure goto, so a jump whose target was not defined by THIS body can
@@ -221,6 +228,7 @@ const
   WASM_PAGE        = 65536;
 
 procedure WasmBeginModuleOnce;
+var i: Integer;
 begin
   if WasmModuleStarted then Exit;
   WasmModuleStarted := True;
@@ -231,6 +239,7 @@ begin
   WasmAddExport('memory', WEK_MEM, 0);
   { The shadow-stack pointer. Exported so a harness can assert it balances —
     the property the Phase 5 prototype leans on. }
+  for i := 0 to MAX_PROCS - 1 do WasmProcSlot[i] := -1;
   WasmGSp := WasmAddGlobal('sp', WT_I32, True, 65536);
   WasmAddExport('sp', WEK_GLOBAL, WasmGSp);
 end;
@@ -690,6 +699,13 @@ begin
     { A load's type is the SYMBOL's — the one place it is certainly right. }
     IR_LOAD_SYM      : WasmNodeResultType := Syms[IRA[node]].TypeKind;
     IR_LEA, IR_FIELD : WasmNodeResultType := tyPointer;
+    { A call's type is the CALLEE's declared result, which is the same place
+      the signature came from. IRTk would usually agree and has no reason to be
+      the authority. }
+    IR_CALL          : if (IRA[node] >= 0) and (IRA[node] < MAX_PROCS) then
+                         WasmNodeResultType := Procs[IRA[node]].RetType
+                       else
+                         WasmNodeResultType := IntToTypeKind(IRTk[node]);
     IR_BINOP :
       if WasmIsCompare(WasmBinopOp(node)) then
         WasmNodeResultType := tyBoolean
@@ -837,6 +853,7 @@ begin
     IR_CONST_INT : WasmEmitConstInt(node);
     IR_LOAD_SYM  : WasmEmitLoadSym(IRA[node]);
     IR_BINOP     : WasmEmitBinop(node);
+    IR_CALL      : WasmEmitCall(node, False);
     IR_LEA       : WasmEmitLea(node);
     IR_FIELD     : WasmEmitField(node);
     IR_LOAD_MEM  : WasmEmitLoadMem(node);
@@ -845,6 +862,166 @@ begin
   else
     WasmUnsupported('value IR op ' + WasmIntStr(IRKind[node]));
   end;
+end;
+
+{ ===== proc signatures and direct calls =====
+
+  One function computes a proc's wasm signature and one map holds its function
+  slot, and BOTH are shared by the body emitter and every call site. That is
+  not economy: a caller and a callee that derive the shape separately can
+  disagree, and wasm's answer to a disagreement is a validation failure at the
+  call, which points at the caller rather than at whichever of the two got it
+  wrong. }
+
+{ A parameter's wasm type. A `var`/`out` parameter and an array parameter are
+  ADDRESSES, whatever they are declared as — so `var x: Int64` is an i32
+  parameter, not an i64 one. Taking the declared type here would give an i64
+  parameter whose caller passes a pointer, and the slot store would be an
+  i64.store of an i32: loud, but loud at the wrong place and for the wrong
+  reason. }
+function WasmParamValType(p, i: Integer; var vt: Byte): Boolean;
+begin
+  if Procs[p].Params[i].IsRef or Procs[p].Params[i].IsArray then
+  begin
+    vt := WT_I32;
+    WasmParamValType := True;
+  end
+  else
+    WasmParamValType := WasmScalarType(Procs[p].Params[i].TypeKind, vt);
+end;
+
+function WasmProcResult(p: Integer; var vt: Byte): Boolean;
+begin
+  WasmProcResult := WasmScalarType(Procs[p].RetType, vt);
+end;
+
+{ The type index for proc p. Records a refusal — against whatever body is
+  currently being emitted — for any part of the signature wasm cannot express,
+  and substitutes a placeholder so the module stays well-formed: the body will
+  be `unreachable`, which is polymorphic and validates against any signature. }
+function WasmSigForProc(p: Integer): Integer;
+var
+  i, nParams, nRes: Integer;
+  ptypes: array[0..31] of Byte;
+  rtypes: array[0..0] of Byte;
+begin
+  nParams := Procs[p].ParamCount;
+  if nParams > 32 then
+  begin
+    WasmUnsupported(Procs[p].Name + ' has more than 32 parameters');
+    nParams := 32;
+  end;
+  for i := 0 to nParams - 1 do
+    if not WasmParamValType(p, i, ptypes[i]) then
+    begin
+      ptypes[i] := WT_I32;
+      WasmUnsupported('parameter ' + Procs[p].Params[i].Name + ' of '
+                      + Procs[p].Name + ' has no wasm value type');
+    end;
+  nRes := 0;
+  if Procs[p].IsFunc then
+  begin
+    nRes := 1;
+    if not WasmProcResult(p, rtypes[0]) then
+    begin
+      rtypes[0] := WT_I32;
+      WasmUnsupported('result of ' + Procs[p].Name + ' has no wasm value type');
+    end;
+  end;
+  if nParams = 0 then
+  begin
+    { The array-slice spellings keep WasmAddType's open-array parameters honest
+      for the 0-param and 0-result cases. }
+    if nRes = 0 then WasmSigForProc := WasmAddType([], [])
+    else WasmSigForProc := WasmAddType([], [rtypes[0]]);
+  end
+  else
+    WasmSigForProc := WasmAddTypeN(ptypes, nParams, rtypes, nRes);
+end;
+
+{ The wasm function slot for proc p, reserved on first mention. }
+function WasmSlotForProc(p: Integer): Integer;
+begin
+  if (p < 0) or (p >= MAX_PROCS) then
+  begin
+    WasmUnsupported('proc index ' + WasmIntStr(p) + ' out of range');
+    WasmSlotForProc := 0;
+    Exit;
+  end;
+  if WasmProcSlot[p] < 0 then
+    WasmProcSlot[p] := WasmAddFunc(Procs[p].Name, WasmSigForProc(p));
+  WasmSlotForProc := WasmProcSlot[p];
+end;
+
+{ A direct call. On a register target this is where the argument-passing ABI
+  lives — riscv32 spends 508 lines here spilling arguments to its stack and
+  reloading them into a0..a7. wasm has neither registers nor a calling
+  convention to implement: arguments are pushed onto the operand stack in
+  order and `call` consumes them. The ABI is the instruction.
+
+  What is NOT handled, by name rather than by omission:
+
+  * The BUILTIN encodings. IR_CALL doubles as the node for GetMem, FreeMem,
+    class instantiation, SetLength and the rest, spelled as a NEGATIVE proc
+    index (`-Ord(tkGetMem)`). Each is a small program, not a call, and each
+    needs the heap — Phase 6.
+  * EXTERNAL procs, which need a wasm import and a host to provide it.
+  * The hidden-destination return ABI for aggregates. wasm can express it (a
+    pointer parameter, exactly as the register targets do), but choosing the
+    convention is an ABI decision and belongs with the rest of Phase 4, not
+    inferred here from one call site. }
+procedure WasmEmitCall(node: Integer; isStmt: Boolean);
+var p, argNode, i, nParams: Integer; pvt: Byte;
+begin
+  p := IRA[node];
+  if p < 0 then
+  begin
+    WasmUnsupported('builtin call (IR_CALL with proc index '
+                    + WasmIntStr(p) + ') — needs the heap, Phase 6');
+    Exit;
+  end;
+  if (p < Length(ProcExternal)) and ProcExternal[p] then
+  begin
+    WasmUnsupported('call to external ' + Procs[p].Name
+                    + ' — needs a wasm import, Phase 6');
+    Exit;
+  end;
+  nParams := Procs[p].ParamCount;
+  argNode := IRB[node];
+  i := 0;
+  while (argNode <> -1) and (not WasmBodyBroken) do
+  begin
+    if i >= nParams then
+    begin
+      WasmUnsupported('call to ' + Procs[p].Name + ' passes more than its '
+                      + WasmIntStr(nParams) + ' parameters');
+      Exit;
+    end;
+    if not WasmParamValType(p, i, pvt) then
+    begin
+      WasmUnsupported('argument ' + WasmIntStr(i) + ' of ' + Procs[p].Name
+                      + ' has no wasm value type');
+      Exit;
+    end;
+    WasmEmitValueAs(IRA[argNode], pvt, 'argument to ' + Procs[p].Name);
+    Inc(i);
+    argNode := IRB[argNode];
+  end;
+  if WasmBodyBroken then Exit;
+  if i <> nParams then
+  begin
+    { wasm counts the operand stack, so a short call is a validation failure
+      rather than a garbage register — but it is a validation failure in the
+      CALLER, so say which call it was while that is still known. }
+    WasmUnsupported('call to ' + Procs[p].Name + ' passes ' + WasmIntStr(i)
+                    + ' of ' + WasmIntStr(nParams) + ' parameters');
+    Exit;
+  end;
+  WasmCall(WasmFuncIndex(WasmSlotForProc(p)), Procs[p].Name);
+  { A function called for its side effect leaves its result on the operand
+    stack, and wasm requires the stack to be empty at the end of a statement.
+    `drop` is that requirement, not a tidy-up. }
+  if isStmt and Procs[p].IsFunc then WasmOp($1A, 'drop');
 end;
 
 { ===== control flow =====
@@ -981,6 +1158,7 @@ begin
     IR_NOP, IR_BLOCK, IR_LABEL : ;
     IR_JUMP          : WasmEmitJump(node, blk);
     IR_TERMINATE     : WasmEmitTerminate(node, blk);
+    IR_CALL          : WasmEmitCall(node, True);
     IR_JUMP_IF_FALSE : WasmEmitJumpIfFalse(node, blk);
     IR_STORE_MEM     : WasmEmitStoreMem(node);
     IR_STORE_SYM :
@@ -1100,10 +1278,8 @@ end;
 procedure IREmitMachineCodeWasm32;
 var
   i, sigIdx, nParams, retSym, psym: Integer;
-  pvt: Byte;
+  pvt, resVt: Byte;
   rtk: TTypeKind;
-  ptypes: array[0..31] of Byte;
-  rtypes: array[0..0] of Byte;
   nRes: Integer;
   nm: AnsiString;
 begin
@@ -1119,29 +1295,19 @@ begin
   begin
     nm := Procs[CurProc].Name;
     nParams := Procs[CurProc].ParamCount;
-    for i := 0 to nParams - 1 do
-      if not WasmScalarType(Procs[CurProc].Params[i].TypeKind, ptypes[i]) then
-      begin
-        { A placeholder keeps the signature well-formed. The body is going to
-          be discarded for `unreachable`, which is polymorphic and validates
-          against any signature, so the placeholder only has to be legal — not
-          right. }
-        ptypes[i] := WT_I32;
-        WasmUnsupported('parameter ' + Procs[CurProc].Params[i].Name
-                        + ' has no wasm value type');
-      end;
+    if nParams > 32 then nParams := 32;
+    nRes := 0;
     if Procs[CurProc].IsFunc then
     begin
       nRes := 1;
-      if not WasmScalarType(Procs[CurProc].RetType, rtypes[0]) then
-      begin
-        rtypes[0] := WT_I32;
-        WasmUnsupported('result has no wasm value type');
-      end;
-    end
-    else
-      nRes := 0;
+      if not WasmProcResult(CurProc, resVt) then resVt := WT_I32;
+    end;
     retSym := Procs[CurProc].RetSymIdx;
+    { The SAME slot and the SAME signature a caller would have reserved. If a
+      call to this proc was emitted first, the slot already exists and this
+      fills it in; the shape cannot differ, because both went through
+      WasmSigForProc. }
+    WasmCurSlot := WasmSlotForProc(CurProc);
   end
   else
   begin
@@ -1150,29 +1316,16 @@ begin
     nParams := 0;
     nRes := 0;
     retSym := -1;
+    WasmCurSlot := WasmAddFunc(nm, WasmAddType([], []));
   end;
 
-  { Signature. The array-slice spellings keep WasmAddType's open-array
-    parameters honest for the 0-param and 0-result cases. }
-  if nParams = 0 then
-  begin
-    if nRes = 0 then sigIdx := WasmAddType([], [])
-    else sigIdx := WasmAddType([], [rtypes[0]]);
-  end
-  else
-    sigIdx := WasmAddTypeN(ptypes, nParams, rtypes, nRes);
+  { Open the body session BEFORE naming params or adding locals: they now
+    accumulate in the per-body buffers that WasmBodyBegin resets. }
+  WasmBodyBegin;
 
-  { Refuse a signature Phase 2 cannot honour, BEFORE emitting a body that would
-    contradict it. This is the concrete form of the argument in CHARTER.md: on a
-    register target, loading an Int64 slot with a 32-bit load produces a
-    plausible wrong value far from the cause. Here the module simply fails to
-    validate — `type mismatch in implicit return, expected [i64] but got [i32]`,
-    with a byte offset. The bug is the same bug; the target is what makes it
-    impossible to ship. }
-  WasmCurSlot := WasmAddFunc(nm, sigIdx);
   for i := 0 to nParams - 1 do
-    WasmAddParamName(WasmCurSlot, Procs[CurProc].Params[i].Name);
-  WasmLocalFp := WasmAddLocal(WasmCurSlot, WT_I32, 'fp');
+    WasmAddParamName(Procs[CurProc].Params[i].Name);
+  WasmLocalFp := WasmAddLocal(WT_I32, 'fp');
 
   { Pass one: cut the body into basic blocks and map every label to one. It
     must precede the $pc local, because whether $pc exists at all depends on
@@ -1182,15 +1335,13 @@ begin
   WasmLocalPc := -1;
   WasmNeedDispatch := (WasmBlockCount > 1) or WasmHasTerminate;
   if WasmNeedDispatch then
-    WasmLocalPc := WasmAddLocal(WasmCurSlot, WT_I32, 'pc');
+    WasmLocalPc := WasmAddLocal(WT_I32, 'pc');
 
   { FrameSize is final by the time a body reaches codegen — locals are
     allocated during lowering (symtab.inc), not here — so unlike the register
     backends there is no prologue to backpatch. Round up to 16 to keep the
     shadow stack aligned for anything that later cares. }
   WasmCurFrame := ((FrameSize + 15) div 16) * 16;
-
-  WasmBodyBegin;
 
   { prologue: $fp := $sp - frame ; $sp := $fp }
   WasmGlobalGet(WasmGSp);
@@ -1213,7 +1364,13 @@ begin
           today, and the day they stop agreeing is the day a store of the wrong
           width silently corrupts the slot next door. }
         psym := Procs[CurProc].Params[i].SymIdx;
-        if WasmSlotType(psym, pvt) then
+        if Procs[CurProc].Params[i].IsRef
+           or Procs[CurProc].Params[i].IsArray then
+          { The incoming value is an ADDRESS, so four bytes go into the slot
+            whatever the slot was sized for. WasmLValueAddr reads them back
+            with the matching i32.load. }
+          WasmTypeStore(tyPointer, WT_I32)
+        else if WasmSlotType(psym, pvt) then
           WasmTypeStore(Syms[psym].TypeKind, pvt);
       end;
 
@@ -1231,14 +1388,14 @@ begin
     rtk := Syms[retSym].TypeKind;
     WasmEmitLoadSym(retSym);
     if (not WasmBodyBroken) and WasmScalarType(rtk, pvt) then
-      WasmCoerce(rtk, pvt, rtypes[0], 'function result');
+      WasmCoerce(rtk, pvt, resVt, 'function result');
   end;
 
   if WasmBodyBroken then
   begin
     { discard whatever was emitted and leave a body that traps if reached.
       `unreachable` is polymorphic, so this validates for any signature. }
-    WasmBodyBegin;
+    WasmBodyDiscard;
     WasmBodyUnreachable;
     Inc(WasmBrokenCount);
     { The list is capped, but the cap ANNOUNCES itself below. A report that
@@ -1297,8 +1454,35 @@ begin
   WasmSetMemory((top + WASM_PAGE - 1) div WASM_PAGE, -1);
 end;
 
+{ A slot reserved by a call whose body never arrived. A declared wasm function
+  with no body is not a module at all, so it gets the same `unreachable` the
+  broken-body path uses — and the same report line, because a call that traps
+  at run time must not be invisible at compile time. It happens for a proc that
+  is declared and called but whose body this backend never saw: forward
+  declarations resolved elsewhere, and anything the frontend elides. }
+procedure WasmFillEmptyBodies;
+var i: Integer;
+begin
+  for i := 0 to WasmFuncCount - 1 do
+    if WasmFuncCodeLen[i] = 0 then
+    begin
+      WasmBodyBegin;
+      WasmBodyUnreachable;
+      WasmBodyTerminate;
+      WasmBodyEnd(i);
+      Inc(WasmBrokenCount);
+      if Length(WasmBrokenNames) < 65536 then
+        WasmBrokenNames := WasmBrokenNames + '    ' + WasmFuncName[i]
+                           + ' — declared and called, but no body was emitted'
+                           + Chr(10)
+      else
+        Inc(WasmBrokenUnlisted);
+    end;
+end;
+
 procedure writeWasm(const outPath: AnsiString);
 begin
+  WasmFillEmptyBodies;
   WasmFinishMemory;
   WasmReportCoverage;
   if WasmFuncCount = 0 then

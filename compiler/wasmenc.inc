@@ -76,6 +76,15 @@ const
   MAX_WASM_FUNCS     = 16384;
   MAX_WASM_LOCALS    = 131072;  { flattened local-type pool }
   MAX_WASM_VARNAMES  = 65536;   { flattened param+local NAME pool }
+  { Params plus locals in ONE body. Deliberately a literal and not
+    MAX_PROC_PARAMS + n: this file is included ALONE by
+    test/wasm/wasmenc_selftest.pas and may not reference defs.inc, which is
+    the property CHARTER.md records as load-bearing. Writing
+    `MAX_PROC_PARAMS + 255` here compiled fine inside the compiler and broke
+    the selftest with `not a constant` — the same prohibition, violated the
+    same way, within an hour of writing it down. 32 is MAX_PROC_PARAMS today;
+    the rest is headroom for the backend's own locals. }
+  MAX_WASM_BODY_VARS = 288;
   MAX_WASM_CODE      = 8 * 1024 * 1024;   { flattened body-instruction pool }
   MAX_WASM_IMPORTS   = 1024;
   MAX_WASM_EXPORTS   = 4096;
@@ -128,6 +137,20 @@ var
   WasmFuncNVar   : array[0..MAX_WASM_FUNCS-1] of Integer;
   WasmVarNames   : array[0..MAX_WASM_VARNAMES-1] of AnsiString;
   WasmVarNameLen : Integer;
+  { Per-BODY buffers for locals and param/local names, flushed into the pools
+    above by WasmBodyEnd — exactly as WFB is flushed into WasmCodePool.
+
+    They used to append straight to the pools, which forced every function to
+    be COMPLETED in declaration order and enforced it with
+    `locals must be added to the function most recently declared`. That held
+    until direct calls arrived: a call reserves the callee's slot on first
+    mention, so the callee's body is emitted long after some other function was
+    declared. The code pool already had the right shape and the locals pool was
+    the odd one out; this makes them the same shape. }
+  WFLoc          : array[0..MAX_WASM_BODY_VARS-1] of Byte;
+  WFLocLen       : Integer;
+  WFVar          : array[0..MAX_WASM_BODY_VARS-1] of AnsiString;
+  WFVarLen       : Integer;
   WasmFuncCodeOfs: array[0..MAX_WASM_FUNCS-1] of Integer;
   WasmFuncCodeLen: array[0..MAX_WASM_FUNCS-1] of Integer;
   WasmFuncText   : array[0..MAX_WASM_FUNCS-1] of AnsiString;
@@ -170,7 +193,7 @@ begin
   WasmTypeCount := 0; WasmSigLen := 0;
   WasmImpCount := 0; WasmImpFuncCount := 0;
   WasmFuncCount := 0; WasmLocalLen := 0; WasmCodeLen := 0;
-  WasmVarNameLen := 0;
+  WasmVarNameLen := 0; WFLocLen := 0; WFVarLen := 0;
   WasmMemPresent := False; WasmMemMin := 0; WasmMemMax := -1;
   WasmGlobCount := 0;
   WasmExpCount := 0;
@@ -236,9 +259,11 @@ begin
   if WasmFuncCount >= MAX_WASM_FUNCS then WasmFail('wasm: too many functions');
   WasmFuncType[WasmFuncCount] := typeIdx;
   WasmFuncName[WasmFuncCount] := name;
-  WasmFuncLocOfs[WasmFuncCount] := WasmLocalLen;
+  { Pool offsets are claimed by WasmBodyEnd, not here: a slot may be reserved
+    long before its body is emitted. }
+  WasmFuncLocOfs[WasmFuncCount] := 0;
   WasmFuncNLoc[WasmFuncCount] := 0;
-  WasmFuncVarOfs[WasmFuncCount] := WasmVarNameLen;
+  WasmFuncVarOfs[WasmFuncCount] := 0;
   WasmFuncNVar[WasmFuncCount] := 0;
   WasmFuncCodeOfs[WasmFuncCount] := 0;
   WasmFuncCodeLen[WasmFuncCount] := 0;
@@ -254,32 +279,30 @@ end;
 
 { Name a PARAMETER of the most recently added function. Call once per param, in
   order, before any WasmAddLocal — params occupy the low local indices. }
-procedure WasmAddParamName(slot: Integer; const nm: AnsiString);
+{ Name the next parameter of the body being built. Params are named before any
+  local is added, because wasm numbers them that way: params first, then
+  locals, in one index space. }
+procedure WasmAddParamName(const nm: AnsiString);
 begin
-  if slot <> WasmFuncCount - 1 then
-    WasmFail('wasm: params must be named on the function most recently declared');
-  if WasmVarNameLen >= MAX_WASM_VARNAMES then WasmFail('wasm: var-name pool full');
-  WasmVarNames[WasmVarNameLen] := nm;
-  Inc(WasmVarNameLen);
-  Inc(WasmFuncNVar[slot]);
+  if WFVarLen > High(WFVar) then WasmFail('wasm: too many params+locals');
+  WFVar[WFVarLen] := nm;
+  Inc(WFVarLen);
 end;
 
 { Append one local to the most recently added function, with its name. Locals
   are stored one per entry here and run-length compressed at emit time.
   Returns the local INDEX (params first), which is what local.get/set take. }
-function WasmAddLocal(slot: Integer; vt: Byte; const nm: AnsiString): Integer;
+{ Add a local to the body being built; returns its index in the params-then-
+  locals numbering. }
+function WasmAddLocal(vt: Byte; const nm: AnsiString): Integer;
 begin
-  if slot <> WasmFuncCount - 1 then
-    WasmFail('wasm: locals must be added to the function most recently declared');
-  if WasmLocalLen >= MAX_WASM_LOCALS then WasmFail('wasm: local pool full');
-  if WasmVarNameLen >= MAX_WASM_VARNAMES then WasmFail('wasm: var-name pool full');
-  WasmLocalPool[WasmLocalLen] := vt;
-  Inc(WasmLocalLen);
-  Inc(WasmFuncNLoc[slot]);
-  WasmVarNames[WasmVarNameLen] := nm;
-  Inc(WasmVarNameLen);
-  WasmAddLocal := WasmFuncNVar[slot];
-  Inc(WasmFuncNVar[slot]);
+  if (WFLocLen > High(WFLoc)) or (WFVarLen > High(WFVar)) then
+    WasmFail('wasm: too many params+locals');
+  WFLoc[WFLocLen] := vt;
+  Inc(WFLocLen);
+  WasmAddLocal := WFVarLen;
+  WFVar[WFVarLen] := nm;
+  Inc(WFVarLen);
 end;
 
 { The name of local index `idx` in the function currently being emitted. }
@@ -322,7 +345,21 @@ end;
 
 { ===== function body construction (into the scratch buffer) ===== }
 
+{ Start a NEW body: code, text, locals and names all reset. }
 procedure WasmBodyBegin;
+begin
+  WFBLen := 0;
+  WFText := '';
+  WFIndent := 4;
+  WFLocLen := 0;
+  WFVarLen := 0;
+end;
+
+{ Throw away the CODE emitted so far and keep the declarations. Used by the
+  backend's incremental-bringup path, which discards a body it could not lower
+  and emits `unreachable` in its place — the params and locals stay declared,
+  because the signature still refers to them and the .wat still names them. }
+procedure WasmBodyDiscard;
 begin
   WFBLen := 0;
   WFText := '';
@@ -590,6 +627,25 @@ procedure WasmBodyEnd(slot: Integer);
 var i: Integer;
 begin
   WasmFuncText[slot] := WFText;
+  { Flush the per-body locals and names into the pools, recording THIS slot's
+    offsets — so pool order follows body-COMPLETION order and a slot reserved
+    earlier by a call is filled in correctly. }
+  if WasmLocalLen + WFLocLen > MAX_WASM_LOCALS then WasmFail('wasm: local pool full');
+  if WasmVarNameLen + WFVarLen > MAX_WASM_VARNAMES then WasmFail('wasm: var-name pool full');
+  WasmFuncLocOfs[slot] := WasmLocalLen;
+  WasmFuncNLoc[slot] := WFLocLen;
+  for i := 0 to WFLocLen - 1 do
+  begin
+    WasmLocalPool[WasmLocalLen] := WFLoc[i];
+    Inc(WasmLocalLen);
+  end;
+  WasmFuncVarOfs[slot] := WasmVarNameLen;
+  WasmFuncNVar[slot] := WFVarLen;
+  for i := 0 to WFVarLen - 1 do
+  begin
+    WasmVarNames[WasmVarNameLen] := WFVar[i];
+    Inc(WasmVarNameLen);
+  end;
   if WasmCodeLen + WFBLen > MAX_WASM_CODE then WasmFail('wasm: code pool full');
   WasmFuncCodeOfs[slot] := WasmCodeLen;
   WasmFuncCodeLen[slot] := WFBLen;

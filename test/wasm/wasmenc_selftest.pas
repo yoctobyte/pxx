@@ -46,10 +46,10 @@ begin
   { addmul(a, b) = (a + b) * 2, computed THROUGH linear memory so the store/load
     path and the i32.load/i32.store encodings are exercised, not just arithmetic }
   fAddMul := WasmAddFunc('addmul', tI32I32_I32);
-  WasmAddParamName(fAddMul, 'a');
-  WasmAddParamName(fAddMul, 'b');
-  lFp := WasmAddLocal(fAddMul, WT_I32, 'fp');
   WasmBodyBegin;
+  WasmAddParamName('a');
+  WasmAddParamName('b');
+  lFp := WasmAddLocal(WT_I32, 'fp');
     { $fp := $sp - 16 ; $sp := $fp }
     WasmGlobalGet(gSp);
     WasmI32Const(16);
