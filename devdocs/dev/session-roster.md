@@ -11566,3 +11566,102 @@ and it belongs here rather than in a message that dies with the session:
 post-mortem lands on *"I will be more careful"*, that is the tell that a mechanism was
 available and went unlooked-for. A resolution is what you reach for when you have stopped
 looking for a mechanism.
+
+### 2026-08-28 — the grant held, and the audit it triggered found worse
+
+**Condition met and verified independently** (all four shas confirmed ancestors of
+`origin/master`, after my first check was malformed and returned the tip four times — the
+"correct answer to the wrong question" shape again, caught only because four identical
+answers were implausible):
+
+- `b78e8f9bc` — the PXXSysWrite wasm32 arm, own commit, sha `ea689da902bb` with and without.
+- `1a0ab35b3` — ticket resolved.
+- `98274ce25` — the audit's own ticket.
+- `c7690064e` — `tools/forwardlint.py`, now on master.
+
+**frankwasm volunteered a fact that reduces the visible value of its own work**: master has
+**no wasm backend** — `ir_codegen_wasm32.inc` and `wasmenc.inc` exist only on the branch
+(verified: both absent). `CPU_WASM32` *is* definable (`lexer.inc:998`) so the arm parses, but
+on master the patch is correct, inert and **dead** until the branch merges. That disclosure
+is the behaviour that makes a lane's reports worth acting on without re-deriving them.
+
+### The ten-minute audit found four chains, two with no default at all
+
+I verified the two worst directly. `PXXSysOpenRO` and `PXXSysLseek` have arms for
+x86-64/i386/arm32/aarch64, **no pre-chain `Result :=`, and no terminal else** — so on any
+other hosted target they return an **uninitialised** slot. The drift is visible in the same
+file: `PXXSysRead`/`PXXSysWrite` twenty lines earlier *do* carry `CPU_RISCV32` arms. riscv32
+was added to read and write and not to open and lseek.
+
+`PXXStrLoadFile` makes it concrete: `fd := PXXSysOpenRO(path); if fd < 0 then Exit;` on an
+uninitialised return, then `PXXAlloc(size + ...)` on an equally uninitialised size. **On
+hosted riscv32, LoadFile against a target with no `open` does not fail — it allocates an
+arbitrary amount of memory.**
+
+Filed as `bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open` [A, p60], written around a
+terminal `{$else}` that fails **loud** rather than around the four missing arms — because
+adding arms leaves the generator running. **Four instances of this class this week** counting
+the Track P directive chain.
+
+### forwardlint: promoting it is what proved the version I quoted was not fleet-ready
+
+Pointed at the whole compiler, the narrow three-file version reported **seventeen failures on
+a tree FPC builds clean** — this repo declares cross-file forwards in dedicated files a
+per-file view cannot see. The shipped version expands the `{$include}` chain and asks FPC's
+question over the real stream: **206,768 lines, 4.1s, 17 → 0**, which I reproduced myself.
+
+**The number in my U ticket was wrong and load-bearing: 4.1s, not ~1s.** Corrected in place,
+with the discarded version described rather than deleted. Still ~11x faster than the 46s FPC
+build, so the argument survives — but I had put an unverified number into a decision document.
+
+The sharpest finding is the tokenizer one, and it generalises: **braces nest in practice.**
+Standard Pascal says the first `}` closes a comment; both pxx and FPC accept
+`{ ... span_{nd-1} ... }` as one. Measured with a six-line program after the scanner ended a
+comment early and reported a name that appears only in prose. **A tokenizer that disagrees
+with both compilers about where a comment ends is not a check — it is a generator of
+plausible-looking failures.**
+
+The lint caught the phase's **third** seed instance the second it was written
+(`WasmEmitConstStr`, called 1090, defined 1548) — before the build, before a gate. First time
+that class cost nothing.
+
+### The one note on a clean tree became a ticket, not an allowlist entry
+
+`forwardlint` prints exactly one NOTE on today's master: `pasparser_expr.inc:1924` calls
+`LowerCase` before this codebase declares it at `pasparser_proc.inc:2384`, forward-declared
+nowhere. Filed as `bug-a-lowercase-resolves-to-two-different-routines-depending-on-the-seed`
+[A, p35] with the honest framing — **both implementations are ASCII-only and agree on every
+input this call site can receive.** There is no misbehaviour to reproduce and a ticket
+claiming one would be wrong.
+
+The defect is that the agreement is **a coincidence nothing enforces**, and the reason it is
+p35 rather than p10:
+
+> **The self-host fixedpoint cannot see this class, by construction.** It proves pxx-built-pxx
+> reproduces itself; it never compares the FPC-seeded build's *behaviour* against the
+> self-hosted build's. Both builds are internally consistent, and internal consistency is the
+> only question it asks.
+
+Same shape as the `CLAUDE.md` scope note about the fixedpoint proving one `-O` level. The gate
+is strong and narrow, and the narrowness is load-bearing both times.
+
+**Fix the note before adopting the lint, never allowlist it** — a check that prints something
+permanent on a green tree teaches every agent on day one that its output contains noise, which
+is the slow version of crying wolf.
+
+### frankB was NOT woken to receive the relay it earned
+
+frankwasm asked me to pass back that frankB's rule found a live hole in a lane frankB cannot
+see: `check_host.sh` asserted `afterWriteln === 0`, and **silence is the environment's
+default** — a lowering that records nothing keeps every assertion true, keeps both hosts
+agreeing, and reports PASS on a compiler that drops every `writeln`.
+
+frankB is parked clean by agreement, so the relay went into the **audit ticket** instead of
+into its context. That is this session's own rule applied to itself: **file first, notify
+second** — and the notification was the part that was optional here, because the ticket is
+where the finding does work and frankB has nothing to act on.
+
+Worth recording why the second instance is stronger than the first: frankB's was a routine
+control that **happened** to fire; frankwasm's was **predicted, constructed, and confirmed
+within the hour.** That upgrades the claim from *"this can happen"* to *"this is findable on
+demand"*, which is the actual argument for auditing the whole suite.
