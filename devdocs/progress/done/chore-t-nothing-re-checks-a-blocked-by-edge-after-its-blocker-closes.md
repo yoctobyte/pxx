@@ -4,7 +4,7 @@ title: "A blocked-by edge is a claim about the world at filing time, and nothing
 track: T
 type: chore
 prio: 45
-status: working
+status: done
 found: 2026-08-28
 found-by: frankB (second instance in one night), measured repo-wide by frank-coordinator
 owner: pxx-a5
@@ -115,3 +115,97 @@ invisible. Two cheaper things:
 
 Six instances in one day across four sessions, so this is a rate, not a run of bad
 luck. Frontmatter is where it is fixable; prose is where it is expensive.
+
+---
+
+## 2026-08-28 — shipped, with one correction to this ticket's own framing
+
+Landed in `8a02b8651`: `tools/progress.sh check` now re-reads every live
+ticket's `blocked-by` against `done/`, `decided/` and `rejected/`, and prints
+its own aperture with every verdict.
+
+### The correction: the EDGE is not what hides a ticket — the FOLDER is
+
+The ticket reads as though a stale `blocked-by` suppresses a ticket. Measured
+against `ready_tickets()`, it does not:
+
+```python
+if self.track_matches(t.track, track_filter) and all(b in done for b in t.blockers):
+```
+
+`done` here is `resolved_slugs` = `done/ | decided/`. A **closed** blocker
+therefore *satisfies* its edge, so a fully-cleared ticket sitting in `backlog/`
+ranks completely normally. Its stale edge is untidy, not harmful.
+
+Running the first draft of the check over the real board made this unavoidable:
+**17 findings, of which 12 were in `backlog/`, `rainy-day/` or `done-followup/`
+and cost nobody anything.** Failing the board on those is how a check earns the
+habit of being scrolled past — the same crying-wolf failure the skip banner
+avoided by firing on coverage holes only.
+
+So the severity split is by FOLDER, not by edge:
+
+| case | severity | why |
+| --- | --- | --- |
+| fully cleared, in `blocked/` | **failure** | the folder *means* "has an unmet blocker" and `ready`/`next` never scan it, so the ticket is genuinely invisible — the p85 case |
+| fully cleared, in a ranked folder | strict warning | ranks normally; stale, not harmful |
+| fully cleared, in `rainy-day`/`float`/`experimental` | strict warning | unranked **deliberately**; parked on purpose, not hidden by accident |
+| partially cleared | strict warning | some blockers closing is the normal life of a ticket |
+
+**None of this weakens the ticket's evidence** — all five measured cases were
+in `blocked/`, which is exactly the failing category. What changes is the
+mechanism: the compounding of a cleared edge *with* a folder nothing scans, not
+the edge alone. That matters for the fix, because a check that fails on the edge
+alone would have been 70% noise on day one.
+
+### The aperture, printed with every verdict including a clean one
+
+Per this ticket's own second half, the scan reads frontmatter and cannot see the
+prose half. `check` now says so on every run:
+
+> NOTE stale-edge scan reads FRONTMATTER only. A blocking claim made in a
+> ticket's PROSE is not checked and cannot be; a clean run means the frontmatter
+> half is clean, not the family. Convention that keeps them in sync: prose
+> stating a blocking relationship must also carry the frontmatter edge, and the
+> commit that closes a blocker marks its dependents' prose.
+
+Deliberately **not** a second query, on this ticket's own recommendation. An
+instrument that does not report its own reach is how "no findings" and "did not
+look" come to print the same thing — which is the same defect this check exists
+to catch, and it would have been embarrassing to ship it wearing that.
+
+### A duplicate I wrote and then removed
+
+I implemented a `BLOCKER-REJECTED` check — `resolved_slugs` excludes
+`rejected/`, so a rejected blocker can never satisfy an edge in *any* folder,
+and moving the ticket does not help. All true. It was **already there** as
+`BLOCKED-BY-REJECTED`, sixty lines further down the same function, with better
+reasoning than mine (it explains why not to auto-unblock: rejecting a decision
+often moots the dependent too).
+
+Mine is removed. Two mechanisms serving one concept is the smell
+`normalise-dont-special-case.md` names, and the second one is the one that stays
+broken. What the detour was worth is the guard: the incumbent check had **no
+test** and now has one. Zero instances on the board today.
+
+I found it only because a mutation run printed an assertion message containing a
+string I had not written. Reading the function first would have been cheaper.
+
+### Guards
+
+8 in `tools/progress_stale_edge_devtest.py`, over a throwaway board tree so the
+`blocked/` case is *proven to fire* even though live data currently has no
+instance. All four breaks mutation-tested — including one that first appeared to
+catch nothing, because my mutation was a syntax error and the harness scored a
+crashed run identically to a passing one. The harness had the same aperture
+problem as the thing it was testing.
+
+### Still open, and not by omission
+
+The prose half, exactly as this ticket describes it. No tooling is proposed for
+it here and none should be; the two cheap measures it recommends are a
+convention and closing-commit discipline, and the first of them is now printed
+by `check` itself where a reader will meet it.
+
+## Log
+- 2026-08-28 — resolved, commit PENDING-COMMIT.
