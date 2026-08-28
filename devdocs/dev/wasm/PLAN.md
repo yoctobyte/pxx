@@ -1259,6 +1259,45 @@ caller had ever passed anything but `WT_VOID`, so it had never fired. `WasmLoop`
 had the identical defect one procedure below and was fixed at the same time
 rather than when someone reached it.
 
+### Re-measured after the slice — and the histogram was a ranking of what is REACHED
+
+`compiler.pas` for wasm32, same probe build, after Phase 9a:
+
+| | before | after |
+| --- | --- | --- |
+| bodies lowered | 2056 of 3647 (56%) | **3222 of 3650 (88%)** |
+| bodies refused | 1591 | **428** |
+| refusal lines | 881 | 431 |
+
+The dynamic-array family is **gone** from the histogram — not reduced, absent.
+But the total did not fall by its 83% share, and what replaced it is the
+finding:
+
+| lines | refusal | was |
+| --- | --- | --- |
+| 267 | set membership, `in` | 68 |
+| 74 | `IR_DEFAULT_MEM` (op 52) | 59 |
+| 30 | open-array parameter | 23 |
+| 15 | builtin -50 | 4 |
+
+**`in` went UP, from 68 to 267, and nothing about `in` changed.** A body reports
+its FIRST refusal and stops, so the histogram ranks what each body *reached*,
+not what it is missing. 1163 bodies stopped at a dynamic array before they could
+discover they also needed `in`. Removing the leader does not subtract its share;
+it PROMOTES everything the leader was masking.
+
+So the earlier reading — "one feature at 83%, then a tail" — was right about
+the leader and wrong about the tail, and it was wrong in the direction that
+matters for planning: the tail was never small, it was hidden. The honest form
+of the claim is that the dynamic-array family was 83% of what programs hit
+FIRST. `in` is now 62% of the remainder on exactly the same reasoning, and the
+same caution applies to it.
+
+This is the diff-versus-summary lesson one level in. A histogram is a
+measurement, and it still misled, because the quantity it counts is not the
+quantity it appears to count. **Measuring the right thing is a separate act
+from measuring.**
+
 ### The blocker Phase 9 actually starts at, and a correction it forced
 
 The unprobed compile stops at `compiler error: EmitZeroFrameSlot: unhandled
