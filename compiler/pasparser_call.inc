@@ -692,6 +692,85 @@ begin
             ProcParamHasDefault[mpi * MAX_PROC_PARAMS + nextIdx];
 end;
 
+{ `obj.M` / `TClass.M` with no `@` and no argument list, read as a method
+  REFERENCE rather than a call.
+
+  Delphi lets the `@` be omitted where a method POINTER is wanted, so the same
+  three tokens mean two different things and only the CONTEXT separates them.
+  Two contexts supply that context today -- an assignment whose LHS is a
+  method-pointer variable, and a CAST whose target is a method-pointer type --
+  and they were answering the question separately: the assignment arms had the
+  reading, the cast arm did not, so `TSel(s.IPick)` fell through to the ordinary
+  expression path, was parsed as a zero-argument CALL, and the returned integer
+  was reinterpreted as a {Code, Data} pair. That crashed
+  (bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults) until the
+  arity check turned it into a diagnostic, which made it honest but no more
+  correct: the call reading is not too strict, it is the WRONG READING.
+
+  So the decision lives here, once, and the callers differ only in how they
+  establish that a method pointer is wanted -- exactly the split
+  BuildIndirectCallAST states for the callee node. Writing a fifth
+  AN_METHODREF construction site instead is what root-cause-over-microfix.md
+  says to stop and count rather than do.
+
+  Both receiver flavours are handled because they are one concept: a VARIABLE
+  (Self is the instance, AN_IDENT) and a CLASS NAME (Self is the metaclass, the
+  RTTI blob, AN_CLASSREF -- whose VMT lives at +24, not [Self+0], which is
+  IRMethodRefCode's business).
+
+  Returns -1 without consuming anything when the tokens are not this shape, so
+  a caller can simply fall through to ParseExpr. A following `(` means an
+  argument list, i.e. a real call, and is left alone. }
+function TryParseParenlessMethodRef: Integer;
+var rsym, rci, rmmi, opNode, refNode: Integer;
+begin
+  Result := -1;
+  if not DelphiMode then Exit;
+  if CurTok.Kind <> tkIdent then Exit;
+  if TokPos + 2 >= TokCount then Exit;
+  if Tokens[TokPos].Kind <> tkDot then Exit;
+  if Tokens[TokPos + 1].Kind <> tkIdent then Exit;
+  if Tokens[TokPos + 2].Kind = tkLParen then Exit;   { an argument list: a CALL }
+
+  rci := -1;
+  rmmi := -1;
+  rsym := FindSym(CurTok.SVal);
+  if (rsym >= 0) and (Syms[rsym].RecName >= REC_UCLASS_BASE) and
+     (not UClsIsRecord[Syms[rsym].RecName - REC_UCLASS_BASE]) then
+    rci := Syms[rsym].RecName - REC_UCLASS_BASE
+  else if (rsym < 0) and (FindUClass(CurTok.SVal) >= 0) and
+          (not UClsIsRecord[FindUClass(CurTok.SVal)]) then
+    rci := FindUClass(CurTok.SVal)
+  else
+    Exit;
+
+  rmmi := FindUMeth(rci, GetTokenStr(TokPos + 1));
+  if rmmi < 0 then Exit;
+
+  { committed: nothing below can fail, so no tokens are consumed speculatively }
+  if rsym >= 0 then
+  begin
+    opNode := AllocNode(AN_IDENT);
+    ASTIVal[opNode] := rsym;
+    ASTTk[opNode] := Ord(tyClass);
+  end
+  else
+  begin
+    opNode := AllocNode(AN_CLASSREF);
+    ASTIVal[opNode] := rci;
+    ASTTk[opNode] := Ord(tyPointer);
+  end;
+
+  Next; Next;   { receiver name and '.'; CurTok = method name }
+  refNode := AllocNode(AN_METHODREF);
+  ASTIVal[refNode] := UMthProc_[rmmi];
+  ASTLeft[refNode] := opNode;
+  ASTRight[refNode] := UMthVirSlot[rmmi];   { VMT slot (>=0 virtual) }
+  ASTTk[refNode] := Ord(tyRecord);
+  Next;         { consume method name }
+  Result := refNode;
+end;
+
 { A method mentioned with NO argument list at all, where the method REQUIRES
   arguments: `s.IPick;` on `IPick(A: LongInt)`. Every method-call site shares the
   shape `if CurTok.Kind = tkLParen then begin ...parse args... end;` with no

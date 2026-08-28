@@ -320,3 +320,59 @@ applied to the arity decision.
 turned this from a segfault into a diagnostic; weakening it restores the silence
 and re-opens the garbage-argument hole everywhere. The call reading is not "too
 strict" here — it is the *wrong reading*, and the fix is to supply the right one.
+
+## Defect B — the reading is fixed; one lowering gap remains
+
+**Verified first, as this ticket's own note asked.** A probe at the C4 alias
+cast arm printed `C4 alias cast taken for TSel` immediately before the error, so
+the inferred location is now measured fact rather than a reading of a docstring.
+Probe removed.
+
+**The fix.** `TryParseParenlessMethodRef` in `pasparser_call.inc` — **one**
+place answering "is this mention a call or a reference?", where two contexts
+were answering it separately. The cast arm consults it, gated on the alias
+being a method pointer (`AliasProcSig >= 0` **and** `AliasTk = tyRecord`, the
+16-byte `{Code, Data}` form the call arm already distinguishes from the pointer
+form), so no other cast flavour changes how its operand is read. Both receiver
+flavours are handled together because they are one concept: a variable (Self is
+the instance, `AN_IDENT`) and a class name (Self is the metaclass blob,
+`AN_CLASSREF`). **No fifth `AN_METHODREF` construction site was written.**
+
+Measured at HEAD against FPC 3.2.2 — the cast in ASSIGNMENT position now works
+for both receivers, and virtual dispatch survives the cast:
+
+| shape | pinned | HEAD | FPC |
+| --- | --- | --- | --- |
+| `m := TSel(s.IPick)` | SEGFAULT | **15** | 15 |
+| `m := TSel(TSvc.CPick)` | SEGFAULT | **10** | 10 |
+| `m := TSel(s.VPick)`, override via base ref | SEGFAULT | **1005** | 1005 |
+
+Pinned in `test/test_method_pointer_cast.{pas,expected}` — expectations taken
+from the FPC oracle, and confirmed to **segfault on `pinned`**, so it is not a
+test that would have passed anyway.
+
+### What is left: `AN_METHODREF` has no lowering as a VALUE
+
+Rows 3/6 — `TMethodRec(TSel(s.IPick)).Code` — now report
+
+```
+error: IR_UNSUPPORTED: frontend could not lower AST node (kind 45) — a frontend gap, would miscompile
+```
+
+The parse is now correct; the node reaches IR lowering as a genuine method
+reference and there is no arm for it in **value** position. `AN_ASSIGN` knows
+how to write a method reference (Code at +0, Data at +TARGET_PTR_SIZE), so the
+capability exists — it is simply not reachable except as an assignment RHS.
+
+**This is the third failure mode this shape has had, and each step was an
+improvement in honesty:** silent segfault → a false "wrong number of parameters"
+(the arity check, correct mechanism, wrong reading) → an accurate refusal naming
+the real gap. It is now the same honest `IR_UNSUPPORTED` exit as its virtual
+sibling [[bug-p-the-address-of-a-virtual-class-method-cannot-be-lowered]]
+(kind 88), which is the ticket to fix it **with**: one mechanism, two node
+kinds, and fixing either alone leaves the other's exit in place.
+
+The remaining work is Track A (`ir.inc`), not the frontend: factor the
+method-reference materialisation out of `AN_ASSIGN` into a temp-producing
+helper, and lower `AN_METHODREF` in value position through it — the same
+normalisation, one level down.

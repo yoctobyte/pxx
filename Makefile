@@ -2551,6 +2551,13 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_method_parenless_still_valid.pas $(TESTTMP)/test_method_parenless26
 	@$(TESTTMP)/test_method_parenless26 | diff -u test/test_method_parenless_still_valid.expected - \
 	  || { echo 'test_method_parenless_still_valid: FAIL - a legitimate parenless method mention was broken'; exit 1; }
+	@# A cast to a METHOD-POINTER type reads `obj.M` as a REFERENCE, not a call.
+	@# Segfaults on the pre-fix compiler (compiles clean, then jumps to an
+	@# integer), so this is not a no-op test. Expectations came from FPC.
+	@# bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults
+	@./$(COMPILER) test/test_method_pointer_cast.pas $(TESTTMP)/test_method_ptr_cast26
+	@$(TESTTMP)/test_method_ptr_cast26 | diff -u test/test_method_pointer_cast.expected - \
+	  || { echo 'test_method_pointer_cast: FAIL - a method-pointer cast lost its reference reading'; exit 1; }
 	@# a SECOND class of the same name in one unit must be refused, naming it
 	@./$(COMPILER) test/test_pascal_duplicate_class_fail.pas $(TESTTMP)/test_pascal_dup_class26 2>&1 \
 	  | grep -q 'duplicate class name TFoo' \
