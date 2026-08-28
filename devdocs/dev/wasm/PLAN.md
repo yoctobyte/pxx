@@ -970,10 +970,28 @@ because both slopes are zero; slice 2's lesson is that agreement with the
 reference is not the same as correctness, and the check says so where the
 figure is printed.
 
-**Result:** 231 of 236, up from 216. What remains is two real refusals —
-`IR_VAR_STORE` (a variant store) and builtin `-205` (`FloatToStr`) — plus three
-`IInterface` stubs that are declarations without bodies and not refusals at
-all. The `unreachable` scaffold comes out when the count reads N of N.
+**Result:** 231 of 233, up from 216 of 236. What remains is two real
+refusals — `IR_VAR_STORE` (a variant store) and builtin `-205`
+(`FloatToStr`).
+
+**The denominator moved because the report was counting non-defects.** Three
+`IInterface` methods are DECLARED without implementations; the RTTI blob names
+them, so a function index has to exist, and each gets `unreachable` because
+calling one must trap. That is the correct code, not a placeholder for missing
+code — and they were being counted and announced as holes in op coverage on
+every program that links the interface RTTI. The per-body *reason* already said
+so; the headline did not, which is the half that gets read. So the report is
+now two lines: gaps, which claim incompleteness, and declaration-only stubs,
+which do not. Both stay listed — a body that traps at run time must be visible
+at compile time, and the day one of these is a real missing body it is on the
+page.
+
+That was not cosmetic. **The completion criterion for this backend is that the
+count reads N of N**, and three permanent non-defects made it unreachable by
+construction: a signal that can never go clean is a signal nobody reads. With
+the split, `test_exception_typed.pas` and `test_exception_finally.pas` already
+report *op coverage is complete for this program*, which is true and was true
+before the change — nothing said so.
 
 **The other check corrected itself for the opposite reason.** `check_strop.sh`
 asserts the three RTL calls appear in the slice and in no program without

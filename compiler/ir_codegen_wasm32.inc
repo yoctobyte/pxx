@@ -56,6 +56,8 @@ var
   WasmLoweredCount  : Integer = 0;
   WasmBrokenNames   : AnsiString = '';
   WasmBrokenUnlisted: Integer = 0;   { broken bodies past the listing cap }
+  WasmStubCount     : Integer = 0;   { declaration-only stubs — NOT a coverage gap }
+  WasmStubNames     : AnsiString = '';
   WasmGSp           : Integer = -1;   { the $sp global's index }
   WasmCurSlot       : Integer = -1;   { function slot being emitted }
   WasmCurFrame      : Integer = 0;    { this body's frame size, bytes }
@@ -4057,15 +4059,45 @@ end;
   by design: a module with trapping holes must never look like a complete one. }
 procedure WasmReportCoverage;
 begin
-  if WasmBrokenCount = 0 then Exit;
-  WriteLn('wasm32: ', WasmLoweredCount, ' of ',
-          WasmLoweredCount + WasmBrokenCount,
-          ' bodies lowered; ', WasmBrokenCount,
-          ' emitted as `unreachable` (op coverage is incomplete):');
-  Write(WasmBrokenNames);
-  if WasmBrokenUnlisted > 0 then
-    WriteLn('    ... and ', WasmBrokenUnlisted,
-            ' more not listed (listing capped)');
+  { TWO reports, because they are two different facts and only one of them is
+    a defect. A body this backend could not lower is a hole in op coverage and
+    the phase is not done. A DECLARATION-ONLY stub — an interface method with
+    no implementation, named by the RTTI blob so a function index has to exist
+    — is not a hole at all; it gets `unreachable` because calling it must trap,
+    which is the correct code, not a placeholder for missing code.
+
+    They used to share a line, and the cost was not cosmetic. Every program
+    that links the interface RTTI carries three of these, so the headline said
+    "op coverage is incomplete" on a module whose coverage was complete — and
+    the phase-completion criterion for this backend is that the count reads N
+    of N, which three permanent non-defects made unreachable by construction.
+    A signal that can never go clean is a signal nobody reads.
+
+    Both stay LISTED. The stub line is not a suppression: a function that traps
+    at run time must be visible at compile time, and the day one of these is a
+    real missing body rather than an interface declaration, it is on the page.
+    What changed is which of the two claims "incomplete". }
+  if (WasmBrokenCount = 0) and (WasmStubCount = 0) then Exit;
+  if WasmBrokenCount > 0 then
+  begin
+    WriteLn('wasm32: ', WasmLoweredCount, ' of ',
+            WasmLoweredCount + WasmBrokenCount,
+            ' bodies lowered; ', WasmBrokenCount,
+            ' emitted as `unreachable` (op coverage is incomplete):');
+    Write(WasmBrokenNames);
+    if WasmBrokenUnlisted > 0 then
+      WriteLn('    ... and ', WasmBrokenUnlisted,
+              ' more not listed (listing capped)');
+  end
+  else
+    WriteLn('wasm32: ', WasmLoweredCount, ' of ', WasmLoweredCount,
+            ' bodies lowered — op coverage is complete for this program.');
+  if WasmStubCount > 0 then
+  begin
+    WriteLn('wasm32: ', WasmStubCount,
+            ' declaration-only stub(s) trap if called (not a coverage gap):');
+    Write(WasmStubNames);
+  end;
 end;
 
 { ===== the compiler's entry point =====
@@ -4180,17 +4212,30 @@ begin
       WasmBodyUnreachable;
       WasmBodyTerminate;
       WasmBodyEnd(i);
-      Inc(WasmBrokenCount);
+      { WHICH counter is the whole distinction. An ADDRESS-TAKEN body that never
+        arrived is normal — an interface's method declarations have no bodies
+        by construction and the RTTI blob names them. A CALLED one is a gap:
+        a forward declaration resolved elsewhere, or something the frontend
+        elided, and a call to it traps. }
       if WasmSlotInTable(i) then
+      begin
+        Inc(WasmStubCount);
         why := 'address taken, but no body was emitted — normal for a method '
-             + 'DECLARED without an implementation, such as an interface''s'
+             + 'DECLARED without an implementation, such as an interface''s';
+        if Length(WasmStubNames) < 65536 then
+          WasmStubNames := WasmStubNames + '    ' + WasmFuncName[i]
+                           + ' — ' + why + Chr(10);
+      end
       else
+      begin
+        Inc(WasmBrokenCount);
         why := 'declared and called, but no body was emitted';
-      if Length(WasmBrokenNames) < 65536 then
-        WasmBrokenNames := WasmBrokenNames + '    ' + WasmFuncName[i]
-                           + ' — ' + why + Chr(10)
-      else
-        Inc(WasmBrokenUnlisted);
+        if Length(WasmBrokenNames) < 65536 then
+          WasmBrokenNames := WasmBrokenNames + '    ' + WasmFuncName[i]
+                             + ' — ' + why + Chr(10)
+        else
+          Inc(WasmBrokenUnlisted);
+      end;
     end;
 end;
 
