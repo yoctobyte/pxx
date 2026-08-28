@@ -9834,3 +9834,92 @@ measurement of library surface at all and
 has never been started while items below it get worked. Escalated, not acted on:
 `prio:` is the owner's field, and Track N is undispatched by owner call anyway.
 Filed so the evidence outlives the session that measured it.
+
+## Both open questions answered — and the causal story is simpler than either guess (frankT, 2026-08-28)
+
+### 1. The timing was not a discrepancy. It was six hours of my own elapsed time.
+The pin verify published at **23:25:33Z**, ~3 minutes after frankT last reported
+it at 84%. It landed exactly as forecast. "The record is 6h old" was true and
+unremarkable — the gap is in *reading* it, not in the daemon. The `23:45:45Z`
+report is 20 minutes **later** and is the `c52fc38` full tier that produced the
+fifth red. **The hold bought what was charged for it: a completed 3202-job run
+published its verdict.**
+
+> **`verify_pin` publishes no `reports/` entry BY DESIGN** — its docstring says it
+> publishes exactly one thing, a run record, and touches no state another phase
+> reads, because feeding a days-old pin through the HEAD progression would set
+> "last tested" backwards and manufacture NEW-RED/FIXED pairs out of time travel.
+
+So "no report for the pin verify" is the design, not a loss. The verdict lives in
+the `pin_verify` block. **Worth knowing before it costs someone else an hour** —
+the reports directory is the wrong place to look and looks authoritative.
+
+### 2. The request never drained, and it never could have. **The lull did it.**
+```
+request queue landed   2026-08-28 00:09  (b441acdb4)
+daemon started         2026-08-27 22:19:53
+running code_fp        cc482c9fccc0
+```
+**The resident daemon never contained the code that drains the queue.** It could
+not have read the request. `--covering` agrees from the other end: *EXACT: none.*
+What ran was `verify_pin` off its own idle ladder, unprompted.
+
+**This is the third wrong diagnosis of the same phenomenon, and the third was
+mine again.** First: "starved by position, an idle phase is never reached" —
+frankT measured the phase being entered constantly. Second: reframed to "the axis
+is COMMITMENT, not PRIORITY" — right about `verify_pin`, but still a theory about
+the queue's *behaviour*. Third and actual: **the queue's code was never
+executing.** I spent a night reasoning about the scheduling of a mechanism that
+was not running.
+
+> **Sharper than "a pushed fix is not a live fix": when a resident process is the
+> consumer, its behaviour is not evidence about the code you are reading.** Check
+> `code_fp` against origin BEFORE theorising about scheduling. Two of my three
+> diagnoses were unfalsifiable for the same reason and neither of us noticed.
+
+The corollary is the good news: **the lull lever is real and it was the whole
+story.** Five hours of starvation ended when lanes finished, not when anything
+was tuned — and frankT twice declining to retune scheduling under load was right
+both times, for a better reason than either of us had.
+
+### Struck the request line myself (`verify-requests.tsv`, unserved)
+It is live code now and would be served. It asked for the pin **commit**
+`ab51855df`; the question was about the pin **tree** `83468c5462d4`, already
+answered RED/0-new. Serving it would spend a **3202-job full tier on the binding
+box, at a sha 20+ testable commits stale, to re-answer an answered question.**
+Struck with the reasoning left in the file as a comment. Ownership was clean:
+requesters write their own lines and frankT explicitly declined to touch another
+lane's request.
+
+> **Before queueing a targeted request: `--covering` first, AND check whether an
+> existing phase already produces that verdict.** `verify_pin` did.
+
+## watch.json is a RECORD, not live state — the sixth quiet-affirmative, and the only one authoring care could not have caught
+
+Sixteen seconds after restarting the daemon, `--status` reported it was running
+stale code and advised `trackt restart`. It was reading the **stopping** daemon's
+final `watch.json` write; the fresh daemon had not called `set_phase` yet.
+
+**Wrong in the direction that wastes the fix**: it says "still stale" about a
+daemon that is current, so the natural response is to restart again and see the
+same message. Fixed by requiring the record to belong to a process that still
+exists — `phase == "stopped"` is a farewell note, and a recorded pid is checked
+with `os.kill(pid, 0)`. Two devtest cases guard the over-correction, because a
+check that goes silent on the real case is worse than a false positive.
+
+> Same sentence as the heartbeat bug, one layer up. **A record of state is not
+> state.** And this one was found *by using the tool*, not by reasoning about it —
+> the only one of the six that no care at authoring time would have caught, and
+> the argument for the restart being worth doing independent of `commit_after`.
+
+Daemon now verified rather than assumed: pid 1991398 under systemd,
+`code_fp 35cc8e1ba1a3` matching clone and origin, already running a `full` tier at
+`04fea1461`. **`commit_after` and the request queue are live for the first time.**
+
+## Credit correction, in the other direction
+frankT: *"your reading of my log line is better than my log line."* It wrote that
+the synapse range was unsound and stopped there. **Refusing an unsound bisect is
+half the job; naming the candidate the unsoundness was hiding is the half that
+moves it.** Recorded because the split matters — the refusal was the harder call
+and the one that preserved the evidence; the inference was cheap once the refusal
+existed. Neither half works alone.
