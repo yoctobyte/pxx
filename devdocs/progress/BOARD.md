@@ -51,7 +51,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
 
-## backlog (296)
+## backlog (295)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -79,7 +79,6 @@ _none_
 | bug-a-xtensa-codegen-has-no-variant-support | S | 22 | bug | `var v: Variant; v := 1;` does not compile for --target=xtensa: `unsupported node in IR codegen: var_store`. The exact sibling of bug-a-riscv32-codegen-has-no-variant-support, which was fixed 2026-08-27 -- xtensa is the last backend with no IR_VAR_STORE / IR_VAR_BOX / IR_VAR_BINOP arm at all. | — |
 | bug-a-xtensa-refuses-to-lower-an-unreachable-syscall | S | 45 | bug | xtensa codegen errors with 'unsupported node in IR codegen: syscall' on a __pxxrawsyscall call that is statically unreachable on that target, which makes an otherwise-portable RTL unit uncompilable. Inconsistent with the ESP PAL's own pattern of refusing unsupported operations at RUNTIME rather than failing the build. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
-| bug-b-lib-dns-libc-failed-once-in-the-gate-and-claims-a-hermeticity-it-lacks | B | 30 | bug | lib_dns_libc's default build failed one `make lib-test` run on 2026-08-28 and did not reproduce in a full gate re-run or 15 direct runs of the same binary — cause undiagnosed, recorded so the next false red is not rediscovered from scratch. Separately and verifiably: the test's header claims `NO NETWORK: every lookup is localhost`, which is false in the PXX_DNS_LIBC build — it resolves `nonexistent-zzz-qqq.invalid`, which goes to the resolver. | — |
 | bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict | N | 40 | bug | pylib treats VT_CHAR and VT_STRING as ONE string type in ordering, repr, concat and text extraction — but `PyVarEq` bails on `p^.VType <> q^.VType` before it ever gets there, and `PyVarHashKey` has no VT_CHAR arm either. So a char-tagged key stores fine and then misses every lookup. No NilPy-reachable repro today (the pystr_ofchar boundary converts at every crossing), but this is the mechanism that turned Counter(str) into a SILENT 0 instead of a loud KeyError. | — |
 | bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name | N | 45 | bug | `def g(): return 1` followed by `if True: def g(): return 2` still calls the FIRST g. Split out of bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name when that one was fixed: it is a different mechanism — the def side, not the assignment side. A nested def has a position, but PyRegisterDefShells only walks module-level defs at DEPTH 0, so a def inside a branch never gets one. | — |
 | bug-n-a-field-assigned-from-a-module-global-expression-is-refused | N | 55 | bug | `G = 7 / 2` then `self.v = G` REFUSES to compile — \"cannot infer the type of field self.v - annotate it\". `G = 3.5` is accepted. PyModuleGlobalLiteralType reads a global's type off its initialiser token and can only see a bare LITERAL, so any global initialised by an expression is untypeable to the field pre-pass. | — |
@@ -142,6 +141,7 @@ _none_
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 55 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
 | chore-doc-pascal-dialect-divergences-pointer-difference | D | 25 | chore | Re-filed from decide-pointer-difference-unit and decide-should-a-null-variant-raise-like-fpc, both decided 2026-08-25. Two divergences from FPC are now CHOSEN rather than merely inherited, and a chosen divergence that is not written down is indistinguishable from a bug to the next reader. Both entries land in devdocs/dev/pascal-dialect-divergences.md. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
+| chore-t-a-standing-collector-cannot-say-so-to-the-ranker | T | 30 | chore | A ticket that is a DESTINATION for findings rather than a task — a standing collector — has no way to say so, so it ranks like work forever. feature-crtl-implement-libc-assumptions said in prose since 2026-07-20 that it has no done state and should not sit in the ready queue; it sat at the head of Track B's queue at p45 for five weeks and was dispatched to an agent as work on 2026-08-28. progress.py reads status and prio, not prose. | — |
 | chore-t-a-wikilink-to-a-ticket-that-does-not-exist-is-never-detected | T | 30 | chore | 52 distinct ticket-convention [[wikilinks]] across devdocs/progress resolve to no ticket (71 references; 13 cited by live, non-done tickets). Some are renames leaving a dead trail; some appear never to have been filed, which is work hidden behind a link that looks like a citation. Nothing checks. | — |
 | chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile | T | 20 | chore | The second, weaker half of the split_jobs lint: flag any job that RUNS a /tmp binary no line in that job produces. Prototyped and deliberately NOT shipped — it yields 5-7 candidates depending on how recipe lines are segmented, and every one needs individual adjudication. Shipping it half-tuned would produce exactly the noisy guard that gets muted. | — |
 | chore-t-nothing-re-checks-a-blocked-by-edge-after-its-blocker-closes | T | 45 | chore |  | — |
@@ -204,7 +204,6 @@ _none_
 | feature-cdecl-bodied-sysv-prologue | A | 58 | feature | Bodied Pascal `cdecl` procs: genuine SysV prologue (float params, >6 args) | — |
 | feature-cli-widgetset-flag | A | 20 | feature | CLI: --widgetset=<name> as sugar for -dWIDGETSET_<NAME>, so the flag reads like Lazarus' -ws | — |
 | feature-cross-frontend-interop-contract | A | 20 | feature | Cross-frontend interop contract — umbrella | — |
-| feature-crtl-implement-libc-assumptions | B | 45 | feature | crtl: implement the libc assumptions real-world C leans on | — |
 | feature-demo-ide-jump-into-includes-and-units | E | 35 | feature | garin's diagnostic parser keys off `a number between the first two colons` and carries no file, on the stated assumption that the compiler names one main unit. Since 2026-08-21 that is no longer true: a diagnostic in an include or a `uses`d unit is followed by an `in: <path>` line, which the IDE currently drops, so jump-to-error lands on the wrong file. | — |
 | feature-demo-nilpy-ide | E | 30 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | — |
 | feature-demo-portable-userland | E | 35 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
@@ -388,7 +387,7 @@ _none_
 | feature-wasm-frontend | A | 45 | feature | WebAssembly frontend — statically typed, IR-shaped; experimental | — |
 | feature-zig-frontend | Z | 45 | feature | Zig frontend — THEORETIC COMPLETION reached (frontend-side); experimental | — |
 
-## rainy-day (44)
+## rainy-day (45)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -407,6 +406,7 @@ _none_
 | feature-additional-cpu-targets | A | 50 | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
 | feature-allocator-quality | A | 50 | feature | Allocator quality: split / coalesce / bins / alignment | — |
 | feature-async-auto-backend | A | 50 | feature | Auto stackless/stackful backend selection | — |
+| feature-crtl-implement-libc-assumptions | B | 45 | feature | crtl: implement the libc assumptions real-world C leans on | — |
 | feature-dwarf-debug-info | A | 50 | feature | DWARF debug info (`-g`) — phased, x86-64 first | — |
 | feature-eliah-ai-command-rail | B | 45 | feature | feature: Eliah AI command rail + console pane | — |
 | feature-extended-type-support | A | 50 | feature | Proper `Extended` type support (currently aliased to Double) | — |
@@ -592,9 +592,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2562)
+## done (2563)
 
-2562 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2563 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (46)
 
@@ -773,7 +773,6 @@ _none_
 - [p 45] [A] feature-a-dynamic-array-of-frozen-strings
 - [p 45] [A] feature-a-getinterface-refcounting
 - [p 45] [A+O] feature-a-reentrant-heap-lock-and-per-thread-arenas
-- [p 45] [B] feature-crtl-implement-libc-assumptions
 - [p 45] [A] feature-dynamic-compiler-tables [parked — re-claim, do not duplicate]
 - [p 45] [P] feature-embed-pascal-script
 - [p 45] [N] feature-n-from-accepts-a-quoted-foreign-file
@@ -848,12 +847,12 @@ _none_
 - [p 30] [A] bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce
 - [p 30] [A] bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body
 - [p 30] [S] bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file
-- [p 30] [B] bug-b-lib-dns-libc-failed-once-in-the-gate-and-claims-a-hermeticity-it-lacks
 - [p 30] [N] bug-n-nilpy-carries-its-own-copies-of-the-float-type-table
 - [p 30] [N] bug-nilpy-an-extended-slice-cannot-be-assigned
 - [p 30] [T] bug-t-fpc-seed-canary-red-cited-lines-that-cannot-contain-the-identifier
 - [p 30] [A] chore-a-delete-the-dead-pascal-lvalue-statement-path
 - [p 30] [A] chore-a-re-include-bench-timing-in-tools-devtest
+- [p 30] [T] chore-t-a-standing-collector-cannot-say-so-to-the-ranker
 - [p 30] [T] chore-t-a-wikilink-to-a-ticket-that-does-not-exist-is-never-detected
 - [p 30] [U] decide-is-real-a-double-or-fpcs-80-bit-extended
 - [p 30] [U] decide-two-devdocs-directories-make-a-wrong-grep-look-like-a-refutation

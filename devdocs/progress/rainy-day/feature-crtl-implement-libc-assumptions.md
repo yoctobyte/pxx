@@ -6,15 +6,16 @@ prio: 45
 # crtl: implement the libc assumptions real-world C leans on
 
 > **AS OF 2026-08-28 THIS COLLECTOR'S LIST IS EMPTY — do not treat it as pending
-> work.** Every gap it had collected is closed, verified by measurement, not by
-> reading: `test/crtl_declaration_census.sh` (in `lib-test`) reports 358
-> declared, all defined, zero libc imports. The ticket stays open because it is a
-> standing collector and the next real-project bring-up will refill it — but
-> right now there is nothing here to pick up. Details at the bottom
-> (2026-08-28). Its `prio: 45` reflects the collector, not a queue of work.
+> work, and it is now PARKED in `rainy-day/` so the ranker cannot offer it as
+> if it were.** Every gap it had collected is closed, verified by measurement,
+> not by reading: `test/crtl_declaration_census.sh` (in `lib-test`) reports 358
+> declared, all defined, zero libc imports. The ticket is not done — it is a
+> standing collector and the next real-project bring-up will refill it, at
+> which point it moves back to `backlog/` at its `prio: 45`. Details at the
+> bottom (2026-08-28), and the reason for the park below that.
 
 - **Type:** feature (libraries) — Track B (`lib/crtl`).
-- **Status:** backlog, ongoing collector — 2026-07-06.
+- **Status:** rainy-day (parked 2026-08-28), ongoing collector — 2026-07-06.
 - **Premise (user, 2026-07-06):** gcc has its own libc; we have our own
   (`lib/crtl`, libc-free). Real C leans on a *waspnest of libc assumptions* —
   headers, macros, feature-test knobs, struct layouts, function contracts. Bring
@@ -711,3 +712,36 @@ So the three defences do different work and none replaces another:
 The third is the collector's real remaining function, and it is the one that
 cannot be automated, because the input is "what does real C code turn out to
 assume", which is discovered by compiling real C code and by nothing else.
+
+
+## 2026-08-28 — parked in `rainy-day/`, because saying so in prose did not work
+
+This ticket has said since 2026-07-20 that it is *"an ongoing collector by
+design ... so it does not have a 'done' state and should not sit in the ready
+queue as if it did"*, and it sat at the head of Track B's ready queue anyway,
+for five weeks, at `prio: 45`. Today it was dispatched to an agent as work. The
+prose was correct, prominent, and read by nobody who needed it, because the
+ranker does not read prose — it reads `status` and `prio`.
+
+**A ranked queue asserts that a ticket is UNBLOCKED. It does not assert that
+there is work in it.** Those are different claims and only the first is checked.
+A standing collector is the shape where they come apart permanently: its list
+empties every time someone closes its items, and nothing about that emptying
+changes its rank.
+
+So the fix is structural rather than textual. `rainy-day/` is loaded but never
+ranked (`progress.py`'s `RANKED_STATUSES`), which is exactly the behaviour
+wanted: the 700 lines of recorded lessons here stay findable, prio propagation
+and `check` still see it, and `next --track B` stops offering it. The move is
+reversible in one `git mv` and the README says so.
+
+**Why not `done/`:** because it is not done, and filing it there would replace
+one false claim with another. The census gates ONE of this ticket's classes —
+declared-but-undefined. The class that has cost the most is the one directly
+above this section: **not declared at all**, which no enumeration of the headers
+can see, and which is found only by compiling real C code. That function is
+live; it just has no queue entry today.
+
+**Why not `prio: 10`:** CLAUDE.md's own compat table names that anti-pattern —
+parking by priority "keeps it in the ranker's scan forever at zero value". The
+choice is between rankable and parked, not a number in between.
