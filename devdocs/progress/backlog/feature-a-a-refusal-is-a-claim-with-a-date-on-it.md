@@ -363,3 +363,63 @@ label that tells a reader nothing about how big a gap is.* Named now and confirm
 
 > **A list of gap names carries no magnitude, and magnitude is the only thing that orders
 > work.** Same shape as diff-versus-summary, pointed at planning.
+
+### CORRECTION 2026-08-28 — the histogram above is a FIRST-REFUSAL count, not a gap size
+
+Left visible rather than edited away. The table is real and its framing was wrong, and the
+wrongness was mine to catch: **a body reports its FIRST refusal and stops**, so the histogram
+ranks what each body *reached*, not what it is *missing*.
+
+Measured after the dynamic-array slice shipped:
+
+| | before | after |
+| --- | --- | --- |
+| lowered | 2056 | **3222** of 3650 |
+| refused | 1591 | 428 |
+| `in` | 68 | **267 — UP, and nothing about `in` changed** |
+| `IR_DEFAULT_MEM` | 59 | 74 |
+| open-array param | 23 | 30 |
+
+**Removing the leader does not subtract its share — it PROMOTES everything the leader was
+masking.** 1163 bodies were stopping at a dynamic array before they could discover they also
+needed `in`.
+
+So *"one feature at 83%, then a tail"* was right about the leader and wrong about the tail, in
+the direction that matters: **the tail was not small, it was hidden.** The honest claim is *83%
+of what programs hit first*.
+
+**And the least trustworthy number in such a table is the smallest one** — "record returns are
+five lines" was the punchline of the version above and is the most masked entry in it. A tail
+item's count is a lower bound, not a size.
+
+> **A HISTOGRAM IS A MEASUREMENT AND IT STILL MISLED, because the quantity it counts is not the
+> quantity it appears to count. Measuring the right thing is a separate act from measuring.**
+
+That is the sharpest form of this family yet: the fix for *"a name list carries no magnitude"*
+was to take a measurement, and the measurement's **framing** was then trusted without asking
+what it was a count OF.
+
+---
+
+## FACE TWELVE — a ONE-DIRECTIONAL instrument
+
+An arena-slope probe detects refcounts that are too **HIGH** — a leak. It is blind **by
+construction** to refcounts that are too **LOW**, which is a premature free: the direction that
+**corrupts** rather than wastes.
+
+Found because a deliberate break passed. Removing a retain makes refcounts too low, and every
+assertion in the suite pointed the other way. Worse, it is **invisible in the output until the
+freed block is REUSED** — the stale bytes survive and the wrong build prints the right answer.
+The assertion that catches it allocates a same-sized array between the free and the read.
+
+> **An instrument that can only be wrong in one direction reports "clean" for the entire
+> opposite half of the defect space, and nothing in its output says which half it covers.**
+
+Distinct from face seven (diffing against a buggy oracle): there the instrument was sound and
+the *reference* was wrong. Here the instrument is sound, the reference is sound, and the
+instrument's **sensitivity is one-sided**.
+
+**Consequence, disclosed and not yet measured:** three phases of managed-string work shipped
+with only the leak half of that pair. Filed as
+`chore-a-audit-the-managed-string-slices-for-the-premature-free-direction` — as a measurement
+task, not as a bug, because nobody has measured it.
