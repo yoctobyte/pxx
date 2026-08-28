@@ -167,3 +167,77 @@ mandates as step one is the deliverable, and it says the batch was already
 done. The one remaining candidate is fenced by this ticket's own scope rule and
 is now filed as a Track U decision with the measurement attached, so it can be
 settled in one read.
+
+---
+
+## 2026-08-28 (frankB, Track B) — NOT CLAIMED. Verified row by row: the Track B batch is exhausted; what remains is Track N.
+
+Picked up as head of B's queue, read the parked state, and **did not claim it** —
+the remaining work is not Track B's. Reporting rather than taking it.
+
+**I did not trust the parked table, and I did not re-run the ladder either.**
+This ticket's own first rule is that a count without a sha is a snapshot, and
+the 2026-08-18 re-measure (v352) is now ten days and many pins old — so it is
+exactly as stale as the 2026-08-14 table it replaced. A full 48-file ladder run
+was not affordable at the time of writing (box load 14.8, Track T mid-tier), so
+I answered the *routing* question a cheaper and more direct way: **checking each
+row individually** against `pinned` v389. That settles B-vs-N without producing
+today's wall counts, and I am not claiming it produced them.
+
+### Every row this ticket was filed to attack, verified present
+
+`six`, `warnings`, `colorsys`, `copy`, `bisect`, `xml.sax.xmlreader`,
+`urllib.parse`, `six.moves`, `xml.dom` — all present as `lib/rtl/mimic_*.py`.
+`codecs` and `urllib.request` have no `mimic_codecs.py` / `mimic_urllib_request.py`
+by that name but **do** resolve; compiling `import codecs` and
+`import urllib.request` on v389 prints
+
+```
+note: codecs -> mimic_codecs (shim, subset)
+note: urllib_request -> mimic_urllib_request (shim, subset)
+```
+
+so the absence is a file-naming detail, not a gap. **`xml.etree.ElementTree`,
+the one row the 2026-08-18 re-measure left open, is also done**: its fork was
+decided (Option A, the minimal shim —
+`decide-xml-etree-thin-tree-model-or-a-real-xml-library`, in `decided/`),
+re-filed as `feature-b-mimic-xml-etree-elementtree-tree-model`, and that ticket
+is in `done/` with `mimic-xml-etree` gated in `make lib-test`.
+
+### So the four remaining rows are all out of Track B's scope, each for its own reason
+
+| row | files | why not this ticket |
+| --- | --- | --- |
+| `genshi_core` | 2 | third-party package, not stdlib — and this ticket's scope rule says shimming one is impersonating a library. Both files are optional backends html5lib guards behind an import. |
+| `lxml` | 1 | third-party, and a C-library binding |
+| `weakref` | 1 | a runtime lifetime facility, not a module surface — confirmed still absent on v389 |
+| `xml.etree` | 4 | **shipped since**, see above |
+
+That leaves the language walls, which the last measure put at 32 with `yield`
+alone at 18. **This is Track N work wearing a Track B ticket's clothes**, and
+Track N is undispatched by owner call, so it is not mine to take.
+
+### The convergence, and the one genuinely-in-scope shim job it points at
+
+The B-side batch is exhausted **for this ladder's three corpora**, which are one
+family of self-contained web parsers with almost no stdlib footprint — the
+finding of
+`feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise`
+(resolved `b125395e2`). Measured there: a corpus with an *ordinary* footprint
+stops at its first missing import, and 16 of the 17 stdlib modules reportlab's
+top walls name have no shim at all.
+
+Verified again here on v389: **`functools` does not resolve** — and it was
+reportlab's #2 wall at **27 files**. `pickle` was 18. So thin-stdlib-shim work
+of exactly the kind this ticket was filed for still exists in quantity; it is
+simply aimed at the wrong corpus. The right home for it is
+`feature-nilpy-stdlib-coverage-gaps-measured` [p72], which is the top-ranked
+NilPy feature and has never been started — deliberately **not** duplicated into
+a new ticket here.
+
+### Suggested disposition
+
+Close or re-scope this ticket rather than leave it at the head of B's queue: as
+written it promises a batch that no longer exists, and its re-measure step has
+now been performed twice with the same answer. The `blocked-by` edge on the
+xml.etree decision is also stale — that decision is made and its work is done.
