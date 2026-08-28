@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:23 blocked:6 backlog:295 backlog_new:6 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2563 rejected:46`
+`unfinished:23 blocked:6 backlog:295 backlog_new:6 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2564 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-t-a-skip-that-cannot-say-why-is-a-pass-in-the-verdict` [T] — owner: pxx-a5
+_none — no lane is locked._
 
 ## unfinished (23) — parked mid-flight; re-claim, do not duplicate
 
