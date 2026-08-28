@@ -2583,6 +2583,17 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_resourcestring_addressable.pas $(TESTTMP)/test_resstr26
 	@$(TESTTMP)/test_resstr26 | diff -u test/test_resourcestring_addressable.expected - \
 	  || { echo 'test_resourcestring_addressable: FAIL - @resourcestring broke'; exit 1; }
+	@# Two generics referencing each other where only ONE direction is a
+	@# declaration-time dependency (inheritance); the other is a method-body
+	@# reference FPC resolves when the method is compiled. Treating both as
+	@# blocking manufactured a cycle out of a program that has none.
+	@# Pairs with test_generic_cycle_fail below, which asserts a GENUINE cycle is
+	@# still refused -- turning this test green by disabling the detector turns
+	@# that one red, which is the point of keeping both.
+	@# bug-p-mutually-referencing-generics-are-rejected-as-circular
+	@./$(COMPILER) test/test_generic_mutual_reference.pas $(TESTTMP)/test_gen_mutual26
+	@$(TESTTMP)/test_gen_mutual26 | diff -u test/test_generic_mutual_reference.expected - \
+	  || { echo 'test_generic_mutual_reference: FAIL - mutual generic refs rejected as circular again'; exit 1; }
 	@# a SECOND class of the same name in one unit must be refused, naming it
 	@./$(COMPILER) test/test_pascal_duplicate_class_fail.pas $(TESTTMP)/test_pascal_dup_class26 2>&1 \
 	  | grep -q 'duplicate class name TFoo' \

@@ -53,6 +53,37 @@ were measured.
 *"The symbol is there"* and *"its address can be taken"* both fail with the
 symbol present, and only the second one is the bug.
 
+## 2026-08-28 (frankA, later still) — the false cycle is gone; rung 6's wall is a THIRD ordering defect
+
+`bug-p-mutually-referencing-generics-are-rejected-as-circular` resolved. A
+prerequisite found in a METHOD BODY is materialisation-time and is now emitted
+without deferring; only class-body (declaration-time) edges defer. The
+distinction needed no new state — the scans already run class body first, so the
+boundary is one index — which is also what kept it inside Track P, since the
+`NSpec*` arrays live in `defs.inc` and a per-edge flag would have crossed into A.
+
+`generics.defaults.pas` **`:994` → `:3250`** (2256 lines).
+
+The new stop is the same ordering family a third time, and it is filed:
+[[bug-p-a-generic-prerequisite-is-emitted-before-the-referenced-template-exists]]
+(p60). The rewrite emits a template's alias right behind *that template's own*
+declaration, so a prerequisite naming a template declared LATER in the same type
+section lands before it exists:
+
+| | line |
+| --- | --- |
+| `TGStringComparer<T, THashFactory>` declared | ~985 |
+| `TGOrdinalStringComparer<T, THashFactory>` declared | **1002** |
+| `TGStringComparer.Ordinal`'s body names it | 3250 |
+
+**Rung 6 has now yielded three ordering defects in a row** (wall 6, the false
+cycle, this), each revealed only by fixing the one in front of it. That is worth
+saying plainly to whoever sizes the rung next: the wall count is not a work
+estimate, and each of these was invisible until its predecessor fell.
+
+`generics.collections.pas` still dies at the same `defaults` line without
+reaching one of its own.
+
 ## 2026-08-28 (frankA, later) — wall 6 is DOWN; rung 6's wall is now ONE defect, in both units
 
 `bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body` is

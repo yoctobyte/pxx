@@ -1065,6 +1065,7 @@ var
   nc, ti, i, j, k, na, ts, tc, gEnd, si, dfIdx: Integer;
   gmScan: Integer;   { -1 = the class body, >= 0 = a buffered method body }
   dScan, dHdr, dBase: Integer;   { mode-Delphi not-yet-buffered method impls }
+  nDeclEdges: Integer;   { NSpec entries below this came from the CLASS BODY }
   dup: Boolean;
 begin
   Result := False;
@@ -1136,20 +1137,26 @@ begin
     (specialize)`. That is rtl-generics' dominant comparer idiom, which lives in
     a class constructor body and nowhere else.
     bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body }
-  for gmScan := -1 to GenericMethodCount - 1 do
+  { THE CLASS BODY FIRST, AND SEPARATELY -- the order is the classification.
+
+    A `specialize X<..>` in the class body is a DECLARATION-TIME dependency:
+    `TDel<T> = class(specialize TEq<T>)` cannot be declared before its parent
+    exists. One in a METHOD BODY is a MATERIALISATION-TIME reference: it has to
+    exist by the time that method is streamed, which is after this class is
+    declared. Treating the second as the first manufactures a cycle out of a
+    program that has none -- bug-p-mutually-referencing-generics-are-rejected-as-circular.
+
+    The distinction needs no new state: the scans already run class body first,
+    so the boundary is an index. Everything below nDeclEdges is
+    declaration-time; everything at or above it is materialisation-time. }
+  ScanRangeForNestedSpecs(Templates[ti].TokStart, Templates[ti].TokCount, specName);
+  nDeclEdges := NSpecCount;
+
+  for gmScan := 0 to GenericMethodCount - 1 do
   begin
-    if gmScan < 0 then
-    begin
-      ts := Templates[ti].TokStart;
-      tc := Templates[ti].TokCount;
-    end
-    else
-    begin
-      if GenericMethods[gmScan].TemplateIdx <> ti then Continue;
-      ts := GenericMethods[gmScan].TokStart;
-      tc := GenericMethods[gmScan].TokCount;
-    end;
-    ScanRangeForNestedSpecs(ts, tc, specName);
+    if GenericMethods[gmScan].TemplateIdx <> ti then Continue;
+    ScanRangeForNestedSpecs(GenericMethods[gmScan].TokStart,
+                            GenericMethods[gmScan].TokCount, specName);
   end;   { gmScan }
 
   { MODE DELPHI: the same sweep over this template's method impls that the
@@ -1229,6 +1236,30 @@ begin
     writeln('SPEC ', specName, ' = ', templateName, ' nested=', NSpecCount);
     for k := 0 to NSpecCount - 1 do
       writeln('  needs ', NSpecName[k], ' from ', NSpecTmpl[k]);
+  end;
+
+  { MATERIALISATION-TIME ONLY: emit the prerequisites and DO NOT defer.
+
+    Deferring would re-emit this declaration behind them, and on the re-parse the
+    method-body reference is still undeclared -- it now sits AFTER this
+    declaration in the stream -- so the scan finds it again, defers again, and
+    the round counter eventually calls it a cycle. That is the false circularity:
+    two specializations each waiting for the other to be declared first, when
+    only one of them actually needs to be.
+
+    So register THIS specialization now (fall through) and put the prerequisite
+    declarations at TokPos, where they are parsed straight after it and well
+    before FlushPendingClassSpecializations streams any method that needs them.
+    A genuine cycle is unaffected: both its edges are declaration-time, so
+    nDeclEdges > 0 on at least one side and the deferral path below still runs.
+    test/test_generic_cycle_fail.pas is the control and must keep failing. }
+  if (NSpecCount > 0) and (nDeclEdges = 0) then
+  begin
+    NSpecInsCnt := 0;
+    for k := 0 to NSpecCount - 1 do
+      EmitSpecDecl(NSpecName[k], NSpecTmpl[k], k * MAX_TEMPLATE_PARAMS, NSpecNArg[k]);
+    InsertTokens(TokPos, NSpecIns, NSpecInsCnt);
+    NSpecCount := 0;
   end;
 
   if NSpecCount > 0 then
