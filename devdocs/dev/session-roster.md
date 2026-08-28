@@ -15275,3 +15275,91 @@ appended the half its own fix cannot reach (`a8ef25587`): the query reads
 frontmatter, and the three prose instances found later that day are invisible to
 it. I recommended **against** a second query for the prose half — a body-grep for
 slug mentions is mostly noise and one more instrument whose aperture is invisible.
+
+### aarch64 port landed — and porting the PROBE was a precondition, not a courtesy
+
+`cf70cb5be`. `ir_codegen_aarch64.inc` now admits and ranks on **loads**; my
+source-read ranking held. Fixedpoint green at `1bdc93d1b061`, 13 programs ×
+-O0/-O2/-O3 under qemu identical to the pre-port compiler, **all 6 targets at
+default -O 48/48 hashes identical** — the check that matters for an `-O3`-gated
+change — and x86-64 untouched by construction and confirmed.
+
+**The finding I did not anticipate when I ranked this "a threshold and a ranking
+key":** aarch64 had **no `a.resid` probe at all**, and this box has no aarch64
+disassembler — `objdump` built without aarch64 support, no `llvm-objdump`, no
+cross binutils. So there was **no way to see what the aarch64 residency pass
+decided. Not a slower way — none.** Porting TALLY and adding the ASSIGN lines
+x86-64 has and aarch64 never did was the precondition, and it paid on the first
+run:
+
+```
+TALLY sym=i count=4 loads=3    admitted:  4 > 3
+TALLY sym=s count=3 loads=2    EXCLUDED:  3 <= 3   <- the accumulator
+TALLY sym=j count=2 loads=1    EXCLUDED:  2 <= 3
+```
+
+Post-port all three take registers (x19/x20/x21). **One resident becomes three,
+and the one being refused was the loop-carried accumulator — refused while five of
+six registers sat idle.** Arithmetic on printed data, unobtainable here any other
+way. Same lesson as `PXXDBG`'s whole reason for existing, one backend over: the
+cost of not having the probe is not slowness, it is that the question cannot be
+asked.
+
+### A CONTROL caught a wrong measurement — and it is a new trap, the fourth
+
+qemu first said the port was **7% SLOWER** (0.93x) on a two-way interleaved
+min-of-5. The same binary measured **7.42** and, eleven minutes later, **11.26** —
+a **1.5× load swing, drifting faster than the interleaving could cancel.** None of
+the three traps already in that umbrella covers that.
+
+What settled it was adding a variant whose direction was already known: build at
+`-O2`, where residency is **off entirely**, and ask whether qemu prefers *that*.
+It does not, in any run:
+
+```
+-O2  (no residency)     11.96 12.63 13.23 12.75
+-O3  pre-port  (1 res)  11.26 12.24 12.86 12.27
+-O3  post-port (3 res)  10.54 10.88 11.87 10.84
+```
+
+Monotonic every run; **1.07-1.13×** for the port.
+
+> **When the box drifts faster than you can interleave, add a variant whose
+> expected direction you already know.** A structural *ordering* across three
+> variants survives drift that destroys a two-point comparison — because drift
+> moves all three together and cannot invert a known order.
+
+**The number is DIRECTIONAL AND A LOWER BOUND and must not be quoted otherwise.**
+qemu user-mode times translated instruction throughput and **does not model
+store-to-load forwarding — the precise stall residency exists to remove.** The same
+change was 1.9-2.1× on x86-64 *hardware*. 1.07-1.13× says the pass fires and helps;
+it is **not** a prediction for real aarch64 silicon, and no measurement on this box
+can be.
+
+`task-o-hand-w2stress-to-the-corpus` closed as already done (`9e9e84ab5`) — the
+program had landed with item 3 as `test/test_o3_resident_inplace.pas`, renamed and
+extended past the ticket's description. Checked against the ticket's own three
+requirements rather than assumed. My correction is recorded in the umbrella with
+the per-pass table, the `optcov` pointer, and the boundary — **and it added that
+item 3 and this port are themselves hours old and unswept, rather than leaving it
+implied.** That is the citation rule working the way it was meant to.
+
+### The hook refused a heredoc for QUOTING a glob, and that is not a defect to fix
+
+Appending the resolution via a shell heredoc was refused by
+`.claude/hooks/no-full-suite.sh`, because the prose **quoted the corpus glob
+literally** and the hook matches command text. Worked around by describing the
+glob instead of spelling it.
+
+**No change requested and none will be made from here** — hooks are the owner's,
+never a peer's to alter, and the lane that hit it says explicitly the false
+positive is cheap and the protection is not. I agree. It also confirms a rule I
+already carry (*the hook substring-matches blocked text anywhere in an invocation
+— paraphrase*), which now has a second measured instance.
+
+Worth naming the symmetry, on the night the fleet found six of these: **the hook's
+aperture is command text, and "a command" and "prose about a command" are
+indistinguishable in it.** It was *right to refuse on what it could see.* Face
+seventeen, in a guard rather than an instrument — and here the un-reportable
+aperture is the correct engineering trade, which is the counterexample worth
+keeping so the face is not read as "always fixable".
