@@ -93,3 +93,36 @@ for its own track.
 T owns the tool. Whichever option is taken, `feature-crtl-implement-libc-assumptions`
 moves back out of `rainy-day/` and into whatever the answer is — it is a Track B
 ticket and its content is unaffected.
+
+## Second instance, and it widens the field beyond collectors (coordinator, 2026-08-28)
+
+`feature-b-posix-and-fpc-named-socket-facades` [B p25] is a better instance than
+the crtl collector, and it is a **different kind**. Its own second line reads
+*"filed to preserve a design, not to schedule work"* — it says outright that it
+is not work — and it sits at p25 rather than at a queue head, so it misleads
+**less** than the collector did. It still got offered as work, twice: once by the
+ranker, once by me.
+
+That matters for the field's scope. The collector case invites reading `standing:`
+as *"this ticket is a standing survey"*. This case is a **preserved design**:
+nothing to survey, nothing recurring, no consumer — just a record someone will
+want if and only if they open that work. Both belong out of the ranked queue for
+the same reason, and it is not "it recurs". It is:
+
+> **the ticket's value is not conditioned on anyone acting on it now.**
+
+Two shapes so far — a standing survey and a preserved design — which is why the
+field should NOT be named for either. `standing: true` reads as the first one.
+Something closer to `ranked: false` says what it does rather than why, and admits
+the third shape nobody has hit yet.
+
+**A caution the first instance did not surface.** This one was *inaccurate at the
+moment it was filed* — written from `feature-networking`'s design log rather than
+from the tree, so it claimed the FPC-named facades were never built when
+`sockets.pas` (633 lines, 4 consumers) and `baseunix.pas` (149 lines, 10 files
+naming it in a `uses` clause) are built and load-bearing. Corrected same-day by
+its own filer (`f2d76bc30`). Unranking a ticket makes it **less likely to be
+re-read**, so whatever the field is called, an unranked ticket's claims decay
+with nothing pushing back — the crtl collector's premise and this one's were both
+wrong within days of filing. That is an argument for the field, not against it,
+but it is also an argument that unranking should not be silent: it wants a date.
