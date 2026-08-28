@@ -143,4 +143,4 @@ a predicate that can be tested directly, then say plainly which rows are the
 gate and which are smoke.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit 3968ba2ed.
