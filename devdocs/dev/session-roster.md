@@ -14674,3 +14674,60 @@ numbers across its commits are not.**
 and CLAUDE.md sends every agent to that playbook before hand-patching a probe, so a general-purpose
 probe documented nowhere is a tool nobody finds. And the float-residents unknown must live in the
 umbrella, not only in a peer message that dies with the session.
+
+### frank-optimize parks — and finds aarch64 is still on the pre-item-1 rule
+
+`5fedcb605`, umbrella moved `working/` → `unfinished/` **unprompted** (first lane this session to
+release its own lock without being asked). Nothing half-applied: W2 `c93292fe4`, item 3
+`d2eafe1e3`, docs `ee411c181`, each green with the fixedpoint verified.
+
+**The finding, and I verified it in the source rather than from the report — and from the other
+side too:**
+
+| | |
+| --- | --- |
+| `ir_codegen_aarch64.inc:757` | `if Counts[k] <= 3 then Continue;` — admission by **total** accesses |
+| `ir_codegen.inc:9755` | ranks on **`LCounts`** (loads) |
+| `ir_codegen.inc:9771` | *"The old test was `Counts[k] <= 3` over loads"* — the comment written by whoever changed it |
+
+Two sides of the same change, one of them self-documenting. **aarch64 still excludes the
+loop-carried accumulator item 1 exists to admit** — worth **1.9-2.1x on x86-64, more than W2 and
+item 3 combined** — and it is the cheapest of the three to port: a threshold and a ranking key,
+no new encodings, no new predicate. Track O's per-backend rule names aarch64 explicitly.
+
+**Re-priced the umbrella 55 → 70** (`4b87be7bc`), reasoning written into the ticket. Track O had
+correctly cut 85 → 55 when its own decomposition collected the prize; it then superseded that
+premise on the way out, which is the condition that re-opens a rank. Not back to 85 because
+nothing is blocked on it and it is a port of proven work. **Track O may revise on resume — it has
+the benches, I do not.**
+
+> **A TICKET'S MOST RECENT SECTION READS AS ITS NEXT ACTION.** Its filer wrote the aarch64 row in
+> deliberately *"so nobody ports the most recent thing in it first just because that is what the
+> last section talks about."* Document order becomes work order, and the newest writing is the
+> loudest regardless of what it ranks. Same family as *a diagnosis in the shape of the previous
+> fix* — **recency and resemblance both supply confidence the content has not earned.**
+
+**Closeout, and three parts worth copying:**
+
+- `a.poisonslot` in the playbook, distinguished from the metadata probes beside it on the right
+  axis: *those ask "was it never populated or never read"; this asks **"does anything still READ
+  this storage"*** — the question that blocks an optimisation wanting to stop maintaining
+  something. It carries the **exact-`TypeSize` rule** as well as the technique: a wider store
+  corrupts the neighbour and **manufactures the bug it is hunting** — a probe that generates its
+  own false positive.
+- `differential-probes.md` got a **cross-reference, not a row**: the probe has no external oracle,
+  it compares a program against **itself under a perturbation**. Naming that a fifth shape beats
+  forcing it into a table it does not fit.
+- **A known-unknowns TABLE, not prose** — four rows: float residents, `try`/`except` bodies, `-O3`
+  at large, aarch64. *"Not covered reads as fine the moment it is only in prose."* The antidote to
+  a clean sweep meaning "nothing I swept uses this". The float row is the sharpest: **the first
+  step to extending item 3 to floats is extending the PROBE, not the optimisation** — the
+  instrument gates the work, and noticing which comes first is what stops a guess shipping as a
+  result.
+
+**On the stop condition, which is the coordination lesson.** It named two calls as shaping the
+work: refusing item 1 at the tail of a session, and **asking for a stop condition rather than a
+target**. The second produced the poison probe — *"I was looking for a reason to park cleanly, and
+building the experiment was cheaper than the park would have been."* A stop condition asked for to
+prevent a bad landing bought a better route through instead. **A well-formed way out is sometimes
+what makes the way through visible.**
