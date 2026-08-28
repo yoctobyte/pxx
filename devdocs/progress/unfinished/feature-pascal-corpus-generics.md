@@ -2,7 +2,7 @@
 track: P
 prio: 65
 owner: claude-A
-blocked-by: [gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo]
+blocked-by: []
 status: unfinished
 type: feature
 ---
@@ -881,3 +881,52 @@ While chasing this, note that the `in: <path>` line under a diagnostic named a
 [[bug-a-a-diagnostic-in-a-used-unit-names-the-wrong-source-file]]. Anyone driving
 a corpus unit reads that line to find the wall; trust the `near:` window over it
 until that is fixed.
+
+
+## 2026-08-28 (frankA) — `blocked-by:` edge cleared, and BOTH blockers checked by behaviour
+
+The frontmatter edge to `gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo`
+was stale: that gap is in `done/`. Nobody walked the edge when it closed, which
+is the missing-edge family — resolving a blocker is an event on the BLOCKER, and
+the edge lives on the DEPENDENT.
+
+**Checked by running code, not by the ticket's location**, because "filed as
+done" and "the capability works" are different claims:
+
+```pascal
+td := GetTypeData(TypeInfo(TSmall));     { TSmall = -128..127 }
+WriteLn(Ord(td^.OrdType), td^.MinValue, td^.MaxValue);   { 4, -128, 127 }
+```
+
+Correct for that subrange, so the gap really is delivered. Edge cleared.
+
+### The second blocker was recorded in PROSE only, and it is also satisfied
+
+The body's *"Blocked on the TObject root-method slice"* section says the edge to
+[[feature-pascal-builtin-tobject-class]] was *"recorded as a `blocked-by:` edge"*
+— **it never was**; frontmatter carried only the typinfo one. That is the same
+family pointing the other way: a prose claim about an edge, invisible to
+`progress.sh check`, which reads frontmatter.
+
+Measured too. What this rung needs is that `Equals`/`GetHashCode` be virtual and
+overridable, since every default comparer overrides them:
+
+```pascal
+type TFoo = class
+  function Equals(Obj: TObject): Boolean; override;
+  function GetHashCode: PtrInt; override;
+end;
+var o: TObject;  { o := TFoo.Create; o.GetHashCode -> 42 }
+```
+
+Compiles, and dispatches through the VMT to `TFoo` from a `TObject`-typed
+variable. So the capability is present and no edge is added.
+
+**Two honest limits on that check.** `feature-pascal-builtin-tobject-class`
+remains open in `backlog/` for its *wider* scope (`var o: TObject`,
+`TObject.Create`, the classinfo-blob decision) — this only establishes that the
+part this rung named is available. And **FPC rejected my override probe**, so
+there is no oracle behind it: signature parity with FPC (`PtrInt` vs `Integer`,
+mode) is unverified, and by the dead-oracle rule that probe proves the capability
+exists in pxx and nothing about whether it matches FPC. Anyone relying on parity
+should re-probe with a compiling FPC control first.

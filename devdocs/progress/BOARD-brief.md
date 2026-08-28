@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:22 blocked:6 backlog:295 backlog_new:6 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2563 rejected:46`
+`unfinished:23 blocked:6 backlog:295 backlog_new:6 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2563 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
-- `feature-pascal-corpus-expansion` [P] — owner: frankA
+_none — no lane is locked._
 
-## unfinished (22) — parked mid-flight; re-claim, do not duplicate
+## unfinished (23) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -26,8 +26,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
 - `feature-opt-o3-register-pressure` [O]
+- `feature-pascal-corpus-expansion` [P]
 - `feature-pascal-corpus-fpc-testsuite` [P]
-- `feature-pascal-corpus-generics` [P] — blocked-by: gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo
+- `feature-pascal-corpus-generics` [P]
 - `feature-pascal-type-helpers` [A]
 - `feature-port-rtl-over-libc` [A]
 - `feature-real-dynlib-loader` [B] — blocked-by: bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream
@@ -45,10 +46,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `regression-lib-test-lib-synapse` [B] — blocked-by: bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream
 
-## Ready — top 30 of 308, ranked
+## Ready — top 30 of 309, ranked
 
 - `[p 85] [N]` bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
+- `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 72] [N]` feature-nilpy-stdlib-coverage-gaps-measured
 - `[p 70] [A]` bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream (unblocks 2)
@@ -76,6 +78,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
-- `[p 62] [A]` feature-a-typeref-migrate-consumers
 
-_278 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_279 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
