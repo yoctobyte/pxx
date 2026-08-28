@@ -217,6 +217,81 @@ def t_final_count_is_recomputed_after_the_run():
     return "skip count is recomputed at report time"
 
 
+# --------------------------------------------------- the PUBLISHED artefact --
+# testmgr producing the field is half the fix. The ticket is about what a
+# reader of tstate sees days later, and the archive had no skip key at all.
+
+def _tw():
+    s = importlib.util.spec_from_file_location(
+        "tw", os.path.join(HERE, "twatch.py"))
+    m = importlib.util.module_from_spec(s)
+    s.loader.exec_module(m)
+    return m
+
+
+def _render(skips, verdict="GREEN"):
+    tw = _tw()
+
+    class _C(object):
+        def __init__(self, p):
+            self.path = p
+
+    rep = {"tier": "full", "wall": "1200", "scale": "1", "verdict": verdict,
+           "compiler_sha256": "abc", "jobs": [], "skips": skips}
+    with tempfile.TemporaryDirectory() as d:
+        rel = tw.write_report_md(_C(d), "h", "a" * 40, "b" * 40, rep,
+                                 [], [], [], {"last_by_tier": {}})
+        return open(os.path.join(d, rel)).read()
+
+
+def t_report_header_carries_the_counts():
+    body = _render({"count": 50, "coverage_holes": 50, "by_reason": {}})
+    assert "skips: 50" in body and "skip_holes: 50" in body, body[:400]
+    return "the report header states how much the verdict speaks for"
+
+
+def t_coverage_banner_fires_on_holes():
+    """The 2026-08-26 case: GREEN over a suite that partly did not run."""
+    body = _render({"count": 50, "coverage_holes": 50,
+                    "by_reason": {"corpus absent: external/x": ["a"]}})
+    assert "DID NOT RUN on this box" in body, body[:600]
+    assert "speaks for the jobs that ran" in body
+    return "a narrowed verdict says so above the fold"
+
+
+def t_no_banner_when_nothing_was_a_hole():
+    """A recipe's own guard is not a coverage hole; don't cry wolf."""
+    body = _render({"count": 2, "coverage_holes": 0,
+                    "by_reason": {"t: SKIP by design": ["a", "b"]}})
+    assert "DID NOT RUN on this box" not in body, body[:600]
+    assert "skipped jobs, by reason" in body, "the set is still named"
+    return "self-guarded skips are listed but not alarming"
+
+
+def t_the_skipped_set_is_named_by_reason():
+    body = _render({"count": 2, "coverage_holes": 2,
+                    "by_reason": {"corpus absent: external/lua":
+                                  ["test-lua#00", "test-lua-cross#00"]}})
+    assert "corpus absent: external/lua" in body
+    assert "test-lua-cross#00" in body
+    return "reasons and job names both reach the reader"
+
+
+def t_a_report_with_no_skip_data_still_renders():
+    """Legacy/partial reports must not crash the publisher."""
+    body = _render({})
+    assert "verdict: GREEN" in body
+    assert "DID NOT RUN" not in body
+    return "absent skip data degrades quietly"
+
+
+def t_archive_row_carries_skips():
+    src = open(os.path.join(HERE, "twatch.py")).read()
+    assert '"skips": (report.get("skips") or {}).get("count")' in src, \
+        "the ndjson archive row has no skip count, so no query can find one"
+    return "the uncapped archive records the skip count"
+
+
 def t_a_skipped_advisory_job_renders_as_skip():
     """SKIP must outrank NOTICE in the per-job line.
 
@@ -236,6 +311,12 @@ def t_a_skipped_advisory_job_renders_as_skip():
 
 TESTS = [t_summary_is_present_when_empty,
          t_a_skipped_advisory_job_renders_as_skip,
+         t_report_header_carries_the_counts,
+         t_coverage_banner_fires_on_holes,
+         t_no_banner_when_nothing_was_a_hole,
+         t_the_skipped_set_is_named_by_reason,
+         t_a_report_with_no_skip_data_still_renders,
+         t_archive_row_carries_skips,
          t_only_skip_status_counts,
          t_groups_by_reason,
          t_coverage_holes_counted_separately,

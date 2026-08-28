@@ -1755,6 +1755,12 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
              # later, and "verify against a KNOWN sha" is unusable if the report
              # does not name the binary (task-t-seed-from-stable-defeats-rebuild).
              "compiler_sha256: %s" % (report.get("compiler_sha256") or "unknown"),
+             # How much of the suite this verdict actually SPEAKS for. A skip
+             # is passlike, so without these two numbers a GREEN here is
+             # indistinguishable from a GREEN that ran everything.
+             "skips: %s" % ((report.get("skips") or {}).get("count", "unknown")),
+             "skip_holes: %s" % ((report.get("skips")
+                                  or {}).get("coverage_holes", "unknown")),
              "---", ""]
     if report.get("timed_out") or report.get("verdict") == "TIMEOUT":
         lines += ["> **THIS RUN HAS NO VERDICT.** It hit its %s-second deadline "
@@ -1783,6 +1789,27 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
                       "tree. A `%s` verdict covers x86-64 only — do not read it "
                       "as matrix coverage."
                       % (fmt_age(age), fmt_age(age), report["tier"]), ""]
+
+    # What this verdict does NOT speak for. The breadth and -O3 notes below ask
+    # it of a whole tier; this asks it of the jobs inside THIS run, which is
+    # the version that bites without warning: the tier was right, the run
+    # completed, and a chunk of it quietly did not execute.
+    skips = report.get("skips") or {}
+    holes = skips.get("coverage_holes") or 0
+    if holes:
+        lines += ["> **COVERAGE: %d job(s) DID NOT RUN on this box** (of %d "
+                  "skipped). They are scored passlike, so they are invisible "
+                  "in the verdict above — a `%s` here speaks for the jobs that "
+                  "ran, not for the suite."
+                  % (holes, skips.get("count") or holes, report["verdict"]), ""]
+    if skips.get("by_reason"):
+        lines += ["<details><summary>skipped jobs, by reason (%d)</summary>"
+                  % (skips.get("count") or 0), ""]
+        for why, names in sorted(skips["by_reason"].items()):
+            shown = " ".join(names[:12])
+            more = "" if len(names) <= 12 else " …+%d more" % (len(names) - 12)
+            lines += ["- **%s** — %s%s" % (why, shown, more)]
+        lines += ["", "</details>", ""]
 
     # -O3 coverage: the breadth note's question, one tier over. `opt` is
     # DISJOINT from the quick<native<limited<full chain and runs only as idle
@@ -3039,6 +3066,19 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                             # lacks it; absent means "not known", not "false".
                             "timed_out": bool(report.get("timed_out")),
                             "unreached": report.get("unreached"),
+                            # Jobs that RAN NOTHING but scored passlike. Its
+                            # sibling `unreached` has been archived since the
+                            # teardown work; skips had no key at all, so no
+                            # consumer of this archive could tell a sweep that
+                            # covered 3031 of 3081 jobs from one that covered
+                            # 3081. Count and coverage-hole count only -- the
+                            # per-reason grouping lives in the report md, which
+                            # is where a human reads it; this is the field a
+                            # query filters on. Absent on rows before
+                            # 2026-08-28: "not known", never zero.
+                            "skips": (report.get("skips") or {}).get("count"),
+                            "skip_holes": (report.get("skips")
+                                           or {}).get("coverage_holes"),
                             "deadline": report.get("deadline"),
                             "wall": report["wall"], "new_red": new_red,
                             "fixed": fixed,
