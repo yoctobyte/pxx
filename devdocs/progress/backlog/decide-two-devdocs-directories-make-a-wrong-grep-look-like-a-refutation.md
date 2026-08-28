@@ -77,3 +77,31 @@ two directories under one name would be strictly worse than today.
 
 Anything under `devdocs/progress/**` (the board) or `docs/**` (Track D's
 public docs). This is only the two internal developer-doc directories.
+
+## Second instance, in a different tree — the progress board, 2026-08-28
+
+The coordinator concluded a ticket had not been filed, on the strength of **two greps
+with different wording plus an mtime sweep**, and filed a duplicate. Track O had
+already filed it. The searches covered `devdocs/progress/backlog/` and
+`devdocs/progress/unfinished/`; the ticket was in **`devdocs/progress/backlog_new/`**
+— a fourth directory that `ready`/`next` *do* scan and the searches did not.
+
+**This is the same failure as the `devdocs/dev` vs `devdocs/developer` case this
+ticket was filed about, in a different tree.** Which matters, because it means the
+subject is not "someone should merge two doc directories" but a general property:
+
+> **A search across a set of sibling directories is only as complete as the list of
+> siblings the searcher happened to type.** Nothing in the empty result names the
+> directories it did not visit, so a blind search and a true absence are the same
+> output.
+
+Both instances were *non-existence* claims, which is the direction that does not
+survive a single search. The cost here was small — one duplicate ticket, folded back
+in the same hour — but the mechanism is identical to the one that nearly recorded a
+correct citation as false earlier the same day.
+
+**Worth noting for whoever decides this:** the fix that would have caught it is not a
+tidier directory layout, it is `tools/progress.sh` itself — a ticket search that knows
+its own set of status directories cannot omit one. A tool that enumerates the
+canonical list is a construction that cannot express the mistake; remembering to type
+four paths is a documented trap.
