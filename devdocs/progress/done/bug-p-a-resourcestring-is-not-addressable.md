@@ -257,4 +257,4 @@ the "3 sites" figure this session spent a thread correcting. No B ticket was
 held and `lib/` had no in-flight edits. Declared rather than done quietly.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit c9cf8c457.
