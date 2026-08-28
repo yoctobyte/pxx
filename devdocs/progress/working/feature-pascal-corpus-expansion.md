@@ -11,6 +11,40 @@ prio: 75
   neglected by comparison — user call).
 - **Owner:** frankA
 
+---
+
+## LIVE STATUS — rung 6 (`rtl-generics`). THE ONE CANONICAL TABLE.
+
+**Every other wall table in this file is a dated snapshot of what was true when it
+was written, and they disagree with each other by design.** Three of them
+accumulated because each session appended its measurement rather than editing the
+last — right for the record, wrong for anyone asking "where is this now", who
+then reads whichever table they scroll to first. Wall 4 sat `filed` in one table
+and `(to file / relay to frankB)` in another while it was actually **done**.
+**Update THIS table. Leave the snapshots alone.**
+
+Last measured 2026-08-28 against binary `4157f75831bb`, on the **pristine**
+corpus (no stubs).
+
+| # | wall | owner | status |
+| --- | --- | --- | --- |
+| 1 | typinfo surface | B | **DONE** — facade `cfa72767f` |
+| 2 | generic method header binds to same-named non-generic class | P | **DONE** — `042bcbb32` |
+| 3 | nested `specialize X<T>` in expression position | P | open, diagnosis banked, not reached by the probe yet |
+| 4 | SysUtils: `EArgumentOutOfRangeException`, `CreateRes`, `Error`/`TRuntimeError` | B | **DONE** — all three declared in `lib/rtl/sysutils.pas` (191, 154/155, 208/268); verified by compiling a `raise EArgumentOutOfRangeException` program, not by grep |
+| 5 | method pointers | P | **the current blocker.** Defect A fixed `9ab19fb21`; defect B open, 28 sites |
+
+**Rung 6 is behind wall 5 alone.** Walls 3 and 4 are not reached by the probe —
+4 because it is done, 3 because 5 stops the compile first, so **3's status is
+"open, unverified against the current tree"** rather than "next". Re-probe before
+trusting it.
+
+Under wall 5, the root cause is now
+[[bug-p-a-method-call-with-missing-arguments-is-accepted-and-reads-garbage]]
+(p80): a method mentioned without its arguments is compiled as a zero-arg call
+reading garbage, which is why a cast to a method-pointer type takes the call
+reading. Fix that first; defect B may fall out of it.
+
 ## Why (the gap)
 The C frontend got a driven ladder (c-testsuite → zlib → cjson → lua → sqlite →
 tcc, all green). **Pascal never got one.** What exercises the Pascal frontend
@@ -290,6 +324,8 @@ generics implementation**. Method: stub each wall out in a throwaway copy
 wall becomes visible. Stubs are labelled `{PROBE: ...}` in that copy and exist
 only to see past a wall — nothing here is a claim that the unit compiles.
 
+*(SNAPSHOT 2026-08-28, stubbed copy — superseded. Live table at the top.)*
+
 | # | wall | owner | sites | ticket |
 | --- | --- | --- | --- | --- |
 | 1 | typinfo: `PTypeData` fields, `PTypeInfo`, `GetTypeData`, `TTypeKind`, `TOrdType`, `TFloatType` | **B** | see list below | `feature-typinfo-facade-unit` (p72) |
@@ -351,6 +387,8 @@ is the only thing that keeps this section honest.
 
 ### Current state of the five walls
 
+*(SNAPSHOT — superseded. Live table at the top.)*
+
 | # | wall | owner | status |
 | --- | --- | --- | --- |
 | 1 | typinfo surface | B | facade landed `cfa72767f`; **type-level API only** — its instance-taking overloads are still unreachable, see below |
@@ -390,6 +428,8 @@ the earlier partition was measured through a stubbed copy, and stubs are what
 made it a partition rather than a compile.
 
 **Binary `ea689da902bb`. `generics.defaults.pas` now reaches line 2411.**
+
+*(SNAPSHOT — superseded. Live table at the top.)*
 
 | wall | status now |
 | --- | --- |
