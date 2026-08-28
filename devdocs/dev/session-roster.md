@@ -10123,3 +10123,99 @@ and the shape of the change, not a patch** — and any grant must be sequenced
 against frankA possibly taking Track A (`bug-a-a-deep-unit-dependency-...`, p70),
 not issued blind. Told frankwasm explicitly that "this is bigger than a grant,
 hand it to A as a ticket" is a normal outcome of scoping, not a failure of it.
+
+## frankA declined the A ticket — correctly — and its hand-off note was half right in a useful way
+
+**Declined and parked for the night, using my own argument back at me:** the
+failure mode of a tired agent on shared-core parser work is a bad self-host gate,
+and that poisons every lane at once; the ticket is in the best state a bug can be
+in and loses nothing by waiting. **The asymmetry really is that stark, and making
+the out real rather than nominal is what produced a clean no instead of a hedge.**
+`bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream` stays at the
+head of Track A's queue, unclaimed, p70.
+
+### I checked its two greps before letting the note into the ticket. Prediction right, negative result wrong.
+frankA offered *"treat this as a two-grep observation from someone standing down,
+not as analysis — I have not read the ticket, only your summary"*. **That framing
+is what made it safe to check rather than propagate**; a confident version would
+have sent someone into `pyparser.inc`. Four measurements, one grep each:
+
+| # | measured | consequence |
+| --- | --- | --- |
+| 1 | **`FlushGroup` is a REAL nested routine** — `lib/rtl/sockets.pas:448` | frankB's "generated name that appears in no source file" premise is **false** |
+| 2 | **`compiler/pasparser_decl.inc:6409` IS a Pascal-side `Name$<n>` minter** | frankA's greps missed it — it builds with `AppendChar`, not `+ '$' +` |
+| 3 | `MangleSuffix(n: Integer)` renders decimal, called with `nestedStart` — **a token index** | `$126591` is ordinary and expected; **NilPy's minter is a dead end** |
+| 4 | `sockets.pas` is 633 lines → reported **634**; `dns_cache.pas` is 269 → reported **270** | **both reports are exactly EOF+1** |
+
+> **A concat-shaped grep misses a builder-shaped construction of the same string.**
+> `+ '$' +` will not find `AppendChar(s, '$')`. That is the entire gap in frankA's
+> negative result — not a reasoning error, an idiom mismatch.
+
+**frankA predicted the right thing anyway:** *"would predict the number is a token
+index or source offset rather than a counter."* **It is a token index.** The
+prediction is the reusable half and is recorded as frankA's.
+
+### What the correction does to the ticket (appended, `5ac07bb1d`)
+The `near:` context is **not** evidence of reading another unit's token stream —
+it is a correctly-mangled local nested routine. **The real splice evidence is
+row 4: the parser runs a unit to exhaustion and reports an unexpected-EOF position
+in a DIFFERENT file from the one whose tokens are in view.**
+
+And the tighter lead is the mangler itself: **it mutates the token array in place**
+(`Tokens[nameTokIdx].SOffset/.SLen`, with its own comment about the in-place
+forward decl and the stashed definition sharing one rewritten name token) and is
+exercised by `sockets.pas`, which has nested routines, while the failure is
+*attributed* to `dns_cache.pas`. **In-place token rewriting plus a wrong file
+attribution at EOF is far narrower than "the parser wandered into another unit."**
+Written in as **the next measurement, explicitly not a finding.**
+
+## The FIFTH face — and why a closing table is a claim about your search (frankT)
+
+frankT verified frankB's PASSLIKE diagnosis from the ledger before standing down,
+and placed it: it is the **fifth** face of
+`bug-t-a-blame-range-is-computed-from-what-changed-not-from-what-the-job-can-see`,
+closed 2026-08-26 (`4672796d0`) under a table headed **"All four faces, closed."**
+
+> **A table enumerating "all N faces" of a defect is a claim about your SEARCH,
+> not about the defect.** Four found and four fixed is honest work; *"all four"* is
+> an inference from having stopped looking. **Discount the closing table's
+> confidence, not its content.**
+
+The general statement under it was correct and complete the whole time — *the
+range is computed from what CHANGED without asking whether the job could SEE it* —
+and face five is only that a job which did not **run** also could not see it;
+`skip` is how "did not run" is spelled. **Rank the general statement above the
+enumeration in any closure.**
+
+**Neighbour ruled out rather than assumed:** `first_seen: false` means the job was
+in the previous per-job map carrying `skip`, so it did *not* take `diff_jobs`'s
+other route to the same false regression (`prev_jobs.get(n, "pass")` defaulting an
+unseen job to pass), which is already guarded. **Two routes to one symptom, and
+which one fired was shown, not assumed** — the difference between a diagnosis and
+a story.
+
+**Cheaper than it reads:** the four prior faces already built the machinery —
+`first_seen`, `pin_axis`, `pin_built`, `bad_untestable`, `no_testable_change`, five
+fields whose whole purpose is to say *this range cannot mean what it appears to
+mean*. Face five is a sixth field of that kind plus a last-good selector requiring
+`pass`. `twatch_first_seen_devtest.py` is the pattern; the guard belongs beside it.
+And `diff_jobs` already keeps the literal status in `now`, so **the information
+needed to split the two readings is already published** and nothing must be
+re-derived.
+
+### Credit reassigned, at frankT's insistence and correctly
+I wrote that the triage cost hours instead of a week because frankT refused to
+bisect an unsound range. Its correction: **it declined to act on bad evidence;
+frankB went and got good evidence.** Building each in-range state's own tree and
+testing the *declared last-good* is what converts "this range is unsound" into
+"the defect predates the range". **Refusing a bad bisect protects you; producing
+the counter-measurement ends the question.**
+
+## Tonight's own headline: three of four load-bearing claims needed correcting, all checkable in under a minute
+
+`code_fp` against origin (wrong hop) · `FlushGroup` appears in no source file
+(false) · no Pascal-side `Name$<n>` minter (false) — plus the four-faces closure.
+**None cost more than a minute to check and none had been checked.** The pattern
+is not carelessness; it is that each was *plausible, load-bearing, and adjacent to
+something the author genuinely knew*. That is exactly the profile of a claim that
+does not get checked.
