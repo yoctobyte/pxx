@@ -390,6 +390,12 @@ procedure WasmEmitCall(node: Integer; isStmt: Boolean); forward;
 procedure WasmEmitProcAddr(node: Integer); forward;
 procedure WasmEmitCallInd(node: Integer; isStmt: Boolean); forward;
 procedure WasmEmitVirtualCall(node: Integer; isStmt: Boolean); forward;
+{ Not a dispatch target — WasmEmitGetMem calls it to marshal a constructor's
+  arguments, and GetMem is lowered as a BUILTIN, which puts its call site above
+  the indirect-call machinery it shares. Caught by the FPC canary, twice now
+  the same way: the file self-hosts perfectly with the call unresolved. }
+function WasmEmitIndArgs(sigProc, firstArg, startIdx: Integer;
+                         const what: AnsiString): Boolean; forward;
 
 { The address at which the PASCAL VARIABLE `si` lives, which is not always the
   address of its slot. A var/out parameter's slot holds the CALLER's address,
