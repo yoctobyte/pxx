@@ -118,7 +118,7 @@ _none_
 | bug-nilpy-four-remaining-absent-builtins | N | 12 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
 | bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching | P | 65 | bug | A parameter's pointer element type is lost between registration and overload matching | — |
-| bug-p-a-resourcestring-is-not-addressable | P | 55 | bug | `@SomeResourceString` is `error: undefined variable` — pxx parses a `resourcestring` section as a plain const section (pasparser_proc.inc:4783), and a const has no address. FPC makes resourcestrings addressable (they are runtime-replaceable variables), which is what `Exception.CreateRes(@SArgumentOutOfRange)` — the Delphi/FPC idiom, 3 sites in generics.defaults.pas — depends on. | — |
+| bug-p-a-resourcestring-is-not-addressable | P | 65 | bug | `@SomeResourceString` is `error: undefined variable` — pxx parses a `resourcestring` section as a plain const section (pasparser_proc.inc:4783), and a const has no address. FPC makes resourcestrings addressable (they are runtime-replaceable variables), which is what `Exception.CreateRes(@SArgumentOutOfRange)` — the Delphi/FPC idiom — depends on. Measured 2026-08-28: **28 `CreateRes(@…)` sites** in the rtl-generics corpus, 18 of them in `generics.collections.pas` and 7 in `generics.defaults.pas`; the addressed symbol is the corpus's own resourcestring (`generics.strings.pas:26`), NOT our `lib/rtl/rtlconsts.pas` const, which `generics.defaults.pas` does not even use. Supersedes the earlier estimate of 3 sites. | — |
 | bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
 | bug-p-an-unknown-compiler-directive-is-silently-ignored | P | 35 | bug | compiler/lexer.inc's {$...} handler is an if/else chain of 34 CaseEqual(command, ...) arms with no terminal else, so ANY directive outside those 34 is silently ignored — no warning, no note, exit 0. {$FATAL} is one confirmed instance (bug-p-fatal-directive-is-silently-ignored) and the mechanism guarantees there are others. Filed separately from the {$FATAL} ticket on purpose: fixing {$FATAL} closes that ticket and leaves this generator intact. | — |
 | bug-p-fatal-directive-is-silently-ignored | P | 35 | bug | {$FATAL text} and {$MESSAGE FATAL text} are silently ignored: the frontend handles warning/message/error and treats every other directive as a no-op, so a guard block that means 'stop, this configuration is unsupported' compiles clean and produces a binary that should not exist. | — |
@@ -668,6 +668,7 @@ _none_
 - [p 68] [N] feature-nilpy-user-defined-decorators
 - [p 65] [P] bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython [parked — re-claim, do not duplicate]
+- [p 65] [P] bug-p-a-resourcestring-is-not-addressable
 - [p 65] [P] bug-p-two-different-nested-specializations-of-one-template-collide
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source [parked — re-claim, do not duplicate]
 - [p 65] [N] feature-nilpy-iter-and-next-over-a-container
@@ -714,7 +715,6 @@ _none_
 - [p 55] [N] bug-n-keys-through-an-untyped-receiver-is-not-dispatched-cross-module
 - [p 55] [N] bug-n-super-as-an-expression-fails-with-a-misleading-diagnostic
 - [p 55] [N] bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only
-- [p 55] [P] bug-p-a-resourcestring-is-not-addressable
 - [p 55] [P] bug-p-qword-div-by-a-literal-above-2-63-is-signed
 - [p 55] [P] bug-p-the-address-of-a-virtual-class-method-cannot-be-lowered
 - [p 55] [A] chore-a-the-range-checked-fpc-seed-cannot-be-built

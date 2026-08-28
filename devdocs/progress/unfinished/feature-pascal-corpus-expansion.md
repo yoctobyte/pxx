@@ -43,7 +43,13 @@ wall 7 was first recorded here as Track B, "the constant exists at
 exist and it *is* exported — and neither fact is the defect. The corpus writes
 `CreateRes(@SArgumentOutOfRange)`, which takes an **address**, and a plain
 `const` has none. Worse, our copy is not even the symbol in play: the corpus
-declares its own under a `resourcestring` section in `generics.strings.pas:24`.
+declares its own under a `resourcestring` section in `generics.strings.pas:25-26`
+(`resourcestring` at :25, `SArgumentOutOfRange` at :26 — I cited `:24` here and
+to the coordinator, off by one, in the middle of an exchange about how a
+`file:line` is exactly what makes a wrong answer persuasive). Conclusive:
+`generics.defaults.pas:42` does not use `RtlConsts` at all, so our copy is not
+merely the wrong candidate, it is out of scope in the unit where the failures
+were measured.
 *"The symbol is there"* and *"its address can be taken"* both fail with the
 symbol present, and only the second one is the bug.
 
@@ -390,7 +396,20 @@ only to see past a wall — nothing here is a claim that the unit compiles.
 | 1 | typinfo: `PTypeData` fields, `PTypeInfo`, `GetTypeData`, `TTypeKind`, `TOrdType`, `TFloatType` | **B** | see list below | `feature-typinfo-facade-unit` (p72) |
 | 2 | generic method header binds to same-named non-generic class | **P** | ~700 lines gated | `bug-p-a-generic-methods-out-of-line-header-binds-to-a-same-named-non-generic-class` |
 | 3 | `TGeneric<T>.ClassMethod` inside another generic's body | **P** | 13 in `defaults`, ~357-ish shape count in `collections` | `bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body` |
-| 4 | SysUtils gaps: `EArgumentOutOfRangeException`, `Exception.CreateRes`, `System.Error`/`TRuntimeError` | **B** | 3 + 3 + 7 | (to file / relay to frankB) |
+| 4 | SysUtils gaps: `EArgumentOutOfRangeException`, `Exception.CreateRes`, `System.Error`/`TRuntimeError` | **B** | ~~3 + 3~~ **7 + 7** + 7 (see note) | (to file / relay to frankB) |
+
+> **The two `3`s in row 4 were one wrong measurement reported twice.** Re-measured
+> 2026-08-28: `generics.defaults.pas` has **7** `EArgumentOutOfRangeException`
+> sites and **7** `CreateRes(@SArgumentOutOfRange)` sites — and they are *the same
+> seven lines* (2960, 3049, 3075, 3078, 3182, 3218, 3221), because each line
+> spells both. So the two symbols never had independent counts to agree on; one
+> figure was recorded under two headings, which is what made it look corroborated.
+> A count that stops at 3 where the truth is 7 is the shape of an error-limited
+> compile, not of a grep. Corpus-wide the real figure is **28** `CreateRes(@…)`
+> sites — 18 in `generics.collections.pas`, 7 here, plus one each of
+> `SDuplicatesNotAllowed` / `SDictionaryKeyDoesNotExist` / `SArgumentNilNode` —
+> so this blocks **collections** harder than defaults, and collections has not
+> been probed past its earlier walls.
 
 After stubbing all four, `generics.defaults.pas` produced **no further distinct
 errors** — the walls above are the complete set for that unit, not a prefix of

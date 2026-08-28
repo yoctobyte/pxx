@@ -1,11 +1,11 @@
 ---
 slug: bug-p-a-resourcestring-is-not-addressable
 track: P
-prio: 55
+prio: 65
 type: bug
 status: backlog
 blocked-by: []
-summary: "`@SomeResourceString` is `error: undefined variable` — pxx parses a `resourcestring` section as a plain const section (pasparser_proc.inc:4783), and a const has no address. FPC makes resourcestrings addressable (they are runtime-replaceable variables), which is what `Exception.CreateRes(@SArgumentOutOfRange)` — the Delphi/FPC idiom, 3 sites in generics.defaults.pas — depends on."
+summary: "`@SomeResourceString` is `error: undefined variable` — pxx parses a `resourcestring` section as a plain const section (pasparser_proc.inc:4783), and a const has no address. FPC makes resourcestrings addressable (they are runtime-replaceable variables), which is what `Exception.CreateRes(@SArgumentOutOfRange)` — the Delphi/FPC idiom — depends on. Measured 2026-08-28: **28 `CreateRes(@…)` sites** in the rtl-generics corpus, 18 of them in `generics.collections.pas` and 7 in `generics.defaults.pas`; the addressed symbol is the corpus's own resourcestring (`generics.strings.pas:26`), NOT our `lib/rtl/rtlconsts.pas` const, which `generics.defaults.pas` does not even use. Supersedes the earlier estimate of 3 sites."
 ---
 
 # A `resourcestring` is not addressable
@@ -129,3 +129,29 @@ site count. Measured:
 So this blocks `generics.collections.pas` harder than `generics.defaults.pas`,
 which is the larger unit of rung 6 and has not been probed past its earlier
 walls yet. Do not size this from the defaults-only figure.
+
+### Where the "3" came from, and why it looked corroborated
+
+Worth recording, because the wrong number survived being quoted between three
+sessions. `feature-sysutils-delphi-exception-api-gaps-found-by-rtl-generics`
+(done, historical — do not edit it) states two counts as separate findings:
+*"`EArgumentOutOfRangeException` — 3 sites in `defaults`"* and
+*"`Exception.CreateRes(@ResourceString)` — 3 sites"*. Two symbols, two headings,
+the same figure: that reads as corroboration.
+
+It is not. Both symbols occur **7** times in `generics.defaults.pas`, on *the
+same seven lines* — 2960, 3049, 3075, 3078, 3182, 3218, 3221 — because each line
+spells both:
+
+```pascal
+raise EArgumentOutOfRangeException.CreateRes(@SArgumentOutOfRange);
+```
+
+So there were never two independent counts to agree with each other. One
+measurement was recorded under two headings and inherited a second heading's
+worth of apparent confirmation. And a count that stops at 3 where the truth is 7
+is the shape of an **error-limited compile**, not of a grep — the same instrument
+confusion that produced the "5" elsewhere in this thread.
+
+The corrected figures above were taken by listing the matching lines rather than
+counting them, which is why they are quotable.

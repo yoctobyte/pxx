@@ -67,6 +67,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [P]` bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
+- `[p 65] [P]` bug-p-a-resourcestring-is-not-addressable
 - `[p 65] [P]` bug-p-two-different-nested-specializations-of-one-template-collide
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [N]` feature-nilpy-iter-and-next-over-a-container
@@ -74,6 +75,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [O]` feature-opt-bulk-copy-is-byte-at-a-time
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
-- `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 
 _278 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
