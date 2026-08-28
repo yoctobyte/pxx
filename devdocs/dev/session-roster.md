@@ -13735,3 +13735,88 @@ stated reason: it moves the corpus without the design risk. **No lane conflict b
 Track O works in `ir_codegen.inc`, the p55 is in `pasparser_proc.inc`. Purely the session cap.
 The A/P lock is released and stays released; **do not re-derive frank-optimize's hold as an A/P
 hold — it is the cap, third identity this hold has had.**
+
+### Tick 2026-08-28 late — pxx-a5 lands T p60 in one session; frank-optimize dispatched on the p85
+
+**`0dec0194a` — a SKIP is not a last-good.** `job_anchor()` now answers *"where did this job
+last RUN AND PASS"*; `last_covering_sha()` answered *"which earlier run's tier CONTAINED it"*.
+**Tier coverage is not execution, and the coverage answer is confidently wrong exactly when the
+job never ran.** Ticket in `done/`, credit recorded to frankB who filed it — including the
+counter-measurement (rebuilding the declared last-good's own tree under the pin actually in
+force there, and watching it fail identically) that made it a fact rather than a hypothesis.
+
+Both risks I flagged in the dispatch were real and one changed the design:
+
+- **skip as a THIRD state, not moved between buckets** — `PASSLIKE` is untouched. `skip` stays
+  pass-like for the run verdict and for `reg_open`, so a corpus-less run still returns GREEN and
+  `red -> skip` still closes a regression. Only the *anchor* reading changed. **Reclassifying
+  would have fixed the anchor by breaking the verdict.**
+- **break it twice** — it broke it four ways, and pxx-a5 went past my instruction correctly:
+  anchoring on the last *pass* rather than the last *status*, because pass-at-A / skip-at-B /
+  fail-at-C gives an empty range under the ticket's own proposal and the true `A..C` under this
+  one. Erring wide on purpose, with `last_covering_sha`'s docstring as the authority.
+
+### Break D — an assertion that matches TEXT can be satisfied by PROSE
+
+Of the four mutations, three fired guards and **D fired nothing**: the fix still visibly in the
+file and merely unreachable, because the ordering assertion matched the string `job_anchor` in
+the **block comment above the call** and so passed no matter where the call actually sat.
+
+> **A guard defeated by a comment.** Anchor guards on the expression, never on a name that also
+> appears in prose. Found by *running the mutation*, not by reading the test — reading the test
+> shares its population with the test.
+
+**Not numbered a new face.** It is face nine's mechanism (a comment carrying a false claim)
+meeting a test guard; inflating the count is the thing the family ticket warns against. Recorded
+as a worked example instead, and pointed at `bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing`
+[T p45] — **already in pxx-a5's own ready queue**, whose subject this is exactly. A p45 with a
+measured instance is a different ticket from a p45 with a hypothesis.
+
+### Two escalations, both ruled
+
+**1. Ledger format — `never_passed` accepted, no lane action.** Additive, absent-means-false.
+Sixth field beside `first_seen` / `pin_axis` / `pin_built` / `bad_untestable` /
+`no_testable_change`. Recorded here rather than broadcast: no lane reads those fields today, and
+waking a session to hand it a finding it cannot act on is the failure already committed once
+this week.
+
+**2. The re-scan — split ruling, first half a QUESTION not an assumption.**
+
+- **The archive is not rewritten.** tstate verdicts are keyed by sha and cited by `resolve`
+  lines across the board. A wrong historical range is a true record of *what the tool believed
+  at the time*; rewriting it falsifies history exactly as editing an old handoff note would.
+- **The live set is the population, and it is five, not the archive.** Before anyone builds
+  `--job-history`: **does the open set self-heal at the next full tier?** If `job_last_pass` is
+  built forward only, a job with no recorded pass makes `job_anchor` refuse and `range_for`
+  open no range — synapse's nine-commit window evaporates on its own. pxx-a5 already
+  reconstructed that behaviour for `c52fc389fd97`. Asked, not assumed.
+
+**Directive back: split the `reg_open` trade out before parking.** `red -> skip` counting as
+FIXED appears **exactly once in the repo**, at line 268 of a ticket now in `done/`, with no
+ticket of its own — measured, not guessed. Deferring it to *"if the false fixed is ever seen to
+cost something"* leaves it with no observer: **a trigger nobody is assigned to watch is not a
+trigger**, and `done/` is where findings stop being looked at. Check it against
+`bug-t-a-skip-that-cannot-say-why-is-a-pass-in-the-verdict` [T p50] — same confusion pointing a
+third way; they may want to be one ticket or explicit siblings.
+
+Declining the 86-file family sweep with plexus at load 27 on the owner's workstation was right;
+the covering subset was the risk surface.
+
+### Dispatch state after this tick
+
+| session | state | expiry |
+| --- | --- | --- |
+| frankwasm | working `IR_DEFAULT_MEM` | its park line |
+| **frank-optimize-b4** | **dispatched** `feature-opt-o3-register-pressure` [p85] | — |
+| pxx-a5 | filing the split-out, then parks | slot freed to frank-optimize |
+| frankA | parked, next in line on [P p55] | when a slot frees |
+| frankB | idle by decision, no trigger fired | four recorded triggers |
+| Track N | undispatched — owner's reserved call | not re-asked |
+
+`progress.sh check` → **board OK with warnings** (350 dead-commit citations, 666 historical
+hygiene findings; both long-standing, neither new). Track T **UP**, full tier through
+`84ddb6fc1209`, `new_red: []`.
+
+**frank-optimize's hold had THREE identities over its life** — the A/P lane lock, then the
+session cap, then released. It was told all three, because a hold whose reason has quietly
+changed is how one becomes permanent.
