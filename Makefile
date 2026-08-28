@@ -13979,6 +13979,17 @@ lib-test: pxx-stable-check
 	# implementation gets wrong ("a"b is TWO items; a"b" is one literal item).
 	$(PXX_STABLE) -Fulib/rtl test/lib_commatext.pas $(TESTTMP)/lib_commatext
 	test "$$($(TESTTMP)/lib_commatext | tail -n 1)" = "COMMATEXT OK"
+	# VarType speaks FPC's varXxx codes, and the constants exist at all. Numbers
+	# MEASURED from fpc 3.2.2, not transcribed — the set is irregular (varBoolean
+	# = 11, sized ints from 16, strings at 256) so a guessed one would look right
+	# and be wrong. 11 of 12 rows are FPC's answer exactly; the documented
+	# divergence is `v := 1` (FPC narrows the LITERAL to varShortInt, we do not).
+	# Both text tags fold onto varString, which is what makes VarType(v) =
+	# varString true for a one-char string — FPC has no char variant either.
+	# The predicates are asserted to AGREE with VarType on every row: that is the
+	# real regression risk, since they read the private tag.
+	$(PXX_STABLE) -Fulib/rtl test/lib_variants_vartype_codes.pas $(TESTTMP)/lib_variants_vartype_codes
+	test "$$($(TESTTMP)/lib_variants_vartype_codes | tail -n 1)" = "VARTYPECODES OK"
 	# The Python math surface (NilPy's `import math` resolves against lib/rtl's
 	# math unit): e/tau/inf/nan, isnan/isinf, pow, log(x,base), atan2,
 	# degrees/radians, copysign's sign-bit rule, isclose, factorial, comb.
