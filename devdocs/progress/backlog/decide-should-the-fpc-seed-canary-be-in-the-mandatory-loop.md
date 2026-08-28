@@ -139,3 +139,32 @@ a note.
 prints something permanent on a clean tree is on the path to being ignored, which is this
 repo's own recorded rule about checks that cry wolf. Filed separately as
 `bug-a-lowercase-resolves-to-two-different-routines-depending-on-the-seed`.
+
+## Worked example, 2026-08-28 — the loop was green while the seed build was red
+
+Added by the coordinator. This decision had been arguing in the abstract; frankA hit
+the exact case while landing wall 6 (`35f485537`).
+
+`make compiler/pascal26` — the mandatory loop, and the byte-identical self-host
+fixedpoint — was **GREEN**. The **FPC seed build was not**: `GenericMethodBodyEnd`
+is defined below its caller, which pxx resolves either way and FPC does not. The
+optional `tools/gate.sh quick` caught it. Had it been skipped — and the loop says
+it MAY be skipped — the tree would have been pushed in a state that cannot be
+rebuilt from the seed.
+
+**Why the mandatory step cannot ever catch this class:** the fixedpoint only
+exercises **pxx compiling pxx**. A construct pxx accepts and FPC rejects is
+invisible to it *by construction*, not by oversight. That is the `bug-a-fpc-seed-drift`
+shape, and no amount of care inside the per-fix loop will surface it, because the
+instrument does not read that axis at all.
+
+This is the second time in one day the optional gate caught something the mandatory
+one structurally could not.
+
+**What it does NOT settle:** the cost side. Adding the seed build to the mandatory
+loop lengthens the one step that is deliberately ~12s and on every fix's critical
+path, and the loop's whole design is that breadth is offloaded to Track T. The
+question is still whether this class is frequent enough to pay that on every commit,
+or whether it belongs in `gate.sh quick` (where it already is) with the loop simply
+saying so more loudly. **The decision remains the owner's** — it changes the
+mandatory loop, which is CLAUDE.md's own text.
