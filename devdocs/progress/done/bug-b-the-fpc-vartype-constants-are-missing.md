@@ -165,4 +165,4 @@ re-run or 15 direct runs and is filed as
 Synapse jobs skipped, same standing caveat.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit fb75a3d57.

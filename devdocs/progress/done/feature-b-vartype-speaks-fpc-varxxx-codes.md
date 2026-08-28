@@ -71,4 +71,4 @@ Gated by `test/lib_variants_vartype_codes.pas` in `make lib-test`, sentinel
 `VARTYPECODES OK`, negative-controlled.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit fb75a3d57.
