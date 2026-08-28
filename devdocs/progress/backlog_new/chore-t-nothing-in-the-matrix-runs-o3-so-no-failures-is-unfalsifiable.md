@@ -97,3 +97,30 @@ external oracle at all — which is another reason to prefer it.
 - **It IS a precondition on `-O3` -> `-O2` promotion**, per the coordinator
   (2026-08-28). Once `-O3` is genuinely swept, promotion becomes a decision with
   data under it.
+
+## Merged in from a duplicate the coordinator filed (2026-08-28)
+
+I filed `bug-t-nothing-exercises-o3-so-its-clean-record-is-empty` [T p50] an hour
+after this one, having concluded from two greps and an mtime sweep that the ticket
+did not exist. **Both greps searched `backlog/` and `unfinished/` only — this ticket
+was in `backlog_new/`**, which `ready`/`next` do scan and my searches did not. The
+duplicate is removed; this ticket keeps the slug, the p60 and the priority. Content
+from it worth keeping:
+
+**The concrete risk is not hypothetical for this campaign.** frank-optimize-b4's
+first W2 build **silently refused the hottest shape in the language** — it guarded on
+IR node types, and a for loop's own increment carries `tyUnknown`, so it fired on
+`s := s + j` and not on `i := i + 1`. Half the win. Every output stayed
+byte-identical and every test stayed green, because **a missing optimisation is not a
+wrong answer and no correctness suite can see one.** Only disassembling the output
+caught it. A tier nobody runs cannot catch even the cases that *do* change behaviour.
+
+**Open questions for whoever takes it**, neither prescribed: whether `-O3` belongs in
+the quick tier at all — it lengthens the step every lane is on — or only in
+limited/full; and whether a per-level differential is cheaper as a handful of dense
+stress programs than as a re-run of the corpus.
+
+**Nothing is blocked by this today.** The `-O2` promotion it gates has been deferred
+by the coordinator on exactly this ground, so its rank is honest rather than parked.
+**It becomes blocking the moment anyone proposes promoting a pass to `-O2`**, and
+whoever proposes that should be pointed here first.
