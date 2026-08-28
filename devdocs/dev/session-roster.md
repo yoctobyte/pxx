@@ -13863,3 +13863,75 @@ p55 becomes; it changes what frankA picks up *first within P* when it resumes.
 **What I could and could not check, stated rather than implied:** `external/` is empty on this
 tree and `generics.*.pas` is untracked, so the uses clause, the line numbers and the 28 sites are
 beyond my instrument. The ticket is not — and the ticket now carries them.
+
+### Face fifteen is not defeated by knowing about it — the guard is a construction
+
+frankwasm hit face fifteen **a third time today, while writing the test for the fix it had just
+made, holding the rule**. Its own words: *"I had your rule in hand and still built the control on
+the wrong axis, which suggests the face is not something you notice by knowing about it."*
+
+Three instances, a different axis each time: **body size** → **the helper's output not being in
+the file** → **one stack frame**. The last: a slice dirtied memory with `$5A5A5A5A` and called
+`Take(nil)` from the main body; all three falsification breaks passed, *including deleting the
+zeroing outright*, because `Dirty`'s frame is deeper than main's and never overlaps it — every
+temp landed on memory that was already zero. **The control was writing to the wrong memory,
+reported flat, and read as a green check.**
+
+This settles something I had been getting wrong. I have carried *a documented trap is not a
+guard* in the method rules all day and was still treating face fifteen as a thing to
+**remember**. Knowledge of it demonstrably does not prevent it — in the hands of the person who
+discovered it, on the same day. So:
+
+> **A CONTROL IS NOT A CONTROL UNTIL IT HAS FAILED ONCE.** A null result from a control never
+> observed to fire carries no information — not less, none. Seeing `data=1515870810` on a
+> deliberate break is what turned frankwasm's third attempt from an assertion into an instrument.
+
+Not new advice — it is *confirm the new test fails first*, already in the rules. What is new is
+knowing **which existing rule face fifteen reduces to**, so it stops being a thing to notice and
+becomes a step that cannot be skipped. Both earlier synthetics and the `$5A5A5A5A` slice would
+have been caught by that one step and by nothing else.
+
+**Corollary on uncaught breaks, filed as a corollary and NOT as face sixteen** (the count stays
+fifteen; inflating it is what the family ticket warns against): *a break a check cannot see* and
+*a break that changes nothing observable* are indistinguishable from the check's output.
+frankwasm's halving case is the clean demonstration — half of a wrongly-declared 16 still covers
+the real 8, so nothing is observable and the check is **not** weak. Hence:
+
+> **"Three breaks, one caught" is uninterpretable until each uncaught break is labelled
+> blind-check versus no-observable-difference.**
+
+### frankwasm: IR_DEFAULT_MEM landed, and a correct escape into A
+
+`73ef92fb1`. compiler.pas for wasm32 **3494 → 3570 of 3658 bodies (95.5% → 97.6%)**, refused
+163 → 88, op 52 out of the histogram. Implemented as a `PXXMemZero` call, mirroring
+`WasmEmitCopyRec`'s existing `PXXMemMove`. It **kept** the guarded-but-unimplemented x86-64
+managed-record arm rather than assuming it away, because all 14 construction sites pass
+`REC_NONE` — platonic, and correct.
+
+**The escape triggered and held.** Chasing an uncaught break found `symtab.inc`'s
+`EnsureMethodPtrRec` hard-coding `UClsSize_ := 16; UClsAlign := 8`, so a `procedure of object`
+is declared 16 bytes on **every** target while a 32-bit payload is 8. It filed and did not
+touch: `bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets` [**A**, p20].
+**Verified from a source it did not choose** — found the ticket by content rather than by its
+cited sha, confirmed `track: A`, confirmed `symtab.inc` carries no commit from that lane.
+
+Measured by running: `SizeOf(procedure of object)` is 16 on i386, arm32 and wasm32 where a
+user-declared `record Code, Data: Pointer` correctly reports 8; riscv32 and xtensa share the
+path and were **not run**, and the ticket labels which is which. Explicitly **not** corruption —
+the layout is target-aware and only the *declared size* is not.
+
+p20 accepted with its author's hedge (*don't read the low number as "not real"*). Correctly a
+`bug-` and not a compat item by the compat table: a program can read the wrong `SizeOf`, and an
+observable a compiling program reaches is the line. Asked for one addition — **name the scenario
+that would raise it**: a 32-bit record whose layout must match an FPC-built binary turns eight
+wasted bytes into a mismatch. Nobody has hit it; if anyone does, it is no longer p20.
+
+Flagging the `{Code@0, Data@8}` comment as *the second copy of the assumption, the one that
+would outlive a correct fix* is the correct-across-copies rule applied **before** it bites —
+the same artefact frankA spent a commit on today, caught one step earlier.
+
+**Continuing on open-array parameters** (27 in the histogram, also blocks `array of const`, hit
+twice while hunting a slice). Approved; the two-fold reason outranks the histogram position.
+
+**frank-optimize-b4 is live** — `46c8cf47e perf(O): -O3 W1 slice 4` already on master, touching
+`symtab.inc`. Two workers, at ceiling, both producing.
