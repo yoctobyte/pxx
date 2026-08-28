@@ -5,6 +5,14 @@ prio: 45
 
 # crtl: implement the libc assumptions real-world C leans on
 
+> **AS OF 2026-08-28 THIS COLLECTOR'S LIST IS EMPTY — do not treat it as pending
+> work.** Every gap it had collected is closed, verified by measurement, not by
+> reading: `test/crtl_declaration_census.sh` (in `lib-test`) reports 358
+> declared, all defined, zero libc imports. The ticket stays open because it is a
+> standing collector and the next real-project bring-up will refill it — but
+> right now there is nothing here to pick up. Details at the bottom
+> (2026-08-28). Its `prio: 45` reflects the collector, not a queue of work.
+
 - **Type:** feature (libraries) — Track B (`lib/crtl`).
 - **Status:** backlog, ongoing collector — 2026-07-06.
 - **Premise (user, 2026-07-06):** gcc has its own libc; we have our own
@@ -677,3 +685,29 @@ for the differential between the two extractions that found both.
 No known open Track B gap. It stays in `backlog` as the standing collector it
 was designed to be — the next real-project bring-up is what refills it — but its
 list is now accurate rather than three weeks stale.
+
+### Does the census supersede this ticket? No — and the reason sharpens what it is for
+
+Asked when the census landed, and the honest answer is that a gate over
+declarations covers exactly ONE of the classes this ticket lists, and it is not
+the one that has hurt most.
+
+**The census enumerates what crtl DECLARES. It is structurally blind to what
+crtl fails to declare at all.** `environ` is the worked example and it is the
+one that cost the most: it was never declared-but-undefined, it was *undeclared*,
+so `char **envp = environ;` compiled to a silent NULL. No census over
+`lib/crtl/include/**` could ever have found it, because the name it needed to
+check was not in the headers to be enumerated. That is an absence, and an
+absence is invisible to any enumeration of what is present.
+
+So the three defences do different work and none replaces another:
+
+| what finds it | class |
+| --- | --- |
+| `crtl_declaration_census.sh` | declared but not defined — now permanently gated |
+| `crtl_libc_oracle.c` + friends, against gcc | declared, defined, and *behaves differently* — wrong macro value, wrong struct layout, wrong printf conversion |
+| **this ticket** — bring up a real project | **not declared at all**, and every assumption no one has thought to write a check for yet |
+
+The third is the collector's real remaining function, and it is the one that
+cannot be automated, because the input is "what does real C code turn out to
+assume", which is discovered by compiling real C code and by nothing else.

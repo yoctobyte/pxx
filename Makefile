@@ -14145,6 +14145,12 @@ lib-test: pxx-stable-check
 	  test "$$n" = "0" || (echo "FAIL: crtl_atexit has $$n DT_NEEDED — atexit bound to libc"; exit 1); \
 	  echo "  lib-test: crtl_atexit is self-contained (no DT_NEEDED)"; \
 	else echo "  lib-test: readelf absent, skipping the atexit linkage check"; fi
+	# Whole-surface generalisation of the two DT_NEEDED spot-checks above: every
+	# function crtl DECLARES must also be DEFINED, or a C program that calls it
+	# silently binds to the system libc and cannot run off this box. The name list
+	# is generated from the headers on every run rather than checked in, because a
+	# frozen list goes stale exactly where the next such gap appears.
+	sh test/crtl_declaration_census.sh $(PXX_STABLE) $(TESTTMP)
 	# Payne-Hanek huge-argument trig: sin/cos/tan past 1e8, expected values are
 	# the correctly-rounded doubles judged against 400-digit references.
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_trig_huge.c $(TESTTMP)/crtl_trig_huge
