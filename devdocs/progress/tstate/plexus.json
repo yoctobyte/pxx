@@ -7043,7 +7043,7 @@
    "status": "fail"
   },
   {
-   "bad": "b898d0543fc8499facc66706257ff08d39195520",
+   "bad": "19dc5586e384b5881f03509233f74437c08d4472",
    "bad_untestable": true,
    "first_seen": false,
    "good": "8b2cc332791e5da7618f123cfb05f87b12bd13f3",
@@ -7054,8 +7054,7 @@
    "pin_axis": 0,
    "pin_built": false,
    "range": [
-    "19dc5586e384b5881f03509233f74437c08d4472",
-    "218ce1eaf2502e290dd68292faeaa1b2628f7ecb"
+    "19dc5586e384b5881f03509233f74437c08d4472"
    ],
    "src": "test/test_nilpy_parent_call_after_instantiation.npy test/test_nilpy_parent_call_after_instantiation.expected",
    "status": "fail"
