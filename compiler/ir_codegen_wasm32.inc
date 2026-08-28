@@ -80,6 +80,11 @@ var
   check cannot itself contain a call, so nested calls cannot overlap. Per-site
   locals would add one to the locals vector for every call in the program. }
   WasmCRLocal       : array[0..3] of Integer;
+  WasmNeedStrScratch: Boolean = False;{ body publishes a managed string }
+  WasmStrScratchOfs : Integer = 0;    { its 8 bytes, from $fp }
+  WasmStrLocN       : Integer = -1;   { scratch: the handle being published }
+  WasmStrLocS       : Integer = -1;   { scratch: the slot's address }
+  WasmStrLocO       : Integer = -1;   { scratch: the handle being replaced }
   WasmCurNRes       : Integer = 0;    { this body's result count (0 or 1) }
   WasmCurResVt      : Byte = 0;       { ... and its wasm type when 1 }
 
@@ -532,6 +537,8 @@ procedure WasmEmitFrozenStore(dstIsSym: Boolean;
   block machinery they branch through. }
 procedure WasmEmitExcCheck; forward;
 procedure WasmEmitPostCall(spillVt: Byte; hasResult: Boolean); forward;
+procedure WasmEmitManagedStore(dstIsSym: Boolean;
+                               dstRef, valNode: Integer); forward;
 
 { The address at which the PASCAL VARIABLE `si` lives, which is not always the
   address of its slot. A var/out parameter's slot holds the CALLER's address,
@@ -866,8 +873,30 @@ begin
   end;
   if (Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray then
   begin
-    WasmUnsupported('address of managed string ' + Syms[si].Name
-                    + ' — needs the heap, Phase 6');
+    { A scalar managed string. IR_LEA on one is POSITION-DEPENDENT in the
+      register backends: read position yields the HANDLE, write position yields
+      the SLOT's address so a store can publish a new handle into it
+      (ir_codegen_aarch64.inc:1351). They tell the two apart with the global
+      InLValueWrite, which the shared walker never sets — every backend that
+      reads it also writes it, so on this target it is permanently False and
+      cannot be believed.
+
+      This backend does not model the flag, and reaches the same answer another
+      way: the write-position consumers do not get here at all. `SetLength`
+      is builtin -102 and refused by name; `s[i] := c` is refused by
+      WasmEmitIndex; and a `var string` argument does not lower through IR_LEA
+      on this path (measured: `Fill(s)` lowers with this arm refusing). So
+      every IR_LEA of a scalar managed string that reaches this line is a READ,
+      and the handle is the right answer.
+
+      That is an argument from what currently refuses, which is the same shape
+      as the guard in WasmEmitBinop that held only by coincidence — so it is
+      written down rather than assumed: when SetLength or indexed assignment
+      lands on this target, the FIRST thing that change must do is decide how
+      write position reaches the slot address, not add a case beside this one.
+      check_managed.sh asserts the three refusals above still fire. }
+    WasmLValueAddr(si);
+    WasmMemOp($28, 'i32.load', 2, 0);
     Exit;
   end;
   WasmLValueAddr(si);
@@ -964,10 +993,10 @@ begin
   end;
   if tk = tyAnsiString then
   begin
-    { Same reason as IR_STORE_SYM above: the slot is pointer-sized and the
-      store is not a pointer store. }
-    WasmUnsupported('store of a managed string through an address — '
-                    + 'refcounting is its own phase');
+    { A managed string through an ADDRESS — a record field, an array element.
+      Same three steps as through a symbol; only how the slot is reached
+      differs. }
+    WasmEmitManagedStore(False, IRA[node], IRB[node]);
     Exit;
   end;
   if not WasmScalarType(tk, vt) then
@@ -1135,34 +1164,49 @@ var
 begin
   op := WasmBinopOp(node);
   what := 'binary operator ' + WasmBinopName(op);
+
+  { STRINGS FIRST, and BEFORE the width oracle — not inside its failure arm,
+    which is where this test used to live and where it could not do its job.
+    Both string kinds are pointer-shaped, so every operator on them has an
+    integer instruction that would compile and run: `a = b` becomes an i32.eq
+    of two ADDRESSES, which answers "the same buffer" where Pascal asked "the
+    same characters", and `a + b` becomes an i32.add of two pointers.
+
+    The width oracle was doing the refusing, and it refuses only when it cannot
+    agree on a width. `s + 'x'` is a managed string and a CHAR — pointer-sized
+    and ordinal — so it agreed on i32 and never reached the guard: measured as
+    `t + '/' + 'z'` lowering to `i32.load; i32.const 47; i32.add; i32.const
+    122; i32.add`, a valid module that computes an address from a handle and
+    two character codes. A refusal that depends on a DIFFERENT check happening
+    to fail is not a refusal; it is a coincidence, and this one held only while
+    both operands were strings.
+
+    Refusing by name also matters: a message about operand ORDINALS sends the
+    reader looking for a type-mapping gap instead of at the two RTL routines
+    that are missing (PXXStrConcat, PXXStrCmp3/PXXStrEq). }
+  if TypeIsFrozenString(WasmNodeResultType(IRA[node]))
+     or TypeIsFrozenString(WasmNodeResultType(IRB[node]))
+     or (WasmNodeResultType(IRA[node]) = tyAnsiString)
+     or (WasmNodeResultType(IRB[node]) = tyAnsiString)
+     or (IntToTypeKind(IRTk[node]) = tyAnsiString) then
+  begin
+    WasmUnsupported('`' + WasmBinopName(op) + '` on strings — concatenation '
+                    + 'and comparison are RTL calls, not instructions, and '
+                    + 'this target does not make them yet');
+    Exit;
+  end;
+
   if not WasmBinopWidth(node, want, sgn) then
   begin
-    { STRINGS FIRST, and by name. Both string kinds are pointer-shaped, so
-      every operator on them has an integer instruction that would compile and
-      run: `a = b` becomes an i32.eq of two ADDRESSES, which answers "the same
-      buffer" where Pascal asked "the same characters", and `a + b` becomes an
-      i32.add of two pointers. The width oracle refuses them — that is what
-      keeps this correct — but a message about operand ORDINALS sends the
-      reader looking for a type-mapping gap instead of at the two RTL routines
-      that are missing (PXXStrConcat, PXXStrCmp3/PXXStrEq). }
-    if TypeIsFrozenString(WasmNodeResultType(IRA[node]))
-       or TypeIsFrozenString(WasmNodeResultType(IRB[node]))
-       or (WasmNodeResultType(IRA[node]) = tyAnsiString)
-       or (WasmNodeResultType(IRB[node]) = tyAnsiString)
-       or (IntToTypeKind(IRTk[node]) = tyAnsiString) then
-      WasmUnsupported('`' + WasmBinopName(op) + '` on strings — concatenation '
-                      + 'and comparison are RTL calls, not instructions, and '
-                      + 'this target does not make them yet')
-    else
-      { Name the operand TYPES and the IR KINDS. "operand type in binary
-        operator 67" says a comparison was refused and nothing about which side
-        or why; with both named the report is a diagnosis rather than a pointer
-        to one. }
-      WasmUnsupported(what + ': operand types '
-                      + WasmTypeKindName(WasmNodeResultType(IRA[node])) + '/'
-                      + WasmTypeKindName(WasmNodeResultType(IRB[node]))
-                      + ', IR kinds ' + WasmIntStr(IRKind[IRA[node]]) + '/'
-                      + WasmIntStr(IRKind[IRB[node]]));
+    { Name the operand TYPES and the IR KINDS. "operand type in binary
+      operator 67" says a comparison was refused and nothing about which side
+      or why; with both named the report is a diagnosis rather than a pointer
+      to one. }
+    WasmUnsupported(what + ': operand types '
+                    + WasmTypeKindName(WasmNodeResultType(IRA[node])) + '/'
+                    + WasmTypeKindName(WasmNodeResultType(IRB[node]))
+                    + ', IR kinds ' + WasmIntStr(IRKind[IRA[node]]) + '/'
+                    + WasmIntStr(IRKind[IRB[node]]));
     Exit;
   end;
 
@@ -1634,7 +1678,15 @@ begin
       WasmStrTypeOf := Syms[IRA[node]].TypeKind;
   end
   else if (IRKind[node] = IR_FIELD) or (IRKind[node] = IR_INDEX) then
-    WasmStrTypeOf := IntToTypeKind(IRTk[node]);
+    WasmStrTypeOf := IntToTypeKind(IRTk[node])
+  else if (IRKind[node] = IR_BINOP)
+          and (IntToTypeKind(IRTk[node]) = tyAnsiString) then
+    { A concat. WasmNodeResultType answers with the UNIFIED OPERAND WIDTH for a
+      binop — LongWord for two handles — which is a true statement about the
+      arithmetic and a false one about the value. Saying so here routes the
+      unsupported concat to WasmEmitBinop's own message, which names the two
+      missing RTL routines, instead of reporting a type nobody wrote. }
+    WasmStrTypeOf := tyAnsiString;
 end;
 
 { Length. Both string representations keep their length in a machine word next
@@ -2893,6 +2945,165 @@ begin
   WasmCall(WasmSlotForProc(mv), 'PXXMemMove');
 end;
 
+{ ===== managed (reference-counted) strings =====
+
+  A managed string's slot holds a HANDLE — the address of the char data inside
+  a heap block whose header sits below it: [kind:8][refcount:8][length:8][data].
+  Reading one is a plain i32.load and has been supported since Phase 2, because
+  a read takes no ownership. Writing one is not a store at all; it is three
+  things in a fixed order:
+
+    1. MATERIALISE a handle the destination will own (+1 held for the slot),
+    2. PUBLISH it into the slot,
+    3. RELEASE whatever the slot held before.
+
+  The order is the aliasing rule, not a style choice: `s := s` and `s := t`
+  where t aliases s both pass through here, and releasing first would free the
+  block that step 1 is about to hand back. Every register backend does the same
+  three steps in the same order (ir_codegen.inc:4988-5075); this is that
+  sequence expressed in wasm, not a second policy.
+
+  The scratch used by the Char shape lives just above the handler frames at the
+  bottom of the frame, for the same reason those do: $sp moves during the call
+  that reads it, so a byte written below $sp would be inside the callee. }
+
+{ 8 bytes at the bottom of the frame, above the handler frames. Reserved only
+  for a body that publishes a managed string — see WasmNeedStrScratch. }
+procedure WasmStrScratchAddr;
+begin
+  WasmLocalGet(WasmLocalFp);
+  if WasmStrScratchOfs > 0 then
+  begin
+    WasmI32Const(WasmStrScratchOfs);
+    WasmOp($6A, 'i32.add');
+  end;
+end;
+
+{ Leave on the stack an i32 handle whose +1 belongs to the caller of this
+  routine. False means nothing was pushed and the body is already marked
+  unsupported.
+
+  The one discrimination worth naming is the last arm. A concat result or a
+  function result arrives ALREADY owned — the callee built it with refcount 1
+  and handed the reference over — so retaining it again leaks the block. The
+  predicate that answers this is IRNodeOwnsManagedStr, shared with every
+  register backend and forwarded ahead of this file in compiler.pas precisely
+  so there is one answer rather than five. }
+function WasmEmitOwnedStr(valNode: Integer): Boolean;
+var sVal: AnsiString; si, hp, lv: Integer; stk: TTypeKind;
+begin
+  WasmEmitOwnedStr := False;
+  hp := WasmWriteHelper('PXXStrFromLit');
+  if hp < 0 then Exit;
+
+  if IRKind[valNode] = IR_CONST_STR then
+  begin
+    { The literal's blob is a FROZEN string — [len:8][chars][nul] — so the
+      chars start at +8 and the length is known here without a load. }
+    sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
+    si := InternStr(sVal);
+    WasmI32Const(Length(sVal));
+    WasmDataAddr(Strs[si].Offset);
+    WasmI32Const(8); WasmOp($6A, 'i32.add');
+    WasmCall(WasmSlotForProc(hp), 'PXXStrFromLit');
+    WasmEmitOwnedStr := True;
+    Exit;
+  end;
+
+  stk := WasmStrTypeOf(valNode);
+
+  if stk = tyChar then
+  begin
+    WasmStrScratchAddr;
+    WasmEmitValueAs(valNode, WT_I32, 'character assigned to a managed string');
+    if WasmBodyBroken then Exit;
+    WasmMemOp($3A, 'i32.store8', 0, 0);
+    WasmI32Const(1);
+    WasmStrScratchAddr;
+    WasmCall(WasmSlotForProc(hp), 'PXXStrFromLit');
+    WasmEmitOwnedStr := True;
+    Exit;
+  end;
+
+  if TypeIsFrozenString(stk) then
+  begin
+    { A frozen string EVALUATES TO ITS ADDRESS (WasmEmitValueAs), and that
+      address is the [len:8][chars] blob — the same shape as a literal's, so
+      the length comes from memory and the chars from +8. }
+    lv := WasmAddLocal(WT_I32, 'msfz');
+    WasmEmitValueAs(valNode, WT_I32, 'frozen string assigned to a managed string');
+    if WasmBodyBroken then Exit;
+    WasmLocalSet(lv);
+    WasmLocalGet(lv); WasmMemOp($28, 'i32.load', 2, 0);
+    WasmLocalGet(lv); WasmI32Const(8); WasmOp($6A, 'i32.add');
+    WasmCall(WasmSlotForProc(hp), 'PXXStrFromLit');
+    WasmEmitOwnedStr := True;
+    Exit;
+  end;
+
+  if stk = tyAnsiString then
+  begin
+    lv := WasmAddLocal(WT_I32, 'mssrc');
+    WasmEmitValueAs(valNode, WT_I32, 'managed string assigned to a managed string');
+    if WasmBodyBroken then Exit;
+    WasmLocalSet(lv);
+    if not IRNodeOwnsManagedStr(valNode) then
+    begin
+      hp := WasmWriteHelper('PXXStrIncRef');
+      if hp < 0 then Exit;
+      WasmLocalGet(lv);
+      WasmCall(WasmSlotForProc(hp), 'PXXStrIncRef');
+    end;
+    WasmLocalGet(lv);
+    WasmEmitOwnedStr := True;
+    Exit;
+  end;
+
+  WasmUnsupported('value of type ' + WasmTypeKindName(stk)
+                  + ' assigned to a managed string');
+end;
+
+{ materialise -> publish -> release-old. dstIsSym picks how the SLOT's address
+  is reached: through the symbol (which routes by-ref parameters to the
+  caller's slot via the ABI oracle, so `procedure P(var s: string)` publishes
+  where it should) or through an already-lowered address expression. }
+procedure WasmEmitManagedStore(dstIsSym: Boolean; dstRef, valNode: Integer);
+var hp: Integer;
+begin
+  if WasmStrLocN < 0 then WasmStrLocN := WasmAddLocal(WT_I32, 'msnew');
+  if WasmStrLocS < 0 then WasmStrLocS := WasmAddLocal(WT_I32, 'msslot');
+  if WasmStrLocO < 0 then WasmStrLocO := WasmAddLocal(WT_I32, 'msold');
+  hp := WasmWriteHelper('PXXStrDecRef');
+  if hp < 0 then Exit;
+
+  { The three locals are reused across every managed store in a body rather
+    than allocated per site, because a Pascal assignment is a STATEMENT: the
+    value is fully materialised before the slot is touched, and no managed
+    store can be nested inside another one's value expression. A store inside a
+    CALLEE is a different frame and therefore different locals. }
+  if not WasmEmitOwnedStr(valNode) then Exit;
+  WasmLocalSet(WasmStrLocN);
+
+  if dstIsSym then WasmLValueAddr(dstRef)
+  else WasmEmitValueAs(dstRef, WT_I32, 'address of a managed string store');
+  if WasmBodyBroken then Exit;
+  WasmLocalSet(WasmStrLocS);
+
+  WasmLocalGet(WasmStrLocS);
+  WasmMemOp($28, 'i32.load', 2, 0);
+  WasmLocalSet(WasmStrLocO);
+
+  WasmLocalGet(WasmStrLocS);
+  WasmLocalGet(WasmStrLocN);
+  WasmMemOp($36, 'i32.store', 2, 0);
+
+  { LAST, and PXXStrDecRef ignores nil, so an uninitialised slot needs no
+    guard here — the frame is zeroed by the shadow stack's own initial state
+    and a nil old handle is the normal first-assignment case. }
+  WasmLocalGet(WasmStrLocO);
+  WasmCall(WasmSlotForProc(hp), 'PXXStrDecRef');
+end;
+
 procedure WasmEmitStmt(node, blk: Integer);
 var pvt: Byte;
 begin
@@ -2935,10 +3146,7 @@ begin
         honest answer is a refusal that names itself. READING a managed string
         stays supported: a load hands back the handle and takes no ownership. }
       if Syms[IRA[node]].TypeKind = tyAnsiString then
-        WasmUnsupported('assignment to managed string ' + WasmSymLabel(IRA[node])
-                        + ' — refcounting and literal materialisation are their'
-                        + ' own phase, and a bare pointer store here is a wrong'
-                        + ' handle rather than a missing feature')
+        WasmEmitManagedStore(True, IRA[node], IRB[node])
       else if TypeIsFrozenString(Syms[IRA[node]].TypeKind) then
         WasmEmitFrozenStore(True, IRA[node], IRB[node], SymStrCap[IRA[node]])
       else if WasmSlotType(IRA[node], pvt) then
@@ -2986,6 +3194,7 @@ begin
     WasmHasTerminate := False;
     WasmExcSites := 0;
     WasmExcHasHandler := False;
+    WasmNeedStrScratch := False;
   end;
   for i := 0 to IRCount - 1 do
   begin
@@ -3016,6 +3225,16 @@ begin
         Inc(WasmExcSites);
         WasmExcHasHandler := True;
       end;
+      { Reserve the managed-string scratch for the whole body rather than for
+        the Char shape alone: 8 bytes, and asking here which source shape a
+        store will take would duplicate WasmEmitOwnedStr's discrimination in a
+        second place — the drift this file spends its comments avoiding. }
+      if (not emit)
+         and (((IRKind[i] = IR_STORE_SYM)
+               and (Syms[IRA[i]].TypeKind = tyAnsiString))
+              or ((IRKind[i] = IR_STORE_MEM)
+                  and (IntToTypeKind(IRTk[i]) = tyAnsiString))) then
+        WasmNeedStrScratch := True;
       if emit then WasmEmitStmt(i, curBlk);
       if (IRKind[i] = IR_JUMP) or (IRKind[i] = IR_JUMP_IF_FALSE)
          or (IRKind[i] = IR_EXC_MATCH) or (IRKind[i] = IR_EXC_MATCH_HIT) then
@@ -3066,6 +3285,64 @@ procedure WasmCloseDispatch;
 begin
   WasmEnd;                                  { loop }
   WasmEnd;                                  { $exit }
+end;
+
+{ ===== managed locals: zero at entry, release at exit =====
+
+  A managed string local's slot is FRAME memory, and this target's frame is the
+  shadow stack — whatever the previous call left there. The publish sequence
+  reads the slot to find the handle it must release, so an unwritten slot hands
+  stale bytes to PXXStrDecRef: measured as `Make` trapping on its very first
+  `Make := 'one'`, because $fp+8 held a leftover from the caller's writeln.
+  Every register backend zeroes these in its prologue for exactly this reason
+  (ir_codegen.inc:10037, pasparser_expr.inc:170, and the four notes there, each
+  one a bug where a slot was released before it was ever written). Those passes
+  emit machine code through EmitZeroFrameSlot and cannot reach this target,
+  which has its own prologue — so this is the same rule, expressed here.
+
+  The two loops share their predicate ON PURPOSE. Zeroing a slot the exit does
+  not release leaks; releasing a slot the entry does not zero is the trap
+  above. They are the same set or they are a bug, so they are written as one
+  procedure with a flag rather than two loops that can drift.
+
+  The RESULT symbol is zeroed and NOT released: a function hands its result
+  over already owned, so releasing it here would free the string the caller is
+  about to read. That is i386's rule too (`i <> retSymIdx`,
+  ir_codegen.inc:10154).
+
+  Scalars only, for now. A record with a managed field, a static array of
+  string and a variant local are each their own release shape, and every one of
+  them is still refused by name elsewhere on this target — so the honest scope
+  is what can actually be stored. }
+procedure WasmEmitManagedLocals(release: Boolean; retSym: Integer);
+var i, hp: Integer;
+begin
+  if CurProc < 0 then Exit;    { a program-body chunk: its variables are BSS,
+                                 which the module's own memory image zeroes }
+  hp := -1;
+  if release then
+  begin
+    hp := WasmWriteHelper('PXXStrDecRef');
+    if hp < 0 then Exit;
+  end;
+  for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+    if (Syms[i].Kind = skLocal) and (Syms[i].TypeKind = tyAnsiString)
+       and not Syms[i].IsArray and not Syms[i].IsRef then
+    begin
+      if release then
+      begin
+        if i = retSym then Continue;
+        WasmSlotAddr(i);
+        WasmMemOp($28, 'i32.load', 2, 0);
+        WasmCall(WasmSlotForProc(hp), 'PXXStrDecRef');
+      end
+      else
+      begin
+        WasmSlotAddr(i);
+        WasmI32Const(0);
+        WasmMemOp($36, 'i32.store', 2, 0);
+      end;
+    end;
 end;
 
 { ===== the per-body entry point ===== }
@@ -3138,6 +3415,9 @@ begin
   WasmWalkBody(False);
   WasmLocalPc := -1;
   WasmLocalSelf := -1;
+  WasmStrLocN := -1;
+  WasmStrLocS := -1;
+  WasmStrLocO := -1;
   { A handler frame's pad is a BLOCK NUMBER, so a body that owns one needs the
     br_table to branch through even in the degenerate case where its own
     control flow would not have produced a second block. }
@@ -3154,7 +3434,10 @@ begin
     `$fp + WasmCurFrame + Offset` with Offset negative from the frame top, so
     growing WasmCurFrame moves the slots up and opens exactly this much room at
     $fp — which is where WasmExcFrameAddr puts frame 0. }
-  WasmCurFrame := ((FrameSize + WasmExcSites * WASM_EXCF_SIZE + 15) div 16) * 16;
+  WasmStrScratchOfs := WasmExcSites * WASM_EXCF_SIZE;
+  WasmCurFrame := FrameSize + WasmStrScratchOfs;
+  if WasmNeedStrScratch then WasmCurFrame := WasmCurFrame + 8;
+  WasmCurFrame := ((WasmCurFrame + 15) div 16) * 16;
 
   { prologue: $fp := $sp - frame ; $sp := $fp }
   WasmGlobalGet(WasmGSp);
@@ -3190,9 +3473,19 @@ begin
           WasmTypeStore(Syms[psym].TypeKind, pvt);
       end;
 
+  if not WasmBodyBroken then WasmEmitManagedLocals(False, retSym);
+
   if WasmNeedDispatch then WasmOpenDispatch;
   WasmWalkBody(True);
   if WasmNeedDispatch then WasmCloseDispatch;
+
+  { Released BEFORE $sp is restored and before the result is loaded: the slots
+    are addressed through $fp either way, but the result must be read after
+    everything that could have freed a block, and it is the one slot this skips.
+    The exception UNWIND path returns without passing here and therefore leaks —
+    known, shared with xtensa, and filed as
+    bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa. }
+  if not WasmBodyBroken then WasmEmitManagedLocals(True, retSym);
 
   { epilogue: restore $sp, then leave the result on the operand stack }
   WasmLocalGet(WasmLocalFp);

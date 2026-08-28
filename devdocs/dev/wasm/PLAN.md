@@ -714,6 +714,80 @@ offset, so the useful value is a POISON (-1) rather than a trap. Taken under a
 branch-only grant that is explicitly **not** merge permission: all three of the
 branch's shared-file arms present as one reviewable set at merge time.
 
+## Phase 8a — managed strings, slice 1: publish — **DONE 2026-08-28**
+
+The plan said the PAL was next; the measurement said otherwise, so the
+measurement won. On the 236-body corpus (`test/test_variant.pas`) the refusal
+histogram read **182 of 236 lowered, 51 refusals, 32 of them the single line
+"assignment to managed string"** — one cause, four fifths of the mass. That is
+a phase, not a list, so it was taken ahead of the PAL.
+
+**What a managed store is.** Not one instruction. The slot is pointer-sized, so
+the wrong lowering VALIDATES and RUNS: `s := 'lit'` stores the address of the
+literal's frozen `[len][chars]` blob where a heap handle belongs, and every
+later read is off by eight bytes. The right one is three steps in a fixed
+order — materialise a handle the slot will own, publish it, release what the
+slot held — and the order is the aliasing rule, not a style choice: `s := s`
+and `s := t` where `t` aliases `s` both pass through it. Source shapes:
+literal, `Char` (via an 8-byte frame scratch above the handler frames),
+frozen string, another handle, and the already-owned results — a concat or a
+call, discriminated by `IRNodeOwnsManagedStr`, the shared predicate every
+register backend uses, already forwarded ahead of this file in `compiler.pas`.
+
+**The half that was not in the plan: zero-init.** A managed local's slot is
+shadow-stack memory, and the publish sequence READS it to find the handle it
+must release. `Make`'s first `Make := 'one'` therefore handed the caller's
+leftover `writeln` bytes to `PXXStrDecRef` and trapped. Every register backend
+zeroes these in its prologue and each of the four notes at
+`ir_codegen.inc:10037` is a bug where a slot was released before it was written;
+those passes emit through `EmitZeroFrameSlot`, which has no wasm arm (filed:
+`bug-a-emitzeroframeslot-has-no-wasm32-arm`, with the fork about which
+mechanism owns the guarantee). So this target zeroes in its own prologue, in
+`WasmEmitManagedLocals` — **one procedure with a flag, entry and exit sharing
+one predicate**, because zeroing a slot the exit does not release leaks and
+releasing one the entry does not zero is the trap above.
+
+**A refusal that held only by coincidence, found on the way.** `WasmEmitBinop`
+refused string operands from INSIDE the arm that runs when the width oracle
+fails. `s + 'x'` is a handle and a `Char` — pointer-sized and ordinal — so the
+oracle agreed on i32 and the guard was never reached: `t + '/' + 'z'` lowered
+to `i32.load; i32.const 47; i32.add; i32.const 122; i32.add`, and
+`writeln(t + 'x')` in a body with no managed store at all lowered to
+`handle + 120` passed to `PXXWriteStrMW` — measured on the branch BEFORE this
+phase, so it is a pre-existing hole this phase exposed rather than opened. The
+managed-store refusal had been masking it in the common shape. The guard is now
+above the oracle. **A refusal that depends on a different check happening to
+fail is not a refusal.**
+
+**IR_LEA of a scalar managed string** now yields the HANDLE. It is
+position-dependent in the register backends (read → handle, write → the slot's
+address) and they tell the two apart with the global `InLValueWrite`, which
+only backends assign — so on this target it is permanently False and cannot be
+believed. Instead: every write-position consumer refuses somewhere else
+(`SetLength` is builtin -102, `s[i] := c` is `WasmEmitIndex`, concat is the
+binop guard above), so every IR_LEA that arrives is a read. That is an argument
+from what currently refuses — the same shape as the coincidence one paragraph
+up — so `check_managed.sh` asserts all three refusals still fire, with the
+slice's own zero-refusal count as the positive twin that stops the negative
+passing vacuously.
+
+**Result:** 195 of 236 on the same corpus, 38 real refusals. The new mass is
+concat/compare (20 of 38: 16 `+`, 3 `=`, 1 `<>`) — slice 2 — then indexing
+(8) and `SetLength` (3) — slice 3.
+
+**Scope, stated because the green tick does not say it.** The heap arena still
+starts at address 0 (`bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero`,
+open, prio 70). The slice passes because its live set is a handful of short
+strings the free list recycles inside the first kilobyte. Measured today: past
+about 128 KB of live allocation the module traps, because it never calls
+`memory.grow`. `check_managed.sh` asserts the heap is STILL broken, so the day
+that ticket lands this check fails and the scope note has to be rewritten
+rather than quietly outliving its cause.
+
+The unwind path still leaks managed locals — it returns without passing the
+epilogue — which is the wasm half of
+`bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa`, unchanged.
+
 ## Phase 8 — the PAL
 
 `lib/rtl/platform/wasi/platform_backend.pas`, sized like `esp/` (1,035 lines).
@@ -761,6 +835,14 @@ two contained shared-file changes above. Bigger than a frontend skeleton,
 smaller than the C frontend was.
 
 ## Log
+- 2026-08-28 — **managed strings, slice 1 (publish) done; the plan's own
+  ordering overruled by measurement.** 195 of 236 bodies on the string corpus,
+  up from 182, and the single largest refusal cause is gone. Two findings
+  outrank the feature: a string-operand guard in `WasmEmitBinop` that was
+  reachable only when a DIFFERENT check failed, and therefore was not a guard —
+  it let `writeln(t + 'x')` lower to pointer arithmetic on a handle before this
+  phase started; and zero-init, which the plan never mentioned, is half of what
+  makes a managed slot work at all. Both written up under Phase 8a.
 - 2026-08-27 — branch and standalone checkout established; plan and charter
   written.
 - 2026-08-27 — Phase 0 complete. Tooling proven (wabt + node, no wasmtime yet),
