@@ -11742,3 +11742,73 @@ signature, call sites and epilogue. The refusal names the convention, not the ty
 shared-file escape before writing code, and it concerns `exception_emit.inc` — a **shared
 Track A file**. Both previously predicted escapes dissolved on inspection. If this one
 does not, it is an A ticket and I need to know before anything is edited.
+
+### 2026-08-28 — the Phase 7 shared-file escape did NOT dissolve; granted on the BRANCH only
+
+frankwasm stopped at the finding and edited nothing, as instructed. The ruling and its
+reasoning, because this is the shape that will recur every time a frontend/backend branch
+needs a target-dispatch arm:
+
+**What is actually being asked for:** ~4 lines in `compiler/exception_emit.inc:436`, the
+`else if TargetArch = TARGET_WASM32 then` arm, changing `Error(...)` to "set the three
+address variables and emit no bytes."
+
+**What I verified myself, and one thing frankwasm did not claim:**
+
+- The arm is exactly one `else if` in a target chain (`exception_emit.inc:436-439`). ✓
+- **The xtensa arm FOUR LINES ABOVE is the template**: `ExcSetJmpAddr := CodeLen;
+  ExcLongJmpAddr := CodeLen; ExcRaiseAddr := CodeLen;` then `EmitExit(...)`. frankwasm
+  argued from design; the in-file precedent is stronger than the argument it made.
+- `TargetHasProcCleanupFrame` (`ir_codegen.inc:10789`) lists five targets and excludes
+  xtensa and wasm — **no edit needed there**, and the managed-locals-leak-on-unwind cost is
+  literally xtensa's existing position, not a new concession. ✓
+- The branch already carries **25 insertions across those two shared files** (measured:
+  `exception_emit.inc` and `ir_codegen.inc`). The pattern is established, not proposed. ✓
+
+**GRANTED, on the branch only.** The reasoning, in the order that decided it:
+
+1. **It is a BRANCH edit.** Master's binary, its pin and its self-host gate are untouched.
+   Track A's file-ownership rule exists to stop two agents editing one file on master and
+   to protect the gate; neither hazard is present here.
+2. **No Track A holder to collide with** (frankA parked clean).
+3. **Established branch precedent**, measured rather than asserted.
+4. The surface is a dispatch arm for a target whose codegen exists only on this branch.
+
+**frankwasm volunteered that this does NOT qualify on the PXXSysWrite terms** — that grant
+rested on an ifdef the x86-64 build never compiles, so the sha was provably identical; this
+is a runtime `if` in always-compiled code and the binary changes. It said so itself and
+declined to dress it up. **That is why I could rule in one pass**: a peer that reports the
+weakness in its own request converts my job from adjudication into confirmation.
+
+### The condition that actually matters: branch permission is NOT merge permission
+
+The risk here is not four lines. It is **piecewise branch approvals accumulating into an
+unreviewed master change** — three shared-file arms, each individually waved through by a
+coordinator, arriving at the merge with an implied "already approved."
+
+So the ruling is explicit on both halves: **edits on the branch are mine to allow; the
+merge is Track A's gate and nothing on the branch is pre-approved by this grant.** All
+three shared-file arms present as ONE reviewable set at merge time, and that review is
+where their effect on master's binary is judged for the first time.
+
+### Two findings that must not live only in messages
+
+- **Managed locals leak on unwind on wasm32** (xtensa's documented position). frankwasm
+  offered to "state it rather than let it be discovered" — told to state it in a **ticket**,
+  because this session has established that a finding in no ticket dies with the session.
+- **The prototype's central claim is overturned.** It assumed landing pads are statically
+  known; against the real IR they are not reconstructible that way — a `try` emits
+  `EXC_ENTER L / body / EXC_LEAVE 1 / JUMP end / LABEL L / EXC_LEAVE 1 / handlers`, so there
+  are **two LEAVEs per ENTER**, and `EXC_LEAVE n` with n>1 on a break-out-of-nested-trys
+  path pops frames the lexically following code is still inside. **A linear scan
+  reconstructs the wrong nesting silently.** The fix is not to reconstruct it: `br_table`
+  dispatch makes a DYNAMIC landing pad free because `$label` is already a variable, so the
+  handler chain stays a real runtime chain in linear memory like every register backend —
+  each frame holding `prev`, `pad`, and the owning `$fp`, and a raise comparing that stored
+  `$fp` against the current one.
+
+  frankwasm's own framing is the reusable part: **this turns the prototype's "no runtime
+  handler stack" finding from a property of the DESIGN into a property of the PROTOTYPE'S
+  SIMPLIFIED INPUT.** A prototype's conclusions are scoped to its inputs, and the scope is
+  invisible once the conclusion is written down as a design property. Must land in the
+  design doc, not in a message.
