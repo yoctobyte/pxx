@@ -221,3 +221,42 @@ of crying wolf, arriving from the opposite side.
 Fixed by splitting the line rather than hiding the stubs: gaps claim incompleteness,
 declaration-only stubs do not, both stay listed. Two corpus programs now report *"op coverage
 is complete for this program"* — **which was true before the change and which nothing said.**
+
+---
+
+## FACE NINE — an inert flag, and it lived in a COMMENT
+
+New location for the family: not in a check, but **in the comment explaining why a check was
+sound** — the layer nothing tests.
+
+`check_host.sh`'s node:wasi arm called `wasi.initialize`, which node refuses on a module
+exporting `_start`. Its comment said this was fine because the caller compiled a second module
+with `-dWASM_NOMAIN`, and added that reactor-ness *"is a property of how it is COMPILED, and
+now it says so."*
+
+**`host_slice.pas` did not contain the string `WASM_NOMAIN`.** The define was inert. Both
+builds were the same program, and the arm had worked only because nothing we emitted exported
+`_start`, so every module looked like a reactor to node. **The comment asserted a property of
+the build that the build did not have**, and had done so for weeks.
+
+> **AN INERT FLAG IS INVISIBLE FROM THE OUTSIDE.** A misspelled or unread define does not
+> warn. The build succeeds and produces a module that is simply not the one you asked for.
+
+**The guard is the same one that catches a vacuous assertion:** if a flag is supposed to change
+the output, the check passing it must be able to **fail without it**. Here that took one line
+and one rebuild — and the moment the define became load-bearing, **a second arm went red**,
+because it had been quietly relying on the same module still running its body. One inert flag
+was propping up two arms.
+
+Note the fix that was **refused**: suppressing `_start` under the define would have kept the
+old framing alive by *inventing a compiler flag to serve a test's story* — when the story was
+the thing that was wrong. Nothing this backend emits is a reactor (const initialisers alone
+produce a main wrapper), so `initialize` is refused by design and the arms moved to
+`wasi.start`.
+
+**A second WASI instance of the same family, worth recording next to it:** WASI errno numbering
+is **alphabetical** — WASI 2 is `EACCES` where Linux 2 is `ENOENT`. Passing the number through
+turns every missing file into a permission error, and **both are non-zero**, so any check
+asking only *"did it fail?"* agrees with the bug. Same shape as the coverage count that
+measured lowering rather than correctness: the predicate is true, and true of the wrong
+question.
