@@ -1,7 +1,13 @@
 #!/bin/sh
 # The WAT round-trip, shared by every slice check.
 #
-#   wat_oracle.sh <pxx> <slice.pas> <workdir> <tag>
+#   wat_oracle.sh <pxx> <slice.pas> <workdir> <tag> [extra compiler flags...]
+#
+# The trailing flags exist for slices whose source needs a unit search path —
+# the PAL slice compiles only with -Fulib/rtl/platform/wasi. Without the
+# pass-through, calling this with an extra argument compiles the slice WITHOUT
+# it, the compile fails, and the only way to keep the caller green is a `|| true`
+# that turns the round-trip into a decoration.
 #
 # Compiles the slice a second time to a .wat, parses it back with wat2wasm, and
 # compares the two modules through wasm2wat. The text form is the only readable
@@ -21,8 +27,9 @@
 # never byte-identical.
 set -e
 pxx=$1; src=$2; work=$3; tag=$4
+shift 4
 
-"$pxx" --target=wasm32 -dWASM_NOMAIN "$src" "$work/$tag.wat" > /dev/null 2>&1
+"$pxx" --target=wasm32 -dWASM_NOMAIN "$@" "$src" "$work/$tag.wat" > /dev/null 2>&1
 wat2wasm "$work/$tag.wat" -o "$work/$tag.fromtext.wasm"
 wasm-validate "$work/$tag.fromtext.wasm"
 wasm2wat "$work/$tag.wasm"          -o "$work/$tag.a.wat"

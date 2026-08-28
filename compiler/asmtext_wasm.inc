@@ -227,7 +227,24 @@ begin
 
   for i := 0 to WasmFuncCount - 1 do
   begin
-    WT('  (func $' + WasmFuncName[i]);
+    { NAME + SLOT, unconditionally. A WAT identifier space must be injective
+      and Pascal's is not: overloads, two classes' methods of the same name,
+      and the anonymous bodies the frontend emits for typed-const initialisers
+      all collide. wat2wasm rejects the redefinition outright — measured, and
+      it is the good failure mode — but "the reader's tool refuses it" is not
+      the same as emitting a valid module, and a consumer that resolved
+      first-wins or last-wins instead would bind `call $Foo` to the wrong Foo
+      and round-trip into a different program that still validates. We do not
+      get to depend on which. Every slice before the PAL one happened to have
+      unique names, which is why this survived nine phases: it was first
+      reached by a program that `uses SysUtils`, where DateTimeToStr and
+      AdjustLineBreaks are each declared twice.
+
+      Suffixing only the duplicates would read better and cannot be done here:
+      a call is emitted while its callee may not exist yet, so "is this name
+      taken" has no answer at the point the text is written. The slot always
+      does. }
+    WT('  (func $' + WasmFuncName[i] + '$' + WasmIntTxt(i));
     WTLn(WasmSigTextFor(WasmFuncType[i], i));
     for j := 0 to WasmFuncNLoc[i] - 1 do
     begin

@@ -1006,14 +1006,68 @@ on the one it was written against.**
 ## Phase 8 — the PAL
 
 `lib/rtl/platform/wasi/platform_backend.pas`, sized like `esp/` (1,035 lines).
-~35 of ~90 entries implemented, ~55 returning `PAL_ERR_UNSUPPORTED` — the same
-deliberate refusal Track S established for ESP, inverted: ESP has sockets and no
-files, WASI has files and no sockets. **Heap growth is no longer here** — it
-was one line in this section and it turned out to gate everything, so it is
-Phase 6 now.
+The PAL surface is **87 entry points**, identical in the posix and esp backends
+(measured, not estimated) — so a third backend is a third implementation of one
+fixed contract. ESP refuses 37 of them unconditionally; WASI's refusal set is
+different in shape rather than in size: ESP has sockets and no files, WASI has
+files and no sockets. **Heap growth is no longer here** — it was one line in
+this section and it turned out to gate everything, so it is Phase 6 now.
 
 - **Milestone:** a program that opens, writes, reads back and closes a file
   under `wasmtime --dir=.`, and prints to stdout.
+
+### Phase 8d — the PAL SEAM, everything behind it refusing — **DONE 2026-08-28**
+
+Landed first and on its own, because of what it unblocks rather than what it
+implements. **Before this file existed, `uses SysUtils` did not compile for
+wasm32 at all** — posix is the compiled-in default PAL, it reaches the kernel
+through a per-architecture table of Linux syscall NUMBERS, and wasm32 fell into
+it and died at PARSE time with `undefined variable (SYS_openat)`. That is not a
+gap in the backend; it is a whole third of the RTL unreachable for a reason
+that has nothing to do with codegen. With the seam in place a SysUtils program
+compiles (642 of 669 bodies) and its output is byte-identical to the native
+build's.
+
+**Why a third backend and not an arm of the posix one.** wasm has no syscall
+instruction and no number space: a host call is an IMPORT, named by module and
+field, resolved at instantiation. There is nothing to add a `{$ifdef
+CPU_WASM32}` block to — the mechanism differs, not the constants.
+
+**No shared-file edit, and the reason is documented rather than lucky.**
+Selection is `-Fu` on the unit search path, and `AddDefaultPasUnitDirs` appends
+the posix default *after* the user's `-Fu` dirs specifically so an explicit
+override wins. Making wasm32 pick the wasi directory by DEFAULT would be a
+`compiler.pas` change and a fourth shared-file arm on this branch; the shape
+for it already exists in that same function (ESP targets are excluded from the
+default), so it is available if the explicit form ever proves unworkable. It
+has not been taken.
+
+**Everything refuses, and that is the deliberate failure mode, not a
+placeholder.** All 87 entries return `PAL_ERR_UNSUPPORTED`, so a program that
+opens a file meets runtime error 38 (ENOSYS) — asserted, because "unimplemented"
+must be distinguishable from "trapped" and from "wrong answer". It is the model
+Track S established for ESP.
+
+**The check nearly shipped a `|| true`, and what it was hiding was worse than
+the check.** `wat_oracle.sh` takes four positional arguments and passes no
+compiler flags, so calling it for a slice that needs `-Fulib/rtl/platform/wasi`
+compiled the slice WITHOUT the flag, failed, and could only be kept green by
+swallowing the exit status. Making the flags pass through instead turned up a
+real bug: **the WAT emitter's function identifiers were not injective.** It
+rendered `(func $Name)` and `call $Name` from the Pascal name, and Pascal names
+are not unique — `uses SysUtils` declares `DateTimeToStr` and
+`AdjustLineBreaks` twice each. wat2wasm rejects the redefinition, which is the
+good failure mode, but depending on the reader's tool to reject a module we
+should not have emitted is not a property. Every slice for nine phases happened
+to have unique names. Fixed by making the slot part of the identifier
+unconditionally: per-name suffixing cannot be done at the point the text is
+written, because a call is emitted while its callee may not exist yet.
+
+**Remaining refusals with SysUtils in play (27), as the next histogram:** nine
+`value IR op N`, seven `the slot holds a heap handle` (dynamic arrays), three
+records returned through a caller-owned hidden destination (`RetViaHiddenDest`
+— a new class, and the reason `PalIn6Any` and `DateTimeToTimeStamp` do not
+lower), two `SetLength` on a dynamic array, and assorted singles.
 
 ## Phase 9 — the anchor: `pascal26` under wasmtime
 
@@ -1270,3 +1324,53 @@ genuinely is a load). Wrong in both directions simultaneously, and green.
 That is the same failure as `check_strop`'s module-wide negative control one
 slice earlier: **check what an assertion is quantified over before believing
 it**, and prefer the property the diff cannot make over the one it can.
+
+### 2026-08-28 — the PAL seam, and a `|| true` that was covering a real bug
+
+**A suppressed check is worse than a missing one, and this is the cleanest
+example the branch has produced.** `check_pal.sh` called `wat_oracle.sh` with
+an extra `-Fu` argument the oracle does not accept, so the round-trip compiled
+the slice without it, failed, and only stayed green because of a `|| true`
+appended to keep the script moving. Making the argument pass through instead
+took two lines and immediately turned red on a genuine defect: the WAT
+emitter's function identifiers were not injective, and had not been for nine
+phases, because every slice until this one happened to contain no overloaded
+name. The suppression was written *knowing* it was a suppression — which is
+exactly when to stop and make the call work instead.
+
+**"The reader's tool rejects it" is not a property of what you emit.** The
+first draft of that fix's comment claimed the failure mode was `call $Foo`
+binding to the wrong `Foo`. wat2wasm does not do that — it rejects the
+redefinition outright, measured. The honest statement is narrower and still
+sufficient: we emit a module whose validity depends on which resolution rule
+the consumer happens to use, and we do not get to choose the consumer. Claiming
+the worse failure mode would have been the same error this branch keeps finding
+in other people's comments.
+
+**Land the seam before the implementation when the seam is what unblocks.**
+Nothing behind this backend works — all 87 entries return
+`PAL_ERR_UNSUPPORTED`. It was still worth its own commit, because the thing it
+removed was not a missing feature but a *parse error*: `uses SysUtils` did not
+compile for wasm32 at all. Measuring that (642 of 669 bodies, output identical
+to native) took one probe and reordered the whole phase.
+
+**Count what the contract says, not what the file says.** The PAL surface is
+87 entry points — the posix and esp backends declare exactly the same set,
+diffed rather than assumed, which is what makes "a third backend" a well-posed
+job. Three plausible numbers describe ESP's refusals (79 mentions of
+`PAL_ERR_UNSUPPORTED`, 67 entry points that can return it, 37 that only ever
+return it) and quoting the wrong one is how two documents come to look like
+they disagree.
+
+**One naming change broke three checks, and the two that kept passing are the
+interesting half.** Making the WAT identifier `name$slot` moved every `(func
+$Name` line. `check_managed.sh` matched `\(func \$Make ` with a trailing SPACE
+and went red immediately on code that was still correct — the good failure.
+`check_index.sh` and `check_strop.sh` matched `\(func \$main\$0` with nothing
+after it, so they kept matching by prefix and stayed green — which was luck,
+not correctness: the same pattern would also match `$main$01`. The repair is
+the same in all three, anchoring on the separator (`\$Make\$`), and it is
+worth stating as a rule: **a check that greps emitted text is coupled to the
+emitter's naming**, so it should match the whole identifier, not a prefix that
+happens to be unique today. A pattern too tight fails loudly; a pattern too
+loose passes for the wrong reason, and only the first kind tells you anything.

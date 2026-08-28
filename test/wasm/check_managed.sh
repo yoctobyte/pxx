@@ -131,7 +131,13 @@ echo "ok  the store is materialise / retain / release, not a pointer store"
 # assertion. This one pins WHERE it happens: in the prologue, before any call,
 # because a zeroing that drifted after the first store would still pass a
 # whole-body grep while being useless.
-if ! awk '/\(func \$Make /,/^  \)/' "$work/m.wat" \
+# NOTE the trailing \$ in every func pattern below. A WAT function identifier
+# is name + '$' + slot (unconditionally — Pascal names are not unique and WAT
+# identifiers must be), so `\(func \$Make ` with a trailing SPACE stopped
+# matching the day the slot suffix landed and this check failed on correct
+# code. A bare prefix would match again but would also match $MakeOther;
+# anchoring on the separator is what makes the pattern mean "this function".
+if ! awk '/\(func \$Make\$/,/^  \)/' "$work/m.wat" \
      | sed -n '1,/call /p' \
      | grep -A1 '^ *i32.const 0$' | grep -q '^ *i32.store'; then
   echo "FAIL Make does not zero its managed result slot BEFORE its first call"
@@ -148,7 +154,7 @@ echo "..  could read it as a live handle"
 # leaks. Scoped to this slice's own bodies: a module-wide grep would start
 # answering about the RTL the moment anything in it uses the routine, which is
 # the exact way check_strop's negative control went vacuous.
-if awk '/\(func \$(Make|Fill|Local|main\$0) /,/^  \)/' "$work/m.wat" \
+if awk '/\(func \$(Make|Fill|Local|main\$0)\$/,/^  \)/' "$work/m.wat" \
      | grep -q 'call \$PXXStrUnique'; then
   echo "FAIL a read of a managed string clones it — PXXStrUnique appears in a"
   echo "     body of this slice, which only reads. Read position must hand back"

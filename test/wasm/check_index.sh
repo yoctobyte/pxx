@@ -106,7 +106,13 @@ end.
 EOF
   "$root/compiler/pascal26" --target=wasm32 "$work/pos.pas" "$work/pos.wat" \
       > /dev/null 2>&1
-  awk '/\(func \$main\$0/,/^  \)/' "$work/pos.wat" | grep -c 'call \$PXXStrUnique' || true
+# NOTE the trailing \$ in every func pattern below. A WAT function identifier
+# is name + '$' + slot (unconditionally — Pascal names are not unique and WAT
+# identifiers must be), so `\(func \$Make ` with a trailing SPACE stopped
+# matching the day the slot suffix landed and this check failed on correct
+# code. A bare prefix would match again but would also match $MakeOther;
+# anchoring on the separator is what makes the pattern mean "this function".
+  awk '/\(func \$main\$0\$/,/^  \)/' "$work/pos.wat" | grep -c 'call \$PXXStrUnique' || true
 }
 r=$(pos "  c := s[1];")
 w=$(pos "  s[1] := 'z';")
@@ -145,7 +151,7 @@ begin
 end.
 EOF
 "$root/compiler/pascal26" --target=wasm32 "$work/sl.pas" "$work/sl.wat" >/dev/null 2>&1
-if ! awk '/\(func \$main\$0/,/^  \)/' "$work/sl.wat" | grep -q 'call \$PXXStrSetLen'; then
+if ! awk '/\(func \$main\$0\$/,/^  \)/' "$work/sl.wat" | grep -q 'call \$PXXStrSetLen'; then
   echo "FAIL SetLength on a managed string does not call PXXStrSetLen"
   exit 1
 fi

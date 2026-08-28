@@ -160,7 +160,13 @@ EOF
 # being tested invalidated. Same lesson as the abi.inc grep calibrated against
 # an empty result: a negative control has to be measured on the tree the check
 # will actually run on, not on the one it was written against.
-body() { awk '/\(func \$main\$0/,/^  \)/' "$1"; }
+# NOTE the trailing \$ in every func pattern below. A WAT function identifier
+# is name + '$' + slot (unconditionally — Pascal names are not unique and WAT
+# identifiers must be), so `\(func \$Make ` with a trailing SPACE stopped
+# matching the day the slot suffix landed and this check failed on correct
+# code. A bare prefix would match again but would also match $MakeOther;
+# anchoring on the separator is what makes the pattern mean "this function".
+body() { awk '/\(func \$main\$0\$/,/^  \)/' "$1"; }
 for sym in PXXStrConcat PXXStrEq PXXStrCmp3; do
   if ! body "$work/s.wat" | grep -q "call \$$sym"; then
     echo "FAIL the slice's own body does not call $sym — concat and compare"

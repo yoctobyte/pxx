@@ -802,7 +802,12 @@ begin
   WFCallSlot[WFCallLen] := slot;
   Inc(WFCallLen);
   for i := 1 to 5 do WasmBodyB(0);
-  if nm <> '' then WasmText('call $' + nm)
+  { The SLOT is part of the identifier, always — see the note on the `(func $`
+    line in asmtext_wasm.inc. Pascal names are not unique and WAT identifiers
+    must be. Suffixing unconditionally costs a few characters of readability
+    and cannot be got wrong; deciding per-name cannot be done here at all,
+    because a call is emitted while its callee may not exist yet. }
+  if nm <> '' then WasmText('call $' + nm + '$' + WasmIntStr(slot))
   else WasmText('call ' + WasmIntStr(slot));
 end;
 
