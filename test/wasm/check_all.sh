@@ -28,7 +28,7 @@ mkdir -p "$work"
 trap 'rm -rf "$work"' EXIT
 
 fail=0
-for c in proto/check.sh check_phase1.sh check_phase2.sh check_phase3.sh check_phase4.sh check_data.sh check_calls.sh check_write.sh check_tickets.sh; do
+for c in proto/check.sh check_phase1.sh check_phase2.sh check_phase3.sh check_phase4.sh check_data.sh check_calls.sh check_host.sh check_tickets.sh; do
   name=$(basename "$c" .sh)
   echo "=== $c ==="
   if sh "$here/$c" > "$work/out.txt" 2>&1; then status=0; else status=$?; fi

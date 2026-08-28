@@ -16,6 +16,11 @@ work=${TMPDIR:-/tmp}/pxx-wasm-phase2.$$
 mkdir -p "$work"
 trap 'rm -rf "$work"' EXIT
 
+# Every module imports proc_exit (the RTL error reporters all end in Halt),
+# so a bare `{}` import object no longer instantiates. wasmhost.js is the one
+# place that knows what a pxx module needs.
+cp "$here/wasmhost.js" "$work/"
+
 "$root/compiler/pascal26" "$here/phase2_slice.pas" "$work/native" >/dev/null
 "$work/native" > "$work/native.txt"
 
@@ -29,8 +34,10 @@ wasm-validate "$work/p2.wasm"
 
 cat > "$work/run.js" <<'JS'
 const fs = require('fs');
-const inst = new WebAssembly.Instance(
-  new WebAssembly.Module(fs.readFileSync(process.argv[2])), {});
+const host = require('./wasmhost.js');
+const h = host();
+const inst = h.bind(new WebAssembly.Instance(
+  new WebAssembly.Module(fs.readFileSync(process.argv[2])), h.imports));
 const sp0 = inst.exports.sp.value;
 // Mirrors the native main's writeln order. The duplication is deliberate: two
 // independent expressions of the same call sequence is what makes this a

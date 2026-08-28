@@ -292,6 +292,16 @@ var
     would declare it twice. }
   WasmProcImpIdx    : array[0..MAX_PROCS-1] of Integer;
 
+  { Host imports the BACKEND declares, as opposed to the ones a Pascal
+    `external` declaration names. There is exactly one today — WASI's
+    proc_exit, because `Halt` is a process-level operation with no wasm
+    instruction behind it — and the table exists so the second one cannot be
+    declared twice by two call sites. Keyed on the field name, which is unique
+    within the one module namespace this backend uses. }
+  WasmHostImpName   : array[0..15] of AnsiString;
+  WasmHostImpIdx    : array[0..15] of Integer;
+  WasmHostImpCount  : Integer;
+
   { Scratch i32 local for virtual dispatch, allocated on first use per body:
     Self is needed twice (as argument 0 and to load the VMT) and the operand
     stack only yields it once. -1 = not allocated in this body. }
@@ -315,6 +325,7 @@ begin
     WasmProcTabIdx[i] := -1;
     WasmProcImpIdx[i] := -1;
   end;
+  WasmHostImpCount := 0;
   WasmGSp := WasmAddGlobal('sp', WT_I32, True, 65536);
   WasmAddExport('sp', WEK_GLOBAL, WasmGSp);
   { Immutable, and its initialiser is back-filled by WasmFinishMemory once
@@ -1448,6 +1459,28 @@ end;
   import or instantiation fails, so a module declaring imports it does not use
   is a module that will not load. `builtin.pas` alone declares more externals
   than any wasm host provides. }
+{ Declare (once) a host import this backend needs in its own right, and return
+  its wasm function index. See WasmHostImpName. }
+function WasmHostImport(const modName, fldName: AnsiString;
+                        const params: array of Byte;
+                        const results: array of Byte): Integer;
+var i: Integer;
+begin
+  for i := 0 to WasmHostImpCount - 1 do
+    if WasmHostImpName[i] = fldName then
+    begin
+      WasmHostImport := WasmHostImpIdx[i];
+      Exit;
+    end;
+  if WasmHostImpCount > High(WasmHostImpName) then
+    WasmFail('wasm: too many backend host imports');
+  WasmHostImpName[WasmHostImpCount] := fldName;
+  WasmHostImpIdx[WasmHostImpCount] :=
+    WasmAddImportFunc(modName, fldName, WasmAddType(params, results));
+  WasmHostImport := WasmHostImpIdx[WasmHostImpCount];
+  Inc(WasmHostImpCount);
+end;
+
 function WasmImportIndex(p: Integer): Integer;
 var modName, fldName: AnsiString;
 begin
@@ -1819,7 +1852,28 @@ procedure WasmEmitTerminate(node, blk: Integer);
 begin
   if IRIVal[node] = AN_HALT then
   begin
-    WasmUnsupported('Halt — needs the WASI proc_exit import (Phase 6)');
+    { Halt(n) must EXIT WITH n — the failure this arm exists to avoid is
+      `Halt(7)` returning 0, which is a program's failure signal vanishing
+      with no diagnostic (bug-a-halt-n-exits-zero-on-hosted-riscv32, the same
+      mistake on a different target).
+
+      Declared by the backend rather than named by an `external` declaration,
+      because `Halt` is an IR op: there is no Pascal call site to hang the
+      declaration on, and the RTL's PXXExitProcess reaches it through the same
+      IR op rather than through a routine of its own.
+
+      `unreachable` follows because proc_exit does not return. wasm does not
+      know that — its type is (i32) -> () — so without it the validator goes on
+      checking a path that cannot be taken, and a `Halt` in a function with a
+      result fails validation for the missing value. `unreachable` is
+      polymorphic and says exactly what is true here. }
+    if IRA[node] <> -1 then
+      WasmEmitValueAs(IRA[node], WT_I32, 'the Halt exit code')
+    else
+      WasmI32Const(0);
+    WasmCallImport(WasmHostImport('wasi_snapshot_preview1', 'proc_exit',
+                                  [WT_I32], []), 'proc_exit');
+    WasmBodyUnreachable;
     Exit;
   end;
   WasmBr(WasmDepthToExit(blk));

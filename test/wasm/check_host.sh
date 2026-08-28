@@ -1,5 +1,6 @@
 #!/bin/sh
-# Phase 6, first milestone: the module reaches its HOST.
+# Phase 6: the module reaches its HOST — stdout through fd_write, and exit
+# through proc_exit.
 #
 # `external 'lib' name 'sym'` IS a wasm import — the module/field pair a wasm
 # import needs is exactly what the Pascal form already carries, and what the
@@ -18,14 +19,19 @@
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
-work=${TMPDIR:-/tmp}/pxx-wasm-write.$$
+work=${TMPDIR:-/tmp}/pxx-wasm-host.$$
 mkdir -p "$work"
 trap 'rm -rf "$work"' EXIT
+
+# Every module imports proc_exit (the RTL error reporters all end in Halt),
+# so a bare `{}` import object no longer instantiates. wasmhost.js is the one
+# place that knows what a pxx module needs.
+cp "$here/wasmhost.js" "$work/"
 
 # NOT piped: a pipeline's exit status is its LAST command's, so a compile
 # failure would sail through `| head` under `set -e`. Capture, then trim.
 "$root/compiler/pascal26" --target=wasm32 -dWASM_NOMAIN \
-    "$here/write_slice.pas" "$work/w.wasm" > "$work/cov.txt" 2>&1
+    "$here/host_slice.pas" "$work/w.wasm" > "$work/cov.txt" 2>&1
 head -1 "$work/cov.txt"
 wasm-validate "$work/w.wasm"
 
@@ -52,37 +58,27 @@ fi
 # and not merely that some bytes arrived.
 cat > "$work/run.js" <<'JS'
 const fs = require('fs');
-let mem, out = [];
-const imports = { wasi_snapshot_preview1: {
-  fd_write(fd, iovs, iovsLen, nwritten) {
-    const m = new DataView(mem.buffer);
-    if (iovsLen !== 1) { console.error(`FAIL iovsLen=${iovsLen}, expected 1`); process.exit(1); }
-    let total = 0;
-    for (let i = 0; i < iovsLen; i++) {
-      const p = m.getUint32(iovs + i * 8, true);
-      const n = m.getUint32(iovs + i * 8 + 4, true);
-      out.push({ fd, bytes: Array.from(new Uint8Array(mem.buffer, p, n)) });
-      total += n;
-    }
-    m.setUint32(nwritten, total, true);
-    return 0;
-  },
-}};
-const inst = new WebAssembly.Instance(
-  new WebAssembly.Module(fs.readFileSync(process.argv[2])), imports);
-mem = inst.exports.memory;
+const host = require('./wasmhost.js');
+const h = host();
+const inst = h.bind(new WebAssembly.Instance(
+  new WebAssembly.Module(fs.readFileSync(process.argv[2])), h.imports));
 const sp0 = inst.exports.sp.value;
 
 const n = inst.exports.Emit();
-const text = out.map(w => Buffer.from(w.bytes).toString('latin1')).join('');
-const fds  = [...new Set(out.map(w => w.fd))];
+if (h.writes.length !== 1 || h.writes[0].bytes.length !== 5) {
+  console.error(`FAIL expected one 5-byte iovec, got ` +
+                JSON.stringify(h.writes.map(w => w.bytes.length)));
+  process.exit(1);
+}
+const text = h.text();
+const fds  = [...new Set(h.writes.map(w => w.fd))];
 
 // writeln(42) must produce NOTHING — PXXSysWrite has no wasm32 arm. Asserted
 // as loudly as the output above, because the day it starts working is the day
 // this file's claim about it stops being true.
-out = [];
+h.reset();
 inst.exports.TryWriteln();
-const afterWriteln = out.length;
+const afterWriteln = h.writes.length;
 
 if (inst.exports.sp.value !== sp0) {
   console.error(`FAIL shadow stack leaked: ${sp0} -> ${inst.exports.sp.value}`);
@@ -152,8 +148,69 @@ echo "ok  KNOWN LIMITATION unchanged: writeln lowers and prints nothing —"
 echo "..  PXXSysWrite has no wasm32 arm. bug-a-pxxsyswrite-has-no-wasm32-arm"
 echo "..  The import path above is what that arm will be built on."
 
-sh "$here/wat_oracle.sh" "$root/compiler/pascal26" "$here/write_slice.pas" "$work" w
+# ---- Halt(n) must EXIT WITH n --------------------------------------------
+# `Halt` is a process-level operation with no wasm instruction behind it, so it
+# lowers to WASI's proc_exit — declared by the BACKEND rather than named by an
+# `external` declaration, because an IR op has no Pascal call site to hang one
+# on. The failure this guards is the one hosted riscv32 shipped
+# (bug-a-halt-n-exits-zero-on-hosted-riscv32): the argument evaluated nowhere,
+# so `Halt(7)` returns 0 and a program's failure signal vanishes silently.
+#
+# Diffed against the native build, and read TWO ways: once as the host
+# process's own exit status under node's real WASI (which is what a caller
+# actually sees), and once through a hand-written proc_exit that records its
+# argument (which is what the module actually passed). A wrong value that
+# happened to survive one reading does not survive both.
+cat > "$work/halt.pas" <<'PAS'
+program HaltTest;
+begin
+  Halt(7);
+end.
+PAS
+"$root/compiler/pascal26" "$work/halt.pas" "$work/halt_native" >/dev/null
+set +e; "$work/halt_native"; native_code=$?; set -e
+
+"$root/compiler/pascal26" --target=wasm32 "$work/halt.pas" "$work/halt.wasm" \
+    >/dev/null 2>&1
+cat > "$work/halt1.js" <<'JS'
+const fs = require('fs');
+const { WASI } = require('node:wasi');
+const wasi = new WASI({ version: 'preview1', args: [], env: {},
+                        returnOnExit: false });
+const inst = new WebAssembly.Instance(
+  new WebAssembly.Module(fs.readFileSync(process.argv[2])),
+  wasi.getImportObject());
+wasi.initialize(inst);
+inst.exports.main();
+process.exit(99);   // reached only if Halt did NOT exit
+JS
+set +e; node "$work/halt1.js" "$work/halt.wasm" 2>/dev/null; wasi_code=$?; set -e
+
+cat > "$work/halt2.js" <<'JS'
+const fs = require('fs');
+let code = null;
+const imports = { wasi_snapshot_preview1: {
+  proc_exit(c) { code = c; throw new Error('exit'); },
+  fd_write() { return 0; },
+}};
+const inst = new WebAssembly.Instance(
+  new WebAssembly.Module(fs.readFileSync(process.argv[2])), imports);
+try { inst.exports.main(); } catch (e) { /* the unwind */ }
+process.stdout.write(String(code) + '\n');
+JS
+arg_code=$(node "$work/halt2.js" "$work/halt.wasm")
+
+if [ "$native_code" = 7 ] && [ "$wasi_code" = 7 ] && [ "$arg_code" = 7 ]; then
+  echo "ok  Halt(7) exits 7 — native, WASI process status, and the argument"
+  echo "..  proc_exit actually received, all three agreeing"
+else
+  echo "FAIL Halt(7): native=$native_code wasi=$wasi_code arg=$arg_code"
+  [ "$wasi_code" = 99 ] && echo "     99 means Halt returned instead of exiting."
+  exit 1
+fi
+
+sh "$here/wat_oracle.sh" "$root/compiler/pascal26" "$here/host_slice.pas" "$work" w
 
 # A POSITIVE sentinel, last line, reachable only after every check above
 # passed: `set -e` kills the script before here on any failure.
-echo "PASS check_write"
+echo "PASS check_host"

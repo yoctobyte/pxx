@@ -16,6 +16,11 @@ work=${TMPDIR:-/tmp}/pxx-wasm-data.$$
 mkdir -p "$work"
 trap 'rm -rf "$work"' EXIT
 
+# Every module imports proc_exit (the RTL error reporters all end in Halt),
+# so a bare `{}` import object no longer instantiates. wasmhost.js is the one
+# place that knows what a pxx module needs.
+cp "$here/wasmhost.js" "$work/"
+
 "$root/compiler/pascal26" "$here/data_slice.pas" "$work/native" >/dev/null
 "$work/native" > "$work/native.txt"
 
@@ -28,8 +33,10 @@ wasm-validate "$work/d.wasm"
 
 cat > "$work/run.js" <<'JS'
 const fs = require('fs');
-const inst = new WebAssembly.Instance(
-  new WebAssembly.Module(fs.readFileSync(process.argv[2])), {});
+const host = require('./wasmhost.js');
+const h = host();
+const inst = h.bind(new WebAssembly.Instance(
+  new WebAssembly.Module(fs.readFileSync(process.argv[2])), h.imports));
 const sp0 = inst.exports.sp.value;
 // Run the program's initialisation before reading anything. A typed const
 // RECORD is still built by startup code rather than stored in the blob (the
