@@ -13651,3 +13651,28 @@ Both flags it raised unprompted:
   trigger happens to live.* And `IsMethodNameTokAt`'s comment claimed the list was shared
   *"so the two cannot drift"* while holding a private copy — **the comment named the
   guarantee whose absence caused the bug it was attached to.**
+
+### The arity-check strictness risk is retired BY MEASUREMENT, not by time passing
+
+Full tier on plexus, `84ddb6fc1209`, 1202 s: **`new_red: []`, `fixed: []`.** Five
+STILL-RED, all previously known and none of them today's work —
+`lib-test#src:test/lib_synapse.pas` (the false-range job, root cause
+`bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream`, predating its own
+range), `test-emit-obj#src:test/cxtensa_obj.c@1`, two Track N nilpy jobs, `tools-devtest#00`.
+
+**The risk I had been flagging every tick is now answered.** The p80 missing-argument fix
+was a strictness change over 206,824 lines of the compiler's own Pascal and 23 `lib/pcl`
+units; the failure mode I named was breaking the self-host fixedpoint, which poisons every
+lane. `selfhost-fixedpoint` and every `.pascal26.fixedpoint` job ran at full tier and none
+appear in `still_red`. frankA's diagnostic-first-then-promote sequencing is what made that
+cheap, and its measured count of zero held on the matrix.
+
+`test-nilpy#src:test/test_method_parenless_still_valid.pas` flipped to **pass** — the
+parenless-method work confirmed on the matrix rather than on frankA's box.
+
+**Stop carrying it.** A risk that has been measured and did not fire is not a small risk,
+it is a closed one, and re-emitting it every tick is precisely the stale-carried-state
+failure this roster exists to catch. Removed from the loop prompt's live-risk line.
+
+**No dispatch consequence:** nothing new is red, so nobody is redirected. Track N's two reds
+stay undispatched — the owner's reserved call, unchanged, not re-asked.
