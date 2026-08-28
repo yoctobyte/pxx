@@ -10582,3 +10582,92 @@ and `bug-b-varisstr-is-false-for-a-one-character-string` sit at p45 behind it.
 **If the constants are the same defect as the codes, take them together rather than
 closing one and leaving its twin ranked** — the double-case rule, and `varisstr`
 being wrong for a one-character string smells like a possible third arm.
+
+## THE UNIFYING RULE OF THE NIGHT: an enumeration is a claim about the SEARCH that produced it
+
+frankB's vartype work (`5b65c475c`) supplied the third instance in one day, from
+three unrelated lanes, and the general form is what makes it catchable:
+
+| the enumeration | the blind spot | cost |
+| --- | --- | --- |
+| decided spec: *"the four internal call sites that compare against `VT_` constants"* | **there are eight** — `VarIsEmpty`/`VarIsNull` compare a bare `0`, `VarIsNumeric` bare `1`/`2`/`3`; **a `VT_` grep cannot see a raw literal** | would have broken 4 more callers |
+| frankT: *"All four faces, closed"* | a **fifth** face existed the whole time (`skip` is how "did not run" is spelled) | a false regression over 9 commits |
+| *"no `mimic_*.py` of that name, therefore missing"* | `codecs`/`urllib.request` **resolve** under a differently-named shim | would have re-implemented two working shims |
+
+> **"The four call sites", "all four faces", "no file of that name" — each is a
+> count that inherits the blind spot of the query behind it.** Every one looked
+> like ordinary diligence at the time. **Before writing a count, ask what
+> construction the search was structurally blind to** — the same question frankA's
+> universal-negative rule asks, applied to enumerations instead of to absences.
+
+## The vartype trio was ONE job — and doing the p55 alone would have BROKEN the p45
+
+Not "arms of one defect" as I flagged, but worse: once `VarType` translates,
+`VarType(V) = VT_STRING` is false for **every** string, so eight callers
+(`VarIsClear`, `VarIsEmpty`, `VarIsNull`, `VarIsNumeric`, `VarIsStr`, `VarToStr`,
+`VarToStrDef`, `VarCompareValue`) turn a narrow known bug into a total one.
+**The double-case rule with teeth — and an argument for reading the neighbours
+BEFORE starting, not after finishing.**
+
+**Ticket three was already fixed in the source with its ticket left open** — the
+backlog and the tree disagreed and nothing detected it. But it is now fixed **by
+construction**: both text tags fold onto `varString`, so a caller *cannot observe*
+that `'x'` and `'xy'` are tagged differently — the only route by which `VarIsStr`
+could disagree with `VarCompareValue`. **Deleting the class, not the instance.**
+FPC has no char variant either (`v := c` with `c: Char` reports 256 there too,
+measured), so the fold is **parity, not a compromise**.
+
+**Constants printed from FPC 3.2.2, not transcribed from documentation** — the set
+is irregular (`varBoolean` 11, sized integers from 16, `varString` 256, `varUString`
+258) and **a guessed constant looks plausible and is wrong, with no failure mode
+that tells you which one you got.** 11 of 12 rows match exactly. The one divergence
+(`v := 1` → our `varInteger` vs FPC `varShortInt`) is **recorded and deliberately
+not escalated**: chasing it means narrowing integer *literals* at assignment — a
+language change, to buy parity on a value that varies with the literal rather than
+with the program's meaning. The test asserts the divergent row **immediately beside**
+`v := someInteger`, which agrees exactly, so a future reader cannot "fix" the wrong
+one. Negative control: reverting `VarType` to the raw tag fails with 11 errors on
+exactly the 11 `VarType` rows.
+
+## A new — and the worst — member of the pipe family: the pipe destroys the EVIDENCE
+
+`bug-b-lib-dns-libc-failed-once-in-the-gate-and-claims-a-hermeticity-it-lacks`
+[B, p30, `backlog/`]. `lib_dns_libc`'s **default** build failed once in the gate;
+did **not** reproduce in a full gate re-run (REAL EXIT=0) or in 15 direct runs of
+the very binary that failed.
+
+> `test "$(prog | tail -1)" = "SENTINEL"` **discards the output on failure**, so an
+> intermittent leaves **no evidence whatsoever.**
+
+The earlier members swallowed a *status* or inverted a *verification*. **This one
+destroys the DIAGNOSTIC, and precisely in the case where the diagnostic is
+irreplaceable** — the run you cannot reproduce is the one whose stdout you needed.
+A gate line capturing stdout on mismatch would have made this a diagnosis instead
+of a ticket. Belongs in `gating-and-waiting.md` beside the entry frankB generalised
+this morning.
+
+**Filed without a diagnosis, and the tempting adjacency RULED OUT rather than left
+unproven:** the `.invalid` lookup is inside the libc ifdef and the failing build is
+the **default** one. Saying so stops the next person re-deriving a dead end. *One
+failure is not a cause; fifteen non-reproductions are not an absence either*, and
+neither was claimed.
+
+**Verified independently by the coordinator:** `test/lib_dns_libc.pas:17` says
+*"NO NETWORK: every lookup is `localhost`"* and line 108 calls
+`DnsLibcResolveHost('nonexistent-zzz-qqq.invalid', ...)`. **The header claim is
+false.** That is certain, unlike the flake.
+
+## Dispatched: `compat-pascal-ioresult-returns-a-negative-errno` [B, p55]
+
+**Classification flag raised, which may change the ticket rather than the work.**
+It is tagged compat, and CLAUDE.md defers "our error number differs" as *error
+reporting*. But **`IOResult` is a value programs BRANCH ON** — real code compares
+against specific codes. If correct Pascal source behaves *wrongly* because we
+return a negative errno where it expects FPC's code, **that is the
+silent-wrong-behaviour escape and it is a `bug-` in B's lane, not a compat item.**
+The work is likely identical either way; the framing decides whether it can be
+deferred later. Left to frankB after looking. **No re-ranking — `prio:` is the
+owner's.**
+
+After it, B's queue drops to a p45 tail (`feature-crtl-implement-libc-assumptions`,
+the parked `feature-real-dynlib-loader`, then p40s).
