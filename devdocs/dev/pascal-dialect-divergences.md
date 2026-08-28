@@ -261,3 +261,22 @@ what stopped `VarType(v) = varString` from being false for `'x'`.
 
 Verified against FPC 3.2.2: `test/lib_variants_vartype_codes.pas` asserts every
 row above, and marks the divergent one in place next to the row that agrees.
+
+## `{ }` comments: pxx nests, FPC does not
+
+FPC ends a `{ }` comment at the **first** `}`, so a `}` written inside one — the
+everyday case is a doc comment mentioning a record like `{Code,Data}` — closes
+the comment and the remaining prose is parsed as code. pxx keeps reading to a
+later `}`.
+
+Direction: **we accept a form FPC rejects**, which is the "not a defect" row of
+CLAUDE.md's compat table, and it cannot silently miscompile valid FPC source —
+any FPC program with this shape fails to compile there, so no working program
+depends on the early close.
+
+Recorded anyway because it is a live trap **for test authors**: a `.pas` in
+`test/` whose header comment contains a `}` compiles under pxx and is rejected
+by FPC, so the FPC oracle silently disappears and the expectation ends up
+unverified against anything. Met on 2026-08-28 writing
+`test/test_class_method_to_method_pointer.pas`; the giveaway is FPC reporting a
+syntax error at a line and column inside what looks like a comment.

@@ -6822,6 +6822,44 @@ begin
                   Next;   { consume method name }
                 end
                 else if DelphiMode and (idx >= 0) and (SymProcSig[idx] >= 0) and
+                   (Syms[idx].TypeKind = tyRecord) and (CurTok.Kind = tkIdent) and
+                   (argIdx < 0) and (FindUClass(CurTok.SVal) >= 0) and
+                   (not UClsIsRecord[FindUClass(CurTok.SVal)]) and
+                   (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) and
+                   (Tokens[TokPos+2].Kind <> tkLParen) and
+                   (FindUMeth(FindUClass(CurTok.SVal), GetTokenStr(TokPos+1)) >= 0) then
+                begin
+                  { ...and the CLASS receiver twin: `p := TSvc.ClassMethod`, where
+                    the receiver names a TYPE rather than a variable. The arm above
+                    opens with FindSym, which resolves a variable only, so a class
+                    receiver fell through here to the ordinary expression path and
+                    was parsed as a CALL -- `TSvc.CPick` was invoked with the class
+                    as its hidden self and the returned Int64 stored into the
+                    16-byte method-pointer target. Calling it then jumped to that
+                    integer. Compiled clean, SIGSEGV at run time.
+
+                    Self for a class method is the metaclass (AN_CLASSREF, the RTTI
+                    blob pointer) -- the same self node GenMakeStaticMethodCall
+                    passes -- so AN_ASSIGN's Data half needs no special case: it
+                    already stores IRLowerAST(ASTLeft). The virtual half is handled
+                    in IRMethodRefCode, which must read the blob's VMT at +24
+                    rather than dereferencing [Self+0].
+                    bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults }
+                  smci := FindUClass(CurTok.SVal);
+                  smmii := FindUMeth(smci, GetTokenStr(TokPos+1));
+                  Next; Next;   { consume class name and '.'; CurTok = method name }
+                  opNode := AllocNode(AN_CLASSREF);
+                  ASTIVal[opNode] := smci;
+                  ASTTk[opNode] := Ord(tyPointer);
+                  CurASTNode := AllocNode(AN_METHODREF);
+                  ASTIVal[CurASTNode] := UMthProc_[smmii];
+                  ASTLeft[CurASTNode] := opNode;
+                  ASTRight[CurASTNode] := UMthVirSlot[smmii];   { VMT slot (>=0 virtual) }
+                  ASTTk[CurASTNode] := Ord(tyRecord);
+                  LastExprTk := tyRecord;
+                  Next;   { consume method name }
+                end
+                else if DelphiMode and (idx >= 0) and (SymProcSig[idx] >= 0) and
                    (CurTok.Kind = tkIdent) and (argIdx < 0) and
                    (FindProc(CurTok.SVal) >= 0) and (Tokens[TokPos].Kind <> tkLParen) then
                 begin

@@ -5138,7 +5138,26 @@ begin
     Exit;
   end;
   selfVal := IRLowerAST(ASTLeft[mref]);
+  { WHERE THE VMT LIVES DEPENDS ON WHAT SELF IS, and getting this wrong yields a
+    plausible wrong code pointer rather than a crash.
+
+      instance receiver  -- Self is the object, whose VMT is at [Self + 0];
+      CLASS receiver     -- Self is the RTTI BLOB (an AN_CLASSREF, which is what
+                            a `class function` takes as its hidden self), and a
+                            blob's +0 is its NAME pointer. Its VMT sits at +24.
+
+    Same split, same reason and same constant as AN_CLASS_VIRTUAL_CALL's arm
+    above, which cannot reuse IR_VIRTUAL_CALL for exactly this. Dereferencing a
+    blob as though it were an object reads the name pointer as a VMT and indexes
+    off it.
+    bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults }
+  if ASTKind[ASTLeft[mref]] = AN_CLASSREF then
+    selfVal := IRAppend(IR_BINOP, selfVal,
+                 IRAppend(IR_CONST_INT, -1, -1, -1, 24, Ord(tyInteger)),
+                 Ord(tkPlus), 0, Ord(tyPointer));
   vmt := IRAppend(IR_LOAD_MEM, selfVal, -1, -1, 0, Ord(tyPointer));
+  { slot * 8 on EVERY target -- the VMT keeps 8-byte slots even on ILP32; the
+    same convention the AN_CLASS_VIRTUAL_CALL arm documents. }
   slotK := IRAppend(IR_CONST_INT, -1, -1, -1, ASTRight[mref] * 8, Ord(tyInteger));
   codeAddr := IRAppend(IR_BINOP, vmt, slotK, Ord(tkPlus), 0, Ord(tyPointer));
   IRMethodRefCode := IRAppend(IR_LOAD_MEM, codeAddr, -1, -1, 0, Ord(tyPointer));
