@@ -1,7 +1,7 @@
 ---
 track: B
 prio: 45  # auto
-blocked-by: [feature-a-rdrand-cpuid-compiler-builtins]   # Track B portion done 2026-08-15; only the HW tier remains and it is Track A
+blocked-by: [feature-a-rdrand-cpuid-compiler-builtins, bug-a-xtensa-refuses-to-lower-an-unreachable-syscall]   # Track B portion done 2026-08-15; only the HW tier remains and it is Track A
 owner: claude-B
 ---
 
@@ -380,3 +380,17 @@ Nothing here is Track B work. Tier 1 is closed; the two remaining items are a
 Track A codegen gap (xtensa) and a hosted-riscv32 atomics limitation that no
 shipping configuration hits. The cross-target oracle covers 4 targets, and the
 honest count of what is *blocked* is one target, not two.
+
+
+## Second blocker recorded 2026-08-28 — it was live and unedged
+
+frankB re-verified this ticket live and found it unworkable: the Track B portion has
+been done since 2026-08-15 and the remaining HW tier is Track A, but on top of that
+`bug-a-xtensa-refuses-to-lower-an-unreachable-syscall` — which frankB itself filed —
+is still open and blocks it.
+
+**That edge was never recorded, so the ranker showed this ticket as READY at p45 in
+Track B's queue and the coordinator dispatched a session onto it.** Adding it now.
+
+> **A ranked queue says a ticket is UNBLOCKED, not that it has WORK LEFT IN IT.**
+> Those are different claims and the board only checks the first.

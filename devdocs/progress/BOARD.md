@@ -288,7 +288,7 @@ _none_
 | feature-port-openbsd-libc | A | 50 | feature | OpenBSD/amd64 target — route RTL through libc.so; pinsyscalls satisfied by construction | feature-port-rtl-over-libc |
 | feature-port-windows-pe | M | 25→55 | feature | Windows/x64 target — PE/COFF writer, MS x64 ABI, IAT imports; testable via Wine | feature-port-rtl-over-libc |
 | feature-promo-launch-plan | W | 15 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | — |
-| feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
+| feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | bug-a-xtensa-refuses-to-lower-an-unreachable-syscall, feature-a-rdrand-cpuid-compiler-builtins |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-t-audit-tests-that-pass-with-the-implementation-removed | T | 40 | feature | frankB wrote a regression test for bug-b-resolver-sends-localhost-to-the-wire, got eight green rows, then reverted the fix to control it — and the test still passed, every row. This box's systemd-resolved is itself RFC 6761 compliant and synthesises the localhost subtree, so the broken code returned the right ANSWER and merely emitted 20 DNS queries to get it. A value assertion was testing systemd-resolved. Three instances of this shape landed in one night. This ticket is the sweep for others. | — |
 | feature-t-fail-when-a-test-file-is-wired-into-no-build-rule | T | 45 | feature | A file in test/ is not a test until a build rule runs it. Two confirmed cases of a test that existed, passed, and was referenced by nothing — one ungated for two weeks. Proposed: a check (progress.sh check or testmgr) that fails when a test/*.expected or test/*.npy has no rule referencing it, converting the class from 'someone notices' to 'CI notices'. | — |
@@ -755,8 +755,8 @@ _none_
 - [p 50] [C] refactor-c-string-literal-decay-belongs-at-the-producer
 - [p 48] [O] feature-opt-heap-per-thread-cache
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
+- [p 45] [S] bug-a-xtensa-refuses-to-lower-an-unreachable-syscall (unblocks 1)
 - [p 45] [A] bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire
-- [p 45] [S] bug-a-xtensa-refuses-to-lower-an-unreachable-syscall
 - [p 45] [N] bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name
 - [p 45] [N] bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart
 - [p 45] [N] bug-n-object-is-the-one-builtin-type-name-that-is-not-a-value
@@ -782,7 +782,6 @@ _none_
 - [p 45] [N] feature-nilpy-threadsafe-containers
 - [p 45] [O] feature-opt-inline-float-and-record-returning-leaves
 - [p 45] [P] feature-p-defineglobal-a-define-that-crosses-unit-boundaries
-- [p 45] [B] feature-random-library
 - [p 45] [T] feature-t-fail-when-a-test-file-is-wired-into-no-build-rule
 - [p 45] [T] feature-t-nilpy-cpython-differential-fuzzer
 - [p 45] [A] refactor-a-one-program-driver-prologue-for-every-frontend
@@ -964,6 +963,7 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream
 - **2** — feature-web-track-w-bootstrap
+- **1** — bug-a-xtensa-refuses-to-lower-an-unreachable-syscall
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching
 - **1** — decide-does-nilpy-random-seed-itself-at-import

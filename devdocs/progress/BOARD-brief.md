@@ -44,7 +44,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `regression-lib-test-lib-synapse` [B] — blocked-by: bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream
 
-## Ready — top 30 of 309, ranked
+## Ready — top 30 of 308, ranked
 
 - `[p 85] [N]` bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
@@ -77,4 +77,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
 
-_279 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_278 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
