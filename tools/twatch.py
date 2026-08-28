@@ -1352,6 +1352,52 @@ def last_covering_sha(st, tier, exclude_sha):
     return None
 
 
+def job_anchor(st, name):
+    """The sha where this job last RAN AND PASSED, or why there is no such sha.
+
+    The last-good end of a regression range. It exists because
+    `last_covering_sha()` answers a DIFFERENT question -- "which earlier run's
+    tier CONTAINED this job" -- and tier coverage is not execution. A job whose
+    corpus is absent SKIPs, which is correct on its own terms and is recorded
+    as PASSLIKE, so the containing run looked like a clean anchor.
+
+    Measured 2026-08-27 (bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-
+    last-good, filed by frankB out of the synapse triage): `external/synapse`
+    was absent on plexus, three synapse jobs SKIPped for their whole life, and
+    the moment the corpus landed the first real execution failed. That was
+    published as a regression over NINE commits, five of them touching `lib/`
+    or the pin, every one of them innocent -- the defect predated the entire
+    range, which frankB proved by rebuilding the declared last-good's own tree
+    under the pin actually in force there and watching it fail too.
+
+        A first-ever run is not a regression, and a sha where a job did not
+        execute is not a last-good.
+
+    Returns `(sha, "")` when an execution-backed anchor exists, and
+    `(None, reason)` when the job is KNOWN never to have passed. The third
+    case -- `(None, "")` -- means "no opinion": state written before
+    `job_last_pass` existed, where the caller must keep its old fallback rather
+    than blank a range it has no evidence against. That distinction is the
+    whole migration story; without it, upgrading would suppress every range on
+    the box for a cycle.
+
+    Deliberately does NOT reclassify `skip`. It stays PASSLIKE for the run
+    verdict and for reg_open, because a run whose corpus is absent must still
+    be able to come back GREEN and a box that legitimately cannot run a job
+    must not hold a regression open forever. `skip` is correct as a verdict and
+    catastrophic as an anchor; this splits the two readings instead of moving
+    `skip` from one bucket to the other, which would fix the anchor by breaking
+    the verdict.
+    """
+    lp = (st.get("job_last_pass") or {}).get(name)
+    if lp:
+        return lp, ""
+    if (st.get("jobs") or {}).get(name) == "skip":
+        return None, ("its last recorded status was SKIP — it did not run at "
+                      "that sha, so that sha is not a last-good")
+    return None, ""
+
+
 def job_key(j):
     """Identity of a job ACROSS commits.
 
@@ -2561,6 +2607,26 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # updated for this run yet, so it names the tier the job's PREVIOUS status
     # came from — which is exactly the tier whose last run bounds the range.
     def range_for(name):
+        # EXECUTION FIRST. Everything below this block reasons about tier
+        # COVERAGE -- which earlier run would have contained this job -- and
+        # that is a strictly weaker fact than "the job ran there and passed".
+        # A skipped job is contained by every run that could have run it, so
+        # the coverage answer is confidently wrong exactly when the job never
+        # executed. See job_anchor().
+        #
+        # Note this is a NO-OP for the common case: when the previous status
+        # was a real `pass`, job_last_pass names the parent sha and the range
+        # comes out identical to what the coverage path produced. It differs
+        # only where the old answer had no execution behind it, which is the
+        # whole point and is why the blast radius is small.
+        aname, why = job_anchor(st, name)
+        if aname and aname != sha:
+            try:
+                return testable_only(clone.commits_between(aname, sha)), aname
+            except (RuntimeError, subprocess.SubprocessError, OSError):
+                pass          # unreachable sha (rewritten history): fall through
+        elif why:
+            return [], ""     # known never to have passed: no interval can hold it
         prev_tier = job_bounding_tier(st, name, report["tier"])
         if parent_ran_job(st, name, report["tier"]):
             return rng, good        # the parent's run DID contain it
@@ -2660,6 +2726,17 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                           "the cause is in the box or the job's own inputs, not "
                           "in the commits"
                           % (name, (jgood or "?")[:12], sha[:12]), flush=True)
+            never_passed = bool(job_anchor(st, name)[1])
+            if never_passed and not jrng:
+                # Same epistemic position as first_seen, reached differently:
+                # first_seen never appeared in the map at all, this one appeared
+                # carrying `skip`. Both mean "no earlier passing sha", and an
+                # empty range is the honest answer to both.
+                print("twatch: %s is red at %s and has NEVER been observed to "
+                      "pass on this host — %s. No range opened; a first real "
+                      "execution failing is a finding, not a regression from "
+                      "the commits around it"
+                      % (name, sha[:12], job_anchor(st, name)[1]), flush=True)
             if name in first_seen:
                 # No earlier passing sha exists, so no interval can contain the
                 # cause. An EMPTY range is the honest answer and the machinery
@@ -2715,6 +2792,12 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                          "good": jgood, "range": jrng, "opened": utcnow(),
                          "status": statmap.get(name, "fail"),
                          "first_seen": name in first_seen,
+                         # Sixth field of the "this range cannot mean what it
+                         # appears to mean" family, and the fifth face of
+                         # bug-t-a-blame-range-is-computed-from-what-changed-
+                         # not-from-what-the-job-can-see, whose closure
+                         # enumerated four.
+                         "never_passed": never_passed,
                          "pin_axis": pin_axis,
                          "bad_untestable": bad_untestable,
                          "no_testable_change": no_testable_change,
@@ -2789,6 +2872,13 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # "this run could have run it and didn't -> gone" from "not my tier".
     st["job_tier"] = dict(st.get("job_tier", {}),
                           **{k: report["tier"] for k in now})
+    # ...and the sha each job last RAN AND PASSED at, which is the only honest
+    # anchor for a regression range (job_anchor). Literally "pass": `skip` is
+    # deliberately excluded, because a job that did not run cannot vouch for a
+    # sha. Written from `now`, so it advances only for jobs THIS run actually
+    # reported -- a quick tier does not silently vouch for a full tier's jobs.
+    st["job_last_pass"] = dict(st.get("job_last_pass", {}),
+                               **{k: sha for k, v in now.items() if v == "pass"})
     st["history"] = (st["history"] +
                      [{"sha": sha, "date": st["last"]["date"],
                        "verdict": report["verdict"], "tier": report["tier"],
@@ -2818,6 +2908,9 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
         st["jobs"] = {k: v for k, v in st["jobs"].items() if k not in dead}
         st["job_tier"] = {k: v for k, v in (st.get("job_tier") or {}).items()
                           if k not in dead}
+        st["job_last_pass"] = {k: v for k, v
+                               in (st.get("job_last_pass") or {}).items()
+                               if k not in dead}
         authoritative = {k: v for k, v in authoritative.items() if k not in dead}
     update_job_reasons(st, report, st["jobs"])
     # Shadow only — records the pin it WOULD have made, moves nothing.
