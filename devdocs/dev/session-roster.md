@@ -10943,3 +10943,83 @@ local per allocation SITE, not per body.** And `$9C` is `f64.floor` where
 `f64.nearest` was meant — **visible only on an exact half** (`Round(3.5)` is 4 vs 3)
 — caught on first run because the slice deliberately picks halves either side of
 zero. *A test designed against the failure it later caught.*
+
+## THE HEADLINE RULE OF 2026-08-27/28 — absences vs contradictions
+
+frankwasm's generalisation of the coordinator's near-miss, and it reframes the
+whole night:
+
+> **An absence is consistent with too many stories; a contradiction is consistent
+> with almost none.**
+
+`find -name '*heapmmap*'` returning nothing fit four live, benign stories — not
+filed, mid-push, different slug, mistyped. **The commit being in the log while the
+file was not in the tree fit almost nothing except the truth.**
+
+**It is the REVERSE of the rule frankA and frankwasm reached from the other side.**
+A non-existence claim does not survive one search — so the remedy is not a better
+search:
+
+> **Stop trusting single-source absences. Start manufacturing disagreements.** Two
+> cheap sources that must agree beat one thorough search, because the thorough
+> search still has exactly one blind spot and no way to notice it.
+
+**Every one of tonight's misses was a single source reporting an absence, and every
+one was caught by a SECOND SOURCE DISAGREEING — never by looking harder at the
+first:**
+
+| the absence | the contradiction that caught it |
+| --- | --- |
+| `test-emit-obj` : 0 hits in 1697 runs | `live.json`'s `red_src` naming the file |
+| `ls lib/rtl/mimic_*` : `codecs` missing | compiling `import codecs` and getting a resolution note |
+| spec: *"the four call sites"* | the bare-literal comparisons the `VT_` grep could not see |
+| *"all four faces, closed"* | the ledger's `first_seen: false` |
+| `find '*heapmmap*'` : nothing | the commit present in the log |
+| `f64.nearest` looked right | native disagreeing on an exact half |
+
+## frankwasm wrote a CHECK, not a CHARTER line — the family closing on itself
+
+Both tickets are on master (`7cee9147e`) and **verified by the coordinator rather
+than taken on report**: `ready --track A` shows the heap bug at **p70, second row**,
+typed-const at p35. The branch can no longer hide one (`678aa0ee3`).
+
+> *"Writing it down is what failed the first time. Adding 'tickets go on master' to
+> CHARTER.md would have been the fourth."*
+
+Three of the four instances are frankwasm's own — the IRTk rule written at the
+emitter and broken in the planner, the pipe hazard documented then walked into, the
+null-guard hazard written in the backend's own memory-map note and never connected
+to the allocator. **It applied the lesson to the lesson.**
+
+`test/wasm/check_tickets.sh` runs in the ordinary loop and fails if any file under
+`devdocs/progress/**` exists on the branch and not on `origin/master`. **Verified in
+both directions** — a planted branch-only ticket fails it, removing it passes.
+
+### Two design details that mattered more than the check
+- **Compares by SLUG, not path.** A ticket's directory *is* its state and master
+  moves tickets between `backlog`/`working`/`done` constantly; the path-wise version
+  named **eleven** files, none of them frankwasm's, all resolved by master since its
+  last merge.
+  > **A check that cries wolf is worse than no check — for the same reason a
+  > diagnostic that names a cause is: it does your reasoning for you, wrongly.**
+  That unifies two of tonight's findings under one mechanism.
+- **Reads the WORKING TREE (`--cached --others`), not `HEAD`** — it fires the moment
+  the file exists. *"The real incident was a committed ticket only because nothing
+  looked earlier."* The difference between a check and a post-mortem.
+
+**And the no-fetch decision is safe because its failure mode is named:** a stale
+`origin/master` ref makes it **late, never wrong**; the remedy is a fetch.
+> **A check whose worst case is LATENESS can live in a fast loop; one whose worst
+> case is a WRONG ANSWER cannot.** Reusable criterion for anything proposed for the
+> per-fix path.
+
+**The coordinator's own verification command was the naive version:**
+`git log origin/master..origin/wasm --name-only` still names both files, because the
+cherry-pick leaves the *commits* branch-only while the *content* is on master —
+**exactly the false positive frankwasm designed around, reproduced by me ten minutes
+after it explained it.** Its check is right; mine would have cried wolf on first run.
+
+frankwasm also audited the three earlier A tickets unprompted: all on master, all
+pushed *from* master. **The pattern was "whichever branch I happened to be standing
+on — which is not a model at all."** A wrong model can be corrected; **no model can
+only be replaced by a mechanism**, which is what it built.
