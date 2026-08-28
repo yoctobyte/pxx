@@ -298,4 +298,4 @@ has deprioritized and reserved the call on. That is why the finding went to
 Track U rather than into a re-ranking.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit 5899ae95e.
