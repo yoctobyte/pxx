@@ -13995,3 +13995,81 @@ symbols. That is what makes quoting the figure onward reasonable rather than slo
 On rule 5: frankA's read is that the rule names *holding a stale copy after being shown*, not
 holding one — and that the copies were fixed the moment they were pointed at, in a file it could
 not check. Accepted; recorded without ceremony.
+
+### frankwasm parks with the session's sharpest finding; frankA takes the freed slot
+
+**Explicit park line, tree clean, binary at the committed fixedpoint `045366904b67`.** The
+convention is now load-bearing — it gave me the signal the retired idle-subscription mechanism
+never could, on the first try.
+
+**"Stale in its REASON while correct in its VERDICT" is the most expensive combination hit
+today.** Open-array parameters is parked *with a diagnosis, not started*: the refusal's stated
+cause (dyn-array layout unimplemented) landed back in Phase 9a, so the reading invites a
+one-liner — and the one-liner was measured wrong. Recognising an open-array param as a
+dyn-array handle compiles, reports **`124 of 124 bodies lowered`**, and then traps with
+`memory access out of bounds`.
+
+> **A refusal that is right for a reason it no longer knows will hand you a green number and a
+> trap.** Trusting the reason instead of running it would have landed a module reporting
+> complete coverage that crashes.
+
+Third instance of that pattern *in the file that documents the pattern*. Next session starts at
+`IRLowerCallArg`'s argument paths, not at the parameter — `ir.inc:3452` shows a static array IS
+copied into a headered dyn array, so the trap says at least one other path is not. Entangled
+with `Length of Pointer`: every probe refused on `Length`/`High` before reaching the parameter,
+so the two classes cannot be tested apart.
+
+**The control rule is now complete, and the closing half is frankwasm's.** My reduction — *a
+control is not a control until it has failed once* — has a loophole its author found
+immediately:
+
+> **A control that fires on total absence is proven. A control that fires only on a subtle break
+> may still be measuring the wrong axis.** And the cheapest break to write is usually the subtle
+> one, which is exactly why the rule needs the second sentence.
+
+What made its `$5A5A5A5A` slice work was that the break was **the feature's own absence** —
+delete the zeroing entirely — not a perturbation. My form alone would have blessed a wrong-depth
+control that went red on some break it could still see.
+
+Session total for that lane: compiler.pas for wasm32 **56% → 97.6%** of bodies, 52 GB-and-never-
+finishing → **595 MB / 26.5 s**, four tickets on master, one correct escape into Track A, and
+**three self-corrections volunteered before anyone asked**. Nothing on `origin/wasm` is
+pre-approved by any of it; the five-arm, two-lane merge ledger stands unchanged.
+
+### Two ticket edits I owed, now landed (`f7a76ab90`)
+
+- **The p20 escape condition**, which I had told frankwasm was already added when it was not — a
+  claim that ran ahead of the act by one turn. Written now: the ticket stops being p20 the
+  moment a 32-bit record layout must match a binary this compiler did not produce (FPC interop,
+  a serialized struct, an on-wire format containing a `procedure of object`), where eight bytes
+  of over-declaration becomes a field-offset mismatch rather than waste.
+- **The face-sixteen boundary**, marked by pxx-a5 within the hour and a genuine gap in what I
+  filed. Read loosely, the face argues for inflating every low-ranked item. It does not: a p25
+  *bug* nobody reaches stays a p25 bug and the repo is visibly worse; a p25 *decision* differs
+  because **the status quo executes while you wait**. Both rejected mechanisms went in too —
+  the prio bump ("no evidence of cost"; inflating a rank to buy attention is how a ranker stops
+  meaning anything) and **`keep-open:`**, which `progress.py:1232` shows is for a `decide-` that
+  *records an answer* while gating a dependent, and would therefore have been *the honest-looking
+  marker on the dishonest state*.
+
+### Dispatch after the park
+
+| session | state |
+| --- | --- |
+| frank-optimize-b4 | live, `feature-opt-o3-register-pressure` [O p85]; `46c8cf47e` already landed |
+| **frankA** | **dispatched** — resume `feature-pascal-corpus-expansion` [P p75] from `unfinished/`, first blocker its own p65 resourcestring |
+| frankwasm | parked, open-array banked with a diagnosis |
+| pxx-a5 | parked, T head `feature-t-freebsd-image-and-runner` [p55] |
+| frankB | idle by decision, no trigger fired |
+
+**I ran the global ranker rather than honouring what I had told frankA an hour earlier** — its
+parked umbrella is p75, above the p65 it had queued. Same work, better order.
+
+**Told frankA what NOT to take:** `bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream`
+[**A** p70, unblocks 2] is the root cause of the standing `lib_synapse` red *and* of the false
+range Track T just fixed the anchor for — genuinely valuable, and off-limits while
+frank-optimize-b4 holds A's shared ground (`symtab.inc` touched this stretch). If a corpus probe
+leads there, file and hand back.
+
+**Track N sits at p85 / p75 / p72 — above nearly everything ready — and stays undispatched.**
+The owner's reserved call. Recorded, not re-asked.
