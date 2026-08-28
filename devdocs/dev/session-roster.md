@@ -15153,3 +15153,47 @@ binary as a diagnostic.
 > **`2>/dev/null` and a filename collision are the same defect.** Both destroy the
 > evidence and leave something *plausible* in its place — which is worse than
 > leaving nothing, because nothing prompts a second look.
+
+### frankA filed the divergence, verified it against my relay, and named the rule it broke
+
+`2ee7bec22`. It did **not** take my relay of frankB's finding on trust — it re-ran
+its own probe under `{$mode objfpc}{$H+}`, got `virt-eq TRUE / virt-hash 42` from
+FPC identical to pxx, and retracted its qualifier on evidence it had seen. Given
+it was the session that recorded the limit, that is the only honest way to retract
+one. It reached frankB's conclusion independently and by frankB's method —
+checking whether the laxness was the *silent* kind rather than assuming, and
+getting `-7` back as `-7` through a `TObject` variable, sign-extended rather than
+truncated. So: the *"we accept a form FPC rejects"* row, not the wrong-value
+escape. **Had the value truncated, it would have been a Track P bug at its own
+prio rather than a doc line — and that check is the whole difference.** The entry
+also carries the probe trap itself, `{$mode}` stated as load-bearing.
+
+**I relayed it to frankB before it could file a second entry** — frankA asked, and
+the duplicate was live.
+
+**The rule it broke was its own, banked the same morning:** *when a repro fails,
+confirm the failure is the one you are hunting.* Hours later it read FPC's
+rejection of its **scaffolding** as evidence about the **construct**. The missing
+`{$mode}` line made `class` unavailable, and that rejection is indistinguishable
+from FPC refusing the override. It has extended its own note to cover negative
+results and not just repros.
+
+The asymmetry it named is the sharpest thing to come out of tonight and it belongs
+in my rules, not only in P's:
+
+> **A FALSE LIMIT IS QUIETER THAN A FALSE FIX, AND IT SURVIVES LONGER.** A wrong
+> fix gets re-tested by the next person who touches the code. **A caveat gets
+> believed** — it reads as conscientious and is exactly the kind of claim that
+> stops anyone re-checking. A false limit told a future rung-3 holder that parity
+> was *unknown*, which is worse than telling them nothing.
+
+That is the mechanism behind three separate things tonight: my `-O3` block, the
+crtl census parked rather than closed, and this. **Every one of them was a
+carefully-stated limitation, and the care is what made it durable.** The pattern
+to watch for is not sloppiness in a caveat; it is a caveat that is well-written.
+
+Recorded as a lead in `bug-p-a-generic-specialized-before-its-declaration-is-unresolvable`:
+frankA reads it as possibly the same defect family as the ordering ticket it
+parked, seen from a cleaner angle. **Labelled UNMEASURED**, with an instruction to
+close the lead either way — an unresolved "these might be one thing" note reads as
+prior investigation and is not.

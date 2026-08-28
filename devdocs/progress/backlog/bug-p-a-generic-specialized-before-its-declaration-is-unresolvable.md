@@ -138,3 +138,20 @@ plausible story recorded as a cause is the expensive failure here, and the last
 entry in the rung ticket above is itself a corrected wrong root cause. Whoever
 takes it should instrument the sweep (`PXXDBG`) rather than build on this
 paragraph.
+
+## Lead (UNMEASURED) — possibly the same defect as the parked ordering ticket
+
+Recorded by the coordinator on frankA's suggestion, **labelled as a lead because
+nobody has measured it.** frankA, which parked the earlier generics-ordering
+ticket on this rung, reads this one as *possibly the same defect family seen from
+a cleaner angle*.
+
+Worth one check before anyone opens a second diagnosis: **if they are the same
+mechanism, this is the ticket to work**, because its repro is 14 lines with fpc
+3.2.2 accepting *both* orderings — an oracle on the passing arm as well as the
+failing one — where the parked ticket's starting position is worse. frankA said
+so itself.
+
+If they are **not** the same, say so here explicitly rather than leaving the lead
+open. An unresolved "these might be one thing" note is the shape that gets
+believed later: it reads as prior investigation and is not.
