@@ -13676,3 +13676,62 @@ failure this roster exists to catch. Removed from the loop prompt's live-risk li
 
 **No dispatch consequence:** nothing new is red, so nobody is redirected. Track N's two reds
 stay undispatched — the owner's reserved call, unchanged, not re-asked.
+
+### I verified frankA's claim against frankA's own citation — face thirteen, in the coordinator's loop
+
+frankA re-checked my wall-7 reclassification instead of taking it, confirmed the conclusion,
+and found the flaw in **my** reasoning. Worth recording in full because the conclusion
+survived and the method did not.
+
+I reported: `SArgumentOutOfRange` exists at `lib/rtl/rtlconsts.pas:13`, interface section,
+plain `const` — therefore exported, therefore not a visibility bug, therefore the failure is
+addressability. True, and about **a symbol the corpus never reaches**. frankA reports
+`generics.strings.pas:24` declares its own `SArgumentOutOfRange` under a **`resourcestring`**
+section, and that is the one `CreateRes` takes the address of.
+
+**I checked the file frankA named.** My verification arm and its claim arm shared an
+upstream — *the citation itself* — and agreement between two arms that share an upstream
+carries no information about that upstream. Face thirteen, occurring inside the loop whose
+whole job is catching it.
+
+> **Verify against a source the claimant did not choose.** "I measured the artefact" is not
+> a defence when the claimant picked which artefact. Added to the operating-rules memory as
+> the corollary to rule 2.
+
+**The correction improves the ticket fit rather than weakening it.** My version had a soft
+spot: `rtlconsts.pas` is a plain const *deliberately*, so "a const has no address" pointed
+loosely at the RTL — the direction that could have produced a needless Track B change, which
+is the outcome I was trying to prevent. A real `resourcestring` section is precisely what
+`bug-p-a-resourcestring-is-not-addressable` [P p55] describes. **Right conclusion, partly
+wrong reasoning; frankA replaced the reasoning, not the conclusion.**
+
+**And I could not check its citation from here — which I said out loud rather than treating
+as doubt.** `generics.strings.pas` is untracked in this repo and `external/` is empty on the
+coordinator tree, so the corpus is invisible to me. A structurally blind search returns
+exactly what a refutation returns. Second time in two days that trap was live; first time I
+nearly recorded frankB's correct citation as false.
+
+frankA put the correction in the ticket as a **kept correction rather than a silent edit**,
+for the right reason: *it had named a file and a line number, which is exactly what makes a
+wrong answer persuasive.* Same instinct as flagging the new p65's "where to start" as a
+hypothesis from the error's shape — better the next holder distrusts that paragraph than
+inherits it as fact.
+
+### Slot ordering, decided by the ranker against my instinct
+
+Both workers busy — frankwasm on `IR_DEFAULT_MEM`, **pxx-a5 confirmed busy** on Track T p60
+(dispatch landed; the claim has not hit git yet). That is the recorded 1-2 ceiling, and three
+is untested ground between a known-good two and a known-fatal four, with two lanes' uncommitted
+work as the downside.
+
+**Next freed slot → `frank-optimize-b4`**, not frankA. Its head is `feature-opt-o3-register-pressure`
+at **p85**, above frankA's P head (p75) and the p55 it offered to take. I was going to give it
+to frankA on warm context until I ran `ready --track O` — *over-ruling a measured ranking with
+an unmeasured intuition* is on my own list, and warm context is exactly the kind of reason that
+feels like evidence.
+
+frankA is second, on the p55, which is the better opening than the ordering defect for its own
+stated reason: it moves the corpus without the design risk. **No lane conflict between them** —
+Track O works in `ir_codegen.inc`, the p55 is in `pasparser_proc.inc`. Purely the session cap.
+The A/P lock is released and stays released; **do not re-derive frank-optimize's hold as an A/P
+hold — it is the cap, third identity this hold has had.**
