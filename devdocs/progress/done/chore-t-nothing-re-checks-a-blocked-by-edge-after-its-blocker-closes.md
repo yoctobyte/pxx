@@ -208,4 +208,4 @@ convention and closing-commit discipline, and the first of them is now printed
 by `check` itself where a reader will meet it.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit 11ad14c38.
