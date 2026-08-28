@@ -119,6 +119,39 @@ end;
   (CHARTER.md), so an unclassified type returns False and the body is recorded
   as unlowered instead of being guessed at. }
 
+{ A type kind by NAME. `type 4` is a number the reader has to go look up, and
+  a refusal message is read precisely when nobody has the enum in front of
+  them. Unknown ordinals still print as a number, which is the honest answer
+  for one this list has not been taught. }
+function WasmTypeKindName(tk: TTypeKind): AnsiString;
+begin
+  case tk of
+    tyUnknown: WasmTypeKindName := 'tyUnknown';
+    tyInteger: WasmTypeKindName := 'Integer';
+    tyBoolean: WasmTypeKindName := 'Boolean';
+    tyChar:    WasmTypeKindName := 'Char';
+    tyString:  WasmTypeKindName := 'String (frozen, inline length prefix)';
+    tyRecord:  WasmTypeKindName := 'record';
+    tyClass:   WasmTypeKindName := 'class';
+    tyPointer: WasmTypeKindName := 'Pointer';
+    tySingle:  WasmTypeKindName := 'Single';
+    tyDouble:  WasmTypeKindName := 'Double';
+    tyVariant: WasmTypeKindName := 'Variant';
+    tyAnsiString: WasmTypeKindName := 'AnsiString';
+  else
+    WasmTypeKindName := 'type kind ' + WasmIntStr(Ord(tk));
+  end;
+end;
+
+{ A symbol for a message. Compiler temporaries have no name, and 'assignment
+  to ' followed by nothing is a message that has lost the only thing it was
+  carrying — met exactly once, in the refusal that named the variant engine. }
+function WasmSymLabel(si: Integer): AnsiString;
+begin
+  if (si >= 0) and (Syms[si].Name <> '') then WasmSymLabel := Syms[si].Name
+  else WasmSymLabel := 'an unnamed temporary (symbol ' + WasmIntStr(si) + ')';
+end;
+
 function WasmScalarType(tk: TTypeKind; var vt: Byte): Boolean;
 begin
   WasmScalarType := True;
@@ -396,6 +429,9 @@ procedure WasmEmitVirtualCall(node: Integer; isStmt: Boolean); forward;
   the same way: the file self-hosts perfectly with the call unresolved. }
 function WasmEmitIndArgs(sigProc, firstArg, startIdx: Integer;
                          const what: AnsiString): Boolean; forward;
+{ Caught by tools/forwardlint.py the second it was written, which is the third
+  time this file has needed one and the first time it cost nothing. }
+procedure WasmEmitConstStr(node: Integer); forward;
 
 { The address at which the PASCAL VARIABLE `si` lives, which is not always the
   address of its slot. A var/out parameter's slot holds the CALLER's address,
@@ -525,7 +561,7 @@ begin
   if WasmBodyBroken then Exit;
   if not WasmScalarType(got, gvt) then
   begin
-    WasmUnsupported('value of type ' + WasmIntStr(Ord(got)) + ' in ' + ctx);
+    WasmUnsupported('value of type ' + WasmTypeKindName(got) + ' in ' + ctx);
     Exit;
   end;
   WasmCoerce(got, gvt, want, ctx);
@@ -1087,6 +1123,7 @@ begin
       the stackless save/restore path depends on it: it writes a by-ref
       param's own slot. WasmSlotAddr is already exactly this. }
     IR_SLOTADDR  : WasmSlotAddr(IRA[node]);
+    IR_CONST_STR : WasmEmitConstStr(node);
     IR_INDEX     : WasmEmitIndex(node);
     IR_FIELD     : WasmEmitField(node);
     IR_LOAD_MEM  : WasmEmitLoadMem(node);
@@ -1530,6 +1567,26 @@ begin
     WasmProcImpIdx[p] := WasmAddImportFunc(modName, fldName, WasmSigForProc(p));
   end;
   WasmImportIndex := WasmProcImpIdx[p];
+end;
+
+{ A string literal used as a VALUE is the address of its interned blob — the
+  same thing every register backend loads with an immediate dataref, and the
+  same address the write path already hands to PXXWriteFrozenW. What sits there
+  is a frozen string buffer: an 8-byte length prefix, then the chars, then a
+  nul (measured: `0a 00 00 00 00 00 00 00 'QWERTYUIOP'`). So a consumer may
+  read it as a length-prefixed string or, from +8, as a PChar, which is what
+  the variant engine does with it.
+
+  Note this is IR_CONST_STR the VALUE, not the operand form the write path
+  special-cases: there the literal's offset is known at the call site and the
+  address never reaches the operand stack. Two shapes, one address computation,
+  and WasmDataAddr is where both end up. }
+procedure WasmEmitConstStr(node: Integer);
+var sVal: AnsiString; si: Integer;
+begin
+  sVal := GetTokenStrFromRaw(IRA[node], IRB[node]);
+  si := InternStr(sVal);
+  WasmDataAddr(Strs[si].Offset);
 end;
 
 procedure WasmEmitCall(node: Integer; isStmt: Boolean);
@@ -2101,7 +2158,7 @@ begin
           Pascal and an i32.store of an i64 in wasm, which is not an
           instruction. }
         WasmEmitValueAs(IRB[node], pvt,
-                        'assignment to ' + Syms[IRA[node]].Name);
+                        'assignment to ' + WasmSymLabel(IRA[node]));
         if not WasmBodyBroken then
           WasmTypeStore(Syms[IRA[node]].TypeKind, pvt);
       end;
