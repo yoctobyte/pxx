@@ -173,9 +173,55 @@ begin
   Halt(code);
 end;
 
+const
+  { FPC's codes for the two states that are not errnos at all. Measured:
+    renaming an OPEN handle answers 102 on fpc 3.2.2. }
+  TF_ERR_NOT_ASSIGNED = 102;
+  TF_ERR_NOT_OPEN     = 103;
+
+{ A POSITIVE errno -> the code FPC's IOResult reports. MEASURED against fpc
+  3.2.2 by producing each condition and reading IOResult back, because FPC does
+  NOT simply translate: it maps a known set and passes everything else through
+  as the positive errno.
+
+    errno                     FPC IOResult
+    2  ENOENT                 2
+    36 ENAMETOOLONG           2      <- mapped, not passthrough (36 <> 2)
+    13 EACCES                 5
+    20 ENOTDIR                5
+    21 EISDIR                 5
+    40 ELOOP                  40     <- PASSTHROUGH: FPC leaves it alone
+
+  ELOOP is the row that settles the design. Had FPC translated everything, an
+  unmapped errno would need a code invented for it, and an invented code is a
+  plausible wrong answer with no failure mode that reveals it. It does not, so
+  the `else` here is FPC's own behaviour rather than a fallback of ours.
+
+  The mapped rows are exactly the ones measured. Others that look like they
+  belong (EPERM, EROFS) are deliberately NOT listed: they could not be produced
+  on this box without root, so listing them would be transcription. They take
+  the passthrough path, which may differ from FPC -- an unverified guess in the
+  table would be worse, because it would look measured. }
+function ErrnoToIOResult(e: Integer): Integer;
+begin
+  case e of
+    2, 36: Result := 2;
+    13, 20, 21: Result := 5;
+  else
+    Result := e;
+  end;
+end;
+
+{ The one place a raw errno becomes a public IOResult. Negative in, FPC's
+  numbering out -- so no caller has to know, and no call site can forget.
+  Non-negative values are already final codes (TF_OK, TF_ERR_NOT_OPEN...) and
+  pass straight through. }
 procedure SetIO(code: Integer);
 begin
-  LastIOResult := code;
+  if code < 0 then
+    LastIOResult := ErrnoToIOResult(-code)
+  else
+    LastIOResult := code;
 end;
 
 { Every reader in this unit goes through the buffer below — there is no second
@@ -230,7 +276,7 @@ begin
   end;
   if f.Handle < 0 then
   begin
-    SetIO(-1);
+    SetIO(TF_ERR_NOT_OPEN);
     f.HitEof := True;
     Result := False;
     Exit;
@@ -376,7 +422,7 @@ begin
   { Classic Erase: delete the assigned (closed) file by name. }
   if f.Name = '' then
   begin
-    SetIO(-1);
+    SetIO(TF_ERR_NOT_ASSIGNED);
     Exit;
   end;
   rc := PalDelete(PChar(f.Name));
@@ -460,12 +506,12 @@ begin
     name-level operation on a closed, assigned handle. }
   if f.Handle >= 0 then
   begin
-    SetIO(-1);
+    SetIO(TF_ERR_NOT_ASSIGNED);
     Exit;
   end;
   if (f.Name = '') or (NewName = '') then
   begin
-    SetIO(-1);
+    SetIO(TF_ERR_NOT_ASSIGNED);
     Exit;
   end;
   rc := PalRename(PChar(f.Name), PChar(NewName));
@@ -491,7 +537,7 @@ var n: Int64;
 begin
   if f.Handle < 0 then
   begin
-    SetIO(-1);
+    SetIO(TF_ERR_NOT_OPEN);
     Exit;
   end;
   n := PalWrite(f.Handle, PChar(s), Length(s));

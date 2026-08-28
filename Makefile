@@ -13940,6 +13940,14 @@ lib-test: pxx-stable-check
 	# (feature-b-text-file-surface-seekeof-rename-settextbuf).
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_text_seek_rename.pas $(TESTTMP)/lib_text_seek_rename
 	test "$$($(TESTTMP)/lib_text_seek_rename | tail -n 1)" = "TEXTSEEK OK"
+	# IOResult reports FPC's codes, never a raw negative errno. Measured against
+	# fpc 3.2.2, and FPC is NOT a clean translation: it maps a known set and
+	# passes the rest through as the positive errno (ELOOP comes back as 40).
+	# The ELOOP row is load-bearing — it proves the else-arm is FPC's behaviour
+	# and not a fallback we invented. `path not found` is 2, not the 3 DOS
+	# heritage predicts. compat-pascal-ioresult-returns-a-negative-errno.
+	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_ioresult_fpc_codes.pas $(TESTTMP)/lib_ioresult_fpc_codes
+	test "$$($(TESTTMP)/lib_ioresult_fpc_codes | tail -n 1)" = "IORESULTCODES OK"
 	# The PChar family (StrPCopy/StrNew/StrAlloc/StrECopy/StrMove/StrUpper...).
 	# Half of it existed and half did not, which is the worst shape: code
 	# compiles up to its second call. Expectations measured against FPC by
