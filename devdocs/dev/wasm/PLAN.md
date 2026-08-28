@@ -362,7 +362,27 @@ as an address on any path wasm32 takes.
 
 ### What the blocker histogram says about the ORDER of this phase
 
-Measured at `f2c0ca849` against `phase4_slice.pas`, 22 unlowered bodies:
+**Re-measured at `3f99f2034`** against `w0.pas` (`writeln(42)`), 17 unlowered of
+126 — and the interesting part is not the count, it is that **six bodies changed
+what they BLAME**. The RTL error reporters used to report `IR_WRITE`; they now
+report `Halt`, because the write lowered and the next thing in the way became
+visible. A blocker histogram measures the *topmost* obstacle, so a phase's real
+yield is partly invisible in the total:
+
+| blocker | count | who |
+| --- | --- | --- |
+| `Halt` — needs the WASI `proc_exit` import | **7** | the six RTL error reporters plus `PXXExitProcess`. Cheap now: the import mechanism exists. |
+| `value IR op 2` | 2 | `PXXVarBinOp`, `PXXVarNot` — the variant engine |
+| `IR_SLOTADDR` (op 50) | 3 | `PxxSciDigits17`, `PxxIntDDigits`, `PxxFracDigits` |
+| non-integer constant (float literals) | 2 | `PXXWriteFloatFixed`, `PXXWriteFloatSci` |
+| declared without an implementation | 3 | `IInterface`'s three methods — **not a defect** |
+
+Three of the seventeen are the `IInterface` declarations, which will never have
+bodies. So the real remaining surface is **fourteen bodies across four
+mechanisms**, and one of the four is now a two-line import.
+
+The earlier measurement, at `f2c0ca849` against `phase4_slice.pas`, 22 unlowered
+bodies:
 
 | blocker | count | who |
 | --- | --- | --- |
@@ -375,7 +395,7 @@ Measured at `f2c0ca849` against `phase4_slice.pas`, 22 unlowered bodies:
 by an order of magnitude.** The indirect-call table is worth nine bodies, the
 VMT path one — and the VMT path falls out of the same mechanism for free.
 
-## Phase 6 — the heap — **backend side DONE 2026-08-28; blocked on one Track A ticket**
+## Phase 6 — the heap and the host — **backend side DONE 2026-08-28; blocked on two Track A tickets**
 
 `PXXAlloc` and its siblings: the builtin lowerings spelled as a NEGATIVE proc
 index on `IR_CALL` (`-Ord(tkGetMem)` and friends), plus `memory.grow` as the
@@ -430,10 +450,61 @@ because it is boring.
   (prio 70). `check_calls.sh` asserts the limitation is **still exactly this
   one** — it fails if the heap starts working, because that means the ticket
   landed and the block is stale.
-- **Second milestone:** `writeln` of an integer, diffed against native. That is
-  `IR_WRITE` plus `PXXWriteUIntD`, both heap-blocked today, and it is the point
-  at which a wasm program can report its own answer instead of being
-  interrogated through exports.
+- **Second milestone — `writeln`. Met on the wasm side; blocked on one shared
+  arm, exactly like the first.** `IR_WRITE`/`IR_WRITELN` lower (`3f99f2034`),
+  and a `writeln` program compiled to wasm32 prints under node's WASI with
+  output byte-identical to the native build — **measured with the shared arm
+  applied locally, then reverted.** What is committed is everything except that
+  arm: [[bug-a-pxxsyswrite-has-no-wasm32-arm]] (prio 70, filed on master with
+  the patch and both measurements).
+- **There was no write codegen to write.** The plan said "`IR_WRITE` plus
+  `PXXWriteUIntD`", expecting the integer formatter to be the work. It was
+  already done: `builtinheap.pas` carries a target-neutral console family —
+  `PXXWriteNL`, `PXXWriteDecW`, `PXXWriteCharW`, `PXXWriteBoolW`,
+  `PXXWriteStrMW`, `PXXWriteFrozenW`, `PXXWriteCStr` — written when hosted
+  riscv32 hit this same wall, carrying the comment *"any backend could adopt
+  them"*. This one adopts them unchanged, and a const string costs one call
+  rather than the register backends' two, because a literal in `Data[]` already
+  **is** a frozen string buffer (measured: `0a 00 00 00 00 00 00 00
+  'QWERTYUIOP'` at the offset the call passes). Third time this plan has
+  budgeted for work the RTL had already done — see the `PXXAlloc` scope note
+  above and the `AddMethodFix` finding in Phase 5.
+- **`external 'lib' name 'sym'` IS a wasm import, and no shared file had to
+  learn that.** The plan expected host imports to need a mechanism. A wasm
+  import's module/field pair is exactly what the Pascal form carries, and both
+  halves were already recorded by the parser — `ProcLibrary` and `ProcExtName`
+  (`pasparser_proc.inc:1298`), populated since forever and read until now only
+  by the ELF writers. **Second escape this plan predicted that dissolved on
+  inspection rather than on argument** (the first was Phase 5's `AddMethodFix`).
+  Both dissolved the same way: trace the fact to where it is actually stored,
+  instead of inferring from the first grep. It also changes Phase 8 — the PAL
+  becomes a set of *declarations* in Pascal source rather than a set of backend
+  special cases.
+- **The bug this phase actually had to fix was in the index space, and it was
+  silent.** Imports occupy the LOW function indices, so registering one shifts
+  every DEFINED function's index by one — and an import is registered whenever
+  the frontend first reaches an external call, which is after most bodies are
+  emitted. A module whose indices were baked before that **still validates**:
+  every callee has some signature, and enough of them match. It just calls the
+  wrong functions. Nothing stores a function index now: calls emit a
+  fixed-width placeholder plus a relocation, the table and export table store
+  slots, and the bias is applied in one function from the three write-time
+  emitters. `WasmCall` no longer *accepts* an index, so the wrong form is
+  unspellable rather than avoided. **Measured both ways, because it is silent:**
+  with the relocation removed, a module WITH an import is rejected with 127 type
+  errors, and a module WITHOUT one is accepted unchanged — *all eight suites
+  that existed before this phase are in the second category and none of them
+  could ever have caught it.*
+- **The `.wat` oracle earned its keep on the same module, on a bug of the same
+  shape.** Our text used inline signatures, so a parser numbered types by text
+  order while the binary used ours; the two agreed by coincidence until an
+  import — which must precede the functions in text — became the parser's type
+  0, and every `call_indirect (type N)` then named a different signature in the
+  two modules. The `.wat` now declares the whole type table up front, so the
+  numberings agree by construction. **An oracle whose only input is a module the
+  same generator produced can still find this**, because the two encodings
+  disagree about it — which is the cheapest kind of manufactured
+  disagreement there is.
 - **Scope note, and it did not survive contact.** The plan expected to write a
   bump allocator. **There was nothing to write:** `PXXAlloc(size, align)` is an
   ordinary Pascal routine in the builtin unit and every backend simply calls
@@ -571,3 +642,26 @@ smaller than the C frontend was.
   heap allocates **from address 0**, works, passes a 7-value differential, and
   corrupts BSS above ~1 KB — the failure this target's own null-guard note
   predicted in writing and nobody connected until it happened.
+- 2026-08-28 — **`writeln` lowers, and a wasm module can reach its host.** The
+  second Phase 6 milestone, met on the wasm side and blocked on one shared arm
+  exactly as the first was: `writeln` compiled to wasm32 prints under node's
+  WASI with output byte-identical to the native build, measured with
+  [[bug-a-pxxsyswrite-has-no-wasm32-arm]]'s patch applied locally and then
+  reverted. Three findings, in ascending order of what they cost to learn.
+  **(1) There was no write codegen to write** — the RTL's target-neutral
+  console family already existed for hosted riscv32, carrying the comment "any
+  backend could adopt them"; the third time this plan budgeted for work already
+  done. **(2) `external 'lib' name 'sym'` IS a wasm import**, and the parser
+  had been recording both halves of the name since forever — the second
+  predicted shared-file escape to dissolve on inspection, and it dissolved the
+  same way the first did: trace the fact to where it is stored rather than
+  inferring from the first grep. **(3) The real bug was in the index space and
+  it was silent.** Registering an import shifts every defined function's index
+  by one, and a module whose indices were baked earlier *still validates* —
+  enough signatures match — it just calls the wrong functions. Nothing stores
+  an index now; `WasmCall` no longer accepts one. Measured both ways: with the
+  relocation removed, a module with an import is rejected with 127 type errors
+  and a module without one is accepted unchanged, **which is every suite that
+  existed before today.** The `.wat` oracle then caught the same shape one
+  level up, in the type numbering — an oracle fed a module from the same
+  generator still finds this, because the two encodings disagree about it.
