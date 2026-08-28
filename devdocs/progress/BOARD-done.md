@@ -1614,6 +1614,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-xtensa-call0-large-frame-truncates | S | 50 | bug | Xtensa Call0 / non-windowed frame >128 bytes silently truncates | — |
 | bugfix-cfront-sqlite3-crash-vdbecursor-layout | A+C | 50 | bugfix | bugfix: cfront — sqlite3 aggregate crash from inline struct pointer field | — |
 | chess-pal-getdents-link | B | 50 | chess | examples/chess: PalBackendGetDents64 undefined (PAL backend not linked) | — |
+| chore-a-audit-the-managed-string-slices-for-the-premature-free-direction | A | 40 | chore | RESULT, 2026-08-28 — verified, no defect, and the REASON does not generalise | — |
 | chore-asmtext-per-platform-split | A | 50 | chore | Split `asmtext.inc` monolith into per-platform files + fix emitter tests | — |
 | chore-fast-pin-tiered-tests | A | 50 | chore | Fast pin: tiered test suite + stabilize-fast (target: pin in ~20s) | — |
 | chore-makefile-selfhost-iterate-to-convergence | A | 45 | chore | `make compiler/pascal26` demands one-pass convergence; a stale seed then fails a gate that would pass | — |

@@ -109,3 +109,51 @@ a break that passes.
 Closing this ticket: **no defect found, control run, result recorded.** The
 suite's coverage of this direction for strings is real but incidental, and the
 note above is what stops that being read as "the suite covers it".
+
+---
+
+## Coordinator addendum, 2026-08-28 — the verdict stands; the CATEGORY is not a property of the type
+
+Verified independently, not relayed. The audit's conclusion is right and its *reason* is
+stronger and more fragile than stated, and the difference decides what to do with it.
+
+**Verified:** interfaces and managed records have **zero** uniqueness/copy-on-write paths
+(`IR_INTFUNIQUE`/`IR_RECUNIQUE`/`UniqueIntf`/`UniqueRec` → 0 hits; 35 interface refcount
+sites, all retain/release). So "both are the second kind" holds today.
+
+**But dynamic arrays used to be the FIRST kind.** `IR_DYNUNIQUE` still exists in four
+backends and its own comment (`ir_codegen.inc:5328`) opens *"The name is now historical"*:
+
+> This node used to implement NESTED copy-on-write: on a write it cloned the level when
+> shared and published the unique handle back into the slot […] That invariant was the
+> deliberate x86-64 design, and it is the opposite of FPC/Delphi […]
+> `decide-dynamic-array-value-vs-reference-semantics` settled on matching FPC, so the clone
+> is gone at every depth.
+
+A **semantics decision** — `decide-dynamic-array-value-vs-reference-semantics` (decided),
+landed as `bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing` (done) — moved
+dynamic arrays from *refcount steers behaviour* to *refcount consulted only on release*.
+
+**So the category is a property of the CURRENT SEMANTICS, not of the type.** And note which
+direction the crossing went, because the two are not symmetric:
+
+| crossing | effect on an existing suite |
+| --- | --- |
+| second kind → first kind (COW added) | the reuse-forcing control becomes redundant. **Harmless.** |
+| **first kind → second kind (COW removed)** | the second observable route disappears, the diff stops witnessing a too-low refcount, and **every test keeps passing.** |
+
+Dynamic arrays took the dangerous direction. **A suite written while COW existed silently
+became an uncovered suite, and nothing in its output changed.** That is the audit's own
+finding — *a green suite that cannot distinguish covered from uncovered* — arriving one level
+up: not in a test, in the **semantics the test's coverage depended on**.
+
+> **A COVERAGE ARGUMENT THAT RESTS ON "THE CODE UNDER TEST READS THIS VALUE" HAS A DEPENDENCY
+> ON A DESIGN DECISION, AND DESIGN DECISIONS ARE NOT VERSIONED AGAINST THE TESTS THAT ASSUME
+> THEM.**
+
+Practical consequence, and it is cheap: the reuse-forcing control is the one that survives a
+category change in either direction. **Where it is cheap, design it in even for a first-kind
+type** — it costs an allocation and it is the only witness that does not depend on the
+semantics staying put. Do not, however, weaken the audit's actual instruction: *ask which
+kind you have before trusting a green suite* stays exactly right; this only adds that the
+answer has a date on it.
