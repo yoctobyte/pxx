@@ -284,4 +284,4 @@ collapsing it is a real Track P/A refactor — worth its own ticket, not worth
 smuggling into a bug fix.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit c70622013.
