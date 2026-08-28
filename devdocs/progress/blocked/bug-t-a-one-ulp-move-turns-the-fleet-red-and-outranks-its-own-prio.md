@@ -2,8 +2,10 @@
 track: T
 prio: 50
 type: bug
-blocked-by: []
+blocked-by: [decide-t-per-assertion-subjects-or-accept-the-file-level-label]
 summary: "Float-accuracy assertions in the gated suites make a one-ulp move a CI RED, and a red job is worked at the priority of BEING RED - which overrides the owner's standing rule that float accuracy is low prio. Parking the tickets in float/ does not close this door; only the tests can."
+status: blocked
+owner: ""
 ---
 
 # A one-ulp move turns the fleet red, and a red outranks its own prio
@@ -177,3 +179,78 @@ subject's priority or it does not.
 
 Deliberately NOT done: no float behaviour touched, no test de-gated, no
 expectation regenerated, no coverage removed.
+
+---
+
+## 2026-08-28 — the empirical question has an answer, and item 1 is NOT
+## adoptable by any of the files that motivated it
+
+The 2026-08-26 entry above ends with a falsifiable proposal: *"the next float
+red carries its note, and either it gets triaged at its subject's priority or it
+does not."* Measured today, both halves of that are empty.
+
+### Measurement
+
+| question | answer |
+| --- | --- |
+| tests declaring `PXX-SUBJECT` anywhere in the corpus | **0** |
+| runs recorded since the mechanism landed (2026-08-26) | **259** |
+| float-named red / still-red / fixed events in them | **0** |
+
+So the mechanism has never fired, for two independent reasons: no test declares
+a subject, and no float red has occurred to carry one. **A label with zero
+adopters is indistinguishable from no label** — the same shape as the rest of
+this ticket, one level in: a signal applied nowhere is not a signal.
+
+### Why adoption is empty by construction, not by neglect
+
+`job_subject()` reads the first 4096 bytes of a job's sources and returns **one
+subject for the whole job**. That is *file* granularity — precisely the
+granularity this ticket used to reject shape 2:
+
+> **Shape 2 (move them off the gating tiers) is wrong.** It operates on whole
+> files, so it cannot draw the line the ticket itself requires.
+
+And the same entry's own table shows the line runs *through* every motivating
+file, not between them. Applying the shipped marker to any of the five would do
+the harm shape 2 was rejected for:
+
+| file | marking it `float-accuracy` would de-prioritise |
+| --- | --- |
+| `math_domain_errors` | a NaN / -Inf handling fault — excluded by the escape rule outright |
+| `math_log` | a missing name (`undefined variable (log)`) — explicitly NOT F per CLAUDE.md |
+| `pow_matches_cpython` | an **84 ulp** regression, not one |
+| `float_pow_oracle` | the same span, differentially |
+| `str_float` | `str(3.14)` — a formatting **bug**, not last-digit noise |
+
+**So "still open, item 1: adoption by Track N" is not work waiting to be done —
+it is work that this ticket's own reasoning forbids.** Filing it at N would ask
+that lane to make five changes each of which de-gates something the escape rule
+protects. Item 1 is closed as **not adoptable**, not as done.
+
+What the marker remains good for is a *future* test whose subject genuinely is
+last-digit accuracy end to end. That is a real if modest value, it costs
+nothing, and it stays.
+
+### What is actually left, and why it is a Track U call
+
+The only remaining shape is per-**assertion** subjects — the granularity the
+2026-08-26 entry already identified as correct and expensive. That is a genuine
+fork rather than a task, and it is not mine to settle:
+
+- it is substantial machinery in T's tooling **plus** a per-assertion pass
+  through N's files;
+- its entire subject is float accuracy, which the owner has called low prio *by
+  definition*, four times;
+- and the urgency that justified it has not been observed in 259 runs.
+
+Building significant infrastructure to manage the priority of the lowest-prio
+subject in the repo is exactly the trade a lane agent should not decide alone.
+Escalated as `decide-t-per-assertion-subjects-or-accept-the-file-level-label`.
+
+**Recommendation stated there: accept the file-level label as future-only and
+build nothing more**, revisiting only if float reds resume at the historical
+rate.
+
+Deliberately NOT done, again: no float behaviour touched, no test de-gated, no
+marker applied to a mixed-subject file, no coverage removed.
