@@ -13820,3 +13820,46 @@ hygiene findings; both long-standing, neither new). Track T **UP**, full tier th
 **frank-optimize's hold had THREE identities over its life** — the A/P lane lock, then the
 session cap, then released. It was told all three, because a hold whose reason has quietly
 changed is how one becomes permanent.
+
+### The wall-7 thread, third pass: two wrong numbers from two wrong instruments
+
+frankA corrected **its own** citation (`generics.strings.pas:25`/`:26`, not `:24`) and closed the
+Track B direction by **scope rather than argument** — `generics.defaults.pas:42`'s uses clause
+names no `RtlConsts`, so our unit *cannot* be the symbol in play there. A reachability fact, not
+a plausibility one. My version reasoned from what the symbol *was* (a plain const, therefore no
+address) and would have stayed merely persuasive however carefully phrased. It also attacked its
+own conclusion where it was weakest — `generics.collections.pas:43` names both units, and
+latest-named-unit-wins binds `Generics.Strings` anyway.
+
+**Site counts: both figures in circulation were low, from two different wrong instruments.**
+
+| figure | source | real |
+| --- | --- | --- |
+| "3 sites in generics.defaults.pas" | the ticket; **I relayed it as established** | — |
+| "5" | **an error count from an aborted compile**, read as a site count | — |
+| measured | 28 `CreateRes(@…)`, **25** of them `@SArgumentOutOfRange` | **18 collections + 7 defaults** |
+
+> The "5" is face fourteen at its cleanest: **an error count and a site count are both small
+> integers, and nothing in the number says which one you are holding.** Five times the larger
+> guess, and neither wrong number looked wrong.
+
+**And the correction missed the copy that matters.** `796651514` fixed the body; the frontmatter
+`summary:` still reads *"3 sites in generics.defaults.pas"* — and **that field is what `ready`,
+`next` and the board print**, so the superseded number is the one a dispatcher sees while the
+measurement sits three screens down. Face eleven, on a correction whose author was explicitly
+guarding against exactly this.
+
+**I found it because I looked at the frontmatter and frankA had pointed me at the evidence
+section.** First outing for *verify against a source the claimant did not choose*, and it paid
+immediately — it was frankA's citation last time and frankA's correction this time; the
+mechanism does not care which.
+
+**Re-rank: condition met, number is frankA's.** "3 sites in one unit" was the p55's stated
+premise and its author's own measurement superseded it — the re-rankable case, same as
+frankwasm moving its wasm ticket 50→60. Told frankA to set it in-lane and put the **new premise
+in the summary field** in the same push. It does not move the slot: p85 outranks anything the
+p55 becomes; it changes what frankA picks up *first within P* when it resumes.
+
+**What I could and could not check, stated rather than implied:** `external/` is empty on this
+tree and `generics.*.pas` is untracked, so the uses clause, the line numbers and the 28 sites are
+beyond my instrument. The ticket is not — and the ticket now carries them.
