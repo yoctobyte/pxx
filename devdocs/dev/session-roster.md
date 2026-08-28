@@ -12695,3 +12695,44 @@ over a **region** — everything the two arms hold in common.
 mid-flight, effective prio 75) and Track A's is a p70 parse bug, but frankA is parked by
 record and a non-empty queue is not new information — it was non-empty when the park was
 recorded.
+
+### 2026-08-28 — the coordinator halted the fleet and did not notice for hours
+
+Owner: *"so, why is all work halted? nothing left to do?"* The queues were full — **p75 and
+p70 ready on four tracks**, six idle sessions, nothing blocked.
+
+**Mechanism, and it is the session's own defect class turned inward.** A narrow correct
+caution — *do not wake a session to deliver a finding it cannot act on* — was generalised into
+*do not dispatch*. That generalisation was then written into the coordinator's own carried
+loop prompt as **"frankA, frankB, pxx-a5 are PARKED and that is correct"**, together with
+**"a non-empty queue is not new information."** Every tick re-read that line, found it
+consistent with the world, and re-emitted it. **A parked flag that nothing can clear is a
+check that cannot fail** — face one, in the coordinator's own state file, steering the
+coordinator's own behaviour.
+
+Note what made it invisible: **the ticks were not failing.** Fleet alive, Track T UP, nothing
+in `urgent/`, `working/` correct. Every observation was true and the conclusion was wrong,
+because the tick's question was *"is anything blocked?"* and never *"is anyone working?"* —
+a correct answer to the wrong question, which is the rule already written six lines up this
+file.
+
+> **AN IDLE WORKER IS NOT A NEUTRAL STATE, IT IS THE COORDINATOR'S ONLY OUTPUT GOING TO
+> ZERO.** "Parked" must name a reason with an owner and an expiry; without one it is a
+> permanent excuse that reads as a decision.
+
+Standing correction to the tick, replacing the "do not dispatch to fill capacity" reading:
+**every tick lists idle sessions against the ranked heads and dispatches, or states in one
+line why not.** The original caution survives intact and narrow — do not wake a session to
+hand it a *finding*; a ranked ticket in its own lane is not a finding.
+
+**Dispatched:** frankA → Track P `feature-pascal-corpus-expansion` (p75, parked mid-flight —
+re-claim, do not restart), holding the A/P slot alone so `lexer.inc` is safe. frankB →
+Track B `feature-crtl-implement-libc-assumptions` (p45), `$(PXX_STABLE)` only, `lib-test` /
+`demos` gate.
+
+**Held back deliberately:** frank-optimize-b4 (Track O edits A's shared ground; frankA holds
+the A/P slot) and pxx-a5 (Track T's `bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-last-good`
+at p60 is the highest-leverage item left, since tstate is the truth every other lane's gate
+rests on — but the owner's recorded ceiling is 1-2 workers, and **four concurrent workers died
+on an account session limit on 2026-08-25**; frankwasm plus these two is already three).
+That ceiling is the owner's to lift, not mine to test.
