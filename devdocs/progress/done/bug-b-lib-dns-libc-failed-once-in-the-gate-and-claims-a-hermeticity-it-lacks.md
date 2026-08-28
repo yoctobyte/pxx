@@ -259,4 +259,4 @@ strength of something that *might* happen is a queue entry that asserts work
 where there is none.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit ea3a7c43e.
