@@ -177,3 +177,48 @@ virtual class methods. A non-virtual-only fix does not unblock rung 6.
 Everything above concerns defect A. The inline-cast failure (row 3, an *instance*
 method) has not been traced and may or may not share this mechanism. Do not
 assume it falls out of the same fix.
+
+---
+
+## Defect A FIXED (`9ab19fb21`). Defect B remains and is what blocks rung 6.
+
+Fixed on binary `4157f75831bb`, `gate.sh quick` GREEN. Regression test
+`test/test_class_method_to_method_pointer` asserts seven shapes against FPC,
+byte for byte: `15 TRUE 35 TRUE 10 500 TRUE`. Five of them segfaulted before.
+
+The two virtual rows are the load-bearing ones — `TSvc.CPick` (override) → 10
+and `TBase.CPick` (base) → 500 must differ, which is what proves the blob's VMT
+at +24 is being read rather than the blob's name pointer at +0. A wrong offset
+there yields a plausible code pointer, not a crash, so the test pins both.
+
+### Updated table
+
+| # | shape | before | now |
+| --- | --- | --- | --- |
+| 1, 2 | instance → var → call / record cast | ok | ok |
+| **3** | **instance, INLINE cast** | SEGFAULT | **SEGFAULT — defect B, open** |
+| 4, 5 | class → var → call / record cast | SEGFAULT | **ok** |
+| **6** | **class, INLINE cast** (the corpus shape) | SEGFAULT | **`IR_UNSUPPORTED` kind 88 — defect B, open** |
+| 7, 8 | plain `@` | ok | ok |
+
+Row 6 changed its failure mode but not its outcome: it no longer segfaults, it
+now refuses. That is strictly better — it moved from the silent exit to the
+honest one — but it is not a fix.
+
+### Defect B, now with a shape
+
+Same root cause as A wearing a different hat: a method reference is parsed as a
+**call** in expression position. A fixed it at the *assignment* site
+(`pasparser_stmt.inc`'s `@`-optional arm). B is the same mistake at the *cast*
+site — `TSel(s.IPick)` and `TSel(TSvc.CPick)` — where a cast to a
+method-pointer type should likewise yield a reference rather than invoking the
+method.
+
+That it hits an **instance** receiver too (row 3) is what makes it a separate
+fix rather than a missed case of A: A's arm is only reached for an assignment
+whose LHS is a method-pointer lvalue, and a cast has no such LHS to key on. The
+type being cast TO is the signal instead.
+
+**Rung 6 needs B, not A.** The corpus writes
+`TMethod(TSelectMethod(THashService<T>.SelectBinaryEqualityComparer)).Code` —
+row 6 — at all 28 sites, and `generics.defaults.pas` still stops at 2411.
