@@ -11812,3 +11812,76 @@ where their effect on master's binary is judged for the first time.
   SIMPLIFIED INPUT.** A prototype's conclusions are scoped to its inputs, and the scope is
   invisible once the conclusion is written down as a design property. Must land in the
   design doc, not in a message.
+
+### 2026-08-28 — Phase 7 done at `7996e6c3c`, and the trace was the phase
+
+Nine compositions diffed against native, **identical on the first run**: nested
+try/finally, an exception across two frames each owning a finally, escape from a loop,
+catch-and-re-raise, break and Exit through a finally, raise from value position, typed
+handlers with a descendant reaching its ancestor's arm, an unmatched arm falling outward,
+a raise inside a handler. Unhandled raise exits 217 with a line on fd 2, agreeing with
+native. Twelve wasm checks and `gate.sh quick` green.
+
+**The prototype's central finding was overturned before a line of lowering was written**,
+and the correction **replaced** the finding in the design doc rather than being appended
+below it. That distinction is the whole value: an appended correction leaves both readable
+as findings, and the wrong one is the one phrased as a design property.
+
+What was wrong: *"no runtime handler stack; landing pads resolve at compile time"* was true
+of hand-written WAT — where the nesting **is** the source text — and false of the IR. A
+`try` emits TWO `EXC_LEAVE`s per `EXC_ENTER`, and `EXC_LEAVE n` pops several frames at a
+point the lexically following code is still inside all of them. **A linear scan derives the
+wrong nesting silently**: the module validates, the exception lands in a real pad, and the
+wrong handler runs only for inputs that exercise the nesting. Built on as written, that is
+a bug found weeks later by someone else's nested try.
+
+The replacement was **cheaper** than what it replaced: `$pc` already feeds a `br_table`, so
+a dynamic landing pad is free where a register target would need an indirect jump. Third
+time the dispatch layout has paid for something it was not chosen for, now stated as a
+property of the layout: **any control transfer whose target is data rather than syntax is
+free here.**
+
+### The granted arm: it found a third answer to the question I posed
+
+I asked whether the wasm arm should mirror xtensa's `EmitExit` trap or emit nothing.
+frankwasm answered with neither, on a distinction I had not supplied: **xtensa's stub is
+REACHABLE** — a `call` to that offset is expressible — so its trap is the difference
+between a clean exit and running whatever follows. **Nothing can reach wasm's**, because a
+jump to a code offset is not expressible in a wasm module at all. So it wrote `-1`, not as a
+trap but as a **tell**: if a future shared path ever routes wasm through `IREmitCodeCall`,
+it surfaces as an obviously wrong number rather than a silent branch to offset 0. The
+reasoning is in the file so the next person need not re-derive which shape applies.
+
+Worth recording as a coordination pattern: **posing the question as a fork produced a better
+answer than either branch of the fork.** The value was in requiring a deliberate answer, not
+in the options I named.
+
+### The stranded ticket was caught by a mechanism, on its author
+
+The managed-locals-leak ticket was left on the branch; `check_tickets.sh` — which frankwasm
+built after the last stranding — caught it. It is now on master (`0ae379281`) and filed for
+**xtensa as well as wasm32**, which is broader than I asked and correct: xtensa carries the
+same undocumented leak and nobody had written it down.
+
+frankwasm's line on it is the argument for mechanisms over rules, demonstrated on the person
+who wrote the rule: *"I am glad something mechanical noticed rather than me."*
+
+### One count to reconcile, and a measurement worth more than the count
+
+`test/test_class.pas` — **not a wasm test, not written for this** — compiles to wasm32 and
+produces output identical to native. That, and the corpus's own `test_exception_finally` /
+`test_exception_typed` being byte-identical, is stronger evidence than any purpose-built
+slice, and frankwasm said why: *"I wrote the slice, I did not write those."* **Trust a test
+you did not write more than one you did** — it cannot have been shaped to the
+implementation.
+
+Open question, minor, flagged not assumed: the body count reads **123 of 128** after frozen
+strings and **121 of 126** here. Most likely a per-program set rather than a global one, but
+this fleet has already had one count that was *"true and worthless"* this week, so it gets a
+clarifying line rather than a reconciliation I invent.
+
+**Phase 8 sequencing is frankwasm's own call and it is the right one**: the plan says PAL,
+but the PAL is `external` declarations and expected to be small, while managed strings block
+the variant engine, real string programs and eventually `pascal26` itself. Picking on
+measured mass rather than plan numbering is the same call that moved the heap ahead of
+exceptions.

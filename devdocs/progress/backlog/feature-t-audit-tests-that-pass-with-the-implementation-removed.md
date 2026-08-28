@@ -128,3 +128,36 @@ Note what it cost to see: nothing was wrong with the test's *reasoning*. Every a
 in it was true, the mechanism it named was real, and it was written by someone who had the
 rule in hand. **Only reverting the implementation separates a test that checks the
 implementation from one that checks the environment.**
+
+---
+
+## The technique, refined 2026-08-28 — assert in BOTH directions
+
+Third instance, and this one contributes the method rather than another example.
+
+frankwasm's `check_exc.sh` needed to assert that post-call exception checks are gated on
+`ExceptionUsed` — i.e. that a program with no `raise` emits **no** pending flag and **no**
+checks, leaving every pre-existing module unchanged. Note what that gate's failure looks
+like: losing it leaves every module **correct**, every call merely carrying a check that
+can never fire. **No differential can detect it, because the output is identical.** Only a
+direct assertion can.
+
+But a direct negative assertion has its own vacuous-pass mode, and this is the part worth
+copying:
+
+> *"The positive exists so the negative cannot pass by naming a symbol that no longer
+> exists."*
+
+A check that asserts *"symbol X is absent from this module"* passes for two very different
+reasons — the gate works, or **X was renamed and is absent from everywhere.** The negative
+alone cannot tell those apart, and the second one is silent. Pairing it with a positive
+assertion on a module that *should* contain X makes the pair falsifiable: rename the
+symbol and the positive fails immediately.
+
+**So the rule for this audit is not "add a negative control" — it is "every negative
+assertion needs a positive twin that fails when the negative would pass vacuously."**
+
+frankwasm's own connection is the right one to end on: this is the same defect as
+`bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire`. **A check that
+cannot fail and a check that is passing look identical from outside.** An absent symbol, a
+silent environment, and a grep matching zero are three faces of one thing.
