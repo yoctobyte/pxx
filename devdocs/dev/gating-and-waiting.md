@@ -53,6 +53,18 @@ Do not pipe it (`tools/gate.sh quick | tail`) when you care about the exit
 status — the pipe reports `tail`'s. The summary is already short; read it whole,
 or use `${PIPESTATUS[0]}`.
 
+**This is not a `gate.sh` rule — it is a rule about every command whose exit
+status you intend to believe**, `make lib-test` and `make demos` included. It bit
+again on 2026-08-28 in exactly that shape: `make lib-test 2>&1 | tail -25` reported
+success while make had aborted with `Error 1`, and the run had stopped before
+reaching the test the session had just added, so the "pass" covered a suite that
+never ran the thing being gated. Redirect to a file and read it
+(`make lib-test > log 2>&1; echo $?`); the log is there either way. The general
+form is worth keeping in mind whenever a check is piped: **a check is only safe if
+it prints a sentinel that failure cannot reach — if green looks like the ABSENCE
+of output, a pipe or a `tail` can manufacture it.** That is also why every
+`lib-test` entry ends in a positive `... OK` line rather than simply not failing.
+
 ### `pgrep` matches your own watcher
 
 ```bash

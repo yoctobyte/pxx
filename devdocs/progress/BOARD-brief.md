@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:23 blocked:9 backlog:274 backlog_new:1 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2538 rejected:46`
+`working:1 unfinished:23 blocked:9 backlog:274 backlog_new:1 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2539 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
@@ -69,7 +69,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [P]` bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
-- `[p 65] [B]` feature-b-text-file-surface-seekeof-rename-settextbuf
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [N]` feature-nilpy-iter-and-next-over-a-container
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
@@ -81,5 +80,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [B]` feature-b-the-module-shim-batch-blocking-the-python-corpus
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
+- `[p 62] [A]` feature-unicodestring-model
 
 _255 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
