@@ -41,21 +41,16 @@ _none_
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | refactor-a-two-dyn-array-depth-functions-that-drift | A | 30 | refactor | Two functions answer 'how many `array of` levels does this expression have': NodeDynDepth (ast_arena.inc) and DynArrayNodeDepth (symtab.inc). They have diverged at least twice and each divergence produced a silent wrong VALUE, not an error. Merge them. | — |
 
-## blocked (9)
+## blocked (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-b-nilpy-random-is-never-seeded-and-its-first-draw-is-the-low-bound | N | 60 | bug | `import random` then `random.randint(1,100)` produces the SAME sequence on every run — CPython seeds from OS entropy at import and NilPy never does. PARKED: the fixed seed is DELIBERATE and argued in pylib.pas, so it needs decide-does-nilpy-random-seed-itself-at-import first. | decide-does-nilpy-random-seed-itself-at-import |
 | bug-c-crtl-utoa-digit-loop-is-unbounded | C | 25 | bug | `__crtl_utoa`'s digit loop has no bound on its index, so a wrong `base` turns a printf into an unbounded stack write that smashes the routine's own parameters and then walks to the guard page. Do NOT fix in isolation — it is the amplifier for an unnamed defect and bounding it would hide that. | bug-b-reportlab-mimic-multi-font-heap-corruption |
-| bug-n-a-subpackage-directory-does-not-resolve-as-a-module | N | 55 | bug | `from .inner import X` (RELATIVE) where `inner` is a subpackage directory fails with `no unit named inner`, while the absolute `from pkg.inner import X` works — so directory-as-module resolution exists and the relative form just hands the resolver a bare name instead of the package-qualified one. html5lib has three real subpackages (_trie, treebuilders, treewalkers), so this is its next rung. | bug-a-a-python-module-s-identity-is-its-name-not-its-file |
-| bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module | N | 85 | bug | RE-SCOPED: not about import aliases. A name that names a `def` is resolved to that def at EVERY call site and any later rebinding is ignored — `def a…; def b…; b = a; b(1,5)` answers 18 (the original b) where CPython answers 5, with no import anywhere. The alias spelling is one way to rebind. Blocked: the correct destination is the dynamic call path, which cannot yet carry defaults (see the decision ticket). | decide-how-a-compiled-def-carries-its-signature-when-boxed |
-| bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
-| feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
-| regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 | regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
 
-## backlog (284)
+## backlog (290)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -89,9 +84,11 @@ _none_
 | bug-n-a-keyword-argument-through-a-procedural-field-needs-a-plain-receiver | N | 55 | bug | `H().fn(1, b=2)` and `hs[0].fn(1, b=2)` are `error: undefined variable (b)` where `h.fn(1, b=2)` and `g().fn(1, b=2)` answer correctly — a KEYWORD argument to a callable FIELD, only when the receiver is a constructor call or a subscript. The keyword name parses as an expression, the same symptom the statically-unknown-callee ticket had. | — |
 | bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart | N | 45 | bug | `hasattr([1], 'add')` and `hasattr([1], 'update')` are True: list and set are both TPyList at run time, so every `is`-test-based introspection answers set questions about a list. `type(x).__name__` DOES tell them apart, so the discriminator exists and the predicate is not using it. | — |
 | bug-n-a-staticmethod-read-through-an-instance-binds-a-receiver | N | 25 | bug | bug(N): a @staticmethod read through an INSTANCE binds a receiver, so `type(k.stat).__name__` says 'method' | — |
+| bug-n-a-subpackage-directory-does-not-resolve-as-a-module | N | 55 | bug | `from .inner import X` (RELATIVE) where `inner` is a subpackage directory fails with `no unit named inner`, while the absolute `from pkg.inner import X` works — so directory-as-module resolution exists and the relative form just hands the resolver a bare name instead of the package-qualified one. html5lib has three real subpackages (_trie, treebuilders, treewalkers), so this is its next rung. | bug-a-a-python-module-s-identity-is-its-name-not-its-file |
 | bug-n-a-tuple-unpacking-assignment-does-not-box-a-callable-value | N | 55 | bug | `a, b = lambda x: x + 1, lambda x: x + 2` compiles and then `a(1)` raises TypeError: object is not callable. The single-target spellings (`a = lambda ...`, `return lambda ...`) box the callable so the name is a variant; the tuple-UNPACK targets do not, so each name holds a raw pointer the dynamic-call path does not recognise. | — |
 | bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence | N | 55 | bug | Six `timeout N` literals are hardcoded inside the test-nilpy and test-uforth recipes. The three uforth ones are the damaging pair of shapes: `wait $pp \|\| true` discards timeout's exit 124, the kill truncates p.out mid-stream, and the truncation is then reported as `DIFF <corpus>` — a pxx-versus-CPython divergence — and counted into `bad`. A machine under load thus manufactures a Nil-Python frontend finding. Filed by Track T, which owns the harness but not the Makefile. | — |
 | bug-n-abs-of-a-complex-raises-typeerror | N | 12 | bug | `abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set. | — |
+| bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module | N | 85 | bug | RE-SCOPED: not about import aliases. A name that names a `def` is resolved to that def at EVERY call site and any later rebinding is ignored — `def a…; def b…; b = a; b(1,5)` answers 18 (the original b) where CPython answers 5, with no import anywhere. The alias spelling is one way to rebind. Blocked: the correct destination is the dynamic call path, which cannot yet carry defaults (see the decision ticket). | decide-how-a-compiled-def-carries-its-signature-when-boxed |
 | bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising | N | 50 | bug | `None.bit_length()` returns 0 where CPython raises AttributeError — the int-method arm on a variant receiver unboxes without checking the tag, and None's payload reads as the integer 0. dict/list/str receivers do raise, so None is the one shape that answers. | — |
 | bug-n-exec-ignores-a-caller-supplied-builtins-mapping | N | 20 | bug | `exec(src, {\"__builtins__\": {}})` — the restricted-exec idiom — raises NameError in CPython and silently resolves builtins anyway in pxx. The caller's explicit instruction to resolve names against THIS mapping is discarded, so working CPython code takes a different path. Upward-compatibility defect, split out of the cosmetic decide-nilpy-exec-injects-a-builtins-key. | — |
 | bug-n-hasattr-with-a-computed-name-cannot-see-a-builtin-method | N | 55 | bug | `hasattr(x, n)` with the name in a VARIABLE answers False for every builtin-container, str, int and float method — `n = 'keys'; hasattr(a_dict, n)` is False while `hasattr(a_dict, 'keys')` is True. The literal and computed spellings of one question resolve through two different mechanisms and only the literal one was fixed. | — |
@@ -117,6 +114,7 @@ _none_
 | bug-nilpy-empty-str-and-none-are-the-same-value | N | 75 | bug | `\"\" is None` answers TRUE for any NilPy value whose static type is plain `str` — literal, local, parameter, `-> str` return, AND every pylib str-method result (`.replace()`, a slice, `.join()`, `*0`). Container-derived and `Optional[str]` values are correct, because they carry a variant TAG; the rule is tagged-vs-untagged, not literal-vs-computed. A CORRECTION at the bottom retracts the 2026-08-27 down-scoping, which claimed the pylib results were already right and was measured wrong (they answer True on v385, v386 and HEAD alike) — the original ~260-producer sizing, and the basis the decision was taken on, both stand. A constant-fold is unsafe: `def f() -> str: return None` is legal CPython. | decide-nilpy-none-str-sentinel-vs-textstr-kind |
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 55 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 12 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
+| bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
 | bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching | P | 65 | bug | A parameter's pointer element type is lost between registration and overload matching | — |
 | bug-p-a-resourcestring-is-not-addressable | P | 55 | bug | `@SomeResourceString` is `error: undefined variable` — pxx parses a `resourcestring` section as a plain const section (pasparser_proc.inc:4783), and a const has no address. FPC makes resourcestrings addressable (they are runtime-replaceable variables), which is what `Exception.CreateRes(@SArgumentOutOfRange)` — the Delphi/FPC idiom, 3 sites in generics.defaults.pas — depends on. | — |
 | bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
@@ -142,6 +140,7 @@ _none_
 | chore-doc-pascal-dialect-divergences-pointer-difference | D | 25 | chore | Re-filed from decide-pointer-difference-unit and decide-should-a-null-variant-raise-like-fpc, both decided 2026-08-25. Two divergences from FPC are now CHOSEN rather than merely inherited, and a chosen divergence that is not written down is indistinguishable from a bug to the next reader. Both entries land in devdocs/dev/pascal-dialect-divergences.md. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
 | chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile | T | 20 | chore | The second, weaker half of the split_jobs lint: flag any job that RUNS a /tmp binary no line in that job produces. Prototyped and deliberately NOT shipped — it yields 5-7 candidates depending on how recipe lines are segmented, and every one needs individual adjudication. Shipping it half-tuned would produce exactly the noisy guard that gets muted. | — |
+| chore-t-nothing-re-checks-a-blocked-by-edge-after-its-blocker-closes | T | 45 | chore |  | — |
 | chore-t-split-lib-test-into-jobs-that-name-what-failed | T | 45 | chore | One lib-test job bundles several sources, so its tstate key names only the FIRST of them: `lib-test#src:test/crtl_exp2.c` is really `crtl_exp2.c examples/tk/hello.npy +5`, and a timeout in the tk step reads as a C-math regression. Split it so a job names what failed. Do it while lib-test is green — the baseline is recorded here. | — |
 | chore-t-test-binaries-hardcode-unsweepable-tmp-paths | T | 35 | chore | 60 /tmp paths are hardcoded in 37 COMPILED TEST SOURCES and written by the test binary at runtime, so no Makefile sweep can reach them and testmgr does not privatize them either. Two concurrent runs still share those files EVEN UNDER testmgr. Split out of chore-makefile-testtmp-parameterize, which closed the recipe half. | — |
 | chore-t-the-breadth-line-omits-its-zero-instead-of-printing-it | T | 25 | chore |  | — |
@@ -283,6 +282,7 @@ _none_
 | feature-port-openbsd-libc | A | 50 | feature | OpenBSD/amd64 target — route RTL through libc.so; pinsyscalls satisfied by construction | feature-port-rtl-over-libc |
 | feature-port-windows-pe | M | 25→55 | feature | Windows/x64 target — PE/COFF writer, MS x64 ABI, IAT imports; testable via Wine | feature-port-rtl-over-libc |
 | feature-promo-launch-plan | W | 15 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | — |
+| feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-t-audit-tests-that-pass-with-the-implementation-removed | T | 40 | feature | frankB wrote a regression test for bug-b-resolver-sends-localhost-to-the-wire, got eight green rows, then reverted the fix to control it — and the test still passed, every row. This box's systemd-resolved is itself RFC 6761 compliant and synthesises the localhost subtree, so the broken code returned the right ANSWER and merely emitted 20 DNS queries to get it. A value assertion was testing systemd-resolved. Three instances of this shape landed in one night. This ticket is the sweep for others. | — |
 | feature-t-fail-when-a-test-file-is-wired-into-no-build-rule | T | 45 | feature | A file in test/ is not a test until a build rule runs it. Two confirmed cases of a test that existed, passed, and was referenced by nothing — one ungated for two weeks. Proposed: a check (progress.sh check or testmgr) that fails when a test/*.expected or test/*.npy has no rule referencing it, converting the class from 'someone notices' to 'CI notices'. | — |
@@ -333,6 +333,7 @@ _none_
 | refactor-p-the-field-declaration-parser-exists-twice | P | 45 | refactor | `ParseRecordFields` (pasparser_decl.inc ~3199) and the class-body field arm inside `ParseTypeSection` (~4824) parse the same grammar — comma-separated names, inline fixed/dynamic array, named array alias, scalar — with the same locals under different names and the same AddUField tail. Every field-level feature has to be written twice, and the second copy is the one that stays broken. | — |
 | refactor-p-the-overload-probe-cannot-see-the-argument-match-channels | P | 45 | refactor | The speculative overload probe in FindUMethOverloadAhead has only argument KINDS, while the free-call path has five side channels (MatchArgArray/ArrayElemTk/Nil/Rec/Scalar) filled in pasparser_lval.inc. So the probe cannot run the free path's own compatibility check — measured, a gate built on kinds alone refuses four classes of legal call. Lift the population into a helper both callers share. | — |
 | refactor-p-three-hand-rolled-postfix-loops | P | 55 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
+| regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 | regression-test-emit-obj-cxtensa-obj | A+S | 70 | regression | regression: `--target=xtensa` on a C source selects the POSIX platform backend | — |
 | regression-test-nilpy-test-nilpy-parent-call-after-instantiation | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy red at b898d0543fc8 (auto-filed by twatch) | — |
@@ -641,6 +642,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 85] [N] bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
 - [p 85] [O] feature-opt-o3-register-pressure [parked — re-claim, do not duplicate]
 - [p 75] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 75] [P] feature-pascal-corpus-oop
@@ -652,6 +654,7 @@ _none_
 - [p 70] [N] feature-nilpy-staticmethod-and-classmethod
 - [p 70] [P] feature-p-delphi-string-helpers
 - [p 70] [P] feature-pascal-typed-and-untyped-files
+- [p 70] [P] regression-cascade-4e27dc2be114
 - [p 70] [A+S] regression-test-emit-obj-cxtensa-obj
 - [p 70] [N] regression-test-nilpy-test-nilpy-parent-call-after-instantiation
 - [p 70] [N] regression-test-nilpy-test-nilpy-startswith-tuple
@@ -676,6 +679,7 @@ _none_
 - [p 60] [A] bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open
 - [p 60] [A] bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open
 - [p 60] [N] bug-n-os-environ-and-os-sep-are-not-values
+- [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - [p 60] [P] bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body [parked — re-claim, do not duplicate]
 - [p 60] [T] bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-last-good
 - [p 60] [N] feature-a-declaration-phase
@@ -697,6 +701,7 @@ _none_
 - [p 55] [N] bug-n-a-field-assigned-from-a-module-global-expression-is-refused
 - [p 55] [N] bug-n-a-keyword-argument-through-a-class-value-is-refused-at-runtime
 - [p 55] [N] bug-n-a-keyword-argument-through-a-procedural-field-needs-a-plain-receiver
+- [p 55] [N] bug-n-a-subpackage-directory-does-not-resolve-as-a-module
 - [p 55] [N] bug-n-a-tuple-unpacking-assignment-does-not-box-a-callable-value
 - [p 55] [N] bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence
 - [p 55] [N] bug-n-hasattr-with-a-computed-name-cannot-see-a-builtin-method
@@ -749,6 +754,7 @@ _none_
 - [p 45] [N] bug-n-object-is-the-one-builtin-type-name-that-is-not-a-value
 - [p 45] [N] bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind
 - [p 45] [T] bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing
+- [p 45] [T] chore-t-nothing-re-checks-a-blocked-by-edge-after-its-blocker-closes
 - [p 45] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
 - [p 45] [T] chore-t-tools-devtest-is-one-job-that-runs-86-guards
 - [p 45] [U] decide-t-refuse-unscoped-pattern-kills-in-a-hook
@@ -768,6 +774,7 @@ _none_
 - [p 45] [N] feature-nilpy-threadsafe-containers
 - [p 45] [O] feature-opt-inline-float-and-record-returning-leaves
 - [p 45] [P] feature-p-defineglobal-a-define-that-crosses-unit-boundaries
+- [p 45] [B] feature-random-library
 - [p 45] [T] feature-t-fail-when-a-test-file-is-wired-into-no-build-rule
 - [p 45] [T] feature-t-nilpy-cpython-differential-fuzzer
 - [p 45] [A] refactor-a-one-program-driver-prologue-for-every-frontend

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:21 blocked:9 backlog:284 backlog_new:6 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2551 rejected:46`
+`working:2 unfinished:21 blocked:4 backlog:290 backlog_new:6 experimental:20 rainy-day:44 float:21 done-followup:3 decided:116 done:2551 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
@@ -36,20 +36,16 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-threadsafe-heap-optimize` [A]
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
-## blocked (9) — has an unmet blocker; do not claim
+## blocked (4) — has an unmet blocker; do not claim
 
 - `bug-b-nilpy-random-is-never-seeded-and-its-first-draw-is-the-low-bound` [N] — blocked-by: decide-does-nilpy-random-seed-itself-at-import
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
-- `bug-n-a-subpackage-directory-does-not-resolve-as-a-module` [N] — blocked-by: bug-a-a-python-module-s-identity-is-its-name-not-its-file
-- `bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module` [N] — blocked-by: decide-how-a-compiled-def-carries-its-signature-when-boxed
-- `bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity` [N] — blocked-by: feature-b-tkhtmlview-in-nilpy
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
-- `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
-- `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 - `regression-lib-test-lib-synapse` [B] — blocked-by: bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream
 
-## Ready — top 30 of 297, ranked
+## Ready — top 30 of 303, ranked
 
+- `[p 85] [N]` bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
 - `[p 85] [O]` feature-opt-o3-register-pressure
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -61,6 +57,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` feature-nilpy-staticmethod-and-classmethod
 - `[p 70] [P]` feature-p-delphi-string-helpers
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
+- `[p 70] [P]` regression-cascade-4e27dc2be114
 - `[p 70] [A+S]` regression-test-emit-obj-cxtensa-obj
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-parent-call-after-instantiation
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-startswith-tuple
@@ -78,7 +75,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
 - `[p 62] [N]` feature-nilpy-enum-class
-- `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
-- `[p 62] [A]` feature-unicodestring-model
 
-_267 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_273 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

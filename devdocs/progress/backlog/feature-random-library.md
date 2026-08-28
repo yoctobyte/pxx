@@ -8,7 +8,7 @@ owner: claude-B
 # Random library — HW/OS/software tiered RNG (cross-target capability test)
 
 - **Type:** feature
-- **Status:** blocked
+- **Status:** backlog (unblocked 2026-08-28 — see the coordinator note at the end)
   remaining work is HW tiers and thread-safe state)
 - **Relation:** a real, reusable RTL library that doubles as a broad
   cross-target test: runtime capability probing, per-target inline asm, a
@@ -319,3 +319,13 @@ mnemonic surface including `cpuid`. Nothing further is available in this lane.
   that record). So the cross-target oracle covers 4 targets, not 6.
 - **`Random128`** from the API sketch is not implemented: there is no 128-bit
   integer type to return. Left out deliberately rather than faked with a record.
+
+
+---
+
+**Unblocked and moved to `backlog/` by the coordinator, 2026-08-28.** Its declared
+`blocked-by` names a ticket that has since been resolved, so this was sitting in `blocked/` —
+which `ready`/`next` never scan — while it was actually rankable. Nothing about the work
+changed; only the record was stale. Found by a sweep (see
+`chore-t-nothing-re-checks-a-blocked-by-edge-after-its-blocker-closes`); 14 tickets repo-wide
+carry at least one `blocked-by` naming a closed ticket, five of them fully unblocked.

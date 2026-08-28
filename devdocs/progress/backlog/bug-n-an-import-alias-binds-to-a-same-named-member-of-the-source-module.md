@@ -4,7 +4,7 @@ prio: 85
 type: bug
 blocked-by: [decide-how-a-compiled-def-carries-its-signature-when-boxed]
 summary: "RE-SCOPED: not about import aliases. A name that names a `def` is resolved to that def at EVERY call site and any later rebinding is ignored — `def a…; def b…; b = a; b(1,5)` answers 18 (the original b) where CPython answers 5, with no import anywhere. The alias spelling is one way to rebind. Blocked: the correct destination is the dynamic call path, which cannot yet carry defaults (see the decision ticket)."
-status: blocked
+status: backlog
 owner: unassigned
 ---
 
@@ -143,3 +143,17 @@ that.
 
 The title names the alias shape, which is one instance rather than the rule. Left
 to whoever takes it, same convention as the other two tickets re-scoped today.
+
+
+---
+
+**Unblocked and moved to `backlog/` by the coordinator, 2026-08-28.** Its declared
+`blocked-by` names a ticket that has since been resolved, so this was sitting in `blocked/` —
+which `ready`/`next` never scan — while it was actually rankable. Nothing about the work
+changed; only the record was stale. Found by a sweep (see
+`chore-t-nothing-re-checks-a-blocked-by-edge-after-its-blocker-closes`); 14 tickets repo-wide
+carry at least one `blocked-by` naming a closed ticket, five of them fully unblocked.
+
+**Track N is NOT being dispatched** (owner deprioritized it and reserved the call, 2026-08-27).
+This ticket is rankable again and correctly filed, but do not auto-claim it on a cold-start
+"take the global top" — ask the owner first.

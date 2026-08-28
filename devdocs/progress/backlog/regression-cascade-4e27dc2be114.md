@@ -118,3 +118,13 @@ import ConfigBase` is refused with *expected a module name after from*. So
 two (dotted base, unqualified base) still hold and its header records what went
 and why. Whether the quoted form should be accepted after `from` is noted in the
 Track A ticket.
+
+
+---
+
+**Unblocked and moved to `backlog/` by the coordinator, 2026-08-28.** Its declared
+`blocked-by` names a ticket that has since been resolved, so this was sitting in `blocked/` —
+which `ready`/`next` never scan — while it was actually rankable. Nothing about the work
+changed; only the record was stale. Found by a sweep (see
+`chore-t-nothing-re-checks-a-blocked-by-edge-after-its-blocker-closes`); 14 tickets repo-wide
+carry at least one `blocked-by` naming a closed ticket, five of them fully unblocked.

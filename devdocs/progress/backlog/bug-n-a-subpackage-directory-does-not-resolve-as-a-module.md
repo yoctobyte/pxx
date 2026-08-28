@@ -4,7 +4,7 @@ prio: 55
 type: bug
 blocked-by: [bug-a-a-python-module-s-identity-is-its-name-not-its-file]
 summary: "`from .inner import X` (RELATIVE) where `inner` is a subpackage directory fails with `no unit named inner`, while the absolute `from pkg.inner import X` works — so directory-as-module resolution exists and the relative form just hands the resolver a bare name instead of the package-qualified one. html5lib has three real subpackages (_trie, treebuilders, treewalkers), so this is its next rung."
-status: blocked
+status: backlog
 owner: frank2
 ---
 
@@ -195,3 +195,17 @@ the A fix lands: the count-asserting test (a module appending to a list on
 import, importer asserting length 1 after importing it by both spellings) plus
 an `isinstance`-across-spellings check. Do not write it as an output-comparison
 test — the probe's visible output was already correct while the module ran twice.
+
+
+---
+
+**Unblocked and moved to `backlog/` by the coordinator, 2026-08-28.** Its declared
+`blocked-by` names a ticket that has since been resolved, so this was sitting in `blocked/` —
+which `ready`/`next` never scan — while it was actually rankable. Nothing about the work
+changed; only the record was stale. Found by a sweep (see
+`chore-t-nothing-re-checks-a-blocked-by-edge-after-its-blocker-closes`); 14 tickets repo-wide
+carry at least one `blocked-by` naming a closed ticket, five of them fully unblocked.
+
+**Track N is NOT being dispatched** (owner deprioritized it and reserved the call, 2026-08-27).
+This ticket is rankable again and correctly filed, but do not auto-claim it on a cold-start
+"take the global top" — ask the owner first.

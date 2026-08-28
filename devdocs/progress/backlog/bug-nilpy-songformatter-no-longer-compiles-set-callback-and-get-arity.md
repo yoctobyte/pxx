@@ -4,7 +4,7 @@ type: bug
 track: N
 blocked-by: [feature-b-tkhtmlview-in-nilpy]
 prio: 60
-status: blocked
+status: backlog
 ---
 
 # songformatter stopped compiling — `set_` callback member, and `get()` arity
@@ -181,3 +181,17 @@ No claim is made here about whether the `set_` and `get()`-arity halves are
 still live — they have NOT been re-measured. Whoever unblocks this should
 re-run the repro before assuming either half survives; several tickets in this
 sweep no longer reproduced.
+
+
+---
+
+**Unblocked and moved to `backlog/` by the coordinator, 2026-08-28.** Its declared
+`blocked-by` names a ticket that has since been resolved, so this was sitting in `blocked/` —
+which `ready`/`next` never scan — while it was actually rankable. Nothing about the work
+changed; only the record was stale. Found by a sweep (see
+`chore-t-nothing-re-checks-a-blocked-by-edge-after-its-blocker-closes`); 14 tickets repo-wide
+carry at least one `blocked-by` naming a closed ticket, five of them fully unblocked.
+
+**Track N is NOT being dispatched** (owner deprioritized it and reserved the call, 2026-08-27).
+This ticket is rankable again and correctly filed, but do not auto-claim it on a cold-start
+"take the global top" — ask the owner first.
