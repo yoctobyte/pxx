@@ -6286,6 +6286,16 @@ def report_running_code(clone_path):
     whether the matrix is being covered; running-stale-but-covering is a real
     state and not the same as down. Says nothing at all when it cannot tell,
     rather than guessing — an unreadable watch.json is not evidence of drift.
+
+    THE SHAPE, stated once because it generalises past this daemon: staleness
+    here has TWO hops — origin -> the clone's disk (closed by a `git pull`) and
+    the clone's disk -> the resident process (closed only by a RESTART). This
+    check answers the second, and it is the one no amount of pulling can fix.
+    Measured again 2026-08-28: the clone's `twatch.py` was byte-identical to
+    the fix on master while the daemon had been running the previous code for
+    hours. **A deploy that is correct on disk and stale in memory reports the
+    disk version if anyone asks it** — every filesystem-level check, including
+    a sha256 of the source, confirms the wrong hop.
     """
     if not clone_path:
         return

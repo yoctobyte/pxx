@@ -98,3 +98,29 @@ change does nothing until the daemon restarts — check `code_fp` against the
 clone's disk afterwards, per the two-hop rule
 (`origin -> clone disk -> resident process`; `code_fp` answers the second hop
 only).
+
+## 2026-08-28 — a second reason to touch `mid_tier`, found from the other side
+
+While fixing the `-O3` attribution gap I hit `mid_tier` from an angle this
+ticket does not cover, and it is worth recording here rather than opening a
+third ticket.
+
+`last_full` is **the last REPLACING run**, not the last `full` tier — the name
+is a historical accident. Under the shipped default (`mid_tier == deep_tier ==
+full`) the two coincide and nothing is wrong today. Configure `mid_tier` to
+`limited`, which is exactly what this ticket contemplates, and they diverge: a
+`limited` run would refresh `last_full`, and the BREADTH staleness banner reads
+`last_full` to decide whether any cross target has seen the tree. A `limited`
+run covers no cross target. The banner would go quiet on evidence that does not
+support it.
+
+So enabling `mid_tier` is not purely a scheduling change; it silently widens
+what the breadth banner vouches for. `last_by_tier` (`ecacf87bd`) answers the
+question exactly — newest COMPLETE run at each tier, exact match, never
+`covered_tiers` — and the banner should be moved onto it **before** any
+`mid_tier` experiment, not after.
+
+This is the same shape as the gap that ticket fixed, and as the four-gate-tier
+survey that missed `opt`: **a knob whose reach is not visible in the output it
+governs**. Noted, not ranked up — one good analogy is not evidence, and the
+ranking should follow the measurement this ticket already asks for.

@@ -192,5 +192,20 @@ doubt. Same lesson as the rest of the ticket, applied to me — a confident clai
 about an inventory is cheap to check and I checked the inventory I had just
 been arguing about, while taking my own supporting citation on trust.
 
+## The strongest claim available for item 2, stated plainly
+
+The report banner and `trackt optcov` resolve the same fact — which `opt` run
+last swept a tree — **by different code paths that share nothing**. The banner
+reads the watcher's own state (`last_by_tier`, falling back to a scan of
+`history`); `optcov` reads the uncapped NDJSON archive and tests ancestry with
+git. Run against the live plexus state on 2026-08-28 they returned the same run,
+`0fbcbdebccd3` at `2026-08-28T09:41:46Z`.
+
+That is **two implementations, one answer, no shared code path** — independent
+confirmation from inside a single lane, which is the most that can be claimed
+without a second pair of eyes and is worth more than either result alone. It
+will not be obvious to a later reader that the agreement was not tautological,
+so it is recorded here rather than left to be inferred.
+
 ## Log
 - 2026-08-28 — resolved, commit 48ea92a22.
