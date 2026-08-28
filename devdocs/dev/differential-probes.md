@@ -244,6 +244,22 @@ and that scope is honest. The failure mode is in the reading — taking a green
 cross-target sweep as coverage of *the compiler* rather than of *the part below
 the frontend*.
 
+**And the same test applies to how you VERIFY, not just to what you run.** Two checking
+methods can share an upstream as easily as two test arms:
+
+> **GREP AND READ ARE NOT INDEPENDENT — they share the FILE as their population.**
+
+Measured 2026-08-28: four `test/wasm/` checks were recorded as having "exactly one assertion
+each", confirmed by grepping the check file and by reading it. Both were wrong the same way —
+each check *also* prints a line emitted by the shared `wat_oracle.sh` helper, which is not in
+the check file at all. A grep of the file misses it, and reading the file agrees with the grep,
+so two methods corroborated each other into a confident wrong count. It surfaced only when the
+annotated check printed both lines together, i.e. from the **output**, which was the one
+population that contained the answer.
+
+Before calling something double-checked, ask what the two checks READ, not how different they
+feel.
+
 **So: before trusting a green pxx-vs-pxx run, name what the two arms share, and
 treat everything above that line as untested by it.** For anything at or above
 the frontend the oracle has to be foreign — FPC, gcc, CPython — which is

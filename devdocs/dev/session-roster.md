@@ -13441,3 +13441,55 @@ One level beyond *a rule lives in the file the violator will open* — better th
 right file is a file that cannot hold the error. Both new tests were also confirmed to **fail on
 `pinned`** (the method-pointer one segfaults there), because a test that would have passed
 anyway proves nothing.
+
+### Memory bug root-caused: O(n²) string append, branch-local, ~30 lines — FIX APPROVED
+
+The checkpoint I set was *"triage to a size, report, then decide"*, and the deciding fact came
+in on the cheap side.
+
+**Cause:** `compiler/wasmenc.inc:604` — `WFText := WFText + WasmIndentStr + t + LineEnding`,
+called once per emitted instruction. Each call reallocates and copies the whole accumulated
+string: O(n²) bytes. `WFText` resets per function, so peak is set by the **largest single
+function body** — which is why `compiler.pas` is catastrophic and the earlier synthetics were
+flat. **Body count was never the variable; body SIZE was.**
+
+**Both hypotheses frankwasm had named in the ticket were wrong** — encoder-holds-all-bodies and
+O(n²)-over-patch-sites — *and the ticket had deliberately named no root cause.* That discipline
+paid exactly what it was for: nothing had to be un-said.
+
+Measured, with the A/B that is A minus one thing — `WasmText` stubbed to a no-op:
+
+| ifs/body | wasm32 | stubbed | x86-64 |
+| --- | --- | --- | --- |
+| 100 | 827 MB | 30 MB | 30 MB |
+| 200 | 3213 MB | 30 MB | 30 MB |
+| 300 | 7180 MB (82 s) | 30 MB (0.5 s) | 30 MB |
+
+Native flat on identical input put the cause in the wasm32 path **before any code was read**.
+Probe reverted, tree clean, binary back to `2e68d018ccac`.
+
+**Approved: take the fix.** Four sites in one branch-local file, ~30 lines, no interface change,
+**no shared A file and no collision with frankA** — the escape condition I set (root cause
+landing in `ir.inc`/`symtab.inc`/`defs.inc`) did not trigger. Reusing the growable-pool shape
+`WasmCodePool` already uses in that file is right: an existing mechanism, not a fifth one.
+
+**Acceptance criterion I asked for:** the `.wat` output must be **byte-identical before and
+after**. This is a pure accumulation refactor, so its own suite already contains the control —
+`wat_oracle.sh` compares `.wat` against `.wasm` — and self-comparison is legitimate here
+precisely because the requirement *is* output preservation.
+
+**Honest limit on my verification: `wasmenc.inc` does not exist on master**, so I could not read
+line 604 from this tree. The cause is accepted on frankwasm's measurement, not confirmed by me —
+and the measurements are strong enough (a stub returning 7180 MB → 30 MB) that the claim does
+not rest on reading the line.
+
+**Scope correction, and the re-rank is legitimate.** frankwasm filed it at p50 partly on *"it
+blocks Phase 9's anchor"*, and now reports the real scope is wider: **any wasm32 compile of a
+program with a large procedure hits this** — not a `compiler.pas` special case, and 300
+statements in one body is not exotic. Plus it starved a 60 GB box and killed sibling jobs.
+Raising the prio here is **not** over-ruling a measured ranking with intuition — *the ranking's
+stated premise has been superseded by its own author's measurement.* frankwasm corrects scope
+and prio when it lands the fix.
+
+**Payoff:** this restores the lane's measurability, which was the entire reason I chose it over
+the refusal tail. Phase 9's coverage row can be filled once it lands.
