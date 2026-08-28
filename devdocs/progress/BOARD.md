@@ -8,11 +8,14 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (2)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| feature-opt-o3-register-pressure | O | 85 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
+| feature-pascal-corpus-expansion | P | 75 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 
-## unfinished (23)
+## unfinished (21)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -28,8 +31,6 @@ _none_
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 65 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
-| feature-opt-o3-register-pressure | O | 85 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
-| feature-pascal-corpus-expansion | P | 75 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 | feature-pascal-corpus-fpc-testsuite | P | 65 | feature | Pascal corpus rung 1 — FPC test-suite subset (conformance) | — |
 | feature-pascal-corpus-generics | P | 65 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo |
 | feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
@@ -647,9 +648,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 85] [N] bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
-- [p 85] [O] feature-opt-o3-register-pressure [parked — re-claim, do not duplicate]
 - [p 75] [N] bug-nilpy-empty-str-and-none-are-the-same-value
-- [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [P] feature-pascal-corpus-oop
 - [p 72] [N] feature-nilpy-stdlib-coverage-gaps-measured
 - [p 70] [A] bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream (unblocks 2)

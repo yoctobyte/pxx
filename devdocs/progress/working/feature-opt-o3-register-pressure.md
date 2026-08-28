@@ -8,7 +8,7 @@ prio: 85
   file-ownership **Track A** — edits the shared `ir_codegen.inc` / `symtab.inc` /
   backends, so it obeys A's no-concurrent-edit rule + self-host gate) — umbrella
   for the next optimization campaign.
-- **Status:** unfinished — parked 2026-08-28 in a clean state (see the PARKED
+- **Status:** working
   section at the bottom for what landed, what is left and what to read first).
   Nothing is half-applied. Worked from a
   dedicated optimization checkout (`~/frank-optimize`), because Track O is
@@ -28,7 +28,7 @@ prio: 85
   a *dynamic* profile — the static sweep understates it badly.
   New passes still land behind **`-O3`**; `-O2` stays the proven default.
 - **Opened:** 2026-07-10 (post -O2-default flip, [[feature-optimization-levels]]).
-- **Owner:** frank-optimize
+- **Owner:** frank-optimize-b4
 
 ## Why — the measured opportunity
 

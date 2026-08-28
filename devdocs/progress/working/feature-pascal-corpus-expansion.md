@@ -7,7 +7,7 @@ prio: 75
 - **Type:** feature — umbrella (frontend stress corpus)
 - **Track:** P (Pascal frontend; shares `lexer.inc`/`parser.inc` with A, so bugs
   found land as Track P — A-gated — or Track A core)
-- **Status:** unfinished — parked 2026-08-28, see PARKED below
+- **Status:** working
   neglected by comparison — user call).
 - **Owner:** frankA
 
