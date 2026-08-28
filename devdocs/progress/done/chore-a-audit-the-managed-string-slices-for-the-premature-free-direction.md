@@ -157,3 +157,26 @@ type** — it costs an allocation and it is the only witness that does not depen
 semantics staying put. Do not, however, weaken the audit's actual instruction: *ask which
 kind you have before trusting a green suite* stays exactly right; this only adds that the
 answer has a date on it.
+
+### Loop closed, 2026-08-28 — the recommendation above was ACTIONED, not filed and forgotten
+
+`954b56b53` on `origin/wasm` (branch-local `test/wasm/check_managed.sh`, +46 lines; **not a
+shared-file arm, no grant required and none missing**). Verified: **zero** sole-owner-triggering
+constructs added.
+
+The control: alias a string, drop one reference, force the allocator to hand the block out
+again, read through the surviving name. One allocation, and **it never asks whether anything
+is a sole owner — so no future semantics decision can retire it.** Falsified properly: with
+the retain removed it prints sixteen `Z`s, and frankwasm ran that program **directly under the
+broken compiler** rather than inferring from the check going red, because the diff would have
+failed either way and said nothing about which assertion did the work. *Know which line
+catches which break*, applied to its own new line.
+
+Deliberately **not** added to `check_index`: that slice's aliasing coverage *is* the COW
+trigger (`s[1] := 'z'` is the sole-owner test), so the same control there duplicates this one
+instead of extending it — the same reasoning that correctly left `check_strop` alone.
+
+**Why this note exists at all:** without it this ticket would read *"verified, for a reason
+that expires"* forever, with its own remedy sitting unactioned inside a `done/` file. That is
+the failure this ticket is about, one level up again — **a closed ticket is exactly where a
+finding stops being looked at.**

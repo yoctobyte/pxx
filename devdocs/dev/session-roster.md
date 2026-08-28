@@ -12630,3 +12630,12 @@ frankwasm also named the pattern in itself unprompted — an unfiled grant, an u
 an unfiled finding, all in one day, all cases where *"the thinking was done and the record
 treated as the optional part."* And it wrote a control **before** the code it guards exists
 (interfaces, managed records), which is the first time that has run forward this session.
+
+**Closed the same day it was opened.** frankwasm applied the semantics-dependency correction
+rather than agreeing with it: `954b56b53` (origin/wasm, branch-local test file — not a
+shared-file arm, no grant needed) adds a retain control to `check_managed` that **never
+consults sole-ownership**, so no future semantics decision can retire it. Its own framing of
+what my evidence changed is the part worth keeping: *"my audit had just concluded the string
+suite was fine on exactly the argument that had already silently expired for dyn arrays."*
+The asymmetry has **no symptom** — that is why it is not reachable by reasoning and why the
+control, not the argument, is the deliverable.
