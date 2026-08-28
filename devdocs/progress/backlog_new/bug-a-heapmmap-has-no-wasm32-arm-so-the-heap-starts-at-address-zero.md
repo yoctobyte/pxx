@@ -124,3 +124,61 @@ fixedpoint) plus the repro. The repro is the two-object program above; assert
 the returned addresses are above the module's BSS top, not merely non-zero.
 Other targets are untouched by construction, but `gate.sh quick` is cheap and
 this file is compiled by all of them.
+
+## 2026-08-28 — re-measured, and one fact the original report did not have
+
+The managed-string phase is the first thing on this target that allocates in
+anger, so the arena was measured again rather than inferred:
+
+```
+$ cat probe.pas
+program AllocProbe;
+var i: Integer; p: Pointer;
+begin
+  for i := 1 to 12 do begin p := PXXAlloc(1000, 8); writeln(i, ' ', NativeInt(p)); end;
+end.
+
+$ pascal26 --target=wasm32 probe.pas probe.wasm && node run.js probe.wasm
+1 8
+2 1016
+3 2024
+...
+12 11096
+```
+
+Address 8, then a straight bump. BSS starts at `WASM_BSS_BASE = 1024`, so the
+third allocation is already inside it.
+
+**The new fact: it does not merely corrupt, it eventually traps.** The module
+declares `(memory 2)` — 128 KB — and never calls `memory.grow`, so a program
+whose live heap passes about 128 KB dies with `RuntimeError: memory access out
+of bounds`. Demonstrated by filling each block:
+
+```
+addr sentinel 43300
+alloc 8
+alloc 1016
+alloc 2024
+TRAP: memory access out of bounds
+```
+
+So the wasm32 failure ladder is: silent corruption of the null guard, then of
+BSS, then of the data blob and the shadow stack, and finally a trap — the
+*correct* diagnosis arriving only after everything it could have reported is
+already gone.
+
+**Any fix therefore has two halves, not one.** The `PXX_ESP` static-arena shape
+named in the original report gives a correct BASE but a fixed CEILING, which on
+this target means a program that dies at a size the host could trivially have
+granted. wasm's native `sbrk` is `memory.grow`, which returns the previous size
+in pages — but there is no way to reach it from Pascal today: the wasm32
+backend has no lowering for it and no intrinsic is declared. So the arm needs
+an RTL change (Track A, this ticket) **and** a backend intrinsic (the wasm32
+lane), and the two should be designed together.
+
+**What now depends on it:** managed strings publish correctly as of the phase
+landed today, and `test/wasm/check_managed.sh` passes — but only because its
+live set is a handful of short strings the free list recycles inside the first
+kilobyte. That script asserts `PXXAlloc` still returns an address below 1024,
+so **it will FAIL by design the day this ticket lands**, which is the signal to
+rewrite its scope note and re-measure the slice at a realistic size.
