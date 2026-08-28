@@ -84,3 +84,48 @@ merge.
 The repro above prints `out of range`; the other three rows of the table are
 unchanged (in particular an untyped `const` must STILL refuse `@`); `make test`
 + self-host fixedpoint.
+
+## Corpus evidence, measured 2026-08-28 (frankA)
+
+Verified against the rtl-generics tree in `library_candidates/`, which is **not
+present on every checkout** — a search for these symbols from a tree without the
+corpus is structurally blind and returns exactly what a refutation returns.
+Recorded here so the next holder does not have to re-establish it.
+
+The addressed symbol is the corpus's **own `resourcestring`**, not anything in
+our RTL:
+
+- `generics.strings.pas:25` — `resourcestring`
+- `generics.strings.pas:26` — `SArgumentOutOfRange = 'Argument out of range';`
+
+**`lib/rtl/rtlconsts.pas:13` is a red herring, and worth naming as one** because
+it is the first thing a grep finds. It declares an `SArgumentOutOfRange` too, as
+a plain `const`, deliberately (that unit has no resource tables). But
+`generics.defaults.pas` — the unit where the failures were measured — has
+`uses Classes, SysUtils, Generics.Hashes, TypInfo, Variants, Math,
+Generics.Strings, Generics.Helpers` and **does not use `RtlConsts` at all**, so
+our constant is not in scope there and cannot be the symbol involved. Fixing
+anything in `lib/rtl` would change nothing.
+
+This matters for the *reasoning*, not the conclusion: "a plain const has no
+address" points at the RTL and invites a needless Track B change. The real shape
+is the one this ticket already names — a genuine `resourcestring` section, which
+we parse as a plain const section (`pasparser_proc.inc:4783`), and which FPC
+makes addressable because resourcestrings are runtime-replaceable variables.
+
+### Site counts, corrected
+
+Earlier notes give "3 sites in `generics.defaults.pas`" and a corpus figure of
+"5". Both are low; the 5 was an *error* count from one aborted compile, not a
+site count. Measured:
+
+| what | count |
+| --- | --- |
+| `CreateRes(@SArgumentOutOfRange)` in `generics.collections.pas` | 18 |
+| `CreateRes(@SArgumentOutOfRange)` in `generics.defaults.pas` | 7 |
+| other `CreateRes(@…)` — `SDuplicatesNotAllowed`, `SDictionaryKeyDoesNotExist`, `SArgumentNilNode` | 1 each |
+| **total `CreateRes(@…)` sites in the corpus** | **28** |
+
+So this blocks `generics.collections.pas` harder than `generics.defaults.pas`,
+which is the larger unit of rung 6 and has not been probed past its earlier
+walls yet. Do not size this from the defaults-only figure.
