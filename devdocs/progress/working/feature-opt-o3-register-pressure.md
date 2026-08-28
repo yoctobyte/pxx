@@ -1,5 +1,5 @@
 ---
-prio: 85
+prio: 55
 ---
 
 # -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator
@@ -1464,3 +1464,51 @@ the other three, caught by the amplification rule this ticket already carries.
 3. **The promotion experiment** — coordinator's call, unchanged.
 4. 5a (`cmp` reads the resident) — **measured and rejected**, 1.02-1.04x. Do not
    rebuild it; the entry exists so it is not re-proposed.
+
+### 2026-08-28 — re-priced 85 -> 55, and the promotion step is now blocked
+
+**prio 85 -> 55.** 85 was set against a prize that has since been collected. The
+umbrella was ranked when the remaining register-contract change looked like
+~1.4x; W2 took ~70% of that, so what is left is **~1.10x on one loop shape**,
+plus item 3 at ~5%. The number follows the measurement. Re-raise it if a future
+sizing finds more, but do not re-raise it on the strength of the older text.
+
+**Item 1 (the rest of the register contract) is deliberately NOT open**, on the
+coordinator's call and for a reason worth keeping: a multi-session project
+should be opened **at its correct price, at the start of a session** — not at
+the tail of one, and not at a price its own author has just superseded.
+
+**The promotion experiment is blocked** on
+`chore-t-nothing-in-the-matrix-runs-o3-so-no-failures-is-unfalsifiable`
+(Track T, filed today from this lane). `-O3` is a free tier because nothing
+gates `OptLevel>=3` — and nothing gating it also means nothing **exercising**
+it, so "no `-O3` failures" and "nobody ran `-O3`" are currently the same
+evidence. Every pass in this campaign has been validated only by its author's
+own bench. Promoting one to `-O2` before the matrix sweeps `-O3` would be a
+first exposure wearing a promotion's clothes.
+
+### The lesson from W2 that generalises past this ticket
+
+**For an optimisation, the characteristic failure mode is invisible to every
+correctness check in the repo.** W2's first version guarded on IR node types, so
+a for loop's own increment (`tyUnknown`) never matched: it fired on `s := s + j`
+and not on `i := i + 1`. Half the win, and:
+
+- every output still byte-identical to baseline
+- all four `-O` levels still in agreement
+- 48/48 cross-target hashes still identical
+- self-host fixedpoint still green
+
+**A missing optimisation is not a wrong answer, so no correctness test can see
+it.** The suite proves you did not break anything; nothing in it proves you did
+anything at all. Only disassembling the output caught this.
+
+So the check that belongs in this lane's loop, next to the gate: **disassemble
+the shape the pass was written for and confirm the pass actually fired.** It is
+seconds, and it is the only signal that exists.
+
+The fix generalises too: **guard on the property the operation depends on, not
+on the syntax that usually carries it.** The store narrows by `Syms[].TypeKind`
+and the refresh re-extends by it, so that is what the predicate must ask about;
+the node's type kind merely correlates, and stops correlating exactly where the
+compiler generates the code itself.

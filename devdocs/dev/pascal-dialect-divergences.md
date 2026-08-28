@@ -331,3 +331,46 @@ writing code FPC cannot compile.
 with *Variable identifier expected*, and per the trap above, a dead oracle and an
 agreeing oracle look identical in a hand-rolled comparison. Write through the
 pointer instead — both accept that.
+
+---
+
+## `{$Q+}` catches a 32-bit overflow that `fpc -O2` misses
+
+The mirror image of every other entry here: this is a divergence where **we are
+the stricter and more correct side**, so it is not a defect on either the
+"FPC accepts a form we reject" row or the "we accept a form FPC rejects" row of
+CLAUDE.md's compat table. It is written down because *seen and recorded nowhere*
+is the worst state — the next person to hit it re-discovers it and files it as a
+bug.
+
+```pascal
+{$Q+}
+var n, k: LongInt;
+...
+n := 0;
+try
+  for k := 1 to 40 do n := n + 100000000;   { 4e9, past 2^31 }
+except
+  on E: Exception do ovf := True;
+end;
+{ pxx -O0/-O1/-O2/-O3:  ovf = TRUE   (overflow detected) }
+{ fpc -Mobjfpc -O2:     ovf = FALSE  (silently wraps)    }
+```
+
+FPC evaluates the addition at 64-bit register width and the overflow happens
+where the 64-bit value narrows into the 4-byte slot, which its `{$Q+}` check
+does not cover. pxx range-checks the value against the destination width before
+storing (`EmitOvfCheckNarrowX64`, added for
+`bug-a-qplus-misses-32bit-overflow` — we had exactly FPC's gap and closed it).
+
+**Not a compat ticket, and specifically not one to "fix".** `{$Q+}` asks for
+overflow checking and we deliver it; matching FPC here would mean deliberately
+re-introducing the bug that ticket closed.
+
+**Do not use `{$Q+}` overflow on a 32-bit type in an FPC-oracled differential
+test** — the oracle disagrees by design, and a differential harness reports that
+as a failure of ours.
+
+Found 2026-08-28 while writing `w2stress.pas` for the `-O3` W2 pass
+(`c93292fe4`). It **predates that work and is unrelated to it**: the pre-W2
+baseline compiler produces the identical `ovf = TRUE`, at all four `-O` levels.

@@ -12,7 +12,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| feature-opt-o3-register-pressure | O | 85 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
+| feature-opt-o3-register-pressure | O | 55 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-pascal-corpus-expansion | P | 75 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 
 ## unfinished (20)
@@ -349,7 +349,7 @@ _none_
 | task-d-document-warn-ignored-directives | D | 20 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (6)
+## backlog_new (7)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -358,6 +358,7 @@ _none_
 | bug-a-emitzeroframeslot-has-no-wasm32-arm | A | 55 | bug | EmitZeroFrameSlot (compiler/symtab.inc:10074) is the single owner of the zero-init contract and has TWO per-target chains, one per size class. The wide one (> pointer) ends in Error and fails loud — that is what this ticket originally described. The narrow one (<= pointer, which is EVERY managed scalar) ends in an UNGUARDED else that emits x86-64 bytes, so wasm32 falls open there and has been doing so since the managed-string phase. Measured 2026-08-28 with a probe build. Output is byte-identical with the fall-through removed, so Code[] is unread on this target and nothing wrong has been PRODUCED — it is latent, not active. Carries one open design question: the wasm32 backend now zeroes its own managed scalars in its prologue, so there are three mechanisms for one guarantee on this target. | — |
 | bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero | A | 70 | bug | HeapMmap in compiler/builtin/builtinheap.pas is a chain of per-target {$ifdef}s with no wasm32 arm, so on wasm32 it assigns Result nothing and returns 0. PXXAlloc does not check the result (on Linux a failed mmap returns a negative errno that faults on access), so the heap bump pointer starts at 0 and hands out addresses 8, 32, 56... Measured: two objects at 8 and 32, both readable and correct. It works until roughly 1 KB has been allocated and then silently overwrites BSS, because address 0 is a legal wasm address with no page protection. Fix is one additive arm, exactly the shape the PXX_ESP static arena already has. | — |
 | bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open | A | 60 | bug | The per-CPU {$ifdef} chains in compiler/builtin/builtinheap.pas have no terminal {$else}, so a target with no arm gets whatever the pre-chain default was — and for PXXSysOpenRO and PXXSysLseek there is no default at all: Result is NEVER ASSIGNED. Both are guarded only by {$ifndef PXX_ESP} and have arms for x86-64/i386/arm32/aarch64 only, so on HOSTED RISCV32 and on wasm32 they compile and return the return slot's leftover contents. PXXStrLoadFile then does `if fd < 0 then Exit` on that garbage and, if it happens to be non-negative, calls PXXAlloc(size + ...) with an equally garbage size. Four instances of the same generator shape in this one file; the systemic fix is a terminal else that fails LOUD, not four more arms. | — |
+| chore-t-nothing-in-the-matrix-runs-o3-so-no-failures-is-unfalsifiable | T | 60 | chore | The -O3 tier is free because nothing gates OptLevel>=3 — but that also means nothing EXERCISES it. Every -O3 pass in the register-pressure campaign has been validated only by its author's own bench. Promoting one to -O2 would move it from an unobserved tier to the proven default in one step. Same shape as the skip-counted-as-pass bug fixed 2026-08-28, one level up in tier composition. Asks for an optimisation-agreement job: compile a fixed set at -O0/-O1/-O2/-O3 and require all four outputs to agree. Filed by Track O, which found the gap; T owns tier composition. | — |
 | refactor-a-target-dispatch-chains-fail-open | A | 50 | refactor | Not a missing-helper ticket: TARGET_PTR_SIZE exists and is read at 129 sites. The narrow, verified gap is that several per-target if/else-if chains have no final else, so adding target #7 (wasm32) or #8 (riscv64) matches no arm and configures nothing, silently. lexer.inc:936 is the worked example. Fix is a mandatory else that Errors, not a collapse of the 180 TargetArch sites — util.inc:87 already documents why collapsing is wrong. | — |
 
 ## experimental (20)
@@ -685,6 +686,7 @@ _none_
 - [p 60] [N] bug-n-os-environ-and-os-sep-are-not-values
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - [p 60] [P] bug-p-mutually-referencing-generics-are-rejected-as-circular
+- [p 60] [T] chore-t-nothing-in-the-matrix-runs-o3-so-no-failures-is-unfalsifiable
 - [p 60] [N] feature-a-declaration-phase
 - [p 60] [N] feature-nilpy-process-exec-binding
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application
