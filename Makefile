@@ -14073,6 +14073,13 @@ lib-test: pxx-stable-check
 	# diagnostic and a tail would discard them.
 	$(PXX_STABLE) test/lib_random_hw_tier1.pas $(TESTTMP)/lib_random_hw_tier1
 	test "$$($(TESTTMP)/lib_random_hw_tier1)" = "$$(printf 'probe-stable=ok\ncontract=ok\nseeded-reproducible=ok\nrandomize-varies=ok\nHWTIER1 OK')"
+	# FPC-compatible Signal(sig, handler) over pxx's PARAMETERLESS hook. The row
+	# with teeth is per-signal-number: ONE handler registered for TWO signals,
+	# each asserting its own number. A single-signal test passes even with the
+	# trampoline hard-wired to a constant, which is the bug this unit could have
+	# had -- the control produced usr1=3 usr2=0.
+	$(PXX_STABLE) test/lib_signals_fpc.pas $(TESTTMP)/lib_signals_fpc
+	test "$$($(TESTTMP)/lib_signals_fpc)" = "$$(printf 'prev-initial=ok\nper-signal-number=ok\nprev-returned=ok\nrange=ok\nignore=ok\nSIGNALS OK')"
 	# IPv6 over the PAL: sockaddr_in6 layout + loopback round trip (skips if the
 	# host has no AF_INET6 — a broken layout is the target, not the CI netstack)
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_ipv6.pas $(TESTTMP)/lib_ipv6
