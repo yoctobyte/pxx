@@ -10671,3 +10671,94 @@ owner's.**
 
 After it, B's queue drops to a p45 tail (`feature-crtl-implement-libc-assumptions`,
 the parked `feature-real-dynlib-loader`, then p40s).
+
+## THE FPC SEED BLIND SPOT — the one whole-fleet failure the documented loop cannot see
+
+**Verified by the coordinator before propagating.** `tools/gate.sh:219` carries an
+FPC seed canary; **`make compiler/pascal26` does not, and structurally cannot** —
+it compiles with **pxx**, which accepts a call to a routine defined later in the
+same include. **FPC rejects it, and FPC is what bootstraps this compiler.**
+
+> **Adding a call above its definition in `compiler/**` breaks the bootstrap seed
+> while every commit stays green on the documented per-fix loop.** Unlike a broken
+> fixedpoint, it produces **no signal at all.**
+
+**Measured (frankwasm):** `WasmEmitCall` used at `ir_codegen_wasm32.inc:912`,
+defined at 1030 — the seed was broken **the day direct calls landed** and stayed
+broken across several commits, all green on the loop. Caught only by the canary.
+Fixed in 18 lines of forwards (`cd878f9ca`), **verified by building `compiler.pas`
+with `fpc` directly rather than by inference** — the only reason the fix is known
+to be a fix.
+
+**The loop is not to blame:** `gate.sh:228` says the canary is affordable
+*precisely because it is concurrent* — started first, in the background, overlapping
+the rest. Serially in a per-fix loop it would not be free. **That cost is the whole
+question**, which is why it is a decision and not a repair.
+
+**Propagated three ways, none of which touches the owner's files:**
+1. A **BEFORE YOU START** warning appended to
+   `bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream` — the unclaimed
+   A ticket is a `compiler/**` edit on a token rewriter with helpers, i.e. exactly
+   the shape at risk.
+2. `decide-should-the-fpc-seed-canary-be-in-the-mandatory-loop` [U, p55, `backlog/`]
+   — three options costed, recommendation **option 1** (targeted trigger), with its
+   weakness stated: it relies on a lane recognising its own edit shape, **and
+   frankwasm's edit was exactly that shape and went unnoticed for days.**
+3. Here.
+
+**Track B is unaffected** — FPC never compiles `lib/rtl`. The exposed lanes are
+A/P/C/N/R/Z and wasm.
+
+### frankwasm's framing of the periodic gate beats mine, and is recorded as its own
+I said: run `gate.sh quick` once at phase end **as the falsification of your
+no-shared-edit claim**. The claim held — the six targets did not move. But:
+
+> **It paid for itself on an unrelated failure, in exactly the class a narrow loop
+> is blind to by construction.**
+
+That is the stronger argument, because **it does not depend on the conclusion being
+wrong.** A periodic wide gate is not insurance against your reasoning; it is
+coverage of the classes your loop cannot represent.
+
+## DECISION: the heap moves ahead of exceptions in the wasm plan
+
+frankwasm asked rather than reordering quietly. Approved, in its words:
+
+> **The ordering in this plan was derived from what wasm makes DIFFERENT. The real
+> order is set by what every program NEEDS.**
+
+Nothing runs without allocation; the blocker list is almost entirely heap (class
+instantiation, `writeln`, variants, the float writers). **And it is the same
+finding twice** — the data segment gated Phase 4's milestone exactly as the heap now
+gates Phase 5's. *Two incidents make a pattern; a pattern makes a reordering.*
+
+**Phase 5's milestone is recorded as HALF met**, which is the milestone rule
+surviving its hardest test: procedural variables run and diff against native (7
+values); **virtual dispatch emits, validates, and CANNOT BE RUN**, because every
+path to a virtual call begins with a heap allocation. `virtual_slice.pas` compiles
+and validates, and **the check says in as many words that it does not prove
+dispatch.** The tempting version — *"virtual dispatch: validates ✓"* — would have
+been true and worthless.
+
+### Three keepers from Phases 4-5
+- **The program body arrives in PIECES.** A frontend calls the per-body entry with
+  `CurProc = -1` more than once, and **on a register target those pieces land
+  contiguously in `Code[]` and genuinely ARE one function.** On wasm they became N
+  functions named `main`, none called — surfacing as `duplicate export "main"`, *a
+  complaint about the symptom*, while the defect was **every global those chunks
+  initialise reading zero.** An IR invariant that holds only because of a target's
+  incidental layout property; asked for it in `ir-as-substrate.md` beside the IRTk
+  note, same category.
+- **An oracle with ONE FIXED INPUT tests the oracle against that input, not the
+  system.** The WAT oracle ran on a single hand-built four-function module for four
+  phases and hid two bugs that both need more than four functions. **Only the TEXT
+  form was ever wrong** — the binary encodes indices and never asks for a name, so
+  the `.wasm` validated, ran and matched native while the `.wat` named locals it
+  never declared. **Two representations, one exercised, and the unexercised one is
+  the one humans read.**
+- `bug-a-a-typed-const-record-is-built-by-startup-code-not-stored-as-data` [A, p35]
+  — 116 bytes of code per 16-byte record vs zero for an equivalent Integer array.
+  **Ranked as codegen efficiency, not a correctness escalation, because native
+  behaviour is correct**; wasm noticed only because a target with no automatic
+  startup makes "initialised by generated code" and "initialised data" observably
+  different. Provenance is in the ticket.
