@@ -142,8 +142,34 @@ fi
 # an arm per target and no wasm32 arm — so it returns 0 having written nothing.
 # builtinheap.pas is a SHARED file: bug-a-pxxsyswrite-has-no-wasm32-arm.
 #
-# The assertion above (afterWriteln === 0) is the guard. Green here means "the
-# known limitation is still exactly this one".
+# `afterWriteln === 0` alone would be a WORTHLESS assertion, and it is worth
+# saying why, because it is the exact shape a sibling lane hit today: a check
+# can only gate behaviour its environment does not already supply. Silence is
+# supplied here by default. Delete the IR_WRITE arm entirely and the write is
+# skipped, TryWriteln returns normally, and `afterWriteln === 0` still passes —
+# the assertion would be testing that nothing happened, which is what happens
+# when nothing works.
+#
+# So the silence is asserted TOGETHER with the mechanism that is supposed to
+# produce it. TryWriteln must actually contain the call chain: format the
+# integer, then the newline. The pair distinguishes "lowered correctly and
+# PXXSysWrite is inert" from "silently dropped", which the silence alone cannot.
+# The .wat is the only readable view of what was emitted, and wat_oracle.sh
+# below proves it describes the same module as the binary — so reading the
+# text here is reading the binary, not a second thing that might disagree.
+"$root/compiler/pascal26" --target=wasm32 -dWASM_NOMAIN \
+    "$here/host_slice.pas" "$work/w.wat" >/dev/null 2>&1
+body=$(awk '/\(func \$TryWriteln/,/^  \)/' "$work/w.wat")
+if echo "$body" | grep -q 'call \$PXXWriteDecW' &&
+   echo "$body" | grep -q 'call \$PXXWriteNL'; then
+  echo "ok  writeln LOWERED: TryWriteln calls PXXWriteDecW then PXXWriteNL"
+else
+  echo "FAIL TryWriteln does not contain the write call chain — the silence"
+  echo "     above is the write being DROPPED, not the write reaching an inert"
+  echo "     PXXSysWrite. Body was:"
+  echo "$body"
+  exit 1
+fi
 echo "ok  KNOWN LIMITATION unchanged: writeln lowers and prints nothing —"
 echo "..  PXXSysWrite has no wasm32 arm. bug-a-pxxsyswrite-has-no-wasm32-arm"
 echo "..  The import path above is what that arm will be built on."
