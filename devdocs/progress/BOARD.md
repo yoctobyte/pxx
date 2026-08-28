@@ -189,6 +189,7 @@ _none_
 | feature-a-unreferenced-class-rtti-keeps-every-method-alive | A | 30 | feature | An unreferenced class keeps every one of its methods alive | — |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 20 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
 | feature-b-a-real-minidom-is-an-implementation-not-a-shim | B | 20 | feature | Question 2 of the xml.dom row, re-filed on its own as that ticket said it should be. html5lib/treebuilders/dom.py wants a document you can build and mutate — ~25 DOM methods, getDOMImplementation().createDocument(), weakref.proxy(), and a reach into minidom's PRIVATE _child_node_types. That is a DOM implementation, not a compatibility alias. It unblocks exactly one corpus file and should be ranked as an implementation project, not alongside shims. | — |
+| feature-b-posix-and-fpc-named-socket-facades | B | 25 | feature | The Posix.* / FPC-named (BaseUnix, Sockets, UnixType) socket compat facades over the PAL substrate, with a selectable syscall-or-libc backend. Fully designed inside feature-networking and never built; split out when that umbrella closed so the design survives its container. | — |
 | feature-c-csmith-differential-fuzzing | C | 40 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-diagnostics-name-the-module-they-are-in | C | 40 | feature | A Pascal diagnostic now prints `in: <path>` when the error is in an include or a `uses`d unit. The C frontend has the same information already — CModRange* is populated in every build, not just under -g — and prints nothing, so an error in a crtl module or an included header still reports a bare line number. | — |
 | feature-c-esp-conformance-coverage | S | 18 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
@@ -215,7 +216,6 @@ _none_
 | feature-n-from-accepts-a-quoted-foreign-file | N | 45 | feature | `from 'basehook.pas' import ConfigBase` and `from 'basehook.pas' as bh import X, Y` are refused with \"expected a module name after from\", while `import 'basehook.pas' as bh` works. Both from-arms test tkIdent and never consider tkString. The semantics already exist — from-import discards its name list and importing a unit opens its namespace flat — so this is a parser change with no new resolution path. | — |
 | feature-n-nilpy-ast-typing-module-scope | N | 20 | feature | NilPy: type MODULE locals from the AST too | — |
 | feature-nested-routine-fixed-array-capture | A | 50 | feature | Nested routines: capture of fixed-size array locals not supported | — |
-| feature-networking | B | 40 | feature | Networking runtime | — |
 | feature-nilpy-a-genexpr-is-lazy-not-materialised | N | 30 | feature | A genexpr's elements are built EAGERLY and then walked by a cursor, so single consumption is right but an INFINITE genexpr still cannot be expressed and side effects all happen at construction. True laziness means a TPyIter whose mapping is the element expression. | — |
 | feature-nilpy-arc-cross-parity | A | 25 | feature | NilPy object-ARC cross-target parity (aarch64 inline arms + scope-exit) | — |
 | feature-nilpy-ascii-flag-fast-path | N | 25 | feature | Make pystr_isascii O(1) by reading PXX_FLAG_ASCII — but first MEASURE whether every string reaching it carries a header, because a false positive there is a silent wrong answer on exactly the non-ASCII strings the character surface exists for | — |
@@ -586,9 +586,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2551)
+## done (2552)
 
-2551 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2552 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (46)
 
@@ -805,7 +805,6 @@ _none_
 - [p 40] [C] feature-c-csmith-differential-fuzzing
 - [p 40] [C] feature-c-diagnostics-name-the-module-they-are-in
 - [p 40] [O] feature-inline-nonleaf-and-branch-locals
-- [p 40] [B] feature-networking
 - [p 40] [N] feature-nilpy-map-over-several-iterables
 - [p 40] [N] feature-nilpy-str-surface-gaps-2026-08-09
 - [p 40] [O] feature-opt-dynarray-grows-in-place
@@ -882,6 +881,7 @@ _none_
 - [p 25] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees
 - [p 25] [U] decide-release-signing-key-custody
 - [p 25] [S] feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle
+- [p 25] [B] feature-b-posix-and-fpc-named-socket-facades
 - [p 25] [S] feature-esp-hardware-flash-validation
 - [p 25] [A] feature-nilpy-arc-cross-parity
 - [p 25] [N] feature-nilpy-ascii-flag-fast-path

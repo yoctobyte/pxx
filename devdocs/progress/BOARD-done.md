@@ -1967,6 +1967,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nested-routines | A | 50 | feature | feature: nested (local) functions and procedures | — |
 | feature-net-a-first-connect-by-name | B | 35 | feature | Connect-by-name with A-first, AAAA-fallback ordering | — |
 | feature-net-lib-cross-target | A | 50 | feature | net lib cross-target build matrix — i386 + arm32 backend gaps | — |
+| feature-networking | B | 40 | feature | Networking runtime | — |
 | feature-nil-python-frontend | A | 50 | feature | Nil Python frontend (`.npy`) | — |
 | feature-nilpy-a-callable-value-needs-its-own-variant-tag | A | 70 | feature | Give a callable value its own variant tag so `(3 + 4)(x)` can be refused. Track A, not N: the tag is defined in defs.inc and consumed by ir_codegen's clear/retain emitters, builtinheap and parser.inc. No decision needed — tag numbering is internal and renumberable. | — |
 | feature-nilpy-a-generator-as-a-first-class-value | N | 55 | feature | A Nil Python generator can only be consumed by a `for`, never held as a value | — |

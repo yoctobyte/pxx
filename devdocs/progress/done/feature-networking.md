@@ -6,7 +6,7 @@ prio: 40
 # Networking runtime
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-07 (manual request, consolidates plan-networking.md)
 
@@ -303,3 +303,66 @@ instruction to "rank the children, not the umbrella". Whether a years-spanning
 strategy umbrella with zero open children should be closed, or kept open to
 collect future ones, is a judgment call about how this project wants its board
 read — flagged here rather than decided by an agent.
+
+## Closed 2026-08-28 (Track B, frankB) — delivered; split-or-demote call made
+
+The call this ticket had been waiting for: **split one child, then close.** It is
+an umbrella whose milestone is met and whose every named residue already has its
+own ticket — and all of those tickets are `done`.
+
+### The First Milestone is met
+
+`lib/rtl/net.pas` provides `TNetSocket`/`TNetAddress`, TCP
+`NetTcpListen`/`NetTcpAccept`/`NetTcpConnect`/`NetSend`/`NetRecv`, UDP
+`NetUdpBind`/`NetUdpSendTo`/`NetUdpRecvFrom`, and
+`NetGetSockName`/`NetGetSockError`/`NetShutdown`/`NetClose`, over the PAL
+substrate with no platform conditionals of its own. `asyncnet.pas` is the
+coroutine face over the same primitives; `sockets.pas` and `baseunix.pas` exist.
+`lib-test` carries 66 net-related rows and exercises async DNS, IPv6, TLS and
+cross-target net PAL under qemu.
+
+### Every residue is closed, and that is what makes this a demote rather than a park
+
+| residue this ticket named | where it went | state |
+| --- | --- | --- |
+| DNS resolver policy | [[feature-dns-resolver-library]] | **done** |
+| PAL datagram / poll / errno | [[feature-pal-network-datagram-poll-errno]] | **done** |
+| dotted unit names (`Posix.*`) | [[feature-dotted-unit-names]] | **done** |
+| `{$IF DECLARED(Qualified.Symbol)}` | [[feature-conditional-declared-directive]] | **done** |
+| Synapse compat milestone | [[feature-synapse-compile-check]] | **done** |
+| IPv6 | landed in `net.pas` | **done** — 19 API points, gated by `lib_ipv6` |
+
+### One item was stale, and one was superseded
+
+- **IPv6** was still listed as open in the 2026-07-19 sweep note. It is done.
+- **"async/blocking facade unification"** is **superseded, not outstanding.**
+  `devdocs/developer/plan-networking.md:117` records the decision: the blocking
+  compat surfaces "coexist with the async transport, they do not merge", and the
+  2026-06-21 entry states the same shape — one PAL substrate, two libraries
+  above it. The 2026-07-19 line carrying "facade unification" forward is a
+  backlog **sweep note**, a weaker source than the design decision it postdates,
+  and reads as a restatement rather than a re-decision.
+
+  Stated explicitly rather than silently dropped, because it is the one
+  judgement call in this closure: if the intent really was to revisit the
+  coexist decision, this is the sentence to disagree with, and reopening costs
+  one ticket.
+
+### Split out
+
+[[feature-b-posix-and-fpc-named-socket-facades]] (Track B, prio 25) — the
+`Posix.*` / FPC-named compat facades with a selectable syscall-or-libc backend.
+**The only piece designed in detail here and never built**, and the only one with
+no ticket of its own; closing this umbrella without it would have deleted the
+design. Filed at low prio because nothing is blocked on it — Synapse already
+compiles via `--mimic-fpc` — and ranked the way CLAUDE.md ranks a compat item: by
+how much real code needs the form, which today is none in tree.
+
+### Why closing beats parking
+
+An umbrella nobody can start is a planning defect, not a backlog entry. This one
+read as p40 of available Track B work while containing none: a dispatcher sees a
+slug and a prio, not a body, so a ticket whose contents are entirely elsewhere
+costs a real dispatch every time it surfaces. That happened tonight to two
+tickets in this lane.
+- 2026-08-28 — resolved, commit PENDING-COMMIT.
