@@ -13508,7 +13508,9 @@ question, not a missing constant"*, reasoning from the symbol existing at
 
 That is **`bug-p-a-resourcestring-is-not-addressable` [P, p55]**, already in `backlog/`, whose
 summary names `pasparser_proc.inc:4783`, the `CreateRes(@…)` idiom, and *three sites in
-generics.defaults.pas*. It is in frankA's own lane and already second in its own P queue.
+generics.defaults.pas*  [**CORRECTED 2026-08-28: the real count is 25 `@SArgumentOutOfRange`
+sites — 18 in generics.collections.pas, 7 in generics.defaults.pas. The "3" was one
+measurement filed under two headings in a done/ ticket; see the third-pass section below.**]. It is in frankA's own lane and already second in its own P queue.
 
 > **The existence check answered a different question than the failure was asking.** "Is the
 > symbol there?" and "can its address be taken?" both fail with the symbol present, and only one
@@ -13686,7 +13688,8 @@ survived and the method did not.
 I reported: `SArgumentOutOfRange` exists at `lib/rtl/rtlconsts.pas:13`, interface section,
 plain `const` — therefore exported, therefore not a visibility bug, therefore the failure is
 addressability. True, and about **a symbol the corpus never reaches**. frankA reports
-`generics.strings.pas:24` declares its own `SArgumentOutOfRange` under a **`resourcestring`**
+`generics.strings.pas:25`/`:26` declares its own `SArgumentOutOfRange` under a **`resourcestring`**
+[**corrected from `:24`, frankA's own off-by-one, `e1b187536`**]
 section, and that is the one `CreateRes` takes the address of.
 
 **I checked the file frankA named.** My verification arm and its claim arm shared an
@@ -13935,3 +13938,60 @@ twice while hunting a slice). Approved; the two-fold reason outranks the histogr
 
 **frank-optimize-b4 is live** — `46c8cf47e perf(O): -O3 W1 slice 4` already on master, touching
 `symtab.inc`. Two workers, at ceiling, both producing.
+
+### Face sixteen, and a "convergence" of mine that was nothing of the kind
+
+**Face sixteen — a decision never reached has been decided by arithmetic.** pxx-a5, on its own
+ticket, an hour after filing it: *"never-reached is not neutral. It silently selects option 1,
+the status quo. A decision made by queue position instead of by judgment."* Filed to the family
+ticket. It clears the bar the previous corollary did not because it names a **new instrument —
+the ranked queue itself** — where nothing fails to run: the ranker works correctly every tick,
+and its correct output *is* the silent selection.
+
+**Operational consequence, and it is mine:** a `decide-*` must not be ranked like work. Work at
+p25 is work deferred; a **decision** at p25 is an answer already given. Two honest states — rank
+it where it will be reached (or route it to the owner), or **close it as decided**, recording
+that the status quo is the answer and who chose it. Parking it low is the third state and it is
+the one that lies. I read low-prio `decide-*` that way from now on.
+
+**pxx-a5 reversed its own lane call by measurement** after I declined to override: 12 of 13
+`decide-*` are `track: U`, and the thirteenth is *also* a Track-T-tooling decision laned U — a
+precedent, not a coincidence. Its distinction is the durable one: **U is about who DECIDES, not
+who owns the file**; T's charter self-governs *changes*, not forks with no better answer.
+Declining to override produced a fact with a population behind it instead of a coordinator's
+opinion.
+
+**The transferable rule of the day, and its author says plainly it was not skill.** The
+`fixed`-as-proxy check returned "NEVER" for four of five jobs and was not believed *because four
+of five is too strong a claim* — had it flagged only synapse, it would have matched expectation
+exactly and shipped.
+
+> **Distrust a result that proves more than you asked for.** "Check your instrument" is advice;
+> "this answer is too strong for the question" is a trigger you can notice. It inverts into the
+> dangerous case: an instrument returning **exactly** what you expected is the one that ships
+> unexamined.
+
+Recorded as face fourteen's operational form.
+
+### frankA corrected my convergence claim, and it is face thirteen a third time
+
+I wrote that frankA and I reached *annotate-don't-rewrite* **independently** — it on the done/
+SysUtils ticket, me on tstate's archive. frankA: not quite, it had CLAUDE.md's *"rewriting a
+session record falsifies history"* in front of it. So mine was the independent arm and its was
+downstream of the shared document.
+
+> **Convergence is the claim that most wants checking.** Two lanes agreeing feels like
+> corroboration and is worth nothing when one of them read the upstream.
+
+Third time today that rule earned its keep, and the first time it caught **me claiming
+corroboration** rather than catching a wrong fact. The claim was half as strong as it read.
+
+**Forward pointer landed** (`a37beaf06`) at the two headings rather than as a banner, on the
+evidence that both quotes which actually travelled were *heading* quotes — a reader who lands on
+`## 2 … 3 sites` never scrolls up. It also records what the original session could not have
+known: §1 and §2 are one measurement, because every one of those seven lines spells both
+symbols. That is what makes quoting the figure onward reasonable rather than sloppy.
+
+On rule 5: frankA's read is that the rule names *holding a stale copy after being shown*, not
+holding one — and that the copies were fixed the moment they were pointed at, in a file it could
+not check. Accepted; recorded without ceremony.
