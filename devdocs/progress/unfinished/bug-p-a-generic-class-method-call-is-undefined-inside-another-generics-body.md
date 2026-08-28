@@ -186,3 +186,84 @@ different defect: that one was about *which class* a genuine header binds to;
 this one is about a use that is not a header at all.
 
 **Status:** unfinished — diagnosis banked, no partial code landed.
+
+---
+
+## 2026-08-28 (frankA) — objfpc FIXED; Delphi mode blocked on an ORDERING defect
+
+**Wall 3 and wall 6 are the same defect, confirmed from the diagnosis rather
+than from the numbering.** The corpus ticket's snapshot tables number them
+inconsistently (one snapshot already had them as one row), so the question was
+asked of the two DEFECTS: this ticket's own banked analysis concludes the real
+bug is *"a nested `specialize X<T>` group is not supported in EXPRESSION
+position"*, which is verbatim wall 3's subject. One defect, two entries. Wall 3
+has no ticket of its own; this is it, and no new one is needed.
+
+### The three stacked defects, all now resolved or reclassified
+
+**(a) header misclassification — FIXED.** `DelphiRewriteGenericUses` identified
+a method-implementation header by the dot that FOLLOWS the group, which
+`TCmp<T>.Default` in expression position also has. It now tests what PRECEDES
+the name (`procedure` / `function` / `constructor` / `destructor`, the last two
+compared by text as soft keywords). As the banked note predicted, this alone
+moved the Delphi surface onto the same error as objfpc — both now converge.
+
+**(b) the prerequisite scan never saw method bodies — FIXED.**
+`ParseSpecialization`'s scan swept `Templates[ti]` only; it now sweeps the class
+body **and** every buffered `GenericMethods[]` body of the template (`gmScan`,
+-1 = class body).
+
+**(c) the "third thing, not understood" — was NOT about generics at all.**
+Isolated to eight lines with no generic in sight: **a method could not be
+NAMED `Default`**, because `default` lexes as its own token kind and
+`IsMethodNameTok` did not accept it. Fixed, filed as its own concern, and
+`IsMethodNameTokAt` — whose comment claimed it shared the predicate "so the two
+cannot drift" while carrying a private copy of the list — now actually shares
+it. `Default` was the drift that mattered. This is why the failure looked like a
+generics bug: `TComparer<T>.Default` is where it surfaced.
+
+### Result
+
+```pascal
+{$mode objfpc}
+class function TOrd.Get: LongInt;
+begin
+  Result := specialize TCmp<T>.Size;   { was: undefined variable (specialize) }
+end;
+```
+now compiles and matches FPC. Pinned in
+`test/test_generic_nested_specialize_in_method_body.{pas,expected}`, which fails
+on `pinned`.
+
+### What still blocks the corpus, and it is a DIFFERENT defect
+
+`generics.defaults.pas` is `{$MODE DELPHI}`, and the Delphi surface still fails
+— **not** on (a) or (b), but on an ordering problem underneath both. Measured
+with `--debug`:
+
+| mode | trace |
+| --- | --- |
+| objfpc | `SCAN ti=1 gm=1 …` → `SPEC TO1 = TOrd nested=1` → `needs TCmp$Int64` |
+| Delphi | `SCAN ti=1 gm=-1 … (GenericMethodCount=0)` → `SPEC … nested=0` |
+
+**`GenericMethodCount` is 0 when the Delphi specialization runs.** The rewrite
+emits its alias declarations near the top of the token stream, so
+`ParseSpecialization` executes *before* the parser has reached the method
+implementations and buffered them — even though those implementations appear
+EARLIER in the source than the user's own specialization. Extending the scan
+cannot help: at that moment there is nothing to scan.
+
+So the remaining work is not "scan more", it is **when the Delphi alias is
+specialized relative to method buffering**. A deferral mechanism already exists
+in `ParseSpecialization` (the `NSpecCount > 0` path), which is the obvious thing
+to look at first — deferring a Delphi alias until the template's methods are
+buffered — but that is a direction, not a diagnosis: it has not been measured.
+
+**Corpus effect so far:** `generics.defaults.pas` no longer fails at `:3250`
+(`TGOrdinalStringComparer`) at all. Remaining errors there are 6 × `specialize`
+and 9 × comparer names (all this ordering defect), plus 5 ×
+`SArgumentOutOfRange` — which **does** exist in `lib/rtl/rtlconsts.pas:13`, so
+that one is a visibility/export question for **Track B**, not a frontend bug.
+
+**Status:** still unfinished — retitle when picked up; the Delphi ordering
+defect is the whole of what is left.

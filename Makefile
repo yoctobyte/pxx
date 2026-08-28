@@ -2558,6 +2558,20 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_method_pointer_cast.pas $(TESTTMP)/test_method_ptr_cast26
 	@$(TESTTMP)/test_method_ptr_cast26 | diff -u test/test_method_pointer_cast.expected - \
 	  || { echo 'test_method_pointer_cast: FAIL - a method-pointer cast lost its reference reading'; exit 1; }
+	@# A method may be NAMED `Default` -- rtl-generics' central idiom, and a
+	@# collision with nothing to do with generics. Exercises the property
+	@# `default` MODIFIER alongside it, since that is what a too-eager fix breaks.
+	@# bug-p-a-method-cannot-be-named-Default
+	@./$(COMPILER) test/test_method_named_default.pas $(TESTTMP)/test_method_default26
+	@$(TESTTMP)/test_method_default26 | diff -u test/test_method_named_default.expected - \
+	  || { echo 'test_method_named_default: FAIL - a method named Default, or the property default modifier, broke'; exit 1; }
+	@# A nested `specialize X<T>` living ONLY in a generic's METHOD body. The
+	@# prerequisite scan swept the class body and nothing else, so the literal
+	@# word `specialize` survived into the stream.
+	@# bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body
+	@./$(COMPILER) test/test_generic_nested_specialize_in_method_body.pas $(TESTTMP)/test_gen_nested_spec26
+	@$(TESTTMP)/test_gen_nested_spec26 | diff -u test/test_generic_nested_specialize_in_method_body.expected - \
+	  || { echo 'test_generic_nested_specialize_in_method_body: FAIL'; exit 1; }
 	@# a SECOND class of the same name in one unit must be refused, naming it
 	@./$(COMPILER) test/test_pascal_duplicate_class_fail.pas $(TESTTMP)/test_pascal_dup_class26 2>&1 \
 	  | grep -q 'duplicate class name TFoo' \

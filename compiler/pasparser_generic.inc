@@ -548,7 +548,24 @@ begin
               let ParseSpecialization's nested-prerequisite pass do it. Stripping
               `<T>` there left a bare template name behind and produced
               `base type not found` on rtl-generics. }
-            if (j + 1 < TokCount) and (Tokens[j + 1].Kind = tkDot) then
+            { A method-implementation header is identified by what PRECEDES
+              the name -- `procedure` / `function` / `constructor` /
+              `destructor` (the last two are SOFT keywords, lexed as tkIdent,
+              so they are compared by text) -- NOT by the dot that follows it.
+              `TCmp<T>.Default` in EXPRESSION position also has a dot after the
+              group, so the follow-test classified a USE as a header, deleted
+              its `<T>`, and left a bare template name behind: `undefined
+              variable (TCmp)` on rtl-generics' dominant comparer idiom.
+              bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body }
+            if (j + 1 < TokCount) and (Tokens[j + 1].Kind = tkDot) and
+               (i > 0) and
+               ((Tokens[i - 1].Kind = tkProcedure) or
+                (Tokens[i - 1].Kind = tkFunction) or
+                ((Tokens[i - 1].Kind = tkIdent) and
+                 (CaseEqual(GetTokenStrFromRaw(Tokens[i - 1].SOffset,
+                                               Tokens[i - 1].SLen), 'constructor') or
+                  CaseEqual(GetTokenStrFromRaw(Tokens[i - 1].SOffset,
+                                               Tokens[i - 1].SLen), 'destructor')))) then
             begin
               { Deleting `<T>` here makes this header indistinguishable from the
                 impl of a same-named NON-generic class's method, and the resolver
@@ -974,6 +991,7 @@ var
   cNames: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
   cKinds: array[0..MAX_TEMPLATE_PARAMS-1] of TTokenKind;
   nc, ti, i, j, k, na, ts, tc, gEnd, si, dfIdx: Integer;
+  gmScan: Integer;   { -1 = the class body, >= 0 = a buffered method body }
   dup: Boolean;
 begin
   Result := False;
@@ -1033,9 +1051,31 @@ begin
   end;
 
   { Nested generic prerequisites: every `specialize NAME<args>` in the body,
-    with args mapped through the substitution, that is not a type yet. }
-  ts := Templates[ti].TokStart;
-  tc := Templates[ti].TokCount;
+    with args mapped through the substitution, that is not a type yet.
+
+    Swept over the class body AND every buffered METHOD body of this template
+    (gmScan = -1 is the class body, >= 0 each GenericMethods[] entry). Method
+    bodies are buffered separately by BufferGenericMethod, so scanning only
+    Templates[ti] missed any nested specialization that appears solely inside a
+    method -- no prerequisite was registered, no alias declaration emitted,
+    SpecializeStream's collapse found NestedSpecKnown false, and the literal
+    word `specialize` survived into the stream: `undefined variable
+    (specialize)`. That is rtl-generics' dominant comparer idiom, which lives in
+    a class constructor body and nowhere else.
+    bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body }
+  for gmScan := -1 to GenericMethodCount - 1 do
+  begin
+  if gmScan < 0 then
+  begin
+    ts := Templates[ti].TokStart;
+    tc := Templates[ti].TokCount;
+  end
+  else
+  begin
+    if GenericMethods[gmScan].TemplateIdx <> ti then Continue;
+    ts := GenericMethods[gmScan].TokStart;
+    tc := GenericMethods[gmScan].TokCount;
+  end;
   i := 0;
   while i < tc do
   begin
@@ -1075,6 +1115,7 @@ begin
     else
       Inc(i);
   end;
+  end;   { gmScan }
 
   { A prerequisite queued by one deferral may already have been satisfied by
     another: rtl-generics reaches TCustomComparer$string through BOTH
