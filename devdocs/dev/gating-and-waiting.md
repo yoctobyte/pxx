@@ -65,6 +65,25 @@ it prints a sentinel that failure cannot reach — if green looks like the ABSEN
 of output, a pipe or a `tail` can manufacture it.** That is also why every
 `lib-test` entry ends in a positive `... OK` line rather than simply not failing.
 
+**And the third member of the family, which is the worst of the three: a pipe can
+destroy the DIAGNOSTIC.** The gate's own assertion shape,
+
+```make
+test "$$($(TESTTMP)/some_test | tail -n 1)" = "SENTINEL OK"
+```
+
+discards the program's output entirely when it does not match — `test` compares
+and says nothing. On a reproducible failure that costs nothing, because you rerun
+it. **On an INTERMITTENT it costs everything**, since the one run whose stdout you
+needed is the one that will not happen again: on 2026-08-28 `lib_dns_libc` went
+red once, passed a full gate re-run and fifteen direct runs of the same binary,
+and left no record of what its last line actually said
+(`bug-b-lib-dns-libc-failed-once-in-the-gate-and-claims-a-hermeticity-it-lacks`).
+A line that captured stdout on mismatch would have made that a diagnosis instead
+of a ticket. The first two members swallow a *status* and invert a
+*verification*; this one deletes the *evidence*, and precisely where evidence is
+irreplaceable.
+
 ### `pgrep` matches your own watcher
 
 ```bash

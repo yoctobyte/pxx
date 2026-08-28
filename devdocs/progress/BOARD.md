@@ -55,7 +55,7 @@ _none_
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 | regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
 
-## backlog (273)
+## backlog (272)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -142,7 +142,6 @@ _none_
 | compat-p-system-integer-is-smallint-in-fpc | P | 10 | compat | `System.Integer` is SmallInt in FPC, LongInt in pxx | — |
 | compat-pascal-directive-in-comment-ignores-nested-comments-off | P | 5 | compat | With nested comments OFF (delphi mode), a {$...} sequence inside a brace comment does not end the comment in pxx, but does in FPC. Lax direction — pxx accepts sources FPC rejects | — |
 | compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees | P | 25 | compat | set (32 vs 4), subrange (4 vs 1) and string[N] (8 vs 21) all store wider or narrower than FPC; every VALUE agrees, only SizeOf and record layout differ -- one layout family, four filed measurements | — |
-| compat-pascal-ioresult-returns-a-negative-errno | B | 55 | compat | IOResult returns the raw negative errno (-2 for a missing file, -13 for permission denied) where FPC returns the positive DOS-style code (2, 5). Code written as `if IOResult = 2` silently takes the wrong branch. | — |
 | compat-pascal-overload-prefers-signed-for-an-unsigned-argument | A | 12 | compat | Overload resolution picks the signed arm for an unsigned argument | — |
 | compat-pascal-the-strict-fpc-flag-family-is-incomplete | P | 15 | compat | --strict-fpc reproduces some FPC behaviours and silently not others (Abs/Sqr widths, pointer difference, TypeInfo name), and most flags ignore DialectIsPxx -- the gaps left after the umbrella landed | — |
 | decide-c-crtl-rand-max-is-conforming-but-breaks-real-code | U | 40 | decide | crtl defines RAND_MAX as 32767 and rand() returns [0,32767]. C99 7.20.2.1 only requires RAND_MAX >= 32767, so this is conforming — but every mainstream libc uses 2147483647 and real programs branch on the value. busybox editors/awk.c has an #error for anything else and is the only busybox file still blocked on a non-library gap. Raising it is a behaviour change to a shipped library, not a defect fix, so it is a call to make, not a bug to close. | — |
@@ -568,9 +567,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2544)
+## done (2545)
 
-2544 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2545 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (46)
 
@@ -688,7 +687,6 @@ _none_
 - [p 55] [P] bug-p-qword-div-by-a-literal-above-2-63-is-signed
 - [p 55] [P] bug-p-the-address-of-a-virtual-class-method-cannot-be-lowered
 - [p 55] [A] chore-a-the-range-checked-fpc-seed-cannot-be-built
-- [p 55] [B] compat-pascal-ioresult-returns-a-negative-errno
 - [p 55] [U] decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample
 - [p 55] [U] decide-settextbuf-needs-buffered-text-io-or-stays-missing
 - [p 55] [U] decide-should-the-fpc-seed-canary-be-in-the-mandatory-loop
