@@ -308,6 +308,9 @@ mnemonic surface including `cpuid`. Nothing further is available in this lane.
 
 ### Remaining, and none of it is Track B
 
+**Re-measured 2026-08-28 (frankB). Two of the three entries below were stale;
+the corrections follow each one.**
+
 - **Tier 1 (hardware entropy)** needs compiler intrinsics, because the design
   mandate keeps per-arch instructions out of the `.pas`. The source cited
   `feature-rdrand-cpuid-compiler-builtins`, which **had never been filed** —
@@ -329,3 +332,51 @@ which `ready`/`next` never scan — while it was actually rankable. Nothing abou
 changed; only the record was stale. Found by a sweep (see
 `chore-t-nothing-re-checks-a-blocked-by-edge-after-its-blocker-closes`); 14 tickets repo-wide
 carry at least one `blocked-by` naming a closed ticket, five of them fully unblocked.
+
+## 2026-08-28 (frankB) — the "Remaining" list re-measured
+
+Checked rather than read, because this ticket was surfaced as available Track B
+work and its remaining list is what makes that judgement.
+
+**Tier 1 (hardware entropy) — DONE, both halves.** The compiler intrinsics
+landed as [[feature-a-rdrand-cpuid-compiler-builtins]] (2026-08-21), and the
+library was wired to them tonight in
+[[feature-b-random-tier1-consume-the-hw-entropy-intrinsics]]: `HWEntropy64`
+probes `__pxxCpuHasHwRandom`, retries `__pxxHwRandom64` a bounded ten times, and
+falls to tier 2. Verified live on this box (probe TRUE, `rdrand` in
+`/proc/cpuinfo`, three distinct draws) rather than passing through the
+not-available branch, which looks identical from outside.
+
+**"riscv32 cannot build this unit at all" — imprecise, and the correction
+matters.** Measured today:
+
+| invocation | result |
+| --- | --- |
+| `--target=riscv32 --platform=esp` | **builds, exit 0** |
+| `--target=riscv32` (hosted/posix units) | fails on atomics: "machine-mode CSR access (mstatus), which a hosted user-mode program does not have" |
+
+So the unit builds for the riscv32 configuration that actually ships (the C3 ESP
+profile). The atomics refusal is specific to *hosted* riscv32. Worth noting my
+first measurement used the default platform units and would have confirmed the
+ticket's claim — it was wrong for the same reason a strace of glibc was wrong
+earlier tonight: it measured a configuration nobody builds.
+
+**xtensa fails too, on something this ticket does not mention.** Not atomics —
+`error: target xtensa: unsupported node in IR codegen: syscall`, from tier 2's
+`__pxxrawsyscall`, which is **statically unreachable on xtensa** because
+`SysGetRandom` returns -1 there. The library is correct; the compiler refuses to
+lower dead code. Filed as
+[[bug-a-xtensa-refuses-to-lower-an-unreachable-syscall]] (Track A, prio 45) and
+deliberately NOT worked around here — wrapping the call in `{$ifdef}` would be
+the compiler-appeasement workaround, and xtensa is the primary ESP target, so
+the cost of the gap is real.
+
+**`Random128`** is unchanged: still deliberately absent, no 128-bit integer type
+to return.
+
+### Net effect on this ticket's rankability
+
+Nothing here is Track B work. Tier 1 is closed; the two remaining items are a
+Track A codegen gap (xtensa) and a hosted-riscv32 atomics limitation that no
+shipping configuration hits. The cross-target oracle covers 4 targets, and the
+honest count of what is *blocked* is one target, not two.
