@@ -393,8 +393,23 @@ begin
   WasmIntStr := s;
 end;
 
+{ i32.const's immediate is a signed LEB that must FIT in 32 bits — wabt says
+  `unable to read i32 leb128: i32.const value` and then refuses to decode the
+  rest of the module, so it is a PARSE failure rather than a validation one and
+  reports a byte offset with no function name attached to it.
+
+  This REFUSES rather than wrapping. Wrapping is the right thing to do to a
+  32-bit Pascal value, but only where the Pascal type says the value is 32 bits
+  — and that is known in the backend, not here. This procedure also emits
+  addresses, block indices and frame displacements, where a value out of i32
+  range is a bug and wrapping would turn that bug into a wrong address. So the
+  semantic wrap happens at the one call site that knows it has a value
+  (WasmEmitConstInt) and everything else is held to the instruction's
+  contract. }
 procedure WasmI32Const(v: Int64);
 begin
+  if (v > 2147483647) or (v < -2147483648) then
+    WasmFail('wasm: i32.const out of range: ' + WasmIntStr(v));
   WasmBodyB(WOP_I32_CONST); WasmBodySLEB(v);
   WasmText('i32.const ' + WasmIntStr(v));
 end;
@@ -468,6 +483,74 @@ procedure WasmOp(opcode: Byte; const nm: AnsiString);
 begin
   WasmBodyB(opcode);
   WasmText(nm);
+end;
+
+{ ===== structured control flow =====
+
+  wasm has no jumps. It has nested blocks and branches that leave them, and a
+  branch names its target by RELATIVE DEPTH counted outward from the branch —
+  `br 0` is the innermost enclosing block, `br 1` the one around it. The depth
+  is therefore a property of where the instruction sits, not of where it wants
+  to go, which is the whole difference from every other backend here and the
+  reason the depths are computed rather than symbolic.
+
+  Text form deliberately uses the same numeric depths rather than named labels:
+  `br 3` in the WAT is byte-for-byte what the binary says, so the WAT stays an
+  oracle for the encoding instead of a prettier restatement of it. Names would
+  read better and would hide exactly the class of bug the .wat is here to
+  catch.
+
+  Indentation is NOT tracked for these. A br_table dispatch nests one block per
+  basic block, and a body with a few hundred blocks would indent past any
+  useful width — see PLAN.md's Phase 3 note on wabt's ~9000-deep parser limit. }
+
+procedure WasmBlock(bt: Byte);
+begin
+  WasmBodyB($02); WasmBodyB(bt);
+  if bt = WT_VOID then WasmText('block') else WasmText('block (result)');
+end;
+
+procedure WasmLoop(bt: Byte);
+begin
+  WasmBodyB($03); WasmBodyB(bt);
+  if bt = WT_VOID then WasmText('loop') else WasmText('loop (result)');
+end;
+
+procedure WasmEnd;
+begin
+  WasmBodyB(WOP_END);
+  WasmText('end');
+end;
+
+procedure WasmBr(depth: Integer);
+begin
+  WasmBodyB($0C); WasmBodyU32(depth);
+  WasmText('br ' + WasmIntStr(depth));
+end;
+
+procedure WasmBrIf(depth: Integer);
+begin
+  WasmBodyB($0D); WasmBodyU32(depth);
+  WasmText('br_if ' + WasmIntStr(depth));
+end;
+
+{ br_table whose arms are the depths 0, 1, ... n-1 in order. That is not a
+  convenience: it IS the dispatch shape, because the blocks are nested so that
+  breaking out of k of them lands at basic block k's code. Taking an arbitrary
+  vector would need an array parameter for a table that is always this
+  sequence, and the sequence is the invariant worth stating. }
+procedure WasmBrTableSeq(n, defaultDepth: Integer);
+var i: Integer; t: AnsiString;
+begin
+  WasmBodyB($0E); WasmBodyU32(n);
+  t := 'br_table';
+  for i := 0 to n - 1 do
+  begin
+    WasmBodyU32(i);
+    t := t + ' ' + WasmIntStr(i);
+  end;
+  WasmBodyU32(defaultDepth);
+  WasmText(t + ' ' + WasmIntStr(defaultDepth));
 end;
 
 procedure WasmCall(funcIndex: Integer; const nm: AnsiString);

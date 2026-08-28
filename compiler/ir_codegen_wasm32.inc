@@ -60,6 +60,21 @@ var
   WasmCurSlot       : Integer = -1;   { function slot being emitted }
   WasmCurFrame      : Integer = 0;    { this body's frame size, bytes }
   WasmLocalFp       : Integer = 0;    { local index of $fp }
+  WasmLocalPc       : Integer = -1;   { local index of $pc, -1 if no dispatch }
+  WasmBlockCount    : Integer = 0;    { basic blocks in the current body }
+  WasmBodySerial    : Integer = 0;    { stamps WasmLabelStamp, see below }
+  WasmHasTerminate  : Boolean = False;{ body contains an early Exit }
+  WasmNeedDispatch  : Boolean = False;{ ... so the dispatch must exist }
+
+{ Label id -> the basic block it starts, stamped with the body that defined it.
+  The stamp is not defensive clutter: these arrays outlive a body, Pascal has no
+  cross-procedure goto, so a jump whose target was not defined by THIS body can
+  only be a compiler bug — and without the stamp it would silently read another
+  function's block number and branch to whatever is there. A jump to the wrong
+  code is the exact failure this backend's structure otherwise makes
+  impossible, so it is worth two arrays to keep it that way. }
+  WasmLabelBlock    : array[0..MAX_IR-1] of Integer;
+  WasmLabelStamp    : array[0..MAX_IR-1] of Integer;
 
 { Mark the body being emitted as not-yet-lowerable. Deliberately NOT Error:
   Error aborts the compile, and one unimplemented op in a builtin would then
@@ -121,6 +136,26 @@ begin
   end
   else
     WasmScalarType := False;   { records, sets, variants, frozen strings }
+end;
+
+{ A constant's 32-bit interpretation. IRIVal is an Int64 and carries a mask
+  like $FFFFFFFF as 4294967295, but the Pascal value is 32 bits wide and its
+  32-bit reading is -1. Every register backend gets this for free by moving the
+  low half of a register; here the immediate is ENCODED, so the reading has to
+  be taken explicitly — and an i32.const of 4294967295 is not merely wrong, it
+  is unencodable, so the whole module stops decoding at that byte.
+
+  Another member of the class named in
+  bug-a-function-result-assignment-does-not-narrow: a declared width that only
+  has to be enforced where something cannot hold the wider value. This one is
+  ours rather than the native build's, and it is the friendly end of the class
+  — it cannot be encoded, so it cannot ship. }
+function WasmWrap32(v: Int64): Int64;
+var w: Int64;
+begin
+  w := v and $FFFFFFFF;
+  if w > 2147483647 then w := w - 4294967296;
+  WasmWrap32 := w;
 end;
 
 { The value type of an IR node, from the type the lowering recorded on it. }
@@ -252,10 +287,9 @@ begin
     WasmUnsupported('slot ' + Syms[si].Name + ' has no wasm value type');
 end;
 
-function WasmEmitLoadSym(si: Integer): TTypeKind;
+procedure WasmEmitLoadSym(si: Integer);
 var vt: Byte;
 begin
-  WasmEmitLoadSym := Syms[si].TypeKind;
   if not WasmSlotType(si, vt) then Exit;
   WasmLValueAddr(si);
   WasmTypeLoad(Syms[si].TypeKind, vt);
@@ -493,10 +527,9 @@ end;
   not to produce quietly. They arrive with the managed types, not with Phase 2
   scalars. }
 
-function WasmEmitLea(node: Integer): TTypeKind;
+procedure WasmEmitLea(node: Integer);
 var si: Integer;
 begin
-  WasmEmitLea := tyPointer;
   si := IRA[node];
   if Syms[si].IsArray then
   begin
@@ -515,9 +548,8 @@ end;
   carries the offset, which the record layout has already resolved, so there is
   no record-shape knowledge in this backend at all — it is address arithmetic
   that happens to be spelled with a dot. }
-function WasmEmitField(node: Integer): TTypeKind;
+procedure WasmEmitField(node: Integer);
 begin
-  WasmEmitField := tyPointer;
   WasmEmitValueAs(IRA[node], WT_I32, 'record base address');
   if WasmBodyBroken then Exit;
   if Integer(IRIVal[node]) <> 0 then
@@ -527,11 +559,10 @@ begin
   end;
 end;
 
-function WasmEmitLoadMem(node: Integer): TTypeKind;
+procedure WasmEmitLoadMem(node: Integer);
 var tk: TTypeKind; vt: Byte;
 begin
   tk := IntToTypeKind(IRTk[node]);
-  WasmEmitLoadMem := tk;
   if not WasmScalarType(tk, vt) then
   begin
     WasmUnsupported('load through a pointer of type ' + WasmIntStr(IRTk[node]));
@@ -565,6 +596,71 @@ begin
   WasmTypeStore(tk, vt);
 end;
 
+{ ===== what a node produces =====
+
+  ONE pure function answers "what type does this node leave on the stack", and
+  it is what the emitters return. That is not tidiness — it is the second half
+  of the rule stated at WasmEmitNode, and it was learned the same way twice.
+
+  `IRTk[node]` is the IR's own record of a node's type and it is NOT reliably
+  populated: a for-loop's bound comparison arrives with an IR_LOAD_SYM whose
+  IRTk is tyUnknown while the symbol it loads is plainly an Integer. Register
+  backends never notice, because they read a register width rather than a type.
+  Reading IRTk here refused every `for` loop in the compiler with "operand type
+  in binary operator 67", which is a true statement about IRTk and a false one
+  about the program.
+
+  So the answer is taken from the thing that actually determines the value —
+  the SYMBOL for a load, the unified operand width for a binop — and IRTk is
+  the fallback for nodes whose type is nothing but what the IR recorded. }
+
+function WasmNodeResultType(node: Integer): TTypeKind; forward;
+
+function WasmIsCompare(op: TTokenKind): Boolean;
+begin
+  WasmIsCompare := (op = tkEq) or (op = tkNeq) or (op = tkLt)
+                   or (op = tkLe) or (op = tkGt) or (op = tkGe);
+end;
+
+{ Pascal spells `shr` as an IDENTIFIER — the lexer never produces tkShr for it,
+  so an IR_BINOP carrying `shr` carries Ord(tkIdent) as its operator
+  (compiler/ir.inc:8867 says so in as many words, and ir.inc:8878 performs
+  exactly this substitution for the one consumer that predates this backend).
+  Doing it again here is the second arm of a double case, which is the shape
+  devdocs/dev/normalise-dont-special-case.md says to fix at the source rather
+  than duplicate — filed as bug-a-shr-reaches-the-ir-spelled-as-tkident. Until
+  that lands, a backend that did NOT translate would not merely miss `shr`, it
+  would mistake every `shr` for whatever it does with tkIdent. }
+function WasmBinopOp(node: Integer): TTokenKind;
+var op: TTokenKind;
+begin
+  op := TTokenKind(IRC[node]);
+  if op = tkIdent then op := tkShr;
+  WasmBinopOp := op;
+end;
+
+{ Pure: the single width both operands are brought to, and its signedness.
+  Shared by the planner and the type oracle so the two cannot disagree about
+  what a binop yields. }
+function WasmBinopWidth(node: Integer; var want: Byte; var sgn: Boolean): Boolean;
+var tkA, tkB: TTypeKind; vtA, vtB, vtN: Byte;
+begin
+  WasmBinopWidth := False;
+  tkA := WasmNodeResultType(IRA[node]);
+  tkB := WasmNodeResultType(IRB[node]);
+  if not WasmScalarType(tkA, vtA) then Exit;
+  if not WasmScalarType(tkB, vtB) then Exit;
+  { The node's own recorded type joins the unification when it HAS one. It can
+    only widen the result (WasmUnify never narrows), and it is there to stop a
+    plan that would truncate a value the IR expects whole. When it is unset —
+    which happens — dropping it is right: the operands alone already say what
+    the arithmetic is. }
+  if not WasmScalarType(IntToTypeKind(IRTk[node]), vtN) then vtN := vtA;
+  want := WasmUnify(WasmUnify(vtA, vtB), vtN);
+  sgn := TypeSigned(tkA) or TypeSigned(tkB);
+  WasmBinopWidth := True;
+end;
+
 { A representative Pascal type for a wasm value type. Only its WIDTH and SIGN
   are ever read back — this is how a computed value carries enough of itself to
   be coerced again by whatever consumes it. }
@@ -582,45 +678,57 @@ begin
   end;
 end;
 
-function WasmEmitBinop(node: Integer): TTypeKind;
+{ The oracle's body, now that WasmRepType exists. Every emitter's declared
+  result is this function, so an emitter cannot report a type it did not
+  produce. }
+function WasmNodeResultType(node: Integer): TTypeKind;
+var want: Byte; sgn: Boolean;
+begin
+  WasmNodeResultType := tyInt32;
+  if node < 0 then Exit;
+  case IRKind[node] of
+    { A load's type is the SYMBOL's — the one place it is certainly right. }
+    IR_LOAD_SYM      : WasmNodeResultType := Syms[IRA[node]].TypeKind;
+    IR_LEA, IR_FIELD : WasmNodeResultType := tyPointer;
+    IR_BINOP :
+      if WasmIsCompare(WasmBinopOp(node)) then
+        WasmNodeResultType := tyBoolean
+      else if WasmBinopWidth(node, want, sgn) then
+        WasmNodeResultType := WasmRepType(want, sgn)
+      else
+        WasmNodeResultType := IntToTypeKind(IRTk[node]);
+  else
+    { Constants, loads through a pointer, unaries: the IR's record is all there
+      is, and for these it is populated. }
+    WasmNodeResultType := IntToTypeKind(IRTk[node]);
+  end;
+end;
+
+procedure WasmEmitBinop(node: Integer);
 var
   op: TTokenKind;
-  tkA, tkB: TTypeKind;
-  vtA, vtB, vtN, want: Byte;
-  sgn, isCmp: Boolean;
+  want: Byte;
+  sgn: Boolean;
   what: AnsiString;
 begin
-  op := TTokenKind(IRC[node]);
-  { Pascal spells `shr` as an IDENTIFIER — the lexer never produces tkShr for
-    it, so an IR_BINOP carrying `shr` carries Ord(tkIdent) as its operator
-    (compiler/ir.inc:8867 says so in as many words, and ir.inc:8878 performs
-    exactly this substitution for the one consumer that existed before this
-    backend). Doing it again here is the second arm of a double case, which is
-    the shape devdocs/dev/normalise-dont-special-case.md says to fix at the
-    source rather than duplicate — filed as
-    bug-a-shr-reaches-the-ir-spelled-as-tkident. Until that lands, a backend
-    that did NOT translate would not merely miss `shr`, it would mistake every
-    `shr` for whatever it does with tkIdent. }
-  if op = tkIdent then op := tkShr;
-  WasmEmitBinop := tyInt32;
-  tkA := IntToTypeKind(IRTk[IRA[node]]);
-  tkB := IntToTypeKind(IRTk[IRB[node]]);
+  op := WasmBinopOp(node);
   what := 'binary operator ' + WasmIntStr(IRC[node]);
-  if (not WasmScalarType(tkA, vtA)) or (not WasmScalarType(tkB, vtB))
-     or (not WasmNodeType(node, vtN)) then
+  if not WasmBinopWidth(node, want, sgn) then
   begin
-    WasmUnsupported('operand type in ' + what);
+    { Name the operand TYPES and IR KINDS, not just the operator. "operand type
+      in binary operator 67" says a comparison was refused and nothing about
+      which side or why; with the numbers the report is a diagnosis rather than
+      a pointer to one. }
+    WasmUnsupported(what + ': operand types '
+                    + WasmIntStr(Ord(WasmNodeResultType(IRA[node]))) + '/'
+                    + WasmIntStr(Ord(WasmNodeResultType(IRB[node])))
+                    + ', IR kinds ' + WasmIntStr(IRKind[IRA[node]]) + '/'
+                    + WasmIntStr(IRKind[IRB[node]]));
     Exit;
   end;
 
   { Both operands are brought to ONE width before the instruction, because wasm
-    has no mixed-width arithmetic at all. The node's own recorded type joins the
-    unification: it can only widen the result (WasmUnify never narrows), and
-    including it stops a plan that would truncate a value the IR expects whole.
-    For a comparison it contributes Boolean/i32, which changes nothing. }
-  want := WasmUnify(WasmUnify(vtA, vtB), vtN);
-  sgn := TypeSigned(tkA) or TypeSigned(tkB);
-
+    has no mixed-width arithmetic at all. }
   WasmEmitValueAs(IRA[node], want, what);
   WasmEmitValueAs(IRB[node], want, what);
   if WasmBodyBroken then Exit;
@@ -629,20 +737,11 @@ begin
     divisor and on the INT_MIN div -1 overflow rather than raising. A trap is
     not a catchable Pascal exception, so the checked forms must arrive with the
     IR's own pre-check in front of them — removing that pre-check is a SEMANTIC
-    change, not an optimisation (phase2-shadow-stack.md). The pre-check is a
-    comparison and a branch, so div is not even reachable until Phase 3 lands,
-    and when it arrives it arrives guarded. }
+    change, not an optimisation (phase2-shadow-stack.md). }
   if (want = WT_F32) or (want = WT_F64) then
     WasmFloatBinop(op, want = WT_F64, what)
   else
     WasmIntBinop(op, want = WT_I64, sgn, what);
-
-  { A comparison consumes two operands of any width and yields i32 regardless;
-    everything else yields the width it was computed at. }
-  isCmp := (op = tkEq) or (op = tkNeq) or (op = tkLt)
-           or (op = tkLe) or (op = tkGt) or (op = tkGe);
-  if isCmp then WasmEmitBinop := tyBoolean
-  else WasmEmitBinop := WasmRepType(want, sgn);
 end;
 
 { ===== unary operators =====
@@ -656,10 +755,9 @@ end;
   sign bit, so they negate zero and NaN correctly where the subtraction would
   not. }
 
-function WasmEmitUnary(node: Integer; isNeg: Boolean): TTypeKind;
+procedure WasmEmitUnary(node: Integer; isNeg: Boolean);
 var got: TTypeKind; vt: Byte;
 begin
-  WasmEmitUnary := tyInt32;
   got := IntToTypeKind(IRTk[node]);
   if not WasmScalarType(got, vt) then
   begin
@@ -704,21 +802,18 @@ begin
       WasmI32Const(-1); WasmOp($73, 'i32.xor');
     end;
   end;
-  if (not isNeg) and (got = tyBoolean) then WasmEmitUnary := tyBoolean
-  else WasmEmitUnary := got;
 end;
 
-function WasmEmitConstInt(node: Integer): TTypeKind;
+procedure WasmEmitConstInt(node: Integer);
 var vt: Byte;
 begin
-  WasmEmitConstInt := IntToTypeKind(IRTk[node]);
   if not WasmNodeType(node, vt) then
   begin
     WasmUnsupported('integer constant of type ' + WasmIntStr(IRTk[node]));
     Exit;
   end;
   if vt = WT_I64 then WasmI64Const(IRIVal[node])
-  else if vt = WT_I32 then WasmI32Const(IRIVal[node])
+  else if vt = WT_I32 then WasmI32Const(WasmWrap32(IRIVal[node]))
   else
     { An IR_CONST_INT carrying a float type would need f32.const/f64.const,
       whose immediates are raw IEEE bytes rather than a LEB — a different
@@ -737,18 +832,267 @@ begin
   WasmEmitNode := tyInt32;
   if WasmBodyBroken then Exit;
   if node < 0 then begin WasmUnsupported('null node reference'); Exit; end;
+  WasmEmitNode := WasmNodeResultType(node);
   case IRKind[node] of
-    IR_CONST_INT : WasmEmitNode := WasmEmitConstInt(node);
-    IR_LOAD_SYM  : WasmEmitNode := WasmEmitLoadSym(IRA[node]);
-    IR_BINOP     : WasmEmitNode := WasmEmitBinop(node);
-    IR_LEA       : WasmEmitNode := WasmEmitLea(node);
-    IR_FIELD     : WasmEmitNode := WasmEmitField(node);
-    IR_LOAD_MEM  : WasmEmitNode := WasmEmitLoadMem(node);
-    IR_NEG       : WasmEmitNode := WasmEmitUnary(node, True);
-    IR_NOT       : WasmEmitNode := WasmEmitUnary(node, False);
+    IR_CONST_INT : WasmEmitConstInt(node);
+    IR_LOAD_SYM  : WasmEmitLoadSym(IRA[node]);
+    IR_BINOP     : WasmEmitBinop(node);
+    IR_LEA       : WasmEmitLea(node);
+    IR_FIELD     : WasmEmitField(node);
+    IR_LOAD_MEM  : WasmEmitLoadMem(node);
+    IR_NEG       : WasmEmitUnary(node, True);
+    IR_NOT       : WasmEmitUnary(node, False);
   else
     WasmUnsupported('value IR op ' + WasmIntStr(IRKind[node]));
   end;
+end;
+
+{ ===== control flow =====
+
+  wasm has no jumps, so an unstructured CFG cannot be emitted directly. The
+  standard answer, and the one PLAN.md's Phase 3 names, is a DISPATCH LOOP: the
+  body is cut into basic blocks, a `$pc` local holds the block to run next, and
+  one `br_table` at the top of a loop jumps to it. The blocks are nested so
+  that breaking out of exactly k of them lands at basic block k's code:
+
+      block                    ;; $exit
+        loop                   ;; $L
+          block ... block      ;; B(n-1) ... B0, B0 innermost
+            local.get $pc
+            br_table 0 1 ... n-1  (default n+1 -> $exit)
+          end                  ;; B0 ends, so:
+          <code of block 0>
+          end                  ;; B1 ends, so:
+          <code of block 1>
+          ...
+          end                  ;; B(n-1) ends
+          <code of block n-1>
+        end                    ;; falling off a loop EXITS it — no back edge
+      end
+
+  Two things fall out of this shape that are worth stating, because both look
+  like omissions:
+
+  * **Fallthrough costs nothing.** Block k's code is the last thing inside
+    B(k+1), so falling off the end of B(k+1) lands exactly on block k+1's code.
+    A block that ends without a jump therefore emits no branch at all — not an
+    optimisation, just what the nesting already means.
+  * **A stale $pc is harmless.** $pc is read at the dispatch and nowhere else,
+    and the dispatch is only reached by a `br` that is always immediately
+    preceded by setting it. So a conditional jump may set $pc and then NOT
+    branch, and the value is simply never read.
+
+  A body with no control flow at all skips the whole construction and emits its
+  statements flat, which keeps the .wat oracle readable for the simple cases
+  where reading it is how you debug. }
+
+{ The depth of the dispatch loop, counted outward from inside block blk's code:
+  that code sits inside B(blk+1)..B(n-1) and the loop, so the loop is n-1-blk
+  levels out. $exit is one further. These two lines are the entire reason this
+  scheme is delicate — a depth is a property of WHERE THE BRANCH SITS, not of
+  where it goes, so it cannot be checked by looking at the target. }
+function WasmDepthToLoop(blk: Integer): Integer;
+begin
+  WasmDepthToLoop := WasmBlockCount - 1 - blk;
+end;
+
+{ One further out than the loop. Branching here leaves the dispatch entirely
+  and lands on the instruction after the outer block's `end` — which is where
+  the epilogue starts, so `br $exit` IS an early return. }
+function WasmDepthToExit(blk: Integer): Integer;
+begin
+  WasmDepthToExit := WasmBlockCount - blk;
+end;
+
+{ Resolve a jump target to its basic block, refusing a label this body never
+  defined rather than reading a stale entry. }
+function WasmTargetBlock(lbl: Integer): Integer;
+begin
+  WasmTargetBlock := 0;
+  if (lbl < 0) or (lbl >= MAX_IR) or (WasmLabelStamp[lbl] <> WasmBodySerial) then
+  begin
+    WasmUnsupported('jump to label ' + WasmIntStr(lbl)
+                    + ', which this body does not define');
+    Exit;
+  end;
+  WasmTargetBlock := WasmLabelBlock[lbl];
+end;
+
+procedure WasmEmitJump(node, blk: Integer);
+begin
+  WasmI32Const(WasmTargetBlock(IRA[node]));
+  if WasmBodyBroken then Exit;
+  WasmLocalSet(WasmLocalPc);
+  WasmBr(WasmDepthToLoop(blk));
+end;
+
+procedure WasmEmitJumpIfFalse(node, blk: Integer);
+var ctk: TTypeKind; cvt: Byte;
+begin
+  WasmI32Const(WasmTargetBlock(IRA[node]));
+  if WasmBodyBroken then Exit;
+  WasmLocalSet(WasmLocalPc);
+  { The condition is tested AT ITS OWN WIDTH. Coercing it to i32 first would be
+    an i32.wrap_i64, which discards the high half — riscv32 shipped exactly
+    that bug (bug-32bit-truthiness-high-half, ir_codegen_riscv32.inc:3673): a
+    nonzero Int64 whose low word happens to be zero tests as FALSE. wasm has
+    i64.eqz, so the full-width test is one instruction and the narrowing never
+    has to happen. }
+  ctk := WasmEmitNode(IRB[node]);
+  if WasmBodyBroken then Exit;
+  if not WasmScalarType(ctk, cvt) then
+  begin
+    WasmUnsupported('condition of type ' + WasmIntStr(Ord(ctk)));
+    Exit;
+  end;
+  if cvt = WT_I64 then WasmOp($50, 'i64.eqz')
+  else if cvt = WT_I32 then WasmOp($45, 'i32.eqz')
+  else
+  begin
+    WasmUnsupported('float condition');
+    Exit;
+  end;
+  { eqz answered "the condition was false", which is precisely when this jump
+    is taken. }
+  WasmBrIf(WasmDepthToLoop(blk));
+end;
+
+{ IR_TERMINATE is two statements wearing one opcode: `Halt(n)` when IRIVal is
+  AN_HALT, and an early `Exit` otherwise (ir_codegen_riscv32.inc's arm makes the
+  same split). Exit is a branch out of the dispatch to the epilogue, which is
+  what every register backend spells as "jump to the procedure epilogue". Halt
+  is a process-level operation with no wasm instruction at all — it needs WASI's
+  proc_exit import, which is Phase 6 — so it is refused by name rather than
+  quietly returning, which would turn `Halt(1)` into success. }
+procedure WasmEmitTerminate(node, blk: Integer);
+begin
+  if IRIVal[node] = AN_HALT then
+  begin
+    WasmUnsupported('Halt — needs the WASI proc_exit import (Phase 6)');
+    Exit;
+  end;
+  WasmBr(WasmDepthToExit(blk));
+end;
+
+procedure WasmEmitStmt(node, blk: Integer);
+var pvt: Byte;
+begin
+  case IRKind[node] of
+    IR_NOP, IR_BLOCK, IR_LABEL : ;
+    IR_JUMP          : WasmEmitJump(node, blk);
+    IR_TERMINATE     : WasmEmitTerminate(node, blk);
+    IR_JUMP_IF_FALSE : WasmEmitJumpIfFalse(node, blk);
+    IR_STORE_MEM     : WasmEmitStoreMem(node);
+    IR_STORE_SYM :
+      if WasmSlotType(IRA[node], pvt) then
+      begin
+        WasmLValueAddr(IRA[node]);
+        { The value is brought to the SLOT's width before the store, not
+          after: `i: Integer; j: Int64; i := j` is a defined truncation in
+          Pascal and an i32.store of an i64 in wasm, which is not an
+          instruction. }
+        WasmEmitValueAs(IRB[node], pvt,
+                        'assignment to ' + Syms[IRA[node]].Name);
+        if not WasmBodyBroken then
+          WasmTypeStore(Syms[IRA[node]].TypeKind, pvt);
+      end;
+  else
+    { Anything not yet handled is RECORDED rather than skipped. A skipped IR op
+      is a program that compiles and computes the wrong answer, which is the
+      failure class this target exists to make impossible. }
+    if IRTopLevelStmt(node) then
+      WasmUnsupported('statement IR op ' + WasmIntStr(IRKind[node]));
+  end;
+end;
+
+{ Walk the body once, cutting it into basic blocks. Called TWICE with the same
+  rule: `emit = False` counts the blocks and maps each label to one, `emit =
+  True` emits the code. The rule lives in ONE procedure because two copies of
+  it would drift, and a drift here does not fail to build — it makes the
+  br_table's arm count disagree with the number of blocks actually emitted, so
+  every jump lands one block off. That is a wrong answer with a valid module,
+  which is the shape this file spends its comments trying to avoid.
+
+  A block starts at a label, and at the statement after a jump. Adjacent labels
+  share a block and a label straight after a jump reuses the block that jump
+  opened, so the common `jump end; label else` pattern costs one block and not
+  two — which matters, because block count is nesting depth and nesting depth
+  is the one measured cap this scheme has. }
+procedure WasmWalkBody(emit: Boolean);
+var i, curBlk, nStmt: Integer; pending: Boolean;
+begin
+  curBlk := 0;
+  nStmt := 0;
+  pending := False;
+  if not emit then WasmHasTerminate := False;
+  for i := 0 to IRCount - 1 do
+  begin
+    if IRKind[i] = IR_LABEL then
+    begin
+      if (nStmt > 0) or pending then
+      begin
+        Inc(curBlk); nStmt := 0; pending := False;
+        if emit then WasmEnd;
+      end;
+      if (not emit) and (IRIVal[i] >= 0) and (IRIVal[i] < MAX_IR) then
+      begin
+        WasmLabelBlock[IRIVal[i]] := curBlk;
+        WasmLabelStamp[IRIVal[i]] := WasmBodySerial;
+      end;
+    end
+    else if IRTopLevelStmt(i) then
+    begin
+      if pending then
+      begin
+        Inc(curBlk); nStmt := 0; pending := False;
+        if emit then WasmEnd;
+      end;
+      Inc(nStmt);
+      if emit then WasmEmitStmt(i, curBlk);
+      if (IRKind[i] = IR_JUMP) or (IRKind[i] = IR_JUMP_IF_FALSE) then
+        pending := True
+      else if IRKind[i] = IR_TERMINATE then
+      begin
+        { An early Exit branches OUT of the dispatch, so it needs one to exist.
+          A body whose only control flow is a trailing `Exit;` would otherwise
+          have a single basic block, no enclosing blocks, and nowhere for the
+          branch to go — so the terminate both ends its block and forces the
+          construction. }
+        pending := True;
+        WasmHasTerminate := True;
+      end;
+    end;
+  end;
+  if not emit then WasmBlockCount := curBlk + 1;
+end;
+
+{ Open the nested blocks and the br_table. Emitted only when the body actually
+  branches. }
+procedure WasmOpenDispatch;
+var i: Integer;
+begin
+  WasmI32Const(0);
+  WasmLocalSet(WasmLocalPc);
+  WasmBlock(WT_VOID);                       { $exit }
+  WasmLoop(WT_VOID);                        { $L }
+  for i := 0 to WasmBlockCount - 1 do
+    WasmBlock(WT_VOID);                     { B(n-1) .. B0 }
+  WasmLocalGet(WasmLocalPc);
+  { Arms 0..n-1 reach the blocks; the default reaches $exit, which from here is
+    n blocks plus the loop plus one. It is what a $pc of n — the value nothing
+    sets, because falling off the last block leaves the loop on its own — would
+    take, and it is also the only safe answer for a $pc that is somehow out of
+    range. }
+  WasmBrTableSeq(WasmBlockCount, WasmBlockCount + 1);
+  WasmEnd;                                  { closes B0; block 0's code follows }
+end;
+
+{ Close the dispatch. WasmWalkBody has already emitted the `end` that opens
+  each block after the first, so what is left is the loop and $exit. }
+procedure WasmCloseDispatch;
+begin
+  WasmEnd;                                  { loop }
+  WasmEnd;                                  { $exit }
 end;
 
 { ===== the per-body entry point ===== }
@@ -830,6 +1174,16 @@ begin
     WasmAddParamName(WasmCurSlot, Procs[CurProc].Params[i].Name);
   WasmLocalFp := WasmAddLocal(WasmCurSlot, WT_I32, 'fp');
 
+  { Pass one: cut the body into basic blocks and map every label to one. It
+    must precede the $pc local, because whether $pc exists at all depends on
+    whether this body branches. }
+  Inc(WasmBodySerial);
+  WasmWalkBody(False);
+  WasmLocalPc := -1;
+  WasmNeedDispatch := (WasmBlockCount > 1) or WasmHasTerminate;
+  if WasmNeedDispatch then
+    WasmLocalPc := WasmAddLocal(WasmCurSlot, WT_I32, 'pc');
+
   { FrameSize is final by the time a body reaches codegen — locals are
     allocated during lowering (symtab.inc), not here — so unlike the register
     backends there is no prologue to backpatch. Round up to 16 to keep the
@@ -863,29 +1217,9 @@ begin
           WasmTypeStore(Syms[psym].TypeKind, pvt);
       end;
 
-  for i := 0 to IRCount - 1 do
-    case IRKind[i] of
-      IR_NOP, IR_BLOCK, IR_LABEL : ;
-      IR_STORE_MEM : WasmEmitStoreMem(i);
-      IR_STORE_SYM :
-        if WasmSlotType(IRA[i], pvt) then
-        begin
-          WasmLValueAddr(IRA[i]);
-          { The value is brought to the SLOT's width before the store, not
-            after: `i: Integer; j: Int64; i := j` is a defined truncation in
-            Pascal and an i32.store of an i64 in wasm, which is not an
-            instruction. }
-          WasmEmitValueAs(IRB[i], pvt, 'assignment to ' + Syms[IRA[i]].Name);
-          if not WasmBodyBroken then
-            WasmTypeStore(Syms[IRA[i]].TypeKind, pvt);
-        end;
-    else
-      { Anything not yet handled errors rather than being skipped. A skipped IR
-        op is a program that compiles and computes the wrong answer, which is
-        the failure class this target exists to make impossible. }
-      if IRTopLevelStmt(i) then
-        WasmUnsupported('statement IR op ' + WasmIntStr(IRKind[i]));
-    end;
+  if WasmNeedDispatch then WasmOpenDispatch;
+  WasmWalkBody(True);
+  if WasmNeedDispatch then WasmCloseDispatch;
 
   { epilogue: restore $sp, then leave the result on the operand stack }
   WasmLocalGet(WasmLocalFp);
@@ -894,7 +1228,8 @@ begin
   WasmGlobalSet(WasmGSp);
   if (nRes = 1) and (retSym >= 0) then
   begin
-    rtk := WasmEmitLoadSym(retSym);
+    rtk := Syms[retSym].TypeKind;
+    WasmEmitLoadSym(retSym);
     if (not WasmBodyBroken) and WasmScalarType(rtk, pvt) then
       WasmCoerce(rtk, pvt, rtypes[0], 'function result');
   end;
@@ -937,7 +1272,7 @@ begin
   WriteLn('wasm32: ', WasmLoweredCount, ' of ',
           WasmLoweredCount + WasmBrokenCount,
           ' bodies lowered; ', WasmBrokenCount,
-          ' emitted as `unreachable` (Phase 2 is incomplete):');
+          ' emitted as `unreachable` (op coverage is incomplete):');
   Write(WasmBrokenNames);
   if WasmBrokenUnlisted > 0 then
     WriteLn('    ... and ', WasmBrokenUnlisted,
@@ -970,5 +1305,16 @@ begin
     WasmFail('wasm32: nothing to write — no code was generated for this module '
           + '(the module writer is present and tested via '
           + 'test/wasm/check_phase1.sh)');
-  WasmSaveModule(outPath);
+  { An output path ending in .wat gets the TEXT module. asmtext_wasm.inc has
+    been able to write it since Phase 1 and nothing in the compiler could ask
+    for it — the oracle existed and was unreachable from the command line,
+    which is precisely the state you discover while staring at
+    `unable to read i32 leb128` with no way to see what you emitted. No flag:
+    the extension already says which form is wanted, and a flag would be a
+    second way to say the same thing. }
+  if (Length(outPath) >= 4)
+     and (Copy(outPath, Length(outPath) - 3, 4) = '.wat') then
+    WasmWriteText(outPath)
+  else
+    WasmSaveModule(outPath);
 end;
