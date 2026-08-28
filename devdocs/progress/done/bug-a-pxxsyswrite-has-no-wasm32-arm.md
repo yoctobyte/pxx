@@ -4,8 +4,9 @@ prio: 70
 type: bug
 blocked-by: []
 summary: "PXXSysWrite in compiler/builtin/builtinheap.pas is a chain of per-target {$ifdef}s over __pxxrawsyscall with no wasm32 arm, so on wasm32 it returns 0 having written nothing. Every console path bottoms out there — writeln, the RTL error reporters, PXXDbg — so a wasm32 program compiles, lowers correctly, runs, and is silent. Fix is one additive arm behind {$ifdef CPU_WASM32} calling a WASI fd_write import; the wasm backend already lowers `external 'lib' name 'sym'` to a wasm import. VERIFIED: with the patch below applied, a Pascal program compiled to wasm32 prints under node's WASI and its output is byte-identical to the native build. The compiler's own self-host fixedpoint sha is UNCHANGED with and without the patch (c9817ce01cbc both ways), because CPU_WASM32 is never defined while building for any other target."
-status: new
-owner: ""
+status: done
+owner: "wasm32 lane (narrow grant)"
+resolved: PENDING-COMMIT
 ---
 
 # `PXXSysWrite` has no wasm32 arm, so a wasm32 program is silent
@@ -150,3 +151,30 @@ combined-track assignment, which this lane does not hold.
   design — it asserts writeln's silence as the current known limitation. That
   failure is the signal to replace the assertion with a real native-vs-wasm
   diff of the output.
+
+## Resolution — 2026-08-28
+
+Fixed by the wasm32 lane under a **narrow grant** from the coordinator, rather
+than by a Track A holder, on the strength of one measurement: the property
+Track A's file-and-wait rule exists to protect is that the compiler can
+reproduce itself, and the evidence offered here **is** that property stated
+directly — `make compiler/pascal26` produces the same self-host fixedpoint sha
+with and without the change, because `CPU_WASM32` is defined only under
+`--target=wasm32` (`lexer.inc:998`). Re-verified on the tree actually pushed
+(`ea689da902bb` both ways), `gate.sh quick` GREEN.
+
+**The framing in the original report was one level too shallow**, and the
+coordinator's independent check is what sharpened it. `Result := 0` is assigned
+*before* the ifdef chain and the chain has no terminal `else`, so the defect is
+not "wasm32 is missing from a list" — it is that **the list fails OPEN**. A
+target with no arm reports *"wrote nothing, and no error"*, which is
+indistinguishable from a successful zero-length write. That is a generator
+shape, not a typo: the same day, a `{$ifdef}` chain of 34 arms with no final
+else was filed against Track P for silently ignoring a compiler directive. Two
+instances of one class in one day.
+
+`HeapMmap` (`bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero`,
+p70) is the third instance and was deliberately **not** granted: its fix adds a
+BSS arena and a size constant — new storage in a file every target compiles —
+so the sha-identity argument would be a weaker claim about a larger change. The
+line was drawn at the strength of the evidence, not the ticket's priority.
