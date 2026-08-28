@@ -7026,7 +7026,7 @@
    "status": "fail"
   },
   {
-   "bad": "cba47d112560b22a142d9fe2cc44fc780fb79bd3",
+   "bad": "f3422cd14b99caa4a5a495fb36f816e29463416c",
    "bad_untestable": false,
    "first_seen": false,
    "good": "62a4242203a308e0cb9c46893976c45c29afcc7c",
@@ -7037,8 +7037,7 @@
    "pin_axis": 0,
    "pin_built": false,
    "range": [
-    "f3422cd14b99caa4a5a495fb36f816e29463416c",
-    "cba47d112560b22a142d9fe2cc44fc780fb79bd3"
+    "f3422cd14b99caa4a5a495fb36f816e29463416c"
    ],
    "src": "",
    "status": "fail"
