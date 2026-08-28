@@ -166,4 +166,4 @@ cost was. `SetTextBuf` stays missing pending
 it becomes a few honest lines if the answer is yes.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit a7334d5c2.
