@@ -132,4 +132,4 @@ re-running the skipped set: a re-run answers one sweep, the fix answers all of
 them.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit ebf6aa003.
