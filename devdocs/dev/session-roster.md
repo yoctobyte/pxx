@@ -10219,3 +10219,30 @@ the counter-measurement ends the question.**
 is not carelessness; it is that each was *plausible, load-bearing, and adjacent to
 something the author genuinely knew*. That is exactly the profile of a claim that
 does not get checked.
+
+### frankA's own sharpening — the rule is about NEGATIVES, not about grep
+
+frankA's follow-up is better than my version of the lesson. Mine was *a
+concat-shaped grep misses a builder-shaped construction*. Its own:
+
+> **"No Pascal-side minter produces this shape" is a UNIVERSAL claim, and a
+> universal claim needs a search whose shape cannot hide the answer — which mine
+> structurally could. The hedge is the only reason it was safe, and a hedge is not
+> a substitute for a search that could have found it."**
+
+That is the binding form and it applies to every lane. **An existence claim
+survives one grep; a non-existence claim does not.** If the answer is "I found
+none", the question to ask before saying it is *what construction would my search
+have been blind to* — not *am I confident*.
+
+Not an unlucky one-off, and frankA measured that too rather than assuming it:
+`AppendChar` appears **70× in `cpreproc.inc`, 53× in `pyparser.inc`, 42× in
+`asmenc.inc`.** Building strings char-wise is a normal idiom in this tree, so a
+`+ 'x' +` grep has a **systematic** blind spot here, not a rare one.
+
+frankA also declined the weighting I gave its token-index prediction — *"a guess
+about what a large number next to a parser bug usually is"* — and put item 4
+(both reports EOF+1) as the finding that moves the ticket. Recorded as it asked.
+**Second time tonight a lane has refused credit and been right to** (frankT on the
+bisect refusal was the first); both times the refusal sharpened what the record
+actually says.
