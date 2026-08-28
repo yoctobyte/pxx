@@ -13320,3 +13320,54 @@ GB — then another task was killed at **52 GB free, load 12.7**, so memory does
 pattern. One confirmed instance promoted to a rule. It found it by running `free -g` before
 theorising the second time, which is the habit it had just been told to adopt, applied to
 itself within the hour.
+
+### A full-tier RED that is NOT frankA's — disambiguated before it cost anyone a session
+
+`1a376ec2d tstate(plexus): 2c5549642225 RED (full)` landed on master. `2c5549642225` is
+frankA's arity **probe**, so the line reads as *the probe broke the full tier*. It did not.
+
+**Measured: `2c5549642225` is blamed for ZERO open regressions.** All four are attributed to
+older commits:
+
+| job | blamed sha | what that sha is |
+| --- | --- | --- |
+| `tools-devtest#00` | `f3422cd14b99` | 2026-08-27 `fix(nilpy): a main-program class must not be visible inside a unit` |
+| `test-nilpy#…parent_call_after_instantiation` | `19dc5586e384` | 2026-08-27 `fix(nilpy): type a method call by the METHOD…` |
+| `test-nilpy#…startswith_tuple` | `19dc5586e384` | same |
+| `test-emit-obj#cxtensa_obj.c` | `32fba2082684` | a **docs-only** commit — tstate itself flags *"bad touches NO buildable file: it is the tested upper bound, not a lead"* |
+
+> **"RED (full) at sha X" MEANS THE TIER RUN AT X IS RED, NOT THAT X BROKE IT.** The sha is a
+> timestamp for the run, and it reads as an accusation.
+
+Relayed to frankA as *no action* rather than left to be discovered — it is mid-flight on defect
+B, and that one line would have pulled it off to chase someone else's bug. **Preventing a false
+alarm is dispatch work too.**
+
+**Composition worth noting: three of the four standing reds are Track N** — the lane the owner
+deprioritized and reserved. So the fleet's red count is dominated by an undispatched lane, and
+`pin verify` reports **0 new** against the v389 baseline. Not re-asking about N; recording that
+this is what the red number is made of.
+
+I also could not have called any of these "new": my earlier tick output was a truncated `tail`,
+so their absence there proves nothing. **A non-existence claim does not survive a tail.**
+
+### frankA landed defect B while I was reading the RED
+
+`6d2a841a1 fix(p): a method-pointer cast reads obj.M as a reference, not a call` and
+`2c155cce2 fix(a): lower a method reference in ADDRESS position — all 7 rows match FPC`.
+Note `2c155cce2` is a **Track A** fix — legitimate, frankA holds the A/P slot alone, and the
+combined-track rule lets it self-resolve rather than hand off.
+
+If all seven rows match FPC then the blocking divergence the arity check opened is closed, and
+wall 5 — the last wall — should be down. **Not asserting rung 6 is green:** that is frankA's
+probe to run on the pristine corpus, and the pristine-versus-stubbed lesson is three hours old.
+
+### Dispatch, one line each
+
+- **frankA** — busy, defect B / corpus, holds A/P. No change.
+- **frankwasm** — busy, triaging the memory bug per the ruling. No change.
+- **frankB** — idle by decision, four recorded triggers, none fired.
+- **pxx-a5** — holds; ceiling is two workers and both are busy. Expiry: a park line from frankA
+  or frankwasm (the retired idle-subscription is not coming back).
+- **frank-optimize-b4** — holds; Track O edits A's shared ground and frankA holds A/P. Expiry:
+  frankA releasing the lane, **not** a session slot.
