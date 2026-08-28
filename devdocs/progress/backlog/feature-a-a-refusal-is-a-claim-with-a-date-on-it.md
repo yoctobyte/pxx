@@ -310,3 +310,56 @@ the test.
 in the same places, and needs filing by the same rule. A coordinator who grants an exception
 without filing it has produced exactly the artefact this ticket family is about: a permission
 whose absence from the record is indistinguishable from its presence.
+
+---
+
+## FACE ELEVEN — a correction that did not travel to the copies
+
+A refusal read *"needs the heap, Phase 6."* Phase 6 shipped the heap. The refusal stayed
+**correct** and its stated **cause** stopped being true — what is actually missing is the
+dynamic-array LAYOUT (descriptor, refcount, length, element arithmetic, `SetLength`,
+copy-on-write), none of which the heap provides.
+
+The sharp part is not the stale reason — that is face five. It is that **the file already
+carried a note retiring that exact phrase**, written earlier by the same author when they found
+it was an assumed cause rather than a measured one. **It was retired in one place and left
+standing in two others**, including a calls note asserting that every builtin needs the heap
+while `SetLength` on a string lowers today.
+
+> **Correcting a wrong reason where you found it does not correct it where it was copied to.
+> Grep the phrase, not the site.**
+
+**This repo already has this rule for CODE** — `CLAUDE.md:338`, from
+`normalise-dont-special-case.md`: *"if you fix a bug on one arm of a double case, grep for the
+sibling before closing the ticket."* The finding is that it applies identically to **prose**:
+comments, refusal messages and stated causes get copied exactly like code paths do, and nothing
+greps them.
+
+Place it beside *"applied the rule to the code under test and not to the test"* rather than
+under it — that one is **a rule not carried across kinds**; this is **a correction not carried
+across copies.**
+
+---
+
+## A planning instance: a list of gap NAMES carries no magnitude
+
+Not a check, but the same disease in the artefact that orders work. Five gaps were reported as
+roughly comparable. Measured on `compiler.pas` compiled for wasm32 — 3647 bodies, 2056 lowered,
+1591 refused — they are not:
+
+| gap | share |
+| --- | --- |
+| dynamic-array family (incl. open-array params, `SetLength`, `Length` of a Pointer) | **83%** |
+| set membership `in` | 8% |
+| `IR_DEFAULT_MEM` | 7% |
+| record via `RetViaHiddenDest` | **5 lines** |
+
+**Record returns read as a peer of dynamic arrays on the name list and are five lines.**
+Ordering the phase off that list would have spent it on items worth under a percent each.
+
+And the label that hid it: `in` was reporting as **`builtin unrecognised (-999)`** — *the one
+label that tells a reader nothing about how big a gap is.* Named now and confirmed by repro
+(`if i in [1,2,3]`) rather than inferred from the constant.
+
+> **A list of gap names carries no magnitude, and magnitude is the only thing that orders
+> work.** Same shape as diff-versus-summary, pointed at planning.
