@@ -163,7 +163,26 @@ begin
 
   WTLn('(module');
 
-  { imports first — they define the low function index space }
+  { EVERY function type, declared explicitly and in our order, before anything
+    that uses one.
+
+    The inline `(param ...) (result ...)` forms below are an abbreviation: a
+    parser resolves each to the first DECLARED type that matches, appending a
+    new one only if none does. So declaring the whole table up front makes the
+    text's type numbering identical to the binary's by construction — where
+    before it was identical by coincidence, because the two happened to
+    interleave in the same order.
+
+    The coincidence broke on the first module with an import. An import must
+    precede the functions in the text, so its inline signature became the
+    parser's type 0, while in the binary it was interned wherever
+    WasmSigForProc reached it — and every `call_indirect (type N)`, which
+    carries a NUMBER, then named a different signature in the two modules. The
+    oracle caught it as a wall of type mismatches; nothing else would have. }
+  for i := 0 to WasmTypeCount - 1 do
+    WTLn('  (type (func' + WasmSigText(i) + '))');
+
+  { imports next — they define the low function index space }
   for i := 0 to WasmImpCount - 1 do
     WTLn('  (import "' + WasmImpModule[i] + '" "' + WasmImpName[i]
          + '" (func $' + WasmImpName[i] + WasmSigText(WasmImpType[i]) + '))');
@@ -186,7 +205,9 @@ begin
   begin
     WTLn('  (table ' + WasmIntTxt(WasmTabCount + 1) + ' funcref)');
     WT('  (elem (i32.const 1)');
-    for i := 0 to WasmTabCount - 1 do WT(' ' + WasmIntTxt(WasmTabElem[i]));
+    { Slots, biased past the imports — the same close the binary does. }
+    for i := 0 to WasmTabCount - 1 do
+      WT(' ' + WasmIntTxt(WasmIndexOfSlot(WasmTabElem[i])));
     WTLn(')');
   end;
 
@@ -248,7 +269,7 @@ begin
   for i := 0 to WasmExpCount - 1 do
     WTLn('  (export "' + WasmExpName[i] + '" ('
          + WasmExportKindName(WasmExpKind[i]) + ' '
-         + WasmIntTxt(WasmExpIdx[i]) + '))');
+         + WasmIntTxt(WasmExportIndex(i)) + '))');
 
   WTLn(')');
   WTFlush;

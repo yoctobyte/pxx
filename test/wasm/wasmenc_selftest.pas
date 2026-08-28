@@ -82,31 +82,31 @@ begin
     { 14 — the Phase 0 probe's answer, now produced by our own encoder }
     WasmI32Const(3);
     WasmI32Const(4);
-    WasmCall(WasmFuncIndex(fAddMul), 'addmul');
-    WasmCall(fPrint, 'print');
+    WasmCall(fAddMul, 'addmul');
+    WasmCallImport(fPrint, 'print');
     { signed LEB128, one byte, sign bit set }
     WasmI32Const(-1);
-    WasmCall(fPrint, 'print');
+    WasmCallImport(fPrint, 'print');
     { signed LEB128 across the 7-bit boundary in both directions }
     WasmI32Const(-64);
-    WasmCall(fPrint, 'print');
+    WasmCallImport(fPrint, 'print');
     WasmI32Const(-65);
-    WasmCall(fPrint, 'print');
+    WasmCallImport(fPrint, 'print');
     WasmI32Const(63);
-    WasmCall(fPrint, 'print');
+    WasmCallImport(fPrint, 'print');
     WasmI32Const(64);
-    WasmCall(fPrint, 'print');
+    WasmCallImport(fPrint, 'print');
     { multi-byte unsigned and the 32-bit extremes }
     WasmI32Const(123456789);
-    WasmCall(fPrint, 'print');
+    WasmCallImport(fPrint, 'print');
     WasmI32Const(-2147483648);
-    WasmCall(fPrint, 'print');
+    WasmCallImport(fPrint, 'print');
     WasmI32Const(2147483647);
-    WasmCall(fPrint, 'print');
+    WasmCallImport(fPrint, 'print');
     WasmBodyTerminate;
   WasmBodyEnd(fMain);
 
-  WasmAddExport('main', WEK_FUNC, WasmFuncIndex(fMain));
+  WasmAddExport('main', WEK_FUNC, fMain);
 
   WasmSaveModule(outBase + '.wasm');
   WasmWriteText(outBase + '.wat');

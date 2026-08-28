@@ -87,6 +87,8 @@ const
   MAX_WASM_BODY_VARS = 288;
   MAX_WASM_CODE      = 8 * 1024 * 1024;   { flattened body-instruction pool }
   MAX_WASM_IMPORTS   = 1024;
+  MAX_WASM_BODY_CALL = 65536;             { `call`s in one body }
+  MAX_WASM_CALLREL   = 262144;            { `call` operands awaiting relocation }
   MAX_WASM_EXPORTS   = 4096;
   MAX_WASM_GLOBALS   = 1024;
 
@@ -156,6 +158,35 @@ var
   WasmFuncText   : array[0..MAX_WASM_FUNCS-1] of AnsiString;
   WasmCodePool   : array[0..MAX_WASM_CODE-1] of Byte;
   WasmCodeLen    : Integer;
+
+  { ---- call relocations ----
+
+    A `call` operand is the callee's wasm function index, and for a DEFINED
+    function that index is WasmImpFuncCount + slot. WasmImpFuncCount is NOT
+    final while bodies are being emitted: an import is registered the first
+    time a call to that external routine is lowered, which is whenever the
+    frontend happens to reach it. Every call emitted before that point would
+    then be off by one — silently, and in the direction that matters, because
+    a wasm module whose call operands all shifted by one still VALIDATES.
+    Every callee has some signature, and enough of them match that the module
+    loads and calls the wrong function.
+
+    So a defined-function call operand is never written at emission time. It
+    goes out as a fixed-width 5-byte LEB placeholder plus a relocation, and
+    WasmPatchCalls fills every one of them in once the index space is closed.
+    Fixed width means the patch is in place and nothing moves.
+
+    Note WasmCall no longer ACCEPTS a function index — only a slot. That is
+    the point: the wrong form is not merely avoided here, it is unspellable.
+    An IMPORT's index needs no relocation (imports are numbered from zero in
+    registration order and never renumbered), and WasmCallImport is the one
+    place a raw index is still legal. }
+  WFCallPos      : array[0..MAX_WASM_BODY_CALL-1] of Integer;  { WFB offsets }
+  WFCallSlot     : array[0..MAX_WASM_BODY_CALL-1] of Integer;
+  WFCallLen      : Integer;
+  WasmCallRelPos : array[0..MAX_WASM_CALLREL-1] of Integer;    { pool offsets }
+  WasmCallRelSlot: array[0..MAX_WASM_CALLREL-1] of Integer;
+  WasmCallRelLen : Integer;
 
   { ---- the function table ----
 
@@ -301,10 +332,24 @@ begin
   Inc(WasmFuncCount);
 end;
 
-{ The wasm function INDEX of a defined function slot — imports come first. }
-function WasmFuncIndex(slot: Integer): Integer;
+{ The wasm function INDEX of a defined function slot — imports come first, so
+  the index is WasmImpFuncCount + slot.
+
+  This used to be a public WasmFuncIndex() that the backend called wherever it
+  needed an index, and every one of those calls was a latent bug: the value is
+  only correct if no further import is ever registered, and an import is
+  registered the first time a call to an external routine is lowered, which is
+  whenever the frontend happens to reach it. A module whose stored indices were
+  computed before that still VALIDATES and calls the wrong functions.
+
+  So the bias is applied in exactly one place — here — and only from the three
+  write-time emitters (calls, the element segment, the export table), each of
+  which runs after the index space is closed. Everything upstream stores a
+  SLOT. The function is deliberately not exported to the backend: a site that
+  wants an index has to be a write-time site to get one. }
+function WasmIndexOfSlot(slot: Integer): Integer;
 begin
-  WasmFuncIndex := WasmImpFuncCount + slot;
+  WasmIndexOfSlot := WasmImpFuncCount + slot;
 end;
 
 { Name a PARAMETER of the most recently added function. Call once per param, in
@@ -420,6 +465,7 @@ begin
   WFIndent := 4;
   WFLocLen := 0;
   WFVarLen := 0;
+  WFCallLen := 0;
 end;
 
 { Throw away the CODE emitted so far and keep the declarations. Used by the
@@ -431,6 +477,9 @@ begin
   WFBLen := 0;
   WFText := '';
   WFIndent := 4;
+  { The discarded bytes carried the relocations; keeping them would patch
+    whatever `unreachable` leaves behind. }
+  WFCallLen := 0;
 end;
 
 procedure WasmBodyB(b: Byte);
@@ -668,11 +717,29 @@ begin
   WasmText(t + ' ' + WasmIntStr(defaultDepth));
 end;
 
-procedure WasmCall(funcIndex: Integer; const nm: AnsiString);
+{ Call a DEFINED function by its slot. The operand is a placeholder; see the
+  call-relocation note above for why it cannot be computed here. }
+procedure WasmCall(slot: Integer; const nm: AnsiString);
+var i: Integer;
 begin
-  WasmBodyB($10); WasmBodyU32(funcIndex);
+  WasmBodyB($10);
+  if WFCallLen > High(WFCallPos) then WasmFail('wasm: too many calls in one body');
+  WFCallPos[WFCallLen] := WFBLen;
+  WFCallSlot[WFCallLen] := slot;
+  Inc(WFCallLen);
+  for i := 1 to 5 do WasmBodyB(0);
   if nm <> '' then WasmText('call $' + nm)
-  else WasmText('call ' + WasmIntStr(funcIndex));
+  else WasmText('call ' + WasmIntStr(slot));
+end;
+
+{ Call an IMPORTED function by its index. Imports are numbered from zero in
+  registration order and are never renumbered, so this operand is already
+  final — the one place a raw function index may be written into a body. }
+procedure WasmCallImport(impIndex: Integer; const nm: AnsiString);
+begin
+  WasmBodyB($10); WasmBodyU32(impIndex);
+  if nm <> '' then WasmText('call $' + nm)
+  else WasmText('call ' + WasmIntStr(impIndex));
 end;
 
 { An indirect call. The type index is CHECKED at run time against the callee's
@@ -735,6 +802,17 @@ begin
     Inc(WasmVarNameLen);
   end;
   if WasmCodeLen + WFBLen > MAX_WASM_CODE then WasmFail('wasm: code pool full');
+  { Rebase this body's call relocations from WFB offsets to pool offsets
+    BEFORE the bytes move, while WasmCodeLen still names where they land. }
+  if WasmCallRelLen + WFCallLen > MAX_WASM_CALLREL then
+    WasmFail('wasm: call-relocation table full');
+  for i := 0 to WFCallLen - 1 do
+  begin
+    WasmCallRelPos[WasmCallRelLen] := WasmCodeLen + WFCallPos[i];
+    WasmCallRelSlot[WasmCallRelLen] := WFCallSlot[i];
+    Inc(WasmCallRelLen);
+  end;
+  WFCallLen := 0;
   WasmFuncCodeOfs[slot] := WasmCodeLen;
   WasmFuncCodeLen[slot] := WFBLen;
   for i := 0 to WFBLen - 1 do
@@ -935,6 +1013,16 @@ begin
   WPatchSize(p, WBLen - p - 5);
 end;
 
+{ The wasm index an export entry names. Function exports store a SLOT (see
+  WasmIndexOfSlot); every other kind's index space has no imports in front of
+  it. Both the binary emitter and the .wat oracle read it from here, so the two
+  cannot disagree about the one thing the oracle exists to check. }
+function WasmExportIndex(i: Integer): Integer;
+begin
+  if WasmExpKind[i] = WEK_FUNC then WasmExportIndex := WasmIndexOfSlot(WasmExpIdx[i])
+  else WasmExportIndex := WasmExpIdx[i];
+end;
+
 procedure WasmEmitExportSection;
 var i, p: Integer;
 begin
@@ -946,13 +1034,34 @@ begin
   begin
     WOutName(WasmExpName[i]);
     WOutB(Byte(WasmExpKind[i]));
-    WOutU32(WasmExpIdx[i]);
+    WOutU32(WasmExportIndex(i));
   end;
   WPatchSize(p, WBLen - p - 5);
 end;
 
 { The code section. Each entry is size(locals + body); the locals vector is
   run-length compressed from the flat per-local pool. }
+
+{ Close the function index space: every recorded `call` placeholder becomes
+  WasmImpFuncCount + slot. Must run after the last import is registered and
+  before the code section is written; WasmEmitModule is the only caller. }
+procedure WasmPatchCalls;
+var i, j, pos: Integer; x: Int64; b: Byte;
+begin
+  for i := 0 to WasmCallRelLen - 1 do
+  begin
+    pos := WasmCallRelPos[i];
+    x := WasmIndexOfSlot(WasmCallRelSlot[i]);
+    for j := 0 to 4 do
+    begin
+      b := Byte(x and $7F);
+      x := x shr 7;
+      if j < 4 then b := b or $80;
+      WasmCodePool[pos + j] := b;
+    end;
+  end;
+end;
+
 procedure WasmEmitCodeSection;
 var i, j, p, bp, runStart, groups: Integer; vt: Byte;
 begin
@@ -991,13 +1100,14 @@ begin
   WPatchSize(p, WBLen - p - 5);
 end;
 
-{ Put a function in the table and return its INDEX. Slot 0 stays null, so the
-  first entry is index 1 and a zero read out of a VMT slot or a procedural
+{ Put a function in the table and return its TABLE index. Takes the function's
+  SLOT, not its wasm index — see WasmIndexOfSlot. Table slot 0 stays null, so
+  the first entry is index 1 and a zero read out of a VMT slot or a procedural
   variable is unambiguously "no function". }
-function WasmTableAdd(funcIndex: Integer): Integer;
+function WasmTableAdd(slot: Integer): Integer;
 begin
   if WasmTabCount >= MAX_WASM_FUNCS then WasmFail('wasm: function table full');
-  WasmTabElem[WasmTabCount] := funcIndex;
+  WasmTabElem[WasmTabCount] := slot;
   Inc(WasmTabCount);
   WasmTableAdd := WasmTabCount;      { = index, since slot 0 is reserved }
 end;
@@ -1033,7 +1143,8 @@ begin
   WOutS32(1);                    { offset — slot 0 stays null }
   WOutB(WOP_END);
   WOutU32(WasmTabCount);
-  for i := 0 to WasmTabCount - 1 do WOutU32(WasmTabElem[i]);
+  { WasmTabElem holds SLOTS; the index space closes here. }
+  for i := 0 to WasmTabCount - 1 do WOutU32(WasmIndexOfSlot(WasmTabElem[i]));
   WPatchSize(p, WBLen - p - 5);
 end;
 
@@ -1074,6 +1185,7 @@ begin
   WasmEmitGlobalSection;
   WasmEmitExportSection;
   WasmEmitElemSection;
+  WasmPatchCalls;
   WasmEmitCodeSection;
   WasmEmitDataSection;
 end;

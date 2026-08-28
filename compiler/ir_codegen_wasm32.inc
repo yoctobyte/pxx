@@ -286,6 +286,12 @@ var
     produced the IRTk planner/emitter split — one function, asked twice. }
   WasmProcTabIdx    : array[0..MAX_PROCS-1] of Integer;
 
+  { A proc's wasm IMPORT index, or -1 if it is not an external routine this
+    module has called. Memoised for the same reason WasmProcTabIdx is: an
+    import must be declared exactly once, and two sites deciding independently
+    would declare it twice. }
+  WasmProcImpIdx    : array[0..MAX_PROCS-1] of Integer;
+
   { Scratch i32 local for virtual dispatch, allocated on first use per body:
     Self is needed twice (as argument 0 and to load the VMT) and the operand
     stack only yields it once. -1 = not allocated in this body. }
@@ -307,6 +313,7 @@ begin
   begin
     WasmProcSlot[i] := -1;
     WasmProcTabIdx[i] := -1;
+    WasmProcImpIdx[i] := -1;
   end;
   WasmGSp := WasmAddGlobal('sp', WT_I32, True, 65536);
   WasmAddExport('sp', WEK_GLOBAL, WasmGSp);
@@ -1238,7 +1245,7 @@ begin
     WasmCallRtl := False;
     Exit;
   end;
-  WasmCall(WasmFuncIndex(WasmSlotForProc(p)), nm);
+  WasmCall(WasmSlotForProc(p), nm);
   WasmCallRtl := True;
 end;
 
@@ -1290,7 +1297,7 @@ begin
     WasmLocalGet(obj);                      { Self is parameter 0 }
     if not WasmEmitIndArgs(ctor, IRB[argNode], 1, 'constructor '
                            + Procs[ctor].Name) then Exit;
-    WasmCall(WasmFuncIndex(WasmSlotForProc(ctor)), Procs[ctor].Name);
+    WasmCall(WasmSlotForProc(ctor), Procs[ctor].Name);
     { A constructor's own return value is not the instance — the INSTANCE is,
       on every target. x86-64 saves Self across the call and returns it; here
       the saved copy is already in a local, so the ctor's result is dropped and
@@ -1424,8 +1431,48 @@ begin
   end;
 end;
 
+{ ===== host imports =====
+
+  `external 'lib' name 'sym'` and a wasm import are the same declaration. The
+  two-part name a wasm import needs — a MODULE and a FIELD — is exactly what
+  the Pascal form already carries and what the parser already records:
+  ProcLibrary is the module, ProcExtName the field (pasparser_proc.inc:1298).
+  Nothing had to be added to a shared file for this; both fields were already
+  there and populated, used until now only by the ELF writers.
+
+  That is what makes Phase 8's PAL a set of DECLARATIONS rather than a set of
+  backend special cases: the WASI surface is spelled in Pascal source.
+
+  A routine declared external but never called declares no import — and that is
+  load-bearing, not an optimisation. A wasm host must supply EVERY declared
+  import or instantiation fails, so a module declaring imports it does not use
+  is a module that will not load. `builtin.pas` alone declares more externals
+  than any wasm host provides. }
+function WasmImportIndex(p: Integer): Integer;
+var modName, fldName: AnsiString;
+begin
+  WasmImportIndex := -1;
+  if (p < 0) or (p >= MAX_PROCS) then
+  begin
+    WasmUnsupported('external proc index ' + WasmIntStr(p) + ' out of range');
+    Exit;
+  end;
+  if WasmProcImpIdx[p] < 0 then
+  begin
+    if ProcExtName[p] >= 0 then fldName := Strs[ProcExtName[p]].Text
+    else fldName := Procs[p].Name;
+    { No library clause: `env` is the module name wasm-ld defaults to and the
+      convention non-WASI host toolchains write. A WASI routine names its module
+      explicitly — external 'wasi_snapshot_preview1' name 'fd_write'. }
+    if ProcLibrary[p] >= 0 then modName := Strs[ProcLibrary[p]].Text
+    else modName := 'env';
+    WasmProcImpIdx[p] := WasmAddImportFunc(modName, fldName, WasmSigForProc(p));
+  end;
+  WasmImportIndex := WasmProcImpIdx[p];
+end;
+
 procedure WasmEmitCall(node: Integer; isStmt: Boolean);
-var p, argNode, i, nParams: Integer; pvt: Byte;
+var p, argNode, i, nParams, impIdx: Integer; pvt: Byte;
 begin
   p := IRA[node];
   if p < 0 then
@@ -1435,11 +1482,11 @@ begin
                     + 'index ' + WasmIntStr(p) + ')');
     Exit;
   end;
+  impIdx := -1;
   if (p < Length(ProcExternal)) and ProcExternal[p] then
   begin
-    WasmUnsupported('call to external ' + Procs[p].Name
-                    + ' — needs a wasm import, Phase 6');
-    Exit;
+    impIdx := WasmImportIndex(p);
+    if impIdx < 0 then Exit;
   end;
   nParams := Procs[p].ParamCount;
   argNode := IRB[node];
@@ -1472,7 +1519,8 @@ begin
                     + ' of ' + WasmIntStr(nParams) + ' parameters');
     Exit;
   end;
-  WasmCall(WasmFuncIndex(WasmSlotForProc(p)), Procs[p].Name);
+  if impIdx >= 0 then WasmCallImport(impIdx, Procs[p].Name)
+  else WasmCall(WasmSlotForProc(p), Procs[p].Name);
   { A function called for its side effect leaves its result on the operand
     stack, and wasm requires the stack to be empty at the end of a statement.
     `drop` is that requirement, not a tidy-up. }
@@ -1516,7 +1564,7 @@ begin
     Exit;
   end;
   if WasmProcTabIdx[p] < 0 then
-    WasmProcTabIdx[p] := WasmTableAdd(WasmFuncIndex(WasmSlotForProc(p)));
+    WasmProcTabIdx[p] := WasmTableAdd(WasmSlotForProc(p));
   WasmTableIndex := WasmProcTabIdx[p];
 end;
 
@@ -1777,6 +1825,157 @@ begin
   WasmBr(WasmDepthToExit(blk));
 end;
 
+{ ===== write / writeln =====
+
+  wasm has no syscall instruction, so there is no inline write to emit. That
+  turns out to cost nothing, because the RTL already contains a target-neutral
+  console-output family — PXXWriteNL / PXXWriteDecW / PXXWriteCharW /
+  PXXWriteBoolW / PXXWriteStrMW / PXXWriteFrozenW / PXXWriteCStr / PXXWritePad
+  in builtinheap.pas — written when hosted riscv32 hit the same wall, with the
+  comment "any backend could adopt them". This one does, unchanged.
+
+  They format into a local buffer and emit ONE PXXSysWrite, and they contain no
+  `write` STATEMENT, which is what stops this arm recursing into itself.
+
+  What they do NOT solve is the last inch: PXXSysWrite is an ifdef chain over
+  __pxxrawsyscall with an arm per target and NO CPU_WASM32 arm, so on this
+  target it returns 0 having written nothing. That is a shared file; see
+  bug-a-pxxsyswrite-has-no-wasm32-arm. Until it lands, `writeln` here lowers
+  correctly and prints nothing — which is why the slice asserts the silence
+  rather than the output, and will fail the day it stops being silent.
+
+  Argument types come from the CALLEE's declared parameters rather than being
+  assumed, exactly as WasmEmitCall does it: a helper parameter declared
+  NativeInt is i32 on wasm32 and i64 on a 64-bit target, and assuming either is
+  how an i32/i64 mismatch gets in without a diagnostic. }
+
+function WasmWriteHelper(const nm: AnsiString): Integer;
+begin
+  WasmWriteHelper := FindProc(nm);
+  if WasmWriteHelper < 0 then
+    WasmUnsupported('write: RTL helper ' + nm + ' not found');
+end;
+
+{ Push a compile-time integer as the callee's parameter i wants it. }
+procedure WasmWriteConstArg(p, i: Integer; v: Int64);
+var vt: Byte;
+begin
+  if not WasmParamValType(p, i, vt) then
+  begin
+    WasmUnsupported('write: parameter ' + WasmIntStr(i) + ' of '
+                    + Procs[p].Name + ' has no wasm value type');
+    Exit;
+  end;
+  if vt = WT_I64 then WasmI64Const(v) else WasmI32Const(v);
+end;
+
+{ Push an IR value as the callee's parameter i wants it. }
+procedure WasmWriteValueArg(p, i, valNode: Integer);
+var vt: Byte;
+begin
+  if not WasmParamValType(p, i, vt) then
+  begin
+    WasmUnsupported('write: parameter ' + WasmIntStr(i) + ' of '
+                    + Procs[p].Name + ' has no wasm value type');
+    Exit;
+  end;
+  WasmEmitValueAs(valNode, vt, 'write argument to ' + Procs[p].Name);
+end;
+
+procedure WasmEmitWrite(node: Integer);
+var
+  valNode, wid, decs, si, hp, scFrac, scExp: Integer;
+  sVal: AnsiString;
+  tk: TTypeKind;
+begin
+  if IRKind[node] = IR_WRITELN then
+  begin
+    hp := WasmWriteHelper('PXXWriteNL');
+    if hp < 0 then Exit;
+    WasmCall(WasmSlotForProc(hp), 'PXXWriteNL');
+    Exit;
+  end;
+
+  valNode := IRA[node];
+  wid  := IRB[node];      { field width, 0 = none }
+  decs := IRC[node];      { decimals; -1 none, -2 native float, -3 PChar }
+
+  { A literal is already a frozen string in Data[] — an 8-byte length prefix
+    followed by the chars — which is precisely PXXWriteFrozenW's argument, so
+    the padding and the write are one call rather than the two the register
+    backends need. }
+  if IRKind[valNode] = IR_CONST_STR then
+  begin
+    sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
+    si := InternStr(sVal);
+    hp := WasmWriteHelper('PXXWriteFrozenW');
+    if hp < 0 then Exit;
+    WasmDataAddr(Strs[si].Offset);
+    WasmWriteConstArg(hp, 1, wid);
+    WasmCall(WasmSlotForProc(hp), 'PXXWriteFrozenW');
+    Exit;
+  end;
+
+  if decs = -3 then
+  begin
+    hp := WasmWriteHelper('PXXWriteCStr');
+    if hp < 0 then Exit;
+    WasmWriteValueArg(hp, 0, valNode);
+    WasmCall(WasmSlotForProc(hp), 'PXXWriteCStr');
+    Exit;
+  end;
+
+  tk := IntToTypeKind(IRTk[node]);
+
+  if TypeIsFloat(tk) then
+  begin
+    { The float writers take the ADDRESS of a double, so the value has to be
+      spilled. Not yet done here — a shadow-stack temp of its own is a small
+      job and it is not what the milestone is about. Reported, not skipped. }
+    WasmUnsupported('write of a float — the RTL writers take a double by '
+                    + 'address and this arm does not spill one yet');
+    Exit;
+  end;
+
+  if tk = tyVariant then
+  begin
+    WasmUnsupported('write of a variant — needs the slot ADDRESS, not its '
+                    + 'value');
+    Exit;
+  end;
+
+  if tk = tyChar then hp := WasmWriteHelper('PXXWriteCharW')
+  else if tk = tyBoolean then hp := WasmWriteHelper('PXXWriteBoolW')
+  else if tk = tyAnsiString then hp := WasmWriteHelper('PXXWriteStrMW')
+  else if TypeIsFrozenString(tk) then hp := WasmWriteHelper('PXXWriteFrozenW')
+  else if TypeIsOrdinal(tk) or (tk = tyUnknown) then
+    hp := WasmWriteHelper('PXXWriteDecW')
+  else
+  begin
+    WasmUnsupported('write of type kind ' + WasmIntStr(IRTk[node])
+                    + ' has no RTL helper on this target');
+    Exit;
+  end;
+  if hp < 0 then Exit;
+
+  WasmWriteValueArg(hp, 0, valNode);
+  if Procs[hp].Name = 'PXXWriteDecW' then
+  begin
+    { (v: Int64; uns: NativeInt; wid: NativeInt) — `uns` decides how the 64-bit
+      pattern is read, and it must follow the value's OWN signedness, not the
+      helper parameter's. tyUnknown is treated as signed, as everywhere else. }
+    if (tk <> tyUnknown) and not TypeSigned(tk) then
+      WasmWriteConstArg(hp, 1, 1)
+    else
+      WasmWriteConstArg(hp, 1, 0);
+    WasmWriteConstArg(hp, 2, wid);
+  end
+  else
+    WasmWriteConstArg(hp, 1, wid);
+  if WasmBodyBroken then Exit;
+  WasmCall(WasmSlotForProc(hp), Procs[hp].Name);
+end;
+
 procedure WasmEmitStmt(node, blk: Integer);
 var pvt: Byte;
 begin
@@ -1789,6 +1988,7 @@ begin
     IR_VIRTUAL_CALL  : WasmEmitVirtualCall(node, True);
     IR_JUMP_IF_FALSE : WasmEmitJumpIfFalse(node, blk);
     IR_STORE_MEM     : WasmEmitStoreMem(node);
+    IR_WRITE, IR_WRITELN : WasmEmitWrite(node);
     IR_STORE_SYM :
       if WasmSlotType(IRA[node], pvt) then
       begin
@@ -2061,9 +2261,9 @@ begin
     the rest stay addressable rather than being dropped. }
   if WasmExportTaken(nm) then
     WasmAddExport(nm + '$' + WasmIntStr(WasmCurSlot), WEK_FUNC,
-                  WasmFuncIndex(WasmCurSlot))
+                  WasmCurSlot)
   else
-    WasmAddExport(nm, WEK_FUNC, WasmFuncIndex(WasmCurSlot));
+    WasmAddExport(nm, WEK_FUNC, WasmCurSlot);
 end;
 
 { Printed once, from the module writer, before the .wasm is saved. Unconditional
@@ -2158,12 +2358,13 @@ end;
 { Is this slot's function in the table — i.e. was it reserved because someone
   took its ADDRESS rather than because someone called it? }
 function WasmSlotInTable(slot: Integer): Boolean;
-var i, fi: Integer;
+var i: Integer;
 begin
   WasmSlotInTable := False;
-  fi := WasmFuncIndex(slot);
+  { WasmTabElem holds SLOTS — the wasm index space is not closed until the
+    module is written, so a slot is the only thing comparable here. }
   for i := 0 to WasmTabCount - 1 do
-    if WasmTabElem[i] = fi then
+    if WasmTabElem[i] = slot then
     begin
       WasmSlotInTable := True;
       Exit;
@@ -2220,11 +2421,11 @@ begin
   slot := WasmAddFunc('main', WasmAddType([], []));
   WasmBodyBegin;
   for i := 0 to WasmMainChunkCount - 1 do
-    WasmCall(WasmFuncIndex(WasmMainChunk[i]),
+    WasmCall(WasmMainChunk[i],
              'main$' + WasmIntStr(i));
   WasmBodyTerminate;
   WasmBodyEnd(slot);
-  WasmAddExport('main', WEK_FUNC, WasmFuncIndex(slot));
+  WasmAddExport('main', WEK_FUNC, slot);
 end;
 
 procedure writeWasm(const outPath: AnsiString);
