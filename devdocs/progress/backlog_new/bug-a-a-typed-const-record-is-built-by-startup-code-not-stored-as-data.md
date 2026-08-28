@@ -75,8 +75,8 @@ begin
 end.
 ```
 
-Correct natively (`11 4 8 7`). Compile it with `--target=wasm32 -dPXX_NOTHING`
-and dump the `.wat`: `R1`, `ARR` and `NEST` appear as `i32.store` sequences in
+Correct natively (`11 4 8 7`). Compile it with `--target=wasm32` to a `.wat` path
+: `R1`, `ARR` and `NEST` appear as `i32.store` sequences in
 top-level chunks, while `SIMPLE`'s bytes are in the data segment.
 
 ## Why the wasm lane cares, and why that does not change the track
