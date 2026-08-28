@@ -65,4 +65,4 @@ construct a too-eager fix would break. Fails on `pinned`; expectations from the
 FPC oracle.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit 2b60837ac.
