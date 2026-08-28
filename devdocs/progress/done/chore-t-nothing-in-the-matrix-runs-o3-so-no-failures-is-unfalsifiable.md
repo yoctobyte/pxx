@@ -5,7 +5,7 @@ track: T
 prio: 60
 type: chore
 blocked-by: []
-status: working
+status: done
 owner: "pxx-a5"
 created: 2026-08-28
 summary: "Premise refuted by measurement: optdiff.sh sweeps -O0 against -O2 and -O3 over all 1841 standalone test programs in 12 shards, has run 701 times (most recently today), has gone non-GREEN 30 times with named optdiff shard reds, and four -O3 bugs in done/ came from it. The real gap is narrower and still real: the opt tier is DISJOINT from quick/native/limited/full, runs only as idle watcher work, so only 690 of 2296 gate-verdict shas (30.1%) ever got -O3 coverage and nothing in a sha's verdict says whether it was one of them. Re-scoped to three cheap items. Track O found a real gap in the wrong mechanism."
@@ -70,22 +70,48 @@ and tier-composition gap, which is squarely T's tool.
 
 Three things, all cheap, none requiring a new harness:
 
-1. **`-O1` is genuinely unswept.** The level loop covers 2 and 3 only. O asked
-   for agreement across `-O0`/`-O1`/`-O2`/`-O3`, and `-O1` is the one level that
-   really has no coverage anywhere in the matrix. Adding it is a one-token
-   change; the cost is +50% optdiff wall, which matters because opt already runs
-   ~20 minutes per sweep. Size it before doing it — possibly `-O1` over a subset.
-2. **Verdict visibility.** A sha's report should state whether `opt` covered it,
-   and at which sha the last opt sweep landed. This is the actual fix for the
-   thing O correctly smelled: today "no `-O3` failures for this sha" and "opt has
-   not visited this sha" *do* produce identical evidence in the report, even
-   though they are distinguishable in the archive.
-3. **Corpus density, not a new job.** `w2stress.pas` is worth having — but as a
-   file in the test corpus, where the existing 12 shards sweep it automatically
-   at every level forever, not as a bespoke harness. Track O hands the program
-   over; no T machinery is needed to make it swept. This is the cheapest item and
-   probably the highest value for the register-pressure campaign specifically,
-   since the corpus is broad but not dense in in-place ALU shapes.
+1. **`-O1` is genuinely unswept.** — **DONE.** The level loop covered 2 and 3
+   only. O asked for agreement across `-O0`/`-O1`/`-O2`/`-O3`, and `-O1` was the
+   one level with no coverage anywhere in the matrix.
+   *Correction to my own estimate above:* I wrote "+50%", which was wrong.
+   optdiff does three compile+run passes today (the `-O0` baseline, then 2 and
+   3), so a fourth is **+33%** arithmetically. Measured on shard 0/60 with the
+   same binary both halves: **49.5s → 65.3s, +31.9%** — so the ~20 minute full
+   sweep becomes ~27. Confirmed on an independent slice (shard 7/60, 30
+   programs): `diff=0`, no `-O1` divergence.
+2. **Verdict visibility.** — **DONE.** A sha's report now states whether `opt`
+   covered it and, when it did not, how old the newest sweep is and which sha it
+   ran at. This is the actual fix for the thing O correctly smelled: "no `-O3`
+   failures for this sha" and "opt has not visited this sha" used to produce
+   identical evidence in the report even though they are distinguishable in the
+   archive.
+3. **Corpus density, not a new job.** — **handed to Track O.** `w2stress.pas` is
+   worth having, but as a file in the test corpus, where the existing 12 shards
+   sweep it automatically at every level forever, not as a bespoke harness. Track
+   O hands the program over; no T machinery is needed to make it swept. Filed as
+   `task-o-hand-w2stress-to-the-corpus-so-optdiff-sweeps-it`. It is the cheapest
+   item and probably the highest value for the register-pressure campaign
+   specifically, since the corpus is broad but not dense in in-place ALU shapes.
+
+# What landed
+
+| item | commit | evidence |
+| --- | --- | --- |
+| verdict attribution (`last_by_tier`, `last_run_at_tier`, the `-O3` report banner) | `ecacf87bd` | 12 guards in `tools/twatch_opt_coverage_devtest.py`; all three breaks mutation-tested |
+| `-O1` added to the sweep | this commit | shard 0/60 timed both ways, shard 7/60 confirms `diff=0` |
+| the `w2stress.pas` handover | — | Track O's, filed separately |
+
+The verdict-attribution change also closes a second hole found on the way: the
+existing BREADTH banner reads `last_full`, which is the last **replacing** run
+rather than the last `full` tier. Under the shipped default (`mid_tier ==
+deep_tier == full`) those coincide, so nothing is wrong today — but with
+`mid_tier` configured to `limited`, a `limited` run would refresh `last_full`
+and silence a breadth warning while covering no cross target. `last_by_tier`
+answers that question exactly, and is one mechanism for both.
+
+Note the daemon runs the code it STARTED with, so the report banner appears
+only after the next watcher restart; `-O1` is read from the working tree per
+sweep and takes effect on the next `opt` phase.
 
 # What this does to the -O2 promotion gate
 
@@ -132,3 +158,6 @@ the last opt run as `2026-07-31`. The NDJSON archive is not date-ordered across
 hosts, and a `tail` of the concatenation is not a chronological tail. Sorting by
 `date` gives today. Same failure family as the rest of this ticket — a
 convenient read of an inventory, taken for the inventory.
+
+## Log
+- 2026-08-28 — resolved, commit PENDING-COMMIT.

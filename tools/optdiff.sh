@@ -3,7 +3,7 @@
 # optdiff.sh — O-level differential sweep (Track T, testmgr --tier opt).
 #
 # Every standalone-runnable test program (test/*.pas, test/*.c) must behave
-# identically at -O0 / -O2 / -O3: same stdout+stderr, same exit code. A DIFF
+# identically at -O0 / -O1 / -O2 / -O3: same stdout+stderr, same exit code. A DIFF
 # is the silent-miscompile class this sweep exists to catch — highest
 # severity Track T can detect. Port of the manual v196 promotion harness
 # (feature-testmgr-opt-tier-and-benchmarks).
@@ -98,7 +98,18 @@ for t in $FILES; do
     skip=$((skip + 1)); skip_timeout="$skip_timeout $b"; continue
   fi
   ok=1
-  for L in 2 3; do
+  # -O1 was the one level with no coverage anywhere in the matrix: the gate
+  # tiers compile at the default -O, and this sweep skipped straight from the
+  # -O0 baseline to -O2. Track O asked for four-level agreement
+  # (chore-t-nothing-in-the-matrix-runs-o3-so-no-failures-is-unfalsifiable) and
+  # this is the half of that ask which was genuinely missing.
+  #
+  # Measured cost 2026-08-28 on shard 0/60, same binary both halves:
+  # 49.5s -> 65.3s, +32% -- the 3-compiles-to-4 ratio, as predicted, so the
+  # ~20min full sweep becomes ~27min. It lands only on idle watcher cycles and
+  # the tier stays preemptible, which is why this is a tier-composition change
+  # rather than a request. Revert by dropping the 1.
+  for L in 1 2 3; do
     # shellcheck disable=SC2086  # CF is a flag list, split on purpose
     if ! "./$CC" $CF "-O$L" "$t" "$TMP/d$L" >/dev/null 2>&1; then
       echo "OPT COMPILE-DIFF -O$L: $t"

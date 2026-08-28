@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| chore-t-nothing-in-the-matrix-runs-o3-so-no-failures-is-unfalsifiable | T | 60 | chore | Premise refuted by measurement: optdiff.sh sweeps -O0 against -O2 and -O3 over all 1841 standalone test programs in 12 shards, has run 701 times (most recently today), has gone non-GREEN 30 times with named optdiff shard reds, and four -O3 bugs in done/ came from it. The real gap is narrower and still real: the opt tier is DISJOINT from quick/native/limited/full, runs only as idle watcher work, so only 690 of 2296 gate-verdict shas (30.1%) ever got -O3 coverage and nothing in a sha's verdict says whether it was one of them. Re-scoped to three cheap items. Track O found a real gap in the wrong mechanism. | — |
 | feature-pascal-corpus-expansion | P | 75 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 
 ## unfinished (22)
@@ -52,7 +51,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
 
-## backlog (295)
+## backlog (296)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -350,6 +349,7 @@ _none_
 | task-d-document-own-language-first-in-the-language-reference | D | 15 | task | The user-facing half of the name-resolution rules: 'a name from your own language wins, and an explicit foreign import overrides it'. Internal map is devdocs/dev/name-resolution.md; the language reference says nothing. Blocked until the symbol rule is actually built — documenting behaviour the compiler does not have is worse than documenting nothing. | feature-a-own-language-first-symbol-resolution |
 | task-d-document-the-strict-overload-width-flag | D | 20 | task | `--strict-overload-width` shipped 2026-08-15 with no row in docs/reference/cli.md, modes.md or directives.md. One table row each, plus the one sentence that explains why it is standalone rather than part of the --strict-fpc umbrella. | — |
 | task-d-document-warn-ignored-directives | D | 20 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
+| task-o-hand-w2stress-to-the-corpus-so-optdiff-sweeps-it | A | 40 | task | Track O wrote w2stress.pas for c93292fe4 and asked for a bespoke four-level agreement harness to run it. The harness already exists -- tools/optdiff.sh sweeps every standalone test program at -O0/-O1/-O2/-O3 in 12 shards -- so the program only needs to land in the corpus to be swept forever, with no new machinery. Cheapest item of the three the -O3 ticket resolved into, and the one with the most value for the register-pressure campaign, since the corpus is broad but not dense in in-place ALU shapes. | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
 ## backlog_new (6)
@@ -592,9 +592,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2561)
+## done (2562)
 
-2561 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2562 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (46)
 
@@ -821,6 +821,7 @@ _none_
 - [p 40] [C] refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag
 - [p 40] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
 - [p 40] [A] task-a-add-fu-to-the-compiler-usage-line
+- [p 40] [A] task-o-hand-w2stress-to-the-corpus-so-optdiff-sweeps-it
 - [p 35] [A] bug-a-a-typed-const-record-is-built-by-startup-code-not-stored-as-data
 - [p 35] [A] bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error
 - [p 35] [A] bug-a-lowercase-resolves-to-two-different-routines-depending-on-the-seed
