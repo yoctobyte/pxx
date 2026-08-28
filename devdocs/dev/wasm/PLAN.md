@@ -375,7 +375,7 @@ Measured at `f2c0ca849` against `phase4_slice.pas`, 22 unlowered bodies:
 by an order of magnitude.** The indirect-call table is worth nine bodies, the
 VMT path one — and the VMT path falls out of the same mechanism for free.
 
-## Phase 6 — the heap **(moved ahead of exceptions, 2026-08-28)**
+## Phase 6 — the heap — **backend side DONE 2026-08-28; blocked on one Track A ticket**
 
 `PXXAlloc` and its siblings: the builtin lowerings spelled as a NEGATIVE proc
 index on `IR_CALL` (`-Ord(tkGetMem)` and friends), plus `memory.grow` as the
@@ -405,18 +405,48 @@ because it is boring.
   begins with a class instantiation. So this milestone is stated as *the
   previous phase's unfinished half becoming true*, which is a milestone nothing
   can satisfy by deleting a message.
+  **Met on the wasm side, and NOT met as a phase.** All 7 values match. Virtual
+  dispatch, `inherited`, dispatch through a base type, and construction all
+  work — **on a heap that starts at address 0.**
+- **The heap was not what blocked the heap, and my own diagnostic said it was.**
+  Every unlowered builtin printed `needs the heap`. That was assumed from the
+  two members of the set that are true (`GetMem`, `FreeMem`) and it was wrong
+  for the ones that mattered: `PXXAlloc` itself was blocked on an `Integer()`
+  CAST, and the write path on `Trunc`. Both are cheap, neither is the heap,
+  and the message asserted a cause in a report that is then read as evidence.
+  **A diagnostic that names a CAUSE is asserting a root cause**; it now names
+  the BUILTIN. Found by dumping the IR rather than believing the message.
+- **`HeapMmap` has no wasm32 arm** — a per-target `{$ifdef}` chain that matches
+  nothing, so `Result` is unassigned and returns 0. `PXXAlloc` does not check
+  it, deliberately: on a hosted target a failed `mmap` returns a negative errno
+  and the next access faults. **Linear memory has nothing to fault on** —
+  address 0 is legal, loads return zero, no page protection — so the allocator
+  bumps from 0 and hands out 8, 32, 56. Measured, correct, and correct only
+  until ~1 KB, after which it overwrites BSS at 1024.
+  **This is the shared-file escape this plan predicted for a later phase,
+  arriving here.** `compiler/builtin/builtinheap.pas`, one additive arm with
+  the shape `PXX_ESP` already has. Filed, not fixed:
+  [[bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero]]
+  (prio 70). `check_calls.sh` asserts the limitation is **still exactly this
+  one** — it fails if the heap starts working, because that means the ticket
+  landed and the block is stale.
 - **Second milestone:** `writeln` of an integer, diffed against native. That is
   `IR_WRITE` plus `PXXWriteUIntD`, both heap-blocked today, and it is the point
   at which a wasm program can report its own answer instead of being
   interrogated through exports.
-- **Scope note.** A bump allocator over linear memory with `memory.grow` and no
-  reuse is the classic bring-up answer and is NOT throwaway — it is genuinely
-  how a wasm heap starts. But `Free` becoming a no-op is a decision with
-  consequences for the RTL's refcounting, so state which allocator is being
-  built and why, in the file, at the top. Do not let "temporary" be implied.
-- **Still in our own files.** Builtin lowering is backend work; the RTL side is
-  Track B's `lib/rtl`, and if this phase needs something there it is a Track B
-  ticket, not an edit.
+- **Scope note, and it did not survive contact.** The plan expected to write a
+  bump allocator. **There was nothing to write:** `PXXAlloc(size, align)` is an
+  ordinary Pascal routine in the builtin unit and every backend simply calls
+  it — the x86-64 path spends its lines saving registers around that call,
+  which is the whole of what this target does not have to do. What the backend
+  owes is the four steps *after* the allocation (store the VMT pointer, run the
+  constructor, return the instance, not the constructor's own result), and
+  those are the same on every target. `memory.grow` never came into it.
+- **A fresh scratch local per allocation SITE, not one per body.** `z[0] :=
+  A.Create; z[1] := B.Create` is three sites in one body, and a constructor
+  argument may itself allocate — a shared local is clobbered by the inner
+  allocation between the outer store and the outer read. One local per site is
+  correct by construction and costs a locals-vector entry.
 
 ## Phase 7 — exceptions **(the one remaining shared-file escape)**
 
@@ -531,3 +561,13 @@ smaller than the C frontend was.
   now stated as a rule rather than an incident. The heap was not a phase at
   all — one line inside the PAL phase — while being the only thing blocking
   class instantiation, `writeln`, variants and the float writers.
+- 2026-08-28 — **Phase 6 backend side done; the phase is blocked on one Track A
+  ticket.** Casts, `Ord`, `Trunc`/`Round`, `GetMem` and `FreeMem` all lower;
+  virtual dispatch, `inherited` and construction match the native build 7 of 7.
+  Two findings worth more than the code. First: **my own coverage message was a
+  guess** — `needs the heap` on every unlowered builtin, when `PXXAlloc` was
+  blocked on an `Integer()` cast and the write path on `Trunc`. I relayed it as
+  a measurement. Diagnostics now name the builtin, not a cause. Second: the
+  heap allocates **from address 0**, works, passes a 7-value differential, and
+  corrupts BSS above ~1 KB — the failure this target's own null-guard note
+  predicted in writing and nobody connected until it happened.

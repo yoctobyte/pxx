@@ -66,23 +66,79 @@ fi
 
 sh "$here/wat_oracle.sh" "$root/compiler/pascal26" "$here/calls_slice.pas" "$work" c
 
-# ---- virtual dispatch: compiled and validated, NOT yet run ----------------
-# Every routine in virtual_slice.pas begins with a class instantiation, which is
-# a heap allocation, and the heap is a later phase. So this half asserts what
-# can honestly be asserted today — the VMT path emits, no body here is
-# unreachable for a DISPATCH reason, and the module validates — and says
-# plainly that it does not assert dispatch. A check that went green here while
-# proving less than it looks like is the failure mode this whole suite exists
-# to avoid.
+# ---- virtual dispatch, interfaces, construction ---------------------------
+"$root/compiler/pascal26" "$here/virtual_slice.pas" "$work/vnative" >/dev/null
+"$work/vnative" > "$work/vnative.txt"
 "$root/compiler/pascal26" --target=wasm32 -dWASM_NOMAIN \
     "$here/virtual_slice.pas" "$work/v.wasm" > "$work/vcov.txt" 2>&1
 wasm-validate "$work/v.wasm"
 if grep -E '^    (TAnimal|TBird|TPenguin)\.' "$work/vcov.txt" > "$work/vbad.txt"; then
   echo "FAIL a virtual method was emitted as unreachable:"; cat "$work/vbad.txt"; exit 1
 fi
-echo "ok  virtual_slice compiles and validates; every method body lowered"
-echo "..  NOT RUN: class instantiation needs the heap (a later phase). This"
-echo "..  proves the VMT path emits and type-checks, not that it dispatches."
+
+cat > "$work/vrun.js" <<'JS'
+const fs = require('fs');
+const inst = new WebAssembly.Instance(
+  new WebAssembly.Module(fs.readFileSync(process.argv[2])), {});
+const e = inst.exports;
+const out = [
+  e.AnimalLegs(), e.BirdLegs(),
+  e.BirdSpeakViaBase(), e.PenguinSpeak(),
+  e.BirdDescribe(), e.PenguinDescribe(),
+  e.TotalSpeak(),
+];
+process.stdout.write(out.join('\n') + '\n');
+JS
+
+node "$work/vrun.js" "$work/v.wasm" > "$work/vwasm.txt"
+if diff -u "$work/vnative.txt" "$work/vwasm.txt"; then
+  echo "ok  virtual dispatch matches the native build (7 values)"
+else
+  echo "FAIL virtual dispatch diverges from native"; exit 1
+fi
+
+# ---- and the limitation that green does NOT cover -------------------------
+# Everything above passes on a heap that starts at ADDRESS ZERO. HeapMmap has
+# no wasm32 arm, so it returns 0, and PXXAlloc does not check it — deliberately,
+# because on a hosted target a failed mmap returns a negative errno and the next
+# access faults. Linear memory has nothing to fault on: address 0 is legal,
+# loads return zero, there is no page protection. So allocation works and stays
+# correct until roughly 1 KB, and then overwrites BSS.
+#
+# This is asserted rather than commented, and it is asserted as the CURRENT
+# state: the check fails if the heap silently starts working, because that means
+# the ticket landed and this block is stale. Green here means "the known
+# limitation is still exactly this one", which is the only honest thing a test
+# can say about a defect it cannot fix.
+#   bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero
+cat > "$work/heap.pas" <<'PAS'
+program HeapProbe;
+type TA = class Code: Integer; end;
+var a: TA;
+function Addr1: Integer; begin a := TA.Create; a.Code := 11; Addr1 := Integer(a); end;
+begin
+end.
+PAS
+"$root/compiler/pascal26" --target=wasm32 "$work/heap.pas" "$work/heap.wasm" >/dev/null 2>&1
+cat > "$work/heap.js" <<'JS'
+const fs = require('fs');
+const inst = new WebAssembly.Instance(
+  new WebAssembly.Module(fs.readFileSync(process.argv[2])), {});
+process.stdout.write(String(inst.exports.Addr1()) + '\n');
+JS
+addr=$(node "$work/heap.js" "$work/heap.wasm")
+if [ "$addr" -lt 1024 ]; then
+  echo "ok  KNOWN LIMITATION unchanged: first allocation at $addr, below the"
+  echo "..  1024-byte guard — the heap has no arena and bumps from 0."
+  echo "..  bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero"
+  echo "..  Everything above passed ON THAT HEAP. It is correct under ~1 KB and"
+  echo "..  overwrites BSS after."
+else
+  echo "FAIL the heap now allocates at $addr — above the guard."
+  echo "     That means the HeapMmap ticket landed. Delete this block, and turn"
+  echo "     the assertion into a real one: allocations must clear BSS entirely."
+  exit 1
+fi
 
 # A POSITIVE sentinel, last line, reachable only after every check above
 # passed: `set -e` kills the script before here on any failure. check_all.sh
