@@ -157,6 +157,17 @@ var
   WasmCodePool   : array[0..MAX_WASM_CODE-1] of Byte;
   WasmCodeLen    : Integer;
 
+  { ---- the function table ----
+
+    One table of funcref, and one active element segment filling it from index
+    1. Index 0 is left UNINITIALISED on purpose: an MVP table element that no
+    segment writes is null, and `call_indirect` through a null element traps.
+    That is exactly what a call through a nil procedural variable should do,
+    and it costs nothing — no reserved dummy function, no explicit compare at
+    every indirect call site. }
+  WasmTabElem    : array[0..MAX_WASM_FUNCS-1] of Integer;  { table[i+1] = this func index }
+  WasmTabCount   : Integer;
+
   { ---- the data segment ----
 
     One active segment at WasmDataSegBase. The bytes are a COPY, made at write
@@ -215,6 +226,7 @@ begin
   WasmGlobCount := 0;
   WasmExpCount := 0;
   WasmDataSegLen := 0; WasmDataSegBase := 0;
+  WasmTabCount := 0;
 end;
 
 { Intern a signature. Returns its type index, reusing an identical one — the
@@ -530,6 +542,17 @@ begin
   else WasmText('local.set ' + WasmIntStr(idx));
 end;
 
+{ Set a local AND leave its value on the operand stack — the one instruction
+  that lets a value be consumed twice without being recomputed. }
+procedure WasmLocalTee(idx: Integer);
+var nm: AnsiString;
+begin
+  WasmBodyB($22); WasmBodyU32(idx);
+  nm := WasmVarNameOf(idx);
+  if nm <> '' then WasmText('local.tee $' + nm)
+  else WasmText('local.tee ' + WasmIntStr(idx));
+end;
+
 procedure WasmGlobalGet(idx: Integer);
 begin
   WasmBodyB($23); WasmBodyU32(idx);
@@ -650,6 +673,16 @@ begin
   WasmBodyB($10); WasmBodyU32(funcIndex);
   if nm <> '' then WasmText('call $' + nm)
   else WasmText('call ' + WasmIntStr(funcIndex));
+end;
+
+{ An indirect call. The type index is CHECKED at run time against the callee's
+  actual signature, so a table entry of the wrong shape traps instead of
+  reinterpreting the operand stack — the one place wasm gives us a guarantee a
+  register target has to buy with a convention. }
+procedure WasmCallIndirect(typeIndex: Integer);
+begin
+  WasmBodyB($11); WasmBodyU32(typeIndex); WasmBodyB($00);   { table index 0 }
+  WasmText('call_indirect (type ' + WasmIntStr(typeIndex) + ')');
 end;
 
 procedure WasmDrop;
@@ -958,6 +991,52 @@ begin
   WPatchSize(p, WBLen - p - 5);
 end;
 
+{ Put a function in the table and return its INDEX. Slot 0 stays null, so the
+  first entry is index 1 and a zero read out of a VMT slot or a procedural
+  variable is unambiguously "no function". }
+function WasmTableAdd(funcIndex: Integer): Integer;
+begin
+  if WasmTabCount >= MAX_WASM_FUNCS then WasmFail('wasm: function table full');
+  WasmTabElem[WasmTabCount] := funcIndex;
+  Inc(WasmTabCount);
+  WasmTableAdd := WasmTabCount;      { = index, since slot 0 is reserved }
+end;
+
+procedure WasmEmitTableSection;
+var p: Integer;
+begin
+  if WasmTabCount = 0 then Exit;
+  WOutB(WSEC_TABLE);
+  { Placeholder-and-patch like every other section here. Computing the length
+    by hand looks safe for a payload this small and is not: the count is a
+    variable-length LEB, so the arithmetic is wrong for every module with more
+    than 127 table entries and right for every test small enough to write by
+    hand. }
+  p := WOutSizePlaceholder;
+  WOutU32(1);                    { one table }
+  WOutB($70);                    { funcref }
+  WOutB($00);                    { limits: min only }
+  WOutU32(WasmTabCount + 1);     { +1 for the reserved null slot }
+  WPatchSize(p, WBLen - p - 5);
+end;
+
+{ The element section: one active segment at table offset 1. }
+procedure WasmEmitElemSection;
+var i, p: Integer;
+begin
+  if WasmTabCount = 0 then Exit;
+  WOutB(WSEC_ELEM);
+  p := WOutSizePlaceholder;
+  WOutU32(1);                    { one segment }
+  WOutU32(0);                    { table index 0 }
+  WOutB(WOP_I32_CONST);
+  WOutS32(1);                    { offset — slot 0 stays null }
+  WOutB(WOP_END);
+  WOutU32(WasmTabCount);
+  for i := 0 to WasmTabCount - 1 do WOutU32(WasmTabElem[i]);
+  WPatchSize(p, WBLen - p - 5);
+end;
+
 { The data section. One ACTIVE segment: memory index 0, an `i32.const` offset
   expression, then the raw bytes. Active rather than passive because a passive
   segment needs `memory.init` from bulk-memory and an explicit start function to
@@ -990,9 +1069,11 @@ begin
   WasmEmitTypeSection;
   WasmEmitImportSection;
   WasmEmitFuncSection;
+  WasmEmitTableSection;
   WasmEmitMemorySection;
   WasmEmitGlobalSection;
   WasmEmitExportSection;
+  WasmEmitElemSection;
   WasmEmitCodeSection;
   WasmEmitDataSection;
 end;

@@ -177,6 +177,19 @@ begin
       WTLn(WasmIntTxt(WasmMemMin) + ')');
   end;
 
+  { The function table and its one element segment. Numeric function indices
+    rather than $names: the element list already holds indices (imports
+    included), and rendering them as names would mean inventing the mapping a
+    second time — the WAT is an oracle for the binary, so it says what the
+    binary says. Slot 0 is skipped; the segment starts at 1. }
+  if WasmTabCount > 0 then
+  begin
+    WTLn('  (table ' + WasmIntTxt(WasmTabCount + 1) + ' funcref)');
+    WT('  (elem (i32.const 1)');
+    for i := 0 to WasmTabCount - 1 do WT(' ' + WasmIntTxt(WasmTabElem[i]));
+    WTLn(')');
+  end;
+
   for gi := 0 to WasmGlobCount - 1 do
   begin
     WT('  (global $' + WasmGlobName[gi]);

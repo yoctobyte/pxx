@@ -279,6 +279,18 @@ var
   WasmMainChunk     : array[0..MAX_WASM_MAIN_CHUNKS-1] of Integer;
   WasmMainChunkCount: Integer;
 
+  { A proc's index in the function table, or -1 if its address has never been
+    taken. Memoised because BOTH consumers must agree: the IR_PROCADDR arm,
+    which emits it as a value, and the MethodFixups loop, which writes it into a
+    VMT slot. Two sites deriving the same index separately is the shape that
+    produced the IRTk planner/emitter split — one function, asked twice. }
+  WasmProcTabIdx    : array[0..MAX_PROCS-1] of Integer;
+
+  { Scratch i32 local for virtual dispatch, allocated on first use per body:
+    Self is needed twice (as argument 0 and to load the VMT) and the operand
+    stack only yields it once. -1 = not allocated in this body. }
+  WasmLocalSelf     : Integer;
+
 procedure WasmBeginModuleOnce;
 var i: Integer;
 begin
@@ -291,7 +303,11 @@ begin
   WasmAddExport('memory', WEK_MEM, 0);
   { The shadow-stack pointer. Exported so a harness can assert it balances —
     the property the Phase 5 prototype leans on. }
-  for i := 0 to MAX_PROCS - 1 do WasmProcSlot[i] := -1;
+  for i := 0 to MAX_PROCS - 1 do
+  begin
+    WasmProcSlot[i] := -1;
+    WasmProcTabIdx[i] := -1;
+  end;
   WasmGSp := WasmAddGlobal('sp', WT_I32, True, 65536);
   WasmAddExport('sp', WEK_GLOBAL, WasmGSp);
   { Immutable, and its initialiser is back-filled by WasmFinishMemory once
@@ -838,6 +854,20 @@ begin
                          WasmNodeResultType := Procs[IRA[node]].RetType
                        else
                          WasmNodeResultType := IntToTypeKind(IRTk[node]);
+    { Same rule for the indirect forms — the type comes from the SIGNATURE, and
+      the signature is where the call's shape came from. They differ only in
+      which field holds the proc: IRIVal for an indirect call, IRC for a
+      virtual one. A table index is a pointer-sized value, nothing more. }
+    IR_CALL_IND      : if (Integer(IRIVal[node]) >= 0)
+                          and (Integer(IRIVal[node]) < MAX_PROCS) then
+                         WasmNodeResultType := Procs[Integer(IRIVal[node])].RetType
+                       else
+                         WasmNodeResultType := IntToTypeKind(IRTk[node]);
+    IR_VIRTUAL_CALL  : if (IRC[node] >= 0) and (IRC[node] < MAX_PROCS) then
+                         WasmNodeResultType := Procs[IRC[node]].RetType
+                       else
+                         WasmNodeResultType := IntToTypeKind(IRTk[node]);
+    IR_PROCADDR      : WasmNodeResultType := tyPointer;
     IR_BINOP :
       if WasmIsCompare(WasmBinopOp(node)) then
         WasmNodeResultType := tyBoolean
@@ -992,6 +1022,9 @@ begin
     IR_LOAD_MEM  : WasmEmitLoadMem(node);
     IR_NEG       : WasmEmitUnary(node, True);
     IR_NOT       : WasmEmitUnary(node, False);
+    IR_PROCADDR  : WasmEmitProcAddr(node);
+    IR_CALL_IND  : WasmEmitCallInd(node, False);
+    IR_VIRTUAL_CALL : WasmEmitVirtualCall(node, False);
   else
     WasmUnsupported('value IR op ' + WasmIntStr(IRKind[node]));
   end;
@@ -1157,6 +1190,177 @@ begin
   if isStmt and Procs[p].IsFunc then WasmOp($1A, 'drop');
 end;
 
+{ ===== indirect calls =====
+
+  wasm has no code addresses. A function is reachable through a `call` (a
+  static index) or through a `call_indirect` (a runtime index into a table),
+  and nothing in the language turns a function into a number you can do
+  arithmetic on. So `@Proc`, a procedural variable, a VMT slot and an RTTI
+  method entry all become the same thing here: a TABLE INDEX.
+
+  That is a smaller change than it sounds, and the reason is worth stating
+  because the plan predicted otherwise. The frontends never write a code
+  address into `Data[]` — they cannot, because no address exists while `Data[]`
+  is being built. They record a RELOCATION (`AddMethodFix`, emit.inc:103, the
+  one append point) and the writer resolves it. The ELF writers resolve it to
+  `entry + BodyAddr`; this backend resolves it to a table index. Same list,
+  same shape, different meaning, and no shared file has to know.
+
+  Phase 0 checked the one thing that could have made indices unusable: whether
+  any code ORDERS or does arithmetic on a procedure address. `lib/rtl/
+  scheduler.pas` is the only place, and it is the coroutine stack-frame builder
+  — already out of scope for this target.
+
+  Index 0 is never handed out. An MVP table element that no segment writes is
+  null and `call_indirect` through it traps, so a nil procedural variable — a
+  zeroed VMT slot, an uninitialised procvar — traps on call for free, with no
+  reserved dummy function and no explicit compare at the call site. }
+
+{ A proc's table index, assigned on first demand. THE one place a proc becomes
+  an index; both consumers ask here rather than deriving it. }
+function WasmTableIndex(p: Integer): Integer;
+begin
+  if (p < 0) or (p >= MAX_PROCS) then
+  begin
+    WasmUnsupported('proc index ' + WasmIntStr(p) + ' out of range');
+    WasmTableIndex := 0;
+    Exit;
+  end;
+  if WasmProcTabIdx[p] < 0 then
+    WasmProcTabIdx[p] := WasmTableAdd(WasmFuncIndex(WasmSlotForProc(p)));
+  WasmTableIndex := WasmProcTabIdx[p];
+end;
+
+{ `@Proc` — the address of a routine, as a table index. }
+procedure WasmEmitProcAddr(node: Integer);
+begin
+  WasmI32Const(WasmTableIndex(IRA[node]));
+end;
+
+{ The arguments of an indirect or virtual call, pushed in order, starting at
+  parameter `startIdx` — 0 for an ordinary indirect call, 1 for a virtual one
+  whose Self has already been emitted and teed. Shared by both because the
+  marshalling is identical (wasm has no calling convention to differ over), and
+  because a caller and a callee that count parameters separately can disagree,
+  which wasm reports at the CALLER. }
+function WasmEmitIndArgs(sigProc, firstArg, startIdx: Integer;
+                         const what: AnsiString): Boolean;
+var argNode, i, nParams: Integer; pvt: Byte;
+begin
+  WasmEmitIndArgs := False;
+  nParams := Procs[sigProc].ParamCount;
+  argNode := firstArg;
+  i := startIdx;
+  while (argNode <> -1) and (not WasmBodyBroken) do
+  begin
+    if i >= nParams then
+    begin
+      WasmUnsupported(what + ' passes more than its ' + WasmIntStr(nParams)
+                      + ' parameters');
+      Exit;
+    end;
+    if not WasmParamValType(sigProc, i, pvt) then
+    begin
+      WasmUnsupported('argument ' + WasmIntStr(i) + ' of ' + what
+                      + ' has no wasm value type');
+      Exit;
+    end;
+    WasmEmitValueAs(IRA[argNode], pvt, 'argument to ' + what);
+    Inc(i);
+    argNode := IRB[argNode];
+  end;
+  if WasmBodyBroken then Exit;
+  if i <> nParams then
+  begin
+    WasmUnsupported(what + ' passes ' + WasmIntStr(i) + ' of '
+                    + WasmIntStr(nParams) + ' parameters');
+    Exit;
+  end;
+  WasmEmitIndArgs := True;
+end;
+
+{ A call through a value: a procedural variable, or a VMT slot already loaded.
+  IRA = the callee value, IRB = the argument chain, IRIVal = the proc whose
+  declaration is the SIGNATURE (not a callee — nothing calls it). }
+procedure WasmEmitCallInd(node: Integer; isStmt: Boolean);
+var sigProc: Integer;
+begin
+  sigProc := Integer(IRIVal[node]);
+  if (sigProc < 0) or (sigProc >= MAX_PROCS) then
+  begin
+    WasmUnsupported('indirect call with no signature');
+    Exit;
+  end;
+  if IRCallDest[node] >= 0 then
+  begin
+    WasmUnsupported('indirect call returning an aggregate — the hidden-'
+                    + 'destination ABI is not chosen for this target yet');
+    Exit;
+  end;
+  if not WasmEmitIndArgs(sigProc, IRB[node], 0, 'indirect call') then Exit;
+  { The table index goes on TOP, after the arguments — call_indirect pops it
+    first. }
+  WasmEmitValueAs(IRA[node], WT_I32, 'indirect call target');
+  if WasmBodyBroken then Exit;
+  WasmCallIndirect(WasmSigForProc(sigProc));
+  if isStmt and Procs[sigProc].IsFunc then WasmOp($1A, 'drop');
+end;
+
+{ VMT dispatch. IRA = first arg (Self is argument 0), IRB chains them, IRC =
+  the proc whose declaration is the signature, IRIVal = the VMT slot.
+
+  Self is needed TWICE — once as argument 0 and once to load the VMT — and the
+  operand stack yields it once, so it is teed into a scratch local. That is the
+  whole difference from an ordinary indirect call; the register backends spill
+  every argument to make room and then reload, which is machinery this target
+  does not need.
+
+  The slot stride is *8 on every target (ir.inc:7332): the data blob keeps
+  8-byte slots and a 32-bit target puts its value in the low dword. PtrSize is
+  4 here, so an i32 load at slot*8 reads exactly the four bytes WasmFillData
+  wrote the table index into. }
+procedure WasmEmitVirtualCall(node: Integer; isStmt: Boolean);
+var sigProc, slot, argNode: Integer; pvt: Byte;
+begin
+  sigProc := IRC[node];
+  slot := Integer(IRIVal[node]);
+  if (sigProc < 0) or (sigProc >= MAX_PROCS) then
+  begin
+    WasmUnsupported('virtual call with no signature');
+    Exit;
+  end;
+  if IRCallDest[node] >= 0 then
+  begin
+    WasmUnsupported('virtual call returning an aggregate — the hidden-'
+                    + 'destination ABI is not chosen for this target yet');
+    Exit;
+  end;
+  argNode := IRA[node];
+  if argNode = -1 then
+  begin
+    WasmUnsupported('virtual call with no Self argument');
+    Exit;
+  end;
+  if not WasmParamValType(sigProc, 0, pvt) then pvt := WT_I32;
+  if pvt <> WT_I32 then
+  begin
+    WasmUnsupported('virtual call whose Self is not a pointer');
+    Exit;
+  end;
+  if WasmLocalSelf < 0 then WasmLocalSelf := WasmAddLocal(WT_I32, 'vself');
+  { argument 0, kept }
+  WasmEmitValueAs(IRA[argNode], WT_I32, 'Self of a virtual call');
+  if WasmBodyBroken then Exit;
+  WasmLocalTee(WasmLocalSelf);
+  if not WasmEmitIndArgs(sigProc, IRB[argNode], 1, 'virtual call') then Exit;
+  { vmt := [Self];  index := [vmt + slot*8] }
+  WasmLocalGet(WasmLocalSelf);
+  WasmMemOp($28, 'i32.load', 2, 0);
+  WasmMemOp($28, 'i32.load', 2, slot * 8);
+  WasmCallIndirect(WasmSigForProc(sigProc));
+  if isStmt and Procs[sigProc].IsFunc then WasmOp($1A, 'drop');
+end;
+
 { ===== control flow =====
 
   wasm has no jumps, so an unstructured CFG cannot be emitted directly. The
@@ -1292,6 +1496,8 @@ begin
     IR_JUMP          : WasmEmitJump(node, blk);
     IR_TERMINATE     : WasmEmitTerminate(node, blk);
     IR_CALL          : WasmEmitCall(node, True);
+    IR_CALL_IND      : WasmEmitCallInd(node, True);
+    IR_VIRTUAL_CALL  : WasmEmitVirtualCall(node, True);
     IR_JUMP_IF_FALSE : WasmEmitJumpIfFalse(node, blk);
     IR_STORE_MEM     : WasmEmitStoreMem(node);
     IR_STORE_SYM :
@@ -1471,6 +1677,7 @@ begin
   Inc(WasmBodySerial);
   WasmWalkBody(False);
   WasmLocalPc := -1;
+  WasmLocalSelf := -1;
   WasmNeedDispatch := (WasmBlockCount > 1) or WasmHasTerminate;
   if WasmNeedDispatch then
     WasmLocalPc := WasmAddLocal(WT_I32, 'pc');
@@ -1604,10 +1811,11 @@ end;
                  writers put the address in the low dword and leave the high
                  dword zero, and so do we — the same shape, a different base.
     MethodFixups a code address in a VMT slot or an RTTI method entry. wasm has
-                 no code addresses; these become table indices, and until the
-                 table exists they stay zero, which is index 0 — the reserved
-                 null element, so a call through an unresolved slot traps
-                 rather than dispatching somewhere plausible.
+                 no code addresses; these become TABLE INDICES. The same list
+                 the ELF writers resolve to `entry + BodyAddr`, resolved to
+                 something else — which is the whole reason this needed no
+                 shared-file change: the frontends record a relocation, never
+                 an address, because no address exists while Data[] is built.
     Fixups /     code->data and code->BSS references. These name a position in
     GlobFix      Code[], the register backends' instruction stream, which this
                  backend never writes to: it reaches a global through
@@ -1631,6 +1839,18 @@ begin
     Data[pos + 2] := Byte((v shr 16) and $FF);
     Data[pos + 3] := Byte((v shr 24) and $FF);
   end;
+  { The slot is 8 bytes and the index goes in the low dword — where a 32-bit
+    ELF target puts its address, and where an i32 load at slot*8 reads. The
+    high dword is already zero and stays that way. }
+  for i := 0 to MethodFixCount - 1 do
+  begin
+    pos := MethodFixups[i].DataPos;
+    v := WasmTableIndex(MethodFixups[i].ProcIdx);
+    Data[pos]     := Byte(v and $FF);
+    Data[pos + 1] := Byte((v shr 8) and $FF);
+    Data[pos + 2] := Byte((v shr 16) and $FF);
+    Data[pos + 3] := Byte((v shr 24) and $FF);
+  end;
   for i := 0 to DataLen - 1 do WasmDataSegByte(Data[i]);
 end;
 
@@ -1646,14 +1866,35 @@ begin
   WasmSetMemory((top + WASM_PAGE - 1) div WASM_PAGE, -1);
 end;
 
-{ A slot reserved by a call whose body never arrived. A declared wasm function
-  with no body is not a module at all, so it gets the same `unreachable` the
-  broken-body path uses — and the same report line, because a call that traps
-  at run time must not be invisible at compile time. It happens for a proc that
-  is declared and called but whose body this backend never saw: forward
-  declarations resolved elsewhere, and anything the frontend elides. }
+{ Is this slot's function in the table — i.e. was it reserved because someone
+  took its ADDRESS rather than because someone called it? }
+function WasmSlotInTable(slot: Integer): Boolean;
+var i, fi: Integer;
+begin
+  WasmSlotInTable := False;
+  fi := WasmFuncIndex(slot);
+  for i := 0 to WasmTabCount - 1 do
+    if WasmTabElem[i] = fi then
+    begin
+      WasmSlotInTable := True;
+      Exit;
+    end;
+end;
+
+{ A slot reserved by a call or a table entry whose body never arrived. A
+  declared wasm function with no body is not a module at all, so it gets the
+  same `unreachable` the broken-body path uses — and the same report line,
+  because a call that traps at run time must not be invisible at compile time.
+
+  The two reasons are worth telling apart in the message. A CALLED body that
+  never arrived is a gap: a forward declaration resolved elsewhere, or
+  something the frontend elided. An ADDRESS-TAKEN one usually is not — an
+  interface's method declarations have no bodies by construction, and the RTTI
+  blob names them, so `IInterface._Release` appears here on every program that
+  links the interface RTTI and nothing is wrong. Reporting both with the word
+  "called" made a normal module look like it had three holes in it. }
 procedure WasmFillEmptyBodies;
-var i: Integer;
+var i: Integer; why: AnsiString;
 begin
   for i := 0 to WasmFuncCount - 1 do
     if WasmFuncCodeLen[i] = 0 then
@@ -1663,10 +1904,14 @@ begin
       WasmBodyTerminate;
       WasmBodyEnd(i);
       Inc(WasmBrokenCount);
+      if WasmSlotInTable(i) then
+        why := 'address taken, but no body was emitted — normal for a method '
+             + 'DECLARED without an implementation, such as an interface''s'
+      else
+        why := 'declared and called, but no body was emitted';
       if Length(WasmBrokenNames) < 65536 then
         WasmBrokenNames := WasmBrokenNames + '    ' + WasmFuncName[i]
-                           + ' — declared and called, but no body was emitted'
-                           + Chr(10)
+                           + ' — ' + why + Chr(10)
       else
         Inc(WasmBrokenUnlisted);
     end;
@@ -1695,9 +1940,16 @@ end;
 
 procedure writeWasm(const outPath: AnsiString);
 begin
+  { ORDER MATTERS, and it is the reverse of the obvious one. WasmFinishMemory
+    resolves the VMT relocations, and resolving one hands out a table index,
+    and handing one out RESERVES A FUNCTION SLOT for a proc whose address is
+    taken but which this backend may never have been asked to emit. So it must
+    run BEFORE the empty-body pass, or those slots reach the code section as a
+    zero-length body — `function body must end with END opcode`, at a byte
+    offset, naming nothing. }
   WasmEmitMainWrapper;
-  WasmFillEmptyBodies;
   WasmFinishMemory;
+  WasmFillEmptyBodies;
   WasmReportCoverage;
   if WasmFuncCount = 0 then
     WasmFail('wasm32: nothing to write — no code was generated for this module '
