@@ -87,6 +87,13 @@ var
   WasmStrLocS       : Integer = -1;   { scratch: the slot's address }
   WasmStrLocO       : Integer = -1;   { scratch: the handle being replaced }
   WasmStrLocZ       : Integer = -1;   { scratch: a materialised source value }
+  { The `in` operand, held while every member is tested against it. Two, because
+    the comparison happens at the value's own width and a body may contain both
+    an i32 and an i64 `in`. Reused across every `in` in a body for the same
+    reason the string scratch slots are: the value is fully materialised before
+    the first test, and no `in` can be nested inside another one's operand. }
+  WasmSetInLoc      : Integer = -1;
+  WasmSetInLoc64    : Integer = -1;
   WasmCurNRes       : Integer = 0;    { this body's result count (0 or 1) }
   WasmCurResVt      : Byte = 0;       { ... and its wasm type when 1 }
 
@@ -1715,6 +1722,7 @@ begin
   if WasmCastKind(p, ctk) then WasmBuiltinResultType := ctk
   else if (p = -203) or (p = -204) then WasmBuiltinResultType := tyInt64
   else if p = -Ord(tkGetMem) then WasmBuiltinResultType := tyPointer
+  else if p = -SPECIAL_IN then WasmBuiltinResultType := tyBoolean
   else if p = -Ord(tkLength) then WasmBuiltinResultType := tyInt32
   else if (p = -Ord(tkOrd)) and (IRB[node] <> -1) then
     WasmBuiltinResultType := WasmNodeResultType(IRA[IRB[node]])
@@ -1959,6 +1967,120 @@ begin
   WasmEmitLength := True;
 end;
 
+{ `x in [a, b, lo..hi]` — SPECIAL_IN, spelled as a call with proc index -999.
+
+  ARG SHAPE, read from the IR rather than guessed: arg1's IRA is the TEST
+  VALUE; every later arg's IRA is a set item, and an item is either a constant
+  node or an IR_BLOCK carrying a RANGE (lo in IRA, hi in IRB). That is the
+  contract all four register backends implement.
+
+  BRANCHLESS, where they all use jumps. wasm has no flags register to
+  accumulate into, but it has an operand stack, so the whole set is one
+  expression: start with 0 and `i32.or` each membership test onto it. A range is
+  `(v >= lo) and (v <= hi)`, signed, matching i386's jl/jg. The empty set falls
+  out correctly — nothing is or-ed onto the 0.
+
+  SIGNEDNESS is signed for the same reason theirs is: set members are ordinals
+  and an enum or Char is non-negative anyway, so the two agree everywhere a
+  program can tell.
+
+  WIDTH: the comparison happens at the TEST VALUE's own width. i386 moves the
+  value into eax and compares 32-bit, so `i: Int64; i in [1]` with i = 2^32+1
+  answers TRUE there. Doing it in i64 here is two extra opcodes and not a
+  divergence worth inheriting — i64.eq/ge_s/le_s all yield i32, so only the
+  pushes change type and the accumulator stays i32 either way.
+
+  THE NON-CONSTANT REFUSAL IS A TRIPWIRE, NOT A GUARD, and the difference is
+  worth stating because the first version of this comment got it wrong. It said
+  the refusal protected against the fail-open in i386, which reads
+  Integer(IRIVal[itemNode]) with no kind check. Measured: it protects against
+  nothing, because SPECIAL_IN is only ever emitted for an ALL-CONSTANT set
+  literal. `i in [j]` with a variable member does not reach here at all — it
+  lowers to IR_DEFAULT_MEM over a real 32-byte set (confirmed in the IR dump:
+  `default_mem ival=32 tk=21`, no -999 node anywhere). So i386's unchecked read
+  is safe, and saying otherwise was a claim about another backend that one
+  command would have checked, which is exactly what this branch keeps finding
+  in other people's comments.
+
+  The refusal stays, on the same reasoning as the -1 poison values in
+  exception_emit.inc: it cannot fire today, and if the frontend ever routes a
+  variable member through SPECIAL_IN it converts a silent comparison against a
+  meaningless field into a named stop. What it must not do is read as coverage
+  of a live hazard. }
+function WasmEmitSetIn(node: Integer): Boolean;
+var argNode, itemNode, v: Integer; vt: Byte; wide: Boolean;
+
+  procedure PushOrd(x: Int64);
+  begin
+    if wide then WasmI64Const(x) else WasmI32Const(x);
+  end;
+
+  { IR_CONST_INT only — there is no IR_CONST_CHAR. `c in ['a'..'z']` lowers its
+    members to const_int 97 and 122, which the IR dump shows directly and which
+    is why this asks about the NODE KIND rather than about the element type. }
+  function ItemIsConst(n: Integer): Boolean;
+  begin
+    ItemIsConst := IRKind[n] = IR_CONST_INT;
+  end;
+
+begin
+  WasmEmitSetIn := False;
+  argNode := IRB[node];
+  if argNode = -1 then Exit;
+
+  vt := WT_I32;
+  if not WasmScalarType(WasmNodeResultType(IRA[argNode]), vt) then vt := WT_I32;
+  wide := (vt = WT_I64);
+
+  if wide then
+  begin
+    if WasmSetInLoc64 < 0 then WasmSetInLoc64 := WasmAddLocal(WT_I64, 'inval64');
+    v := WasmSetInLoc64;
+  end
+  else
+  begin
+    if WasmSetInLoc < 0 then WasmSetInLoc := WasmAddLocal(WT_I32, 'inval');
+    v := WasmSetInLoc;
+  end;
+
+  WasmEmitValueAs(IRA[argNode], vt, 'the value tested by `in`');
+  if WasmBodyBroken then Exit;
+  WasmLocalSet(v);
+
+  WasmI32Const(0);                        { the accumulator }
+  argNode := IRB[argNode];
+  while argNode <> -1 do
+  begin
+    itemNode := IRA[argNode];
+    if IRKind[itemNode] = IR_BLOCK then
+    begin
+      if not (ItemIsConst(IRA[itemNode]) and ItemIsConst(IRB[itemNode])) then
+      begin
+        WasmUnsupported('a non-constant range in a set literal');
+        Exit;
+      end;
+      WasmLocalGet(v); PushOrd(IRIVal[IRA[itemNode]]);
+      if wide then WasmOp($59, 'i64.ge_s') else WasmOp($4E, 'i32.ge_s');
+      WasmLocalGet(v); PushOrd(IRIVal[IRB[itemNode]]);
+      if wide then WasmOp($57, 'i64.le_s') else WasmOp($4C, 'i32.le_s');
+      WasmOp($71, 'i32.and');
+    end
+    else
+    begin
+      if not ItemIsConst(itemNode) then
+      begin
+        WasmUnsupported('a non-constant member in a set literal');
+        Exit;
+      end;
+      WasmLocalGet(v); PushOrd(IRIVal[itemNode]);
+      if wide then WasmOp($51, 'i64.eq') else WasmOp($46, 'i32.eq');
+    end;
+    WasmOp($72, 'i32.or');
+    argNode := IRB[argNode];
+  end;
+  WasmEmitSetIn := True;
+end;
+
 function WasmEmitBuiltin(node, p: Integer; isStmt: Boolean): Boolean;
 var argNode: Integer; ctk: TTypeKind; atk: TTypeKind; want: Byte; wide: Boolean;
 begin
@@ -2011,6 +2133,12 @@ begin
   if p = -Ord(tkFreeMem) then
   begin
     WasmEmitBuiltin := WasmEmitFreeMem(node);
+    Exit;
+  end;
+
+  if p = -SPECIAL_IN then
+  begin
+    WasmEmitBuiltin := WasmEmitSetIn(node);
     Exit;
   end;
 
@@ -4186,6 +4314,8 @@ begin
   WasmStrLocS := -1;
   WasmStrLocO := -1;
   WasmStrLocZ := -1;
+  WasmSetInLoc := -1;
+  WasmSetInLoc64 := -1;
   WasmStrDepth := 0;
   for i := 0 to WASM_STR_DEPTH - 1 do
     for pvtI := 0 to WASM_STR_SLOTS - 1 do WasmStrPool[i][pvtI] := -1;
