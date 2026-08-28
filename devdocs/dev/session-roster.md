@@ -11222,3 +11222,78 @@ not an absence.* Chasing it tonight is not worth it; fixing the false header is.
 **After that B is genuinely dry** (p20 minidom, p12 string-template). **That is a
 legitimate stopping point, and whether frankB continues past it is the owner's call
 rather than work for the coordinator to manufacture.**
+
+## A MEASUREMENT OF A PROXY IS NOT A MEASUREMENT OF THE SYSTEM
+
+frankB's dns work produced the night's last general rule, and it caught it on
+itself. It straced **glibc's `getaddrinfo`** and got a clean, correct answer —
+`localhost` 0 contacts to port 53, `nonexistent-zzz-qqq.invalid` 9 — and wrote a
+header correction on it.
+
+**The default build does not use glibc at all. It uses pxx's own wire resolver.**
+
+> **A measurement of a proxy is not a measurement of the system. Ask what the
+> system actually calls before straceing something else.**
+
+It was caught by noticing **what had been measured**, not by the numbers looking
+wrong: 0 vs 9 was entirely plausible. Straceing the **actual binaries**:
+
+| build | contacts to port 53 |
+| --- | --- |
+| default | **6** |
+| libc | **12** |
+
+**Neither is hermetic.** That is the contradiction rule turned on one's own method
+rather than on a search result.
+
+### Fully explained — and it overturns the exclusion the ticket rested on
+Verified by the coordinator:
+```
+/etc/hosts:1  127.0.0.1 localhost
+/etc/hosts:5  ::1       ip6-localhost ip6-loopback     <- localhost is NOT on this line
+getent ahostsv6 localhost -> ::ffff:127.0.0.1 only     <- no native AAAA from files
+```
+- line 72 `DnsResolveHost('localhost')` → **files hit → no network.** The header's
+  claim is true for this row.
+- line 75 `DnsResolveHost6('localhost')` → **files MISS → wire → six DNS queries**,
+  full search-list expansion (`localhost.home`, `localhost.tail…ts.net`,
+  `localhost.`) against 127.0.0.53.
+- line 76 asserts `facade_v6_rc: rc = 0` — **so a transient resolver failure there
+  produces exactly a one-off `DNSLIBC FAILED` in the DEFAULT build.**
+
+**Not a diagnosis** — one failure is still not a cause — **but it removes the
+exclusion.** The original write-up ruled network out because the `.invalid` row sits
+behind `{$ifdef PXX_DNS_LIBC}` while the failing build was the default: **sound for
+that ROW, false for the BUILD.**
+
+> **The coordinator repeated that exclusion in the dispatch and called it "ruled out
+> rather than merely unproven."** frankB caught my reasoning, not only its own. A
+> dependency on a tailscale search domain resolving through a systemd-resolved stub
+> is exactly what is fine 999 runs in 1000.
+
+### Coordinator calls
+**Q1 — make the v6 row hermetic. Not optional.** A suite whose header declares NO
+NETWORK cannot have a row that passes *because the network answered*; it is the
+header lie one level in, and it is now the leading candidate mechanism for a red.
+Shape left to frankB; the fit is its own **printed-skip** pattern from this morning.
+What must go either way is asserting `rc = 0` for a name that legitimately has no
+AAAA in files.
+
+**Q2 — file it, but the steer leans AGAINST frankB's instinct, and it may be a
+`bug-` rather than a `decide-`.** frankB leaned *"the resolver is right, the test is
+wrong."* **RFC 6761 §6.3 (to be VERIFIED, not asserted — the coordinator could not
+fetch it)** is recalled as: name-resolution APIs SHOULD treat `localhost` as
+special, SHOULD always return loopback, SHOULD NOT send such queries to configured
+DNS servers. If so:
+
+1. **`.invalid` and `localhost` are both RFC 6761 reserved but carry DIFFERENT
+   prescriptions** — NXDOMAIN locally vs loopback locally. So *"glibc doesn't
+   special-case `.invalid`"* is evidence about `.invalid` and **says nothing about
+   `localhost`** — an inference doing quiet work in the current lean.
+2. **A resolver that sends `localhost` to the wire can be ANSWERED by the network**,
+   and a hostile or merely misconfigured server can return a non-loopback address.
+   That is a behaviour a correct program observes — the silent-wrong-behaviour
+   escape, not a preference.
+
+**The test fix lands regardless: the test is wrong even if the resolver is also
+wrong.**
