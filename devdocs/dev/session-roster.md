@@ -12781,3 +12781,58 @@ real planning work in its own lane, and to idle openly if that is not real eithe
 
 Third instance in one day of **state recorded once and never re-derived**: a refusal with no
 date, a `blocked-by` nothing re-checks, and a parked flag nothing can clear.
+
+### Track B is IDLE — with a reason and an expiry, not a flag
+
+**Reason.** B's ranked queue after tonight is p25 / p20 / p12 and nothing above it.
+`feature-networking` closed as **delivered** (`ee2753bb4`) — First Milestone met, every
+residual it named has its own ticket and all five are done, IPv6 landed and was stale in its
+list. `feature-random-library` is not B's: slice 7 landed 2026-07-20 and the remainder needs
+`builtinheap` intrinsics (Track A). The one homeless design was split out rather than deleted
+with its container — `feature-b-posix-and-fpc-named-socket-facades` [B p25], low because
+nothing is blocked on it and Synapse already compiles via `--mimic-fpc`.
+
+**Expiry — any of these, and B is re-examined immediately:**
+1. the wasm merge becomes real (`lib/rtl/platform.pas` and `lib/rtl/platform/wasi/**` are
+   B-gated; an A-gate run has not reviewed them);
+2. any lane files a B-lane ticket at p40 or above;
+3. `bug-a-xtensa-refuses-to-lower-an-unreachable-syscall` resolves, which unblocks portable
+   RTL work on the primary ESP target;
+4. failing all three, **2026-09-04** — a week, then re-examined regardless.
+
+This is the shape "parked" should have had all along. The fleet halted today because a park
+with no reason and no expiry reads as a decision and re-justifies itself every tick.
+
+### The xtensa gap — filed, not worked around
+
+`bug-a-xtensa-refuses-to-lower-an-unreachable-syscall` [A p45]: codegen errors on a
+`__pxxrawsyscall` that is **statically unreachable** on xtensa (`SysGetRandom` returns -1
+there, so the call is dead), making an otherwise-portable RTL unit uncompilable on the primary
+ESP target. `random.pas` is already correct; an `{$ifdef}` to silence it is exactly the
+compiler-appeasement workaround CLAUDE.md forbids, so **the platonic code stays and the ticket
+carries the defect.**
+
+The argument that it is a defect rather than a correct refusal is the repo's own precedent:
+the ESP PAL refuses 33 entry points **at runtime** with `PAL_ERR_UNSUPPORTED` rather than
+failing the build, so POSIX-shaped code meets an honest error instead of being uncompilable.
+Codegen refusing at compile time contradicts that and costs a whole unit instead of one call.
+
+### Face fourteen, and I demonstrated it while checking it
+
+frankB re-measured *"riscv32 cannot build this unit at all"* and its first measurement
+**confirmed** the stale claim — using default platform units, where the Makefile builds that
+target with `--platform=esp`. Under the shipping configuration it builds, exit 0; the atomics
+refusal is **hosted** riscv32 only.
+
+> **A PROXY WILL OFTEN AGREE WITH THE STALE CLAIM YOU WERE CHECKING, AND AGREEMENT ENDS THE
+> INVESTIGATION.**
+
+Confirmation and refutation are not symmetric in cost: a wrong-configuration measurement that
+disagrees provokes a second look; one that agrees is absorbed as verification. So the
+wrong-config measurements that survive are exactly the ones that happened to agree.
+
+**Mirror image, mine, the same hour:** verifying frankB's `plan-networking.md:117` citation, I
+looked in `devdocs/dev/` and got silence. The file is `devdocs/developer/`. **A search in the
+wrong directory returns silence that reads exactly like a refuted claim** — and I was one step
+from reading a correct citation as false. The citation was exact; the closure call is
+ratified.
