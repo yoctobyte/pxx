@@ -14897,3 +14897,57 @@ chronological tail. It caught this before anything was written into the ticket. 
 it not, the correction to me would have arrived carrying a stale date that made my
 position look *more* defensible than it was — and I would have had no reason to
 question a number that agreed with me.
+
+### Dispatch, 2026-08-28 late — and the new rule caught the very next dispatch
+
+Fleet was at **zero active workers** with six sessions idle. Two slots filled.
+
+- **frankA → `bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults`
+  [P p70]** — its own diagnosis, table already varied to no untested neighbours,
+  and a segfault outranks the corpus rungs by CLAUDE.md's own ordering. Told it
+  rung 3 is unblocked and the umbrella above it was lying (below). Its
+  generics-circularity fix is in `done/`; `feature-pascal-corpus-expansion` is
+  still its lock in `working/`, which I asked it to move rather than moving it.
+- **frank-optimize-b4 → the aarch64 register-pressure port** [O umbrella p70],
+  with the promotion block lifted. Flagged explicitly that I ranked that port
+  from **source reading, with no benches**, and that its measurements win if they
+  disagree — the umbrella's own rule against over-ruling a measured ranking with
+  an unmeasured intuition cuts against me here, not for me.
+- frankB, frankwasm, pxx-a5 idle **by the cap, not by judgment**. Expiry: the
+  next park line frees one.
+
+**The rule frankB made me write down caught the next dispatch I was about to
+make.** P's ranked head is `feature-pascal-corpus-oop` at **p75** — and its own
+body says *"this umbrella has no work despite ranking at 65."* I was one message
+from sending frankA to it. Reading it for content instead of blockers is the only
+reason I did not, on the same evening I wrote the rule down. That is two hollow
+dispatches avoided against two made.
+
+Underneath it, a **stale stall note** — and this one is a new shape worth its own
+line:
+
+> **A "stalled because X" note in a body ages into a false claim, and it ages
+> INVISIBLY.** Every clause was true when written. Nothing re-reads it when X
+> resolves, because *resolving a blocker is an event on the blocker, and the note
+> lives on the dependent.* Same family as a `blocked-by` pointing at a closed
+> ticket — but `progress.sh check` reads frontmatter and **cannot see prose**, so
+> the frontmatter half is caught and the prose half is not.
+
+All three clauses of that note were false: `decide-tobject-root-methods-dispatch-model`
+was answered **2026-08-21** and is in `decided/`; `feature-pascal-builtin-tobject-class`
+records itself unblocked **2026-08-22**; rung 3 `feature-pascal-corpus-generics`
+[P p65, `unfinished/`] has its remaining `blocked-by` in **`done/`**. Rung 3 is
+fully unblocked and is the actionable item. The fcl-xml route-around the note
+raised as a scope call for the user is moot. Corrected in `cc36aeb5a`.
+
+That is the **sixth** ticket found today stranded behind a resolved blocker.
+Five were `blocked/` frontmatter this morning, one was `feature-random-library`'s
+missing edge this evening, and this one is prose. The frontmatter cases are a
+tooling gap the board already models; the prose case has **no owner at all** and
+no checker can reach it. Worth a Track T item if it recurs — not yet, because one
+instance is not a sweep.
+
+**Fifteen open Track U decisions, not fourteen** (`urgent`+`backlog`+`backlog_new`+`unfinished`+`blocked`).
+My count has now been wrong twice in the lane I exist to feed. The correct move is
+to count them at the tick rather than carry the number — carrying it is what made
+it wrong both times.
