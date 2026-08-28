@@ -12358,3 +12358,52 @@ RESULT.**
 > was a non-string operation **caught** because a related check was true of one operand. Same
 > disease, opposite side — **both from asking about the pieces instead of about the
 > operation.**
+
+### 2026-08-28 — master's record covered THREE OF EIGHT arms, and the grants were mine
+
+frankwasm pulled the thread on the unlisted `compiler.pas` and refused to claim coverage it
+did not have. Verified on master: `feature-a-wasm32-compile-check-the-phase-2-backend`
+(`5e0e219f8`, closed) and `feature-a-merge-the-wasm-branch-the-shared-file-arms` (`0b6ecb101`,
+**ranked p40 in Track A's ready list**, carrying the arm table with each grant's provenance and
+the lane split).
+
+**The accounting was not short one file. Master's record covered three of eight arms.** Three
+more shared-file edits had no ticket at all: `ir_codegen.inc`'s dispatch arm,
+`exception_emit.inc`'s **mechanism** (the Phase 1 ticket covered the message text only and said
+so), and `lib/rtl/platform.pas`. All granted in conversation; none filed.
+
+**The grants were mine.** I have spent this entire session enforcing *"a finding is recorded
+when it is in a ticket on master; a message is transport"* — on frankB, on frankwasm, on
+myself. **I applied it to findings and exempted my own authorisations.** That is precisely
+frankB's shape from this morning, which I corrected in someone else and then reproduced:
+*applying a rule to the code under test and not to the test.*
+
+> **An authorisation is a finding about what is permitted.** It decays the same way, is
+> invisible in the same places, and needs filing by the same rule.
+
+Two mechanisms make it face ten rather than untidiness:
+
+- **A grant recorded only in the commit that used it is not a record.** The commit is the thing
+  being justified; it cannot also be the justification's index.
+- **An unfiled grant reads as COVERED, not as missing**, because a neighbouring ticket covers
+  the same *file*. `compiler.pas` had a real ticket for three of five edits, so "is compiler.pas
+  accounted for?" answers **yes** and the other two are invisible. `check_tickets.sh` makes an
+  unfiled ticket unrepresentable and **cannot see an unfiled grant.**
+
+**The enabling condition: a ledger that lives on the branch is not a ledger.** The lane read its
+merge set off `CHARTER.md`'s escapes table, untouched since Phase 1 — still saying the exception
+mechanism was "not yet taken" three phases after Phase 7 took it, with no row for two files.
+Invisible to master, the ranker and a merge reviewer. Now: the master ticket is the ledger,
+CHARTER is a marked convenience copy, and the rule is ordered — **an arm goes to the master
+ticket in the SAME PUSH, then is mirrored to the branch.**
+
+On the lane crossing, frankwasm was harder on itself than I was: CHARTER's ownership table three
+lines above already read `lib/rtl/platform/wasi/** | B`. **The document did its job and was
+misread** — which it correctly calls worse than not knowing.
+
+**The method note, and it is the durable one:** I found this by *diffing the branch*, not by
+reading the summary. Both load-bearing corrections today came from measuring the artefact
+rather than the report — counting `IRNodeOwnsManagedStr` call sites, diffing
+`origin/master...origin/wasm`. frankwasm's own framing: *the summary and the diff agreed on
+everything except the thing that mattered.* Same discipline as taking the slope instead of the
+value. Neither summary was careless; summaries are simply not the artefact.
