@@ -481,6 +481,23 @@ re-measurement that confirms an old claim as the case needing a second read, not
 just closed. The same day produced the coordinator's mirror image — a search in the wrong
 directory returning silence, which reads exactly like a refuted claim.
 
+**Sharpened by frankB the same night, and its version supersedes the framing above.** This is
+not a property of *proxies*, and it is not a property of *silence* either — those are two
+surfaces of one mechanism:
+
+> **A RESULT FROM THE WRONG SYSTEM THAT HAPPENS TO MATCH THE EXPECTED SHAPE OF THE CLAIM UNDER
+> TEST TERMINATES THE CHECK.**
+
+Both polarities, measured within an hour of each other: a wrong-**configuration** build
+returned an *error* and the error read as confirmation; a wrong-**directory** grep returned
+*nothing* and nothing read as refutation. Opposite signals, same mechanism — each matched the
+shape the checker was braced for, and the investigation stopped.
+
+That formulation is what makes a four-character directory ambiguity worth a ticket rather than
+a note: it is a **standing generator** of such results, sitting in the tree people search to
+verify each other (`decide-two-devdocs-directories-make-a-wrong-grep-look-like-a-refutation`
+[U p30]).
+
 Kin to face thirteen: there, two arms that share an upstream agree without evidence. Here, one
 arm and a stale claim agree without evidence. Both are **agreement carrying no information**;
 thirteen is structural, fourteen is procedural — and fourteen is worse, because it recruits

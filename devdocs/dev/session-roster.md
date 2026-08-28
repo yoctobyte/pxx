@@ -12836,3 +12836,58 @@ looked in `devdocs/dev/` and got silence. The file is `devdocs/developer/`. **A 
 wrong directory returns silence that reads exactly like a refuted claim** — and I was one step
 from reading a correct citation as false. The citation was exact; the closure call is
 ratified.
+
+### CORRECTION — rung 6 is behind ONE defect, not five walls
+
+My carried state said *"rung 6 is NOT one wall from green: five walls known, only one was
+typinfo."* **That is now wrong and I had been re-emitting it every tick.** frankA re-probed on
+the **pristine** corpus — no stubs, which the earlier partition never was — and with the
+typinfo facade in and wall 2 fixed, `generics.defaults.pas` reaches line 2411: **walls 1 and 2
+are gone and walls 3 and 4 are not even reached.** The ticket itself was already corrected
+(`feature-pascal-corpus-expansion:402`); only my copy was stale. Fourth instance today of state
+recorded once and never re-derived — and the one where I was the sole holder of the stale copy.
+
+**Wall 5 was mis-bounded, by frankA, and it corrected itself.** Filed from four measured shapes
+as *"the address of a virtual class method cannot be lowered"*; extending to eight shows **two
+independent defects, neither about `virtual`**:
+
+- **A** — a CLASS method cannot become a method pointer at all (`m := TSvc.CPick; m(5)`
+  segfaults, no cast anywhere, while the instance twin works). **Fixed, `9ab19fb21`,
+  `gate.sh quick` green.**
+- **B** — an inline cast of a method reference fails even for an **instance** method. Through a
+  variable works; casting in expression position does not.
+
+> **The two rows that separated the defects were exactly the two that had not been tried, and
+> the fix the first table implied would have left half the bug in place.** Second time today a
+> tidy-looking table was the thing to distrust.
+
+Root-caused by measurement: `PXXDBG=a.ast` showed the instance form assigning `AN_METHODREF`
+and the class form assigning `AN_CALL` with an `AN_CLASSREF` argument — the class method was
+being *invoked*, its `Int64` result stored into a 16-byte Code/Data target. The Delphi
+`@`-optional arm opens with `FindSym`, which resolves a variable, so a class-type receiver fell
+through to the ordinary expression path. A class method's Self is the **RTTI blob** (VMT at
++24), not an instance (VMT at `[Self+0]`) — getting that wrong yields a **plausible wrong code
+pointer rather than a crash**, so the test pins a base-declared and an overridden virtual
+separately and requires 500 vs 10.
+
+**And frankA stated the non-win plainly rather than burying it:** this does **not** unblock
+rung 6. The corpus uses the inline-cast form at all 28 sites — defect B. Row 6 changed failure
+mode without changing outcome: no longer a segfault, now an honest `IR_UNSUPPORTED` refusal.
+Strictly better, still stopped at 2411.
+
+### The FPC oracle can vanish — and the probe already knows
+
+frankA hit it: **pxx nests `{ }` comments and FPC does not**, so a `}` inside a header comment
+compiles here and is rejected there. Benign in the language sense (we are laxer; per CLAUDE.md
+that is not a defect) — but it **silently removes the oracle** from a hand-rolled comparison.
+
+**Checked before filing anything, and no ticket is warranted:** `tools/fpc_diff_probe.sh`
+already handles it, and handles it exactly right — `SKIP … no oracle: fpc cannot compile it,
+so this case proves nothing`, with a comment recording that returning quietly *"is how such a
+case sits in this file for months looking like coverage"*, and a trunk arm insisting *"an
+oracle that could not look and an oracle that found nothing must never print the same."*
+Someone already learned this and hardened the tool.
+
+**The hardening does not travel to hand-rolled comparisons**, which is where frankA met it. So
+the remedy is a pointer, not a ticket: the divergences entry should say *use the probe, which
+already refuses to score a case whose oracle died.*
