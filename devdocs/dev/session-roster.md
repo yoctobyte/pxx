@@ -9738,3 +9738,99 @@ Correction to the guidance as issued: I told lanes docs-only pushes stay open
 during a hold, which is true of the *push* and says nothing about *ordering*. The
 usable form is **"commit docs first, then code"** — cheap when done up front,
 a rebase when discovered later.
+
+## v389 PIN VERIFY PUBLISHED — RED, **0 new**. Hold cleared 2026-08-28 ~06:00Z
+
+```
+pin verify — v389 at 83468c5462d4 RED (full), 4 red, 0 new vs the v389 baseline
+```
+
+**`0 new` is the answer; `RED` is the headline and it is the wrong one.** Four
+jobs red at the pinned tree, every one pre-existing and ticketed:
+`tools-devtest#00`, `test-emit-obj#src:test/cxtensa_obj.c@1`, and two
+`test-nilpy`. **Nothing v389 introduced is red. No revert.** Three lanes built on
+that binary for hours; the binary is sound.
+
+Hold released on both conditions, verified rather than assumed: a published
+result, **and** no live run (`pgrep` for testmgr/verify_pin — nothing; the
+watcher is in idle phases running a throttled fuzz recheck). frankwasm, frankB
+and frankT all told, all cleared for `compiler/**` `lib/**` `test/**` `tools/**`.
+
+### frankT's four-and-four call held, and it was falsifiable
+It named the red set **before the run finished** and staked it: four reds, the
+open-regression ledger agrees exactly, **and a fifth job means the pre-emption
+stops covering it.** No fifth in the verify. That is a better artifact than four
+separate "this one is known" notes because it could be checked in advance and it
+was — the standard to hold pre-emptions to from here.
+
+### UNRECONCILED, handed to frankT rather than smoothed over
+frankT observed the run live at 1898/3202 with ~8 min left. At 05:58Z the newest
+report in `tstate/reports/` is `20260827T234545Z-c52fc38-plexus.md` and the
+pin-verify record reads **6h old**. Those do not obviously fit. Either the record
+predates the run being watched, or a completed 3202-job run published nothing.
+frankT has `live.json`; the coordinator does not. **It matters: if that run
+published nothing, the hold imposed on three lanes bought less than was charged
+for it.**
+
+### Against myself: the targeted request asked the wrong question
+The queued request was a `full` sweep of the pin **commit** `ab51855df`. What was
+actually wanted was the pin **tree** `83468c5462d4` — which `verify_pin` produces
+on its own. Whether the request *caused* the run or was redundant with it cannot
+be told from here, and the flattering reading is not being claimed. **Check this
+before anyone queues another targeted request:** the mechanism may already exist
+for the question being asked.
+
+## A FIFTH red, outside the verify — and the pin is the obvious suspect
+
+`lib-test#src:test/lib_synapse.pas`, bad `c52fc389fd97`, 9 in range — from the
+full tier 20m **after** the pinned tree, so outside the pin verify and no
+falsification of the four-and-four call.
+
+```
+pascal26:270: error: expected implementation section
+  in: stable_linux_amd64/default/../../lib/rtl/dns_cache.pas
+```
+
+The watcher refused to bisect it and said why: *the job builds only with the pin,
+and `c52fc389fd97` moved no pinned binary, so that commit cannot be causal — the
+range is unsound.* **That refusal is what made the real candidate visible.** A
+test that builds only with the pin has one obvious suspect when it goes red:
+**the pin.** v389 moved the pinned binary and is in the range. A bisect would
+have produced a confident wrong commit.
+
+Range narrowed to the five commits touching `lib/` or the stable dir
+(`a6b06ebc1` exception-API, `cfa72767f` typinfo facade, `1091cd0ff` workaround
+reverts, **`ab51855df` pin v389**, `0b2f731b6` unsigned renderer). **`dns_cache.pas`
+itself is unchanged in the range** — last touched at `28bd01e11`, below the lower
+bound. So a source that did not change stopped parsing, and the error resolves
+the *live* `lib/rtl` through the *pinned* binary: a live-source × pinned-binary
+cross product, exactly where a pin move bites.
+
+Dispatched to frankB [B, p70, `backlog/`] with the falsification ordered first —
+**compile `dns_cache.pas` under v388's binary and v389's; one command, no
+bisect.** If they differ it is a Track A parser regression the pin carried in and
+the coordinator files it. Told frankB explicitly: test hypothesis 1 before
+touching any source, and if it is the pin, **do not work around it.**
+
+## Track U: the NilPy 55-70 ranking was derived from a low-dependency sample
+
+Filed `backlog/decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample.md`
+[U, p55] from frankB's fourth-corpus verdict (`b125395e2`). reportlab 4.2.5,
+421 `.py`, at pin v389: 36/159 compile, 123 failures over 30 distinct first walls,
+**not one of them a wall the family produced.**
+
+The weak reading is "different walls". The real one: **89% of its failures are
+library surface** (16 of 17 named stdlib modules have no shim), so it stops at its
+first missing import and **never reaches the mechanism layer**. The 55-70 cluster
+is therefore **conditional** — what a corpus hits *once its import surface is
+covered*. webencodings/html5lib/tinycss2 are self-contained web parsers with
+almost no stdlib footprint, so **the ranking was derived from a sample chosen,
+accidentally, for having nothing to rank.**
+
+`six` is the precedent at file scale: gated 15 files, landing `mimic_six` moved
+4/48 → 4/48. **Compile count lags, walls-cleared leads.** The campaign has no
+measurement of library surface at all and
+`feature-nilpy-stdlib-coverage-gaps-measured` [p72] — top-ranked NilPy feature —
+has never been started while items below it get worked. Escalated, not acted on:
+`prio:` is the owner's field, and Track N is undispatched by owner call anyway.
+Filed so the evidence outlives the session that measured it.
