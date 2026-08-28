@@ -1789,3 +1789,99 @@ Benches remain Track O's, and Track O has them.
 The `55 -> 70` re-price below stands unchanged — it rests on the aarch64
 divergence verified in source from both sides, which this correction does not
 touch.
+
+---
+
+## 2026-08-28 — item 1 ported to aarch64. LANDED.
+
+`ir_codegen_aarch64.inc` was on the **pre-item-1** admission rule. Ported the
+rule and, because it turned out to be necessary rather than nice, the probe.
+
+### What the probe showed, which is the whole argument
+
+aarch64 had **no `a.resid` probe at all**, and this box has **no aarch64
+disassembler** (`objdump` here has no aarch64 support; no `llvm-objdump`, no
+cross-binutils). So before this commit there was *no way whatsoever* to see what
+the aarch64 residency pass decided — not a cheaper way, none. Ported TALLY and
+added ASSIGN lines the x86-64 side has and aarch64 never did.
+
+For `three.pas`'s `Run`, on the pre-port rule:
+
+```
+TALLY sym=i count=4 loads=3      <- admitted:  4 > 3
+TALLY sym=s count=3 loads=2      <- EXCLUDED:  3 <= 3   (the accumulator)
+TALLY sym=j count=2 loads=1      <- EXCLUDED:  2 <= 3
+```
+
+and after:
+
+```
+ASSIGN sym=i reg=x19 loads=3
+ASSIGN sym=s reg=x20 loads=2
+ASSIGN sym=j reg=x21 loads=1
+```
+
+One resident becomes three, and the one it had been refusing is the
+**loop-carried accumulator** — the exact local item 1 exists to admit, refused
+while five of six registers sat idle. That is arithmetic on printed data, not
+inference.
+
+### Measured — and the first reading was wrong
+
+qemu says **1.07-1.13x** across four interleaved three-way runs, monotonic every
+time:
+
+| build | run 1 | run 2 | run 3 | run 4 |
+| --- | --- | --- | --- | --- |
+| `-O2` (residency OFF — it is `-O3` gated) | 11.96 | 12.63 | 13.23 | 12.75 |
+| `-O3` pre-port (1 resident) | 11.26 | 12.24 | 12.86 | 12.27 |
+| `-O3` post-port (3 residents) | **10.54** | **10.88** | **11.87** | **10.84** |
+
+**The first measurement said the port was 7% SLOWER (0.93x) and it was a false
+reading — the sixth from this box today.** It was a two-way interleaved
+min-of-5; the same binary measured 7.42 there and 11.26 minutes later, a 1.5x
+load swing, which is fast enough drift to defeat interleaving itself. What
+caught it was a **control**, not a repeat: build at `-O2`, where residency is
+off entirely, and ask whether qemu prefers *that*. It does not — the ordering
+is `-O2` slowest, pre-port middle, post-port fastest, every run. A structural
+ordering across three variants is evidence a two-point comparison cannot give
+you.
+
+**Read the number as directional only, and as a LOWER bound.** qemu user-mode
+times translated instruction throughput; it does not model store-to-load
+forwarding, which is the precise stall residency exists to remove. The same
+change was **1.9-2.1x on x86-64 hardware**. So 1.07-1.13x confirms the pass
+fires and helps; it is **not** a prediction for real aarch64 silicon, and
+nothing here should be quoted as one.
+
+### Correctness
+
+- self-host fixedpoint verified, `1bdc93d1b061`
+- 13 programs x `-O0`/`-O2`/`-O3` under qemu: every output identical to the
+  pre-port compiler
+- **all 6 targets at default `-O`: 48/48 hashes identical** — the port is
+  `-O3`-gated, so default output must not move, and it does not
+- x86-64 untouched by construction (the change edits only
+  `ir_codegen_aarch64.inc`) and confirmed by the same 48/48
+
+### Note on the promotion question, which moved twice today
+
+The `-O3` sweep block was lifted (my premise was false — see above), but
+"lifted" means the per-pass question is **askable**, not answered. Track T
+overclaimed and corrected within the hour, measured per pass:
+
+| pass | swept? |
+| --- | --- |
+| `562965e1c` item 1 | GREEN at `0fbcbdebccd3`, 2026-08-28T09:41:46Z |
+| `46c8cf47e` W1 slice 4 | same run |
+| `c93292fe4` W2 | **NOT SWEPT** — landed nine hours after it |
+
+`trackt optcov <commit>` answers it (`e4c004a5e`). Two things it gets right that
+matter when reading a NOT SWEPT: uncheckable runs are counted **separately**
+from misses (a sha you have not fetched reported as "not swept" would be a wrong
+answer wearing a careful one's clothes), and it reprints the boundary — a GREEN
+opt run proves `-O3` is not WRONG on that tree and **cannot prove a pass
+FIRES**. This ticket's own lesson, now printed at the point of use.
+
+**Nothing was promoted here.** This port is new work, not a promotion. Item 3
+and this aarch64 port have never been swept either, being hours old.

@@ -688,6 +688,7 @@ procedure UnifiedResidencyAssignA64;
 var k, j, t, best, bestCnt, lbl, si, nsyms: Integer;
     islot, fslot, saveOff, reg: Integer;
     Counts: array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
+    LCounts: array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
     CSyms:  array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
     seen: Boolean;
 begin
@@ -719,14 +720,39 @@ begin
           if si < 0 then Continue;
           seen := False;
           for best := 0 to nsyms - 1 do
-            if CSyms[best] = si then begin Inc(Counts[best]); seen := True; Break; end;
+            if CSyms[best] = si then
+            begin
+              Inc(Counts[best]);
+              if IRKind[j] = IR_LOAD_SYM then Inc(LCounts[best]);
+              seen := True; Break;
+            end;
           if (not seen) and (nsyms < MAX_LOOPSYM_SCAN) then
           begin
-            CSyms[nsyms] := si; Counts[nsyms] := 1; Inc(nsyms);
+            CSyms[nsyms] := si; Counts[nsyms] := 1;
+            if IRKind[j] = IR_LOAD_SYM then LCounts[nsyms] := 1
+            else LCounts[nsyms] := 0;
+            Inc(nsyms);
           end;
         end;
     end;
   if nsyms = 0 then Exit;
+  { PXXDBG=a.resid — the same tally dump the x86-64 pass carries, and it matters
+    MORE here: residency decisions are invisible in the emitted bytes on every
+    target, but on aarch64 a dev box typically has no disassembler for them at
+    all, so this is not merely cheaper than reading the output — it is the only
+    way to see what the pass decided. }
+  if PxxDbgEnabled('a.resid') then
+    for k := 0 to nsyms - 1 do
+    begin
+      si := CSyms[k];
+      Write('PXXDBG a.resid TALLY proc=', Procs[CurProc].Name,
+            ' sym=', Syms[si].Name, ' count=', Counts[k],
+            ' loads=', LCounts[k],
+            ' type=', Syms[si].TypeKind, ' kind=', Syms[si].Kind);
+      if Syms[si].IsArray then Write(' array');
+      if SymSlotEscapes(si) then Write(' escapes');
+      WriteLn(' target=aarch64');
+    end;
   { Ranked selection, per-class budgets: int x19..x24 (slot i -> x(19+i)),
     float d8..d13 (slot i -> d(8+i)). No regcall on aarch64, so the whole GPR
     pool is free. }
@@ -735,7 +761,7 @@ begin
   begin
     best := -1; bestCnt := 0;
     for k := 0 to nsyms - 1 do
-      if Counts[k] > bestCnt then
+      if LCounts[k] > bestCnt then
       begin
         si := CSyms[k];
         if Syms[si].IsArray then Continue;
@@ -754,16 +780,26 @@ begin
             here said so -- slots 4 and 5 wrote past the end of all three, which
             is bug-a-aarch64-o3-segfaults-the-compiler-on-an-empty-program. }
           if RcResidentCount >= RC_RESIDENT_SLOTS then Continue;
-          if Counts[k] <= 3 then Continue;      { int threshold: > 3 loop accesses }
+          { Admission is by LOADS, and one is enough — ported from x86-64's
+            UnifiedResidencyAssign (item 1 of feature-opt-o3-register-pressure,
+            worth 1.9-2.1x there). Residency removes READS; a store dual-writes
+            through a register move. The old test here was `Counts[k] <= 3` over
+            loads AND stores, which ranked a store-heavy local above a
+            load-bearing one and excluded a loop-carried accumulator at exactly
+            3 accesses while registers sat idle. A loop-carried accumulator must
+            never sit in the frame while a GPR is free. The bound that remains
+            is the register pool, not a threshold. }
+          if LCounts[k] < 1 then Continue;      { int: at least one loop LOAD }
           if not RegcallScalarType(Syms[si].TypeKind) then Continue;
           if ResidentRegOf(si) <> 0 then Continue;
         end;
         if SymSlotEscapes(si) then Continue;
-        best := k; bestCnt := Counts[k];
+        best := k; bestCnt := LCounts[k];   { same scale the loop above tests }
       end;
     if best < 0 then Break;
     si := CSyms[best];
     Counts[best] := 0;
+    LCounts[best] := 0;
     FrameSize := AlignTo(FrameSize + 8, 8);
     saveOff := -FrameSize;
     if Syms[si].TypeKind = tyDouble then
@@ -776,6 +812,9 @@ begin
       A64FrameAddr9(Syms[si].Offset);
       EmitI32($FD400120 or (8 + fslot));            { ldr d(8+fslot), [x9] }
       FrResidentSym[fslot] := si;
+      if PxxDbgEnabled('a.resid') then
+        WriteLn('PXXDBG a.resid ASSIGN proc=', Procs[CurProc].Name,
+                ' sym=', Syms[si].Name, ' reg=d', 8 + fslot, ' loads=', bestCnt);
       Inc(fslot);
       FrResidentCount := fslot;
     end
@@ -789,6 +828,13 @@ begin
       RcResidentSym[RcResidentCount] := si;
       RcResidentReg[RcResidentCount] := reg;
       RcResidentSaveOff[RcResidentCount] := saveOff;
+      { The pick, not just the tally. On x86-64 a disassembly is the fallback
+        evidence that a register was actually claimed; on aarch64 a dev box
+        usually has no disassembler for the output at all, so without this line
+        there is NO way to tell an admitted local from a rejected one. }
+      if PxxDbgEnabled('a.resid') then
+        WriteLn('PXXDBG a.resid ASSIGN proc=', Procs[CurProc].Name,
+                ' sym=', Syms[si].Name, ' reg=x', reg, ' loads=', bestCnt);
       Inc(RcResidentCount);
       Inc(islot);
     end;
