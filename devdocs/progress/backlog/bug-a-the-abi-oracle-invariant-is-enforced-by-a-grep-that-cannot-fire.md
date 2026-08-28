@@ -95,3 +95,42 @@ Same generator as `bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open` and
 failure case is unreachable, so its silence carries no information.** Third structural
 instance this week. A check that cannot fail and a check that is passing are the same
 observation, and only one of them is worth anything.
+
+---
+
+## The same disease with a second mechanism — verified 2026-08-28
+
+`bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64` [A, p70] is this ticket's
+problem wearing a different failure mode, and the pair is worth reading together because the
+fix shape is shared.
+
+**Counted directly** (`grep -n IRNodeOwnsManagedStr compiler/ir_codegen*.inc`):
+
+| backend | binop sites asking the ownership predicate |
+| --- | --- |
+| aarch64, arm32, riscv32, i386 | **3 each** (concat, equality, ordered) |
+| x86-64 (`ir_codegen.inc`) | **1** |
+
+Result: `if F(x) = 'lit'` leaks F's result **on the default target**, every evaluation, `-O0`
+and up, silent and unbounded — 40 bytes an iteration, measured.
+
+**The distinction that makes this pair instructive:**
+
+- **This ticket**: an oracle exists (`abi.inc`) and backends **re-derive instead of asking**.
+- **That ticket**: an oracle exists (`IRNodeOwnsManagedStr`, one function) and a backend
+  **forgets to ask at one of the sites where asking is required**.
+
+Both are **an obligation across a backend × site matrix with nothing enforcing completeness**,
+and in both cases a grep for the predicate's *name* returns plenty of hits and tells you
+nothing — the defect is a hit that is **absent**, which is the family's signature.
+
+**The mirror is already in `done/`.** `bug-a-a-string-function-result-in-a-concat-leaks-on-
+every-cross-target` fixed the *opposite* half — predicate right on x86-64, missing from the
+four cross backends — and its own comment observed *"this was the FIFTH hand-written copy of
+that predicate."* It fixed the copies without removing the need for copies, so the other half
+of the same fifteen-cell matrix stayed broken and nothing noticed for months.
+
+**So neither ticket may be closed by adding more call sites.** Closing this family means one
+of: a completeness check over the matrix, or a shape where the obligation cannot be omitted
+(the predicate asked once at the shared layer, backends receiving the answer). Six more copies
+and no note about the sixteenth is the failure this pair documents.

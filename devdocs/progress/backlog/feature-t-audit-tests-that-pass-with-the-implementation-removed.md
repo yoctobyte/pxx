@@ -197,3 +197,33 @@ deliberately breaking the implementation.
 **So the audit's procedure is: break it, and if the test still passes, ask what makes the
 broken state observable — then assert THAT.** Stopping after round 1 yields a test that
 passes for the wrong reason, which is exactly what this ticket is about.
+
+---
+
+## Two more failure modes in checks, both caught by the checks failing — 2026-08-28
+
+**1. A support list assembled from what currently refuses.** `check_managed.sh` justified an
+`IR_LEA` answer by naming three refusals that had to keep firing. One of them — concat — was
+in the list *because it refused*, not because it was a write position; an operand of `a + b`
+is read, and no part of the argument ever depended on it. Slice 2 implemented concat, the
+check failed, and only then did the mistake surface.
+
+> **A list assembled from "what currently refuses" rather than from "what this argument
+> needs" contains everything that happens to be missing — and only the failure distinguishes
+> the two.**
+
+The check failing was correct behaviour, not a false alarm. Note the follow-on: slice 3 will
+make it fail *again*, and that time the two remaining entries **are** genuinely load-bearing,
+so the argument must be replaced rather than the list trimmed. **Trimming a support list to
+make a check pass is how the argument quietly stops being supported.**
+
+**2. A negative control scoped to the wrong unit.** `check_strop.sh` asserted that a program
+with no string operators never calls `PXXStrConcat` — and it passed while being written only
+because the RTL's own `PXXVarBinOp` was itself refused and emitted as `unreachable`. The
+change under test made the symbol appear **module-wide**, so the assertion had been answering
+a question about the whole module when it meant to ask about one function. Now scoped to
+`$main$0`.
+
+Same shape as `bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire`: **the
+assertion was true, and true of the wrong scope.** When a negative control passes on first
+write, check what unit it is quantified over before believing it.

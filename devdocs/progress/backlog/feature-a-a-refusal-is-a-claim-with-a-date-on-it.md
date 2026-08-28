@@ -139,3 +139,34 @@ detects it — **the detector for face six is removing the OTHER check and seein
 refuses**, which is the negative-control method from
 `feature-t-audit-tests-that-pass-with-the-implementation-removed` pointed at guards instead
 of at tests.
+
+---
+
+## FACE SEVEN — where the CORRECT build is the one that looks wrong
+
+Every face so far is a check that cannot fail. This one is a check that fails **on the right
+answer**, and it is how the x86-64 comparison leak was found.
+
+frankwasm's leak check diffed the wasm heap advance against the native build's. They
+disagreed. **The native build was the wrong one** — x86-64 leaks 40 bytes per evaluation of
+`if F(x) = 'lit'` — so a check reading "does my backend match the reference?" would have
+reported the correct backend as broken, and a check reading "do they agree?" would have
+reported a *shared* bug as a pass.
+
+> **A diff against an oracle is only as good as the oracle. The only thing separating "my
+> backend agrees with the reference" from "my backend agrees with the reference's BUG" is
+> measuring something the bug has to SCALE with.**
+
+The fix was to take the figure at **two iteration counts and compare the slope**, not the
+value: 0 → 1032 bytes, 1000 → 41032, 10000 → 401032. A constant offset is allocator
+bookkeeping; a slope is a leak. Two independent oracles then confirmed the direction (same
+source to wasm32 gives 1032; FPC's `GetHeapStatus.TotalAllocated` gives 0).
+
+**Attempt one is worth recording too**: comparing `PXXAlloc(64)` addresses produced 72 vs 112
+and *neither build was leaking* — free-list bookkeeping read as a signal. **Three attempts to
+get one assertion that asserts the thing.**
+
+**Rule: when diffing against a reference implementation, assert a PROPERTY the bug must
+violate (a slope, an invariant, a bound), never equality with the reference.** Equality
+inherits the reference's defects silently, and this repo has now been on both sides of that:
+the reference was right when it caught face six, and wrong here.
