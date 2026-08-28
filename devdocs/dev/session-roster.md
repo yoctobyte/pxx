@@ -15436,3 +15436,49 @@ reach, would have been embarrassing."*
 > un-reportable aperture. This is not irony to file away — it is the reason the
 > family keeps recurring: **the checking layer is written with less suspicion than
 > the layer being checked**, because it is "just the harness".
+
+### Tick — lock gap fixed, frankA dispatched, and Track N's cost is now measurable
+
+`working/` was **empty while frank-optimize-b4 was mid-aarch64-port.** That is the
+worse of the two lock directions — an empty `working/` during live work reads as
+*nothing is being touched*, which authorises a double-assignment. Claimed the O
+umbrella on its behalf (`f2d59f45d`) rather than interrupting a build for a file
+move.
+
+**frankA → `bug-p-a-generic-specialized-before-its-declaration-is-unresolvable`
+[P p55].** Opened at HEAD before sending — `backlog/`, `blocked-by` empty, repro
+intact — because I got exactly that wrong with frankA once tonight. Told it to
+settle **its own lead first**: if this and its parked ordering ticket are one
+mechanism, it fixes once and closes two, and this is the better arm because fpc
+3.2.2 accepts **both** orderings. If they are not the same, say so explicitly — an
+unresolved *"these might be one thing"* note reads as prior investigation and is
+not. Carried frankB's seven ruled-out variations and the park-again permission:
+`DelphiRewriteGenericUses` records a previous runaway, and the entry above
+frankB's on that rung is itself a corrected wrong root cause.
+
+Two workers (frank-optimize-b4, frankA); pxx-a5 parked on a daemon restart;
+frankB and frankwasm parked. **Target, not an exception.** U queue **counted**, not
+carried: **15**.
+
+**Track T is UP** — plexus native GREEN at `560951769ffc`, breadth 15m old.
+
+### Track N: the cost of the reserved call is no longer one filename
+
+Not re-asking — the owner's call stands and this is **new evidence, not a repeat of
+the question.** When I last recorded it, N's cost was *one* red on `tools-devtest`
+from the `/tmp` race. `twatch --status` now shows **three** open N-side
+regressions, two of them with a bisected culprit:
+
+- `tools-devtest#00` bad=`f3422cd14b99` — the `/tmp` race, filed as
+  `bug-n-a-nilpy-test-writes-a-fixed-tmp-path-so-concurrent-runs-race` [N p45].
+- `test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy` bad=`19dc5586e384`
+- `test-nilpy#src:test/test_nilpy_startswith_tuple.npy` bad=`19dc5586e384`
+
+The last two share a bad sha, **1 in range each** — so the culprit is identified,
+not merely bounded, and they are almost certainly one root cause rather than two.
+That is a cheap fix sitting behind an unstaffed lane, and unlike the `/tmp` race it
+is a real regression rather than a harness artifact.
+
+Recorded here so the number is in front of the owner when the staffing question
+next comes up, rather than surfacing as a surprise. **A known red gate stops being
+read**, and N now has three.
