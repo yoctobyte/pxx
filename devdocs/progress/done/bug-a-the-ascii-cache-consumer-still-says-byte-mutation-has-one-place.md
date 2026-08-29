@@ -2,7 +2,7 @@
 track: A
 prio: 20
 type: bug
-status: open
+status: done
 found: 2026-08-29
 found-by: frankD
 summary: "pylib.pas:3361 justifies trusting the ASCII cache with 'PXXStrUnique forgets it whenever bytes are about to change, which is the one place they can'. There are four such places. All four handle it correctly today, so no defect — but this is the same false-choke-point sentence that cost two months as instance #4, still asserted in the CONSUMER that depends on it, after the fix."
@@ -91,3 +91,6 @@ same layout.
 ## Gate
 
 Comment-only. `make compiler/pascal26` byte-identical.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

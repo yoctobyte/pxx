@@ -3357,8 +3357,17 @@ begin
     indexing loop O(n^2) — measured at 2476x CPython for n=160k, and the reason
     a compiled language was losing to a bytecode interpreter
     (bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython).
-    The block header carries the answer; PXXStrUnique forgets it whenever bytes
-    are about to change, which is the one place they can. }
+    The block header carries the answer, and every site that mutates bytes in
+    place must forget it — PXXStrUnique is one of them, NOT the only one. This
+    sentence used to say it was ("which is the one place they can"); the same
+    claim in PXXStrUnique's own header caused three bugs fixed on 2026-08-29,
+    and this copy is the one that decides whether the cache may be trusted at
+    all, so it is the worse place for it to be wrong. The list today is
+    `grep PXXStrForgetAscii` in builtinheap.pas plus two hand-emitted x86-64
+    paths in ir_codegen.inc (the AnsiStrUniqueAddr blob and the in-place
+    SetLength resize). Adding a mutation site means adding a forget, whether or
+    not it goes through PXXStrUnique.
+    bug-a-the-ascii-cache-consumer-still-says-byte-mutation-has-one-place }
   cached := PXXStrAsciiCached(Pointer(s));
   if cached >= 0 then
   begin

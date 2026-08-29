@@ -2,7 +2,7 @@
 track: A
 prio: 30
 type: bug
-status: open
+status: done
 found: 2026-08-30
 found-by: frankD
 summary: "builtinheap.pas:2625-2631 is the sentence that produced instances 1, 2 and 3 of the builtinheap-twins ticket. All three were fixed on 2026-08-29. The comment was written 2026-08-14 and has not been touched since — it still says PXXStrUnique is 'the single choke point for byte mutation, which is what makes the cache sound' and that 'PXXStrSetLen needs no such call'. Refuted three times in one day, still standing, still load-bearing."
@@ -91,3 +91,6 @@ is asserting something a command can check.
 
 Comment-only. `make compiler/pascal26` must stay byte-identical; if it does not,
 something in the change was not a comment.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

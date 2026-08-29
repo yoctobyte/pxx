@@ -2625,10 +2625,30 @@ begin
   { Whichever path runs, the caller is about to WRITE bytes through the handle
     we return, so any cached ASCII answer stops being true. rc<=1 hands back the
     same block (mutated in place); the COW path copies through PXXStrFromLit,
-    which stamps the flag from the OLD bytes. Both must forget it — this is the
-    single choke point for byte mutation, which is what makes the cache sound.
-    PXXStrSetLen needs no such call: it always allocates a fresh block and
-    PXXHdrInit zeroes its meta. }
+    which stamps the flag from the OLD bytes. Both must forget it.
+
+    This is ONE of several sites that mutate bytes, not the only one — the
+    sentence that used to stand here said "the single choke point for byte
+    mutation, which is what makes the cache sound", and on 2026-08-29 three
+    separate bugs were fixed that had all been caused by believing it
+    (8be3c6d06, df19c72a7, b71690c40). The invariant is per-site, so state it
+    that way: EVERY site that mutates bytes in place must forget the answer.
+    The current list is `grep PXXStrForgetAscii` plus the two hand-emitted
+    x86-64 paths in ir_codegen.inc — the AnsiStrUniqueAddr blob, and the
+    in-place SetLength resize that clears both bits itself. Run the grep; do not
+    trust a count in a comment, this one's included.
+
+    A note on the clause that also used to stand here, because it is the subtler
+    trap: "PXXStrSetLen needs no such call: it always allocates a fresh block."
+    That is TRUE of this Pascal routine — every non-collapsing path really does
+    PXXAlloc + PXXHdrInit — and it was still the premise of a real bug, because
+    x86-64 does not CALL PXXStrSetLen: it inlines the symbol-target resize, and
+    that inline has an in-place arm (df19c72a7). A reader who checked the claim
+    against PXXStrSetLen confirmed it and stopped. **The thing that gets checked
+    was not the thing that was load-bearing** — so when a comment justifies an
+    invariant by naming a routine, check the OPERATION's other implementations,
+    not the routine.
+    bug-a-the-comment-that-caused-three-bugs-survived-all-three-fixes }
   rc := PWord(oldHandle - 16)^;
   if rc <= 1 then
   begin
