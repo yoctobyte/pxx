@@ -280,6 +280,43 @@ signatures, not from the ladder's list — and both are ahead of it now:
     Resolves `bug-r-rexprrecid-breaks-the-fpc-bootstrap-seed` and
     `bug-r-rparser-calls-rexprrecid-before-declaring-it-so-the-fpc-bootstrap-seed-does-not-compile`.
 
+11. **DONE** — the stage-3 **unity build**: several `.rs` modules concatenated
+    into one translation unit, the same trick `test/zlib/runner.c` uses. `cat`
+    IS the build step; no module system, and none wanted.
+
+    What concatenation does *not* fix is the module QUALIFIERS: the source
+    still says `crate::attacks::popcount(...)` and `board::Board::new()`, and
+    those names have to become flat. Stripping them needs to tell a MODULE path
+    from a TYPE path, because `Board::new` and `Color::White` must survive — so
+    `RStripTopItems` now collects the `mod x;` declarations in a first pass and
+    strips `<mod>::`, `crate::`, `self::`, `super::` anywhere in a second.
+    Exact rather than heuristic: no rule about capitalisation, and an unknown
+    `foo::bar` still errors the way it should. Chains fall out for free, since
+    after dropping `crate ::` the loop re-examines `board ::` in place.
+
+    The two-pass split is load-bearing: a `mod` item may sit BELOW a use of its
+    own qualifier, and one forward pass would then strip nothing.
+
+    `test/rust_unity/` is four modules with real cross-module references — a
+    data module of const tables, a type module with an impl, a module reading
+    both and returning an array, and a crate root that declares them. Every
+    oracle is a hand-computed knight mobility (a1 = 2, b2 = 4, c3..f6 = 8,
+    h8 = 2), not a recorded run.
+
+    **Stated limit:** the corpus is written in real-crate shape but is NOT
+    verified against rustc — there is no rustc on this box. It is a shape
+    fixture, not a conformance one, and the Makefile comment says so. Claiming
+    otherwise would be the same overreach the claims-discipline section warns
+    about.
+
+12. **DOC** — `devdocs/dev/rust-semantics-divergences.md` created, the Rust peer
+    of the NilPy and Pascal divergence docs. Holds the const-array deviation
+    (routed there by CLAUDE.md's "an observable that no compiling program can
+    reach" row rather than by a `decide-*`, since the written rule already
+    answers it), the `println!` argument-order note from rung 6, and the
+    single-token type-alias narrowing — all three had been living only in this
+    ticket, which is the wrong place for them once the ticket closes.
+
 ## Log
 - 2026-08-29 — unit 1 landed (see the ladder ticket's log for the detail).
 - 2026-08-29 — unit 2 landed: Option (and records generally) through fn
@@ -310,3 +347,7 @@ signatures, not from the ladder's list — and both are ahead of it now:
   between `let` and the const prescan. `test_rust_module_items.rs`.
 - 2026-08-29 — urgent FPC-seed fix: `RExprRecId` forward-declared. Both
   duplicate p80 tickets resolved.
+- 2026-08-29 - rung 11 landed: the stage-3 unity build. Module qualifiers are
+  stripped using the crate root's own `mod x;` declarations, so a `cat` of four
+  modules compiles and runs. `test/rust_unity/`.
+- 2026-08-29 - `devdocs/dev/rust-semantics-divergences.md` created.
