@@ -831,3 +831,44 @@ share the absorbing property. Face thirteen: two arms sharing an upstream in the
 code. Both concern what an observation cannot distinguish. Twenty concerns what
 an ACTION cannot distinguish — and the action's evidence is generated *after* the
 belief exists, which is the direction that admits the most self-deception.
+
+## Face twenty-one — an append to a path that does not exist creates it, and reports success
+
+Found by frank-coordinator, 2026-08-29, in its own week-old work. Face twenty is
+about an intervention whose evidence is ambiguous. This is about a WRITE that
+lands somewhere other than where it was aimed and says nothing.
+
+**The instance.** Two appends were addressed to `devdocs/progress/backlog/<slug>.md`
+while the ticket lived in `backlog_new/`. The shell created the file. Both
+appends reported success. The content really was written — to an empty-headed
+orphan with no frontmatter and no body, while the real ticket received nothing.
+
+| condition | evidence produced |
+| --- | --- |
+| appended to the existing ticket | exit 0, file present, content in it |
+| created a new file at the wrong path | exit 0, file present, content in it |
+
+**Why it lasted.** Every downstream reading agreed with the wrong one. The
+ranker offered the slug twice at the same priority and flagged nothing. The
+checker validated ticket *content* and never asked about the ticket *set*. And
+critically, **both files read as coherent when opened alone**: the orphan looked
+like a complete analysis, the real ticket looked like a correctly-filed bug, and
+neither could announce the other. A reader lands on whichever the ranker offered
+and gets a consistent, wrong picture.
+
+**The general shape, past shells.** *Create-if-missing is a convenience that
+converts a targeting error into a silent success.* It is the same trade every
+`mkdir -p`, every upsert and every `?=` default makes, and each is right in the
+case it was designed for. What it costs is the ability to say "that destination
+was not there" — and that sentence is the only thing standing between an append
+and an orphan.
+
+**The cheap guard**, and it is the one that generalises: **when a write is
+supposed to MODIFY something, assert the target exists first.** Not "did the
+write succeed" — the write always succeeds. `>>` cannot distinguish appending
+from creating, so the check has to happen before it, or the distinction is gone.
+
+**Related.** Face twenty: a remedy already in force and one that worked produce
+the same green. Both are cases where the ACTION's own report is uninformative,
+as opposed to an observation's. The pattern across both: **an operation that
+cannot fail cannot inform.**
