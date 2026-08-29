@@ -948,13 +948,6 @@ begin
       WasmMemOp($28, 'i32.load', 2, 0);
     Exit;
   end;
-  if (Syms[si].Kind = skParam) and Syms[si].IsArray and not Syms[si].IsRef then
-  begin
-    WasmUnsupported('open-array parameter ' + Syms[si].Name
-                    + ' — the slot holds a dynamic-array handle, whose layout'
-                    + ' is not implemented on this target');
-    Exit;
-  end;
   if (Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray then
   begin
     { A scalar managed string. IR_LEA on one is POSITION-DEPENDENT: read
@@ -1914,8 +1907,15 @@ end;
   wrong number. }
 function WasmNodeIsDynArray(n: Integer): Boolean;
 begin
+  { An open-array PARAMETER is a dyn array too: its slot leads to the same
+    header, so Length reads the same word. ArrLen alone says no — an open
+    array's ArrLen is the open-array sentinel, not -1 — and answering no here
+    is what made `Length(a)` on an open-array parameter refuse as `Length of
+    Pointer` while the indexing right next to it worked. }
   WasmNodeIsDynArray := (IRKind[n] = IR_LEA) and (IRA[n] >= 0)
-                        and Syms[IRA[n]].IsArray and (Syms[IRA[n]].ArrLen = -1);
+                        and Syms[IRA[n]].IsArray
+                        and ((Syms[IRA[n]].ArrLen = -1)
+                             or (Syms[IRA[n]].Kind = skParam));
 end;
 
 function WasmEmitLength(valNode: Integer): Boolean;
