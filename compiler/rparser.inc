@@ -1495,6 +1495,17 @@ begin
   Result := ci;
 end;
 
+{ Parses the aggregate literal at the cursor into an already-existing target
+  LVALUE (a node, so the target can be a local, a fn's Result slot, or a FIELD
+  of one) and returns the chain of field stores. A literal is the only way a
+  whole struct/enum value comes into existence here -- no AST node carries one
+  through an expression -- so it is always N stores into a named slot, and
+  every context that can name one uses this single implementation.
+
+  The target node is REUSED as the base of each store rather than rebuilt.
+  That is safe because a target lvalue is a pure address chain (ident, field,
+  index over them) with no side effects to repeat -- the same property the
+  compound-assign desugar relies on. }
 function RParseAggregateIntoNode(targetNode, ci: Integer): Integer; forward;
 
 function RMaterializeAggregate(ci: Integer): Integer;
@@ -2771,19 +2782,6 @@ begin
   ASTLeft[Result] := baseNode; ASTRight[Result] := idxNode;
   ASTTk[Result] := tk;
 end;
-
-{ Parses the aggregate literal at the cursor into an already-existing target
-  LVALUE (a node, so the target can be a local, a fn's Result slot, or a FIELD
-  of one) and returns the chain of field stores. A literal is the only way a
-  whole struct/enum value comes into existence here -- no AST node carries one
-  through an expression -- so it is always N stores into a named slot, and
-  every context that can name one uses this single implementation.
-
-  The target node is REUSED as the base of each store rather than rebuilt.
-  That is safe because a target lvalue is a pure address chain (ident, field,
-  index over them) with no side effects to repeat -- the same property the
-  compound-assign desugar relies on. }
-function RParseAggregateIntoNode(targetNode, ci: Integer): Integer; forward;
 
 { One field's initializer, stored into an already-built field node. Three
   shapes, and the recursion is what makes a nested literal work:
