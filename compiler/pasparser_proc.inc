@@ -4503,6 +4503,26 @@ begin
   end;
 end;
 
+{ `uses a, b, c;` -- one shape, three sites (program decl part, unit interface,
+  unit implementation), which is why it is a procedure: the Delphi-generics
+  desugar below has to run at the END of every one of them, and a fourth copy is
+  how the third site would have been the one that stayed broken. }
+procedure ParseUsesClause;
+var doneUses: Boolean;
+begin
+  Next;   { consume `uses` }
+  doneUses := False;
+  while (CurTok.Kind in [tkIdent, tkString]) and not doneUses do
+  begin
+    ParseUsesEntry;
+    if not Eat(tkComma) then doneUses := True;
+  end;
+  Eat(tkSemicolon);
+  { Every template the clause just imported is registered now, and every use of
+    one lies ahead of this point. See DesugarImportedDelphiGenericUses. }
+  DesugarImportedDelphiGenericUses;
+end;
+
 { Compile a unit's `initialization` section into a synthesized parameterless
   proc and register it in InitProcs[]. The dialect has no real init execution,
   so ParseUnit used to drop these tokens; this emits a normal proc body that the
@@ -4727,7 +4747,7 @@ end;
 procedure ParseUnit;
 var
   uname: AnsiString;
-  doneUses, savedInterface, doneImp, savedPreScan, savedPass2Active: Boolean;
+  savedInterface, doneImp, savedPreScan, savedPass2Active: Boolean;
   savedBase, afterImpTok, ii, savedPass2BodyTok: Integer;
 begin
   { A used unit parses in its own normal (single-pass) mode: its interface is
@@ -4759,17 +4779,7 @@ begin
   while (CurTok.Kind <> tkEOF) and not ((CurTok.Kind = tkIdent) and ((CurTok.SVal = 'implementation') or (CurTok.SVal = 'Implementation'))) do
   begin
     case CurTok.Kind of
-      tkUses:
-      begin
-        Next;
-        doneUses := False;
-        while (CurTok.Kind in [tkIdent, tkString]) and not doneUses do
-        begin
-          ParseUsesEntry;
-          if not Eat(tkComma) then doneUses := True;
-        end;
-        Eat(tkSemicolon);
-      end;
+      tkUses:     ParseUsesClause;
       tkVar:      ParseVarSection;
       tkConst:    ParseConstSection(-1, 0, False);
       tkType:     ParseTypeSection;
@@ -4833,17 +4843,7 @@ begin
     else
     begin
       case CurTok.Kind of
-        tkUses:
-        begin
-          Next;
-          doneUses := False;
-          while (CurTok.Kind in [tkIdent, tkString]) and not doneUses do
-          begin
-            ParseUsesEntry;
-            if not Eat(tkComma) then doneUses := True;
-          end;
-          Eat(tkSemicolon);
-        end;
+        tkUses:     ParseUsesClause;
         tkVar:      ParseVarSection;
         tkConst:    ParseConstSection(-1, 0, False);
         tkType:     ParseTypeSection;
