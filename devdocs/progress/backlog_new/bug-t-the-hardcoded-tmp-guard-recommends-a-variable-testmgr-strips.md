@@ -111,3 +111,47 @@ Track T's own, for a tooling change. For the message-only half the guard answers
 in about a second with no build (`python3
 tools/testmgr_hardcoded_tmp_devtest.py`), plus the four environment shapes above
 on any one converted test.
+
+---
+
+## 2026-08-30 — the guard's RED came and went, and it is NOT this ticket
+
+Worth writing down because the red was read three different wrong ways in one
+evening, mine included.
+
+**What the two boxes actually say**, re-read after both took a newer full tier:
+
+| host | `tools-devtest#00` | at | note |
+| --- | --- | --- | --- |
+| plexus | `fail` → **`pass`** | `49bd043061c1` → `e46dbffaa80d` | the red named `testmgr_hardcoded_tmp_devtest.py`; it is gone |
+| seven | **`timeout`**, `job_last_pass` empty | `f2706f45eabe` | never passed there; 90.1s against a 90s budget |
+
+So it is **not** "green here, red there". It is one box that went red and then
+green between two full tiers, and one box that has never finished the job at
+all. Two different facts that a single `fail` column made look like one.
+
+**What healed plexus:** `10e405656` *"teach testmgr the TESTTMP value, so the
+four cannot go blind at once"* — which changed the `/tmp` **literals the guard
+scans**. Different defect, same three letters. seven's is the budget, addressed
+separately by the calibration probe
+(`bug-t-a-job-that-never-passed-on-this-box-can-never-earn-a-bigger-budget`).
+
+**And neither closes THIS ticket.** Re-measured against `tools/testmgr.py` at
+HEAD rather than inferred from the guard's colour:
+
+```
+ENV_ALLOW           — TESTTMP absent
+ENV_ALLOW_PREFIXES  — ("PXX_", "TESTMGR_", "LC_", "QEMU_"): no match
+tools/testmgr_hardcoded_tmp_devtest.py:202 — still prints "$TESTTMP"
+```
+
+Both claims in the summary above stand, unchanged.
+
+**The trap, stated plainly, because it will catch the next reader too:** this
+ticket's failure mode is *the guard being **GREEN** while the defect stands*. So
+a green guard is not evidence against the ticket — **it is the symptom.** Anyone
+who reaches this file because the devtest went green has just reproduced the
+finding, not refuted it.
+
+*(Measured by the Track T agent on plexus. No change made here — the fix is
+still the two parts above, and part 2 is the one that lasts.)*
