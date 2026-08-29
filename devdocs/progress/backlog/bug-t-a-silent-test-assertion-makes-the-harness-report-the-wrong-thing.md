@@ -1,5 +1,5 @@
 ---
-track: T
+track: A+T
 prio: 45
 type: bug
 blocked-by: []
@@ -233,3 +233,31 @@ carries **Track A's file ownership and gate**, and per this ticket's own Gate
 section must not land concurrently with other A edits to `Makefile`.
 
 Nothing here is blocked any more. The helper is a dependency that now exists.
+
+## Retracked `T` → `A+T` by the coordinator, 2026-08-29
+
+**This is a dispatch call, made rather than left implicit.** pxx-a5 flagged that
+`next --track T` headed with this ticket and **no T agent can take it** — its
+remaining half edits `Makefile`, Track A's file-lane. It declined to retrack,
+correctly: retracking *is* the dispatch call and that call is mine.
+
+**Why `A+T` and not plain `A`.** CLAUDE.md's two axes settle it: **A is the
+file-lane** (Makefile — who owns this file when two agents run at once) and **T is
+the work-tag** (test diagnostics — what kind of work this is). Exactly the shape of
+`A+O`, `A+S`, `B+F`. Dropping the `T` would lose what the ticket is *about*;
+keeping only `T` puts it in a queue whose agents cannot act on it.
+
+> **A queue head that its own lane cannot work is worse than an empty queue** — it
+> occupies the ranker's top slot and every `next --track T` re-offers it, so the
+> lane reads as busy while nothing is takeable.
+
+**Step 1 is DONE and this is now a clean Track A dispatch:** `tools/expect_same.sh`
+landed (`b194ef7ec`) as its own closed unit — labelled output, `-` expected / `+`
+actual pinned by a guard, no absolute `/tmp` path (testmgr rewrites those), and
+**byte-stable across runs** because `diff -u` stamps mtimes on its header lines and
+a reason that changes every run reads as a NEW failure to anything comparing this
+run's reds against the last.
+
+What remains is **480 mechanical conversions in `Makefile`**, against a helper that
+exists and is guarded, **nothing blocked**. The gate constraint stands: it must not
+land concurrently with other Track A edits to `Makefile`.
