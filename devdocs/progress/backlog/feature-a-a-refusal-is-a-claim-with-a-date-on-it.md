@@ -1681,3 +1681,82 @@ expires *silently*, or that expires while accusing the wrong change, is not.
 current shape.** "The heap does not overlap BSS" survives the fix. "The heap base
 is below 1024" is the bug, written down as an assertion, waiting to accuse
 whoever repairs it.
+
+### 40. A ticket certifying a gap as harmless describes TODAY's reachability — and the fix is what changes it
+
+frankwasm, 2026-08-29, wasm32 `EmitZeroFrameSlot`.
+
+The ticket said the loud `Error` was the harmless half — *"fails open, but
+demonstrably INERTLY."* It was not the harmless half. **It was the protection.**
+
+`WasmEmitManagedLocals`, the prologue pass the ticket correctly identified as the
+real owner, zeroed scalar AnsiStrings and dynamic arrays **and nothing else**.
+Every other kind `ManagedLocalZeroBytes` knows about — a local record with managed
+fields, a static array of string, a Variant, a COM interface, a promotable int —
+was unzeroed on that target. They were unreachable *only* because the wide chain
+refused them at compile time.
+
+So the obvious fix — add the arm the ticket asks for, leave the pass alone —
+**removes the refusal and the protection in one commit and ships a
+use-after-free**, while closing a ticket whose own text says the failure is inert.
+
+**The trap is that the reassurance was TRUE when written.** Inertness was never a
+property of the code; it was a property of the refusal standing in front of it.
+The ticket is therefore at its most misleading to the one person guaranteed to
+read it: whoever is doing what it asks. A caveat that says "harmless" is read as a
+statement about the defect, and it is really a statement about the guard.
+
+**When a refusal is load-bearing, removing it is not a no-op — audit what it was
+holding back before you take it out.** The repair is the one that keeps recurring:
+the pass now asks `ManagedLocalZeroBytes`, the shared table its own callers use,
+instead of restating a list of kinds. The release half deliberately keeps its own
+narrower predicate — *what must start nil* and *what this backend knows how to
+release* are different questions, and collapsing them into one predicate is
+exactly what hid this.
+
+Sibling of face 33 (a capability nothing invokes) inverted: there the check
+existed and nothing called it; here the thing that called it was the bug.
+
+### 41. When a cap is breached, measure every CONSUMER — the one in the report is just whichever ran first
+
+frankA, 2026-08-29, `MAX_CODE` 16 → 32 MB.
+
+The ticket named **aarch64** and recommended a floor around 21 MB. Measured at
+HEAD, one compiler, one source, only `--target` differing:
+
+| target | bytes | % of old cap |
+| --- | --- | --- |
+| x86-64 | 9 316 078 | 55.5% |
+| i386 | 10 902 436 | 65.0% |
+| aarch64 | 20 446 704 | **121.9% OVERFLOWED** |
+| arm32 | 21 568 956 | **128.6% OVERFLOWED** |
+
+`make cross-bootstrap` builds i386, aarch64 **and arm32**. **Had the recommended
+~21 MB been taken, aarch64 would have fitted and arm32 would still have
+overflowed** — the fix would have looked complete, the ticket would have closed,
+and the next dispatch would have failed on the target nobody measured.
+
+The reporter stopped at the first failure, which is correct behaviour and is
+precisely what makes the report a biased sample: **a build aborts at its first
+overflowing consumer, so the ticket names the one that ran earliest, not the one
+that needs the most.** Sizing headroom from the reported instance sizes it for an
+arbitrary member of the set.
+
+Two corollaries earned in the same fix:
+
+- **The hesitation was resting on a stale comment.** `defs.inc` said the cap
+  "costs virtual BSS only", true when `Code[]` and `AsmDisProcAtPos` were fixed
+  arrays. Both are `array of` now — `GrowCode` doubles on demand, and
+  `AsmDisProcAtPos` is sized to actual `CodeLen`. The constant is a ceiling, not
+  an allocation, and raising it costs zero bytes until a program emits them.
+  Measured: BSS moved 76 206 356 → 76 249 388 across the bump, i.e. with the
+  rebuild, not with the cap. **A cost note outlives the representation it
+  describes, and every future bump inherits the false hesitation.**
+- **This was the THIRD cap raise** — `MAX_CODE` 8→16, `MAX_STRS` 8192→65536,
+  `MAX_CODE` 16→32 — and all three were found by a program failing, none by
+  anyone looking, because **no cap's utilisation is reported at any verbosity.**
+  The compile summary prints `code= data= bss= procs=`: raw counts with no
+  denominator, so `procs=3401` never says it is 21% of `MAX_PROCS`. A number
+  without its denominator is not a measurement of headroom, and the board cannot
+  tell a cap at 20% from one at 99%. Filed as `feature-a-report-fixed-cap-headroom`
+  [A p40], sorted by percent so the top row is the next to bite.
