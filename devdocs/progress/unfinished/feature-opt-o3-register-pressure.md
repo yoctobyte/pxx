@@ -1918,3 +1918,81 @@ An aarch64 port of W2 that stays inside `ir_codegen_aarch64.inc` may proceed
 concurrently. One that needs `symtab.inc` **must wait or coordinate** — do not
 take it on the strength of holding the O umbrella, because the umbrella's letter
 is not what allocates the file.
+
+---
+
+## 2026-08-29 — item 3 on aarch64, plus the prerequisite nobody had ranked. LANDED.
+
+`21d2c4234`. Two changes, and the first is a **prerequisite**, not a companion.
+
+### The dependency the source-level ranking could not see
+
+aarch64's dual-write refreshed a resident by **reloading the frame slot** written
+one instruction earlier — an immediate materialisation, an `add x9, x29, x9` and
+a load, on the critical path of every store to a resident. x86-64 removed exactly
+this in `RegcallRefreshResidentFromRax`; aarch64 never got it.
+
+**Item 3 could not be ported without it.** Item 3 makes the slot stale; a refresh
+that reads the slot then loads garbage. So the port that was ranked as "item 3 on
+aarch64" was really two changes, and the order between them is forced. This is
+the second time this port has turned out to be bigger than a source reading
+suggested — the first was the missing probe.
+
+Item 3 itself is worth **more** here than on x86-64: skipping the dual-write
+removes three instructions (immediate + add + store) rather than one, and with
+the refresh change about six per store.
+
+Gated on the **same shared predicate** as x86-64 — `ResidentSlotIsDead`, which is
+target-agnostic because `ResidentRegOf` is — so both targets refuse an
+exception-frame body for the same reason and one poison experiment validates
+both. `RcProcHasExc` is now recomputed in the aarch64 pass: redundant today, but
+otherwise aarch64's correctness would depend on the x86-64 pass having run first,
+a coupling nothing states and a reordering would silently break.
+
+### Measured — and one earlier number in this ticket is corrected
+
+qemu, interleaved, 9 reps, three runs each:
+
+| | before | after | |
+| --- | --- | --- | --- |
+| item 1 alone (`cf70cb5be`) | 11.76 / 10.67 / 8.53 | 10.56 / 9.66 / 7.63 | **1.105-1.118x** |
+| item 3 + refresh-from-x0 | 10.87 / 8.28 / 8.00 | 5.32 / 4.23 / 4.08 | **1.855-1.961x** |
+| control: `-O2`, no residency at all | 11.10 | 5.01 (full stack) | 2.216x |
+
+**A FOUR-WAY interleaved run read item 1 as NEUTRAL (~1.00x), and it was wrong —
+the seventh false reading from this box.** It was min-of-**4** across four
+variants, one running at half the others' wall time, so the interleave was uneven
+and the rep count too low. That is the *repetition* trap, occurring in a run that
+was correctly applying the interleaving and control disciplines — the traps do
+not compose for free:
+
+> **Adding a variant does not come free; it costs reps.** A control earns its
+> place by making the ordering structural, but it also divides your sampling
+> budget, and an under-powered four-way beats a well-powered pair only if the
+> reps come with it.
+
+Re-measured pairwise at 9 reps it is 1.105-1.118x over three runs, matching the
+original 1.07-1.13x. **The number in the `cf70cb5be` entry stands; the four-way
+run that appeared to contradict it is the one that was wrong.**
+
+All of these stay **directional and lower bounds**: qemu times translated
+instruction throughput and does not model store-to-load forwarding, the precise
+stall residency removes. Nothing here predicts real aarch64 silicon.
+
+### Correctness
+
+- self-host fixedpoint verified, `a07c5ee5f972`, and again at `603e1fa38a2c`
+  after rebasing onto ~18h of drift
+- 13 programs x `-O0`/`-O2`/`-O3` under qemu: identical to the pre-item-3 compiler
+- `PXXDBG=a.poisonslot` green **12/12 on aarch64**, including
+  `test_o3_resident_inplace` with its `try/except` and unwind-through cases
+- all 6 targets at default `-O`: 48/48 hashes identical
+
+### File boundary observed
+
+Stayed entirely inside `ir_codegen_aarch64.inc`. `symtab.inc` is frankA's while
+`bug-a-nodemetaclassci-does-not-know-a-virtual-class-method-call` is open, and
+this needed nothing from it beyond the predicate already there. **The umbrella's
+track letter does not allocate the file** — worth stating in the ticket, because
+holding an O ticket that already edits `symtab.inc` is exactly the reasoning that
+would have taken it.
