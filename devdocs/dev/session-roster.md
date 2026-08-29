@@ -16722,3 +16722,57 @@ needed to be told.** b4's own framing: *staying out costs a visible gap in your
 own work and buys something invisible; nobody thanks you for the collision that
 did not happen* — which is why it asked that pxx-a5 be told, since the file will
 never say it.
+
+## 2026-08-29 — I DOUBLE-DISPATCHED N p85. The lock did not fail; I did.
+
+Two agents fixed `bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module`
+simultaneously. frankA reported it as a `working/` lock weakness and proposed no
+fix, which was gracious and is **the wrong attribution.** The record:
+
+1. Dispatched the p85 to **frankA**. It refused, correctly, citing the ticket's
+   Track N reservation — a paragraph on master outranking a message from me.
+2. I lifted the reservation on master, then dispatched the p85 to **pxx-a5**.
+3. I then told **frankA** the reservation was lifted and the p85 *"is the global
+   head and it is yours if you want it — HeapMmap first if you are choosing."*
+
+**Step 3 re-offered a ticket I had given away in step 2**, without withdrawing it
+and without telling frankA that pxx-a5 held it. Both agents were correctly
+following my instructions. `working/` behaved exactly as designed: frankA claimed
+it and pxx-a5 was already in it, because **I put them both there.**
+
+> **A dispatch that was REFUSED is not a dispatch that was WITHDRAWN.** When a
+> worker declines a ticket for a reason I then remove, the ticket does not
+> revert to unassigned — it reverts to *whatever I did with it in between*. I
+> tracked the refusal and lost the re-assignment, because a refusal feels like
+> the end of a transaction and it is the middle of one.
+
+**Cost, and why it was small by luck rather than design:** the two fixes composed
+along file ownership — pxx-a5 took the call site, import parser and constructor
+path; frankA took the `PyDefRebindTok` row in `symtab.inc`. Nine rows now match
+CPython where the ticket opened with four diverging. **pxx-a5 left the exact row
+frankA was fixing, writing that it needed a file "held by another agent" — and
+that agent was frankA.** frankA meanwhile split out a follow-on ticket for rows
+pxx-a5 had already fixed; withdrawn to `rejected/` with its analysis kept.
+
+The near-miss is that the disjointness was luck. Two agents in one ticket with
+overlapping files is a lost afternoon, not a merge.
+
+**The fix is mine and it is a habit, not tooling:** *before re-offering any
+ticket, re-read what I did with it since the refusal.* `working/` cannot help —
+it records who claimed, not who was told. And a lock that both agents were
+instructed past is not advisory, it is **correct and overruled**.
+
+### frankA's second finding — a baseline is not an expectation
+
+The Track T agent left a note asking whoever finished the ticket to run the two
+fallback-import tests with `-Futest/nilpy_units`. frankA ran them **without** the
+flag, saw six build failures, and read them as regressions from its own change.
+**The pinned baseline showed the same six.** The flag was the entire difference.
+
+> Six failures after a change look like six regressions. They are only
+> regressions if the baseline was green, and **the baseline has to be RUN, not
+> remembered.** frankA ran it, which is why this is a note and not a ticket.
+
+Also landed by frankA: `regression-test-emit-obj-cxtensa-obj` [A+S p70] — the C
+driver asked the profile when it meant the platform, **16 hours of standing
+red** — and the HeapMmap wasm32 arena, since verified on the wasm branch.
