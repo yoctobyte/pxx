@@ -198,3 +198,154 @@ releases it.
 
 **Expiry:** when this ticket resolves, or when frankC reports the slot released —
 whichever is first. A later `ir.inc` change is a later ask.
+
+---
+
+# INVENTORY — frankC, 2026-08-29. Reported before moving anything (grant condition 2). No line of `ir.inc` has been touched.
+
+Measured at `3e76bb52a`. `compiler/ir.inc` is 13,570 lines and carries **40**
+`CProgramMode` matches. **The count is wrong in both directions**, which is the
+headline: it over-counts what is C by 18 and misses 232 lines that are.
+
+## Classification of the 40
+
+**One is not a site at all.** Line 1662 is *prose* — a comment recording that a
+guard was **removed** (*"This arm was gated on `CProgramMode` for no reason the
+guard itself needs"*, `feature-a-typeref-migrate-consumers`). 39 real guards.
+
+| class | count | what it is | can it move to `cir.inc`? |
+| --- | ---: | --- | --- |
+| **A — C-exclusive** | **22** | lowering that only ever runs in C mode | yes, but see the shape problem |
+| **B — Pascal/NilPy-only, C excluded** | **13** | `not CProgramMode` guarding *Pascal* code | **no — moving it would be backwards** |
+| **C — shared two-armed dialect decision** | **4** | both dialects act, differently | **no — it is a shared rule** |
+| — comment | 1 | records a guard already deleted | n/a |
+
+### Class B — 13 sites that are not C lowering at all
+
+`2864 7212 8282 8352 8966 8980 9343 9427 9448 9669 12752 12772 12830`
+
+Every one is Pascal (or Pascal+NilPy) behaviour with C carved *out*: the
+char-array/string conversions (`bug-p-a-char-array-is-not-a-string-in-any-direction`,
+five sites), the PChar↔string wraps, the record-arithmetic and assignment-type
+diagnostics, the cdecl-procvar reject, the enum/widechar write paths. The C
+"behaviour" at each is **absence**. `IRCoerceCharArrayArg` (2864) is the clearest:
+`if CProgramMode then Exit` as its first statement — a 50-line routine that is
+*entirely Pascal's*.
+
+**A naive "move the `CProgramMode` sites" would relocate a third of the Pascal
+frontend into a C file.** This is the ticket's own warning (*"some are shared
+lowering with a guard bolted on, which is a different defect"*) landing harder
+than expected — the guard is not bolted onto shared lowering, it is bolted onto
+*the other lane's* lowering.
+
+### Class C — 4 shared decisions
+
+| line | decision |
+| --- | --- |
+| 1758 | string-literal index base: `-8` (C, 0-based) vs `-7` (Pascal, 1-based) |
+| 3801 | record argument: C always copies to a temp; Pascal branches on `isRefArg` |
+| 10426 | literal→pointer store: `CProgramMode or IsNodePChar(dest)` — **one rule, two spellings** |
+| 12074 | ternary arm type: `tyPointer` (C) vs `tyAnsiString` (Pascal) |
+
+These are dialect *parameters*, not C code. 10426 is the interesting one: C says
+"any pointer destination", Pascal says "a PChar destination", and they are the
+same rule at different strictness — a `normalise-dont-special-case` candidate in
+its own right, and **not** something to move.
+
+### Class A — the 22 that are genuinely C, and why the obvious move fails
+
+| shape | count | lines |
+| --- | ---: | --- |
+| whole routine is C-only | 1 | 2238 |
+| C-only **tail** of a shared routine | 3 | 867, 2153, 2375 |
+| C-only early-exit in a shared routine | 1 | 864 |
+| **C arm inside a shared dispatch** | **17** | 1642 2406 2426 2440 2467 3152 3176 7165 7176 7309 7909 9288 10220 10461 10468 10529 10635 |
+
+**Seventeen of the twenty-two are arms inside somebody else's `case` or
+`if`-chain** — `IRLowerAST`'s giant AST-kind case, `IRLowerAddress` (604 lines),
+`IRPointerStride` (182), `IRLowerCallArg` (1168). They cannot be lifted out
+whole, because what surrounds them is the shared dispatch itself.
+
+**This is the structural difference from the `parser.inc` precedent, and it is
+why that precedent does not transfer unmodified.** Pascal parsing was *whole
+procedures* — `ParseClassDecl`, `ParseGeneric` — so slicing them into
+`pasparser_*.inc` was a file move. C lowering is *arms*, and an arm has no
+boundary to cut along.
+
+## What the 40-site grep MISSES — 232 lines, six whole routines
+
+`CProgramMode` does not appear in them, so none is in the inventory. Each is
+**reached only from a C-guarded call site**, verified by checking every caller:
+
+| routine | line | size | reached from |
+| --- | ---: | ---: | --- |
+| `IRLowerBitFieldRead` | 959 | 70 | 7178, 10228 — both `CProgramMode` arms |
+| `IRLowerBitFieldStore` | 1029 | 50 | 10227 — same arm |
+| `IRLowerCompoundAssign` | 2169 | 41 | 9333, under `IRAssignIsSharedCompound` |
+| `IRAddrMayCall` | 2075 | 28 | 2154 only, after `if not CProgramMode then Exit` |
+| `IRAssignIsSharedCompound` | 2225 | 28 | 9331 |
+| `CASTNodeOccursIn` | 2210 | 15 | only from `IRAssignIsSharedCompound` |
+| | | **232** | |
+
+`CASTNodeOccursIn` already carries the `C` prefix in its name — someone knew.
+(`cparser.inc:12381` mentions `IRLowerBitFieldRead` in a comment only; it is not
+a call, so nothing outside `ir.inc` reaches any of the six.)
+
+**These six move with zero guard edits, zero behaviour change, and zero risk** —
+they are whole routines with no non-C caller. They are the honest slice 1, and
+the grep would never have found them.
+
+## Proposed shape — extract bodies, keep the dispatch line
+
+For the 17 arms, the move that works is **body extraction, not relocation**:
+
+```pascal
+{ ir.inc, at the arm }
+if CProgramMode and (ASTKind[node] = AN_FIELD) and ... then
+  Result := CIRLowerFieldArrayDecay(node, left)      { cir.inc }
+```
+
+`ir.inc` keeps a one-line guarded call per arm; `cir.inc` owns every body. That
+is where the work and the future edits are — the guard line is stable, the body
+is what `refactor-c-string-literal-decay` and
+`refactor-c-the-partial-index-sentinel` actually need to change. **It does not
+get Track C out of `ir.inc` entirely, and the ticket should stop promising
+that**: adding a *new* C arm will always touch the dispatch. It gets C out of
+`ir.inc` for the changes that are actually queued.
+
+## Proposed slices
+
+1. **The six invisible routines** (232 lines) into `cir.inc`. No guards touched,
+   no behaviour change. Establishes the file and its include point.
+2. **`IRPointerStride`'s four C arms + `IRNodePointerBase`'s tail** — the
+   pointer/decay cluster, which is one coherent subject and is exactly what
+   `refactor-c-the-partial-index-sentinel` needs to own.
+3. **`IRDiscardValue` / `IRLowerDestAddress` tails** — the C
+   assignment-as-expression cluster (864, 867, 2153) plus the load-backs
+   (10461, 10468).
+4. **The string-literal `+8` family** (9288, 10426, 10635, and the call-arg
+   site) — this is `refactor-c-string-literal-decay-belongs-at-the-producer`'s
+   whole subject; do that refactor *at the same time*, since the correct fix is
+   to lower it once at the producer rather than move three copies.
+5. Remaining arms, by dispatcher.
+
+Classes B and C are **out of scope by measurement, not by preference** — 17 of
+the 39 real guards stay in `ir.inc` permanently and that is correct.
+
+## Two findings worth their own tickets — NOT filed by me, flagged for the owner
+
+1. **The 13 Class-B sites are Pascal lowering carrying a C-shaped guard.** Several
+   are the same `bug-p-a-char-array-is-not-a-string-in-any-direction` rule
+   repeated at five sites (8282, 9343, 12752, 12830, and `IRCoerceCharArrayArg`),
+   each with a comment pointing at the others. That is the `root-cause-over-microfix`
+   "three copies is a design flaw" count, in Track P's ground, and it is a
+   separate ticket from this one.
+2. **`10426` is one rule spelled two ways** (`CProgramMode or IsNodePChar(dest)`).
+   Normalising it would delete a Class-C entry rather than move it.
+
+## Status
+
+Inventory only. **`compiler/ir.inc` is unmodified and the tree is clean.** Awaiting
+the go-ahead on the slice plan — specifically on whether slice 1 (the six
+routines, 232 lines, no behaviour change) should land before the plan for the
+arms is agreed, since it is independently safe and independently useful.
