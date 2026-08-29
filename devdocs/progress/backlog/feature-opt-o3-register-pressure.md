@@ -2655,3 +2655,95 @@ concurrent `pascal26` processes, a `stage_2a` fixedpoint and a `pinned` at 106%
 over 12 cores. Best-of-five alternation is a sound design for a mildly noisy box
 and is not one at 1.2x oversubscription with self-host builds landing at random.
 It goes in when the fleet quiets, stamped with its own load.
+
+---
+
+## 2026-08-29 — W1 slice 5 LANDED behind -O3: resident left operand into a compare
+
+Slice 4 killed `mov rcx, rN` on the RIGHT. The left half of the funnel is
+harder and mostly **cannot** be killed: add/sub/and/or/xor write their result to
+rax, so a resident left operand has to be moved there. A **compare has no
+destination**, so its `mov rax, rN` is deletable outright.
+
+**Census before writing the arm, not after** — `PXXDBG=a.w1left` (new,
+report-only) classifies every binop whose left operand is a resident leaf symbol
+by what it feeds. "The funnel is 1.21% of the binary" does not say which arms
+could drop the move; this does. Static emit sites at `-O3`:
+
+| program | CMP | ALU | MULIMM | SHIFT | OTHER | deletable |
+| --- | --- | --- | --- | --- | --- | --- |
+| compiler.pas | **2891** | 2649 | 422 | 285 | 110 | 52% |
+| jsondemo | **794** | 806 | 91 | 105 | 113 | 46% |
+| mandelbrot | 234 | 462 | 31 | 59 | 55 | 32% |
+| lispdemo | 237 | 451 | 27 | 59 | 52 | 32% |
+| sieve | 226 | 451 | 27 | 59 | 58 | 31% |
+
+CMP is the largest bucket in every program and the half needing no encoding
+trick. **MULIMM is the other deletable bucket** — `imul rax, rN, imm` is a
+three-operand form — and is deliberately **not** in this slice: different
+encoding, different proof, own measurement.
+
+**The census also over-promised, and the first cut proved it.** Guarding only
+the two `-O1` leaf-operand arms fired on **11-12 sites** and left `three.pas`
+byte-identical at `-O3` — because most comparisons with a constant right are
+folded earlier by the `-O2` cmp-immediate arm, and the for-loop's own compare is
+emitted by the branch fold in `IR_JUMP_IF_FALSE`, not by the binop path at all.
+Extending to those two folds is what made the slice real: −119 B on `three.pas`,
+−2772 B on jsondemo. **A population count is not a firing count**, and the gap
+between them was two arms wide.
+
+**Four sites, two new emitters** (`EmitCmpLeftRcx`, `EmitCmpLeftImm32`), not four
+hand-written encodings — the same normalisation as `EmitAluRaxRight`. Worth
+naming: the immediate form is a **different opcode**, not the rax one with a
+register swapped. rax has a short accumulator encoding (`48 3D id`) that
+`r12..r15` do not, so the resident form is `81 /7 id` — 2 bytes longer on the cmp
+itself, still net −1 byte and −1 instruction once the `mov` is gone.
+
+**Soundness.** `EmitLoadVar`'s resident arm emits the move and *nothing else*;
+its own comment states the register already holds a correctly size/sign-extended
+value, so `cmp rN, rcx` is equivalent instruction-for-instruction. For the
+register form the eligibility test is a **whitelist** of operand types,
+deliberately not a copy of the conditions guarding the string/char arms below it:
+every one of those is reached through `tyAnsiString`, `tyString` or `tyChar`, so
+excluding exactly those three is sound *today* and stops being sound, silently,
+the day a fourth is added — and the caller skips the left load on this
+predicate's word, so a string arm reached with rax unloaded compares a stale
+register. Naming what is allowed fails closed. The two cmp-immediate arms need no
+whitelist: `CmpFusible` already excludes float/string/variant and those arms have
+no path below them.
+
+**Verification**
+
+| check | result |
+| --- | --- |
+| `-O0`/`-O1`/`-O2` vs base compiler | **byte-identical**, all five programs |
+| `-O3` size | smaller on all five: −119 / −360 / −413 / −455 / −2772 B |
+| values at `-O0`..`-O3` vs base | identical, and equal to FPC 3.2.2 |
+| self-host fixedpoint | converged after 1 round, `bf5d6afc8e37` |
+
+**Dynamic, on the three-local loop** (qemu exact count, method in the entry
+above): **22 → 20 retired instructions per iteration**, delta exactly `2n` at
+n=2000/20000/50000 — **9.09%** of the loop's instruction stream, of which slice 1
+was the first instruction and this slice the second. The `mov rax,r12` before
+`cmp r12,rcx` is gone from the emitted loop.
+
+**No whole-program dynamic number.** qemu's exact count costs ~100x, and sieve
+and lispdemo did not finish inside a bounded run on a loaded box. The honest
+state is: exact dynamic evidence on the microbenchmark, static size evidence on
+the five programs, and nothing in between. Not padded with an estimate.
+
+**The test is a control pair, and it was proven non-vacuous.** It runs at **both
+`-O0` and `-O3`** against one expectation — the pass is `-O3`-gated, so `-O0`
+provably cannot use either new encoding, which makes a wrong encoding show up as
+two optimisation levels disagreeing rather than as a number with no oracle. Every
+variable holds a distinct value and none is 0 or 1, because the failure being
+hunted is *comparing the wrong register*; negatives and values astride the 32-bit
+boundary cover the sign-extension half.
+
+Breaking the ModRM field on purpose made `-O3` print `acc=0` while `-O0` stayed
+correct. **And the compiler still self-hosted byte-identically while broken**,
+because it builds at the default `-O` level — a concrete instance of the scope
+limit CLAUDE.md records: the fixedpoint gate cannot see an `-O3`-only defect.
+That is the reason this test exists rather than leaning on the gate.
+
+Landed `81d2ec232`. `-O2` promotion not taken — coordinator's call, after soak.
