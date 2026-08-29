@@ -2656,3 +2656,56 @@ broken — `normalise-dont-special-case.md`, one level up.
 `pxx-reject` guard immediately below uses `any` over the pxx arms the same way, so
 one pxx level failing to compile while others succeed would be labelled a frontend
 gap when it is an optimiser bug. Same double case, one branch away.
+
+### 61. GREEN TESTS AND A GOOD STORY IS NOT EVIDENCE — a change that costs something and buys nothing measurable passes every gate
+
+frank-rust, 2026-08-29, and it is here because **the author caught it on itself,
+retracted in the next message, and kept the dead end rather than the change.**
+
+Chasing `unknown type: TKey` in `generics.defaults.pas:46` while fixing the
+Delphi cross-unit generic, it found that `isParamForm` tests an argument only
+against **`ti`'s own** parameter names — so `TComparer<TKey>` inside
+`TDictionary<TKey, TValue>` is treated as concrete where `TBox<T>` inside TBox's
+own body is not. A real asymmetry, a plausible mechanism, and an obvious
+widening: accept any template's parameter names.
+
+It built it. **19 named generic tests green, 8 `.expected` diffs green, the
+self-host fixedpoint verified.** Every signal a lane normally has said land it.
+
+Then it measured the thing the change was *for*: `uses Generics.Collections`
+produced **byte-identical output to `pinned`** — same error, same line, same four
+errors. Reduced to 15 lines (`TCmp<T>`, `TDict<TKey, TValue>` with a
+`C: TCmp<TKey>` field; FPC prints 5) and confirmed the widened build fails exactly
+as `pinned` does.
+
+**The reason is ordering and is obvious only afterwards:** when TCmp's sweep runs,
+TDict has not been parsed yet, so `TKey` is not any *known* template's parameter
+name. The fixed point re-runs every template once TDict registers — but
+`TCmp<TKey>` was already minted as `TCmp$TKey` in round one.
+
+**Why this is a face and not just a good retraction.** The change was **not
+refuted by any gate the repo has.** It was correct-looking, self-host clean, and
+regression-free; the only thing that could refute it was measuring the specific
+outcome it was supposed to produce, against a baseline. A suite answers *"did I
+break anything?"* — it cannot answer *"did I fix the thing?"*, and a change that
+fixes nothing while touching a hot predicate is pure carried risk that reads as
+progress. frank-rust's own line is the keeper: **"green tests and a good story is
+not evidence."**
+
+Compare face 32 (a derived number standing in for a measured one) and rule 59
+(a population count is not a firing count): all three are cases where a genuinely
+careful step produced authority that the decision did not earn. Here the careful
+step was running the whole regression set.
+
+**The disposal is the part to copy.** Instead of a silent revert, the dead end was
+written into `bug-p-a-generic-argument-that-is-another-templates-parameter-is-
+minted-as-a-concrete-type` (p65) as a **"what does NOT fix it, measured"**
+section, with the 15-line repro — so the next holder cannot spend it twice. A
+negative result with a repro is cheaper to record now than to rediscover, and it
+is the single artefact most often thrown away.
+
+**And it settled a stale ticket claim in passing.** That ticket's original
+`unknown type: TKey` framing had been recorded as *"wrong"* during a rename. It
+was not wrong — it was a **second, independent defect** that the rename walked
+past, and the eleven-line repro had found a different one sitting in front of it.
+"That framing was wrong" is the kind of line that survives unqualified for months.
