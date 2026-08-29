@@ -4,8 +4,8 @@ prio: 85
 type: bug
 blocked-by: [decide-how-a-compiled-def-carries-its-signature-when-boxed]
 summary: "RE-SCOPED: not about import aliases. A name that names a `def` is resolved to that def at EVERY call site and any later rebinding is ignored — `def a…; def b…; b = a; b(1,5)` answers 18 (the original b) where CPython answers 5, with no import anywhere. The alias spelling is one way to rebind. Blocked: the correct destination is the dynamic call path, which cannot yet carry defaults (see the decision ticket)."
-status: backlog
-owner: unassigned
+status: working
+owner: frankA
 ---
 
 # An import alias binds to a same-named member of the SOURCE module
