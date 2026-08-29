@@ -427,3 +427,78 @@ and the grep still missed them: **a name is not an index.**
 The rule that found them, and the one to use for later slices: **follow CALLERS,
 not the guard.** The guard says where the decision is made; it never says where
 the work lives.
+
+## SLICE 1 LANDED — frankC, 2026-08-30
+
+Seven C-only routines out of `ir.inc` into the new `compiler/cir.inc`:
+`IRLowerBitFieldRead` / `IRLowerBitFieldStore`, `IRAddrMayCall`,
+`CASTLValueHasSideEffect`, `CASTNodeOccursIn`, `IRAssignIsSharedCompound`,
+`IRLowerCompoundAssign`. `ir.inc` −230 / +10, `compiler.pas` +7.
+
+### The gate — and why the usual one could not be it
+
+**`make compiler/pascal26` is structurally blind to this entire slice.** Compiling
+`compiler.pas` compiles *Pascal*; `CProgramMode` is never set; **not one of these
+seven routines is ever called**. The fixedpoint would have gone green if their
+bodies had been deleted. A gate that cannot fail is worse than no gate, because
+it launders the change through everyone's trust in it.
+
+**The `pasparser_*` precedent inverts here rather than transferring.**
+`compiler.pas:126` says each of those slices is *"a contiguous range re-included
+where it sat, which is what makes the carve-out provable by the self-host
+fixedpoint"* — an argument that works *because Pascal parsing is what the
+fixedpoint exercises*. A C carve-out is the exact case where it fails. That is
+the second way this ticket's founding precedent does not carry.
+
+**So the gate is a C-side equivalent, and it is the standing gate for this
+refactor and every per-arm extraction** (adopted by the coordinator, 2026-08-30).
+For a *relocation* claim, output equality is too weak — it would pass a semantic
+change. Relocation must produce **identical machine code**. Ten C tests covering
+all seven routines, sha256'd against the pre-move compiler `261e6cd2b58f`,
+rebuilt after:
+
+```
+canon_bitfield_b310 66f59407f54c   cbitfield_arith_precision 78c5eaf6b5f2
+cbitfield_longlong_b359 62709c2fc25d   cbitfield_mixed_type_pack_b373 4d4e710c39d1
+cbitfield_promotion_b358 201cf0c82b2c   csigned_bitfield_b306 490e0650460f
+cassign_compound_lvalue_once bc0bb454c366   cassign_dest_call_once e873b0aa848c
+cassign_value_b43 849b560a76ba   cstruct_assign_dest_side_effects ec89940cc167
+```
+
+**All ten byte-identical, outputs identical.** Plus `forwardlint` clean, and
+`gate.sh quick` GREEN — including its `fpc seed compiles (forward decls)` step,
+which is what actually exercises the five new forwards.
+
+### Forward count: 5, not the 1 predicted
+
+**The include position I proposed did not exist.** I assumed `{$include cir.inc}`
+could sit *inside* `ir.inc`'s stream after `IRLowerDestAddress`, costing one
+forward. The flat convention puts it in `compiler.pas`, which can only place
+`cir.inc` before or after the **whole** of `ir.inc`. Both options were measured:
+
+| position | forwards | where they live |
+| --- | ---: | --- |
+| `cir.inc` **after** `ir.inc` | **5** | in `ir.inc`, for what it calls forward |
+| `cir.inc` before `ir.inc` | 6 | in `cir.inc`, for what it borrows |
+
+*After* was chosen not on the count but because **before is not viable**:
+`cir.inc` calls `IRLowerAST`, which `ir.inc` already forward-declares at 675, so
+placing `cir.inc` first needs a second forward for it — a duplicate the FPC seed
+rejects, and precisely what `forwardlint` exists to catch.
+
+**Carry the 5 into the arms decision, not the 1.** And expect worse there: an
+arm's body reaches back into the locals of the dispatcher it was cut from, which
+relocating a whole routine never does.
+
+### Cross-finding, same evening, other direction (frankA, `2d57b9744`)
+
+`ParsingClassBodyCi`'s `-1` sentinel was initialised **only inside
+`ParseProgram`**, the Pascal entry point, so every other frontend ran with the
+BSS default `0` — a valid `UCls` index (`TGuid`). **ALGOL, Erlang, Rust, Zig, C
+and asm all carried the hole; only NilPy had the users to expose it.**
+
+Same root property as the blind gate, with the roles reversed: **the shared gate
+exercises the Pascal path, so anything true only off that path is unobserved by
+construction** — in the gate's blindness and in the bug's survival alike. Two
+independent findings in one evening arguing for the same remedy, which is why
+the C-side byte-identical gate is not a local nicety for this refactor.

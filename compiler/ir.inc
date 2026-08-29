@@ -678,6 +678,16 @@ function IRVariantAddr(argAST: Integer): Integer; forward;
 function IRMethodRefCode(mref: Integer): Integer; forward;
 function IRMethodRefToTemp(mref: Integer): Integer; forward;
 function IRMaterializeIntfCast(node: Integer; doTrap: Boolean): Integer; forward;
+{ Track C: C-EXCLUSIVE lowering, moved to compiler/cir.inc (which is included
+  AFTER this file, so ir.inc needs the forwards). Each is reached ONLY from a
+  CProgramMode-guarded call site below; none of them contains that string, which
+  is why the grep that scoped the carve-out could not see any of them.
+  refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed }
+function IRLowerBitFieldRead(fieldNode: Integer; storageAddr: Integer; storageTk: TTypeKind): Integer; forward;
+function IRLowerBitFieldStore(fieldNode, rhsValue: Integer; storageTk: TTypeKind): Integer; forward;
+function IRAddrMayCall(n, depth: Integer): Boolean; forward;
+function IRAssignIsSharedCompound(node: Integer): Boolean; forward;
+function IRLowerCompoundAssign(node: Integer): Integer; forward;
 { defined near IRWrapChkBounds, used from IRLowerAddress's AN_DEREF arm far above it
   — the FPC seed needs the forward (bug-a-fpc-seed-drift-emitasmx64-forward). }
 function IRWrapNilChk(ptrVal, astNode: Integer; defaultOn: Boolean): Integer; forward;
@@ -954,103 +964,6 @@ begin
   else if bytes = 2 then Result := tyUInt16
   else if bytes <= 4 then Result := tyUInt32
   else Result := tyUInt64;   { long-long bitfield: a >4-byte storage unit loads 8 bytes }
-end;
-
-function IRLowerBitFieldRead(fieldNode: Integer; storageAddr: Integer; storageTk: TTypeKind): Integer;
-var recId, width, shift: Integer; fieldName: AnsiString; value, maskNode: Integer;
-    fieldTk: TTypeKind; signBit: Int64; sbNode: Integer;
-begin
-  recId := ResolveNodeRec(ASTLeft[fieldNode]);
-  fieldName := GetASTIdentName(fieldNode);
-  width := RecFieldBitWidth(recId, fieldName);
-  shift := RecFieldBitShift(recId, fieldName);
-  fieldTk := RecFieldType(recId, fieldName);
-  storageTk := IRBitStorageTk(RecFieldBitBytes(recId, fieldName));
-  value := IRAppend(IR_LOAD_MEM, storageAddr, -1, -1, 0, Ord(storageTk));
-  if shift > 0 then
-    value := IRAppend(IR_BINOP, value,
-                      IRAppend(IR_CONST_INT, -1, -1, -1, shift, Ord(tyInteger)),
-                      Ord(tkIdent), 0, Ord(storageTk));
-  maskNode := IRAppend(IR_CONST_INT, -1, -1, -1, IRBitMask(width), Ord(storageTk));
-  Result := IRAppend(IR_BINOP, value, maskNode, Ord(tkAnd), 0, Ord(storageTk));
-
-  { A SIGNED bitfield stores a two's-complement value in `width` bits, so the mask
-    above hands it back ZERO-extended: `signed f : 7` holding -5 reads as 123. C says
-    -5. Sign-extend it branchlessly with (v xor signBit) - signBit -- no arithmetic
-    shift, no new IR op, correct for every width.
-
-    Applies to EVERY signed field, whatever its width: IRBitStorageTk always picks an
-    UNSIGNED storage type (tyUInt8/16/32), so the load is zero-extended even when the
-    field exactly fills its unit. Guarding on `width < storage bits` (as this first
-    did) left `signed f : 8` in a one-byte unit reading -7 back as 249. An unsigned
-    field must of course stay zero-extended.
-
-    csmith found this on its fourth program, and every signed bitfield in every
-    generated program was wrong. The C corpora (lua/sqlite/tcc) never caught it
-    because their bitfields are unsigned -- the bug was invisible to a decade of
-    real-world C. }
-  { C integer promotion: a bitfield NARROWER than int reads as a SIGNED int —
-    every value of a sub-int field fits, so both signed and unsigned sub-int fields
-    promote to `int`, and downstream signed-vs-unsigned arithmetic (subtraction,
-    modulo, division, comparison) is chosen from THIS node's type. The prior code
-    sign-extended in the (unsigned) storage type and left the result tagged
-    unsigned, so `bit.i % bit.u` did an UNSIGNED modulo (bf-sign-2.c, bitfld-1.c,
-    the gcc-torture bitfield cluster). Do the whole extension in the 32-bit
-    tyInteger domain: first re-mask to a clean zero-extended value (clears garbage
-    above `width` left by a sub-int storage-width op), then sign-extend if the field
-    is signed. Full-width (:32) and long-long bitfields can't fit in int, so they
-    keep the storage-type extension path below. }
-  if width < 32 then
-  begin
-    maskNode := IRAppend(IR_CONST_INT, -1, -1, -1, IRBitMask(width), Ord(tyInteger));
-    Result := IRAppend(IR_BINOP, Result, maskNode, Ord(tkAnd), 0, Ord(tyInteger));
-    if ((fieldTk = tyInt8) or (fieldTk = tyInt16) or (fieldTk = tyInt32) or
-        (fieldTk = tyInt64) or (fieldTk = tyInteger) or (fieldTk = tyNativeInt)) then
-    begin
-      signBit := IRBitMask(width) - (IRBitMask(width) div 2);   { = 1 shl (width-1) }
-      sbNode := IRAppend(IR_CONST_INT, -1, -1, -1, signBit, Ord(tyInteger));
-      Result := IRAppend(IR_BINOP, Result, sbNode, Ord(tkXor), 0, Ord(tyInteger));
-      sbNode := IRAppend(IR_CONST_INT, -1, -1, -1, signBit, Ord(tyInteger));
-      Result := IRAppend(IR_BINOP, Result, sbNode, Ord(tkMinus), 0, Ord(tyInteger));
-    end;
-  end
-  else if ((fieldTk = tyInt8) or (fieldTk = tyInt16) or (fieldTk = tyInt32) or
-           (fieldTk = tyInt64) or (fieldTk = tyInteger) or (fieldTk = tyNativeInt)) then
-  begin
-    { Full-width / long-long signed bitfield: sign-extend in the storage type. }
-    signBit := IRBitMask(width) - (IRBitMask(width) div 2);   { = 1 shl (width-1) }
-    sbNode := IRAppend(IR_CONST_INT, -1, -1, -1, signBit, Ord(storageTk));
-    Result := IRAppend(IR_BINOP, Result, sbNode, Ord(tkXor), 0, Ord(storageTk));
-    sbNode := IRAppend(IR_CONST_INT, -1, -1, -1, signBit, Ord(storageTk));
-    Result := IRAppend(IR_BINOP, Result, sbNode, Ord(tkMinus), 0, Ord(storageTk));
-  end;
-end;
-
-function IRLowerBitFieldStore(fieldNode, rhsValue: Integer; storageTk: TTypeKind): Integer;
-var recId, width, shift, addr, oldVal, clearMask, newBits, maskedNew, maskNode: Integer;
-    fieldName: AnsiString; mask, shiftedMask: Int64;
-begin
-  recId := ResolveNodeRec(ASTLeft[fieldNode]);
-  fieldName := GetASTIdentName(fieldNode);
-  width := RecFieldBitWidth(recId, fieldName);
-  shift := RecFieldBitShift(recId, fieldName);
-  storageTk := IRBitStorageTk(RecFieldBitBytes(recId, fieldName));
-  addr := IRLowerAddress(fieldNode);
-  mask := IRBitMask(width);
-  shiftedMask := mask shl shift;
-  oldVal := IRAppend(IR_LOAD_MEM, addr, -1, -1, 0, Ord(storageTk));
-  clearMask := IRAppend(IR_BINOP, oldVal,
-                        IRAppend(IR_CONST_INT, -1, -1, -1, not shiftedMask, Ord(storageTk)),
-                        Ord(tkAnd), 0, Ord(storageTk));
-  maskedNew := IRAppend(IR_BINOP, rhsValue,
-                        IRAppend(IR_CONST_INT, -1, -1, -1, mask, Ord(storageTk)),
-                        Ord(tkAnd), 0, Ord(storageTk));
-  if shift > 0 then
-    maskedNew := IRAppend(IR_BINOP, maskedNew,
-                          IRAppend(IR_CONST_INT, -1, -1, -1, shift, Ord(tyInteger)),
-                          Ord(tkShl), 0, Ord(storageTk));
-  newBits := IRAppend(IR_BINOP, clearMask, maskedNew, Ord(tkOr), 0, Ord(storageTk));
-  Result := IRAppend(IR_STORE_MEM, addr, newBits, -1, 0, Ord(storageTk));
 end;
 
 { ===== PROMOTABLE INT lowering (feature-a-promotable-int stage 3) =====
@@ -2072,55 +1985,6 @@ begin
     Result := IRAppend(IR_UNSUPPORTED, ASTKind[node], ASTLeft[node], ASTRight[node], ASTIVal[node], ASTTk[node]);
 end;
 
-function IRAddrMayCall(n, depth: Integer): Boolean;
-{ Does evaluating this ADDRESS node RUN something? Only calls matter: every other
-  address shape here is a load or an arithmetic node over one, and re-walking
-  those is free and idempotent (`*p++` parks its increment in a separate
-  statement, which is why that shape was never affected).
-
-  The walk is kind-aware on purpose. IRA is a NODE index for some opcodes and a
-  SYMBOL/PROC index for others (IR_LEA, IR_LOAD_SYM, IR_CALL), so a blind
-  three-operand recursion would read a symbol number as a node number and answer
-  from an unrelated part of the arena. Unknown kinds answer False — that is
-  today's behaviour, so a shape this list misses stays exactly as it was rather
-  than growing a temp nobody asked for. }
-begin
-  Result := False;
-  if (n < 0) or (n >= IRCount) or (depth > 12) then Exit;
-  case IRKind[n] of
-    IR_CALL, IR_CALL_IND, IR_VIRTUAL_CALL:
-      Result := True;
-    IR_LOAD_MEM, IR_NEG, IR_NOT:
-      Result := IRAddrMayCall(IRA[n], depth + 1);
-    IR_INDEX, IR_FIELD, IR_BINOP:
-      begin
-        Result := IRAddrMayCall(IRA[n], depth + 1);
-        if not Result then Result := IRAddrMayCall(IRB[n], depth + 1);
-      end;
-  end;
-end;
-
-function CASTLValueHasSideEffect(n, depth: Integer): Boolean;
-{ Does EVALUATING this lvalue do anything observable — call, increment, assign?
-  Only then is it worth pinning the node down; an ordinary `a[i] += 1` must keep
-  the exact IR it has today, so the default answer is False and the recursion
-  covers only the shapes an lvalue is actually built from. }
-begin
-  Result := False;
-  if (n < 0) or (n >= ASTNodeCount) or (depth > 12) then Exit;
-  case ASTKind[n] of
-    AN_CALL, AN_VIRTUAL_CALL, AN_INCDEC, AN_ASSIGN, AN_COMPOUND_ASSIGN, AN_COMMA:
-      Result := True;
-    AN_DEREF, AN_FIELD, AN_PTR_CAST, AN_ADDR, AN_CLASS_CAST:
-      Result := CASTLValueHasSideEffect(ASTLeft[n], depth + 1);
-    AN_INDEX, AN_BINOP:
-      begin
-        Result := CASTLValueHasSideEffect(ASTLeft[n], depth + 1);
-        if not Result then Result := CASTLValueHasSideEffect(ASTRight[n], depth + 1);
-      end;
-  end;
-end;
-
 function IRLowerDestAddress(node: Integer): Integer;
 { The destination address of an assignment, evaluated EXACTLY ONCE.
 
@@ -2164,90 +2028,6 @@ begin
   IRTk[Result] := Ord(tyPointer);
   IRAppend(IR_STORE_SYM, addrTmp, Result, -1, 0, Ord(tyPointer));
   Result := IRAppend(IR_LOAD_SYM, addrTmp, -1, -1, 0, Ord(tyPointer));
-end;
-
-function IRLowerCompoundAssign(node: Integer): Integer;
-{ C `lv OP= rhs` where lv has a SIDE EFFECT.
-
-  cparser desugars it to `lv = lv OP rhs` and REUSES the one lvalue AST node in
-  both places -- the comment there says "since it is a pure lvalue read this is
-  safe", which is the assumption C breaks. Lowering walks that node twice, so
-  `*f() += 1` called f twice, `a[i++] += 1` stepped i twice, and `*p++ += 1`
-  advanced p by TWO. The increment operators never had it: AN_INCDEC lowers the
-  address once, and that is the model here.
-
-  Keeping the desugar is deliberate. The alternative -- switching cparser to the
-  AN_COMPOUND_ASSIGN node, whose docstring promises exactly "the lvalue address
-  is computed ONCE" -- looks like a one-line fix and is a trap: that node lowers
-  to a raw scalar read-modify-write with no pointer-arithmetic SCALING, so
-  `p += 1` on a `long long *` would step one byte. The desugar inherits all of
-  C's conversion and scaling rules from the ordinary binop path, because the AST
-  is untouched; only the VALUE the shared node lowers to is supplied here.
-
-  So: lower the destination address once, read through it once, and pin the node
-  to both for the duration of the RHS. Saved/restored around the recursion so a
-  nested compound assignment (`a[i++] += (b[j++] += 1)`) keeps its own pinning.
-  bug-c-a-compound-assignment-evaluates-its-lvalue-twice }
-var lvNode, lvTk, addr, cur, val: Integer;
-    savedAST, savedAddr, savedVal: Integer;
-begin
-  lvNode := ASTLeft[node];
-  lvTk := ASTTk[lvNode];
-  addr := IRLowerDestAddress(lvNode);
-  cur := IRAppend(IR_LOAD_MEM, addr, -1, -1, 0, lvTk);
-  savedAST := IRCompoundLvAST; savedAddr := IRCompoundLvAddr; savedVal := IRCompoundLvVal;
-  IRCompoundLvAST := lvNode;
-  IRCompoundLvAddr := addr;
-  IRCompoundLvVal := cur;
-  val := IRLowerAST(ASTRight[node]);
-  IRCompoundLvAST := savedAST; IRCompoundLvAddr := savedAddr; IRCompoundLvVal := savedVal;
-  Result := IRAppend(IR_STORE_MEM, addr, val, -1, 0, lvTk);
-  { an assignment is an expression yielding the stored value (C 6.5.16), same
-    load-back the ordinary scalar arms append }
-  Result := IRAppend(IR_LOAD_MEM, addr, -1, -1, 0, lvTk);
-end;
-
-function CASTNodeOccursIn(root, target, depth: Integer): Boolean;
-{ Does this exact AST NODE INDEX appear inside that subtree? Node identity, not
-  equality: two spellings of the same expression are two nodes, so a hit means
-  one node is genuinely reachable from two places — which in C only cparser's
-  `lv OP= rhs` -> `lv = lv OP rhs` desugar produces. Depth-capped; the shared
-  node sits on the RHS's left spine, a few levels down at most (a plain-char
-  lvalue promotes through three binops before it). }
-begin
-  Result := False;
-  if (root < 0) or (root >= ASTNodeCount) or (depth > 24) then Exit;
-  if root = target then begin Result := True; Exit; end;
-  Result := CASTNodeOccursIn(ASTLeft[root], target, depth + 1);
-  if not Result then Result := CASTNodeOccursIn(ASTRight[root], target, depth + 1);
-end;
-
-function IRAssignIsSharedCompound(node: Integer): Boolean;
-{ Is this AN_ASSIGN the `lv = lv OP rhs` cparser builds for `lv OP= rhs`, with a
-  side-effecting lvalue? The signature is exact: the binop's LEFT is the very
-  same AST node index as the destination, which nothing else produces.
-
-  Narrow on purpose -- a pure lvalue keeps the IR it has today (the shared node
-  lowers to the same loads twice, which is only duplicated work), an AN_IDENT
-  destination has no address to double, and a managed or aggregate destination
-  belongs to the arms that know how to copy it. C has no compound assignment on
-  those anyway. }
-var lv: Integer; tk: TTypeKind;
-begin
-  Result := False;
-  if not CProgramMode then Exit;
-  lv := ASTLeft[node];
-  if (lv < 0) or (ASTKind[lv] = AN_IDENT) then Exit;
-  if (ASTRight[node] < 0) or (ASTKind[ASTRight[node]] <> AN_BINOP) then Exit;
-  { The lvalue is normally the binop's own left operand, but a promotion sits in
-    between when it needs one: a plain-char lvalue arrives as
-    `((lv & $FF) ^ $80) - $80`, three binops deep, and that spelling kept its
-    double evaluation after the direct check was already fixed. Search the RHS
-    instead of guessing the depth. }
-  if not CASTNodeOccursIn(ASTRight[node], lv, 0) then Exit;
-  tk := IntToTypeKind(ASTTk[lv]);
-  if not (TypeIsOrdinal(tk) or TypeIsFloat(tk) or (tk = tyPointer)) then Exit;
-  Result := CASTLValueHasSideEffect(lv, 0);
 end;
 
 function IRBuildHiddenDest(procIdx: Integer): Integer;
