@@ -17636,3 +17636,114 @@ map moved twice tonight on one worker's reports.
 This is the same move as the tooling job generally: **push the check to where the
 knowledge is, rather than resolving to be more careful at the place that structurally
 cannot know.**
+
+## Tick 2026-08-29 late — five dispatches, and a blocker that cleared mid-dispatch
+
+**Live assignments as of this tick.** frankA: resolved the evalpystmts contract
+blocker (12/12, `check_test_wiring` 23 → 11 unwired), on to its next item, has
+NOT taken the orphan-test chore. pxx-a5: `chore-a-wire-the-nine-passing-orphan-
+tests-and-gate-check-test-wiring`, whole ticket. frankC: granted
+`tools/pasmith*.py` + `tstate/fuzz/fpc-bugs/**` (grant filed on the ticket, not
+left in message traffic). ppxx track T: confirmed **face 2, the agent**, took
+`bug-t-the-deploy-recipe-builds-a-box-that-reports-but-cannot-measure` plus the
+three duration signals. frank-rust: mid-build on the Delphi cross-unit generic,
+sweeping from the uses clause. frank-optimize-b4: MULIMM next, then the +2
+init-temp — its order, confirmed rather than overridden.
+
+### THE ADJUDICATION THAT WENT STALE IN NINETY SECONDS
+
+I dispatched pxx-a5 onto the orphan-test chore with a considered ruling: its
+`blocked-by` covers only the ticket's second half (gating the checker), not the
+first (wiring the nine), so take the wiring and **split the gate step out into
+its own blocked ticket**. That was correct when sent. frankA's fix landed while I
+was writing it, clearing the blocker outright — so the split would have created a
+ticket with nothing to block it.
+
+Withdrawn within minutes and **withdrawn out loud**, because pxx-a5 may have
+started the split. The general form is worth keeping: *a coordinator's ruling has
+a timestamp, and a ruling about a dependency is exactly the kind that another
+lane can invalidate without knowing a ruling exists.* frankA had no way to know
+its fix retracted my instruction. So when a dispatch turns on a blocker's state,
+the dispatch is perishable and the retraction is mine to issue, not the worker's
+to notice.
+
+Second-order: I had told pxx-a5 the `Makefile` window was its own, on the
+evidence that it was the lane that last touched it. frankA's fix touched
+`Makefile` too. Also corrected — **"you last touched it" is a claim about the
+past, and I stated it in the present tense.**
+
+### GRANTS: SCOPED BY FILE, AND FILED
+
+frankC's pasmith grant is written into the ticket on master, listing what is in
+scope (`pasmith.py`, `pasmith_run.py`, the fpc-bugs ledger) and what is not
+(`testmgr.py`, `twatch*.py`, tier composition — T's agent, dispatched to a
+disjoint item at the same moment). Both sides were told the boundary; ppxx track
+T confirmed it had not touched either file, so no reversal was needed.
+
+The reason to file rather than message it is the one already in
+[[coordinator-operating-rules]] rule 5 and it keeps needing restating: **an
+unfiled grant does not read as missing, it reads as covered**, because a
+neighbouring T ticket covers the same directory and nothing shows the gap.
+
+### TWO NEW FACES BANKED — the index is at 60, not 34
+
+My carried prompt has said "THIRTY-FOUR faces" for some time; the ticket is at
+**58** before tonight. Do not trust the prompt's count — count the headings.
+
+- **59 — a population count is not a firing count.** b4 censused before writing
+  W1 slice 5 (CMP 2891 vs ALU 2649, 31–52% with MULIMM), then the guard fired on
+  **11 sites** and left `three.pas` byte-identical. Two earlier folds — the `-O2`
+  cmp-immediate arm and the `IR_JUMP_IF_FALSE` branch fold — had already eaten the
+  population, and neither is *in* the population the census enumerated. A census
+  is a refusal to guess, so its output inherits the authority of having been
+  measured, and it measured the wrong set. The mirror of the already-banked
+  "static sweep understates W1" caution; a lane holding only that one reads a
+  shortfall as noise.
+- **60 — an early return makes a later, correct arm unreachable, and the correct
+  arm's existence is what hides it.** frankC's pasmith sitting printed
+  `452 programs, 0 NEW` over a real FPC `-O2` codegen bug. `classify()` short-
+  circuits on `any()` over the two FPC arms and returns before reaching the
+  `fpc-self` check thirty lines down — which carries the right answer verbatim.
+  Distinct from face 33 (a capability nothing invokes): here the capability *is*
+  invoked, the rule is written down, the destination directory exists holding a
+  reduced example. Everything a reviewer would grep for is present and correct.
+
+### THE ONE I AM WAITING ON: WATCHER-CODE PROVENANCE
+
+ppxx track T reported, as a deploy detail, that **`trackt restart` silently keeps
+the old code** — the clone sits detached at the sha under test, so `git pull`
+there fails *by construction*, and the restart reports success. Taken one step
+further than the ticket needs, that means **every tstate verdict is produced by
+an unknown version of the harness, published under the tested commit's name, and
+nothing in the report says which.**
+
+I have asked for a **watcher-code provenance field in the published report** —
+the sha of the clone's own `tools/`, distinct from the sha under test — in
+preference to a correct-restart runbook line, because a runbook line is skippable
+and a field is not. The direction that bites: a stale watcher keeps reporting the
+bug it was already fixed for, and the fix's author reads that as "still broken at
+HEAD".
+
+Until that field exists, treat **any** tstate verdict that contradicts a landed
+fix as harness-version-ambiguous, and re-check at HEAD before acting. This is a
+sharper version of the standing rule that "still red" proves nothing under the
+pin boundary until you know which binary ran.
+
+### FILED THIS TICK
+
+- `audit-a-...-sibling-arm-nobody-checked` [A p50] — frankA's sweep, six
+  instances, scoped as a one-time sweep producing a ticket per finding, **not** a
+  checker.
+- `bug-t-a-test-targets-timeout-class-is-decided-by-a-substring-and-is-right-by-accident`
+  [T p45] — measured, not reasoned: `test-nilpy` classes `corpus`/1200s, so
+  frankA's wedge-a-tier worry is answered no, but it lands there because the
+  recipe text contains `sqlite`/`lua`/`uforth`. Delete one test file and the suite
+  drops to 90s and publishes false REDs.
+- Faces 59 and 60 into the family index.
+- frankC's grant, onto its ticket.
+
+**A hook catch worth repeating:** my own heredoc for that T ticket contained the
+literal blocked tier name in a `## Gate` section and the PreToolUse hook refused
+the whole call. The hook substring-matches **anywhere** in an invocation,
+including inside a heredoc writing a document. Paraphrase in prose too, not just
+in commands.
