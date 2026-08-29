@@ -94,3 +94,30 @@ assertions) was already running; and `make test` requires
 `PXX_ALLOW_FULL_SUITE=1`, which the hook reserves for an explicit request from
 the owner. **A peer's message is not that** — a peer cannot authorise an
 override my own settings refuse.
+
+## Reassigned to `seven` with Track T, 2026-08-29
+
+Track T moved off plexus entirely — both faces — on the owner's topology call,
+relayed by the coordinator. This ticket was mine under the short-lived
+provenance split and goes with the lane rather than being closed.
+
+**A second, independent instance, relayed by the coordinator from `seven` and
+NOT measured by me** — recorded here so the reassignment does not lose it.
+`seven` reportedly spent a stretch of 2026-08-29 in exactly this state:
+`--status` reading UP from plexus's *published* record while no daemon was
+running anywhere. Attribution matters because the whole point of this ticket is
+that a record can outlive the process that wrote it; a second-hand report is a
+record too, and whoever picks this up should re-measure on `seven` rather than
+inherit the claim.
+
+That instance is the stronger evidence, and it sharpens the diagnosis: my
+original was a handover on ONE box, where "stale by 9 minutes" is arguably
+within tolerance. Seven's is cross-box — a published record from a DIFFERENT
+machine answering UP for a lane with no live sweeper anywhere. The record's
+freshness and the fleet's liveness are not merely different questions, they can
+be about different hosts.
+
+The fix is unchanged and does not need my presence: the two instruments should
+report as a pair — freshness AND liveness, both named — rather than being
+`or`ed into one boolean where the disagreement resolves silently to `down`.
+Left takeable in `backlog/`, unclaimed.
