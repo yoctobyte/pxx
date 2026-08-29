@@ -389,9 +389,35 @@ begin
     end;
 end;
 
+{ The record id a symbol's management operators would belong to.
+
+  For a plain record variable that is `RecName` (mirrored as `SymTR[].RecId`).
+  For an ARRAY of records it is `ElemRecName` — `RecName` is meaningless there,
+  because only AllocVar/AllocParam ever write it.
+
+  Split out because reading `RecId` for an array symbol was wrong in the way
+  that hides: symbol slots are RECYCLED, so an array's `RecName` held whatever
+  the previous occupant left behind, and for `var arr: array[0..1] of TFoo`
+  inside a proc that was reliably TFoo itself. The refusal below therefore
+  fired, correctly, for the wrong reason — until `4a3c88532` cleared the field
+  on recycle and the refusal went silent, letting an array of a managed record
+  compile with an Initialize that never runs. That commit did not cause this;
+  it removed the accident this was standing on, and named the class in its own
+  message: twenty more `RecName` reads guarded by `TypeKind = tyRecord`, which
+  is not a guard at all for an array symbol, since that field carries the
+  ELEMENT kind.
+  regression-test-core-test-mgmt-operators
+  bug-a-allocarray-leaves-recname-stale-on-a-recycled-symbol-slot }
+function SymManagedRecId(idx: Integer): Integer;
+begin
+  if Syms[idx].IsArray then SymManagedRecId := SymTR[idx].ElemRec
+  else SymManagedRecId := SymTR[idx].RecId;
+end;
+
 function WrapManagementOpsRange(loSym, hiSym, retSym: Integer; wantGlobal: Boolean;
                                bodyNode: Integer): Integer;
 var i, ip, fp, callNode, headInit, tailInit, headFin, tailFin, newSeq, tryNode: Integer;
+    mrec: Integer;
     isTarget: Boolean;
 begin
   Result := bodyNode;
@@ -404,13 +430,14 @@ begin
       whose declared invariant simply never runs. An array needs a loop and a
       nested field needs a path, both of which FPC gets free from recursive RTTI
       and this pass does not have. }
-    if isTarget and (SymTR[i].RecId <> REC_NONE) and
+    mrec := SymManagedRecId(i);
+    if isTarget and (mrec <> REC_NONE) and
        (Syms[i].TypeKind in [tyRecord, tyClass]) then
     begin
-      if Syms[i].IsArray and RecHasManagementOp(SymTR[i].RecId) then
+      if Syms[i].IsArray and RecHasManagementOp(mrec) then
         Error('an array of a record with a management operator is not supported yet '
               + '(feature-pascal-management-operators-nested-and-array)');
-      if RecContainsManagementOp(SymTR[i].RecId, 0) then
+      if RecContainsManagementOp(mrec, 0) then
         Error('a field of a record with a management operator is not managed yet '
               + '(feature-pascal-management-operators-nested-and-array)');
     end;

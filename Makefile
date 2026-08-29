@@ -8692,6 +8692,20 @@ test-core: $(COMPILER)
 	  | grep -q "feature-pascal-management-operators-nested-and-array"
 	./$(COMPILER) test/test_mgmt_operators_copy_refused.pas $(TESTTMP)/test_mgmt_op_cpy26 2>&1 \
 	  | grep -q "feature-pascal-management-operators-copy-and-addref"
+	# ...and the same refusal for a GLOBAL array, which WrapMainBodyManagementOps
+	# reaches through a separate call. Added with the fix for
+	# regression-test-core-test-mgmt-operators: the local row above had been
+	# passing FOR THE WRONG REASON — the guard read RecName, which is meaningless
+	# for an array symbol (its record id is ElemRecName), and only ever held the
+	# right value because slots are recycled and the stale one happened to fit.
+	# 4a3c88532 cleared that field and every arm went silent at once. A row that
+	# only asserts "refused" cannot tell a correct guard from a lucky one; two
+	# rows that fail together, across the local and global paths, can.
+	if ./$(COMPILER) test/test_mgmt_operators_global_array_refused.pas $(TESTTMP)/test_mgmt_op_garr26 >/dev/null 2>&1; then \
+	  echo "FAIL: a global array of a managed record compiled"; exit 1; \
+	fi
+	./$(COMPILER) test/test_mgmt_operators_global_array_refused.pas $(TESTTMP)/test_mgmt_op_garr26 2>&1 \
+	  | grep -q "feature-pascal-management-operators-nested-and-array"
 	./$(COMPILER) test/test_promoint_function_result.pas $(TESTTMP)/test_promoint_function_result26
 	tools/expect_same.sh test_promoint_function_result26 "$$($(TESTTMP)/test_promoint_function_result26)" "$$(printf '12\n10000000000000000000000000000000000000000\n12\n24\n10000000000000000000000000000000000000000\n13\n1\nOK')"
 	./$(COMPILER) test/test_promoint_parameter_32bit.pas $(TESTTMP)/test_promoint_parameter_32bit26
