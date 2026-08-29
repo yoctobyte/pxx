@@ -12067,6 +12067,7 @@ begin
   else if dotted = 'os.startfile' then Result := 'pyos_startfile'
   else if dotted = 'os.rename' then Result := 'pyos_rename'
   else if dotted = 'os.stat' then Result := 'pyos_stat'
+  else if dotted = 'os.listdir' then Result := 'pyos_listdir'
   else if dotted = 'sys.exit' then Result := 'pysys_exit'
   else if dotted = 'sys.stdin.read' then Result := 'pystdin_read'
   else if dotted = 'sys.stdin.readline' then Result := 'pystdin_readline'
@@ -12086,6 +12087,12 @@ begin
     contract) -- intercepted here by name, ahead of the ordinary qualified-
     call resolution that `import math` would otherwise hit.
     bug-nilpy-implicit-return-is-0-and-math-floor-returns-a-float }
+  { time.time() must not reach C's time(2) — `import time` resolves the NAME to
+    the C header, so `time.time()` bound to time(2) and reported "no overload of
+    time matches these arguments". Same wrong-target shape as math.floor below,
+    and intercepted the same way, ahead of qualified resolution.
+    feature-nilpy-stdlib-coverage-gaps-measured }
+  else if dotted = 'time.time' then Result := 'pytime_time'
   else if dotted = 'math.floor' then Result := 'pymath_floor'
   else if dotted = 'math.ceil' then Result := 'pymath_ceil'
   { math.fabs has no Pascal RTL counterpart under that name at all --
@@ -12196,9 +12203,14 @@ begin
     if pname <> '' then begin nTok := 1; Result := True; Exit; end;
   end;
   base := LowerCase(GetTokenStr(TokPos - 1));
+  { This list and PyStdlibCallProc's table are ONE concept in two places: a
+    dotted name not admitted here never reaches the table, so an entry added
+    there alone is silently dead code. Adding a base costs a line; forgetting
+    it costs the shim. (time.time went in and did nothing until `time` was
+    added here.) }
   if (base <> 'os') and (base <> 'sys') and (base <> 'textwrap') and
      (base <> 'select') and (base <> 'dict') and (base <> 'math') and
-     (base <> 'random') and (base <> 'str') then Exit;
+     (base <> 'random') and (base <> 'str') and (base <> 'time') then Exit;
   if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot) then Exit;
   if TokPos + 1 >= TokCount then Exit;
   d2 := base + '.' + LowerCase(GetTokenStr(TokPos + 1));

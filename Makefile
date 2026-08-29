@@ -2124,6 +2124,11 @@ test-nilpy: $(COMPILER)
 	# the surplus args were emitted anyway). CPython renders them as a tuple.
 	./$(COMPILER) test/test_nilpy_exception_multi_arg.npy $(TESTTMP)/test_nilpy_excmulti26
 	$(TESTTMP)/test_nilpy_excmulti26 | diff -u test/test_nilpy_exception_multi_arg.expected -
+	# time.time() and os.listdir() -- the two names that needed a PAL syscall
+	# (clock_gettime / getdents64) rather than a shim. Asserted by property:
+	# a clock reading and a directory listing are not reproducible.
+	./$(COMPILER) test/test_nilpy_time_and_listdir.npy $(TESTTMP)/test_nilpy_timelistdir26
+	$(TESTTMP)/test_nilpy_timelistdir26 | diff -u test/test_nilpy_time_and_listdir.expected -
 	# os.sep / os.linesep are ATTRIBUTES, not calls -- and the value builder
 	# behind them now checks WHICH module was asked, so sys.SEEK_SET raises
 	# AttributeError instead of answering 0.

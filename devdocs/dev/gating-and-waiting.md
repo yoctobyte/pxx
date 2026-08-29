@@ -192,3 +192,31 @@ tree at the same time and alone explains that RED. Two variables changed, one
 story fit. It was then narrowed away on a search of 105 job logs that found
 nothing — and the signature appeared at log **684**. A correct rule, held for a
 wrong reason, nearly deleted on an incomplete search.
+
+## Do not put a worktree under `/tmp` — testmgr rewrites the path (2026-08-29)
+
+This page already warns that **an expected output must never contain an absolute
+`/tmp` path**, because testmgr rewrites those. The same rewrite bites a worktree
+that is merely *located* there, and the symptom does not look like a path problem:
+
+```
+cannot read input file: /tmp/testmgr-scratch-NNN/<the whole worktree path>/test/...
+```
+
+testmgr mangles its own scratch root together with the worktree path. **The error
+names a missing test file, so it reads as a broken or incomplete checkout rather
+than as "you are standing in the wrong directory"** — which is the expensive part,
+since the natural next move is to re-clone or re-fetch and the second attempt fails
+identically.
+
+Put scratch worktrees under `$HOME` (e.g. `~/pxx-irfix`), not `/tmp`. Found by the
+wasm32 lane while gating the managed-string arg-temp consolidation; it cost a full
+diagnostic detour on a gate that was otherwise clean.
+
+**Companion trap, same session, same family:** starting `gate.sh` with a stale
+`compiler/pascal26` on disk after an A/B build makes the gate compare a
+fixedpoint-from-`pinned` against a binary built from different sources, and it
+correctly reports *"two distinct fixedpoints"*. **The gate is right and you are the
+contamination it names.** It prints the tell itself — `compiler/pascal26 is OLDER
+than the last commit touching compiler/` — so read that note before diagnosing a
+miscompile. Rebuild (`make compiler/pascal26`, ~12s) and re-gate.

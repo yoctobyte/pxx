@@ -1,0 +1,11 @@
+float
+True
+True
+True
+True
+True
+False False
+True
+['zzlibmod.py']
+a missing directory raises OSError
+listdir of a FILE raises OSError
