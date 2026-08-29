@@ -16982,3 +16982,81 @@ grant). pxx-a5 N p72. frankB reactor slot-0 (12-core box, cannot reproduce).
 b4 `EmitLoadVarA64`. T: breadth first, heap-debug queued at named sha
 `a38e76336aad368e` (fixedpoint converged 2 rounds, sha256 `43be165be817…` ≠
 pinned `867207f2b418…`). U queue **19**.
+
+## 2026-08-29 ~22:00 — PIN v391 landed; two ranker fixes; faces 45-52
+
+**PIN v391 = `06e61e8b3f38`**, gated at `f4654ba1e`. `gate.sh quick` GREEN
+(fixedpoint 71s, seed canary 4s, testmgr quick 7s) → `stabilize-fast` → `pin`.
+Requested by TWO lanes: frankB (`make lib-test` red because v390 could not
+compile `test/lib_synapse.pas` while HEAD could — a **stale pin, not a defect**,
+and visible only on a box where someone fetched `external/synapse`) and frankA
+(`8be3c6d06` changed the NilPy string runtime in `compiler/builtin`).
+**Written into the pin commit: what the gate did NOT cover** — quick ran 29
+Pascal/C jobs and one ~1s NilPy canary, so this pin is not breadth for the NilPy
+change it carries. T has the limited/full sweep against `8be3c6d06`.
+
+**MY FIRST PIN GATE WENT RED AND IT WAS MY OWN STALE BINARY.** `compiler/pascal26`
+older than a commit already in my checkout → "two distinct fixedpoints". The gate
+diagnosed it exactly, including printing *"compiler/pascal26 is OLDER than the last
+commit touching compiler/"*. **I then misattributed it to frankwasm's push, and
+frankwasm corrected me**: the fixedpoint script's three inputs (`pinned`,
+`compiler/pascal26`, working tree) are ALL LOCAL — nothing consults origin. I had
+pulled and not rebuilt. The wrong diagnosis ("a sibling's push can red my gate")
+would have misdirected me later. Also learned: the script says **NOTE** for a
+concurrent build replacing the binary and **FAIL** for a genuine disagreement, and
+the distinction is only in the first word.
+
+**TOOLING 1 — `next` was offering a ticket that says "do not claim"** (`0041dbaf9`,
+found by frankB). `feature-target-wasm` opens *"NOT DISPATCHABLE — held by a
+standalone checkout on branch `wasm`"* and `next` printed a paste-ready claim line
+for it. **I did NOT take the proposed fix** (suppress on `owner:`): measured first —
+16 of 332 ranked tickets carry an owner and most are RETIRED session names
+(`claude-A`, `agent-AN`, `fable-a-n`) on dispatchable backlog items, so that rule
+would have hidden ~14 real tickets to catch one bad dispatch. Keyed on the explicit
+text marker instead: 4 tickets, all genuine. **`next` skips AND says which** — a
+silent suppression would recreate the defect. `ready` lists them flagged.
+Left alone deliberately: `unfinished/` conflates "parked, re-claim" with "held by a
+live checkout"; two conditions, one output. Recorded, not fixed.
+
+**I BROKE `progress.py` FOR EVERY LANE FOR ~4 MINUTES** — inserted `@property`
+above a line that already had one, so `owner` lost its decorator and
+`not_dispatchable` got two. Caught because I ran the command with **stderr
+visible**; my first run had `2>/dev/null` and showed empty output, which I nearly
+read as "no ready tickets". Second time tonight that suppressing stderr almost
+produced a wrong conclusion. **Do not pipe or muzzle a tool you are testing.**
+
+**Faces 45-52 landed** (index 52, OPEN): 45 a phase that can be entered but never
+finish eats the slot it protects and reads as slowness; 46 a fix is inert until
+both halves happen and **the restart succeeds** while serving old code; 47 the
+summary sentence a fix invites you to write can be false while the fix is right;
+48 a sweep reporting "present" without the spelling it tried; 49 **a RED is
+bounded by its host too** — my dispatch told frankB it could not verify its own
+fix and the ticket's `taskset` table was dialling the worker count and calling it
+hardware; 50 one sample per cell reads as a measurement and is a coin flip with a
+table drawn around it; 51 a behaviour-preserving change verifies identically to a
+no-op — prove the code moved (332 bytes); 52 **the population inherited from
+wherever the first look landed**, third instance in two days, the third written by
+the author who had just banked the second.
+
+**Doc landed:** `gating-and-waiting.md` — never put a worktree under `/tmp`
+(testmgr rewrites the path; the error names a missing test file and reads as a
+broken checkout), plus the stale-binary companion.
+
+**Open for the owner, both in the morning report:** CLAUDE.md says the quick tier
+carries *"dense NilPy/C canaries"* — it carries **one** ~1s canary by documented
+design (`testmgr.py` puts `test-nilpy` in limited/full). Wording overstates
+coverage; **owner's file, surfaced not edited.** And
+`decide-should-forwardlint-join-the-mandatory-per-fix-loop` [U p50].
+
+**Disposition agreed with frankA on the file-collision gap: take the NORM, not a
+lock field** — *announce the file when you change files mid-ticket*. A lock field
+has a staleness mode and still cannot cover entering a file you have not claimed.
+Note every agent commits as `yoctobyte`, so git authorship cannot attribute a file
+to an agent; no tool substitutes for the announcement.
+
+**Live:** frankA aarch64 stage-2 under qemu (unresolved, no green claimed).
+frankwasm merged master into `wasm` (`8aee2572c`), blocked on the sys-intrinsics U
+decision. pxx-a5 on `pypal.pas` (granted; 84 NR_ entries across 6 targets — a wrong
+number is invisible on 5 of 6). frankB on the concurrent-Halt bug. b4 finished
+`EmitLoadVarA64` (5/5 exact prediction), `builtinheap.pas` now free for bulk-copy.
+U queue **20**.
