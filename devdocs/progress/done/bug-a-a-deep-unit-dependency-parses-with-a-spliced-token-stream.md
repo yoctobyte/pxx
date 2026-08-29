@@ -421,4 +421,4 @@ which is Track R's file at HEAD, not from this work, and is a live bootstrap-see
 break for everyone. Reported to the coordinator, not touched.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 614ec6017.
