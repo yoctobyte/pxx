@@ -48,6 +48,9 @@ order to read them in. Route by what you are holding:
 
 **You have a failing thing and want the tool**
 - `## Order` -- the tool per question, and the reason to reach for one at all
+- `## Order` item **6** -- *it faulted on a cross target and I have only an
+  address*: `-strace` for the `si_code`, `-d in_asm` for the block, `--debug` to
+  name the routine, and where the cross binutils actually live
 - ``## `perf` being blocked is not "no profiler"`` -- FPC `-pg` + gprof, read call
   counts not percentages
 - ``## Profile the SHIPPING binary`` -- and `tools/pxxprof`, for when `perf` and
@@ -250,6 +253,67 @@ No rebuild, no source patch. **This exists because patching a probe in and
 self-compiling (~90s) is how a wrong premise got recorded in a ticket** — the
 cheap move was to reason instead of measure. Do not reason about what type the
 compiler inferred; print it.
+
+**6. It faulted on a CROSS target and all you have is an address.**
+
+```sh
+tools/run_target.sh <arch> ./prog                  # the plain run
+qemu-<arch> -strace ./prog                         # WHY it died, and where
+qemu-<arch> -d in_asm -D /tmp/asm.log ./prog       # the block it died in
+qemu-<arch> -d cpu    -D /tmp/cpu.log ./prog       # register state
+compiler/pascal26 --debug ... 2>&1 | grep '^proc'  # "proc N: NAME at OFFSET"
+```
+
+New in 2026-08-30, because until then no xtensa binary could be executed at all
+and "it faulted" was not a shape this repo had. Take them in that order — the
+first line usually ends it:
+
+- **`-strace` first, always.** It prints the syscalls, then the signal *with its
+  `si_code` and address*. `SIGBUS si_code=1` is `BUS_ADRALN` and the address
+  will be odd — which converts *"a wild pointer somewhere"* into *"a misaligned
+  one, go look at the frame"*, and those are different searches. A wild pointer
+  sends you hunting ownership; a misaligned one sends you to the frame layout,
+  where the bug actually was
+  ([[bug-a-a-hidden-aggregate-result-temp-gets-an-unaligned-frame-slot]]).
+- **`-d in_asm` names the block**, and its last instruction is the faulting one.
+  `-d cpu` gives the registers, but read it knowing the dump is at the last
+  *exception*, which for a normal syscall is the syscall itself — a register
+  there is not necessarily the register at the fault.
+- **`--debug` maps an address to a routine.** It prints `proc N: NAME at
+  OFFSET`, and the base is the ELF **entry point**, not the load address (our
+  images have no section headers, so nothing else will tell you). Without this
+  you are staring at a hex address with no name.
+- **Then, and only then, a probe** in the backend's own emitter to print the
+  offending symbol. That is what turned "an odd offset" into eight named slots.
+
+**The cross toolchains are installed and are not on `PATH`.** ESP-IDF puts
+`xtensa-esp-elf-objdump`, `xtensa-esp-elf-gdb` and the riscv32 pair under
+`~/.espressif/tools/**`, reachable only after `. $IDF_PATH/export.sh`. A bare
+`command -v xtensa-esp-elf-objdump` in a fresh shell answers about the SHELL and
+reads exactly like the tool being absent — this cost the fleet five weeks on the
+QEMU emulators and cost one session a weaker verification the same night, in the
+same directory tree. **A stated absence about this box is a claim about a
+search, not about the box**; before concluding a capability is missing, grep the
+repo for something that already uses it (`tools/esp_run.sh` had been globbing
+that directory for four weeks).
+
+Our ELFs carry program headers only, so disassemble the raw image:
+
+```sh
+OD=$(ls ~/.espressif/tools/xtensa-esp-elf/*/xtensa-esp-elf/bin/xtensa-esp-elf-objdump|head -1)
+$OD -D -b binary -m xtensa --adjust-vma=0x08048000 \
+    --start-address=0x... --stop-address=0x... ./prog
+```
+
+Two cautions worth the lines. **Objdump desyncs on the inline literal pools**
+xtensa emits mid-code (a `j` hops over each one), so anchor `--start-address` on
+a known instruction boundary — a proc start from `--debug` — and treat
+`excw` / stray `.byte` runs as the tell that you have drifted. And **the
+strongest evidence is two backends, not one**: the same source compiled for
+xtensa and riscv32, disassembled with each toolchain, showed *identical* frame
+offsets, which is what proved a suspected xtensa codegen bug was shared layout
+that five backends simply never trap. One backend's disassembly could not have
+said that.
 
 ## Two traps that produced confident wrong readings
 
