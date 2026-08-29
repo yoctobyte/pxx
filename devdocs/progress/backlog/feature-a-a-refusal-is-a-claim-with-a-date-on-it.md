@@ -847,6 +847,27 @@ reported**, and the sibling shape is invisible at all three.
 frankB wrapped the save/release around the whole block instead, so the inline
 arms are covered too.
 
+### The sharper form (frankB, same evening) — three checks that were one check
+
+> **"The repro, the fix site and the verification were not three independent
+> checks — they were one check counted three times."**
+
+A repro travels the single path that exhibits the reported shape. The fix is
+placed to satisfy that path. Verification re-runs the repro. Three steps, all
+downstream of whichever shape happened to get reported first — so the apparent
+redundancy is zero, and it *feels* like defence in depth.
+
+**What broke it was not care at any of the three steps.** It was asking a
+different question entirely — *what other shapes reach this code* — which is a
+question none of the three can pose about itself. That is why the answer was
+`F(x) = 'c'`, **a program nobody had written down anywhere**: not in the ticket,
+not in the repro, not in the test suite.
+
+The operational form: after a fix verified by the reporting repro, ask what
+*else* reaches the changed code, by reading the dispatch rather than by running
+anything. If two arms reach it and your repro exercises one, you have tested
+half of what you changed and all three of your checks say you tested it fully.
+
 **And the ticket named the wrong site.** It asked for `EmitStrCmpReg`; the leaking
 emitter is `EmitAnsiStrCmpReg`. A release in `EmitStrCmpReg` is **provably dead
 code** — it is the `else if` after the `tyAnsiString` block, so neither side can
