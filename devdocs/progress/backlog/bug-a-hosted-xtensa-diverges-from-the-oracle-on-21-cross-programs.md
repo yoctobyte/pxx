@@ -30,7 +30,7 @@ and without `--xtensa-soft-mulhigh` any numeric output SIGILLs.
 | `test_cross_dynarray` | `10 20 30 len=3` | `10 20 30 len=3` |
 | `test_cross_float` | ` qemu: uncaught target signal 7 (Bus error) - ` | ` 3.5000000000000000E+000` |
 | `test_cross_float_return` | `qemu: uncaught target signal 7 (Bus error) - c` | `2.5000` |
-| `test_cross_managed_aggregate_locals` | `hello worldtext¬#	Æ	Ì#	¼#	L%	d%	` | `hello 42` |
+| `test_cross_managed_aggregate_locals` | `\x05hello\x06 world\x04text\xac#\t\x08\x04\xc6\x1b\t\x08\x04\xcc#\t\x08\xbc#\t\x08L%\t\x08\x04\x03d%\t\x08` | `hello 42` |
 | `test_cross_multidim3d` | `var3d=1476000000 c123=123000000` | `var3d=1476000000 c123=123000000` |
 | `test_cross_openarray_string` | `count=2` | `count=2` |
 | `test_cross_param_2darray` | `vsum=14` | `vsum=14` |

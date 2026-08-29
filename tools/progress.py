@@ -709,14 +709,34 @@ class Board:
         self.tickets: list[Ticket] = []
         self.by_slug: dict[str, Ticket] = {}
         self.by_status: dict[str, list[Ticket]] = {st: [] for st in STATUSES}
+        self.mojibake: list[Path] = []
         self.load()
 
     def load(self) -> None:
+        # errors="replace", NOT strict. One ticket carrying a stray non-UTF-8
+        # byte used to raise UnicodeDecodeError out of here and take down
+        # `ready`, `next`, `check` and `board-md` for EVERY lane at once -- and
+        # the traceback named the codec and a byte offset, never the file, so
+        # the blast radius was the whole fleet and the diagnosis was a manual
+        # bisect. Measured 2026-08-30: a bug-a-hosted-xtensa ticket pasted the
+        # diverging program's RAW OUTPUT into a markdown table, which is exactly
+        # the evidence such a ticket should carry.
+        #
+        # A ticket is prose plus evidence, and evidence arrives as bytes from a
+        # failing program -- so this will happen again, and the board must
+        # degrade to one damaged cell rather than fail closed. The substitution
+        # is not silent: the paths are collected and `check` reports them, so
+        # the ticket still gets repaired, it just no longer blocks anyone first.
         for st in STATUSES:
             for path in sorted((PROG / st).glob("*.md")):
                 if path.name in {"README.md", "BOARD.md"}:
                     continue
-                text = path.read_text(encoding="utf-8")
+                raw = path.read_bytes()
+                try:
+                    text = raw.decode("utf-8")
+                except UnicodeDecodeError:
+                    text = raw.decode("utf-8", errors="replace")
+                    self.mojibake.append(path)
                 fm, fm_blockers = parse_frontmatter(text)
                 t = Ticket(path, st, slug_from_path(path), text, fm, fm_blockers)
                 self.tickets.append(t)
@@ -1339,6 +1359,18 @@ pre code{background:none;padding:0}
         exists = self.by_slug
         indeg = {s: 0 for s in exists}
         dependents: dict[str, list[str]] = defaultdict(list)
+
+        # Load() no longer dies on a non-UTF-8 ticket, so the damage has to be
+        # reported somewhere or the replacement really would be silent. WARNING,
+        # not a problem: the board is usable and the ticket is readable; what is
+        # lost is the exact bytes of some pasted evidence, which is worth
+        # repairing at leisure and never worth blocking a dispatch over.
+        for path in self.mojibake:
+            lines.append(
+                f"ENCODING: {path.name} is not valid UTF-8 — undecodable bytes "
+                f"shown as U+FFFD. Re-paste any raw program output as \\xNN "
+                f"escapes so the evidence survives.")
+            warning_count += 1
 
         for t in self.tickets:
             for b in t.blockers:
