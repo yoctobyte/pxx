@@ -15811,3 +15811,56 @@ wired-into-no-build-rule check plus the helper as its own unit). frankA dispatch
 to its own A ticket. frank-optimize-b4 and frankB **have not answered** — both show
 `waiting`, which is ambiguous and is **not** a park line; no mechanical expiry set
 because neither holds anything now. U queue **counted: 15.**
+
+## 2026-08-29 17:20 — MAX-PARALLEL WINDOW OPENS (owner), and the session ceiling is superseded
+
+Owner: the plan upgrade **reset the weekly limits**, and the reset **expires in two
+days**. Instruction: *"let's do as much parallel work as we can"*, plus a
+self-reminder because **the 5-hour rolling cap still applies**.
+
+### The four-died-at-once measurement is SUPERSEDED — five are running now
+
+At 17:20 `ListAgents` shows **five workers BUSY simultaneously** — frankA, frankB,
+frankwasm, frank-optimize-b4, pxx-a5 — plus this coordinator. **Six sessions, none
+died.**
+
+| | old | now |
+| --- | --- | --- |
+| owner's target | 1-2 workers (2026-08-17, token-bound) | **lifted** — tokens reset |
+| measured break | 4 died at once (2026-08-25) | **5 workers observed alive 2026-08-29** |
+
+So the number I have been treating as a hard ceiling for four days was **plan-tier
+bound after all**, and the upgrade moved it. **Do not reinstate "4 is the break"** —
+it was true of the old plan and is now a historical fact, not a limit.
+
+> **A limit measured once, under conditions that have since changed, is a
+> historical fact wearing a rule's clothes.** I kept it as a live constraint
+> through four ticks after the variable behind it changed, and only stopped
+> because the fleet ran past it while I was not looking.
+
+Adding **frank-rust** → six workers. The next real break is unknown again, and that
+is the correct state to be in rather than guessing conservatively.
+
+### THE 5-HOUR CAP — the reminder, and what it actually protects
+
+**Max-parallel window opened 17:20 CEST, 2026-08-29.** The weekly reset expires
+**2026-08-31**.
+
+The cap is a **rolling 5-hour window**, so with six sessions running hard it can be
+exhausted well before five hours elapse, and everything stalls until the window
+rolls. **What makes that cheap rather than expensive is already in force:**
+
+> **Push per logical unit.** A cap-stall then costs exactly the *time*, and never
+> the work — the same property that made the 4-session test safe to run. A stall
+> with unpushed work in five trees is the only version of this that hurts.
+
+**Coordinator's standing job for the next two days**, checked every tick:
+1. **If sessions go quiet together, suspect the cap before suspecting the fleet** —
+   an exhausted window looks exactly like five workers finishing at once, and I
+   have already made the mirror-image error today (diagnosing my own token outage
+   as being logged out).
+2. **Tell the owner when we stall and why**, rather than reporting an idle fleet.
+3. **Never let a stall find unpushed work** — re-state push-per-unit on every
+   dispatch, and treat "I'll push when it's done" as the failure mode.
+4. The cost of *over*-running the cap is a wait. The cost of *under*-using a
+   two-day window that expires is permanent. **Bias to running hot.**
