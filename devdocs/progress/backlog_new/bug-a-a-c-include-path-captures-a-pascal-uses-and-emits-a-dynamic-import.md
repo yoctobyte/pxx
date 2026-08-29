@@ -108,6 +108,52 @@ That is the second-order damage worth stating plainly: **a workaround that
 outlives the bug it worked around does not go quiet, it starts lying.** The
 measurement it protects is the one it corrupts.
 
+## A second exposed site, and it narrows the trigger
+
+`apps/ide/build.sh` passes `GTK3_INC="$(pkg-config --cflags-only-I gtk+-3.0)"`
+next to Pascal `uses` — the same shape, in our own tooling, added the same day
+this was filed. frankB checked the three names above against the gtk-3.0 header
+roots and reported it clean. **It is clean, and the way it is clean is the
+useful part.**
+
+Re-checked here by cross-producting every RTL unit name against every header on
+those roots rather than the three known ones, which finds a fourth collision
+frankB's narrower test could not:
+
+```
+lib/rtl/png.pas   vs   /usr/include/libpng16/png.h      (on gtk+-3.0's -I path)
+```
+
+And yet:
+
+```
+$ pascal26 $GTK3_INC png_test.pas /tmp/p        # uses png
+ok
+```
+
+**A name collision is necessary but NOT sufficient.** `strings.h` captures and
+`png.h` does not, on the same compiler, through the same flag. The difference
+that fits every observation so far: pxx's own `lib/crtl/include/strings.h` is
+written to be compiled by cfront and parses as a unit, while `/usr/include/libpng16/png.h`
+is a real system header that does not — and an empty `strings.h` does not
+capture either (the control at the top of this ticket). So the capture happens
+when the header **successfully compiles as a unit**, and falls back correctly
+when it does not.
+
+That is where to look, and it also says what the fix must not break: whatever
+makes `png.h` fall back to `lib/rtl/png.pas` is already doing the right thing.
+
+**Known-exposed sites, both verified:**
+
+| site | flag | status |
+| --- | --- | --- |
+| `feature-demo-songformatter-pxx-target` measurement instruction | `-Ilib/crtl/include` | **captures** — three of five modules mis-fail; instruction superseded |
+| `apps/ide/build.sh` | `GTK3_INC` (gtk+-3.0 roots) | **clean today** — `png` collides by name, does not capture |
+
+The second row is worth as much as the first: it is the passing test case, and a
+fix that makes `png` start capturing would be a regression nothing else would
+catch.
+
 ## Fix sketch
 
 A `uses` clause names a PASCAL unit. The include path is for `#include`, and the
