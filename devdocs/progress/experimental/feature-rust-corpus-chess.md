@@ -9,9 +9,10 @@ prio: 0
 branch of the movegen/search compiles and runs, and its move enumeration is
 *identical to the reference perft* — the "bit-comparable" bar for a chess
 engine. Two forms live in `test/`:
-- `test_rust_chess_engine.rs` — faithful struct model (real `Move` struct in a
-  `[Move; 256]` list passed as `&[Move]`), make/unmake, negamax, UCI output.
-  perft(4)=197281 exact; picks the mate-in-1 `a1a8`.
+- `test_rust_chess_engine.rs` — faithful struct model (real `Move` struct in an
+  ArrayVec-shaped `MoveList { data: [Move; 256], len: i64 }` passed as
+  `&mut MoveList`), make/unmake, negamax, UCI output. perft(4)=197281 exact;
+  picks the mate-in-1 `a1a8`.
 - `test_rust_chess_perft_full.rs` / `test_rust_chess_search.rs` — packed-i64
   form: perft exact to depth 5 in `make test` (depth 6 = 119060324 confirmed
   locally), forced mate-in-1 and mate-in-2 found and depth-sensitive.
@@ -420,3 +421,61 @@ pure swallowing/trivia, cheap and high-leverage.
 
   Remaining: the ArrayVec replacement (corpus work, not frontend work).
 
+
+
+## Stage 4 (2026-08-29): the ArrayVec rewrite — the last ladder item, DONE
+
+The engine no longer opens each search node with
+
+```rust
+let mut mv: [Move; 256];      // uninitialised -- pxx accepts, rustc rejects
+let ms = &mv[0..256];
+let n = gen_moves(b, side, ep, castle, ms);
+```
+
+and no longer threads the count by hand through
+`fn add(ms: &[Move], n: i64, ..) -> i64`. Both are gone, replaced by the shape
+the real source uses:
+
+```rust
+struct MoveList { data: [Move; 256], len: i64 }
+impl MoveList {
+    fn new() -> MoveList { MoveList { data: [Move { from: -1, to: -1, flags: 0 }; 256], len: 0 } }
+    fn push(&mut self, from: i64, to: i64, flags: i64) { .. }
+    fn get(&self, i: i64) -> Move { self.data[i] }
+    fn len(&self) -> i64 { self.len }
+}
+```
+
+`gen_moves` takes `&mut MoveList` and returns nothing; the three search loops
+(`perft`, `negamax`, `best_move`) read slots back with `ml.get(i)`.
+
+**One frontend rung was needed and only one** — `[Name { .. }; N]`, a repeat
+array whose element is a struct literal, in both the `let` and the struct-field
+position (rung 16, `feature-rust-option-type`). Everything else the shape wants
+was measured working *before* anything was written: array-of-struct fields,
+`self.data[self.len].from = f` through `&mut self`, `fn get(&self, i) -> Move`,
+`fn f(ml: &mut MoveList)` with `f(&mut ml)`, and whole-record copies between
+array slots. This ticket's earlier note that "`list[i] = some_move`
+(record-value copy) is not yet wired" was **stale** and is retracted.
+
+**Cost:** 0.252s vs 0.192s for the same perft(4)+search workload — the 255
+constructor copies plus the ~6 KB by-value `MoveList` return, once per search
+node (~9.3k nodes). Real Rust would NRVO both away; pxx does not, and at this
+size it does not matter. Recorded so nobody re-measures it as a regression.
+
+**Two pre-existing Track R bugs fell out of the probing** and are filed, not
+fixed:
+`bug-rust-slice-param-fn-erases-mains-record-array-element-type` (a fn with a
+slice param and arity >= 2 before `main` makes a `[Struct; N]` local in `main`
+lose its element record — a parse error for a struct element, a **segfault**
+when the slice's element is that same struct) and
+`bug-rust-whole-array-borrow-as-a-slice-argument-segfaults` (`f(&arr)` compiles
+clean and crashes). The engine dodges the first because `main`'s only arrays are
+scalar boards, and the second because it binds `let b = &board[0..64];` first.
+
+**The file is still not rustc-clean**, and the header says so honestly rather
+than claiming otherwise: `b[from]` indexes a slice with an `i64` (rustc wants
+`usize`), and the boards are mutated through `&[i64]` rather than `&mut [i64]`.
+What changed is that the move list no longer has a form with *no* Rust meaning
+at all.
