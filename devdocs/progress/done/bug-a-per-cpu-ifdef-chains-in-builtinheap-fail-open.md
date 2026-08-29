@@ -4,7 +4,7 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "The per-CPU {$ifdef} chains in compiler/builtin/builtinheap.pas have no terminal {$else}, so a target with no arm gets whatever the pre-chain default was — and for PXXSysOpenRO and PXXSysLseek there is no default at all: Result is NEVER ASSIGNED. Both are guarded only by {$ifndef PXX_ESP} and have arms for x86-64/i386/arm32/aarch64 only, so on HOSTED RISCV32 and on wasm32 they compile and return the return slot's leftover contents. PXXStrLoadFile then does `if fd < 0 then Exit` on that garbage and, if it happens to be non-negative, calls PXXAlloc(size + ...) with an equally garbage size. Four instances of the same generator shape in this one file; the systemic fix is a terminal else that fails LOUD, not four more arms."
-status: new
+status: done
 owner: ""
 ---
 
@@ -195,3 +195,88 @@ opposite reason to the one recorded.**
 the backend's prologue pass, the x86-64 fall-through, and the loud `Error`.
 `root-cause-over-microfix.md` calls three mechanisms for one concept a design flaw, so the fix
 here is plausibly **deleting an arm rather than adding one**.
+
+## Log
+- 2026-08-29 — resolved, commit PENDING-COMMIT.
+
+## Resolved 2026-08-29 — fixed as the shape, with three corrections to this ticket
+
+All five chains in the file (`PXXSysOpenRO`, `PXXSysLseek`, `PXXSysClose`,
+`PXXSysRead`, `PXXSysWrite`) converted from runs of separate `{$ifdef}` blocks
+into single `{$if defined}/{$elseif}/{$else}` chains with a terminal arm.
+Closes this and `bug-a-three-pxxsys-primitives-return-a-plausible-fd-on-wasm32`
+together — one defect that was counted twice.
+
+**Correction 1 — `{$error}` does not exist in this dialect,** so the fix this
+ticket proposes cannot be written. The directive dispatcher in `lexer.inc`
+handles `ifdef/ifndef/if/ifopt/elseif/else/endif/define/undef` and the strict-*
+flags; there is no error/fatal/message. The ticket flagged this as "the first
+thing to check" and it was, and the answer was no. `{$if defined(X)}`,
+`{$elseif}`, `{$else}` and `not/and/or` all work, which is what made an
+exhaustive chain possible at all. **The absent directive is the real missing
+mechanism here** — with no way to refuse at compile time, every chain in the
+tree can only fail to a defined-but-wrong value. Worth its own Track A ticket;
+`lexer.inc` was outside this grant.
+
+**Correction 2 — the armless set is larger than the ticket's table.** The file
+header records that xtensa under IDF compiles the `{$ifndef PXX_ESP}` bodies
+("riscv32 under IDF compiled all of them, which is the proof the bodies are
+fine on an ESP target"). So open/lseek/close are reached with no arm on hosted
+riscv32, on wasm32, AND on **xtensa/IDF** — three live targets, one of them
+Track S's active campaign, not the two this ticket names.
+
+**Correction 3 — `PXXSysWrite` is marked "fixed" in the table above and was
+not.** Adding the wasm32 arm closed that instance and left the generator
+running: its pre-chain `Result := 0` still meant an armless target reported
+writing nothing *successfully*. `PXXSysRead` is the same, where 0 reads as EOF.
+Both are converted here. This is the ticket's own prediction — "adding an arm
+closes today's instance and leaves the generator running" — having already come
+true once inside the ticket, unnoticed.
+
+### Measured, per the playbook, not reasoned
+
+`PXXSysOpenRO` IR on riscv32 (`PXXDBG=a.ir:PXXSysOpenRO`):
+
+| | IR | meaning |
+| --- | --- | --- |
+| before | `IR count=1` — one empty `block` | body is EMPTY; `Result` never assigned |
+| after | `IR count=4` — `const 1; neg; store Result` | `Result := -1` |
+
+And frankwasm's reproducer from the sibling ticket, run end to end:
+
+| | native x86-64 | riscv32 (no arms) |
+| --- | --- | --- |
+| `PXXSysOpenRO(nil)` | `-14` unchanged | `-1` (was: return-slot leftovers) |
+| `PXXSysClose(7)` | `-9` unchanged | `-1` |
+| `PXXSysLseek(7,0,0)` | `-9` unchanged | `-1` |
+
+x86-64 is provably untouched by the first three chains: that build produced a
+**byte-identical compiler** (`da54007a8f92`, equal to HEAD) because the else
+arms are dead on the host. The read/write conversion does change the binary —
+it removes the now-redundant pre-chain `Result := 0` dead store on every target
+that has an arm. riscv32 keeps syscalls 63/64, confirmed by IR dump. 12 of 12
+loadfile/readln/writeln assertions pass, i386 and aarch64 cross sites included.
+
+### Why -1 rather than something louder
+
+For these five, -1 is not a consolation for the missing `{$error}` — it is the
+value they already signal failure with, and `PXXStrLoadFile`'s `if fd < 0 then
+Exit` consumes it correctly. The routine now fails the way its own caller
+already expects, instead of returning a plausible success.
+
+### Explicitly NOT done
+
+- **`HeapMmap` — UNGRANTED, untouched, unswept.** The sixth instance and the
+  largest blast radius; stays on
+  `bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero` [p70]
+  under the owner's standing "both halves or neither" condition.
+- **xtensa's `Result := 0` in read/write is preserved, not judged.** It was
+  never chosen for xtensa — it was the default every unnamed target inherited.
+  It is now an explicit arm, so the fall-open is gone, but whether 0 (EOF /
+  "wrote nothing, successfully") is a lie on xtensa/IDF is **Track S's call**
+  and is flagged in the source at both sites.
+- The `{$error}` gap, and the `EmitZeroFrameSlot` narrow chain the correction
+  above identifies — both outside `compiler/builtin/**`.
+
+## Log
+- 2026-08-29 — fixed as the shape, not a fifth arm; resolved. PENDING-COMMIT

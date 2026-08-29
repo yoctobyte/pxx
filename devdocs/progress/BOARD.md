@@ -54,7 +54,7 @@ lives in git, not in a timestamp._
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
 
-## backlog (302)
+## backlog (300)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -70,7 +70,6 @@ lives in git, not in a timestamp._
 | bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets | A | 20 | bug |  | — |
 | bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse | A | 40 | bug | `C(**d)` and `C(*lst)` on a class with an ordinary `__init__` fail with `expected expression` — on the PINNED compiler too, so this is not a regression. The ctor path in pyparser.inc:45097 builds its own AN_ARG chain and never consults the star-forwarding branch that plain calls use. Routing it there needs the receiver prepended, which PyStarForwardCall's signature does not take. | — |
 | bug-a-open-array-of-string-arg-spilled-through-a-managed-string-temp | A | 30 | bug | `JoinOpen(['x','yy','zzz'])` for `procedure JoinOpen(const a: array of string)` spills the argument through a hidden temp that ir.inc declares tyAnsiString. An open-array parameter records its ELEMENT kind in TypeKind, and the spill guard at ir.inc:11207 reads that field without also testing IsArray -- the same file already guards correctly at :11329. The temp then holds an array data pointer while claiming to be a managed string. On the register backends the mistyped retain and the scope-exit release cancel, so nothing is observable and it has been latent; wasm32 type-checks the store and refuses the body. One-clause fix, confirmed by measurement. | — |
-| bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open | A | 60 | bug | The per-CPU {$ifdef} chains in compiler/builtin/builtinheap.pas have no terminal {$else}, so a target with no arm gets whatever the pre-chain default was — and for PXXSysOpenRO and PXXSysLseek there is no default at all: Result is NEVER ASSIGNED. Both are guarded only by {$ifndef PXX_ESP} and have arms for x86-64/i386/arm32/aarch64 only, so on HOSTED RISCV32 and on wasm32 they compile and return the return slot's leftover contents. PXXStrLoadFile then does `if fd < 0 then Exit` on that garbage and, if it happens to be non-negative, calls PXXAlloc(size + ...) with an equally garbage size. Four instances of the same generator shape in this one file; the systemic fix is a terminal else that fails LOUD, not four more arms. | — |
 | bug-a-pxx-home-is-advertised-but-not-honoured | A | 35 | bug | `--where` advertises PXX_HOME as tier 2, overriding the exe-dir defaults, but setting it changes nothing: units still resolve from compiler/../lib/rtl, and even REMOVING a unit from the PXX_HOME tree does not produce 'unit not found'. Found while trying to test a compiler hypothesis against a modified copy of the RTL instead of editing Track B's files. | — |
 | bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body | A | 30 | bug |  | — |
 | bug-a-riscv32-sa-onstack-has-no-effect-under-qemu | A | 12 | bug | riscv32 registers a signal alt stack correctly — the sigaltstack syscall succeeds and the flags word assembles to $18000004 — but the handler still runs on the FAULTING stack under qemu-riscv32, so a stack-overflow SIGSEGV kills the process. The identical construction works under qemu-i386/arm/aarch64 of the same build, which points at qemu-user rather than at us. Unverifiable without hardware. | — |
@@ -81,7 +80,6 @@ lives in git, not in a timestamp._
 | bug-a-testtmp-defaults-to-a-path-every-checkout-shares | A+T | 55 | bug | Makefile:49 is `TESTTMP ?= /tmp` — a fixed path, not per-checkout and not per-PID. Every agent's suite writes its test binaries to the same names in the same directory, so two concurrent runs on one box overwrite each other's artefacts. The failure mode is a wrong verdict, not a crash. CORRECTED 2026-08-29 (see body): testmgr ALREADY privatizes recipe /tmp paths per PID, so this is true only of bare `make`; the recipe half closed in b2cab6b6b; and the proposed fix would blind four testmgr expressions at once — blocked on the prerequisite. | chore-t-teach-testmgr-the-testtmp-value-before-anyone-changes-it |
 | bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire | A | 45 | bug |  | — |
 | bug-a-the-div-by-zero-check-is-still-missing-on-xtensa | A+S | 25 | bug | The last target without a pre-divide zero check. The other five landed 2026-08-23; xtensa was left out because it cannot be RUN on this box (bare profile emits an ESP image, not a Linux ELF), its branches carry only an 8-bit displacement, its windowed ABI rotates the register window on a call, and its divide is two shapes depending on XtensaSoftDivide. | — |
-| bug-a-three-pxxsys-primitives-return-a-plausible-fd-on-wasm32 | A | 55 | bug | PXXSysOpenRO, PXXSysClose and PXXSysLseek in compiler/builtin/builtinheap.pas are ifdef chains with arms for x86-64/i386/arm32/aarch64 and NO CPU_WASM32 arm and no else. On wasm32 the body is empty, Result is never assigned, and the functions return whatever is in the result slot -- measured as 7, 6 and 6, where native returns -14, -9, -9. These are not garbage-looking values: 7 is a plausible file descriptor, so `if fd < 0 then error` passes and the caller reads a file it never opened. Same family as bug-a-pxxsyswrite-has-no-wasm32-arm (done) and HeapMmap, and the same failure direction: FAIL OPEN. The minimal fix is an explicit error return, not a WASI implementation. | — |
 | bug-a-xtensa-codegen-has-no-variant-support | S | 22 | bug | `var v: Variant; v := 1;` does not compile for --target=xtensa: `unsupported node in IR codegen: var_store`. The exact sibling of bug-a-riscv32-codegen-has-no-variant-support, which was fixed 2026-08-27 -- xtensa is the last backend with no IR_VAR_STORE / IR_VAR_BOX / IR_VAR_BINOP arm at all. | — |
 | bug-a-xtensa-refuses-to-lower-an-unreachable-syscall | S | 45 | bug | xtensa codegen errors with 'unsupported node in IR codegen: syscall' on a __pxxrawsyscall call that is statically unreachable on that target, which makes an otherwise-portable RTL unit uncompilable. Inconsistent with the ESP PAL's own pattern of refusing unsupported operations at RUNTIME rather than failing the build. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
@@ -601,9 +599,9 @@ lives in git, not in a timestamp._
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2582)
+## done (2584)
 
-2582 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2584 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (46)
 
@@ -695,7 +693,6 @@ lives in git, not in a timestamp._
 - [p 62] [A] feature-unicodestring-model
 - [p 60] [U] decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - [p 60] [A] bug-a-cross-bootstrap-aarch64-overflows-max-code
-- [p 60] [A] bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open
 - [p 60] [N] bug-n-os-environ-and-os-sep-are-not-values
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - [p 60] [N] feature-a-declaration-phase
@@ -716,7 +713,6 @@ lives in git, not in a timestamp._
 - [p 55] [A] bug-a-emitzeroframeslot-has-no-wasm32-arm
 - [p 55] [A] bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice
 - [p 55] [A+T] bug-a-testtmp-defaults-to-a-path-every-checkout-shares
-- [p 55] [A] bug-a-three-pxxsys-primitives-return-a-plausible-fd-on-wasm32
 - [p 55] [N] bug-n-a-field-assigned-from-a-module-global-expression-is-refused
 - [p 55] [N] bug-n-a-keyword-argument-through-a-class-value-is-refused-at-runtime
 - [p 55] [N] bug-n-a-keyword-argument-through-a-procedural-field-needs-a-plain-receiver
