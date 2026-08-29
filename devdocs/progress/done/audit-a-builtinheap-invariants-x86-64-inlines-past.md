@@ -2,9 +2,10 @@
 track: A
 type: audit
 prio: 60
-status: open
+status: done
 found: 2026-08-29
 found-by: claude-N
+owner: frankD
 ---
 
 # A helper's comment is a claim about every caller, written where one caller cannot see it
@@ -184,3 +185,83 @@ prose describing the absence produced the appearance of presence.** Caught only
 because the answer contradicted a grep from twenty minutes earlier. The numbers
 above are from the corrected run with comments stripped; treat any future
 `FindProc` census the same way.
+
+---
+
+## AUDIT COMPLETE 2026-08-30 (frankD) — the three unaudited pairs, tested rather than read
+
+Read-only. The census left four pairs unaudited and named the right next step as
+**differential rather than reading**. Three were testable (float→text is Track F
+by charter and stays out), so they were tested: the same program compiled for
+x86-64 (inline twin) and riscv32 (portable helper), run, and diffed.
+
+### Result: 31 cases, zero divergence
+
+| pair | cases | covering | verdict |
+| --- | --- | --- | --- |
+| `PXXStrEq` / inline compare | 13 | equal content in different blocks, literal compare, prefix both ways, `''`=`''`, `''` vs non-empty, `<>`, `Char`, frozen `string[8]` against an ansistring **in both operand orders** | **identical** |
+| `PXXVarClear` + `PXXVarRetain` + `PXXVarReleasePayload` / `EmitVariantClear` and the aarch64 twin | 10 | `v := v` self-assign, retag over a string payload, variant outliving the ansistring it copied, variant-to-variant store in a loop, int/bool/double round-trip | **identical** |
+| console read family / `EmitReadLine`, `EmitReadVarParse` | 8 | string line, `Char`, two ints on one line with leading blanks and a negative, `Int64` past 2^53, bare `ReadLn` discard, trailing-space preservation, `Eof` both false and true | **identical** |
+
+The variant row is the one worth noting: `v := v` is the shape that broke as
+`bug-a-a-variant-assigned-to-itself-becomes-empty`, and it is now correct on both
+halves.
+
+### The scope limit, stated because it is exactly where tonight's real bug was
+
+**riscv32 was the cross representative. xtensa was not tested here**, because the
+pinned compiler resolves builtin units from its own frozen
+`stable_linux_amd64/default/builtin/`, which predates frankS's `HeapMmap`
+`CPU_XTENSA` arm — so hosted xtensa cannot allocate under the toolchain a Track D
+agent is allowed to use.
+
+That matters more than a usual caveat: **the one genuine divergence found in this
+seam tonight was xtensa-only**
+([[bug-a-xtensa-has-no-ordered-string-compare-and-sorts-by-heap-handle]]), and it
+was invisible to exactly this kind of x86-64/riscv32 diff. So read the table as
+*"the portable helper and the x86-64 inline agree"* — which is what the census
+asked — and **not** as "all five cross backends agree". Re-running these three
+probes against xtensa once a pin carries the heap arm is cheap and is the
+remaining work; the probes are six-line programs and are reproduced above by
+description.
+
+### One finding, and it is the seam's own root cause
+
+[[bug-a-the-comment-that-caused-three-bugs-survived-all-three-fixes]] —
+`builtinheap.pas:2625-2631`, the `PXXStrUnique` comment, is the sentence that
+produced instances 1, 2 and 3 of this ticket. All three were fixed on 2026-08-29.
+`git blame` still dates all seven lines to `8a263f504`, **2026-08-14**. Three
+agents found three bugs caused by believing it, fixed all three in one day, and
+none edited it. Its sibling copy in the *consumer* is
+[[bug-a-the-ascii-cache-consumer-still-says-byte-mutation-has-one-place]] — fix
+both in one commit or the next reader finds whichever was left.
+
+### Census correction carried from the sibling audit
+
+The `FindProc('<name>')` matcher misses **name-taking wrappers** (`XtensaHelperProc`,
+`EmitXtensaHelperCall`, `EmitVarHelperCall*`, `EmitStrRefCall*`). Corrected:
+**46 reached by x86-64, 33 cross-only** — not 45/30. `PXXVarRetain`,
+`PXXVarReleasePayload`, `__pxx_divsi3` and `__pxx_modsi3` were invisible;
+`PXXRecordRetainIntf` moves out of cross-only. There is a **tenth documented
+pair**: `EmitVariantClearA64Ex` (`ir_codegen_aarch64.inc:549`) is aarch64's
+hand-emitted twin of `PXXVarReleasePayload`, and its comment names the twin
+correctly.
+
+The methodology note at the foot of the census should carry both halves now: the
+first run showed *prose describing an absence producing the appearance of
+presence*; this one is the inverse, **an indirection producing the appearance of
+absence**.
+
+### Verdict on the ticket's own question
+
+> *"if the answer is 'three, and they are now all fixed', that closes a worry
+> cheaply. If it is larger, each entry is a latent wrong-answer bug."*
+
+**Ten pairs. Six known defects, all fixed. Three pairs newly tested and clean on
+the x86-64/riscv32 axis. One pair (float→text) deliberately out of scope as F.
+One new finding, which is not a code defect but the comment that caused three of
+the six.** The worry closes — but not for the reason the ticket expected: the
+pairs are in good shape and **the sentence that describes them is not**.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:23 blocked:8 backlog:314 backlog_new:14 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2659 rejected:51`
+`working:2 unfinished:23 blocked:8 backlog:314 backlog_new:14 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2660 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
@@ -80,6 +80,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [A]` feature-unicodestring-model
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - `[p 60] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 1)
-- `[p 60] [A]` audit-a-builtinheap-invariants-x86-64-inlines-past
+- `[p 60] [A]` bug-a-an-array-constructor-in-argument-position-leaks-its-dynamic-array
 
 _304 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
