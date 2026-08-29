@@ -8,12 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (3)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-cross-bootstrap-aarch64-overflows-max-code | A | 60 | bug | MEASURED — it is DENSITY, raise the cap. aarch64 codegen runs 2.295x x86-64 across four unrelated programs (spread 2.27-2.34); the compiler needs only 1.80x to breach MAX_CODE, so predicted aarch64 size is 20.4 MB against a 16 MB cap. Runaway ruled out. ~21 MB floor, 32 MB gives headroom, A's call. Originally: `make cross-bootstrap` for aarch64 fails at HEAD with `code overflow: emitted code exceeds MAX_CODE` in compiler/pyparser.inc. Same pinned stable, same source, only the target differs — x86-64 emits 9,343,257 B (56% of the 16 MiB cap) while aarch64 exceeds it, so that backend needs >1.8x the code density for identical input. The error's own suggested remedy does not apply: default and -O2 overflow identically. Unseen because cross-bootstrap runs ONLY on a manual tag dispatch in release.yml, never per-commit, so it can rot at HEAD indefinitely — while the website advertises aarch64 as a supported target. | — |
-| feature-opt-emitloadvara64-needs-a-destination-register-parameter | A+O | 55 | feature | EmitLoadVarA64 hardcodes x0 behind residency, dyn-array-handle and sign-extension special cases, so the aarch64 leaf-operand collapse could only be done for the CONST half. The LEAFSYM half needs the right operand in x1 while the left sits in x0; a load-to-x1 twin would duplicate every one of those special cases. Honest fix is a destination-register parameter. Unlocks a further 12-16% of all binops on aarch64. | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
 
 ## unfinished (21)
@@ -604,9 +603,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2599)
+## done (2600)
 
-2599 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2600 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (51)
 

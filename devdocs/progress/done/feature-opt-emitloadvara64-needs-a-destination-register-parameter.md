@@ -4,7 +4,7 @@ prio: 55
 type: feature
 blocked-by: []
 summary: "EmitLoadVarA64 hardcodes x0 behind residency, dyn-array-handle and sign-extension special cases, so the aarch64 leaf-operand collapse could only be done for the CONST half. The LEAFSYM half needs the right operand in x1 while the left sits in x0; a load-to-x1 twin would duplicate every one of those special cases. Honest fix is a destination-register parameter. Unlocks a further 12-16% of all binops on aarch64."
-status: working
+status: done
 owner: frank-optimize
 ---
 
@@ -136,3 +136,117 @@ never microfix as a consolation.* The consolation move here was visible and
 tempting: land the commutative-only subset, book 6-8% of binops, and leave the
 global-operand clobber undiscovered inside it. The measurement above is what that
 would have cost.
+
+---
+
+## DONE 2026-08-29 — both steps, in the order the parked note demanded
+
+Landed as two commits, because the second is only safe after the first.
+
+### Step 1 — one scratch register (`refactor(A): EmitLoadVarA64 has ONE scratch register`)
+
+The parked diagnosis was right about the hazard and **wrong about its size**. It
+named "the skGlobal and tySingle arms" as the x1 users. The **by-ref-param deref
+is a third** — `ldr x1, [x9]` in both the tySingle and the general arm. Four code
+paths across three arms, not two.
+
+That is the third time in two days the same error shape has shown up here: the
+bulk-copy ticket's "at least four more places" (really eight), `forwardlint`
+naming only the earliest of eight `LowerCase` sites, and now my own note from
+yesterday. **The population gets inherited from wherever the first look landed.**
+In this case it would not have caused a wrong fix — the collapse had to sweep the
+whole routine anyway — but the note would have under-described its own blast
+radius to whoever picked it up.
+
+Everything now routes through **x9**. The safety argument is structural rather
+than hopeful: the helper *already* destroyed x9 unconditionally on its commonest
+path (every local, every parameter), so no caller could have relied on it
+surviving; the change makes x9 dead in strictly more cases and x1 dead in
+strictly fewer. All 13 call sites checked — the only one holding a live x9 is the
+residency spill, which is finished with it before it calls.
+
+Collapsing the scratch collapsed the code: the address computation happens once
+per Kind, and the sz/sgn load ladder — **three copies differing only in their
+base register** — is now one. 88 lines to 66.
+
+### Step 2 — the destination parameter and its consumer (`perf(O): the aarch64 leaf-sym binop collapse`)
+
+`EmitLoadVarA64Dest(idx, rd)`, rd anything but x9, with `EmitLoadVarA64(idx)` as
+the rd = 0 wrapper so the 13 existing call sites are untouched. Kept as a wrapper
+rather than a 14th edited call site because a fixed-argument forwarder is not a
+duplicated *path* — there is one body, and `normalise-dont-special-case` is about
+logic that drifts, which a one-line forwarder cannot.
+
+The binop path then loads a leaf-sym right operand straight into x1.
+
+### The number, and why this one has no gap
+
+3 instructions (12 bytes) saved per leaf-sym binop, predicted from the
+`PXXDBG=a.a64binop` census and measured from emitted code:
+
+| program | LEAFSYM | predicted | measured |
+| --- | --- | --- | --- |
+| loadvar | 323 | 3876 | **3876** |
+| mandelbrot | 801 | 9612 | **9612** |
+| sieve | 771 | 9252 | **9252** |
+| lispdemo | 778 | 9336 | **9336** |
+| leafsym | 374 | 4488 | **4488** |
+
+Exact, five for five. Every fire collapsed; none emitted then rewound. Recorded
+because the x86-64 float sibling had a 76-fires-vs-37-instructions gap that is
+**still only a hypothesis**, and a matching pair here is evidence the counting
+method is sound where it was applied — not evidence that the old gap was
+imaginary.
+
+-O3 code size: -1.41% to -2.81% across ten programs. -O0 and -O2 byte-identical
+everywhere, which is the `OptLevel >= 3` gate proving itself.
+
+### Verification, and the row that stops it being vacuous
+
+| check | result |
+| --- | --- |
+| self-host fixedpoint | converged 1 round — step 1 `f24d319d76fb`, step 2 `724c6b20181c` |
+| aarch64 differential, step 1 | 30 pairs, 0 behaviour differ, **0 size differ** |
+| aarch64 differential, step 2 | 30 pairs, 0 behaviour differ, size shrinks at -O3 only |
+| non-commutative stress vs x86-64 oracle | identical at -O0/-O2/-O3, under `{$Q+}{$R+}` |
+| x86_64 / i386 / arm32 / riscv32 output | byte-identical, all three levels, both steps |
+| **step 1: did it change anything at all?** | **332 bytes differ** in the aarch64 binaries |
+
+The last row exists because step 1 is behaviour-preserving *and* size-preserving,
+which is also exactly what a no-op edit produces. A vacuous diff has been
+published in this repo before; the byte count is the difference between "verified
+identical" and "verified nothing".
+
+The **non-commutative stress** is the test that carries step 2. A wrong-way-round
+operand pair gives a plausible wrong ANSWER, not a crash, and commutative ops
+cannot observe it — an all-commutative test would have passed either way.
+`test_a64_leafsym_binops` covers sub/div/mod/shl/shr and all four orderings
+permanently; `test_a64_loadvar_arms` covers every width, signedness, global,
+by-ref and Single arm of the loader.
+
+### Corpus gaps found while verifying — not fixed, not mine
+
+- **`jsondemo` and `life` do not build for aarch64** — *"aggregate result with
+  more than 8 params not supported"*, in `builtin/pylib.pas`. Pre-existing. This
+  ticket's census lists jsondemo as an aarch64 data point; that census counted
+  target-independent IR shapes so it stands, but the corpus available for
+  **behavioural** verification on this target is thinner than it implies. With
+  chess (already noted here) that is three of the obvious programs missing.
+- **`test_a64_leafsym_binops` does not build for arm32/riscv32** — `{$Q+}` needs
+  `PXXOverflow` and builtinheap is not loaded for `softfloat.pas` there.
+  Pre-existing, unrelated.
+- The differential harness used previously swallowed a failed compile with
+  `|| continue`, so a change that broke compilation outright would have appeared
+  as a *smaller comparison count*, never as a failure. Hardened to report skips,
+  and it earned that immediately: the first negative-control run silently skipped
+  3 of 6 pairs.
+
+### Still open, and deliberately not taken
+
+`OTHER` right operands — roughly 6% of binops — still pay the full push/eval/
+mov/pop dance. Whether that remainder is worth a ticket should be decided from a
+census of what those operands actually are, not from the fact that a number
+remains.
+
+## Log
+- 2026-08-29 — resolved, commit PENDING-COMMIT.
