@@ -2675,12 +2675,23 @@ end;
   (length, data) operand shape so managed handles and inline strings share it.
   Returns -1, 0 or +1.
 
-  It exists because the four cross backends had NO ordered-string arm at all:
-  only `=` / `<>` were special-cased, so `a < b` fell through to the ordinary
-  integer compare and compared the two heap HANDLES. That is a silent wrong
-  answer — `'zzz' < 'aaa'` reported by allocation order — on i386, arm32,
-  aarch64 and riscv32 alike.
+  It exists because the cross backends that do not call it have NO
+  ordered-string arm at all: only `=` / `<>` were special-cased, so `a < b`
+  fell through to the ordinary integer compare and compared the two heap
+  HANDLES — a silent wrong answer, `'zzz' < 'aaa'` reported by allocation
+  order.
   bug-a-ordered-string-comparison-of-a-parameter-compares-handles-on-every-cross-target
+
+  THE COUNT USED TO BE IN THIS SENTENCE AND THE COUNT WAS WRONG. It said "the
+  four cross backends", meaning i386, arm32, aarch64 and riscv32 — and there
+  were five. **Xtensa was never visited**, kept the bug for months, and was
+  found only once a hosted xtensa profile could run a program and print the
+  wrong answer. The count is deliberately gone rather than corrected to five:
+  a number in a comment is a claim that goes stale silently, and the next
+  target to land would have made "five" wrong the same way. Say which backends
+  by the property that matters — whether they call this helper — so the
+  sentence stays true as the set changes.
+  bug-a-xtensa-has-no-ordered-string-compare-and-sorts-by-heap-handle
 
   Bytes are compared UNSIGNED (x86-64's inline sequence uses repe cmpsb + the
   unsigned setcc family), and the shorter string sorts first when one is a

@@ -159,6 +159,43 @@ begin
   end;
 end;
 
+function XtensaSlotOff(argBase, idx, nLive: Integer): Integer;
+{ Byte offset FROM SP of expression-stack slot `idx` (0 = first pushed of the
+  group), given `nLive` slots pushed above argBase and still live.
+
+  THE TWO ABIS INDEX THE EXPRESSION STACK IN OPPOSITE DIRECTIONS, and that is
+  the whole reason this is a function. Windowed keeps sp fixed -- moving it
+  desyncs the window spill area at [sp-16] -- so slot idx sits at a RISING
+  offset from argBase. Call0 moves sp on every push, so the MOST RECENTLY
+  pushed slot is at sp+0 and slot idx sits (nLive-1-idx) words above it.
+
+  Written by hand, the windowed spelling `argBase + 4*idx` is correct on
+  windowed and SILENTLY WRONG on Call0 -- it reads a neighbouring live slot
+  rather than faulting, so the wrong value is always a plausible one. That is
+  how ansistring `=` came to return a heap handle on the DEFAULT ABI (nonzero,
+  so `if a = b` was simply always true), and how `PXXStrSetLen` got its two
+  arguments the wrong way round. Call0 also never maintains XtSpillDepth, so
+  `argBase` is a stale counter there, not an offset.
+  bug-a-xtensa-has-no-ordered-string-compare-and-sorts-by-heap-handle }
+begin
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+    XtensaSlotOff := argBase + 4 * idx
+  else
+    XtensaSlotOff := 4 * (nLive - 1 - idx);
+end;
+
+procedure XtensaDropSlots(argBase, nLive: Integer);
+{ Release nLive expression-stack slots. Windowed rewinds the offset counter;
+  Call0 must actually MOVE SP BACK, which the hand-written `XtSpillDepth :=
+  argBase` did not do -- that assignment is a no-op on Call0, so every managed
+  string compare leaked 12 bytes of stack and every concat 12 more. }
+begin
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+    XtSpillDepth := argBase
+  else if nLive > 0 then
+    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 4 * nLive);
+end;
+
 procedure XtensaPopA3;
 { Pop the top expression-stack slot into a3 (windowed: sp constant). }
 begin
@@ -1209,6 +1246,7 @@ end;
 procedure IREmitNodeXtensa(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, argBase, valNode, j: Integer;
+  isOrd: Boolean;   { managed-string compare: ordered (PXXStrCmp3) vs equality }
   argFree: Integer;   { Call0: bytes of argument block to pop AFTER the call
                         (0 = the block was already freed before it) }
   scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
@@ -1538,7 +1576,7 @@ begin
           IREmitNodeXtensa(left);  XtensaPushA2;       { lhs @ argBase }
           IREmitNodeXtensa(right); XtensaPushA2;       { rhs @ argBase+4 }
           { rhs -> srcB(a6)/lenB(a7) }
-          xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, argBase + 4);
+          xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, XtensaSlotOff(argBase, 1, 2));
           if IntToTypeKind(IRTk[right]) = tyAnsiString then
           begin
             xtensa_mov(reg_xtensa_a6, reg_xtensa_a8);
@@ -1552,11 +1590,11 @@ begin
           end
           else
           begin
-            xtensa_addi(reg_xtensa_a6, reg_xtensa_sp, argBase + 4);
+            xtensa_addi(reg_xtensa_a6, reg_xtensa_sp, XtensaSlotOff(argBase, 1, 2));
             EmitLoadConstXtensa(reg_xtensa_a7, 1);
           end;
           { lhs -> srcA(a5)/lenA(a4) }
-          xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, argBase + 0);
+          xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, XtensaSlotOff(argBase, 0, 2));
           if IntToTypeKind(IRTk[left]) = tyAnsiString then
           begin
             xtensa_mov(reg_xtensa_a5, reg_xtensa_a8);
@@ -1570,7 +1608,7 @@ begin
           end
           else
           begin
-            xtensa_addi(reg_xtensa_a5, reg_xtensa_sp, argBase + 0);
+            xtensa_addi(reg_xtensa_a5, reg_xtensa_sp, XtensaSlotOff(argBase, 0, 2));
             EmitLoadConstXtensa(reg_xtensa_a4, 1);
           end;
           procIdx := FindProc('PXXStrConcat');
@@ -1593,35 +1631,60 @@ begin
             EmitCallProc(procIdx);                           { result a2 }
           end;
           { release fresh tyAnsiString BINOP operand temporaries }
-          XtensaPushA2;                                 { result @ argBase+8 }
+          XtensaPushA2;                                 { slot 2 = result }
           if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
           begin
-            xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, argBase + 0);
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, XtensaSlotOff(argBase, 0, 3));
             EmitStrRefCallXtensa('PXXStrDecRef');
           end;
           if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
           begin
-            xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, argBase + 4);
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, XtensaSlotOff(argBase, 1, 3));
             EmitStrRefCallXtensa('PXXStrDecRef');
           end;
-          xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, argBase + 8);   { result }
-          XtSpillDepth := argBase;                                  { drop result, rhs, lhs }
+          xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, XtensaSlotOff(argBase, 2, 3));   { result }
+          XtensaDropSlots(argBase, 3);
           Exit;
         end;
 
-        if ((op = Ord(tkEq)) or (op = Ord(tkNeq))) and
-           ((IntToTypeKind(IRTk[left]) = tyAnsiString) or (IntToTypeKind(IRTk[right]) = tyAnsiString)) then
+        if (((op = Ord(tkEq)) or (op = Ord(tkNeq))) and
+            ((IntToTypeKind(IRTk[left]) = tyAnsiString) or (IntToTypeKind(IRTk[right]) = tyAnsiString)))
+           or
+           (((op = Ord(tkLt)) or (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe))) and
+            ((IntToTypeKind(IRTk[left]) = tyAnsiString) or (IntToTypeKind(IRTk[right]) = tyAnsiString) or
+             TypeIsFrozenString(IntToTypeKind(IRTk[left])) or TypeIsFrozenString(IntToTypeKind(IRTk[right])))) then
         begin
-          { Managed-string equality -> PXXStrEq(lenA, srcA, lenB, srcB) -> 1/0.
-            Each operand decomposed (mirrors concat): handle -> len [h-8] (0 if
-            nil) + src h; frozen tyString -> len [buf] + src buf+8; char -> len 1
-            + src &slot. Build a4=lenA,a5=srcA,a6=lenB,a7=srcB (a2-a7 survive
-            call8). }
+          { Managed-string compare. ONE arm for both equality and ordering,
+            differing only in callee and result tail -- not two arms, because
+            the ordered form was MISSING here and the whole bug is that a
+            second path is the one nobody visits. `<` fell through to the
+            integer compare below and compared the two heap HANDLES, so
+            'zzz' < 'aaa' answered by allocation order. PXXStrCmp3's own header
+            said "the FOUR cross backends had no ordered-string arm at all";
+            there were five, and that miscount is why xtensa was never visited.
+            The count is now gone from that header rather than corrected.
+
+            Operand decompose (mirrors concat): handle -> len [h-8] (0 if nil)
+            + src h; frozen tyString -> len [buf] + src buf+8; char -> len 1 +
+            src &slot. Builds a4=lenA, a5=srcA, a6=lenB, a7=srcB (a2-a7 survive
+            call8).
+
+            The ordered guard also accepts a FROZEN string on either side,
+            which the equality guard does not need: frozen equality already
+            works. Char-vs-string reaches the ordered arm through the
+            tyAnsiString on the other side.
+
+            Slot offsets go through XtensaSlotOff: the hand-written
+            `argBase + k` spelling is windowed-only and read a neighbouring
+            live slot on Call0, which is why `=` returned a heap handle on the
+            default ABI. }
+          isOrd := (op = Ord(tkLt)) or (op = Ord(tkLe)) or
+                   (op = Ord(tkGt)) or (op = Ord(tkGe));
           argBase := XtSpillDepth;
-          IREmitNodeXtensa(left);  XtensaPushA2;       { lhs @ argBase }
-          IREmitNodeXtensa(right); XtensaPushA2;       { rhs @ argBase+4 }
+          IREmitNodeXtensa(left);  XtensaPushA2;       { slot 0 = lhs }
+          IREmitNodeXtensa(right); XtensaPushA2;       { slot 1 = rhs }
           { rhs -> lenB(a6)/srcB(a7) }
-          xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, argBase + 4);
+          xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, XtensaSlotOff(argBase, 1, 2));
           if IntToTypeKind(IRTk[right]) = tyAnsiString then
           begin
             xtensa_mov(reg_xtensa_a7, reg_xtensa_a8);
@@ -1635,11 +1698,11 @@ begin
           end
           else
           begin
-            xtensa_addi(reg_xtensa_a7, reg_xtensa_sp, argBase + 4);
+            xtensa_addi(reg_xtensa_a7, reg_xtensa_sp, XtensaSlotOff(argBase, 1, 2));
             EmitLoadConstXtensa(reg_xtensa_a6, 1);
           end;
           { lhs -> lenA(a4)/srcA(a5) }
-          xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, argBase + 0);
+          xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, XtensaSlotOff(argBase, 0, 2));
           if IntToTypeKind(IRTk[left]) = tyAnsiString then
           begin
             xtensa_mov(reg_xtensa_a5, reg_xtensa_a8);
@@ -1653,11 +1716,16 @@ begin
           end
           else
           begin
-            xtensa_addi(reg_xtensa_a5, reg_xtensa_sp, argBase + 0);
+            xtensa_addi(reg_xtensa_a5, reg_xtensa_sp, XtensaSlotOff(argBase, 0, 2));
             EmitLoadConstXtensa(reg_xtensa_a4, 1);
           end;
-          procIdx := FindProc('PXXStrEq');
-          if procIdx < 0 then Error('compiler error: PXXStrEq not found');
+          if isOrd then procIdx := FindProc('PXXStrCmp3')
+          else procIdx := FindProc('PXXStrEq');
+          if procIdx < 0 then
+          begin
+            if isOrd then Error('compiler error: PXXStrCmp3 not found')
+            else Error('compiler error: PXXStrEq not found');
+          end;
           if XtensaABI = XTENSA_ABI_WINDOWED then
           begin
             xtensa_mov(reg_xtensa_a10, reg_xtensa_a4);
@@ -1676,23 +1744,37 @@ begin
             EmitCallProc(procIdx);                           { result a2 }
           end;
           { release fresh tyAnsiString BINOP operand temporaries }
-          XtensaPushA2;                                 { result @ argBase+8 }
+          XtensaPushA2;                                 { slot 2 = result }
           if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
           begin
-            xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, argBase + 0);
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, XtensaSlotOff(argBase, 0, 3));
             EmitStrRefCallXtensa('PXXStrDecRef');
           end;
           if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
           begin
-            xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, argBase + 4);
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, XtensaSlotOff(argBase, 1, 3));
             EmitStrRefCallXtensa('PXXStrDecRef');
           end;
-          xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, argBase + 8);   { result }
-          XtSpillDepth := argBase;                                  { drop result, rhs, lhs }
+          xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, XtensaSlotOff(argBase, 2, 3));  { result }
+          XtensaDropSlots(argBase, 3);
           if op = Ord(tkNeq) then
           begin
             xtensa_movi(reg_xtensa_a8, 1);
             xtensa_xor(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a8);
+          end
+          else if isOrd then
+          begin
+            { PXXStrCmp3 -> -1/0/1; map to 0/1 against zero in a3, the same
+              branch idiom the integer compare tail below uses. }
+            xtensa_movi(reg_xtensa_a3, 0);
+            if op = Ord(tkLt) then
+              EmitAsmXtensa(['movi a4, 1','blt a2, a3, .done','movi a4, 0','.done:','mov a2, a4'])
+            else if op = Ord(tkGt) then
+              EmitAsmXtensa(['movi a4, 1','blt a3, a2, .done','movi a4, 0','.done:','mov a2, a4'])
+            else if op = Ord(tkLe) then
+              EmitAsmXtensa(['movi a4, 1','bge a3, a2, .done','movi a4, 0','.done:','mov a2, a4'])
+            else
+              EmitAsmXtensa(['movi a4, 1','bge a2, a3, .done','movi a4, 0','.done:','mov a2, a4']);
           end;
           Exit;
         end;
@@ -1879,15 +1961,15 @@ begin
             if procIdx < 0 then Error('compiler error: PXXStrSetLen not found');
             if XtensaABI = XTENSA_ABI_WINDOWED then
             begin
-              xtensa_l32i(reg_xtensa_a10, reg_xtensa_sp, argBase + 0);
-              xtensa_l32i(reg_xtensa_a11, reg_xtensa_sp, argBase + 4);
-              XtSpillDepth := argBase;
+              xtensa_l32i(reg_xtensa_a10, reg_xtensa_sp, XtensaSlotOff(argBase, 0, 2));
+              xtensa_l32i(reg_xtensa_a11, reg_xtensa_sp, XtensaSlotOff(argBase, 1, 2));
+              XtensaDropSlots(argBase, 2);
             end
             else
             begin
-              xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, argBase + 0);
-              xtensa_l32i(reg_xtensa_a3, reg_xtensa_sp, argBase + 4);
-              XtSpillDepth := argBase;
+              xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, XtensaSlotOff(argBase, 0, 2));
+              xtensa_l32i(reg_xtensa_a3, reg_xtensa_sp, XtensaSlotOff(argBase, 1, 2));
+              XtensaDropSlots(argBase, 2);
             end;
             EmitCallProc(procIdx);
             Exit;
@@ -1908,20 +1990,24 @@ begin
           XtensaPushA2;
           procIdx := FindProc('PXXDynSetLen');
           if procIdx < 0 then Error('compiler error: PXXDynSetLen not found');
+          { The one site that already had the Call0 direction right, by hand
+            (sp+8/4/0 and a real sp restore). Routed through the helper anyway:
+            it emits the identical offsets, and leaving one correct hand-written
+            copy beside three broken ones is what made the broken spelling look
+            like the house style. }
           if XtensaABI = XTENSA_ABI_WINDOWED then
           begin
-            xtensa_l32i(reg_xtensa_a10, reg_xtensa_sp, argBase + 0);
-            xtensa_l32i(reg_xtensa_a11, reg_xtensa_sp, argBase + 4);
-            xtensa_l32i(reg_xtensa_a12, reg_xtensa_sp, argBase + 8);
-            XtSpillDepth := argBase;
+            xtensa_l32i(reg_xtensa_a10, reg_xtensa_sp, XtensaSlotOff(argBase, 0, 3));
+            xtensa_l32i(reg_xtensa_a11, reg_xtensa_sp, XtensaSlotOff(argBase, 1, 3));
+            xtensa_l32i(reg_xtensa_a12, reg_xtensa_sp, XtensaSlotOff(argBase, 2, 3));
           end
           else
           begin
-            xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, 8);
-            xtensa_l32i(reg_xtensa_a3, reg_xtensa_sp, 4);
-            xtensa_l32i(reg_xtensa_a4, reg_xtensa_sp, 0);
-            xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 12);
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, XtensaSlotOff(argBase, 0, 3));
+            xtensa_l32i(reg_xtensa_a3, reg_xtensa_sp, XtensaSlotOff(argBase, 1, 3));
+            xtensa_l32i(reg_xtensa_a4, reg_xtensa_sp, XtensaSlotOff(argBase, 2, 3));
           end;
+          XtensaDropSlots(argBase, 3);
           EmitCallProc(procIdx);
           Exit;
         end;
@@ -2414,15 +2500,15 @@ begin
         if procIdx < 0 then Error('compiler error: PXXStrSetLen not found');
         if XtensaABI = XTENSA_ABI_WINDOWED then
         begin
-          xtensa_l32i(reg_xtensa_a10, reg_xtensa_sp, argBase + 0);
-          xtensa_l32i(reg_xtensa_a11, reg_xtensa_sp, argBase + 4);
-          XtSpillDepth := argBase;
+          xtensa_l32i(reg_xtensa_a10, reg_xtensa_sp, XtensaSlotOff(argBase, 0, 2));
+          xtensa_l32i(reg_xtensa_a11, reg_xtensa_sp, XtensaSlotOff(argBase, 1, 2));
+          XtensaDropSlots(argBase, 2);
         end
         else
         begin
-          xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, argBase + 0);
-          xtensa_l32i(reg_xtensa_a3, reg_xtensa_sp, argBase + 4);
-          XtSpillDepth := argBase;
+          xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, XtensaSlotOff(argBase, 0, 2));
+          xtensa_l32i(reg_xtensa_a3, reg_xtensa_sp, XtensaSlotOff(argBase, 1, 2));
+          XtensaDropSlots(argBase, 2);
         end;
         EmitCallProc(procIdx);
       end;
