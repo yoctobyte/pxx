@@ -32,6 +32,7 @@ Five instances, one day, five different subsystems:
 | 4 | string COW / meta word | `PXXStrUnique` (5 targets) | x86-64's inline `AnsiStrUniqueAddr` | silent stale ASCII flag |
 | 5 | ordered string compare | x86-64 inline | `PXXStrCmp3` (4 targets) | `'zzz' < 'aaa'` by **allocation order** |
 | 6 | `SomeName(expr)` named-type cast | 4 of 5 `ParseFactorCore` dispatch sites | `FindTypeAlias` arm | alias cast **did not narrow** — silent wrong value |
+| 7 | a TICKET's own prose | the paragraph listing `vm.push(...)` attribute use | the prescription two paragraphs below it | prescribed edit would have **swapped** one failing set for another |
 
 **Instance 6 is the loudest and was found the same day, by pxx-a5 (`6cc4afc17`).**
 It is worth stating separately because it removes the last charitable reading of
@@ -56,6 +57,33 @@ lacks.** Instance 3's runtime-step arm says outright: *"the previous lowering
 re-ran the stop expression on every iteration"* — and the literal-step arm was
 doing exactly that. Instance 4's `PXXStrUnique` calls itself *"the single choke
 point for byte mutation, which is what makes the cache sound."*
+
+### Row 7 is the same defect wearing a document instead of a comment
+
+Added on frankA's argument, which is better than the framing I first gave it. I
+had relayed this to pxx-a5 as advice about writing tickets — *"store X rather
+than Y" is a stronger claim than "X is missing", and the second is usually all
+the evidence supports.* True, and **unactionable**: nobody knows in the moment
+which of their claims is the over-strong one.
+
+What makes it a row rather than advice is the tell. `bug-n-the-only-callers-of-
+evalpystmts-encode-a-contract-that-changed` prescribed storing the bound methods
+*"rather than a `vm` receiver"*. Following that literally would have broken the
+suite, because those scripts also reach `vm` by attribute — `vm.push(123)`,
+`vm.pop()`, `vm.pic.append("x")`, `vm.memory`, `vm.words` — and only the implicit
+host-call *receiver* rule was removed by `ff439149e`. The prescription would have
+traded one set of failing rows for a different set.
+
+**The evidence to catch that was already in the ticket, two paragraphs above the
+prescription, unread by whoever wrote the last line.** That is not a lesson about
+ticket-writing. It is this audit's defect exactly — a document states the
+invariant, and the next author does not read it — with a `.md` file in the role
+the comment plays in rows 1-6.
+
+So the population this audit sweeps is wider than source comments: **any artefact
+that states a property near the code or prescription that must honour it.** The
+sweep should read ticket prescriptions against their own bodies wherever a ticket
+prescribes an edit rather than describing a symptom.
 
 ## Why it keeps winning
 
