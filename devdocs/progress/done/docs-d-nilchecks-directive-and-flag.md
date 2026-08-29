@@ -56,7 +56,7 @@ D's usual: prose consistent, and any snippet compiles against `$(PXX_STABLE)`.
 Note the pin must be v369 or later for the examples to build at all.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit f246a3d2e.
 
 ---
 
