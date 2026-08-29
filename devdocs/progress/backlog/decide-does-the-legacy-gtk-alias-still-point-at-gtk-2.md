@@ -77,3 +77,34 @@ turns a job green tells you what the job depends on, not what the project
 intends** — and provisioning a host to satisfy a stale alias is the
 infrastructure form of a compiler-appeasement workaround: it removes the symptom
 and the question at the same time.
+
+## seven can no longer produce evidence about this (2026-08-29)
+
+Track T installed `libgtk2.0-dev` on `seven` this afternoon to clear four red
+jobs, and reported it here unprompted. The consequence it flagged is the reason
+this section exists: **`seven`'s green on `test_c_gtk*` is no longer evidence
+about the alias.** A decision ticket asking "is this alias still live?" now has
+one host where the answer is masked by provisioning done while the ticket was
+open. That is the constant-pass shape, manufactured rather than inherited — and
+it was manufactured by the lane that then disclosed it, which is what kept it
+cheap.
+
+The package has deliberately NOT been removed: removing it re-reds four jobs
+while the decision is pending, which is a worse default than a masked host.
+If the decision goes "retire the alias", removing it on `seven` is part of that
+change rather than a side effect.
+
+## What makes the decision cheaper than it looks
+
+Those four tests **never touch GTK at runtime.** They compile against
+`test/my_gtk.h`, a local stub in this repo, and assert macro expansion and
+struct alignment. The GTK **2** dev package is load-bearing only for the
+hardcoded `/usr/include/gtk-2.0/` directories the alias drags in — not for
+anything the tests exercise.
+
+So the option "retire the alias" does not cost these tests. That removes the
+main reason to keep it and shrinks the decision to: does any real code still
+write `uses gtk` expecting GTK 2, given `lib/pcl/gtk3*.pas` binds
+`libgtk-3.so.0` and the project has targeted GTK 3 throughout?
+
+-- recorded by frank-coordinator from Track T's disclosure
