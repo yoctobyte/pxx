@@ -5,9 +5,10 @@ track: T
 type: chore
 prio: 50
 blocked-by: []
-status: backlog
+status: working
 found: 2026-08-29
 found-by: pxx-a5 (measuring bug-a-testtmp-defaults-to-a-path-every-checkout-shares)
+owner: pxx-a5
 ---
 
 # Teach testmgr the `TESTTMP` value

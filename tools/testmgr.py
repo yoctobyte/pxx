@@ -854,11 +854,42 @@ def kill_run(pid, why):
         pass
 
 
+# THE SCRATCH ROOT, read once. `$(TESTTMP)` is the directory the Makefile's
+# recipes build into; its default is `/tmp`, so with the variable unset every
+# derivation below is byte-identical to the literals that were here before.
+#
+# It is read at all because four expressions in make_dry_run(), plus TMP_RE,
+# _REASON_TMP_RE and RUN_TMP, hardcoded the literal prefix as it appears in
+# `make -n` output -- and the comment on them said what happens if the default
+# ever moves: "all four go blind AT ONCE and fail silently -- no privatization
+# (concurrent runs collide again) and no producer/consumer merge (which is how
+# test-core#555/#556 went red on 2026-07-12). Teach them the value before
+# setting it; do not set it and hope." This is teaching them the value.
+#
+# WHAT FOLLOWS IT AND WHAT DOES NOT is a per-site judgment, not a sweep:
+#
+#   follows  anything matching or generating a path that appears in RECIPE
+#            text -- TMP_RE, the three make_dry_run expressions,
+#            _REASON_TMP_RE, the pinned-path root, and RUN_TMP itself (the
+#            privatized destination must sit under the same root the recipes
+#            name, or the rewrite points the two halves at different files).
+#
+#   stays    paths OTHER tools own and write themselves: `/tmp/pxx-build-*`
+#            (the self-host build's own per-invocation root), `/tmp/tbench-*`
+#            and `/tmp/pasmith*` (the bench and the fuzzers),
+#            `/tmp/pxx_c_conformance.*` (that script's own scratch). Those do
+#            not read TESTTMP, so following it here would make the reaper stop
+#            finding them -- a silent leak rather than a silent collision, but
+#            silent either way.
+TESTTMP = (os.environ.get("TESTTMP") or "/tmp").rstrip("/") or "/tmp"
+TESTTMP_RE = re.escape(TESTTMP)
+
+
 def reap_stale(info):
     """Clean up after a run that died without releasing its lock."""
     pid = info.get("pid", -1)
     kill_run(pid, "wedged (no heartbeat for >%ds)" % HEARTBEAT_STALE)
-    scratch = "/tmp/testmgr-scratch-%d" % pid
+    scratch = "%s/testmgr-scratch-%d" % (TESTTMP, pid)
     if os.path.isdir(scratch):
         shutil.rmtree(scratch, ignore_errors=True)
     try:
@@ -960,7 +991,7 @@ def sweep_orphan_tmp():
     # SIGKILL left behind — and SIGKILL is routine here, because testmgr kills
     # its own over-budget jobs, which is exactly why the EXIT trap inside
     # run_c_conformance.sh cannot be relied on (a trap never runs on SIGKILL).
-    for pat, sep in (("/tmp/testmgr-scratch-*", "-"),
+    for pat, sep in ((TESTTMP + "/testmgr-scratch-*", "-"),
                      ("/tmp/pxx_c_conformance.*", "."),
                      # the self-host build's per-invocation root (Makefile
                      # PXX_TMP); pid-keyed for exactly this reason
@@ -998,8 +1029,8 @@ def sweep_orphan_tmp():
     # ways: by age, and by count, so a busy night cannot accumulate unboundedly
     # inside the age window (128 dirs / 392 MB observed in well under 24h).
     logdirs = []
-    for p in glob.glob("/tmp/testmgr-*"):
-        if p.startswith("/tmp/testmgr-scratch-"):
+    for p in glob.glob(TESTTMP + "/testmgr-*"):
+        if p.startswith(TESTTMP + "/testmgr-scratch-"):
             continue
         try:
             if os.path.isdir(p):
@@ -1248,7 +1279,7 @@ CORPUS_GUARD_RE = re.compile(r"\[\s+-[a-z]\s+library_candidates/")
 # private per-run substitute for the recipes' literal /tmp/ paths (see
 # Job.script); created in main(), world-unreadable is not needed — /tmp
 # hygiene only, the OS reaps it
-RUN_TMP = "/tmp/testmgr-scratch-%d" % os.getpid()
+RUN_TMP = "%s/testmgr-scratch-%d" % (TESTTMP, os.getpid())
 # The run's OWN copy of the compiler. `compiler/pascal26` is a single mutable
 # path and a prerequisite of every test target, so any unrelated make (a
 # `make pxx-debug` for a gdb build, say) can replace it mid-run: observed
@@ -1293,7 +1324,16 @@ IDLE_KEEP_SECS = 2 * 3600
 # only passed on boxes where a stale /tmp/libfoo.so from an earlier serial
 # `make` happened to survive; on a freshly booted box they were red.
 # The lookahead keeps /tmpfoo and /tmp.bak alone.
-TMP_RE = re.compile(r"/tmp(?![\w.-])(?:/[A-Za-z0-9_.+-]+)*")
+TMP_RE = re.compile(TESTTMP_RE + r"(?![\w.-])(?:/[A-Za-z0-9_.+-]+)*")
+
+# make_dry_run()'s three, hoisted to module scope beside TMP_RE. They share its
+# reason for existing (the literal prefix as it appears in `make -n` output) and
+# were unreachable to a guard while they were locals -- which is how four
+# expressions came to hardcode the same assumption with only a comment holding
+# them together. Constants either way; nothing depends on rebuilding them.
+DRY_TMP_RE = re.compile(TESTTMP_RE + r"/[A-Za-z0-9_./+-]+")
+DRY_SO_PROD_RE = re.compile(r"-o\s+" + TESTTMP_RE + r"/\S+\.so\b")
+DRY_LOADER_DIR_RE = re.compile(r"LD_LIBRARY_PATH=" + TESTTMP_RE + r"(?![\w./-])")
 
 
 def pinned_tmp_paths(lines):
@@ -1330,7 +1370,7 @@ def pinned_tmp_paths(lines):
                 out.update(TMP_RE.findall(f.read()))
         except OSError:
             continue
-    return {p for p in out if p != "/tmp"}
+    return {p for p in out if p != TESTTMP}
 
 
 class Job:
@@ -1417,7 +1457,7 @@ class Job:
                 continue                      # recipe comment: shell no-op
             body = TMP_RE.sub(
                 lambda m: m.group(0) if m.group(0) in pinned
-                else RUN_TMP + m.group(0)[len("/tmp"):], ln)
+                else RUN_TMP + m.group(0)[len(TESTTMP):], ln)
             # point every invocation at the run's snapshot (see RUN_COMPILER)
             if os.path.exists(RUN_COMPILER):
                 body = COMPILER_PATH_RE.sub(RUN_COMPILER, body)
@@ -1454,7 +1494,7 @@ REASON_LINES = 6          # substantive lines, at most
 # The run's scratch dir is pid-keyed (RUN_TMP), so an unscrubbed path changes on
 # every run and dirties tstate even when nothing else moved. Same literal /tmp
 # prefix the four regexes in make_dry_run() key off -- see the note there.
-_REASON_TMP_RE = re.compile(r"/tmp/[A-Za-z0-9_./+-]+")
+_REASON_TMP_RE = re.compile(TESTTMP_RE + r"/[A-Za-z0-9_./+-]+")
 # The last line of nearly every failing log, and it carries nothing the job's
 # status and name do not already say. Keeping it would give every job the same
 # reason, which is the current defect wearing a longer string.
@@ -2035,9 +2075,8 @@ def split_jobs(target, lines):
     # (concurrent runs collide again) and no producer/consumer merge (which is
     # how test-core#555/#556 went red on 2026-07-12).  Teach them the value
     # before setting it; do not set it and hope.
-    tmp_re = re.compile(r"/tmp/[A-Za-z0-9_./+-]+")
-    so_prod_re = re.compile(r"-o\s+/tmp/\S+\.so\b")
-    loader_dir_re = re.compile(r"LD_LIBRARY_PATH=/tmp(?![\w./-])")
+    tmp_re, so_prod_re = DRY_TMP_RE, DRY_SO_PROD_RE
+    loader_dir_re = DRY_LOADER_DIR_RE
     LOADER_DIR = "\0so-loader-dir"
     parent = list(range(len(groups)))
     def find(x):
@@ -2346,7 +2385,7 @@ def fpc_canary_job():
     source" IS the signal.  ADVISORY — a red here is a notice for Track A
     (it's compiler/** drift), not a gate on anyone's push.
     """
-    out = "/tmp/p26_fpc_canary"                    # -> private scratch
+    out = TESTTMP + "/p26_fpc_canary"              # -> private scratch
     cmd = " ".join([FPC_BIN] + FPC_FLAGS +
                    ["-FU" + out + "_u", "-FE" + out + "_u",
                     "-o" + out, COMPILER_SRC.strip('"')])
