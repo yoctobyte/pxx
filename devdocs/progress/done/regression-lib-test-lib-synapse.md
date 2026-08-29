@@ -1,7 +1,6 @@
 ---
 prio: 70
 track: B
-blocked-by: [bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream]
 status: done
 owner: frankB
 ---
@@ -142,3 +141,19 @@ different claims**, and only the second one is evidence.
 Resolved citing `614ec6017`. Re-run the gated job after the next pin, and if it
 is red *then*, it is a second cause.
 - 2026-08-29 — resolved, commit 3dbdc6b63.
+---
+
+## UNBLOCKED 2026-08-29 — re-test before assuming there is work here
+
+The only blocker, `bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream`,
+was **fixed and closed** by frankA at `614ec6017` — an out-of-bounds write in
+`VisibilityAllows`'s memo cache that set `PreScanPass := True` mid-parse, making
+a unit run off its own end and die at the NEXT unit's EOF.
+
+Synapse is a deep multi-unit corpus, which is exactly the shape that bug needed,
+so **this may already be green.** Re-run the job at HEAD before reading a line of
+code. If it passes, resolve it citing `614ec6017` — one fix, two tickets.
+
+Left in the ranked pool rather than closed on inference: a folder is a filing
+decision, not a measurement. It was invisible to `ready`/`next` while it sat in
+`blocked/` with a satisfied edge; found by `progress check`'s stale-edge scan.
