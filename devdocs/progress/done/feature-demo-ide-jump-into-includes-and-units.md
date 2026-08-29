@@ -126,4 +126,4 @@ IDE is unwired. Noted on
 than in a new ticket.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit cb04a0db9.
