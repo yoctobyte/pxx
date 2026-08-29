@@ -1293,6 +1293,14 @@ function pyos_path_expanduser(const p: AnsiString): AnsiString;
 function pyos_path_splitext(const p: AnsiString): TPyList;
 function pyos_path_exists(const p: AnsiString): Boolean;
 function pyos_path_abspath(const p: AnsiString): AnsiString;
+{ time.time() — seconds since the Unix epoch as a float, CPython's contract.
+  Raises rather than answering 0 on a target with no clock number: the epoch is
+  a legal value, so a soft failure here is a wrong ANSWER, not a missing one. }
+function pytime_time: Double;
+{ os.listdir(path) — the directory's entries, '.' and '..' excluded as CPython
+  excludes them. Order is the filesystem's, which CPython also does not promise;
+  a caller that needs an order sorts. }
+function pyos_listdir(const path: AnsiString): TPyList;
 function pyos_getcwd: AnsiString;
 procedure pysys_exit(code: Integer);
 { os.remove / os.rename: unlink / rename via syscall, returning 0 (Python returns
@@ -12489,6 +12497,84 @@ end;
 function pyos_getenv_d(const name: AnsiString; const dflt: Variant): Variant;
 begin
   pyos_getenv_d := pyos_environ_get_d(name, dflt);
+end;
+
+{ The getdents64 buffer walk. The kernel packs VARIABLE-LENGTH records:
+
+    struct linux_dirent64 {
+      u64  d_ino;      offset 0
+      s64  d_off;      offset 8
+      u16  d_reclen;   offset 16   <- how far to the next record
+      u8   d_type;     offset 18
+      char d_name[];   offset 19, NUL-terminated, padded so reclen is aligned
+    };
+
+  That layout is the same on every target — it is a kernel ABI struct, not a
+  per-arch one, which is why only the syscall NUMBER varies and this walk does
+  not. d_reclen is assembled from two BYTES rather than read as a wider word:
+  every target here is little-endian so a masked 8-byte read would work, but it
+  would also read past the record for the shortest possible entry, and being
+  explicit costs one line. }
+function pyos_listdir(const path: AnsiString): TPyList;
+var cs, nm: AnsiString;
+    buf: array[0..8191] of Byte;
+    fd, n, pos, reclen, k: Int64;
+begin
+  Result := TPyList.Create;
+  if not PyPalHasGetdents then
+    raise Exception.Create('os.listdir: this build has no getdents64 number '
+      + 'for this target (see the table in pypal.pas)');
+  cs := path + #0;
+  { O_RDONLY, deliberately WITHOUT O_DIRECTORY: that flag's value differs per
+    architecture (0200000 on x86, 040000 on arm/arm64), so requiring it would
+    add a second per-arch constant table to get wrong. getdents64 on a
+    non-directory answers -ENOTDIR by itself, which is the same refusal one
+    syscall later. }
+  fd := PyPalOpen(@cs[1], PYPAL_O_RDONLY, 0);
+  if fd < 0 then
+    pyos_raise_ioerror(fd, path, '');
+  while True do
+  begin
+    n := PyPalGetdents(fd, @buf[0], SizeOf(buf));
+    if n = 0 then Break;                 { end of directory }
+    if n < 0 then
+    begin
+      PyPalClose(fd);                    { before raising, or the fd leaks }
+      pyos_raise_ioerror(n, path, '');
+    end;
+    pos := 0;
+    while pos < n do
+    begin
+      reclen := Int64(PByte(@buf[pos + 16])^)
+                or (Int64(PByte(@buf[pos + 17])^) shl 8);
+      { A zero reclen would spin this loop forever on a malformed buffer; stop
+        instead. Nothing should produce one, which is exactly why an unguarded
+        version would hang rather than fail. }
+      if reclen <= 0 then Break;
+      nm := '';
+      k := pos + 19;
+      while (k < n) and (buf[k] <> 0) do
+      begin
+        nm := nm + Chr(buf[k]);
+        k := k + 1;
+      end;
+      if (nm <> '.') and (nm <> '..') then Result.append(nm);
+      pos := pos + reclen;
+    end;
+  end;
+  PyPalClose(fd);
+end;
+
+function pytime_time: Double;
+var sec, nsec: Int64;
+begin
+  if not PyPalClockRealtime(sec, nsec) then
+    raise Exception.Create('time.time(): this build has no clock_gettime '
+      + 'number for this target (see the table in pypal.pas)');
+  { Double carries 53 mantissa bits; an epoch second needs 31, which leaves
+    sub-microsecond resolution — the same precision CPython's float gives, and
+    for the same reason. }
+  pytime_time := Double(sec) + Double(nsec) / 1000000000.0;
 end;
 
 function pyos_getcwd: AnsiString;

@@ -1312,23 +1312,17 @@ begin
   PWord(Int64(newBlock) + PXX_HDR_RC)^ := 1;      { refcount }
   PWord(Int64(newBlock) + PXX_HDR_LEN)^ := newLen;          { length }
   newArrData := Pointer(Int64(newBlock) + PXX_HDR_SIZE);
-  i := 0;
-  while i < newLen * elSize do
-  begin
-    PByte(Int64(newArrData) + i)^ := 0;
-    i := i + 1;
-  end;
+  { Same two calls as the hosted PXXDynSetLen below, for the same reason. Both
+    helpers are forward-declared at the top of this unit, so the ESP arm is not
+    obliged to hand-roll what the hosted one calls.
+    feature-opt-bulk-copy-is-byte-at-a-time }
+  PXXMemZero(newArrData, newLen * elSize);
   if oldData <> nil then
   begin
     oldLen := PWord(Int64(oldData) - 8)^;
     copyLen := oldLen;
     if newLen < copyLen then copyLen := newLen;
-    i := 0;
-    while i < copyLen * elSize do
-    begin
-      PByte(Int64(newArrData) + i)^ := PByte(Int64(oldData) + i)^;
-      i := i + 1;
-    end;
+    PXXBlockCopy(Int64(newArrData), Int64(oldData), copyLen * elSize);
   end;
   PWord(arrSlot)^ := Int64(newArrData);
   PXXDynArrayReleaseEsp(oldData);
@@ -1918,12 +1912,7 @@ begin
     while (PByte(Int64(src) + len)^ <> 0) and (len < 255) do len := len + 1;
   PWord(dst)^ := len;
   PWord(Int64(dst) + 4)^ := 0;     { high half of the 8-byte length prefix }
-  i := 0;
-  while i < len do
-  begin
-    PByte(Int64(dst) + 8 + i)^ := PByte(Int64(src) + i)^;
-    i := i + 1;
-  end;
+  PXXBlockCopy(Int64(dst) + 8, Int64(src), len);
 end;
 
 { Publish a managed handle into a string slot, releasing the old one. }
@@ -3244,12 +3233,9 @@ begin
   PWord(Int64(newBlock) + PXX_HDR_LEN)^ := len;
   newArrData := Pointer(Int64(newBlock) + PXX_HDR_SIZE);
 
-  i := 0;
-  while i < len * elSize do
-  begin
-    PByte(Int64(newArrData) + i)^ := PByte(Int64(arrData) + i)^;
-    i := i + 1;
-  end;
+  { The copy-on-write duplicate — every write to a shared dyn array lands here.
+    feature-opt-bulk-copy-is-byte-at-a-time }
+  PXXBlockCopy(Int64(newArrData), Int64(arrData), len * elSize);
 
   depth := PInt32(Int64(desc) + 8)^;
   baseKind := PInt32(Int64(desc) + 12)^;
@@ -3353,24 +3339,24 @@ begin
   PWord(Int64(newBlock) + PXX_HDR_LEN)^ := newLen;
   newArrData := Pointer(Int64(newBlock) + PXX_HDR_SIZE);
 
-  i := 0;
-  while i < newLen * elSize do
-  begin
-    PByte(Int64(newArrData) + i)^ := 0;
-    i := i + 1;
-  end;
+  { PXXMemZero / PXXBlockCopy, not a byte loop. Both are defined above and both
+    already move a machine word at a time (PXXMemZero is `rep stosb` on x86-64),
+    so this is one call replacing a loop, not a new primitive.
+
+    The old loops were worse than "one byte per iteration": each recomputed
+    `newLen * elSize` in its own condition, so every byte cost a multiply as well
+    as a load, a store and a compare. This is on the `Copy(arr)` path -- Copy
+    lowers to SetLength-then-PXXMemCopy, so the zero-fill here ran byte-by-byte
+    immediately before a `rep movsb` overwrote every byte of it.
+    feature-opt-bulk-copy-is-byte-at-a-time }
+  PXXMemZero(newArrData, newLen * elSize);
 
   if oldData <> nil then
   begin
     oldLen := PWord(Int64(oldData) - 8)^;
     copyLen := oldLen;
     if newLen < copyLen then copyLen := newLen;
-    i := 0;
-    while i < copyLen * elSize do
-    begin
-      PByte(Int64(newArrData) + i)^ := PByte(Int64(oldData) + i)^;
-      i := i + 1;
-    end;
+    PXXBlockCopy(Int64(newArrData), Int64(oldData), copyLen * elSize);
     PXXDynArrayRetainImmediate(newArrData, copyLen, depth, baseKind, baseRecDesc);
   end;
 
@@ -3418,20 +3404,14 @@ begin
     oldLen := PWord(Int64(oldData) - 8)^;
     copyLen := oldLen;
     if newLen < copyLen then copyLen := newLen;
-    i := 0;
-    while i < copyLen do
-    begin
-      PByte(Int64(newData) + i)^ := PByte(Int64(oldData) + i)^;
-      i := i + 1;
-    end;
+    { SetLength(s, n) on a string, on every target — the site this ticket's
+      original list missed entirely, and plausibly the hottest of them.
+      feature-opt-bulk-copy-is-byte-at-a-time }
+    PXXBlockCopy(Int64(newData), Int64(oldData), copyLen);
   end;
 
-  i := copyLen;
-  while i < newLen do
-  begin
-    PByte(Int64(newData) + i)^ := 0;
-    i := i + 1;
-  end;
+  if newLen > copyLen then
+    PXXMemZero(Pointer(Int64(newData) + copyLen), newLen - copyLen);
   PByte(Int64(newData) + newLen)^ := 0;       { nul terminator }
 
   PWord(strSlot)^ := Int64(newData);
