@@ -2231,27 +2231,48 @@ def print_est_mem_accuracy(jobs):
     job, because that job's number is exactly what the row should become.
     """
     seen = collections.defaultdict(list)
+    over = []
     for j in jobs:
-        if j.peak_rss and j.peak_rss > 0:
-            seen[j.cls].append((j.peak_rss, j.name))
+        if not (j.peak_rss and j.peak_rss > 0):
+            continue
+        seen[j.cls].append((j.peak_rss, j.name))
+        # THE ESTIMATE THAT SCHEDULED IT IS `j.est_mem`, NOT THE CLASS ROW.
+        # The row is only the cold-start value: once a job has a metric,
+        # admission uses max(64MB, learned*1.4) and the row is not consulted.
+        # Comparing the peak against the row therefore answers a question
+        # adjacent to the one that matters, and it answers it wrongly in the
+        # alarming direction -- lib-test#00 peaked at 838 MB against a 400 MB
+        # row and was flagged on every single run, while the estimate it was
+        # actually admitted on was 1148 MB and never came close to being
+        # exceeded. A warning that fires on a healthy run is the "cries wolf"
+        # failure this file's own report contract is written against.
+        if j.est_mem and j.peak_rss > j.est_mem:
+            cold = (j.est_mem == CLASSES.get(j.cls, {}).get("est_mem"))
+            over.append((j.cls, j.peak_rss, j.est_mem, j.name, cold))
     if not seen:
         return
     mb = 1 << 20
-    over = []
     parts = []
     for cls in sorted(seen):
-        v = sorted(seen[cls])
+        peak, _who = sorted(seen[cls])[-1]
         est = CLASSES.get(cls, {}).get("est_mem", 0)
-        peak, who = v[-1]
         parts.append("%s %d/%d" % (cls, peak // mb, est // mb))
-        if est and peak > est:
-            over.append((cls, peak, est, who))
+    # The table line still quotes the class row, because revising that row is
+    # what it is for -- it is a cold-start tuning aid, not a health check.
     print("  est_mem peak/est MB: %s" % "  ".join(parts))
-    for cls, peak, est, who in over:
-        print("  !! est_mem TOO LOW for class %s: %s peaked at %d MB against a "
-              "%d MB estimate — the scheduler admitted it on a promise the box "
-              "did not have to keep. Raise the row (max*1.5) in CLASSES."
-              % (cls, who, peak // mb, est // mb))
+    for cls, peak, est, who, cold in over:
+        if cold:
+            print("  !! est_mem TOO LOW for class %s: %s peaked at %d MB "
+                  "against its %d MB COLD-START estimate (no learned metric "
+                  "yet) — admitted on a promise the box did not have to keep. "
+                  "Raise the row (max*1.5) in CLASSES."
+                  % (cls, who, peak // mb, est // mb))
+        else:
+            print("  !! learned est_mem UNDERSHOT for %s (class %s): peaked at "
+                  "%d MB against the %d MB its own history predicted — the 1.4 "
+                  "headroom on the learned figure was not enough. The class row "
+                  "is not involved; do not raise it."
+                  % (who, cls, peak // mb, est // mb))
 
 
 def generate(tier):

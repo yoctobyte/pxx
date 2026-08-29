@@ -323,12 +323,42 @@ That equality is the one silent failure mode left; it is asserted only by
 inspection.
 
 **Handing the verification to the wasm32 lane** (frankwasm), which asked to be
-pinged at the commit. The assertion it named is the right one and is stronger
-than "non-zero": `PXXAlloc` must return an address **above** the BSS top
-(`WASM_BSS_BASE + BSSSize`) — the current bug already satisfies non-zero, at
-address 8. `test/wasm/check_managed.sh` asserts the return is *below* 1024 and so
-**fails by design** when this reaches that branch; rewriting its scope note is
-that lane's call.
+pinged at the commit.
+
+> **CORRECTION 2026-08-29, and the wrong version is kept because this ticket
+> published it.** This section first said the assertion to use is *"`PXXAlloc`
+> must return an address **above** the BSS top (`WASM_BSS_BASE + BSSSize`)"*.
+> **That is wrong, and it would have failed on the very fix it was written to
+> validate:** the arena IS in BSS, so a correct allocation lands *inside*
+> `[WASM_BSS_BASE, WASM_BSS_BASE + BSSSize)`, not above it. Measured by the wasm
+> lane: first allocation at 39152, BSS running from 1024 for ~1 MiB. It came from
+> that lane and I relayed it into this ticket without re-deriving it against the
+> arm actually being built — the assertion was shaped for the mmap-style fix
+> originally imagined. Same page, same message, both facts present: BSS feeds the
+> declared page count *and* the arena lives in BSS. Neither of us put them
+> together.
+
+**The assertions that actually hold** (`test/wasm/check_managed.sh`, each arm
+falsified individually before being trusted):
+
+- `base >= 1024` — clears the null guard. Weak alone, but it is the arm that
+  catches a regression to address zero.
+- **240 successive 4 KB allocations all succeed and every byte of each is
+  written.** This is the `HEAP_ARENA` == `WasmArena` byte-size equality, finally
+  asserted rather than inspected: if `HEAP_ARENA` exceeds the buffer, `HeapEnd`
+  sits past its end and the writes walk out; if the buffer exceeds `HEAP_ARENA`,
+  blocks run out early.
+- the 240 blocks span >= 900000 bytes — catches recycling or overlap that
+  per-block success would not.
+- **a global sentinel survives filling the arena** — this is the actual defect.
+  Allocation from address 0 read back correctly for the first kilobyte; "the
+  object works" was never evidence. Measured intact after 980856 bytes.
+
+Nothing pins the arena's ADDRESS: it is a BSS-layout accident, and pinning it
+would make any unrelated BSS change look like this bug returning. `test/wasm/check_managed.sh` asserted the return is *below* 1024 and so failed by
+design when this reached that branch — **and so did `check_calls.sh`, which
+carried its own "the heap has no arena" arm that neither of us knew about.** Both
+rewritten by that lane to assert properties instead of the defect (`0f9cd8c72`).
 
 ### Sizing — 1 MiB, on the lane's own measurement
 
@@ -357,3 +387,23 @@ the pre-existing `rparser.inc` `RExprRecId` seed break, Track R's, unrelated).
 
 ## Log
 - 2026-08-29 — resolved, commit 3a7d75f12.
+
+---
+
+## VERIFIED ON HARDWARE-EQUIVALENT 2026-08-29 (frankwasm, branch `wasm` @ `0f9cd8c72`)
+
+The half this lane could not run. All three predictions made from master held:
+
+- **`(memory 18)`** for the probe program — 2 baseline + 16 for the arena, exactly
+  what `BSSSize` feeding `WasmFinishMemory` predicts, and the number that
+  justifies 1 MiB over "a few MiB".
+- **the arm is selected and correct as compiled** — 124/124 bodies lowered,
+  allocations bumping 39152, 40160, 41168 at the expected 1008-byte stride.
+- **the sentinel survives** — `111 222 333 444 guard` intact after 980856 bytes of
+  writes, which is the defect itself finally falsified rather than inferred.
+
+25 checks green, fixedpoint converged, binary `90b089c95cb7`.
+
+**The `-1`-not-`0` call was load-bearing and was nearly lost:** that lane reports
+it would have read the `PXX_ESP` arm as the model and copied its `Result := 0`,
+not noticing that 0 faults on ESP and is a legal heap address here.

@@ -123,3 +123,79 @@ is the same fork stated one level down.
 - `EmitManagedLocalCleanupForTarget` (`ir_codegen.inc:10135`) has the same
   shape and the same missing arm on the release side, and the wasm backend
   likewise does its own. Same fork, same answer; fold it in.
+
+## RESOLVED ON THE `wasm` BRANCH, 2026-08-29 — not on master, and the ledger carries it
+
+Fixed at `346d4bf3e` on branch `wasm`. **The two shared-file edits are on the
+branch and NOT on master**, listed in
+`feature-a-merge-the-wasm-branch-the-shared-file-arms`. This ticket stays open
+until that merge lands; what follows is the decision, so the next reader does
+not have to re-derive it.
+
+### The fork, decided — and one of the two readings was impossible
+
+The ticket asked whoever took it to choose explicitly between "the wasm
+prologue pass owns scalars" and "`EmitZeroFrameSlot` owns everything, delete
+the prologue pass's zeroing half". It is not a preference. Two facts settle it:
+
+1. `EmitZeroFrameSlot` writes MACHINE CODE into `Code[]` at the current
+   emission point, and the wasm32 backend never reads `Code[]` — it builds its
+   own module model.
+2. **Both callers run from `CompileAST`, which calls `IREmitMachineCode`
+   afterwards.** At the moment the routine is invoked there is no wasm function
+   body being emitted and no cursor to emit into. It could not do the job on
+   this target even if `Code[]` were read.
+
+So: an explicit **no-op** arm, with the reason written at the arm.
+`WasmEmitManagedLocals` is the owner. `EmitManagedLocalCleanupForTarget` gets
+the same treatment on the release side — it was already a no-op for wasm32,
+since its chain simply ends, but the ticket is right that an unnamed
+fall-through is indistinguishable from an unconsidered one.
+
+Three mechanisms → one mechanism and two arms that say why they are not it.
+
+### The finding this produced: the gap and its guard were the same line
+
+`WasmEmitManagedLocals` zeroed **scalar AnsiStrings and dynamic arrays and
+nothing else.** Every other managed kind `ManagedLocalZeroBytes` knows about —
+a local record with managed fields, a static array of string, a Variant, a COM
+interface local, a promotable int — was unzeroed on wasm32, and was unreachable
+**only because the wide chain refused them at compile time.** The loud `Error`
+this ticket was filed against was, accidentally, the guard.
+
+**Removing the refusal and leaving the pass alone would have shipped a
+use-after-free in the same commit that fixed a "harmless" ticket.** That is why
+the zero half now asks `ManagedLocalZeroBytes` — the shared table — rather than
+restating a list of kinds. The release half keeps its own narrower predicate on
+purpose: *what must start nil* and *what this backend knows how to release* are
+different questions, and sharing one predicate is exactly what hid this.
+
+Emission splits on WIDTH, not kind: pointer-sized gets an inline `i32.store`,
+anything wider goes to `PXXMemZero`. A helper call per managed string local is
+what that avoids, and the check asserts both directions.
+
+### Evidence
+
+- **Falsified against a build broken on purpose.** With the zero pass removed,
+  `ViaRecord` dies with `memory access out of bounds` — it releases the dirty
+  bytes of its unzeroed local record as if they were a live string handle. The
+  plain-string row **still passed** in that build, which is the measurement
+  that justifies the wide-extent rows existing separately rather than trusting
+  one managed local to stand for all of them.
+- Every row runs after a recursion that writes recognisable non-zero words into
+  the shadow stack, because all of this is invisible on a clean one. The check
+  asserts those words are still in the emitted module — a dirtying routine the
+  optimiser folded away would leave the whole thing passing for free.
+- **Other targets: emitted output byte-identical** for aarch64, arm32, i386,
+  riscv32 and x86-64, **with a positive control** — perturbing the x86-64
+  narrow arm's immediate changes 2 bytes of the same corpus, so the corpus
+  really does reach this routine. (The same perturbation breaks the self-host
+  fixedpoint outright: a second, independent proof of reach.)
+- `test/wasm/check_zeroinit.sh`, four assertion arms, each falsified.
+
+### Left for the general ticket
+
+The chain's final arm is now **named in a comment** as x86-64 rather than a
+default. It emits no differently; it stops reading as a default, which is how a
+seventh target fell into it for an entire phase. The structural fix belongs to
+`refactor-a-target-dispatch-chains-fail-open`, not here.
