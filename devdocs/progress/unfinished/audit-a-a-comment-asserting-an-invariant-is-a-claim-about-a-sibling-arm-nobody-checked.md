@@ -263,3 +263,23 @@ Parked in `unfinished/`, not abandoned. **The Track-A-in-unfinished rule does no
 bite here**: that rule exists because a half-applied *compiler change* can break
 the self-host gate, and this audit has applied none — it edits no code by
 construction.
+
+### Addendum — instance 8 landed concurrently, and it makes THREE shapes not two
+
+frankA's instance 8 (eleven lines, same procedure, same screen, and the comment
+false about its **own** arm rather than a sibling's) arrived while pass 1 was
+running. Folding it in, the distance column now separates three shapes, and they
+imply three different remedies:
+
+| shape | distance | what would have caught it |
+| --- | --- | --- |
+| **close sibling** — frankA's 1-7 | same file, often same routine | a review habit: grep the sibling before closing |
+| **self-false** — instance 8 | eleven lines, same screen | *nothing* readable. The comment is more persuasive than the code. Only a failing output caught it |
+| **distant reference** — pass 1's two | different files, different subsystems | a periodic sweep; no reader at the violation site can see the claim |
+
+So the "always close" hypothesis is right about *distance* for the majority and
+wrong about what follows from it. Instance 8 is the closest of all nine and the
+least reachable by reading — which means **proximity does not predict
+catchability**, and "read what you already have open" is not the remedy even
+where the comment is on the same screen. The three columns want three things: a
+habit, an oracle, and a sweep. Only the first is free.

@@ -53,11 +53,11 @@ _none_
 | bug-c-crtl-utoa-digit-loop-is-unbounded | C | 25 | bug | `__crtl_utoa`'s digit loop has no bound on its index, so a wrong `base` turns a printf into an unbounded stack write that smashes the routine's own parameters and then walks to the guard page. Do NOT fix in isolation — it is the amplifier for an unnamed defect and bounding it would hide that. | bug-b-reportlab-mimic-multi-font-heap-corruption |
 | bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio | T | 50 | bug | Float-accuracy assertions in the gated suites make a one-ulp move a CI RED, and a red job is worked at the priority of BEING RED - which overrides the owner's standing rule that float accuracy is low prio. Parking the tickets in float/ does not close this door; only the tests can. | decide-t-per-assertion-subjects-or-accept-the-file-level-label |
 | chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring | A | 40 | chore | Wire the nine that pass, then gate the checker | chore-t-six-orphan-gui-tests-the-blanket-was-hiding |
-| feature-lib-tkinter-grid-pad-accepts-a-two-tuple | B | 45 | feature | `widget.grid(padx=(8, 6))` — tkinter's two-tuple pad, meaning (left, right) — is rejected by the facade: `no overload of grid matches these arguments`. A scalar `padx=8` works. Real tkinter accepts both for padx and pady on grid and pack. One line of songformatter's settings.py needs it; it is the module's only remaining wall. | bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped |
+| feature-lib-tkinter-grid-pad-accepts-a-two-tuple | B | 45 | feature | CORRECTED 2026-08-29 by the lane that filed it: the facade is NOT missing the two-tuple pad. padx/pady are already Variant, the braced pair is already emitted, and `grid info` on a live widget reports `-padx {8 6}`. The call is rejected by bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped — a METHOD call with an earlier default left unbound and an object-valued Variant. Nothing to change in lib/pcl; kept open only to track the app-side consequence. | bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped |
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (307)
+## backlog (309)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -362,6 +362,8 @@ _none_
 | refactor-p-three-hand-rolled-postfix-loops | P | 55 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
 | regression-cascade-154d1aa3fba6 | T | 70 | regression | regression CASCADE: 18 jobs newly red in e417731e9..154d1aa3f (12 commits) — auto-filed by twatch | — |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
+| regression-demos-00-2 | T | 40 | regression | advisory: demos#00 red at b26e7ed366f3 (auto-filed by twatch) | — |
+| regression-lib-test-crtl-reachability-4 | C | 70 | regression | regression: lib-test#src:tools/crtl_reachability.py red at b26e7ed366f3 (auto-filed by twatch) | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 | regression-test-core-test-mgmt-operators | P | 70 | regression | regression: test-core#src:test/test_mgmt_operators.pas red at 47277dd0e52b (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-relative-import-in-package | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_relative_import_in_package.npy red at ee62e6dc0582 (auto-filed by twatch) | — |
@@ -683,6 +685,7 @@ _none_
 - [p 70] [A+O] feature-opt-o3-register-pressure
 - [p 70] [T] regression-cascade-154d1aa3fba6
 - [p 70] [P] regression-cascade-4e27dc2be114
+- [p 70] [C] regression-lib-test-crtl-reachability-4 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [P] regression-test-core-test-mgmt-operators [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-nilpy-relative-import-in-package [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-nilpy-startswith-tuple [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
@@ -864,6 +867,7 @@ _none_
 - [p 40] [N] perf-nilpy-remaining-perbyte-string-builders
 - [p 40] [C] refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag
 - [p 40] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
+- [p 40] [T] regression-demos-00-2
 - [p 40] [A] task-a-add-fu-to-the-compiler-usage-line
 - [p 35] [A] bug-a-a-typed-const-record-is-built-by-startup-code-not-stored-as-data
 - [p 35] [A] bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error
