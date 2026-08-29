@@ -208,3 +208,4 @@
 2026-08-29T20:23:52Z	seven	9beb2af4946c4fff367c09d4a411014c58e42fb4	would-pin PENDING 9beb2af4946c — qualifies, streak 1/2
 2026-08-29T21:17:05Z	seven	b26e7ed366f37d1df21bb8595fc2c0d462db0949	would NOT pin b26e7ed366f3 — 3 red(s) the current pin does not have, 5 inherited from the current pin: demos#00, lib-test#src:tools/crtl_reachability.py, test-core#src:test/test_mgmt_operators.pas
 2026-08-29T21:47:11Z	seven	30c06db1ae4e181fd0bb18d488b1c7cf6e224903	would NOT pin 30c06db1ae4e — 3 red(s) the current pin does not have, 5 inherited from the current pin: demos#00, test-core#src:test/test_mgmt_operators.pas, test-pascal-conformance#shard0/6
+2026-08-29T22:05:13Z	seven	f2706f45eabe3c1418eb56eaebdeb832f3607cf6	would NOT pin f2706f45eabe — 3 red(s) the current pin does not have, 5 inherited from the current pin: demos#00, test-core#src:test/test_mgmt_operators.pas, test-pascal-conformance#shard0/6
