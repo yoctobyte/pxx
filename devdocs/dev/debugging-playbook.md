@@ -1448,3 +1448,43 @@ answer emptily:**
 And the discipline that catches it when the harness is someone else's: **before
 believing a clean differential, make it fail on purpose.** Point it at a
 deliberately broken binary. If it still says "identical", it was never looking.
+
+## A count inferred from a size delta is not a count
+
+Sibling of the empty-diff entry above, from the same day, and the more common of
+the two because it reads as *more* rigorous rather than less.
+
+A probe was added that emits an 11-byte instruction per site. To find out how
+many sites there were, two binaries were compiled — one with the probe, one
+without — and the size difference divided by 11. Answer: 261 sites. The probe
+was then asked directly, and the answer was **76**.
+
+Nothing about 261 looked wrong. It was arithmetic on two measured quantities,
+and it was three and a half times the truth, because a binary's size is not its
+code size, code motion and alignment absorb bytes, and the emitted sequence was
+not the length assumed.
+
+> **The instrument that produced the effect can also count it. Ask it.** A number
+> derived from a side effect of the thing you are measuring inherits every
+> assumption you made about that side effect — and unlike the measurement, it
+> carries no signal when one of those assumptions is wrong.
+
+Chasing the discrepancy paid twice over: reconciling the counted 76 against the
+37 instructions actually removed from the binary is what surfaced a real gap
+between codegen-time site counts and emitted code, which two further hypotheses
+(dead-proc elimination, double emission) were then measured and ruled out.
+The gap is recorded as unexplained rather than smoothed over.
+
+**In practice:**
+
+- **Print the count from the code that does the thing.** One `WriteLn` behind a
+  debug flag, emitted where the transform fires. It cannot drift from reality
+  because it *is* reality.
+- **When two counts disagree, that is a finding, not an annoyance.** Both were
+  measurements of the same population; one of your models is wrong and you have
+  been handed the case that proves it.
+- **Quote the artifact number, not the derived one**, and say which is which.
+  "37 fewer instructions in the binary" survives review; "261 sites, inferred"
+  does not, and should not.
+- **`code=NNNNB` from the compiler's own success line beats `stat -c%s`** for
+  anything about code size — the file carries data, bss and headers too.
