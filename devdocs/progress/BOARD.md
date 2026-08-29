@@ -8,19 +8,19 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (3)
-
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| bug-a-the-fpc-seed-canary-skips-a-break-already-on-master | A | 50→80 | bug |  | — |
-| bug-nilpy-import-order-leaks-a-class-name-into-a-later-compiled-rtl-unit | N | 65 | bug | A NilPy program that imports unit A (declaring `Text = class`) before unit B SILENTLY REBINDS `Text` inside B — an ordinary Pascal unit that never names A: SizeOf goes 4128 (the RTL file record) -> 8 (a class pointer), and it COMPILES. `import tkinter` then `import configparser` is the arm where it happens to hit an overload check. TRIAGED 2026-08-29: the cause stated below is WRONG — NilPy DID inherit the visibility fix and the class lookup returns the correct row; an earlier arm of ParseTypeRef claims the name and IsClassType is never reached. Three-file repro, no tkinter needed. Handed off to A/N (pasparser_decl.inc / symtab.inc). | — |
-| feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
-
-## unfinished (23)
+## working (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | audit-a-a-comment-asserting-an-invariant-is-a-claim-about-a-sibling-arm-nobody-checked | A | 50 | audit | Five defects in one day share one greppable shape: a construct has two or more arms, one arm carries a comment ASSERTING the invariant, and the sibling arm does not honour it. The comment is the signal and nothing reads it. Sweep rather than wait for the sixth discovery. | — |
+| bug-a-the-fpc-seed-canary-skips-a-break-already-on-master | A | 50→80 | bug |  | — |
+| bug-nilpy-import-order-leaks-a-class-name-into-a-later-compiled-rtl-unit | N | 65 | bug | A NilPy program that imports unit A (declaring `Text = class`) before unit B SILENTLY REBINDS `Text` inside B — an ordinary Pascal unit that never names A: SizeOf goes 4128 (the RTL file record) -> 8 (a class pointer), and it COMPILES. `import tkinter` then `import configparser` is the arm where it happens to hit an overload check. TRIAGED 2026-08-29: the cause stated below is WRONG — NilPy DID inherit the visibility fix and the class lookup returns the correct row; an earlier arm of ParseTypeRef claims the name and IsClassType is never reached. Three-file repro, no tkinter needed. Handed off to A/N (pasparser_decl.inc / symtab.inc). | — |
+| feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
+
+## unfinished (22)
+
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
 | bug-a-nilpy-on-cross-targets-four-remaining-walls | A | 40 | bug | After the string-tagged-binop gate was lifted, NilPy still does not RUN on any cross target: arm32 builds and SIGILLs, i386 refuses on `symbol kind not supported yet (load)`, aarch64 on `aggregate result with more than 8 params`, riscv32 on bare-metal mmap. Four separate walls, one campaign — ~53 .npy tests are cross-blind until they fall. | — |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
 | bug-nilpy-shared-nonlocal-frame-cell-is-never-freed | N | 40 | bug | A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted | — |
@@ -57,11 +57,10 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (310)
+## backlog (309)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| audit-a-a-comment-asserting-an-invariant-is-a-claim-about-a-sibling-arm-nobody-checked | A | 50 | audit |  | — |
 | audit-a-builtinheap-invariants-x86-64-inlines-past | A | 60 | audit | A helper's comment is a claim about every caller, written where one caller cannot see it | — |
 | audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol | A | 45 | audit | `TypeKind = tyRecord` is not a guard, and 20 reads use it as one | — |
 | bug-a-a-c-headers-variadic-tail-is-dropped-on-import | A | 45 | bug | A variadic C function imported into Pascal is callable only with its FIXED prefix: printf imports as printf(Pointer). The `...` is NOT lost -- ProcVariadic[] records it and codegen honours it -- the Pascal-side overload matcher simply never consults it. One clause in ProcArityMatches plus bounding the type-match loops. | — |
@@ -782,8 +781,6 @@ _none_
 - [p 55] [P] refactor-p-three-hand-rolled-postfix-loops
 - [p 53] [A] feature-threadsafe-heap-optimize [parked — re-claim, do not duplicate]
 - [p 50] [U] decide-t-per-assertion-subjects-or-accept-the-file-level-label (unblocks 1)
-- [p 50] [A] audit-a-a-comment-asserting-an-invariant-is-a-claim-about-a-sibling-arm-nobody-checked
-- [p 50] [A] audit-a-a-comment-asserting-an-invariant-is-a-claim-about-a-sibling-arm-nobody-checked [parked — re-claim, do not duplicate]
 - [p 50] [N] bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising
 - [p 50] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 50] [N] bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base
