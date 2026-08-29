@@ -22,11 +22,12 @@ bugs rather than accepted as dialect differences. Nil Python is a from-scratch
 compiler that targets CPython compatibility; it is not derived from CPython's
 implementation, and it is not an interpreter.
 
-That is a harder target than Pascal or C, and the board shows it: Nil Python's
-open queue peaked at 79 tickets against 30 for the C frontend and 20 for
-Pascal's, and 77% of its tickets are bugs or regressions. A deep queue here
+That is a harder target than Pascal or C, and the board shows it: Nil Python
+carries by far the deepest open queue of any frontend, and roughly four in five
+of its tickets are bugs or regressions rather than features. A deep queue here
 means the reference is exacting, not that the frontend is fragile — see
-[ticket flow](https://pxxc.org/status/flow/) for the curves.
+[ticket flow](https://pxxc.org/status/flow/) for the curves, which are generated
+from the board and cannot go stale the way a sentence can.
 
 **What it will not do**, and this is a design boundary rather than a gap to
 close: anything requiring a live interpreter. No monkeypatching a class after
@@ -46,8 +47,8 @@ Compiling Python-shaped code exercises the shared AST, IR and runtime along
 paths that Pascal and C programs rarely reach — variants, dunder dispatch,
 container semantics — and the defects it turns up are usually **not** in the
 Nil Python frontend at all. They land in the shared layers, where fixing them
-benefits every frontend. Over 100 tickets in the compiler-core lane reference
-Nil Python work. It has been the cheapest bug-discovery route the project has:
+benefits every frontend. Well over a hundred compiler-core tickets reference Nil
+Python work. It has been the cheapest bug-discovery route the project has:
 no third-party test corpus had to be dragged into Pascal or C to find them.
 
 ---

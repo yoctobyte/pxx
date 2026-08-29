@@ -107,9 +107,9 @@ Libraries that PXX does not emulate (such as GTK, zlib, sqlite, pthread, and dl)
 `lib/crtl/` bundles both the headers (`lib/crtl/include/`) and libc-free
 implementations (`lib/crtl/src/`) that back the Magic Link. Implemented, with
 a real `.c` body behind the header (not just declarations): `assert.h`,
-`ctype.h`, `fcntl.h`, `locale.h`, `math.h` (the largest, ~1200 lines),
+`ctype.h`, `fcntl.h`, `locale.h`, `math.h` (the largest),
 `pthread.h` (a real but partial threading subset — see below), `signal.h`,
-`stdio.h` (~1000 lines), `stdlib.h`, `string.h`, `time.h`, `unistd.h`, and
+`stdio.h` (the second largest), `stdlib.h`, `string.h`, `time.h`, `unistd.h`, and
 socket-related headers. `setjmp.h` is backed by compiler intrinsics rather
 than a `.c` file. `wchar.h`/`wctype.h` headers exist but have no
 implementation file behind them yet — treat wide-character support as

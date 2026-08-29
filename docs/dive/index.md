@@ -51,9 +51,11 @@ assembler, linker, or C compiler invoked during the build.
   allocation for strings; the same program is a 287-byte static ELF. Both
   figures were verified on this checkout. See
   [Types](../language/types.md#strings).
-- **Six targets, one compiler.** x86-64, i386, aarch64, and arm32 self-host
-  byte-identical; xtensa and riscv32 target bare-metal ESP32 as emit-only
-  backends. `--target=` selects the backend.
+- **Six code-generating targets, one compiler.** x86-64, i386, aarch64, and
+  arm32 self-host byte-identical. riscv32 covers both bare-metal ESP32-C3 and
+  hosted 32-bit RISC-V Linux, whose binaries run under `qemu-riscv32`; xtensa
+  targets the ESP32-S2/S3. `--target=` selects the backend, and
+  [Targets](../targets/index.md) is the table that stays current.
 - **Multiple frontends.** The same backend also compiles a C frontend
   (tested against real-world C, including SQLite and Lua sources), a
   statically-typed Python-like dialect (Nil Python, `.npy`), and an
@@ -96,8 +98,9 @@ cleanly on x86-64, i386, aarch64, and arm32 while writing this page. The C
 and Nil Python frontends compile against real-world C headers and libraries.
 DWARF debug information (`-g`) is available on all four Linux targets.
 
-Known gaps: the two ESP32 targets (xtensa, riscv32) are emit-only, not
-self-host, targets (though classes with virtual dispatch now work on both).
+Known gaps: xtensa and riscv32 are not self-host targets — the compiler emits
+for them but does not compile itself with them (though classes with virtual
+dispatch now work on both).
 Optimization is local only — there is no whole-program or SSA-based pass.
 Integer overflow, range, and IO checking exist but are opt-in per region
 (`{$Q+}`, `{$R+}`, `{$I+}`); the lax default wraps and does not range-check.

@@ -45,7 +45,11 @@ Nearly every "I built X with AI" account is reconstructed from memory afterwards
 - **Self-host fixed point** — the compiler compiles its own source to a byte-identical binary.
   A verifiable, mechanical gate. (Claims discipline: this is *binary* identity of our own
   output; the gcc-oracle corpus claims are *behavioral* parity — see CLAUDE.md. Never blur.)
-- **200+ pinned stable versions** — the whole trajectory, not a snapshot.
+- **Every pinned stable version** — the whole trajectory, not a snapshot. Do not
+  write the count here: it was "200+" when this ticket was filed and the ledger
+  said 393 by 2026-08-30. `tools/factsheet.sh` prints it with the sha it measured
+  at. A stale number in the list of *receipts* is the most expensive place in
+  this document for one to sit.
 - **The ticket board** — with `Log` sections recording what was tried, what failed, what was
   abandoned, written *at decision time* rather than in hindsight.
 - **tstate regression reports** tied to exact SHAs; a cross-target test matrix.
