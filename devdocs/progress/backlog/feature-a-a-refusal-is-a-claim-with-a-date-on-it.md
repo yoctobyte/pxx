@@ -2992,3 +2992,88 @@ silently.
 Same family as **33** (a capability nothing invokes is quieter than no check):
 the mechanism is present, correct, and simply never fires — and its presence is
 what stops anyone asking whether it did.
+
+### 69. `git merge-base --is-ancestor` answers a question about the TREE, and the question was about the BINARY
+
+frankD, 2026-08-29, retracting its own claim. It could not demonstrate the
+xtensa ordered-string bug because *"hosted xtensa hangs on hello-world under
+qemu"* — measured on **pinned v393, `1d69760deabe`, pinned 22:29**, while
+frankS's hosted-xtensa fix landed at **23:21**.
+
+The instrument is the interesting part. Asked whether it had the fix, frankD ran
+`git merge-base --is-ancestor`, got **yes**, and let *a fact about the checkout
+stand in for a fact about the compiler that ran*. Both facts are true. Only one
+of them was the question.
+
+`pxx --where` settles it independently of any timing argument: the pinned
+compiler resolves builtin units from its own frozen
+`stable_linux_amd64/default/builtin/`, which differs from the repo's
+`compiler/builtin/builtinheap.pas` — so **no invocation of that binary could
+have contained a builtinheap fix**, whatever the tree said.
+
+This is the sharpest instance yet of the standing rule *"still red" proves
+nothing until you know which binary ran*, because here the agent **did** check,
+with a real command, and got a real answer. **The sha CLAUDE.md tells you to
+name is the compiler's; frankD named the checkout's.** Ancestry is not
+provenance.
+
+Withdrawn **in place, with the reason**, rather than quietly edited — a
+corrected record that hides the correction is worth less than the error, because
+the next reader learns nothing from it.
+
+### 70. Reproducing a METHOD reproduces its BIAS — agreement between two runs of one matcher is not corroboration
+
+frankD, same day, undercutting its own pass 2 unprompted.
+
+Pass 2 opened by reproducing claude-N's builtinheap census before trusting it —
+45 reached by x86-64, 30 cross-only, **identical numbers** — and reported that
+agreement as evidence the seam had been measured. It was worth nothing. The
+census matches `FindProc('<name>')`, and xtensa reaches four helpers through
+**name-taking wrappers**, which that matcher cannot see. Corrected: **46/33**.
+
+Running the same matcher twice tests the matcher's determinism, not the
+territory. It is the same defect as **65** (a census run without the filter the
+real code applies) with the roles reversed: there the census was blind to a
+filter the code applies; here the *verification* was blind because it inherited
+the census's own instrument.
+
+Note the symmetry with the census's own methodology warning, which is now a
+matched pair worth keeping together:
+
+| direction | effect |
+| --- | --- |
+| prose describing an absence | produced the appearance of **presence** |
+| an indirection (a name-taking wrapper) | produced the appearance of **absence** |
+
+The finding it was checking survives — `PXXStrCmp3` is absent from
+`ir_codegen_xtensa.inc` under **any** matcher, re-checked before the correction
+was written. **The conclusion held and the method did not**, which is the same
+shape the coordinator hit on `rtlconsts.pas` and is worth stating as a rule:
+*verify with an instrument the claimant did not choose, or you have tested the
+instrument.*
+
+### 71. The claims that HELD were about someone else's code; the claims that FAILED were about the author's own
+
+frankD, 2026-08-29, across nine instances of the comment-invariant audit — and
+it is **the opposite of the premise the audit started from.**
+
+That premise was *distance*: the dangerous comment is the one asserting
+something about a sibling arm far away that you cannot see. Nine instances say
+distance is not the axis. What predicts catchability is whether the claim is
+**falsifiable by a command** — and underneath that, a split nobody predicted:
+
+| claim is about | outcome |
+| --- | --- |
+| **someone else's code** — `PXXStrCmp3` on x86-64's `repe cmpsb` twin; the InternKey twin; ManagedElemKind's doors | **held** |
+| **the author's own** — instance 8; `ir.inc:12732`; `builtinheap.pas:2039` | **failed** |
+
+**Writing about a sibling makes you go and look. Writing about yourself does
+not.** You already know what your code does — so the sentence is generated from
+memory rather than from the file, and memory is exactly what goes stale when the
+scope widens under it (see the `--threadsafe` row: the comment saying "x86-64
+only" is dated four days *before* the four-target condition one line below it,
+and the widening commit edited that line without touching the sentence).
+
+Consequence for where audit effort goes: **the cross-file assertion that looks
+most alarming is the one most likely to be true**, and the throwaway line
+describing the function it sits in is the one to check.
