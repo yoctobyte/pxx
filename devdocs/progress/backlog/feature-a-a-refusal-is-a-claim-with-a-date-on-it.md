@@ -3233,3 +3233,57 @@ C-side byte-identical gate, captured BEFORE the move.** Generalises past C — a
 lane whose code the self-host build does not execute (C, NilPy, Rust, Zig, the
 cross backends) is gated by something that cannot fail on its changes, and needs
 its own oracle rather than the shared one.
+
+### 77. A sentinel initialised by ONE entry point is not a sentinel — the hole is an absence, not a leak
+
+frankA, 2026-08-29, root-causing the NilPy import-order type capture.
+
+`ParsingClassBodyCi := -1` is set in exactly one place: `pasparser_prog.inc:569`,
+inside **`ParseProgram`** — the *Pascal* entry point. **Every other frontend
+enters elsewhere and never runs it**, so the global keeps its BSS default of
+`0`. And `0` is not a sentinel; it is a **valid `UCls` index**. Class 0 is
+`TGuid`.
+
+So NilPy believed it was inside `TGuid`'s class body for the entire
+compilation. `AddClassLikeType` calls `AddNestedType(ParsingClassBodyCi, …)`
+unconditionally when it is ≥ 0, so **every top-level class in every imported
+unit became a nested type of `TGuid`**; `ParseTypeKind` consults
+`FindNestedType` before `IsClassType`; and class-scope lookup is deliberately
+not visibility-gated.
+
+| driver | `ParsingClassBodyCi` | `nestCi` | `SizeOf` |
+| --- | --- | --- | --- |
+| Pascal | **−1** | −1 → final else | 4128 ✓ |
+| NilPy, good order | **0 (TGuid)** | 101 = the textfile *record* | 4128 ✓ |
+| NilPy, bad order | **0 (TGuid)** | 74×101, **1×108 = the class** | **8** ✗ |
+
+**The coordinator predicted the mechanism and got the KIND wrong**, which is the
+part worth keeping: the prediction was *"an unbalanced restore leaks it for the
+rest of the compilation"*. The save/restore pairs are **balanced** — there is no
+`Exit` in either range, and every restore in the NilPy run returns to `0`
+**including the first**, so `savedPCB` was already `0` before any class body
+opened. Same symptom, opposite defect: **balancing a restore would have changed
+nothing.** A leak is a value that escapes; this is a value that never arrived.
+
+It also explains cleanly what had bothered three sessions: **the visibility
+layer returned the correct verdict throughout and simply was not the layer that
+answered** (`ci=101`, right, in both NilPy runs — `nestCi` overrode it). Nothing
+in it was broken.
+
+**The fix is shared, not a NilPy patch:** `ResetDeclScopeSentinels` in
+`symtab.inc`, called once before the frontend dispatch, with `ParseProgram`
+calling it instead of keeping its own copy of the literals. Exact precedent
+three lines above — `EmitTlsMainInstall`, *"one call site rather than one per
+driver"*, from `bug-a-threadsafe-segfaults-on-every-nilpy-program`. **Second
+instance of the same shape at the same seam.**
+
+And it fixes a **latent sibling nobody had reported**: `ParsingClassConstCi`, in
+the same block, same `-1`-vs-BSS-0 problem, same single init. **ALGOL, Erlang,
+Rust, Zig, C and asm all had the same hole** — the bug was reported by NilPy
+because NilPy is the frontend with users, not because it was the frontend
+affected.
+
+**Generalisable:** a per-compilation global whose "unset" value is not its
+zero value must be initialised where compilation begins, not where one
+frontend begins. Grep for the *initialiser*, not the declaration — the
+declaration is in the shared file and looks fine.
