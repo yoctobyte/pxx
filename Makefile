@@ -250,14 +250,14 @@ benchmark: $(COMPILER) benchmark-check
 	  --command-name 'self-hosted pascal26 managed: $(BENCH_BATCH) x hello' 'for i in $$(seq 1 $(BENCH_BATCH)); do ./$(COMPILER) test/hello.pas $(TESTTMP)/hello-bench-self-managed >/dev/null; done' \
 	  --command-name 'self-hosted pascal26 frozen: $(BENCH_BATCH) x hello' 'for i in $$(seq 1 $(BENCH_BATCH)); do ./$(COMPILER) -uPXX_MANAGED_STRING test/hello.pas $(TESTTMP)/hello-bench-self-frozen >/dev/null; done'
 	stat -c '%n %s bytes' $(TESTTMP)/pascal26-bench-fpc $(TESTTMP)/pascal26-bench-self $(TESTTMP)/hello-bench-fpc $(TESTTMP)/hello-bench-self-managed $(TESTTMP)/hello-bench-self-frozen
-	test "$$($(TESTTMP)/hello-bench-fpc)" = "Hello, World!"
-	test "$$($(TESTTMP)/hello-bench-self-managed)" = "Hello, World!"
-	test "$$($(TESTTMP)/hello-bench-self-frozen)" = "Hello, World!"
+	tools/expect_same.sh hello-bench-fpc "$$($(TESTTMP)/hello-bench-fpc)" "Hello, World!"
+	tools/expect_same.sh hello-bench-self-managed "$$($(TESTTMP)/hello-bench-self-managed)" "Hello, World!"
+	tools/expect_same.sh hello-bench-self-frozen "$$($(TESTTMP)/hello-bench-self-frozen)" "Hello, World!"
 	$(TESTTMP)/pascal26-bench-self test/hello.pas $(TESTTMP)/bench-compiler-hello-managed >/dev/null
 	$(TESTTMP)/pascal26-bench-self -uPXX_MANAGED_STRING test/hello.pas $(TESTTMP)/bench-compiler-hello-frozen >/dev/null
 	stat -c '%n %s bytes' $(TESTTMP)/bench-compiler-hello-managed $(TESTTMP)/bench-compiler-hello-frozen
-	test "$$($(TESTTMP)/bench-compiler-hello-managed)" = "Hello, World!"
-	test "$$($(TESTTMP)/bench-compiler-hello-frozen)" = "Hello, World!"
+	tools/expect_same.sh bench-compiler-hello-managed "$$($(TESTTMP)/bench-compiler-hello-managed)" "Hello, World!"
+	tools/expect_same.sh bench-compiler-hello-frozen "$$($(TESTTMP)/bench-compiler-hello-frozen)" "Hello, World!"
 
 benchmark-compiler-runtime: $(COMPILER) benchmark-check
 	rm -rf $(TESTTMP)/frankonpiler-bench-runtime-fpc-units
@@ -275,8 +275,8 @@ benchmark-compiler-runtime: $(COMPILER) benchmark-check
 	  --command-name 'FPC-built pascal26: $(BENCH_BATCH) x hello' 'for i in $$(seq 1 $(BENCH_BATCH)); do $(TESTTMP)/pascal26-runtime-fpc test/hello.pas $(TESTTMP)/hello-runtime-fpc >/dev/null; done' \
 	  --command-name 'self-hosted pascal26: $(BENCH_BATCH) x hello' 'for i in $$(seq 1 $(BENCH_BATCH)); do ./$(COMPILER) test/hello.pas $(TESTTMP)/hello-runtime-self >/dev/null; done'
 	stat -c '%n %s bytes' $(TESTTMP)/pascal26-runtime-fpc $(TESTTMP)/pascal26-runtime-fpc-output $(TESTTMP)/pascal26-runtime-self-output $(TESTTMP)/hello-runtime-fpc $(TESTTMP)/hello-runtime-self
-	test "$$($(TESTTMP)/hello-runtime-fpc)" = "Hello, World!"
-	test "$$($(TESTTMP)/hello-runtime-self)" = "Hello, World!"
+	tools/expect_same.sh hello-runtime-fpc "$$($(TESTTMP)/hello-runtime-fpc)" "Hello, World!"
+	tools/expect_same.sh hello-runtime-self "$$($(TESTTMP)/hello-runtime-self)" "Hello, World!"
 
 # benchmark-opt-levels: build the compiler at each -O tier with the current
 # self-hosted binary, prove every tier emits identical (correct) -O0 output,
@@ -3628,44 +3628,44 @@ test-threads: $(COMPILER)
 	# PXX_THREADSAFE is set by --threadsafe and only by it. Both spellings are
 	# asserted: with only the ON case, a define set unconditionally would pass.
 	./$(COMPILER) test/threadsafe_define.pas $(TESTTMP)/test_tsdefine_off26
-	test "$$($(TESTTMP)/test_tsdefine_off26)" = "plain"
+	tools/expect_same.sh test_tsdefine_off26 "$$($(TESTTMP)/test_tsdefine_off26)" "plain"
 	./$(COMPILER) --threadsafe test/threadsafe_define.pas $(TESTTMP)/test_tsdefine_on26
-	test "$$($(TESTTMP)/test_tsdefine_on26)" = "threadsafe"
+	tools/expect_same.sh test_tsdefine_on26 "$$($(TESTTMP)/test_tsdefine_on26)" "threadsafe"
 	# ...and the per-target heap-lock defines. PXX_TS_HARDLOCK was dead on every
 	# build (set below an early Exit that x86-64 always took), so x86-64
 	# --threadsafe ran the allocator-racing finalization path the define exists
 	# to prevent. bug-a-x86-64-early-exit-skips-target-defines
 	./$(COMPILER) test/threadsafe_lockdefine.pas $(TESTTMP)/test_tslock_off26
-	test "$$($(TESTTMP)/test_tslock_off26)" = "$$(printf 'no-hardlock\nno-softlock')"
+	tools/expect_same.sh test_tslock_off26 "$$($(TESTTMP)/test_tslock_off26)" "$$(printf 'no-hardlock\nno-softlock')"
 	./$(COMPILER) --threadsafe test/threadsafe_lockdefine.pas $(TESTTMP)/test_tslock_on26
-	test "$$($(TESTTMP)/test_tslock_on26)" = "$$(printf 'hardlock\nno-softlock')"
+	tools/expect_same.sh test_tslock_on26 "$$($(TESTTMP)/test_tslock_on26)" "$$(printf 'hardlock\nno-softlock')"
 	./$(COMPILER) --threadsafe test/test_thread_clone.pas $(TESTTMP)/test_thread_clone26
-	test "$$($(TESTTMP)/test_thread_clone26)" = "$$(printf 'thread 0 -> 1000\nthread 1 -> 1001\nthread 2 -> 1002\nthread 3 -> 1003\ntotal ok 4 / 4\nTHREADS OK')"
+	tools/expect_same.sh test_thread_clone26 "$$($(TESTTMP)/test_thread_clone26)" "$$(printf 'thread 0 -> 1000\nthread 1 -> 1001\nthread 2 -> 1002\nthread 3 -> 1003\ntotal ok 4 / 4\nTHREADS OK')"
 	./$(COMPILER) --threadsafe test/test_palthread.pas $(TESTTMP)/test_palthread26
-	test "$$($(TESTTMP)/test_palthread26)" = "$$(printf 'thread 0 -> 1000\nthread 1 -> 1001\nthread 2 -> 1002\nthread 3 -> 1003\ntotal ok 4 / 4\nPALTHREAD OK')"
+	tools/expect_same.sh test_palthread26 "$$($(TESTTMP)/test_palthread26)" "$$(printf 'thread 0 -> 1000\nthread 1 -> 1001\nthread 2 -> 1002\nthread 3 -> 1003\ntotal ok 4 / 4\nPALTHREAD OK')"
 	./$(COMPILER) --threadsafe test/test_atomic_counter.pas $(TESTTMP)/test_atomic_counter26
-	test "$$($(TESTTMP)/test_atomic_counter26)" = "$$(printf 'xchg old=10 now=99\ncas hit old=99 now=7\ncas miss old=7 now=7\nadd old=7 now=12\ncounter=800000 expected=800000\nATOMIC OK')"
+	tools/expect_same.sh test_atomic_counter26 "$$($(TESTTMP)/test_atomic_counter26)" "$$(printf 'xchg old=10 now=99\ncas hit old=99 now=7\ncas miss old=7 now=7\nadd old=7 now=12\ncounter=800000 expected=800000\nATOMIC OK')"
 	./$(COMPILER) --threadsafe test/test_mutex.pas $(TESTTMP)/test_mutex26
-	test "$$($(TESTTMP)/test_mutex26)" = "$$(printf 'counter=400000 expected=400000\nMUTEX OK')"
+	tools/expect_same.sh test_mutex26 "$$($(TESTTMP)/test_mutex26)" "$$(printf 'counter=400000 expected=400000\nMUTEX OK')"
 	./$(COMPILER) --threadsafe test/test_tthread.pas $(TESTTMP)/test_tthread26
-	test "$$($(TESTTMP)/test_tthread26)" = "$$(printf 'counter=400000 expected=400000\nTTHREAD OK')"
+	tools/expect_same.sh test_tthread26 "$$($(TESTTMP)/test_tthread26)" "$$(printf 'counter=400000 expected=400000\nTTHREAD OK')"
 	./$(COMPILER) --threadsafe test/test_event.pas $(TESTTMP)/test_event26
-	test "$$($(TESTTMP)/test_event26)" = "$$(printf 'passed=4 expected=4\nEVENT OK')"
+	tools/expect_same.sh test_event26 "$$($(TESTTMP)/test_event26)" "$$(printf 'passed=4 expected=4\nEVENT OK')"
 	@# --threadsafe + -dPXX_HEAP_DEBUG together used to HANG (self-deadlock on the
 	@# heap spinlock: PXXFree runs inside the emitted locked region and its
 	@# PXXDbgFlush had a managed local whose finalize re-took the same lock).
 	@# All three builds must agree, so a fix cannot pass by disabling either mode.
 	./$(COMPILER) --threadsafe test/test_threadsafe_heap_debug_combo.pas $(TESTTMP)/test_tshd_ts26
-	test "$$($(TESTTMP)/test_tshd_ts26)" = "$$(printf '110 110\n110 survivor-ok\nblockx churn-ok')"
+	tools/expect_same.sh test_tshd_ts26 "$$($(TESTTMP)/test_tshd_ts26)" "$$(printf '110 110\n110 survivor-ok\nblockx churn-ok')"
 	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_threadsafe_heap_debug_combo.pas $(TESTTMP)/test_tshd_hd26
-	test "$$($(TESTTMP)/test_tshd_hd26)" = "$$(printf '110 110\n110 survivor-ok\nblockx churn-ok')"
+	tools/expect_same.sh test_tshd_hd26 "$$($(TESTTMP)/test_tshd_hd26)" "$$(printf '110 110\n110 survivor-ok\nblockx churn-ok')"
 	./$(COMPILER) --threadsafe -dPXX_HEAP_DEBUG test/test_threadsafe_heap_debug_combo.pas $(TESTTMP)/test_tshd_both26
-	test "$$($(TESTTMP)/test_tshd_both26)" = "$$(printf '110 110\n110 survivor-ok\nblockx churn-ok')"
+	tools/expect_same.sh test_tshd_both26 "$$($(TESTTMP)/test_tshd_both26)" "$$(printf '110 110\n110 survivor-ok\nblockx churn-ok')"
 	./$(COMPILER) --threadsafe test/test_thread_heap.pas $(TESTTMP)/test_thread_heap26
-	test "$$($(TESTTMP)/test_thread_heap26)" = "$$(printf 'errors=0\nHEAP OK')"
+	tools/expect_same.sh test_thread_heap26 "$$($(TESTTMP)/test_thread_heap26)" "$$(printf 'errors=0\nHEAP OK')"
 	# heap contract: every allocation family safe under concurrent churn (strings, dynarrays, classes, raw+realloc)
 	./$(COMPILER) --threadsafe test/test_thread_heap_mixed.pas $(TESTTMP)/test_thread_heap_mixed26
-	test "$$($(TESTTMP)/test_thread_heap_mixed26)" = "$$(printf 'errors=0\nHEAP MIXED OK')"
+	tools/expect_same.sh test_thread_heap_mixed26 "$$($(TESTTMP)/test_thread_heap_mixed26)" "$$(printf 'errors=0\nHEAP MIXED OK')"
 	# per-thread storage: __pxxTlsBase. Four threads each arch_prctl(ARCH_SET_FS)
 	# their own block and re-read their tag 20000x while the others do the same.
 	# The prize is a per-thread slot reachable WITHOUT a syscall -- gettid is fine
@@ -3675,7 +3675,7 @@ test-threads: $(COMPILER)
 	# (children alias the parent's block, since clone does not reset fs), so the
 	# assertion below is not merely "it ran".
 	./$(COMPILER) --threadsafe test/test_tls_base.pas $(TESTTMP)/test_tls_base26
-	test "$$($(TESTTMP)/test_tls_base26)" = "$$(printf 'errors=0\nTLS OK')"
+	tools/expect_same.sh test_tls_base26 "$$($(TESTTMP)/test_tls_base26)" "$$(printf 'errors=0\nTLS OK')"
 	# --threadsafe on a NON-PASCAL frontend. Every --threadsafe job above is
 	# Pascal and every NilPy job elsewhere runs without the flag, so this exact
 	# combination had never been executed by any gate on any box -- which is how
@@ -3687,8 +3687,8 @@ test-threads: $(COMPILER)
 	# exercises the reentrancy depth counter, which was aliased onto the owner.
 	./$(COMPILER) --threadsafe test/test_threadsafe_nilpy_io.npy $(TESTTMP)/test_ts_npy_on26
 	./$(COMPILER) test/test_threadsafe_nilpy_io.npy $(TESTTMP)/test_ts_npy_off26
-	test "$$($(TESTTMP)/test_ts_npy_on26)" = "$$($(TESTTMP)/test_ts_npy_off26)"
-	test "$$($(TESTTMP)/test_ts_npy_on26)" = "$$(printf 'hi\ninner 3\nouter 6\ninner 0\ninner 1\ninner 2\ntotal 6')"
+	tools/expect_same.sh test_ts_npy_on26.1 "$$($(TESTTMP)/test_ts_npy_on26)" "$$($(TESTTMP)/test_ts_npy_off26)"
+	tools/expect_same.sh test_ts_npy_on26.2 "$$($(TESTTMP)/test_ts_npy_on26)" "$$(printf 'hi\ninner 3\nouter 6\ninner 0\ninner 1\ninner 2\ntotal 6')"
 	# heap contract: thread creation without --threadsafe is a clear compile error, not a heisencrash
 	! ./$(COMPILER) test/test_thread_clone.pas $(TESTTMP)/test_thread_clone_guard26 > $(TESTTMP)/test_thread_clone_guard.log 2>&1
 	grep -q "requires --threadsafe" $(TESTTMP)/test_thread_clone_guard.log
@@ -3697,106 +3697,106 @@ test-threads: $(COMPILER)
 	! ./$(COMPILER) --target=riscv32 --threadsafe test/hello.pas $(TESTTMP)/test_threadsafe_riscv32_guard26 > $(TESTTMP)/test_threadsafe_riscv32_guard.log 2>&1
 	grep -q "only" $(TESTTMP)/test_threadsafe_riscv32_guard.log
 	./$(COMPILER) --threadsafe test/test_critsec_once.pas $(TESTTMP)/test_critsec_once26
-	test "$$($(TESTTMP)/test_critsec_once26)" = "$$(printf 'critsec=400000 expected=400000\ninit ran=1 expected=1\nCRITSEC_ONCE OK')"
+	tools/expect_same.sh test_critsec_once26 "$$($(TESTTMP)/test_critsec_once26)" "$$(printf 'critsec=400000 expected=400000\ninit ran=1 expected=1\nCRITSEC_ONCE OK')"
 	# data-parallel loop runtime (palparallel PXXParallelFor): exact partition (each index once), values, edge ranges. worker count is host-dependent, so gate on the deterministic tail.
 	./$(COMPILER) --threadsafe test/test_parallel_for.pas $(TESTTMP)/test_parallel_for26
-	test "$$($(TESTTMP)/test_parallel_for26 | tail -n 4)" = "$$(printf 'visitErr=0\nvalErr=0\nedgeErr=0\nPARALLELFOR OK')"
+	tools/expect_same.sh test_parallel_for26 "$$($(TESTTMP)/test_parallel_for26 | tail -n 4)" "$$(printf 'visitErr=0\nvalErr=0\nedgeErr=0\nPARALLELFOR OK')"
 	# `parallel for` LANGUAGE surface: parse-time worker synthesis + PXXParallelFor dispatch (exact partition, values)
 	./$(COMPILER) --threadsafe test/test_parallel_for_lang.pas $(TESTTMP)/test_parallel_for_lang26
-	test "$$($(TESTTMP)/test_parallel_for_lang26)" = "$$(printf 'visitErr=0\nvalErr=0\nPARFORLANG OK')"
+	tools/expect_same.sh test_parallel_for_lang26 "$$($(TESTTMP)/test_parallel_for_lang26)" "$$(printf 'visitErr=0\nvalErr=0\nPARFORLANG OK')"
 	# `parallel for` without --threadsafe = clear compile error, not a heisencrash
 	! ./$(COMPILER) test/test_parallel_for_lang.pas $(TESTTMP)/test_parallel_for_guard26 > $(TESTTMP)/test_parallel_for_guard.log 2>&1
 	grep -q "requires --threadsafe" $(TESTTMP)/test_parallel_for_guard.log
 	# `parallel for` scalar capture (Phase A): enclosing scalars by-ref via the frame pointer (read + write-back)
 	./$(COMPILER) --threadsafe test/test_parallel_for_capture.pas $(TESTTMP)/test_parallel_for_capture26
-	test "$$($(TESTTMP)/test_parallel_for_capture26)" = "$$(printf 'readErr=0\ntotal=4950\nPARFORCAP OK')"
+	tools/expect_same.sh test_parallel_for_capture26 "$$($(TESTTMP)/test_parallel_for_capture26)" "$$(printf 'readErr=0\ntotal=4950\nPARFORCAP OK')"
 	# `parallel for` named-type aggregate capture (B-1): local fixed array + dyn array + record by-ref via the frame pointer
 	./$(COMPILER) --threadsafe test/test_parallel_for_capture_aggr.pas $(TESTTMP)/test_parallel_for_capture_aggr26
-	test "$$($(TESTTMP)/test_parallel_for_capture_aggr26 | tail -n 1)" = "PARFORAGGR OK"
+	tools/expect_same.sh test_parallel_for_capture_aggr26 "$$($(TESTTMP)/test_parallel_for_capture_aggr26 | tail -n 1)" "PARFORAGGR OK"
 	# `parallel for` ansistring capture: Length + char-index + compare of a captured string (needs the p^[k] fix)
 	./$(COMPILER) --threadsafe test/test_parallel_for_capture_string.pas $(TESTTMP)/test_parallel_for_capture_string26
-	test "$$($(TESTTMP)/test_parallel_for_capture_string26 | tail -n 1)" = "PARFORSTR OK"
+	tools/expect_same.sh test_parallel_for_capture_string26 "$$($(TESTTMP)/test_parallel_for_capture_string26 | tail -n 1)" "PARFORSTR OK"
 	./$(COMPILER) --threadsafe test/test_parallel_for_capture_callee.pas $(TESTTMP)/test_parallel_for_capture_callee26
-	test "$$($(TESTTMP)/test_parallel_for_capture_callee26 | tail -n 1)" = "PARFORCALLEE OK"
+	tools/expect_same.sh test_parallel_for_capture_callee26 "$$($(TESTTMP)/test_parallel_for_capture_callee26 | tail -n 1)" "PARFORCALLEE OK"
 	./$(COMPILER) --threadsafe test/test_parallel_for_capture_scalar_types.pas $(TESTTMP)/test_parallel_for_capture_scalar_types26
-	test "$$($(TESTTMP)/test_parallel_for_capture_scalar_types26 | tail -n 1)" = "PARFORSCALARTYPES OK"
+	tools/expect_same.sh test_parallel_for_capture_scalar_types26 "$$($(TESTTMP)/test_parallel_for_capture_scalar_types26 | tail -n 1)" "PARFORSCALARTYPES OK"
 	# async (per-thread coroutine scheduler) composes with parallel (OS threads): each worker runs its own reactor
 	./$(COMPILER) --threadsafe test/test_async_parallel_compat.pas $(TESTTMP)/test_async_parallel_compat26
-	test "$$($(TESTTMP)/test_async_parallel_compat26 | tail -n 1)" = "ASYNC x PARALLEL OK"
+	tools/expect_same.sh test_async_parallel_compat26 "$$($(TESTTMP)/test_async_parallel_compat26 | tail -n 1)" "ASYNC x PARALLEL OK"
 	# __pxxmulhi_u64: unsigned 64x64->128 high half (x86-64 mul / aarch64 umulh)
 	./$(COMPILER) test/test_mulhi.pas $(TESTTMP)/test_mulhi26
-	test "$$($(TESTTMP)/test_mulhi26 | tail -1)" = "MULHI OK"
+	tools/expect_same.sh test_mulhi26 "$$($(TESTTMP)/test_mulhi26 | tail -1)" "MULHI OK"
 	# whole-array assign to a var param (copy sized from the open-array
 	# placeholder -> 1000-element overrun) + N-D whole-array assign
 	./$(COMPILER) test/test_array_var_param_assign.pas $(TESTTMP)/test_avpa26
-	test "$$($(TESTTMP)/test_avpa26 | tail -1)" = "ARRAY VAR PARAM ASSIGN OK"
+	tools/expect_same.sh test_avpa26 "$$($(TESTTMP)/test_avpa26 | tail -1)" "ARRAY VAR PARAM ASSIGN OK"
 	# an OPEN ARRAY value param gets its own COPY (FPC's rule): the callee's
 	# x[0] := n was visible to the caller. Every row diffed against FPC,
 	# including the ones that already agreed -- var open arrays and named
 	# dyn-array value params must keep aliasing.
 	./$(COMPILER) test/test_open_array_value_param_copies.pas $(TESTTMP)/test_oavp26
-	test "$$($(TESTTMP)/test_oavp26 | tail -1)" = "OPEN ARRAY VALUE PARAM OK"
-	test "$$($(TESTTMP)/test_oavp26 | head -2 | tail -1)" = "open by value      : 1"
+	tools/expect_same.sh test_oavp26.1 "$$($(TESTTMP)/test_oavp26 | tail -1)" "OPEN ARRAY VALUE PARAM OK"
+	tools/expect_same.sh test_oavp26.2 "$$($(TESTTMP)/test_oavp26 | head -2 | tail -1)" "open by value      : 1"
 	# function RESULTS of the aggregate kinds. A set-returning function used to
 	# answer the EMPTY set on every target, and a fixed-array one element 0 and
 	# zeros -- both silent. Every row diffed against FPC.
 	./$(COMPILER) test/test_aggregate_function_results.pas $(TESTTMP)/test_aggret26
-	test "$$($(TESTTMP)/test_aggret26 | tail -1)" = "AGGREGATE FUNCTION RESULTS OK"
-	test "$$($(TESTTMP)/test_aggret26 | head -1)" = "set lit   TRUE TRUE FALSE"
-	test "$$($(TESTTMP)/test_aggret26 | head -7 | tail -1)" = "arr       8 9 10"
+	tools/expect_same.sh test_aggret26.1 "$$($(TESTTMP)/test_aggret26 | tail -1)" "AGGREGATE FUNCTION RESULTS OK"
+	tools/expect_same.sh test_aggret26.2 "$$($(TESTTMP)/test_aggret26 | head -1)" "set lit   TRUE TRUE FALSE"
+	tools/expect_same.sh test_aggret26.3 "$$($(TESTTMP)/test_aggret26 | head -7 | tail -1)" "arr       8 9 10"
 	# a fixed-array call result as a `const` / by-value array ARGUMENT (the last
 	# aggregate that still demanded an lvalue); a `var` one is still refused
-	test "$$($(TESTTMP)/test_aggret26 | tail -2 | head -1)" = "arr as arg 27 19 54"
+	tools/expect_same.sh test_aggret26.4 "$$($(TESTTMP)/test_aggret26 | tail -2 | head -1)" "arr as arg 27 19 54"
 	# ...and the Result SLOT, which was one element wide with no dim spans:
 	# array[0..3] overran into the return address, an N-D result indexed with
 	# no strides, and a non-Integer element got an Integer stride.
-	test "$$($(TESTTMP)/test_aggret26 | head -9 | tail -1)" = "arr4      1 2 3 4"
-	test "$$($(TESTTMP)/test_aggret26 | head -10 | tail -1)" = "arr 2d    1 2 3 4"
-	test "$$($(TESTTMP)/test_aggret26 | head -11 | tail -1)" = "arr 3d    105 106 115 116 125 126 205 206 215 216 225 226"
-	test "$$($(TESTTMP)/test_aggret26 | head -12 | tail -1)" = "arr str   aa bb cc"
-	test "$$($(TESTTMP)/test_aggret26 | head -13 | tail -1)" = "arr rec   1 2 3 4"
+	tools/expect_same.sh test_aggret26.5 "$$($(TESTTMP)/test_aggret26 | head -9 | tail -1)" "arr4      1 2 3 4"
+	tools/expect_same.sh test_aggret26.6 "$$($(TESTTMP)/test_aggret26 | head -10 | tail -1)" "arr 2d    1 2 3 4"
+	tools/expect_same.sh test_aggret26.7 "$$($(TESTTMP)/test_aggret26 | head -11 | tail -1)" "arr 3d    105 106 115 116 125 126 205 206 215 216 225 226"
+	tools/expect_same.sh test_aggret26.8 "$$($(TESTTMP)/test_aggret26 | head -12 | tail -1)" "arr str   aa bb cc"
+	tools/expect_same.sh test_aggret26.9 "$$($(TESTTMP)/test_aggret26 | head -13 | tail -1)" "arr rec   1 2 3 4"
 	# indexing the CALL directly and then selecting a field: ResolveNodeRec had
 	# a case for every AN_INDEX base kind except a CALL, so the selector was
 	# applied at offset 0 and every field answered the first one.
 	./$(COMPILER) test/test_index_call_result_field.pas $(TESTTMP)/test_idxcall26
-	test "$$($(TESTTMP)/test_idxcall26 | tail -1)" = "INDEX CALL RESULT FIELD OK"
-	test "$$($(TESTTMP)/test_idxcall26 | head -2 | tail -1)" = "on call   1 2 3 4 5 6"
+	tools/expect_same.sh test_idxcall26.1 "$$($(TESTTMP)/test_idxcall26 | tail -1)" "INDEX CALL RESULT FIELD OK"
+	tools/expect_same.sh test_idxcall26.2 "$$($(TESTTMP)/test_idxcall26 | head -2 | tail -1)" "on call   1 2 3 4 5 6"
 	# a string[N] field in a record's VARIANT part: the variant-part builder had
 	# no frozen-string arm, so the field was 8 bytes (undersizing the record) and
 	# typed tyFixedString instead of tyString+UFldStrCap (so it read as an
 	# address). Every other branch type was already right.
 	./$(COMPILER) test/test_variant_part_string_field.pas $(TESTTMP)/test_vpstr26
-	test "$$($(TESTTMP)/test_vpstr26 | tail -1)" = "VARIANT PART STRING FIELD OK"
-	test "$$($(TESTTMP)/test_vpstr26 | head -1)" = "scalar  1 aa 2"
-	test "$$($(TESTTMP)/test_vpstr26 | head -5 | tail -1)" = "trunc   abcdef 6"
-	test "$$($(TESTTMP)/test_vpstr26 | head -7 | tail -1)" = "no ovr  22 abcdef"
+	tools/expect_same.sh test_vpstr26.1 "$$($(TESTTMP)/test_vpstr26 | tail -1)" "VARIANT PART STRING FIELD OK"
+	tools/expect_same.sh test_vpstr26.2 "$$($(TESTTMP)/test_vpstr26 | head -1)" "scalar  1 aa 2"
+	tools/expect_same.sh test_vpstr26.3 "$$($(TESTTMP)/test_vpstr26 | head -5 | tail -1)" "trunc   abcdef 6"
+	tools/expect_same.sh test_vpstr26.4 "$$($(TESTTMP)/test_vpstr26 | head -7 | tail -1)" "no ovr  22 abcdef"
 	# write(c:width) on a Char: x86-64 was the ONLY backend that dropped the
 	# field width (the four cross targets and FPC all pad), so the default
 	# target silently produced ragged columns.
 	./$(COMPILER) test/test_write_char_field_width.pas $(TESTTMP)/test_wcw26
-	test "$$($(TESTTMP)/test_wcw26 | tail -1)" = "WRITE CHAR FIELD WIDTH OK"
-	test "$$($(TESTTMP)/test_wcw26 | head -3 | tail -1)" = "[    q]"
-	test "$$($(TESTTMP)/test_wcw26 | head -6 | tail -1)" = "[q][q]"
-	test "$$($(TESTTMP)/test_wcw26 | head -8 | tail -1)" = "   x   y"
+	tools/expect_same.sh test_wcw26.1 "$$($(TESTTMP)/test_wcw26 | tail -1)" "WRITE CHAR FIELD WIDTH OK"
+	tools/expect_same.sh test_wcw26.2 "$$($(TESTTMP)/test_wcw26 | head -3 | tail -1)" "[    q]"
+	tools/expect_same.sh test_wcw26.3 "$$($(TESTTMP)/test_wcw26 | head -6 | tail -1)" "[q][q]"
+	tools/expect_same.sh test_wcw26.4 "$$($(TESTTMP)/test_wcw26 | head -8 | tail -1)" "   x   y"
 	# ...and the VARIABLE-width rows, in a program with NO uses clause
-	test "$$($(TESTTMP)/test_wcw26 | head -11 | tail -3 | tr '\n' '|')" = "[   ab]|[    q]|[ TRUE]|"
-	test "$$($(TESTTMP)/test_wcw26 | head -14 | tail -3 | tr '\n' '|')" = "[    5]|[ 3.50]|[ab][  abc]|"
+	tools/expect_same.sh test_wcw26.5 "$$($(TESTTMP)/test_wcw26 | head -11 | tail -3 | tr '\n' '|')" "[   ab]|[    q]|[ TRUE]|"
+	tools/expect_same.sh test_wcw26.6 "$$($(TESTTMP)/test_wcw26 | head -14 | tail -3 | tr '\n' '|')" "[    5]|[ 3.50]|[ab][  abc]|"
 	# a metaclass-typed FIELD as a receiver. The parser recognises a metaclass
 	# receiver from a LIST of base node kinds (variable, cast, array element --
 	# the last added at b328 for this same bug) and a FIELD was never in it.
 	./$(COMPILER) test/test_metaclass_field_receiver.pas $(TESTTMP)/test_mcfld26
-	test "$$($(TESTTMP)/test_mcfld26 | tail -1)" = "METACLASS FIELD RECEIVER OK"
-	test "$$($(TESTTMP)/test_mcfld26 | head -4 | tail -1)" = "named   der TDer 7"
-	test "$$($(TESTTMP)/test_mcfld26 | head -7 | tail -1)" = "classfld der"
-	test "$$($(TESTTMP)/test_mcfld26 | head -8 | tail -1)" = "ctor    B|BD"
+	tools/expect_same.sh test_mcfld26.1 "$$($(TESTTMP)/test_mcfld26 | tail -1)" "METACLASS FIELD RECEIVER OK"
+	tools/expect_same.sh test_mcfld26.2 "$$($(TESTTMP)/test_mcfld26 | head -4 | tail -1)" "named   der TDer 7"
+	tools/expect_same.sh test_mcfld26.3 "$$($(TESTTMP)/test_mcfld26 | head -7 | tail -1)" "classfld der"
+	tools/expect_same.sh test_mcfld26.4 "$$($(TESTTMP)/test_mcfld26 | head -8 | tail -1)" "ctor    B|BD"
 	# ...and the fifth spelling, a metaclass returned from a FUNCTION: it never
 	# reached that list at all (the call-result suffix walker owns it), so
 	# `Give.Kind` lowered to IR_UNSUPPORTED. All five now share NodeMetaclassCi.
 	./$(COMPILER) test/test_metaclass_call_receiver.pas $(TESTTMP)/test_mccall26
-	test "$$($(TESTTMP)/test_mccall26 | tail -1)" = "METACLASS CALL RECEIVER OK"
-	test "$$($(TESTTMP)/test_mccall26 | head -3 | tail -1)" = "call    der TDer"
-	test "$$($(TESTTMP)/test_mccall26 | head -5 | tail -1)" = "args    base der"
-	test "$$($(TESTTMP)/test_mccall26 | head -6 | tail -1)" = "ctor    BDB"
+	tools/expect_same.sh test_mccall26.1 "$$($(TESTTMP)/test_mccall26 | tail -1)" "METACLASS CALL RECEIVER OK"
+	tools/expect_same.sh test_mccall26.2 "$$($(TESTTMP)/test_mccall26 | head -3 | tail -1)" "call    der TDer"
+	tools/expect_same.sh test_mccall26.3 "$$($(TESTTMP)/test_mccall26 | head -5 | tail -1)" "args    base der"
+	tools/expect_same.sh test_mccall26.4 "$$($(TESTTMP)/test_mccall26 | head -6 | tail -1)" "ctor    BDB"
 	# record operator overloads with MIXED operand types. The in-record
 	# signature skip was depth-blind and stopped at the ';' separating parameter
 	# groups; and once it parsed, the operator table turned out to be keyed on
@@ -3808,66 +3808,66 @@ test-threads: $(COMPILER)
 	@# must still be arithmetic. Values measured against fpc 3.2.2.
 	@# feature-a-operator-table-keyed-on-both-operands
 	./$(COMPILER) test/test_op_overload_scalar_left.pas $(TESTTMP)/test_opscalarleft26
-	test "$$($(TESTTMP)/test_opscalarleft26)" = "ALL OK"
+	tools/expect_same.sh test_opscalarleft26 "$$($(TESTTMP)/test_opscalarleft26)" "ALL OK"
 	./$(COMPILER) test/test_op_overload_mixed_operands.pas $(TESTTMP)/test_opmix26
-	test "$$($(TESTTMP)/test_opmix26 | tail -1)" = "OP OVERLOAD MIXED OPERANDS OK"
-	test "$$($(TESTTMP)/test_opmix26 | head -3 | tail -1)" = "mul   (3,6)"
-	test "$$($(TESTTMP)/test_opmix26 | head -11 | tail -1)" = "pick  (4,6) (3,6)"
+	tools/expect_same.sh test_opmix26.1 "$$($(TESTTMP)/test_opmix26 | tail -1)" "OP OVERLOAD MIXED OPERANDS OK"
+	tools/expect_same.sh test_opmix26.2 "$$($(TESTTMP)/test_opmix26 | head -3 | tail -1)" "mul   (3,6)"
+	tools/expect_same.sh test_opmix26.3 "$$($(TESTTMP)/test_opmix26 | head -11 | tail -1)" "pick  (4,6) (3,6)"
 	# a by-value SET or string[N] param gets its own COPY too -- the callee's
 	# `s := s + [7]` / `s := 'changed'` wrote through to the CALLER on x86-64,
 	# aarch64 and arm32 (riscv32 already matched FPC). Every row diffed
 	# against FPC, including var write-back and the const escape hatch.
 	./$(COMPILER) test/test_set_shortstring_value_param_copies.pas $(TESTTMP)/test_ssvp26
-	test "$$($(TESTTMP)/test_ssvp26 | tail -1)" = "SET SHORTSTRING VALUE PARAM OK"
-	test "$$($(TESTTMP)/test_ssvp26 | head -1)" = "set value  : ok"
-	test "$$($(TESTTMP)/test_ssvp26 | head -2 | tail -1)" = "str20 value: orig"
-	test "$$($(TESTTMP)/test_ssvp26 | head -12 | tail -1)" = "forwarded  : orig"
+	tools/expect_same.sh test_ssvp26.1 "$$($(TESTTMP)/test_ssvp26 | tail -1)" "SET SHORTSTRING VALUE PARAM OK"
+	tools/expect_same.sh test_ssvp26.2 "$$($(TESTTMP)/test_ssvp26 | head -1)" "set value  : ok"
+	tools/expect_same.sh test_ssvp26.3 "$$($(TESTTMP)/test_ssvp26 | head -2 | tail -1)" "str20 value: orig"
+	tools/expect_same.sh test_ssvp26.4 "$$($(TESTTMP)/test_ssvp26 | head -12 | tail -1)" "forwarded  : orig"
 	# 64-bit named constants (were declared tyInteger -> truncated on 32-bit
 	# targets). Only meaningful cross; x86-64 passed even when broken.
 	./$(COMPILER) test/test_const64.pas $(TESTTMP)/test_const64_26
-	test "$$($(TESTTMP)/test_const64_26 | tail -1)" = "CONST64 OK"
+	tools/expect_same.sh test_const64_26 "$$($(TESTTMP)/test_const64_26 | tail -1)" "CONST64 OK"
 	# M2 final slice: 64-bit atomics + TConditionVariable
 	./$(COMPILER) --threadsafe test/test_atomic64.pas $(TESTTMP)/test_atomic64_26
-	test "$$($(TESTTMP)/test_atomic64_26 | tail -1)" = "ATOMIC64 OK"
+	tools/expect_same.sh test_atomic64_26 "$$($(TESTTMP)/test_atomic64_26 | tail -1)" "ATOMIC64 OK"
 	./$(COMPILER) --threadsafe test/test_condvar.pas $(TESTTMP)/test_condvar26
-	test "$$($(TESTTMP)/test_condvar26 | tail -1)" = "CONDVAR OK"
+	tools/expect_same.sh test_condvar26 "$$($(TESTTMP)/test_condvar26 | tail -1)" "CONDVAR OK"
 	./$(COMPILER) --threadsafe test/test_tthread_terminate.pas $(TESTTMP)/test_tthread_terminate26
-	test "$$($(TESTTMP)/test_tthread_terminate26)" = "$$(printf 'terminated=TRUE\nfinished=TRUE\nreturnvalue=42\nTERMINATE OK')"
+	tools/expect_same.sh test_tthread_terminate26 "$$($(TESTTMP)/test_tthread_terminate26)" "$$(printf 'terminated=TRUE\nfinished=TRUE\nreturnvalue=42\nTERMINATE OK')"
 	# TThread Synchronize/Queue/CheckSynchronize main-thread marshalling + auto-join virtual destructor
 	./$(COMPILER) --threadsafe test/test_tthread_sync.pas $(TESTTMP)/test_tthread_sync26
-	test "$$($(TESTTMP)/test_tthread_sync26)" = "$$(printf 'sync=200 expected=200\nonmain=200 expected=200\nqueue=200 expected=200\nautojoin OK\nTTHREAD SYNC OK')"
+	tools/expect_same.sh test_tthread_sync26 "$$($(TESTTMP)/test_tthread_sync26)" "$$(printf 'sync=200 expected=200\nonmain=200 expected=200\nqueue=200 expected=200\nautojoin OK\nTTHREAD SYNC OK')"
 	# M3 final slice: FreeOnTerminate + OnTerminate + CurrentThread + Suspend/Resume
 	./$(COMPILER) --threadsafe test/test_tthread_final.pas $(TESTTMP)/test_tthread_final26
-	test "$$($(TESTTMP)/test_tthread_final26)" = "$$(printf 'main current OK\ncurrentthread=1 ontermmain=1\nfreeonterminate=1\nsuspend=2 suspended=FALSE\nlatestart=1\nTTHREAD FINAL OK')"
+	tools/expect_same.sh test_tthread_final26 "$$($(TESTTMP)/test_tthread_final26)" "$$(printf 'main current OK\ncurrentthread=1 ontermmain=1\nfreeonterminate=1\nsuspend=2 suspended=FALSE\nlatestart=1\nTTHREAD FINAL OK')"
 	# statement-atomic threaded writeln: every concurrent output line is whole (--threadsafe I/O lock)
 	./$(COMPILER) --threadsafe test/test_thread_writeln_interleave.pas $(TESTTMP)/test_thread_writeln_interleave26
 	$(TESTTMP)/test_thread_writeln_interleave26 > $(TESTTMP)/twi26.out
-	test "$$(wc -l < $(TESTTMP)/twi26.out)" = "401"
-	test "$$(grep -cvE '^(A{60}|B{60}|done)$$' $(TESTTMP)/twi26.out)" = "0"
+	tools/expect_same.sh twi26.out.1 "$$(wc -l < $(TESTTMP)/twi26.out)" "401"
+	tools/expect_same.sh twi26.out.2 "$$(grep -cvE '^(A{60}|B{60}|done)$$' $(TESTTMP)/twi26.out)" "0"
 	# statement-atomic writeln from parallel-for WORKERS (read-only lines, no
 	# worker heap alloc): every 100-char line must stay whole, all 200 present.
 	./$(COMPILER) --threadsafe test/test_parallel_writeln_atomic.pas $(TESTTMP)/test_parallel_writeln_atomic26
 	$(TESTTMP)/test_parallel_writeln_atomic26 > $(TESTTMP)/pwa26.out
-	test "$$(tail -n1 $(TESTTMP)/pwa26.out)" = "PARWROK"
-	test "$$(grep -cE '^A{49}-1[0-9]{3}-B{49}$$' $(TESTTMP)/pwa26.out)" = "200"
-	test "$$(grep -oE '\-1[0-9]{3}\-' $(TESTTMP)/pwa26.out | sort -u | wc -l)" = "200"
+	tools/expect_same.sh pwa26.out.1 "$$(tail -n1 $(TESTTMP)/pwa26.out)" "PARWROK"
+	tools/expect_same.sh pwa26.out.2 "$$(grep -cE '^A{49}-1[0-9]{3}-B{49}$$' $(TESTTMP)/pwa26.out)" "200"
+	tools/expect_same.sh pwa26.out.3 "$$(grep -oE '\-1[0-9]{3}\-' $(TESTTMP)/pwa26.out | sort -u | wc -l)" "200"
 	# policy-aware runtime (feature-parallel-for-scheduling-policy): every
 	# distribution (chunked/onDemand/guided + worker-count modes) covers the range
 	# exactly once — a broken atomic-counter work-steal would drop/double indices.
 	./$(COMPILER) --threadsafe test/test_parallel_policy.pas $(TESTTMP)/test_parallel_policy26
-	test "$$($(TESTTMP)/test_parallel_policy26)" = "PARPOL OK"
+	tools/expect_same.sh test_parallel_policy26 "$$($(TESTTMP)/test_parallel_policy26)" "PARPOL OK"
 	# `parallel(P) for` language surface: policy clause lowers to PXXParallelForPP;
 	# bare/preset/var-policy all cover exactly once; `parallel` stays a normal ident.
 	./$(COMPILER) --threadsafe test/test_parallel_policy_lang.pas $(TESTTMP)/test_parallel_policy_lang26
-	test "$$($(TESTTMP)/test_parallel_policy_lang26)" = "PARPOLLANG OK"
+	tools/expect_same.sh test_parallel_policy_lang26 "$$($(TESTTMP)/test_parallel_policy_lang26)" "PARPOLLANG OK"
 	# reduction(op: v): private per-worker partial folded under PXXReduceLock —
 	# exact deterministic +/xor results (a race would flake the sum).
 	./$(COMPILER) --threadsafe test/test_parallel_reduction.pas $(TESTTMP)/test_parallel_reduction26
-	test "$$($(TESTTMP)/test_parallel_reduction26)" = "PARRED OK"
+	tools/expect_same.sh test_parallel_reduction26 "$$($(TESTTMP)/test_parallel_reduction26)" "PARRED OK"
 	# parallel(named args) for: bare enum / dist|workers keys / cap|chunk|n ints
 	# folded to PXXParallelForN; each form covers exactly once, composes w/ reduction.
 	./$(COMPILER) --threadsafe test/test_parallel_policy_named.pas $(TESTTMP)/test_parallel_policy_named26
-	test "$$($(TESTTMP)/test_parallel_policy_named26)" = "PARNAMED OK"
+	tools/expect_same.sh test_parallel_policy_named26 "$$($(TESTTMP)/test_parallel_policy_named26)" "PARNAMED OK"
 
 # MVP .asm -> exe frontend (feature-asm-mvp-frontend). A flat mov/add/ret .asm
 # encoded through lib/asmcore -> ET_EXEC; exit code carries the computed result.
@@ -3886,21 +3886,21 @@ test-asm: $(COMPILER)
 	# pool it reads. That is the cost of an unwired test exactly — it does not
 	# fail, it rots, and it rots silently. The mocks are added in this batch.
 	./$(COMPILER) -Fucompiler test/test_asm_emit_x64.pas $(TESTTMP)/sweep_asmemit_x6426
-	test "$$($(TESTTMP)/sweep_asmemit_x6426 | tail -1)" = "ALL X64 ASM EMIT TESTS PASSED"
+	tools/expect_same.sh sweep_asmemit_x6426 "$$($(TESTTMP)/sweep_asmemit_x6426 | tail -1)" "ALL X64 ASM EMIT TESTS PASSED"
 	./$(COMPILER) -Fucompiler test/test_asm_emit_386.pas $(TESTTMP)/sweep_asmemit_38626
-	test "$$($(TESTTMP)/sweep_asmemit_38626 | tail -1)" = "ALL I386 ASM EMIT TESTS PASSED"
+	tools/expect_same.sh sweep_asmemit_38626 "$$($(TESTTMP)/sweep_asmemit_38626 | tail -1)" "ALL I386 ASM EMIT TESTS PASSED"
 	./$(COMPILER) -Fucompiler test/test_asm_emit_a64.pas $(TESTTMP)/sweep_asmemit_a6426
-	test "$$($(TESTTMP)/sweep_asmemit_a6426 | tail -1)" = "ALL AARCH64 ASM EMIT TESTS PASSED"
+	tools/expect_same.sh sweep_asmemit_a6426 "$$($(TESTTMP)/sweep_asmemit_a6426 | tail -1)" "ALL AARCH64 ASM EMIT TESTS PASSED"
 	./$(COMPILER) -Fucompiler test/test_asm_emit_arm32.pas $(TESTTMP)/sweep_asmemit_arm3226
-	test "$$($(TESTTMP)/sweep_asmemit_arm3226 | tail -1)" = "ALL ARM32 ASM EMIT TESTS PASSED"
+	tools/expect_same.sh sweep_asmemit_arm3226 "$$($(TESTTMP)/sweep_asmemit_arm3226 | tail -1)" "ALL ARM32 ASM EMIT TESTS PASSED"
 	./$(COMPILER) -Fucompiler test/test_asm_emit_rv32.pas $(TESTTMP)/sweep_asmemit_rv3226
-	test "$$($(TESTTMP)/sweep_asmemit_rv3226 | tail -1)" = "ALL RISC-V ASM EMIT TESTS PASSED"
+	tools/expect_same.sh sweep_asmemit_rv3226 "$$($(TESTTMP)/sweep_asmemit_rv3226 | tail -1)" "ALL RISC-V ASM EMIT TESTS PASSED"
 	# ...and the x86-64 ENCODER's own harness (x64enc.inc without the text
 	# assembler on top). Same rot, different symptom: it had stopped compiling
 	# on an "unresolved forward" for AsmRecordGlobalFixup, whose real body lives
 	# in asmenc.inc. Resolved to the mock sink, which its own GlobRef rows read.
 	./$(COMPILER) -Fucompiler test/test_x64enc.pas $(TESTTMP)/sweep_x64enc26
-	test "$$($(TESTTMP)/sweep_x64enc26 | tail -1)" = "ALL ENCODER TESTS PASSED."
+	tools/expect_same.sh sweep_x64enc26 "$$($(TESTTMP)/sweep_x64enc26 | tail -1)" "ALL ENCODER TESTS PASSED."
 	./$(COMPILER) test/test_asm_mvp.asm $(TESTTMP)/test_asm_mvp26
 	$(TESTTMP)/test_asm_mvp26; test "$$?" = "42"
 	./$(COMPILER) test/test_asmcore_x64.pas $(TESTTMP)/test_asmcore_x64_26
@@ -3921,30 +3921,30 @@ test-asm: $(COMPILER)
 	# phase 1). Runs the arithmetic rather than pinning bytes: a correct opcode
 	# with a wrong ModRM still encodes, and only execution catches that.
 	./$(COMPILER) test/test_asm_sse_scalar.pas $(TESTTMP)/test_asm_sse_scalar26
-	test "$$($(TESTTMP)/test_asm_sse_scalar26)" = "asm sse scalar ok"
+	tools/expect_same.sh test_asm_sse_scalar26 "$$($(TESTTMP)/test_asm_sse_scalar26)" "asm sse scalar ok"
 	# cpuid/rdtsc from inline asm (phase 2). Assertions are machine-INDEPENDENT:
 	# comparing the vendor string to GenuineIntel would pass here and fail on
 	# every AMD box, which is worse than not testing.
 	./$(COMPILER) test/test_asm_cpuid.pas $(TESTTMP)/test_asm_cpuid26
-	test "$$($(TESTTMP)/test_asm_cpuid26)" = "asm cpuid ok"
+	tools/expect_same.sh test_asm_cpuid26 "$$($(TESTTMP)/test_asm_cpuid26)" "asm cpuid ok"
 	# packed SSE2 from inline asm (phase 3). Vectors are built from SCALARS via
 	# unpcklpd, not loaded from an array: movapd faults on a misaligned address,
 	# and relying on a Pascal array being 16-byte aligned is a coin flip.
 	./$(COMPILER) test/test_asm_sse_packed.pas $(TESTTMP)/test_asm_sse_packed26
-	test "$$($(TESTTMP)/test_asm_sse_packed26)" = "asm sse packed ok"
+	tools/expect_same.sh test_asm_sse_packed26 "$$($(TESTTMP)/test_asm_sse_packed26)" "asm sse packed ok"
 	# AVX/FMA from inline asm (phase 4). GATES ITSELF on cpuid + xgetbv, and
 	# reports a clean skip as success: an AVX instruction on a machine without
 	# AVX is #UD, so an ungated test would take the suite down rather than fail.
 	# AVX and FMA are separate feature bits -- Sandy Bridge has one and not the
 	# other -- so they are gated separately.
 	./$(COMPILER) test/test_asm_avx.pas $(TESTTMP)/test_asm_avx26
-	test "$$($(TESTTMP)/test_asm_avx26)" = "asm avx ok"
+	tools/expect_same.sh test_asm_avx26 "$$($(TESTTMP)/test_asm_avx26)" "asm avx ok"
 	./$(COMPILER) test/test_asm_hello.asm $(TESTTMP)/test_asm_hello26
-	test "$$($(TESTTMP)/test_asm_hello26)" = "Hello, asm world!"
+	tools/expect_same.sh test_asm_hello26 "$$($(TESTTMP)/test_asm_hello26)" "Hello, asm world!"
 	./$(COMPILER) test/test_asm_entry_global.asm $(TESTTMP)/test_asm_entry_global26
 	$(TESTTMP)/test_asm_entry_global26; test "$$?" = "42"
 	./$(COMPILER) test/test_asm_extern.asm $(TESTTMP)/test_asm_extern26
-	test "$$($(TESTTMP)/test_asm_extern26)" = "Hello from extern printf!"
+	tools/expect_same.sh test_asm_extern26 "$$($(TESTTMP)/test_asm_extern26)" "Hello from extern printf!"
 	./$(COMPILER) test/test_asm_obj.asm $(TESTTMP)/test_asm_obj26.o
 	readelf -h $(TESTTMP)/test_asm_obj26.o | grep -q 'REL (Relocatable file)'
 	readelf -h $(TESTTMP)/test_asm_obj26.o | grep -q 'X86-64'
@@ -10798,7 +10798,7 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_managed_strlen_deref.pas $(TESTTMP)/test_i386_managed_strlen
 	./$(COMPILER) test/test_managed_strlen_deref.pas $(TESTTMP)/test_i386_managed_strlen_x64
 	tools/expect_same.sh i386/test_i386_managed_strlen "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_managed_strlen)" "$$($(TESTTMP)/test_i386_managed_strlen_x64)"
-	test "$$($(TESTTMP)/test_i386_managed_strlen_x64)" = "$$(printf '5\n5\n5\n2\n2\nOK')"
+	tools/expect_same.sh test_i386_managed_strlen_x64 "$$($(TESTTMP)/test_i386_managed_strlen_x64)" "$$(printf '5\n5\n5\n2\n2\nOK')"
 	./$(COMPILER) --target=i386 test/test_not_int64_expr.pas $(TESTTMP)/test_i386_not64
 	./$(COMPILER) test/test_not_int64_expr.pas $(TESTTMP)/test_i386_not64_x64
 	tools/expect_same.sh i386/test_i386_not64 "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_not64)" "$$($(TESTTMP)/test_i386_not64_x64)"
@@ -11082,9 +11082,9 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_i386_parnamed "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_parnamed)" "PARNAMED OK"
 	./$(COMPILER) --threadsafe --target=i386 test/test_parallel_writeln_atomic.pas $(TESTTMP)/test_i386_pwa
 	tools/run_target.sh i386 $(TESTTMP)/test_i386_pwa > $(TESTTMP)/test_i386_pwa.out
-	test "$$(tail -n1 $(TESTTMP)/test_i386_pwa.out)" = "PARWROK"
-	test "$$(grep -cE '^A{49}-1[0-9]{3}-B{49}$$' $(TESTTMP)/test_i386_pwa.out)" = "200"
-	test "$$(grep -oE '\-1[0-9]{3}\-' $(TESTTMP)/test_i386_pwa.out | sort -u | wc -l)" = "200"
+	tools/expect_same.sh test_i386_pwa.out.1 "$$(tail -n1 $(TESTTMP)/test_i386_pwa.out)" "PARWROK"
+	tools/expect_same.sh test_i386_pwa.out.2 "$$(grep -cE '^A{49}-1[0-9]{3}-B{49}$$' $(TESTTMP)/test_i386_pwa.out)" "200"
+	tools/expect_same.sh test_i386_pwa.out.3 "$$(grep -oE '\-1[0-9]{3}\-' $(TESTTMP)/test_i386_pwa.out | sort -u | wc -l)" "200"
 	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + variant-single + byref-params + setlen-str + setlen-varparam + in-operator + loadfile + sysopen-family + args + string-cow + frozen-strlen-deref + rec-arr-store + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + stackless-generator + proctype + scheduler + scheduler-exc + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + nested-dynarray-setlen + method-implicit-field + forin-implicit-field + dynarray-global-after-method + forin-member-access + call-result-member + collections + timer + reactor + asyncecho + extern-c + extern-c-float + c-entry + c-args + c-double-to-int + readln + eof-stdin ok (output identical to x86-64)"
 
 test-aarch64: $(COMPILER)
@@ -11497,9 +11497,9 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_aarch64_parnamed "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parnamed)" "PARNAMED OK"
 	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_writeln_atomic.pas $(TESTTMP)/test_aarch64_pwa
 	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_pwa > $(TESTTMP)/test_aarch64_pwa.out
-	test "$$(tail -n1 $(TESTTMP)/test_aarch64_pwa.out)" = "PARWROK"
-	test "$$(grep -cE '^A{49}-1[0-9]{3}-B{49}$$' $(TESTTMP)/test_aarch64_pwa.out)" = "200"
-	test "$$(grep -oE '\-1[0-9]{3}\-' $(TESTTMP)/test_aarch64_pwa.out | sort -u | wc -l)" = "200"
+	tools/expect_same.sh test_aarch64_pwa.out.1 "$$(tail -n1 $(TESTTMP)/test_aarch64_pwa.out)" "PARWROK"
+	tools/expect_same.sh test_aarch64_pwa.out.2 "$$(grep -cE '^A{49}-1[0-9]{3}-B{49}$$' $(TESTTMP)/test_aarch64_pwa.out)" "200"
+	tools/expect_same.sh test_aarch64_pwa.out.3 "$$(grep -oE '\-1[0-9]{3}\-' $(TESTTMP)/test_aarch64_pwa.out | sort -u | wc -l)" "200"
 	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + variant-single + setlen-str + setlen-varparam + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + frozen-strlen-deref + rec-arr-store + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + nested-dynarray-setlen + method-implicit-field + forin-implicit-field + dynarray-global-after-method + forin-member-access + call-result-member + collections + timer + reactor + asyncecho + extern-c + extern-c-float + c-entry + c-args + c-double-to-int + readln + eof-stdin ok (output identical to x86-64)"
 
 test-riscv32: $(COMPILER)
@@ -11508,7 +11508,7 @@ test-riscv32: $(COMPILER)
 	# Output must match the x86-64 oracle exactly (b345)
 	./$(COMPILER) --target=riscv32 test/test_frozen_string_cross_b305.pas $(TESTTMP)/test_riscv32_frozen
 	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_frozen > $(TESTTMP)/test_riscv32_frozen.out
-	test "$$(cat $(TESTTMP)/test_riscv32_frozen.out)" = "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
+	tools/expect_same.sh test_riscv32_frozen.out "$$(cat $(TESTTMP)/test_riscv32_frozen.out)" "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
 	# string[N] truncation incl. a heap record holding a shortstring field reached
 	# through a pointer (bug-cross-pointer-store-record-with-shortstring-field)
 	./$(COMPILER) --target=riscv32 test/test_shortstring_trunc.pas $(TESTTMP)/test_riscv32_sstrunc
@@ -11725,7 +11725,7 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) -Fulib/rtl --target=riscv32 test/test_cross_variant_payload_widths.pas $(TESTTMP)/test_rv32x_varpay
 	./$(COMPILER) -Fulib/rtl test/test_cross_variant_payload_widths.pas $(TESTTMP)/test_rv32x_varpay_x64
 	tools/expect_same.sh riscv32/test_rv32x_varpay "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_varpay)" "$$($(TESTTMP)/test_rv32x_varpay_x64)"
-	test "$$($(TESTTMP)/test_rv32x_varpay_x64 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_rv32x_varpay_x64 "$$($(TESTTMP)/test_rv32x_varpay_x64 | tail -1)" "ALL OK"
 	./$(COMPILER) --target=riscv32 test/test_cross_strresult.pas $(TESTTMP)/test_rv32x_strresult
 	./$(COMPILER) test/test_cross_strresult.pas $(TESTTMP)/test_rv32x_strresult_x64
 	tools/expect_same.sh riscv32/test_rv32x_strresult "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_strresult)" "$$($(TESTTMP)/test_rv32x_strresult_x64)"
@@ -12356,9 +12356,9 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_arm32_parnamed "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_parnamed)" "PARNAMED OK"
 	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_writeln_atomic.pas $(TESTTMP)/test_arm32_pwa
 	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_pwa > $(TESTTMP)/test_arm32_pwa.out
-	test "$$(tail -n1 $(TESTTMP)/test_arm32_pwa.out)" = "PARWROK"
-	test "$$(grep -cE '^A{49}-1[0-9]{3}-B{49}$$' $(TESTTMP)/test_arm32_pwa.out)" = "200"
-	test "$$(grep -oE '\-1[0-9]{3}\-' $(TESTTMP)/test_arm32_pwa.out | sort -u | wc -l)" = "200"
+	tools/expect_same.sh test_arm32_pwa.out.1 "$$(tail -n1 $(TESTTMP)/test_arm32_pwa.out)" "PARWROK"
+	tools/expect_same.sh test_arm32_pwa.out.2 "$$(grep -cE '^A{49}-1[0-9]{3}-B{49}$$' $(TESTTMP)/test_arm32_pwa.out)" "200"
+	tools/expect_same.sh test_arm32_pwa.out.3 "$$(grep -oE '\-1[0-9]{3}\-' $(TESTTMP)/test_arm32_pwa.out | sort -u | wc -l)" "200"
 	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + variant-single + strresult + setlen-str + setlen-varparam + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + frozen-strlen-deref + rec-arr-store + var-string-param + openarray-string + stack-params + aggregate-stackargs + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + nested-dynarray-setlen + method-implicit-field + forin-implicit-field + dynarray-global-after-method + forin-member-access + call-result-member + collections + timer + reactor + asyncecho + extern-c + extern-c-float + c-entry + c-args + c-double-to-int + readln + eof-stdin ok (output identical to x86-64)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
@@ -12395,7 +12395,7 @@ cross-bootstrap: cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i
 # intermediates). Reference 3745966 (FPC-confirmed on x86-64).
 test-float-determinism: $(COMPILER)
 	./$(COMPILER) examples/mandelbrot/mandelbrot.pas $(TESTTMP)/mb_x86_64
-	test "$$($(TESTTMP)/mb_x86_64 | grep checksum=)" = "checksum=3745966"
+	tools/expect_same.sh mb_x86_64 "$$($(TESTTMP)/mb_x86_64 | grep checksum=)" "checksum=3745966"
 	@for a in i386 aarch64 arm32; do \
 	  ./$(COMPILER) --target=$$a examples/mandelbrot/mandelbrot.pas $(TESTTMP)/mb_$$a >/dev/null || exit 1; \
 	  c=$$(tools/run_target.sh $$a $(TESTTMP)/mb_$$a | grep checksum=); \
@@ -13038,15 +13038,15 @@ test-emit-obj: $(COMPILER)
 	# ("external (dynamic) symbols not yet supported"), and the IDF profile
 	# compiles the HOST branch and dies on `unsupported node: syscall`.
 	./$(COMPILER) test/test_esp_hello.pas $(TESTTMP)/esp_hello26
-	test "$$($(TESTTMP)/esp_hello26)" = "$$(printf 'PXX\nOK')"
+	tools/expect_same.sh esp_hello26 "$$($(TESTTMP)/esp_hello26)" "$$(printf 'PXX\nOK')"
 	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_hello.pas $(TESTTMP)/esp_hello_xt.o
 	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_hello.pas $(TESTTMP)/esp_hello_rv.o
 	./$(COMPILER) test/test_esp_print.pas $(TESTTMP)/esp_print26
-	test "$$($(TESTTMP)/esp_print26)" = "$$(printf '1\n2\n3\n4\n5\n15')"
+	tools/expect_same.sh esp_print26 "$$($(TESTTMP)/esp_print26)" "$$(printf '1\n2\n3\n4\n5\n15')"
 	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_print.pas $(TESTTMP)/esp_print_xt.o
 	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_print.pas $(TESTTMP)/esp_print_rv.o
 	./$(COMPILER) test/test_esp_cast.pas $(TESTTMP)/esp_cast26
-	test "$$($(TESTTMP)/esp_cast26)" = "ABZ!"
+	tools/expect_same.sh esp_cast26 "$$($(TESTTMP)/esp_cast26)" "ABZ!"
 	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_cast.pas $(TESTTMP)/esp_cast_xt.o
 	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_cast.pas $(TESTTMP)/esp_cast_rv.o
 	# div/mod with a NEGATIVE operand: Pascal truncates toward zero, so
@@ -13054,46 +13054,46 @@ test-emit-obj: $(COMPILER)
 	# a soft-division helper, which is exactly where a sign convention gets
 	# borrowed from C's or from a floor-division and nobody notices.
 	./$(COMPILER) test/test_esp_softdiv.pas $(TESTTMP)/esp_softdiv26
-	test "$$($(TESTTMP)/esp_softdiv26)" = "$$(printf '14\n2\n-14\n-2\n-14\n2\n156\n372\n0')"
+	tools/expect_same.sh esp_softdiv26 "$$($(TESTTMP)/esp_softdiv26)" "$$(printf '14\n2\n-14\n-2\n-14\n2\n156\n372\n0')"
 	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_softdiv.pas $(TESTTMP)/esp_softdiv_xt.o
 	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_softdiv.pas $(TESTTMP)/esp_softdiv_rv.o
 	./$(COMPILER) test/test_esp_aoc.pas $(TESTTMP)/esp_aoc26
-	test "$$($(TESTTMP)/esp_aoc26)" = "$$(printf '1 2 3\n42 -7 100 999')"
+	tools/expect_same.sh esp_aoc26 "$$($(TESTTMP)/esp_aoc26)" "$$(printf '1 2 3\n42 -7 100 999')"
 	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_aoc.pas $(TESTTMP)/esp_aoc_xt.o
 	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_aoc.pas $(TESTTMP)/esp_aoc_rv.o
 	./$(COMPILER) test/test_esp_heap.pas $(TESTTMP)/esp_heap26
-	test "$$($(TESTTMP)/esp_heap26)" = "$$(printf '100\n20\n3\n123')"
+	tools/expect_same.sh esp_heap26 "$$($(TESTTMP)/esp_heap26)" "$$(printf '100\n20\n3\n123')"
 	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_heap.pas $(TESTTMP)/esp_heap_xt.o
 	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_heap.pas $(TESTTMP)/esp_heap_rv.o
 	./$(COMPILER) test/test_esp_dynarray.pas $(TESTTMP)/esp_dynarray26
-	test "$$($(TESTTMP)/esp_dynarray26)" = "$$(printf '5\n150\n2\n30')"
+	tools/expect_same.sh esp_dynarray26 "$$($(TESTTMP)/esp_dynarray26)" "$$(printf '5\n150\n2\n30')"
 	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_dynarray.pas $(TESTTMP)/esp_dynarray_xt.o
 	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_dynarray.pas $(TESTTMP)/esp_dynarray_rv.o
 	./$(COMPILER) test/test_esp_string.pas $(TESTTMP)/esp_string26
-	test "$$($(TESTTMP)/esp_string26)" = "$$(printf '3\nPXX\nPXX')"
+	tools/expect_same.sh esp_string26 "$$($(TESTTMP)/esp_string26)" "$$(printf '3\nPXX\nPXX')"
 	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_string.pas $(TESTTMP)/esp_string_xt.o
 	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_string.pas $(TESTTMP)/esp_string_rv.o
 	./$(COMPILER) test/test_esp_strcat.pas $(TESTTMP)/esp_strcat26
-	test "$$($(TESTTMP)/esp_strcat26)" = "$$(printf 'PXX rocks\nPXX rocks!\nfoo')"
+	tools/expect_same.sh esp_strcat26 "$$($(TESTTMP)/esp_strcat26)" "$$(printf 'PXX rocks\nPXX rocks!\nfoo')"
 	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_strcat.pas $(TESTTMP)/esp_strcat_xt.o
 	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_strcat.pas $(TESTTMP)/esp_strcat_rv.o
 	./$(COMPILER) test/test_esp_strcmp.pas $(TESTTMP)/esp_strcmp26
-	test "$$($(TESTTMP)/esp_strcmp26)" = "$$(printf 'Y\nN\nY\nY\nN')"
+	tools/expect_same.sh esp_strcmp26 "$$($(TESTTMP)/esp_strcmp26)" "$$(printf 'Y\nN\nY\nY\nN')"
 	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_strcmp.pas $(TESTTMP)/esp_strcmp_xt.o
 	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_strcmp.pas $(TESTTMP)/esp_strcmp_rv.o
 	# copy-on-write on the ESP arena: s[2] := 'Y' while t shares the buffer
 	# must clone, leaving t at QXX. A missing COW prints QYX twice and looks
 	# like a print bug.
 	./$(COMPILER) test/test_esp_strmut.pas $(TESTTMP)/esp_strmut26
-	test "$$($(TESTTMP)/esp_strmut26)" = "$$(printf 'QXX\nQYX\nQXX\nQY')"
+	tools/expect_same.sh esp_strmut26 "$$($(TESTTMP)/esp_strmut26)" "$$(printf 'QXX\nQYX\nQXX\nQY')"
 	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_strmut.pas $(TESTTMP)/esp_strmut_xt.o
 	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_strmut.pas $(TESTTMP)/esp_strmut_rv.o
 	./$(COMPILER) test/test_esp_strscope.pas $(TESTTMP)/esp_strscope26
-	test "$$($(TESTTMP)/esp_strscope26)" = "$$(printf 'OK4\nkept')"
+	tools/expect_same.sh esp_strscope26 "$$($(TESTTMP)/esp_strscope26)" "$$(printf 'OK4\nkept')"
 	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_strscope.pas $(TESTTMP)/esp_strscope_xt.o
 	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_strscope.pas $(TESTTMP)/esp_strscope_rv.o
 	./$(COMPILER) test/test_esp_iram.pas $(TESTTMP)/esp_iram26
-	test "$$($(TESTTMP)/esp_iram26)" = "$$(printf 'S\nABC\nABCDE\nE')"
+	tools/expect_same.sh esp_iram26 "$$($(TESTTMP)/esp_iram26)" "$$(printf 'S\nABC\nABCDE\nE')"
 	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_iram.pas $(TESTTMP)/esp_iram_xt.o
 	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_iram.pas $(TESTTMP)/esp_iram_rv.o
 	# `iram;` is only meaningful in the object: it routes the body into
@@ -13108,7 +13108,7 @@ test-emit-obj: $(COMPILER)
 	# by-value record return (the xtensa windowed ABI's first casualty), and
 	# an 8-char managed string built with +.
 	./$(COMPILER) test/test_esp_hw_validation.pas $(TESTTMP)/esp_hwval26
-	test "$$($(TESTTMP)/esp_hwval26)" = "$$(printf 'pxx esp hw validation\npow3^20 3486784401\nint64min+1 -9223372036854775807\ndivmod -9223344366821 -675344\nvec 7000011 4199 120\nstring ABCDEFGH 8\nok')"
+	tools/expect_same.sh esp_hwval26 "$$($(TESTTMP)/esp_hwval26)" "$$(printf 'pxx esp hw validation\npow3^20 3486784401\nint64min+1 -9223372036854775807\ndivmod -9223344366821 -675344\nvec 7000011 4199 120\nstring ABCDEFGH 8\nok')"
 	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_hw_validation.pas $(TESTTMP)/esp_hwval_xt.o
 	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_hw_validation.pas $(TESTTMP)/esp_hwval_rv.o
 	# ISR registration: no output by design -- @MyIsr is handed to
@@ -13130,21 +13130,21 @@ test-emit-obj: $(COMPILER)
 	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_interrupt.pas $(TESTTMP)/esp_interrupt_rv.o
 	# ---- the three PXX_ESP_BARE programs: --esp-profile=bare, not the IDF ----
 	./$(COMPILER) test/test_esp_procaddr.pas $(TESTTMP)/esp_procaddr26
-	test "$$($(TESTTMP)/esp_procaddr26)" = "$$(printf '1\n1\n1')"
+	tools/expect_same.sh esp_procaddr26 "$$($(TESTTMP)/esp_procaddr26)" "$$(printf '1\n1\n1')"
 	./$(COMPILER) --esp-profile=bare --target=riscv32 test/test_esp_procaddr.pas $(TESTTMP)/esp_procaddr_rv
 	./$(COMPILER) --esp-profile=bare --target=xtensa test/test_esp_procaddr.pas $(TESTTMP)/esp_procaddr_xt
 	# every line's expected 1/0 is written next to it in the source; the two
 	# 0s (d > e and d >= e for d=3.0, e=4.0) are what make this a real
 	# transcription rather than "all ones"
 	./$(COMPILER) test/test_esp_float_probe.pas $(TESTTMP)/esp_floatprobe26
-	test "$$($(TESTTMP)/esp_floatprobe26)" = "$$(printf '1\n1\n0\n1\n0\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh esp_floatprobe26 "$$($(TESTTMP)/esp_floatprobe26)" "$$(printf '1\n1\n0\n1\n0\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) --esp-profile=bare --target=xtensa test/test_esp_float_probe.pas $(TESTTMP)/esp_floatprobe_xt
 	./$(COMPILER) --esp-profile=bare --target=riscv32 test/test_esp_float_probe.pas $(TESTTMP)/esp_floatprobe_rv
 	# {$$FASTDOUBLES ON} + --xtensa-fpu: Double +,-,* go through the hardware
 	# SINGLE fpu. Only integer-valued doubles are used, which are exact in
 	# single, so the host oracle and the lossy fast path must agree.
 	./$(COMPILER) test/test_esp_fastdoubles.pas $(TESTTMP)/esp_fastdoubles26
-	test "$$($(TESTTMP)/esp_fastdoubles26)" = "$$(printf '1\n1\n1\n1\n1')"
+	tools/expect_same.sh esp_fastdoubles26 "$$($(TESTTMP)/esp_fastdoubles26)" "$$(printf '1\n1\n1\n1\n1')"
 	./$(COMPILER) --esp-profile=bare --target=xtensa --xtensa-fpu test/test_esp_fastdoubles.pas $(TESTTMP)/esp_fastdoubles_xt
 	./$(COMPILER) --esp-profile=bare --target=riscv32 test/test_esp_fastdoubles.pas $(TESTTMP)/esp_fastdoubles_rv
 	@echo "esp: 19 previously-unrun test_esp_* programs ok (x86-64 oracle + xtensa/riscv32 build)"
@@ -13405,7 +13405,7 @@ test-quick: $(COMPILER)
 	# fast check at all between "it built" and the 554s suite.
 	# qc_* names deliberately avoid the smoke_* namespace these recipes share.
 	./$(COMPILER) test/quick_canary_nilpy.npy $(TESTTMP)/qc_nilpy26
-	test "$$($(TESTTMP)/qc_nilpy26 | tail -1)" = "total ok 23 / 23"
+	tools/expect_same.sh qc_nilpy26 "$$($(TESTTMP)/qc_nilpy26 | tail -1)" "total ok 23 / 23"
 	# NAMESPACE SCOPE, both directions. Deep on purpose where the rest of this
 	# tier is broad: when `uses` went non-transitive, quick stayed green while
 	# five corpus sources went red, because nothing here imported deeply enough
@@ -13418,7 +13418,7 @@ test-quick: $(COMPILER)
 	! ./$(COMPILER) -Futest/usesdepth test/quick_canary_uses_fail.pas $(TESTTMP)/qc_usesf26 > $(TESTTMP)/qc_usesf.log 2>&1
 	grep -q "undefined variable (DeepInt)" $(TESTTMP)/qc_usesf.log
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/quick_canary_c.c $(TESTTMP)/qc_c26
-	test "$$($(TESTTMP)/qc_c26 | tail -1)" = "total ok 22 / 22"
+	tools/expect_same.sh qc_c26 "$$($(TESTTMP)/qc_c26 | tail -1)" "total ok 22 / 22"
 	# THE EMITTED BINARY MUST NOT DEPEND ON HOW THE COMPILER WAS INVOKED. Unit
 	# resolution builds paths out of ExeDir (the directory of ParamStr(0)), and
 	# those resolved paths were interned into the EMITTED string pool, so one
@@ -13433,7 +13433,7 @@ test-quick: $(COMPILER)
 	# bug-a-the-compilers-output-depends-on-argv0
 	cp $(COMPILER) $(TESTTMP)/qc_argv0_copy26
 	./$(COMPILER) test/quick_canary_argv0.pas $(TESTTMP)/qc_argv0_a26
-	test "$$($(TESTTMP)/qc_argv0_a26)" = "argv0 canary ok 42"
+	tools/expect_same.sh qc_argv0_a26 "$$($(TESTTMP)/qc_argv0_a26)" "argv0 canary ok 42"
 	$(TESTTMP)/qc_argv0_copy26 test/quick_canary_argv0.pas $(TESTTMP)/qc_argv0_b26
 	cmp $(TESTTMP)/qc_argv0_a26 $(TESTTMP)/qc_argv0_b26
 	# ...and the C frontend, which leaked the same way through a SECOND site
@@ -13441,40 +13441,40 @@ test-quick: $(COMPILER)
 	# site: a Pascal-only canary stayed green while every C binary still carried
 	# './compiler/../lib/crtl/src/*.c'.
 	./$(COMPILER) test/quick_canary_argv0.c $(TESTTMP)/qc_argv0_c_a26
-	test "$$($(TESTTMP)/qc_argv0_c_a26)" = "c argv0 canary ok 42"
+	tools/expect_same.sh qc_argv0_c_a26 "$$($(TESTTMP)/qc_argv0_c_a26)" "c argv0 canary ok 42"
 	$(TESTTMP)/qc_argv0_copy26 test/quick_canary_argv0.c $(TESTTMP)/qc_argv0_c_b26
 	cmp $(TESTTMP)/qc_argv0_c_a26 $(TESTTMP)/qc_argv0_c_b26
 	./$(COMPILER) test/test_dynarray_torture.pas $(TESTTMP)/smoke_dyntorture26
-	test "$$($(TESTTMP)/smoke_dyntorture26 | tail -1)" = "total ok 27 / 27"
+	tools/expect_same.sh smoke_dyntorture26 "$$($(TESTTMP)/smoke_dyntorture26 | tail -1)" "total ok 27 / 27"
 	./$(COMPILER) test/test_dynarray_insert_delete.pas $(TESTTMP)/smoke_dynid26
-	test "$$($(TESTTMP)/smoke_dynid26 | tail -1)" = "total ok 71 / 71"
+	tools/expect_same.sh smoke_dynid26 "$$($(TESTTMP)/smoke_dynid26 | tail -1)" "total ok 71 / 71"
 	./$(COMPILER) test/test_frozen_string_reentrant.pas $(TESTTMP)/smoke_frozen26
-	test "$$($(TESTTMP)/smoke_frozen26 | tail -1)" = "total ok 4 / 4"
+	tools/expect_same.sh smoke_frozen26 "$$($(TESTTMP)/smoke_frozen26 | tail -1)" "total ok 4 / 4"
 	./$(COMPILER) test/test_ansistring.pas $(TESTTMP)/smoke_ansistr26
-	test "$$($(TESTTMP)/smoke_ansistr26)" = "$$(printf '0\nInitially empty ok\nHello\n5\nHello\nAssignment equal ok\nhello\nHello\nCOW index write ok\nLocalString\n11\nLocal equal ok\nX\nChar assign ok\nHello World!\nHello\nHello World!\n0\nClear empty ok')"
+	tools/expect_same.sh smoke_ansistr26 "$$($(TESTTMP)/smoke_ansistr26)" "$$(printf '0\nInitially empty ok\nHello\n5\nHello\nAssignment equal ok\nhello\nHello\nCOW index write ok\nLocalString\n11\nLocal equal ok\nX\nChar assign ok\nHello World!\nHello\nHello World!\n0\nClear empty ok')"
 	./$(COMPILER) test/test_class_of.pas $(TESTTMP)/smoke_classof26
-	test "$$($(TESTTMP)/smoke_classof26)" = "TChild"
+	tools/expect_same.sh smoke_classof26 "$$($(TESTTMP)/smoke_classof26)" "TChild"
 	./$(COMPILER) test/test_metaclass_construct.pas $(TESTTMP)/smoke_metactor26
-	test "$$($(TESTTMP)/smoke_metactor26)" = "$$(printf '50\n70\n3')"
+	tools/expect_same.sh smoke_metactor26 "$$($(TESTTMP)/smoke_metactor26)" "$$(printf '50\n70\n3')"
 	./$(COMPILER) test/test_cross_exception.pas $(TESTTMP)/smoke_exc26
-	test "$$($(TESTTMP)/smoke_exc26 | wc -l)" = "9"
+	tools/expect_same.sh smoke_exc26 "$$($(TESTTMP)/smoke_exc26 | wc -l)" "9"
 	./$(COMPILER) test/test_record_temp_byval_arg.pas $(TESTTMP)/smoke_recbyval26
-	test "$$($(TESTTMP)/smoke_recbyval26)" = "$$(printf '18\n46')"
+	tools/expect_same.sh smoke_recbyval26 "$$($(TESTTMP)/smoke_recbyval26)" "$$(printf '18\n46')"
 	./$(COMPILER) test/test_const_record_method_prebody.pas $(TESTTMP)/smoke_crmp26
-	test "$$($(TESTTMP)/smoke_crmp26 | tail -1)" = "OK"
+	tools/expect_same.sh smoke_crmp26 "$$($(TESTTMP)/smoke_crmp26 | tail -1)" "OK"
 	./$(COMPILER) --threadsafe test/test_mutex.pas $(TESTTMP)/smoke_mutex26
-	test "$$($(TESTTMP)/smoke_mutex26 | tail -1)" = "MUTEX OK"
+	tools/expect_same.sh smoke_mutex26 "$$($(TESTTMP)/smoke_mutex26 | tail -1)" "MUTEX OK"
 	./$(COMPILER) --threadsafe test/test_tthread_sync.pas $(TESTTMP)/smoke_tthread26
-	test "$$($(TESTTMP)/smoke_tthread26 | tail -1)" = "TTHREAD SYNC OK"
+	tools/expect_same.sh smoke_tthread26 "$$($(TESTTMP)/smoke_tthread26 | tail -1)" "TTHREAD SYNC OK"
 	./$(COMPILER) test/test_fwd_ptr_alias_field.pas $(TESTTMP)/smoke_fwdptralias26
-	test "$$($(TESTTMP)/smoke_fwdptralias26)" = "11 22"
+	tools/expect_same.sh smoke_fwdptralias26 "$$($(TESTTMP)/smoke_fwdptralias26)" "11 22"
 	# feature-dynamic-soname-discovery: an `external 'lib<x>.so'` for a library
 	# OUTSIDE the compiler's hardcoded eight-library table must come out as the
 	# host's versioned soname, which can only have come from reading
 	# /etc/ld.so.cache. Skipped, loudly, where the host has no cache or no
 	# libgcc_s entry — a silent skip would read as a pass.
 	./$(COMPILER) test/soname_host_discovery.pas $(TESTTMP)/soname_host26
-	test "$$($(TESTTMP)/soname_host26)" = "soname discovery ok"
+	tools/expect_same.sh soname_host26 "$$($(TESTTMP)/soname_host26)" "soname discovery ok"
 	@if [ -r /etc/ld.so.cache ] && command -v readelf >/dev/null 2>&1 && \
 	    grep -aq 'libgcc_s\.so\.1' /etc/ld.so.cache; then \
 	  readelf -d $(TESTTMP)/soname_host26 | grep -q "Shared library: \[libgcc_s.so.1\]" || \
@@ -13563,7 +13563,7 @@ test-quick: $(COMPILER)
 	# about where its libraries are still compiles a `uses sysutils` program.
 	cp $(COMPILER) $(TESTTMP)/cliux_pxx
 	cd $(TESTTMP) && PXX_HOME=$(CURDIR) ./cliux_pxx $(CURDIR)/test/quick_canary_argv0.pas $(TESTTMP)/cliux_home26
-	test "$$($(TESTTMP)/cliux_home26)" = "argv0 canary ok 42"
+	tools/expect_same.sh cliux_home26 "$$($(TESTTMP)/cliux_home26)" "argv0 canary ok 42"
 	# ...and the SAME source compiled with and without PXX_HOME must emit the
 	# same bytes. The env tier is a second way to feed the compiler a different
 	# library path for identical input, which is precisely how
@@ -13584,7 +13584,7 @@ test-quick: $(COMPILER)
 	cp test/cliux_cfg_prog.pas $(TESTTMP)/cliux_cfg/prog.pas
 	printf 'home %s\nunitpath ./mylib\n' "$(CURDIR)" > $(TESTTMP)/cliux_cfg/pxx.cfg
 	cd $(TESTTMP)/cliux_cfg && ./bin/pxx prog.pas out26
-	test "$$($(TESTTMP)/cliux_cfg/out26)" = "cliux cfg unit 42"
+	tools/expect_same.sh cliux_cfg "$$($(TESTTMP)/cliux_cfg/out26)" "cliux cfg unit 42"
 	cd $(TESTTMP)/cliux_cfg && ./bin/pxx --where | grep -q '^    unitpath  ./mylib/'
 	# An unknown or argless directive WARNS with file:line and keeps going: a
 	# config file is read by a binary the user did not build, so a newer file
@@ -13629,7 +13629,7 @@ test-smoke: test-quick
 	./$(COMPILER) $(PXXFLAGS) $(COMPILER_SRC) $(TESTTMP)/pascal26-self.$$$$.tmp && mv -f $(TESTTMP)/pascal26-self.$$$$.tmp $(TESTTMP)/pascal26-self
 	$(TESTTMP)/pascal26-self $(PXXFLAGS) $(COMPILER_SRC) $(TESTTMP)/pascal26-next.$$$$.tmp && mv -f $(TESTTMP)/pascal26-next.$$$$.tmp $(TESTTMP)/pascal26-next
 	$(TESTTMP)/pascal26-next test/bootstrap_features.pas $(TESTTMP)/smoke_boot26
-	test "$$($(TESTTMP)/smoke_boot26)" = "$$(printf '120\n98\ncase-ok\n0')"
+	tools/expect_same.sh smoke_boot26 "$$($(TESTTMP)/smoke_boot26)" "$$(printf '120\n98\ncase-ok\n0')"
 	$(TESTTMP)/pascal26-next $(PXXFLAGS) $(COMPILER_SRC) $(TESTTMP)/pascal26-fixedpoint.$$$$.tmp && mv -f $(TESTTMP)/pascal26-fixedpoint.$$$$.tmp $(TESTTMP)/pascal26-fixedpoint
 	cmp $(TESTTMP)/pascal26-next $(TESTTMP)/pascal26-fixedpoint
 	cp $(TESTTMP)/pascal26-fixedpoint $(TESTTMP)/pascal26-s5.$$$$.tmp && mv -f $(TESTTMP)/pascal26-s5.$$$$.tmp $(TESTTMP)/pascal26-s5
@@ -13813,7 +13813,7 @@ selfcheck: check-stable
 	cmp $(TESTTMP)/pxx-sc-g2 $(TESTTMP)/pxx-sc-g3
 	@echo "self-host fixedpoint OK (g2 == g3)"
 	$(TESTTMP)/pxx-sc-g1 test/hello.pas $(TESTTMP)/pxx-sc-hello
-	test "$$($(TESTTMP)/pxx-sc-hello)" = "Hello, World!"
+	tools/expect_same.sh pxx-sc-hello "$$($(TESTTMP)/pxx-sc-hello)" "Hello, World!"
 	@echo "=== selfcheck OK ==="
 
 check-stable-managed:
