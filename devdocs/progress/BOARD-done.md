@@ -2443,6 +2443,8 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-nilpy-c-define-const | T | 70 | regression | regression: test-core#src:test/test_nilpy_c_define_const.npy red at 67015a8cf7d8 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-c-pointer | T | 70 | regression | regression: test-core#src:test/test_nilpy_c_pointer.npy red at 67015a8cf7d8 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-dataclass-dict-factory | T | 70 | regression | regression: test-core#src:test/test_nilpy_dataclass_dict_factory.npy red at 2fbb5a270acc (auto-filed by twatch) | — |
+| regression-test-core-test-nilpy-fallback-import-try-wins | N | 70 | regression | regression: test-core#src:test/test_nilpy_fallback_import_try_wins.npy red at 3ad067ed395d (auto-filed by twatch) | — |
+| regression-test-core-test-nilpy-fallback-import | N | 70 | regression | regression: test-core#src:test/test_nilpy_fallback_import.npy red at 3ad067ed395d (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-float-pow-oracle | T | 70 | regression | regression: test-core#src:test/test_nilpy_float_pow_oracle.npy red at c9706630b486 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-forward-module-global | T | 70 | regression | regression: test-core#src:test/test_nilpy_forward_module_global.npy red at dbf783346025 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-from-import-as-rename | N | 70 | regression | regression: test-core#src:test/test_nilpy_from_import_as_rename.npy red at 9bbbbef6c055 (auto-filed by twatch) | — |
