@@ -345,4 +345,4 @@ and is untouched here. The divergence was upstream of it and had nothing to do
 with `uses` transitivity.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 2d57b9744.
