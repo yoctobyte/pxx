@@ -1670,6 +1670,74 @@ The slice feeds `JoinOpen` from a dynamic array instead, so
 open-arrays-of-managed-elements stays covered and only the constructor
 spelling is missing; the check says so in its own "does NOT catch" section.
 
+### Phase 9f — aggregate function results: the hidden destination — **DONE, 2026-08-29**
+
+`abi.inc`'s `RetViaHiddenDest` is ONE convention, not five features: a record,
+a set, a variant, a promotable int and a frozen string all come back through a
+destination the CALLER allocates and the callee fills. Every register target
+carries that pointer in a spare register (x8 on aarch64, r10 on x86-64). wasm
+has none and cannot invent one, so here it is a **trailing parameter** — and
+that single difference is the whole arm.
+
+Trailing rather than leading so the declared parameters keep their indices: the
+body homes parameter *i* from local *i*, and a leading destination would have
+shifted every one of them, for exactly the set of procs whose bodies are
+hardest to check.
+
+**Result on `compiler.pas`: 3615 of 3660 bodies, refusals 52 → 45.**
+
+**Report what it PROMOTED, not what it removed** — the numbers only reconcile
+that way:
+
+| | |
+| --- | --- |
+| `RetViaHiddenDest` records | 5 → **0** |
+| `PXXMemMove` of a record | 5 → **0** |
+| `IR_DYNUNIQUE` (`value IR op 49`) | 1 → **4** |
+
+Ten refusals removed, **three promoted** into a gap that was always there and
+that only two bodies had previously reached. Net −7. A refusal count is a claim
+about what the bodies *reached*.
+
+**The denominator moved too, and it is not a coverage change.** 3658 → 3660
+because `compiler.pas` contains the file being edited and this work added two
+functions to it. Face eighteen, in the most ordinary possible form: the
+body-count denominator is not a constant across a change to this backend, so
+"3606 of 3658 → 3615 of 3660" is two different populations and the percentages
+are not directly comparable.
+
+**`IR_SET_COPY` came along**, because a set result cannot travel without it — a
+32-byte block copy, the same `PXXMemMove` shape as `IR_COPY_REC`. Noted while
+writing it: the set width has **no name**. Six backends each write a literal
+32, so a change to the set representation would have to be found by grep in six
+places. That is a `defs.inc` fix and not this backend's to make unilaterally.
+
+**Three of the five shapes landed UNTESTED, and that is stated in the check
+rather than left implied.** A set result additionally needs set CONSTRUCTION
+(`value IR op 33`) and `in` against a set VARIABLE (`binary operator 99`);
+variant and promotable-int results have their own unimplemented shapes. They
+travel by this same convention, so it is live for them and unexercised. An
+indirect or virtual call returning an aggregate still refuses **by design** —
+`WasmNodeIsAggRetCall` asks about a DIRECT call specifically, so those cannot
+silently yield whatever is on the operand stack.
+
+**The bug worth recording, because the compile check was no help at all.** The
+first working version put the copy AFTER the epilogue restored `$sp`, on the
+reasoning — written into the comment — that every slot is addressed through
+`$fp` so a restored `$sp` cannot move them. True of the scalar load beside it,
+false of this, because this is a **CALL**: `PXXMemMove`'s own prologue sets its
+frame at `$sp`, which once raised lands exactly on top of the Result local
+being copied out of. It compiled, validated, reported `125 of 125 bodies
+lowered`, ran to completion, and returned `x=3 y=8` — the `y` field holding the
+byte-count argument of the memmove that had just overwritten it. Only the diff
+against native said so, and the same signature reappears in break 3.
+
+`test/wasm/check_aggret.sh`, wired into `check_all.sh`, falsified three ways:
+the copy after `$sp` restore (module dies), `TypeSize` instead of
+`AggRetCopySize` (the fixed-array and frozen-string rows go binary), and
+returning the callee's own Result slot instead of the caller's destination
+(the `y=8` signature again).
+
 - **Milestone:** the wasm-hosted compiler's **emitted output bytes are identical
   to the native compiler's** for the same input.
 - **State this claim precisely.** It is output parity across two hosts of the

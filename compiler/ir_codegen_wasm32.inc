@@ -717,6 +717,16 @@ begin
   end;
 end;
 
+{ Is this node a DIRECT call whose result travels through the caller-owned
+  hidden destination? Such a node's value is an i32 address, whatever its
+  declared type kind says. }
+function WasmNodeIsAggRetCall(n: Integer): Boolean;
+begin
+  WasmNodeIsAggRetCall := (n >= 0) and (IRKind[n] = IR_CALL) and (IRA[n] >= 0)
+                          and (IRA[n] < ProcCount)
+                          and ABIRetViaHiddenDestProc(IRA[n]);
+end;
+
 { Emit a value and leave it on the stack at exactly `want`. Every consumer of a
   value goes through here, so there is one place a width can be wrong. }
 procedure WasmEmitValueAs(node: Integer; want: Byte; const ctx: AnsiString);
@@ -737,6 +747,17 @@ begin
     Only WT_I32 is accepted: a frozen string asked for as an i64 or an f64 is a
     real type error and still refused. }
   if TypeIsFrozenString(got) and (want = WT_I32) then Exit;
+  { An aggregate-returning CALL is the same shape one line up: the node's TYPE
+    is the record, and its VALUE is the ADDRESS the callee filled — the hidden
+    destination it was handed and hands back. So a record-typed call node is
+    already an i32 and needs no conversion, while a record-typed node of any
+    other kind is still a real type error and still refused.
+
+    Narrow on purpose. It asks about THIS node being a direct call to a
+    hidden-dest proc, not about the type being aggregate, because an indirect
+    or virtual call to one is a convention this target does not thread yet and
+    must keep refusing rather than quietly yield whatever is on the stack. }
+  if WasmNodeIsAggRetCall(node) and (want = WT_I32) then Exit;
   if not WasmScalarType(got, gvt) then
   begin
     WasmUnsupported('value of type ' + WasmTypeKindName(got) + ' in ' + ctx);
@@ -1567,6 +1588,11 @@ begin
     WasmParamValType := WasmScalarType(Procs[p].Params[i].TypeKind, vt);
 end;
 
+{ Local index of the trailing hidden-destination parameter in the body being
+  emitted, or -1 when this body does not return an aggregate. }
+var
+  WasmRetDestLocal: Integer;
+
 function WasmProcResult(p: Integer; var vt: Byte): Boolean;
 begin
   WasmProcResult := WasmScalarType(Procs[p].RetType, vt);
@@ -1599,7 +1625,34 @@ begin
   if Procs[p].IsFunc then
   begin
     nRes := 1;
-    if not WasmProcResult(p, rtypes[0]) then
+    { An aggregate result travels the way every other backend sends it: the
+      CALLER allocates the destination and the callee fills it. On a register
+      target the pointer rides in a spare register (x8 on aarch64, r10 on
+      x86-64); wasm has no spare register, and no way to invent one, so it
+      rides as a TRAILING PARAMETER. Trailing rather than leading because the
+      declared parameters keep their indices that way — the body homes
+      parameter i from local i, and a leading dest would shift every one of
+      them by one for exactly the set of procs whose bodies are hardest to
+      check.
+
+      ABIRetViaHiddenDestProc, not the kind-only RetViaHiddenDest: a
+      `function F: TArr` records its ELEMENT kind in RetType, so the kind says
+      tyInteger and the aggregate is invisible (abi.inc says so, and names the
+      bug that taught it). The two answers differ for exactly the case that
+      looks scalar and is not. }
+    if ABIRetViaHiddenDestProc(p) then
+    begin
+      if nParams < 32 then
+      begin
+        ptypes[nParams] := WT_I32;
+        Inc(nParams);
+      end
+      else
+        WasmUnsupported(Procs[p].Name + ' has no room for the hidden'
+                        + ' destination parameter (32-parameter limit)');
+      rtypes[0] := WT_I32;
+    end
+    else if not WasmProcResult(p, rtypes[0]) then
     begin
       rtypes[0] := WT_I32;
       if RetViaHiddenDest(Procs[p].RetType) then
@@ -2425,6 +2478,22 @@ begin
                     + ' of ' + WasmIntStr(nParams) + ' parameters');
     Exit;
   end;
+  { The hidden destination goes on LAST, matching the trailing slot
+    WasmSigForProc reserved. IRC is where the lowering already put it — the
+    same field aarch64 reads for x8 — so nothing here allocates: the caller's
+    scratch temp exists because ir.inc made one, and inventing a second would
+    be a second answer to who owns the destination. }
+  if ABIRetViaHiddenDestProc(p) then
+  begin
+    if IRC[node] < 0 then
+    begin
+      WasmUnsupported('call to ' + Procs[p].Name + ' returns an aggregate but'
+                      + ' the lowering supplied no hidden destination');
+      Exit;
+    end;
+    WasmEmitValueAs(IRC[node], WT_I32, 'hidden destination for ' + Procs[p].Name);
+    if WasmBodyBroken then Exit;
+  end;
   if impIdx >= 0 then WasmCallImport(impIdx, Procs[p].Name)
   else WasmCall(WasmSlotForProc(p), Procs[p].Name);
   { A function called for its side effect leaves its result on the operand
@@ -2433,7 +2502,12 @@ begin
   if isStmt and Procs[p].IsFunc then WasmOp($1A, 'drop');
   if impIdx < 0 then
   begin
-    if not WasmProcResult(p, pvt) then pvt := WT_I32;
+    { A hidden-dest call's VALUE is the destination pointer the callee hands
+      back, so it is an i32 regardless of what the declared result type would
+      have mapped to — WasmProcResult answers about the aggregate and would say
+      no. }
+    if ABIRetViaHiddenDestProc(p) then pvt := WT_I32
+    else if not WasmProcResult(p, pvt) then pvt := WT_I32;
     WasmEmitPostCall(pvt, Procs[p].IsFunc and not isStmt);
   end;
 end;
@@ -3277,6 +3351,29 @@ begin
   WasmCall(WasmSlotForProc(mv), 'PXXMemMove');
 end;
 
+{ Copy a whole set: dest address in IRA, src address in IRB. The byte count is
+  the set representation's fixed width and comes from NEITHER a node field nor
+  a named constant — IRIVal carries nothing here, and there is no SET_BYTES to
+  spell. Every backend writes the literal 32 (ir_codegen.inc:8559's `mov rcx,
+  32`, and i386's arm likewise), so this one does too rather than inventing a
+  private constant that would drift from the four that already agree.
+
+  That the width has no name is a real smell — six copies of a magic 32 across
+  six backends, and the set representation changing would need all six found by
+  grep — but it is a shared-file fix (defs.inc) and not this backend's to make
+  unilaterally. Noted here so the next reader sees it was seen. }
+procedure WasmEmitSetCopy(node: Integer);
+var mv: Integer;
+begin
+  mv := WasmWriteHelper('PXXMemMove');
+  if mv < 0 then Exit;
+  WasmWriteValueArg(mv, 0, IRA[node]);        { dest }
+  WasmWriteValueArg(mv, 1, IRB[node]);        { src }
+  WasmWriteConstArg(mv, 2, 32);               { count — the set width, see above }
+  if WasmBodyBroken then Exit;
+  WasmCall(WasmSlotForProc(mv), 'PXXMemMove');
+end;
+
 { Zero a block: destination address in IRA, byte count in IRIVal. Calls the
   same RTL routine the other backends use, for the same reason WasmEmitCopyRec
   calls PXXMemMove — the arguments go straight onto the operand stack in order.
@@ -3715,6 +3812,7 @@ begin
     IR_STORE_MEM     : WasmEmitStoreMem(node);
     IR_WRITE, IR_WRITELN : WasmEmitWrite(node);
     IR_COPY_REC      : WasmEmitCopyRec(node);
+    IR_SET_COPY      : WasmEmitSetCopy(node);
     IR_DEFAULT_MEM   : WasmEmitDefaultMem(node);
     IR_EXC_ENTER     : WasmEmitExcEnter(node);
     IR_EXC_LEAVE     : WasmEmitExcLeave(node);
@@ -4297,7 +4395,7 @@ var
   i, sigIdx, nParams, retSym, psym, pvtI: Integer;
   pvt, resVt: Byte;
   rtk: TTypeKind;
-  nRes: Integer;
+  nRes, mvHelper: Integer;
   nm: AnsiString;
 begin
   WasmBeginModuleOnce;
@@ -4317,7 +4415,11 @@ begin
     if Procs[CurProc].IsFunc then
     begin
       nRes := 1;
-      if not WasmProcResult(CurProc, resVt) then resVt := WT_I32;
+      { Must agree with WasmSigForProc or the body's declared result and its
+        type index disagree, which validates as a type error at MODULE level —
+        far from the body that caused it. }
+      if ABIRetViaHiddenDestProc(CurProc) then resVt := WT_I32
+      else if not WasmProcResult(CurProc, resVt) then resVt := WT_I32;
     end;
     retSym := Procs[CurProc].RetSymIdx;
     { The SAME slot and the SAME signature a caller would have reserved. If a
@@ -4351,6 +4453,16 @@ begin
 
   for i := 0 to nParams - 1 do
     WasmAddParamName(Procs[CurProc].Params[i].Name);
+  { The trailing hidden-destination parameter. It is named and counted here so
+    that local indices line up: every local added below sits above it, and a
+    body that forgot it would silently address the dest as its first local. }
+  WasmRetDestLocal := -1;
+  if (CurProc >= 0) and Procs[CurProc].IsFunc
+     and ABIRetViaHiddenDestProc(CurProc) and (nParams < 32) then
+  begin
+    WasmRetDestLocal := nParams;
+    WasmAddParamName('$retdest');
+  end;
   WasmLocalFp := WasmAddLocal(WT_I32, 'fp');
 
   { Pass one: cut the body into basic blocks and map every label to one. It
@@ -4435,12 +4547,39 @@ begin
     bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa. }
   if not WasmBodyBroken then WasmEmitManagedLocals(True, retSym);
 
+  { The aggregate copy runs BEFORE $sp is restored, and the reason is worth
+    stating because the obvious reading says it does not matter. Every slot
+    here is addressed through $fp, so a restored $sp cannot move them — which
+    is true of the scalar LOAD below and false of this, because this is a
+    CALL. PXXMemMove's own prologue sets its frame at $sp, and once $sp has
+    been raised past this frame that lands exactly on top of the Result local
+    being copied out of. Measured: `function MakeP: TP` returned x=3 y=8, the
+    y field holding the byte-count argument of the memmove that had just
+    overwritten it. }
+  if (nRes = 1) and (retSym >= 0) and (WasmRetDestLocal >= 0) then
+  begin
+    mvHelper := WasmWriteHelper('PXXMemMove');
+    if mvHelper >= 0 then
+    begin
+      WasmLocalGet(WasmRetDestLocal);          { dest }
+      WasmSlotAddr(retSym);                    { src — the Result local }
+      WasmI32Const(AggRetCopySize(retSym));    { count }
+      if not WasmBodyBroken then
+        WasmCall(WasmSlotForProc(mvHelper), 'PXXMemMove');
+    end;
+  end;
+
   { epilogue: restore $sp, then leave the result on the operand stack }
   WasmLocalGet(WasmLocalFp);
   WasmI32Const(WasmCurFrame);
   WasmOp($6A, 'i32.add');
   WasmGlobalSet(WasmGSp);
-  if (nRes = 1) and (retSym >= 0) then
+  if (nRes = 1) and (retSym >= 0) and (WasmRetDestLocal >= 0) then
+    { The copy already happened above, while the frame was still live. All that
+      is left is the value, and for this convention the value IS the caller's
+      destination — the same pointer that came in. }
+    WasmLocalGet(WasmRetDestLocal)
+  else if (nRes = 1) and (retSym >= 0) then
   begin
     rtk := Syms[retSym].TypeKind;
     WasmEmitLoadSym(retSym);
