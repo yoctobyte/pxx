@@ -3876,6 +3876,23 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_imulresid326 "$$($(TESTTMP)/test_imulresid326)" "$$(printf 'acc=20000053834\none=5000013460\ndone')"
 	./$(COMPILER) -O0 test/test_imul_resident_left.pas $(TESTTMP)/test_imulresid026
 	tools/expect_same.sh test_imulresid026 "$$($(TESTTMP)/test_imulresid026)" "$$(printf 'acc=20000053834\none=5000013460\ndone')"
+	# a fused compare reads its RIGHT operand in place at -O3: `cmp rN, rM` when it
+	# is register-resident, `cmp rN, [rbp+off]` when it is an 8-byte frame local or
+	# param, instead of staging it through rcx. ONLY 8-byte operands fold -- a
+	# 4-byte one would need the left register to be provably sign-extended, and the
+	# 4-byte rows here are the controls that must stay on the rcx path.
+	# The band rows are the point of this test. `a > b` with b = -5000000001 is
+	# true for whatever junk a WRONG reg/rm field names, so the obvious rows are
+	# insensitive to the exact bug this pass can introduce -- measured: three
+	# separate deliberate breaks passed. Straddling a with a-1 and a+1, from both
+	# sides, makes the pair true only for a register holding EXACTLY a and only for
+	# those two slots. All six breaks then move it: mem reg field, mem
+	# displacement, both reg/rm forms, and each REX bit. Verified against FPC 3.2.2.
+	# feature-opt-o3-register-pressure W1 slice 7
+	./$(COMPILER) -O3 test/test_cmp_right_in_place.pas $(TESTTMP)/test_cmprip326
+	tools/expect_same.sh test_cmprip326 "$$($(TESTTMP)/test_cmprip326)" "$$(printf 'acc=393213\none=131071\nbyref=10\ndone')"
+	./$(COMPILER) -O0 test/test_cmp_right_in_place.pas $(TESTTMP)/test_cmprip026
+	tools/expect_same.sh test_cmprip026 "$$($(TESTTMP)/test_cmprip026)" "$$(printf 'acc=393213\none=131071\nbyref=10\ndone')"
 	# the AN_FOR hidden INIT temp is elided at -O3 when both bounds are re-emittable
 	# (literal / plain scalar var / pure arithmetic over those). The temp enforces
 	# "evaluate both bounds before assigning the control variable"; eliding it

@@ -7,7 +7,7 @@ owner: ""
 
 # -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator
 
-## READ FIRST — three standing rules for every slice in this campaign
+## READ FIRST — four standing rules for every slice in this campaign
 
 Each of these was paid for once. They are here, at the top, rather than inside
 the write-up of the slice that learned them, because that is where the next
@@ -60,6 +60,35 @@ that an `-O3`-gated pass changing `-O0` output is *impossible*, so the
 contradiction pointed at the measurement rather than at the code. **When a
 result says something that cannot be true, suspect the baseline before the
 change.**
+
+**4. A deliberate break must be verified at the level the BUG lives — and the
+row it targets must be sensitive to it.** Rule 1 says break the pass and confirm
+the test goes red. Slice 7 found the two ways that can silently not work, and
+both look like a passing control:
+
+- *The break was an identity.* Changing `$85 or ((lreg - 8) shl 3)` to
+  `$85 or (lreg - 8)` looks like a wrong ModRM reg field. For the register that
+  actually occurred (`r13`) it emits **the same byte** — `$85` already has bit 2
+  set, so `or 5` changes nothing. The edit script asserted the source matched
+  exactly once, which proves the *edit* applied and says nothing about the
+  *encoding* changing. Verify a break by disassembling the emitted bytes, not by
+  asserting the patch applied.
+- *The row was insensitive.* With a genuine break (`r13` -> `r14`), the test
+  still passed: the row was `if a > b` with `b = -5000000001`, which is true for
+  essentially any junk value a wrong register could hold. Three separate real
+  breaks passed for this reason. The fix is to **straddle**: with `blo = a-1` and
+  `bhi = a+1`, the pair `a > blo` and `a < bhi` is true only for a register
+  holding *exactly* `a`, and only for those two slots — so one shape catches a
+  wrong reg field, a wrong rm field and a wrong displacement at once. Mirror it
+  (`blo < a`, `bhi > a`) to cover the operand roles the other way round.
+
+The general form, and it outlives this campaign: **a test row proves the encoding
+only if its answer changes when the encoding names the wrong thing.** Picking
+"distinct, memorable, far-apart values" — which is the instinct, and which the
+first cut of that test followed deliberately — produces rows that are maximally
+*insensitive*, because far-apart values compare the same way against almost
+anything. Adjacent values, not distinct ones, are what make an operand
+observable.
 
 
 - **Type:** feature (codegen — optimization) — **Track O** (Optimization lane;
@@ -2953,3 +2982,48 @@ for this" is not the same claim as "I watched this control fail" — which is
 standing rule 1's last clause, met here by the rule catching its own author.
 
 Landed `a2711f2ea`. `-O2` promotion not taken — coordinator's call, after soak.
+
+### 2026-08-29 — W1 slice 7 LANDED behind -O3: fused compare reads its RIGHT operand in place
+
+A fused compare staged its right operand through `rcx` unconditionally: `mov
+rcx, <right>` then `cmp rax|rN, rcx`. When the right operand is already a value
+`cmp` can address, that `mov` is dead weight. Two cases now fold:
+
+- **register-resident right** — `cmp rN, rM` (`4C/4D 3B /r`)
+- **8-byte frame local or param** — `cmp rN, [rbp+off]` (ModRM mod=10 rm=101)
+
+`W1CmpRightInPlace` returns `W1CMP_REG` / `W1CMP_MEM` / `W1CMP_NONE`, screened
+by the existing `LeafSymRcxLoadable` (which already excludes arrays, floats,
+strings and by-ref params — a by-ref slot holds a *pointer*, so folding it would
+compare the wrong thing entirely). Wired into both the value form and the
+`IR_JUMP_IF_FALSE` branch form.
+
+**Only 8-byte operands fold, deliberately.** A 4-byte local is loaded with
+`movsxd`; folding it would mean a 32-bit compare *plus* the assumption that the
+left register holds a properly sign-extended value. That invariant's failure
+mode is a silently wrong comparison — a wrong loop bound, not a crash — so the
+4-byte rows in the test are controls that must stay on the `rcx` path.
+
+**Result, and the honest half first:** `three.pas`'s hot loop is **unchanged**,
+and its dynamic delta is **0**. Its limit temp is a 4-byte `movsxd`, so the
+8-byte-only fold correctly declines — the slice does not fix the case that
+motivated it. What it does do is shrink every program measured: `three.pas`
+-63 B, mandelbrot -213 B, lispdemo -159 B, sieve -156 B, **jsondemo -978 B**.
+
+**Verification (binary sha `36f9c3c11b99`, self-host 1 round):** `-O0`/`-O1`/
+`-O2` byte-identical against baseline `2ef7053d0926` on all five programs; `-O3`
+smaller on all five; values identical at all four levels; FPC 3.2.2 agrees with
+the test's expectation.
+
+**Non-vacuity — this is where the slice cost its time, and it produced standing
+rule 4 at the top of this ticket.** Six deliberate breaks now move the test:
+mem reg field, mem displacement (+1 slot), both reg/rm forms of the reg-reg
+encoding, and each REX bit. Getting there took three false passes: one break was
+a no-op *encoding* despite the patch applying cleanly, and two genuine breaks
+passed because the rows were insensitive to which register was named. The band
+rows (`blo = a-1`, `bhi = a+1`, straddled from both sides) are the fix and the
+transferable part. Read rule 4 before writing the next slice's test.
+
+**Banked, not filed:** the ALU bucket (2649 sites) needs flags-liveness before
+`lea` is safe; widening the fold to 4-byte operands needs the sign-extension
+invariant proved rather than assumed.

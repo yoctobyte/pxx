@@ -2271,6 +2271,84 @@ end;
   Hoisted above IREmitNode so the value-producing compare fold can ask the
   same question: `x = k` as an rvalue and `if x = k` differ only in what
   consumes the flags, and having ONE predicate decide both is the point. }
+const
+  { W1CmpRightInPlace's verdict. Declared here rather than in defs.inc: they are
+    private to this pass and defs.inc is shared ground under A's no-concurrent-
+    edit rule. }
+  W1CMP_NONE = 0;
+  W1CMP_REG  = 1;
+  W1CMP_MEM  = 2;
+
+{ -O3 W1 slice 7: can a fused compare read its RIGHT operand IN PLACE instead of
+  loading it into rcx first?
+
+  `EmitLoadVarRcx` + `cmp rax, rcx` is two instructions where x86 can often do
+  one, and unlike the register-pressure work this needs NO register — it
+  sidesteps the pressure problem rather than competing with it. It is also
+  PER-ITERATION in a loop condition, not per-entry, which is what makes it worth
+  more than the init-temp elision.
+
+  Returns W1CMP_NONE / W1CMP_REG (reg set) / W1CMP_MEM (memOff set).
+
+  ONLY 8-byte frame locals and params, and that restriction is the whole safety
+  argument rather than a convenience. For an 8-byte symbol the load
+  EmitLoadVarRcx emits is a plain `mov rcx,[rbp+off]` with no extension to
+  reproduce, so `cmp rN,[rbp+off]` is identical instruction-for-instruction.
+  A 4-byte symbol is loaded with `movsxd`, and folding THAT would mean emitting a
+  32-bit compare and assuming the left operand's register holds a properly
+  sign-extended value — an invariant that is true almost always and whose failure
+  is a silently wrong comparison, which in a loop condition is a wrong iteration
+  count. That is the exact class of defect
+  bug-a-for-loop-limit-is-evaluated-after-the-control-variable-is-assigned was,
+  and it is not worth 4 bytes. A byte scan of an -O3-built compiler says the safe
+  half is also the bigger one: 2580 8-byte load-then-compare sites against 1271
+  4-byte signed ones, which is the opposite of what I assumed before measuring.
+
+  skGlobal is excluded: its load is a different addressing mode (absolute/RIP),
+  so folding it is a separate proof, not this one.
+
+  LeafSymRcxLoadable is reused for the operand screening it already does —
+  arrays, floats, strings, frozen strings and by-ref params are all out there,
+  and a by-ref param matters here specifically because its slot holds a POINTER,
+  so folding its address would compare the wrong thing. }
+function W1CmpRightInPlace(node: Integer; var reg: Integer; var memOff: Integer): Integer;
+var idx: Integer;
+begin
+  W1CmpRightInPlace := W1CMP_NONE;
+  reg := 0; memOff := 0;
+  if OptLevel < 3 then Exit;
+  if not LeafSymRcxLoadable(node) then Exit;
+  idx := IRA[node];
+  reg := ResidentRegOf(idx);
+  if reg <> 0 then begin W1CmpRightInPlace := W1CMP_REG; Exit; end;
+  if not ((Syms[idx].Kind = skLocal) or (Syms[idx].Kind = skParam)) then Exit;
+  if TypeSize(Syms[idx].TypeKind) <> 8 then Exit;
+  memOff := Syms[idx].Offset;
+  W1CmpRightInPlace := W1CMP_MEM;
+end;
+
+{ `cmp <left>, <right>` with both operands in registers. Opcode 3B puts the LEFT
+  in the reg field and the right in r/m, the same way EmitCmpLeftRcx does — so
+  these two agree by construction rather than by coincidence. }
+procedure EmitCmpLeftReg(lreg, rreg: Integer);
+begin
+  EmitB($48 or (Ord(lreg <> 0) shl 2) or Ord(rreg <> 0));
+  EmitB($3B);
+  if lreg = 0 then EmitB($C0 or (rreg - 8))
+  else if rreg = 0 then EmitB($C1 or ((lreg - 8) shl 3))
+  else EmitB($C0 or ((lreg - 8) shl 3) or (rreg - 8));
+end;
+
+{ `cmp <left>, [rbp+off]` — mod=10 rm=101 is rbp+disp32, so the ModRM base is $85
+  and the left register rides the reg field exactly as above. }
+procedure EmitCmpLeftMemRbp(lreg, off: Integer);
+begin
+  if lreg = 0 then EmitB($48) else EmitB($4C);
+  EmitB($3B);
+  if lreg = 0 then EmitB($85) else EmitB($85 or ((lreg - 8) shl 3));
+  EmitI32(off);
+end;
+
 function CmpFusible(node: Integer): Boolean;
 var opTk: Integer; lt, rt: TTypeKind;
 begin
@@ -4460,6 +4538,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     w1RightReg: Integer;   { -O3 W1: 0 = the normal rcx contract, else r12..r15 }
     shiftImmCnt: Integer;  { -O1 W1: >= 0 = a constant shift count NOT materialised into rcx }
     w1LeftReg: Integer;    { -O3 W1 slice 5: 0 = left is in rax, else r12..r15 read in place }
+    w1CmpRightKind, w1CmpRightReg, w1CmpRightOff: Integer;  { -O3 W1 slice 7 }
     strCmpRel: Boolean;    { this comparison releases an owned string operand }
     pAnsiAlloc, pAnsiShared, pAnsiTooSmall, pAnsiNoZeroGrow, pAnsiFastDone: Integer;
     pAnsiUseNeededNil, pAnsiUseNeededSmall, pAnsiMinDone, pAnsiCapDone: Integer;
@@ -5854,6 +5933,7 @@ begin
         w1RightReg := 0;
         shiftImmCnt := -1;
         w1LeftReg := 0;
+        w1CmpRightKind := W1CMP_NONE; w1CmpRightReg := 0; w1CmpRightOff := 0;
 
         { PXXDBG=a.w1left -- REPORT ONLY, prices the LEFT half of the operand
           funnel. W1 slice 4 killed `mov rcx, rN` on the RIGHT; the left still
@@ -6156,7 +6236,21 @@ begin
           if (OptLevel >= 3) and W1AluRightEligible(node, left, right) then
             w1RightReg := ResidentRegOf(IRA[right])
           else
-            EmitLoadVarRcx(IRA[right]);
+          begin
+            { -O3 W1 slice 7, the value-producing twin of the branch fold. Same
+              opportunity, same predicate: a compare can address its right
+              operand in place. Wired here as well because fixing one arm of a
+              double case and leaving the sibling is how the sibling stays
+              broken -- normalise-dont-special-case. CmpFusible is required
+              because only that set reaches the bare `cmp` below; everything
+              else keeps the rcx contract. }
+            w1CmpRightKind := W1CmpRightInPlace(right, w1CmpRightReg, w1CmpRightOff);
+            if (w1CmpRightKind = W1CMP_NONE) or not CmpFusible(node) then
+            begin
+              w1CmpRightKind := W1CMP_NONE;
+              EmitLoadVarRcx(IRA[right]);
+            end;
+          end;
         end
         else if (OptLevel >= 2) and (not InLValueWrite) and
                 ((IRKind[left] = IR_CONST_INT) or
@@ -6775,7 +6869,12 @@ begin
               end
               else
               begin
-                EmitCmpLeftRcx(w1LeftReg);          { cmp rax|r12..r15, rcx }
+                if w1CmpRightKind = W1CMP_REG then
+                  EmitCmpLeftReg(w1LeftReg, w1CmpRightReg)      { cmp rax|rN, rM }
+                else if w1CmpRightKind = W1CMP_MEM then
+                  EmitCmpLeftMemRbp(w1LeftReg, w1CmpRightOff)   { cmp rax|rN, [rbp+off] }
+                else
+                  EmitCmpLeftRcx(w1LeftReg);                    { cmp rax|rN, rcx }
                 if cmpUnsigned then
                 begin
                   case op of
@@ -9298,6 +9397,7 @@ var i, lblId, pos, targetOffset, f, procIdx, excSkip: Integer;
     cOp: TTokenKind;
     cmpUns, fused, cmpImmOk: Boolean;
     w1JccLeftReg: Integer;   { -O3 W1 slice 5: 0 = cLeft is in rax, else r12..r15 }
+    w1JccRightKind, w1JccRightReg, w1JccRightOff: Integer;  { -O3 W1 slice 7 }
 begin
   CurWriteFd := STDOUT;   { default write target; IR_WRITE/IR_WRITELN override per-statement (fd 2 for StdErr) }
   { DWARF -g: per-body line-row state, reset before any backend runs (each backend
@@ -9467,6 +9567,7 @@ begin
               untouched -- the push/pop arm below evaluates cRight between, and
               cRight there may contain calls that mutate the left symbol. }
             w1JccLeftReg := 0;
+            w1JccRightKind := W1CMP_NONE; w1JccRightReg := 0; w1JccRightOff := 0;
             if (OptLevel >= 3) and (IRKind[cLeft] = IR_LOAD_SYM) and
                (cmpImmOk or LeafSymRcxLoadable(cRight)) then
               w1JccLeftReg := ResidentRegOf(IRA[cLeft]);
@@ -9485,7 +9586,10 @@ begin
             else if LeafSymRcxLoadable(cRight) then
             begin
               if w1JccLeftReg = 0 then IREmitNode(cLeft);
-              EmitLoadVarRcx(IRA[cRight]);
+              { -O3 W1 slice 7: read the right operand in place where the cmp can
+                address it, instead of staging it through rcx. }
+              w1JccRightKind := W1CmpRightInPlace(cRight, w1JccRightReg, w1JccRightOff);
+              if w1JccRightKind = W1CMP_NONE then EmitLoadVarRcx(IRA[cRight]);
             end
             else if (OptLevel >= 2) and (not InLValueWrite) and
                     ((IRKind[cLeft] = IR_CONST_INT) or
@@ -9544,6 +9648,10 @@ begin
             end;
             if cmpImmOk then
               EmitCmpLeftImm32(w1JccLeftReg, Integer(IRIVal[cRight]))  { cmp rax|rN, imm32 }
+            else if w1JccRightKind = W1CMP_REG then
+              EmitCmpLeftReg(w1JccLeftReg, w1JccRightReg)              { cmp rax|rN, rM }
+            else if w1JccRightKind = W1CMP_MEM then
+              EmitCmpLeftMemRbp(w1JccLeftReg, w1JccRightOff)           { cmp rax|rN, [rbp+off] }
             else
               EmitCmpLeftRcx(w1JccLeftReg);                            { cmp rax|rN, rcx }
             cmpUns := TypeCompareUnsigned(IntToTypeKind(IRTk[cLeft]), IntToTypeKind(IRTk[cRight]));
