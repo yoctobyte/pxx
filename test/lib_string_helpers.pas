@@ -15,16 +15,27 @@
   negative Substring starts, a pad narrower than the string, and Split on ''
   (which is ONE empty element, not none).
 
-  NOT COVERED, and there is no way to cover it today: `s.Length`. FPC declares
-  Length as a PROPERTY and pxx does not dispatch a property through a type
-  helper — bug-p-a-type-helper-cannot-declare-a-property. The obvious
-  substitute does not exist either: FPC declares the `GetLength` accessor
-  PRIVATE, so `s.GetLength` is an `Illegal qualifier` there and cannot appear
-  in a file both compilers build. The declaration in sysutils stays platonic
-  rather than being respelled as a method; when that bug is fixed, add
-  `writeln('Length=', s.Length);` here and the oracle covers it with no other
-  change. Until then this surface's most-used member is genuinely ungated, and
-  saying so is better than a row that gates something else. }
+  `Length` WORKS now and is still not gated here, which needs explaining.
+
+  It is a PROPERTY in FPC over a PRIVATE `GetLength`, and pxx dispatched only
+  METHODS through a type helper — so the surface's most-used member was the one
+  that did not work while every sibling did. Widening the helper guard in
+  `pasparser_lval.inc` fixed it, with no change to the library declaration,
+  which had been written the FPC way and left platonic for exactly that moment.
+
+  But THIS file is built by `$(PXX_STABLE)`, the pinned binary, and the pin
+  predates that fix — so a `Length` row here reds `lib-test` on a compiler that
+  is correct. Track B's gate can only ever assert what the PIN can do, which
+  means a library feature riding an unpinned compiler fix is ungatable here
+  until the pin moves. The mechanism is gated meanwhile by
+  `test/test_type_helper_property.pas` in `test-core`, which builds with the
+  freshly-built compiler.
+
+  AT THE NEXT PIN: add `writeln('Length=', s.Length);` as the first row and
+  regenerate `.expected` with the command in the Makefile rule. Nothing else
+  changes. Verified against the post-fix compiler: 35 rows, byte-identical.
+  It was NOT left out because `s.GetLength` could substitute — that would gate
+  a member FPC does not expose, since the accessor is private there. }
 program lib_string_helpers;
 {$mode objfpc}{$H+}{$modeswitch typehelpers}
 uses sysutils;

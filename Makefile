@@ -4829,6 +4829,15 @@ test-core: $(COMPILER)
 	# that declares nothing. .expected IS fpc 3.2.2's own output.
 	./$(COMPILER) test/test_tobject_unitname.pas $(TESTTMP)/test_tobjun26
 	test "$$($(TESTTMP)/test_tobjun26)" = "$$(cat test/test_tobject_unitname.expected)"
+	# A type helper's PROPERTY dispatches, not only its methods
+	# (bug-p-a-type-helper-cannot-declare-a-property). The record-property row in
+	# the same file is the CONTROL and must stay: properties on a record always
+	# worked, so the defect was the intersection of two working features, and
+	# keeping both arms in view is what stops the fix being rewritten as a
+	# helper special case. diff -u rather than a string compare so a mismatch
+	# names the row.
+	./$(COMPILER) test/test_type_helper_property.pas $(TESTTMP)/test_thelpprop26
+	$(TESTTMP)/test_thelpprop26 | diff -u test/test_type_helper_property.expected -
 	./$(COMPILER) test/test_bare_property.pas $(TESTTMP)/test_bare_property26
 	test "$$($(TESTTMP)/test_bare_property26)" = "$$(printf 'num=21\nnum2=25\ndbl=50\nflagzero=TRUE\nflagset=TRUE')"
 	./$(COMPILER) test/test_ansistring.pas $(TESTTMP)/test_ansistring26
