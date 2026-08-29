@@ -2896,3 +2896,99 @@ the right set with the wrong *input*.
 
 **And the correction was written into the ticket rather than quietly deleted**,
 which is the only reason the pattern was countable at all.
+
+### 66. A relayed NEGATIVE is a claim like any other — and the cheap test and the expensive test disagree about it in the direction that looks like diligence
+
+frankwasm, 2026-08-29. The standing rule *verify a peer's report before relaying
+it* was written entirely about **positive** claims. A negative reads as modest —
+*"I checked, there is nothing there"* — which is exactly why it draws no
+scrutiny.
+
+The case. frankB checked three known RTL unit names (`math`, `netdb`,
+`strings`) against gtk-3.0's include roots for the `-I`-capture bug and called
+it clean. frankwasm re-checked by cross-producting **every** RTL unit name
+against **every** header on those roots, and found a fourth match frankB's
+narrower test could not: `lib/rtl/png.pas` vs `/usr/include/libpng16/png.h`.
+
+**One message away from relaying that as a live second exposure.** Then it
+compiled the thing: `uses png` under the IDE's own `GTK3_INC` works fine. The
+name match is a false positive, frankB's conclusion stands — and the *reason* it
+stands is the finding:
+
+| header | on the `-I` path | captures? |
+| --- | --- | --- |
+| `lib/crtl/include/strings.h` | yes | **yes** |
+| the same file, emptied | yes | no |
+| `/usr/include/libpng16/png.h` | yes | **no** |
+
+A name collision is **necessary but not sufficient**. The reading that fits all
+three rows: capture happens when the header successfully compiles **as a unit**,
+and falls back correctly when it does not — pxx's own crtl headers are written
+to be parsed by cfront, libpng's is not.
+
+**The negative became a test case instead of an assurance**, and it also names
+what the fix must not break: whatever makes `png.h` fall back to
+`lib/rtl/png.pas` is already correct, and a fix that made `png` start capturing
+would be a regression **nothing else in the suite would catch**.
+
+Pairs with the standing *a false limit is quieter than a false fix — a wrong fix
+gets re-tested, a caveat gets believed.* This is the mechanism underneath it:
+the grep and the compile disagree, and the grep is the one that feels careful.
+**Checking a colleague's negative is not distrust.**
+
+### 67. A probe that CHANGES the failure has not necessarily reached the defect
+
+frankwasm, same day; the sibling of 63. Where **63** says do not diagnose
+without opening the code, **67** says do not accept a probe result without
+reading *what the probe now reports*. **A faster failure and a different failure
+are each indistinguishable from progress.**
+
+Two experiments on the non-terminating `render_backend.py` compile **passed**,
+and both were decoys:
+
+- deleting `_as_tk_photo` made the compile fail **earlier**, at `:329` — which
+  read as a fix, because the symptom moved;
+- the scratchpad truncations terminated, because they were measuring **import
+  resolution** rather than the bug.
+
+Both are now in the ticket **as rejected causes**, which is the transferable
+part: a ticket that lists only the failed attempts teaches its next reader that
+everything untried is promising. Listing the attempts that *appeared to succeed*
+is what makes them cost nothing twice.
+
+The trap that produced the second one is now a line in that ticket: **any bisect
+of this file must run in the app directory** — with the `cmp` result showing the
+inputs are byte-identical and only the cwd differs. Invisible from inside a
+correct-looking experiment.
+
+### 68. Prio propagation is only as good as the edges somebody drew — and a STRUCTURAL blocker is exactly the kind that never gets one
+
+The coordinator, 2026-08-29, on
+`refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed`.
+
+The board ranks by *"one human `prio:` propagated down dependency edges — a
+blocker inherits the priority of what it unblocks, so you rate goals and the
+chain follows."* That mechanism was **inert** on the one ticket standing between
+Track C and being an independently staffable lane. It sat at p45, ranked below
+five tickets it blocks, because:
+
+```
+$ grep -rl "c-exclusive-lowering" devdocs/progress/{urgent,backlog,backlog_new,unfinished,blocked}/
+$          # zero files
+```
+
+**No in-edges, so nothing to inherit.** And the edges were not merely forgotten:
+adding them would be a *false claim*, because `blocked-by:` means *cannot
+proceed* and those five tickets can proceed perfectly well — by an agent holding
+the A slot. Marking them blocked would hide real Track A work from Track A's
+queue to repair a ranking artefact.
+
+**The general shape: a ticket that blocks a LANE rather than a TICKET can never
+be ranked correctly by propagation, and no checker can see it** — from the
+ranker's side, an in-degree of zero is indistinguishable from a leaf. Any ticket
+whose beneficiaries are *"most of track X"* under-ranks itself permanently and
+silently.
+
+Same family as **33** (a capability nothing invokes is quieter than no check):
+the mechanism is present, correct, and simply never fires — and its presence is
+what stops anyone asking whether it did.
