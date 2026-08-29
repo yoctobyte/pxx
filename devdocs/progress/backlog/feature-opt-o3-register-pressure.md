@@ -2554,3 +2554,40 @@ every queue *and* mis-tracked, and the second fault was masked by the first.
 **Landed, four of four:** operand scheduler, callee-saved scratch, float-resident
 dead-store elimination, and the aarch64 `-O1` leaf-operand port (42084 bytes and
 10521 instructions off mandelbrot at `-O3`, 5.8%).
+
+---
+
+## 2026-08-29 — the aarch64 leaf-operand remainder is CLOSED, by census
+
+The aarch64 leaf-operand collapse is complete: CONST landed in `1185b3489`,
+LEAFSYM in the `EmitLoadVarA64` two-step. Together they take 93-94% of integer
+binops on this target. **The ~6% remainder is not worth a pass, and this is the
+measurement rather than the intuition.**
+
+`PXXDBG=a.a64binop` now names the IR kind of an `OTHER` right operand, because
+"6% are OTHER" is a number with no next step. What they are:
+
+| right operand kind | compiler.pas | mandelbrot | lispdemo | collapsible? |
+| --- | --- | --- | --- | --- |
+| `binop` | 1914 | 193 | 183 | **no** — a nested expression evaluates through x0/x1 itself |
+| `call` | 745 | 48 | 51 | **no** — side effects, and it owns x0/x1 for args and result |
+| `neg` | 724 | 22 | 15 | only if ITS operand is a leaf — a nested case, not this one |
+| `load_mem` | 525 | 29 | 36 | maybe, for simple addressing; needs its own analysis |
+| `not` / `lea` / `index` | 8 | 8 | 8 | negligible |
+
+**The two dominant kinds are structurally uncollapsible.** The whole trick is
+that a constant or a leaf-symbol right operand has no side effects and cannot
+observe the left, so it can be materialised *after* the left is in x0. A nested
+binop and a call are exactly the operands for which that is false — they need x0
+as their own working register, and the stack round trip is what makes them safe,
+not what makes them slow.
+
+What is left after removing those: `neg`-of-a-leaf and simple `load_mem`, which
+on mandelbrot is **51 sites — 1.0% of all binops**, at 3 instructions each, and
+`neg` only for the subset whose own operand is a leaf. That is a smaller slice of
+a smaller slice, needing an addressing analysis that does not exist yet.
+
+**So: not filed as a ticket, deliberately.** A ticket justified by the fact that a
+number remains is a placeholder that sits at low prio forever — the exact backlog
+leak CLAUDE.md names. The remainder is priced and closed; if someone wants it
+later, this table is the starting point and the answer it gives today is no.

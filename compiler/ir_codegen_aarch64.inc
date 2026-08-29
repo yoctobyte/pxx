@@ -2053,7 +2053,12 @@ begin
               WriteLn('PXXDBG a.a64binop LEAFSYM_NONCOMM');
           end
           else
-            WriteLn('PXXDBG a.a64binop OTHER');
+            { Name the kind. "6% are OTHER" is not a finding — it is a number
+              with no next step. What those operands ARE decides whether the
+              remainder is worth a pass or is structurally uncollapsible
+              (anything with a side effect, or that can observe the left
+              operand, must stay behind the stack round trip). }
+            WriteLn('PXXDBG a.a64binop OTHER ', IROpName(IRKind[right]));
         end;
         { -O3 leaf-operand direct load, aarch64 half of x86-64's -O1 arm.
 
