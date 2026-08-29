@@ -4,7 +4,7 @@ prio: 80
 type: bug
 blocked-by: []
 summary: "compiler/rparser.inc calls RExprRecId ~340 lines before it is declared and there is no forward, so FPC stops with `Identifier not found \"RExprRecId\"` and compiler.pas does not compile under FPC at all. pxx resolves names across the whole unit and is unaffected, which is why every green gate stayed green: the self-host loop never asks FPC anything. The FPC bootstrap seed is the one thing that build cannot verify, and it is the path a fresh checkout with no pinned binary must take. One-line fix: a forward declaration next to the five already at rparser.inc:63-67. Landed 2026-08-29 in 68dac6d2a."
-status: new
+status: done
 owner: ""
 ---
 
@@ -73,3 +73,6 @@ separately if anyone wants it: move it to `tools/` and hang it off
 `gate.sh quick`, which is ~30s and already the pre-pin brake. A pin is exactly
 the moment the seed's health matters, and it is currently the moment nothing
 asks.
+
+## Log
+- 2026-08-29 — resolved, commit PENDING-COMMIT.

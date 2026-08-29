@@ -229,6 +229,57 @@ signatures, not from the ladder's list — and both are ahead of it now:
    literal-suffix bug wearing a different hat, and worth stating because the
    generic-looking helper is the obvious thing to reach for.
 
+10. **DONE** — module-level items: type aliases that actually alias, and
+    top-level `const NAME: [T; N]`. Stage 0/3 of the ladder — what a real `.rs`
+    file has *above* its first fn, and what a unity-build concatenation of
+    several modules therefore has a lot of.
+
+    Both were being *swallowed*: `RStripTopItems` dropped `type X = Y;` whole
+    (so every use of X died on `unknown type X`) and `RParseTopLevelConst`
+    skipped array consts whole (so every use died on `undefined variable`).
+    That is why the corpus's modules died in their first four lines.
+
+    - **Aliases** are recorded as the item is stripped and resolved in
+      `RTypeNameAt`, the one canonical type-name reader — so `FindUClass`, the
+      record-id lookups and the array-element paths all see the TARGET name
+      and need no alias knowledge of their own. Chained aliases resolve, with
+      a bounded loop so `type A = B; type B = A;` cannot spin. Narrowing:
+      single-token targets only, so `type Row = [u8; 8];` still vanishes as
+      before and this strictly widens what compiles.
+    - **Const arrays** become globals filled at startup, registered by a
+      PRESCAN (Rust lets a const be used above its declaration, and a global
+      needs `CurProc < 0`), with the stores prepended to `main`'s body — this
+      driver calls `main` and exits, so there is no other startup hook.
+      Deviation, stated rather than hidden: Rust's `const` is a `.rodata`
+      compile-time value and this is a mutable global. No compiling program
+      can observe the difference — values, stable addresses, reads from any
+      function are all identical — and real `.rodata` initializers are
+      shared-codegen work (Track A) that would buy the engine nothing.
+
+    The refactor is the part worth keeping: the array-literal parser was
+    lifted out of `RParseLet` into `RParseArrayLiteral` and shared with the
+    const prescan, rather than copied. An array-literal parser that exists
+    twice is one that gets fixed on one arm — this file has already paid that
+    tax three times this window.
+
+11. **FIXED (urgent, p80, not a rung)** — `RExprRecId` was called ~340 lines
+    above its own declaration with no `forward`. pxx resolves names across the
+    whole unit; **FPC resolves in source order**, so `compiler.pas` did not
+    compile under FPC at all and a fresh tree with no trusted binary could not
+    be seeded.
+
+    The reason it reached master with every gate green is structural and worth
+    internalising: `make compiler/pascal26` compiles the compiler **with pxx**,
+    so the only compiler the per-fix loop ever consults is the one under test.
+    The byte-identical self-host fixedpoint — our strongest signal — cannot see
+    FPC-only breakage by construction, and no testmgr tier covers it either.
+    `python3 tools/forwardlint.py` is what catches it, and nothing in
+    `gate.sh` or the Makefile invoked it. **Run it before pushing.**
+    Verified two ways here: forwardlint clean, and a direct
+    `fpc -Mobjfpc compiler.pas` bootstrap that now links.
+    Resolves `bug-r-rexprrecid-breaks-the-fpc-bootstrap-seed` and
+    `bug-r-rparser-calls-rexprrecid-before-declaring-it-so-the-fpc-bootstrap-seed-does-not-compile`.
+
 ## Log
 - 2026-08-29 — unit 1 landed (see the ladder ticket's log for the detail).
 - 2026-08-29 — unit 2 landed: Option (and records generally) through fn
@@ -254,3 +305,8 @@ signatures, not from the ladder's list — and both are ahead of it now:
   run, because the bug it pins produced *plausible* numbers.
 - 2026-08-29 — rung 9 landed: `if` as an expression, statement and tail forms,
   on the shared AN_TERNARY. `test_rust_if_expr.rs`.
+- 2026-08-29 — rung 10 landed: type aliases resolve, top-level const arrays
+  become startup-filled globals, and the array-literal parser is now shared
+  between `let` and the const prescan. `test_rust_module_items.rs`.
+- 2026-08-29 — urgent FPC-seed fix: `RExprRecId` forward-declared. Both
+  duplicate p80 tickets resolved.
