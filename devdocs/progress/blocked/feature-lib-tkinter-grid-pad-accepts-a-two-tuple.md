@@ -2,10 +2,10 @@
 track: B
 prio: 45
 type: feature
-blocked-by: []
+blocked-by: [bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped]
 summary: "`widget.grid(padx=(8, 6))` — tkinter's two-tuple pad, meaning (left, right) — is rejected by the facade: `no overload of grid matches these arguments`. A scalar `padx=8` works. Real tkinter accepts both for padx and pady on grid and pack. One line of songformatter's settings.py needs it; it is the module's only remaining wall."
-status: new
-owner: ""
+status: working
+owner: frank-b
 ---
 
 # tkinter facade: `grid(padx=(8, 6))` — the two-tuple pad
@@ -60,3 +60,52 @@ Track B's: `make lib-test` / `make demos` green, built with `$(PXX_STABLE)`
 (never rebuild the compiler), plus the repro above compiling and the padding
 actually applied asymmetrically on screen — a scalar fallback that silently
 ignores the second element would pass a compile check and is the wrong fix.
+
+
+## Triage (frank-b, 2026-08-29) — NOT a Track B defect; blocked on Track N
+
+**The facade is already complete.** `padx`/`pady` on both `grid` and `pack` are
+already `Variant`, and `TkiOptPad` already renders the `(before, after)` pair as
+Tk's braced list. Nothing in `lib/pcl/tkinter.pas` needed changing, and I
+changed nothing.
+
+The gate's own requirement — *"the padding actually applied asymmetrically ...
+a scalar fallback that silently ignores the second element would pass a compile
+check and is the wrong fix"* — is met today. Verified by asking **Tk**, not our
+own formatter (`grid info` on the live widgets under xvfb):
+
+```
+pair  : ... -padx {8 6} -pady 2 -sticky e
+scalar: ... -padx 8 -pady 2 -sticky e
+pady  : ... -padx 1 -pady {3 9} -sticky e
+```
+
+**What actually rejects the call is a NilPy argument-binding bug**, filed as
+[[bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped]].
+A keyword call to a **method** that leaves an earlier defaulted parameter
+unbound rejects an object-valued Variant argument. The same signature and the
+same call bind correctly through the **instantiation** path and through a
+unit-level procedure — same class, only the path differs:
+
+```python
+c = v6.TC(a=0, v=(8, 6))     # OK
+c.meth(a=0, v=(8, 6))        # no overload of meth matches these arguments
+```
+
+Which is why the ticket's own table reads the way it does: `grid(..., padx=8)`
+works because a scalar is not affected, and `grid(..., padx=(8, 6))` fails
+because three options before it were left unbound. Supply them all and the
+tuple form compiles and works **today**:
+
+```python
+lbl.grid(row=0, column=0, sticky="e", columnspan=1, rowspan=1, padx=(8, 6), pady=2)
+```
+
+That is the **workaround available now** for `settings.py:183` if the wasm lane
+does not want to wait for the N fix — it is one line and it is not a
+compiler-appeasement reshape of library code, it is an application spelling
+every option it is already setting.
+
+**Why this ticket stays open rather than being resolved:** its ask is that the
+short spelling work, and it does not. But there is nothing left for Track B to
+do, so it is parked on the N bug rather than held in `working/`.
