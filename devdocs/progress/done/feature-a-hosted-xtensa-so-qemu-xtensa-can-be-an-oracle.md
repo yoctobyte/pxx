@@ -1045,4 +1045,4 @@ being true of xtensa. It is now false — for Call0, for the 55, with the flag
 named.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit cced65cbe.
