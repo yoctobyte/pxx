@@ -6,6 +6,8 @@ procedure EmitLoadImmArm32(rd: Integer; v: Int32); forward;
 procedure EmitLoadImmA64(rd: Integer; v: Int64); forward;
 procedure EmitwriteSyscallArm32(dataOff, len: Integer); forward;
 procedure xtensa_j(offset: Integer); forward;
+procedure xtensa_movi(t, imm12: Integer); forward;
+procedure xtensa_syscall; forward;
 procedure XtensaEmitLitHeader; forward;
 
 { Kept out of EmitB so the hot inline path stays a compare and a store. The
@@ -370,8 +372,36 @@ procedure EmitExit(code: Int64);
 begin
   if TargetArch = TARGET_XTENSA then
   begin
-    { Bare-metal: no exit syscall — park in a self-loop. }
-    xtensa_j(0);
+    if TargetPlatform = PLATFORM_ESP then
+      { Bare metal / IDF: no kernel, so no exit syscall — park in a self-loop. }
+      xtensa_j(0)
+    else
+    begin
+      { Hosted linux (qemu-xtensa user mode): exit_group(119).
+
+        119 IS exit_group and 118 is plain exit — VERIFIED, not read off the
+        table: qemu-xtensa -strace names them, printing `exit(7)` for 118 and
+        `exit_group(7)` for 119. That distinction is load-bearing here, not
+        pedantic: this routine wants exit_group ON PURPOSE (see the header
+        note and bug-b-concurrent-halt-from-several-threads-exits-0), because
+        a plain exit ends only the CALLING thread, so Halt(216) from a worker
+        left the process running and the status was silently lost as 0. A
+        single-threaded probe cannot tell the two apart, and hosted xtensa has
+        no threads yet (--threadsafe is x86-64/i386/aarch64/arm32 only), so
+        -strace is what settled it.
+
+        The numbering is XTENSA'S OWN unistd.h, not the generic table riscv32
+        uses five lines below: there write is 64, here write is 13 (measured
+        against qemu). Do not carry a number across these two arms.
+
+        a2 = syscall number, arg0 = a6 -- NOT a2..a7 in order; see the
+        IR_SYSCALL arm in ir_codegen_xtensa.inc for the full register map.
+        movi's imm12 covers the 0..255 exit-code range.
+        feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle }
+      xtensa_movi(2, 119);                        { a2 = __NR_exit_group }
+      xtensa_movi(6, Integer(code and $FF));      { a6 = arg0 = exit code }
+      xtensa_syscall;
+    end;
     Exit;
   end;
   if TargetArch = TARGET_RISCV32 then

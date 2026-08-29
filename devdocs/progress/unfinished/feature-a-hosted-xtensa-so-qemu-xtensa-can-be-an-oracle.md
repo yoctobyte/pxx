@@ -394,3 +394,125 @@ thread's `exit_group` killed the winner mid-`writeln`, producing truncated
 output. **That is `Halt`'s intended semantics — whole process, immediately — not a
 defect to design around.** "Output stopped mid-line" near a `Halt` is expected,
 not evidence of a codegen fault. It cost b4 time to establish once.
+
+## Progress 2026-08-29b (frankS) — walls 1 and 2 down; a hosted xtensa binary now PRINTS and EXITS
+
+```
+$ pascal26 --target=xtensa --platform=posix -Fulib/rtl hello.pas hello_xt
+$ qemu-xtensa hello_xt
+hello from hosted xtensa
+$ echo $?
+0
+```
+
+Works on **both ABIs** (Call0 and `--xtensa-abi=windowed`). Two walls left, both
+newly identified, both outside the granted file set.
+
+### `exit_group = 119` is now VERIFIED, and the earlier caveat is withdrawn
+
+The previous note bounded this: 118 and 119 both terminate with the passed code,
+and a single-threaded probe structurally cannot tell `exit` from `exit_group`.
+Hosted xtensa has no threads (`--threadsafe` is x86-64/i386/aarch64/arm32 only),
+so the thread-based distinguishing test is impossible here.
+
+It did not need threads — **qemu names them**:
+
+```
+$ qemu-xtensa -strace <118>   ->   exit(7)
+$ qemu-xtensa -strace <119>   ->   exit_group(7)
+```
+
+That matters rather than being pedantic: `EmitExit` wants `exit_group` *on
+purpose* (`bug-b-concurrent-halt-from-several-threads-exits-0` — a plain `exit`
+ends only the calling thread, so `Halt(216)` from a worker left the process
+running and the status was silently lost as 0). Inheriting 119 from table
+ordering would have been inheriting the one bit the measurement could not see.
+
+### Wall 1 — `EmitExit` (done)
+
+`emit.inc` now gates on `TargetPlatform`: ESP keeps the self-loop, hosted emits
+`exit_group(119)`. The encoders are declared `forward` at the top of `emit.inc`
+alongside the existing `xtensa_j` forward, so this calls `xtensa_movi` /
+`xtensa_syscall` rather than hand-encoding a second copy of the SYSCALL bytes.
+
+### Wall 2 — `IR_WRITE` (done)
+
+`ir_codegen_xtensa.inc` now gates on `TargetPlatform` and, hosted, routes
+through the same `PXXWrite*W` builtin helpers riscv32 uses. Two new helpers keep
+it uniform: `XtensaHelperProc` (FindProc + the not-found Error, one copy instead
+of ten) and `EmitXtensaHelperCall(procIdx, nArgs)`, which owns the Call0-vs-
+windowed argument dance in ONE place — the write path has ten call sites and
+open-coding the dance ten times is how one of them ends up windowed-wrong.
+String constants take an inline `write(1, …)` syscall as on riscv32.
+
+### Wall 3 (NEW) — `PXXSysWrite` / `PXXSysRead` are xtensa stubs
+
+`compiler/builtin/builtinheap.pas` returns **`Result := 0`** on the xtensa arm
+of both, and both comments say why it is not a decision:
+
+> *"this was the pre-chain default, not a choice made for xtensa. Preserved
+> exactly. 0 means 'wrote nothing, successfully'."*
+> *"…0 means 'read 0 bytes, no error' — EOF — and if xtensa ever reaches here
+> that is a silent lie, not a dead stub. **Deciding that is Track S's call**,
+> not this ticket's."*
+
+That is this lane's call, explicitly deferred to it. It is why `WriteLn('x')`
+prints the string but **not the newline**: the string goes out through the
+inline syscall, while `PXXWriteNL` goes through `PXXSysWrite` and silently
+writes nothing. Measured: riscv32 makes 2 `write` syscalls for that program,
+xtensa 1.
+
+Fix is one line each — `__pxxrawsyscall(13, …)` for write and `12` for read,
+the numbers measured in the previous note. **Not done: `builtinheap.pas` is
+outside the granted file set and was last touched 2 hours ago by Track O.**
+
+### Wall 4 (NEW) — qemu's xtensa cores do not implement `MULUH`
+
+Numeric output still dies with `SIGILL`. Traced to `0x0807c201`, the
+instruction after `mull a8, a4, a2`:
+
+```
+20 84 82   mull  a8, a4, a2
+20 94 a2   muluh a9, a4, a2     <-- illegal on every qemu core
+```
+
+`MULUH` is the 32-bit multiply-high option, emitted unconditionally by the
+64-bit `tkStar` sequence (`ir_codegen_xtensa.inc`). It is **real on ESP32
+LX6/LX7** ("Verified vs xtensa-esp32s3-elf-as") — so this is an oracle
+limitation, not a codegen bug. Confirmed against **all five** qemu cores
+(`dc232b`, `dc233c`, `de212`, `de233_fpu`, `lx106`): every one traps.
+
+Consequence: any Int64 multiply cannot run under the oracle, which includes the
+decimal-conversion path, so string output works and numeric output does not.
+
+**This is a fork worth deciding rather than guessing** (Track U if the owner
+prefers). The options:
+
+1. **Software multiply-high on the hosted profile only** — the same
+   profile-gating shape as walls 1 and 2, in `ir_codegen_xtensa.inc`, which is
+   already granted. Cost: hosted code diverges from ESP code *in this one
+   sequence*, so the oracle stops being bit-identical to what the hardware runs
+   — for a multiply, the very thing one would want an oracle to check.
+2. **Accept the limitation.** The oracle covers control flow, strings, calls,
+   ARC and syscalls, and cannot cover 64-bit multiply. Cheap and honest, and it
+   leaves exactly the arithmetic hole the blocked tickets
+   ([[bug-a-the-div-by-zero-check-is-still-missing-on-xtensa]],
+   [[bug-a-xtensa-cannot-lower-an-int64-to-float-conversion]]) care about.
+3. **Reuse the existing precedent:** `--xtensa-cpu=lx6` already routes div/mod
+   through soft kernels for a core that lacks the hardware. A peer
+   `--xtensa-soft-mul` would fit that established shape and keeps the default
+   path untouched.
+
+**Recommendation: 3.** It matches a pattern the codebase already chose for
+exactly this problem, keeps the ESP default bit-for-bit unchanged, and makes the
+divergence explicit at the command line rather than implicit in a profile — so a
+verdict produced under the oracle names the flag that produced it.
+
+### Verified (binary `acdd97e2ec9d`, fixedpoint converged 1 round)
+
+- Hosted `WriteLn` of a string matches the x86-64 oracle byte for byte on both
+  ABIs, and exits 0 (`exit_group(0)` under `-strace`).
+- ESP profile unchanged: `random.pas` repro, `hello-s3`/`timer-s3`/`hello-c3`,
+  and `test_esp_bare` all still build.
+- x86-64 and riscv32 still run correctly.
+- `gate.sh quick` GREEN including the FPC seed canary.

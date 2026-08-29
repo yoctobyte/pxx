@@ -1038,6 +1038,33 @@ end;
     is no PXXWriteVariant call site to add: `writeln(v)` compiles and emits
     nothing, exactly as `writeln` of any other type does on this backend. }
 
+function XtensaHelperProc(const name: AnsiString): Integer;
+{ FindProc + the "not found" Error, which every helper call site below wants
+  and which is worth exactly one copy. }
+begin
+  Result := FindProc(name);
+  if Result < 0 then Error('compiler error: ' + name + ' not found');
+end;
+
+procedure EmitXtensaHelperCall(procIdx, nArgs: Integer);
+{ Call a runtime helper whose arguments are ALREADY in a2..a(1+nArgs) -- the
+  Call0 argument registers, in order. Under the windowed ABI they must be
+  copied up to a10.., which is what call8 rotates into the callee's a2..,
+  and the result comes back in a10.
+
+  One routine rather than the dance open-coded at each write case below: they
+  are all the same decision, and repeating it ten times is how one of them ends
+  up windowed-wrong (devdocs/dev/normalise-dont-special-case.md). }
+var k: Integer;
+begin
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+    for k := 0 to nArgs - 1 do
+      xtensa_mov(reg_xtensa_a10 + k, reg_xtensa_a2 + k);
+  EmitCallProc(procIdx);
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+    xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);
+end;
+
 procedure EmitVarHelperCallXtensa(const name: AnsiString);
 { a2 = variant slot address (the helper's only argument), and a2 still holds it
   on return — every caller below keeps using the slot afterwards.
@@ -1154,6 +1181,7 @@ var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, argBase, valNode, j: Integer;
   argFree: Integer;   { Call0: bytes of argument block to pop AFTER the call
                         (0 = the block was already freed before it) }
+  scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
   tk: TTypeKind;
   sgn, savedLVW: Boolean;
   sVal: AnsiString;
@@ -2093,7 +2121,142 @@ begin
 
     IR_WRITE, IR_WRITELN:
       begin
-        { Bare-metal: write/writeln does nothing. }
+        if TargetPlatform = PLATFORM_ESP then
+        begin
+          { Bare-metal / IDF: write/writeln does nothing (UART output is
+            explicit MMIO in user code, see test_esp_bare.pas). }
+        end
+        else if IRKind[node] = IR_WRITELN then
+          EmitXtensaHelperCall(XtensaHelperProc('PXXWriteNL'), 0)
+        else
+        begin
+          { HOSTED: route every write argument through the portable
+            buffer-based builtin helpers (PXXWrite*W in builtinheap.pas), the
+            same way riscv32's hosted arm does -- no inline write codegen.
+            feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle }
+          valNode := IRA[node];
+          j := IRB[node];                    { field width, 0 = none }
+          if IRKind[valNode] = IR_CONST_STR then
+          begin
+            sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
+            si := InternStr(sVal);
+            if (j > 0) and (j > Strs[si].Len) then
+            begin
+              EmitLoadConstXtensa(reg_xtensa_a2, j - Strs[si].Len);
+              EmitXtensaHelperCall(XtensaHelperProc('PXXWritePad'), 1);
+            end;
+            if Strs[si].Len > 0 then
+            begin
+              { write(1, data+8, len) -- inline syscall, no helper needed.
+                13 is __NR_write in XTENSA'S table (measured under
+                qemu-xtensa); riscv32's arm uses 64, from the generic table.
+                a2 = nr, a6 = arg0, a3 = arg1, a4 = arg2 -- NOT a2..a7 in
+                order; see the IR_SYSCALL arm for the whole map. }
+              EmitLoadDataRefXtensa(reg_xtensa_a3, Strs[si].Offset + 8);
+              EmitLoadConstXtensa(reg_xtensa_a4, Strs[si].Len);
+              xtensa_movi(reg_xtensa_a6, 1);              { fd 1 }
+              xtensa_movi(reg_xtensa_a2, 13);             { __NR_write }
+              xtensa_syscall;
+            end;
+          end
+          else
+          begin
+            tk := IntToTypeKind(IRTk[node]);
+            if IRC[node] = -3 then
+            begin
+              { write(PChar): NUL-terminated C string }
+              IREmitNodeXtensa(valNode);
+              EmitXtensaHelperCall(XtensaHelperProc('PXXWriteCStr'), 1);
+            end
+            else if tk = tyVariant then
+            begin
+              { The runtime picks the format from the slot's tag, so a variant
+                write is one call with the slot ADDRESS -- no width form.
+                This is the call site bug-a-xtensa-codegen-has-no-variant-support
+                recorded as having no counterpart on xtensa; the hosted profile
+                is what gives it one. }
+              EmitLoadVariantAddrXtensa(valNode);
+              EmitXtensaHelperCall(XtensaHelperProc('PXXWriteVariant'), 1);
+            end
+            else if TypeIsFloat(tk) then
+            begin
+              { a2:a3 = double bits; the portable float writers take their
+                stack ADDRESS. Windowed keeps sp fixed, so the slot is at
+                sp+XtSpillDepth-8 after the push; Call0 moved sp onto it. }
+              EmitFloatOperandXtensa(valNode, tyDouble);
+              XtensaPush64;
+              if XtensaABI = XTENSA_ABI_WINDOWED then
+                xtensa_addi(reg_xtensa_a2, reg_xtensa_sp, XtSpillDepth - 8)
+              else
+                xtensa_mov(reg_xtensa_a2, reg_xtensa_sp);
+              i := IRC[node];                          { decimals }
+              if i >= 0 then
+              begin
+                EmitLoadConstXtensa(reg_xtensa_a3, i);
+                EmitLoadConstXtensa(reg_xtensa_a4, j);  { field width }
+                EmitXtensaHelperCall(XtensaHelperProc('PXXWriteFloatFixed'), 3);
+              end
+              else if i = -2 then
+                EmitXtensaHelperCall(XtensaHelperProc('PXXWriteFloatNat'), 1)
+              else
+              begin
+                SciFormatFor(j, Ord(tk), scFrac, scExp);
+                EmitLoadConstXtensa(reg_xtensa_a3, scFrac);
+                EmitLoadConstXtensa(reg_xtensa_a4, scExp);
+                EmitXtensaHelperCall(XtensaHelperProc('PXXWriteFloatSci'), 3);
+              end;
+              XtensaPop64ToA4A5;                       { discard: frees the slot }
+            end
+            else if tk = tyChar then
+            begin
+              IREmitNodeXtensa(valNode);
+              EmitLoadConstXtensa(reg_xtensa_a3, j);
+              EmitXtensaHelperCall(XtensaHelperProc('PXXWriteCharW'), 2);
+            end
+            else if tk = tyBoolean then
+            begin
+              IREmitNodeXtensa(valNode);
+              EmitLoadConstXtensa(reg_xtensa_a3, j);
+              EmitXtensaHelperCall(XtensaHelperProc('PXXWriteBoolW'), 2);
+            end
+            else if tk = tyAnsiString then
+            begin
+              IREmitNodeXtensa(valNode);               { a2 = handle }
+              EmitLoadConstXtensa(reg_xtensa_a3, j);
+              EmitXtensaHelperCall(XtensaHelperProc('PXXWriteStrMW'), 2);
+            end
+            else if TypeIsFrozenString(tk) then
+            begin
+              IREmitNodeXtensa(valNode);               { a2 = buffer addr }
+              EmitLoadConstXtensa(reg_xtensa_a3, j);
+              EmitXtensaHelperCall(XtensaHelperProc('PXXWriteFrozenW'), 2);
+            end
+            else if Is64BitXtensa(tk) or TypeIsOrdinal(tk) or (tk = tyUnknown) then
+            begin
+              { PXXWriteDecW(v: Int64; uns, wid) -- v in a2:a3, so uns/wid land
+                in a4/a5 and the call takes four argument words. }
+              if Is64BitXtensa(tk) then
+                EmitNode64Xtensa(valNode)              { a2:a3 = value }
+              else
+              begin
+                IREmitNodeXtensa(valNode);
+                if (tk <> tyUnknown) and not TypeSigned(tk) then
+                  xtensa_movi(reg_xtensa_a3, 0)        { zero-extend }
+                else
+                  { no srai on this ISA -- the EmitNode64Xtensa idiom }
+                  EmitAsmXtensa(['movi a3, 0', 'bge a2, a3, .wpos', 'movi a3, -1', '.wpos:']);
+              end;
+              if (tk <> tyUnknown) and not TypeSigned(tk) then
+                xtensa_movi(reg_xtensa_a4, 1)
+              else
+                xtensa_movi(reg_xtensa_a4, 0);
+              EmitLoadConstXtensa(reg_xtensa_a5, j);
+              EmitXtensaHelperCall(XtensaHelperProc('PXXWriteDecW'), 4);
+            end
+            else
+              Error('target xtensa: write of this type not supported (hosted)');
+          end;
+        end;
       end;
 
     IR_TERMINATE:
