@@ -61,3 +61,43 @@ so this is a clarity/robustness refactor, not an open defect.
 
 C tests green + self-host byte-identical; both tests above still pass, and the
 tyInt64 special case in `IRNodePointerBase` is gone rather than moved.
+
+## Ownership: this needs the Track A slot, not just Track C — 2026-08-29 (frankC)
+
+Checked before claiming, dispatched to frankC and handed back. Same fork and
+same answer as [[refactor-c-string-literal-decay-belongs-at-the-producer]], so
+recording it here too rather than making the next agent derive it a third time.
+
+The file map:
+
+| symbol | file | lane |
+| --- | --- | --- |
+| `ParseCPostfixTail` (writes the sentinel) | `compiler/cparser.inc:3696` | C |
+| `CNodePointeeTk` (reads it) | `compiler/cparser.inc:2051` | C |
+| `IRNodePointerBase` (reads it) | `compiler/ir.inc:2348` | **A** |
+| `IRPointerStride` (reads the stamp) | `compiler/ir.inc:2390` | **A** |
+
+**The gate line requires the A file by construction:** *"the tyInt64 special
+case in `IRNodePointerBase` is gone rather than moved."* That special case IS
+the refactor — the `cparser` half only changes how the fact is written down.
+
+**Neither sketch option escapes it.** The `ASTSLen`-style stamp is read by
+`IRPointerStride`'s AN_BINOP arm in `ir.inc`, so `IRNodePointerBase` has to be
+re-keyed onto it there. The dedicated-AST-node option is *worse* for Track C,
+not better: CLAUDE.md names a new AST node as a Track A ticket you file, not
+code you write.
+
+**Do not land the cparser half alone.** It would write the sentinel twice — the
+type tag AND the new marker — with A's reader still keyed on the tag, which is
+strictly worse than today's single overloaded field.
+
+`track:` stays `C`: it is a C-frontend defect and belongs in C's queue for
+visibility. But whoever takes it must hold Track A or confirm no one else is in
+`ir.inc`. Nothing was started and no code was touched.
+
+Instance five of
+[[refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed]],
+and the sharpest one: this ticket was dispatched *specifically* because it
+looked disjoint from A's files, and it collided anyway. Five of the seven ready
+Track C tickets now need A's ground, because the ~40 `CProgramMode` sites in
+`ir.inc` have no `cir.inc` to live in.
