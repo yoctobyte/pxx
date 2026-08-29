@@ -8,11 +8,12 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-cross-bootstrap-aarch64-overflows-max-code | A | 60 | bug | MEASURED — it is DENSITY, raise the cap. aarch64 codegen runs 2.295x x86-64 across four unrelated programs (spread 2.27-2.34); the compiler needs only 1.80x to breach MAX_CODE, so predicted aarch64 size is 20.4 MB against a 16 MB cap. Runaway ruled out. ~21 MB floor, 32 MB gives headroom, A's call. Originally: `make cross-bootstrap` for aarch64 fails at HEAD with `code overflow: emitted code exceeds MAX_CODE` in compiler/pyparser.inc. Same pinned stable, same source, only the target differs — x86-64 emits 9,343,257 B (56% of the 16 MiB cap) while aarch64 exceeds it, so that backend needs >1.8x the code density for identical input. The error's own suggested remedy does not apply: default and -O2 overflow identically. Unseen because cross-bootstrap runs ONLY on a manual tag dispatch in release.yml, never per-commit, so it can rot at HEAD indefinitely — while the website advertises aarch64 as a supported target. | — |
+| feature-opt-emitloadvara64-needs-a-destination-register-parameter | A+O | 55 | feature | EmitLoadVarA64 hardcodes x0 behind residency, dyn-array-handle and sign-extension special cases, so the aarch64 leaf-operand collapse could only be done for the CONST half. The LEAFSYM half needs the right operand in x1 while the left sits in x0; a load-to-x1 twin would duplicate every one of those special cases. Honest fix is a destination-register parameter. Unlocks a further 12-16% of all binops on aarch64. | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
 
 ## unfinished (21)
@@ -51,7 +52,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (305)
+## backlog (304)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -268,10 +269,9 @@ _none_
 | feature-nilpy-walrus-operator | N | 35 | feature | `:=` (walrus) — the assignment expression is not parsed | — |
 | feature-opt-alloc-intent-hint | A+O | 10 | feature | Allocation-intent hint: tell the RTL growth policy how a buffer will be used | — |
 | feature-opt-arch-level-and-dispatch | A+O | 25 | feature | What x86-64 feature level does pxx emit for? Referenced as 'if raised' by two existing tickets and never filed; raised by the user 2026-08-15 when FMA came up. MEASURED: our own gate box plexus is a Xeon E5-2620 v2 (Ivy Bridge, 2013) with AVX but NO FMA and no AVX2 — x86-64-v2, not v3. So a v2 bump is safe and FMA would SIGILL on the machine that gates every push. Includes the answer to the 'dispatch defeats inlining' objection: multiversion whole FUNCTIONS, not instructions. | — |
-| feature-opt-bulk-copy-is-byte-at-a-time | O | 65 | feature | The runtime's bulk-copy primitives move ONE BYTE per iteration. Copy() on a 64-element array is ~23x slower than FPC's (2.54s vs 0.11s over 3M copies). A word-at-a-time loop -- ~10 lines, portable, no backend work -- was prototyped and measured at 3.3x of that back. | — |
+| feature-opt-bulk-copy-is-byte-at-a-time | O | 65 | feature | STALE HEADLINE -- re-priced 2026-08-29 at 1fd403b28: BOTH proposed fixes already landed (PXXBlockCopy word loop; the __pxxblockmove/rep-movsb intrinsic, 0f6a04644 + 2b85f8c8f), so the 23x and the 3.3x describe a compiler that no longer exists and must not be re-quoted. What remains is 8 open-coded byte loops in 5 routines (the ticket said 4 sites and missed PXXStrSetLen, the hottest), each now a one-line call to the already-landed PXXBlockCopy/PXXMemZero. Re-measure Copy() vs FPC before trusting prio 65. Also recorded: PXXMemMove is forward-only on every target and corrupts overlapping dst>src -- latent, no caller reaches it. | — |
 | feature-opt-dynarray-grows-in-place | A+O | 40 | feature | A growing dynamic array leaves its whole geometric series behind as garbage | — |
 | feature-opt-emitasmx64-reparses-fixed-strings | A+O | 60 | feature | `EmitAsmX64` re-parses the same hardcoded assembly strings on every compile — ~12% of a NilPy compile | — |
-| feature-opt-emitloadvara64-needs-a-destination-register-parameter | A+O | 55 | feature | EmitLoadVarA64 hardcodes x0 behind residency, dyn-array-handle and sign-extension special cases, so the aarch64 leaf-operand collapse could only be done for the CONST half. The LEAFSYM half needs the right operand in x1 while the left sits in x0; a load-to-x1 twin would duplicate every one of those special cases. Honest fix is a destination-register parameter. Unlocks a further 12-16% of all binops on aarch64. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-opt-inline-float-and-record-returning-leaves | A+O | 45 | feature | The inliner takes only int/ordinal leaves — it rejects any function returning a float or a record. Measured on lib/rtl/math.pas's double-double kernels: hand-inlining the exact same arithmetic took a sin kernel from 7.96 us to 2.11 us, BIT-IDENTICAL, so ~74% of that path's cost was call overhead the inliner already knows how to remove for integers. | — |
 | feature-opt-o3-register-pressure | A+O | 70 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
@@ -742,7 +742,6 @@ _none_
 - [p 55] [N] feature-nilpy-lambda-compiled-closure
 - [p 55] [N] feature-nilpy-no-type-inference-switch
 - [p 55] [N] feature-nilpy-str-format-named-keyword-fields
-- [p 55] [A+O] feature-opt-emitloadvara64-needs-a-destination-register-parameter
 - [p 55] [P] feature-p-assertions-directive-and-position
 - [p 55] [P] feature-p-tmethod-record-for-method-pointers
 - [p 55] [P] feature-p-uses-a-unit-in-an-explicit-file
