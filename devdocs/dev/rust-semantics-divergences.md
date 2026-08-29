@@ -62,17 +62,23 @@ doing it.
 
 ## `println!` evaluates its arguments interleaved with the format text
 
-*Noticed 2026-08-29, rung 6.*
+*Noticed 2026-08-29, rung 6. Re-checked rung 13, when `println!` was next
+touched — still true, and now true for a second reason.*
 
 Rust evaluates all of a `println!`'s arguments, in order, before any output is
 produced. This frontend lowers the macro to a sequence of writes, so a
 side-effecting argument runs at the point its placeholder is reached rather
 than before the first literal segment.
 
+Rung 13 made the sequence *longer* — a bool argument now splits the write in
+two so it can be spelled `true`/`false` — which widens the window without
+changing the order. The fix is the same one it always was and is still not
+done: evaluate every argument into a temp first, then write. That costs a temp
+per argument for a case no test in the corpus reaches, which is the whole
+argument for leaving it.
+
 Only reachable with a side-effecting argument. Every Rust test in this repo
-that would have tripped over it hoists the call into a `let` instead. Worth
-fixing when `println!` is next touched — it is a lowering-order question, not a
-design choice — but it has never produced a wrong value in the corpus.
+that would have tripped over it hoists the call into a `let` instead.
 
 ## A type alias with a multi-token target is dropped, not aliased
 

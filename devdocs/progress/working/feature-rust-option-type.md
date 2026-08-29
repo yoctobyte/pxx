@@ -402,3 +402,11 @@ signatures, not from the ladder's list — and both are ahead of it now:
 - 2026-08-29 - rung 12 landed: Result<T, E>, the `?` operator, and a fix for
   the record-payload sizing bug it exposed in Option (segfault on master).
   `test_rust_result.rs`.
+- 2026-08-29 - rung 13 landed: `println!` spells a bool `true`/`false`.
+  Found by an EDGE SWEEP over rung 12, not by a test — every value in
+  `Option`/`Result` was right and `is_none()` printed `TRUE`. Same shape as
+  the two bugs before it: a wrong value that looked like a result. Fixed in
+  the frontend (the spelling belongs to the language, not the writer) and as
+  a branch between two literal writes, because the obvious ternary over two
+  strings needs a managed-string runtime this frontend deliberately does not
+  emit. `test_rust_bool_print.rs`.
