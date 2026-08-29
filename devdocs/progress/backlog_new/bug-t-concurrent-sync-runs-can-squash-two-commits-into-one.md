@@ -65,12 +65,31 @@ Two candidates, cheapest first:
 A cheap guard while neither is done: `sync.sh` records the commit count before
 the rebase and warns if fewer commits were pushed than were staged for push.
 
+## How to check whether it hit you — and what is NOT the tell
+
+**`commit (amend)` inside a rebase is NOT the signature.** `sync.sh` amends
+deliberately as part of its documented job: filling in the sha a `resolve`
+landed as, which is the entire reason `resolve` writes `PENDING-COMMIT`. One
+coordinator reflog carried **38** of them in a single night. Grepping for that
+alone will tell most of the fleet they lost work.
+
+The signature is an amend that **reduces the commit count** — one whose parent
+is not the commit being amended. Operationally, and much cheaper:
+
+**Count your commits on origin afterwards, and check by CONTENT, not by sha.**
+A sha that is absent from `origin/master` is the *normal* outcome of a rebase,
+not evidence of loss: the coordinator found two of six shas missing and both
+had landed intact under new shas with their own messages. Six commits in, six
+distinct messages out, nothing lost. Checking by sha and stopping there would
+have produced a duplicate of this ticket filed against a healthy push.
+
+So the check is: **N commits pushed, N distinct messages on origin.** That is
+what caught this one — the code was all present, and the count was one short.
+
 ## Repro
 
 Two local commits, a `BOARD*.md`-touching commit landing on origin between
-them, and a second `sync.sh` running concurrently. Not deterministic; the
-reflog signature above (`commit (amend)` inside a rebase) is the reliable tell
-after the fact.
+them, and a second `sync.sh` running concurrently. Not deterministic.
 
 ## Related
 - [[bug-c-a-multidim-array-field-decays-with-the-element-stride]] — the ticket whose commit message this ate

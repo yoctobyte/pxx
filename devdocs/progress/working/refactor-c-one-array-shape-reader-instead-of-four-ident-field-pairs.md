@@ -15,6 +15,74 @@ owner: frankC
 - **Scoped by frank-coordinator, 2026-08-29**, after three separate field-arm
   bugs landed in one day.
 
+## The census — 2026-08-30 (frankC), 116 cells measured, 33 wrong
+
+Run as an **enumeration, not a pattern search**, on frankS's rule: *a search
+for duplicated logic cannot find the place where the logic is missing.* Every
+one of the three field-arm bugs fixed on 2026-08-29 was found by grepping for
+the pattern just fixed, so the same blind spot would have shaped this census.
+
+So the list is defined by the language, not by the codebase: **every way C can
+reach an array** (spelling) crossed with **everything C can do with one**
+(construct), one standalone program per cell, gcc deciding each. A cell is
+wrong whether the code that should handle it is divergent *or absent*, and it
+cannot tell the difference — which is the property the rule demands and a
+reading of the four routines could never have.
+
+```
+construct       global-ident  local-ident  struct-field  ptr-arrow  nested-field  elem-of-array
+row-stride      ok            ok           ok            ok         ok            ok
+row-stride-2    ok            ok           ok            ok         ok            ok
+partial-elem    ok            ok           ok            ok         ok            ok
+partial-elem-2  ok            ok           ok            ok         ok            ok
+noop-deref      ok            ok           SIGSEGV       SIGSEGV    SIGSEGV       SIGSEGV
+deref-plus      ok            ok           SIGSEGV       SIGSEGV    SIGSEGV       SIGSEGV
+deref-partial   ok            ok           ok            ok         ok            ok
+sizeof          ok            ok           ok            ok         ok            48!=224
+sizeof-row      16!=4         16!=4        16!=4         16!=4      16!=4         16!=224
+ptrdiff         ok            ok           4!=1          4!=1       4!=1          4!=1
+row-var         ok            ok           ok            ok         ok            ok
+row-into-fn     ok            ok           ok            ok         ok            ok
+row-into-ptr    ok            ok           ok            ok         ok            ok
+char-load       ok            ok           99!=25699     99!=25699  99!=25699     99!=25699
+char-noop-deref ok            ok           SIGSEGV       SIGSEGV    SIGSEGV       SIGSEGV
+char-strcmp     ok            ok           SIGSEGV       SIGSEGV    SIGSEGV       SIGSEGV
+char-row-stride ok            ok           ok            ok         ok            ok
+3d-stride       ok            ok           ok            ok         -             -
+3d-partial      ok            ok           SIGSEGV       SIGSEGV    -             -
+3d-all-star     ok            ok           SIGSEGV       SIGSEGV    -             -
+3d-row-var      ok            ok           ok            ok         -             -
+```
+
+**What the enumeration found that the pattern search could not.** The
+`sizeof-row` row is wrong on **every** spelling, `global-ident` included —
+there is no correct sibling arm anywhere to notice its absence against. It is
+filed separately at prio 80, because it is worse than every segfault in this
+grid: `memcpy(dst[1], src[1], sizeof(src[1]))` copies one element instead of
+the row and returns normally, and `sizeof(a[0])/sizeof(a[0][0])` answers 1
+instead of 4. See
+[[bug-c-sizeof-a-partial-index-answers-the-element-not-the-row]] — and note
+that its grid needed a *second* measurement: the census spells every cell
+parenthesised, an isolated bare-form probe disagreed, and separating the two
+variables showed two mechanisms with two different wrong answers. **A census
+cell that disagrees with a hand probe is a signal to vary the shape, not to
+pick a winner.**
+
+**Confirmed-correct readers, recorded so nobody sweeps them a fifth time.**
+Eleven constructs are right across all six spellings: `row-stride` (both),
+`partial-elem` (both), `deref-partial`, `row-var`, `row-into-fn`,
+`row-into-ptr`, `char-row-stride`, `3d-stride`, `3d-row-var`. Four of those
+six spellings — `gp->m`, `gs.in.m`, `garr[0].m`, and the local — had **never**
+been probed before today, and the two fixes of 2026-08-29 generalise to all of
+them without further work. That is the enumerate-the-correct-ones instruction
+paying for itself: those cells are now evidence, not assumption.
+
+**Still open from the grid** (beyond the `sizeof` ticket): the segfault family
+(`noop-deref`, `deref-plus`, `char-noop-deref`, `char-strcmp`, `3d-partial`,
+`3d-all-star`) on all four non-ident spellings; `ptrdiff` answering 1 instead
+of 4 through a field; `char-load` reading four bytes of a `char` row; and
+`sizeof(garr[0].m)` answering 224 (the whole struct) instead of 48.
+
 ## The evidence that makes this prio 75 and not a tidy-up
 
 ```c
@@ -53,6 +121,50 @@ pointer-to-array emits a real LOAD: the row's first eight bytes are read as an
 address and dereferenced. That is precisely the failure
 [[bug-c-deref-of-a-pointer-to-array-loads-instead-of-decaying]] describes and
 fixed — for idents only.
+
+## The accessor already exists, and one caller filters out half of it — 2026-08-30 (frankC)
+
+Found before writing any code, by asking frankS's question instead of mine
+(below). **`NodeArrNDInfo` (`compiler/pasparser_call.inc:483`) is already the
+shared reader this ticket proposes to invent.** It fills `NDInfoNDims` /
+`NDInfoLo[]` / `NDInfoSpan[]` and it already handles all three shapes — an
+`AN_IDENT` array, an **`AN_FIELD`** array, and an `AN_DEREF` of a
+pointer-to-array. Its own header says so: *"Lets m[..], r.m[..] and p^[..]
+share one path."*
+
+`ParseCPostfixTail` calls it — and gates the call:
+
+```pascal
+if (ASTKind[node] = AN_IDENT) and NodeArrNDInfo(node) then   { cparser.inc:3714 }
+```
+
+**That guard is the bug generator.** It excludes exactly the shape the helper
+already supports, which is why a second, near-identical struct-field arm exists
+180 lines below re-deriving everything from `RecFieldArrNDims` /
+`RecFieldArrDimSpanAt` / `RecFieldRowStride` — the arm that carried both defects
+fixed in `10676bcc2` and that nothing downstream could then answer for.
+
+So the shape is not "four readers grew divergent copies". It is: **one shared
+reader exists, one caller declines to use half of it, and a duplicate arm grew
+in the gap.** That reframes the work from *invent an accessor* to *delete a
+guard and collapse what it forced into existence*, which is the smaller job and
+the one that removes cases instead of adding them.
+
+Two real gaps remain in the accessor, and they are what the C readers actually
+need on top of spans and lows:
+
+1. It fires only for **rank >= 2** (`>= 2` in all three arms), so a 1-D array
+   answers False — but `long long v[8]` reached as a field is exactly one of the
+   shapes that was broken.
+2. It yields rank/lows/spans but **not the element type, element record or
+   element size** — which is precisely the part each reader re-implements per
+   node kind.
+
+`NodeArrNDInfo` lives in `pasparser_call.inc` = **Track P's file**, so do not
+extend it under Track C. The C-side answer is a thin `CNodeArrayShape` in
+`cparser.inc` that calls `NodeArrNDInfo` for rank/spans and adds the element
+triple with **one** ident/field switch — four switches become one, in C's own
+lane, with no Track P edit and no new symtab surface.
 
 ## Why one reader, not two more patches
 
