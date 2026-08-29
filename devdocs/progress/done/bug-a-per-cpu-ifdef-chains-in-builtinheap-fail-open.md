@@ -280,3 +280,54 @@ already expects, instead of returning a plausible success.
 
 ## Log
 - 2026-08-29 — fixed as the shape, not a fifth arm; resolved. PENDING-COMMIT
+
+## CORRECTION 2026-08-29 — `{$error}` DOES exist. Correction 1 above is wrong.
+
+Caught by frankA within minutes of the resolve, and corrected here rather than
+edited away, because the commit message `1ea3bdb85` carries the false claim and
+someone will read it.
+
+`lexer.inc:1697` recognises `warning`/`message`/`error`; `lexer.inc:1976` calls
+`Error(messageText)`. Measured both ways:
+
+```
+{$if not defined(NEVER_DEFINED_XYZ)}{$error the terminal arm fired}{$endif}
+  -> pascal26:1: error: the terminal arm fired
+{$if defined(NEVER_DEFINED_XYZ)}{$error should not fire}{$endif}
+  -> compiles clean
+```
+
+**How the wrong answer was produced, because the mechanism matters more than
+the fact.** The first grep was case-sensitive over uppercase directive names
+(`'(IFDEF|...|ERROR|...)'`) against source that spells them lowercase. It
+returned **nothing at all — not even `ifdef`** — and that empty output was read
+as "no such directive" rather than as "this pattern matched nothing". A second
+grep then ranged over line 1745-1900 and missed 1976 by 76 lines. Two
+instruments, both silent, both read as evidence of absence.
+
+That is the exact shape this session spent the day cataloguing — *an
+instrument whose aperture is invisible in its own output* — committed in the
+step that was supposed to be checking. An empty grep result and a
+does-not-exist are the same output, and only one of them was true.
+
+### The fix is still right, for a reason NEITHER TICKET GAVE — this is frankA's
+
+`{$error}` fires when the **file is compiled**, not when the routine is called.
+`builtinheap.pas` is compiled into every program on every target — the empty
+`program p; begin end.` used for the IR probe above compiled it on riscv32 —
+so an `{$error}` terminal in `PXXSysOpenRO` would refuse **every** wasm32 and
+xtensa build outright, including the overwhelming majority that never open a
+file. It would convert a latent wrong value into a hard build failure for
+unrelated programs.
+
+So the terminal arm is chosen by reachability, and that is the rule to carry
+forward:
+
+> **`{$error}` is right where a missing arm cannot be reached at run time; a
+> defined failure value is right where the routine is compiled into everything
+> and called by almost nothing.**
+
+Both tickets prescribed `{$error}` unconditionally, without that distinction —
+which is why "the dialect lacks it" landed as a plausible explanation instead
+of being re-tested. A wrong premise reached the right code, and only the
+premise needed correcting.

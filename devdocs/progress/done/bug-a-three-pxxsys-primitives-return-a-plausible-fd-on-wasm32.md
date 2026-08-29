@@ -117,3 +117,13 @@ and the next target too, which was the point.
 
 ## Log
 - 2026-08-29 — resolved with the root-cause sibling. PENDING-COMMIT
+
+## CORRECTION 2026-08-29 — `{$error}` exists; see the sibling ticket
+
+This ticket's proposed compile-time refusal was available all along. It is
+still not the right terminal here, but for a reachability reason rather than
+an availability one: `{$error}` fires when `builtinheap.pas` is COMPILED, and
+that file is compiled into every program on every target, so it would refuse
+every wasm32/xtensa build including programs that never open a file. Full
+correction, and how the wrong answer was produced, in
+[[bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open]].
