@@ -1823,6 +1823,10 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
              "wall: %s" % report["wall"],
              "scale: %s" % report["scale"],
              "verdict: %s" % report["verdict"],
+             # ...and which HARNESS, not only which tree. A verdict whose
+             # harness predates the fix it appears to contradict can then be
+             # discarded on sight instead of investigated.
+             "code_fp: %s" % (CODE_FP or "unknown"),
              # WHICH binary produced this verdict. The json has carried it since
              # the mid-run-change check; the markdown is what a human reads days
              # later, and "verify against a KNOWN sha" is unusable if the report
@@ -3070,10 +3074,30 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # A summary that omits the field determining its meaning is the same defect
     # as a report that omits what it never reached: the reader is left to infer
     # from a number what a field could have told them.
+    # `code_fp` below is WHICH HARNESS produced this verdict, distinct from the
+    # sha under test. It is published in watch.json already, but that file lives
+    # INSIDE the clone and no remote consumer can read it -- so until now a
+    # tstate row was a verdict from an unknown version of the harness, presented
+    # under the tested commit's name, with nothing in it saying which.
+    #
+    # Not cosmetic. A daemon holds the code it STARTED with, and `trackt
+    # restart` alone does not update it: the clone sits detached at the sha
+    # under test, so a `git pull` there fails by construction while the restart
+    # reports success. A watcher that has not picked up a fix keeps reporting
+    # the bug it was fixed for, and the fix's author reads that as "still broken
+    # at HEAD". A runbook line for the restart is skippable; a field in the
+    # artefact is not.
+    #
+    # The prose sits ABOVE the assignment rather than inside it deliberately:
+    # twatch_timeout_verdict_devtest asserts this summary's shape by slicing a
+    # fixed window after the marker, and a comment block inside the literal
+    # pushes the later fields out of that window. Widening the window to fit a
+    # comment would weaken a guard to accommodate its own subject.
     st["last"] = {"sha": sha, "date": utcnow(), "verdict": report["verdict"],
                   "wall": report["wall"], "tier": report["tier"],
                   "timed_out": bool(report.get("timed_out")),
                   "deadline": report.get("deadline"),
+                  "code_fp": CODE_FP,     # which harness; see above
                   "unreached": report.get("unreached")}
     # Newest COMPLETE run at each tier, so a consumer can ask "did tier X see
     # this tree?" without a cross-file join into runs-<host>.ndjson. Written
@@ -3196,6 +3220,8 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                             # without replaying every row before it. Four
                             # consecutive full runs on 2026-08-16 looked exactly
                             # like that while their reports each listed two.
+                            # the harness that produced the row; see st["last"]
+                            "code_fp": CODE_FP,
                             "still_red": still_red}, sort_keys=True) + "\n")
     record_host_epoch(clone, host)
     regen_index(clone)
