@@ -943,6 +943,66 @@ is a line of **prose inside a comment** that contains `test "$$(prog | tail -1)"
 as an example. The classifier counted a comment as code — the same category
 error as reading ModRM bytes as `push rax`, one layer up.
 
+## Face twenty-nine — a broken instrument produces exactly the artefact the observer was warned to expect, and the warning was correct
+
+Found by pxx-a5, 2026-08-29, while building `tools/verify_assertions.py` — and
+it is the most dangerous shape recorded here, because every part of it is
+someone doing their job well.
+
+**The setup.** frankB converted 2476 Makefile assertions, none suite-executed,
+and warned — unprompted, before any sweep existed — that **a wide red against
+those shas would be ONE systematic cause, not 2000 regressions.** The
+coordinator relayed that to both Track T faces in advance. Correct warning,
+correctly propagated, and it is the reason nobody would have wasted a night
+bisecting.
+
+**What nearly happened.** pxx-a5's sampler emitted FAILs while it was being
+written. Every one was **its own aperture**, not a defect: a producer sitting
+before the *previous* assertion; a `2>&1` read as an output path; an unexpanded
+`$(PXX_STABLE)`; a compile buried inside a quoted `hyperfine --command-name`; a
+`printf` producer filtered out as bookkeeping. Each printed an **empty `actual`
+under a confident MISMATCH banner.**
+
+> *"Had I sampled and reported without chasing them, I would have handed you
+> four to six phantom conversion defects **in exactly the shape you were braced
+> for** — uniform, empty-output, spread across targets. It would have read as
+> confirmation."*
+
+**Why this is worse than an ordinary false positive.** A prediction had been
+issued and widely relayed: *a uniform, systematic failure across many sites.* A
+buggy sampler produces uniform, systematic, empty-output failures across many
+sites — because that is what a broken harness always produces, not because
+anything was wrong. **The prior does not merely fail to protect against the
+false positive; it certifies it.** Everyone downstream — including the
+coordinator who issued the warning — would have read the artefact as the
+predicted event arriving on schedule.
+
+| condition | artefact |
+| --- | --- |
+| the conversion has a systematic defect | uniform empty-output failures across sites |
+| the sampler has an aperture bug | uniform empty-output failures across sites |
+
+And the correct warning is what makes the second row unquestionable.
+
+**The invariant that fixes it, and its necessary counterweight.** *Never FAIL on
+an input that was not demonstrably produced.* Paired with a guard named
+`t_a_real_mismatch_is_still_a_fail` — because **an instrument softened until it
+cannot fail is decorative, not safe**, which is the failure the softening itself
+invites. Both halves or neither.
+
+**And two of its own guards passed VACUOUSLY**, found in the same pass: `"FAIL"
+in out` is true of *every* run, because the summary line reads `0 pass, 0 FAIL,
+1 skipped`. The guard's substring matched the report of there being no failures.
+The checking layer written with less suspicion than the layer checked, again, by
+the person who had spent the day cataloguing exactly that.
+
+**The result, stated with its own scope**, which is the discipline the face is
+about: 60 sites sampled at HEAD in a fresh scratch root — **59 pass, 0 FAIL, 1
+skip** (`hyperfine` absent; a real gap, nothing installed to paper over it). Plus
+17 statically-flagged anomalies confirmed by execution to be the sampler's own
+`shlex` parsing. **Read as "no uniform defect is visible", never as coverage:
+2416 sites were not executed and nothing in that run speaks for them.**
+
 ## Face eighteen — when the compiler is its own test input, a diff cannot tell a CODEGEN change from a SOURCE change
 
 Found by frankwasm, 2026-08-29, and it nearly cost twenty lines of inert code.
