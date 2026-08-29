@@ -15482,3 +15482,109 @@ is a real regression rather than a harness artifact.
 Recorded here so the number is in front of the owner when the staffing question
 next comes up, rather than surfacing as a surprise. **A known red gate stops being
 read**, and N now has three.
+
+## 2026-08-29 16:40 — an 18.5h offline gap, and what it cost
+
+**The coordinator session was logged out from ~22:09 on 08-28 to 16:39 on 08-29.**
+Everything on master in that window is tstate. Not a fleet failure and not a
+worker's: nothing was dispatched because nobody was here to dispatch. Recording the
+duration because *"why is all work halted"* has been asked once before, and the
+answer that time was a self-justifying park flag — this time it is simply an
+absent coordinator, which is a different thing and should not be filed under the
+same cause.
+
+**I nearly reported it wrong.** My first range read *9 commits, all tstate, zero
+code* — and frankA's fix landed at **16:39, the same minute I ran the tick.** True
+when measured, false a minute later. I checked the ancestry before writing it up
+(the base sha was *not* rebased away — that hypothesis was wrong and cost one
+command), and the real story is a race, not a broken instrument. **The tick's own
+step 3 will keep producing this**: a range computed at T and reported at T+2min is
+a claim about the past presented in the present tense.
+
+### frankA closed two tickets with one fix — by REDUCTION, not resemblance
+
+`3a011ed6f`. It settled the same-family lead I recorded as UNMEASURED, and settled
+it the expensive-to-fake way: **stripping the parked repro's incidental
+inheritance until it failed identically to the p55's.** Not "these look alike".
+
+> Resemblance is what I would have accepted if it had been reported, and it is
+> precisely what produces a wrong root cause that survives review. The entry
+> directly above frankA's on that rung is itself a corrected wrong root cause, so
+> the trap was one screen away and it did not step in it.
+
+`bug-p-a-generic-specialized-before-its-declaration-is-unresolvable` and
+`bug-p-a-generic-prerequisite-is-emitted-before-the-referenced-template-exists`
+both closed. Corpus `generics.defaults.pas` **`:3250` → `:3341`**, and — the part
+that matters — it now stops on a **different class** of error (*"a pointer has no
+members"*), not another `specialize`.
+
+> **A wall that moves to a NEW error class is better evidence than a wall that
+> moves to the same one further down.** The second is what a shape-shift looks
+> like; the first is what a fix looks like.
+
+Controls were run in both directions: the cycle test still correctly *refuses*, and
+the new FPC-oracled test carries **both** orderings — the broken arm and the one
+that always worked, which is what a fix trading one for the other would break.
+
+### The FPC seed canary now has THREE instances, and the third is a new shape
+
+Appended to `decide-should-the-fpc-seed-canary-be-in-the-mandatory-loop` [U p55]
+(`b4802ce07`). frankA hit seed drift **twice in one session**; both times
+`make compiler/pascal26` was green and the optional `gate.sh quick` went RED.
+
+The second occurrence is the one to put in front of the owner:
+
+> The forwards **existed** — they had ended up below a caller a later refactor had
+> lifted above them. So *"I already added forwards"* was **true and useless.** A
+> guard whose correctness depends on **relative position** is re-broken by any edit
+> that moves either side, and the person who added it remembers adding it. **A
+> memory of an action is not a measurement of the current file.**
+
+That changes what the canary is *worth*: a one-off omission is covered by a
+discipline note; a positional dependency that silently re-breaks under unrelated
+refactors is exactly what a mechanical check catches and a convention does not.
+**Direction not re-recommended** — the call is the owner's and was stated at filing.
+
+### Filed from the tick: the fuzz ledger erases reopen history
+
+`f014da68a`, `bug-t-a-reopened-fuzz-finding-erases-the-history-that-makes-it-useful`
+[T p45]. `ec2f50d8c` announced `NEW: fpc-self_if` for a signature first seen
+**2026-07-14** and marked fixed 2026-08-16. Diffing the ledger entry across the
+reopen: `first_seed`, `first_sha` and `opened` **overwritten** with the new run's
+values; `fixed` and `fixed_sha` **deleted**; `hits` not incremented; `examples`
+replaced. `reopened_from_fixed: True` is the only honest field.
+
+> **A flag that records an event while its evidence is deleted is worse than no
+> flag** — it tells the reader a history exists and leaves nothing to read.
+
+The concrete loss is a **bisect bracket**: `fixed_sha=42e147157b60` plus the
+reopening sha bound the window the finding came back in. The ledger held both, one
+at a time, and now holds neither. **This instance is harmless — FPC contradicting
+itself, pxx agrees at all three levels — and that is why it survived: the erasure
+is generic and was observed on the one finding class whose loss costs nothing.**
+
+The hook refused my heredoc for spelling a tier command **in prose**, exactly as it
+did for Track O yesterday. Paraphrased, as the rule says. **Second measured
+instance; still not a defect to fix.**
+
+### Dispatched — two workers, no exception needed
+
+- **frankA → `feature-pascal-corpus-generics` [P p65]**, rung 3, the wall it just
+  moved. Next target is reducing the new `:3341` error class.
+- **frankwasm → open-array parameters WITH `Length of Pointer`**, resumed from its
+  park. Its own reason decided it and I endorsed it explicitly: *every probe
+  refused on `Length`/`High` before reaching the parameter, so the two classes
+  cannot be tested apart* — splitting them means measuring one through the other's
+  failure. Start at `IRLowerCallArg`'s argument paths; the refusal is **stale in
+  its reason, correct in its verdict**, and the one-liner it invites reports
+  `124 of 124 bodies lowered` and then traps. Ledger boundaries restated unchanged:
+  branch permission is not merge permission, five arms across two lanes, **HeapMmap
+  UNGRANTED and never the RTL arm alone.**
+- **frank-optimize-b4 → asked whether its `working/` lock is live or stale**, not
+  dispatched. I claimed the O umbrella on its behalf yesterday while it was
+  mid-build; if it parked, that lock now reads as *"someone is on it"*, which is the
+  opposite failure from the one I fixed and just as expensive.
+
+U queue **counted, not carried: 15.** Track T **UP** — but breadth is 17h old and
+flagged STALE, so there is **no cross-target verdict on this tree**; native green
+does not cover i386/arm32/riscv32/aarch64.
