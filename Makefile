@@ -13991,7 +13991,7 @@ lib-test: pxx-stable-check
 	# ~16s parallel across 138 units.
 	PXX_STABLE=$(PXX_STABLE) python3 tools/lib_units_compile.py
 	$(PXX_STABLE) examples/sudoku/sudoku.pas $(TESTTMP)/lib_sudoku
-	test "$$($(TESTTMP)/lib_sudoku)" = "$$(printf '534678912672195348198342567859761423426853791713924856961537284287419635345286179\n987654321246173985351928746128537694634892157795461832519286473472319568863745219\n812753649943682175675491283154237896369845721287169534521974368438526917796318452')"
+	tools/expect_same.sh lib_sudoku "$$($(TESTTMP)/lib_sudoku)" "$$(printf '534678912672195348198342567859761423426853791713924856961537284287419635345286179\n987654321246173985351928746128537694634892157795461832519286473472319568863745219\n812753649943682175675491283154237896369845721287169534521974368438526917796318452')"
 	$(PXX_STABLE) -dPXX_MANAGED_STRING test/test_collections.pas $(TESTTMP)/lib_collections
 	@test -n "$$($(TESTTMP)/lib_collections)" || (echo "lib smoke: collections produced no output"; exit 1)
 	$(TESTTMP)/lib_collections >/dev/null
@@ -14002,7 +14002,7 @@ lib-test: pxx-stable-check
 	# oracle: the SAME source must print the same session under python3, which is
 	# the cross-runtime half of the thesis the demo exists to show.
 	$(PXX_STABLE) examples/shell/nilsh.npy $(TESTTMP)/lib_nilsh
-	test "$$($(TESTTMP)/lib_nilsh | tail -n 1)" = "nilsh: unknown applet: nosuch"
+	tools/expect_same.sh lib_nilsh "$$($(TESTTMP)/lib_nilsh | tail -n 1)" "nilsh: unknown applet: nosuch"
 	@if command -v python3 >/dev/null 2>&1; then \
 	  python3 examples/shell/nilsh.npy > $(TESTTMP)/lib_nilsh_cpy.txt 2>&1; \
 	  $(TESTTMP)/lib_nilsh > $(TESTTMP)/lib_nilsh_pxx.txt 2>&1; \
@@ -14014,18 +14014,18 @@ lib-test: pxx-stable-check
 	# (Trunc(Log10(n)) + 1 is the digit-count idiom everyone writes), and values
 	# a hair off a power are NOT flattened onto it.
 	$(PXX_STABLE) -Fulib/rtl test/lib_log_exactness.pas $(TESTTMP)/lib_log_exactness
-	test "$$($(TESTTMP)/lib_log_exactness | tail -n 1)" = "LOGEXACT OK"
+	tools/expect_same.sh lib_log_exactness "$$($(TESTTMP)/lib_log_exactness | tail -n 1)" "LOGEXACT OK"
 	# TextReadChar (FPC's read(f, c)) consumes ONE character and interleaves with
 	# TextReadLn — expectations measured against FPC, not reasoned about.
 	$(PXX_STABLE) -Fulib/rtl test/lib_textreadchar.pas $(TESTTMP)/lib_textreadchar
-	test "$$($(TESTTMP)/lib_textreadchar | tail -n 1)" = "TEXTREADCHAR OK"
+	tools/expect_same.sh lib_textreadchar "$$($(TESTTMP)/lib_textreadchar | tail -n 1)" "TEXTREADCHAR OK"
 	# TextReadNumTok / TextReadStrTo — FPC's read(f, number) and read(f, s) stop
 	# where FPC stops and PUT THE DELIMITER BACK, so the assertions cover the
 	# cursor as well as the value. Both were measured against FPC 3.2.2 by
 	# draining the rest of the file after each read
 	# (bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line).
 	$(PXX_STABLE) -Fulib/rtl test/lib_textreadnumtok.pas $(TESTTMP)/lib_textreadnumtok
-	test "$$($(TESTTMP)/lib_textreadnumtok | tail -n 1)" = "TEXTNUMTOK OK"
+	tools/expect_same.sh lib_textreadnumtok "$$($(TESTTMP)/lib_textreadnumtok | tail -n 1)" "TEXTNUMTOK OK"
 	# SeekEof/SeekEoln (the whitespace-tolerant loop conditions the tokeniser
 	# above needs) and Rename. The skip set is the subject and it is NOT
 	# `c <= 32`: measured against FPC 3.2.2 byte by byte, exactly #9, #26 and
@@ -14034,7 +14034,7 @@ lib-test: pxx-stable-check
 	# bytes out of a data file
 	# (feature-b-text-file-surface-seekeof-rename-settextbuf).
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_text_seek_rename.pas $(TESTTMP)/lib_text_seek_rename
-	test "$$($(TESTTMP)/lib_text_seek_rename | tail -n 1)" = "TEXTSEEK OK"
+	tools/expect_same.sh lib_text_seek_rename "$$($(TESTTMP)/lib_text_seek_rename | tail -n 1)" "TEXTSEEK OK"
 	# IOResult reports FPC's codes, never a raw negative errno. Measured against
 	# fpc 3.2.2, and FPC is NOT a clean translation: it maps a known set and
 	# passes the rest through as the positive errno (ELOOP comes back as 40).
@@ -14042,19 +14042,19 @@ lib-test: pxx-stable-check
 	# and not a fallback we invented. `path not found` is 2, not the 3 DOS
 	# heritage predicts. compat-pascal-ioresult-returns-a-negative-errno.
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_ioresult_fpc_codes.pas $(TESTTMP)/lib_ioresult_fpc_codes
-	test "$$($(TESTTMP)/lib_ioresult_fpc_codes | tail -n 1)" = "IORESULTCODES OK"
+	tools/expect_same.sh lib_ioresult_fpc_codes "$$($(TESTTMP)/lib_ioresult_fpc_codes | tail -n 1)" "IORESULTCODES OK"
 	# The PChar family (StrPCopy/StrNew/StrAlloc/StrECopy/StrMove/StrUpper...).
 	# Half of it existed and half did not, which is the worst shape: code
 	# compiles up to its second call. Expectations measured against FPC by
 	# running the SAME program under both — StrNew('') is nil, StrECopy returns
 	# the end cursor, StrBufSize(StrNew('abc')) is 4.
 	$(PXX_STABLE) -Fulib/rtl test/lib_strings_pchar.pas $(TESTTMP)/lib_strings_pchar
-	test "$$($(TESTTMP)/lib_strings_pchar | tail -n 1)" = "STRINGSPCHAR OK"
+	tools/expect_same.sh lib_strings_pchar "$$($(TESTTMP)/lib_strings_pchar | tail -n 1)" "STRINGSPCHAR OK"
 	# StrUtils' three disagreeing split models (ExtractWord vs ExtractDelimited
 	# vs ExtractSubstr) plus SplitString, pinned on 'a,b,,c' — the row with an
 	# empty field, where they differ. Measured against FPC.
 	$(PXX_STABLE) -Fulib/rtl test/lib_strutils_words.pas $(TESTTMP)/lib_strutils_words
-	test "$$($(TESTTMP)/lib_strutils_words | tail -n 1)" = "STRUTILSWORDS OK"
+	tools/expect_same.sh lib_strutils_words "$$($(TESTTMP)/lib_strutils_words | tail -n 1)" "STRUTILSWORDS OK"
 	# Delphi's TStringHelper surface on AnsiString. The .expected file is fpc
 	# 3.2.2's own stdout for THIS SOURCE, regenerate with:
 	#   fpc -viwn test/lib_string_helpers.pas && ./lib_string_helpers
@@ -14073,28 +14073,28 @@ lib-test: pxx-stable-check
 	# FALSE and DateTimeToStr drops the time half at midnight — both measured,
 	# both the kind of thing a plausible implementation gets backwards.
 	$(PXX_STABLE) -Fulib/rtl test/lib_sysutils_dirs_dates.pas $(TESTTMP)/lib_sysutils_dirs_dates
-	test "$$($(TESTTMP)/lib_sysutils_dirs_dates | tail -n 1)" = "SYSUTILSDIRSDATES OK"
+	tools/expect_same.sh lib_sysutils_dirs_dates "$$($(TESTTMP)/lib_sysutils_dirs_dates | tail -n 1)" "SYSUTILSDIRSDATES OK"
 	# The FPC threading surface where FPC code looks for it: WaitFor as a
 	# FUNCTION returning ReturnValue, the BeginThread family, and an empty
 	# cthreads shim. Expectations are FPC's own output for the same program.
 	$(PXX_STABLE) --threadsafe -Fulib/rtl test/lib_fpc_thread_surface.pas $(TESTTMP)/lib_fpc_thread_surface
-	test "$$($(TESTTMP)/lib_fpc_thread_surface | tail -n 1)" = "FPCTHREAD OK"
+	tools/expect_same.sh lib_fpc_thread_surface "$$($(TESTTMP)/lib_fpc_thread_surface | tail -n 1)" "FPCTHREAD OK"
 	# TThread reached through `uses Classes` — FPC's own uses line, no {$IFDEF FPC}
 	# split. The non-threaded half of the bargain (classes still building WITHOUT
 	# --threadsafe) is asserted by every other classes test above, which do not
 	# pass the flag.
 	$(PXX_STABLE) --threadsafe -Fulib/rtl test/lib_classes_tthread.pas $(TESTTMP)/lib_classes_tthread
-	test "$$($(TESTTMP)/lib_classes_tthread | tail -n 1)" = "CLASSESTHREAD OK"
+	tools/expect_same.sh lib_classes_tthread "$$($(TESTTMP)/lib_classes_tthread | tail -n 1)" "CLASSESTHREAD OK"
 	# FPC surface the differential probe found missing: Eoln, the legacy
 	# TSeekOrigin names, IncMonth's end-of-month clamp. Expectations measured
 	# against an FPC build, per the ticket's method note.
 	$(PXX_STABLE) -Fulib/rtl test/lib_fpc_surface_2026_08.pas $(TESTTMP)/lib_fpc_surface
-	test "$$($(TESTTMP)/lib_fpc_surface | tail -n 1)" = "FPCSURFACE OK"
+	tools/expect_same.sh lib_fpc_surface "$$($(TESTTMP)/lib_fpc_surface | tail -n 1)" "FPCSURFACE OK"
 	# TStrings.CommaText/DelimitedText: 43 cases whose expectations are FPC's own
 	# output, including the two quoting rules a from-the-description
 	# implementation gets wrong ("a"b is TWO items; a"b" is one literal item).
 	$(PXX_STABLE) -Fulib/rtl test/lib_commatext.pas $(TESTTMP)/lib_commatext
-	test "$$($(TESTTMP)/lib_commatext | tail -n 1)" = "COMMATEXT OK"
+	tools/expect_same.sh lib_commatext "$$($(TESTTMP)/lib_commatext | tail -n 1)" "COMMATEXT OK"
 	# VarType speaks FPC's varXxx codes, and the constants exist at all. Numbers
 	# MEASURED from fpc 3.2.2, not transcribed — the set is irregular (varBoolean
 	# = 11, sized ints from 16, strings at 256) so a guessed one would look right
@@ -14105,12 +14105,12 @@ lib-test: pxx-stable-check
 	# The predicates are asserted to AGREE with VarType on every row: that is the
 	# real regression risk, since they read the private tag.
 	$(PXX_STABLE) -Fulib/rtl test/lib_variants_vartype_codes.pas $(TESTTMP)/lib_variants_vartype_codes
-	test "$$($(TESTTMP)/lib_variants_vartype_codes | tail -n 1)" = "VARTYPECODES OK"
+	tools/expect_same.sh lib_variants_vartype_codes "$$($(TESTTMP)/lib_variants_vartype_codes | tail -n 1)" "VARTYPECODES OK"
 	# The Python math surface (NilPy's `import math` resolves against lib/rtl's
 	# math unit): e/tau/inf/nan, isnan/isinf, pow, log(x,base), atan2,
 	# degrees/radians, copysign's sign-bit rule, isclose, factorial, comb.
 	$(PXX_STABLE) -Fulib/rtl test/lib_math_python_surface.pas $(TESTTMP)/lib_math_python_surface
-	test "$$($(TESTTMP)/lib_math_python_surface | tail -n 1)" = "MATHPY OK"
+	tools/expect_same.sh lib_math_python_surface "$$($(TESTTMP)/lib_math_python_surface | tail -n 1)" "MATHPY OK"
 	# Ln/Log10/Log2/Exp/Power correctly rounded, asserted on the BITS (a digit
 	# comparison would measure our float formatter as much as the function).
 	# The Log10 cases at the end are ones where GLIBC is the wrong one — verified
@@ -14120,28 +14120,28 @@ lib-test: pxx-stable-check
 	# and ~1 ulp, so without the flag five rows fail for a reason that is not a
 	# defect — see devdocs/dev/float-policy.md.
 	$(PXX_STABLE) -dPXX_FLOAT_EXACT -Fulib/rtl test/lib_math_correctly_rounded.pas $(TESTTMP)/lib_math_correctly_rounded
-	test "$$($(TESTTMP)/lib_math_correctly_rounded | tail -n 1)" = "MATHROUND OK"
+	tools/expect_same.sh lib_math_correctly_rounded "$$($(TESTTMP)/lib_math_correctly_rounded | tail -n 1)" "MATHROUND OK"
 	# ...and its companion: the DEFAULT (fast) path, which is what every program
 	# that does not pass the flag actually gets. Accuracy is a 2-ulp TOLERANCE;
 	# behaviour (signed zeros, NaN, Inf, and argument reduction out to 1e100) is
 	# asserted EXACTLY, because those are wrong values rather than rounding.
 	$(PXX_STABLE) -Fulib/rtl test/lib_math_fast_tolerance.pas $(TESTTMP)/lib_math_fast_tolerance
-	test "$$($(TESTTMP)/lib_math_fast_tolerance | tail -n 1)" = "MATHFAST OK"
+	tools/expect_same.sh lib_math_fast_tolerance "$$($(TESTTMP)/lib_math_fast_tolerance | tail -n 1)" "MATHFAST OK"
 	# Canary for a change in ANOTHER lane: a Pascal RTL name that collides with
 	# a libc one silently hijacks it in every C program (pxxcio does `uses math`).
 	# nan(tag): positive quiet NaN carrying the tag as its payload, base 0 —
 	# "077" is octal and "0x10" is hex, the rows a decimal-only parser misses.
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/src test/cmath_nan_payload.c $(TESTTMP)/cmath_nan_payload
-	test "$$($(TESTTMP)/cmath_nan_payload)" = "$$(printf 'empty      7FF8000000000000\n1          7FF8000000000001\n12345      7FF8000000003039\n0x10       7FF8000000000010\nabc        7FF8000000000000\n077        7FF800000000003F\nbig        7FF8000000000001')"
+	tools/expect_same.sh cmath_nan_payload "$$($(TESTTMP)/cmath_nan_payload)" "$$(printf 'empty      7FF8000000000000\n1          7FF8000000000001\n12345      7FF8000000003039\n0x10       7FF8000000000010\nabc        7FF8000000000000\n077        7FF800000000003F\nbig        7FF8000000000001')"
 	$(PXX_STABLE) test/cmath_no_pascal_hijack.c $(TESTTMP)/cmath_no_pascal_hijack
-	test "$$($(TESTTMP)/cmath_no_pascal_hijack)" = "$$(printf 'pow=1024 1.41421\nlog=1.386294361 log10=3.000000000 log2=3.000000000\nexp=2.718281828\natan2=0.785398163 0.463647609 1.107148718\ncopysign=-3 3\nisnan=1 0\nisinf=1 0\nnan=1 1\nhypot=5.000000000 fmod=1\nsqrt=1.414213562 ceil=-2 floor=-3')"
+	tools/expect_same.sh cmath_no_pascal_hijack "$$($(TESTTMP)/cmath_no_pascal_hijack)" "$$(printf 'pow=1024 1.41421\nlog=1.386294361 log10=3.000000000 log2=3.000000000\nexp=2.718281828\natan2=0.785398163 0.463647609 1.107148718\ncopysign=-3 3\nisnan=1 0\nisinf=1 0\nnan=1 1\nhypot=5.000000000 fmod=1\nsqrt=1.414213562 ceil=-2 floor=-3')"
 	# TCriticalSection: excludes under contention AND blocks rather than spins.
 	# The output is identical either way — the property that separates a futex
 	# mutex from the spinlock it replaced is CPU TIME, so assert that: three
 	# waiters queued behind a 0.6s hold burnt 1.73s of user CPU as a spinlock and
 	# 0.00s as a futex mutex. 1s is far above the noise and far below a regression.
 	$(PXX_STABLE) --threadsafe -Fulib/rtl test/lib_criticalsection_blocking.pas $(TESTTMP)/lib_cs_blocking
-	test "$$($(TESTTMP)/lib_cs_blocking)" = "$$(printf 'count=8000\nCSBLOCK OK')"
+	tools/expect_same.sh lib_cs_blocking "$$($(TESTTMP)/lib_cs_blocking)" "$$(printf 'count=8000\nCSBLOCK OK')"
 	@if command -v /usr/bin/time >/dev/null 2>&1; then \
 	  u=$$(/usr/bin/time -f '%U' $(TESTTMP)/lib_cs_blocking 2>&1 >/dev/null | tail -n 1); \
 	  awk -v u="$$u" 'BEGIN { if (u+0 > 1.0) { print "FAIL: TCriticalSection waiters burnt " u "s of user CPU — spinning, not blocking"; exit 1 } \
@@ -14150,15 +14150,15 @@ lib-test: pxx-stable-check
 	  echo "  lib-test: /usr/bin/time absent, skipping the TCriticalSection spin check"; \
 	fi
 	$(PXX_STABLE) test/lib_sysutils.pas $(TESTTMP)/lib_sysutils
-	test "$$($(TESTTMP)/lib_sysutils)" = "$$(printf '0\n-123456789\n10000000000\nhello\nworld\n[]\n[pad]\n42\n-7\n-1\n100\nQ\n7\nAB3Z\nab3z\nhello\nab\nbcde\nabcde\nabcde\nhello world\nstart end\nstart end\nabc\nfoobar\nx\nx\nbase\n77\nderived')"
+	tools/expect_same.sh lib_sysutils "$$($(TESTTMP)/lib_sysutils)" "$$(printf '0\n-123456789\n10000000000\nhello\nworld\n[]\n[pad]\n42\n-7\n-1\n100\nQ\n7\nAB3Z\nab3z\nhello\nab\nbcde\nabcde\nabcde\nhello world\nstart end\nstart end\nabc\nfoobar\nx\nx\nbase\n77\nderived')"
 	# regex engine: 61 checks whose expectations are CPython's re output for the
 	# same pattern/subject pairs, including every songformatter pattern
 	$(PXX_STABLE) -Fulib/rtl test/lib_regex.pas $(TESTTMP)/lib_regex
-	test "$$($(TESTTMP)/lib_regex | tail -n 1)" = "REGEX OK"
+	tools/expect_same.sh lib_regex.1 "$$($(TESTTMP)/lib_regex | tail -n 1)" "REGEX OK"
 	# regex engine: 61 checks whose expectations are CPython's re output for the
 	# same pattern/subject pairs, including every songformatter pattern
 	$(PXX_STABLE) -Fulib/rtl test/lib_regex.pas $(TESTTMP)/lib_regex
-	test "$$($(TESTTMP)/lib_regex | tail -n 1)" = "REGEX OK"
+	tools/expect_same.sh lib_regex.2 "$$($(TESTTMP)/lib_regex | tail -n 1)" "REGEX OK"
 	# xoshiro256**: a seed fixes the stream, and the stream is the CROSS-TARGET
 	# oracle — byte-identical on x86-64, i386, aarch64 and arm32, so a diff here
 	# is a 64-bit shift/multiply codegen bug rather than a library one. Expected
@@ -14169,7 +14169,7 @@ lib-test: pxx-stable-check
 	$(TESTTMP)/lib_random | diff -u test/lib_random.expected -
 	# per-stream PRNG state: reproducibility + independent split streams (no lock)
 	$(PXX_STABLE) test/lib_randomstate.pas $(TESTTMP)/lib_randomstate
-	test "$$($(TESTTMP)/lib_randomstate | tail -n 1)" = "RANDOMSTATE OK"
+	tools/expect_same.sh lib_randomstate "$$($(TESTTMP)/lib_randomstate | tail -n 1)" "RANDOMSTATE OK"
 	# Tier 1 (hardware entropy) wiring: random.pas consuming __pxxCpuHasHwRandom
 	# and __pxxHwRandom64. Asserts CONTRACTS, not values -- RDRAND is present on
 	# this box but not on every box the suite runs on -- so both branches of the
@@ -14180,14 +14180,14 @@ lib-test: pxx-stable-check
 	# unreachable on failure and the program exits 1, but the FAIL lines are the
 	# diagnostic and a tail would discard them.
 	$(PXX_STABLE) test/lib_random_hw_tier1.pas $(TESTTMP)/lib_random_hw_tier1
-	test "$$($(TESTTMP)/lib_random_hw_tier1)" = "$$(printf 'probe-stable=ok\ncontract=ok\nseeded-reproducible=ok\nrandomize-varies=ok\nHWTIER1 OK')"
+	tools/expect_same.sh lib_random_hw_tier1 "$$($(TESTTMP)/lib_random_hw_tier1)" "$$(printf 'probe-stable=ok\ncontract=ok\nseeded-reproducible=ok\nrandomize-varies=ok\nHWTIER1 OK')"
 	# FPC-compatible Signal(sig, handler) over pxx's PARAMETERLESS hook. The row
 	# with teeth is per-signal-number: ONE handler registered for TWO signals,
 	# each asserting its own number. A single-signal test passes even with the
 	# trampoline hard-wired to a constant, which is the bug this unit could have
 	# had -- the control produced usr1=3 usr2=0.
 	$(PXX_STABLE) test/lib_signals_fpc.pas $(TESTTMP)/lib_signals_fpc
-	test "$$($(TESTTMP)/lib_signals_fpc)" = "$$(printf 'prev-initial=ok\nper-signal-number=ok\nprev-returned=ok\nrange=ok\nignore=ok\nSIGNALS OK')"
+	tools/expect_same.sh lib_signals_fpc "$$($(TESTTMP)/lib_signals_fpc)" "$$(printf 'prev-initial=ok\nper-signal-number=ok\nprev-returned=ok\nrange=ok\nignore=ok\nSIGNALS OK')"
 	# IPv6 over the PAL: sockaddr_in6 layout + loopback round trip (skips if the
 	# host has no AF_INET6 — a broken layout is the target, not the CI netstack)
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_ipv6.pas $(TESTTMP)/lib_ipv6
@@ -14200,12 +14200,12 @@ lib-test: pxx-stable-check
 	# :: listener), not by setsockopt's return, since the point is that the
 	# option takes effect rather than being accepted and ignored.
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_net_v6only.pas $(TESTTMP)/lib_net_v6only
-	test "$$($(TESTTMP)/lib_net_v6only | tail -1)" = "NETV6ONLY OK"
+	tools/expect_same.sh lib_net_v6only "$$($(TESTTMP)/lib_net_v6only | tail -1)" "NETV6ONLY OK"
 	# Connect-by-name and the decided A-first / AAAA-fallback ordering. Every
 	# ordering assertion checks which FAMILY won, since "it connected" is true
 	# under either order. localhost only, so no network.
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_netconnect.pas $(TESTTMP)/lib_netconnect
-	test "$$($(TESTTMP)/lib_netconnect | tail -1)" = "NETCONNECT OK"
+	tools/expect_same.sh lib_netconnect "$$($(TESTTMP)/lib_netconnect | tail -1)" "NETCONNECT OK"
 	# asyncnet over ::1 — the coroutine reactor is family-agnostic, so this runs
 	# the v6 socket calls against the SAME accept/recv/send the v4 tests use
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_asyncnet6.pas $(TESTTMP)/lib_asyncnet6
@@ -14226,7 +14226,7 @@ lib-test: pxx-stable-check
 	# RoundTo family. The three frontends disagree BY DESIGN, each matching its
 	# own reference — pinned so nobody "harmonises" them.
 	$(PXX_STABLE) -Fulib/rtl test/lib_rounding_contract.pas $(TESTTMP)/lib_rounding_contract
-	test "$$($(TESTTMP)/lib_rounding_contract | tail -n 1)" = "ROUNDING OK"
+	tools/expect_same.sh lib_rounding_contract "$$($(TESTTMP)/lib_rounding_contract | tail -n 1)" "ROUNDING OK"
 	# longjmp usable as a VALUE, not only as a call — C 7.13 requires it to be a
 	# real function, and tcc passes it as a function pointer.
 	# anonymous mmap gives REAL pages and mprotect really flips them executable —
@@ -14236,19 +14236,19 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/src test/crtl_longjmp_as_value.c $(TESTTMP)/crtl_longjmp_as_value
 	$(TESTTMP)/crtl_longjmp_as_value; test "$$?" = "42"
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/src test/cmath_lround.c $(TESTTMP)/cmath_lround
-	test "$$($(TESTTMP)/cmath_lround)" = "$$(printf '0.5 lround=1 llround=1 lrint=0\n1.5 lround=2 llround=2 lrint=2\n2.5 lround=3 llround=3 lrint=2\n3.5 lround=4 llround=4 lrint=4\n-0.5 lround=-1 llround=-1 lrint=0\n-1.5 lround=-2 llround=-2 lrint=-2\n-2.5 lround=-3 llround=-3 lrint=-2\n2.7 lround=3 llround=3 lrint=3\n-2.7 lround=-3 llround=-3 lrint=-3\n0.0 lround=0 llround=0 lrint=0')"
+	tools/expect_same.sh cmath_lround "$$($(TESTTMP)/cmath_lround)" "$$(printf '0.5 lround=1 llround=1 lrint=0\n1.5 lround=2 llround=2 lrint=2\n2.5 lround=3 llround=3 lrint=2\n3.5 lround=4 llround=4 lrint=4\n-0.5 lround=-1 llround=-1 lrint=0\n-1.5 lround=-2 llround=-2 lrint=-2\n-2.5 lround=-3 llround=-3 lrint=-2\n2.7 lround=3 llround=3 lrint=3\n-2.7 lround=-3 llround=-3 lrint=-3\n0.0 lround=0 llround=0 lrint=0')"
 	# The integral-part family at the signed-zero and 2^52 boundaries. The
 	# frexp(inf) row is a LIVENESS check — the old body looped forever there, so
 	# a regression shows up as this target hanging, not as a mismatch.
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/src test/cmath_integral_family.c $(TESTTMP)/cmath_integral_family
-	test "$$($(TESTTMP)/cmath_integral_family)" = "$$(printf 'fabs(-0)=+0\ntrunc(-0.5)=-0\nround(-0)=-0\nrint(-0.5)=-0\nfrexp(-0)=-0 e=0\nmodf(-1) fr=-0 ip=-1\ntrunc(1e300)=+1e+300\nround(-1e300)=-1e+300\nmodf(1e300) fr=+0 ip=+1e+300\nround(0.49999999999999994)=+0\nfrexp(inf)=+inf')"
+	tools/expect_same.sh cmath_integral_family "$$($(TESTTMP)/cmath_integral_family)" "$$(printf 'fabs(-0)=+0\ntrunc(-0.5)=-0\nround(-0)=-0\nrint(-0.5)=-0\nfrexp(-0)=-0 e=0\nmodf(-1) fr=-0 ip=-1\ntrunc(1e300)=+1e+300\nround(-1e300)=-1e+300\nmodf(1e300) fr=+0 ip=+1e+300\nround(0.49999999999999994)=+0\nfrexp(inf)=+inf')"
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_clock_monotonic.c $(TESTTMP)/crtl_clock_monotonic
 	$(TESTTMP)/crtl_clock_monotonic; test "$$?" = "42"
 	# poll() over a SET (not a loop over a per-handle poll), and the LINKAGE that
 	# a declared-but-unimplemented crtl function silently gave away: a body-less
 	# declaration binds to libc.so.6 and still prints the right answers.
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_poll_set.c $(TESTTMP)/crtl_poll_set
-	test "$$($(TESTTMP)/crtl_poll_set)" = "$$(printf 'timeout r=0 rev0=0 rev1=0\nready r=1 rev0=0 rev1in=1\nboth r=2 in0=1 in1=1\nnval r=1 nval=1\nzero r=0')"
+	tools/expect_same.sh crtl_poll_set "$$($(TESTTMP)/crtl_poll_set)" "$$(printf 'timeout r=0 rev0=0 rev1=0\nready r=1 rev0=0 rev1in=1\nboth r=2 in0=1 in1=1\nnval r=1 nval=1\nzero r=0')"
 	@if command -v readelf >/dev/null 2>&1; then \
 	  n=$$(readelf -d $(TESTTMP)/crtl_poll_set 2>/dev/null | grep -c NEEDED); \
 	  test "$$n" = "0" || (echo "FAIL: crtl_poll_set has $$n DT_NEEDED — poll bound to libc"; exit 1); \
@@ -14261,11 +14261,11 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_atexit.c $(TESTTMP)/crtl_atexit
 	test "$$($(TESTTMP)/crtl_atexit)"   = "$$(printf 'main-returns\nh3\nh2\nh1')"
 	$(TESTTMP)/crtl_atexit; test "$$?" = "0"
-	test "$$($(TESTTMP)/crtl_atexit e)" = "$$(printf 'via-exit\nchild-exit')"
+	tools/expect_same.sh crtl_atexit.1 "$$($(TESTTMP)/crtl_atexit e)" "$$(printf 'via-exit\nchild-exit')"
 	$(TESTTMP)/crtl_atexit e; test "$$?" = "4"
-	test "$$($(TESTTMP)/crtl_atexit x)" = "via-_Exit"
+	tools/expect_same.sh crtl_atexit.2 "$$($(TESTTMP)/crtl_atexit x)" "via-_Exit"
 	$(TESTTMP)/crtl_atexit x; test "$$?" = "5"
-	test "$$($(TESTTMP)/crtl_atexit n)" = "registered ok=100 bad=0"
+	tools/expect_same.sh crtl_atexit.3 "$$($(TESTTMP)/crtl_atexit n)" "registered ok=100 bad=0"
 	@if command -v readelf >/dev/null 2>&1; then \
 	  n=$$(readelf -d $(TESTTMP)/crtl_atexit 2>/dev/null | grep -c NEEDED); \
 	  test "$$n" = "0" || (echo "FAIL: crtl_atexit has $$n DT_NEEDED — atexit bound to libc"; exit 1); \
@@ -14304,7 +14304,7 @@ lib-test: pxx-stable-check
 	# session under python3, which is the only way to know a charmap codec is
 	# right rather than merely self-consistent. (feature-b-mimic-codecs-for-nilpy)
 	$(PXX_STABLE) test/lib_codecs.npy $(TESTTMP)/lib_codecs
-	test "$$($(TESTTMP)/lib_codecs | tail -n 1)" = "codecs ok"
+	tools/expect_same.sh lib_codecs "$$($(TESTTMP)/lib_codecs | tail -n 1)" "codecs ok"
 	@if command -v python3 >/dev/null 2>&1; then \
 	  python3 test/lib_codecs.npy > $(TESTTMP)/lib_codecs_cpy.txt 2>&1; \
 	  $(TESTTMP)/lib_codecs > $(TESTTMP)/lib_codecs_pxx.txt 2>&1; \
@@ -14324,9 +14324,9 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) test/lib_mimic_urllib_request_refusals.npy $(TESTTMP)/lib_urllib_refusals
 	# The refusals have no oracle by construction (CPython does these things
 	# rather than refusing), so they run on their own, with no server needed.
-	test "$$($(TESTTMP)/lib_urllib_refusals | tail -n 1)" = "MIMIC-URLLIB-REQUEST REFUSALS OK"
-	test "$$($(TESTTMP)/lib_urllib_refusals | grep -c '=ok')" = "8"
-	test "$$($(TESTTMP)/lib_urllib_refusals | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_urllib_refusals.1 "$$($(TESTTMP)/lib_urllib_refusals | tail -n 1)" "MIMIC-URLLIB-REQUEST REFUSALS OK"
+	tools/expect_same.sh lib_urllib_refusals.2 "$$($(TESTTMP)/lib_urllib_refusals | grep -c '=ok')" "8"
+	tools/expect_same.sh lib_urllib_refusals.3 "$$($(TESTTMP)/lib_urllib_refusals | grep -c 'FAIL')" "0"
 	@set -e; \
 	  rm -f $(TESTTMP)/lib_urllib_srv.log; \
 	  $(TESTTMP)/lib_urllib_server 0 > $(TESTTMP)/lib_urllib_srv.log 2>&1 & \
@@ -14369,33 +14369,33 @@ lib-test: pxx-stable-check
 	# MulHiU64: intrinsic on CPU64, Pascal fallback elsewhere. The sweep
 	# fingerprint is identical on every target iff the two agree bit for bit.
 	$(PXX_STABLE) test/lib_wideint.pas $(TESTTMP)/lib_wideint
-	test "$$($(TESTTMP)/lib_wideint)" = "$$(printf 'sweep=16730136239701361245\nWIDEINT OK')"
+	tools/expect_same.sh lib_wideint "$$($(TESTTMP)/lib_wideint)" "$$(printf 'sweep=16730136239701361245\nWIDEINT OK')"
 	# P-256 field arithmetic (Montgomery/CIOS, 4x64 saturated limbs) checked
 	# differentially against bignum's TBigInt mod-p arithmetic
 	$(PXX_STABLE) -Fulib/rtl test/lib_p256field.pas $(TESTTMP)/lib_p256field
-	test "$$($(TESTTMP)/lib_p256field | tail -1)" = "P256FIELD OK"
+	tools/expect_same.sh lib_p256field "$$($(TESTTMP)/lib_p256field | tail -1)" "P256FIELD OK"
 	$(PXX_STABLE) test/lib_bignum_ops.pas $(TESTTMP)/lib_bignum_ops
-	test "$$($(TESTTMP)/lib_bignum_ops)" = "$$(printf 'chain=999999999999999999940000000000000001234499999999999999925930\ndiv=10000000000000000000100000000000000012352\nmod=12394\nidentity=yes\nf50=30414093201713378043612608166064768844377641568960512000000000000\np512=13407807929942597099574024998205846127479365820592393377723561443721764030073546976801874298166903427690031858186486050853753882811946569946433649006084096\nnegsub=-999999999999999999999999987655\nbackagain=12345\nzero=yes\nlt=TRUE TRUE FALSE\nle=TRUE TRUE FALSE\ngt=TRUE TRUE FALSE\nge=TRUE TRUE FALSE\neq=TRUE FALSE\nne=TRUE FALSE\nnegdiv=-2 -1\nnegidentity=yes')"
+	tools/expect_same.sh lib_bignum_ops "$$($(TESTTMP)/lib_bignum_ops)" "$$(printf 'chain=999999999999999999940000000000000001234499999999999999925930\ndiv=10000000000000000000100000000000000012352\nmod=12394\nidentity=yes\nf50=30414093201713378043612608166064768844377641568960512000000000000\np512=13407807929942597099574024998205846127479365820592393377723561443721764030073546976801874298166903427690031858186486050853753882811946569946433649006084096\nnegsub=-999999999999999999999999987655\nbackagain=12345\nzero=yes\nlt=TRUE TRUE FALSE\nle=TRUE TRUE FALSE\ngt=TRUE TRUE FALSE\nge=TRUE TRUE FALSE\neq=TRUE FALSE\nne=TRUE FALSE\nnegdiv=-2 -1\nnegidentity=yes')"
 	$(PXX_STABLE) test/lib_vecmath.pas $(TESTTMP)/lib_vecmath
-	test "$$($(TESTTMP)/lib_vecmath)" = "$$(printf 'add=5.00 7.00 9.00\nsub=3.00 3.00 3.00\nmul=2.00 4.00 6.00\ndiv=2.00 2.50 3.00\nchain=9.00 12.00 15.00\neq3=yes\nneq3=yes\ndot3=32.00\ncrossXY=0.00 0.00 1.00\ncross=-3.00 6.00 -3.00\north1=0.00\north2=0.00\nnorm2=5.00\nnormalize2=0.60 0.80\nnormlen=1.00\nnormzero=0.00 0.00\nvmul3=4.00 10.00 18.00\nlerp3=5.00 10.00 15.00\nadd4=2.00 4.00 6.00 8.00\ndot4=30.00\nnormsq4=30.00\nmatI=yes\nm3sq=30.00 36.00 42.00\ndet3I=1.00\ndet3scale=24.00\ndet3=-3.00\ntrans3=4.00 2.00\ntransinv=yes\nmv3=6.00 15.00 25.00\ntpoint=2.00 3.00 4.00 1.00\ndet4scale=24.00\ndet4I=1.00\nst=4.00 9.00 16.00 1.00\nrotz=0.00 1.00 0.00 1.00\nrotx=0.00 0.00 1.00 1.00\ndetmul=yes')"
+	tools/expect_same.sh lib_vecmath "$$($(TESTTMP)/lib_vecmath)" "$$(printf 'add=5.00 7.00 9.00\nsub=3.00 3.00 3.00\nmul=2.00 4.00 6.00\ndiv=2.00 2.50 3.00\nchain=9.00 12.00 15.00\neq3=yes\nneq3=yes\ndot3=32.00\ncrossXY=0.00 0.00 1.00\ncross=-3.00 6.00 -3.00\north1=0.00\north2=0.00\nnorm2=5.00\nnormalize2=0.60 0.80\nnormlen=1.00\nnormzero=0.00 0.00\nvmul3=4.00 10.00 18.00\nlerp3=5.00 10.00 15.00\nadd4=2.00 4.00 6.00 8.00\ndot4=30.00\nnormsq4=30.00\nmatI=yes\nm3sq=30.00 36.00 42.00\ndet3I=1.00\ndet3scale=24.00\ndet3=-3.00\ntrans3=4.00 2.00\ntransinv=yes\nmv3=6.00 15.00 25.00\ntpoint=2.00 3.00 4.00 1.00\ndet4scale=24.00\ndet4I=1.00\nst=4.00 9.00 16.00 1.00\nrotz=0.00 1.00 0.00 1.00\nrotx=0.00 0.00 1.00 1.00\ndetmul=yes')"
 	$(PXX_STABLE) test/lib_ucomplex.pas $(TESTTMP)/lib_ucomplex
-	test "$$($(TESTTMP)/lib_ucomplex)" = "$$(printf 'chain=14.000000 2.000000\nadd=4.000000 2.000000\nsub=2.000000 6.000000\nmul=11.000000 -2.000000\ndiv=-1.000000 2.000000\neq=yes\nneq=yes\ncmod=5.000000\ncarg_i=1.570796\ncong=3.000000 -4.000000\ncinv=0.000000 -0.500000\ncsqrt-1=0.000000 1.000000\ncsqrt=2.000000 1.000000\ncexp_ipi_re=-1.000000\ncexp_ipi_im_small=TRUE\ncln_e=1.000000 0.000000\ncsqr=-7.000000 24.000000\nipow2_re=-1.000000\nipow2_im_small=TRUE\ncaddr=4.000000 4.000000\ncsubr=2.000000 4.000000\ncrsub=-2.000000 -4.000000\ncmulr=6.000000 8.000000\ncdivr=1.500000 2.000000\ncrdiv=0.000000 -1.000000\ncneg=-3.000000 -4.000000\ncdiv_fn=-1.000000 2.000000\nsincos_re=1.000000\nsincos_im_small=TRUE\nsame=TRUE\nnotsame=FALSE\ncstr=1.00-2.00i\ncstr0=1.50\ncstrp=-1.00+2.00i')"
+	tools/expect_same.sh lib_ucomplex "$$($(TESTTMP)/lib_ucomplex)" "$$(printf 'chain=14.000000 2.000000\nadd=4.000000 2.000000\nsub=2.000000 6.000000\nmul=11.000000 -2.000000\ndiv=-1.000000 2.000000\neq=yes\nneq=yes\ncmod=5.000000\ncarg_i=1.570796\ncong=3.000000 -4.000000\ncinv=0.000000 -0.500000\ncsqrt-1=0.000000 1.000000\ncsqrt=2.000000 1.000000\ncexp_ipi_re=-1.000000\ncexp_ipi_im_small=TRUE\ncln_e=1.000000 0.000000\ncsqr=-7.000000 24.000000\nipow2_re=-1.000000\nipow2_im_small=TRUE\ncaddr=4.000000 4.000000\ncsubr=2.000000 4.000000\ncrsub=-2.000000 -4.000000\ncmulr=6.000000 8.000000\ncdivr=1.500000 2.000000\ncrdiv=0.000000 -1.000000\ncneg=-3.000000 -4.000000\ncdiv_fn=-1.000000 2.000000\nsincos_re=1.000000\nsincos_im_small=TRUE\nsame=TRUE\nnotsame=FALSE\ncstr=1.00-2.00i\ncstr0=1.50\ncstrp=-1.00+2.00i')"
 	$(PXX_STABLE) test/lib_bitset.pas $(TESTTMP)/lib_bitset
-	test "$$($(TESTTMP)/lib_bitset)" = "$$(printf 'TRUE\nTRUE\nFALSE\nTRUE\nTRUE\nFALSE\nTRUE\nFALSE\nFALSE\nFALSE\nTRUE\nFALSE\n6\n5 10 70 150 \n4\n-1\n10\n70')"
+	tools/expect_same.sh lib_bitset "$$($(TESTTMP)/lib_bitset)" "$$(printf 'TRUE\nTRUE\nFALSE\nTRUE\nTRUE\nFALSE\nTRUE\nFALSE\nFALSE\nFALSE\nTRUE\nFALSE\n6\n5 10 70 150 \n4\n-1\n10\n70')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_platform.pas $(TESTTMP)/lib_platform
-	test "$$($(TESTTMP)/lib_platform)" = "$$(printf 'posix\nfiles\nsockets\nthreads\npal-write=3\nflush=0\ntell=2\nfile=io:2:2\nrename=0\nold-missing\nnew-readable\ndelete=0\nmkdir=0\nrmdir=0\nunsupported=-38')"
+	tools/expect_same.sh lib_platform "$$($(TESTTMP)/lib_platform)" "$$(printf 'posix\nfiles\nsockets\nthreads\npal-write=3\nflush=0\ntell=2\nfile=io:2:2\nrename=0\nold-missing\nnew-readable\ndelete=0\nmkdir=0\nrmdir=0\nunsupported=-38')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_platform_net.pas $(TESTTMP)/lib_platform_net
-	test "$$($(TESTTMP)/lib_platform_net)" = "$$(printf 'tcp=ok\nunsupported=-38')"
+	tools/expect_same.sh lib_platform_net "$$($(TESTTMP)/lib_platform_net)" "$$(printf 'tcp=ok\nunsupported=-38')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_platform_net_udp.pas $(TESTTMP)/lib_platform_net_udp
-	test "$$($(TESTTMP)/lib_platform_net_udp)" = "$$(printf 'poll=ok\nrecv=ok\npeer=ok\necho=ok\nunsupported=-38')"
+	tools/expect_same.sh lib_platform_net_udp "$$($(TESTTMP)/lib_platform_net_udp)" "$$(printf 'poll=ok\nrecv=ok\npeer=ok\necho=ok\nunsupported=-38')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_platform_net_sockopt.pas $(TESTTMP)/lib_platform_net_sockopt
-	test "$$($(TESTTMP)/lib_platform_net_sockopt)" = "$$(printf 'name=ok\naccept-peer=ok\nsockerr=ok\nunsupported=-38')"
+	tools/expect_same.sh lib_platform_net_sockopt "$$($(TESTTMP)/lib_platform_net_sockopt)" "$$(printf 'name=ok\naccept-peer=ok\nsockerr=ok\nunsupported=-38')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_net.pas $(TESTTMP)/lib_net
-	test "$$($(TESTTMP)/lib_net)" = "$$(printf 'bound=ok\npeer=ok\ntcp=ok\nudp=ok')"
+	tools/expect_same.sh lib_net "$$($(TESTTMP)/lib_net)" "$$(printf 'bound=ok\npeer=ok\ntcp=ok\nudp=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_net_timeout.pas $(TESTTMP)/lib_net_timeout
-	test "$$($(TESTTMP)/lib_net_timeout)" = "$$(printf 'connect=ok\nrefused=ok\nrecv=ok\nrecv-timeout=ok')"
+	tools/expect_same.sh lib_net_timeout "$$($(TESTTMP)/lib_net_timeout)" "$$(printf 'connect=ok\nrefused=ok\nrecv=ok\nrecv-timeout=ok')"
 	$(PXX_STABLE) test/lib_dns_wire.pas $(TESTTMP)/lib_dns_wire
-	test "$$($(TESTTMP)/lib_dns_wire)" = "$$(printf 'qlen=29\nqhdr=ok\nqname=ok\nrcode=0\nid=ok\ncount=2\nip0=ok\nip1=ok\nminttl=ok\nq6type=ok\nrcode6=0\nid6=ok\ncount6=1\nip6=ok\ncname=ok\nnegttl=ok\nnegttl-none=ok')"
+	tools/expect_same.sh lib_dns_wire "$$($(TESTTMP)/lib_dns_wire)" "$$(printf 'qlen=29\nqhdr=ok\nqname=ok\nrcode=0\nid=ok\ncount=2\nip0=ok\nip1=ok\nminttl=ok\nq6type=ok\nrcode6=0\nid6=ok\ncount6=1\nip6=ok\ncname=ok\nnegttl=ok\nnegttl-none=ok')"
 	# Synapse lives in external/, which is gitignored and fetched on demand by
 	# tools/install_externals.sh -- so a fresh clone does not have it. Without
 	# this guard lib-test died INSIDE the compiler on `unit source not found:
@@ -14410,50 +14410,50 @@ ifeq ($(wildcard external/synapse),)
 	@echo "SKIP lib_synapse + lib_synapse_transitive_unit -- external/synapse absent; fetch it with: tools/install_externals.sh"
 else
 	$(PXX_STABLE) --mimic-fpc -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posix test/lib_synapse.pas $(TESTTMP)/lib_synapse
-	test "$$($(TESTTMP)/lib_synapse)" = "$$(printf 'b64=SGVsbG8sIFdvcmxkIQ==\nb64d=Hello, World!\nmd5=900150983cd24fb0d6963f7d28e17f72\nsha1=a9993e364706816aba3e25717850c26c9cd0d89d\ncrc32=3421780262\nurl=a%%20b&c\nsrv-got=ping\ncli-got=pong')"
+	tools/expect_same.sh lib_synapse "$$($(TESTTMP)/lib_synapse)" "$$(printf 'b64=SGVsbG8sIFdvcmxkIQ==\nb64d=Hello, World!\nmd5=900150983cd24fb0d6963f7d28e17f72\nsha1=a9993e364706816aba3e25717850c26c9cd0d89d\ncrc32=3421780262\nurl=a%%20b&c\nsrv-got=ping\ncli-got=pong')"
 	$(PXX_STABLE) --mimic-fpc -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posix test/lib_synapse_transitive_unit.pas $(TESTTMP)/lib_synapse_transitive_unit
-	test "$$($(TESTTMP)/lib_synapse_transitive_unit)" = "ok"
+	tools/expect_same.sh lib_synapse_transitive_unit "$$($(TESTTMP)/lib_synapse_transitive_unit)" "ok"
 	# Synapse's OpenSSL 3 binding compiles AND the opt-in dlopen loader resolves
 	# real libssl/libcrypto symbols (feature-real-dynlib-loader). -dPXX_DYNLIB_LIBC
 	# is the opt-in libc-linked loader; the default syscall-only build has no
 	# loader by design, so this is the one recipe line that asks for it.
 	$(PXX_STABLE) --mimic-fpc -dPXX_DYNLIB_LIBC -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posix test/lib_synapse_ssl.pas $(TESTTMP)/lib_synapse_ssl
-	test "$$($(TESTTMP)/lib_synapse_ssl | grep -c '=ok')" = "3"
-	test "$$($(TESTTMP)/lib_synapse_ssl | tail -1)" = "SYNAPSE-SSL OK"
+	tools/expect_same.sh lib_synapse_ssl.1 "$$($(TESTTMP)/lib_synapse_ssl | grep -c '=ok')" "3"
+	tools/expect_same.sh lib_synapse_ssl.2 "$$($(TESTTMP)/lib_synapse_ssl | tail -1)" "SYNAPSE-SSL OK"
 endif
 	$(PXX_STABLE) test/lib_dns_cache.pas $(TESTTMP)/lib_dns_cache
-	test "$$($(TESTTMP)/lib_dns_cache)" = "$$(printf 'hit=ok\nmiss-other=ok\nexpired=ok\nneg-hit=ok\nneg-expired=ok\nqtype-a=ok\nqtype-aaaa=ok\nreplace-val=ok\nreplace-count=ok\nttl-zero-noop=ok\nfull-live=ok\nevict-cap=ok\nevict-oldest=ok\nevict-newkept=ok\nv6-hit=ok\nv6-coexist=ok\nv6-expired=ok\nv6-neg=ok\ncn-hit=ok\ncn-coexist=ok\ncn-expired=ok\ncn-ttl-noop=ok')"
+	tools/expect_same.sh lib_dns_cache "$$($(TESTTMP)/lib_dns_cache)" "$$(printf 'hit=ok\nmiss-other=ok\nexpired=ok\nneg-hit=ok\nneg-expired=ok\nqtype-a=ok\nqtype-aaaa=ok\nreplace-val=ok\nreplace-count=ok\nttl-zero-noop=ok\nfull-live=ok\nevict-cap=ok\nevict-oldest=ok\nevict-newkept=ok\nv6-hit=ok\nv6-coexist=ok\nv6-expired=ok\nv6-neg=ok\ncn-hit=ok\ncn-coexist=ok\ncn-expired=ok\ncn-ttl-noop=ok')"
 	$(PXX_STABLE) test/lib_dns_config.pas $(TESTTMP)/lib_dns_config
-	test "$$($(TESTTMP)/lib_dns_config)" = "$$(printf 'ip-ok=ok\nip-val=ok\nip-oversize=ok\nip-short=ok\nip-empty=ok\ncount=3\nns0=ok\nns1=ok\nns2=ok\nh-local=ok\nh-alias=ok\nh-ci=ok\nh-nofinalnl=ok\nh-comment=ok\nh-miss=ok\nex-count=3\nex-search=2\nex-s0=ok\nex-s1=ok\nex-ndots=2\nex-domain=ok\nc-rel0=ok\nc-rel1=ok\nc-rel2=ok\nc-rel3=ok\nc-abs0=ok\nc-abs1=ok\nc-root0=ok\nc-root1=ok\nip6-full=ok\nip6-comp=ok\nip6-loop=ok\nip6-any=ok\nip6-tail=ok\nip6-v4=ok\nip6-caps=ok\nip6-badgap=ok\nip6-badlen=ok\nip6-badlong=ok\nip6-badgrp=ok\nip6-badzone=ok\nip6-badcolon=ok\nip6-gapfull=ok\nip6-notv4=ok\nh6-loop=ok\nh6-host=ok\nh6-skip4=ok\nh6-miss=ok\nsv-basic=ok\nsv-ci=ok\nsv-alias=ok\nsv-anyproto=ok\nsv-udp=ok\nsv-nofinalnl=ok\nsv-protomiss=ok\nsv-miss=ok\nsv-comment-alias=ok')"
+	tools/expect_same.sh lib_dns_config "$$($(TESTTMP)/lib_dns_config)" "$$(printf 'ip-ok=ok\nip-val=ok\nip-oversize=ok\nip-short=ok\nip-empty=ok\ncount=3\nns0=ok\nns1=ok\nns2=ok\nh-local=ok\nh-alias=ok\nh-ci=ok\nh-nofinalnl=ok\nh-comment=ok\nh-miss=ok\nex-count=3\nex-search=2\nex-s0=ok\nex-s1=ok\nex-ndots=2\nex-domain=ok\nc-rel0=ok\nc-rel1=ok\nc-rel2=ok\nc-rel3=ok\nc-abs0=ok\nc-abs1=ok\nc-root0=ok\nc-root1=ok\nip6-full=ok\nip6-comp=ok\nip6-loop=ok\nip6-any=ok\nip6-tail=ok\nip6-v4=ok\nip6-caps=ok\nip6-badgap=ok\nip6-badlen=ok\nip6-badlong=ok\nip6-badgrp=ok\nip6-badzone=ok\nip6-badcolon=ok\nip6-gapfull=ok\nip6-notv4=ok\nh6-loop=ok\nh6-host=ok\nh6-skip4=ok\nh6-miss=ok\nsv-basic=ok\nsv-ci=ok\nsv-alias=ok\nsv-anyproto=ok\nsv-udp=ok\nsv-nofinalnl=ok\nsv-protomiss=ok\nsv-miss=ok\nsv-comment-alias=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_resolve.pas $(TESTTMP)/lib_dns_resolve
-	test "$$($(TESTTMP)/lib_dns_resolve)" = "$$(printf 'rcode=0\ncount=2\nip0=ok\nip1=ok')"
+	tools/expect_same.sh lib_dns_resolve "$$($(TESTTMP)/lib_dns_resolve)" "$$(printf 'rcode=0\ncount=2\nip0=ok\nip1=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_facade.pas $(TESTTMP)/lib_dns_facade
-	test "$$($(TESTTMP)/lib_dns_facade)" = "$$(printf 'hosts-hit=ok\nwire-rcode=0\nwire-count=2\nwire-ip0=ok')"
+	tools/expect_same.sh lib_dns_facade "$$($(TESTTMP)/lib_dns_facade)" "$$(printf 'hosts-hit=ok\nwire-rcode=0\nwire-count=2\nwire-ip0=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_spoof.pas $(TESTTMP)/lib_dns_spoof
-	test "$$($(TESTTMP)/lib_dns_spoof)" = "$$(printf 'badid=ok\ncount=0')"
+	tools/expect_same.sh lib_dns_spoof "$$($(TESTTMP)/lib_dns_spoof)" "$$(printf 'badid=ok\ncount=0')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_tcp.pas $(TESTTMP)/lib_dns_tcp
-	test "$$($(TESTTMP)/lib_dns_tcp)" = "$$(printf 'rcode=0\ncount=2\ntcp-fallback=ok')"
+	tools/expect_same.sh lib_dns_tcp "$$($(TESTTMP)/lib_dns_tcp)" "$$(printf 'rcode=0\ncount=2\ntcp-fallback=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_multins.pas $(TESTTMP)/lib_dns_multins
-	test "$$($(TESTTMP)/lib_dns_multins)" = "$$(printf 'rcode=0\ncount=2\nmultins=ok')"
+	tools/expect_same.sh lib_dns_multins "$$($(TESTTMP)/lib_dns_multins)" "$$(printf 'rcode=0\ncount=2\nmultins=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_chase.pas $(TESTTMP)/lib_dns_chase
-	test "$$($(TESTTMP)/lib_dns_chase)" = "$$(printf 'rcode=0\ncount=1\nchased=ok')"
+	tools/expect_same.sh lib_dns_chase "$$($(TESTTMP)/lib_dns_chase)" "$$(printf 'rcode=0\ncount=1\nchased=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_cache_facade.pas $(TESTTMP)/lib_dns_cache_facade
-	test "$$($(TESTTMP)/lib_dns_cache_facade)" = "$$(printf 'r1=0\nip1=ok\nr2=0\ncached=ok\nflushed-neg=ok\nc1=0\nc1-ip=ok\nc2=0\nc2-cached=ok')"
+	tools/expect_same.sh lib_dns_cache_facade "$$($(TESTTMP)/lib_dns_cache_facade)" "$$(printf 'r1=0\nip1=ok\nr2=0\ncached=ok\nflushed-neg=ok\nc1=0\nc1-ip=ok\nc2=0\nc2-cached=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_aaaa.pas $(TESTTMP)/lib_dns_aaaa
-	test "$$($(TESTTMP)/lib_dns_aaaa)" = "$$(printf 'rcode=0\ncount=1\nip6=ok\nrcode6c=0\ncount6c=1\nchased6=ok')"
+	tools/expect_same.sh lib_dns_aaaa "$$($(TESTTMP)/lib_dns_aaaa)" "$$(printf 'rcode=0\ncount=1\nip6=ok\nrcode6c=0\ncount6c=1\nchased6=ok')"
 	# the `variants` unit's FPC surface. VarClear/VarToStr/VarToStrDef/VarIsClear
 	# were all missing, each found by a differential that could not be written
 	# without it (bug-a-varclear-is-undefined,
 	# bug-b-vartostr-is-missing-from-variants). Byte-identical to fpc 3.2.2; the
 	# survive row proves VarClear releases a REFERENCE, not the object.
 	$(PXX_STABLE) -Fulib/rtl test/lib_variants_surface.pas $(TESTTMP)/lib_variants_surface
-	test "$$($(TESTTMP)/lib_variants_surface)" = "$$(printf 'clear    [] empty=TRUE\nint      [42]\nbool     [True]\nstr      [text]\nnull     []\ndef-set  [7]\ndef-null [D]\nisclear0 FALSE\nisclear1 TRUE\nsurvive  [payload-] bad=0')"
+	tools/expect_same.sh lib_variants_surface "$$($(TESTTMP)/lib_variants_surface)" "$$(printf 'clear    [] empty=TRUE\nint      [42]\nbool     [True]\nstr      [text]\nnull     []\ndef-set  [7]\ndef-null [D]\nisclear0 FALSE\nisclear1 TRUE\nsurvive  [payload-] bad=0')"
 	$(PXX_STABLE) test/lib_dns_buildguard.pas $(TESTTMP)/lib_dns_buildguard
-	test "$$($(TESTTMP)/lib_dns_buildguard)" = "$$(printf 'toolong=ok\nno-overflow=ok\nbiglabel=ok\nemptylabel=ok\ntinybuf=ok\nfits=ok')"
+	tools/expect_same.sh lib_dns_buildguard "$$($(TESTTMP)/lib_dns_buildguard)" "$$(printf 'toolong=ok\nno-overflow=ok\nbiglabel=ok\nemptylabel=ok\ntinybuf=ok\nfits=ok')"
 	$(PXX_STABLE) test/lib_dns_parsefuzz.pas $(TESTTMP)/lib_dns_parsefuzz
-	test "$$($(TESTTMP)/lib_dns_parsefuzz)" = "$$(printf 'empty=ok\nshort-header=ok\nrunaway-name=ok\ntruncated-rr=ok\nan-lie=ok\nhuge-rdlen=ok\nreserved-label=ok\nmany-a-rcode=ok\nmany-a-cap=ok\ndone')"
+	tools/expect_same.sh lib_dns_parsefuzz "$$($(TESTTMP)/lib_dns_parsefuzz)" "$$(printf 'empty=ok\nshort-header=ok\nrunaway-name=ok\ntruncated-rr=ok\nan-lie=ok\nhuge-rdlen=ok\nreserved-label=ok\nmany-a-rcode=ok\nmany-a-cap=ok\ndone')"
 	$(PXX_STABLE) test/lib_dns_config_fuzz.pas $(TESTTMP)/lib_dns_config_fuzz
-	test "$$($(TESTTMP)/lib_dns_config_fuzz)" = "$$(printf 'all-255=ok\ndots-only=ok\ntrailing-dot=ok\ntrailing-sp=ok\nfive-octets=ok\nhuge-octet=ok\nvalid-max=ok\nns-cap=ok\nbogus-nomatch=ok\nip6-skip=ok\ngood-line=ok\ndone')"
+	tools/expect_same.sh lib_dns_config_fuzz "$$($(TESTTMP)/lib_dns_config_fuzz)" "$$(printf 'all-255=ok\ndots-only=ok\ntrailing-dot=ok\ntrailing-sp=ok\nfive-octets=ok\nhuge-octet=ok\nvalid-max=ok\nns-cap=ok\nbogus-nomatch=ok\nip6-skip=ok\ngood-line=ok\ndone')"
 	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1; then \
 	  echo "=== lib-test cross: PAL net primitives under qemu-user (i386/aarch64/arm32) ==="; \
 	  for arch in i386 aarch64 arm32; do \
@@ -14477,7 +14477,7 @@ endif
 	# missing sysroot is a host gap, not a pxx one, so it must not read as a pass.
 	@echo "=== lib-test: dynlibs (opt-in -dPXX_DYNLIB_LIBC) ==="
 	$(PXX_STABLE) -dPXX_DYNLIB_LIBC -Fulib/rtl test/test_dynlib.pas $(TESTTMP)/lib_dynlib
-	test "$$($(TESTTMP)/lib_dynlib)" = "$$(printf 'strlen: 5\nunloaded: TRUE')"
+	tools/expect_same.sh lib_dynlib "$$($(TESTTMP)/lib_dynlib)" "$$(printf 'strlen: 5\nunloaded: TRUE')"
 	@for arch in i386 arm32 aarch64; do \
 	  $(PXX_STABLE) --target=$$arch -dPXX_DYNLIB_LIBC -Fulib/rtl test/test_dynlib.pas $(TESTTMP)/lib_dynlib_$$arch >/dev/null || { echo "dynlib compile FAIL on $$arch"; exit 1; }; \
 	  case $$arch in \
@@ -14496,7 +14496,7 @@ endif
 	    || { echo "dynlib i386 run FAIL"; exit 1; }; \
 	else echo "  dynlib i386: qemu-i386 absent, run not verified"; fi
 	$(PXX_STABLE) --platform=esp -Fulib/rtl/platform/esp test/lib_platform_esp.pas $(TESTTMP)/lib_platform_esp
-	test "$$($(TESTTMP)/lib_platform_esp)" = "$$(printf 'esp-idf\nopen=-38\nread=-38\nseek=-38\nflush=-38\ndelete=-38\nrename=-38\nmkdir=-38\nrmdir=-38\nsocket=-38\nreuse=-38\nnonblock=-38\nbind=-38\nconnect=-38\nlisten=-38\naccept=-38\nrecv=-38\nsend=-38\nshutdown=-38\nsockclose=-38\nsendto=-38\nrecvfrom=-38\npoll=-38\nsockerr=-38\nsockname=-38\nacceptip=-38\nunsupported=-38')"
+	tools/expect_same.sh lib_platform_esp "$$($(TESTTMP)/lib_platform_esp)" "$$(printf 'esp-idf\nopen=-38\nread=-38\nseek=-38\nflush=-38\ndelete=-38\nrename=-38\nmkdir=-38\nrmdir=-38\nsocket=-38\nreuse=-38\nnonblock=-38\nbind=-38\nconnect=-38\nlisten=-38\naccept=-38\nrecv=-38\nsend=-38\nshutdown=-38\nsockclose=-38\nsendto=-38\nrecvfrom=-38\npoll=-38\nsockerr=-38\nsockname=-38\nacceptip=-38\nunsupported=-38')"
 	@echo "=== lib-test: esptimer (ESP-IDF timer callback surface) compiles to a riscv32 object with esp_timer imports ==="
 	$(PXX_STABLE) --target=riscv32 --platform=esp -Fulib/rtl -Fulib/rtl/platform/esp examples/esp32/timer-c3/main/main.pas $(TESTTMP)/lib_esptimer_rv.o >/dev/null
 	@if command -v readelf >/dev/null 2>&1; then \
@@ -14515,122 +14515,122 @@ endif
 	  echo "=== lib-test: readelf absent, skipping esp32c3 object lwIP smoke ==="; \
 	fi
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_textfile.pas $(TESTTMP)/lib_textfile
-	test "$$($(TESTTMP)/lib_textfile)" = "$$(printf 'alpha\nbeta\ncount=2\nio=0')"
+	tools/expect_same.sh lib_textfile "$$($(TESTTMP)/lib_textfile)" "$$(printf 'alpha\nbeta\ncount=2\nio=0')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_directory.pas $(TESTTMP)/lib_directory
-	test "$$($(TESTTMP)/lib_directory)" = "$$(printf 'mkdir=0\nchild=0\nlist=ok\nalpha=1\nchild=1\nalpha-file=1\nchild-dir=1\nalpha-size=1\nstat-file=1\nstat-dir=1\nodir-dir=1\nodir-file-rejected=1')"
+	tools/expect_same.sh lib_directory "$$($(TESTTMP)/lib_directory)" "$$(printf 'mkdir=0\nchild=0\nlist=ok\nalpha=1\nchild=1\nalpha-file=1\nchild-dir=1\nalpha-size=1\nstat-file=1\nstat-dir=1\nodir-dir=1\nodir-file-rejected=1')"
 	$(PXX_STABLE) examples/bignum/factorial.pas $(TESTTMP)/lib_factorial
-	test "$$($(TESTTMP)/lib_factorial)" = "$$(printf '5! = 120\n10! = 3628800\n20! = 2432902008176640000\n1000! digits      = 2568\n1000! first 10    = 4023872600\n1000! trailing 0s = 249')"
+	tools/expect_same.sh lib_factorial "$$($(TESTTMP)/lib_factorial)" "$$(printf '5! = 120\n10! = 3628800\n20! = 2432902008176640000\n1000! digits      = 2568\n1000! first 10    = 4023872600\n1000! trailing 0s = 249')"
 	$(PXX_STABLE) examples/bignum/bigmath.pas $(TESTTMP)/lib_bigmath
-	test "$$($(TESTTMP)/lib_bigmath | tail -1)" = "ALL OK"
+	tools/expect_same.sh lib_bigmath "$$($(TESTTMP)/lib_bigmath | tail -1)" "ALL OK"
 	$(PXX_STABLE) examples/json/jsondemo.pas $(TESTTMP)/lib_jsondemo
-	test "$$($(TESTTMP)/lib_jsondemo | tail -1)" = "ALL OK"
+	tools/expect_same.sh lib_jsondemo "$$($(TESTTMP)/lib_jsondemo | tail -1)" "ALL OK"
 	$(PXX_STABLE) examples/calc/calcdemo.pas $(TESTTMP)/lib_calcdemo
-	test "$$($(TESTTMP)/lib_calcdemo | tail -1)" = "ALL OK"
+	tools/expect_same.sh lib_calcdemo "$$($(TESTTMP)/lib_calcdemo | tail -1)" "ALL OK"
 	$(PXX_STABLE) examples/sat/satdemo.pas $(TESTTMP)/lib_satdemo
-	test "$$($(TESTTMP)/lib_satdemo | tail -1)" = "ALL OK"
+	tools/expect_same.sh lib_satdemo "$$($(TESTTMP)/lib_satdemo | tail -1)" "ALL OK"
 	$(PXX_STABLE) examples/mathf/mathdemo.pas $(TESTTMP)/lib_mathdemo
-	test "$$($(TESTTMP)/lib_mathdemo | tail -1)" = "ALL OK"
+	tools/expect_same.sh lib_mathdemo "$$($(TESTTMP)/lib_mathdemo | tail -1)" "ALL OK"
 	$(PXX_STABLE) -Fulib/rtl examples/vm/vmdemo.pas $(TESTTMP)/lib_vmdemo
-	test "$$($(TESTTMP)/lib_vmdemo | tail -1)" = "ALL OK"
+	tools/expect_same.sh lib_vmdemo "$$($(TESTTMP)/lib_vmdemo | tail -1)" "ALL OK"
 	$(PXX_STABLE) examples/mandelbrot/mandelbrot.pas $(TESTTMP)/lib_mandelbrot
-	test "$$($(TESTTMP)/lib_mandelbrot | tail -1)" = "ALL OK"
+	tools/expect_same.sh lib_mandelbrot "$$($(TESTTMP)/lib_mandelbrot | tail -1)" "ALL OK"
 	$(PXX_STABLE) examples/raytracer/raytracer.pas $(TESTTMP)/lib_raytracer
-	test "$$($(TESTTMP)/lib_raytracer | tail -1)" = "ALL OK"
+	tools/expect_same.sh lib_raytracer "$$($(TESTTMP)/lib_raytracer | tail -1)" "ALL OK"
 	$(PXX_STABLE) examples/chess/chess.pas $(TESTTMP)/lib_chess
-	test "$$($(TESTTMP)/lib_chess --selftest | tail -1)" = "ALL OK"
+	tools/expect_same.sh lib_chess "$$($(TESTTMP)/lib_chess --selftest | tail -1)" "ALL OK"
 	$(PXX_STABLE) examples/lisp/lispdemo.pas $(TESTTMP)/lib_lispdemo
-	test "$$($(TESTTMP)/lib_lispdemo | tail -1)" = "ALL OK"
+	tools/expect_same.sh lib_lispdemo "$$($(TESTTMP)/lib_lispdemo | tail -1)" "ALL OK"
 	$(PXX_STABLE) test/lib_zlib.pas $(TESTTMP)/lib_zlib
-	test "$$($(TESTTMP)/lib_zlib)" = "$$(printf 'OK stored roundtrip\nOK fixed huffman\nOK dynamic huffman\nOK bad header checksum\nOK bad adler32\nOK truncated stream\nOK reserved block type\nOK gzip\nOK gzip bad crc\nOK raw deflate')"
+	tools/expect_same.sh lib_zlib "$$($(TESTTMP)/lib_zlib)" "$$(printf 'OK stored roundtrip\nOK fixed huffman\nOK dynamic huffman\nOK bad header checksum\nOK bad adler32\nOK truncated stream\nOK reserved block type\nOK gzip\nOK gzip bad crc\nOK raw deflate')"
 	$(PXX_STABLE) -Fulib/rtl test/lib_base64.pas $(TESTTMP)/lib_base64
-	test "$$($(TESTTMP)/lib_base64 | grep -c '=ok')" = "14"
-	test "$$($(TESTTMP)/lib_base64 | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_base64.1 "$$($(TESTTMP)/lib_base64 | grep -c '=ok')" "14"
+	tools/expect_same.sh lib_base64.2 "$$($(TESTTMP)/lib_base64 | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) test/lib_png.pas $(TESTTMP)/lib_png
-	test "$$($(TESTTMP)/lib_png)" = "$$(printf '86\n137 80 78 71\nTRUE\n2x2\n255,0,0,255\n0,255,0,128\n0,0,255,64\n255,255,255,0\nFALSE\nbad chunk crc')"
+	tools/expect_same.sh lib_png "$$($(TESTTMP)/lib_png)" "$$(printf '86\n137 80 78 71\nTRUE\n2x2\n255,0,0,255\n0,255,0,128\n0,0,255,64\n255,255,255,0\nFALSE\nbad chunk crc')"
 	$(PXX_STABLE) test/lib_ansiterm.pas $(TESTTMP)/lib_ansiterm
-	test "$$($(TESTTMP)/lib_ansiterm)" = "OK"
+	tools/expect_same.sh lib_ansiterm "$$($(TESTTMP)/lib_ansiterm)" "OK"
 	$(PXX_STABLE) test/lib_screen.pas $(TESTTMP)/lib_screen
-	test "$$($(TESTTMP)/lib_screen | tail -1)" = "ALL OK"
+	tools/expect_same.sh lib_screen "$$($(TESTTMP)/lib_screen | tail -1)" "ALL OK"
 	$(PXX_STABLE) test/lib_cursor.pas $(TESTTMP)/lib_cursor
-	test "$$($(TESTTMP)/lib_cursor)" = "$$(printf '\033[3;4H\033[?25h')"
+	tools/expect_same.sh lib_cursor "$$($(TESTTMP)/lib_cursor)" "$$(printf '\033[3;4H\033[?25h')"
 	$(PXX_STABLE) test/lib_lineedit.pas $(TESTTMP)/lib_lineedit
-	test "$$($(TESTTMP)/lib_lineedit | tail -1)" = "ALL OK"
+	tools/expect_same.sh lib_lineedit "$$($(TESTTMP)/lib_lineedit | tail -1)" "ALL OK"
 	$(PXX_STABLE) test/lib_menu.pas $(TESTTMP)/lib_menu
-	test "$$($(TESTTMP)/lib_menu | tail -1)" = "ALL OK"
+	tools/expect_same.sh lib_menu "$$($(TESTTMP)/lib_menu | tail -1)" "ALL OK"
 	$(PXX_STABLE) -Fuexamples/solitaire_gui test/lib_klondike.pas $(TESTTMP)/lib_klondike
-	test "$$($(TESTTMP)/lib_klondike | tail -1)" = "ALL OK"
+	tools/expect_same.sh lib_klondike "$$($(TESTTMP)/lib_klondike | tail -1)" "ALL OK"
 	$(PXX_STABLE) -Fulib/rtl -Fuexamples/solitaire_gui examples/solitaire/console_solitaire.pas $(TESTTMP)/console_solitaire
 	# Deterministic now that klondike seeds the built-in System PRNG directly
 	# (was drawing from an unseeded generator via a name collision with unit
 	# random — bug-lib-test-console-solitaire-flaky). moves=0 = the fixed seed-1
 	# deal has no immediate auto-play; klondike move logic is covered by lib_klondike.
-	test "$$(printf 'aq' | $(TESTTMP)/console_solitaire 2>/dev/null | tail -1)" = "moves=0 won=FALSE"
+	tools/expect_same.sh console_solitaire "$$(printf 'aq' | $(TESTTMP)/console_solitaire 2>/dev/null | tail -1)" "moves=0 won=FALSE"
 	$(PXX_STABLE) -Fuexamples/g2048 test/lib_g2048.pas $(TESTTMP)/lib_g2048
-	test "$$($(TESTTMP)/lib_g2048 | tail -1)" = "ALL OK"
+	tools/expect_same.sh lib_g2048 "$$($(TESTTMP)/lib_g2048 | tail -1)" "ALL OK"
 	$(PXX_STABLE) -Fulib/rtl -Fuexamples/g2048 examples/g2048/console_2048.pas $(TESTTMP)/console_2048
-	test "$$(printf '\033[D\033[B\033[D\033[B\033[C\033[A q' | $(TESTTMP)/console_2048 2>/dev/null | tail -1)" = "score=8 over=FALSE"
+	tools/expect_same.sh console_2048 "$$(printf '\033[D\033[B\033[D\033[B\033[C\033[A q' | $(TESTTMP)/console_2048 2>/dev/null | tail -1)" "score=8 over=FALSE"
 	$(PXX_STABLE) test/lib_tui_app.pas $(TESTTMP)/lib_tui_app
-	test "$$($(TESTTMP)/lib_tui_app | tail -1)" = "ALL OK"
+	tools/expect_same.sh lib_tui_app "$$($(TESTTMP)/lib_tui_app | tail -1)" "ALL OK"
 	$(PXX_STABLE) test/lib_keys.pas $(TESTTMP)/lib_keys
-	test "$$(printf 'q\033[A\033[B\033[3~\177' | $(TESTTMP)/lib_keys)" = "$$(printf '113\n1001\n1002\n1010\n127')"
+	tools/expect_same.sh lib_keys "$$(printf 'q\033[A\033[B\033[3~\177' | $(TESTTMP)/lib_keys)" "$$(printf '113\n1001\n1002\n1010\n127')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix examples/tui/menudemo.pas $(TESTTMP)/menudemo
-	test "$$(printf '\033[B\033[B\r' | $(TESTTMP)/menudemo | tail -1)" = "selected=Quit"
+	tools/expect_same.sh menudemo "$$(printf '\033[B\033[B\r' | $(TESTTMP)/menudemo | tail -1)" "selected=Quit"
 	$(PXX_STABLE) test/lib_ansirender.pas $(TESTTMP)/lib_ansirender
-	test "$$($(TESTTMP)/lib_ansirender)" = "OK"
+	tools/expect_same.sh lib_ansirender "$$($(TESTTMP)/lib_ansirender)" "OK"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_process.pas $(TESTTMP)/lib_process
-	test "$$($(TESTTMP)/lib_process)" = "$$(printf 'Bytes read: 12\nByte 0: 104\nByte 1: 101\nByte 2: 108\nByte 3: 108\nByte 4: 111\nByte 5: 32\nByte 6: 119\nByte 7: 111\nByte 8: 114\nByte 9: 108\nByte 10: 100\nByte 11: 10\nChild output: [hello world\n]\nChild wait status: 0\nOK')"
+	tools/expect_same.sh lib_process "$$($(TESTTMP)/lib_process)" "$$(printf 'Bytes read: 12\nByte 0: 104\nByte 1: 101\nByte 2: 108\nByte 3: 108\nByte 4: 111\nByte 5: 32\nByte 6: 119\nByte 7: 111\nByte 8: 114\nByte 9: 108\nByte 10: 100\nByte 11: 10\nChild output: [hello world\n]\nChild wait status: 0\nOK')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_process_multi.pas $(TESTTMP)/lib_process_multi
-	test "$$($(TESTTMP)/lib_process_multi | tail -1)" = "OK"
+	tools/expect_same.sh lib_process_multi "$$($(TESTTMP)/lib_process_multi | tail -1)" "OK"
 	$(PXX_STABLE) test/lib_dynlibs.pas $(TESTTMP)/lib_dynlibs
-	test "$$($(TESTTMP)/lib_dynlibs)" = "$$(printf 'nil-handle=ok\nsym-nil=ok\nprocaddr-alias=ok\nunload=ok\nfree-alias=ok\nerrstr=ok')"
+	tools/expect_same.sh lib_dynlibs "$$($(TESTTMP)/lib_dynlibs)" "$$(printf 'nil-handle=ok\nsym-nil=ok\nprocaddr-alias=ok\nunload=ok\nfree-alias=ok\nerrstr=ok')"
 	$(PXX_STABLE) test/lib_unixshims.pas $(TESTTMP)/lib_unixshims
-	test "$$($(TESTTMP)/lib_unixshims)" = "$$(printf 'gettimeofday=ok\ntv_sec-sane=ok\ntv_usec-range=ok\nnil-tp=ok\ntzseconds=ok')"
+	tools/expect_same.sh lib_unixshims "$$($(TESTTMP)/lib_unixshims)" "$$(printf 'gettimeofday=ok\ntv_sec-sane=ok\ntv_usec-range=ok\nnil-tp=ok\ntzseconds=ok')"
 	$(PXX_STABLE) test/lib_strpchar.pas $(TESTTMP)/lib_strpchar
-	test "$$($(TESTTMP)/lib_strpchar)" = "$$(printf 'strlcopy-ret=ok\nstrlcopy-trunc=ok\nstrlcopy-short=ok\nstrlcomp-eq=ok\nstrlcomp-lt=ok\nstrlcomp-gt=ok\nsleep=ok\nmove-fillchar=ok\ninttohex-ff=ok\ninttohex-pad=ok\nstringofchar=ok\nstringofchar-0=ok')"
+	tools/expect_same.sh lib_strpchar "$$($(TESTTMP)/lib_strpchar)" "$$(printf 'strlcopy-ret=ok\nstrlcopy-trunc=ok\nstrlcopy-short=ok\nstrlcomp-eq=ok\nstrlcomp-lt=ok\nstrlcomp-gt=ok\nsleep=ok\nmove-fillchar=ok\ninttohex-ff=ok\ninttohex-pad=ok\nstringofchar=ok\nstringofchar-0=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_sockets.pas $(TESTTMP)/lib_sockets
-	test "$$($(TESTTMP)/lib_sockets)" = "$$(printf 'htons=ok\nhtonl=ok\nroundtrip=ok\nsocket=ok\nbind=ok\nlisten=ok\nsockname=ok\nconnect=ok\naccept=ok\nsend=ok\nrecv=ok\nclose-conn=ok\nclose-cli=ok\nclose-srv=ok\nfail-connect-ret=ok\nfail-connect-errno=ok\nfail-socket-ret=ok\nfail-socket-errno=ok\nerrno-survives-success=ok\nfail-send-ret=ok\nfail-send-errno=ok')"
+	tools/expect_same.sh lib_sockets "$$($(TESTTMP)/lib_sockets)" "$$(printf 'htons=ok\nhtonl=ok\nroundtrip=ok\nsocket=ok\nbind=ok\nlisten=ok\nsockname=ok\nconnect=ok\naccept=ok\nsend=ok\nrecv=ok\nclose-conn=ok\nclose-cli=ok\nclose-srv=ok\nfail-connect-ret=ok\nfail-connect-errno=ok\nfail-socket-ret=ok\nfail-socket-errno=ok\nerrno-survives-success=ok\nfail-send-ret=ok\nfail-send-errno=ok')"
 	$(PXX_STABLE) -Fulib/rtl test/lib_sha256.pas $(TESTTMP)/lib_sha256
-	test "$$($(TESTTMP)/lib_sha256 | grep -c '=ok')" = "12"
-	test "$$($(TESTTMP)/lib_sha256 | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_sha256.1 "$$($(TESTTMP)/lib_sha256 | grep -c '=ok')" "12"
+	tools/expect_same.sh lib_sha256.2 "$$($(TESTTMP)/lib_sha256 | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_sha512.pas $(TESTTMP)/lib_sha512
-	test "$$($(TESTTMP)/lib_sha512 | grep -c '=ok')" = "3"
-	test "$$($(TESTTMP)/lib_sha512 | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_sha512.1 "$$($(TESTTMP)/lib_sha512 | grep -c '=ok')" "3"
+	tools/expect_same.sh lib_sha512.2 "$$($(TESTTMP)/lib_sha512 | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_tls13_keys.pas $(TESTTMP)/lib_tls13_keys
-	test "$$($(TESTTMP)/lib_tls13_keys | grep -c '=ok')" = "5"
-	test "$$($(TESTTMP)/lib_tls13_keys | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_tls13_keys.1 "$$($(TESTTMP)/lib_tls13_keys | grep -c '=ok')" "5"
+	tools/expect_same.sh lib_tls13_keys.2 "$$($(TESTTMP)/lib_tls13_keys | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_tls13_record.pas $(TESTTMP)/lib_tls13_record
-	test "$$($(TESTTMP)/lib_tls13_record | grep -c '=ok')" = "6"
-	test "$$($(TESTTMP)/lib_tls13_record | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_tls13_record.1 "$$($(TESTTMP)/lib_tls13_record | grep -c '=ok')" "6"
+	tools/expect_same.sh lib_tls13_record.2 "$$($(TESTTMP)/lib_tls13_record | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_tls13_hs.pas $(TESTTMP)/lib_tls13_hs
-	test "$$($(TESTTMP)/lib_tls13_hs | grep -c '=ok')" = "6"
-	test "$$($(TESTTMP)/lib_tls13_hs | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_tls13_hs.1 "$$($(TESTTMP)/lib_tls13_hs | grep -c '=ok')" "6"
+	tools/expect_same.sh lib_tls13_hs.2 "$$($(TESTTMP)/lib_tls13_hs | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_chacha20poly1305.pas $(TESTTMP)/lib_chacha
-	test "$$($(TESTTMP)/lib_chacha | grep -c '=ok')" = "7"
-	test "$$($(TESTTMP)/lib_chacha | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_chacha.1 "$$($(TESTTMP)/lib_chacha | grep -c '=ok')" "7"
+	tools/expect_same.sh lib_chacha.2 "$$($(TESTTMP)/lib_chacha | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_x25519.pas $(TESTTMP)/lib_x25519
-	test "$$($(TESTTMP)/lib_x25519 | grep -c '=ok')" = "6"
-	test "$$($(TESTTMP)/lib_x25519 | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_x25519.1 "$$($(TESTTMP)/lib_x25519 | grep -c '=ok')" "6"
+	tools/expect_same.sh lib_x25519.2 "$$($(TESTTMP)/lib_x25519 | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_aesgcm.pas $(TESTTMP)/lib_aesgcm
-	test "$$($(TESTTMP)/lib_aesgcm | grep -c '=ok')" = "8"
-	test "$$($(TESTTMP)/lib_aesgcm | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_aesgcm.1 "$$($(TESTTMP)/lib_aesgcm | grep -c '=ok')" "8"
+	tools/expect_same.sh lib_aesgcm.2 "$$($(TESTTMP)/lib_aesgcm | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_rsa.pas $(TESTTMP)/lib_rsa
-	test "$$($(TESTTMP)/lib_rsa | grep -c '=ok')" = "3"
-	test "$$($(TESTTMP)/lib_rsa | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_rsa.1 "$$($(TESTTMP)/lib_rsa | grep -c '=ok')" "3"
+	tools/expect_same.sh lib_rsa.2 "$$($(TESTTMP)/lib_rsa | grep -c 'FAIL')" "0"
 	# RSASSA-PSS against a pinned OpenSSL-produced signature (hermetic: the
 	# vector is recorded, so no openssl is needed at gate time). PSS is what
 	# TLS 1.3 REQUIRES for an RSA CertificateVerify.
 	$(PXX_STABLE) -Fulib/rtl test/lib_rsa_pss.pas $(TESTTMP)/lib_rsa_pss
-	test "$$($(TESTTMP)/lib_rsa_pss | grep -c '=ok')" = "7"
-	test "$$($(TESTTMP)/lib_rsa_pss | tail -1)" = "RSAPSS OK"
+	tools/expect_same.sh lib_rsa_pss.1 "$$($(TESTTMP)/lib_rsa_pss | grep -c '=ok')" "7"
+	tools/expect_same.sh lib_rsa_pss.2 "$$($(TESTTMP)/lib_rsa_pss | tail -1)" "RSAPSS OK"
 	$(PXX_STABLE) -Fulib/rtl test/lib_ed25519.pas $(TESTTMP)/lib_ed25519
-	test "$$($(TESTTMP)/lib_ed25519 | grep -c '=ok')" = "3"
-	test "$$($(TESTTMP)/lib_ed25519 | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_ed25519.1 "$$($(TESTTMP)/lib_ed25519 | grep -c '=ok')" "3"
+	tools/expect_same.sh lib_ed25519.2 "$$($(TESTTMP)/lib_ed25519 | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_ecdsa_p256.pas $(TESTTMP)/lib_ecdsa
-	test "$$($(TESTTMP)/lib_ecdsa | grep -c '=ok')" = "2"
-	test "$$($(TESTTMP)/lib_ecdsa | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_ecdsa.1 "$$($(TESTTMP)/lib_ecdsa | grep -c '=ok')" "2"
+	tools/expect_same.sh lib_ecdsa.2 "$$($(TESTTMP)/lib_ecdsa | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_x509.pas $(TESTTMP)/lib_x509
-	test "$$($(TESTTMP)/lib_x509 | grep -c '=ok')" = "17"
-	test "$$($(TESTTMP)/lib_x509 | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_x509.1 "$$($(TESTTMP)/lib_x509 | grep -c '=ok')" "17"
+	tools/expect_same.sh lib_x509.2 "$$($(TESTTMP)/lib_x509 | grep -c 'FAIL')" "0"
 	# 16, not 14: `fixture-listen` and `fixture-connect` were added when the
 	# hardcoded port 28755 became port 0
 	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable). The
@@ -14638,85 +14638,85 @@ endif
 	# not a failure but a permanent hang at 7 of 14 =ok, and the only symptom
 	# was a testmgr TIMEOUT under a clean compile line.
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_tls.pas $(TESTTMP)/lib_tls
-	test "$$($(TESTTMP)/lib_tls | grep -c '=ok')" = "16"
-	test "$$($(TESTTMP)/lib_tls | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_tls.1 "$$($(TESTTMP)/lib_tls | grep -c '=ok')" "16"
+	tools/expect_same.sh lib_tls.2 "$$($(TESTTMP)/lib_tls | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http.pas $(TESTTMP)/lib_http
-	test "$$($(TESTTMP)/lib_http | grep -c '=ok')" = "83"
-	test "$$($(TESTTMP)/lib_http | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_http.1 "$$($(TESTTMP)/lib_http | grep -c '=ok')" "83"
+	tools/expect_same.sh lib_http.2 "$$($(TESTTMP)/lib_http | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_async.pas $(TESTTMP)/lib_http_async
 	# listen-port is new: the server listens on 0 and publishes the port it got
 	# instead of holding 28755, which lib_tls also held
 	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).
-	test "$$($(TESTTMP)/lib_http_async)" = "$$(printf 'listen-port=ok\nserver-done=ok\nstatus=ok\nreason=ok\nbody=ok')"
+	tools/expect_same.sh lib_http_async "$$($(TESTTMP)/lib_http_async)" "$$(printf 'listen-port=ok\nserver-done=ok\nstatus=ok\nreason=ok\nbody=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_redirect.pas $(TESTTMP)/lib_http_redirect
 	# +1 =ok: `listen-port`, added when the hardcoded port became port 0
 	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).
-	test "$$($(TESTTMP)/lib_http_redirect)" = "$$(printf 'listen-port=ok\nserver-done=ok\nstatus=ok\nbody=ok')"
+	tools/expect_same.sh lib_http_redirect "$$($(TESTTMP)/lib_http_redirect)" "$$(printf 'listen-port=ok\nserver-done=ok\nstatus=ok\nbody=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_keepalive.pas $(TESTTMP)/lib_http_keepalive
 	# +1 =ok: `listen-port`, added when the hardcoded port became port 0
 	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).
-	test "$$($(TESTTMP)/lib_http_keepalive)" = "$$(printf 'listen-port=ok\nserver-done=ok\nbody1=ok\nalive-mid=ok\nbody2=ok')"
+	tools/expect_same.sh lib_http_keepalive "$$($(TESTTMP)/lib_http_keepalive)" "$$(printf 'listen-port=ok\nserver-done=ok\nbody1=ok\nalive-mid=ok\nbody2=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_pool.pas $(TESTTMP)/lib_http_pool
 	# +1 =ok: `listen-port`, added when the hardcoded port became port 0
 	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).
-	test "$$($(TESTTMP)/lib_http_pool)" = "$$(printf 'listen-port=ok\nserver-done=ok\nbody1=ok\nbody2-reused=ok')"
+	tools/expect_same.sh lib_http_pool "$$($(TESTTMP)/lib_http_pool)" "$$(printf 'listen-port=ok\nserver-done=ok\nbody1=ok\nbody2-reused=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_pool_concurrent.pas $(TESTTMP)/lib_http_pool_concurrent
 	# +1 =ok: `listen-port`, added when the hardcoded port became port 0
 	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).
-	test "$$($(TESTTMP)/lib_http_pool_concurrent | grep -c '=ok')" = "7"
-	test "$$($(TESTTMP)/lib_http_pool_concurrent | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_http_pool_concurrent.1 "$$($(TESTTMP)/lib_http_pool_concurrent | grep -c '=ok')" "7"
+	tools/expect_same.sh lib_http_pool_concurrent.2 "$$($(TESTTMP)/lib_http_pool_concurrent | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_gzip.pas $(TESTTMP)/lib_http_gzip
 	# +1 =ok: `listen-port`, added when the hardcoded port became port 0
 	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).
-	test "$$($(TESTTMP)/lib_http_gzip | grep -c '=ok')" = "5"
-	test "$$($(TESTTMP)/lib_http_gzip | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_http_gzip.1 "$$($(TESTTMP)/lib_http_gzip | grep -c '=ok')" "5"
+	tools/expect_same.sh lib_http_gzip.2 "$$($(TESTTMP)/lib_http_gzip | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_cookie.pas $(TESTTMP)/lib_http_cookie
 	# +1 =ok: `listen-port`, added when the hardcoded port became port 0
 	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).
-	test "$$($(TESTTMP)/lib_http_cookie | grep -c '=ok')" = "5"
-	test "$$($(TESTTMP)/lib_http_cookie | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_http_cookie.1 "$$($(TESTTMP)/lib_http_cookie | grep -c '=ok')" "5"
+	tools/expect_same.sh lib_http_cookie.2 "$$($(TESTTMP)/lib_http_cookie | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_serve.pas $(TESTTMP)/lib_http_serve
 	# +1 =ok: `listen-port`, added when the hardcoded port became port 0
 	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).
-	test "$$($(TESTTMP)/lib_http_serve | grep -c '=ok')" = "4"
-	test "$$($(TESTTMP)/lib_http_serve | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_http_serve.1 "$$($(TESTTMP)/lib_http_serve | grep -c '=ok')" "4"
+	tools/expect_same.sh lib_http_serve.2 "$$($(TESTTMP)/lib_http_serve | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_httpjson.pas $(TESTTMP)/lib_httpjson
 	# +1 =ok: `listen-port`, added when the hardcoded port became port 0
 	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).
-	test "$$($(TESTTMP)/lib_httpjson | grep -c '=ok')" = "7"
-	test "$$($(TESTTMP)/lib_httpjson | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_httpjson.1 "$$($(TESTTMP)/lib_httpjson | grep -c '=ok')" "7"
+	tools/expect_same.sh lib_httpjson.2 "$$($(TESTTMP)/lib_httpjson | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix examples/net/httpdemo.pas /tmp/httpdemo
-	test "$$(/tmp/httpdemo | grep -c -e 'Welcome to frank2 net' -e 'cookie: sid=demo123' -e 'hello sid=demo123' -e 'body:   hello world' -e '^done')" = "5"
+	tools/expect_same.sh httpdemo "$$(/tmp/httpdemo | grep -c -e 'Welcome to frank2 net' -e 'cookie: sid=demo123' -e 'hello sid=demo123' -e 'body:   hello world' -e '^done')" "5"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_https_mock.pas $(TESTTMP)/lib_https_mock
 	# +1 =ok: `listen-port`, added when the hardcoded port became port 0
 	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).
-	test "$$($(TESTTMP)/lib_https_mock | grep -c '=ok')" = "7"
-	test "$$($(TESTTMP)/lib_https_mock | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_https_mock.1 "$$($(TESTTMP)/lib_https_mock | grep -c '=ok')" "7"
+	tools/expect_same.sh lib_https_mock.2 "$$($(TESTTMP)/lib_https_mock | grep -c 'FAIL')" "0"
 	# ephemeral-ports is new: the six hardcoded ports 28766-28771 became port 0
 	# (bug-b-lib-dns-async-ignores-six-bind-returns-and-can-park-forever). Two
 	# concurrent copies of the old binary gave BOTH failure modes at once — one
 	# wedged with no output, the other exited 0 having answered its neighbour's
 	# queries, so chase-* and cache-1query read as DNS-logic regressions.
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_async.pas $(TESTTMP)/lib_dns_async
-	test "$$($(TESTTMP)/lib_dns_async)" = "$$(printf 'ephemeral-ports=ok\nserver-done=ok\nrcode=ok\ncount=ok\nip=ok\nchase-server-done=ok\nchase-rcode=ok\nchase-count=ok\nchase-ip=ok\ntimeout=ok\nv6-server-done=ok\nv6-rcode=ok\nv6-count=ok\nv6-ip=ok\ncache-1st=ok\ncache-2nd=ok\ncache-1query=ok\ntc-udp-done=ok\ntc-tcp-done=ok\ntc-rcode=ok\ntc-count=ok\ntc-ips=ok')"
+	tools/expect_same.sh lib_dns_async "$$($(TESTTMP)/lib_dns_async)" "$$(printf 'ephemeral-ports=ok\nserver-done=ok\nrcode=ok\ncount=ok\nip=ok\nchase-server-done=ok\nchase-rcode=ok\nchase-count=ok\nchase-ip=ok\ntimeout=ok\nv6-server-done=ok\nv6-rcode=ok\nv6-count=ok\nv6-ip=ok\ncache-1st=ok\ncache-2nd=ok\ncache-1query=ok\ntc-udp-done=ok\ntc-tcp-done=ok\ntc-rcode=ok\ntc-count=ok\ntc-ips=ok')"
 	$(PXX_STABLE) -Fulib/rtl test/lib_classes.pas $(TESTTMP)/lib_classes
-	test "$$($(TESTTMP)/lib_classes | grep -c '=ok')" = "21"
-	test "$$($(TESTTMP)/lib_classes | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_classes.1 "$$($(TESTTMP)/lib_classes | grep -c '=ok')" "21"
+	tools/expect_same.sh lib_classes.2 "$$($(TESTTMP)/lib_classes | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) -Fulib/rtl test/test_tlist_notify.pas $(TESTTMP)/lib_tlist_notify
-	test "$$($(TESTTMP)/lib_tlist_notify)" = "total ok 2 / 2"
+	tools/expect_same.sh lib_tlist_notify "$$($(TESTTMP)/lib_tlist_notify)" "total ok 2 / 2"
 	$(PXX_STABLE) -Fulib/rtl test/test_tcomponent.pas $(TESTTMP)/lib_tcomponent
-	test "$$($(TESTTMP)/lib_tcomponent)" = "total ok 9 / 9"
+	tools/expect_same.sh lib_tcomponent "$$($(TESTTMP)/lib_tcomponent)" "total ok 9 / 9"
 	$(PXX_STABLE) -Fulib/rtl test/lib_types.pas $(TESTTMP)/lib_types
-	test "$$($(TESTTMP)/lib_types)" = "3 4 10 20 0 1"
+	tools/expect_same.sh lib_types "$$($(TESTTMP)/lib_types)" "3 4 10 20 0 1"
 	# the integer parsers: radix prefixes, the Int64 boundaries, and that all
 	# four entry points give the SAME answer (they used to disagree). Compiles
 	# under FPC; expectations read off it.
 	$(PXX_STABLE) -Fulib/rtl test/lib_strtoint.pas $(TESTTMP)/lib_strtoint
-	test "$$($(TESTTMP)/lib_strtoint | grep -c '=ok')" = "36"
-	test "$$($(TESTTMP)/lib_strtoint | tail -1)" = "STRTOINT OK"
+	tools/expect_same.sh lib_strtoint.1 "$$($(TESTTMP)/lib_strtoint | grep -c '=ok')" "36"
+	tools/expect_same.sh lib_strtoint.2 "$$($(TESTTMP)/lib_strtoint | tail -1)" "STRTOINT OK"
 	$(PXX_STABLE) -Fulib/rtl test/lib_strutil.pas $(TESTTMP)/lib_strutil
-	test "$$($(TESTTMP)/lib_strutil | grep -c '=ok')" = "59"
-	test "$$($(TESTTMP)/lib_strutil | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_strutil.1 "$$($(TESTTMP)/lib_strutil | grep -c '=ok')" "59"
+	tools/expect_same.sh lib_strutil.2 "$$($(TESTTMP)/lib_strutil | grep -c 'FAIL')" "0"
 	# the four gaps a 22-program string differential against fpc 3.2.2 found:
 	# variadic Concat under `uses sysutils`, AnsiQuotedStr, SameStr, and a
 	# failed TryStr* leaving the caller's stale value in place. Expected output
@@ -14737,8 +14737,8 @@ endif
 	# Generics.Defaults uses as comparer case-selectors; those twelve values are
 	# fpc 3.2.2's, run for run.
 	$(PXX_STABLE) -Fulib/rtl test/lib_typinfo_props.pas $(TESTTMP)/lib_typinfo_props
-	test "$$($(TESTTMP)/lib_typinfo_props | grep -c '=ok')" = "63"
-	test "$$($(TESTTMP)/lib_typinfo_props | tail -1)" = "TYPINFO-PROPS OK"
+	tools/expect_same.sh lib_typinfo_props.1 "$$($(TESTTMP)/lib_typinfo_props | grep -c '=ok')" "63"
+	tools/expect_same.sh lib_typinfo_props.2 "$$($(TESTTMP)/lib_typinfo_props | tail -1)" "TYPINFO-PROPS OK"
 	# the three Delphi/FPC exception-API gaps a vendored rtl-generics hits:
 	# EArgumentOutOfRangeException (a DESCENDANT of EArgumentException, so
 	# `on E: EArgumentException` catches it), Exception.CreateRes/CreateResFmt,
@@ -14747,43 +14747,43 @@ endif
 	# deliberately at Error(), which halts there and raises here (our domain by
 	# the error-handling ruling; see devdocs/dev/pascal-dialect-divergences.md).
 	$(PXX_STABLE) -Fulib/rtl test/lib_sysutils_delphi_exceptions.pas $(TESTTMP)/lib_sysutils_delphi_exc
-	test "$$($(TESTTMP)/lib_sysutils_delphi_exc | grep -c '=ok')" = "21"
-	test "$$($(TESTTMP)/lib_sysutils_delphi_exc | tail -1)" = "SYSUTILS-DELPHI-EXC OK"
+	tools/expect_same.sh lib_sysutils_delphi_exc.1 "$$($(TESTTMP)/lib_sysutils_delphi_exc | grep -c '=ok')" "21"
+	tools/expect_same.sh lib_sysutils_delphi_exc.2 "$$($(TESTTMP)/lib_sysutils_delphi_exc | tail -1)" "SYSUTILS-DELPHI-EXC OK"
 	# the date PARSE direction (StrToDate/StrToDateTime/TryStrTo*). Rows are
 	# read off FPC 3.2.2, including the ones nobody guesses: ISO input raises
 	# under the d/m/y default, and a two-digit year uses a SLIDING window.
 	$(PXX_STABLE) -Fulib/rtl test/lib_dateparse.pas $(TESTTMP)/lib_dateparse
-	test "$$($(TESTTMP)/lib_dateparse | grep -c '=ok')" = "36"
-	test "$$($(TESTTMP)/lib_dateparse | tail -1)" = "lib_dateparse: all ok"
+	tools/expect_same.sh lib_dateparse.1 "$$($(TESTTMP)/lib_dateparse | grep -c '=ok')" "36"
+	tools/expect_same.sh lib_dateparse.2 "$$($(TESTTMP)/lib_dateparse | tail -1)" "lib_dateparse: all ok"
 	# GetExceptionMask/SetExceptionMask. Deliberately NOT named lib_*.pas: it is
 	# x86-64 only by design, and lib_cross_sweep.sh builds the lib_* glob for
 	# four other targets where the intrinsics are a compile-time refusal.
 	$(PXX_STABLE) -Fulib/rtl test/fpu_exception_mask_x64.pas $(TESTTMP)/lib_fpumask
-	test "$$($(TESTTMP)/lib_fpumask | grep -c '=ok')" = "15"
-	test "$$($(TESTTMP)/lib_fpumask | tail -1)" = "fpu_exception_mask: all ok"
+	tools/expect_same.sh lib_fpumask.1 "$$($(TESTTMP)/lib_fpumask | grep -c '=ok')" "15"
+	tools/expect_same.sh lib_fpumask.2 "$$($(TESTTMP)/lib_fpumask | tail -1)" "fpu_exception_mask: all ok"
 	$(PXX_STABLE) -Fulib/rtl test/lib_format.pas $(TESTTMP)/lib_format
-	test "$$($(TESTTMP)/lib_format | grep -c '=ok')" = "27"
-	test "$$($(TESTTMP)/lib_format | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_format.1 "$$($(TESTTMP)/lib_format | grep -c '=ok')" "27"
+	tools/expect_same.sh lib_format.2 "$$($(TESTTMP)/lib_format | grep -c 'FAIL')" "0"
 	# Format('%.Nf') on the EXACT decimal expansion: no Int64 threshold at
 	# ~9e13 (silent) or ~9.2e16 (garbage), and no 10^prec overflow.
 	# bug-b-format-fixed-overflows-int64-and-loses-digits
 	$(PXX_STABLE) -Fulib/rtl test/lib_format_fixed.pas $(TESTTMP)/lib_format_fixed
-	test "$$($(TESTTMP)/lib_format_fixed | grep -c '=ok')" = "40"
-	test "$$($(TESTTMP)/lib_format_fixed | tail -1)" = "FORMATFIXED OK"
+	tools/expect_same.sh lib_format_fixed.1 "$$($(TESTTMP)/lib_format_fixed | grep -c '=ok')" "40"
+	tools/expect_same.sh lib_format_fixed.2 "$$($(TESTTMP)/lib_format_fixed | tail -1)" "FORMATFIXED OK"
 	$(PXX_STABLE) -Fulib/rtl test/lib_paths.pas $(TESTTMP)/lib_paths
-	test "$$($(TESTTMP)/lib_paths | grep -c '=ok')" = "20"
-	test "$$($(TESTTMP)/lib_paths | grep -c 'FAIL')" = "0"
+	tools/expect_same.sh lib_paths.1 "$$($(TESTTMP)/lib_paths | grep -c '=ok')" "20"
+	tools/expect_same.sh lib_paths.2 "$$($(TESTTMP)/lib_paths | grep -c 'FAIL')" "0"
 	# FloatToStr against FPC: every expectation in the table came from an
 	# FPC-built copy of the same program, so this compiles under FPC too.
 	$(PXX_STABLE) -Fulib/rtl test/lib_floattostr.pas $(TESTTMP)/lib_floattostr
-	test "$$($(TESTTMP)/lib_floattostr | tail -1)" = "FLOATTOSTR OK"
+	tools/expect_same.sh lib_floattostr "$$($(TESTTMP)/lib_floattostr | tail -1)" "FLOATTOSTR OK"
 	# The PARSE direction. lib_floattostr above checks the formatter against
 	# expected strings; the exact parse path (ExDecNearest -> ExDecOfMant) had
 	# nothing asserting it was correctly rounded, which is the property a
 	# performance change there can silently trade away. ~2.7s.
 	$(PXX_STABLE) -Fulib/rtl test/lib_strtofloat_roundtrip.pas $(TESTTMP)/lib_strtofloat_roundtrip
-	test "$$($(TESTTMP)/lib_strtofloat_roundtrip | grep -c '=ok')" = "6"
-	test "$$($(TESTTMP)/lib_strtofloat_roundtrip | tail -1)" = "STRTOFLOAT-ROUNDTRIP OK"
+	tools/expect_same.sh lib_strtofloat_roundtrip.1 "$$($(TESTTMP)/lib_strtofloat_roundtrip | grep -c '=ok')" "6"
+	tools/expect_same.sh lib_strtofloat_roundtrip.2 "$$($(TESTTMP)/lib_strtofloat_roundtrip | tail -1)" "STRTOFLOAT-ROUNDTRIP OK"
 	# Eisel-Lemire's ACCEPT decisions, against CPython as the oracle. The
 	# roundtrip test above only ever feeds the parser 17-digit spellings of real
 	# doubles; this one feeds arbitrary decimals near rounding boundaries, which
@@ -14800,8 +14800,8 @@ endif
 	# plausible wrong entry, which a hand-typed expectation would just encode
 	# twice. Reached as `import six`, mapped to lib/rtl/mimic_six.py.
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_six.npy $(TESTTMP)/lib_mimic_six
-	test "$$($(TESTTMP)/lib_mimic_six | grep -c '=ok')" = "18"
-	test "$$($(TESTTMP)/lib_mimic_six | tail -1)" = "MIMIC-SIX OK"
+	tools/expect_same.sh lib_mimic_six.1 "$$($(TESTTMP)/lib_mimic_six | grep -c '=ok')" "18"
+	tools/expect_same.sh lib_mimic_six.2 "$$($(TESTTMP)/lib_mimic_six | tail -1)" "MIMIC-SIX OK"
 	# The `warnings` shim. Asserts stdout ONLY and runs unmodified under
 	# CPython: stderr is where the two deliberately differ, since CPython
 	# prefixes `<file>:<line>:` by walking the call stack and this shim
@@ -14809,8 +14809,8 @@ endif
 	# for a registered workaround -- the natural `category=UserWarning`
 	# default segfaults when taken (see track-b-workarounds.md).
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_warnings.npy $(TESTTMP)/lib_mimic_warnings
-	test "$$($(TESTTMP)/lib_mimic_warnings 2>/dev/null | grep -c '=ok')" = "9"
-	test "$$($(TESTTMP)/lib_mimic_warnings 2>/dev/null | tail -1)" = "MIMIC-WARNINGS OK"
+	tools/expect_same.sh lib_mimic_warnings.1 "$$($(TESTTMP)/lib_mimic_warnings 2>/dev/null | grep -c '=ok')" "9"
+	tools/expect_same.sh lib_mimic_warnings.2 "$$($(TESTTMP)/lib_mimic_warnings 2>/dev/null | tail -1)" "MIMIC-WARNINGS OK"
 	# The five corpus module shims (feature-b-module-shims-for-the-html5lib-corpus).
 	# All five are DIFFERENTIALS in the same sense as lib_mimic_six above: each
 	# .npy runs unmodified under CPython against the real stdlib module, and
@@ -14819,20 +14819,20 @@ endif
 	# bisect boundary, a colour space with one sector wrong, an escape() that
 	# also escapes quotes), none of which raises anything.
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_bisect.npy $(TESTTMP)/lib_mimic_bisect
-	test "$$($(TESTTMP)/lib_mimic_bisect | grep -c '=ok')" = "18"
-	test "$$($(TESTTMP)/lib_mimic_bisect | tail -1)" = "MIMIC-BISECT OK"
+	tools/expect_same.sh lib_mimic_bisect.1 "$$($(TESTTMP)/lib_mimic_bisect | grep -c '=ok')" "18"
+	tools/expect_same.sh lib_mimic_bisect.2 "$$($(TESTTMP)/lib_mimic_bisect | tail -1)" "MIMIC-BISECT OK"
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_colorsys.npy $(TESTTMP)/lib_mimic_colorsys
-	test "$$($(TESTTMP)/lib_mimic_colorsys | grep -c '=ok')" = "20"
-	test "$$($(TESTTMP)/lib_mimic_colorsys | tail -1)" = "MIMIC-COLORSYS OK"
+	tools/expect_same.sh lib_mimic_colorsys.1 "$$($(TESTTMP)/lib_mimic_colorsys | grep -c '=ok')" "20"
+	tools/expect_same.sh lib_mimic_colorsys.2 "$$($(TESTTMP)/lib_mimic_colorsys | tail -1)" "MIMIC-COLORSYS OK"
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_copy.npy $(TESTTMP)/lib_mimic_copy
-	test "$$($(TESTTMP)/lib_mimic_copy | grep -c '=ok')" = "13"
-	test "$$($(TESTTMP)/lib_mimic_copy | tail -1)" = "MIMIC-COPY OK"
+	tools/expect_same.sh lib_mimic_copy.1 "$$($(TESTTMP)/lib_mimic_copy | grep -c '=ok')" "13"
+	tools/expect_same.sh lib_mimic_copy.2 "$$($(TESTTMP)/lib_mimic_copy | tail -1)" "MIMIC-COPY OK"
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_sax_saxutils.npy $(TESTTMP)/lib_mimic_saxutils
-	test "$$($(TESTTMP)/lib_mimic_saxutils | grep -c '=ok')" = "18"
-	test "$$($(TESTTMP)/lib_mimic_saxutils | tail -1)" = "MIMIC-SAXUTILS OK"
+	tools/expect_same.sh lib_mimic_saxutils.1 "$$($(TESTTMP)/lib_mimic_saxutils | grep -c '=ok')" "18"
+	tools/expect_same.sh lib_mimic_saxutils.2 "$$($(TESTTMP)/lib_mimic_saxutils | tail -1)" "MIMIC-SAXUTILS OK"
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_sax_xmlreader.npy $(TESTTMP)/lib_mimic_xmlreader
-	test "$$($(TESTTMP)/lib_mimic_xmlreader | grep -c '=ok')" = "25"
-	test "$$($(TESTTMP)/lib_mimic_xmlreader | tail -1)" = "MIMIC-XMLREADER OK"
+	tools/expect_same.sh lib_mimic_xmlreader.1 "$$($(TESTTMP)/lib_mimic_xmlreader | grep -c '=ok')" "25"
+	tools/expect_same.sh lib_mimic_xmlreader.2 "$$($(TESTTMP)/lib_mimic_xmlreader | tail -1)" "MIMIC-XMLREADER OK"
 	# xml.dom.Node's twelve nodeType constants
 	# (feature-nilpy-xml-dom-is-two-questions-not-one). Every assertion is on a
 	# VALUE, deliberately: a constants-only class was the exact construct that
@@ -14841,8 +14841,8 @@ endif
 	# answering zero. If these are ever "simplified" to presence checks the
 	# coverage is gone and nothing will fail to say so.
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_dom.npy $(TESTTMP)/lib_mimic_xml_dom
-	test "$$($(TESTTMP)/lib_mimic_xml_dom | grep -c '=ok')" = "20"
-	test "$$($(TESTTMP)/lib_mimic_xml_dom | tail -1)" = "MIMIC-XML-DOM OK"
+	tools/expect_same.sh lib_mimic_xml_dom.1 "$$($(TESTTMP)/lib_mimic_xml_dom | grep -c '=ok')" "20"
+	tools/expect_same.sh lib_mimic_xml_dom.2 "$$($(TESTTMP)/lib_mimic_xml_dom | tail -1)" "MIMIC-XML-DOM OK"
 	# xml.etree.ElementTree as a TREE MODEL with no XML reader
 	# (feature-b-mimic-xml-etree-elementtree-tree-model). html5lib hands the
 	# module to its treebuilder/treewalker as somewhere to hang a tree and
@@ -14856,8 +14856,8 @@ endif
 	# byte; that diff is what caught `find("*")` matching a comment, which the
 	# plausible reading gets backwards.
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_etree_elementtree.npy $(TESTTMP)/lib_mimic_xml_etree
-	test "$$($(TESTTMP)/lib_mimic_xml_etree | grep -c '=ok')" = "56"
-	test "$$($(TESTTMP)/lib_mimic_xml_etree | tail -1)" = "MIMIC-XML-ETREE OK"
+	tools/expect_same.sh lib_mimic_xml_etree.1 "$$($(TESTTMP)/lib_mimic_xml_etree | grep -c '=ok')" "56"
+	tools/expect_same.sh lib_mimic_xml_etree.2 "$$($(TESTTMP)/lib_mimic_xml_etree | tail -1)" "MIMIC-XML-ETREE OK"
 	# collections.abc's Mapping / MutableMapping, the ABC MIXIN pattern
 	# (feature-b-mimic-collections-abc-mapping-and-mutablemapping). The shim
 	# stores nothing: its whole value is mixins that dispatch DOWN into a
@@ -14873,8 +14873,8 @@ endif
 	# writes `from collections.abc import Mapping`, which is swallowed before it
 	# reaches here (bug-n-from-collections-abc-import-is-swallowed-by-the-collections-root-rule).
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_collections_abc.npy $(TESTTMP)/lib_mimic_collections_abc
-	test "$$($(TESTTMP)/lib_mimic_collections_abc | grep -c '=ok')" = "49"
-	test "$$($(TESTTMP)/lib_mimic_collections_abc | tail -1)" = "MIMIC-COLLECTIONS-ABC OK"
+	tools/expect_same.sh lib_mimic_collections_abc.1 "$$($(TESTTMP)/lib_mimic_collections_abc | grep -c '=ok')" "49"
+	tools/expect_same.sh lib_mimic_collections_abc.2 "$$($(TESTTMP)/lib_mimic_collections_abc | tail -1)" "MIMIC-COLLECTIONS-ABC OK"
 	# urllib.parse, reached the way the corpus reaches it: `from six.moves
 	# import urllib_parse as urlparse`, a RENAMED re-export through two shims
 	# (feature-b-mimic-six-moves-needs-http-client-and-urllib). Testing
@@ -14886,16 +14886,16 @@ endif
 	# unbalanced [ raises ValueError -- which the sanitizer catches to DELETE
 	# the attribute.
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_six_moves.npy $(TESTTMP)/lib_mimic_six_moves
-	test "$$($(TESTTMP)/lib_mimic_six_moves | grep -c '=ok')" = "27"
-	test "$$($(TESTTMP)/lib_mimic_six_moves | tail -1)" = "MIMIC-SIX-MOVES OK"
+	tools/expect_same.sh lib_mimic_six_moves.1 "$$($(TESTTMP)/lib_mimic_six_moves | grep -c '=ok')" "27"
+	tools/expect_same.sh lib_mimic_six_moves.2 "$$($(TESTTMP)/lib_mimic_six_moves | tail -1)" "MIMIC-SIX-MOVES OK"
 	# DNS backend selection: the default (dns_wire) must be undisturbed by the
 	# new backend, and -dPXX_DNS_RESOLVED must agree with it. Both use only
 	# localhost, so neither needs the network; the resolved half skips itself
 	# where systemd-resolved is absent, which is a supported configuration.
 	$(PXX_STABLE) -Fulib/rtl test/lib_dns_resolved.pas $(TESTTMP)/lib_dns_wire_default
-	test "$$($(TESTTMP)/lib_dns_wire_default | tail -1)" = "DNSRESOLVED OK"
+	tools/expect_same.sh lib_dns_wire_default "$$($(TESTTMP)/lib_dns_wire_default | tail -1)" "DNSRESOLVED OK"
 	$(PXX_STABLE) -dPXX_DNS_RESOLVED -Fulib/rtl test/lib_dns_resolved.pas $(TESTTMP)/lib_dns_resolved
-	test "$$($(TESTTMP)/lib_dns_resolved | tail -1)" = "DNSRESOLVED OK"
+	tools/expect_same.sh lib_dns_resolved "$$($(TESTTMP)/lib_dns_resolved | tail -1)" "DNSRESOLVED OK"
 	# The getaddrinfo backend, same two ways. Its ABI assertions (struct
 	# addrinfo's field offsets, pinned against gcc offsetof) run in the second
 	# build and are the load-bearing part: a wrong offset yields a plausible
@@ -14928,7 +14928,7 @@ endif
 	# A spawned child inherits the parent's environment (every spawn site used
 	# to hard-code an empty envp, i.e. handed each child `env -i`).
 	$(PXX_STABLE) -Fulib/rtl test/lib_child_env.pas $(TESTTMP)/lib_child_env
-	test "$$($(TESTTMP)/lib_child_env | tail -1)" = "CHILDENV OK"
+	tools/expect_same.sh lib_child_env "$$($(TESTTMP)/lib_child_env | tail -1)" "CHILDENV OK"
 	# The M_* math constants, and <strings.h>: both were absent, and an
 	# undeclared identifier is a silent 0 rather than an error.
 	$(PXX_STABLE) test/cmath_constants.c $(TESTTMP)/cmath_constants
@@ -15219,8 +15219,8 @@ endif
 	# exec() as a library, driven from a .npy: the whole output is diffed
 	# against CPython's for the same file (test/lib_pyexec.npy is valid .py)
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_pyexec.npy $(TESTTMP)/lib_pyexec
-	test "$$($(TESTTMP)/lib_pyexec | tail -1)" = "inner 1099511627776"
-	test "$$($(TESTTMP)/lib_pyexec | grep -c '^')" = "8"
+	tools/expect_same.sh lib_pyexec.1 "$$($(TESTTMP)/lib_pyexec | tail -1)" "inner 1099511627776"
+	tools/expect_same.sh lib_pyexec.2 "$$($(TESTTMP)/lib_pyexec | grep -c '^')" "8"
 	@if command -v python3 >/dev/null 2>&1; then \
 	  cp test/lib_pyexec.npy $(TESTTMP)/lib_pyexec_oracle.py; \
 	  python3 $(TESTTMP)/lib_pyexec_oracle.py > $(TESTTMP)/lib_pyexec_cpython.txt; \
@@ -15234,34 +15234,34 @@ endif
 	else echo "  pyexec: ok (no python3 for the CPython diff)"; fi
 	# Format's %g / %e, every row read off an FPC build of the same file
 	$(PXX_STABLE) -Fulib/rtl test/lib_format_ge.pas $(TESTTMP)/lib_format_ge
-	test "$$($(TESTTMP)/lib_format_ge | grep -c '=ok')" = "31"
-	test "$$($(TESTTMP)/lib_format_ge | tail -1)" = "FORMATGE OK"
+	tools/expect_same.sh lib_format_ge.1 "$$($(TESTTMP)/lib_format_ge | grep -c '=ok')" "31"
+	tools/expect_same.sh lib_format_ge.2 "$$($(TESTTMP)/lib_format_ge | tail -1)" "FORMATGE OK"
 	# TStrings' Name=Value surface, every row read off an FPC build of the
 	# same file (it compiles under both)
 	$(PXX_STABLE) -Fulib/rtl test/lib_strings_namevalue.pas $(TESTTMP)/lib_namevalue
-	test "$$($(TESTTMP)/lib_namevalue | tail -1)" = "NAMEVALUE OK"
+	tools/expect_same.sh lib_namevalue "$$($(TESTTMP)/lib_namevalue | tail -1)" "NAMEVALUE OK"
 	# TStrings.Text at the BYTE level -- CRLF and LF print identically and
 	# SetText accepts either, so only the length and the character codes can
 	# see the difference. Compiles under FPC too; expectations read off it.
 	$(PXX_STABLE) -Fulib/rtl test/lib_strings_text.pas $(TESTTMP)/lib_strings_text
-	test "$$($(TESTTMP)/lib_strings_text | grep -c '=ok')" = "11"
-	test "$$($(TESTTMP)/lib_strings_text | tail -1)" = "STRINGSTEXT OK"
+	tools/expect_same.sh lib_strings_text.1 "$$($(TESTTMP)/lib_strings_text | grep -c '=ok')" "11"
+	tools/expect_same.sh lib_strings_text.2 "$$($(TESTTMP)/lib_strings_text | tail -1)" "STRINGSTEXT OK"
 	# markdown against the CommonMark reference (expectations came from
 	# markdown-it-py; python-markdown agrees on all but its ul/ol merge quirk)
 	$(PXX_STABLE) -Fulib/rtl test/lib_markdown.pas $(TESTTMP)/lib_markdown
-	test "$$($(TESTTMP)/lib_markdown | grep -c '=ok')" = "17"
-	test "$$($(TESTTMP)/lib_markdown | tail -1)" = "MARKDOWN OK"
+	tools/expect_same.sh lib_markdown.1 "$$($(TESTTMP)/lib_markdown | grep -c '=ok')" "17"
+	tools/expect_same.sh lib_markdown.2 "$$($(TESTTMP)/lib_markdown | tail -1)" "MARKDOWN OK"
 	# IntToHex vs FPC 3.2.2. Built TWICE on purpose: the default run asserts the
 	# RTL bodies only (15 rows, flag-independent), and the flagged run adds the
 	# four rows whose answer depends on WHICH overload the resolver picks --
 	# a Track A choice, so it is asserted only where FPC's narrowest-fit rule
 	# is in force. Compiles under FPC too; expectations read off it.
 	$(PXX_STABLE) -Fulib/rtl test/lib_inttohex.pas $(TESTTMP)/lib_inttohex
-	test "$$($(TESTTMP)/lib_inttohex | grep -c '=ok')" = "15"
-	test "$$($(TESTTMP)/lib_inttohex | tail -1)" = "INTTOHEX OK"
+	tools/expect_same.sh lib_inttohex.1 "$$($(TESTTMP)/lib_inttohex | grep -c '=ok')" "15"
+	tools/expect_same.sh lib_inttohex.2 "$$($(TESTTMP)/lib_inttohex | tail -1)" "INTTOHEX OK"
 	$(PXX_STABLE) --strict-overload-width -dSTRICT_WIDTH -Fulib/rtl test/lib_inttohex.pas $(TESTTMP)/lib_inttohex_strict
-	test "$$($(TESTTMP)/lib_inttohex_strict | grep -c '=ok')" = "19"
-	test "$$($(TESTTMP)/lib_inttohex_strict | tail -1)" = "INTTOHEX OK"
+	tools/expect_same.sh lib_inttohex_strict.1 "$$($(TESTTMP)/lib_inttohex_strict | grep -c '=ok')" "19"
+	tools/expect_same.sh lib_inttohex_strict.2 "$$($(TESTTMP)/lib_inttohex_strict | tail -1)" "INTTOHEX OK"
 	# The reportlab mimic against REAL reportlab (feature-lib-reportlab-fidelity-vs-oracle).
 	# Validity is not agreement: the mimic reimplements a drawing API rather than
 	# wrapping one, so every metric and coordinate convention in it is an
