@@ -272,3 +272,50 @@ is NOT unblocked by this.
 Remaining in this ticket: GPIO (slice 2) and ADC (slice 3), both now genuinely
 attemptable rather than blocked. Slice 1 is done and, for the first time,
 executed.
+
+## 2026-08-30 (pxx-b) — SLICE 2 (GPIO) CANNOT BE WITNESSED HERE. Measured, with a control.
+
+Probed before writing any of it, because the ticket forbids adding code nobody
+has executed and I wanted to know whether an acceptance was reachable at all.
+`examples/esp32/gpio-c3` is that probe, landed with its result:
+
+```
+PROBE: gpio_config rc=0
+PROBE: install_isr_service rc=0
+PROBE: isr_handler_add rc=0
+PROBE: set 1 -> read 0        (x5 toggles)
+PROBE: pullup-input pin4 cfg rc=0 reads 0 (1 on real silicon)
+PROBE: edges=0
+PROBE: VERDICT qemu-delivers-NO-gpio-edges
+```
+
+**All three SDK calls return rc=0 and nothing happens.** A probe that checked
+only return codes concludes GPIO works and writes a library against it.
+
+**The control arm is what makes this a diagnosis rather than an observation.**
+The first cut only toggled an INPUT_OUTPUT pin and counted ISR entries, and
+`edges=0` is equally consistent with two different worlds: "GPIO works, the
+interrupt model is missing" and "GPIO is inert". So the probe also configures a
+SECOND pin as INPUT with a pull-up, which on real silicon reads 1 with nothing
+attached. It reads 0.
+
+So QEMU's esp32c3 does not model the GPIO **input path** at all. The missing
+edges follow from that; they are not a separate gap. No choice of edge type, ISR
+flag or pin works around it — which is the day this control arm saves.
+
+**Disposition: slice 2 needs a board.** Writing the GPIO unit now would produce
+exactly the unexecuted code this ticket has twice refused to accumulate. Note
+the difference from the block this same ticket carried for five weeks: THAT one
+was a probe with no true arm and was never true; this one is measured and has a
+control. Both say "blocked"; only one of them earned it.
+
+`./build.sh qemu-assert` in gpio-c3 asserts the CURRENT behaviour, so it fails
+the day QEMU gains a GPIO model or the day someone runs it on hardware — where
+edges>0 is the right answer and slice 2 becomes acceptable. The failure text
+says so, to stop the next reader "fixing" it by updating the expectation.
+
+**Slice 3 (ADC) is NOT measured.** Do not infer it from this — probe it the same
+way. Reasoning from the GPIO result is the move this ticket keeps punishing.
+
+State of the ticket: slice 1 done and executed; slices 2 and 3 blocked on
+hardware, one measured and one unknown.
