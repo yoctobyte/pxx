@@ -186,4 +186,4 @@ carries the three always-working spellings as controls, and was **confirmed
 refused on the baseline first** (line 53).
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 72dbc9ba0.
