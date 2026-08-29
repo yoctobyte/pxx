@@ -69,7 +69,7 @@ Whether any probe should be *promoted*, and anything about the frontends' behavi
 This is about what the public docs say exists.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 05dbd4c0e.
 
 ---
 
