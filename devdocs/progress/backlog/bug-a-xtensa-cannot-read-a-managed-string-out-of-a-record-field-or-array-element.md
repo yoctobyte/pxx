@@ -74,3 +74,80 @@ Object-level plus observable output, hosted profile, Call0, at `3bc9a9303267`,
 compared directly against riscv32 and x86-64 built from the same source.
 Windowed not checked — it faults earlier for unrelated reasons
 ([[bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength]]).
+
+---
+
+## ROOT CAUSE — the store, and it was three stores, not one. frankS, 2026-08-30
+
+The ticket's own guess was right and understated. Measured first, by reading the
+field's raw slot and then `[handle-8]`:
+
+| target | slot | `[slot-8]` |
+| --- | --- | --- |
+| x86-64 | nonnil | 5 |
+| riscv32 | nonnil | 5 |
+| **xtensa** | nonnil | **1936482630** |
+
+So the slot held a **raw literal buffer address, not a managed handle** — the
+store is wrong, not the load, and no amount of work on `Length` or `IR_FIELD`
+would have found it.
+
+`IR_STORE_SYM` has dispatched on the destination TYPE since managed strings
+landed. **`IR_STORE_MEM` — the same store reached through an ADDRESS, which is
+how every record field, array element and deref is written — had no type
+dispatch at all** on xtensa: a 64-bit branch and then a raw sized word store.
+Three type classes need more than a word copy and all three were silently wrong
+through an aggregate:
+
+| | shape | what actually landed in the destination |
+| --- | --- | --- |
+| managed | `r.f := 'lit'` | the rodata ADDRESS; `Length` read `[addr-8]` |
+| frozen | `r.g := 'lit'` | the source address, where `[len][chars]` belongs |
+| float | `r.d := i` | the integer bits, in a `Double` field |
+
+Every other backend has all three; riscv32 has them adjacent in this same node,
+which is how one probe found all three.
+
+### Why it survived: the working spellings are the common ones
+
+`r.f := s` and `r.f := s + 'x'` were always **right**, because in those two
+shapes the raw source word already IS a handle. Only a literal, a char or a
+frozen source exposes it. This is the third instance tonight of the same
+sentence — see [[why-xtensa-was-the-holdout]] — and the one before it,
+`ABIParamSlotHoldsValueAddr`, had exactly this structure too.
+
+### The float row was measured, not inferred
+
+It was added on riscv32's evidence, and the probe that suggested it faulted
+somewhere else entirely: **`WriteLn` of a `Double` SIGBUSes on xtensa for a
+plain local**, no aggregate involved — a separate defect that masked this one.
+Measured instead by reading the field's raw bits back as an `Int64`, and
+confirmed load-bearing by **ablation**: branch off, `r.d := i` leaves `hi=0
+lo=7`; branch on, `hi=1075576832 lo=0` = `$401C0000_00000000` = 7.0, matching
+both oracles. That `WriteLn(Double)` fault is filed separately.
+
+### Fixed by sharing, not copying
+
+Two helpers lifted out so both stores use one body:
+`EmitStrHandleForStoreXtensa` (the four handle-producing source shapes, was
+inline in `IR_STORE_SYM`) and `EmitFrozenCopyXtensa` (the frozen `[len][chars]`
+copy against a destination ADDRESS — it was inline against a symbol *slot*,
+which is precisely why the address-reached path had nothing to call).
+
+### Bound
+
+Hosted profile, Call0, `--xtensa-soft-mulhigh`, binary `915121e5d0e9`, against
+the x86-64 and riscv32 oracles built from the same source. The 9-case store
+matrix went 9/9 wrong-or-crashing to 9/9 identical. The 142-source differential
+went **57 match / 19 differ → 63 / 13**, cfail set unchanged at 66, **zero
+regressions**; newly green: `test_cross_dynarray`,
+`test_cross_managed_aggregate_locals`, `test_cross_openarray_string`,
+`test_cross_stack_params`, `test_interfaces_multi_secondary`,
+`test_u64_to_double`. Both interface tests the Scope section predicted are
+among them.
+
+Windowed: the managed stores now work there too; the frozen one still faults,
+and that fault is **pre-existing and not from this change** — a plain
+`var f: string[16]; f := 'FROZEN'` symbol store, no aggregate anywhere, SIGBUSes
+under windowed on code this commit does not touch
+([[bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength]]).

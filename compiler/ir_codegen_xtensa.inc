@@ -464,21 +464,21 @@ begin
   end;
 end;
 
-procedure EmitFrozenStoreXtensa(si, valNode: Integer);
-{ Store a string value into a FROZEN inline buffer (`string[N]` / shortstring):
-  the slot holds [len:8][chars]. Xtensa had no frozen store at all, so
-  `f := 'hello'` left the buffer untouched and every later read saw length 0
-  (bug-frozen-string-unsupported-riscv32-xtensa). Mirrors riscv32's b345 port:
-  three source shapes — a char ordinal, a MANAGED handle (length at [h-8],
-  chars at h, nil = empty), or another frozen/literal buffer (length at [b],
-  chars at b+8). The length is clamped to the slot capacity (truncating
-  string[N] semantics). }
-var srcTk: TTypeKind; cap: Integer;
+procedure EmitFrozenCopyXtensa(srcTk: TTypeKind; cap: Integer);
+{ THE FROZEN COPY ITSELF, destination given as an ADDRESS: a5 = the evaluated
+  source, a4 = the destination inline buffer, `cap` = its capacity. Writes
+  [len:8][chars] with the length clamped (truncating `string[N]` semantics).
+  Mirrors riscv32's b345 port: three source shapes — a char ordinal, a MANAGED
+  handle (length at [h-8], chars at h, nil = empty), or another frozen/literal
+  buffer (length at [b], chars at b+8).
+
+  Split out of EmitFrozenStoreXtensa (which had it inline against a SYMBOL SLOT)
+  so IR_STORE_MEM can reach it: a `string[N]` RECORD FIELD is reached through an
+  address expression, not a slot index, and that path had no frozen store at all
+  — the generic sized store dropped the source ADDRESS into the field.
+  bug-a-xtensa-cannot-read-a-managed-string-out-of-a-record-field-or-array-element }
 begin
-  IREmitNodeXtensa(valNode);                    { a2 = source }
-  xtensa_mov(reg_xtensa_a5, reg_xtensa_a2);     { a5 = src }
-  EmitSlotAddrXtensa(reg_xtensa_a4, si);        { a4 = dst buffer }
-  srcTk := IntToTypeKind(IRTk[valNode]);
+  if cap <= 0 then cap := DEFAULT_STR_CAP;
 
   if srcTk = tyChar then
   begin
@@ -503,8 +503,6 @@ begin
   { Truncating `string[N]` assignment: clamp the length to the slot capacity
     before publishing/copying — without this the copy overruns the buffer
     (bug-pascal-shortstring-no-truncation-buffer-overrun). }
-  cap := SymStrCap[si];
-  if cap <= 0 then cap := DEFAULT_STR_CAP;
   xtensa_movi(reg_xtensa_a8, cap);
   EmitAsmXtensa(['bge a8, a6, .tk', 'mov a6, a8', '.tk:']);
 
@@ -517,6 +515,83 @@ begin
                  'l8ui a8, a5, 0', 's8i a8, a4, 0',
                  'addi a5, a5, 1', 'addi a4, a4, 1', 'addi a6, a6, -1',
                  'j .fc', '.fd:']);
+end;
+
+procedure EmitFrozenStoreXtensa(si, valNode: Integer);
+{ `f := 'hello'` where f is a `string[N]` SYMBOL. Xtensa had no frozen store at
+  all, so the buffer was never written and every later read saw length 0
+  (bug-frozen-string-unsupported-riscv32-xtensa). Now just the slot-addressed
+  front end of EmitFrozenCopyXtensa. }
+begin
+  IREmitNodeXtensa(valNode);                    { a2 = source }
+  xtensa_mov(reg_xtensa_a5, reg_xtensa_a2);     { a5 = src }
+  EmitSlotAddrXtensa(reg_xtensa_a4, si);        { a4 = dst buffer }
+  EmitFrozenCopyXtensa(IntToTypeKind(IRTk[valNode]), SymStrCap[si]);
+end;
+
+procedure EmitStrHandleForStoreXtensa(valNode: Integer);
+{ Materialise in a2 the MANAGED HANDLE to publish into an ansistring
+  destination, carrying the +1 reference that destination is about to own.
+  Four source shapes, and only the LAST of them is already a handle:
+
+    IR_CONST_STR  a literal      -> PXXStrFromLit(len, rodata chars)
+    tyChar        a character    -> PXXStrFromLit(1, &spilled char)
+    frozen        a string[N]    -> PXXStrFromLit([buf], buf+8)
+    otherwise     a handle       -> IncRef, unless the value is a FRESH result
+                                    (a concat or a function return) which
+                                    already carries its own +1.
+
+  Lifted out of IR_STORE_SYM so IR_STORE_MEM can use the same four rows. It had
+  them inline and IR_STORE_MEM had NONE of them: a store through an address just
+  wrote the raw source word into the slot, so `r.f := 'lit'` put the address of
+  the rodata literal into a managed field. `r.f := s` and `r.f := s + 'x'`
+  happened to be right — the raw word IS a handle in those two shapes — which is
+  exactly what hid it.
+  bug-a-xtensa-cannot-read-a-managed-string-out-of-a-record-field-or-array-element }
+var sVal: AnsiString; j: Integer;
+begin
+  if IRKind[valNode] = IR_CONST_STR then
+  begin
+    sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
+    j := InternStr(sVal);
+    EmitLoadConstXtensa(reg_xtensa_a2, Strs[j].Len);          { len }
+    EmitLoadDataRefXtensa(reg_xtensa_a3, Strs[j].Offset + 8); { src }
+    EmitStrFromLitXtensa;                                     { a2 = handle }
+  end
+  else if IntToTypeKind(IRTk[valNode]) = tyChar then
+  begin
+    IREmitNodeXtensa(valNode);                  { a2 = char code }
+    XtensaPushA2;                               { spill char to the frame }
+    { a3 = address of the spilled char slot. }
+    if XtensaABI = XTENSA_ABI_WINDOWED then
+      xtensa_addi(reg_xtensa_a3, reg_xtensa_sp, XtSpillDepth - 4)
+    else
+      xtensa_addi(reg_xtensa_a3, reg_xtensa_sp, 0);
+    EmitLoadConstXtensa(reg_xtensa_a2, 1);      { len 1 }
+    EmitStrFromLitXtensa;                       { a2 = handle }
+    { drop the char slot }
+    if XtensaABI = XTENSA_ABI_WINDOWED then Dec(XtSpillDepth, 4)
+    else xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 4);
+  end
+  else if TypeIsFrozenString(IntToTypeKind(IRTk[valNode])) then
+  begin
+    IREmitNodeXtensa(valNode);                  { a2 = inline buffer addr }
+    xtensa_l32i(reg_xtensa_a4, reg_xtensa_a2, 0); { len = [buf] }
+    xtensa_addi(reg_xtensa_a3, reg_xtensa_a2, 8); { src = buf+8 }
+    xtensa_mov(reg_xtensa_a2, reg_xtensa_a4);     { len }
+    EmitStrFromLitXtensa;
+  end
+  else
+  begin
+    IREmitNodeXtensa(valNode);                  { a2 = source handle }
+    if not (((IRKind[valNode] = IR_BINOP) and (IntToTypeKind(IRTk[valNode]) = tyAnsiString)) or
+            ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0))) then
+    begin
+      XtensaPushA2;                             { save handle }
+      EmitStrRefCallXtensa('PXXStrIncRef');
+      XtensaPopA2;                              { restore handle }
+    end;
+  end;
 end;
 
 { ===== 64-bit (Int64/UInt64) value model: a2:a3 = lo:hi register pair =====
@@ -1303,49 +1378,7 @@ begin
         begin
           { Managed-string assignment: build the new handle in a2, then publish
             into the slot (DecRef old). Mirrors i386/riscv32. }
-          valNode := IRB[node];
-          if IRKind[valNode] = IR_CONST_STR then
-          begin
-            sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
-            j := InternStr(sVal);
-            EmitLoadConstXtensa(reg_xtensa_a2, Strs[j].Len);          { len }
-            EmitLoadDataRefXtensa(reg_xtensa_a3, Strs[j].Offset + 8); { src }
-            EmitStrFromLitXtensa;                                     { a2 = handle }
-          end
-          else if IntToTypeKind(IRTk[valNode]) = tyChar then
-          begin
-            IREmitNodeXtensa(valNode);                  { a2 = char code }
-            XtensaPushA2;                               { spill char to the frame }
-            { a3 = address of the spilled char slot. }
-            if XtensaABI = XTENSA_ABI_WINDOWED then
-              xtensa_addi(reg_xtensa_a3, reg_xtensa_sp, XtSpillDepth - 4)
-            else
-              xtensa_addi(reg_xtensa_a3, reg_xtensa_sp, 0);
-            EmitLoadConstXtensa(reg_xtensa_a2, 1);      { len 1 }
-            EmitStrFromLitXtensa;                       { a2 = handle }
-            { drop the char slot }
-            if XtensaABI = XTENSA_ABI_WINDOWED then Dec(XtSpillDepth, 4)
-            else xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 4);
-          end
-          else if TypeIsFrozenString(IntToTypeKind(IRTk[valNode])) then
-          begin
-            IREmitNodeXtensa(valNode);                  { a2 = inline buffer addr }
-            xtensa_l32i(reg_xtensa_a4, reg_xtensa_a2, 0); { len = [buf] }
-            xtensa_addi(reg_xtensa_a3, reg_xtensa_a2, 8); { src = buf+8 }
-            xtensa_mov(reg_xtensa_a2, reg_xtensa_a4);     { len }
-            EmitStrFromLitXtensa;
-          end
-          else
-          begin
-            IREmitNodeXtensa(valNode);                  { a2 = source handle }
-            if not (((IRKind[valNode] = IR_BINOP) and (IntToTypeKind(IRTk[valNode]) = tyAnsiString)) or
-                    ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0))) then
-            begin
-              XtensaPushA2;                             { save handle }
-              EmitStrRefCallXtensa('PXXStrIncRef');
-              XtensaPopA2;                              { restore handle }
-            end;
-          end;
+          EmitStrHandleForStoreXtensa(IRB[node]);
           { Publish: save new, DecRef the old handle in the slot, then store new.
             The slot address can't be held in a8 across the windowed DecRef call
             (call8 rotates a8-a15 out), so recompute it before the store. }
@@ -1547,6 +1580,87 @@ begin
       begin
         tk := IntToTypeKind(IRTk[node]);
         sz := TypeSize(tk);
+        { THE TYPED STORES. IR_STORE_SYM has dispatched on the destination TYPE
+          since managed strings landed; IR_STORE_MEM — the same store reached
+          through an ADDRESS (a record field, an array element, a deref) — had
+          none of it and fell straight through to a raw sized store. So the
+          three type classes that need more than a word copy were all silently
+          wrong through an aggregate, and each failed differently:
+
+            r.f := 'lit'   (managed)  the rodata ADDRESS landed in the field;
+                                      Length read [addr-8] = 1936482630
+            r.g := 'lit'   (frozen)   the source address landed in the buffer
+                                      where [len][chars] belongs
+            r.d := i       (float)    the integer bits landed in a Double field
+                                      — SIGBUS on the next read
+
+          Every other backend has all three. riscv32 has them adjacent in this
+          same node, which is how all three were found by one probe.
+          bug-a-xtensa-cannot-read-a-managed-string-out-of-a-record-field-or-array-element }
+        if tk = tyAnsiString then
+        begin
+          { Managed store through an address: build the new handle (with its +1),
+            publish it into the slot, then DecRef whatever was there.
+            Publish-before-DecRef, so `r.f := r.f` cannot free the live value. }
+          EmitStrHandleForStoreXtensa(IRB[node]);
+          XtensaPushA2;                              { new handle }
+          savedLVW := InLValueWrite;
+          InLValueWrite := True;
+          IREmitNodeXtensa(IRA[node]);               { a2 = slot address }
+          InLValueWrite := savedLVW;
+          XtensaPopA3;                               { a3 = new handle }
+          xtensa_l32i(reg_xtensa_a4, reg_xtensa_a2, 0);   { a4 = old handle }
+          xtensa_s32i(reg_xtensa_a3, reg_xtensa_a2, 0);   { [slot] := new }
+          xtensa_mov(reg_xtensa_a2, reg_xtensa_a4);       { a2 = old }
+          EmitStrRefCallXtensa('PXXStrDecRef');
+          Exit;
+        end;
+        if tk = tyString then
+        begin
+          { Frozen `string[N]` store through an address: copy [len][chars] with
+            the length clamped to the destination capacity, which the IR carries
+            as the node's ival. Same core as the slot-addressed store. }
+          IREmitNodeXtensa(IRB[node]);               { a2 = source }
+          XtensaPushA2;
+          savedLVW := InLValueWrite;
+          InLValueWrite := True;
+          IREmitNodeXtensa(IRA[node]);               { a2 = dest buffer }
+          InLValueWrite := savedLVW;
+          xtensa_mov(reg_xtensa_a4, reg_xtensa_a2);  { a4 = dst }
+          XtensaPopA3;
+          xtensa_mov(reg_xtensa_a5, reg_xtensa_a3);  { a5 = src }
+          EmitFrozenCopyXtensa(IntToTypeKind(IRTk[IRB[node]]), Integer(IRIVal[node]));
+          Exit;
+        end;
+        if IsFloatXtensa(tk) then
+        begin
+          { Coerce the RHS to the destination's float width before storing. Must
+            precede the Is64Bit branch: a Double destination IS 64-bit, but an
+            integer RHS needs int->double conversion, not a raw bit copy. }
+          EmitFloatOperandXtensa(IRB[node], tk);
+          if tk = tyDouble then
+          begin
+            XtensaPush64;
+            savedLVW := InLValueWrite;
+            InLValueWrite := True;
+            IREmitNodeXtensa(IRA[node]);             { a2 = dest addr }
+            InLValueWrite := savedLVW;
+            XtensaPop64ToA4A5;                       { a4:a5 = lo:hi }
+            xtensa_s32i(reg_xtensa_a4, reg_xtensa_a2, 0);
+            xtensa_s32i(reg_xtensa_a5, reg_xtensa_a2, 4);
+          end
+          else
+          begin
+            XtensaPushA2;
+            savedLVW := InLValueWrite;
+            InLValueWrite := True;
+            IREmitNodeXtensa(IRA[node]);             { a2 = dest addr }
+            InLValueWrite := savedLVW;
+            XtensaPopA3;
+            xtensa_s32i(reg_xtensa_a3, reg_xtensa_a2, 0);
+          end;
+          Exit;
+        end;
         if (sz = 8) and Is64BitXtensa(tk) then
         begin
           { 64-bit store through memory: spill both value words across the
