@@ -329,4 +329,4 @@ in a Track P file. It does **not** touch `cparser.inc`, `cpreproc.inc`,
 with the NilPy import-order work.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 4576ad4d1.
