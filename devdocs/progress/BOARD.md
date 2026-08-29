@@ -14,7 +14,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
 
-## unfinished (21)
+## unfinished (20)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -34,7 +34,6 @@ _none_
 | feature-pascal-corpus-generics | P | 65 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 | feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
 | feature-port-rtl-over-libc | A | 55 | feature | RTL-over-libc lowering mode — route runtime primitives through a system C library instead of raw syscalls | — |
-| feature-real-dynlib-loader | B | 45 | feature | Real dlopen loader: DONE on x86-64 (PAL primitives, opt-in -dPXX_DYNLIB_LIBC, truthful PalHasDynlib, OpenSSL 3 loaded and answering). Two items open: (b) an arm32/aarch64 RUN, blocked on this host having no cross ld-linux/libc, and (d) Synapse SSL end-to-end, now past the connect wall and stopped in SSLDoConnect. | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-target-wasm | A+B | 60 | feature | NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim. | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
@@ -50,7 +49,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (314)
+## backlog (316)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -145,6 +144,7 @@ _none_
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 55 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
 | chore-a-typesize-answers-8-for-a-record-and-the-warning-is-where-no-caller-looks | A | 45 | chore | TypeSize(tyRecord) returns 8, and the warning that a caller must use RecSize() for the full size lives on the return-value line INSIDE symtab.inc, where no caller reads it. One confirmed misuse cost a SIGSEGV and a silently-wrong value in the Rust frontend. There are 319 TypeSize call sites across compiler/**; most are legitimate. This is a classification problem, not a defect list — do not file 319 tickets. | — |
 | chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring | A | 40 | chore | Wire the nine that pass, then gate the checker | bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed |
+| chore-b-no-cross-loader-on-this-host-blocks-the-dynlib-arm-run | B | 20 | chore | The dlopen loader is unverified by an actual RUN on arm32/aarch64 because this host has no cross ld-linux or cross libc — /usr/arm-linux-gnueabihf/lib and /usr/aarch64-linux-gnu/lib do not exist at all. Host provisioning, not code: no ticket resolving will make a cross libc appear. Split out of feature-real-dynlib-loader so that feature stops resurfacing at p45 with nothing actionable in it. | — |
 | chore-doc-pascal-dialect-divergences-pointer-difference | D | 25 | chore | Re-filed from decide-pointer-difference-unit and decide-should-a-null-variant-raise-like-fpc, both decided 2026-08-25. Two divergences from FPC are now CHOSEN rather than merely inherited, and a chosen divergence that is not written down is indistinguishable from a bug to the next reader. Both entries land in devdocs/dev/pascal-dialect-divergences.md. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
 | chore-t-a-stable-gated-red-should-name-pin-lag-before-flakiness | T | 35 | chore | twatch's auto-filed note tells the reader 'this commit CANNOT be the cause ... look at flakiness or box load' whenever a $(PXX_STABLE)-gated job goes red. The deduction is right and the conclusion is wrong: unchanged stable bytes rule out the COMMIT, not the PINNED BINARY, which is stale relative to any compiler fix landed since the last pin. That third branch is missing and it is the common case — the watcher re-files the same already-fixed finding every sweep until the pin moves. | — |
@@ -209,6 +209,7 @@ _none_
 | feature-a-unreferenced-class-rtti-keeps-every-method-alive | A | 30 | feature | An unreferenced class keeps every one of its methods alive | — |
 | feature-a-wasm32-sys-intrinsics-and-ir-syscall-lowering | A | 60 | feature | The last 36 unlowered bodies in compiler.pas on wasm32: 35 sys builtins (writeELF*, writeU8/16/32/64, LoadFile) plus IR_SYSCALL (value op 54), which is the same question wearing a different hat. Blocked on the Track U decision, not on any missing mechanism. Filed so the ranker can SEE that a U item is holding a p60 lane — the edge did not exist, so prio propagation had nothing to work with and the decision sat at 40. | decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 20 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
+| feature-b-a-hermetic-tls-loopback-for-the-ssl-suite | B | 30 | feature | lib_synapse_ssl proves the dlopen'd libssl resolves real symbols, but not that a handshake completes — the handshake is verified only by a manual probe against `openssl s_server`. A TLS handshake needs both sides live at once and the suite is single-process with no fork, so automating it means a self-exec harness: the test re-runs its own binary as the server, cert from TSSLOpenSSL.CreateSelfSignedCert, port over the pipe. | — |
 | feature-b-a-real-minidom-is-an-implementation-not-a-shim | B | 20 | feature | Question 2 of the xml.dom row, re-filed on its own as that ticket said it should be. html5lib/treebuilders/dom.py wants a document you can build and mutate — ~25 DOM methods, getDOMImplementation().createDocument(), weakref.proxy(), and a reach into minidom's PRIVATE _child_node_types. That is a DOM implementation, not a compatibility alias. It unblocks exactly one corpus file and should be ranked as an implementation project, not alongside shims. | — |
 | feature-b-posix-and-fpc-named-socket-facades | B | 25 | feature | The Posix.* / FPC-named (BaseUnix, Sockets, UnixType) socket compat facades over the PAL substrate, with a selectable syscall-or-libc backend. Fully designed inside feature-networking and never built; split out when that umbrella closed so the design survives its container. | — |
 | feature-c-csmith-differential-fuzzing | C | 40 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
@@ -611,9 +612,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2606)
+## done (2607)
 
-2606 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2607 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (51)
 
@@ -816,7 +817,6 @@ _none_
 - [p 45] [N] feature-nilpy-threadsafe-containers
 - [p 45] [A+O] feature-opt-inline-float-and-record-returning-leaves
 - [p 45] [P] feature-p-defineglobal-a-define-that-crosses-unit-boundaries
-- [p 45] [B] feature-real-dynlib-loader [parked — re-claim, do not duplicate]
 - [p 45] [T] feature-t-nilpy-cpython-differential-fuzzer
 - [p 45] [A] refactor-a-one-program-driver-prologue-for-every-frontend
 - [p 45] [A] refactor-a-viscachevis-is-indexed-by-a-string-id-and-sized-by-a-unit-count
@@ -903,6 +903,7 @@ _none_
 - [p 30] [D] docs-d-nilchecks-directive-and-flag
 - [p 30] [A] feature-a-finalize-for-bare-dynarray-and-variant
 - [p 30] [A] feature-a-unreferenced-class-rtti-keeps-every-method-alive
+- [p 30] [B] feature-b-a-hermetic-tls-loopback-for-the-ssl-suite
 - [p 30] [E] feature-demo-nilpy-ide
 - [p 30] [B+S] feature-esp-peripheral-callback-api
 - [p 30] [N] feature-nilpy-a-genexpr-is-lazy-not-materialised
@@ -953,6 +954,7 @@ _none_
 - [p 20] [N] bug-n-exec-ignores-a-caller-supplied-builtins-mapping
 - [p 20] [N] bug-n-name-on-a-builtin-type-is-unimplemented
 - [p 20] [A] chore-a-sweep-the-unwired-tests-into-the-suite
+- [p 20] [B] chore-b-no-cross-loader-on-this-host-blocks-the-dynlib-arm-run
 - [p 20] [T] chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile
 - [p 20] [U] decide-should-writeableconst-off-be-honoured
 - [p 20] [A+S] feature-a-promoint-variant-esp-targets
