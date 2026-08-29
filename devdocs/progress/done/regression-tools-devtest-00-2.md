@@ -4,7 +4,7 @@ prio: 70
 type: bug
 status: done
 owner: frankwasm
-commit: PENDING-COMMIT
+commit: fd634c122
 ---
 
 # regression: tools-devtest#00 red at 8787cfe4235a — a new hardcoded /tmp path in a NilPy test
@@ -150,4 +150,4 @@ armed again, which per this ticket's own reasoning is the point: it can now
 report the next new path as news.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit fd634c122.
