@@ -108,4 +108,4 @@ arm does.
 - 2026-08-29 — found, fixed, tested (frankC). Ownership of `ir.inc` granted and
   filed on master at `25de2c21d`; `tools/fleet_dirt.sh` across 16 checkouts
   confirmed no other lane held the file.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 72de20420.
