@@ -502,3 +502,58 @@ exercises the Pascal path, so anything true only off that path is unobserved by
 construction** — in the gate's blindness and in the bug's survival alike. Two
 independent findings in one evening arguing for the same remedy, which is why
 the C-side byte-identical gate is not a local nicety for this refactor.
+
+## Grant, 2026-08-30 — frank-coordinator to frankC: IRPointerStride's AN_FIELD arm
+
+Extends the standing `ir.inc` grant by ONE routine. `IRPointerStride` lives in
+`compiler/ir.inc` (Track A's ground); `CNodePointeeTk`, `CDerefDecayStride` and
+`ParseCPostfixTail` are already frankC's in `cparser.inc`.
+
+**Granted:** separate commit, own ticket, alongside the sentinel refactor.
+
+**Why it is safe rather than merely small.** Checked, not assumed —
+`tools/fleet_dirt.sh` across all 16 discovered checkouts at the time of the
+grant: `compiler/ir.inc` is held by **frankC alone**. frankA is in
+`pasparser_lval/_expr/_stmt`, frank-rust in `pasparser_generic.inc`, frankS in
+`ir_codegen_xtensa.inc`, pxx-songfmt in `pyparser.inc`. No second lane is in the
+file, so the no-concurrent-edit rule the letters exist to enforce is not in play.
+
+**Why it is not scope creep.** The bug is *inside the arm frankC is already
+re-keying*, is not long-long-specific, and produces silent wrong ADDRESSES:
+
+| expression | type | gcc | pxx |
+| --- | --- | --- | --- |
+| `(char*)(s.m+1)-(char*)s.m` | `int m[3][4]` | 16 | 4 |
+| same | `char c[2][8]` | 8 | 1 |
+| same | `double d[2][3]` | 24 | 8 |
+| `int (*r)[4] = s.m + 1; r[0][2]` | | 7 | 0 |
+
+A multi-dim array reached as a struct FIELD decays with the ELEMENT stride. The
+`AN_IDENT` arm directly above it has the multi-dim row rule; the `AN_FIELD` arm
+never got it. Under the compat table in CLAUDE.md this is the *silent wrong
+behavior* escape — a normal `bug-` ticket in the owning lane, not a compat item.
+
+**The condition, and it is the whole point:** frankC declined to trim the failing
+assertion out of its long-long regression test to make the suite pass. That is
+the correct call and it is what forced the ask instead of a quiet workaround. The
+grant exists so the complete test can land with the fix rather than the test
+being cut to fit the permission.
+
+## The pattern the grant is really about — parallel AN_IDENT / AN_FIELD arms
+
+**Third field-arm bug in one day whose array-arm twin was fixed months ago.**
+`ParseCPostfixTail` and `IRPointerStride` each carry parallel `AN_IDENT` and
+`AN_FIELD` arms, and *every past fix landed on one of the two*. Two more readers
+walk left to an `AN_IDENT` and ignore `AN_FIELD` and are so far unprobed:
+`CNodePointeeTk`'s `AN_BINOP` arm, and `CDerefDecayStride`.
+
+This is `normalise-dont-special-case` and *a parser that exists twice is one that
+gets fixed on one arm*, with three landed instances as evidence rather than as a
+prediction. **Sweep scoped as its own ticket** — meeting it a fourth time costs
+more than enumerating the readers once. Note what makes it expensive: the two
+arms are adjacent in the same routine, so each fix *looks* local and complete,
+and nothing in a diff shows the sibling going unedited.
+
+`AN_FIELD` reader census to start from (not a completeness claim — the count is
+per-file mentions, and the C-side readers are what matters):
+`ir.inc` 44, `cparser.inc` 17.
