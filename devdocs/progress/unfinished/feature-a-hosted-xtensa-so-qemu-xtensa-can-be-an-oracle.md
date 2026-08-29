@@ -686,3 +686,41 @@ and a stop-line is not mine to move.
 **The complete patch is written and gated on that one line**; see the commit that
 follows this note for wall 3, and `feature-a-hosted-xtensa-*` remains
 `unfinished/` until wall 4 lands.
+
+### The wall-4 sequence is not a proposal — it is measured correct
+
+Written, built (`e65494e3a126`, fixedpoint converged) and run with the branch
+temporarily forced ON, then reverted pending the grant. 12 cases spanning no-carry,
+carry out of the low 16, carry out of the mid, both halves saturated, `Llo` =
+`$FFFFFFFF`, and signed pairs — compared against the x86-64 oracle:
+
+```
+x86-64 oracle                            ............
+xtensa soft, dc232b dc233c de212         ............
+             de233_fpu lx106             ............
+             sample_controller mmuhifi   ............
+             dsp3400                     SIGILL  <- see below
+```
+
+**7 of 8 cores exact.** `dsp3400` is not a counterexample: it SIGILLs on a *plain*
+`mull` too, so it lacks MUL32 entirely and no multiply-high policy reaches it. It
+is a DSP core, not an ESP part, and this is pre-existing.
+
+Two findings worth keeping from the run:
+
+- **The test caught its own author first.** The 12th case initially printed `X` on
+  the oracle *and* on every xtensa core — my expected value was wrong by hand
+  arithmetic. Both sides disagreeing with me identically is what an oracle is for,
+  and it is the reason this is reported as measured rather than as reviewed.
+- **`lx106` cannot run the windowed ABI** (SIGILL on the windowed build, fine on
+  Call0). Expected — it is the ESP8266 core and has no windowed option — but it
+  means an ABI sweep must pin its core list, so noting it here.
+
+The sequence needs no new encoder: it uses the `ssr`/`srl` SAR idiom this file's
+own 64-bit header already documents (*"the MSB of a word is extracted with `srl`
+after presetting SAR=31 (no EXTUI needed)"*), and scratch `a9..a13` only — inside
+the `a6/a8..a14` temporary range that header names, clear of both frame pointers
+and of the live `a2..a5`/`a8`.
+
+Full patch (the two out-of-grant hunks plus the in-grant codegen hunk) is staged
+at `scratchpad/wall4.patch`, pending the `defs.inc` line.
