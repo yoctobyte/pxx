@@ -91,4 +91,4 @@ seed FAIL, not PASS/SKIP — verifiable today by checking out `fa238413e`, which
 carries the live duplicate-forward break, with a clean working tree.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 49a21b84d.
