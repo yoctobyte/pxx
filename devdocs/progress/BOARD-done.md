@@ -7,6 +7,7 @@ should not read it to find out what to do. Grep it freely._
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| audit-a-a-comment-asserting-an-invariant-is-a-claim-about-a-sibling-arm-nobody-checked | A | 50 | audit | Five defects in one day share one greppable shape: a construct has two or more arms, one arm carries a comment ASSERTING the invariant, and the sibling arm does not honour it. The comment is the signal and nothing reads it. Sweep rather than wait for the sixth discovery. | — |
 | audit-shared-global-reentrancy-thread-safety | A | 50 | audit | Audit: shared-global state — reentrancy & thread-safety | — |
 | bug-32bit-truthiness-high-half | A | 70 | bug | `if (v)` on a 64-bit value tested only the LOW half on every 32-bit target | — |
 | bug-64bit-named-const-truncated-32bit-targets | A | 80 | bug | 64-bit named constants are truncated to 32 bits on the 32-bit targets | — |

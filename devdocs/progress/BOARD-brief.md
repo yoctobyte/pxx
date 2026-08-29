@@ -5,11 +5,10 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:23 blocked:8 backlog:316 backlog_new:15 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2651 rejected:51`
+`working:3 unfinished:23 blocked:8 backlog:316 backlog_new:15 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2652 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
-- `audit-a-a-comment-asserting-an-invariant-is-a-claim-about-a-sibling-arm-nobody-checked` [A] — owner: frankD
 - `bug-a-the-fpc-seed-canary-skips-a-break-already-on-master` [A] — owner: unrecorded
 - `feature-a-error-does-not-halt-so-a-parse-can-be-speculative` [A] — owner: frankA
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)

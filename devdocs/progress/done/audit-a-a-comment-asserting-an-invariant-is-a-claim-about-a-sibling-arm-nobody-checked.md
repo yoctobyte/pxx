@@ -2,7 +2,7 @@
 track: A
 prio: 50
 type: chore
-status: working
+status: done
 blocked-by: []
 owner: frankD
 summary: "Five defects in one day share one greppable shape: a construct has two or more arms, one arm carries a comment ASSERTING the invariant, and the sibling arm does not honour it. The comment is the signal and nothing reads it. Sweep rather than wait for the sixth discovery."
@@ -26,6 +26,70 @@ target for as long as that target has existed. `HeapMmap`'s missing `CPU_XTENSA`
 arm is the same defect expressed in code rather than prose — seven arms and a
 silent default where an eighth belongs — which is why the rule is about
 *checkability*, not about comments.
+
+## RESULT — what the sweep found, in one section
+
+Five passes, 22 of the 53 first-tier phrase hits examined, plus the whole
+`builtinheap` twin seam and the target-enumeration population. **Five findings,
+one of them a live wrong-answer bug on a whole target, one open question routed
+to Track U. The rest of this ticket is the working record; this is the result.**
+
+### The predictor
+
+**A comment goes stale exactly when the sentence and its truth-maker can be
+changed independently.**
+
+That is the axis. Not distance, and not self-vs-sibling — both of which this
+ticket believed at different points, and both of which it now explains rather
+than merely replaces:
+
+| held / failed | why |
+| --- | --- |
+| **HELD** — every single-site `must never` | the sentence is an *instruction with its enforcement two or three lines below*. Wiring it and describing it are **the same edit**; they cannot drift |
+| **FAILED** — a count vs. the backend list | separate edits |
+| **FAILED** — a scope ("x86-64 only") vs. the target gate | separate edits |
+| **FAILED** — "the one place" vs. three call sites | separate edits |
+| **FAILED** — a documented frame layout vs. six prologues | separate edits |
+| **FAILED** — "the gate that stands today" vs. a `WriteLn` | separate edits |
+
+**Why the earlier readings looked right.** Proximity usually *implies*
+co-editing, so distance correlated without being the cause — and instance 8 is
+the exception that proves it: eleven lines apart, the closest of all, and it
+failed, because it described a **loop's behaviour**, which the loop's edits can
+change without touching the words.
+
+### The operational form
+
+The predictor is truer; the rule at the top of this ticket is **quotable**, which
+is the only property that matters for something nobody is paid to read. Keep
+both, use the rule.
+
+### The findings
+
+| # | finding | severity |
+| --- | --- | --- |
+| 1 | [[bug-a-xtensa-has-no-ordered-string-compare-and-sorts-by-heap-handle]] | **LIVE** — demonstrated, both lines wrong on both ABIs; fix accepted by frankS |
+| 2 | [[bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july]] | stale, 54 days, no defect |
+| 3 | [[bug-a-the-ir-frame-op-doc-asserts-a-frame-layout-riscv32-does-not-use]] | false universal in an IR-op reference |
+| 4 | [[bug-a-promocore-is-not-the-only-place-that-knows-the-promo-slot-layout]] | false choke point, harmless today |
+| 5 | [[bug-a-the-ascii-cache-consumer-still-says-byte-mutation-has-one-place]] | instance #4's sentence, surviving the fix, in the consumer |
+| 6 | [[bug-a-target-enumerations-in-comments-are-stale-and-one-of-them-hid-a-live-bug]] | three miscounts, five correct |
+| ? | [[decide-a-the-o3-residency-exception-gate-that-stands-today-is-only-a-debug-print]] | **question**, routed |
+
+Plus **ten claims verified holding**, recorded in the passes below so nobody
+re-checks them, and a **census correction**: the `FindProc('<name>')` matcher
+misses name-taking wrappers, so 45/30 is really **46/33**, and there is a tenth
+documented inline pair (`EmitVariantClearA64Ex`).
+
+### Why it stops here
+
+The yield curve: passes 1-4 produced five findings, pass 5 produced one question.
+~31 first-tier hits remain unexamined and they are the residue the curve
+predicts. **The rule is worth more than the residue** — it is checkable by
+command on any future comment, whereas finishing the list buys 31 one-time
+answers. The coverage log below makes resumption cheap if anyone disagrees.
+
+
 
 - **Type:** chore (audit) — **Track A** file-ownership by default; each finding
   is filed into whichever lane owns the arm.
@@ -791,3 +855,6 @@ asserting that an enforcement exists, where the enforcement is a print
 statement.** And it fits the predictor exactly — the sentence and its truth-maker
 are separately editable, because wiring a gate and describing one are different
 edits.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
