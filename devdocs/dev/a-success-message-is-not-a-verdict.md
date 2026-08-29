@@ -82,6 +82,47 @@ to any lane running an hour-long cross-target check.
   moment the bug is closed** — `scheduler.pas` calling `exit_group` directly means
   `test_sched_reactor_exhaustion` would pass with the `Halt` bug still present.
 
+## The waiting side: a poller's vocabulary is a claim too
+
+Every instance above is about a process *emitting* the wrong signal. The mirror
+image is a process *listening* for the wrong set, and it fails silently rather
+than loudly — so it is harder to notice and it costs wall-clock instead of
+correctness.
+
+Measured 2026-08-29. Two background waiters sat on the aarch64 cross-bootstrap:
+
+```sh
+until grep -q "byte-identical\|differ\|Error\|error:" "$log"; do sleep 30; done
+```
+
+Four patterns, chosen to cover "it worked" and "it failed". The run's actual
+terminal line was:
+
+```
+make: *** [Makefile:12504: cross-bootstrap-aarch64] Terminated
+```
+
+which matches **none of them**. Both waiters would have polled forever — and did
+for 52 minutes — over a job that was already over. The same hole swallows
+`Killed` (OOM), `Segmentation fault`, `No space left on device`, and a bare
+non-zero exit with no message at all.
+
+The bug is not the missing pattern; adding `Terminated` to the list just moves
+the hole. It is that **the waiter enumerated OUTCOMES it could imagine instead of
+watching for the one thing that is always true: the process ended.** An outcome
+list is open-ended and a liveness check is not.
+
+- **Wait on liveness, then read the result.** `wait $pid`, or poll
+  `kill -0 $pid` / the task's completion, and only *then* grep the log for which
+  outcome it was. The two questions are "is it over?" and "what happened?", and
+  conflating them is what hangs.
+- **Every unbounded `until` wants a deadline.** A waiter with no timeout cannot
+  distinguish "still working" from "will never finish", which is instance 2 in
+  the table above wearing the poller's hat.
+- **A poller that has learned nothing for N cycles should say so.** Silence from
+  a waiter reads as patience; it is equally consistent with the thing it watches
+  having died before it started.
+
 ## Where the instances are recorded
 
 Faces 31, 45, 46 and the MAX_CODE ticket's own notes, in
