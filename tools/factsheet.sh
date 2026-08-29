@@ -64,7 +64,11 @@ emit() {
 if [ "$MD" = 1 ]; then
     printf '| measure | value |\n| --- | --- |\n'
 else
-    echo "pxx fact sheet -- $(git rev-parse --short HEAD), $(git log -1 --format=%cd --date=short)"
+    # "measured at <sha>" and NOT "as of <date>": the first cut stamped the HEAD
+    # COMMIT's date, which is not the run date and drifts the moment the tree is
+    # older than the reader. A sha cannot go stale -- it names exactly one tree.
+    # Same rule as the table below: carry an identifier, not a number that ages.
+    echo "pxx fact sheet -- measured at $(git rev-parse --short HEAD)"
     echo
 fi
 

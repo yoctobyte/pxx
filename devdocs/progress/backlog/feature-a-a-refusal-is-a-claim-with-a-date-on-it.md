@@ -3749,3 +3749,60 @@ to over-claim, and frankB narrowed it against itself.
 `TByteArray` is not from `png.pas` at all. **A witness that fails identically in
 every arm is 74 again**, and the tell had been sitting in its own output the
 whole time: `procs=1046` versus `293`, printed and not read.
+
+### 90. The comment that caused three bugs survived all three fixes — because each fixer corrected the CODE it was in
+
+frankD, 2026-08-30, closing the comment-invariant audit on its own root cause.
+
+`builtinheap.pas:2625-2631`, the `PXXStrUnique` comment, is the sentence that
+produced **instances 1, 2 and 3** of that ticket. All three were fixed on
+2026-08-29. `git blame` still dates all seven lines to `8a263f504`,
+**2026-08-14**.
+
+**Three agents found three bugs caused by believing it, fixed all three in one
+day, and not one of them edited it.** Each corrected the code the sentence was
+about and moved on. The comment is the only artefact in the chain that nobody
+treats as changeable, because it is not what failed.
+
+**It is still load-bearing, not merely stale.** *"The single choke point for byte
+mutation"* tells the next author that a fifth mutation site needs no
+invalidation as long as it routes through `PXXStrUnique` — **which is exactly
+the reasoning that produced sites 2 and 3.** Site 3 postdates the fix.
+
+**And the second clause is the subtler half, worth the whole entry:**
+
+> *"`PXXStrSetLen` needs no such call: it always allocates a fresh block."*
+
+That is **true of the routine it names and false of the thing it is used for** —
+x86-64 does not call it, and its inline resize has an in-place arm. So **a reader
+who checks the claim against `PXXStrSetLen` confirms it and stops.** The
+verification succeeds; the conclusion is still wrong.
+
+**Same mechanism as 88, in prose instead of code.** There, `PXXDynSetLen` having
+Call0 right by hand made the broken spelling look like house style. Here, a
+clause that is correct about the routine it names makes a false claim about the
+operation survive checking. **The thing that gets checked is not the thing that
+is load-bearing.**
+
+Filing note that generalises: it must land **in one commit with the consumer
+copy at `pylib.pas:3361`**, or the next reader finds whichever was left — which
+is how this survived in the first place.
+
+### 90a. A scope limit is worth most when it names the case that would have hidden the one real bug
+
+Same ticket. frankD's differential closed the seam: `PXXStrEq` 13 cases,
+the `PXXVarClear` family 10, the console-read family 8 — x86-64 inline twin
+against the riscv32 portable helper, **all identical**, including `v := v`, the
+shape that broke as `bug-a-a-variant-assigned-to-itself-becomes-empty`.
+
+**And the limit is stated precisely where it hurts: xtensa was NOT tested.** The
+pinned compiler resolves builtin units from its own frozen snapshot, which
+predates frankS's `HeapMmap` arm, so hosted xtensa cannot allocate under the
+sanctioned toolchain. **The one genuine divergence in this seam tonight was
+xtensa-only and would have been invisible to exactly this diff.**
+
+So the table means *"the portable helper and the x86-64 inline agree"*, **not**
+*"all five cross backends agree"* — and a reader who takes the second reading
+gets precisely the wrong lesson from a correct measurement. Compare face 8: a
+survey will not name its own scope. This one does, and it names the scope that
+matters rather than a generic caveat.
