@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 70
+prio: 35
 type: feature
 summary: "`Error()` calls `Halt` directly, so nothing in the compiler can trial-parse and back out. That blocks NilPy's type inference (which needs to read an as-yet-unseen name speculatively), and it is also why the compiler stops at the FIRST error. Make the error path recoverable; several unrelated wants fall out of the same change."
 status: backlog
@@ -800,3 +800,63 @@ GREEN; slice 6's counter gate re-run unchanged (A==B 1860, D==C 1861); the six
 slice-7 programs all matching CPython. Per the note above, the fixedpoint is
 "the compiler still builds" for a change on the NilPy side, not evidence about
 the change — the CPython agreement is.
+
+## Prio lowered 70 -> 35 by the coordinator, 2026-08-30 — on the author's own recommendation
+
+frankA, on parking slice 7:
+
+> *"All three tables a trial parse actually dirties are rolled back, so the
+> state-unwind question is answered **for the shapes that exist today**. What is
+> missing is a `TryParse` tying an `Error()` to a rollback point, and **no
+> consumer needs one yet** — so I would not rank this back up until one does.
+> 'Which errors are fatal' remains undecided and remains the right thing to
+> decide last."*
+
+It sat at **p70, the head of Track A's ready queue**, which is where the ranker
+kept offering it — so the queue was pointing every free A agent at work its own
+author had just said should not be done yet. That is the mirror of
+`refactor-a-c-exclusive-lowering`'s problem earlier the same night: **the board
+can tell whether a ticket is unblocked and cannot tell whether it should be
+worked.** A ranked queue says *unblocked*, not *has work left in it*.
+
+**Raise it again when a consumer appears** — an actual caller that needs to
+abandon a parse without re-parsing. Until then the remaining scope is
+speculative in both senses.
+
+### What slices 1-7 established, so the next holder does not re-derive it
+
+**The inherited "tables a rollback must handle" list was wrong in both
+directions, measured over 14 counters across six programs:**
+
+| counter | moves across a rewind? |
+| --- | --- |
+| `SymCount` | **yes — 4 of 6 cases, up to +6** |
+| `ProcCount`, `PyPendLamCount` | yes (lambdas) |
+| **the seven names the list gave** | **never — zero of seven** |
+| `NestedTypeCount`, `AliasCount`, `ArrTypeCount`, `EnumTypeCount` | never |
+
+**Zero of seven, and the most-dirtied table was absent from the list.**
+`SymRollbackTo` already existed and was simply not called at the six sites;
+slice 6 wired procs and pending lambdas and left symbols. Now called with its
+`FrameSize` pair, verified `POST want=475 got=475`.
+
+**`NestedTypeCount` was predicted to move — by the author and the coordinator
+both — and does not.** NilPy cannot declare a class-like type inside an
+expression, so a trial parse never reaches `AddNestedType`. It was a good
+inference from the `ParsingClassBodyCi` bug, which is exactly what made it the
+most likely thing to be assumed in. *The method is only worth anything if it can
+contradict the person running it, and this is the run where it did.*
+
+**Slice 7 has no observable symptom** and the ticket says so: the same program
+compiles byte-identical before and after. It is hygiene for the primitive, not a
+bug fix — nothing breaks today only because every rewind here is followed by a
+re-parse that re-creates the symbols. A speculative parse that *abandons*
+without re-parsing would leak them for real, which is precisely what the unbuilt
+item 1 needs.
+
+**And one published number was withdrawn:** a `+48 B` `bss` difference reported
+mid-slice as "the leak made visible" was **not controlled** — the two programs
+differed by an extra binding, so it compared two different programs and read the
+difference as the effect. The honest control is the same program before and
+after, and it shows no change. Slice 6's pair *was* controlled (identical list
+literal, only the boundary moved) and those numbers stand.
