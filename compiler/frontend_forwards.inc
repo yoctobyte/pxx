@@ -3,6 +3,23 @@
 procedure LoadFile(const path: AnsiString; var dst: AnsiString); forward;
 procedure LoadFileCI(const path: AnsiString; var dst: AnsiString); forward;
 {$endif}
+{ Without this forward, `LowerCase` at pasparser_expr.inc:1927 (and the later
+  uses in pasparser_expr and cparser) binds to FPC's OWN sysutils routine in the
+  SEED build and to this codebase's routine at pasparser_proc.inc:2384 in the
+  self-hosted build — two different implementations of the same call, chosen by
+  which compiler is doing the building. It compiles both ways, which is why it
+  was a forwardlint NOTE rather than an error.
+
+  The two were measured to agree exhaustively before this was added (Track T on
+  `seven`, FPC 3.2.2): 0 differing over all 256 single bytes, 0 over all 65536
+  ordered byte PAIRS, 0 over the call site's own 'Unit'+<byte>+'Name.Sub' shape.
+  The pair sweep is the load-bearing one — a single-byte sweep cannot tell a
+  per-character implementation from a sequence-aware one, which is exactly where
+  locale handling would have diverged. So no behaviour changes here; what changes
+  is that the binding is now STATED instead of coincidental, and it stops being
+  the one permanent note on a clean forwardlint tree.
+  bug-a-lowercase-resolves-to-two-different-routines-depending-on-the-seed }
+function LowerCase(const s: AnsiString): AnsiString; forward;
 function GetFilePath(const path: AnsiString): AnsiString; forward;
 function GetFileBaseName(const path: AnsiString): AnsiString; forward;
 procedure NormalizePath(var p: AnsiString); forward;

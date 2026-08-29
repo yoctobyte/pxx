@@ -174,6 +174,16 @@ var
   PyImpAliasSym: array[0..63] of Integer;
   PyImpAliasSrc: array[0..63] of Integer;
   PyImpAliasCount: Integer;
+  { The alias NAMES, kept after PyFlushImportAliases drains the queue above —
+    call sites run long after the flush and still have to know that a name was
+    bound by `import ... as`. Only aliases: a PLAIN `from M import greet` must
+    NOT appear here, because an optional (`try:`) import allocates a
+    module-level var for the plain spelling too, and treating that var as a
+    rebinding shadows the real import with None. That is exactly what a first
+    attempt at this did, and test_nilpy_fallback_import_try_wins caught it. }
+  PyAliasNameId: array[0..255] of Integer;
+  PyAliasNameUnit: array[0..255] of Integer;
+  PyAliasNameCount: Integer;
   PyTypingChanged: Boolean;
   PyHiddenSeq: Integer;   { serial for hidden for-in loop temps }
   { One parsed `def` header, filled by PyParseDefHeader and read by both its
@@ -597,16 +607,25 @@ function PyParseVariadicMinMax(const nm: AnsiString): Integer;
   feature-nilpy-min-max-variadic-more-than-two-args }
 var acc, rhs, a0, a1, node, pi: Integer;
     at: array[0..1] of TTypeKind;
+    mm: AnsiString;
 begin
+  { The caller passes CurTok.SVal, and `const` binds an AnsiString BY REFERENCE
+    — so `nm` is not a copy, it is the live token text. `Next` does
+    SetLength(CurTok.SVal, ...) IN PLACE (see PyEvalParamDefault), so by the
+    time the loop asks MatchProcCall for an overload, `nm` reads '(' and no
+    2-argument routine of that name exists — at EVERY operand type, which is
+    what made this look like a type-dispatch failure. Copy the characters
+    first, the same way every other arm here does (`nm := CurTok.SVal`). }
+  mm := nm;
   Next; Expect(tkLParen, '(');
   ParseArgExpr; acc := CurASTNode;
   while Eat(tkComma) do
   begin
     ParseArgExpr; rhs := CurASTNode;
     at[0] := IntToTypeKind(ASTTk[acc]); at[1] := IntToTypeKind(ASTTk[rhs]);
-    pi := MatchProcCall(nm, 2, at, False);
+    pi := MatchProcCall(mm, 2, at, False);
     if pi < 0 then
-      Error('Nil Python: no 2-argument ' + nm + ' for these operand types');
+      Error('Nil Python: no 2-argument ' + mm + ' for these operand types');
     a0 := AllocNode(AN_ARG); ASTLeft[a0] := acc;
     a1 := AllocNode(AN_ARG); ASTLeft[a1] := rhs; ASTRight[a1] := -1;
     ASTRight[a0] := a1;
@@ -848,6 +867,23 @@ begin
     Result := PySeqAppend(Result, asgn);
   end;
   PyImpAliasCount := base;
+end;
+
+{ Was this name bound by `from M import X as NAME` in the unit being parsed?
+  The read side of PyAliasNameId; see its declaration for why plain imports are
+  deliberately absent. }
+function PyNameIsImportAlias(const nm: AnsiString): Boolean;
+var i, ni: Integer;
+begin
+  Result := False;
+  if (nm = '') or (PyAliasNameCount = 0) then Exit;
+  ni := InternStr(LowerCase(nm));
+  for i := 0 to PyAliasNameCount - 1 do
+    if (PyAliasNameId[i] = ni) and (PyAliasNameUnit[i] = CurrentUnitIdx) then
+    begin
+      Result := True;
+      Exit;
+    end;
 end;
 
 function PyFlushImportAliases(seq: Integer): Integer;
@@ -11850,8 +11886,13 @@ begin
     if (not Result) and anyAttr then Result := True;
   end
   else if base = 'os' then
-    { os.SEEK_SET/CUR/END — the whence CONSTANTS, bare values not calls. }
-    Result := (nm = 'seek_set') or (nm = 'seek_cur') or (nm = 'seek_end');
+    { os.SEEK_SET/CUR/END — the whence CONSTANTS, bare values not calls — and
+      os.sep / os.linesep, which are the same kind of thing: an ATTRIBUTE, not
+      a call, which is why they were missing while every os.path.* CALL worked
+      and why the error read `undefined variable (os)` rather than a missing
+      member. feature-nilpy-stdlib-coverage-gaps-measured }
+    Result := (nm = 'seek_set') or (nm = 'seek_cur') or (nm = 'seek_end') or
+              (nm = 'sep') or (nm = 'linesep');
 end;
 
 function PyIsSysStreamAhead: Boolean;
@@ -11875,19 +11916,51 @@ begin
 end;
 
 function PyParseSysStream: Integer;
-var nm: AnsiString; procIdx: Integer;
+var nm, base: AnsiString; procIdx: Integer;
 begin
   { Either spelling arrives here: the dotted one spends three tokens, the bare
-    one (a from-imported name) spends one and takes its base from the alias. }
+    one (a from-imported name) spends one and takes its base from the alias.
+
+    The BASE is carried, not just the member. PyIsStdlibMemberValue gates by
+    base and this did not, so every arm below answered for `sys.X` and `os.X`
+    alike: `sys.SEEK_SET` was 0 where CPython raises AttributeError. That is
+    not the harmless direction — the `sys._MEIPASS` note below exists BECAUSE
+    applications guard an absent sys attribute with try/except AttributeError,
+    and an arm that answers a value instead sends them down the wrong branch. }
   if (TokPos >= 1) and (PyStdAliasLookup(GetTokenStr(TokPos - 1), nm) <> '') and
      ((TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot)) then
-    Next                         { the bare name; nm is its MEMBER }
+  begin
+    base := LowerCase(PyStdAliasLookup(GetTokenStr(TokPos - 1), nm));
+    Next;                        { the bare name; nm is its MEMBER }
+  end
   else
   begin
+    base := LowerCase(GetTokenStr(TokPos - 1));
     nm := LowerCase(GetTokenStr(TokPos + 1));
     Next; Next; Next;            { base, '.', the member name }
   end;
-  if (nm = 'seek_set') or (nm = 'seek_cur') or (nm = 'seek_end') then
+  if (base = 'os') and ((nm = 'sep') or (nm = 'linesep')) then
+  begin
+    { os.sep / os.linesep. Constants, like sys.platform above and with the same
+      caveat: these follow the HOST today and must follow the TARGET once pxx
+      emits for Windows, where they are '\\' and #13#10. }
+    Result := AllocNode(AN_STR_LIT);
+    if nm = 'sep' then
+    begin
+      ASTSOffset[Result] := PyStoredName('/');
+      ASTSLen[Result] := 1;
+    end
+    else
+    begin
+      ASTSOffset[Result] := PyStoredName(#10);
+      ASTSLen[Result] := 1;
+    end;
+    ASTTk[Result] := Ord(tyString);
+    LastExprTk := tyString;
+    Exit;
+  end;
+  if (base = 'os') and
+     ((nm = 'seek_set') or (nm = 'seek_cur') or (nm = 'seek_end')) then
   begin
     Result := AllocNode(AN_INT_LIT);
     if nm = 'seek_cur' then ASTIVal[Result] := 1
@@ -36057,8 +36130,11 @@ var impName, impAlias, impRoot, impReal: AnsiString; isCount: Boolean;
       unit arm read it after the pull and bound nothing. }
     impDotted: AnsiString;
     aStrIdx, realStrIdx, optSym, impLevel: Integer;
-    aliasSym, aliasCi, aliasRealSym, aliasRealProc: Integer;
+    aliasSym, aliasCi, aliasRealSym, aliasRealProc, aliasPi: Integer;
     aliasUnitTarget: Integer;   { the unit a from-imported SUBMODULE name really names }
+    aliasSelfIdx: Integer;      { scans the pending alias queue, so a source
+                                  name is not captured by an alias this same
+                                  import run created a moment earlier }
 begin
   while (CurTok.Kind = tkUses) or PyIsIdent('from') do
   begin
@@ -36227,6 +36303,30 @@ begin
                 scope is what makes the un-aliased spelling resolve, and this is
                 the same lookup. }
               aliasRealSym := FindSym(impReal);
+              { SELF-CAPTURE. The alias bindings of one from-import are queued,
+                not yet materialised, and each creates a real module-level var
+                the NEXT item's flat FindSym can then find: in
+                `from M import f as g, g as f`, resolving the source `g` of the
+                second item found the `g` the FIRST item had just allocated, so
+                both names ended up meaning M.f — pxx `5 5` where CPython says
+                `5 18`. CPython binds every name in one from-import from the
+                SOURCE module, simultaneously.
+
+                Skipping only the queue is deliberately narrower than looking
+                the name up in the exporting unit, which is what this tried
+                first: `from pkgprobe.sub import greet` resolves through a shim
+                (`pkgprobe_sub -> mimic_pkgprobe_sub`), and a unit-scoped
+                lookup bound `greet` to None there — the try-branch fallback
+                test caught it. A queued alias is never the source of another
+                item in the same run; that is the whole claim being made here.
+                bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module }
+              if aliasRealSym >= 0 then
+                for aliasSelfIdx := 0 to PyImpAliasCount - 1 do
+                  if PyImpAliasSym[aliasSelfIdx] = aliasRealSym then
+                  begin
+                    aliasRealSym := -1;
+                    Break;
+                  end;
               aliasRealProc := -1;
               if aliasRealSym < 0 then aliasRealProc := FindProc(impReal);
               if (aliasRealSym >= 0) or (aliasRealProc >= 0) then
@@ -36244,12 +36344,47 @@ begin
                   Syms[aliasSym].RecName := Syms[aliasRealSym].RecName;
                   SymSyncTypeRef(aliasSym);
                 end;
+                if PyAliasNameCount < 256 then
+                begin
+                  PyAliasNameId[PyAliasNameCount] := InternStr(LowerCase(impAlias));
+                  PyAliasNameUnit[PyAliasNameCount] := CurrentUnitIdx;
+                  Inc(PyAliasNameCount);
+                end;
                 PyImpAliasSym[PyImpAliasCount] := aliasSym;
                 if aliasRealSym >= 0 then
                   PyImpAliasSrc[PyImpAliasCount] := aliasRealSym
                 else
                   PyImpAliasSrc[PyImpAliasCount] := -(aliasRealProc + 1);
                 Inc(PyImpAliasCount);
+                { The ALIAS NAME may itself be a proc — `from M import f as g`
+                  where M also has its own `g`. Flat unit scope makes that `g`
+                  visible by bare name, so a later call resolved to it and the
+                  alias silently did nothing:
+
+                      from mmod import f as g
+                      print(g(1))        # CPython 7, pxx 16 = mmod.g(1)
+
+                  The binding above is real (PyFlushImportAliases emits `g = f`),
+                  but it is SYNTHESISED and so has no `g =` tokens for the
+                  rebinding scan to find. Stamp it instead, at the import's own
+                  token, which is before every statement of the module — so the
+                  ordering test in PyDefRebound still holds and a call written
+                  ABOVE the import is unaffected.
+
+                  Only for a genuine rename: `from M import g` (impAlias =
+                  impReal) binds the name to the very proc it already meant, and
+                  stamping that would unbind a name nothing rebound.
+                  bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module }
+                if impAlias <> impReal then
+                begin
+                  aliasPi := ProcChainHead(impAlias);
+                  while aliasPi >= 0 do
+                  begin
+                    if Procs[aliasPi].Name = impAlias then
+                      ProcPyAliasRebindTok[aliasPi] := TokPos;
+                    aliasPi := ProcHashNext[aliasPi];
+                  end;
+                end;
               end;
               { Neither a symbol nor a proc: the real name is something this
                 frontend does not know. Left alone — the alias stays undefined
@@ -41671,8 +41806,19 @@ begin
     parsed with one argument and failed with two. Confined to this NilPy
     intercept: Pascal code still gets the record, which is what `var f: Text`
     means there. }
+  { ...unless the name was bound by `from M import <non-class> as NAME`. The
+    alias is a module-level binding to a FUNCTION, and it must not be read as
+    a construction just because M also happens to declare a class by that
+    spelling: `from M import f as C` then `C(1,5)` CONSTRUCTED M's class C and
+    printed an object where CPython prints 5 — silently, and with the argument
+    list quietly reinterpreted as constructor args.
+    A genuine class alias (`from M import Box as BoxAlias`) is NOT affected:
+    it takes the RegisterUClassAlias branch at the import site, which does not
+    record a name here, so BoxAlias stays an exact ctor name.
+    bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module }
   if (CurTok.Kind = tkIdent) and
      PyIsExactCtorName(CurTok.SVal) and
+     (not PyNameIsImportAlias(CurTok.SVal)) and
      (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
   begin
     CurASTNode := PyClassCreateExpr;
@@ -45696,6 +45842,7 @@ begin
          ((Syms[idx].Kind in [skLocal, skParam]) or
           ((Syms[idx].Kind = skGlobal) and PyDefRebound(procIdx)) or
           ((Syms[idx].Kind = skGlobal) and (SymUnitIdx[idx] = CurrentUnitIdx) and
+           PyNameIsImportAlias(name) and
            (ProcUnitIdx[procIdx] >= 0) and
            (ProcUnitIdx[procIdx] <> CurrentUnitIdx))) then
         procIdx := -1;

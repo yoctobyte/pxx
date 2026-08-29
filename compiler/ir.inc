@@ -2871,6 +2871,41 @@ begin
   ASTLeft[item] := WrapCharArrayToStringExpr(ASTLeft[item]);
 end;
 
+{ Does parameter `pathIdx` of proc `cpi` want an OWNING managed-string temp?
+
+  ONE PLACE, because the question is asked at SIX sites — the plain AN_CALL
+  argument loop, the constructor-argument loop (twice: once for `cpi`, once for
+  the `tkGetMem` `slot` alternative), AN_CALL_IND, AN_INTF_CALL and
+  AN_VIRTUAL_CALL — and until 2026-08-29 every one of them asked it by reading
+  `Params[pathIdx].TypeKind = tyAnsiString` directly, and every one was wrong
+  in the same way. Count them from the callers below, not from this sentence.
+
+  `IsArray` IS PART OF THE TYPE HERE. An open-array parameter records its
+  ELEMENT kind in TypeKind (ParseArrayCtorAST documents the convention), so
+  `const a: array of string` has TypeKind = tyAnsiString with IsArray carrying
+  the "it is an array" half. Reading TypeKind alone therefore says "managed
+  string" about a parameter that is nothing of the kind, and the argument — an
+  array data POINTER — is stored into a hidden local declared tyAnsiString.
+
+  Measured, six of seven call shapes reach it: direct/virtual/indirect/interface
+  dispatch, with either an array CONSTRUCTOR or a function RESULT as the
+  argument. Only a named-variable argument escapes, and only because the
+  AN_IDENT exclusion beside each of these predicates happens to catch it first.
+
+  Every register backend absorbs it: the mistyped retain bumps a word below the
+  array data and the scope-exit release decrements it again, so the two cancel
+  and nothing is observable. wasm32 type-checks the store and refuses the body,
+  which is the only reason anyone saw it.
+  bug-a-open-array-of-string-arg-spilled-through-a-managed-string-temp }
+function ParamWantsManagedStrTemp(cpi, pathIdx: Integer): Boolean;
+begin
+  ParamWantsManagedStrTemp :=
+    (cpi >= 0) and (cpi < ProcCount) and (pathIdx >= 0)
+    and (pathIdx < Procs[cpi].ParamCount)
+    and (not Procs[cpi].Params[pathIdx].IsArray)
+    and (Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString);
+end;
+
 function IRLowerCallArg(cpi: Integer; pathIdx: Integer; argAST: Integer; isRefArg: Boolean): Integer;
 var argTk: TTypeKind;
     needTemp: Boolean;
@@ -11058,8 +11093,7 @@ begin
             isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
             value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
             argIsManagedTemp :=
-              (not isRefArg) and (pathIdx < Procs[cpi].ParamCount) and
-              (Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString) and
+              (not isRefArg) and ParamWantsManagedStrTemp(cpi, pathIdx) and
               (ASTKind[ASTLeft[item]] <> AN_IDENT) and
               (ASTKind[ASTLeft[item]] <> AN_FIELD) and
               (ASTKind[ASTLeft[item]] <> AN_INDEX) and
@@ -11304,11 +11338,9 @@ begin
           this never reads slot from a stale earlier iteration). }
         argIsManagedTemp :=
           (not isRefArg) and
-          (((cpi >= 0) and (pathIdx < Procs[cpi].ParamCount) and
-            (Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString)) or
+          (ParamWantsManagedStrTemp(cpi, pathIdx) or
            ((cpi < 0) and (-cpi = Ord(tkGetMem)) and (pathIdx > 0) and
-            (slot >= 0) and (pathIdx < Procs[slot].ParamCount) and
-            (Procs[slot].Params[pathIdx].TypeKind = tyAnsiString))) and
+            ParamWantsManagedStrTemp(slot, pathIdx))) and
           (ASTKind[ASTLeft[item]] <> AN_IDENT) and
           (ASTKind[ASTLeft[item]] <> AN_FIELD) and
           (ASTKind[ASTLeft[item]] <> AN_INDEX) and
@@ -11690,8 +11722,7 @@ begin
            (Procs[cpi].Params[pathIdx].TypeKind = tyPointer) and
            (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyAnsiString) then
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer))
-        else if (not isRefArg) and (cpi >= 0) and (pathIdx < Procs[cpi].ParamCount) and
-           (Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString) and
+        else if (not isRefArg) and ParamWantsManagedStrTemp(cpi, pathIdx) and
            (ASTKind[ASTLeft[item]] <> AN_IDENT) and
            (ASTKind[ASTLeft[item]] <> AN_FIELD) and
            (ASTKind[ASTLeft[item]] <> AN_INDEX) and
@@ -11811,8 +11842,7 @@ begin
         isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
         value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
         argIsManagedTemp :=
-          (not isRefArg) and (pathIdx < Procs[cpi].ParamCount) and
-          (Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString) and
+          (not isRefArg) and ParamWantsManagedStrTemp(cpi, pathIdx) and
           (ASTKind[ASTLeft[item]] <> AN_IDENT) and
           (ASTKind[ASTLeft[item]] <> AN_FIELD) and
           (ASTKind[ASTLeft[item]] <> AN_INDEX) and
@@ -12811,8 +12841,7 @@ begin
            (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyAnsiString) then
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer))
         else if (not isRefArg) and (pathIdx > 0) and
-           (pathIdx < Procs[cpi].ParamCount) and
-           (Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString) and
+           ParamWantsManagedStrTemp(cpi, pathIdx) and
            (ASTKind[ASTLeft[item]] <> AN_IDENT) and
            (ASTKind[ASTLeft[item]] <> AN_FIELD) and
            (ASTKind[ASTLeft[item]] <> AN_INDEX) and
@@ -12929,8 +12958,7 @@ begin
         isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
         value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
         argIsManagedTemp :=
-          (not isRefArg) and (pathIdx < Procs[cpi].ParamCount) and
-          (Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString) and
+          (not isRefArg) and ParamWantsManagedStrTemp(cpi, pathIdx) and
           (ASTKind[ASTLeft[item]] <> AN_IDENT) and
           (ASTKind[ASTLeft[item]] <> AN_FIELD) and
           (ASTKind[ASTLeft[item]] <> AN_INDEX) and

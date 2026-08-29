@@ -1,0 +1,7 @@
+'/'
+'\n'
+a/b
+0 1 2
+'/' 2
+sys.SEEK_SET raises AttributeError
+an unknown sys attribute raises AttributeError

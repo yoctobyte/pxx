@@ -1136,8 +1136,17 @@ begin
           recName := ProcRetRecId[mpi];
           if (tk <> tyClass) and (tk <> tyRecord) then recName := REC_NONE;
 
-          Result := mcallNode;
-          Exit;
+          { ...and then FALL THROUGH to the selector loop below rather than
+            Exit-ing, because the result can carry a tail: `TFactory.GetObj.Bump;`
+            as a STATEMENT. Exiting here left `.Bump` in the token stream, where
+            ParseStatementAST's catch-all `while not (CurTok.Kind in [...]) do Next`
+            ate it -- GetObj ran, Bump never did, exit 0. The three lines above
+            already compute exactly what the loop needs (the RESULT's tk and
+            recName, not the receiver's), so nothing else is required.
+            Sibling of the expression-position arm in pasparser_expr.inc's
+            ParseFactorCore; the two entries are why the bug survived one fix.
+            bug-p-a-call-chained-onto-a-class-method-result-is-dropped }
+          node := mcallNode;
         end
         else
         begin

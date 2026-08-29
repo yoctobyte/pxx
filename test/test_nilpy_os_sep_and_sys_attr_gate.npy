@@ -1,0 +1,38 @@
+# os.sep / os.linesep -- ATTRIBUTES, not calls, which is why they were missing
+# while every os.path.* CALL worked: the dotted table only intercepts call
+# forms, so `os.sep` failed as `undefined variable (os)` rather than as a
+# missing member. feature-nilpy-stdlib-coverage-gaps-measured
+#
+# And the gate that came with them. The value builder behind these constants
+# never checked WHICH module was asked, so `sys.SEEK_SET` answered 0 where
+# CPython raises AttributeError. That is not the harmless direction: an
+# application guards an absent sys attribute with try/except AttributeError
+# (the sys._MEIPASS shape), and an arm that answers a value sends it down the
+# wrong branch.
+import os
+import sys
+
+print(repr(os.sep))
+print(repr(os.linesep))
+print("a" + os.sep + "b")
+print(os.SEEK_SET, os.SEEK_CUR, os.SEEK_END)
+
+# the bare spelling reaches the same membership test
+from os import sep, SEEK_END
+print(repr(sep), SEEK_END)
+
+# an os-only constant is NOT a sys attribute
+try:
+    print(sys.SEEK_SET)
+    print("no raise -- WRONG")
+except AttributeError:
+    print("sys.SEEK_SET raises AttributeError")
+
+# ...and an attribute NEITHER has still raises, unchanged. Deliberately not
+# sys.maxsize: CPython has that one and this build does not model it, so it is
+# a known gap (see the ticket), not a parity case a test should assert.
+try:
+    print(sys.nosuch_attribute_zz)
+    print("no raise -- WRONG")
+except AttributeError:
+    print("an unknown sys attribute raises AttributeError")

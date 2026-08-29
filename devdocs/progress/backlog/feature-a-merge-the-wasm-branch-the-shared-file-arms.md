@@ -41,6 +41,8 @@ carries the list the merge has to review.
 | `compiler/compiler.pas` | 5 | 3 `{$include}` (`wasmenc`, `asmtext_wasm`, `ir_codegen_wasm32`); a forward for `IRTopLevelStmt` in the shared forward block; the `TARGET_WASM32` output arm `Error(...)` → `writeWasm(outFile)` | 3 by `feature-a-wasm32-module-writer-wiring`, 2 by `feature-a-wasm32-compile-check-the-phase-2-backend` |
 | `compiler/exception_emit.inc` | 1 arm | the `TARGET_WASM32` arm: `Error(...)` → three poison values (`ExcSetJmpAddr`/`ExcLongJmpAddr`/`ExcRaiseAddr` := -1). Taken twice historically — the message text at Phase 1, the mechanism at Phase 7 | message text by `feature-a-wasm32-module-writer-wiring`; **the mechanism has no ticket** |
 | `compiler/ir_codegen.inc` | 1 arm | the `TARGET_WASM32` dispatch arm: `Error(...)` → `IREmitMachineCodeWasm32; Exit;` | **no ticket** |
+| `compiler/symtab.inc` | 1 arm + 1 comment | `EmitZeroFrameSlot`: an explicit `TARGET_WASM32` **no-op** arm at the top, plus a comment naming the chain's unnamed final arm as x86-64 rather than a default. Emits nothing for any other target | `bug-a-emitzeroframeslot-has-no-wasm32-arm` [A p55] |
+| `compiler/ir_codegen.inc` | +1 arm | `EmitManagedLocalCleanupForTarget`: an explicit `TARGET_WASM32` no-op arm. That chain already fell through to nothing for wasm32, so this changes no bytes on any target and only names what was unnamed | same ticket |
 | `lib/rtl/platform.pas` | 1 | `PAL_PLATFORM_WASI = 3` beside POSIX=1 and ESP_IDF=2. Additive; no existing line touched | **no ticket — and this one is Track B** |
 
 New files are additive and collision-free and need no arm treatment:

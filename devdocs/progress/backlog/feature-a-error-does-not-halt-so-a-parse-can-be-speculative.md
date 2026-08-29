@@ -3,8 +3,8 @@ track: A
 prio: 70
 type: feature
 summary: "`Error()` calls `Halt` directly, so nothing in the compiler can trial-parse and back out. That blocks NilPy's type inference (which needs to read an as-yet-unseen name speculatively), and it is also why the compiler stops at the FIRST error. Make the error path recoverable; several unrelated wants fall out of the same change."
-status: backlog
-owner: ""
+status: working
+owner: frankA
 ---
 
 # `Error()` halts, so no parse can be speculative
@@ -472,3 +472,81 @@ Item 1 (speculative parse). `ErrorRecover` is the mechanism; nothing ties an
 error to a rollback point. Its only known consumer (NilPy typing) is deferred,
 so the ranking argument for doing it now is still weak. Syntax errors still halt
 at the first one, deliberately.
+
+---
+
+## SURFACE MEASURED 2026-08-29 (frankA) — not started; banked and released
+
+Claimed as the top of `ready --track A`, then released without a code change
+after measuring the ticket's own open question — *"what state must be unwound
+when a speculative parse fails"*. That is the whole job, the answer is
+asymmetric, and it is cheaper written down than re-derived.
+
+### Half of this ticket has already landed, in a previous pass
+
+`compiler/lexer.inc`'s header cites this slug. The four entry points —
+`Error` / `ErrorAt` (halt) x `ErrorRecover` / `ErrorAtRecover` (count and
+return) — are already normalised onto two shared helpers, and
+**want #2 of this ticket, multiple errors per compile, already works**:
+`ErrorRecover` reports, counts, and carries on under a `MAX_REPORTED_ERRORS`
+cap, with a poison-symbol discipline and a post-parse `ErrCount` check that
+suppresses output. Its contract is explicit that only a SEMANTIC failure over a
+well-formed token stream may recover; a syntax error still halts, because past
+one the parser's position is meaningless.
+
+So what remains is **want #1 only: a trial parse that can FAIL and back out.**
+Reading this ticket as untouched will send someone to re-do the error plumbing.
+
+### Trial parses already exist — and cannot fail
+
+NilPy runs real trial parses today (`PyHoistPark` / `PyHoistRestore` /
+`PyHoistMerge`, the `len()` and f-string intercepts in `pasparser_expr.inc`).
+They rewind `TokPos` and park the hoist queue, and they work — but every one of
+them assumes the trial parse SUCCEEDS syntactically. None can survive an
+`Error()`. The primitive is half-built.
+
+### The measured asymmetry — this is the finding
+
+| table | rollback | evidence |
+| --- | --- | --- |
+| **symbols** | **exists** — `SymRollbackTo` (`symtab.inc:3680`) unhashes every symbol above a mark and returns the indices | already used on routine exit |
+| **procs** | **none, and the code asserts one cannot be needed** | `ProcHashInsert`: *"proc names are immutable after registration, so the index never goes stale"* |
+
+`SymRollbackTo` also carries a **worked exception that any general primitive
+inherits**: a routine-local typed `const` must be unhashed but its INDEX kept
+reserved, because the -O2 inliner copies the body into callers and verifies the
+copy after `SymCount` has come back down — a reused index surfaces as *"invalid
+IR symbol reference in load_sym"*, one past the end
+(`bug-p-a-routine-local-typed-const-is-reinitialised-on-every-call`). So
+rollback is not "restore a high-water mark": it is per-table, and at least one
+table needs a rule about which slots may be reused.
+
+The proc side is the harder half and the reason this is not a morning's work.
+`ProcHashInsert` links into a FIFO bucket chain (`ProcHashHead` / `ProcHashNext`
+/ `ProcHashTail`) with **no unlink path anywhere in the tree**. Rolling
+`ProcCount` back would leave those chains pointing at reclaimed indices, and the
+chains are what `ProcChainHead` walks — so the corruption would surface as a
+call resolving to a proc that no longer exists, silently, far from the trial
+parse. Counters are cheap (`SymCount`, `ProcCount`, `UClsCount`, `StrCount`,
+`UClsAliasCount`, `CompiledUnitCount`, `PyImpAliasCount`, `ResPendCount`,
+`PasSrcRangeCount` — a handful of mutation sites each). **The hash chains, the
+overload chains and the per-symbol widening a trial parse may have already done
+are not**, and a high-water-mark rollback that ignores them looks correct and is
+not.
+
+### Recommendation
+
+Do NOT open with a general `TryParse`. Land the proc-side rollback first —
+`ProcRollbackTo`, the exact counterpart of `SymRollbackTo`, including whatever
+`SymRollbackTo`'s typed-const exception turns out to correspond to — and prove
+it against the trial parses that already exist. That is a bounded, independently
+testable Track A change, and every later speculative-parse consumer needs it.
+Only then is "which errors are fatal" worth deciding, and by then it is a
+smaller question.
+
+**Held back on the coordinator's request** (2026-08-29): frank-rust hit exactly
+this wall on rung 9 of the Rust frontend and routed around it with a token scan,
+so there is fresh evidence about what this would actually buy that should be
+weighed before anyone starts. **And the work lands squarely in
+`compiler/symtab.inc`, which another agent is in right now** — the file the
+whole double-dispatch episode of the same day ran through.

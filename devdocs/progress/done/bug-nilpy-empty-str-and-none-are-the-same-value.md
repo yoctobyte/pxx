@@ -4,7 +4,8 @@ prio: 75
 type: bug
 blocked-by: [decide-nilpy-none-str-sentinel-vs-textstr-kind]   # re-asked 2026-08-15: the decided representation's prerequisite (a stamped block kind) turns out never to have been built
 summary: "`\"\" is None` answers TRUE for any NilPy value whose static type is plain `str` — literal, local, parameter, `-> str` return, AND every pylib str-method result (`.replace()`, a slice, `.join()`, `*0`). Container-derived and `Optional[str]` values are correct, because they carry a variant TAG; the rule is tagged-vs-untagged, not literal-vs-computed. A CORRECTION at the bottom retracts the 2026-08-27 down-scoping, which claimed the pylib results were already right and was measured wrong (they answer True on v385, v386 and HEAD alike) — the original ~260-producer sizing, and the basis the decision was taken on, both stand. A constant-fold is unsafe: `def f() -> str: return None` is legal CPython."
-status: backlog
+status: done
+owner: frankA
 ---
 
 # `""` and `None` are the same value for a NilPy str
@@ -416,3 +417,118 @@ Still a Track A string-representation project carrying the `stabilize-fast` +
 sized, with the wrong plan removed. Whoever takes it should start from
 `PXXStrFromLit`'s `if len <= 0 then Result := nil` (builtinheap.pas:1260) and the
 pylib producers, NOT from the empty literal alone.
+
+---
+
+## RESOLVED 2026-08-29 (frankA) — three collapse sites, not ~260 producers
+
+Implemented as decided: `PXX_KIND_TEXTSTR`'s "may be zero length" property,
+scoped so Pascal's `AnsiString` keeps collapsing. Every row of the repro now
+matches the CPython oracle. **The model was not re-opened.**
+
+### The sizing, measured — this is what unblocked it
+
+Both prior parks stalled on a sizing neither could measure without building the
+thing. Measured directly, by removing the collapse and looking:
+
+**There are exactly THREE sites where an empty string becomes nil**, and the
+~260 pylib `: AnsiString` producers are not among them — they funnel through
+site 1, because a Pascal `Result := ''` IS the empty-literal path:
+
+| # | site | reaches |
+| --- | --- | --- |
+| 1 | `PXXStrFromLit` (builtinheap.pas) | every `""` literal, and every pylib `Result := ''` |
+| 2 | `PXXStrSetLen` (builtinheap.pas) | `SetLength` through a non-symbol lvalue; **five of six backends** route all `SetLength` here |
+| 3 | the **inline** symbol-target resize in `ir_codegen.inc` | x86-64 only — the one backend that does not call `PXXStrSetLen` |
+
+Site 1 alone fixed 5 of the 7 wrong rows. `.replace()` and `.join()` were the
+last two standing and they are site 3: both do `SetLength(Result, outLen)` on a
+plain symbol, which on x86-64 alone never reaches the helper.
+
+So the CORRECTION's "the pylib surface is in scope" was right about the
+*symptom* and wrong about the *shape*: those results are wrong, but they are not
+260 places to change. They are one.
+
+### The scoping, and why it is whole-compilation
+
+A new define, `PXX_NILPY_STR`, set in `compiler.pas` when `isNilPy`. Sites 1
+and 2 read it via `{$ifdef}`; site 3 reads `isNilPy` at codegen time. **A Pascal
+compilation never defines it, so it compiles the collapsing arm** — "untouched
+by construction" is literal here, not an audit result, and the self-host
+fixedpoint sha does not move.
+
+It is whole-compilation rather than per-callsite because the producers are not
+only NilPy user code: pylib is Pascal source whose `Result := ''` must not
+collapse. Scoping to "source the NilPy user wrote" would have left every
+`.replace()` / slice / `.join()` result wrong — the partial-coverage shape
+`normalise-dont-special-case.md` warns about, and precisely the failure the
+2026-08-27 down-scoping would have shipped.
+
+### The trap: fixing the producers alone trades one wrong answer for another
+
+`pystr_none` was `Result := ''`. Under the new model that returns a REAL block,
+so `def retnone() -> str: return None` flipped from True to **False** — and
+CPython says True. That row was correct *by accident* before, via the same
+collapse that made `""` wrong. `pystr_none` now leaves `Result` unassigned (the
+zero-initialised nil handle) and says why. A fix that stops the collapse and
+forgets this line is not a partial fix, it is a lateral move.
+
+`pystr_is_none` is **unchanged** — as the 2026-08-16 note said it would be. Its
+own comment ("a real string (including \"\") does not [have a nil handle]") was
+measurably FALSE for as long as it stood and is now true; the comment is
+corrected in place rather than left as a claim the code finally earned.
+
+### Verified
+
+- 12-row repro: **matches CPython on every row**, tagged and untagged alike.
+- 19-row empty-string semantics sweep (truthiness, `==`, `len`, concat,
+  ordering, `in`, dict key, list index, `split`, `%`/`format`, methods, `join`,
+  `repr`, `str()`): identical to CPython **and byte-identical to `pinned`** — no
+  row moved. This is the "what does the runtime do with a non-nil zero-length
+  handle" measurement the park demanded, and the answer is: nothing changes.
+  The CORRECTION's bound was right — the comparison kernels are length-first and
+  the only `Pointer(s) = nil` test on a string handle is `pystr_is_none` itself.
+- Identity (`"" is ""`, `"" is "".replace(...)`) matches CPython; a 200k-iteration
+  empty-allocation loop stays at 8 MB RSS / 0.12 s, so the extra blocks do not
+  accumulate.
+- `make compiler/pascal26` fixedpoint: `converged after 1 round(s)`.
+- `tools/gate.sh quick`: **GREEN**.
+- Ten named NilPy tests run individually: all that carry a `.expected` pass.
+
+### Gate — stated honestly
+
+`gate.sh quick` is green but its tier ran **29 Pascal/C jobs and zero `.npy`
+jobs**, so it is NOT breadth for a change to the NilPy string model. NilPy
+breadth is Track T's limited/full sweep against the pushed sha. The named-test
+sample above is a sample, not a suite.
+
+**This touches `compiler/builtin/**`, so it carries the pin obligation — NOT
+done here.** Workers do not pin; flagged to the coordinator.
+
+### Test
+
+`test/test_nilpy_none_str_field.npy` extended with the case its own closing
+comment had recorded as "NOT asserted here". The expectation is derived from
+**CPython**, and the test **fails on `pinned`** (`867207f2b418`) on exactly the
+eight untagged rows while the tagged control rows pass — so it discriminates
+rather than merely agreeing with the build that produced it.
+
+### Residual, unchanged and still parked in U
+
+A genuine None-str still compares `== ""` True where CPython says False: a
+content compare sees two zero-length operands either way. Recorded on
+[[decide-nilpy-none-str-sentinel-vs-textstr-kind]]; not re-opened here.
+
+### Note on `PXX_KIND_TEXTSTR`
+
+Still declared and never stamped. This fix delivers the decided *property*
+("a NilPy string may be zero length") through the compilation axis rather than
+through the block-kind word, because the collapse decision happens **before a
+block exists** — there is no header to read at the moment you are deciding
+whether to allocate one. The kind word remains available and unstamped for
+[[bug-nilpy-non-ascii-string-surface-measured]] /
+[[bug-nilpy-encode-ignores-the-codec]], which ask their question *of an existing
+block* and so can use it.
+
+## Log
+- 2026-08-29 — resolved, commit 8be3c6d06.

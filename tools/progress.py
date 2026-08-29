@@ -14,6 +14,14 @@ import datetime as _dt
 import os
 import math
 import re
+
+_DUP_STOP = {
+    "a", "an", "the", "is", "and", "or", "to", "of", "in", "for", "on", "it",
+    "that", "not", "be", "are", "so", "its", "has", "have", "with", "by", "as",
+    "at", "from", "but", "no", "does", "do", "can", "when", "why", "what",
+    "which", "than", "then", "this", "bug", "feature", "chore", "decide",
+    "regression", "meta", "idea",
+}
 import shutil
 import subprocess
 import sys
@@ -193,6 +201,29 @@ def normalize_track(value: str) -> str:
     return t
 
 
+def _tag_onto(lane: str, tag: str) -> str:
+    """Surface a WORK-TAG (O, E, M, S) WITHOUT discarding the FILE-LANE the
+    ticket declared.
+
+    These tags are not places code lives. An O ticket edits Track A's shared
+    files and obeys A's gate; an E ticket edits Track B's; M is file-owned by
+    A/B/T per ticket. CLAUDE.md says so for each of them. Returning the bare
+    tag threw the declared lane away, so the ticket vanished from
+    `ready --track A` -- the queue the agent that actually owns those files
+    reads. Measured 2026-08-29: 14 O tickets invisible to A, 4 E invisible to
+    B (whose whole ready queue was 6), 1 M.
+
+    Track F has appended rather than replaced since it was added, and the
+    comment on `track` gives the reason in full. This is that same rule for
+    the tags that were written earlier and missed it.
+    """
+    if not lane:
+        return tag
+    if tag in lane.split("+"):
+        return lane
+    return f"{lane}+{tag}"
+
+
 def first_bullet_value(text: str, marker: str) -> str:
     pat = re.compile(
         rf"^\s*-?\s*\*\*{re.escape(marker)}:\*\*\s*(.*)$",
@@ -359,10 +390,15 @@ class Ticket:
         # NOTE the separator is MANDATORY here, unlike the O/E/R/T rules: with
         # `[ -]?` the pattern also matches the plural "Tracks", which appears in
         # ordinary prose ("Tracks A and B") and mis-tagged two unrelated tickets.
+        explicit = normalize_track(self.fm.get("track", ""))
+        if not explicit:
+            _tl = first_bullet_value(self.text, "Track")
+            if _tl:
+                explicit = normalize_track(_tl.split()[0])
         if re.search(r"\bTrack[ -]S\b", decl, re.I) or \
                 re.match(r"^(feature|bug|regression|idea|compat)-esp-", self.slug) or \
                 re.search(r"-(esp|esp32|xtensa)-", self.slug):
-            return "S"
+            return _tag_onto(explicit, "S")
         # Track M (MSWindows) — the Windows campaign, a work-tag with exactly
         # S's shape: every M ticket ALSO carries its Track A (PE/COFF writer, MS
         # x64 ABI), Track B (lib/pcl win32 widgetset) or Track T (wine harness)
@@ -379,15 +415,10 @@ class Ticket:
         # meta-track-w-collision-windows-vs-website — a board-hygiene ticket
         # about the Windows lane, declaring Track A — was auto-tagged M by its
         # own slug. A ticket ABOUT the campaign is not a ticket IN it.
-        explicit = normalize_track(self.fm.get("track", ""))
-        if not explicit:
-            _tl = first_bullet_value(self.text, "Track")
-            if _tl:
-                explicit = normalize_track(_tl.split()[0])
         if re.search(r"\bTrack[ -]M\b", decl, re.I) or \
                 (re.search(r"-(windows|win32|wine)-", self.slug)
                  and explicit in ("", "M")):
-            return "M"
+            return _tag_onto(explicit, "M")
         # Track O (Optimization: register allocation, opt passes, codegen/heap
         # perf) — a cross-cutting lane surfaced on its own, same decl-line rule as
         # R/T. Each ticket ALSO carries a Track A (compiler internals) or Track B
@@ -397,7 +428,7 @@ class Ticket:
         # umbrella, whose next char is 'i' not '-').
         if re.search(r"\bTrack[ -]?O\b", decl, re.I) or \
                 self.slug.startswith("feature-opt-"):
-            return "O"
+            return _tag_onto(explicit, "O")
         # Track E (Examples/apps: demos, games, GUIs, IDEs, the portable-userland
         # showcase) — apps BUILT WITH pxx, not pxx itself. Work-tag file-owned by
         # Track B (examples/**, lib/**, app dirs); same decl-line rule as O/R/T,
@@ -405,7 +436,7 @@ class Ticket:
         if re.search(r"\bTrack[ -]?E\b", decl, re.I) or \
                 self.slug.startswith("feature-demo-") or \
                 self.slug.startswith("idea-demo-"):
-            return "E"
+            return _tag_onto(explicit, "E")
         # The whole Rust-frontend effort surfaces as Track R on the board, even
         # though individual sub-tickets carry a Track A (compiler internals) or
         # Track B (rust RTL shims) file-ownership tag for collision-avoidance —
@@ -1204,6 +1235,7 @@ pre code{background:none;padding:0}
         # Neither condition has a legitimate case, and both are one line to
         # test — which is the whole argument for testing them.
         seen_slug: dict[str, str] = {}
+        slug_toks: list[tuple[str, str, set[str]]] = []
         for st in self.RANKED_STATUSES:
             d = PROG / st
             if not d.is_dir():
@@ -1226,6 +1258,9 @@ pre code{background:none;padding:0}
                         f"NO-FRONTMATTER: {st}/{path.name} does not start with '---' — "
                         f"an orphan fragment or a truncated ticket, not a ticket the ranker can read")
                     problems = 1
+                slug_toks.append((st, path.name, {
+                    t for t in re.split(r"[-_.]", path.stem.lower())
+                    if len(t) > 2 and t not in _DUP_STOP}))
                 prev = seen_slug.get(path.name)
                 if prev is not None:
                     lines.append(
@@ -1235,6 +1270,44 @@ pre code{background:none;padding:0}
                     problems = 1
                 else:
                     seen_slug[path.name] = st
+
+        # --- near-duplicate slugs -----------------------------------------
+        # Two lanes filing the same ticket minutes apart is real and measured
+        # (2026-08-29, twice in one evening: the EmitLoadVarA64 pair and the
+        # LowerCase pair, the second of which this coordinator caused by
+        # re-filing a ticket a previous session of its own had verified a day
+        # earlier). DUP-SLUG above catches only IDENTICAL filenames, which is
+        # the case that never happens -- two people describing one bug choose
+        # different words.
+        #
+        # Threshold 4 is calibrated, not guessed. Measured over the 341 ranked
+        # tickets on master that day: 3 pairs flagged, 3 genuine duplicates,
+        # ZERO false positives; threshold 5 caught 1 and missed two real ones.
+        # A check that cries wolf earns the habit of being scrolled past, so
+        # recalibrate if the board ever grows a legitimate family of
+        # same-topic tickets rather than loosening it by reflex.
+        #
+        # WHAT THIS CANNOT DECIDE, and the wording above is careful about it:
+        # slug similarity is evidence of a shared SUBJECT, never of a shared
+        # CAUSE. twatch files per JOB, so one commit reding a family of related
+        # tests legitimately produces N tickets with near-identical slugs --
+        # those are TRUE positives that must NOT be merged (pxx-a5, 2026-08-29,
+        # the two nilpy fallback-import regressions: two different .npy files,
+        # one cause, both correctly filed and both correctly separate).
+        # The scan surfaces the pair; a human decides identity.
+        for _i in range(len(slug_toks)):
+            _st1, _n1, _t1 = slug_toks[_i]
+            for _j in range(_i + 1, len(slug_toks)):
+                _st2, _n2, _t2 = slug_toks[_j]
+                _shared = _t1 & _t2
+                if len(_shared) >= 4:
+                    lines.append(
+                        f"NEAR-DUP: {_st1}/{_n1} and {_st2}/{_n2} share "
+                        f"{len(_shared)} slug words ({', '.join(sorted(_shared))}) "
+                        f"— same ticket filed twice, or one CAUSE with N "
+                        f"legitimately separate tickets? Do not merge on the "
+                        f"score alone")
+                    problems = 1
 
         for t in self.by_status["unfinished"]:
             tr = t.track

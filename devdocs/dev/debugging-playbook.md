@@ -1488,3 +1488,68 @@ The gap is recorded as unexplained rather than smoothed over.
   does not, and should not.
 - **`code=NNNNB` from the compiler's own success line beats `stat -c%s`** for
   anything about code size — the file carries data, bss and headers too.
+
+## When success and a failure produce the same output, the output is not evidence
+
+The entries above are each an instance; this is the shape they share, written
+once. It is the most expensive family in this repo's history because every
+member of it *reads as a pass*, so nobody looks.
+
+The canonical case is already in `CLAUDE.md`: in a tree seeded with a copied-in
+binary, `make compiler/pascal26` prints `make: 'compiler/pascal26' is up to
+date` and exits 0. A verified fixedpoint also exits 0. **No fixedpoint was
+proved and nothing says so** — the absence of `converged after N round(s)` is
+the only tell, and an absence is precisely what a reader does not notice.
+
+Four more from a single day, all different mechanisms, all the same shape:
+
+- **A skipped test and a passing test both printed nothing.** 39 guards in
+  `lib-test`; three of them, when their dependency was missing, took a branch
+  that emitted no line at all and let the rule continue. "green" meant "passed"
+  for 36 of them and "was never run" for 3, in the same word.
+- **A remedy already in force and a remedy that worked are indistinguishable.**
+  Applying a fix and seeing the symptom gone proves nothing until you know the
+  fix was not already there. The test is *"did applying it change anything"*,
+  and it is answerable **before** the result exists.
+- **"Still red" and "the pin has not moved" are the same red.** Under the pin
+  boundary a `$(PXX_STABLE)`-gated job keeps failing after the fix lands,
+  because it is not running the fixed compiler. "It is still red, so there is a
+  second cause" is the natural reading and it is wrong.
+- **A no-op patch and a correct component are the same measurement.** Patching a
+  suspect arm and seeing byte-identical output was read as "this arm is not
+  defective". It licensed only "this arm is not on *this shape's* path" — the
+  arm was in fact broken, for a spelling the repro did not contain. **A
+  refutation is scoped to the shape that was tested**, and the negative result
+  cannot tell you which of the two it earned.
+
+And the cheapest one, which cost a full probe cycle the same evening: a compile
+whose output flag was wrong (`pascal26 x.pas -o out` — there is no `-o`; the
+second positional IS the output) wrote a file literally named `-o`, exited 0,
+and left last night's `out` on disk. Running it printed the pre-fix answer.
+**"The fix does not work" and "you ran yesterday's binary" produce the same
+bytes**, and the fix was correct the whole time.
+
+> **Ask of every green: what else would produce exactly this?** If a second
+> state answers, you have not measured anything yet. Do not go looking for the
+> cause of a result until you have established the result is real.
+
+**In practice:**
+
+- **Make the two states print differently, and prefer a POSITIVE token.** Not
+  "no failure line" but `converged after N round(s)`, `SKIPPED: synapse-ssl`,
+  `76 sites`. A pass that is defined by an absence cannot be distinguished from
+  a run that did not happen.
+- **A summary line must name what it did NOT cover.** `lib-test ok (...) --
+  SKIPPED: x y z (green here does NOT cover them)` is the whole fix for the
+  first case, and it is three lines of `make`.
+- **Name the binary, not the commit.** "The fix is in HEAD" and "the fix is in
+  the binary I just ran" are different claims and only the second is evidence.
+  `git merge-base --is-ancestor` answers the first while you execute a stale
+  artifact. Check the sha of the thing that ran.
+- **Confirm the intervention took before reading the result.** The compiler sha
+  changed; the toggle is present in the file; the flag reached the process. A
+  probe that never fired and a probe that fired and found nothing both print
+  nothing.
+- **A regression test nobody has watched fail is not yet a regression test.**
+  Run it against the pre-fix binary. If it passes there, it does not test what
+  you think, and you will never learn that from a green suite.

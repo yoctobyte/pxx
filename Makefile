@@ -2124,6 +2124,16 @@ test-nilpy: $(COMPILER)
 	# the surplus args were emitted anyway). CPython renders them as a tuple.
 	./$(COMPILER) test/test_nilpy_exception_multi_arg.npy $(TESTTMP)/test_nilpy_excmulti26
 	$(TESTTMP)/test_nilpy_excmulti26 | diff -u test/test_nilpy_exception_multi_arg.expected -
+	# os.sep / os.linesep are ATTRIBUTES, not calls -- and the value builder
+	# behind them now checks WHICH module was asked, so sys.SEEK_SET raises
+	# AttributeError instead of answering 0.
+	./$(COMPILER) test/test_nilpy_os_sep_and_sys_attr_gate.npy $(TESTTMP)/test_nilpy_ossep26
+	$(TESTTMP)/test_nilpy_ossep26 | diff -u test/test_nilpy_os_sep_and_sys_attr_gate.expected -
+	# re.split / re.subn / re.finditer, m.end(), and the count convention: a
+	# NEGATIVE count means "do nothing" where 0 means "no limit" -- the inverse
+	# of the engine's own, which is how re.sub(p,r,s,-1) replaced everything.
+	./$(COMPILER) test/test_nilpy_re_split_subn_finditer.npy $(TESTTMP)/test_nilpy_resplit26
+	$(TESTTMP)/test_nilpy_resplit26 | diff -u test/test_nilpy_re_split_subn_finditer.expected -
 	# os.path.split / normpath / getsize / expanduser
 	./$(COMPILER) test/test_nilpy_os_path_more.npy $(TESTTMP)/test_nilpy_ospathmore26
 	$(TESTTMP)/test_nilpy_ospathmore26 | diff -u test/test_nilpy_os_path_more.expected -
@@ -2616,6 +2626,15 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_class_method_result_type.pas $(TESTTMP)/test_clsmeth_ret26
 	@$(TESTTMP)/test_clsmeth_ret26 | diff -u test/test_class_method_result_type.expected - \
 	  || { echo 'test_class_method_result_type: FAIL - a class method result lost its type'; exit 1; }
+	@# ...and the same chain through a bare CLASS NAME receiver: TFactory.MakeC.Tag
+	@# evaluated to the INTERMEDIATE result, because both arms that build a
+	@# TClassName.ClassMethod call returned it without applying the selector tail,
+	@# and the leftover .Tag was eaten by the statement parser's skip-to-';'. Two
+	@# arms (expression and statement position), so fixing one left the other wrong.
+	@# bug-p-a-call-chained-onto-a-class-method-result-is-dropped
+	@./$(COMPILER) test/test_class_name_receiver_chain.pas $(TESTTMP)/test_clsname_chain26
+	@$(TESTTMP)/test_clsname_chain26 | diff -u test/test_class_name_receiver_chain.expected - \
+	  || { echo 'test_class_name_receiver_chain: FAIL - a chain on a class-name receiver was dropped'; exit 1; }
 	@# a SECOND class of the same name in one unit must be refused, naming it
 	@./$(COMPILER) test/test_pascal_duplicate_class_fail.pas $(TESTTMP)/test_pascal_dup_class26 2>&1 \
 	  | grep -q 'duplicate class name TFoo' \
@@ -2864,6 +2883,11 @@ test-nilpy: $(COMPILER)
 	@# different arity, methods, and rebind-to-value already worked)
 	./$(COMPILER) test/test_nilpy_redefine_def.npy $(TESTTMP)/test_nilpy_redefdef26
 	tools/expect_same.sh test_nilpy_redefdef26 "$$($(TESTTMP)/test_nilpy_redefdef26)" "$$(printf '2\n3\n2\n5')"
+	@# an import alias binds to the ORIGINAL name, never to a same-named member
+	@# of the source module; and a module-level assignment rebinds an IMPORTED
+	@# name (row 3 is the ordering control: the rebinding has not run yet)
+	./$(COMPILER) test/test_nilpy_import_alias_collides.npy $(TESTTMP)/test_nilpy_aliascoll26
+	tools/expect_same.sh test_nilpy_aliascoll26 "$$($(TESTTMP)/test_nilpy_aliascoll26)" "$$(printf '7\n5\n2\n99\n7')"
 	@# %e/%E/%g/%G no longer collapse onto %f
 	./$(COMPILER) test/test_nilpy_percent_e_g_format.npy $(TESTTMP)/test_nilpy_pctformat26
 	tools/expect_same.sh test_nilpy_pctformat26 "$$($(TESTTMP)/test_nilpy_pctformat26)" "$$(printf '1.500000e+03\n1.500000E+03\n1.23e+03\n1.5e+06\n0.0001\n100\n0\n0.000000e+00\n-1.500000e+03\n1.23457e+08\n3.141592654\n1\n1.500000\n1.50')"
@@ -3723,6 +3747,23 @@ test-threads: $(COMPILER)
 	# async (per-thread coroutine scheduler) composes with parallel (OS threads): each worker runs its own reactor
 	./$(COMPILER) --threadsafe test/test_async_parallel_compat.pas $(TESTTMP)/test_async_parallel_compat26
 	tools/expect_same.sh test_async_parallel_compat26 "$$($(TESTTMP)/test_async_parallel_compat26 | tail -n 1)" "ASYNC x PARALLEL OK"
+	# ...and with MORE workers than the OLD reactor ceiling of 16. CurR treated its
+	# `slot := 0` initializer as an answer when every reactor was in use, so the 17th
+	# thread adopted a LIVE thread's reactor and the two shared a coroutine table.
+	# The worker count is SET, not inherited from the CPU count: cores were only ever
+	# a proxy for the default worker count, so this is deterministic on a 4-core box.
+	# bug-a-the-17th-thread-silently-aliases-reactor-slot-0
+	./$(COMPILER) --threadsafe test/test_sched_reactors_wide.pas $(TESTTMP)/test_sched_wide26
+	tools/expect_same.sh test_sched_wide26 "$$($(TESTTMP)/test_sched_wide26 | tail -n 1)" "SCHED WIDE OK"
+	# and the exhaustion arm itself, reachable only with MAX_REACTORS lowered to 2 by
+	# the define that exists for this test (at the shipping 64 no parallel-for can
+	# overrun it, and an unreachable guard is an untested one). One named fatal and
+	# exit 216 — never a silent 0, which is what Halt raced to when several threads
+	# were refused at once, and never a hang, which is what serialising Halt produced.
+	./$(COMPILER) --threadsafe -dPXX_SCHED_TINY_REACTORS test/test_sched_reactor_exhaustion.pas $(TESTTMP)/test_sched_exhaust26
+	set +e; $(TESTTMP)/test_sched_exhaust26 > $(TESTTMP)/sched_exhaust.log 2>&1; rc=$$?; set -e; \
+	  tools/expect_same.sh test_sched_exhaust26-rc "$$rc" "216"; \
+	  tools/expect_same.sh test_sched_exhaust26-msg "$$(head -n 1 $(TESTTMP)/sched_exhaust.log)" "fatal: scheduler out of reactor slots (MAX_REACTORS)"
 	# __pxxmulhi_u64: unsigned 64x64->128 high half (x86-64 mul / aarch64 umulh)
 	./$(COMPILER) test/test_mulhi.pas $(TESTTMP)/test_mulhi26
 	tools/expect_same.sh test_mulhi26 "$$($(TESTTMP)/test_mulhi26 | tail -1)" "MULHI OK"
@@ -5924,6 +5965,39 @@ test-core: $(COMPILER)
 	cat test/rust_unity/*.rs > $(TESTTMP)/rust_unity.rs
 	./$(COMPILER) $(TESTTMP)/rust_unity.rs $(TESTTMP)/test_rust_unity26
 	tools/expect_same.sh test_rust_unity26 "$$($(TESTTMP)/test_rust_unity26)" "$$(printf 'side 1 occupied 3\nflipped 2\nmob 2 4 2\ntbl 2 4 8 2\nkf0 132096')"
+	# Rust Result<T, E> and the `?` try operator (feature-rust-corpus-chess, the
+	# rung after the unity build). Result monomorphizes onto the SAME enum
+	# machinery Option uses -- __tag at 0, Ok.0/Err.0 overlapping past it -- so
+	# match/return/field access need no Result-specific code downstream. `?`
+	# desugars to `match e ... Err(e) => return Err(e)`, with the operand
+	# materialization and the early return HOISTED out of the expression and
+	# flushed by RParseStatement, since neither fits in an expression node.
+	# `place` and `pick` pin a payload-SIZING bug this rung exposed: a
+	# monomorphized payload occupies RecSize, not TypeSize(tyRecord), which
+	# answers 8. Option had it wrong since it was written and got away with it
+	# because Option<Square> is exactly 8 bytes -- Option<Big> SEGFAULTED on
+	# master and Result<Pos, i64> read `4 2` back as `4 0`. Neither failed loudly.
+	./$(COMPILER) test/test_rust_result.rs $(TESTTMP)/test_rust_result26
+	tools/expect_same.sh test_rust_result26 "$$($(TESTTMP)/test_rust_result26)" "$$(printf '1 ok 11\n2 err 7\n3 ok 14\n4 err 7\n5 ok 120\n6 err 7\npos 4 2\npos err 3\nbig 10 11 12 13\nbig none')"
+	@echo '--- rust: println! spells a bool true/false, not Pascal TRUE ---'
+	# A wrong STRING in real output, not a missing one -- the exact plausible
+	# failure that survives to be found late. Lowered as a branch between two
+	# literal writes: a string-valued ternary would need the managed-string
+	# runtime, which this frontend deliberately does not emit.
+	# `end`/`{}{}`/`print!` pin the lowering edges: an empty trailing chunk must
+	# still carry the newline, and adjacent bools must not swallow each other.
+	./$(COMPILER) test/test_rust_bool_print.rs $(TESTTMP)/test_rust_bool26
+	tools/expect_same.sh test_rust_bool26 "$$($(TESTTMP)/test_rust_bool26)" "$$(printf 'pair true false\ntrue\nfalse\nlead false mid 7 tail\ntruefalse\nend true\nfalse start\nm true false\ncmp false true\nnot false\np false q true\nplain 42 unchanged')"
+	@echo '--- rust: String / &str / format! over the managed AnsiString ---'
+	# Both Rust string types map to ONE managed representation; the difference
+	# is only observable through aliasing rustc refuses to compile. That buys
+	# concat, compare, len and refcounting from the shared lowering for free.
+	# Gated: a program that never says String/&str/format!/to_string pulls
+	# neither builtinheap nor builtin and stays ~3KB (every earlier rust test).
+	# The oracle is hand-computed -- `sq`/`uci`/`big` are independently
+	# checkable, which is the whole point after two plausible-wrong-value bugs.
+	./$(COMPILER) test/test_rust_string.rs $(TESTTMP)/test_rust_string26
+	tools/expect_same.sh test_rust_string26 "$$($(TESTTMP)/test_rust_string26)" "$$(printf 'empty [] len 0 isempty true\ncat abcde len 5 isempty false\neq true ne false lit 3\nacc [uci: go] len 7\nsq a1 h8 d4\nuci e2e4\nhello, world!\nfmt i=42 n=-7 b=true s=mid c=x\ndegen [] [just text]\nchain 3 1234\nbig a1-h899 len 7')"
 	# Ada frontend skeleton (feature-esoteric-ada): for-range accumulate, if/elsif/else,
 	# while, bare loop + exit-when, Put_Line -- all lowering onto existing shared IR.
 	./$(COMPILER) test/test_ada_skeleton.adb $(TESTTMP)/test_ada_skeleton26

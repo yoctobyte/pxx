@@ -154,6 +154,27 @@ CONF_DEFAULTS = {"tier": "full", "mid_tier": "full",
                  # 60s keeps the cheap-to-discard property for a burst landing
                  # in the first seconds without pretending pushes are rare.
                  "full_commit_secs": 60,
+                 # How stale the newest `full` tier must be before breadth
+                 # RESERVES a slot from the fast verdict (breadth_overdue), and
+                 # the floor between two breadth ATTEMPTS. 0/unset keeps the
+                 # BREADTH_*_SECS defaults (6h / 2h).
+                 #
+                 # BOTH MUST MOVE TOGETHER OR NEITHER DOES: at the 2h retry
+                 # default, lowering only the staleness threshold leaves retry
+                 # binding and the cadence barely changes.
+                 #
+                 # PER-BOX BY NATURE, held as global constants until now. The 6h
+                 # figure was set when the only watcher was plexus -- 12 cores
+                 # capped at 6, a native run ~490s. Measured on seven the same
+                 # week (24 dedicated cores, native ~105s, full ~959s, 115
+                 # commits/hour of which 36 buildable): the idle ladder never
+                 # fires at that push rate, so 6h IS the breadth cadence rather
+                 # than a backstop for it, on a box whose arithmetic supports a
+                 # verdict roughly hourly. The right value is how long a full
+                 # tier costs HERE against how fast commits land, and neither
+                 # term is constant across hosts.
+                 "breadth_stale_secs": 0,
+                 "breadth_retry_secs": 0,
                  "max_cores": 0,       # cores testmgr may keep busy (--max-cores)
                  "max_mem_mb": 0,      # cap the cgroup MemoryMax (env override)
                  "web": True, "web_port": 8377}   # everything ON by default;
@@ -1835,7 +1856,7 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
             lines += ["> **BREADTH: this host has never completed a `full` "
                       "tier.** Nothing here covers i386/arm32/riscv32/aarch64.",
                       ""]
-        elif age > BREADTH_STALE_SECS:
+        elif age > breadth_stale_secs():
             lines += ["> **BREADTH IS %s STALE.** The newest `full` tier on "
                       "this host is %s old, so no cross target has seen this "
                       "tree. A `%s` verdict covers x86-64 only — do not read it "
@@ -2056,9 +2077,33 @@ def host_quiet_secs(st, now=None):
 # warn another.
 BREADTH_STALE_SECS = 6 * 3600
 
+
+def breadth_stale_secs():
+    """The effective breadth-staleness threshold for THIS clone.
+
+    `breadth_stale_secs` in twatch.conf, else the 6h default. A function rather
+    than a module constant because CONF is not populated at import time, and
+    because a reader who found only the constant would conclude the value is
+    fleet-wide -- which is exactly the reading that left a fast dedicated box
+    sized by a shared one's measurements.
+    """
+    return CONF.get("breadth_stale_secs") or BREADTH_STALE_SECS
+
 # How long a breadth attempt is allowed to hold off the fast verdict, and how
 # long we wait before trying again after one fails to land.
 BREADTH_RETRY_SECS = 2 * 3600
+
+
+def breadth_retry_secs():
+    """Floor between breadth ATTEMPTS for this clone; see breadth_stale_secs().
+
+    Per-box for the same reason and to a sharper degree: this guard exists so a
+    breadth tier that cannot finish inside its deadline stops claiming every
+    slot, and whether it can finish is a fact about the host. A full tier costs
+    ~959s on seven against a 3600s deadline, so it lands; on a box where it does
+    not, the 2h default is doing real work and must stay.
+    """
+    return CONF.get("breadth_retry_secs") or BREADTH_RETRY_SECS
 
 
 def breadth_inflight(st, now=None):
@@ -2078,6 +2123,15 @@ def breadth_inflight(st, now=None):
     behind this forever: past that bound the claim is stale and DOWN is the
     honest answer again. In flight means the claim is newer than the host's last
     completed run — once a run lands, `st["last"]` moves past it.
+
+    THE CONSTANT HERE, NOT `breadth_retry_secs()`, AND DELIBERATELY. That knob
+    is a CADENCE floor; this is a DEATH-DETECTION ceiling, and only the second
+    is unsafe to shorten. A live breadth run is cleared by the `last_run <
+    started` test below the moment it lands, so this bound is reached only when
+    no run ever lands -- i.e. the daemon died. Tying it to the cadence knob
+    would let a box configured for frequent breadth declare its own RUNNING
+    breadth run "not in flight" partway through: a worse answer than the
+    staleness it was tuned to fix.
     """
     now = time.time() if now is None else now
     claim = st.get("last_breadth_try") or {}
@@ -2127,11 +2181,11 @@ def breadth_overdue(st, now=None):
         age = None
     else:
         age = secs_since(lf.get("date") or "", now)
-        if age is not None and age <= BREADTH_STALE_SECS:
+        if age is not None and age <= breadth_stale_secs():
             return ""
     last_try = secs_since((st.get("last_breadth_try") or {}).get("date") or "",
                           now)
-    if last_try is not None and last_try < BREADTH_RETRY_SECS:
+    if last_try is not None and last_try < breadth_retry_secs():
         # A breadth run that started and did not land (torn down, aborted,
         # infra) must not immediately claim the next cycle too. Without this,
         # a breadth tier that cannot finish inside its deadline would take
@@ -6704,7 +6758,7 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
         if lf_full.get("date") and not quiet:
             age = secs_since(lf_full["date"], now)
             behind = testable_behind(repo, lf_full.get("sha", ""), ref)
-            stale = age is not None and age > BREADTH_STALE_SECS
+            stale = age is not None and age > breadth_stale_secs()
             print("tstate:   breadth — newest full tier is %s old%s%s"
                   % (fmt_age(age) if age is not None else "?",
                      ", %d testable commit(s) behind" % behind
@@ -7479,8 +7533,32 @@ def main():
                 # gets would otherwise hold this slot forever and make every
                 # branch below it unreachable, which is exactly what happened
                 # for 5h13m on 2026-08-19.
+                #
+                # A COMMITMENT POINT, for the same reason the requested-verdict
+                # branch above has one, and this is the sibling arm that was
+                # missed when that one was fixed. `make_preempted()` with no
+                # `commit_after` is abortable at every moment, and pushes do not
+                # stop; so the phase is entered fine and can never FINISH.
+                # Measured on seven 2026-08-29: **7 pin-verify attempts, 7
+                # preemptions, 0 completions**, while the one breadth run that
+                # reached its commit point that day finished in 959s. Reaching
+                # the slot was never the problem.
+                #
+                # That is precisely the hole verify_pin exists to close — "18 of
+                # the last 25 pins never received a full run" — reproduced one
+                # level down, in the mechanism written to fix it. IDLE_YIELD_AFTER
+                # bounds the damage to other phases but does nothing for the pin:
+                # yielding the slot is not the same as ever verifying.
+                #
+                # Same value and reasoning as the requested branch, NOT breadth's
+                # commit_after=0: a push in the first `full_commit_secs` still
+                # preempts, so a genuinely fresh sha is never starved by a run
+                # that just started; after that the run is allowed to finish.
                 r = verify_pin(clone, host, st, *pin_mid,
-                               abort_check=make_preempted(clone, tested))
+                               abort_check=make_preempted(
+                                   clone, tested,
+                                   commit_after=(CONF.get("full_commit_secs")
+                                                 or None)))
                 if r == "aborted":
                     n = note_idle_abort(clone, host, "pin-verify", pin_mid[1])
                     if n >= IDLE_YIELD_AFTER:
@@ -7535,8 +7613,13 @@ def main():
                 # full run — one verification instead of limited-then-full. It
                 # comes back the moment a clone configures a distinct mid_tier,
                 # which is why it stays.
+                # Same commitment point as pin_mid above -- the two arms of
+                # one phase must not disagree about whether they can finish.
                 verify_pin(clone, host, st, *pin_deep,
-                           abort_check=make_preempted(clone, tested))
+                           abort_check=make_preempted(
+                               clone, tested,
+                               commit_after=(CONF.get("full_commit_secs")
+                                             or None)))
                 did_work = True
             elif tested and CONF.get("idle_slow") and \
                     (st.get("last_full") or {}).get("sha") == tested and \
