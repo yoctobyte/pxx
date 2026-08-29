@@ -32,7 +32,7 @@ type
 
 implementation
 
-uses gl_c, gtk3;
+uses gl_c, gtk3, gtk3_c;
 
 function TGtk3GLBackend.CreateArea(AMajor, AMinor: Integer): Pointer;
 var w: Pointer;

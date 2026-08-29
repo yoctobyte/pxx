@@ -6,6 +6,17 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PXX_STABLE="${PXX_STABLE:-"$ROOT/stable_linux_amd64/default/pinned"}"
 
+# The GTK3 include root. lib/pcl/gtk3_c.h is `#include <gtk/gtk.h>` against the
+# INSTALLED headers, and gtk-2.0 is a default system include root while gtk-3.0
+# is not -- both answer to that same spelling, so the root that comes first
+# decides the GTK version for every C consumer at once. Passing it explicitly
+# keeps this suite off that fork entirely
+# (decide-which-gtk-a-bare-gtk-gtk-h-means). pkg-config when it is available,
+# so a box that installs GTK3 somewhere else still works; the literal path is
+# the fallback, not the source of truth.
+GTK3_INC="$(pkg-config --cflags-only-I gtk+-3.0 2>/dev/null || true)"
+[ -n "$GTK3_INC" ] || GTK3_INC="-I/usr/include/gtk-3.0/"
+
 fail=0
 
 say() {
@@ -22,7 +33,7 @@ run_gui_test() {
   # a previous run's binary gets tested and the suite reports on code that is
   # no longer there.
   rm -f "$out"
-  if ! "$PXX_STABLE" -Fulib/pcl "$src" "$out" >"$log" 2>&1; then
+  if ! "$PXX_STABLE" $GTK3_INC -Fulib/pcl "$src" "$out" >"$log" 2>&1; then
     say "FAIL  $name -- compile: $(tail -1 "$log")"
     fail=1
     return
@@ -45,10 +56,10 @@ widgetset_matrix() {
   local src="$ROOT/test/gui/test_pcl_widgets.pas"
   local a="/tmp/gui_ws_default" b="/tmp/gui_ws_gtk3"
   local log="/tmp/gui_ws.log"
-  if ! "$PXX_STABLE" -Fulib/pcl -Fulib/rtl "$src" "$a" >"$log" 2>&1; then
+  if ! "$PXX_STABLE" $GTK3_INC -Fulib/pcl -Fulib/rtl "$src" "$a" >"$log" 2>&1; then
     say "FAIL  widgetset -- default build: $(tail -1 "$log")"; fail=1; return
   fi
-  if ! "$PXX_STABLE" -dWIDGETSET_GTK3 -Fulib/pcl -Fulib/rtl "$src" "$b" >"$log" 2>&1; then
+  if ! "$PXX_STABLE" $GTK3_INC -dWIDGETSET_GTK3 -Fulib/pcl -Fulib/rtl "$src" "$b" >"$log" 2>&1; then
     say "FAIL  widgetset -- explicit gtk3: $(tail -1 "$log")"; fail=1; return
   fi
   if ! cmp -s "$a" "$b"; then
@@ -57,7 +68,7 @@ widgetset_matrix() {
   # every unsupported cell refuses, and says why
   local ws
   for ws in WIDGETSET_WIN32 WIDGETSET_QT; do
-    if "$PXX_STABLE" "-d$ws" -Fulib/pcl -Fulib/rtl "$src" /tmp/gui_ws_bad >"$log" 2>&1; then
+    if "$PXX_STABLE" $GTK3_INC "-d$ws" -Fulib/pcl -Fulib/rtl "$src" /tmp/gui_ws_bad >"$log" 2>&1; then
       say "FAIL  widgetset -- -d$ws built instead of refusing"; fail=1; return
     fi
     if ! grep -q 'widgetset' "$log"; then
@@ -67,7 +78,30 @@ widgetset_matrix() {
   say "OK    widgetset selection + matrix"
 }
 
+# lib/pcl/gtk3_c.h is `#include <gtk/gtk.h>` against the installed headers, and
+# a bare <gtk/gtk.h> resolves to GTK **2** on this box unless $GTK3_INC puts the
+# gtk-3.0 root first. Asserting the VERSION rather than only that a build links
+# and runs: gtk_main, gtk_main_quit, gtk_window_new and most of the surface PCL
+# uses exist in BOTH GTK2 and GTK3, so a green suite would pass just as happily
+# against the wrong library. This is the check that has bounds on it.
+gtk_version_check() {
+  local src="$ROOT/test/gui/test_gtk_ffi.pas"
+  local out="/tmp/gui_gtk_version" log="/tmp/gui_gtk_version.log"
+  rm -f "$out"
+  if ! "$PXX_STABLE" $GTK3_INC -Fulib/pcl "$src" "$out" >"$log" 2>&1; then
+    say "FAIL  gtk version -- compile: $(tail -1 "$log")"; fail=1; return
+  fi
+  if ! readelf -d "$out" | grep -q 'libgtk-3\.so\.0'; then
+    say "FAIL  gtk version -- not linked against libgtk-3.so.0"; fail=1; return
+  fi
+  if readelf -d "$out" | grep -q 'libgtk-x11-2\.0\.so\.0'; then
+    say "FAIL  gtk version -- linked against GTK2 as well"; fail=1; return
+  fi
+  say "OK    gtk version (libgtk-3.so.0, no GTK2)"
+}
+
 say "=== running GUI test suite (PCL) ==="
+gtk_version_check
 widgetset_matrix
 run_gui_test test_gtk_ffi
 run_gui_test test_pcl_click
@@ -88,7 +122,7 @@ solitaire_smoke() {
   local src="$ROOT/examples/solitaire_gui/solitaire_gui.pas"
   local out="/tmp/gui_test_solitaire" log="/tmp/gui_test_solitaire.log"
   rm -f "$out"
-  if ! "$PXX_STABLE" -Fulib/pcl -Fuexamples/solitaire_gui "$src" "$out" >"$log" 2>&1; then
+  if ! "$PXX_STABLE" $GTK3_INC -Fulib/pcl -Fuexamples/solitaire_gui "$src" "$out" >"$log" 2>&1; then
     say "FAIL  solitaire_gui -- compile: $(tail -1 "$log")"; fail=1; return
   fi
   solitaire_built=1
@@ -177,7 +211,7 @@ life_smoke() {
   local src="$ROOT/examples/life/life.pas"
   local out="/tmp/gui_test_life" log="/tmp/gui_test_life.log"
   rm -f "$out"
-  if ! "$PXX_STABLE" -Fulib/pcl -Fulib/rtl "$src" "$out" >"$log" 2>&1; then
+  if ! "$PXX_STABLE" $GTK3_INC -Fulib/pcl -Fulib/rtl "$src" "$out" >"$log" 2>&1; then
     say "FAIL  life -- compile: $(tail -1 "$log")"; fail=1; return
   fi
   if ! have_xvfb; then
@@ -204,7 +238,7 @@ eliah_smoke() {
   #   OK    eliah_ide (real window 1100x727)
   # two lines apart -- a red that reads half-green.
   rm -f "$out"
-  if ! "$PXX_STABLE" -Fulib/pcl -Fulib/rtl -Fuapps/ide/garin "$src" "$out" >"$log" 2>&1; then
+  if ! "$PXX_STABLE" $GTK3_INC -Fulib/pcl -Fulib/rtl -Fuapps/ide/garin "$src" "$out" >"$log" 2>&1; then
     say "FAIL  eliah_ide -- compile: $(tail -1 "$log")"; fail=1; return
   fi
   eliah_built=1
