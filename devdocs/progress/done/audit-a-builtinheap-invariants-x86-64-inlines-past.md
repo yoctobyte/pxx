@@ -264,4 +264,4 @@ the six.** The worry closes — but not for the reason the ticket expected: the
 pairs are in good shape and **the sentence that describes them is not**.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 619264586.
