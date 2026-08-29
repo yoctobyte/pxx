@@ -4,7 +4,7 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `1bffdc06510a` | 2026-08-29T16:14:10Z | GREEN (native) | 322.2s | `49bd043061c1` RED |
-| seven | `2adbf9cf7165` | 2026-08-29T18:37:05Z | RED (native) | 109.4s | `154d1aa3fba6` RED |
+| seven | `ee62e6dc0582` | 2026-08-29T18:57:08Z | RED (full) | 1062.2s | `ee62e6dc0582` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -35,3 +35,6 @@
   - `test-sqlite-threads-aarch64#src:compiler/.pascal26.fixedpoint`
   - `tools-devtest#00`
   </details>
+- **lib-test#src:test/lib_synapse.pas** — test/lib_synapse.pas tools/expect_same.sh (seven): bad `ee62e6dc0582`, last good `unknown`, 0 commit(s) in range
+- **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +34 (seven): bad `ee62e6dc0582`, last good `154d1aa3fba6`, 41 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_relative_import_in_package.npy** — test/test_nilpy_relative_import_in_package.npy test/test_nilpy_relative_import_in_package.expected +1 (seven): bad `ee62e6dc0582`, last good `154d1aa3fba6`, 76 commit(s) in range
