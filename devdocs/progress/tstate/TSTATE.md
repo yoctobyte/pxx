@@ -4,7 +4,7 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `b7752b0d9474` | 2026-08-29T21:43:02Z | RED (native) | 451.4s | `49bd043061c1` RED |
-| seven | `e46dbffaa80d` | 2026-08-29T22:13:48Z | RED (native) | 109.9s | `f2706f45eabe` RED |
+| seven | `a4fd766af896` | 2026-08-29T22:16:54Z | GREEN (native) | 109.5s | `f2706f45eabe` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -37,6 +37,5 @@
   - `tools-devtest#00`
   </details>
 - **test-nilpy#src:test/test_nilpy_relative_import_in_package.npy** — test/test_nilpy_relative_import_in_package.npy test/test_nilpy_relative_import_in_package.expected +1 (seven): bad `ee62e6dc0582`, last good `154d1aa3fba6`, 76 commit(s) in range
-- **test-core#src:test/test_mgmt_operators.pas** — test/test_mgmt_operators.pas test/test_mgmt_operators.expected +5 (seven): bad `d1378175eec1`, last good `9beb2af4946c`, 7 commit(s) in range
 - **demos#00** (seven): bad `b26e7ed366f3`, last good `9beb2af4946c`, 20 commit(s) in range
 - **test-pascal-conformance#shard0/6** — tools/run_pascal_conformance.sh (seven): bad `30c06db1ae4e`, last good `b26e7ed366f3`, 14 commit(s) in range
