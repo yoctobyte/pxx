@@ -349,3 +349,81 @@ Inventory only. **`compiler/ir.inc` is unmodified and the tree is clean.** Await
 the go-ahead on the slice plan — specifically on whether slice 1 (the six
 routines, 232 lines, no behaviour change) should land before the plan for the
 arms is agreed, since it is independently safe and independently useful.
+
+## Correction to the inventory, and to this ticket's main argument — frankC, 2026-08-29
+
+### 1. The `parser.inc` precedent does not carry the weight this ticket puts on it
+
+Stated plainly because it is this ticket's *principal argument*, it is quoted in
+the prio raise above, and it is wrong:
+
+**Pascal parsing was whole procedures, so slicing `parser.inc` into
+`pasparser_*.inc` was a file move. C lowering is ARMS inside shared
+dispatchers, and an arm has no boundary to cut along.** Seventeen of the
+twenty-two C-exclusive sites are arms in `IRLowerAST`'s AST-kind case,
+`IRLowerAddress` (604 lines), `IRPointerStride` (182) and `IRLowerCallArg`
+(1168).
+
+So the promise *"a `cir.inc` gets Track C out of `ir.inc`"* **cannot be
+delivered**, and it should not be restated. Adding a *new* C arm will always
+touch the shared dispatch. The deliverable goal is the narrower one: **get C out
+of `ir.inc` for the changes that are queued** — which is achievable, and is what
+the slices are for.
+
+**Disposition on the arms (coordinator, 2026-08-29): extract per-arm, ON DEMAND,
+driven by a queued ticket — never as a sweep.** The general question ("should all
+seventeen read as a one-line stub plus a `cir.inc` body?") is deliberately left
+open until two or three real extractions exist, so it can be decided from a diff
+rather than a sketch — and so a bad answer costs three reverts, not seventeen.
+A Track U ticket is deliberately NOT filed yet for the same reason.
+
+### 2. Slice 1 is seven routines and 223 lines, not six and 232
+
+Two corrections to my own numbers, both found while working out the dependency
+order for the move:
+
+**A seventh routine.** `CASTLValueHasSideEffect` (`ir.inc:2103`, 20 lines) is
+called only from `IRAssignIsSharedCompound` and itself. Same shape as the other
+six — C-prefixed name, no `CProgramMode` in its body, invisible to the grep.
+
+**My 232 figure was measured wrong.** It used span-to-next-routine-start, which
+for `IRLowerBitFieldStore` swept in the 24-line `PROMOTABLE INT lowering` comment
+block belonging to the routine *after* it. Real body counts:
+
+| routine | lines |
+| --- | ---: |
+| `IRLowerBitFieldRead` | 69 |
+| `IRLowerBitFieldStore` | 26 (not 50) |
+| `IRAddrMayCall` | 27 |
+| `CASTLValueHasSideEffect` | 20 |
+| `CASTNodeOccursIn` | 14 |
+| `IRAssignIsSharedCompound` | 27 |
+| `IRLowerCompoundAssign` | 40 |
+| **total** | **223** |
+
+### 3. "Pure relocation" acquires one forward declaration
+
+The seven have a circular ordering constraint: `IRLowerDestAddress` (staying in
+`ir.inc`) calls `IRAddrMayCall` (moving), and `IRLowerCompoundAssign` (moving)
+calls `IRLowerDestAddress`. One include point cannot satisfy both, so `ir.inc`
+gains one line:
+
+```pascal
+function IRAddrMayCall(n, depth: Integer): Boolean; forward;   { compiler/cir.inc }
+```
+
+Zero guard edits and zero behaviour change still hold. **Expect this shape in
+every later slice** — the shared dispatchers and the C bodies call each other in
+both directions, so each extraction is likely to leave a forward behind. That is
+a real cost and the general-question decision should be made with it in view.
+
+### 4. The method finding, which outlasts this ticket
+
+**Not one of the seven contains the string `CProgramMode`.** The search that
+defined the job could not see 223 lines of its own subject, while over-counting
+by 18 in the other direction. Two of the seven carry a `C` prefix in their names
+and the grep still missed them: **a name is not an index.**
+
+The rule that found them, and the one to use for later slices: **follow CALLERS,
+not the guard.** The guard says where the decision is made; it never says where
+the work lives.
