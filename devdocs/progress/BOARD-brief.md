@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:23 blocked:8 backlog:312 backlog_new:14 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2648 rejected:51`
+`working:4 unfinished:23 blocked:8 backlog:313 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2649 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
@@ -68,7 +68,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [P]` bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
 - `[p 65] [P]` bug-p-a-qualified-type-name-cannot-be-a-generic-argument (unblocks 1)
-- `[p 65] [A]` bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 65] [P]` bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
 - `[p 65] [P]` bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets
@@ -83,5 +82,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
 - `[p 62] [A]` feature-unicodestring-model
+- `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 
 _302 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

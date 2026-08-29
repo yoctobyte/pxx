@@ -7959,6 +7959,49 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_unitpath_posix26 "$$($(TESTTMP)/test_unitpath_posix26)" "posix"
 	./$(COMPILER) -Futest/unitpath/esp test/test_unitpath.pas $(TESTTMP)/test_unitpath_esp26
 	tools/expect_same.sh test_unitpath_esp26 "$$($(TESTTMP)/test_unitpath_esp26)" "esp"
+	# A `uses` binds a Pascal UNIT, whatever a C include root contains. `-I<dir>`
+	# adds a root for BOTH `#include` and `uses`, and the search took a `.h`
+	# from a root before ever reaching the RTL dir -- so `-Ilib/crtl/include`
+	# put math.h / netdb.h / strings.h in front of lib/rtl/math.pas and friends
+	# (png.h too, via the /usr/include/libpng16 that every gtk+-3.0 pkg-config
+	# emits). RUN, not just compiled: on the arm where the header DOES declare
+	# the symbol the build succeeds and the `uses` becomes a dynamic import, so
+	# the binary carries a DT_NEEDED on a lib<unit>.so that does not exist and
+	# dies at load. A compile-only row passes that arm.
+	#
+	# FLAG ORDER is why this needs four rows rather than two. PasUnitDirs is
+	# searched in flag order, so `-Fulib/rtl` BEFORE the include roots already
+	# masked the bug -- which is exactly how a survey of the same collision
+	# through gtk's include path came back negative. Rows 3 and 4 pin that the
+	# order no longer decides it.
+	#
+	# Values are FPC 3.2.2's for the same program.
+	# bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import
+	./$(COMPILER) test/test_uses_beats_a_c_header_on_the_include_path.pas $(TESTTMP)/test_uses_vs_cinc26
+	tools/expect_same.sh test_uses_vs_cinc26 "$$($(TESTTMP)/test_uses_vs_cinc26)" "$$(printf '3\n4\n1024\nnetdb bound')"
+	./$(COMPILER) -Ilib/crtl/include test/test_uses_beats_a_c_header_on_the_include_path.pas $(TESTTMP)/test_uses_vs_cinc_I26
+	tools/expect_same.sh test_uses_vs_cinc_I26 "$$($(TESTTMP)/test_uses_vs_cinc_I26)" "$$($(TESTTMP)/test_uses_vs_cinc26)"
+	./$(COMPILER) -Ilib/crtl/include -Fulib/rtl test/test_uses_beats_a_c_header_on_the_include_path.pas $(TESTTMP)/test_uses_vs_cinc_IFu26
+	tools/expect_same.sh test_uses_vs_cinc_IFu26 "$$($(TESTTMP)/test_uses_vs_cinc_IFu26)" "$$($(TESTTMP)/test_uses_vs_cinc26)"
+	./$(COMPILER) -Fulib/rtl -Ilib/crtl/include test/test_uses_beats_a_c_header_on_the_include_path.pas $(TESTTMP)/test_uses_vs_cinc_FuI26
+	tools/expect_same.sh test_uses_vs_cinc_FuI26 "$$($(TESTTMP)/test_uses_vs_cinc_FuI26)" "$$($(TESTTMP)/test_uses_vs_cinc26)"
+	# ...and the OPPOSITE polarity, which the fix above broke once before it was
+	# right: a `-Fu`/`-I` search root's C header must still SHADOW the
+	# compiler-anchored one of the same name. Deferring C behind Pascal must not
+	# also defer it behind other C.
+	#
+	# There was no witness for this. -Futest/gtk3stock exists to shadow
+	# lib/pcl/gtk3_c.h and could not see the shadow being defeated, because both
+	# headers now include the installed GTK surface and produce byte-identical
+	# output; it took a `#error` poison probe to find. test/uses_shadow/math_ext.h
+	# declares abs and omits labs, so a program calling labs answers "which file
+	# did the uses resolve to" from outside — and the FAILING row is the one
+	# carrying the information. Confirmed against a rebuild of the broken first
+	# cut, where it wrongly compiles.
+	./$(COMPILER) test/test_uses_shadow_root_beats_the_rtl_header.pas $(TESTTMP)/test_uses_shadow26
+	tools/expect_same.sh test_uses_shadow26 "$$($(TESTTMP)/test_uses_shadow26)" "5"
+	! ./$(COMPILER) -Futest/uses_shadow test/test_uses_shadow_root_beats_the_rtl_header.pas $(TESTTMP)/test_uses_shadow_shad26 > $(TESTTMP)/test_uses_shadow_shad.log 2>&1
+	grep -q "undefined variable (labs)" $(TESTTMP)/test_uses_shadow_shad.log
 	./$(COMPILER) test/test_asm.pas $(TESTTMP)/test_asm26
 	$(TESTTMP)/test_asm26; tools/expect_same.sh test_asm26-rc "$$?" "42"
 	./$(COMPILER) test/test_asm_func.pas $(TESTTMP)/test_asm_func26

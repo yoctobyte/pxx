@@ -3182,6 +3182,10 @@ var
   basePath, ext, emsg: AnsiString;
   lastSlash, lastDot: Integer;
   isCompiled, isCUnit, isCHeader, isPath, savedCaseMode, softMissOK: Boolean;
+  { A C candidate found in a -I/-Fu search root, HELD BACK until the Pascal
+    chain has had its turn. See the deferral note at the search-root loop. }
+  deferredCPath, deferredCContent: AnsiString;
+  deferredCIsHeader: Boolean;
   guardIdx: Integer;   { CompiledUnitKey — see the note at its assignment }
   gPath: AnsiString;   { …the normalised path a path-form reference keys on }
   realIdx: Integer;    { alias-resolved unit for the already-compiled edge }
@@ -3401,6 +3405,9 @@ begin
 
   isCUnit := False;
   isCHeader := False;
+  deferredCPath := '';
+  deferredCContent := '';
+  deferredCIsHeader := False;
   savedCurrentCLibrary := CurrentCLibrary;
   CurrentCLibrary := '';
   UnitContent := '';
@@ -3649,7 +3656,34 @@ begin
     after the including file's own directory and before the compiler-anchored
     builtin/RTL/LCL dirs, so a project or per-platform dir (e.g.
     lib/rtl/platform/posix/) can supply or override a unit by name — the PAL
-    backend-selection mechanism. Dirs carry a trailing '/' (AddPasUnitDir). }
+    backend-selection mechanism. Dirs carry a trailing '/' (AddPasUnitDir).
+
+    A C CANDIDATE FOUND HERE IS HELD BACK, not taken. `-I<dir>` adds a root for
+    BOTH `#include` and `uses` (compiler.pas, feature-dynamic-include-paths-
+    config), so `-Ilib/crtl/include` put twenty-seven C headers on the Pascal
+    unit path — three of which, math.h / netdb.h / strings.h, share a basename
+    with an RTL unit. Taking the header here meant it beat lib/rtl/math.pas,
+    which is searched further down, and the damage went two ways:
+
+      * the loud one, when the header lacks the symbol: `uses strings` +
+        `-Ilib/crtl/include` gives `undefined variable (StrPas)`, pointing at
+        the use rather than at the flag;
+      * the SILENT one, when the header HAS it: the reference binds, `ok:`
+        prints, and the `uses` becomes a dynamic import — the binary carries a
+        DT_NEEDED on `libstrings.so` and dies at load. Nothing in the build
+        says so.
+
+    So the rule is namespace ordering, not a special case for these three
+    names: a Pascal unit ANYWHERE on the chain outranks a C header found in a
+    search root. The header is still reachable — it is adopted below if the
+    whole Pascal chain misses — which is what keeps a real FFI `uses <header>`
+    working when no `.pas` of that name exists.
+
+    NOT extended to the SourceFileDir probes above: a `.c`/`.h` sitting next to
+    the program you are compiling is an explicit local choice, and the reported
+    defect is about a root reached through a flag. Different question, left
+    alone deliberately.
+    bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import }
   i := 0;
   while (Length(UnitContent) = 0) and (i < PasUnitDirCount) do
   begin
@@ -3660,17 +3694,25 @@ begin
       ConcatThree(PasUnitDirs[i], lo, '.pp', path);
       LoadFileCI(path, UnitContent);
     end;
-    if Length(UnitContent) = 0 then
+    if (Length(UnitContent) = 0) and (Length(deferredCContent) = 0) then
     begin
       ConcatThree(PasUnitDirs[i], cName, '.c', path);
-      LoadFile(path, UnitContent);
-      if Length(UnitContent) > 0 then isCUnit := True;
+      LoadFile(path, deferredCContent);
+      if Length(deferredCContent) > 0 then
+      begin
+        deferredCPath := path;
+        deferredCIsHeader := False;
+      end;
     end;
-    if Length(UnitContent) = 0 then
+    if (Length(UnitContent) = 0) and (Length(deferredCContent) = 0) then
     begin
       ConcatThree(PasUnitDirs[i], cName, '.h', path);
-      LoadFile(path, UnitContent);
-      if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
+      LoadFile(path, deferredCContent);
+      if Length(deferredCContent) > 0 then
+      begin
+        deferredCPath := path;
+        deferredCIsHeader := True;
+      end;
     end;
     Inc(i);
   end;
@@ -3728,7 +3770,14 @@ begin
       ConcatThree(rtldir, lo, '.pp', path);
       LoadFileCI(path, UnitContent);
     end;
-    if Length(UnitContent) = 0 then
+    { A C candidate already held back from a search root OUTRANKS this one:
+      the deferral reorders C behind Pascal, never behind other C. Without
+      this guard `-Futest/gtk3stock`'s gtk3_c.h lost to lib/pcl/gtk3_c.h and
+      the shadow was silently defeated — and the test that shadow exists for
+      could not see it, because both headers now include the installed GTK
+      surface and produce byte-identical output. Found with a `#error` poison
+      probe, not by reading. }
+    if (Length(UnitContent) = 0) and (Length(deferredCContent) = 0) then
     begin
       ConcatThree(rtldir, cName, '.h', path);
       LoadFile(path, UnitContent);
@@ -3749,13 +3798,15 @@ begin
       ConcatThree(lcldir, lo, '.pp', path);
       LoadFileCI(path, UnitContent);
     end;
-    if Length(UnitContent) = 0 then
+    { A held-back search-root C candidate outranks these too — see the note at
+      the RTL .h probe above. }
+    if (Length(UnitContent) = 0) and (Length(deferredCContent) = 0) then
     begin
       ConcatThree(lcldir, cName, '.c', path);
       LoadFile(path, UnitContent);
       if Length(UnitContent) > 0 then isCUnit := True;
     end;
-    if Length(UnitContent) = 0 then
+    if (Length(UnitContent) = 0) and (Length(deferredCContent) = 0) then
     begin
       ConcatThree(lcldir, cName, '.h', path);
       LoadFile(path, UnitContent);
@@ -3793,18 +3844,38 @@ begin
     if Length(UnitContent) = 0 then begin ConcatThree('lib/rtl/', lo, '.pp', path); LoadFileCI(path, UnitContent); end;
     if Length(UnitContent) = 0 then begin ConcatThree('lib/pcl/', lo, '.pp', path); LoadFileCI(path, UnitContent); end;
     if Length(UnitContent) = 0 then begin ConcatThree('lib/asmcore/', lo, '.pp', path); LoadFileCI(path, UnitContent); end;
-    if Length(UnitContent) = 0 then
+    if (Length(UnitContent) = 0) and (Length(deferredCContent) = 0) then
     begin
       ConcatThree('lib/rtl/', cName, '.h', path); LoadFile(path, UnitContent);
       if Length(UnitContent) = 0 then begin ConcatThree('lib/pcl/', cName, '.h', path); LoadFile(path, UnitContent); end;
       if Length(UnitContent) = 0 then begin ConcatThree('compiler/', cName, '.h', path); LoadFile(path, UnitContent); end;
       if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
     end;
-    if Length(UnitContent) = 0 then
+    if (Length(UnitContent) = 0) and (Length(deferredCContent) = 0) then
     begin
       ConcatThree('compiler/', cName, '.c', path); LoadFile(path, UnitContent);
       if Length(UnitContent) > 0 then isCUnit := True;
     end;
+  end;
+
+  { The held-back C candidate from a `-I`/`-Fu` search root, adopted now that
+    every Pascal probe has missed. This is the second half of the deferral
+    above and the reason it is an ORDERING change rather than a removal: a real
+    FFI `uses <header>` still resolves exactly as before whenever no `.pas` of
+    that name exists anywhere on the chain, which is every case in the tree
+    except math / netdb / strings.
+
+    Placed after the CWD-relative fallback so no other C probe can be reordered
+    by this. That was checked rather than assumed: the only `.h`/`.c` files the
+    later blocks can reach are lib/pcl/gl_c.h, lib/pcl/gtk3_c.h and
+    lib/rtl/math_ext.h, and none of them shares a basename with anything a
+    search root is likely to carry. }
+  if (Length(UnitContent) = 0) and (Length(deferredCContent) > 0) then
+  begin
+    UnitContent := deferredCContent;
+    path := deferredCPath;
+    isCUnit := True;
+    isCHeader := deferredCIsHeader;
   end;
 
   { AN IMPORT THAT PINNED ANOTHER LANGUAGE does not get a Pascal source. Tested
