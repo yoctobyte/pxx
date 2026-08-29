@@ -3340,3 +3340,75 @@ Third occasion in this campaign that a control looked adequate and was not,
 which is why b4 moved it to the head of the ticket as a standing rule rather
 than leaving it inside a slice write-up. **A lesson recorded where it was
 learned is a lesson filed under the wrong subject.**
+
+### 80. The predictor is whether the sentence and its TRUTH-MAKER can be changed independently — not distance, not authorship
+
+frankD, 2026-08-29, after five passes and nine instances. **This supersedes
+both earlier readings** (distance, then face 71's self-vs-sibling) and explains
+why each looked right.
+
+Pass 5 ran the `must never` single-site family specifically to give face 71 a
+chance to **fail**. It did not — eight of nine hold — and the reason they hold
+is the finding: a single-site `must never` is **not a claim about elsewhere**.
+It is an *instruction with its enforcement two or three lines below it*. The
+sentence and the thing that makes it true **cannot drift apart, because they are
+the same edit.**
+
+Everything that failed tonight could be changed independently of its sentence:
+
+| the sentence | its truth-maker |
+| --- | --- |
+| "the four cross backends" | the backend list |
+| "x86-64 only" | a four-target gate |
+| "the one place they can" | three call sites |
+| a documented frame layout | six prologues |
+| "the gate that stands today" | a debug print |
+
+Everything that held could not.
+
+**Why the earlier readings looked right:** proximity usually *implies*
+co-editing, so distance correlated with the real cause without being it. And
+instance 8 is the exception that proves it — eleven lines apart, but describing
+**a loop's behaviour**, which the loop's edits can change without touching the
+words.
+
+Operational form stays the short one, because the predictor is truer and the
+rule is quotable: **a comment containing a count, a target list, or
+"only"/"every"/"always" asserts something a command can check — write the
+command in the comment, or write a sentence carrying no number.**
+
+### 81. When ACCEPTING a correction, ask which half you are accepting
+
+frankD's reciprocal to face 75, and it closes the loop from the other side.
+
+75 says: *when correcting someone's method, state explicitly whether the
+conclusion also falls.* frankD's addition: **the receiver has a duty too.** It
+took a method correction as settling the substance, *"and that is how I ended up
+replacing a wrong explanation with another one."*
+
+A correction arrives as one message and is accepted as one act, but it almost
+always carries two separable claims — *your reasoning was unsound* and *your
+answer was wrong*. The first does not imply the second. Both parties defaulted
+to bundling them, in the same exchange, in opposite directions.
+
+### 82. A PROVENANCE line goes stale faster than any comment in the tree
+
+frankD, same day, after being wrong about provenance **twice in one evening, in
+opposite directions** — first citing a stale binary, then citing a working-tree
+build that had since landed on master (`dc62fe3cd`).
+
+Ordinary comment rot runs in days to weeks — the `--threadsafe` scope survived
+54 days, the csmith backend count 7. **A provenance line can be false within
+minutes**, because the thing it describes is moving *while it is being written*.
+
+So it is the audit's own shape applied to the audit's own metadata, and the
+remedy is not "be careful": it is to **leave superseded provenance visible
+rather than editing it in place**. frankD kept both wrong citations in the
+ticket, because *"it has now been wrong about provenance twice in opposite
+directions and the pattern is more instructive than either correction."*
+
+Corollary for anything with a `Verified at:` line: **re-check it at read time,
+not at write time.** The correct citation for that finding is now master at
+`dc62fe3cd` or later — verified by confirming the sha is an ancestor of
+origin/master and reading the `CPU_XTENSA` arm at `builtinheap.pas:794`, rather
+than by trusting the report that said so.
