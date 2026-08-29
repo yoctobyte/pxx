@@ -1607,12 +1607,15 @@ begin
 {$elseif defined(CPU_RISCV32)}
   Result := __pxxrawsyscall(63, fd, buf, count);   { hosted linux (qemu-user) }
 {$elseif defined(CPU_XTENSA)}
-  { Was the PRE-CHAIN DEFAULT, inherited by every unnamed target rather than
-    chosen for this one; kept byte-for-byte so this restructure changes no
-    target's behaviour, but 0 means "read 0 bytes, no error" — EOF — and if
-    xtensa ever reaches here that is a silent lie, not a dead stub. Deciding
-    that is Track S's call, not this ticket's. }
-  Result := 0;   { xtensa (bare-only): no read syscall — dead stub there }
+  { Track S's call, made 2026-08-29: 12 is __NR_read in XTENSA'S OWN table,
+    measured under qemu-xtensa — not the generic numbering riscv32 uses two
+    arms up, where read is 63. The previous `Result := 0` was the pre-chain
+    default inherited by every unnamed target, and as that comment warned, 0
+    here reads as EOF: a hosted xtensa program saw every file as empty and no
+    error was raised. Bare/IDF xtensa never reaches this — the ESP PAL owns
+    file I/O there.
+    feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle }
+  Result := __pxxrawsyscall(12, fd, buf, count);
 {$else}
   { No arm. -1 is the POSIX failure value; a fall-through 0 would report EOF. }
   Result := -1;
@@ -1655,9 +1658,12 @@ begin
 {$elseif defined(CPU_RISCV32)}
   Result := __pxxrawsyscall(64, fd, buf, count);   { hosted linux (qemu-user) }
 {$elseif defined(CPU_XTENSA)}
-  { As in PXXSysRead: this was the pre-chain default, not a choice made for
-    xtensa. Preserved exactly. 0 means "wrote nothing, successfully". }
-  Result := 0;
+  { As in PXXSysRead, and the same call: 13 is __NR_write in xtensa's own
+    table (measured), NOT the 64 riscv32 uses two arms up. The previous
+    `Result := 0` meant "wrote nothing, successfully", which is why a hosted
+    WriteLn emitted its string through the inline syscall in codegen and then
+    silently dropped the newline PXXWriteNL sends through here. }
+  Result := __pxxrawsyscall(13, fd, buf, count);
 {$else}
   { No arm. See PXXSysOpenRO. }
   Result := -1;

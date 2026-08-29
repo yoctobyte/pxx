@@ -583,3 +583,106 @@ frankS verified it without threads, which the thread route could not have done
 for 119. b4's reasoning about *why* the distinction was load-bearing is what sent
 frankS looking for a second route rather than shipping the caveat — the reasoning
 did the work even though its test did not run.
+
+---
+
+## WALL 3 LANDED; WALL 4 MEASURED, AND IT STOPS ON ONE LINE IN `defs.inc` — frankS, 2026-08-29
+
+### Wall 3 — landed and verified against the oracle
+
+`compiler/builtin/builtinheap.pas`, the two xtensa arms only. `PXXSysRead` and
+`PXXSysWrite` returned `Result := 0` — the pre-chain default, not a decision —
+and 0 is the worst possible lie in both directions: for read it is **EOF**, so a
+hosted xtensa program saw every file as empty and raised nothing; for write it is
+**"wrote nothing, successfully"**, which is why `WriteLn` emitted its string
+through the codegen's inline syscall and then dropped the newline without a trace.
+Now `__pxxrawsyscall(12, ...)` and `__pxxrawsyscall(13, ...)` — xtensa's own
+numbering, measured, not the 63/64 the riscv32 arm two above uses.
+
+Verified at `c74b6172fe37`, hosted, both ABIs:
+
+```
+hosted xtensa : 00000010: 6420 7874 656e 7361 0a     d xtensa.
+x86-64 oracle : 00000010: 6420 7874 656e 7361 0a     d xtensa.
+write syscalls: riscv32 = 2, xtensa = 2   (was 1)
+```
+
+Byte-identical to the oracle, and xtensa now makes the same two `write` calls
+riscv32 does. `gate.sh quick` GREEN.
+
+**One behaviour change on BARE xtensa, deliberate and worth knowing.** The arm is
+shared: bare/IDF xtensa also compiles it, and there `IR_SYSCALL` lowers to
+`PAL_ERR_UNSUPPORTED` (-38). So bare `PXXSysWrite` now returns **-38 instead of 0**
+— an error where there used to be a silent success. That is the direction this
+repo wants (ESP is not a Unix; a refused PAL entry should say so), and it is the
+same call `bug-a-xtensa-refuses-to-lower-an-unreachable-syscall` made. Bare builds
+re-checked: `test_esp_hello`, `_print`, `_string`, `_softdiv`, `_bare_asm` all
+build, riscv32 bare unchanged.
+
+### Wall 4 — the divide question, measured before choosing the flag's semantics
+
+The open question was whether the new `--xtensa-cpu=` value should *also* imply
+`XtensaSoftDivide`, i.e. whether qemu's cores lack the divide option the way they
+lack multiply-high. **Measured, and the answer is a clean no — the two options are
+independent.** `47 div 5` / `47 mod 5` on a runtime pair, then an `Int64` multiply,
+across every core `qemu-xtensa` 10.2.1 exposes:
+
+| core | `quos`/`rems` | `muluh` |
+| --- | --- | --- |
+| dc232b, dc233c, de212, de233_fpu, dsp3400, lx106, sample_controller, test_mmuhifi_c3 | **all 8 print `92`** | **all 8 SIGILL** |
+
+(Correcting the count in the section above: it is eight cores, not five — five was
+the earlier probe's subset. The verdict is unchanged and stronger.)
+
+So the value gates **multiply-high only**. Had it been wired to `XtensaSoftDivide`
+as a bundle, the flag would have asserted something about div that is false on
+every core it names, and the soft div/mod path would have been exercised by the
+oracle while hardware `quos` shipped — a divergence introduced by the very flag
+meant to label one.
+
+### The flag labels the divergence. It does not remove it.
+
+Recorded here because this is where a reader will hit it, per the coordinator's
+requirement:
+
+Under `--xtensa-cpu=<the new value>` the oracle is **not bit-identical to hardware
+for multiplies**. It is the same cost option 1 would have carried; the flag makes
+it explicit and opt-in rather than absent. And the scope is not academic —
+**the two tickets that motivated this oracle are precisely the ones it still cannot
+answer.** [[bug-a-the-div-by-zero-check-is-still-missing-on-xtensa]] and
+[[bug-a-xtensa-cannot-lower-an-int64-to-float-conversion]] are *arithmetic*, and
+arithmetic is the hole. What the oracle does cover — control flow, strings, calls,
+ARC, syscalls, `Write`/`WriteLn`, both ABIs — is real, and is most of what makes an
+xtensa verdict stop being object-level.
+
+**Any verdict produced under this flag must name the flag.** A green from an
+instrument running a different multiply than the hardware is the host-green failure
+in its purest form: silent, plausible, and it waits.
+
+### WHERE IT STOPS: the flag has no legal home inside frankS's grant
+
+Wall 4's codegen is trivial — one branch at `ir_codegen_xtensa.inc:~712`, mirroring
+`XtensaSoftDivide`'s at `:1717`. The flag it branches on is the problem.
+
+**Every xtensa target flag is a global in `defs.inc`** — `XtensaABI` (3371),
+`XtensaSoftDivide` (3376), `XtensaHasFpu` (3384), `XtensaFastDoubles` (3390),
+`XtSpillDepth` (3394) — and `defs.inc` is a **named stop-line** in frankS's grant.
+There is no second home that is not a worse answer:
+
+- declaring it in `ir_codegen_xtensa.inc` puts one member of a five-flag cluster
+  somewhere else, which is the drift `TargetIsEspClass`'s own header is a monument
+  to — sameness documented in prose and not in code;
+- deriving it from `TargetArch = XTENSA and TargetPlatform = POSIX` needs no flag
+  at all, and is **wrong twice**: it asserts "hosted implies no multiply-high",
+  which is a fact about qemu and not about hosting, and it leaves no flag for a
+  verdict to name — defeating the one requirement above.
+
+So the ask is one additive `Boolean` at the end of that cluster. Additive is the
+operative word: no renumbering, no token or node constant, nothing another lane
+can collide with semantically. Checked at the time of writing — `defs.inc` and
+`compiler.pas` are clean in all twelve clones — but a clean tree is not a grant,
+and a stop-line is not mine to move.
+
+**The complete patch is written and gated on that one line**; see the commit that
+follows this note for wall 3, and `feature-a-hosted-xtensa-*` remains
+`unfinished/` until wall 4 lands.
