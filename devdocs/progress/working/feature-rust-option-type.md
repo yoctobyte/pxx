@@ -81,14 +81,45 @@ when there is none, against the payload expression's own type.
 - A non-variable scrutinee must be a call or a plain variable: `RExprRecId`
   answers for `AN_CALL` and `AN_IDENT`, so `match self.some_field` (a
   record-typed FIELD) is not resolvable yet and says so.
+- Compound assignment on a field/index target names the target subtree on
+  both sides, so a side-effecting subscript (`a[f()] += 1`) evaluates that
+  subscript twice. A narrowing, not a wrong answer.
 - **pxx brace comments NEST.** A `{` written inside a `{ ... }` comment
   opens a second one, and the comment then runs to the *next* `}` —
   which in this file was a `'}'` string 150 lines later, reported as
   `unexpected character` on an innocent blank line. Cost a build cycle;
   worth knowing before writing a comment that quotes Rust syntax.
 
+## Rungs found by testing, past the Option stage
+
+Both were discovered by writing engine-shaped code against the new
+signatures, not from the ladder's list — and both are ahead of it now:
+
+4. **DONE** — fixed-array STRUCT FIELDS (`squares: [i64; 64]`). chess.rs's
+   Board is a mailbox array and the frontend refused the syntax outright.
+   Frontend wiring: `UFldIsArray`/`UFldArrLen` already model an array field
+   (Pascal's `array[0..N-1] of T` and C's `int a[N];` land on it), access is
+   AN_INDEX over AN_FIELD, and `field[i].member` for a record element comes
+   free from `ResolveNodeRec`'s existing arm. `test/test_rust_struct_array_field.rs`.
+5. **DONE** — `&`/`&mut` parameters actually ALIAS. This was the serious one:
+   the frontend DROPPED the `&` on a parameter, so the one bit that decides
+   aliasing never reached `ProcParamExplicitByRef`, `ir.inc` read the by-ref
+   flag as the silent >8-byte ABI promotion, and every record argument was a
+   private temp copy. `self.side = v` in a method wrote into that copy and the
+   caller saw nothing — **silently, no diagnostic**. `&mut self` was not even
+   accepted by the parser. Measured, not reasoned: `PXXDBG=a.ir:main` showed
+   the `IR_COPY_REC` into a temp at the call site.
+   Fixed by recording `&` and setting `ProcParamExplicitByRef`, keeping the
+   by-value copy for a plain `p: T` / `self` — the half a blanket
+   "always alias" fix would have broken, and the half the test pins.
+   Compound assignment on a field/index target (`self.n += 1`) rode along; it
+   is how real code spells this mutation. `test/test_rust_refs.rs`.
+
 ## Log
 - 2026-08-29 — unit 1 landed (see the ladder ticket's log for the detail).
 - 2026-08-29 — unit 2 landed: Option (and records generally) through fn
   signatures and returns.
 - 2026-08-29 — unit 3 landed: expression scrutinees, `if let`, `unwrap_or`.
+- 2026-08-29 — rung 4 landed: fixed-array struct fields.
+- 2026-08-29 — rung 5 landed: `&`/`&mut` params alias; `&mut self` parses;
+  compound assignment on a field/index target.

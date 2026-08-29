@@ -333,6 +333,11 @@ begin
   Result := (recId >= REC_UCLASS_BASE) and ROptionCi[recId - REC_UCLASS_BASE];
 end;
 
+function RIsSliceRec(recId: Integer): Boolean;
+begin
+  Result := (recId >= REC_UCLASS_BASE) and RSliceCi[recId - REC_UCLASS_BASE];
+end;
+
 { Is `recId`'s field `name` a fixed array (`squares: [i64; 64]`)? }
 function RFieldIsArray(recId: Integer; const name: AnsiString): Boolean;
 var fi: Integer;
@@ -2326,14 +2331,46 @@ begin
     indexed-field stores parse as an expression followed by `=` (AN_INDEX,
     slice AN_DEREF, and AN_FIELD over an indexed record are all valid assign
     targets). }
-  if (CurTok.Kind = tkAssign) and
+  if ((CurTok.Kind = tkAssign) or (CurTok.Kind in
+        [tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq,
+         tkAmpEq, tkPipeEq, tkXorEq, tkShlEq, tkShrEq])) and
      ((ASTKind[Result] = AN_INDEX) or (ASTKind[Result] = AN_DEREF) or
       (ASTKind[Result] = AN_FIELD)) then
   begin
+    opTk := CurTok.Kind;
     Next;
+    rhsNode := RParseExpr;
+    { Compound forms on a FIELD / INDEX / slice target desugar the way the
+      plain-identifier ones above do -- `self.n += 1` is `self.n = self.n + 1`
+      -- by naming the target subtree on both sides of the store. Documented
+      consequence: a target with a side-effecting subscript (`a[f()] += 1`)
+      evaluates that subscript twice. Rust source that does this is rare
+      enough not to pay for a temp-materializing lvalue path yet; it is a
+      narrowing, not a silent wrong answer, and it is stated here. }
+    if opTk <> tkAssign then
+    begin
+      case opTk of
+        tkPlusEq:  rhsNode := RBinOp(tkPlus,  Result, rhsNode, IntToTypeKind(ASTTk[Result]));
+        tkMinusEq: rhsNode := RBinOp(tkMinus, Result, rhsNode, IntToTypeKind(ASTTk[Result]));
+        tkStarEq:  rhsNode := RBinOp(tkStar,  Result, rhsNode, IntToTypeKind(ASTTk[Result]));
+        tkSlashEq: rhsNode := RBinOp(tkDiv,   Result, rhsNode, IntToTypeKind(ASTTk[Result]));
+        tkAmpEq:   rhsNode := RBinOp(tkAnd,   Result, rhsNode, IntToTypeKind(ASTTk[Result]));
+        tkPipeEq:  rhsNode := RBinOp(tkOr,    Result, rhsNode, IntToTypeKind(ASTTk[Result]));
+        tkXorEq:   rhsNode := RBinOp(tkXor,   Result, rhsNode, IntToTypeKind(ASTTk[Result]));
+        tkShlEq:   rhsNode := RBinOp(tkShl,   Result, rhsNode, IntToTypeKind(ASTTk[Result]));
+        tkShrEq:
+          { unsigned `>>=` is a LOGICAL shift; the plain-identifier path above
+            spells that tkIdent, so spell it the same way here. }
+          if TypeSigned(IntToTypeKind(ASTTk[Result])) then
+            rhsNode := RBinOp(tkShr, Result, rhsNode, IntToTypeKind(ASTTk[Result]))
+          else
+            rhsNode := RBinOp(tkIdent, Result, rhsNode, IntToTypeKind(ASTTk[Result]));
+        else ;
+      end;
+    end;
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := Result;
-    ASTRight[node] := RParseExpr;
+    ASTRight[node] := rhsNode;
     Result := node;
   end;
   RExpectStmtEnd;
@@ -2558,6 +2595,7 @@ end;
 function RRegisterFnSignatureAt(i: Integer): Integer;
 var j, depth, nparams, procIdx, k, retRecId: Integer; name: AnsiString;
     pnames: array[0..7] of AnsiString; ptypes: array[0..7] of TTypeKind;
+    pbyref: array[0..7] of Boolean; prec: array[0..7] of Integer;
     retType, sElemTk: TTypeKind;
 begin
   name := GetTokenStr(i + 1);
@@ -2582,11 +2620,17 @@ begin
     pnames[nparams] := GetTokenStr(j); Inc(j);
     if Tokens[j].Kind <> tkColon then Error('Rust: expected : in parameter list');
     Inc(j);
-    { `&`/`&mut` prefixes are dropped (records/slices pass by address via
-      the record ABI anyway); `&[T]` / `&mut [T]` is the borrowed-slice
-      view type (the auto-registered __ptr+__len UClass). }
+    { `&` / `&mut` on a param is RECORDED, not dropped. It is the one bit
+      that decides ALIASING: ir.inc gives a record param that is by-ref only
+      for ABI efficiency a private temp copy (ProcParamExplicitByRef False),
+      which is right for a by-value `p: Board` and wrong for a reference.
+      `&[T]` / `&mut [T]` is the borrowed-slice view type (the auto-registered
+      __ptr+__len UClass) and keeps its existing handling -- a copy of a slice
+      HEADER still points at the same elements, so it never depended on this. }
+    pbyref[nparams] := False;
     if Tokens[j].Kind = tkAmp then
     begin
+      pbyref[nparams] := True;
       Inc(j);
       if Tokens[j].Kind = tkMut then Inc(j);
     end;
@@ -2597,7 +2641,7 @@ begin
       { sequence the side-effecting RTypeKindFromName (sets LastTypeRecId)
         before reading LastTypeRecId — do NOT rely on arg eval order. }
       sElemTk := RTypeKindFromName(RTypeNameAt(j), True);
-      RSliceClassForRec(sElemTk, LastTypeRecId);
+      prec[nparams] := REC_UCLASS_BASE + RSliceClassForRec(sElemTk, LastTypeRecId);
       ptypes[nparams] := tyRecord;
       if Tokens[j].Kind <> tkRBrack then Error('Rust: expected ] in &[T] parameter');
       Inc(j);
@@ -2611,6 +2655,7 @@ begin
         record-returning function (Pascal `function F: TRec` does), the Rust
         frontend simply never registered ProcRetRecId for one. }
       ptypes[nparams] := RTypeKindFromName(RTypeNameAt(j), True);
+      prec[nparams] := LastTypeRecId;
     end;
     Inc(nparams);
     if Tokens[j].Kind = tkComma then Inc(j);
@@ -2628,7 +2673,15 @@ begin
   procIdx := RegisterProc(name, True, retType, nparams, pnames, ptypes);
   if retType = tyRecord then ProcRetRecId[procIdx] := retRecId;
   for k := 0 to nparams - 1 do
-    if ptypes[k] = tyRecord then Procs[procIdx].Params[k].IsRef := True;
+    if ptypes[k] = tyRecord then
+    begin
+      Procs[procIdx].Params[k].IsRef := True;
+      { `p: &T` / `p: &mut T` genuinely aliases; a plain `p: T` is a move and
+        the callee's private copy is observationally correct. A slice view is
+        left alone (see the note at the parse site). }
+      if pbyref[k] and not RIsSliceRec(prec[k]) then
+        ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + k] := True;
+    end;
   Result := j;
 end;
 
@@ -2681,7 +2734,8 @@ procedure RRegisterImpls;
 var i, j, k, ci, nparams, procIdx, selfBase, retRecId: Integer;
     typeName, traitName, methodName, fullName: AnsiString;
     pnamesFull: array[0..7] of AnsiString; ptypesFull: array[0..7] of TTypeKind;
-    retType: TTypeKind; hasTrait: Boolean;
+    pbyrefFull: array[0..7] of Boolean;
+    retType: TTypeKind; hasTrait, selfByRef: Boolean;
 begin
   i := 0;
   while i < MainProgramTokCount - 2 do
@@ -2723,11 +2777,17 @@ begin
         Inc(j);
         { methods take self (by address); ASSOCIATED fns (no self) register
           too — called as Type::name(args), plain procs with mangled names }
-        selfBase := 0;
-        if (Tokens[j].Kind = tkAmp) or
+        selfBase := 0; selfByRef := False;
+        if (Tokens[j].Kind = tkAmp) or (Tokens[j].Kind = tkMut) or
            ((Tokens[j].Kind = tkIdent) and (GetTokenStr(j) = 'self')) then
         begin
-          if Tokens[j].Kind = tkAmp then Inc(j);
+          if Tokens[j].Kind = tkAmp then
+          begin
+            selfByRef := True;
+            Inc(j);
+            if Tokens[j].Kind = tkMut then Inc(j);   { `&mut self` }
+          end
+          else if Tokens[j].Kind = tkMut then Inc(j); { by-value `mut self` }
           if (Tokens[j].Kind <> tkIdent) or (GetTokenStr(j) <> 'self') then
             Error('Rust: expected self after & in ' + methodName);
           Inc(j);
@@ -2744,6 +2804,15 @@ begin
           pnamesFull[nparams + selfBase] := GetTokenStr(j); Inc(j);
           if Tokens[j].Kind <> tkColon then Error('Rust: expected : in parameter list');
           Inc(j);
+          { `&`/`&mut` on a method param, recorded for the same aliasing reason
+            as on a free fn's -- the impl prescan did not accept it at all. }
+          pbyrefFull[nparams + selfBase] := False;
+          if Tokens[j].Kind = tkAmp then
+          begin
+            pbyrefFull[nparams + selfBase] := True;
+            Inc(j);
+            if Tokens[j].Kind = tkMut then Inc(j);
+          end;
           if Tokens[j].Kind <> tkIdent then Error('Rust: expected parameter type');
           ptypesFull[nparams + selfBase] := RTypeKindFromName(RTypeNameAt(j), True);
           Inc(nparams);
@@ -2773,7 +2842,20 @@ begin
           callee's AllocParam(isRef=True) dereferences it as a pointer,
           reading garbage / segfaulting (found via testing, not by inspection). }
         if selfBase = 1 then
+        begin
           Procs[procIdx].Params[0].IsRef := True;
+          { `&self` / `&mut self` are REFERENCES and must alias the caller's
+            record. Without ProcParamExplicitByRef, ir.inc reads the by-ref
+            flag as the silent >8-byte ABI promotion and hands the method a
+            private copy -- so `self.field = v` wrote into a temp and the
+            caller saw nothing (measured as an IR_COPY_REC at the call site).
+            A by-value `self` keeps the copy, which is what a move means. }
+          if selfByRef then
+            ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS] := True;
+        end;
+        for k := 0 to nparams + selfBase - 1 do
+          if (k >= selfBase) and (ptypesFull[k] = tyRecord) and pbyrefFull[k] then
+            ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + k] := True;
         if Tokens[j].Kind <> tkBegin then Error('Rust: expected { for method body of ' + fullName);
         Inc(j);
         nparams := 1; { reuse as brace depth counter from here }
@@ -2991,9 +3073,15 @@ begin
     if procIdx < 0 then Error('Rust: internal error — signature prescan missed ' + fullName);
     Expect(tkLParen, '(');
     selfBase := 0;
-    if (CurTok.Kind = tkAmp) or ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'self')) then
+    if (CurTok.Kind = tkAmp) or (CurTok.Kind = tkMut) or
+       ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'self')) then
     begin
-      if CurTok.Kind = tkAmp then Next;
+      if CurTok.Kind = tkAmp then
+      begin
+        Next;
+        if CurTok.Kind = tkMut then Next;   { `&mut self` }
+      end
+      else if CurTok.Kind = tkMut then Next; { by-value `mut self` }
       if (CurTok.Kind <> tkIdent) or (CurTok.SVal <> 'self') then
         Error('Rust: expected self after & in ' + fullName);
       Next;
@@ -3008,6 +3096,11 @@ begin
       if CurTok.Kind <> tkIdent then Error('Rust: expected parameter name');
       pname := CurTok.SVal; Next;
       Expect(tkColon, ':');
+      if CurTok.Kind = tkAmp then
+      begin
+        Next;
+        if CurTok.Kind = tkMut then Next;
+      end;
       if CurTok.Kind <> tkIdent then Error('Rust: expected parameter type');
       ptypes[nparams] := RTypeKindFromName(RTypeNameCur, True);
       precids[nparams] := LastTypeRecId;
@@ -3044,6 +3137,7 @@ begin
         idx := AllocParam(pnames[i], ptypes[i], False, False);
       Procs[procIdx].Params[i + selfBase].SymIdx := idx;
     end;
+
     { a record result needs its record id on the Result slot, or the hidden
       return buffer is sized as a scalar and every field store lands wrong. }
     LastTypeRecId := ProcRetRecId[procIdx];

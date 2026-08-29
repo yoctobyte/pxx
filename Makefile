@@ -5837,6 +5837,14 @@ test-core: $(COMPILER)
 	# but wrong.
 	./$(COMPILER) test/test_rust_struct_array_field.rs $(TESTTMP)/test_rust_saf26
 	test "$$($(TESTTMP)/test_rust_saf26)" = "$$(printf 'sq 0 49 3969\nflags 200 207\nside 1\npieces 5 1 9 2\nchecksum 85344')"
+	# `&`/`&mut` parameters ALIAS the caller (feature-rust-corpus-chess): the
+	# frontend dropped the `&`, so ir.inc read the by-ref flag as the silent
+	# >8-byte ABI promotion and handed the callee a private copy -- `self.side
+	# = v` wrote into a temp and the caller saw nothing. Asserts BOTH
+	# directions: &mut/&self alias, a by-value param mutates only its own
+	# copy, which is the half a blanket "always alias" fix would break.
+	./$(COMPILER) test/test_rust_refs.rs $(TESTTMP)/test_rust_refs26
+	test "$$($(TESTTMP)/test_rust_refs26)" = "$$(printf 'bump 5 8 13\npeek 5\nmeth 18 18\nbyval 999 caller 18\nown 555 caller 18')"
 	./$(COMPILER) test/test_rust_tuple_struct.rs $(TESTTMP)/test_rust_tuple26
 	test "$$($(TESTTMP)/test_rust_tuple26)" = "$$(printf 'a 300 b 44 s 7')"
 	# Rust associated fns + Self (Type::fn / Self::fn call paths, mixed with methods)
