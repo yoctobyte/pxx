@@ -758,3 +758,44 @@ budget session time on widening it. Spend that time on
 `tools/pasmith.py` (random Object Pascal, FPC oracle) instead, which fuzzes the
 frontend that four of today's six findings came from.
 
+
+### Sitting 4 — 2026-08-29 (frankC), seeds 2000..2199, default `--opts 0,2`, x86-64
+
+```
+tools/csmith_fuzz.py --iters 200 --seed-start 2000
+```
+
+**183/200 agreed with the gcc oracle, 17 skipped by the native validity filter,
+no findings.** Compiler: a self-hosted `compiler/pascal26` at `a374f6b63`'s tree,
+fixedpoint verified (`converged after 2 round(s)`) before the run and not rebuilt
+during it — so the batch is pinned to one binary even though sitting 2's
+`--compiler` snapshot trick was not used. Findings directory empty; all five
+buckets zero.
+
+**Weaker than sittings 2-3 in one dimension, and it should be read that way:**
+this used the DEFAULT `--opts 0,2`, not their `0,1,2,3`. So `-O1` and `-O3` were
+not swept here and this sitting does not renew their evidence.
+
+The skip rate is *lower* than the established baseline rather than a new
+problem — 8.5% here against 13.2% (sitting 2) and 15.7% (sitting 3). Worth
+recording because a skip is a program that told us nothing, and the filter is
+purely gcc-side (`gcc won't build it` or its own binary hung), so no pxx-side
+coverage is being silently discarded by a pxx defect.
+
+#### The "residual crash class" bullet's named repros are gone
+
+The **What is still open** section named csmith seeds 901 and 1502 as the last
+known unreduced crashers, from 2026-07-13. Both now report `1/1 agreed with the
+gcc oracle, no findings` at HEAD, and this 200-program batch produced no crasher
+of any kind.
+
+**The bullet is left OPEN deliberately.** Two named seeds passing means those two
+representatives are fixed, not that the class is; and "no crasher in 200
+default-flag programs" is evidence against a class the ticket said *"reproduces
+in minutes"*, which is a genuine update but still not a proof of absence. What
+would close it is a deliberate attempt that fails — a wider flag set, or the
+`--opts 0,1,2,3` sweep this sitting skipped — not another dry default run.
+
+This makes **four dry sittings over 1050 fresh seeds**, which strengthens rather
+than changes sitting 3's conclusion above: keep csmith as a cheap background
+regression net, spend session time on `tools/pasmith.py` instead.

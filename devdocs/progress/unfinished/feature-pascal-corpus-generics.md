@@ -1089,3 +1089,71 @@ Still open from this sweep, and NOT blocking:
 [[bug-p-a-call-chained-onto-a-class-method-result-is-dropped]] — the class-NAME
 receiver (`TFactory.MakeC.Tag`) is still silently wrong, and its obvious cause is
 recorded as refuted.
+
+## 2026-08-29 (claude-N) — the recorded wall is GONE; the next two were one bug
+
+**Re-verified at HEAD before working, and the entry above is stale.** The wall it
+records — `@TEquals.Class: the address of a routine with no body was taken` — no
+longer occurs. `uses Generics.Defaults;` **compiles clean.** Whoever fixed it did
+not know it closed this rung's wall, which is the ordinary case and the reason to
+re-verify rather than resume from the note.
+
+The frontier is now two units further on. Current state, measured:
+
+| unit | compiles | runs |
+| --- | --- | --- |
+| `generics.strings` | yes | yes |
+| `generics.helpers` | yes | yes |
+| `generics.memoryexpanders` | yes | yes |
+| `generics.hashes` | yes | **SEGFAULT** before the first statement |
+| `generics.defaults` | yes | **SEGFAULT** (inherits it — `uses Generics.Hashes`) |
+| `generics.collections` | `unknown type: TKey` | — |
+
+### Both segfaults were one bug, and it is not generics machinery either
+
+[[bug-p-a-cast-through-an-ordinal-type-alias-does-not-truncate]] — filed, not
+fixed here. A cast written through a user-declared alias of an ordinal type does
+not narrow: with `A1 = byte` and `c = $12345678`, `byte(c)` gives 120 and
+`A1(c)` gives 305419896.
+
+`generics.hashes:976` declares **`type ToByte = byte;`** — on non-ARM it is an
+ALIAS, so `ToByte(x)` is a truncating cast rather than a call. (The
+`{$ifdef CPUARM}` arm five lines above is a real masking *function*; the unit
+uses the two forms interchangeably, which is what makes the alias load-bearing
+rather than incidental.) `InitializeCrc32ctab` then indexes
+`crc32ctab[0, ToByte(crc)]` with a full `cardinal`, so an unnarrowed index
+reaches ~4.3e9 into a `array[0..3, byte] of cardinal` and the unit's
+initialization writes off the end.
+
+Substituting **only** that alias for the unit's own ARM-path masking function
+makes `Generics.Hashes` run clean **and** `Generics.Defaults` compile and run.
+So this rung's next two walls are one frontend bug, and it is a general one —
+nothing about it is specific to generics, classes or interfaces.
+
+Third rung in a row where the frontier was not generics machinery. That is worth
+taking seriously as a signal rather than noting each time: this corpus is now
+finding ordinary Pascal defects, which is a fine result for a corpus but means
+the *rung's stated purpose* (generics × classes × interfaces) is not what it is
+currently testing.
+
+### Two traps in this unit, for whoever reduces here next
+
+- **`generics.hashes` has no `initialization` keyword.** Its init is FPC's
+  implicit form — a bare `begin ... end.` at the end of the unit. A `grep -n
+  '^initialization'` says the unit has none, which is how the crash first read
+  as "not in the unit's startup". It is.
+- **`{$define PUREPASCAL}` is set INSIDE the unit** (lines 59/72/75), so
+  `crc32ctab` really is `[0..3, byte]` and `high()` really is 3. A `SizeOf` of
+  4096 where 8192 was expected is correct here, not a defect — checked against
+  FPC before believing it.
+
+### Not re-walked
+
+`generics.collections`' `unknown type: TKey` is already re-diagnosed as
+cross-unit Delphi generics, not `TKey` (`81dffa9cb`). Left alone.
+
+### Still parked
+
+Blocked behind the alias-cast bug, which is Track P's file and was not fixed
+under this corpus dispatch (corpus work files defects into the owning lane, it
+does not fix them). Once it lands, resume at `generics.collections`.

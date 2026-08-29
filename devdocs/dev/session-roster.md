@@ -17576,3 +17576,32 @@ blind spot named: a blocking relationship phrased across two lines, or naming it
 blocker in prose rather than by slug, or expressed only as a `[[wikilink]]` with no
 blocking verb near it. The narrow signal is what made it clean, and narrow means it
 misses. The finding is "no evidence of a population", not "there is none".
+
+### GREP FOR THE INCUMBENT — the seventh time tonight, and this one was mine
+
+Three workers hit "a test exists and nothing runs it" in one evening (b4's two
+`.expected` files that had never run, frank-rust's two orphan GUI tests). I read
+that as a pattern worth a tool, measured it, and **the tool already existed**:
+`tools/check_test_wiring.py`, built and guarded by pxx-a5 earlier the same day,
+with `chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring`
+[A p40] holding the remaining work.
+
+It is also **better than the scan I wrote**. Mine reported the seven `test/fgl/*.pas`
+files as orphans; they are run through a **glob** at `Makefile:13023`, which a
+filename-substring scan cannot see. The real checker handles that and finds more
+besides (the `test_pyeval_*` and `test_softfloat_*` families). It even flags a
+category I had not thought of: *an exemption whose only reference is a `tools/`
+script NAMING the path — a mention is not proof anything runs it.*
+
+**The cost was ~15 minutes and it was avoidable by one grep.** The rule is already
+in my own tick prompt. Note the shape of why it failed: I arrived at the tool
+through **three independent worker reports**, which felt like discovery rather than
+duplication — the more evidence converges on a need, the more it feels like a new
+finding and the less likely anyone is to check whether it is already solved.
+
+**What is actually actionable, and it is a chain worth prioritising:** the wiring
+ticket is `blocked-by: bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed`.
+Clearing that one N bug wires roughly twenty orphan tests **and** lets the checker
+become a gate — after which this class stops recurring. Three of the orphans are
+`test_o3_*`, i.e. Track O's own campaign is partly untested. Dispatch that N bug
+ahead of its p-rank when a lane frees up; `pyparser.inc` is frankA's right now.
