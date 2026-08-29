@@ -18,40 +18,68 @@ rather than trusted.
 
 ## Part 1 — The fact sheet [VERIFIED]
 
-All measured at `HEAD` on 2026-08-14. **Re-run before publishing** — every one
-of these grows weekly, and a stale number in a launch post is exactly the kind
-of thing that gets checked.
+All measured at `HEAD` on **2026-08-30**. **Re-run before publishing** — and this
+is no longer a caution, it is a measurement: the table below was first taken on
+2026-08-14 and **every single number had moved sixteen days later**, commits by
+42%, `done/` tickets by 49%, compiler lines by 33%. A launch post carrying the
+August-14 figures would have been wrong in ten places at once.
+
+**Re-measure the whole table with one paste, and do not hand-edit a single
+number** — hand-editing one is how the other nine stay stale:
+
+```sh
+cd "$(git rev-parse --show-toplevel)" && {
+  echo "measured $(date +%F) at $(git rev-parse --short HEAD)"
+  echo "commits          $(git rev-list --count HEAD)"
+  echo "first commit     $(git log --reverse --format=%ad --date=short | head -1)"
+  echo "agent trailers   $(git log --format=%b | grep -ci 'Co-Authored-By: Claude')"
+  echo "pins             $(cat stable_linux_amd64/default/VERSION)"
+  for d in done rejected decided backlog; do
+    printf 'progress/%-9s %s\n' "$d" "$(ls devdocs/progress/$d/*.md 2>/dev/null | wc -l)"
+  done
+  echo "done w/ track:   $(grep -l '^track:' devdocs/progress/done/*.md | wc -l)"
+  echo "compiler lines   $(find compiler -name '*.inc' -o -name '*.pas' | xargs wc -l | tail -1)"
+  echo "lib lines        $(find lib -name '*.pas' -o -name '*.c' -o -name '*.h' | xargs wc -l | tail -1)"
+}
+```
+
+It is a paste rather than `tools/factsheet.sh` because `tools/**` is Track T's
+lane and this is a Track D draft. If it earns a home there, that is T's call to
+make, not this document's to assume.
 
 | claim | value | how to re-measure |
 | --- | --- | --- |
-| Commits | 11,849 | `git rev-list --count HEAD` |
-| Elapsed | 2026-05-24 → 2026-08-14, ~12 weeks | `git log --reverse --format=%ad --date=short \| head -1` |
-| Commits with an agent co-author trailer | 5,477 | `git log --format=%b \| grep -ci "Co-Authored-By: Claude"` |
-| Pinned stable versions | 303 (`v1`…`v303`) | `cat stable_linux_amd64/default/VERSION`; the log is `stable_linux_amd64/default/history.log` |
-| Tickets resolved | 1,774 | `ls devdocs/progress/done/*.md \| wc -l` |
-| Tickets **rejected** | 37 | `ls devdocs/progress/rejected/*.md \| wc -l` |
-| Decisions recorded | 74 | `ls devdocs/progress/decided/*.md \| wc -l` |
-| Open backlog | 217 | `ls devdocs/progress/backlog/*.md \| wc -l` |
-| Compiler source | ~188.5k lines | `find compiler -name "*.inc" -o -name "*.pas" \| xargs wc -l` |
-| Library source | ~67k lines | `find lib -name "*.pas" -o -name "*.c" -o -name "*.h" \| xargs wc -l` |
+| Commits | 16,848 | `git rev-list --count HEAD` |
+| Elapsed | 2026-05-24 → 2026-08-30, ~14 weeks | `git log --reverse --format=%ad --date=short \| head -1` |
+| Commits with an agent co-author trailer | 7,668 | `git log --format=%b \| grep -ci "Co-Authored-By: Claude"` |
+| Pinned stable versions | 393 (`v1`…`v393`) | `cat stable_linux_amd64/default/VERSION`; the log is `stable_linux_amd64/default/history.log` |
+| Tickets resolved | 2,652 | `ls devdocs/progress/done/*.md \| wc -l` |
+| Tickets **rejected** | 51 | `ls devdocs/progress/rejected/*.md \| wc -l` |
+| Decisions recorded | 116 | `ls devdocs/progress/decided/*.md \| wc -l` |
+| Open backlog | 316 | `ls devdocs/progress/backlog/*.md \| wc -l` |
+| Compiler source | ~250.2k lines | `find compiler -name "*.inc" -o -name "*.pas" \| xargs wc -l` |
+| Library source | ~75.3k lines | `find lib -name "*.pas" -o -name "*.c" -o -name "*.h" \| xargs wc -l` |
 
 ### Numbers that need a qualifier, not a footnote
 
 Three of the above will be misread if stated bare. Say the qualifier in the same
 sentence:
 
-- **5,477 of 11,849 commits carry an agent trailer** — that is 46%, not 100%.
+- **7,668 of 16,848 commits carry an agent trailer** — that is 46%, not 100%.
   Do not round it to "written by AI"; the split *is* the story the ticket says
-  must survive editing.
-- **Track counts in `done/` cover 865 tickets, not 1,774.** Only tickets filed
+  must survive editing. (Worth noting the ratio has held at 46% across sixteen
+  days and five thousand commits, which makes it a real property rather than a
+  snapshot — say so, it is more convincing than the raw count.)
+- **Track counts in `done/` cover 1,687 tickets, not 2,652.** Only tickets filed
   after the `track:` frontmatter convention landed carry the field, so
   `grep -h "^track:" devdocs/progress/done/*.md | sort | uniq -c` under-reports
-  the early months. Current split of the ones that have it: N 482, A 182, T 68,
-  B 61, C 39, P 30, D 2, O 1. Quote it as "of the tickets that record a track",
-  or not at all.
-- **303 pins is not 303 releases.** A pin blesses a self-host-verified binary
+  the early months. Current split of the ones that have it: N 676, A 402, P 234,
+  B 133, T 129, C 73, D 20, R 5, W 3, O 2, S 1, plus 9 combined-track
+  spellings (`A+S`, `A+T`, `A+N`). Quote it as "of the tickets that record a
+  track", or not at all.
+- **393 pins is not 393 releases.** A pin blesses a self-host-verified binary
   that other tracks then build against; it is an internal checkpoint. The
-  interesting property is that all 303 are in git with their sha256 and their
+  interesting property is that all 393 are in git with their sha256 and their
   landing commit, so the trajectory is reconstructible — that is the claim
   worth making, not the count.
 
@@ -102,7 +130,7 @@ Nearly every "I built X with AI" post is reconstructed from memory afterwards
 and cannot be checked. This one can:
 
 - the **self-host fixed point** — a mechanical gate, not a testimonial;
-- **303 pinned binaries** with shas — the trajectory, not a snapshot;
+- **393 pinned binaries** with shas — the trajectory, not a snapshot;
 - the **ticket board**, with `Log` sections written at decision time rather than
   in hindsight — including the 37 rejected ones;
 - **tstate regression reports** tied to exact shas, across a cross-target matrix;
@@ -130,7 +158,7 @@ fixes, the willingness to write the post-mortem down at the time.
 This is the section that makes the piece credible, and it is the one with the
 most material already on disk. Candidates, all real and all documented:
 
-- **The string-literal decay *family*.** Not one bug — 15 tickets in `done/`
+- **The string-literal decay *family*.** Not one bug — **21** tickets in `done/`
   matching `string-literal`, across the C frontend (`bug-c-string-literal-binop-decay`,
   `bug-c-sizeof-string-literal`, `bug-c-string-literal-to-pointer-prefix`),
   NilPy (`bug-nilpy-char-vs-string-literal-ordering-compares-an-address`,
@@ -138,6 +166,24 @@ most material already on disk. Candidates, all real and all documented:
   (`bug-riscv32-string-literal-to-class-field`). The lesson the repo drew from
   it is `devdocs/dev/normalise-dont-special-case.md`: fixing one arm of a double
   case and not grepping for the sibling is how a family forms.
+- **A comment that counted wrong, and cost a whole target its string ordering.**
+  `PXXStrCmp3`'s header says *"the four cross backends had NO ordered-string arm
+  at all"*. There are **five**. The fix went to i386/aarch64/arm32/riscv32 and
+  xtensa was never visited, so `'zzz' < 'aaa'` on xtensa compared the two heap
+  **handles** as signed integers and answered by allocation order — demonstrated
+  2026-08-30 under `qemu-xtensa`, both comparisons wrong on both ABIs
+  ([[bug-a-xtensa-has-no-ordered-string-compare-and-sorts-by-heap-handle]]).
+  This is the best single item in this section and it is worth telling in full,
+  because of *how it was found*: not by a test, not by a user, but by an audit
+  that swept the tree for comments asserting invariants and checked each against
+  the code. **A count in a comment reads as a complete enumeration, so nobody
+  counts.** The audit that found it
+  ([[audit-a-a-comment-asserting-an-invariant-is-a-claim-about-a-sibling-arm-nobody-checked]])
+  produced a rule worth quoting in the essay: *a comment goes stale exactly when
+  the sentence and its truth-maker can be changed independently.* The fact sheet
+  above is itself an instance — ten numbers that all rotted in sixteen days —
+  which is why it now ships with the command that regenerates it.
+
 - **`bug-a-o2-resident-param-stale-after-longjmp`** — an optimizer holding a
   parameter in a register that `longjmp` rolls back. The expensive shape: no
   crash, a plausible wrong value far from the cause.

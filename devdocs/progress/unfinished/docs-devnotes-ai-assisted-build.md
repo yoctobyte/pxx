@@ -89,3 +89,22 @@ the project already runs.
   vibe-coded" aside). Moved to `unfinished/`: what remains is substance only the
   user can write, and the landing spot is decided (`docs/how-this-was-built.md`,
   `order: 6`, next to Dive).
+- 2026-08-30 — **fact sheet re-measured; still parked on the user.** Every number
+  in the draft's table had moved in the sixteen days since it was taken:
+  commits 11,849 -> 16,848 (+42%), `done/` 1,774 -> 2,652 (+49%), pins 303 ->
+  393, compiler ~188.5k -> ~250.2k lines, backlog 217 -> 316, decided 74 -> 116.
+  A launch post carrying the August-14 figures would have been wrong in ten
+  places at once. **The draft now ships the command that regenerates the whole
+  table** (an inline paste, not `tools/**` — that is Track T's lane and this
+  document does not get to assume a home there), verified by running it and
+  diffing against the table it produced. The one number that did NOT drift is
+  the interesting one: the agent-trailer ratio held at **46%** across five
+  thousand commits, which makes it a property rather than a snapshot and is
+  worth saying that way.
+  Also added a §5 failure item from the same day — `PXXStrCmp3`'s comment
+  counting four cross backends when there are five, which left xtensa comparing
+  strings by heap handle. It is the strongest item in that section because of
+  how it was found (an audit sweeping comments against code) rather than what it
+  was.
+  **Still parked**: the four questions in Part 3 and every user-voice section
+  remain untouched. Nothing here moves the ticket off the user.
