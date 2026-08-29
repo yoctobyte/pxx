@@ -2836,3 +2836,63 @@ That is the right protocol when two agents share a ticket.
 **Verification worth copying:** it checked three rows before amending, and the
 third settles it — `grid(padx=(8, 6))` **alone** also fails. The tuple theory
 cannot explain that row; "an earlier default was skipped" predicts it.
+
+### 64. A TOOL THAT SCANS PROSE IN ITS OWN DIRECTORY WILL READ ITS OWN DOCUMENTATION AS DATA — and the report just gets shorter
+
+pxx-a5, 2026-08-29, fixing `check_test_wiring`'s directory-blanket bug
+(`7ce500b51`, `5adfc8b85`). **Three instances of one shape inside a single
+ticket**, and not one of them was visible in the output.
+
+`check_test_wiring` scans `tools/**` for references to test files. It **lives in**
+`tools/`. So:
+
+1. its own `SKIP_DIRS` literal credited the directories it lists — harmless
+   today, because those are skipped anyway;
+2. the devtest **docstring explaining why `helloworld/main.pas` is an orphan**
+   credited that orphan. `wired_paths()` strips full-line comments only, and says
+   so — docstring prose is deliberately counted as a reference. **So the sentence
+   describing the finding became the evidence that cleared it;**
+3. the new stem rule descended a subdirectory: the devtest carries `test/gui/` in
+   a **fixture string** and defines its own `def main()`, and that bare `main`
+   matched `helloworld/main.pas` two levels down.
+
+**The failure mode is what makes it belong here: the report simply got shorter.**
+6 → 5, with nothing red, nothing warned, nothing to notice. pxx-a5's own account
+of why it caught it at all: *"I would not have caught this one either if I had not
+re-run the checker after committing the fix rather than before."*
+
+**Same family as the census matching its own comment (face 60's neighbourhood),
+but sharper**, because here the artefact is the tool's *documentation of the very
+defect it is looking for* — the more carefully you write down what the orphan is,
+the more thoroughly you erase it.
+
+Fix worth copying: a truncated `test/gui/$name.pas` token ends at the variable
+with `.pas` after it, so it can only name a **direct child** — stem evidence is
+now restricted to those, with a guard that fails without the fix.
+
+### 65. A CENSUS RUN WITHOUT THE FILTER THE REAL CODE APPLIES AGREES WITH ITSELF, NOT WITH THE THING IT MEASURES
+
+Same session, and pxx-a5 flags it as **the third time in one session** with an
+identical mechanism, which is what promotes it from a slip to a face.
+
+Its ticket claimed **three** sources of a false directory token, one being "prose
+in a comment". Wrong: `wired_paths()` has stripped full-line comments since the
+csqlite fix. **The census had been pointed at the source text without applying
+the filter the real code applies** — so it reproduced a defect the tool had
+*already fixed* and reported it as live. Re-censused properly: two sources, and
+only one with a victim.
+
+**Why it is not merely "check your work".** A census is the step you take
+*instead* of guessing, so its output inherits the authority of measurement — and
+this failure produces a number that is internally consistent, reproducible, and
+about a program that does not exist. It was caught only because reading
+`wired_paths()` in order to write the fix put the stripping loop in front of the
+author.
+
+**Counter-move:** a census must run the target's own preprocessing, or state in
+its output that it did not. Sibling of 59 (population ≠ firing count) and 59a
+(granularity): those measure the wrong *set* and the wrong *depth*; this measures
+the right set with the wrong *input*.
+
+**And the correction was written into the ticket rather than quietly deleted**,
+which is the only reason the pattern was countable at all.
