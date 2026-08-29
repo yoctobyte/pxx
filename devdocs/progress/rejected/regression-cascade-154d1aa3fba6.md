@@ -215,3 +215,76 @@ For the record, the assertion-conversion commits sit outside the range in both
 directions: batches 1–5 are ancestors of the last good `e417731e9007` (inside
 `seven`'s own 1630-pass sweep), and `c0030946e` / `7e11ab09e` / `0d91dc88f` land
 after `154d1aa3fba6` and were never part of this run.
+
+---
+
+## CLOSED 2026-08-30 — the post-provisioning full tier confirms it. REJECTED.
+
+The triage above ended "re-sweep after provisioning and re-file whatever is
+still red". `seven` has since completed that sweep. **This is the confirmation,
+read off the box's own state rather than argued.**
+
+**Confirming run:** host `seven`, tier `full`, sha **`f2706f45eabe`**,
+2026-08-29T22:05:13Z (879.5s wall, `timed_out: False`, `unreached: 0` — a
+complete run, so its verdict is a verdict). It is also, as of this writing, the
+**newest completed full tier anywhere in the fleet**: plexus's last full is
+`49bd043061c1` at 15:38Z, 6.5 hours older, and borg/xeon are July/August.
+
+**14 of the 18 pass there**, each with `job_last_pass = f2706f45eabe` recorded
+against it — i.e. they did not merely stop being listed, they were run and they
+passed. All ten provisioning jobs, both nilpy duplicates, `tkinter_facade`, and
+`lib-test#lib_inttohex` (the row this ticket left explicitly "not yet isolated"
+— it was the reportlab tooling path, and it went green with the box).
+
+**0 of 18 are attributable to the range.** Every one of the twelve Rust commits
+is cleared, as frank-rust, frankB and the coordinator each said separately.
+
+### The four still red — and none of them is this cascade
+
+The prediction was "the four pre-existing regressions and nothing else". **The
+count is right and the membership is not**, which is the shape that gets read as
+confirmed when it is not, so here it is job by job. `plexus` column is that
+box's own last full tier (`49bd043061c1`); `never passed here` means `seven`'s
+`job_last_pass` is empty — the job has no green run on this host, ever.
+
+| job | seven | plexus | verdict |
+| --- | --- | --- | --- |
+| `test-nilpy#…startswith_tuple.npy` | fail | **fail** | red on both, real, and **already ticketed** — `backlog/regression-test-nilpy-test-nilpy-startswith-tuple`. The only one of the four that is a defect in the tree. |
+| `tools-devtest#00` | timeout, never passed here | fail | red on both for **different reasons**. plexus: `92 green, 1 RED -- tools/testmgr_hardcoded_tmp_devtest.py`, ticketed as `backlog_new/bug-t-the-hardcoded-tmp-guard-recommends-a-variable-testmgr-strips`. seven: 90.1s against a 90s budget. |
+| `test-aarch64#…test_parallel_reduction.pas` | timeout, never passed here | **pass** | budget. Its recorded reason is `ok: $TMP [code=312468B …]` — it **compiled fine** and the clock cut off the run. |
+| `test-sqlite-threads-aarch64#…fixedpoint` | fail, never passed here | **pass** | host. Reason: fixedpoint `verified — 1 round(s)`, sqlite built, then `FAIL aarch64 (output mismatch)`. A threadsafe-sqlite job under qemu on a box that has never run it green while a faster box runs it green. |
+
+Two of the four the triage *named* as pre-existing (`test-emit-obj#cxtensa_obj`,
+`test-nilpy#parent_call_after_instantiation`) have since been **fixed** — both
+tickets are in `done/`, and `seven`'s newer full tier is what shows them green
+while plexus's staler map still says `fail`. Two others took their place, from
+the rows the triage had filed under "duration signals" and "pending packages".
+So the closing statement is not "the predicted four remain"; it is **"nothing
+red here is attributable to the range, and every red that is left has either a
+ticket or a host explanation"** — which is the claim this ticket needed.
+
+### What this earns beyond the close
+
+Three of the four have **never passed on `seven`**. `diff_jobs()` already
+carries the distinction in its own comment — *"NEVER SEEN is not the same fact
+as WAS GREEN"* — and computes `first_seen` for it, but `first_seen` is consumed
+only on the **per-job** ledger path (`tools/twatch.py:2928-3030`, where it
+suppresses the range). The **cascade** branch takes `new_red` wholesale
+(`tools/twatch.py:2901`), so a job that has never once been green on the filing
+host can still be swept into a cascade as evidence of a regression. That is the
+fifth face of the defect the comment at 1671 enumerates four of.
+
+Filed / actioned separately, so this ticket closes clean:
+
+- **`bug-t-a-timeout-budget-is-absolute-wall-clock-so-a-slow-box-reports-a-regression`** — two of the four above are 0.1s over an absolute budget calibrated on faster hardware.
+- **The stub remedy this ticket asked for is done, not deferred**: `file_cascade_ticket` now prints each red job's recorded REASON next to its name. `Could not open '/lib/ld-linux.so.2'` would have been on the first screen of this ticket, and no one would have opened the Range section at all.
+
+**Disposition: `rejected/`.** Not a defect in the tree; the filing was correct
+behaviour by a watcher that says up front it looked at neither the build, the
+box nor the range. Kept as a record — this is the **second** fresh-box mass
+false cascade (`rejected/regression-cascade-110774a14648` was the first, and its
+follow-up `task-t-suppress-autoticket-until-host-baselined` is in `done/`), and
+that the guard shipped and this still happened is the finding worth keeping.
+
+*(Closed by the Track T agent on `plexus`, face 2, from `seven.json` at
+`f2706f45eabe`. No bisect was run and none was warranted.)*
