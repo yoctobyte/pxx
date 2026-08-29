@@ -95,7 +95,8 @@ observable.
   file-ownership **Track A** — edits the shared `ir_codegen.inc` / `symtab.inc` /
   backends, so it obeys A's no-concurrent-edit rule + self-host gate) — umbrella
   for the next optimization campaign.
-- **Status:** working
+- **Status:** backlog (the folder is the lock; this line drifted while the
+  umbrella sat in `backlog/` between slices)
   section at the bottom for what landed, what is left and what to read first).
   Nothing is half-applied. Worked from a
   dedicated optimization checkout (`~/frank-optimize`), because Track O is
@@ -3113,7 +3114,24 @@ test is a control — it shows exactly one `typekind` decline, the 8-vs-4-byte r
 reg field — each move `-O3` while `-O0` stays correct. Band rows from the start
 this time, per standing rule 4, rather than retrofitted.
 
-**Still banked:** (B) the redundant `cdqe` on a resident already re-normalised
-by the emitter, worth -1; (C) the r8 round-trip from evaluating a non-commutative
-binop's operands in the wrong order, worth -2 and literally W1's charter. 18 -> 15
-remains available on this loop.
+**(B) and (C) are now SPLIT OUT as their own ranked tickets**, with the
+disassembly carried into each rather than left in this log:
+
+- `feature-opt-o3-fuse-resident-read-and-widen-into-movsxd` (**-1**) — and the
+  split changed its design. Banked here as "the `cdqe` is a no-op, delete it",
+  which is *correct today* and is exactly the invariant-dependent elision slice
+  8 refused. Writing it up properly produced the version that needs no
+  invariant: emit `movsxd rax, r12d` (3 bytes, one instruction) instead of
+  `mov rax,r12` + `cdqe` (5 bytes, two). Same net effect, strictly better
+  encoding, correct whatever the upper half holds. **Splitting a banked item out
+  is not clerical — it is the first time anyone writes the argument down, and
+  that is when the better design shows up.**
+- `feature-opt-o3-operand-order-for-non-commutative-binops` (**-2**) — the
+  emit-time operand scheduler this umbrella names in its own charter. Distinct
+  from the `-O2` mirror already in the file: the mirror *swaps operands* and so
+  needs commutativity, while this swaps *evaluation order* and keeps the operand
+  roles, which is what covers `-`, `shr`, `div`, `mod`.
+
+Together they take this loop **18 -> 15**. Both carry forward the two controls
+this campaign paid for: an ordering change is invisible to a counter (log the
+order), and a guard needs a decline log to be known selective.
