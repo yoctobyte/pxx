@@ -56,7 +56,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (310)
+## backlog (312)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -98,6 +98,7 @@ _none_
 | bug-n-a-from-import-alias-resolves-its-source-through-flat-scope | N | 55 | bug | bug: a from-import alias resolves its SOURCE name through flat unit scope, not through the exporting module | — |
 | bug-n-a-keyword-argument-through-a-class-value-is-refused-at-runtime | N | 55 | bug | `cls(x, b=99)` — a keyword argument to a class reached as a VALUE — raises TypeError at run time saying such a callable 'still carries no parameter names'. It does: RTTI_METH_FLAG's paramKinds block has carried param NAMES since the reflection work, and PyClassRefNew does not read them. The static spelling `P(x, b=99)` is correct, so this is one construction path disagreeing with the other. | — |
 | bug-n-a-keyword-argument-through-a-procedural-field-needs-a-plain-receiver | N | 55 | bug | `H().fn(1, b=2)` and `hs[0].fn(1, b=2)` are `error: undefined variable (b)` where `h.fn(1, b=2)` and `g().fn(1, b=2)` answer correctly — a KEYWORD argument to a callable FIELD, only when the receiver is a constructor call or a subscript. The keyword name parses as an expression, the same symptom the statically-unknown-callee ticket had. | — |
+| bug-n-a-later-wall-in-key-analysis-blocks-convertrawtext-and-songformatter | N | 55 | bug | convertrawtext.py and SongFormatter.py fail at key_analysis.py:82 (`tonic, mode = label.split(\" \", 1)`) with `unexpected token`. Pre-existing, was hidden behind the grid keyword-call refusal. Does NOT reproduce standalone or through a plain from-import — needs more of convertrawtext.py's context, not yet minimised. | — |
 | bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart | N | 45 | bug | `hasattr([1], 'add')` and `hasattr([1], 'update')` are True: list and set are both TPyList at run time, so every `is`-test-based introspection answers set questions about a list. `type(x).__name__` DOES tell them apart, so the discriminator exists and the predicate is not using it. | — |
 | bug-n-a-module-alias-does-not-resolve-for-attribute-lookup | N | 55 | bug | A module alias resolves for calls but not for attributes | — |
 | bug-n-a-nilpy-test-writes-a-fixed-tmp-path-so-concurrent-runs-race | N | 45 | bug | test_nilpy_class_named_like_an_rtl_record.npy opens, reads and os.remove()s /tmp/pxx_nilpy_rtlrec_probe.txt -- a fixed path chosen at RUNTIME, so the Makefile sweep cannot privatize it and testmgr cannot rewrite it. This box routinely runs several clones' testmgr at once, so one run can delete or overwrite another's probe file mid-test. Caught by tools/testmgr_hardcoded_tmp_devtest.py, which is RED on master today. Introduced by f3422cd14. Filed by Track T; T owns the tool, never the bug. | — |
@@ -349,6 +350,7 @@ _none_
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | Measured at 13e196cc8 on the real -O2 compiler: ParseFactorCore is 9.4% of the whole run — the largest single named function — because 41,032 calls issue 1,583,871 CaseEqual, i.e. 38.6 string compares per factor, walking a linear `else if CaseEqual(name, '...')` chain of 92 arms spread over ~7,180 lines. | — |
 | refactor-a-backend-machine-code-lives-in-six-shared-files | A | 25 | refactor | A backend is not ir_codegen_<arch>.inc + asmtext_<arch>.inc. Six shared files emit or name per-arch machine code: symtab.inc (three full function epilogues), asmenc.inc (inline-asm text for all five targets), ir_codegen.inc (the shared -O pipeline calls two aarch64 passes by name), asmfront.inc, exception_emit.inc, and -- the one that crosses a lane -- cparser.inc, the C FRONTEND, which writes the C _start entry stub as raw rv32_/a64_/arm32_ emission. Measured by the omission defines, which turn every one of these into a compile error. | — |
 | refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed | A | 60 | refactor | C owns its lexer/parser/preproc but NOT its lowering: ir.inc carries 40 CProgramMode references. So most Track C work needs Track A's files, and a C agent cannot be staffed independently -- measured 2026-08-29, four of six ranked C tickets need an A file. | — |
+| refactor-a-nilpy-calling-convention-logic-lives-in-the-pascal-parser-files | A | 25 | refactor | 78 `isNilPy` branches sit inside the pasparser_*.inc set — NilPy language rules living in files named for the Pascal parser. It is why a Track N ticket routes its holder into files Track N does not own, and it is `the-substrate-is-ast-and-ir-not-the-parser` violated by filename rather than by design. | — |
 | refactor-a-one-program-driver-prologue-for-every-frontend | A | 45 | refactor | Five frontend drivers each open-code the same program prologue (entry stub, div0 stub, signal runtime, I/O lock stubs, System intrinsics, the emitted AnsiString runtime). The copies drift in one direction — whatever the Pascal driver gained last — and the BASIC one has now been caught missing four of them, one at a time. | — |
 | refactor-a-search-path-helpers-live-in-the-c-preprocessor | A | 18 | refactor | AddPasUnitDir / AddPasIncDir / AddCIncludeDir are generic search-path functions that live in cpreproc.inc, so compiler.pas's own -Fu/-I handling depends on the C frontend. Six of the eleven errors from omitting the C frontend are this misplacement, not coupling: moving them drops omit-c from 11 sites to about 4. | — |
 | refactor-a-seven-frontends-borrow-rust-parser-helpers | A | 22 | refactor | Zig, ALGOL, Erlang, Fortran, LOLCODE and Whitespace all call five helpers whose bodies live in rparser.inc, so PXX_NO_RUST alone fails with 198 errors and Rust can only be omitted together with all six. Three different layers are marooned under one R prefix: AST constructors (share, wrong file), RWiden (numeric widening — SEMANTICS, should not be shared at all), and REmitParamRegSpill (raw x86-64 emission in a frontend). | — |
@@ -744,6 +746,7 @@ _none_
 - [p 55] [N] bug-n-a-from-import-alias-resolves-its-source-through-flat-scope
 - [p 55] [N] bug-n-a-keyword-argument-through-a-class-value-is-refused-at-runtime
 - [p 55] [N] bug-n-a-keyword-argument-through-a-procedural-field-needs-a-plain-receiver
+- [p 55] [N] bug-n-a-later-wall-in-key-analysis-blocks-convertrawtext-and-songformatter
 - [p 55] [N] bug-n-a-module-alias-does-not-resolve-for-attribute-lookup
 - [p 55] [N] bug-n-a-subpackage-directory-does-not-resolve-as-a-module
 - [p 55] [N] bug-n-a-tuple-unpacking-assignment-does-not-box-a-callable-value
@@ -964,6 +967,7 @@ _none_
 - [p 25] [D] idea-public-status-page [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
 - [p 25] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [A] refactor-a-backend-machine-code-lives-in-six-shared-files
+- [p 25] [A] refactor-a-nilpy-calling-convention-logic-lives-in-the-pascal-parser-files
 - [p 22] [A] refactor-a-seven-frontends-borrow-rust-parser-helpers
 - [p 20] [A] bug-a-irtoplevelstmt-parameter-is-a-node-index-named-k
 - [p 20] [A] bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets
