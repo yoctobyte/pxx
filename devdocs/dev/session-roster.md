@@ -17605,3 +17605,34 @@ Clearing that one N bug wires roughly twenty orphan tests **and** lets the check
 become a gate — after which this class stops recurring. Three of the orphans are
 `test_o3_*`, i.e. Track O's own campaign is partly untested. Dispatch that N bug
 ahead of its p-rank when a lane frees up; `pyparser.inc` is frankA's right now.
+
+### GRANTS ARE PROVISIONAL — the worker verifies the file map, not the coordinator
+
+frank-rust, 2026-08-29, after a grant sent it to three files that were not where
+the work was: *"the file map has shifted twice tonight on my reports alone — it may
+be worth re-checking a ticket's named files before granting rather than after."*
+
+**I did verify before granting, and that is the interesting part.** I grepped every
+file the ticket named and found exactly what it claimed: `Procs[]` at
+`defs.inc:2473`, the `...` consume at `cparser.inc:12692`, `'varargs'` at
+`pasparser_call.inc:963`. All present. **But I verified the ticket's own citations**
+— I confirmed "these files contain what the ticket names", not "the fix belongs in
+these files". The ticket was the upstream for both the claim and the check, so the
+agreement carried no information, which is the corollary already written in
+[[coordinator-operating-rules]] rule 2 and which I applied to peers' claims and not
+to tickets.
+
+The ticket was wrong in the most expensive direction: it asserted `Procs[]` had **no
+varargs flag**, and `ProcVariadic` exists, is set on the shared declaration path, and
+is honoured by four backends. A ticket asserting a missing mechanism that exists
+sends the next reader to build it. frank-rust corrected it in place the same day.
+
+**Protocol, effective now:** a grant is **provisional**. The worker confirms the fix
+actually lands in the granted files and reports back *before editing* if it does not.
+Stopping and reporting is the success case. A worker establishes in two minutes what
+the coordinator cannot establish reliably from outside the code at all — and the file
+map moved twice tonight on one worker's reports.
+
+This is the same move as the tooling job generally: **push the check to where the
+knowledge is, rather than resolving to be more careful at the place that structurally
+cannot know.**
