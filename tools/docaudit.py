@@ -6,6 +6,12 @@
     tools/docaudit.py cites        only the citation check (hard findings)
     tools/docaudit.py limits       only the stated-limit scan (advisory)
     tools/docaudit.py --dir docs   audit a different tree (e.g. Track D's docs/**)
+    tools/docaudit.py targets  compiler/ir.inc ...
+                               DERIVED, not matched: for each comment naming
+                               targets, diff the set it names against the
+                               TARGET_* constants the code right below it
+                               actually tests. The one check here with a real
+                               oracle -- see check_targets()
     tools/docaudit.py comments compiler/builtin/builtinheap.pas ...
                                the limit scan over Pascal { } comments. Weaker
                                filter on purpose -- see check_comments(): prose
@@ -61,13 +67,20 @@ citations are right. And it cannot tell a stale path from a path that is
 absent because the doc successfully argued against building it. Both need a
 reader.
 
-The third class it is BLIND to, and the blindness is structural: a claim that
-is TRUE AND NO LONGER SUFFICIENT. A comment that named the gates it covered,
-was correct when written, and is silent about the gates added since has no
-limit-word problem and no broken citation -- every check here passes it. That
-class is not findable by pattern at all. It needs ENUMERATION: derive the real
-set with a command, diff it against the set the prose names. If you are
-sweeping for it, count things; do not grep for them.
+The third class it is MOSTLY blind to: a claim that is TRUE AND NO LONGER
+SUFFICIENT. A comment that named the gates it covered, was correct when
+written, and is silent about the gates added since has no limit-word problem
+and no broken citation -- `cites` and `limits` both pass it. That class is not
+findable by pattern; it needs ENUMERATION -- derive the real set with a
+command, diff it against the set the prose names. Count things, do not grep
+for them.
+
+`targets` is one instance of that, and only one. It works because the set has
+an oracle in the code: the `TARGET_*` constants a condition tests. Wherever the
+prose names a set with no such oracle -- optimisation gates, call sites,
+"every backend" -- there is nothing to diff against and no generic tool can
+help. That needs a per-claim command, chosen by whoever knows what the sentence
+means. Do not read a clean `targets` run as coverage of the class.
 """
 import os
 import re
@@ -270,6 +283,84 @@ def check_comments(paths):
     return 0
 
 
+TARGET_WORDS = {
+    'TARGET_X86_64': ('x86-64', 'x86_64', 'x86-64'),
+    'TARGET_I386': ('i386',),
+    'TARGET_AARCH64': ('aarch64', 'arm64'),
+    'TARGET_ARM32': ('arm32',),
+    'TARGET_XTENSA': ('xtensa',),
+    'TARGET_RISCV32': ('riscv32', 'risc-v'),
+    'TARGET_WASM32': ('wasm32', 'wasm'),
+}
+CODE_LOOKAHEAD = 6
+
+
+def check_targets(paths):
+    """Comments that name targets, diffed against the targets the code tests.
+
+    This is the only check here with an ORACLE rather than a pattern. It does
+    not ask whether a sentence looks like a limit; it asks whether the set of
+    targets the prose names equals the set of `TARGET_*` constants the
+    condition immediately below it actually tests. A widening that edits the
+    condition and not the comment is exactly the shape this catches, and it is
+    the shape with no sibling arm to grep for -- one edit invalidates every
+    sentence that stated the old scope, in files nobody touched.
+
+    Worked example it reproduces: `ir.inc`'s AN_WRITE lowering says *"x86-64
+    only -- --threadsafe atomics are x86-64-only today"* on the line directly
+    above a condition testing four targets.
+
+    Reports a comment/code MISMATCH, which is not automatically a defect: a
+    comment may name a target for a reason unrelated to the test below it.
+    Every hit needs a reader. But unlike `limits`, a hit here is a measured
+    disagreement between two things in the same file, not a guess about tone.
+    """
+    findings = 0
+    for path in paths:
+        full = path if os.path.isabs(path) else os.path.join(ROOT, path)
+        if not os.path.exists(full):
+            print("docaudit: no such file: %s" % path, file=sys.stderr)
+            continue
+        rel = os.path.relpath(full, ROOT)
+        lines = open(full, errors='replace').read().split('\n')
+
+        depth, start = 0, None
+        for i, line in enumerate(lines):
+            for ch in line:
+                if ch == '{':
+                    if depth == 0:
+                        start = i
+                    depth += 1
+                elif ch == '}' and depth:
+                    depth -= 1
+                    if depth == 0 and start is not None:
+                        body = ' '.join(' '.join(lines[start:i + 1]).split())
+                        code = ' '.join(lines[i + 1:i + 1 + CODE_LOOKAHEAD])
+                        said = {k for k, ws in TARGET_WORDS.items()
+                                if any(re.search(r'\b' + re.escape(w) + r'\b', body, re.I)
+                                       for w in ws)}
+                        tested = {k for k in TARGET_WORDS
+                                  if re.search(r'\b' + k + r'\b', code)}
+                        if said and tested and said != tested:
+                            findings += 1
+                            short = body if len(body) <= 300 else body[:297] + '...'
+                            print("   [%s:%d]" % (rel, start + 1))
+                            print("     comment names : %s" %
+                                  ', '.join(sorted(x[7:].lower() for x in said)))
+                            print("     code tests    : %s" %
+                                  ', '.join(sorted(x[7:].lower() for x in tested)))
+                            print("     %s\n" % short)
+                        start = None
+
+    print("== comment/code target MISMATCHES: %d ==" % findings)
+    print("   The comment names one set of targets; the condition within %d lines"
+          % CODE_LOOKAHEAD)
+    print("   below it tests another. Not automatically a defect -- a comment can")
+    print("   name a target for an unrelated reason -- but it is a measured")
+    print("   disagreement between two things in the same file, not a guess.")
+    return findings
+
+
 def main():
     argv = sys.argv[1:]
     docdir = os.path.join(ROOT, 'devdocs/dev')
@@ -278,6 +369,11 @@ def main():
         docdir = os.path.join(ROOT, argv[i + 1])
         del argv[i:i + 2]
     what = argv[0] if argv else 'all'
+
+    if what == 'targets':
+        if len(argv) < 2:
+            sys.exit("docaudit targets: name at least one source file")
+        sys.exit(1 if check_targets(argv[1:]) else 0)
 
     if what == 'comments':
         if len(argv) < 2:
