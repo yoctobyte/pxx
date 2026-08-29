@@ -1,6 +1,10 @@
-# Track U digest — 23 open decisions
+# Track U digest — 21 distinct questions
 
-**Measured at `64758a5c2`, 2026-08-30.** This page rots faster than most: it
+**Measured at `64758a5c2`, 2026-08-30. Revised the same day** after the triage
+found duplicates: **23 tickets were 21 questions**, and the two collapses are
+described below. The count that matters to whoever works this lane is *distinct
+questions*, not open files — a duplicate costs a full read before it costs
+nothing. This page rots faster than most: it
 quotes ticket prios, dependency edges and a branch divergence that all move.
 Regenerate rather than trust it — `ls devdocs/progress/*/decide-*.md` is the
 population, and every claim below names how it was checked.
@@ -9,7 +13,7 @@ Track U is the one lane no agent can work, and the one that unblocks the ranked
 chain behind it. **Ordered by what the answer releases, not by the decision's own
 prio** — the first four are worth more than their numbers suggest.
 
-**Checked against `decided/` (116 entries): none of the 23 is already answered.**
+**Checked against `decided/` (116 entries): none of the 23 was already answered.**
 No slug overlap, no topic overlap.
 
 ---
@@ -42,12 +46,18 @@ cannot gain any.
 
 ## STALE — re-measure before spending attention
 
-### `decide-what-happens-to-the-136-commit-rust-branch` (p60) and `decide-should-the-rust-topic-branch-be-retired-onto-master` (p45)
+### The rust branch — **COLLAPSED**, and its price was the reason it sat
 
-**These are one question, and its premise has moved.** The first says *"origin/rust
-holds 136 commits of divergent work while origin/master is 222 ahead"*.
+`decide-what-happens-to-the-136-commit-rust-branch` (p60) and
+`decide-should-the-rust-topic-branch-be-retired-onto-master` (p45) asked one
+question, and both priced it off a divergence that has moved. They are now one
+ticket: **`decide-does-track-r-work-on-master-like-every-other-lane`** (p60).
+Both originals are preserved in `rejected/` with redirect notes — their analysis
+is good and only the numbers rotted.
 
-Measured today:
+The p60 said *"origin/rust holds 136 commits of divergent work while
+origin/master is 222 ahead."* The p45 said *"8 ahead and 57 behind."* Both are
+stale, in opposite directions. Measured today:
 
 ```
 git rev-list --left-right --count origin/master...origin/rust   ->  418  136
@@ -62,16 +72,17 @@ the `{$NILCHECKS}` docs are in `docs/reference/directives.md` today, and the
 for-loop bounds fix is `8b35e88fa` on master.
 
 So the fork is no longer *"what do we do with 136 stranded commits"*; it is
-*"merge or drop at most 14, most of which are ticket paperwork"*. Master pulling
-ahead 222 → 418 in the meantime says the branch is being kept in sync **into**
-rust and is not accumulating stranded work.
+*"does Track R work on master, and do we merge or drop at most 14 mostly-paperwork
+commits"*. Master pulling ahead 222 → 418 meanwhile says the branch is being kept
+in sync **into** rust and is not accumulating stranded work.
 
-**Both tickets should be re-filed as one, against the measured divergence.** The
-decision they ask for — does Track R work on master like everyone else — is still
-real and still yours; the 136-commit framing is what is stale, and it makes the
-question look far more expensive than it is. `decide-should-the-rust-topic-branch-be-retired-onto-master`
-already recommends **option 1 (retire onto master)** and argues Track R's work has
-not been destabilizing.
+**The finding underneath is worth more than the correction.** Nobody opens a
+136-commit merge decision at 3am. *A number that rotted made a cheap question
+look expensive, and the cost estimate is what people triage on, not the
+question.* A U ticket does not need to be wrong to be unanswerable; it only needs
+to be priced wrong — and the old slug carried the stale number **in the slug**,
+the one place a reader cannot skip. That is why the survivor has a new slug
+rather than an edit.
 
 ### Verified NOT stale — the code still matches the ticket
 
@@ -85,8 +96,31 @@ Three that looked cheap to falsify and were not:
 
 ## Answerable in one word — the substance is already settled
 
-- **`decide-is-binds-the-cpyext-runtime-the-ratified-extension-module-check`** (p30). Not really a fork: a prior decision ratified `PyInit_<name>`, the implementation shipped *"binds the cpyext runtime"* after measuring that the ratified test held in zero real cases, and nobody recorded the substitution. The ticket recommends **option 1 — ratify what shipped** and says so plainly: *"the substance was decided; only the paperwork is open."* **Say yes and it closes.**
-- **`decide-nilpy-deepcopy-over-the-container-subset`** (p40). Recommendation **A**, and then *delete the "DELIBERATELY ABSENT" paragraph rather than leaving two documents disagreeing.* The second half is the real content — this is a docs-consistency fix wearing a decision's clothes.
+**One item, not two.** The first draft of this page listed a second and was
+wrong; the correction is below, because a triage that mislabels a live fork as
+paperwork does more damage than one that misses a duplicate.
+
+- **`decide-is-binds-the-cpyext-runtime-the-ratified-extension-module-check`** (p30). Not really a fork: a prior decision ratified `PyInit_<name>`, the implementation shipped *"binds the cpyext runtime"* after measuring that the ratified test held for only 3 of the 6 real units, and nobody recorded the substitution. It is shipped, pinned in v391, and now documented on the public website. The ticket recommends **option 1 — ratify what shipped**: *"the substance was decided; only the paperwork is open."* **Say "ratified" and it closes; no code moves.** Re-priced in the ticket itself so the next reader sees the cost before the argument.
+
+### CORRECTION — `decide-nilpy-deepcopy-over-the-container-subset` (p40) is a real fork
+
+This page first called it *"a docs-consistency fix wearing a decision's
+clothes"*, on the strength of the tail of its recommendation (*delete the
+"DELIBERATELY ABSENT" paragraph*). **That reads the consequence of choosing A as
+if it were the question.** It is not:
+
+- The fork is whether `copy.deepcopy` **exists at all** over the container
+  subset — roughly 40 lines of NilPy with an `id()`-keyed memo table — and
+  option B (keep the loud absence) is live and is a **previous author's
+  explicit, reasoned decision**. The filer says so: *"it overrides a documented
+  decision, so it is the owner's call and not mine."*
+- Neither half is mine to do. The paragraph is at **`lib/rtl/mimic_copy.py:29`**
+  — a library file, Track **B**'s lane. Not `docs/**`. I could not have taken it
+  if the label had been right.
+
+The real shape: **upward compatibility (an ordinary CPython program that
+deepcopies a nested dict does not run) against a documented deliberate absence.**
+That is exactly the kind of call Track U exists for. It stays.
 
 ---
 
@@ -98,16 +132,32 @@ they do not surface in the ranker.
 
 | decision | prio | fork | recommendation |
 | --- | --- | --- | --- |
-| `decide-should-the-fpc-seed-canary-be-in-the-mandatory-loop` | 55 | pxx accepts a call above its definition; FPC — which bootstraps this compiler — does not. Does the canary become mandatory? | **option 1**, with the caveat stated: it relies on a lane recognising its own edit shape, and one lane's edit was exactly that shape and went unnoticed for days |
-| `decide-should-forwardlint-join-the-mandatory-per-fix-loop` | 50 | same family — does forwardlint join the three-line loop? | **option 1, narrowly** — the "do not widen" rule exists to stop ten-minute suites, and this is not one |
+| `decide-should-forwardlint-join-the-mandatory-per-fix-loop` **(collapsed, was two)** | 55 | `make compiler/pascal26` compiles with **pxx**, so the loop and the fixedpoint are blind **by construction** to what pxx accepts and FPC rejects — and FPC is the seed. Does the 4.1s lint that models FPC's resolution join the loop? | **option 1, narrowly** — the "do not widen" rule exists to stop ten-minute suites, and its own rationale does not reach a seconds-long check covering a hole the loop cannot see |
 | `decide-t-refuse-unscoped-pattern-kills-in-a-hook` | 45 | a PreToolUse hook refusing bare-pattern `pkill`/`killall`. **A `.claude/` change binding every agent on this box, so explicitly yours** | **C — do not add it, revisit if it recurs**; the cause is unproven and two landed layers already remove the bad instruction |
 | `decide-two-devdocs-directories-make-a-wrong-grep-look-like-a-refutation` | 30 | `devdocs/dev/` (50 files) and `devdocs/developer/` (58) both hold internal docs; a grep in the wrong one reads as a refuted citation | **option 1 (consolidate)**, with two stated conditions |
 | `decide-t-should-a-skip-close-an-open-regression` | 25 | `reg_open` counts red → skip as FIXED, so a regression closes when a box merely stops running the job | ticket describes it as a deliberate existing trade; needs your ruling on which error you prefer |
 
-**Note the pattern**: two of these (`fpc-seed-canary`, `forwardlint`) are the same
-question asked twice about different checks — *what may join the mandatory
-per-fix loop?* A general answer would close both and pre-answer the third time it
-comes up. Worth deciding the **rule** rather than the two instances.
+**These were two tickets and are now one.**
+`decide-should-the-fpc-seed-canary-be-in-the-mandatory-loop` (p55) asked the same
+thing from the other end — its **option 4 was the other ticket's option 1**, same
+tool, same cost, same fork — and the argument that kept it out (a permanent
+`LowerCase` note on a clean tree) was fixed in `7aba316be`. Its evidence log is
+the richest thing either had and is preserved intact in `rejected/`, cited by the
+survivor: **five measured instances** of the loop green while the FPC seed build
+was red, the **empirical disproof** of the "just watch for that edit shape"
+option (the lane missed both of its own instances), and the positional-guard
+finding — *a guard whose correctness depends on relative position is re-broken by
+any edit that moves either side, and the person who added it will remember adding
+it.*
+
+**I deliberately did not generalise it to "what is the rule for loop
+membership?"**, though it is tempting and the question will recur. This page's
+own finding is that decisions sit when they are **priced wrong**, and turning a
+concrete yes/no about a verified 4-second lint into an abstract policy question
+raises the price of the one decision here that is currently cheap — the same
+mistake the rust ticket made by accident. The general rule is offered inside the
+ticket as an optional second sentence the owner may take or leave, not as a
+precondition.
 
 ---
 
@@ -145,8 +195,24 @@ consent to install things on your machine.
 ## What this digest is not
 
 It does not re-litigate any decision. Where a ticket states a recommendation I
-have quoted it rather than formed my own — 14 of the 23 carry one, and the filer
-had the context. The two things I did add are **measurement**: the `decided/`
-cross-check (none already answered) and the rust-branch divergence (122 of 136
-already on master), because both change what is worth reading and neither was
-visible from the ticket text.
+have quoted it rather than formed my own — 14 of the 23 carried one, and the
+filer had the context. What I added is **measurement**, in three places, because
+each changes what is worth reading and none was visible from the ticket text:
+
+1. the `decided/` cross-check — none of the 23 was already answered, which is
+   worth as much as a hit would have been *because* I expected at least one;
+2. the rust-branch divergence — 122 of 136 already on master, and the two
+   spot-checks that show 14 is an upper bound;
+3. the duplicate collapse — 23 tickets, 21 questions.
+
+**And one thing it corrects.** The first draft called the NilPy `deepcopy` ticket
+a docs-consistency fix. It is a live fork over a previous author's reasoned
+decision, in a Track B file, and the correction is in place above rather than
+quietly fixed. Compression is this page's whole value and it is also its whole
+risk: a summary that mislabels a real question as paperwork removes it from the
+owner's attention as effectively as losing the ticket would.
+
+**Two things I deliberately did not do**, both for the same reason — collapsing
+two real questions into one is worse than leaving both open: I did not merge any
+pair whose forks differ, and I did not generalise the loop-membership decision
+into a policy question.

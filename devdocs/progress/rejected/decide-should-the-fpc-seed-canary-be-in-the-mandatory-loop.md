@@ -5,11 +5,26 @@ track: U
 prio: 55
 type: decide
 blocked-by: []
-status: backlog
+status: superseded
 owner: unassigned
 created: 2026-08-28
 summary: "make compiler/pascal26 compiles with pxx, which accepts a call to a routine defined later in the same include; FPC rejects it, and FPC bootstraps this compiler. So an edit that adds a call above its definition breaks the seed while every commit stays green on the documented per-fix loop. Measured 2026-08-28: a branch was red for days across several commits, caught only by the FPC seed canary at tools/gate.sh:219, which is in the gate and not in the loop. CLAUDE.md's gating section is the owner's file, so whether the canary moves into the mandatory path is the owner's call."
+superseded-by: decide-should-forwardlint-join-the-mandatory-per-fix-loop
 ---
+
+> **SUPERSEDED 2026-08-30 by `decide-should-forwardlint-join-the-mandatory-per-fix-loop`.**
+> That ticket and this one ask one question: *does the FPC-seed check join the
+> mandatory loop?* **Option 4 below is that ticket's option 1** — same tool,
+> same cost, same fork — and the argument that kept it out (a permanent
+> `LowerCase` note on a clean tree) was fixed in `7aba316be`.
+>
+> Filed in `rejected/` because it is **not the open question, not because it is
+> wrong**. The evidence log below is the best record either ticket had —
+> five measured instances, the disproof of the targeted-trigger option, the
+> positional-guard finding, and the 4.1s correction — and it is preserved
+> intact and cited by the surviving decision. **Read it before answering that
+> one.**
+
 
 # The one failure class the documented loop cannot see
 

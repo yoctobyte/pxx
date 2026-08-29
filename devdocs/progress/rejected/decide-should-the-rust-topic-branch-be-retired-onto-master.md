@@ -4,7 +4,23 @@ prio: 45
 type: decision
 blocked-by: []
 summary: "The 2026-08-27 per-topic tree topology puts ~/frank-rust on branch `rust` because topic branches carry 'destabilizing' work. frank-rust argues, with evidence, that its work has not been destabilizing: 8 commits, compiler/rparser.inc + tests + 38 Makefile lines, no shared internals, self-host byte-identical each time, gated suite. Cost of the branch: Track T sweeps origin/master only, so those 8 commits have never met the matrix, and origin/rust is already 57 behind. Decision: retire the topic branch and put Track R on master, or keep it and adopt a merge-in cadence."
+status: superseded
+superseded-by: decide-does-track-r-work-on-master-like-every-other-lane
 ---
+
+> **SUPERSEDED 2026-08-30 by `decide-does-track-r-work-on-master-like-every-other-lane`.**
+> This ticket and its sibling asked one question, and both priced it off a
+> divergence measurement that has since moved: `git cherry origin/master
+> origin/rust` reports **122 of the 136 commits already have patch-equivalents
+> on master**, only 14 do not, and 14 is an upper bound — two spot-checks of
+> those 14 are demonstrably present on master. **Do not act on the numbers
+> below.**
+>
+> Filed in `rejected/` because it is not the open question, **not because its
+> reasoning is wrong** — the analysis below is preserved intact and is still
+> the best writeup of the topology argument. Read it; re-measure before
+> quoting it.
+
 
 # Should the Rust topic branch be retired onto master?
 

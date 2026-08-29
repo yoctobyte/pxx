@@ -2,12 +2,27 @@
 track: U
 prio: 60
 type: decide
-status: backlog
+status: superseded
 blocked-by: []
 found: 2026-08-29
 found-by: frank-coordinator
 summary: "origin/rust holds 136 commits of divergent work while origin/master is 222 ahead. A green Track P fix and two p65 tickets landed there tonight and were invisible to the whole fleet. CLAUDE.md says all tracks work on master and never a long-lived branch. Merge it, cherry-pick from it, or retire it -- the coordinator will not decide a 136-commit merge."
+superseded-by: decide-does-track-r-work-on-master-like-every-other-lane
 ---
+
+> **SUPERSEDED 2026-08-30 by `decide-does-track-r-work-on-master-like-every-other-lane`.**
+> This ticket and its sibling asked one question, and both priced it off a
+> divergence measurement that has since moved: `git cherry origin/master
+> origin/rust` reports **122 of the 136 commits already have patch-equivalents
+> on master**, only 14 do not, and 14 is an upper bound — two spot-checks of
+> those 14 are demonstrably present on master. **Do not act on the numbers
+> below.**
+>
+> Filed in `rejected/` because it is not the open question, **not because its
+> reasoning is wrong** — the analysis below is preserved intact and is still
+> the best writeup of the topology argument. Read it; re-measure before
+> quoting it.
+
 
 # What happens to the 136-commit `rust` branch?
 

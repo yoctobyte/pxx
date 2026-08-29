@@ -6,6 +6,19 @@ blocked-by: []
 summary: "decide-nilpy-import-rule-vs-a-cpyext-extension-module ratified `PyInit_<name>` as the extension-module criterion; the implementation substituted 'the unit binds the cpyext runtime' after measuring that PyInit_<name> holds for only 3 of the 6 real units, and flagged the deviation for the owner to overrule. Nobody overruled it either way, and it is now shipped, pinned in v391, and — as of this ticket — documented on the public website. Ratify the substitution or order it changed."
 ---
 
+> **COST: one word.** Re-priced 2026-08-30 by frankD during the Track U triage.
+> This is a **ratification**, not an open design fork. The measurement that
+> killed the decided criterion is sound and reproducible, the substitute has
+> shipped, is pinned in v391, and is documented on the public website; option 2
+> would mean changing the evidence to fit the predicate, and nothing measured
+> suggests option 3. **"Ratified" closes it and the code does not move.**
+>
+> It stays in Track U rather than being re-filed into a lane because no agent
+> may ratify a deviation from an owner decision on its own — but it should be
+> read as a paperwork item that has been mis-shelved among real decisions since
+> it was filed, which is why it has sat at p30.
+
+
 # Is "binds the cpyext runtime" the ratified extension-module check, or still awaiting overrule?
 
 - **Track U** — a decision, not work. No files.
