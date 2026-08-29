@@ -16,22 +16,27 @@
 #     with no string operators must contain none of them — otherwise the
 #     positive check would pass on a build that emits the RTL unconditionally,
 #     which is a check that cannot fail;
-#   * the LEAK, run against wasm ALONE. An operand that owned its reference —
-#     a call result, a nested concat — must be released after the RTL call, and
-#     a leak changes no output whatsoever, so the observable is the heap. The
-#     probe below allocates a size the loop never frees, so every call bumps,
-#     and asserts the advance does not scale with the iteration count.
+#   * the LEAK, on BOTH builds. An operand that owned its reference — a call
+#     result, a nested concat — must be released after the RTL call, and a leak
+#     changes no output whatsoever, so the observable is the heap. The probe
+#     below allocates a size the loop never frees, so every call bumps, and
+#     asserts the advance does not scale with the iteration count.
 #
-# Why wasm alone, when everything else here is diffed against native: THE
-# NATIVE BUILD LEAKS THIS. x86-64 releases an owned managed-string operand
-# after a concat and not after a comparison — 40 bytes per evaluation of
-# `f(x) = 'lit'`, measured at 401032 bytes over 10000 iterations against 1032
-# on wasm and 0 under FPC, and present on x86-64 alone: the four cross backends
-# all carry the release at all three sites. Filed as
-# bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64. Diffing a
-# leak figure against a build with an open leak would assert the bug, so the
-# check asserts the PROPERTY on wasm and separately asserts that native still
-# has the bug — which makes this paragraph expire the day the ticket lands.
+# That last one used to run against wasm ALONE, because the native build leaked
+# it: x86-64 released an owned managed-string operand after a concat and not
+# after a comparison, 40 bytes per evaluation of `f(x) = 'lit'`. It was found
+# HERE, by the wasm figure having nothing to diff against, and filed as
+# bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64. It landed in
+# 0d91dc88f (re-verified 0571f4f9e), and both builds are now flat at 1032 bytes
+# for 1000, 9000 and 100000 iterations alike, so the leak is diffed against the
+# oracle like everything else here and the property check is the second half.
+#
+# Note what the old note cost. It was written to avoid encoding a bug and it
+# encoded one anyway — as the FIGURE it compared against. A workaround that
+# names a defect's magnitude goes stale exactly when the defect is fixed, and it
+# goes red in the direction that reads as a new regression. The `exit 1` below
+# was aimed at that: it fired the day the fix landed and said, in the failure
+# text, which paragraph to rewrite. Prefer that to a number in a comment.
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
@@ -123,22 +128,34 @@ fi
 echo "ok  1000 and 9000 iterations both advance the heap by $a1 bytes — every"
 echo "..  owned operand temporary is released, in the compare AND the concat"
 
-# The other half of that claim, and its expiry. Native must still leak; when it
-# stops, this fails and the note at the top has to be rewritten.
+# The oracle half. Native must be flat too, AND must agree with wasm: since
+# 0d91dc88f the figure is comparable, so a wasm-side regression that happened to
+# be flat at both counts — a constant over-allocation, say — is caught by the
+# diff rather than passing the slope test. Two assertions, not one: flat, and
+# equal. A build that leaked identically on both targets would satisfy the
+# second alone, and one that over-allocated identically would satisfy the first.
 mkleak 1000
 "$root/compiler/pascal26" "$work/leak.pas" "$work/leakn" > /dev/null
 n1=$("$work/leakn")
 mkleak 9000
 "$root/compiler/pascal26" "$work/leak.pas" "$work/leakn" > /dev/null
 n2=$("$work/leakn")
-if [ "$n1" = "$n2" ]; then
-  echo "ok  the NATIVE build no longer leaks either ($n1 at both counts) —"
-  echo "    bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64 has"
-  echo "    landed. Rewrite this script's note and diff the figure again."
+if [ "$n1" != "$n2" ]; then
+  echo "FAIL the NATIVE build leaks an owned string operand again: 1000"
+  echo "     iterations advance the heap by $n1 bytes and 9000 by $n2. This is"
+  echo "     bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64,"
+  echo "     which landed in 0d91dc88f — check whether it has been reverted."
   exit 1
 fi
-echo "ok  native still leaks it ($n1 -> $n2), so the wasm figure above is a"
-echo "..  property and not a copy of the oracle — the reason it is not diffed"
+if [ "$n1" != "$a1" ]; then
+  echo "FAIL the two builds disagree about the advance: native $n1, wasm $a1."
+  echo "     Both are flat, so neither is leaking per-iteration, but one is"
+  echo "     allocating a different fixed amount than the other for the same"
+  echo "     program — a constant a slope test cannot see."
+  exit 1
+fi
+echo "ok  the native build is flat at $n1 too, and the two agree exactly, so"
+echo "..  the figure is diffed against the oracle and not merely self-consistent"
 
 "$root/compiler/pascal26" --target=wasm32 \
     "$here/strop_slice.pas" "$work/s.wat" > /dev/null 2>&1
