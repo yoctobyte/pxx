@@ -985,14 +985,116 @@ end;
   prerequisites have been emitted ahead of a fresh copy of it, nothing was
   registered, and the caller must go round the type-section loop again rather
   than bind a class. See the nested-specialization note above SpecializeStream. }
+{ Sweep this template's mode-Delphi method impls for nested prerequisites,
+  bounded by the header offsets DelphiRewriteGenericUses RECORDED when it deleted
+  a `<T>` (GenMethImplSOff). Attribution is by construction: a range is scanned
+  only when its offset is a recorded header of THIS template, never by matching
+  argument names -- `T` and `U` are the commonest parameter names there are, and
+  matching on shape would register a prerequisite under the wrong substitution.
+
+  The copy is SCRATCH. BufferGenericMethod keeps "each (method, specialization)
+  pair is materialised exactly once" by a before/after split, so registering
+  these as buffered methods would make the parser's own later call the second
+  buffering of the same body. TemplateTokenCount is restored.
+
+  Called twice, at two different times, and the second time is the point:
+  from ParseSpecialization (the method impls the parser has not reached yet) and
+  from EmitLateNestedSpecDecls at the end of the type section, by which time the
+  rewrite has run over bodies it had not reached the first time. }
+{ Forwards for the three helpers below. All three are DEFINED later in this file
+  and CALLED here, by ScanDelphiMethodImplsForNestedSpecs. pxx's own self-host
+  resolves that either way; the FPC seed build does not, and fails with
+  `Identifier not found`. See bug-a-fpc-seed-drift-emitasmx64-forward -- `make
+  compiler/pascal26` is green in exactly this situation, so gate.sh quick is what
+  catches it. Keep these ABOVE the first caller, not merely somewhere in the file. }
+function GenericMethodBodyEnd(startTokIdx: Integer): Integer; forward;
+procedure AppendTokenRangeToTemplateArena(fromIdx, toIdx: Integer;
+                                         var ts, tc: Integer); forward;
+procedure ScanRangeForNestedSpecs(ts, tc: Integer; const specName: AnsiString); forward;
+function IsDelphiGenMethImplHdr(soff: Integer): Boolean; forward;
+
+procedure ScanDelphiMethodImplsForNestedSpecs(ti: Integer; const specName: AnsiString);
+var dScan, dHdr, dBase, ts, tc: Integer;
+begin
+  if GenMethImplCount = 0 then Exit;
+  for dScan := 0 to TokCount - 1 do
+    if (Tokens[dScan].Kind = tkIdent) and (dScan + 1 < TokCount) and
+       (Tokens[dScan + 1].Kind = tkDot) and (dScan >= 1) and
+       CaseEqual(GetTokenStrFromRaw(Tokens[dScan].SOffset, Tokens[dScan].SLen),
+                 Templates[ti].Name) and
+       IsDelphiGenMethImplHdr(Tokens[dScan].SOffset) then
+    begin
+      { the captured range starts at `procedure`/`function`, one earlier for a
+        `class` method -- the same two shapes BufferGenericMethod is called with }
+      dHdr := dScan - 1;
+      if (dScan >= 2) and (Tokens[dScan - 2].Kind = tkClass) then dHdr := dScan - 2;
+      dBase := TemplateTokenCount;
+      AppendTokenRangeToTemplateArena(dHdr, GenericMethodBodyEnd(dHdr), ts, tc);
+      ScanRangeForNestedSpecs(ts, tc, specName);
+      TemplateTokenCount := dBase;   { scratch only: NOT a buffered method }
+    end;
+end;
+
+{ End of a top-level type section: emit alias declarations for nested
+  specializations that could not be seen when the class was specialized.
+
+  WHY THIS TIME AND NOT EARLIER. In mode Delphi the rewrite emits a template's
+  alias right behind THAT template's own declaration, so ParseSpecialization can
+  run before a template mentioned in its method bodies has even been declared --
+  and until that template is declared, `TDeriv<T>` in the body has not been
+  rewritten to `specialize TDeriv<T>`, so there is nothing for any scan to match
+  (the trace shows a bare `nested=0`). By the end of the section every template
+  in it is declared and the rewrite has swept the bodies, so the same scan now
+  finds them.
+
+  WHY EMITTING HERE IS ENOUGH. The alias only has to be REGISTERED before the
+  method is streamed, not before the class is specialized: `NestedSpecKnown`
+  consults registered specializations, and the method impls sit after this
+  section, so a declaration inserted at TokPos is parsed first. Verified
+  directly before this was written -- adding a plain `TDeriv<UnicodeString>`
+  instantiation by hand ahead of the method impl makes the failing program
+  compile and match FPC.
+  bug-p-a-generic-specialized-before-its-declaration-is-unresolvable }
+procedure EmitLateNestedSpecDecls;
+var si, ti, k: Integer;
+begin
+  if (GenMethImplCount = 0) or (SpecializationCount = 0) then Exit;
+  NSpecCount := 0;
+  NSpecInsCnt := 0;
+  for si := 0 to SpecializationCount - 1 do
+  begin
+    ti := -1;
+    for k := 0 to TemplateCount - 1 do
+      if CaseEqual(Templates[k].Name, Specializations[si].TemplateName) then ti := k;
+    if ti < 0 then Continue;
+    SpecializeTemplateName := Templates[ti].Name;
+    SetSpecSubs(ti, si);
+    ScanDelphiMethodImplsForNestedSpecs(ti, Specializations[si].Name);
+  end;
+  if NSpecCount > 0 then
+  begin
+    { A leading `type`. The section loop has already EXITED, so these land at top
+      level, where a bare `X = specialize Y<Z>;` is not a declaration -- the
+      parser reads it where it expects `begin`/`procedure`/`type` and reports
+      *Expected: begin*. The pending-flush path next door needs no such keyword
+      because what IT inserts is `procedure` bodies, which are valid there as
+      they stand. }
+    NSpecIns[NSpecInsCnt].Kind := tkType; NSpecIns[NSpecInsCnt].IVal := 0;
+    NSpecIns[NSpecInsCnt].Line := Tokens[TokPos].Line;
+    NSpecIns[NSpecInsCnt].SOffset := 0; NSpecIns[NSpecInsCnt].SLen := 0;
+    Inc(NSpecInsCnt);
+    for k := 0 to NSpecCount - 1 do
+      EmitSpecDecl(NSpecName[k], NSpecTmpl[k], k * MAX_TEMPLATE_PARAMS, NSpecNArg[k]);
+    InsertTokens(TokPos, NSpecIns, NSpecInsCnt);
+  end;
+  NSpecCount := 0;
+end;
+
 { Forwards: both are DEFINED beside BufferGenericMethod, further down this file,
   and USED by ParseSpecialization above it. pxx's own self-host resolves that
   either way; the FPC seed build does not, and fails with `Identifier not found`.
   See bug-a-fpc-seed-drift-emitasmx64-forward -- `make compiler/pascal26` is
   green in exactly this situation, so gate.sh quick is what catches it. }
-function GenericMethodBodyEnd(startTokIdx: Integer): Integer; forward;
-procedure AppendTokenRangeToTemplateArena(fromIdx, toIdx: Integer;
-                                         var ts, tc: Integer); forward;
 
 { Was this class-name token offset recorded by DelphiRewriteGenericUses as a
   method-impl header it stripped a `<T>` from? See GenMethImplSOff in defs.inc. }
@@ -1064,7 +1166,6 @@ var
   cKinds: array[0..MAX_TEMPLATE_PARAMS-1] of TTokenKind;
   nc, ti, i, j, k, na, ts, tc, gEnd, si, dfIdx: Integer;
   gmScan: Integer;   { -1 = the class body, >= 0 = a buffered method body }
-  dScan, dHdr, dBase: Integer;   { mode-Delphi not-yet-buffered method impls }
   nDeclEdges: Integer;   { NSpec entries below this came from the CLASS BODY }
   dup: Boolean;
 begin
@@ -1186,23 +1287,7 @@ begin
     (method, specialization) pair is materialised exactly once" by a
     before/after split, and buffering here would make the parser's own later
     call the second buffering of the same body and emit it twice. }
-  if GenMethImplCount > 0 then
-    for dScan := 0 to TokCount - 1 do
-      if (Tokens[dScan].Kind = tkIdent) and (dScan + 1 < TokCount) and
-         (Tokens[dScan + 1].Kind = tkDot) and (dScan >= 1) and
-         CaseEqual(GetTokenStrFromRaw(Tokens[dScan].SOffset, Tokens[dScan].SLen),
-                   Templates[ti].Name) and
-         IsDelphiGenMethImplHdr(Tokens[dScan].SOffset) then
-      begin
-        { the captured range starts at `procedure`/`function`, one earlier for a
-          `class` method -- the same two shapes BufferGenericMethod is called with }
-        dHdr := dScan - 1;
-        if (dScan >= 2) and (Tokens[dScan - 2].Kind = tkClass) then dHdr := dScan - 2;
-        dBase := TemplateTokenCount;
-        AppendTokenRangeToTemplateArena(dHdr, GenericMethodBodyEnd(dHdr), ts, tc);
-        ScanRangeForNestedSpecs(ts, tc, specName);
-        TemplateTokenCount := dBase;   { scratch only: NOT a buffered method }
-      end;
+  ScanDelphiMethodImplsForNestedSpecs(ti, specName);
 
   { A prerequisite queued by one deferral may already have been satisfied by
     another: rtl-generics reaches TCustomComparer$string through BOTH

@@ -2594,6 +2594,14 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_generic_mutual_reference.pas $(TESTTMP)/test_gen_mutual26
 	@$(TESTTMP)/test_gen_mutual26 | diff -u test/test_generic_mutual_reference.expected - \
 	  || { echo 'test_generic_mutual_reference: FAIL - mutual generic refs rejected as circular again'; exit 1; }
+	@# A template method body naming a template declared LATER in the same type
+	@# section. FPC accepts both orderings; we accepted only one. Both arms are in
+	@# the file on purpose -- the backward one is the arm that always worked, and a
+	@# fix that trades one ordering for the other would pass with only the forward.
+	@# bug-p-a-generic-specialized-before-its-declaration-is-unresolvable
+	@./$(COMPILER) test/test_generic_forward_template_reference.pas $(TESTTMP)/test_gen_fwd26
+	@$(TESTTMP)/test_gen_fwd26 | diff -u test/test_generic_forward_template_reference.expected - \
+	  || { echo 'test_generic_forward_template_reference: FAIL - declaration order matters again'; exit 1; }
 	@# a SECOND class of the same name in one unit must be refused, naming it
 	@./$(COMPILER) test/test_pascal_duplicate_class_fail.pas $(TESTTMP)/test_pascal_dup_class26 2>&1 \
 	  | grep -q 'duplicate class name TFoo' \

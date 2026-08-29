@@ -5994,6 +5994,18 @@ begin
     nothing was streamed). }
   { NOT from a nested class-local type section: flushing there would splice
     the pending method impls into the middle of the enclosing class body. }
+  { Late nested-specialization declarations, BEFORE the pending flush: in mode
+    Delphi a template mentioned inside another template's method body may not
+    have been declared yet when that class was specialized, so its prerequisite
+    was invisible then and is discoverable only now. Emitted here, they are
+    parsed before the parser reaches the method impls that need them.
+    bug-p-a-generic-specialized-before-its-declaration-is-unresolvable }
+  if TypeSectionDepth = 0 then
+  begin
+    Dec(TokPos);
+    EmitLateNestedSpecDecls;
+    Next;
+  end;
   if (PendingSpecCount > 0) and (TypeSectionDepth = 0) then
   begin
     Dec(TokPos);

@@ -4,6 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "In {$MODE DELPHI}, specializing a generic inside a method body fails when that generic is declared LATER in the same type section: `Result := TDeriv<T>.Create` compiles when TDeriv precedes TBase and reports `undefined variable (specialize)` when it follows. FPC accepts both. Reduced to a 14-line repro whose only difference is the order of two declarations. This is rung 3's wall past the RTTI blocker (generics.defaults.pas:3250)."
+status: done
+owner: frankA
 ---
 
 # A generic specialized before its declaration is unresolvable in DELPHI mode
@@ -155,3 +157,66 @@ so itself.
 If they are **not** the same, say so here explicitly rather than leaving the lead
 open. An unresolved "these might be one thing" note is the shape that gets
 believed later: it reads as prior investigation and is not.
+
+## Resolved 2026-08-28 (frankA)
+
+**This ticket and [[bug-p-a-generic-prerequisite-is-emitted-before-the-referenced-template-exists]]
+are one defect** — settled affirmatively, so one fix closes both. The evidence is
+in that ticket: the parked repro *reduces* to this one (strip its incidental
+inheritance and it fails identically), and both respond the same way to frankB's
+two perturbations. Reduction, not resemblance — a symptom match alone would not
+have been enough.
+
+Ruled out first, so nobody re-derives them: frankB's seven variations, all
+carried over rather than re-run.
+
+### Root cause
+
+`NestedSpecKnown` asks whether a prerequisite is **registered** — `FindSpecialization`
+or `FindUClass` — not whether a token naming it has been inserted somewhere. So a
+prerequisite discovered while a method body is being streamed can no longer be
+declared: emitting before the collapse is too early (nothing registered yet),
+emitting after it is too late (already collapsed). The scan that finds these
+prerequisites runs at `ParseSpecialization` time, when the Delphi rewrite has not
+yet swept the method impls that name them, so in the failing shape it finds
+`nested=0` and nothing is emitted at all.
+
+The fix does not fight that window — it uses an earlier one. At the end of a
+top-level type section the rewrite *has* swept those bodies, and the method impls
+themselves are still ahead of the parser. `EmitLateNestedSpecDecls` re-runs the
+same `GenMethImplSOff`-bounded scan there and emits declarations for whatever is
+still unknown, so the alias is registered before the method is streamed at all.
+
+Two details that are measured, not reasoned — both broke first:
+
+- The inserted run needs a leading `type` token. The section loop has already
+  exited, so a bare `X = specialize Y<Z>;` gives *Expected: begin*. The
+  neighbouring `FlushPendingClassSpecializations` needs no keyword only because
+  what it inserts is `procedure` bodies.
+- It must run when `PendingSpecCount = 0`. In mode Delphi `GenericMethodCount` is
+  0 at specialization time, so nothing is ever queued — copying the flush's guard
+  would have made this a no-op in precisely the case it exists for.
+
+### Verification (binary 5c9d52bdd0bf)
+
+- This repro prints `TRUE`, the parked one prints `7` — both matching FPC.
+- New `test/test_generic_forward_template_reference.pas` (FPC-oracled) carries
+  **both** orderings: forward is the broken arm, backward is the one that always
+  worked and is what a fix trading one for the other would break.
+- Control: `test_generic_cycle_fail` confirmed failing *before* the change and
+  still correctly refused after. `test_generic_mutual_reference` and four other
+  Delphi/generic tests pass.
+- Corpus `generics.defaults.pas` **`:3250` → `:3341`**, stopping on a different
+  class of error (`"LookupEqualityComparer": a pointer has no members`) rather
+  than another `specialize`.
+- `CORPUS_EXPECTED` untouched; the prerequisite scan was not weakened — the fix
+  adds a second run of the same scan at a later time, and both original scans stay.
+
+**FPC seed drift, twice in this session.** `make compiler/pascal26` was green
+throughout; `gate.sh quick` went RED because three helpers were called from an
+include above their definitions. The second occurrence is the interesting one: the
+forwards *existed*, but sat below a caller that a later refactor had lifted above
+them, so "I already added forwards" was true and useless.
+
+## Log
+- 2026-08-28 — resolved, commit PENDING-COMMIT.

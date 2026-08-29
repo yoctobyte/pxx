@@ -168,3 +168,42 @@ question is still whether this class is frequent enough to pay that on every com
 or whether it belongs in `gate.sh quick` (where it already is) with the loop simply
 saying so more loudly. **The decision remains the owner's** — it changes the
 mandatory loop, which is CLAUDE.md's own text.
+
+## Field evidence, 2026-08-28 (frankA) — three RED gate cycles in one session, all four failures pre-detectable
+
+Not an opinion on the decision; a measurement of the current cost, from a Track P
+session that hit this class **four times while landing one fix**.
+
+The refactor lifted `ScanDelphiMethodImplsForNestedSpecs` above three helpers it
+calls. Every `make compiler/pascal26` was green — including the byte-identical
+self-host fixedpoint — and the binary was **identical across all three repairs**
+(`5c9d52bdd0bf` throughout), because forwards change nothing pxx can observe.
+
+What the loop actually looked like:
+
+| cycle | caught by | reported | cost |
+| --- | --- | --- | --- |
+| 1 | `gate.sh quick` | 3 identifiers | ~90s + rebuild |
+| 2 | `gate.sh quick` | 1 more (`IsDelphiGenMethImplHdr`) | ~90s + rebuild |
+| 3 | `tools/forwardlint.py` | **0 remaining, confirmed** | 4s |
+
+**The compounding failure is not the drift, it is that FPC reports one batch at a
+time.** After cycle 1 I fixed exactly the three names the error listed, which felt
+complete and was not — the fourth was invisible until the third-listed one stopped
+aborting compilation. Fixing from the error message is inherently whack-a-mole;
+the lint answers the whole question in one pass. That asymmetry is the argument,
+and it does not depend on which way the decision goes.
+
+Second data point for the "is it silent when correct?" question this ticket raises:
+on today's master `forwardlint` printed **exactly one note** — the known
+`LowerCase` divergence already filed as
+`bug-a-lowercase-resolves-to-two-different-routines-depending-on-the-seed` — and
+zero other noise. The signal-to-noise premise holds up on a tree in mid-refactor,
+not just a clean one.
+
+**Note for whoever decides:** the tool was already in `tools/`, and I did not
+reach for it until the third cycle, having gone twice around on error messages
+first. So "it exists and is documented in a backlog ticket" demonstrably does not
+get it run — which is a point *for* wiring it somewhere mandatory, but it is the
+owner's call and CLAUDE.md's gating section is the owner's file. Not editing
+either.

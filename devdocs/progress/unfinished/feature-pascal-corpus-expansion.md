@@ -661,3 +661,33 @@ that separate the defects — `class → var`, and `instance` with an inline cas
 had not been tried. The fix that boundary implied would have left half the bug
 in place. Vary the shape until the table has no untested neighbours, not until
 it looks tidy.
+
+## Rung 6 progress, 2026-08-28 (frankA) — `:3250` → `:3341`, and the wall list keeps growing
+
+Five defects landed today, four of them walls this unit was standing behind:
+resourcestring addressability, wall 6 (a generic class method call inside
+another generic's body), mutually-referencing generics rejected as circular, and
+— in one fix closing two tickets — a generic specialized before its declaration
+(`bug-p-a-generic-specialized-before-its-declaration-is-unresolvable` +
+`bug-p-a-generic-prerequisite-is-emitted-before-the-referenced-template-exists`).
+
+`generics.defaults.pas` moved `:2960 → :3231 → :994 → :3250 → :3341` across the
+day. Note the `:994` — the third fix moved the failure *backwards*, because a
+construct that had been rejected outright started compiling and reached a new
+error earlier in the file. **A line number going down is not a regression here**,
+and reading it as one would have wasted a session.
+
+The new stop is a *different class* of error — `"LookupEqualityComparer": a
+pointer has no members` — not another `specialize`. That is the first time today
+the unit has failed on something other than generic prerequisite resolution, so
+the next wall is probably not more of the same machinery.
+
+**The rung-6 partition is still superseded, and today is more evidence for the
+warning above, not less.** Four walls cleared, and the unit is still not through.
+Re-run `$SCRATCH/rg/probe.sh` before estimating anything; do not read the wall
+list as a work estimate.
+
+`CORPUS_EXPECTED` untouched throughout, and the prerequisite scan was not
+weakened to make the corpus advance — the fix adds a *second* run of the same
+scan at a later time; both original scans stay, and `test_generic_cycle_fail`
+still correctly refuses.

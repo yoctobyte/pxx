@@ -3,7 +3,7 @@ slug: bug-p-a-generic-prerequisite-is-emitted-before-the-referenced-template-exi
 track: P
 prio: 60
 type: bug
-status: unfinished
+status: done
 blocked-by: []
 summary: "The mode-Delphi rewrite emits a template's alias declaration right behind THAT template's own declaration, so a prerequisite naming a template declared LATER in the same type section lands before it exists and dies `undefined variable (specialize)`. rtl-generics does exactly this: `TGStringComparer` (~985) has a method body at 3250 naming `TGOrdinalStringComparer`, declared at 1002. This is rung 6's wall in BOTH units now. FPC compiles the 8-line repro and prints 7."
 owner: frankA
@@ -228,3 +228,79 @@ outcome to debug.
    materialise the same pair.
 3. `test/test_generic_mutual_reference.pas` and `test/test_generic_cycle_fail.pas`
    are the pair that must stay green/red respectively throughout.
+
+## Resolved 2026-08-28 (frankA) — same defect as [[bug-p-a-generic-specialized-before-its-declaration-is-unresolvable]]
+
+**The lead was settled by reduction, not by resemblance.** Both repros are
+`{$MODE DELPHI}`, a template method body naming a template declared later, same
+`undefined variable (specialize)`, same `nested=0` trace, both fixed by swapping
+two declarations. That is a symptom match and proves nothing on its own, so:
+
+| perturbation | this ticket's repro | the p55 repro |
+| --- | --- | --- |
+| baseline | fails | fails |
+| remove the instantiation | compiles | compiles |
+| concrete type argument for the parameter | compiles | compiles |
+| **remove the inheritance** (this repro's extra ingredient) | **still fails, identically** | n/a — never had it |
+
+The last row is the one that settles it: strip what this repro had and the other
+lacked, and it *reduces* to the other rather than merely resembling it. One
+mechanism, one fix, two tickets.
+
+## Correction: my own banked diagnosis drew too strong a conclusion
+
+The park note said the fix needs a **method-level deferral** — defer the method's
+streaming, register the alias, retry — because `NestedSpecKnown` consults
+registered specializations and so the declaration can be neither emitted before
+the collapse (not yet registered) nor after it (already collapsed).
+
+**The constraint is real and both dead variants really are dead.** The conclusion
+is not: I searched for a place to emit *around the stream* and, finding none,
+concluded the stream itself had to be deferred. There is a third option I did not
+consider — emit at a completely different **time**. The alias only has to be
+registered before the method is *streamed at all*, and the end of the type section
+is exactly such a window: the method impls sit after it, so a declaration inserted
+there is parsed first.
+
+Checked before writing any code, and it is a one-line experiment: adding a plain
+`type TDx = TDeriv<UnicodeString>;` by hand ahead of the method impl makes the
+failing program compile and match FPC. That is the whole hypothesis, testable
+without touching the compiler.
+
+The lesson is narrower than "I was wrong": **ruling out every placement is not
+ruling out every option, when timing is also free.** I had fixed the axis without
+noticing I had fixed it.
+
+## The fix
+
+`EmitLateNestedSpecDecls`, called at the end of a top-level type section (before
+the pending flush), re-runs the same `GenMethImplSOff`-bounded scan the wall-6 fix
+introduced — but *now*, when the rewrite has swept bodies it had not reached
+earlier — and emits declarations for any prerequisites still unknown.
+
+Two things it needs that the neighbouring flush does not:
+
+- **A leading `type` token.** The section loop has already exited, so a bare
+  `X = specialize Y<Z>;` lands at top level and the parser reports *Expected:
+  begin*. The flush needs no keyword because what it inserts is `procedure`
+  bodies, valid there as they stand. Measured, not predicted — it was the first
+  thing that broke.
+- **To run when `PendingSpecCount = 0`.** The flush is guarded on pending
+  entries; in mode Delphi `GenericMethodCount` is 0 at specialization time so
+  nothing is ever queued, and a guard copied from next door would have made this
+  a no-op in exactly the case it exists for.
+
+### Verification
+
+- Both repros match FPC: this one prints `7`, p55 prints `TRUE`.
+- `test/test_generic_forward_template_reference.pas`, FPC-oracled, carries **both
+  orderings** — the backward one is the arm that always worked, and a fix that
+  traded one ordering for the other would pass a forward-only test.
+- `test_generic_cycle_fail` still correctly refused; `test_generic_mutual_reference`
+  and four other Delphi/generic tests still pass.
+- Corpus: `generics.defaults.pas` **`:3250` → `:3341`**, and the new stop is a
+  different kind of error (`"LookupEqualityComparer": a pointer has no members`),
+  not another `specialize`.
+
+## Log
+- 2026-08-28 — resolved, commit PENDING-COMMIT.
