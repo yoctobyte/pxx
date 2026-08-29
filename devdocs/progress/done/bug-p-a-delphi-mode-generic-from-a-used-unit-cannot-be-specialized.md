@@ -219,7 +219,11 @@ That gate line was written before either wall was visible.
   `test_generic_spec_per_unit` still 4/4.
 - `generics.defaults.pas` still compiles alone, to the same code size.
 - `generics.collections.pas` unchanged from `pinned` — same error, same line.
-- `make compiler/pascal26`: `converged after 1 round(s)`.
+- `make compiler/pascal26`: on `master`, `converged after 2 round(s)`,
+  `38e1eed43788`. Every line above was re-run against that binary.
 
 ## Log
-- 2026-08-29 — resolved, commit `9a98d314c` (branch `rust`).
+- 2026-08-29 — resolved, commit `6a810c8c4` on `master`.
+  First landed on the divergent branch `rust` as `9a98d314c` and cherry-picked
+  across; that branch is not the trunk and nothing on it is visible to Track T.
+  All verification below was re-run on `master` after the pick.

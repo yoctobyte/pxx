@@ -33,6 +33,7 @@ Five instances, one day, five different subsystems:
 | 5 | ordered string compare | x86-64 inline | `PXXStrCmp3` (4 targets) | `'zzz' < 'aaa'` by **allocation order** |
 | 6 | `SomeName(expr)` named-type cast | 4 of 5 `ParseFactorCore` dispatch sites | `FindTypeAlias` arm | alias cast **did not narrow** — silent wrong value |
 | 7 | a TICKET's own prose | the paragraph listing `vm.push(...)` attribute use | the prescription two paragraphs below it | prescribed edit would have **swapped** one failing set for another |
+| 8 | the Delphi generics rewrite's fixed-point exit | `DesugarImportedDelphiGenericUses` (new) | `ParseGenericTemplateNamed`'s loop | round read **idle** while work remained — an emitted `type` keyword silently vanished |
 
 **Instance 6 is the loudest and was found the same day, by pxx-a5 (`6cc4afc17`).**
 It is worth stating separately because it removes the last charitable reading of
@@ -51,6 +52,32 @@ unchecked. **It names the surviving broken arm outright, in advance, and it
 still took another round.** So the population is not just findable in principle
 — in at least one case it was already found, written down, and left. The gap
 this audit closes is not detection, it is follow-through.
+
+**Instance 8 is the first where the comment is not about a sibling arm at all —
+it asserts an invariant about the SAME arm, and is simply false.** Both copies of
+the fixed-point loop in `pasparser_generic.inc` exited on `until TokCount =
+dgenBefore`, carrying:
+
+> *"A round that rewrites nothing inserts no alias declaration, so an unchanged
+> TokCount is exactly 'nothing left to collapse'."*
+
+It is not exact. The same round also REMOVES each `<Args>` group it rewrote, so
+one argument tuple used twice removes 8 tokens and inserts 8, and the loop reads
+"idle" on a round that did work. **Distance between the comment and the
+violation: eleven lines, same procedure, same screen.** That number is the point
+— this was not a sibling in another file that a reader could not have been
+expected to visit. Reading the comment could not refute it; the comment is
+*more* persuasive than the code, which is what made it survive. Only a wrong
+output did: the `type` keyword the desugar emits went missing on exactly the
+cancelling input, and the search for why arrived here.
+
+The remedy that distance implies is **not** tooling and not more careful reading.
+It is that an invariant stated in prose next to the code it governs is worth
+nothing until something fails when it is violated — the same reason a claim in a
+ticket has to be diffed against an oracle before it is written down. Fixed in
+`bug-p-a-delphi-mode-generic-from-a-used-unit-cannot-be-specialized`; the sibling
+loop was corrected in the same commit, where its only effect is one extra round
+in the case that was silently reading "idle".
 
 **In every one, the fixed arm's comment names the property the unfixed arm
 lacks.** Instance 3's runtime-step arm says outright: *"the previous lowering
