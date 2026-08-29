@@ -900,3 +900,65 @@ symptom's disappearance, however exact the timing.**
 the same green. Both are cases where the ACTION's own report is uninformative,
 as opposed to an observation's. The pattern across both: **an operation that
 cannot fail cannot inform.**
+
+## Face twenty-two — naming the check you did not run makes the conclusion read as checked
+
+Found by pxx-a5, 2026-08-29, in a ticket frank-coordinator filed the same hour.
+Face twenty is a remedy already in force. This is a *precondition* named and not
+performed — and the naming is what does the damage.
+
+**The instance.** `bug-a-testtmp-defaults-to-a-path-every-checkout-shares` was
+filed with a "Direction, not a prescription" section that said, in as many words:
+*grep for hardcoded `/tmp/` consumers outside the Makefile first, including in the
+tooling, before changing the default.* The coordinator wrote that sentence and
+did not run the grep.
+
+pxx-a5 ran it. It inverts the answer three ways:
+
+- **testmgr already privatizes.** `RUN_TMP = "/tmp/testmgr-scratch-%d" % os.getpid()`
+  (`tools/testmgr.py:1251`), applied by rewriting every recipe line at execution —
+  so the ticket's central sentence, *two runs in two trees write the same absolute
+  paths*, is **false for every testmgr-driven run**, which is how the watcher and
+  every gate tier run. The real exposure is bare `make` by hand, which the
+  full-suite hook already refuses for every lane but T.
+- **The recipe half closed two weeks earlier** — `chore-makefile-testtmp-parameterize`,
+  `b2cab6b6b`, 2026-08-14.
+- **And the proposed fix would break the harness.** Four expressions in
+  `make_dry_run()` hardcode the literal `/tmp` prefix, with a comment on them
+  saying they *"all four go blind AT ONCE and fail silently"* if the default moves
+  — no privatization and no producer/consumer merge. `/tmp` is **load-bearing**,
+  not an oversight, and that comment is the guard.
+
+So the recommendation would have removed isolation that already exists and broken
+the job-dependency merge, both silently, both in the direction where a
+collision-red and a real defect read identically. **It would have made the exact
+problem the ticket is about worse, while looking like the fix.**
+
+**Why the hedge is the mechanism and not the mitigation.** A flat recommendation
+invites a reader to check it. A recommendation that names its own precondition
+reads as one whose author already thought about that — and the sentence *"grep
+for consumers first"* is indistinguishable, on the page, from *"I grepped for
+consumers."* The care is what buys the credibility, and the credibility is what
+suppresses the check.
+
+| condition | how the ticket reads |
+| --- | --- |
+| precondition named and satisfied | a carefully-qualified recommendation |
+| precondition named and never run | a carefully-qualified recommendation |
+
+Same family as the false-limit rule — *a wrong reason is worse than none, because
+it answers the question the reader would otherwise have asked* — but sharper:
+here the wrong reason is **a correct instruction**, and it is wrong only in
+whose desk it was left on.
+
+**The guard.** A precondition you can state in one line is a precondition you can
+run in one line. **If the check is cheap enough to name, run it before filing;
+if it is genuinely too expensive, say "I did not run this" in the same
+sentence** — the disclosure has to be adjacent, because the naming alone reads
+as performance.
+
+The underlying observation — `Makefile:49` really is `TESTTMP ?= /tmp` — was
+true. **A correct measurement carrying a wrong causal story is more dangerous
+than a wrong number**, and this is that rule with the story spelled out: the fact
+was right, its consequences were wrong in three directions, and the ticket
+priced it as a live fleet-wide hazard.
