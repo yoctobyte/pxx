@@ -137,10 +137,20 @@ TARGETS = {
     "aarch64": "LP64",
     "arm32": "ILP32",
     "riscv32": "ILP32",
-    # NOT a backend pxx has. compiler/defs.inc stops at TARGET_RISCV32 = 5 and
-    # "riscv64" appears nowhere in compiler/**. The row is correct-in-advance so
-    # the table needs no edit the day the backend lands -- it is not evidence one
-    # exists, and --target riscv64 will fail at the pxx invocation, not here.
+    # NOT a backend pxx has: "riscv64" appears nowhere in compiler/**. The row is
+    # correct-in-advance so the table needs no edit the day the backend lands --
+    # it is not evidence one exists, and --target riscv64 will fail at the pxx
+    # invocation, not here.
+    #
+    # This comment used to say "compiler/defs.inc stops at TARGET_RISCV32 = 5".
+    # That was true when written (2026-08-20) and false seven days later:
+    # TARGET_WASM32 = 6 landed in 290ee8ca4d on 2026-08-27. Do not restate the
+    # backend count here -- the count is a boundary that moves, and a sentence
+    # asserting one goes stale silently. defs.inc is the authority; this table
+    # is a list of targets csmith can GENERATE for, which is a different set
+    # and deliberately smaller (xtensa and wasm32 are real backends and are
+    # absent from it by omission, not by decision -- see
+    # bug-a-target-enumerations-in-comments-are-stale-and-one-of-them-hid-a-live-bug).
     "riscv64": "LP64",
 }
 
