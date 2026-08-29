@@ -9,8 +9,8 @@ summary: "Real dlopen loader: DONE on x86-64 (PAL primitives, opt-in -dPXX_DYNLI
 # Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy
 
 - **Type:** feature / design decision (runtime infrastructure)
-- **Status:** unfinished
-- **Owner:** frank3
+- **Status:** done
+- **Owner:** frankB
   the link-libc profile / loader-vs-link decision)
 - **Opened:** 2026-06-24
 - **Found-by:** Synapse recon ([[feature-synapse-compile-check]]) — `dynlibs`
@@ -429,3 +429,81 @@ dependency, and is recorded here rather than as an edge, because no ticket
 resolving will make a cross libc appear.
 
 Nothing else changed; the ticket stays `unfinished/` under its existing owner.
+
+## 2026-08-29 (frankB) — item (d) DONE, measured. Ticket closed; item (b) split out.
+
+Picked up from the ranked queue, where it has been surfacing at p45 for months.
+Every previous round re-parked it. This one does not, because **the ground moved
+under item (d) since 2026-08-28 and nothing had re-checked it.**
+
+### Item (d): the handshake works
+
+My own note of 2026-08-28 said (d) was blocked on the Synapse tree being held
+aside as `external/synapse-held-for-bug-a-spliced-token-stream`, since restoring
+it turned Track B's gate into a hard failure. **All three of that sentence's
+premises have since changed:**
+
+- `bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream` was fixed by
+  frankA in `614ec6017`, and **v391 carries it** — so restoring the corpus no
+  longer reds the gate. Confirmed: full `lib-test` green at v391, exit 0, with no
+  `SKIPPED:` clause, all three synapse jobs running.
+- `bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert` —
+  the thing (d) was *actually* stopped on, the tail call through a stack address
+  inside `X509_verify_cert` — was fixed in `2ee660831` back on **2026-08-17**.
+  Nothing re-ran the probe after that.
+
+Re-ran the ticket's own repro verbatim, `pinned` **v391**, x86-64, OpenSSL 3.5.5,
+`-dPXX_DYNLIB_LIBC`, against `openssl s_server` on a self-signed localhost cert:
+
+```
+connect=0
+ssl=0
+```
+
+**Five runs out of five**, where the recorded failure mode was a segfault. The
+FPC oracle built from the identical source gives the identical `connect=0
+ssl=0`. So the loader is proven end-to-end through a real TLS conversation with
+a third-party `.so` we do not control — which is the whole point of this ticket.
+
+**Item (d) is done.**
+
+### Item (b): still environmental, and no longer this ticket's problem
+
+Re-measured today: `/usr/arm-linux-gnueabihf/lib/ld-linux-armhf.so.3` and
+`/usr/aarch64-linux-gnu/lib/ld-linux-aarch64.so.1` are both absent, and neither
+sysroot directory exists at all. Unchanged since 2026-08-09, and unchangeable by
+any ticket.
+
+Split out as
+[[chore-b-no-cross-loader-on-this-host-blocks-the-dynlib-arm-run]] at prio 20.
+
+### Why the ticket closes rather than parks again
+
+The feature is delivered and now proven. What remained was one verification that
+this host physically cannot perform. Keeping a p45 feature open on that means the
+ranker offers it, a worker reads several hundred lines, discovers the blocker is
+a missing file, and re-parks it — which is what happened on 2026-08-02,
+2026-08-09, 2026-08-17 and 2026-08-28. That is
+`CLAUDE.md`'s "keeps it in the ranker's scan forever at zero value", except near
+the top of Track B rather than at the bottom.
+
+### Also done here
+
+- **`test/lib_synapse_ssl.pas`'s header carried a false reason.** It said a TLS
+  connect "currently segfaults inside X509_verify_cert" — true when written,
+  fixed twelve days ago. Read today it asserts the compiler is broken when it is
+  not, and hands the next reader a closed ticket as the reason not to look.
+  Corrected to state what was measured, when, and against what.
+- The handshake is still **not** in the suite, now for a mechanical reason
+  rather than a defect: a handshake needs both sides live at once and this suite
+  is single-process with no `fork`. Filed as
+  [[feature-b-a-hermetic-tls-loopback-for-the-ssl-suite]] with the self-exec
+  design worked out. Deliberately not bolted in as a spawned `openssl s_server`
+  — that is a network-timing test inside Track B's gate, and its failures would
+  be indistinguishable from the terminations `lib-test` already suffers.
+
+Gate: `lib-test` green at v391 (full run, no skips); `lib_synapse_ssl` rebuilt
+and re-run after the header edit — `version=ok`, `SYNAPSE-SSL OK`.
+
+## Log
+- 2026-08-29 — resolved, commit PENDING-COMMIT.
