@@ -21,7 +21,7 @@ set -eu
 sudo apt-get install -y qemu-user qemu-user-static binfmt-support
 
 echo
-for q in qemu-i386 qemu-aarch64 qemu-arm qemu-riscv32 qemu-riscv64; do
+for q in qemu-i386 qemu-aarch64 qemu-arm qemu-riscv32 qemu-riscv64 qemu-xtensa; do
   if command -v "$q" >/dev/null 2>&1; then
     echo "ok: $q ($("$q" --version | head -n1))"
   else

@@ -199,6 +199,30 @@ TIERS = {
         "test-c-conformance",
         "test-float-determinism", "test-emit-obj",
         "test-i386", "test-aarch64", "test-arm32", "test-riscv32",
+        # XTENSA — full only, and it could not have gone anywhere else. It
+        # drives tools/run_target.sh, so it classes `qemu`, and `limited`'s one
+        # promise is that a box without qemu can run it; `native` says so in its
+        # own comment. Enrolled 2026-08-30, the day after the target existed at
+        # all (feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle) — before
+        # that an xtensa binary spun in EmitExit's self-loop or faulted on its
+        # first allocation, which is why three wrong-answer bugs lived in that
+        # backend: nothing could run it, so every ticket ended "do not land this
+        # on inspection".
+        #
+        # WHAT IS ENROLLED IS 55 OF 142 SOURCES, and the other 87 are a STATED
+        # POPULATION, not a filter: 21 measured divergences
+        # (bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs)
+        # and 66 that do not compile yet. The target's own header names them and
+        # cites the ticket; enrolling it here must not be read as "xtensa is
+        # covered". A differential that hides its own failures is exactly how
+        # xtensa got into this state, and the count is the honest headline:
+        # 55/142, not GREEN.
+        #
+        # And a green here is green UNDER --xtensa-soft-mulhigh, which LABELS a
+        # divergence from hardware rather than removing it (no qemu-xtensa core
+        # implements MUL32HIGH). Arithmetic questions — the two tickets that
+        # motivated the oracle — are what this target still cannot answer.
+        "test-xtensa",
         # the 220-program c-testsuite battery per cross target, + lua on all
         # four: this matrix found 3 real backend gaps on the day it landed,
         # so the watcher should be the one running it (Track C asked for it in
@@ -1250,6 +1274,46 @@ HOST_CAPS = [
 ]
 
 
+# ---- host TOOL requirements -------------------------------------------------
+# The CPU guard above, moved from the silicon to $PATH. A cross job runs its
+# binary through tools/run_target.sh, which `need`s the matching qemu-user
+# emulator and exits 2 when it is absent -- so on a box that never installed
+# one, every job of that target goes RED and reads as a defect in the tree.
+#
+# Not hypothetical, and the bill has already been paid: in
+# rejected/regression-cascade-154d1aa3fba6, TEN of eighteen "newly red" jobs on
+# a fresh watcher box were a missing i386 loader and an absent cross sysroot,
+# auto-filed at prio 70 against twelve innocent commits and costing three agents
+# a triage cycle. The corpus guard below already solved this exact shape for the
+# filesystem -- skip, and name the one command that fixes it -- and its argument
+# transfers whole: a red is strictly worse than a skip because it masks a future
+# real regression in that job permanently, while every later run reads it as
+# STILL-RED rather than as coverage loss.
+#
+# PRESENCE ONLY, deliberately. Whether the emulator WORKS is what the job
+# answers; whether it EXISTS is what the harness can answer without running it.
+# And only the arches run_target.sh `need`s unconditionally: `x86_64` execs
+# natively and `i386` tries the native path FIRST and falls back to qemu, so an
+# absent qemu-i386 is not proof that job cannot run. Skipping it would remove
+# coverage on a box that has ia32 emulation in the kernel -- the same
+# asymmetry host_cpu_flags() argues for, and in the same direction: when in
+# doubt, RUN the job.
+HOST_TOOLS = [
+    ("aarch64", "qemu-aarch64"),
+    ("arm32",   "qemu-arm"),
+    ("riscv32", "qemu-riscv32"),
+    ("riscv64", "qemu-riscv64"),
+    ("xtensa",  "qemu-xtensa"),
+]
+RUN_TARGET_RE = re.compile(r"run_target\.sh\s+([A-Za-z0-9_]+)")
+
+
+def missing_emulators():
+    """{arch: binary} for the emulators this box does not have on PATH."""
+    return {arch: exe for arch, exe in HOST_TOOLS
+            if shutil.which(exe) is None}
+
+
 def host_cpu_flags():
     """The host CPU's feature flags, lowercased. Empty set when unknown.
 
@@ -1269,6 +1333,40 @@ def host_cpu_flags():
     except OSError:
         pass
     return set()
+
+
+def apply_host_tool_skips(jobs, absent):
+    """Skip every job that would run a binary through an absent emulator.
+
+    -> the number skipped. A job ALREADY skipped keeps its existing reason: the
+    first one is the actionable one, and re-labelling it with a second true
+    sentence buries the command that would fix it.
+    """
+    if not absent:
+        return 0
+    n = 0
+    for j in jobs:
+        if j.status == "skip":
+            continue
+        arches = set()
+        for ln in j.lines:
+            arches.update(RUN_TARGET_RE.findall(ln))
+        hit = sorted(arches & set(absent))
+        if not hit:
+            continue
+        names = ", ".join(absent[a] for a in hit)
+        j.status = "skip"
+        j.skip_reason = ("host tool absent: %s — this box has no %s on PATH, so "
+                         "the job cannot run here and a red would say nothing "
+                         "about the tree; install it with tools/install_qemu.sh"
+                         % (names, names))
+        n += 1
+    if n:
+        print("testmgr: %d job(s) SKIPPED — no %s on PATH. That is coverage this "
+              "box is not providing, not a verdict on the tree; run "
+              "tools/install_qemu.sh to close it."
+              % (n, ", ".join(sorted(absent.values()))), flush=True)
+    return n
 
 
 CORPUS_ROOTS = [
@@ -5017,6 +5115,11 @@ def main():
                                  "this box and a red would be permanent"
                                  % (cap, human))
                 break
+    # ...and the same for an emulator that is not installed at all. Ordered
+    # after the CPU guard for the same reason that one is ordered after the
+    # corpus guard: a job already skipped has a reason, and the FIRST reason is
+    # the actionable one.
+    apply_host_tool_skips(jobs, missing_emulators())
     for j in jobs:
         j.deps = [d for d in j.deps if d.status != "skip"]
     if args.inject_hang:
