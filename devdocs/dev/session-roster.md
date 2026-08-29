@@ -17811,3 +17811,78 @@ plausible-looking wrong number.**
 Coordinator consequence: when a lane reports a surprising measurement, **ask what
 its baseline was and when it was built** before relaying it. That question costs
 one line and would have caught both.
+
+## Late 08-29 — tooling landed, a stranded branch, and my own rules used on me
+
+**Three tooling fixes, all measured before and after, all mine:**
+
+1. **`tools/sync.sh` exited 0 after failing to push** (found by frankD). Not
+   retry budget — `push_with_retry` returned the true status and the caller's
+   `echo "sync: pushed"` **replaced** it, so commits sat local while resolve
+   lines still read `PENDING-COMMIT`. Now `push_or_die`, budget 3→6, growing
+   pause. Control both directions: stubbed failing push exits 1 and prints no
+   success line; the old shape printed success and exited 0.
+2. **Two more spellings of `PENDING-COMMIT` were invisible to BOTH tools.**
+   `check` reported **zero** while seven `done/` tickets owed a citation:
+   `resolved: PENDING-COMMIT` and a Log line *ending* in the placeholder with no
+   `commit` keyword. `PENDING_RE` now describes the **shape** (any frontmatter
+   key; an unbackticked placeholder at a list item's end) rather than
+   enumerating key names, and the substitution moved into `progress.py fill`
+   beside the detection. **The previous fix gave the two tools one DEFINITION
+   and left them two IMPLEMENTATIONS, so the same drift was still available and
+   took it.** 0 → 5, then filled.
+3. `gate.sh` was **not** a bug — investigated and closed rather than relayed.
+
+**`frankA` died and restarted mid-work** (new session `[1dc006]`, new tmux
+window). Its tree held only a staged ticket rename — no code, nothing unpushed —
+and I verified that *before* writing to the fresh session, then re-briefed it
+with its predecessor's plan and reasoning. **A restarted agent under the same
+name is not the agent you were talking to**; `ListAgents` shows the age, and
+SendMessage warns.
+
+**frank-rust had been working on a long-lived `rust` branch** and reported
+`origin/master` as 135 behind and abandoned. Backwards: master was 222+ ahead and
+is the trunk. A green Track P fix, a third unasked-for fix, and two p65 tickets
+were **not merely unmerged but unseen** — Track T sweeps `origin/master`, so a
+branch commit gets no cross-target verdict and no visibility to any lane that
+might duplicate it. It cherry-picked onto master cleanly (only BOARD conflicted;
+the three `pasparser_*.inc` applied clean across 225 commits, which is the
+ownership table holding). The remaining ~134 commits are
+`decide-what-happens-to-the-136-commit-rust-branch` [U p60] — **a merge that size
+is topology with a blast radius, and branch permission is not merge permission.**
+`origin/wasm` is the same category; two long-lived branches is a pattern.
+
+### MY OWN RULES, USED ON ME, THREE TIMES IN ONE EVENING
+
+Worth recording as a property of the seat rather than as three lapses:
+
+- **GREP FOR THE INCUMBENT.** I scoped a status page for frankD; `docs/reference/status.md`
+  already existed and was already good. I relayed that rule to two lanes the same
+  evening.
+- **A claim about ownership stated in the present tense from evidence about the
+  past.** Twice — telling pxx-a5 the `Makefile` window was its own minutes before
+  frankA moved it, and telling frankA nobody was near `symtab.inc` when the
+  ticket's own tail said otherwise.
+- **Then the inverse:** I held frankA off `symtab.inc` on b4's sentence, which was
+  itself stale. b4's own verdict: *"a stale present-tense claim outranking a
+  correct measurement purely because it came from a person."* **frankA read the
+  tree and was right both times; I overrode it with human assertions twice.**
+
+The generalisation: **a peer's present-tense claim feels like fresh evidence and
+is not.** Ask what a claim was measured from and when — the same question that
+catches the sibling-commit baseline trap, applied to people.
+
+### AUDIT INSTANCE 8 BREAKS THE SHAPE, USEFULLY
+
+frank-rust added an eighth to `audit-a-...-sibling-arm-nobody-checked`, and
+flagged that it does **not** fit: rows 1-7 are sibling-arm cases; row 8's comment
+is about the **same arm** and is simply false — a fixed point terminating on
+`until TokCount = dgenBefore` while the same round removed 8 tokens and inserted
+8. **Distance: eleven lines, same procedure, same screen.**
+
+So on frankA's tooling-vs-reading question this instance argues for **neither**:
+there was no sibling to visit, and reading more carefully would not have helped
+because *the comment is more persuasive than the code beside it*. What refuted it
+was an output going wrong. frank-rust's remedy line is the keeper: **an invariant
+stated in prose next to the code it governs is worth nothing until something
+fails when it is violated.**
