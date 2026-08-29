@@ -67,9 +67,14 @@ parallel body. Everything else is private without anyone deciding anything.
 
 What it covers: the allocator spinlock (`__pxxatomic_xchg(@PXXHeapSpin, 1)`),
 atomic refcounts (`lock dec qword [rax-16]`), statement-atomic console I/O
-(`IR_IO_LOCK`). x86-64 only — `builtinheap.pas:1555` states the refcount blob is
-non-atomic on other targets, so **any parallel story is single-target until that
-moves.**
+(`IR_IO_LOCK`).
+
+**Four targets, not one: x86-64, i386, aarch64 and arm32.** x86-64 uses
+hand-emitted lock blobs; the other three take their locks in Pascal under
+`PXX_TS_SOFTLOCK`. The authority is the CLI gate —
+`grep -n 'ThreadSafeMode and (TargetArch' compiler/compiler.pas` — and
+`{$threadsafe on}` enforces the same set in `lexer.inc`. So the parallel story is
+**not** single-target, and has not been since 2026-07-06.
 
 What it does not cover — `TPyList.append_self`, in full:
 
@@ -187,8 +192,13 @@ native-int reduction default in `feature-nilpy-parallel-for-in`.
 
 ## 7. Open
 
-- `--threadsafe` is **x86-64 only**. Hard limit or unfinished work? Nobody has
-  asked. It bounds everything above.
+- ~~`--threadsafe` is **x86-64 only**. Hard limit or unfinished work? Nobody has
+  asked. It bounds everything above.~~ **Answered, and the answer was
+  "unfinished work" — `07fee0844`, 2026-07-06, widened it to x86-64 / i386 /
+  aarch64 / arm32.** ESP (xtensa, riscv32) is now the only family refused, and
+  there the reason is real: no `clone`/`futex` syscalls exist. What genuinely
+  remains open is the *data structure* gap in section 4, which no target widening
+  addresses.
 - No measurement exists of ARC contention/false sharing on a shared managed
   value under `--threadsafe`. A parallel loop reading one shared list still
   hammers one refcount line from every core. Before promising scaling to anyone,
@@ -228,6 +238,39 @@ create a second agent. Not afterwards, and not as a follow-up ticket — the
 window between the two is a program that compiles, runs, and is wrong only
 sometimes.
 
-This is also why `--threadsafe` being x86-64 only (section 7) is not the whole
+This is also why the *reach* of `--threadsafe` (section 7) was never the whole
 of the question. wasm32 is the second target whose atomics are correct for a
 reason that a future feature would quietly invalidate.
+
+
+---
+
+## Corrected 2026-08-30 (frankD), measured at `de8cd038b`
+
+Three sentences above said `--threadsafe` is x86-64-only. **All three were false
+and had been since `07fee0844` (2026-07-06)** — *"feat(arm32): libc-free
+threading — atomics, clone, futex mutex, IO lock"* — which widened the gate to
+four targets. Verified at HEAD: `compiler.pas` accepts x86-64/i386/aarch64/arm32,
+`lexer.inc` gives the latter three `PXX_TS_SOFTLOCK`, and `__pxxclone` is emitted
+by four backends, not one.
+
+**Two things about how this survived are worth more than the correction.**
+
+**It is the sibling arm of a defect already fixed.** `threading.md`'s target
+table carried the same false limit and was corrected earlier the same day. The
+repo's own rule says *if you fix a bug on one arm of a double case, grep for the
+sibling before closing the ticket* — and that grep was not run, because nothing
+about "the threading doc" suggests there are two of them. **Two documents on one
+subject are a double case, and the second arm is the one that stays broken.**
+
+**And the strongest false claim here was propped up by a citation.** Section 4
+read *"x86-64 only — `builtinheap.pas:1555` states the refcount blob is
+non-atomic on other targets."* Line 1555 of that file today is about string
+append capacity and says nothing on the subject; the comment it meant has drifted
+about 500 lines and is stale in its own right (tracked as
+[[bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july]]).
+So the chain ran **stale comment → doc cites the comment as evidence → doc states
+a false limit → "any parallel story is single-target"** — and every link looked
+like diligence. A citation is not verification: **a limit backed by a line number
+is harder to doubt and no more likely to be true**, and a line number is the part
+of a citation most certain to rot.

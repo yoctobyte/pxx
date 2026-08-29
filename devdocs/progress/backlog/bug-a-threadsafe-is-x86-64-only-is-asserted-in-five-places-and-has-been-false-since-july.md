@@ -40,20 +40,50 @@ twice.
 
 ## The five, with the distance measured
 
+**Locate them by grep, not by line number** — see the note below on why this
+table changed shape:
+
+```
+grep -n 'threadsafe atomics are x86-64-only' compiler/ir.inc
+grep -n 'threadsafe mode is x86-64 only'     compiler/builtin/builtinheap.pas
+grep -n 'x86-64 + ThreadSafeMode only'       compiler/defs.inc
+grep -n 'threadsafe is x86-64-only'          compiler/ir_codegen386.inc
+grep -n 'Threadsafe locking is x86-64-only'  compiler/ir_codegen386.inc
+```
+
 | # | site | asserts | refuted by | distance |
 | --- | --- | --- | --- | --- |
-| 1 | `ir.inc:12730-12733` | *"x86-64 only — --threadsafe atomics are x86-64-only today."* | `ir.inc:12734`, the condition it introduces, which tests all four | **ONE LINE** |
-| 2 | `builtinheap.pas:2039` | `PXXStrIncRef` is *"NON-atomic — threadsafe mode is x86-64 only"* | its own `{$ifdef PXX_TS_SOFTLOCK}` atomic arm, `builtinheap.pas:2050` | **8 lines** |
-| 3 | `defs.inc:809` | `IR_IO_LOCK` is *"x86-64 + ThreadSafeMode only"* | real lock calls in `ir_codegen386.inc:3801`, `ir_codegen_aarch64.inc:4336`, `ir_codegen_arm32.inc:4497` | **cross-file, 3 backends** |
-| 4 | `ir_codegen386.inc:4099` | *"no shim/lock; threadsafe is x86-64-only"* | `compiler.pas:1586`, `lexer.inc:1012` | **cross-file** |
-| 5 | `ir_codegen386.inc:4242` | *"Threadsafe locking is x86-64-only; **i386 runs single-threaded**"* | same | **cross-file** |
+| 1 | `ir.inc` | *"x86-64 only — --threadsafe atomics are x86-64-only today."* | the condition on the very next line, which tests all four | **ONE LINE** |
+| 2 | `builtinheap.pas` | `PXXStrIncRef` is *"NON-atomic — threadsafe mode is x86-64 only"* | its own `{$ifdef PXX_TS_SOFTLOCK}` atomic arm, a few lines below | **~8 lines** |
+| 3 | `defs.inc` | `IR_IO_LOCK` is *"x86-64 + ThreadSafeMode only"* | real lock calls in `ir_codegen386.inc`, `ir_codegen_aarch64.inc`, `ir_codegen_arm32.inc` | **cross-file, 3 backends** |
+| 4 | `ir_codegen386.inc` | *"no shim/lock; threadsafe is x86-64-only"* | the CLI gate in `compiler.pas`, `lexer.inc`'s softlock define | **cross-file** |
+| 5 | `ir_codegen386.inc` | *"Threadsafe locking is x86-64-only; **i386 runs single-threaded**"* | same | **cross-file** |
+
+> **Re-cited 2026-08-30 (frankD), measured at `de8cd038b`.** This table used to
+> give line numbers, measured at `e7385984b`. **Four of the six had drifted**
+> within a day or two — `builtinheap.pas:2039` → 2066, `ir.inc:12730` → 12521,
+> `ir_codegen_xtensa.inc:322` → 359 — and line 2039 today is the middle of
+> `PXXStrLoadFile`, which has nothing to do with refcounts.
+>
+> That is not a tidy-up. **A ticket that cites line numbers rots exactly the way
+> the comments it is reporting rot**, and this one reports comment rot, so
+> leaving it would have been the same defect one level up. Worse, the drift is
+> silent and lands on *plausible* code: a reader who opens `builtinheap.pas:2039`
+> finds real Pascal that simply is not the subject, and has no signal that
+> anything is wrong.
+>
+> Found by the same sweep that found `threading-model.md` propping up a false
+> limit with `builtinheap.pas:1555` — a line that today discusses string append
+> capacity. **A limit backed by a line number is harder to doubt and no more
+> likely to be true**, and the line number is the part of any citation most
+> certain to be wrong first.
 
 Two near misses, recorded so the next reader does not re-check them:
 
-- `compiler.pas:1581-1583` — the comment **two lines above** the four-target
+- `compiler.pas` — the comment **two lines above** the four-target
   check names only x86-64 and i386. Same commit family, same omission, but it is
   an incomplete list rather than a false exclusion.
-- `ir_codegen_xtensa.inc:322` — *"No threadsafe lock (x86-64-only)"* is
+- `ir_codegen_xtensa.inc` (`grep -n 'No threadsafe lock'`) — *"No threadsafe lock (x86-64-only)"* is
   **correct in effect**: xtensa is genuinely not one of the four, and
   `--threadsafe` is refused there. Only the parenthetical is stale. Leave it or
   fix it with the others; it misleads nobody.
@@ -118,3 +148,22 @@ Prose only, and it should be one commit so the five stay consistent:
 Comment-only, so `make compiler/pascal26` (self-host byte-identical) is the whole
 gate — and it should stay byte-identical, since no code changes. If it does not,
 something in the list was not a comment.
+
+
+## The doc arm, found 2026-08-30 and fixed separately
+
+The same false claim had spread into two **live reference docs**, which is where
+a reader is most likely to meet it:
+
+- `devdocs/dev/threading.md` — the heap-contract table said `--threadsafe` was
+  *"rejected at compile time"* on i386/arm32/aarch64. Fixed in `ea5d7c6e7`.
+- `devdocs/dev/threading-model.md` — said it three more times, including an
+  **Open** item asking *"Hard limit or unfinished work? Nobody has asked"* about
+  a question answered seven weeks earlier. Fixed in the follow-up.
+
+Both are prose and neither is this ticket's scope; the five `compiler/**`
+comments above are still open and still Track A's. Recorded here so whoever takes
+them knows the doc arm is already done and does not re-fix it — and because the
+spread is the argument for the ticket's own prio: **a stale comment that only a
+compiler engineer reads is a nuisance; the same claim in a doc is what a lane
+plans around.**
