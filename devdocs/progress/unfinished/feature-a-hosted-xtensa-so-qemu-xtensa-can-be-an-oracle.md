@@ -857,3 +857,68 @@ must name the flag.**
 
 `docs/reference/cli.md` lists the xtensa flags (rows at :114 and :176) and now
 wants a `--xtensa-soft-mulhigh` row. That is `docs/**` = **Track D**, not mine.
+
+## GRANT 2 — `compiler/builtin/builtinheap.pas`, the `HeapMmap` CPU_XTENSA arm
+
+**Granted by the coordinator to frankS, 2026-08-29.** Scope: **one
+`{$elseif defined(CPU_XTENSA)}` arm inside `HeapMmap`'s existing exhaustive
+chain** (`builtinheap.pas:710`), alongside the six already there. Nothing else
+in the file. Verified clean in all clones but frankS's own working copy.
+
+**Why a second grant rather than a stretch of the first.** Grant 1 scoped frankS
+to the `PXXSysWrite`/`PXXSysRead` arms specifically. `HeapMmap` is a different
+function, and frankS stopped and asked — for the third time tonight — rather
+than reading the first grant generously. Its own footnote is the reason the ask
+was right: that terminal arm's comment says a compile-time refusal would break
+IDF builds *"and Track S is a live campaign"*. **This file keeps deferring
+xtensa decisions into Track S's lane, and a deferral written in a comment is
+still not a grant.**
+
+### The finding this grant exists for, which is larger than the ticket it sits in
+
+**`HeapMmap` has arms for x86-64, aarch64, arm32, i386, riscv32, wasm32 and
+bare-ESP, and NO `CPU_XTENSA` arm.** Hosted xtensa fell through to the terminal
+`Result := -1`, so the heap base was `-1` and the first allocation faulted at
+`$FFFFFFFF`.
+
+**No hosted xtensa program that allocated anything has ever run.** That is a
+seventh backend missing from a chain that reads as exhaustive — the same
+miscounted-enumeration shape as `PXXStrCmp3`'s "four cross backends", found the
+same evening, in a different file, by a different lane.
+
+Two constants, both measured under qemu rather than read off a table, because
+xtensa diverges from the generic ABI **twice**:
+
+- **`__NR_mmap2 = 80`.** Generic `222` — which the riscv32 arm three lines above
+  uses — is literally `Unknown syscall 222` on xtensa. Same divergence class as
+  `read`=12/`write`=13 vs 63/64.
+- **`MAP_ANONYMOUS = $800`, so flags = `$802` = 2050, not the 34 every other arm
+  passes.** Xtensa is one of the architectures with non-standard `MAP_*` values.
+
+**The second is the one that fails quietly**, and it is the more instructive
+half: with 34 the kernel sees `MAP_PRIVATE|0x20` with **no ANONYMOUS bit**,
+tries to map fd `-1`, and returns `EBADF` — **and that negative errno becomes
+the heap base, because `PXXAlloc` deliberately does not check it.** A wrong
+constant produces a plausible pointer rather than an error.
+
+**Confinement, measured not argued:** the x86-64 host build is byte-identical
+across the change (`39e87f7d07e2` before and after — the arm is
+`{$elseif}`-compiled-out on the host), and 7/7 bare/ESP artefacts are unchanged
+because the `PXX_ESP` arm is tested first. Only the hosted-xtensa artefact moves.
+
+### Correction to this ticket's own record, and to the coordinator's
+
+The coordinator told frankD its *"hosted xtensa hangs on hello-world"* was a
+**stale measurement** — taken on pinned v393 before wall 3 landed — and frankD
+retracted it. **The coordinator was wrong.** frankS: *"frankD's hello-world hang
+was not a stale pin — that program could not have worked on any pin."*
+
+**frankD's observation was TRUE and was withdrawn on a coordinator's incorrect
+theory.** What was genuinely wrong was frankD's *justification* (`merge-base
+--is-ancestor` answering about the tree, not the binary — face 69, which
+stands). The methodological correction was right; the substantive retraction was
+not, and the coordinator supplied both in one message with equal confidence.
+
+**Recorded because the shape is worse than a wrong fix:** a correct observation
+retracted leaves nothing behind to re-test, and the retraction carries the
+coordinator's authority. See face 75.
