@@ -5758,6 +5758,47 @@ begin
           EmitB($48); EmitB($83); EmitB($C4); EmitB($08);              { add rsp, 8 }
           EmitB($DB); EmitB($BD); EmitI32(Syms[idx].Offset);           { fstpt [rbp+off] }
         end
+        else if FloatResidentSlotIsDead(idx) then
+        begin
+          if PxxDbgEnabled('a.fitem3') then
+            WriteLn('PXXDBG a.fitem3 SKIP proc=', Procs[CurProc].Name,
+                    ' sym=', Syms[idx].Name, ' xmm=', FloatResidentXmmOf(idx));
+          { -O3 item 3, float half: the frame slot is a same-value CACHE of the
+            resident xmm register for a tyDouble local, and at -O3 in a body
+            with no exception frame nothing reads it, so the store is dead.
+            The dual-write below still refreshes the register, which is the
+            authority from here on.
+
+            Measured rather than argued: PXXDBG=a.poisonslot:<Proc> fills the
+            slot with a quiet NaN right after each store and eight independently
+            controlled shapes came back clean — loop-carried recurrence, value
+            param, residents live across internal / indirect / RTL-math calls,
+            narrowing types, a global, and mandelbrot's EscapeCountLimit. Each
+            was validated with a.poisonctl, which forces the reader; a case that
+            does not move under the control is blind and proves nothing.
+
+            The gate is RcProcHasExc, inside FloatResidentSlotIsDead — same
+            gate as the int half, but NOT the same mechanism, and the difference
+            is worth knowing before anyone tries to narrow it.
+
+            The int residents are rolled back by ExcLongJmp, which restores
+            r12-r15 from the jmp_buf. xmm8..13 are NOT in the jmp_buf: the
+            setjmp stub saves rbx, rbp, r12-r15, rsp and the return address, and
+            no XMM at all. What happens to the float pool instead is that a
+            raise longjmp skips the epilogues of every unwound frame, losing
+            their save-iff-used restores, so the registers arrive at the landing
+            pad holding whatever the raise path left. The pad therefore restores
+            the pool from the try-entry snapshot (FloatPoolSave/Restore, which
+            use the separate FxSaveBase area, NOT this slot) and then calls
+            FloatResidencyRefreshAll, which reloads each resident FROM ITS FRAME
+            SLOT.
+
+            So the frame slot is load-bearing on the unwind path for floats too,
+            by a different route: not a register rollback but a pool that was
+            never saved. FloatResidencyRefreshAll has exactly one caller — that
+            landing pad — and it is the only non-residency-aware reader of this
+            slot. Bodies with an exception frame keep the dual-write. }
+        end
         else
           begin EmitB($F2); EmitB($0F); EmitB($11); EmitB($85); EmitI32(Syms[idx].Offset); end; { movsd [rbp+off], xmm0 }
       skGlobal:
