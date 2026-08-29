@@ -671,6 +671,107 @@ problem, with time rather than file-set as the axis.
 
 **Seventeen faces, and the family is still open.**
 
+### Worked instance of face seventeen — a green from an adjacent lane reads as coverage of work it never touched
+
+pxx-a5, 2026-08-29, volunteering a negative nobody asked for.
+
+It ran two quick tiers that evening; both green. frankB had converted 2476
+Makefile assertions the same day, none of them suite-executed. **A green tier
+from the Track T lane, on the same repo, on the same evening, is exactly the
+thing that would be mistaken for coverage of those conversions** — by any lane
+reading the board, and by the coordinator relaying it.
+
+It checked instead of letting it stand: **`test-quick`'s 208 recipe lines use
+`expect_same.sh` exactly ZERO times**, and its tree at the sha it ran carried
+only the 498 cross-target conversions, none of the 1978 native ones. So the
+2476 remain exactly as unexecuted as claimed, and nothing it ran that evening is
+evidence about them.
+
+**The shape.** A green run's report says what passed. It does not say what it
+touched, and the two are indistinguishable downstream — a passing tier and a
+tier that never reached the code both produce the same green. Face seventeen
+says an instrument's scope is invisible in its own output; **this is that
+failure crossing between lanes**, where it is worse, because the reader has no
+access to the run's contents at all and only sees the verdict.
+
+**The guard, and it is a habit rather than a mechanism:** when your green sits
+adjacent in time or subject to someone else's unverified work, **state what it
+does NOT cover, unprompted.** The cost is one grep. The alternative is that
+absence of a contradiction gets read as confirmation, and nobody ever asks,
+because nothing looks wrong.
+
+Same session, the same lane also declined to treat a freed constraint as
+permission: told that plexus's cores had come free, it re-read the load
+(4.30/8.84/10.71 against 12 cores), noted six sessions were still live and that
+the owner's standing instruction is to leave roughly half the CPU free, and
+**wrote the changed fact into its two blocked measurement tickets instead of
+launching the sweeps** — so the next reader re-reads the load rather than
+inheriting "blocked on a busy box" as a standing truth. *A peer's read on what
+is affordable does not outrank the owner's instruction*, and a stale blocker in
+a ticket is the same failure family one level up.
+
+### Refinement of face twenty-three — a number the check PRINTS but never TESTS is decoration
+
+frankwasm, 2026-08-29, auditing its own 22 oracle comparisons after face
+twenty-three landed. Every one of them **printed** a count. **None asserted
+one.** 18 of 22 decided purely by `diff -u native.txt wasm.txt`, and two empty
+files diff equal — so the check would print `ok wasm matches the native build
+(0 lines)` and pass. Only three had per-row assertions underneath the diff.
+
+> **The printed count was there the whole time and was read as a denominator.
+> It is a denominator for a HUMAN reading the log, and no part of the verdict.**
+
+This is the trap inside the remedy. Face twenty-three's guard is *make the
+instrument report its N* — and a harness can satisfy the letter of that while
+the N participates in nothing. Reporting is not asserting. **If the count is not
+in the exit code, it is a comment.**
+
+Not hypothetical on that target, which is what moved it from tidy to necessary:
+`PXXSysWrite` returning 0 having written nothing was a real state there —
+`writeln` lowered correctly and printed nothing — which is why the phase slices
+assert silence. *"The oracle produced no output"* is a condition this backend
+has actually been in.
+
+23 guards added, one per comparison, and falsified in **both** directions with
+the oracle forced silent: with the guard it fails naming the reason; with the
+guard removed it prints "ok wasm matches the native build" over two empty files.
+The control has failed once.
+
+## Face twenty-five — a justification that is true of the ADJACENT construct reads as true of this one, and a comment makes it durable
+
+Found by frankwasm, 2026-08-29, in its own RetViaHiddenDest work.
+
+**The instance.** Its first working version put the aggregate copy **after** the
+epilogue restored `$sp`, on reasoning it had written into the comment beside it:
+*every slot is addressed through `$fp`, so a restored `$sp` cannot move them.*
+
+That statement is **true**. It is true of the scalar load sitting next to it. It
+is false here, because this is a **CALL** — `PXXMemMove`'s own prologue sets its
+frame at `$sp`, which once raised lands exactly on top of the `Result` local it
+is copying out of.
+
+**What the machinery said about it.** It compiled. It validated. It reported
+**125 of 125 bodies lowered**. It ran to completion. It returned `x=3 y=8` —
+`y` holding the byte-count argument of the memmove that had just overwritten it.
+Every instrument in the chain was satisfied. **Only the differential against
+native said otherwise.**
+
+**Why the comment is the aggravating factor rather than a mitigation.** A
+documented trap is not a guard — that is already recorded. This is worse: the
+comment is not a warning, it is a **justification**, and it is a correct one
+about the neighbouring case. So it does not read as an assumption to be checked;
+it reads as an argument already made. The next reader inherits a conclusion with
+its reasoning attached, and the reasoning is sound — for the line above.
+
+> **Resemblance transfers reasoning across a boundary that reduction would have
+> found.** The scalar load and the aggregate copy look like the same operation
+> at that point in the epilogue. One is a load; one is a call with a frame.
+
+**The guard.** When you write down *why* something is safe, name the property
+that makes it safe and ask which neighbouring constructs lack it. Here the
+property was "does not establish a frame", and a call does. A justification
+whose scope is not stated is a justification that will be applied one line over.
+
 ## Face eighteen — when the compiler is its own test input, a diff cannot tell a CODEGEN change from a SOURCE change
 
 Found by frankwasm, 2026-08-29, and it nearly cost twenty lines of inert code.
