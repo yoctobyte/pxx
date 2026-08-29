@@ -4662,3 +4662,51 @@ and nothing in the result says so.
 before concluding. And write environment absences the way you would write any
 non-existence claim — name what you searched, so the next reader can see what the
 search could not have found.
+
+### 118 — co-location makes drift VISIBLE; only an oracle makes it FAIL
+
+*frankS, 2026-08-30, and it is the counterexample to the remedy the five previous
+instances all pointed at.*
+
+`0f48fa6a9` (2026-08-21) gathered six per-target managed-cleanup blocks into one
+procedure **specifically to stop them drifting**. Its own commit header: *"it does
+put them where a reader sees all six at once."* That is the textbook fix, it was
+done deliberately, and it was done well.
+
+Managed kinds each arm actually releases, counted by parsing the procedure at two
+revisions rather than by reading it:
+
+| arm | at `0f48fa6a9` | at HEAD, nine days later |
+| --- | --- | --- |
+| i386 | 4 | **7** |
+| arm32 | 6 | **7** |
+| aarch64 | 7 | **7** |
+| riscv32 | 3 | **7** |
+| **xtensa** | **1** | **1** |
+
+i386 went 4→7 and riscv32 went 3→7 in those nine days — **both edited inside this
+procedure, twenty lines from xtensa's one-row arm.** Four separate times someone
+had the short arm on screen while lengthening the arm beside it. Nobody added a
+row.
+
+So: **seeing that an arm is short and being made to care are different events.**
+The other arms grew because a test went red. Xtensa's could not, because nothing
+in this repo could execute an xtensa binary until the day before.
+
+This is the sixth instance tonight of *the target with no oracle keeps the bug*,
+and it **narrows the rule instead of repeating it.** The first five were gaps a
+search could not SEE — a grep blind to an absent copy (96), a sweep whose
+verification list excluded the target, an alignment rule outsourced to hardware
+(116). Every one of those has "put the copies next to each other" as its natural
+remedy. This one was in plain view, four times, and drifted anyway.
+**Visibility was never the binding constraint.** Co-location is necessary and it
+is not sufficient; what closed the other four arms was a failing test, and what
+kept xtensa's open was not having one.
+
+**Practical consequence for how we file:** a per-target `case` or arm chain with
+no per-target oracle is not a maintained construct, it is a **snapshot of which
+targets were testable when each row was written**. Treat an arm count as a
+measurement — parse it, as above — not as something a reader will notice. And when
+a new target becomes executable, the first work item is not "look for bugs" but
+**"count the rows in every arm chain that mentions it"**, because that set is
+knowable in advance and is where the bugs already are.
