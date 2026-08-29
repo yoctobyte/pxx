@@ -724,3 +724,75 @@ and of the live `a2..a5`/`a8`.
 
 Full patch (the two out-of-grant hunks plus the in-grant codegen hunk) is staged
 at `scratchpad/wall4.patch`, pending the `defs.inc` line.
+
+## GRANT — `compiler/defs.inc`, one additive Boolean, wall 4
+
+**Granted by the coordinator to frankS (Track S), 2026-08-29.** Filed here
+rather than left in message traffic, because *an authorisation is a finding
+about what is permitted* and an unfiled grant does not read as missing — it
+reads as **covered**, since a neighbouring ticket covers the same file.
+
+**Scope, and it is exactly this:**
+
+- **File:** `compiler/defs.inc`, the xtensa flag cluster (currently `XtensaABI`
+  :3371, `XtensaSoftDivide` :3376, `XtensaHasFpu` :3383, `XtensaFastDoubles`
+  :3388, `XtSpillDepth` :3394).
+- **Change:** one additive `Boolean` declaration plus its comment, appended to
+  that cluster. **No renumbering. No token or AST-node constant. No reordering
+  of anything an existing arm indexes.**
+- Plus the already-granted `ir_codegen_xtensa.inc` hunk.
+
+**Precondition verified, not assumed.** `defs.inc` and `compiler.pas` are clean
+in **all twelve clones** at grant time — frankA (`pasparser_decl.inc`,
+`symtab.inc`), frank-rust (`pasparser_generic.inc`), pxx (`pasparser_proc.inc`),
+everyone else clean. frankS reported the same and said *"a clean tree is not a
+grant and a stop-line is not mine to move"*, which is the correct reading of the
+stop-line and the reason this grant exists rather than a collision.
+
+**Gate:** Track A's — `make compiler/pascal26` to fixedpoint plus the wall-4
+cases; `gate.sh quick` before any pin. Grant expires when this ticket resolves;
+a second `defs.inc` change is a second ask.
+
+### Why the home was right, having been checked rather than argued
+
+frankS eliminated all three alternatives and each elimination is sound:
+declaring it in `ir_codegen_xtensa.inc` puts **one member of a five-flag cluster
+somewhere else**, which is the precise drift `TargetIsEspClass`'s header exists
+as a monument to; declaring it in `compiler.pas` after the include is lexically
+the same split; and deriving it from `TargetArch=XTENSA and
+TargetPlatform=POSIX` needs no flag but asserts *"hosted implies no
+multiply-high"* — true of qemu, false of hosting — **and leaves no flag for a
+verdict to name**, which defeats the requirement the flag exists to satisfy.
+
+### The measurement that changed the design, recorded because it is the finding
+
+**`quos`/`rems` run on all EIGHT cores qemu-xtensa exposes; `muluh` SIGILLs on
+all eight.** The two capabilities are independent. So the flag gates
+multiply-high **only**.
+
+Had it been bundled with `XtensaSoftDivide` as one "old core" switch, **the flag
+would have asserted something about divide that is false on every core it names,
+and the oracle would have exercised the soft div/mod path while hardware `quos`
+ships** — a divergence introduced by the very flag meant to label one. That is
+the whole argument for measuring a flag's axis before naming it, and it is
+generalisable well past xtensa.
+
+Corrected count: **eight cores, not five** — five was an earlier probe's subset.
+The verdict is unchanged and stronger.
+
+### The test caught its own author first
+
+Wall 4's case 12 printed `X` on the x86-64 oracle **and** on every xtensa core;
+the expected value was wrong by hand arithmetic. **Both sides disagreeing with
+the author identically is what an oracle is for** — and it is why wall 4 is
+reported as *measured* rather than as *reviewed*. `dsp3400` is not a
+counterexample: it SIGILLs on a plain `mull`, so it lacks MUL32 entirely and no
+multiply-high policy reaches it. `lx106` cannot run the windowed ABI (it is the
+ESP8266 core), so **any ABI sweep must pin its core list.**
+
+### Standing caveat, which must travel with every verdict produced under the flag
+
+The flag **labels** the divergence and does not remove it. The oracle is not
+bit-identical to hardware for multiplies under it. Div-by-zero-check and
+int64-to-float are arithmetic and are exactly what it still cannot answer. **Any
+verdict produced under the flag must name the flag.**
