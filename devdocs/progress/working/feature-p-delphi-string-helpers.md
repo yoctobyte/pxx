@@ -2,6 +2,8 @@
 track: P
 prio: 70
 type: feature
+status: working
+owner: frankB
 ---
 
 # feature(P): Delphi's TStringHelper surface — `s.Length`, `s.ToUpper`, `s.Trim`, `s.Substring`
@@ -136,3 +138,75 @@ which made them loud. The dispatch is keyed on the receiver SYMBOL
 and a helper method's Self is by-reference, so a computed receiver needs
 materialising into a temp first — the move `GenMakeStringValueIndex` already
 makes for `(s + 'x')[3]`.
+
+## 2026-08-29 (frankB) — the whole surface lands except `Length`, and the landmine does not exist
+
+Probed before implementing, as the 2026-08-25 entry asked. Two of this ticket's
+standing claims changed.
+
+### The B/P split is now exact
+
+A capability probe on one `type helper for string` — five features, one missing:
+
+| in a type helper | pxx |
+| --- | --- |
+| plain method | works |
+| `overload` (1-arg and 2-arg arms) | works, both dispatch |
+| `const Seps: array of Char` open-array param | works |
+| dynamic-array return (`TStringArray`) | works |
+| **`property Len: SizeInt read GetLen`** | **refused** |
+
+So the library half was not blocked on anything except one member, and it is
+**landed today**: `TStringHelper` is declared in `lib/rtl/sysutils.pas` with
+FPC's signatures and gated by `test/lib_string_helpers.pas`, whose `.expected`
+is fpc 3.2.2's own stdout for the same source — **34 rows, byte-identical**.
+
+`Length` is the exception and it is the headline member. FPC declares it as a
+PROPERTY over a private `GetLength`, and pxx does not dispatch a property
+through a helper — filed as
+[[bug-p-a-type-helper-cannot-declare-a-property]]. The declaration in sysutils
+is written the FPC way anyway and simply does not resolve yet: platonic, per
+CLAUDE.md's no-appeasement rule, and it starts working when that bug is fixed
+with no change to the library.
+
+Note the shape — properties work on a plain record, helper dispatch works for
+methods, and only the intersection is missing. That is the same double-case this
+ticket's own receiver-generalisation gap is, on a different axis of the same
+dispatch block, which is the argument for fixing both at once.
+
+### The landmine described above does NOT fire, and following it would have hurt
+
+Two entries warn that implementing the helpers reds `test_scalar_member_fail.pas`
+and instruct re-pointing it **in the same commit**. Checked instead of complied
+with, and the instruction is wrong for a correctly-scoped implementation:
+
+- `test/test_scalar_member_fail.pas` has **no `uses` clause**.
+- fpc 3.2.2 **also refuses** that exact program: `s.Length` without
+  `uses sysutils` is `Illegal qualifier`, even under `{$modeswitch typehelpers}`.
+
+So a sysutils-scoped helper leaves that test correctly refused, and it is
+refused for the same reason FPC refuses it. Re-pointing it would have retired a
+test that is right as written and is now *more* precisely right — it pins that
+the helpers are scoped to their unit rather than ambient. `make lib-test` is
+green with it untouched.
+
+The line reference had also drifted: the rule is at `Makefile:5419`, not
+4170-4171.
+
+### One divergence avoided rather than introduced
+
+The first draft declared `GetLength` public so the differential could exercise
+the accessor behind the blocked property. FPC declares it **private** —
+`s.GetLength` is `Illegal qualifier` there — so that would have been a member we
+expose and the reference does not, invented to work around our own gap. It is
+private here too, and the test simply does not cover `Length`; the header says
+so rather than gating something else and looking complete.
+
+### What is left of this ticket
+
+Only P-side work, and it is two bugs in one dispatch block:
+[[bug-p-a-type-helper-cannot-declare-a-property]] (blocks `Length`) and the
+receiver generalisation recorded above (literal, call-result and chained
+receivers). Neither is Track B. **Re-tracking this to P alone is now correct** —
+the 2026-08-25 entry's warning that a claimant would find themselves editing
+`lib/` no longer applies, because that editing is done.

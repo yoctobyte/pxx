@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:22 blocked:6 backlog:294 backlog_new:6 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2573 rejected:46`
+`working:1 unfinished:22 blocked:6 backlog:294 backlog_new:6 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2573 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `feature-p-delphi-string-helpers` [P] — owner: frankB
 
 ## unfinished (22) — parked mid-flight; re-claim, do not duplicate
 
@@ -59,7 +59,6 @@ _none — no lane is locked._
 - `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - `[p 70] [N]` feature-nilpy-staticmethod-and-classmethod
 - `[p 70] [O]` feature-opt-o3-register-pressure
-- `[p 70] [P]` feature-p-delphi-string-helpers
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 70] [P]` regression-cascade-4e27dc2be114
 - `[p 70] [A+S]` regression-test-emit-obj-cxtensa-obj
@@ -77,5 +76,6 @@ _none — no lane is locked._
 - `[p 65] [O]` feature-opt-bulk-copy-is-byte-at-a-time
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
+- `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 
 _276 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
