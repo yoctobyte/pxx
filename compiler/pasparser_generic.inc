@@ -429,12 +429,23 @@ procedure ParseGenericTemplateNamed(const templateNameIn: AnsiString; delphiForm
 function OrdinalNameToTk(const nm: AnsiString): TTypeKind; forward;
 function BuiltinTypeNameTk(const nm: AnsiString): TTypeKind; forward;   { body in pasparser_lval.inc, which also CALLS it above the body (the type-helper type-name receiver). pxx pre-scans and does not need this; FPC does. }
 
-{ Every TEMPLATE PARAMETER NAME the token stream declares, read straight out of
-  Tokens[] rather than out of Templates[].
+{ Every name whose meaning DEPENDS ON A SPECIALIZATION, read straight out of
+  Tokens[] rather than out of Templates[]. Two kinds, one concept:
+
+    - a template's PARAMETER names          -- `TDict<TKey, TValue>`
+    - the type names its BODY declares      -- `TDict<..> = class type TPair = ..`
+
+  Both are meaningless until the template that owns them is specialized, and a
+  generic argument spelled with either must go down the deferred / nested-
+  prerequisite path instead of being minted into a concrete alias. They are
+  collected by ONE procedure on purpose: the parameter case was fixed first and
+  the nested-type case walked straight through it, which is the two-mechanisms-
+  for-one-concept smell from root-cause-over-microfix.md.
+  bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument
 
   Why it cannot come from Templates[]: the sweep for template ti runs the moment
   ti is DECLARED, and a use of ti inside a LATER template's body carries that
-  later template's parameters. `TCmp<TKey>` written in `TDict<TKey, TValue>`'s
+  later template's parameters and nested types. `TCmp<TKey>` written in `TDict<TKey, TValue>`'s
   body is swept while TDict does not exist yet, so TKey is nobody's registered
   parameter, the group reads as concrete, and `TCmp$TKey` is minted -- a class
   whose streamed body says `Val: TKey` and reports `unknown type: TKey` from
@@ -450,24 +461,128 @@ function BuiltinTypeNameTk(const nm: AnsiString): TTypeKind; forward;   { body i
   lexes `>=` as tkGe, so a comparison cannot spell this shape.) Constraints are
   skipped: in `<T: TObject; U>` only T and U are parameter names.
 
-  Deliberately UNSCOPED -- it is every parameter name in the file, not just the
-  ones in scope at the use. That over-approximates toward "defer to the nested
+  A REJECTED alternative, recorded because it looks like the tidier answer: flip
+  the test to a whitelist -- mint only what is CONCRETE at sweep time (a builtin,
+  or a type already declared). It is wrong for the reason this whole ticket is
+  about. "Concrete" and "already parsed" are not the same property, and a
+  whitelist conflates them: a perfectly concrete top-level type declared AFTER
+  the template would fail the test and be deferred, with nothing to re-trigger
+  the sweep. That is the parse-order dependence this collector exists to remove,
+  reintroduced from the other side.
+
+  Deliberately UNSCOPED -- it is every such name in the file, not just the ones
+  in scope at the use. That over-approximates toward "defer to the nested
   path", which yields an honest error rather than a wrong class, and is the
   opposite of the direction wall 6's ticket warns about
   (`do not weaken the prerequisite scan`). The cost is a real type that happens
   to share a name with somebody's type parameter; the benefit is that the check
   does not depend on parse order, which is the whole defect. }
-const MAX_TPL_PARAM_NAMES = 512;
+const MAX_SPEC_BOUND_NAMES = 512;
 var
-  TplParamNameOff : array[0..MAX_TPL_PARAM_NAMES-1] of Integer;
-  TplParamNameLen : array[0..MAX_TPL_PARAM_NAMES-1] of Integer;
-  TplParamNameCount : Integer;
+  SpecBoundNameOff : array[0..MAX_SPEC_BOUND_NAMES-1] of Integer;
+  SpecBoundNameLen : array[0..MAX_SPEC_BOUND_NAMES-1] of Integer;
+  SpecBoundNameCount : Integer;
 
-procedure CollectTemplateParamNamesFromTokens;
+{ Harvest the type names declared INSIDE one template's body, and report where
+  that body ends so the caller can resume past it. `afterEq` is the token just
+  after the header's `=`.
+
+  Body extent by depth, not by a second parser: `class` / `record` / `object` /
+  `interface` / `case` open, `end` closes. `class` opens only when it is not
+  `class function|procedure|var|operator|of` -- the modifier spelling, which is
+  everywhere in a real class body. A header with no body at all (`= class;` or
+  an alias `= TBar<T>;`) simply runs to its `;`.
+
+  Inside the extent, a name is declared when a `type` section is open and an
+  identifier is followed by `=`. The section state is what keeps
+  `procedure P(a: Integer = 0)` from registering `Integer` as a nested type --
+  the `procedure` closes the section before the default value is reached, and
+  registering `Integer` would have deferred every `TBox<Integer>` in the file.
+  `public type PT = ^T;` works because the visibility keyword precedes `type`.
+
+  Not shared with GenericMethodBodyEnd: that one matches begin/case/end over a
+  STATEMENT body, which is a different grammar with a different opener set. }
+procedure CollectNestedTypeNames(afterEq: Integer; var resumeAt: Integer);
+var j, depth: Integer;
+    inTypeSec, isModifier: Boolean;
+begin
+  j := afterEq;
+  { `packed record`, `bitpacked record` }
+  while (j < TokCount) and (Tokens[j].Kind = tkIdent) and
+        (CaseEqual(GetTokenStr(j), 'packed') or CaseEqual(GetTokenStr(j), 'bitpacked')) do
+    Inc(j);
+  if j >= TokCount then begin resumeAt := TokCount; Exit; end;
+
+  if (Tokens[j].Kind = tkClass) or (Tokens[j].Kind = tkRecord) or
+     ((Tokens[j].Kind = tkIdent) and
+      (CaseEqual(GetTokenStr(j), 'interface') or CaseEqual(GetTokenStr(j), 'object'))) then
+  begin
+    depth := 0;
+    inTypeSec := False;
+    while j < TokCount do
+    begin
+      if Tokens[j].Kind = tkEnd then
+      begin
+        Dec(depth);
+        if depth <= 0 then begin resumeAt := j; Exit; end;
+      end
+      else if (Tokens[j].Kind = tkRecord) or (Tokens[j].Kind = tkCase) then
+        Inc(depth)
+      else if (Tokens[j].Kind = tkIdent) and
+              (CaseEqual(GetTokenStr(j), 'interface') or CaseEqual(GetTokenStr(j), 'object')) then
+        Inc(depth)
+      else if Tokens[j].Kind = tkClass then
+      begin
+        isModifier := (j + 1 < TokCount) and
+                      ((Tokens[j + 1].Kind = tkFunction) or (Tokens[j + 1].Kind = tkProcedure) or
+                       (Tokens[j + 1].Kind = tkVar) or (Tokens[j + 1].Kind = tkConst) or
+                       (Tokens[j + 1].Kind = tkOf) or
+                       ((Tokens[j + 1].Kind = tkIdent) and
+                        (CaseEqual(GetTokenStr(j + 1), 'operator') or
+                         CaseEqual(GetTokenStr(j + 1), 'constructor') or
+                         CaseEqual(GetTokenStr(j + 1), 'destructor'))));
+        if not isModifier then
+        begin
+          Inc(depth);
+          { `= class;` / `= class(TBase);` with no body closes immediately }
+          if (depth = 1) and (j + 1 < TokCount) and (Tokens[j + 1].Kind = tkSemicolon) then
+          begin resumeAt := j + 1; Exit; end;
+        end;
+      end
+      else if Tokens[j].Kind = tkType then inTypeSec := True
+      else if (Tokens[j].Kind = tkVar) or (Tokens[j].Kind = tkConst) or
+              (Tokens[j].Kind = tkProcedure) or (Tokens[j].Kind = tkFunction) or
+              (Tokens[j].Kind = tkProperty) then inTypeSec := False
+      else if (Tokens[j].Kind = tkIdent) and
+              (CaseEqual(GetTokenStr(j), 'constructor') or
+               CaseEqual(GetTokenStr(j), 'destructor')) then inTypeSec := False
+      else if inTypeSec and (Tokens[j].Kind = tkIdent) and
+              (j + 1 < TokCount) and (Tokens[j + 1].Kind = tkEq) then
+      begin
+        if SpecBoundNameCount < MAX_SPEC_BOUND_NAMES then
+        begin
+          SpecBoundNameOff[SpecBoundNameCount] := Tokens[j].SOffset;
+          SpecBoundNameLen[SpecBoundNameCount] := Tokens[j].SLen;
+          Inc(SpecBoundNameCount);
+        end;
+      end;
+      Inc(j);
+    end;
+    resumeAt := TokCount;
+  end
+  else
+  begin
+    { an alias header -- no body, nothing nested to declare }
+    while (j < TokCount) and (Tokens[j].Kind <> tkSemicolon) do Inc(j);
+    resumeAt := j;
+  end;
+end;
+
+procedure CollectSpecializationBoundNamesFromTokens;
 var i, j, savedCount: Integer;
     ok, wantName: Boolean;
 begin
-  TplParamNameCount := 0;
+  SpecBoundNameCount := 0;
   i := 0;
   while i + 2 < TokCount do
   begin
@@ -476,7 +591,7 @@ begin
       { walk the group, collecting the names that start each entry. Collected
         speculatively and rolled back below if the group turns out to be a USE
         -- which is why savedCount exists rather than a two-pass scan. }
-      savedCount := TplParamNameCount;
+      savedCount := SpecBoundNameCount;
       j := i + 2;
       ok := True;
       wantName := True;
@@ -486,11 +601,11 @@ begin
         begin
           if wantName then
           begin
-            if TplParamNameCount < MAX_TPL_PARAM_NAMES then
+            if SpecBoundNameCount < MAX_SPEC_BOUND_NAMES then
             begin
-              TplParamNameOff[TplParamNameCount] := Tokens[j].SOffset;
-              TplParamNameLen[TplParamNameCount] := Tokens[j].SLen;
-              Inc(TplParamNameCount);
+              SpecBoundNameOff[SpecBoundNameCount] := Tokens[j].SOffset;
+              SpecBoundNameLen[SpecBoundNameCount] := Tokens[j].SLen;
+              Inc(SpecBoundNameCount);
             end;
             wantName := False;
           end;
@@ -511,9 +626,13 @@ begin
         when this turned out to be a use or a malformed group. }
       if ok and (j + 1 < TokCount) and (Tokens[j].Kind = tkGt) and
          (Tokens[j + 1].Kind = tkEq) then
-        i := j            { a header -- keep the names and resume past the group }
+      begin
+        { a header -- keep the parameter names, then harvest the names its BODY
+          declares, and resume past the whole declaration }
+        CollectNestedTypeNames(j + 2, i);
+      end
       else
-        TplParamNameCount := savedCount;   { a use, or malformed -- forget them }
+        SpecBoundNameCount := savedCount;   { a use, or malformed -- forget them }
     end;
     Inc(i);
   end;
@@ -626,12 +745,12 @@ begin
         { ...and any OTHER template's parameter name, read from the token stream
           rather than from Templates[] -- the enclosing template that gives the
           name its meaning is usually not parsed yet when this runs. See
-          CollectTemplateParamNamesFromTokens. }
+          CollectSpecializationBoundNamesFromTokens. }
         for k := 0 to na - 1 do
-          for kk := 0 to TplParamNameCount - 1 do
+          for kk := 0 to SpecBoundNameCount - 1 do
             if (argTok[k].Kind = tkIdent) and
                CaseEqual(GetTokenStrFromRaw(argTok[k].SOffset, argTok[k].SLen),
-                         GetTokenStrFromRaw(TplParamNameOff[kk], TplParamNameLen[kk])) then
+                         GetTokenStrFromRaw(SpecBoundNameOff[kk], SpecBoundNameLen[kk])) then
               isParamForm := True;
         if DebugTrace then writeln('DGEN match at ', i, ' na=', na, ' paramform=', isParamForm);
         if isParamForm then
@@ -800,7 +919,7 @@ begin
   repeat
     before := TokCount;
     atBefore := at;
-    CollectTemplateParamNamesFromTokens;
+    CollectSpecializationBoundNamesFromTokens;
     for t := 0 to TemplateCount - 1 do
       DelphiRewriteGenericUses(t, at, TemplateIsDelphi[t]);
     Inc(rounds);
@@ -1071,7 +1190,7 @@ begin
       inner group then. Re-sweeping the earlier templates once TPair's round has
       turned the inner group into a plain ident is what finishes the outer one. }
     dgenAtBefore := dgenAt;
-    CollectTemplateParamNamesFromTokens;
+    CollectSpecializationBoundNamesFromTokens;
     for dgenT := 0 to TemplateCount - 1 do
       DelphiRewriteGenericUses(dgenT, dgenAt, TemplateIsDelphi[dgenT]);
     Inc(dgenRounds);

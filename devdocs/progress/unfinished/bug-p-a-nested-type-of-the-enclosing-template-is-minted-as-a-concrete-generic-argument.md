@@ -3,7 +3,7 @@ slug: bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-gene
 track: P
 prio: 65
 type: bug
-status: backlog
+status: unfinished
 blocked-by: []
 summary: "`TEnum<TPair>` where TPair is a type nested INSIDE the enclosing template is minted eagerly as `TEnum$TPair`, giving `unknown type: TPair` at TEnum's own line. Same shape as bug-p-a-generic-argument-that-is-another-templates-parameter-is-minted-as-a-concrete-type, which is fixed — that one catches PARAMETER names via a token-level scan, and a nested type name is not a parameter, so it slips through. 23-line repro, FPC prints 4. This is the current stop for `uses Generics.Collections` (generics.collections.pas:120, TEnumerator<TDictionaryPair>). Two mechanisms for one concept: read the whitelist analysis below before adding a third."
 owner: unassigned
@@ -109,6 +109,57 @@ generics.collections.pas:120: unknown type: PT
 TValue>`, used as arguments to `TEnumerator<T>`. Note the wall is now **inside
 the file the user asked to compile** — before the parameter-name fix it was
 `generics.defaults.pas:46`, a file that contains no specialization at all.
+
+## 2026-08-29 (frankP) — HALF DONE and PARKED, with the second half measured
+
+**Landed:** the collector no longer harvests only parameter names. It is now
+`CollectSpecializationBoundNamesFromTokens` — *every name whose meaning depends
+on a specialization* — and it harvests both a template's parameters and the type
+names its BODY declares, from the same token walk. `--debug` on the repro now
+shows `paramform=TRUE` where it showed `FALSE`: the group is deferred to the
+nested-prerequisite path instead of being minted. No regressions (16 named
+generic tests, 8 `.expected` clean, `spec_per_unit` 4/4, both cross-unit tests,
+self-host fixedpoint `a8f567c2455d`).
+
+That is deliberately ONE procedure and not a second mechanism — see the smell
+note above, which is why the parameter version was renamed rather than
+duplicated.
+
+**Still failing, and the trace says exactly where.** The deferral is now correct
+and the *prerequisite* is wrong:
+
+```
+DGEN match at 41 na=1 paramform=TRUE          <- fixed: no longer minted eagerly
+SPEC TDict$Integer$LongInt = TDict nested=1   <- the prerequisite is discovered
+SPEC TEnum$TPair = TEnum nested=0             <- ...and emitted with TPair RAW
+```
+
+`TEnum$TPair = specialize TEnum<TPair>` is emitted at the TOP LEVEL, where
+`TPair` does not exist. It only exists inside `TDict$Integer$LongInt`. The
+substitution set applied when a template is specialized covers its PARAMETERS
+(`TKey` -> `Integer`) and not the type names its own body declares, so a nested
+name used as a generic argument survives into a top-level declaration unmapped.
+
+**A probe that bounds the remaining work:** a nested type of a specialization is
+already materialised correctly and usable — `TDict<Integer, LongInt>` with
+`P: TPair` and `d.P.K := 3` compiles and prints `3`, matching FPC. So nothing is
+missing from the nested-type machinery itself. What is missing is one mapping:
+when the prerequisite is emitted, a nested name must be rewritten to whatever
+that name is called inside the specialization being emitted for.
+
+**Reduction is in `test/test_generic_nested_type_as_argument.pas`** (5 rows,
+oracle FPC's) and is **deliberately NOT wired into the Makefile** — it is red,
+and a red rule in `test-core` is a landmine. Wire it when the second half lands.
+
+Its last two rows are the boundary in the other direction and were both live
+hazards while writing the collector, not decoration: a genuinely concrete
+argument must STILL be minted, and a method's DEFAULT PARAMETER VALUE must not
+register its type as a nested declaration — `procedure P(a: Integer = 0)` is an
+`Ident =` inside a class body, and reading it as one deferred every
+`TBox<Integer>` in the file until the `type`-section state was added.
+
+**Corpus is unmoved** by this half: `uses Generics.Collections` still stops at
+`generics.collections.pas:120`.
 
 ## Gate
 
