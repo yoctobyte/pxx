@@ -8,6 +8,36 @@
 # bug-n-a-class-named-text-still-segfaults-outside-the-qualified-construction-arm
 
 
+# `os` is imported HERE rather than beside its first call further down, because
+# the probe path below reads os.environ and that use comes first. Hoisting it
+# above the class is also the safer half of the change: this test exists to
+# prove a main-program class named `Text` does not shadow lib/rtl/textfile.pas's
+# `Text` record, and an import landing BETWEEN the class and the file I/O would
+# be one more thing standing between the trigger and the check.
+import os
+
+# The probe path comes from the environment rather than a literal, because it is
+# written by the COMPILED TEST at runtime: no Makefile sweep reaches it, and
+# testmgr cannot privatize it either -- testmgr rewrites the recipe text it
+# executes, not string constants inside a binary it runs. Two concurrent runs
+# would otherwise share this file. regression-tools-devtest-00-2
+#
+# TESTMGR_TMP IS FIRST AND THAT ORDER IS THE POINT. The five sibling tests that
+# already do this read $TESTTMP alone, and the guard's failure message
+# recommends $TESTTMP -- but testmgr launches every job through an ALLOWLIST
+# environment (testmgr.py, ENV_ALLOW / ENV_ALLOW_PREFIXES), and TESTTMP is in
+# neither the exact set nor the "PXX_ TESTMGR_ LC_ QEMU_" prefixes, so it does
+# not survive into the job at all. TESTMGR_TMP does, by the TESTMGR_ prefix,
+# and testmgr sets it per run to a pid-keyed scratch dir it creates. So under a
+# bare testmgr run $TESTTMP alone resolves to the default and both runs land on
+# the same file again -- guard green, collision intact. TESTTMP stays as the
+# second choice because it is what a plain `make test TESTTMP=$(mktemp -d)`
+# sets, and /tmp last keeps the output byte-identical when neither is set.
+PROBE = (os.environ.get("TESTMGR_TMP")
+         or os.environ.get("TESTTMP")
+         or "/tmp") + "/pxx_nilpy_rtlrec_probe.txt"
+
+
 class Text:
     def __init__(self, s):
         self.s = s
@@ -48,19 +78,17 @@ print(Wrap3(Text("ef")).text.s)
 
 # ...and the RTL the class was capturing must still work IN THE SAME PROGRAM:
 # real text-file I/O through Input/Output's own record type
-f = open("/tmp/pxx_nilpy_rtlrec_probe.txt", "w")
+f = open(PROBE, "w")
 f.write(t.s + "\n")
 f.write("second\n")
 f.close()
 
-g = open("/tmp/pxx_nilpy_rtlrec_probe.txt", "r")
+g = open(PROBE, "r")
 for line in g:
     print(line.rstrip())
 g.close()
 
-import os
-
-os.remove("/tmp/pxx_nilpy_rtlrec_probe.txt")
+os.remove(PROBE)
 
 # the renamed control, which always worked
 class Boxy:

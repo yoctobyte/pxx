@@ -1,6 +1,10 @@
 ---
 track: N
 prio: 70
+type: bug
+status: done
+owner: frankwasm
+commit: PENDING-COMMIT
 ---
 
 # regression: tools-devtest#00 red at 8787cfe4235a — a new hardcoded /tmp path in a NilPy test
@@ -95,3 +99,55 @@ that teaches people to skim it.
 
 Both entries in that list are already ticketed and neither is a compiler
 defect: this one, and [[regression-test-emit-obj-cxtensa-obj]].
+
+## Resolution — and the prescribed fix was not the one that works
+
+Fixed 2026-08-29 in `test/test_nilpy_class_named_like_an_rtl_record.npy`. The
+probe path is now read from the environment, but **`TESTMGR_TMP` first and
+`TESTTMP` second**, not `TESTTMP` alone as prescribed above.
+
+`$TESTTMP` alone would have turned this job green and changed nothing under the
+runner that actually runs jobs concurrently. `testmgr.py` launches every job as
+`sh -c` with an **allowlist** environment, and `TESTTMP` is in neither
+`ENV_ALLOW` nor `ENV_ALLOW_PREFIXES` (`PXX_`, `TESTMGR_`, `LC_`, `QEMU_`) — so
+it does not reach the job at all and the test would have taken its `/tmp`
+fallback, landing on the same shared path the literal did. `TESTMGR_TMP` passes
+the `TESTMGR_` prefix and testmgr already sets it per run to a pid-keyed scratch
+dir it creates, so it is the one that buys the isolation.
+
+Two things follow, and neither is this ticket:
+
+* the guard's own failure message recommends `$TESTTMP`, which is where this
+  ticket's text got it. Filed as
+  [[bug-t-the-hardcoded-tmp-guard-recommends-a-variable-testmgr-strips]] (T,
+  p55);
+* five existing tests took the same advice and are inert under testmgr for the
+  same reason. Listed in that ticket. They are not defects — they are the advice
+  followed faithfully, which is the argument for fixing the advice.
+
+`import os` also moved to the top of the file: the probe reads `os.environ`, and
+that use comes before the `os.remove` the import used to sit beside.
+
+### Verified
+
+Pinned build v392 (`60b060bb54a8`), `.expected` unchanged, four environment
+shapes all byte-identical, with a sentinel planted at the old hardcoded path:
+
+| shape | result |
+| --- | --- |
+| neither variable set | `/tmp`, output byte-identical |
+| `TESTMGR_TMP` only (the testmgr shape) | redirected, sentinel untouched |
+| `TESTTMP` only (the plain-`make` shape) | redirected, sentinel untouched |
+| both, two runs concurrently | both pass, no collision |
+
+Negative control: the **unfixed** test destroys the sentinel, so the check can
+fail. CPython runs the file unchanged and still matches `.expected`, so the
+oracle is intact.
+
+`python3 tools/testmgr_hardcoded_tmp_devtest.py` → `ok  no unlisted hardcoded
+/tmp path (61 known, 1 allowed file(s), 2 allowed path(s))`. The ratchet is
+armed again, which per this ticket's own reasoning is the point: it can now
+report the next new path as news.
+
+## Log
+- 2026-08-29 — resolved, commit PENDING-COMMIT.
