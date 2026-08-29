@@ -5,16 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:23 blocked:6 backlog:300 backlog_new:4 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2580 rejected:46`
+`working:2 unfinished:22 blocked:6 backlog:301 backlog_new:4 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2581 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-opt-o3-register-pressure` [O] — owner: frank-optimize-b4
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
-## unfinished (23) — parked mid-flight; re-claim, do not duplicate
+## unfinished (22) — parked mid-flight; re-claim, do not duplicate
 
-- `bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream` [A]
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
@@ -47,14 +46,13 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `regression-lib-test-lib-synapse` [B] — blocked-by: bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream
 
-## Ready — top 30 of 311, ranked
+## Ready — top 30 of 312, ranked
 
 - `[p 85] [N]` bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 72] [N]` feature-nilpy-stdlib-coverage-gaps-measured
-- `[p 70] [A]` bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream (unblocks 2)
 - `[p 70] [A]` bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero
 - `[p 70] [P]` bug-p-a-call-chained-onto-a-class-method-result-is-dropped
 - `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
@@ -79,5 +77,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
 - `[p 62] [N]` feature-nilpy-enum-class
+- `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
 
-_281 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_282 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

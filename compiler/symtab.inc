@@ -787,10 +787,16 @@ begin
     bug-c-sibling-translation-units-cannot-see-each-other }
   if UnitIsCTranslationUnit(curUnit) and UnitIsCTranslationUnit(declUnit) then
   begin VisibilityAllows := True; Exit; end;
-  { Beyond the cache's range: answer directly, without memoizing. Unreachable
-    while ParseUnit caps CompiledUnitCount at 256, and present so that raising
-    that cap is a one-line change rather than a silent out-of-bounds read —
-    which is exactly the failure the MAX_STRS coupling was one step away from. }
+  { Beyond the cache's range: answer directly, without memoizing.
+
+    NOT unreachable, and this comment used to say it was. These indices are
+    Strs[] indices (see the header above), NOT unit ordinals, so they are bounded
+    by the STRING TABLE and not by CompiledUnitCount's cap of 256 -- a unit whose
+    NAME happens to intern past slot 255 lands here, which is why the failure it
+    caused was sensitive to `uses` ORDER: the order decides how many strings are
+    interned before a unit's name. Sizing an array indexed by one domain with the
+    bound of another is the actual defect; these guards are what keeps it from
+    corrupting memory until the two are separated. }
   if (curUnit + 1 > MAX_UNITS) or (declUnit + 1 > MAX_UNITS) then
   begin
     for i := 0 to UsesEdgeCount - 1 do
@@ -813,7 +819,23 @@ begin
     if UsesEdgeFrom[i] = curUnit then
     begin
       v := UsesEdgeTo[i];
-      VisCacheVis[v + 1] := True;
+      { RANGE-CHECK THE EDGE TARGET. The two guards above check curUnit and
+        declUnit and this third index was missed, so an edge whose target sat
+        past the cache wrote True STRAIGHT INTO THE GLOBALS DECLARED AFTER
+        VisCacheVis -- WarnIgnoredDirectives, PreScanPass, GenericMethodBuffered
+        at [257], [258], [259] of an array that ends at [256].
+
+        A True in PreScanPass mid-parse makes ParseSubroutine treat every
+        interface routine header as a definition, so the unit runs off its own
+        end hunting a body and dies at the next unit's EOF with `expected
+        implementation section` -- naming a file it was never parsing.
+
+        Skipping an out-of-range target loses nothing: the answer read below is
+        VisCacheVis[declUnit + 1], declUnit is already range-checked, and a
+        QUERY about a unit past the cache takes the direct-scan early-out above.
+        bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream }
+      if (v + 1 >= 0) and (v + 1 <= MAX_UNITS) then
+        VisCacheVis[v + 1] := True;
     end;
   { NO closure. There is deliberately nothing here. A `uses` clause names units
     in the namespace of the unit that WROTE it and in no other — including a

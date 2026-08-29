@@ -15,11 +15,10 @@ _none_
 | feature-opt-o3-register-pressure | O | 70→50 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
 
-## unfinished (23)
+## unfinished (22)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream | A | 70 | bug | Two units before a third with a deep transitive chain makes the parser hit EOF of a transitively-loaded unit still expecting `implementation`, with lookahead showing ANOTHER unit's generated tokens. Deterministic, -O-independent, and it is what makes test/lib_synapse.pas red. Platonic repro is 4 lines. | — |
 | bug-a-nilpy-on-cross-targets-four-remaining-walls | A | 40 | bug | After the string-tagged-binop gate was lifted, NilPy still does not RUN on any cross target: arm32 builds and SIGILLs, i386 refuses on `symbol kind not supported yet (load)`, aarch64 on `aggregate result with more than 8 params`, riscv32 on bare-metal mmap. Four separate walls, one campaign — ~53 .npy tests are cross-blind until they fall. | — |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
 | bug-nilpy-shared-nonlocal-frame-cell-is-never-freed | N | 40 | bug | A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted | — |
@@ -54,7 +53,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
 
-## backlog (300)
+## backlog (301)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -338,6 +337,7 @@ _none_
 | refactor-a-the-const-cast-width-table-is-the-third-copy | A | 35 | refactor | ConstIntCastWidth is a third copy of the builtin type-name table -- name to width+signedness, for const-expression casts -- and it carries the same longint/nativeint disagreements that bug-a-the-builtin-type-name-table-exists-twice just settled in the other two. Not a bug today: nothing observably differs. It is the count that is the problem. | — |
 | refactor-a-the-greenfield-frontends-share-each-others-parser-helpers | A | 18 | refactor | Omitting rparser.inc breaks zparser.inc in 123 places, plus gparser/eparser/fparser — the greenfield frontends call each other's support functions, which is exactly what the-substrate-is-ast-and-ir-not-the-parser.md says not to do. Costs nothing today; makes R and Z individually unomittable and couples two language specs. | — |
 | refactor-a-two-predicates-answer-what-a-caret-yields | A | 55 | refactor | Two functions type a dereference. NodePtrElem knows more SPELLINGS (index-into-base, pointer FIELD, inline PTR_CAST, pointer arithmetic); ResolveDerefShape knows more ABOUT each (remaining depth, ultimate base). Swapping a call site from one to the other trades one kind of knowledge for the other, silently — which is exactly what shipped a regression on 2026-08-25. | — |
+| refactor-a-viscachevis-is-indexed-by-a-string-id-and-sized-by-a-unit-count | A | 45 | refactor | VisCacheVis is subscripted by a Strs[] index but sized by MAX_UNITS, a unit COUNT. The two are unrelated quantities, so the array's bound has no relationship to the values that index it. Three range checks now stand between that mismatch and memory corruption; one of them was missing and cost a multi-session bug (bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream). Separate the domains so the checks are belt-and-braces rather than load-bearing. | — |
 | refactor-c-string-literal-decay-belongs-at-the-producer | C | 50 | refactor | The +8 that turns a C string literal's handle into a char* is duplicated at three consumers (assign, return, call argument), each keyed on `ASTKind[...] = AN_STR_LIT`. Any wrapper node defeats all three at once -- which is exactly how bug-c-a-pointer-cast-of-a-string-literal-points-at-the-length-prefix happened. Do the decay once, at the producer. | — |
 | refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag | C | 40 | refactor | cparser's partial-index builder marks 'this add is raw bytes, do not scale' by RETAGGING its base ASTTk to tyInt64 — a type tag used as a flag. tyInt64 is also the honest element tag of a `long long` array, and that collision cost a real bug. | — |
 | refactor-n-two-import-handlers-are-twins | N | 45 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
@@ -598,9 +598,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2580)
+## done (2581)
 
-2580 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2581 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (46)
 
@@ -660,7 +660,6 @@ _none_
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [P] feature-pascal-corpus-oop
 - [p 72] [N] feature-nilpy-stdlib-coverage-gaps-measured
-- [p 70] [A] bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream (unblocks 2) [parked — re-claim, do not duplicate]
 - [p 70] [A] bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero
 - [p 70] [P] bug-p-a-call-chained-onto-a-class-method-result-is-dropped
 - [p 70] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
@@ -791,8 +790,10 @@ _none_
 - [p 45] [N] feature-nilpy-threadsafe-containers
 - [p 45] [O] feature-opt-inline-float-and-record-returning-leaves
 - [p 45] [P] feature-p-defineglobal-a-define-that-crosses-unit-boundaries
+- [p 45] [B] feature-real-dynlib-loader [parked — re-claim, do not duplicate]
 - [p 45] [T] feature-t-nilpy-cpython-differential-fuzzer
 - [p 45] [A] refactor-a-one-program-driver-prologue-for-every-frontend
+- [p 45] [A] refactor-a-viscachevis-is-indexed-by-a-string-id-and-sized-by-a-unit-count
 - [p 45] [N] refactor-n-two-import-handlers-are-twins
 - [p 45] [P] refactor-p-the-field-declaration-parser-exists-twice
 - [p 45] [P] refactor-p-the-overload-probe-cannot-see-the-argument-match-channels
@@ -971,7 +972,6 @@ _none_
 
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
-- **2** — bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-a-xtensa-refuses-to-lower-an-unreachable-syscall
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption

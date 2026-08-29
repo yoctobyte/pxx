@@ -4,8 +4,8 @@ prio: 70
 type: bug
 blocked-by: []
 summary: "Two units before a third with a deep transitive chain makes the parser hit EOF of a transitively-loaded unit still expecting `implementation`, with lookahead showing ANOTHER unit's generated tokens. Deterministic, -O-independent, and it is what makes test/lib_synapse.pas red. Platonic repro is 4 lines."
-status: unfinished
-owner: unassigned
+status: done
+owner: frankA
 ---
 
 # A deep unit dependency parses with a spliced token stream
@@ -328,3 +328,97 @@ and the grep needs widening beyond `PreScanPass := `.
 **No compiler change was made.** Every probe was reverted; the tree is clean at
 HEAD and the repro still reproduces (binary `0750a098d055`). `external/synapse`
 installed from `tools/install_externals.sh`; the pin `b3224c3d133a` resolves.
+
+---
+
+## FIXED 2026-08-29 (frankA) — an out-of-bounds write into the global after the array
+
+Resumed from the park above. The banked diagnosis was right as far as it went and
+its leading hypothesis was correct: **a stray write clobbering `PreScanPass`.**
+
+### The write
+
+`VisibilityAllows` (`symtab.inc`) memoizes unit visibility in
+
+```pascal
+VisCacheVis : array[0..MAX_UNITS] of Boolean;   { MAX_UNITS = 256 }
+```
+
+It range-checks two of its three indices and missed the third:
+
+```pascal
+  if (curUnit + 1 > MAX_UNITS) or (declUnit + 1 > MAX_UNITS) then ...   { guarded }
+  ...
+  v := UsesEdgeTo[i];
+  VisCacheVis[v + 1] := True;                                           { NOT guarded }
+```
+
+Instrumented, the failing repro writes at **[257], [258], [259]** of an array
+ending at [256]. The three globals declared immediately after it, in order:
+
+| index | global | effect |
+| --- | --- | --- |
+| 257 | `WarnIgnoredDirectives` | spurious diagnostics |
+| **258** | **`PreScanPass`** | **this bug** |
+| 259 | `GenericMethodBuffered` | corrupts generic method buffering |
+
+A `True` in `PreScanPass` mid-parse makes `ParseSubroutine` treat every interface
+routine header as a definition, so the unit runs off its own end hunting a body
+and dies at the next `tkEOF` with `expected implementation section`, naming a
+file it was never parsing. Everything the two earlier framings chased —
+`sockets.pas`, `dns_cache.pas`, the mangled name, the token map — was downstream
+of one out-of-bounds boolean.
+
+### Why it depended on `uses` ORDER, which is the part worth keeping
+
+These indices are **`Strs[]` indices**, not unit ordinals — the function's own
+header says so (*"Strs[] indices offset by 1"*). The array is sized by
+`MAX_UNITS`, a unit **count**. Two domains conflated in one subscript.
+
+`CompiledUnitCount` really is capped at 256 (`pasparser_proc.inc:3393`), so the
+comment claiming this made the range check unreachable was *reasoning about the
+wrong quantity*. A unit whose NAME interns past string slot 255 overflows, and
+how many strings are interned before a given unit's name is decided by the order
+its `uses` clause was walked. That is the whole ordering table in the ticket
+above: not "two units before blcksock", but "this ordering pushes a unit name
+past slot 255".
+
+It also explains why it looked like a token-stream problem and was not, and why
+it was `-O`-independent and perfectly deterministic.
+
+### The fix
+
+Range-check the edge target, and correct the comment whose premise was false.
+Skipping an out-of-range target loses nothing: the answer read at the end is
+`VisCacheVis[declUnit + 1]` and `declUnit` is already checked, so a query ABOUT a
+unit past the cache takes the direct-scan early-out that already exists.
+
+**Deliberately not done here:** separating the two domains (sizing the cache by
+the string table, or keying it on a real unit ordinal) is the change that removes
+the class rather than this instance. It is a bigger, riskier edit to a function
+called from *every* symbol lookup, and it wants its own ticket rather than
+riding along with a memory-corruption fix that needs to land now. Filed as
+[[refactor-a-viscachevis-is-indexed-by-a-string-id-and-sized-by-a-unit-count]].
+
+### Verification
+
+| | baseline | fixed |
+| --- | --- | --- |
+| ticket's 4-line repro (`synacode, synaip, blcksock`) | `sockets.pas:634` | compiles |
+| `test/lib_synapse.pas` | `dns_cache.pas:270` | compiles, output matches expected exactly |
+| `test/lib_synapse_transitive_unit.pas` | red | `ok` |
+| passing order (`synacode, blcksock, synaip`) | compiles | compiles |
+
+Both reported positions from the variance table are one defect and both are gone.
+`lib_synapse` is the regression test and is already wired and guarded on
+`external/synapse`; no new test is added, because reproducing this synthetically
+needs ~260 units purely to push a name past the string slot.
+
+Gate: `make compiler/pascal26` fixedpoint `da54007a8f92`, `gate.sh quick`,
+`tools/forwardlint.py` clean **for this change** — it reports one pre-existing
+FAIL in `compiler/rparser.inc:1293` (`RExprRecId` used at 1293, declared at 1507)
+which is Track R's file at HEAD, not from this work, and is a live bootstrap-seed
+break for everyone. Reported to the coordinator, not touched.
+
+## Log
+- 2026-08-29 — resolved, commit PENDING-COMMIT.
