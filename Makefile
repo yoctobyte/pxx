@@ -2616,6 +2616,15 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_class_method_result_type.pas $(TESTTMP)/test_clsmeth_ret26
 	@$(TESTTMP)/test_clsmeth_ret26 | diff -u test/test_class_method_result_type.expected - \
 	  || { echo 'test_class_method_result_type: FAIL - a class method result lost its type'; exit 1; }
+	@# ...and the same chain through a bare CLASS NAME receiver: TFactory.MakeC.Tag
+	@# evaluated to the INTERMEDIATE result, because both arms that build a
+	@# TClassName.ClassMethod call returned it without applying the selector tail,
+	@# and the leftover .Tag was eaten by the statement parser's skip-to-';'. Two
+	@# arms (expression and statement position), so fixing one left the other wrong.
+	@# bug-p-a-call-chained-onto-a-class-method-result-is-dropped
+	@./$(COMPILER) test/test_class_name_receiver_chain.pas $(TESTTMP)/test_clsname_chain26
+	@$(TESTTMP)/test_clsname_chain26 | diff -u test/test_class_name_receiver_chain.expected - \
+	  || { echo 'test_class_name_receiver_chain: FAIL - a chain on a class-name receiver was dropped'; exit 1; }
 	@# a SECOND class of the same name in one unit must be refused, naming it
 	@./$(COMPILER) test/test_pascal_duplicate_class_fail.pas $(TESTTMP)/test_pascal_dup_class26 2>&1 \
 	  | grep -q 'duplicate class name TFoo' \
