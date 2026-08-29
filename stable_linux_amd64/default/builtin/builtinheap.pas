@@ -1523,9 +1523,32 @@ begin
 end;
 
 
+{$ifdef CPU_WASM32}
+{ wasm has no syscall instruction, so the host is reached through an IMPORT —
+  and `external 'lib' name 'sym'` already carries exactly the module/field pair
+  a wasm import needs (ProcLibrary / ProcExtName). The wasm32 backend lowers
+  this declaration to `(import "wasi_snapshot_preview1" "fd_write" ...)`. }
+function __wasi_fd_write(fd: NativeInt; iovs: Pointer; iovsLen: NativeInt;
+                         nwritten: Pointer): NativeInt;
+  external 'wasi_snapshot_preview1' name 'fd_write';
+{$endif}
+
 function PXXSysWrite(fd, buf, count: NativeInt): Int64;
+{$ifdef CPU_WASM32}
+var iov: array[0..1] of Integer; nw: Integer;
+{$endif}
 begin
   Result := 0;
+{$ifdef CPU_WASM32}
+  { One iovec: [ptr, len]. WASI returns an ERRNO, not a byte count — the count
+    is written to *nwritten — so the two are not interchangeable and a caller
+    reading the return value as a length would get 0 on success. }
+  iov[0] := Integer(buf);
+  iov[1] := Integer(count);
+  nw := 0;
+  if __wasi_fd_write(fd, @iov[0], 1, @nw) = 0 then Result := nw
+  else Result := -1;
+{$endif}
 {$ifdef CPUX86_64}
   Result := __pxxrawsyscall(1, fd, buf, count);
 {$endif}
