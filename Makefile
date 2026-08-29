@@ -7391,6 +7391,13 @@ test-core: $(COMPILER)
 	$(TESTTMP)/c_environ_prefilled_b38026; tools/expect_same.sh c_environ_prefilled_b38026-rc "$$?" "42"
 	./$(COMPILER) test/cfield_2d_row_decay_b62.c $(TESTTMP)/cfield_2d_row_decay_b6226
 	$(TESTTMP)/cfield_2d_row_decay_b6226; tools/expect_same.sh cfield_2d_row_decay_b6226-rc "$$?" "42"
+	# A PARTIAL index of a multidim struct FIELD: both the row pointer's stride
+	# and the offset multiplier were wrong, silently, with nothing covering the
+	# shape. The bare-array spellings sit beside each field one in the output, and
+	# they were always right — which is what says these were defects.
+	# bug-c-a-struct-field-partial-index-uses-the-outer-row-stride
+	./$(COMPILER) test/cfield_partial_index_stride.c $(TESTTMP)/cfield_partial_index_stride26
+	tools/expect_same.sh cfield_partial_index_stride26 "$$($(TESTTMP)/cfield_partial_index_stride26)" "$$(printf 'f2 *(m[1]+1)=11  a2 *(m[1]+1)=11\nf2 *(m[2]+3)=23  a2 *(m[2]+3)=23\nf2 r[0]=10 r[1]=11\nf3 q[0]=120 q[3]=123  a3 q[0]=120 q[3]=123\nf3 p[0][0]=100 p[1][2]=112 full=123')"
 	./$(COMPILER) test/ctypedef_shadow_local_b151.c $(TESTTMP)/ctypedef_shadow_local_b15126
 	$(TESTTMP)/ctypedef_shadow_local_b15126; tools/expect_same.sh ctypedef_shadow_local_b15126-rc "$$?" "42"
 	./$(COMPILER) test/cinit_struct_designator_b152.c $(TESTTMP)/cinit_struct_designator_b15226

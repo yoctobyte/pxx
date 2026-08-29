@@ -3697,7 +3697,7 @@ function ParseCPostfixTail(node: Integer): Integer;
 var idxExpr, inode, dnode, fnode, baseFld, recId, fldOff, fldLen: Integer;
     argHead, argTail, argNode, valNode, sig, calleeNode2: Integer;
     rowStride, strideLit, mulNode: Integer;
-    ndimsF, flatNode, spanD, ndi, nIdx, si: Integer;
+    ndimsF, flatNode, spanD, ndi, ndi2, nIdx, si: Integer;
     sIdx: array[0..MAX_ARR_DIMS-1] of Integer;  { subscript nodes captured locally — the shared NDIdxNode[] is clobbered when a subscript is itself a multi-dim read }
     done: Boolean; fieldName: AnsiString;
 begin
@@ -3883,14 +3883,51 @@ begin
         begin
           { partial index -> row pointer. rowStride = product(remaining spans)*elem.
             Tag operands tyInt64 so the add is raw 64-bit (no pointer-stride scale);
-            the AN_FIELD value decays to its address as the base. }
+            the AN_FIELD value decays to its address as the base.
+
+            RecFieldRowStride answers for ONE subscript — it is
+            elem*product(span[1..n-1]), the OUTER row. This arm is reached with
+            `ndi` subscripts consumed, and for ndi > 1 the multiplier is the
+            product of the REMAINING spans, which is what the array arm above
+            computes for itself. Using the outer row stride at every depth sent
+            `int *q = s.m[1][2]` on `int m[2][3][4]` 48 bytes per flat unit
+            instead of 16 — the address left the object and q[0] read garbage,
+            silently. Recover the element size by dividing the inner spans back
+            out of RecFieldRowStride (rather than re-deriving it from the field
+            type, which would have to special-case tyRecord the way that helper
+            already does), then multiply the spans this partial index actually
+            leaves behind.
+            bug-c-a-struct-field-partial-index-uses-the-outer-row-stride }
           rowStride := RecFieldRowStride(ResolveNodeRec(ASTLeft[baseFld]), GetASTIdentName(baseFld));
+          for ndi2 := 1 to ndimsF - 1 do
+          begin
+            spanD := RecFieldArrDimSpanAt(ResolveNodeRec(ASTLeft[baseFld]), GetASTIdentName(baseFld), ndi2);
+            if spanD > 0 then rowStride := rowStride div spanD;
+          end;
+          for ndi2 := ndi to ndimsF - 1 do
+          begin
+            spanD := RecFieldArrDimSpanAt(ResolveNodeRec(ASTLeft[baseFld]), GetASTIdentName(baseFld), ndi2);
+            if spanD > 0 then rowStride := rowStride * spanD;
+          end;
           ASTTk[baseFld] := Ord(tyInt64);
           strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := rowStride; ASTTk[strideLit] := Ord(tyInt64);
           mulNode := AllocNode(AN_BINOP); ASTIVal[mulNode] := Ord(tkStar);
           ASTLeft[mulNode] := flatNode; ASTRight[mulNode] := strideLit; ASTTk[mulNode] := Ord(tyInt64);
           inode := AllocNode(AN_BINOP); ASTIVal[inode] := Ord(tkPlus);
           ASTLeft[inode] := baseFld; ASTRight[inode] := mulNode; ASTTk[inode] := Ord(tyPointer);
+          { What the decayed row pointer STEPS BY — the same stamp the ARRAY
+            partial-index arm sets, and the reason this arm needed it is the same
+            one: the base is retagged tyInt64 here, so IRPointerStride recurses
+            into the byte-offset multiply and falls to its size-1 default.
+            `*(s.m[1] + 1)` on `int m[3][4]` therefore stepped ONE BYTE and
+            answered 184549376 (11 shl 24) instead of 11 — the exact signature of
+            bug-c-a-multidim-array-decays-with-the-element-stride, whose second
+            half introduced this stamp for the ARRAY arm and never reached this
+            one. Same defect, same fix, the sibling arm nobody grepped for.
+            bug-c-a-struct-field-partial-index-uses-the-outer-row-stride }
+          spanD := RecFieldArrDimSpanAt(ResolveNodeRec(ASTLeft[baseFld]), GetASTIdentName(baseFld), ndi);
+          if spanD > 0 then ASTSLen[inode] := rowStride div spanD
+          else ASTSLen[inode] := rowStride;
           node := inode;
         end;
       end
