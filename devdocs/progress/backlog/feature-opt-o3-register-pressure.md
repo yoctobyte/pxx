@@ -1,5 +1,8 @@
 ---
 prio: 70
+track: A
+status: backlog
+owner: ""
 ---
 
 # -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator
@@ -2509,3 +2512,45 @@ are exact and are what this stands on.
 `chess` does not build for aarch64 at all (stackful generator, x86-64 only) —
 pre-existing and unrelated, but it means the aarch64 corpus is thinner than the
 x86-64 one.
+
+
+---
+
+## RELEASED FROM `working/` 2026-08-29 — frank-optimize-b4 parked, four of four landed
+
+Moved to `backlog/` rather than `unfinished/`: **nothing is half-applied.** b4
+confirmed the release in the form that actually answers the question, which the
+repo cannot:
+
+```
+HEAD = 2103881fe = origin/master   (level)
+unpushed: 0    uncommitted: 0
+git diff origin/master -- symtab.inc / defs.inc / ir_codegen_aarch64.inc / ir_codegen.inc:  0 lines
+```
+
+Two conditions, not one: **no working-tree copy differing from what the next
+holder checks out, and nothing in a commit they cannot see.** `working/` and
+`ListAgents` can answer neither.
+
+**Also added the missing `track: A` field.** This umbrella had **no `track:` line
+at all**, which matters more than it looks: an unset track parks a ticket in
+Track T's queue regardless of what the body says. It escaped notice only because
+`working/` is deliberately never ranked — so a p70 umbrella was invisible to
+every queue *and* mis-tracked, and the second fault was masked by the first.
+
+> **Two defects, one of which hides the other, is not twice the work — it is a
+> defect you cannot find by fixing the first.** Releasing the lock is what would
+> have exposed the mis-track; had anyone released it earlier, the ticket would
+> have surfaced under the wrong letter.
+
+**Remaining on the umbrella**, both genuinely unclaimed:
+- **Item 1's x86-64 residual**, behind b4's own fresh-session rule.
+- **`feature-opt-emitloadvara64-needs-a-destination-register-parameter` [A p55]**
+  — filed separately, and now a *two-step* job: make `EmitLoadVarA64`'s scratch
+  usage uniform (`skGlobal`/`tySingle` from x1 onto x9, which local/param already
+  use) *before* adding a destination parameter, because the helper's scratch is
+  inconsistent across its own arms and self-clobbers at exactly `rd=1`.
+
+**Landed, four of four:** operand scheduler, callee-saved scratch, float-resident
+dead-store elimination, and the aarch64 `-O1` leaf-operand port (42084 bytes and
+10521 instructions off mandelbrot at `-O3`, 5.8%).
