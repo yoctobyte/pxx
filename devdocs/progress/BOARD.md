@@ -74,12 +74,12 @@ _none_
 | bug-a-shr-reaches-the-ir-spelled-as-tkident | A | 20 | bug | Pascal's shr is lexed as an identifier — there is no tkShr token for it — so an IR_BINOP carrying shr carries Ord(tkIdent) as its operator. ir.inc:8878 substitutes Ord(tkShr) for exactly one consumer. Every other consumer must repeat that substitution or silently mistake `shr` for whatever it does with tkIdent. The wasm32 backend is now the second arm; normalise at IRAppend instead. | — |
 | bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture | A | 40 | bug | Five Makefile guards check the pinned stable with `test -x`, which tests the executable BIT — a property of the file, not of whether this CPU can run it. On a non-x86-64 host every guard reports healthy and the recipe then dies at exec with `Exec format error`, after printing a message saying there is no pinned stable at a path where one demonstrably is. Found on `via` (aarch64), where the repo ships only `stable_linux_amd64`. A reader would reasonably conclude the checkout is broken. | — |
 | bug-a-testtmp-defaults-to-a-path-every-checkout-shares | A+T | 55 | bug | Makefile:49 is `TESTTMP ?= /tmp` — a fixed path, not per-checkout and not per-PID. Every agent's suite writes its test binaries to the same names in the same directory, so two concurrent runs on one box overwrite each other's artefacts. The failure mode is a wrong verdict, not a crash. CORRECTED 2026-08-29 (see body): testmgr ALREADY privatizes recipe /tmp paths per PID, so this is true only of bare `make`; the recipe half closed in b2cab6b6b; and the proposed fix would blind four testmgr expressions at once — blocked on the prerequisite. | chore-t-teach-testmgr-the-testtmp-value-before-anyone-changes-it |
-| bug-a-the-17th-thread-silently-aliases-reactor-slot-0 | B | 75 | bug | lib/rtl/scheduler.pas CurR() falls back to slot 0 when all MAX_REACTORS=16 reactors are in use — `slot := 0` is the initializer and nothing checks for exhaustion. The 17th OS thread silently adopts a live thread's reactor, the two share coroutine state, and the result is memory corruption reported as 'coroutine stack overflow (canary clobbered)'. Invisible on every 12-core box; deterministic above 19 threads. Found on seven (24 cores) 2026-08-29. | — |
 | bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire | A | 45 | bug |  | — |
 | bug-a-the-div-by-zero-check-is-still-missing-on-xtensa | A+S | 25 | bug | The last target without a pre-divide zero check. The other five landed 2026-08-23; xtensa was left out because it cannot be RUN on this box (bare profile emits an ESP image, not a Linux ELF), its branches carry only an 8-bit displacement, its windowed ABI rotates the register window on a call, and its divide is two shapes depending on XtensaSoftDivide. | — |
 | bug-a-the-posix-pal-dir-is-added-on-esp-platform-targets | A+S | 45 | bug | AddDefaultPasUnitDirs (compiler.pas) guards the posix PAL search dir on TargetIsEspClass — bare-ness — when the question is which PAL the platform wants. So an ESP-PLATFORM target that is not bare (xtensa under IDF, riscv32 under --platform=esp) gets lib/rtl/platform/posix/ on its unit path, and the esp PAL dir is never added by the compiler at all: every ESP build passes -Fulib/rtl/platform/esp by hand. Latent as of regression-test-emit-obj-cxtensa-obj — nothing on that path pulls the PAL any more — but the guard is still wrong and the next thing to pull platform_backend on an ESP target resolves the posix one. | — |
 | bug-a-xtensa-codegen-has-no-variant-support | A+S | 22 | bug | `var v: Variant; v := 1;` does not compile for --target=xtensa: `unsupported node in IR codegen: var_store`. The exact sibling of bug-a-riscv32-codegen-has-no-variant-support, which was fixed 2026-08-27 -- xtensa is the last backend with no IR_VAR_STORE / IR_VAR_BOX / IR_VAR_BINOP arm at all. | — |
 | bug-a-xtensa-refuses-to-lower-an-unreachable-syscall | A+S | 45 | bug | xtensa codegen errors with 'unsupported node in IR codegen: syscall' on a __pxxrawsyscall call that is statically unreachable on that target, which makes an otherwise-portable RTL unit uncompilable. Inconsistent with the ESP PAL's own pattern of refusing unsupported operations at RUNTIME rather than failing the build. | — |
+| bug-b-concurrent-halt-from-several-threads-exits-0 | B | 55 | bug | Halt(errcode) from several parallel-for workers at once sometimes exits 0 instead of the code: same binary and width give 0, 216, 0 across runs. A fatal that reports SUCCESS to its caller. Six plain palthread threads all calling Halt do NOT reproduce it, so the cause is not concurrency alone and is not isolated. Reproduced, not diagnosed. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | B+S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict | N | 40 | bug | pylib treats VT_CHAR and VT_STRING as ONE string type in ordering, repr, concat and text extraction — but `PyVarEq` bails on `p^.VType <> q^.VType` before it ever gets there, and `PyVarHashKey` has no VT_CHAR arm either. So a char-tagged key stores fine and then misses every lookup. No NilPy-reachable repro today (the pystr_ofchar boundary converts at every crossing), but this is the mechanism that turned Counter(str) into a SILENT 0 instead of a loud KeyError. | — |
 | bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name | N | 45 | bug | `def g(): return 1` followed by `if True: def g(): return 2` still calls the FIRST g. Split out of bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name when that one was fixed: it is a different mechanism — the def side, not the assignment side. A nested def has a position, but PyRegisterDefShells only walks module-level defs at DEPTH 0, so a def inside a branch never gets one. | — |
@@ -603,9 +603,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2595)
+## done (2596)
 
-2595 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2596 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (51)
 
@@ -665,7 +665,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 75] [B] bug-a-the-17th-thread-silently-aliases-reactor-slot-0
 - [p 75] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [P] feature-pascal-corpus-oop
@@ -719,6 +718,7 @@ _none_
 - [p 55] [A] bug-a-emitzeroframeslot-has-no-wasm32-arm
 - [p 55] [A] bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice
 - [p 55] [A+T] bug-a-testtmp-defaults-to-a-path-every-checkout-shares
+- [p 55] [B] bug-b-concurrent-halt-from-several-threads-exits-0
 - [p 55] [N] bug-n-a-field-assigned-from-a-module-global-expression-is-refused
 - [p 55] [N] bug-n-a-keyword-argument-through-a-class-value-is-refused-at-runtime
 - [p 55] [N] bug-n-a-keyword-argument-through-a-procedural-field-needs-a-plain-receiver

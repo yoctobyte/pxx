@@ -4,8 +4,8 @@ prio: 75
 type: bug
 blocked-by: []
 summary: "lib/rtl/scheduler.pas CurR() falls back to slot 0 when all MAX_REACTORS=16 reactors are in use — `slot := 0` is the initializer and nothing checks for exhaustion. The 17th OS thread silently adopts a live thread's reactor, the two share coroutine state, and the result is memory corruption reported as 'coroutine stack overflow (canary clobbered)'. Invisible on every 12-core box; deterministic above 19 threads. Found on seven (24 cores) 2026-08-29."
-status: open
-owner: unassigned
+status: done
+owner: frankB
 ---
 
 # The 17th thread silently aliases reactor slot 0
@@ -191,3 +191,137 @@ consequence matches this table.
 Also worth noting for sizing: both other tables are **64**, four times the
 reactor ceiling, and neither is reachable on this box's 24 threads. `MAX_REACTORS
 = 16` is the only limit in `lib/rtl` that ordinary hardware now exceeds.
+
+## Resolved — and the "needs a 24-core box" premise is FALSE
+
+The dispatch came with a verification boundary: *this box has 12 cores, the
+defect needs 17 threads, so you can write the fix but cannot witness it.* That
+boundary does not exist. **It reproduces on 12 cores, in one line.**
+
+`MAX_REACTORS` is exhausted by the number of **worker threads**, and the worker
+count is not the core count — it is `PXXParForWorkers`, which merely *defaults*
+to `sched_getaffinity`. `palparallel` already exports the override:
+
+```pascal
+  PXXSetParForWorkers(20);   { PAR_MAX_WORKERS = 64 is the only ceiling }
+```
+
+With that line, the ticket's own program fails on this 12-core host:
+
+| | runs |
+| --- | --- |
+| unfixed, 20 workers, 12 cores | **0 / 8 clean** — canary fatal, `err=37`, `err=50`, `err=59`, and hard crashes with no output |
+| fixed, 20 workers, 12 cores | 10 / 10 clean |
+
+The ticket's `taskset` table was a correct measurement with a wrong inference
+attached. `taskset` changes the affinity mask, `QueryCpuCount` reads the
+affinity mask, and the worker count follows — so the table was dialling the
+**worker count** and reading it as a property of the hardware. Cores were the
+proxy, never the cause, and "12-core hardware structurally cannot reach it" was
+the one sentence in the ticket that nothing had measured. Everything else in it
+holds exactly as written.
+
+This matters beyond this bug: the conclusion drawn was that finding it *required*
+a second, larger watcher box. It required a second box to be **noticed** —
+nothing more. The reproduction was always one exported setter away, and the
+general lesson is the ticket's own, turned on itself: **a green is bounded by
+the machine that ran it, and so is a red.**
+
+## The fix, in the ticket's own order
+
+**1. Guard the exhaustion.** `slot := -1` as a sentinel, and a loud refusal when
+the scan finds nothing — the shape `sockets.pas` uses, with the consequence
+`MAX_CO` chose.
+
+**2. Raise the ceiling — and this one is not optional.** `MAX_REACTORS` is now
+**64**, matching `PAR_MAX_WORKERS` (the hard cap on a parallel-for's width) and
+the two other tables in `lib/rtl`. With the guard alone at 16, every ordinary
+`parallel for` containing async work on a 17+ thread host would have **halted**
+— converting silent corruption into a guaranteed hard failure for exactly the
+users on the big hardware this was found on. The guard is what makes raising it
+safe; raising it is what makes the guard sane to ship. Cost is BSS: 82,012 →
+195,292 bytes for a `--threadsafe` binary, zero-filled and untouched until used.
+
+## The third defect, found while proving the second
+
+`Halt(216)` was the obvious body for the guard, mirroring `MAX_CO`. It is wrong
+here, and the way it is wrong is this repo's favourite shape. Measured with
+`MAX_REACTORS` lowered to 2:
+
+| body | 3 workers | 4 | 8 | 20 |
+| --- | --- | --- | --- | --- |
+| `Halt(216)` | 216 216 216 | **0 216 0** | **0 0 0** | 216 216 216 |
+| `exit_group(216)` | 216 ×6 | 216 ×6 | 216 ×6 | 216 ×6 |
+
+**With `Halt` the exit status is unreliable — it races.** Same binary, same
+width, different answers between runs. So the fatal sometimes reports SUCCESS,
+and a harness reading the status sees a pass.
+
+**A correction to my own first reading of this**, which is the part worth
+keeping. I first sampled each width once, got 216 / 0 / 0, and wrote down
+"concurrent Halt loses the status: one refusal is fine, two or more exit 0" —
+a clean deterministic rule, and I had put it in a source comment before I
+re-measured. Repeating the runs destroyed it: 4 workers gives 0, 216, 0. And the
+obvious minimal repro **fails to reproduce at all** — six plain `palthread`
+threads each calling `Halt(216)` exited 216 in 6/6 runs, so "concurrent Halt" is
+not sufficient and something about halting inside a parallel-for worker during
+reactor attachment is involved. That is where it stands: **observed, reproduced,
+and NOT diagnosed.**
+
+One sample per cell reads exactly like a measurement and is a coin flip with a
+table drawn around it. The named cause would have outlived me in a comment.
+(Related in shape to the i386 `exit_group` number in `pxxcio.pas` — 231 is
+x86-64's, so on i386 it called `fgetxattr` and every failing C program exited 0.
+There too, what got lost was the report of the failure rather than the failure.)
+
+Serialising it did not help and was worse. Holding `regLock` across the fatal
+hung the process (exit 124 under `timeout`, at 4, 8 and 20 workers); releasing it
+and parking the losers hung it too, for the real reason — **`Halt`'s exit path
+joins the worker threads**, so a parked thread is one the join waits on forever.
+
+So the arm calls `exit_group` directly (inline syscall numbers, the pattern this
+unit already uses for `gettid` rather than depending on `palthread`). It joins
+nothing, races nothing, and skips finalizers — the correct trade when the state
+being escaped is two OS threads sharing one coroutine table. Result: **exit 216
+with exactly one message, at 3, 4, 8, 20 and 64 workers.**
+
+The underlying `Halt` race is not this unit's and is filed separately:
+[[bug-b-concurrent-halt-from-several-threads-exits-0]].
+
+## Tests — both reachable on any host, neither needs a big box
+
+- `test/test_sched_reactors_wide.pas` — 20 workers via `PXXSetParForWorkers`,
+  expects `SCHED WIDE OK`. This is the user-facing regression. **0/8 pre-fix on
+  12 cores**, 10/10 after.
+- `test/test_sched_reactor_exhaustion.pas` — built `-dPXX_SCHED_TINY_REACTORS`,
+  which lowers `MAX_REACTORS` to 2 so three threads overrun it deterministically.
+  Asserts the named fatal **and exit 216**, because "prints a fatal" and "fails"
+  are different claims and only the status is what a harness reads. Pre-fix it
+  prints `UNREACHED` and exits 0.
+
+The define exists because raising the ceiling to 64 makes the guard **unreachable
+from Pascal** — no `parallel for` can exceed `PAR_MAX_WORKERS`. An unreachable
+guard is an untested one, and this ticket is about what untested code does.
+
+Both wired into `test-threads` beside `test_async_parallel_compat`, and verified
+by extracting the recipe and running it through **make's own expansion** — my
+first attempt hand-substituted `$$` and produced a false mismatch, which is the
+same "a hand-copied oracle is a second implementation" trap as retyping an
+expected string.
+
+Gate: `make lib-test` (Track B), no pin and no self-host needed, per the routing
+note above.
+
+## Deliberately NOT changed: the `MAX_CO` arm
+
+`SpawnSized`'s `MAX_CO` guard still uses `Halt(216)` and therefore carries the
+same latent exposure — measured at two concurrently-refused threads it exited
+216 correctly, so it is not *observed* broken, but nothing about it is
+structurally safer than the arm this ticket rewrote. Left alone on purpose: it
+is outside this ticket, it is not currently failing, and swapping a working
+fatal for a different mechanism is how a fix trades one bug for two. Recorded in
+[[bug-b-concurrent-halt-from-several-threads-exits-0]] as the place to look
+next, with the reproduction that would settle it.
+
+## Log
+- 2026-08-29 — resolved, commit PENDING-COMMIT.

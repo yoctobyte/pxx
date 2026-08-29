@@ -3747,6 +3747,23 @@ test-threads: $(COMPILER)
 	# async (per-thread coroutine scheduler) composes with parallel (OS threads): each worker runs its own reactor
 	./$(COMPILER) --threadsafe test/test_async_parallel_compat.pas $(TESTTMP)/test_async_parallel_compat26
 	tools/expect_same.sh test_async_parallel_compat26 "$$($(TESTTMP)/test_async_parallel_compat26 | tail -n 1)" "ASYNC x PARALLEL OK"
+	# ...and with MORE workers than the OLD reactor ceiling of 16. CurR treated its
+	# `slot := 0` initializer as an answer when every reactor was in use, so the 17th
+	# thread adopted a LIVE thread's reactor and the two shared a coroutine table.
+	# The worker count is SET, not inherited from the CPU count: cores were only ever
+	# a proxy for the default worker count, so this is deterministic on a 4-core box.
+	# bug-a-the-17th-thread-silently-aliases-reactor-slot-0
+	./$(COMPILER) --threadsafe test/test_sched_reactors_wide.pas $(TESTTMP)/test_sched_wide26
+	tools/expect_same.sh test_sched_wide26 "$$($(TESTTMP)/test_sched_wide26 | tail -n 1)" "SCHED WIDE OK"
+	# and the exhaustion arm itself, reachable only with MAX_REACTORS lowered to 2 by
+	# the define that exists for this test (at the shipping 64 no parallel-for can
+	# overrun it, and an unreachable guard is an untested one). One named fatal and
+	# exit 216 — never a silent 0, which is what Halt raced to when several threads
+	# were refused at once, and never a hang, which is what serialising Halt produced.
+	./$(COMPILER) --threadsafe -dPXX_SCHED_TINY_REACTORS test/test_sched_reactor_exhaustion.pas $(TESTTMP)/test_sched_exhaust26
+	set +e; $(TESTTMP)/test_sched_exhaust26 > $(TESTTMP)/sched_exhaust.log 2>&1; rc=$$?; set -e; \
+	  tools/expect_same.sh test_sched_exhaust26-rc "$$rc" "216"; \
+	  tools/expect_same.sh test_sched_exhaust26-msg "$$(head -n 1 $(TESTTMP)/sched_exhaust.log)" "fatal: scheduler out of reactor slots (MAX_REACTORS)"
 	# __pxxmulhi_u64: unsigned 64x64->128 high half (x86-64 mul / aarch64 umulh)
 	./$(COMPILER) test/test_mulhi.pas $(TESTTMP)/test_mulhi26
 	tools/expect_same.sh test_mulhi26 "$$($(TESTTMP)/test_mulhi26 | tail -1)" "MULHI OK"
