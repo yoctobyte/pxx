@@ -2320,7 +2320,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-lib-test-lib-classes-tthread | T | 70 | regression | regression: lib-test#src:test/lib_classes_tthread.pas red at 459e96f985d1 (auto-filed by twatch) | — |
 | regression-lib-test-lib-mimic-xml-etree-elementtree-2 | N | 45 | regression | regression: lib-test#src:test/lib_mimic_xml_etree_elementtree.npy red at fd93e4a71c37 (auto-filed by twatch) | — |
 | regression-lib-test-lib-mimic-xml-etree-elementtree | N | 70 | regression | regression: lib-test#src:test/lib_mimic_xml_etree_elementtree.npy red at 1b9b43e5b511 (auto-filed by twatch) | — |
-| regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
+| regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | — |
 | regression-lib-test-lib-tls | T | 70 | regression | regression: lib-test#src:test/lib_tls.pas red at 459e96f985d1 (auto-filed by twatch) | — |
 | regression-nilpy-dataclass-dict-factory-test-core-red | N | 70 | regression | test-core RED: `test_nilpy_dataclass_dict_factory.npy` | — |
 | regression-op-overload-class-eq-strict-operator | A | 50 | regression | regression: test_op_overload.pas red — b369 made class = / <> rejection unconditional | — |
@@ -2485,6 +2485,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-writeln-nonfinite-float | T | 70 | regression | regression: test-core#src:test/test_writeln_nonfinite_float.pas red at ad8e212cf739 (auto-filed by twatch) | — |
 | regression-test-core-tkinter-facade | T | 70 | regression | regression: test-core#src:examples/tk/tkinter_facade.npy red at f8b8a7eb5ed2 (auto-filed by twatch) | — |
 | regression-test-emit-obj-02 | T | 70 | regression | regression: test-emit-obj#02 red at c53553f21214 (auto-filed by twatch) | — |
+| regression-test-emit-obj-cxtensa-obj | A+S | 70 | regression | regression: `--target=xtensa` on a C source selects the POSIX platform backend | — |
 | regression-test-fpjson-install-lib-candidates | B | 70 | regression | regression: test-fpjson#src:tools/install_lib_candidates.sh red at 99f1dc81a039 (auto-filed by twatch) | — |
 | regression-test-i386-httpdemo | T | 70 | regression | regression: test-i386#src:examples/net/httpdemo.pas red at be7f80936b0c (auto-filed by twatch) | — |
 | regression-test-i386-test-asyncecho | T | 70 | regression | regression: test-i386#src:test/test_asyncecho.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |

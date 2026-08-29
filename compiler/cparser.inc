@@ -9758,7 +9758,17 @@ begin
     keyword tokens here, and C's `/` is integer division on integer operands, so
     tkSlash is not a float tell the way Pascal's `/` is.
     bug-a-esp32c3-bare-profile-cannot-find-the-softfloat-repack-helper }
-  if TargetIsEspClass and (not NoDefaultRtl) then
+  { PLATFORM, not bare-ness. This asked TargetIsEspClass — "is this bare
+    metal" — but the question the two branches actually split on is "does this
+    target have posix syscalls under it", and those stopped being the same
+    predicate on 2026-08-27 when TargetIsEspClass became profile-aware. xtensa
+    then fell into the hosted branch below, which pulls pxxcio, whose
+    __pxx_exit is a raw exit_group syscall that the xtensa backend has no
+    lowering for at all. TargetPlatform answers the real question: xtensa is
+    PLATFORM_ESP unconditionally ("xtensa has no hosted leg", compiler.pas), and
+    riscv32 — which genuinely is dual-role — is posix unless the profile says
+    otherwise. regression-test-emit-obj-cxtensa-obj }
+  if (TargetPlatform = PLATFORM_ESP) and (not NoDefaultRtl) then
   begin
     cWantsSoftFloat := False;
     for cSfI := 0 to TokCount - 1 do
@@ -9767,7 +9777,7 @@ begin
       begin cWantsSoftFloat := True; Break; end;
     if cWantsSoftFloat then ParseUsesUnitAmbient('softfloat');
   end;
-  if (not NoDefaultRtl) and (not TargetIsEspClass) then
+  if (not NoDefaultRtl) and (TargetPlatform <> PLATFORM_ESP) then
   begin
     { builtinheap declares TInterfacedObject/IInterface (Pascal classes), whose
       signatures name TGuid and TObject — builtin rows the Pascal ParseProgram

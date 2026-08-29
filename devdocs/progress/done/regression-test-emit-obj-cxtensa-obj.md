@@ -1,6 +1,8 @@
 ---
 prio: 70
 track: A+S
+status: done
+owner: frankA
 ---
 
 # regression: `--target=xtensa` on a C source selects the POSIX platform backend
@@ -109,3 +111,90 @@ Track A's: `make compiler/pascal26` (the byte-identical self-host fixedpoint)
 plus the one-line repro above. Cross matters here — the change is in target
 class selection — so let Track T sweep the matrix against the pushed sha rather
 than running it locally.
+
+---
+
+## RESOLVED 2026-08-29 (frankA) — the platform axis, not the profile
+
+**Root cause is one predicate answering the wrong question**, and the ticket's
+own `normalise-dont-special-case` note called it: two mechanisms decide "is
+there an OS under this program", and they stopped agreeing.
+
+`cbfdb5de8` made `TargetIsEspClass` *profile*-aware — `EspBareBoot and (XTENSA
+or RISCV32)` — which is correct for the question that predicate now names
+("is this bare metal, so pull no RTL"). But the C driver's default-RTL guard was
+still spelled `not TargetIsEspClass`, and that branch pulls `pxxcio`. The
+question **that** branch splits on is not bare-ness, it is *"does this target
+have posix syscalls under it"* — and those two stopped being the same predicate
+on the day of that commit.
+
+The compiler already had the right answer, twenty lines from the damage:
+
+```pascal
+{ compiler.pas:1553 }
+if EspBareBoot or (TargetArch = TARGET_XTENSA) then TargetPlatform := PLATFORM_ESP
+```
+
+— *"xtensa has no hosted leg"*, said in the platform derivation and not consulted
+by the guard. So plain `--target=xtensa` derived `PLATFORM_ESP` and pulled the
+**posix** PAL anyway.
+
+### Fix
+
+`compiler/cparser.inc`, both arms of the C default-RTL split, from
+`TargetIsEspClass` to `TargetPlatform = PLATFORM_ESP`. Track A machinery in
+Track C's file; A holds C this session, so it is self-resolved rather than
+handed over (combined-track rule). No change in `compiler.pas`, `util.inc` or
+`builtinheap.pas`.
+
+The widening is deliberate and is the normalisation: xtensa under IDF now takes
+the ESP-class arm (on-demand softfloat from a token scan) instead of the hosted
+arm, which is what it always needed — riscv32, genuinely dual-role, keeps posix
+unless the profile says otherwise.
+
+### `SYS_openat` was the second error, not the first
+
+Worth recording because it sent the original triage to the wrong file. The
+reported symptom is seven undefined `SYS_*` in
+`lib/rtl/platform/posix/platform_backend.pas`, which reads as a PAL-selection
+bug — and `AddDefaultPasUnitDirs` (compiler.pas) does guard the posix PAL dir on
+the same stale predicate, so that reading is not wrong, just not the cause.
+Measured: supplying the ESP PAL by hand gets *past* all seven and then dies at
+
+```
+pascal26:329: error: target xtensa: unsupported node in IR codegen: syscall
+  in: lib/rtl/pxxcio.pas
+```
+
+`pxxcio.__pxx_exit` is a raw `exit_group` syscall and **the xtensa backend has
+no syscall lowering at all**. So no PAL choice could have fixed this: the defect
+is that the hosted C RTL is pulled onto a target that cannot express a syscall.
+Fixing the PAL dir alone would have moved the error, not removed it — which is
+what a same-shaped fix looks like from the outside.
+
+`AddDefaultPasUnitDirs`' stale guard is therefore **still there and still
+wrong**, merely unreachable on this path now that nothing pulls the PAL. Filed
+as `bug-a-the-posix-pal-dir-is-added-on-esp-platform-targets` rather than fixed
+here: it needs the esp PAL to be added as the counterpart, which changes what
+`riscv32 --platform=esp` resolves and is Track S's call.
+
+### Verified
+
+| arm | before | after |
+| --- | --- | --- |
+| C / xtensa | 7x undefined `SYS_*` | **ok** — 354B, 2 procs |
+| C / riscv32 | ok, 432 procs | ok, 432 procs (unchanged) |
+| C / x86-64 | the file's own `#error` | unchanged |
+| Pascal / xtensa | ok, 172 procs | ok, 172 procs |
+| hosted C `printf` | ok | ok, runs, 613 procs |
+
+All six of the Makefile job's `readelf` assertions pass on the xtensa object:
+REL, `Xtensa`, `FUNC GLOBAL DEFAULT 1 app_main`, `UND ext_notify`,
+`R_XTENSA_32`, plus the riscv32 pair.
+
+Gate: `make compiler/pascal26` — `converged after 1 round(s)`, self-host
+fixedpoint verified at `e469b947f167`. `tools/gate.sh quick` green.
+Cross matters here; Track T sweeps the matrix against the pushed sha.
+
+## Log
+- 2026-08-29 — resolved, commit PENDING-COMMIT.
