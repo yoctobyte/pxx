@@ -868,6 +868,34 @@ supposed to MODIFY something, assert the target exists first.** Not "did the
 write succeed" — the write always succeeds. `>>` cannot distinguish appending
 from creating, so the check has to happen before it, or the distinction is gone.
 
+### Amendment to face twenty — frankB, 2026-08-29, and it is the sharper form
+
+> *"The remedy's evidence value was zero before the run started, and nothing in
+> the outcome can tell you that. The test is not 'did it improve' but **did
+> applying it change anything**, and that question is answerable BEFORE you look
+> at the result, for free."*
+
+This is better than the original framing and supersedes it as the operational
+rule. The original said *check whether the remedy is already in place*, which
+sounds like diligence. frankB's version says something stronger and cheaper:
+**the reading's information content is fixed before the reading exists**, so the
+result never needs to be examined at all. Once `run_in_background` was known to
+be already set, lt6's green carried no information about the cause — and that
+was knowable without waiting for lt6.
+
+It is the aperture question of face seventeen, asked of an intervention instead
+of an instrument: **what would this reading have been if I had done nothing?**
+
+frankB then applied it against its own favoured candidate, which is the part
+that makes it a method rather than a retort. Its TESTTMP-collision story has
+exactly the same property — the kills stopped when it stopped running two makes
+at once — and it noted that the stopping was a *side effect of the queue
+emptying*, not a deliberate application, so no confirmation is available from it.
+Cause remains unknown and is recorded in the ticket as a candidate only.
+
+**A remedy that was never deliberately applied cannot be confirmed by the
+symptom's disappearance, however exact the timing.**
+
 **Related.** Face twenty: a remedy already in force and one that worked produce
 the same green. Both are cases where the ACTION's own report is uninformative,
 as opposed to an observation's. The pattern across both: **an operation that
