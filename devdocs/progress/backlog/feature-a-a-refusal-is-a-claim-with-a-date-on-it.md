@@ -4180,3 +4180,89 @@ And the acceptance witness is the right shape: `status=0` where `status` is a
 bitmask the app builds itself (1 start failed, 2 fewer than five ticks, 4 stop
 failed). **A dead timer prints `status=2`** — the pass is a value only a live
 callback path can produce, not merely a zero exit.
+
+### 104. A harness's SKIP path is the easy half, and it is the half that gets tested by accident
+
+frankB, 2026-08-30, correcting its own report of the ESP timer acceptance
+script before anyone could act on it. The script **failed twice before it
+passed**, and both failures presented as an **empty capture**, not an error:
+
+- `idf.py set-target` wipes `build/`, and a regeneration line that looked right
+  did nothing — QEMU booted with no image and wrote an empty serial log.
+- An all-zero efuse block reports chip revision v0.0 against an image requiring
+  ≥ v0.3, so the bootloader rejects it and reboots forever: **306 KB of boot
+  attempts and not one app line.**
+
+> *"'No PXX lines in the log' is indistinguishable from 'the program ran and
+> printed nothing' — which, given I was testing a callback that might
+> legitimately never fire, is precisely the wrong-conclusion-shaped hole."*
+
+**The coincidence is the danger**: the harness's broken output is byte-identical
+to the subject's most plausible real failure. And the general form:
+
+> **"The negative arm was correct from the first cut; the positive one was broken
+> twice. A skip-with-reason is easy to get right and proves nothing about the arm
+> that matters."**
+
+**The arm that has to be right is the one that only runs when everything else
+already works** — which is exactly when nobody is looking at it. A skip path runs
+constantly, on every box lacking the tool, and is debugged by accident.
+
+Remedy applied: efuse defaults now come from IDF's own `QEMU_TARGETS` table
+rather than a pasted constant, so the value and its source cannot drift
+(face 80 applied to configuration).
+
+### 105. One status column showed two different facts as one
+
+pxx-a5, 2026-08-30, retracting its own report. *"The single red inside
+`tools-devtest#00` on plexus per seven's tstate"* was wrong on the attribution
+and, once re-read across both boxes, wrong about the phenomenon:
+
+| box | reality |
+| --- | --- |
+| plexus | `fail` at one sha → **`pass`** at a later one, healed by a commit that changed the `/tmp` **literals the guard scans** — a different defect wearing the same three letters |
+| seven | **`timeout`**, `job_last_pass` empty — **never passed there at all** |
+
+The coordinator read the pair as *"green here, red there — host-dependent"*, the
+failure mode that waits years. It is not. It is **one box that went red then
+green, and one that has never finished the job.** A single `fail`/`pass` column
+cannot distinguish *regressed*, *healed*, and *never completed*, and the three
+license entirely different next steps.
+
+**Note what did NOT happen: the healing commit did not fix the reported
+defect.** Re-measured against source at HEAD rather than inferred from the
+guard's colour, both original claims still stand. Which produces the sharpest
+inoculation written into a ticket here:
+
+> **This ticket's failure mode is the guard being GREEN while the defect stands,
+> so a green guard is not evidence against it — it is the symptom. Anyone
+> arriving because the devtest went green has REPRODUCED the finding, not
+> refuted it.**
+
+### 106. The obvious probe put the entire mass in the part that varies
+
+Measured against `pinned` after the size canary added an empty-program row
+nobody had asked for:
+
+```
+program e; begin end.                       61,276 B
+program h; begin WriteLn('hello'); end.     61,350 B
+```
+
+**`WriteLn` of a literal costs 74 bytes on a 61,276-byte floor.** So
+`bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce` is named after a
+number whose subject is **0.1% of it**, and its open question — *"either the
+pass is not reaching this, or the done ticket's scope was narrower than its
+title"* — has a third answer: **there is no *this* to reach.** The body is empty
+and the number barely moves. The subject is the RTL/startup floor.
+
+Not the filer's fault, and that is the point: **a hello-world is the obvious
+probe for code size, and the obvious probe is obvious because it is minimal —
+which is exactly what makes the constant term invisible in it.** Anyone starting
+there spends an hour on string machinery and concludes DCE is broken.
+
+Remedy is structural rather than a correction: `x86_64-empty` is now a watched
+subject, so the floor is a *measured baseline* rather than an assumption inside
+someone's probe. **The generalisable move is to add the null case to the
+measurement** — a row with none of the feature under test — because the
+difference between the two rows is the only thing the feature can be blamed for.
