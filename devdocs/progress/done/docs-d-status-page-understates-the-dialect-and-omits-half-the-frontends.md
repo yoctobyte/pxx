@@ -79,7 +79,7 @@ Docs internally consistent — specifically, `status.md` must stop contradicting
 page has none today and does not need one.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 1e524bc53.
 
 ---
 
