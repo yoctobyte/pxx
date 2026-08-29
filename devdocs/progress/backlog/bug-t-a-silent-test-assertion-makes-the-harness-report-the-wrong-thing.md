@@ -375,3 +375,53 @@ against the 474 — plus, because a loop fragment cannot be parsed alone, the tw
 enclosing **recipe blocks** were reassembled, make-expanded and passed through
 `bash -n` whole, with a check that all 10 changed lines fell inside a block that
 was actually checked. `make` parses the file and the self-host fixedpoint builds.
+
+## 2026-08-29 — tranche two: the native output-compares
+
+### First, a correction to the scope figure, which was wrong in a new way
+
+The handoff said "2007 remaining, of which 376 are the same not-convertible
+exit-status class". **The 376 are not inside the 2007.** `test "$$?" = "143"`
+does not contain `test "$$(`, so the two greps count disjoint sets. The real
+remaining total is **2383**, and the not-convertible class sits entirely outside
+the set being converted rather than inside it. Same failure as the 480, one level
+down: a subset relation asserted between two numbers that were produced by two
+different filters.
+
+### Shapes, measured
+
+| shape | count | outcome |
+| --- | --- | --- |
+| **A** standalone, line ends after the expected string | **1946** | converting |
+| **C** standalone with a trailer after the expected (`-ge`, `\|\|`, …) | 40 | not this pass |
+| **B** continuation line (trailing `\`) | 19 | not this pass |
+| `test` not at the start of the command (`ulimit -v …; test …`) | 2 | not this pass |
+| exit-status checks, disjoint from the above | 376 | **not convertible** |
+
+Only shape A is a single regex. C is not one shape at all — `-ge` is an integer
+comparison, not a string equality, and `expect_same.sh` cannot express it.
+
+### Labels collide here, and that is the real difference from tranche one
+
+Tranche one had zero collisions because `ARCH/BIN` was unique by construction.
+Here 1946 assertions run over **1709 distinct binaries**: 192 names are reused,
+the worst ten times (`lib_writefloat_fixed26`), because one binary is asserted
+repeatedly through different `head`/`tail`/`grep` pipelines. So the label needs a
+disambiguator, and it is `.N` — appended **only** to names that occur more than
+once, so 1517 labels stay clean.
+
+Not `#N`: inside a recipe `#` is passed through to the shell rather than treated
+as a make comment, and it is safe only because it lands mid-word. A label
+convention whose safety depends on never being at a word boundary is a trap for
+whoever next edits one of these lines by hand.
+
+The full 1946-row label map is computed **once, over the whole set, before any
+batch is applied**, so uniqueness holds across batches that land separately —
+computing it per batch would let batch 5 silently reuse a bare name from batch 4.
+Checked against the 498 already landed: no clashes.
+
+### Batching by rule, not by line range
+
+`test-core` 1164 · `test-nilpy` 408 · `lib-test` 221 · everything else 153. One
+suite per commit, so a reviewer reasons about one suite at a time and the blast
+radius of any mistake is one suite rather than a line range that straddles three.
