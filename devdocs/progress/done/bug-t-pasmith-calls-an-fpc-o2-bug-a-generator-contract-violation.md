@@ -285,4 +285,4 @@ which was the point. Nothing outside the granted file map: no `testmgr.py`, no
 `twatch*`, no tier composition.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 55e7d94d6.
