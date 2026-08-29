@@ -52,7 +52,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 72] [N]` feature-nilpy-stdlib-coverage-gaps-measured
 - `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - `[p 70] [N]` feature-nilpy-staticmethod-and-classmethod
-- `[p 70] [O]` feature-opt-o3-register-pressure
+- `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 70] [T]` regression-cascade-154d1aa3fba6
 - `[p 70] [P]` regression-cascade-4e27dc2be114

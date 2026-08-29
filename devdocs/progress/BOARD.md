@@ -77,10 +77,10 @@ _none_
 | bug-a-the-17th-thread-silently-aliases-reactor-slot-0 | B | 75 | bug | lib/rtl/scheduler.pas CurR() falls back to slot 0 when all MAX_REACTORS=16 reactors are in use — `slot := 0` is the initializer and nothing checks for exhaustion. The 17th OS thread silently adopts a live thread's reactor, the two share coroutine state, and the result is memory corruption reported as 'coroutine stack overflow (canary clobbered)'. Invisible on every 12-core box; deterministic above 19 threads. Found on seven (24 cores) 2026-08-29. | — |
 | bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire | A | 45 | bug |  | — |
 | bug-a-the-div-by-zero-check-is-still-missing-on-xtensa | A+S | 25 | bug | The last target without a pre-divide zero check. The other five landed 2026-08-23; xtensa was left out because it cannot be RUN on this box (bare profile emits an ESP image, not a Linux ELF), its branches carry only an 8-bit displacement, its windowed ABI rotates the register window on a call, and its divide is two shapes depending on XtensaSoftDivide. | — |
-| bug-a-the-posix-pal-dir-is-added-on-esp-platform-targets | S | 45 | bug | AddDefaultPasUnitDirs (compiler.pas) guards the posix PAL search dir on TargetIsEspClass — bare-ness — when the question is which PAL the platform wants. So an ESP-PLATFORM target that is not bare (xtensa under IDF, riscv32 under --platform=esp) gets lib/rtl/platform/posix/ on its unit path, and the esp PAL dir is never added by the compiler at all: every ESP build passes -Fulib/rtl/platform/esp by hand. Latent as of regression-test-emit-obj-cxtensa-obj — nothing on that path pulls the PAL any more — but the guard is still wrong and the next thing to pull platform_backend on an ESP target resolves the posix one. | — |
-| bug-a-xtensa-codegen-has-no-variant-support | S | 22 | bug | `var v: Variant; v := 1;` does not compile for --target=xtensa: `unsupported node in IR codegen: var_store`. The exact sibling of bug-a-riscv32-codegen-has-no-variant-support, which was fixed 2026-08-27 -- xtensa is the last backend with no IR_VAR_STORE / IR_VAR_BOX / IR_VAR_BINOP arm at all. | — |
-| bug-a-xtensa-refuses-to-lower-an-unreachable-syscall | S | 45 | bug | xtensa codegen errors with 'unsupported node in IR codegen: syscall' on a __pxxrawsyscall call that is statically unreachable on that target, which makes an otherwise-portable RTL unit uncompilable. Inconsistent with the ESP PAL's own pattern of refusing unsupported operations at RUNTIME rather than failing the build. | — |
-| bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
+| bug-a-the-posix-pal-dir-is-added-on-esp-platform-targets | A+S | 45 | bug | AddDefaultPasUnitDirs (compiler.pas) guards the posix PAL search dir on TargetIsEspClass — bare-ness — when the question is which PAL the platform wants. So an ESP-PLATFORM target that is not bare (xtensa under IDF, riscv32 under --platform=esp) gets lib/rtl/platform/posix/ on its unit path, and the esp PAL dir is never added by the compiler at all: every ESP build passes -Fulib/rtl/platform/esp by hand. Latent as of regression-test-emit-obj-cxtensa-obj — nothing on that path pulls the PAL any more — but the guard is still wrong and the next thing to pull platform_backend on an ESP target resolves the posix one. | — |
+| bug-a-xtensa-codegen-has-no-variant-support | A+S | 22 | bug | `var v: Variant; v := 1;` does not compile for --target=xtensa: `unsupported node in IR codegen: var_store`. The exact sibling of bug-a-riscv32-codegen-has-no-variant-support, which was fixed 2026-08-27 -- xtensa is the last backend with no IR_VAR_STORE / IR_VAR_BOX / IR_VAR_BINOP arm at all. | — |
+| bug-a-xtensa-refuses-to-lower-an-unreachable-syscall | A+S | 45 | bug | xtensa codegen errors with 'unsupported node in IR codegen: syscall' on a __pxxrawsyscall call that is statically unreachable on that target, which makes an otherwise-portable RTL unit uncompilable. Inconsistent with the ESP PAL's own pattern of refusing unsupported operations at RUNTIME rather than failing the build. | — |
+| bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | B+S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict | N | 40 | bug | pylib treats VT_CHAR and VT_STRING as ONE string type in ordering, repr, concat and text extraction — but `PyVarEq` bails on `p^.VType <> q^.VType` before it ever gets there, and `PyVarHashKey` has no VT_CHAR arm either. So a char-tagged key stores fine and then misses every lookup. No NilPy-reachable repro today (the pystr_ofchar boundary converts at every crossing), but this is the mechanism that turned Counter(str) into a SILENT 0 instead of a loud KeyError. | — |
 | bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name | N | 45 | bug | `def g(): return 1` followed by `if True: def g(): return 2` still calls the FIRST g. Split out of bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name when that one was fixed: it is a different mechanism — the def side, not the assignment side. A nested def has a position, but PyRegisterDefShells only walks module-level defs at DEPTH 0, so a def inside a branch never gets one. | — |
 | bug-n-a-field-assigned-from-a-module-global-expression-is-refused | N | 55 | bug | `G = 7 / 2` then `self.v = G` REFUSES to compile — \"cannot infer the type of field self.v - annotate it\". `G = 3.5` is accepted. PyModuleGlobalLiteralType reads a global's type off its initialiser token and can only see a bare LITERAL, so any global initialised by an expression is untypeable to the field pre-pass. | — |
@@ -193,10 +193,10 @@ _none_
 | feature-a-error-does-not-halt-so-a-parse-can-be-speculative | A | 70 | feature | `Error()` calls `Halt` directly, so nothing in the compiler can trial-parse and back out. That blocks NilPy's type inference (which needs to read an as-yet-unseen name speculatively), and it is also why the compiler stops at the FIRST error. Make the error path recoverable; several unrelated wants fall out of the same change. | — |
 | feature-a-finalize-for-bare-dynarray-and-variant | A | 30 | feature | The VARIANT half landed 2026-08-24 (PXXVarClear through the slot address, FPC-identical on four targets); what remains is the DYNAMIC ARRAY only. A bare dyn-array lvalue still gets a clear compile error, because the release helper needs a per-symbol element descriptor that has no IR-level dataref sentinel (SYM_RTTI_DATAREF_BASE is declared but has no fixup branch). A record CONTAINING one is fully handled, and `a := nil` is the one-line workaround, so the gap is narrow. | — |
 | feature-a-getinterface-refcounting | A | 45 | feature | __pxxGetInterface stores the instance pointer into the caller's interface variable without an AddRef, so the slot holds a borrowed reference while the compiler treats the variable as managed and releases it at scope exit. Every Supports/GetInterface hit is therefore one release the object never got a retain for. Nothing observed to crash yet, which is why it is a ticket and not an urgent bug — but the asymmetry is real and worth settling deliberately. | — |
-| feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle | S | 25 | feature | xtensa is the one target whose output nothing here can RUN, so every xtensa ticket ends in 'do not land this on inspection'. Stock `qemu-xtensa` (user mode) IS installed, but xtensa has no IR_SYSCALL arm and TargetIsEspClass hardcodes it as bare-metal ALWAYS. Installing ESP-IDF (its qemu fork) is the CHEAPER first move and is worth doing regardless — but it does NOT make the blocked tickets' gates reachable, because those tests need the builtin unit, which no ESP-class target gets. | — |
+| feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle | A+S | 25 | feature | xtensa is the one target whose output nothing here can RUN, so every xtensa ticket ends in 'do not land this on inspection'. Stock `qemu-xtensa` (user mode) IS installed, but xtensa has no IR_SYSCALL arm and TargetIsEspClass hardcodes it as bare-metal ALWAYS. Installing ESP-IDF (its qemu fork) is the CHEAPER first move and is worth doing regardless — but it does NOT make the blocked tickets' gates reachable, because those tests need the builtin unit, which no ESP-class target gets. | — |
 | feature-a-io-lock-owner-from-tls-not-gettid | A | 40 | feature | The --threadsafe I/O lock issues a gettid SYSCALL on every I/O statement (measured: 43% overhead, one syscall per Writeln; caching it in TLS removed the whole penalty). The naive version is WRONG -- foreign threads (glibc pthread_create) inherit the creator's block and would answer 'lock already mine', silently losing mutual exclusion. Needs the stack-bounds validation design recorded in the ticket. | — |
 | feature-a-merge-the-wasm-branch-the-shared-file-arms | A | 40 | feature | Branch `wasm` modifies four existing files: compiler.pas (5 edits), exception_emit.inc (1 arm), ir_codegen.inc (1 arm), and lib/rtl/platform.pas (1 additive constant). The last is Track B and carries B's gate, so the merge review spans two lanes, not one. Nothing on the branch is pre-approved. This ticket is the ledger; the branch's own CHARTER table is not visible from master and was stale. | — |
-| feature-a-promoint-variant-esp-targets | S | 20 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
+| feature-a-promoint-variant-esp-targets | A+S | 20 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
 | feature-a-reentrant-heap-lock-and-per-thread-arenas | A+O | 45 | feature | Split out of decide-interface-members-in-aggregates-lock-strategy, where a reentrant heap lock was proposed as a means to fix an ARC leak. That is not what it is for: EmitAcquireHeapLock's own comment says the allocator does not scale because the lock is global, and that per-thread arenas need TLS the runtime lacked. TLS landed 2026-08-20, so both are now open — judged as allocator work, not as a prerequisite for a bug fix. | — |
 | feature-a-shrink-managed-header-on-32-bit | A | 10 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
 | feature-a-typeref-migrate-consumers | A | 62 | feature | TypeRef: migrate consumers lane by lane | — |
@@ -213,16 +213,16 @@ _none_
 | feature-cdecl-bodied-sysv-prologue | A | 58 | feature | Bodied Pascal `cdecl` procs: genuine SysV prologue (float params, >6 args) | — |
 | feature-cli-widgetset-flag | A | 20 | feature | CLI: --widgetset=<name> as sugar for -dWIDGETSET_<NAME>, so the flag reads like Lazarus' -ws | — |
 | feature-cross-frontend-interop-contract | A | 20 | feature | Cross-frontend interop contract — umbrella | — |
-| feature-demo-ide-jump-into-includes-and-units | E | 35 | feature | garin's diagnostic parser keys off `a number between the first two colons` and carries no file, on the stated assumption that the compiler names one main unit. Since 2026-08-21 that is no longer true: a diagnostic in an include or a `uses`d unit is followed by an `in: <path>` line, which the IDE currently drops, so jump-to-error lands on the wrong file. | — |
+| feature-demo-ide-jump-into-includes-and-units | B+E | 35 | feature | garin's diagnostic parser keys off `a number between the first two colons` and carries no file, on the stated assumption that the compiler names one main unit. Since 2026-08-21 that is no longer true: a diagnostic in an include or a `uses`d unit is followed by an `in: <path>` line, which the IDE currently drops, so jump-to-error lands on the wrong file. | — |
 | feature-demo-nilpy-ide | E | 30 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | — |
 | feature-demo-portable-userland | E | 35 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-demo-songformatter-pxx-target | E | 68 | feature | songformatter as a pxx compile target (nilpy) — GUI editor + live preview | feature-lib-pxxpdf-reportlab-compat, feature-nilpy-re-module, feature-nilpy-tkinter-facade |
-| feature-dns-esp-backend | S | 20 | feature | DNS on ESP — bind lwIP's getaddrinfo, do NOT build a separate backend | — |
+| feature-dns-esp-backend | B+S | 20 | feature | DNS on ESP — bind lwIP's getaddrinfo, do NOT build a separate backend | — |
 | feature-dynamic-include-paths-config | A | 55 | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-embed-dwscript-rtti | P | 40 | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching |
 | feature-embed-pascal-script | P | 45 | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
 | feature-esp-hardware-flash-validation | S | 25 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
-| feature-esp-peripheral-callback-api | S | 30 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
+| feature-esp-peripheral-callback-api | B+S | 30 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-inline-nonleaf-and-branch-locals | O | 40 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
 | feature-lib-mimic-string-template | B | 12 | feature | string.Template — the $-placeholder class (substitute, safe_substitute) — is the one member of Python's string module still missing, and it is what logging/__init__.py uses. Deliberately NOT urgent: `import logging` does not resolve at all today, so nothing can reach Template until a logging shim exists. Split out of feature-lib-mimic-string, which shipped every constant and both capwords forms. | — |
 | feature-n-a-kwargs-collecting-callee-through-a-callable-value | N | 55 | feature | A callee that collects `**kwargs` cannot be called through a callable value at all — every shape raises TypeError, including `def f(a, **kw)` called as `zz(1)` with no defaults anywhere. The dynamic bridge has no way to synthesize the empty dict the body expects in the collector slot, so the collector is deliberately left counted in ReqN to make the call REFUSE loudly rather than dispatch at an arity the body does not have. Split out of the *args fix; that half is done and CPython-exact. | — |
@@ -264,16 +264,16 @@ _none_
 | feature-nilpy-tkinter-surface-vs-a-real-application | N | 60 | feature | The tkinter façade is built and now genuinely gated (it runs under Xvfb), but its widget/option surface has never been proven against a real application. songformatter's GUI is the forcing target: tkinter.font metrics (descent/measure), Canvas.create_text anchoring, Notebook, PanedWindow. Measurable for the first time now that a running harness exists. | — |
 | feature-nilpy-user-defined-decorators | N | 68 | feature | A user-defined decorator — the ordinary `@wrap` over a `def`, not one of the four recognised names — is refused at parse time: \"unsupported decorator (only @dataclass and @overload)\". The decorator list is a NAME whitelist, so nothing a program declares itself can appear in it. | — |
 | feature-nilpy-walrus-operator | N | 35 | feature | `:=` (walrus) — the assignment expression is not parsed | — |
-| feature-opt-alloc-intent-hint | O | 10 | feature | Allocation-intent hint: tell the RTL growth policy how a buffer will be used | — |
-| feature-opt-arch-level-and-dispatch | O | 25 | feature | What x86-64 feature level does pxx emit for? Referenced as 'if raised' by two existing tickets and never filed; raised by the user 2026-08-15 when FMA came up. MEASURED: our own gate box plexus is a Xeon E5-2620 v2 (Ivy Bridge, 2013) with AVX but NO FMA and no AVX2 — x86-64-v2, not v3. So a v2 bump is safe and FMA would SIGILL on the machine that gates every push. Includes the answer to the 'dispatch defeats inlining' objection: multiversion whole FUNCTIONS, not instructions. | — |
+| feature-opt-alloc-intent-hint | A+O | 10 | feature | Allocation-intent hint: tell the RTL growth policy how a buffer will be used | — |
+| feature-opt-arch-level-and-dispatch | A+O | 25 | feature | What x86-64 feature level does pxx emit for? Referenced as 'if raised' by two existing tickets and never filed; raised by the user 2026-08-15 when FMA came up. MEASURED: our own gate box plexus is a Xeon E5-2620 v2 (Ivy Bridge, 2013) with AVX but NO FMA and no AVX2 — x86-64-v2, not v3. So a v2 bump is safe and FMA would SIGILL on the machine that gates every push. Includes the answer to the 'dispatch defeats inlining' objection: multiversion whole FUNCTIONS, not instructions. | — |
 | feature-opt-bulk-copy-is-byte-at-a-time | O | 65 | feature | The runtime's bulk-copy primitives move ONE BYTE per iteration. Copy() on a 64-element array is ~23x slower than FPC's (2.54s vs 0.11s over 3M copies). A word-at-a-time loop -- ~10 lines, portable, no backend work -- was prototyped and measured at 3.3x of that back. | — |
-| feature-opt-dynarray-grows-in-place | O | 40 | feature | A growing dynamic array leaves its whole geometric series behind as garbage | — |
-| feature-opt-emitasmx64-reparses-fixed-strings | O | 60 | feature | `EmitAsmX64` re-parses the same hardcoded assembly strings on every compile — ~12% of a NilPy compile | — |
-| feature-opt-emitloadvara64-needs-a-destination-register-parameter | O | 55 | feature | EmitLoadVarA64 hardcodes x0 behind residency, dyn-array-handle and sign-extension special cases, so the aarch64 leaf-operand collapse could only be done for the CONST half. The LEAFSYM half needs the right operand in x1 while the left sits in x0; a load-to-x1 twin would duplicate every one of those special cases. Honest fix is a destination-register parameter. Unlocks a further 12-16% of all binops on aarch64. | — |
-| feature-opt-heap-per-thread-cache | O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
-| feature-opt-inline-float-and-record-returning-leaves | O | 45 | feature | The inliner takes only int/ordinal leaves — it rejects any function returning a float or a record. Measured on lib/rtl/math.pas's double-double kernels: hand-inlining the exact same arithmetic took a sin kernel from 7.96 us to 2.11 us, BIT-IDENTICAL, so ~74% of that path's cost was call overhead the inliner already knows how to remove for integers. | — |
-| feature-opt-o3-register-pressure | O | 70 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
-| feature-opt-rtti-emit-on-use | O | 32 | feature | RTTI is emitted unconditionally (every class, even a classless program) — dead weight on ESP32/embedded | — |
+| feature-opt-dynarray-grows-in-place | A+O | 40 | feature | A growing dynamic array leaves its whole geometric series behind as garbage | — |
+| feature-opt-emitasmx64-reparses-fixed-strings | A+O | 60 | feature | `EmitAsmX64` re-parses the same hardcoded assembly strings on every compile — ~12% of a NilPy compile | — |
+| feature-opt-emitloadvara64-needs-a-destination-register-parameter | A+O | 55 | feature | EmitLoadVarA64 hardcodes x0 behind residency, dyn-array-handle and sign-extension special cases, so the aarch64 leaf-operand collapse could only be done for the CONST half. The LEAFSYM half needs the right operand in x1 while the left sits in x0; a load-to-x1 twin would duplicate every one of those special cases. Honest fix is a destination-register parameter. Unlocks a further 12-16% of all binops on aarch64. | — |
+| feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
+| feature-opt-inline-float-and-record-returning-leaves | A+O | 45 | feature | The inliner takes only int/ordinal leaves — it rejects any function returning a float or a record. Measured on lib/rtl/math.pas's double-double kernels: hand-inlining the exact same arithmetic took a sin kernel from 7.96 us to 2.11 us, BIT-IDENTICAL, so ~74% of that path's cost was call overhead the inliner already knows how to remove for integers. | — |
+| feature-opt-o3-register-pressure | A+O | 70 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
+| feature-opt-rtti-emit-on-use | A+O | 32 | feature | RTTI is emitted unconditionally (every class, even a classless program) — dead weight on ESP32/embedded | — |
 | feature-p-assertions-directive-and-position | P | 55 | feature | RE-TYPED 2026-08-19 feature -> bug for half 1: `{$ASSERTIONS OFF}` is ACCEPTED AND IGNORED — measured on v363, an Assert whose condition has a side effect still runs it (n=1 where FPC gives n=0), so the two dialects take different paths with no diagnostic. Implement FPC assertion parity: {$ASSERTIONS ON/OFF} and -Sa gating (Assert compiled OUT when off, so its side effects do not run), plus the '(file, line N)' suffix FPC appends to the message | — |
 | feature-p-assertions-switch-and-strict-default | P | 30 | feature | Re-filed from decide-assertion-default-vs-fpc, decided 2026-08-25 (option 3, default ON). pxx evaluates Assert() always; FPC ignores it unless -Sa. The dialect contract requires every divergence to be switchable and disabled under the strict family, so the switch is mandated rather than merely preferred. Once it exists the default stops being a one-way door. | — |
 | feature-p-defineglobal-a-define-that-crosses-unit-boundaries | P | 45 | feature | `{$DEFINEGLOBAL xyz}` — a conditional define that outlives the unit that sets it. Measured: pxx matches FPC today, a unit's {$DEFINE} does not reach the program, which is correct Pascal and is also why two units cannot coordinate. The motivating case is 'first implementation loaded claims the name, second skips itself' — the shape that would have dissolved the pylib/sysutils Exception problem. | — |
@@ -498,8 +498,8 @@ _none_
 | decide-dns-libc-backend-shape | U | 40 | decide | Track U: how should a libc-backed DNS resolver be reached from libc-free static ELF? | — |
 | decide-dynamic-array-value-vs-reference-semantics | U | 55 | decide | dynamic arrays: pxx gives b := a VALUE semantics (a copy), FPC/Delphi give REFERENCE semantics (an alias) — is ours deliberate? | — |
 | decide-env-write-side | U | 40 | decide | Policy: does pxx support WRITING the environment (setenv/putenv, os.environ[k]=v) — and does a write reach a child? | — |
-| decide-esp-single-depth-division-into-a-declared-double | S | 45 | decide | Decide: on ESP targets, should `x: Double; x := 1/3` compute at SINGLE depth? | — |
-| decide-esp-soc-axis-and-capability-table | S | 45 | decide | Decide: how does the compiler learn WHICH ESP chip, and what does it derive? | — |
+| decide-esp-single-depth-division-into-a-declared-double | U+S | 45 | decide | Decide: on ESP targets, should `x: Double; x := 1/3` compute at SINGLE depth? | — |
+| decide-esp-soc-axis-and-capability-table | U+S | 45 | decide | Decide: how does the compiler learn WHICH ESP chip, and what does it derive? | — |
 | decide-finalize-noop-vs-refusal | U | 50 | decide | `Finalize(x)` is accepted and does nothing — deliberately, as a documented v1 shortcut. FPC empties the string; pxx leaves it intact. Refusing it is separable from implementing it and far cheaper, but would break code that currently compiles. Fork: refuse now, implement now, or leave the silent no-op. | — |
 | decide-float-fixed-output-exact-or-fpc-17-digit-cap | U | 45 | decide | writeln(d:0:1) of a huge double: pxx and CPython print the EXACT value (18446744073709551616.0), FPC caps at 17 significant digits and zero-pads (18446744073709552000.0). Which is pxx's rule? | bug-a-write-fixed-emits-false-digits-past-1e22 |
 | decide-forin-mixed-int-float-ctor-vs-fpc | U | 20 | decide | `for d in [1, 2.5]` — FPC 3.2.2 prints `1.00 0.00`, dropping the 2.5; pxx prints `1.00 2.50`. Shipped as the correct answer rather than copied, because losing a written value is a defect and not a semantic choice. Confirm, or put FPC's answer behind --strict-fpc. | — |
@@ -644,7 +644,7 @@ _none_
 | feature-asm-structured-ir-library | A | 50 | feature | Unify inline asm onto the existing per-target text-assembler engine | — |
 | feature-dynamic-compiler-arrays-ast-fixups | A | 25 | feature | Apply the dynamic-array pattern (proven on the IR arrays) to the other fixed compiler caps: AST nodes, global fixups, label arrays | — |
 | feature-lazy-standard-unit-emission | A | 50 | feature | Lazy standard-unit emission / routine-level dead-code elimination | — |
-| feature-opt-a64-loadvar-destination-register | O | 55 | feature | EmitLoadVarA64 hardcodes x0, which is why the aarch64 leaf-operand collapse (1185b3489) could only do the CONST half. Giving it a destination-register parameter unlocks the LEAFSYM half — a further 12.6-16.3% of every integer binop on the target. Filed rather than smuggled into the port because duplicating the helper is the second-path failure this repo has a document about. | — |
+| feature-opt-a64-loadvar-destination-register | A+O | 55 | feature | EmitLoadVarA64 hardcodes x0, which is why the aarch64 leaf-operand collapse (1185b3489) could only do the CONST half. Giving it a destination-register parameter unlocks the LEAFSYM half — a further 12.6-16.3% of every integer binop on the target. Filed rather than smuggled into the port because duplicating the helper is the second-path failure this repo has a document about. | — |
 | feature-opt-float-const-pool | O | 35 | feature | -O3: load float constants from a data pool, not GPR materialization | — |
 | feature-opt-lazy-token-sval | O | 55 | feature | Lazy / conditional CurTok.SVal materialization — cut per-token string allocation | — |
 | feature-t-bench-record-host-hardware-specs | T | 55 | feature | Benchmarks record the host *name*, but nothing about the hardware | — |
@@ -668,7 +668,7 @@ _none_
 - [p 72] [N] feature-nilpy-stdlib-coverage-gaps-measured
 - [p 70] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - [p 70] [N] feature-nilpy-staticmethod-and-classmethod
-- [p 70] [O] feature-opt-o3-register-pressure
+- [p 70] [A+O] feature-opt-o3-register-pressure
 - [p 70] [P] feature-pascal-typed-and-untyped-files
 - [p 70] [T] regression-cascade-154d1aa3fba6
 - [p 70] [P] regression-cascade-4e27dc2be114
@@ -701,7 +701,7 @@ _none_
 - [p 60] [N] feature-a-declaration-phase
 - [p 60] [N] feature-nilpy-process-exec-binding
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application
-- [p 60] [O] feature-opt-emitasmx64-reparses-fixed-strings
+- [p 60] [A+O] feature-opt-emitasmx64-reparses-fixed-strings
 - [p 60] [A+B] feature-target-wasm [parked — re-claim, do not duplicate]
 - [p 60] [C] idea-c-realworld-test-targets
 - [p 60] [A] perf-a-cache-the-compiled-nilpy-runtime-unit-image
@@ -741,7 +741,7 @@ _none_
 - [p 55] [N] feature-nilpy-lambda-compiled-closure
 - [p 55] [N] feature-nilpy-no-type-inference-switch
 - [p 55] [N] feature-nilpy-str-format-named-keyword-fields
-- [p 55] [O] feature-opt-emitloadvara64-needs-a-destination-register-parameter
+- [p 55] [A+O] feature-opt-emitloadvara64-needs-a-destination-register-parameter
 - [p 55] [P] feature-p-assertions-directive-and-position
 - [p 55] [P] feature-p-tmethod-record-for-method-pointers
 - [p 55] [P] feature-p-uses-a-unit-in-an-explicit-file
@@ -766,12 +766,12 @@ _none_
 - [p 50] [A] feature-release-checksums-repro
 - [p 50] [A] refactor-a-target-dispatch-chains-fail-open
 - [p 50] [C] refactor-c-string-literal-decay-belongs-at-the-producer
-- [p 48] [O] feature-opt-heap-per-thread-cache
+- [p 48] [A+O] feature-opt-heap-per-thread-cache
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [S] bug-a-xtensa-refuses-to-lower-an-unreachable-syscall (unblocks 1)
+- [p 45] [A+S] bug-a-xtensa-refuses-to-lower-an-unreachable-syscall (unblocks 1)
 - [p 45] [N] bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed (unblocks 1)
 - [p 45] [A] bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire
-- [p 45] [S] bug-a-the-posix-pal-dir-is-added-on-esp-platform-targets
+- [p 45] [A+S] bug-a-the-posix-pal-dir-is-added-on-esp-platform-targets
 - [p 45] [N] bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name
 - [p 45] [N] bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart
 - [p 45] [N] bug-n-a-nilpy-test-writes-a-fixed-tmp-path-so-concurrent-runs-race
@@ -797,7 +797,7 @@ _none_
 - [p 45] [N] feature-nilpy-methods-on-int-and-float
 - [p 45] [N] feature-nilpy-multi-arg-callback-bridges
 - [p 45] [N] feature-nilpy-threadsafe-containers
-- [p 45] [O] feature-opt-inline-float-and-record-returning-leaves
+- [p 45] [A+O] feature-opt-inline-float-and-record-returning-leaves
 - [p 45] [P] feature-p-defineglobal-a-define-that-crosses-unit-boundaries
 - [p 45] [B] feature-real-dynlib-loader [parked — re-claim, do not duplicate]
 - [p 45] [T] feature-t-nilpy-cpython-differential-fuzzer
@@ -829,7 +829,7 @@ _none_
 - [p 40] [O] feature-inline-nonleaf-and-branch-locals
 - [p 40] [N] feature-nilpy-map-over-several-iterables
 - [p 40] [N] feature-nilpy-str-surface-gaps-2026-08-09
-- [p 40] [O] feature-opt-dynarray-grows-in-place
+- [p 40] [A+O] feature-opt-dynarray-grows-in-place
 - [p 40] [T] feature-t-audit-tests-that-pass-with-the-implementation-removed
 - [p 40] [W] feature-web-machine-readable-project-metadata
 - [p 40] [A] feature-writeln-as-library
@@ -851,7 +851,7 @@ _none_
 - [p 35] [D] docs-toolchain-cli-flags
 - [p 35] [A] feature-a-a-refusal-is-a-claim-with-a-date-on-it
 - [p 35] [A] feature-c-package-namespace-decision
-- [p 35] [E] feature-demo-ide-jump-into-includes-and-units
+- [p 35] [B+E] feature-demo-ide-jump-into-includes-and-units
 - [p 35] [E] feature-demo-portable-userland
 - [p 35] [N] feature-nilpy-counter-api-beyond-the-constructor
 - [p 35] [N] feature-nilpy-walrus-operator
@@ -859,12 +859,12 @@ _none_
 - [p 35] [T] feature-twatch-full-tier-coverage-age
 - [p 35] [W] feature-web-blog-bootstrap
 - [p 35] [A] refactor-a-the-const-cast-width-table-is-the-third-copy
-- [p 32] [O] feature-opt-rtti-emit-on-use
+- [p 32] [A+O] feature-opt-rtti-emit-on-use
 - [p 30] [N] bug-b-reportlab-mimic-multi-font-heap-corruption (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 30] [A] bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce
 - [p 30] [A] bug-a-open-array-of-string-arg-spilled-through-a-managed-string-temp
 - [p 30] [A] bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body
-- [p 30] [S] bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file
+- [p 30] [B+S] bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file
 - [p 30] [N] bug-n-nilpy-carries-its-own-copies-of-the-float-type-table
 - [p 30] [N] bug-nilpy-an-extended-slice-cannot-be-assigned
 - [p 30] [T] bug-t-fpc-seed-canary-red-cited-lines-that-cannot-contain-the-identifier
@@ -880,7 +880,7 @@ _none_
 - [p 30] [A] feature-a-finalize-for-bare-dynarray-and-variant
 - [p 30] [A] feature-a-unreferenced-class-rtti-keeps-every-method-alive
 - [p 30] [E] feature-demo-nilpy-ide
-- [p 30] [S] feature-esp-peripheral-callback-api
+- [p 30] [B+S] feature-esp-peripheral-callback-api
 - [p 30] [N] feature-nilpy-a-genexpr-is-lazy-not-materialised
 - [p 30] [A] feature-nilpy-collections-and-string-methods
 - [p 30] [N] feature-nilpy-cpyext-cycle-collector
@@ -908,19 +908,19 @@ _none_
 - [p 25] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees
 - [p 25] [U] decide-release-signing-key-custody
 - [p 25] [U] decide-t-should-a-skip-close-an-open-regression
-- [p 25] [S] feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle
+- [p 25] [A+S] feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle
 - [p 25] [B] feature-b-posix-and-fpc-named-socket-facades
 - [p 25] [S] feature-esp-hardware-flash-validation
 - [p 25] [A] feature-nilpy-arc-cross-parity
 - [p 25] [N] feature-nilpy-ascii-flag-fast-path
 - [p 25] [N] feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition
 - [p 25] [N] feature-nilpy-match-statement
-- [p 25] [O] feature-opt-arch-level-and-dispatch
+- [p 25] [A+O] feature-opt-arch-level-and-dispatch
 - [p 25] [T] feature-t-uforth-bench-on-the-watcher-idle-phase
 - [p 25] [D] idea-public-status-page
 - [p 25] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [A] refactor-a-backend-machine-code-lives-in-six-shared-files
-- [p 22] [S] bug-a-xtensa-codegen-has-no-variant-support
+- [p 22] [A+S] bug-a-xtensa-codegen-has-no-variant-support
 - [p 22] [C] compat-c-printf-p-of-null-prints-0x0-not-nil
 - [p 22] [A] refactor-a-seven-frontends-borrow-rust-parser-helpers
 - [p 20] [A] bug-a-irtoplevelstmt-parameter-is-a-node-index-named-k
@@ -931,12 +931,12 @@ _none_
 - [p 20] [A] chore-a-sweep-the-unwired-tests-into-the-suite
 - [p 20] [T] chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile
 - [p 20] [U] decide-should-writeableconst-off-be-honoured
-- [p 20] [S] feature-a-promoint-variant-esp-targets
+- [p 20] [A+S] feature-a-promoint-variant-esp-targets
 - [p 20] [A] feature-a-why-threadsafe-needs-45pct-more-global-fixups
 - [p 20] [B] feature-b-a-real-minidom-is-an-implementation-not-a-shim
 - [p 20] [A] feature-cli-widgetset-flag
 - [p 20] [A] feature-cross-frontend-interop-contract
-- [p 20] [S] feature-dns-esp-backend
+- [p 20] [B+S] feature-dns-esp-backend
 - [p 20] [N] feature-n-nilpy-ast-typing-module-scope
 - [p 20] [A] feature-nilpy-idf-import
 - [p 20] [S] feature-pal-esp-posix-fd-semantics
@@ -969,7 +969,7 @@ _none_
 - [p 10] [N] feature-nilpy-parallel-for-in (unblocks 1)
 - [p 10] [P] compat-p-system-integer-is-smallint-in-fpc
 - [p 10] [A] feature-a-shrink-managed-header-on-32-bit
-- [p 10] [O] feature-opt-alloc-intent-hint
+- [p 10] [A+O] feature-opt-alloc-intent-hint
 - [p  5] [P] compat-pascal-directive-in-comment-ignores-nested-comments-off
 - [p  5] [N] feature-nilpy-nested-def-as-value
 - [p  5] [A] idea-a-auto-enable-threadsafe-by-restarting-the-compile
