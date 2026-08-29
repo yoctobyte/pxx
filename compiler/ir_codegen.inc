@@ -9383,8 +9383,29 @@ begin
               refreshed from their authoritative frame slots right after).
               rax is dead at the handler label (IR_EXC_MATCH reloads it). }
             EmitB($0F); EmitB($84); excSkip := CodeLen; EmitI32(0);   { jz over the refresh (normal path) }
-            for f := 0 to RcResidentCount - 1 do
-              RegcallRefreshResident(RcResidentSym[f]);
+            { PXXDBG=a.noexcrefresh -- DISCRIMINATOR, diagnostic only. Suppresses
+              this refresh so that the three mechanisms which could explain "a
+              resident's frame slot is read on the unwind path" produce three
+              DIFFERENT values in the handler, instead of one correct one:
+
+                handler sees the LATEST value    -> the registers survived the
+                  raise; the refresh is dead code and the exception gate on
+                  ResidentSlotIsDead can be deleted outright
+                handler sees the TRY-ENTRY value -> ExcLongJmp rolled the
+                  register back from the jmp_buf; the refresh is load-bearing
+                  and the slot must stay current for anything written inside
+                  the protected region
+                handler sees $5EEDADAD           -> combined with a.poisonslot:
+                  some OTHER reader of the slot exists, and it is not this loop
+
+              Written down because a correctness suite cannot tell "the slot is
+              never read" from "the slot is read and happens to hold the right
+              value" -- which is why item 3 needed poisoning rather than tests.
+              A characterisation that names the reader but not the discriminator
+              gets re-derived wrongly by the next holder. }
+            if not PxxDbgEnabled('a.noexcrefresh') then
+              for f := 0 to RcResidentCount - 1 do
+                RegcallRefreshResident(RcResidentSym[f]);
             FloatPoolRestore;
             FloatResidencyRefreshAll;
             if LabelPositions[lblId] <> -1 then

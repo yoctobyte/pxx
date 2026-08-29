@@ -4087,8 +4087,14 @@ begin
               resident from its authoritative frame slot. x0 is dead at the
               handler label (IR_EXC_MATCH reloads it). }
             excSkip := CodeLen; EmitI32($B4000000);                   { cbz x0, .normal (patched) }
-            for f := 0 to RcResidentCount - 1 do
-              RegcallRefreshResidentA64(RcResidentSym[f]);
+            { PXXDBG=a.noexcrefresh -- the aarch64 half of the discriminator
+              documented at the x86-64 IR_EXC_ENTER arm. Same three-way reading:
+              latest value = registers survived, try-entry value = ExcLongJmp
+              rolled x19..x24 back from the jmp_buf, $5EEDADAD (with
+              a.poisonslot) = a reader other than this loop. }
+            if not PxxDbgEnabled('a.noexcrefresh') then
+              for f := 0 to RcResidentCount - 1 do
+                RegcallRefreshResidentA64(RcResidentSym[f]);
             FloatPoolRestoreA64;
             FloatResidencyRefreshAllA64;
             if LabelPositions[lblId] <> -1 then
