@@ -194,3 +194,48 @@ open-ended work of unknown value.
 
 ## Log
 - 2026-08-29 — resolved, commit b76d7461e.
+
+---
+
+## Follow-up, same day: the write-up cleared one of its own findings
+
+The fix landed, the report read **6**, and then it read **5** — because of the
+commit that fixed it.
+
+Two mentions of `test/gui/helloworld/main.pas` in prose credited the file:
+
+1. **The devtest's docstring.** `wired_paths()` strips *full-line* comments
+   only, and says so — *"Prose inside a Python docstring is likewise still
+   counted as a reference."* So the sentence explaining why that file is an
+   orphan became the evidence that something runs it. Reworded to name the file
+   without a live `test/` token, with a note in place saying why the spelling
+   matters.
+
+2. **The stem rule, descending into a subdirectory.** The devtest carries the
+   token `test/gui/` inside a *fixture string* and defines its own `def main()`
+   at the bottom, and the new stem rule matched that bare `main` against
+   `test/gui/helloworld/main.pas`. Fixed properly rather than by rewording: a
+   truncated token `test/gui/$name.pas` ends at the variable with `.pas` after
+   it, so it can only name a file **directly** in that directory, never one two
+   levels down. Stem evidence is now restricted to direct children, and a
+   seventh guard pins it.
+
+Worth recording rather than quietly squashing, because it is the third distinct
+instance of one shape in a single ticket:
+
+| the witness | what it cleared |
+| --- | --- |
+| the checker's own `SKIP_DIRS` literal | the directories that literal lists |
+| the devtest's docstring describing the orphan | that orphan |
+| the devtest's own `def main()` | a file two directories away |
+
+**A tool that scans prose in its own directory will eventually read its own
+documentation as data.** The first was harmless, the second and third were not,
+and none of them was visible in the tool's output — the report simply got
+shorter. The general hazard is untouched and deliberately so: whether a `tools/`
+script *mentions* or *runs* a path is the judgement the checker refuses to guess
+at (that is why the STALE verdict was downgraded to an advisory). What changed
+here is only that the checker no longer reads itself, and that stem evidence
+cannot reach past a directory the token could not have named.
+
+Devtest: **18 guards**, all green.

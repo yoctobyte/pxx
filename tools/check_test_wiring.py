@@ -149,6 +149,17 @@ def wired_paths(prov=None, dir_refs=None):
         except OSError:
             continue
         for rel in git_ls(d):
+            # DIRECT children only. `test/gui/$name.pas` can name a file in
+            # test/gui; it cannot reach one in a subdirectory, because the
+            # token ends at the variable and `.pas` follows it. Without this,
+            # tools/check_test_wiring_devtest.py -- which carries `test/gui/`
+            # inside a FIXTURE string and defines its own `def main()` --
+            # credited test/gui/helloworld/main.pas on the strength of that
+            # `main`. Measured, and it is the same shape as everything else in
+            # this file: a mention that describes the check was read as
+            # evidence about the tree.
+            if os.path.dirname(rel) != d:
+                continue
             stem = os.path.splitext(os.path.basename(rel))[0]
             # The lookbehind excludes `/` on purpose: gui_suite.sh names
             # `$ROOT/apps/ide/eliah/main.pas`, and without it that credited

@@ -238,8 +238,17 @@ def t_a_bare_stem_in_the_same_script_credits_that_file_only():
 
 def t_a_same_stem_path_component_elsewhere_does_not_credit():
     """Measured, not hypothetical: gui_suite.sh names apps/ide/eliah/main.pas,
-    which credited test/gui/helloworld/main.pas -- a different file that merely
-    shares a stem. A path component naming something else is not evidence."""
+    which credited the helloworld/main.pas sitting under the gui test dir -- a
+    different file that merely shares a stem. A path component naming something
+    else is not evidence.
+
+    NOTE the spelling above. Writing that file's real path here CLEARED IT: the
+    checker counts docstring prose as a reference (deliberately -- see
+    wired_paths()'s stated aperture, which strips full-line comments only), so
+    the sentence explaining the orphan became the evidence that it runs. The
+    report went 6 -> 5 on the strength of this write-up. Same self-witness
+    family as the SKIP_DIRS literal one guard below, one level up, and the
+    reason this file must not spell a live test path in prose."""
     root = _tree(tools={"suite.sh": 'src="$ROOT/test/gui/$name.pas"\n'
                                     'other="$ROOT/apps/eliah/main.pas"\n'},
                  tests=["gui/main.pas"])
@@ -289,6 +298,28 @@ def t_the_checker_does_not_scan_its_own_source():
     return "the checker does not read its own source as evidence"
 
 
+def t_stem_evidence_reaches_direct_children_only():
+    """A truncated token names a child of that directory, never a grandchild.
+
+    `$ROOT/testdir/$name.pas` ends at the variable with `.pas` after it, so the
+    file it names sits directly in that directory. Letting the stem search
+    descend cost a real orphan: this very file carries such a token inside a
+    fixture string AND defines its own `def main()`, and that `main` credited
+    the helloworld/main.pas two levels down. The report went 6 -> 5 because a
+    devtest mentioned a directory and happened to have a main().
+    """
+    root = _tree(tools={"suite.sh": 'src="$ROOT/test/gui/$name.pas"\n'
+                                    'run_gui_test direct\n'
+                                    'def deep\n'},
+                 tests=["gui/direct.pas", "gui/sub/deep.pas"])
+    _, out = _run(root)
+    assert "test/gui/direct.pas" not in out, out
+    assert "test/gui/sub/deep.pas" in out, \
+        "a bare stem credited a file two levels down, which a `$name.pas` " \
+        "token cannot reach: %s" % out
+    return "stem evidence reaches direct children only"
+
+
 TESTS = [t_a_commented_mention_does_not_wire_a_file,
          t_a_hash_comment_inside_a_recipe_body_does_not_wire,
          t_a_real_rule_still_wires,
@@ -305,7 +336,8 @@ TESTS = [t_a_commented_mention_does_not_wire_a_file,
          t_a_same_stem_path_component_elsewhere_does_not_credit,
          t_a_glob_over_a_directory_still_blankets_it,
          t_a_search_path_flag_still_blankets_its_directory,
-         t_the_checker_does_not_scan_its_own_source]
+         t_the_checker_does_not_scan_its_own_source,
+         t_stem_evidence_reaches_direct_children_only]
 
 
 def main():
