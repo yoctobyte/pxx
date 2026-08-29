@@ -5,13 +5,12 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:21 blocked:6 backlog:309 backlog_new:8 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2639 rejected:51`
+`working:2 unfinished:21 blocked:6 backlog:310 backlog_new:8 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2640 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-the-fpc-seed-canary-skips-a-break-already-on-master` [A] — owner: unrecorded
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
-- `task-d-document-warn-ignored-directives` [D] — owner: frankD
 
 ## unfinished (21) — parked mid-flight; re-claim, do not duplicate
 
@@ -46,7 +45,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 321, ranked
+## Ready — top 30 of 322, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -79,4 +78,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 1)
 - `[p 60] [A]` audit-a-builtinheap-invariants-x86-64-inlines-past
 
-_291 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_292 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -208,8 +208,10 @@ unit, which take and return an FPC-compatible `TFPUExceptionMask`.
 
 ## Diagnostics and internal flags
 
-These serve compiler development and self-inspection, not normal builds. Use
-them only when directed.
+The `--warn-*` flags are opt-in diagnostics you can run against ordinary
+source; each is off by default and none changes what is compiled. The dump and
+measure flags below them serve compiler development and self-inspection — use
+those only when directed.
 
 | Option | Effect |
 | --- | --- |
@@ -220,6 +222,7 @@ them only when directed.
 | `--warn-missed-fold` | Warn on constant-fold opportunities the optimizer missed. |
 | `--warn-self-result` | Warn when a parameterless function's bare own name is read as its `Result`. |
 | `--warn-uses-leak` | Warn whenever a name resolves through a unit not reachable by the non-transitive `uses` rule. Read-only measurement — resolution itself is unchanged. |
+| `--warn-ignored-directives` | Report a routine directive that is accepted but cannot be honored *here*, naming the reason (`cdecl`, `register`, `iram` off the ESP targets, `stackful`, `reintroduce`, and `inline` when the routine cannot be inlined). Diagnostic only — codegen is unchanged. See [routine directives](../language/dialect.md). |
 
 ## Search paths
 
