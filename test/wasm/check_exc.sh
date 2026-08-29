@@ -91,6 +91,7 @@ if (exited !== null) process.exitCode = exited;
 JS
 
 node "$work/run.js" "$work/e.wasm" > "$work/wasm.txt" 2>"$work/wasm.err"
+[ -s "$work/native.txt" ] || { echo "FAIL the oracle produced NO output, so the comparison below"; echo "     had nothing to compare and would have passed on two empty files"; exit 1; }
 if diff -u "$work/native.txt" "$work/wasm.txt"; then
   echo "ok  wasm matches the native build ($(wc -l < "$work/native.txt") lines):"
   echo "..  nested try/finally, an exception across two frames, escape from a"
@@ -129,6 +130,7 @@ if [ "$nrc" != "217" ] || [ "$wrc" != "217" ]; then
   echo "FAIL unhandled exception exit code: native $nrc, wasm $wrc (want 217)"
   exit 1
 fi
+[ -s "$work/unh.out" ] || { echo "FAIL the oracle produced NO output, so the comparison below"; echo "     had nothing to compare and would have passed on two empty files"; exit 1; }
 if ! diff -u "$work/unh.out" "$work/unhw.out"; then
   echo "FAIL stdout before the unhandled raise differs"; exit 1
 fi

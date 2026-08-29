@@ -55,6 +55,7 @@ echo "ok  every routine in the slice lowered"
 
 node --no-warnings "$here/wasihost.js" "$work/w.wasm" "$work/sandbox" \
     > "$work/wasm.txt"
+[ -s "$work/native.txt" ] || { echo "FAIL the oracle produced NO output, so the comparison below"; echo "     had nothing to compare and would have passed on two empty files"; exit 1; }
 if diff -u "$work/native.txt" "$work/wasm.txt"; then
   echo "ok  wasm matches the native build ($(wc -l < "$work/native.txt") lines):"
   echo "..  write / read back / truncate / append; the PAL directly for a"

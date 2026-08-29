@@ -165,6 +165,7 @@ if (inst.exports.sp.value !== sp0) {
 process.stdout.write(h.text(1));
 JS
 node "$work/speak.js" "$work/w.wasm" > "$work/wasm.txt"
+[ -s "$work/native.txt" ] || { echo "FAIL the oracle produced NO output, so the comparison below"; echo "     had nothing to compare and would have passed on two empty files"; exit 1; }
 if diff -u "$work/native.txt" "$work/wasm.txt"; then
   echo "ok  writeln matches the native build \
 ($(wc -l < "$work/native.txt") lines): literals, signed and unsigned, the"
@@ -193,10 +194,12 @@ wasi.start(inst);
 inst.exports.Speak();
 JS
 node "$work/speakwasi.js" "$work/w.wasm" 2>/dev/null > "$work/wasi.txt"
+[ -s "$work/native.txt" ] || { echo "FAIL the oracle produced NO output, so the comparison below"; echo "     had nothing to compare and would have passed on two empty files"; exit 1; }
 if diff -u "$work/native.txt" "$work/wasi.txt" > /dev/null; then
   echo "ok  node's real WASI produces the same bytes on the real stdout"
 else
   echo "FAIL node:wasi output differs from native:"
+  [ -s "$work/native.txt" ] || { echo "FAIL the oracle produced NO output, so the comparison below"; echo "     had nothing to compare and would have passed on two empty files"; exit 1; }
   diff -u "$work/native.txt" "$work/wasi.txt" | head -20
   exit 1
 fi

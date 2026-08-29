@@ -54,6 +54,7 @@ process.stdout.write(h.text(1));
 JS
 
 node "$work/run.js" "$work/dm.wasm" > "$work/wasm.txt"
+[ -s "$work/native.txt" ] || { echo "FAIL the oracle produced NO output, so the comparison below"; echo "     had nothing to compare and would have passed on two empty files"; exit 1; }
 if diff -u "$work/native.txt" "$work/wasm.txt"; then
   echo "ok  wasm matches the native build ($(wc -l < "$work/native.txt") lines):"
   echo "..  a zeroed method-pointer temp for a nil argument, two temps in one"

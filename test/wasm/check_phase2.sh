@@ -115,6 +115,7 @@ process.stdout.write(out.join('\n') + '\n');
 JS
 
 node "$work/run.js" "$work/p2.wasm" > "$work/wasm.txt"
+[ -s "$work/native.txt" ] || { echo "FAIL the oracle produced NO output, so the comparison below"; echo "     had nothing to compare and would have passed on two empty files"; exit 1; }
 if diff -u "$work/native.txt" "$work/wasm.txt"; then
   echo "ok  wasm matches the native build ($(wc -l < "$work/native.txt") values), \$sp balanced"
   echo "..  this is a pxx-vs-pxx diff, and it is the only assertion here about program"

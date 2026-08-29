@@ -91,6 +91,7 @@ wasm-validate "$work/p.wasm"
 mkdir -p "$work/sandbox"
 node --no-warnings "$here/wasihost.js" "$work/p.wasm" "$work/sandbox" \
     > "$work/wasm.txt"
+[ -s "$work/native.txt" ] || { echo "FAIL the oracle produced NO output, so the comparison below"; echo "     had nothing to compare and would have passed on two empty files"; exit 1; }
 if diff -u "$work/native.txt" "$work/wasm.txt"; then
   echo "ok  a SysUtils program matches the native build ($(wc -l < "$work/native.txt") lines)"
   echo "..  — every one of them unreachable on this target before the seam"

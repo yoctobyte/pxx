@@ -62,6 +62,7 @@ cat > "$work/expected.txt" <<'EXP'
 -2147483648
 2147483647
 EXP
+[ -s "$work/expected.txt" ] || { echo "FAIL the oracle produced NO output, so the comparison below"; echo "     had nothing to compare and would have passed on two empty files"; exit 1; }
 diff "$work/expected.txt" "$work/ra.txt" >/dev/null || { echo "FAIL binary trace"; diff -u "$work/expected.txt" "$work/ra.txt"; exit 1; }
 diff "$work/ra.txt" "$work/rb.txt" >/dev/null || { echo "FAIL text-built trace differs"; exit 1; }
 echo "ok  both run under node, trace matches expected, \$sp balanced"

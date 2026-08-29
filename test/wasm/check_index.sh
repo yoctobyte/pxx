@@ -78,6 +78,7 @@ process.stdout.write(h.text());
 JS
 
 node "$work/run.js" "$work/i.wasm" > "$work/wasm.txt"
+[ -s "$work/native.txt" ] || { echo "FAIL the oracle produced NO output, so the comparison below"; echo "     had nothing to compare and would have passed on two empty files"; exit 1; }
 if diff -u "$work/native.txt" "$work/wasm.txt"; then
   echo "ok  wasm matches the native build ($(wc -l < "$work/native.txt") lines):"
   echo "..  read and write on a scalar, a record field, an array element and a"
