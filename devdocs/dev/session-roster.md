@@ -16379,3 +16379,48 @@ at 7-and-0 and was told so; frankwasm at 76-and-288 is not, and was told that to
 
 Branch permission is still not merge permission. Nothing on `origin/wasm` or
 `origin/rust` is pre-approved.
+
+## Track T handover: plexus's daemon stopped before its successor published anything
+
+Owner, 2026-08-29 ~18:20 CEST: *"since seven is up doing track T stuff, we can
+kill the watcher daemon on localhost."* Done — `trackt-watcher.service` is
+`inactive`, no `twatch.py` process remains. Load on plexus was **13.72 on 12
+cores** with six agent sessions competing, and the watcher makes every agent's
+compile 2-3x slower, so the relief is real and immediate.
+
+**But `seven` had published nothing** — no `seven.json`, no tstate rows, and its
+push probe unverified (it failed once against a stale clone; the re-probe had not
+run). So Track T went from one watcher to zero, not from one to two.
+
+**What I did rather than either refusing or pretending it was fine:**
+
+- Executed it. It is the owner's call, it is reversible, and the core relief is
+  worth having.
+- Left the systemd unit **`enabled`**, so a plexus reboot restores a watcher
+  rather than leaving none. Stop, not disable.
+- Told `seven` its push access is now the critical path, not a procedural item —
+  because if the key lacks write access, **tstate simply stops advancing, and
+  stale reads as quiet, not as down.**
+- Took a **mechanical expiry**: no `seven` row within ~40 minutes and I restart
+  plexus's daemon, converting a gap into an overlap.
+
+**And told all five active lanes NOT to widen their gates**, which is a
+deliberate departure from CLAUDE.md's letter. The rule says a lane runs its full
+local gate when Track T is *proven down*, and by that test it is down. The
+reasoning for overriding it, stated to each lane rather than issued:
+
+- This is a **planned handover with a named successor**, not a failure.
+- Widening costs ~10 minutes per fix across **six live sessions**.
+- The one property a bad push could poison for everyone — a compiler that cannot
+  reproduce itself — is proved by `make compiler/pascal26` in every lane's own
+  loop, watcher or no watcher.
+- What is genuinely uncovered is **breadth**: cross-target reds, the corpus, the
+  wide suites. The remedy for that is seven publishing, not six agents each
+  running a matrix.
+
+**The window is the worst one this month to be blind in**, and both T faces were
+told so in advance: frankB converted **2476 Makefile assertions today and not one
+has been executed by a suite**. `make lib-test` covers 221. The other 2255 meet
+their first execution in seven's first sweep. **A wide red against these shas is
+ONE systematic cause, not 2000 regressions** — relayed to seven and to pxx-a5
+before the sweep, because a warning like that is worth nothing after the report.

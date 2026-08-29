@@ -145,11 +145,11 @@ That was this ticket's own instruction — *"the banner should be moved onto it
 needed no box time at all.
 
 **Still blocked, on the same thing as last time:** the three-rung measurement.
-plexus was at **load 17.33** on six cores when this was picked up, against the
+plexus was at **load 17.33** on twelve cores when this was picked up, against the
 load 12 that deferred
 [[chore-t-tools-devtest-is-one-job-that-runs-86-guards]] the same way. This
 ticket asks for tens of minutes of contention on the owner's workstation, and a
-ratio measured under 3x oversubscription cannot answer the question it is asked
+ratio measured under ~1.4x oversubscription cannot answer the question it is asked
 — *"is `limited` a genuinely cheaper preview"* is precisely a question about
 what contention does to parallel-friendly jobs.
 
@@ -167,3 +167,22 @@ someone's desktop, and this ticket plus the `tools-devtest` one are the two
 best first jobs for it: both are pure measurement, both are read-only, both are
 currently stuck for exactly one reason that seven removes. Worth handing over
 together with that framing rather than as two unrelated stale chores.
+
+
+### Correction, 2026-08-29 (same day): the box has TWELVE cores, not six
+
+I wrote "six cores" above from the watcher's `--max-cores 6`, which is its own
+budget, not the machine's. `nproc` is **12**. So load 17.33 was ~1.4x
+oversubscription, not 3x — still loaded, and still the wrong condition for this
+measurement, but I overstated it and the numbers are corrected in place.
+
+**And the constraint has since moved.** The owner had plexus's watcher daemon
+stopped this evening; load fell to **4.30** on those 12 cores (5-min 8.84,
+15-min 10.71 — the trend is the daemon leaving). The box's largest continuous
+consumer is gone.
+
+That does NOT make this measurable right now: plexus is still the owner's
+workstation, six sessions are live, and load 4.30 is not idle. But the reason
+this ticket has been deferred twice is materially weaker than it was this
+morning, and it is the first time that has been true. Whoever picks it up
+should re-read the load rather than inherit "blocked on a busy box" from here.

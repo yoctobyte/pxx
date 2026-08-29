@@ -4,6 +4,8 @@ prio: 70
 type: bug
 blocked-by: []
 summary: "Two units before a third with a deep transitive chain makes the parser hit EOF of a transitively-loaded unit still expecting `implementation`, with lookahead showing ANOTHER unit's generated tokens. Deterministic, -O-independent, and it is what makes test/lib_synapse.pas red. Platonic repro is 4 lines."
+status: unfinished
+owner: unassigned
 ---
 
 # A deep unit dependency parses with a spliced token stream
@@ -195,3 +197,134 @@ definition — likely here, since the suspect machinery is a token rewriter with
 helpers — **run `tools/gate.sh quick` before you push**, and if it goes red on the
 seed, fix it with forwards and **verify by building `compiler.pas` with `fpc`
 directly**, not by inference.
+
+---
+
+## Measured 2026-08-29 (frankA) — the failing unit is **synsock**, and the mechanism is `PreScanPass`
+
+Not fixed. Diagnosis banked and parked, with the position moved a long way and
+one hypothesis left standing that I could not close.
+
+### Everything the diagnostic told us about *where* is wrong, including the correction
+
+The correction above was right that `FlushGroup$126591` is an ordinary mangled
+nested routine and not evidence of splicing (this run mints `$128258` — a token
+index, as predicted). But its replacement conclusion, *"the parser runs a unit to
+exhaustion and reports the line after the last one, in a different file from the
+one whose tokens are in view"*, is also not what happens.
+
+`PXXDBG=a.srcmap:*` settles it in one run — **the token→file map is correct and
+the attribution is right**:
+
+```
+tok=129561 srcline=634 lexing=FALSE tokcount=145285 -> lib/rtl/sockets.pas
+[28] start=125429  unit sockets      [29] start=129615  unit netdb
+```
+
+Token 129561 really is inside `sockets`'s range. Nothing is misattributed. The
+file is named correctly and is still not the file with the defect, because **the
+unit being PARSED is `synsock`** — whose own tokens are [119862, 124005):
+
+```
+UDBG FAIL unit=synsock TokPos=129562 tokcount=145285
+```
+
+`synsock`'s interface parse ran ~5,500 tokens past the end of its own block,
+through `syncobjs`, `palsync`, `palfutex`, `termio` and into `sockets`, and
+stopped at the first `tkEOF` it met. So `sockets.pas:634` is where it *ran out of
+stream*, and neither `sockets.pas` nor `dns_cache.pas` was ever the subject.
+
+**Do not chase the reported file, and do not chase the mangled name.** Both are
+now measured dead ends, and this is the second correction on that point.
+
+### Why it runs off the end
+
+`ParseSubroutine` decides header-only vs parse-a-body at `pasparser_proc.inc:1543`:
+
+```pascal
+if (CurTok.Kind = tkForward) or InInterface or PreScanPass then   { header only }
+```
+
+With `PreScanPass` **True** during a unit's interface, every routine header is
+treated as a definition and the parser hunts for a body that is not there,
+swallowing the rest of the stream. `ParseUnit` sets `PreScanPass := False` on
+entry for exactly this reason, and says so:
+
+> *"A used unit parses in its own normal (single-pass) mode: its interface is
+> already forward-visible, so the enclosing program's pre-scan must not leak in
+> and make ParseSubroutine skip the unit's bodies."*
+
+Measured at the first routine header of `synsock`'s interface, failing vs passing
+order, everything else identical:
+
+| | `InInterface` | `PreScanPass` |
+| --- | --- | --- |
+| passing order | 1 | **0** |
+| failing order | 1 | **1** |
+
+The two runs are token-for-token identical for 18 interface declarations and
+diverge at the first `function` header (`ssfpc.inc:332`), which is exactly the
+first construct whose parse consults `PreScanPass`. The const/type sections
+before it do not, which is why the failure looks like it starts late.
+
+### Where the flag flips, and the part I could not close
+
+Bracketing each interface-loop declaration narrows it to one call:
+
+```
+UDBG type-in  synsock line=90 ps=0
+UDBG type-out synsock ps=1
+```
+
+`ParseTypeSection` over `ssfpc.inc:90` — `TSocket = longint; TAddrFamily =
+integer; TMemory = pointer;`, three plain aliases — **enters with the flag clear
+and returns with it set.**
+
+**And nothing on that path writes it.** All **19** `PreScanPass := ` sites in the
+tree live in `ParseUnit` or `ParseProgram` (`pasparser_proc.inc`,
+`pasparser_prog.inc` — no other file has one; verified with a full grep, not a
+truncated one). Probes on `ParseUnit`'s entry *and* its restore show **neither
+fires inside that window** — no nested unit is parsed, and none exits early
+leaving the flag raised, which was my first hypothesis and is disproved.
+
+So the value changes with no assignment executing. The leading hypothesis is
+therefore a **stray write clobbering the global** — which would also explain the
+two properties nothing else does: the failure is deterministic, and it depends on
+the *uses ordering*, i.e. on how many tokens precede the unit. `-O`-independence
+(recorded above) does not argue against it.
+
+**This is a hypothesis, not a finding, and it must not be repeated as one.** The
+next measurement is a canary: place a known-valued global adjacent to
+`PreScanPass` and see whether it is corrupted in the same window; if it is, hunt
+the writer (an array bound, most likely in the token machinery, since the trigger
+scales with stream size). If it is not, the flag has a writer I have not found
+and the grep needs widening beyond `PreScanPass := `.
+
+### Confirmed as still true from the ticket above
+
+- Deterministic, ordering-dependent, and the minimal pair is three units with
+  only the order changed: `synacode, synaip, blcksock` FAILS,
+  `synacode, blcksock, synaip` PASSES.
+- The `--mimic-fpc` flag is incidental.
+
+### Two unrelated things measured on the way
+
+1. **`PXX_HOME` is not honoured.** `--where` advertises it as tier 2, overriding
+   the exe-dir defaults, but pointing it at a copied RTL changed nothing — the
+   `in:` path still named `compiler/../lib/rtl`, and *removing* `sockets.pas`
+   from the `PXX_HOME` tree did not even produce "unit not found". This blocked
+   the obvious experiment (edit a copy of the RTL rather than Track B's files)
+   and is worth its own ticket.
+2. **The interface loop's terminator is case-sensitive.**
+   `pasparser_proc.inc:4763` ends the interface on
+   `(CurTok.SVal = 'implementation') or (CurTok.SVal = 'Implementation')` — two
+   hand-listed spellings in a case-insensitive language, where every neighbouring
+   test uses `CaseEqual`. `IMPLEMENTATION` would run a unit off its own end with
+   this exact symptom. Not this bug (ssfpc.inc spells it lowercase), and not
+   fixed here to keep this session's change set at zero.
+
+### State
+
+**No compiler change was made.** Every probe was reverted; the tree is clean at
+HEAD and the repro still reproduces (binary `0750a098d055`). `external/synapse`
+installed from `tools/install_externals.sh`; the pin `b3224c3d133a` resolves.
