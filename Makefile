@@ -3785,6 +3785,28 @@ test-threads: $(COMPILER)
 	set +e; $(TESTTMP)/test_halt_worker26 > $(TESTTMP)/halt_worker.log 2>&1; rc=$$?; set -e; \
 	  tools/expect_same.sh test_halt_worker26-rc "$$rc" "216"; \
 	  tools/expect_same.sh test_halt_worker26-msg "$$(head -n 1 $(TESTTMP)/halt_worker.log)" "worker: calling Halt(216)"
+	# The bulk-copy helpers' BYTE TAIL, at every length 0..17: string SetLength
+	# (grow and shrink), dyn-array SetLength, Copy() at every offset and count,
+	# aliasing-vs-Copy, and concat. Every expectation diffed against FPC 3.2.2.
+	# NOTE FOR WHOEVER READS A GREEN HERE: on x86-64 this proves almost nothing.
+	# That target open-codes the block ops (rep movsb / rep stosb) and inlines
+	# SetLength, so PXXBlockCopy/PXXMemZero barely run — deleting PXXBlockCopy's
+	# byte tail outright leaves this test PASSING natively and produces 415
+	# failures under --target=aarch64. The value of this file is on the CROSS
+	# shards. feature-opt-bulk-copy-is-byte-at-a-time
+	./$(COMPILER) test/test_bulk_copy_tails.pas $(TESTTMP)/test_bulktails26
+	tools/expect_same.sh test_bulktails26 "$$($(TESTTMP)/test_bulktails26 | tail -1)" "BULK COPY TAILS OK"
+	# aarch64 EmitLoadVarA64's arms — every width and signedness of the sz/sgn
+	# ladder, a global Single, by-ref params of each, a by-ref dyn array and
+	# string. Target-neutral source; the .expected is the x86-64 oracle, and the
+	# cross shards are what make it an aarch64 test.
+	./$(COMPILER) test/test_a64_loadvar_arms.pas $(TESTTMP)/test_a64loadvar26
+	$(TESTTMP)/test_a64loadvar26 | diff -u test/test_a64_loadvar_arms.expected -
+	# the leaf-sym binop collapse, NON-COMMUTATIVE ops especially: a wrong-way-
+	# round operand pair is a plausible wrong ANSWER, not a crash, and commutative
+	# ops cannot observe it. Under {$Q+}{$R+}.
+	./$(COMPILER) test/test_a64_leafsym_binops.pas $(TESTTMP)/test_a64leafsym26
+	$(TESTTMP)/test_a64leafsym26 | diff -u test/test_a64_leafsym_binops.expected -
 	# __pxxmulhi_u64: unsigned 64x64->128 high half (x86-64 mul / aarch64 umulh)
 	./$(COMPILER) test/test_mulhi.pas $(TESTTMP)/test_mulhi26
 	tools/expect_same.sh test_mulhi26 "$$($(TESTTMP)/test_mulhi26 | tail -1)" "MULHI OK"

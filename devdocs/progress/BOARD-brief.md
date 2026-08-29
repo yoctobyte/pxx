@@ -5,12 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:20 blocked:5 backlog:314 backlog_new:7 experimental:22 rainy-day:45 float:21 done-followup:3 decided:116 done:2608 rejected:51`
+`working:1 unfinished:20 blocked:5 backlog:315 backlog_new:7 experimental:22 rainy-day:45 float:21 done-followup:3 decided:116 done:2613 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
-- `regression-test-core-test-nilpy-str-ascii-cache` [N] — owner: frankA
 
 ## unfinished (20) — parked mid-flight; re-claim, do not duplicate
 
@@ -43,21 +42,23 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 325, ranked
+## Ready — top 30 of 326, ranked
 
+- `[p 85] [R]` bug-r-a-duplicate-forward-in-rparser-breaks-the-fpc-seed-build
+- `[p 80] [A]` bug-a-the-fpc-seed-canary-skips-a-break-already-on-master
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
+- `[p 70] [A]` bug-a-for-loop-limit-is-evaluated-after-the-control-variable-is-assigned
 - `[p 70] [P]` bug-p-a-delphi-mode-generic-from-a-used-unit-cannot-be-specialized
 - `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 70] [T]` regression-cascade-154d1aa3fba6
 - `[p 70] [P]` regression-cascade-4e27dc2be114
-- `[p 70] [C]` regression-lib-test-crtl-reachability-3
+- `[p 70] [B]` regression-lib-test-crtl-reachability-3
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-parent-call-after-instantiation
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-relative-import-in-package
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-startswith-tuple
-- `[p 70] [P]` regression-test-threads-test-sched-reactor-exhaustion-2
 - `[p 70] [N]` regression-tools-devtest-00-2
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
@@ -68,12 +69,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [N]` feature-nilpy-iter-and-next-over-a-container
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
-- `[p 65] [O]` feature-opt-bulk-copy-is-byte-at-a-time
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
 - `[p 62] [N]` feature-nilpy-enum-class
-- `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
 
-_295 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_296 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

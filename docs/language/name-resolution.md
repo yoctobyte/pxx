@@ -51,6 +51,26 @@ Pascal unit, name it with its extension: import 'classes.pas' as classes
 That refusal is the point. Before it, such an import loaded the Pascal unit and
 failed somewhere inside a file the program never mentioned.
 
+### The one exception: a Python extension module
+
+A Pascal unit that declares itself a **cpyext extension module** is never the
+rule's subject. It is a Python module whose body happens to be Pascal and C —
+the same thing `_socket` or `_json` is to CPython — so a bare `import` of it is
+the correct spelling and resolves. Two things must both be true of the unit:
+
+- a line consisting of exactly `{$PYEXTENSION}` — the **declaration**;
+- its `uses` clause binds the cpyext runtime, `lib/cpyext/src/pyruntime.c` —
+  the **check** on that declaration.
+
+The declaration is what makes the unit a Python module; the runtime binding
+only confirms the claim. A unit that binds the runtime and does *not* declare
+itself is still refused with the message above, so the exception cannot widen
+into "anything that touches CPython". Nothing in the module's *name* is a
+signal — `_ext`, a leading underscore, or neither, it makes no difference.
+
+See [Nil Python](../targets/nil-python.md#python-extension-modules-import-bare)
+for what an extension module is for and what a declaration looks like.
+
 ### To reach another language, name the file
 
 A quoted string with a foreign extension routes that file through the other
