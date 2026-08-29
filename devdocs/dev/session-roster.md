@@ -16336,3 +16336,46 @@ decays like any other.** I passed it on with the coordinator's authority
 attached, which is how a stale count becomes the scope everyone plans against.
 Re-derive a count before you dispatch against it, or say plainly that you did
 not.
+
+## Two lanes were not on master, and I had never checked
+
+Added to the coordinator tick 2026-08-29, after frank-rust mentioned pushing to
+`origin/rust` in passing. Measured across every fleet tree:
+
+| tree | branch | ahead of master | behind master |
+| --- | --- | --- | --- |
+| frank-coordinator, frankA, frankB, frank-optimize, pxx, trackt-watch | master | 0-2 | 0 |
+| **frank-rust** | `rust` | 7 | **0** (local; `origin/rust` is 41 behind) |
+| **frankwasm** | `wasm` | 76 | **288** |
+
+CLAUDE.md puts every track on `master`, and `frank.sh` already documents a tree
+launched on a stale branch as a known trap — it is what produced four tickets
+filed to the dead `dev` branch on 2026-08-27. Neither agent chose this; the trees
+were checked out that way, which is exactly why nobody noticed.
+
+**What it costs, and it is not merge hygiene.** Track T sweeps `origin/master`
+and nothing else, so 76 commits of Phase 9 and 6-7 of Rust work have never been
+near the matrix — no cross-target jobs, no corpus. A per-commit self-host
+fixedpoint is still real, but it proves reproducibility, not that the lane's
+green tests are green on i386 or aarch64.
+
+**The sharper cost, and the reason this is a coordinator problem rather than a
+worker's:** at 288 behind, *every finding that lane files describes the codebase
+as it stood 288 commits ago.* A bug fixed on master in that span still reproduces
+there and gets filed as live — and I have been relaying those findings to other
+lanes as facts about the current tree.
+
+So I verified frankwasm's newest one against master before relaying it again:
+`PXXSysOpenRO`, `PXXSysClose` and `PXXSysLseek` each have exactly four arms with
+`Result :=` only inside them and no terminal else, at HEAD. **The finding holds.**
+But that it happened to hold is not the point — I had no basis for the previous
+ones, and asserted them anyway.
+
+**Standing rules from this:** the tick now prints every tree's branch and drift.
+A finding from an off-master lane must **state its branch and drift the way a
+measurement states its sha**. And a branch move is a repo-wide event, so it is
+scheduled here, not absorbed by a worker mid-rung — frank-rust is cheap to move
+at 7-and-0 and was told so; frankwasm at 76-and-288 is not, and was told that too.
+
+Branch permission is still not merge permission. Nothing on `origin/wasm` or
+`origin/rust` is pre-approved.
