@@ -197,7 +197,7 @@ the backend's prologue pass, the x86-64 fall-through, and the loud `Error`.
 here is plausibly **deleting an arm rather than adding one**.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 4eeadadc4.
 
 ## Resolved 2026-08-29 — fixed as the shape, with three corrections to this ticket
 

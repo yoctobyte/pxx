@@ -89,7 +89,7 @@ Track A's: `make compiler/pascal26` plus the repro above on both targets. The
 wasm32 column must stop reporting plausible success.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 4eeadadc4.
 
 ## Resolved 2026-08-29 — with the sibling, as one defect
 
