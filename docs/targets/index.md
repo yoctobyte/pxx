@@ -40,6 +40,7 @@ For ESP32 targets, start with the board-specific examples under
 - [Cross languages](./cross-languages.md)
 - [C Frontend](./c-frontend.md)
 - [Nil Python](./nil-python.md)
+- [Other frontends](./other-frontends.md)
 
 ## Next
 

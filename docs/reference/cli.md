@@ -61,9 +61,11 @@ pxx (pascal26) — self-hosting Pascal-dialect compiler
 ```
 
 That frontend list is every frontend compiled into the binary, and they sit at
-very different stages. The ones these docs cover are Pascal, [C](../targets/c-frontend.md)
-and [Nil Python](../targets/nil-python.md); the rest are experimental frontends
-and language probes, and their presence in the list is not a support claim.
+very different stages. The ones these docs cover in depth are Pascal,
+[C](../targets/c-frontend.md) and [Nil Python](../targets/nil-python.md); the
+rest are a real BASIC frontend, two experimental ones, and six skeleton probes,
+and their presence in the list is not a support claim. See
+[Other frontends](../targets/other-frontends.md) for which is which.
 
 ### `--where` — the one to reach for first
 
