@@ -52,7 +52,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (306)
+## backlog (305)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -95,7 +95,6 @@ _none_
 | bug-n-a-tuple-unpacking-assignment-does-not-box-a-callable-value | N | 55 | bug | `a, b = lambda x: x + 1, lambda x: x + 2` compiles and then `a(1)` raises TypeError: object is not callable. The single-target spellings (`a = lambda ...`, `return lambda ...`) box the callable so the name is a variant; the tuple-UNPACK targets do not, so each name holds a raw pointer the dynamic-call path does not recognise. | — |
 | bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence | N | 55 | bug | Six `timeout N` literals are hardcoded inside the test-nilpy and test-uforth recipes. The three uforth ones are the damaging pair of shapes: `wait $pp \|\| true` discards timeout's exit 124, the kill truncates p.out mid-stream, and the truncation is then reported as `DIFF <corpus>` — a pxx-versus-CPython divergence — and counted into `bad`. A machine under load thus manufactures a Nil-Python frontend finding. Filed by Track T, which owns the harness but not the Makefile. | — |
 | bug-n-abs-of-a-complex-raises-typeerror | N | 12 | bug | `abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set. | — |
-| bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module | N | 85 | bug | RE-SCOPED: not about import aliases. A name that names a `def` is resolved to that def at EVERY call site and any later rebinding is ignored — `def a…; def b…; b = a; b(1,5)` answers 18 (the original b) where CPython answers 5, with no import anywhere. The alias spelling is one way to rebind. Blocked: the correct destination is the dynamic call path, which cannot yet carry defaults (see the decision ticket). | decide-how-a-compiled-def-carries-its-signature-when-boxed |
 | bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising | N | 50 | bug | `None.bit_length()` returns 0 where CPython raises AttributeError — the int-method arm on a variant receiver unboxes without checking the tag, and None's payload reads as the integer 0. dict/list/str receivers do raise, so None is the one shape that answers. | — |
 | bug-n-compiling-html5lib-trie-never-terminates | N | 55 | bug | Compiling library_candidates/html5lib/html5lib/_trie/__init__.py — five lines — never terminates. Found as a pxx process that had been in state R for 1 day 16:47 on a six-session box, and reproduced bounded: `timeout 60` returns 124 after emitting only the shim-resolution notes. No diagnostic, no progress, no exit. | — |
 | bug-n-exec-ignores-a-caller-supplied-builtins-mapping | N | 20 | bug | `exec(src, {\"__builtins__\": {}})` — the restricted-exec idiom — raises NameError in CPython and silently resolves builtins anyway in pxx. The caller's explicit instruction to resolve names against THIS mapping is discarded, so working CPython code takes a different path. Upward-compatibility defect, split out of the cosmetic decide-nilpy-exec-injects-a-builtins-key. | — |
@@ -603,11 +602,11 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2592)
+## done (2593)
 
-2592 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2593 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
-## rejected (49)
+## rejected (50)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -622,6 +621,7 @@ _none_
 | bug-frozen-self-build-unreliable | A | 50 | bug | Frozen-string compiler self-build (`bootstrap-frozen` / `stabilize-frozen`) is unreliable | — |
 | bug-lexer-identifier-ends-with-keyword | A | 50 | bug | Bug — Lexer misidentifies identifiers ending with keyword names (e.g. 'Class') | — |
 | bug-n-a-user-classs-decode-method-is-hijacked-losing-its-own-parameters | N | 70 | bug | DUPLICATE of bug-nilpy-a-callable-in-a-variable-loses-to-a-def-of-the-same-name (frank2, unfinished/), which reproduces the corpus diagnostic character for character. Kept as a record of a disconfirmed premise: filed as a `decode` method-name hijack, measured not to be one. The separate `undefined variable (final)` shape it turned up is filed as bug-n-a-keyword-argument-through-a-callable-value-is-undefined. | — |
+| bug-n-an-import-alias-cannot-shadow-a-class-or-cross-with-another-alias | N | 60 | bug | Two rows of the alias table that the proc-rebinding fix does NOT reach, because each is a different mechanism. (1) `from M import f as C` where M also has a CLASS named C still CONSTRUCTS M's C — the fix stamps the proc chain, and a class is not on it; FindUClass scans the real class table before the alias table, so there is no way to say `C is not a class here`. (2) `from M import f as g, g as f` answers `5 5` where CPython answers `5 18` — crossing aliases must both read the PRE-import bindings, and the second binding sees the first. Both were rows of the parent ticket; split out because neither is a variation of the proc arm. | — |
 | bug-n-the-sequence-protocol-does-not-yield-iteration | N | 48 | bug | SUPERSEDED 2026-08-19 — split and fixed under two other tickets before this one was ever dispatched. A class with `__len__` + `__getitem__` and no `__iter__` is iterable in CPython. In NilPy `for x in obj` is a compile error whose diagnostic names an unrelated internal (`pylib (count) not loaded`), and `list(obj)` compiles and returns an EMPTY list — a silent wrong answer, which is the worse half. | — |
 | bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error | N | 50 | bug | `xs.sort(key=..., reverse=...)` fails with a bare "unexpected token" | — |
 | bug-nilpy-uforth-rc4-corpus-stack-underflow | N | 45 | bug | WITHDRAWN — not a pxx bug. `ERROR: Stack underflow` came from MY harness invoking `INCLUDE testje.for`; uforth's INCLUDE POPS a string, so the correct form is `\"testje.for\" INCLUDE`. With that, all four RC4 corpora are byte-identical to CPython. | — |
@@ -663,7 +663,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 85] [N] bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
 - [p 75] [B] bug-a-the-17th-thread-silently-aliases-reactor-slot-0
 - [p 75] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
@@ -991,7 +990,6 @@ _none_
 - **1** — bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed
 - **1** — bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching
 - **1** — decide-does-nilpy-random-seed-itself-at-import
-- **1** — decide-how-a-compiled-def-carries-its-signature-when-boxed
 - **1** — decide-how-much-string-machinery-the-basic-frontend-gets
 - **1** — decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
 - **1** — decide-install-qemu-system-and-a-freebsd-image-on-plexus
