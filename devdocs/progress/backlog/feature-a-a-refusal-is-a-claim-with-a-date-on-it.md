@@ -670,3 +670,50 @@ a blocker is an event on the **blocker**; the note lives on the **dependent**; a
 problem, with time rather than file-set as the axis.
 
 **Seventeen faces, and the family is still open.**
+
+## Face eighteen — when the compiler is its own test input, a diff cannot tell a CODEGEN change from a SOURCE change
+
+Found by frankwasm, 2026-08-29, and it nearly cost twenty lines of inert code.
+
+**The situation.** It had a working fix that widened the `IR_LEA` array arm and
+refined its deref discriminator. To decide whether the widening was load-bearing,
+it compiled `compiler.pas` with both compilers and diffed the `.wasm` bytes. **They
+differed.** That reads as proof the widening changed codegen.
+
+**It did not.** `compiler.pas` *contains the file being edited*, so the two runs
+differed in their **input** as well as in their **compiler**. A source change was
+being read as a codegen change. The real fix is **twelve lines** — delete the stale
+refusal and let `WasmNodeIsDynArray` answer yes for an open-array parameter, so
+`Length` reads the header word the indexing beside it already read. Both parts of
+the rework were then measured **inert**: with the narrow predicate only `ArrLen =
+-1` symbols enter the arm, so the refinement is a no-op, and open-array params fall
+through to a generic path that already emits exactly the one deref they need.
+
+**Why it is its own face rather than an instance of thirteen.** Face thirteen is
+two arms sharing an upstream. Here **the shared upstream is the artefact under
+test**: the thing you changed is also the thing you fed in. That is not a mistake
+anyone makes carelessly — it is structural, and it is **specific to a self-hosting
+repo**, where "compile the compiler and compare" is the most natural measurement
+available and is offered by the build system itself.
+
+> **Every "compile `compiler.pas` both ways and diff" measurement in this repo
+> carries this hazard.** The output differing proves *something* changed; it cannot
+> tell you *which side*. And it fails in the direction that flatters the change you
+> just made — a diff is what you were hoping to see.
+
+**The fix is cheap and exact: hold the source fixed and vary only the binary.**
+Doing that gave a **byte-identical** `.wasm` and settled it in one run.
+
+### The adjacent control, and it belongs with this face
+
+frankwasm ran a **determinism control first** — same binary, same input, three
+runs, one sha — **before** trusting any diff.
+
+> A control that fires on the feature's total absence proves the instrument can
+> *detect*. This is the other one: **a control that establishes the instrument is
+> STABLE, run BEFORE the comparison rather than after it surprises you.** Without
+> it, "the bytes differ" cannot be separated from noise, and — the part that
+> matters — you have **no reason to go looking for a third explanation.** It is
+> what made the second measurement readable.
+
+**Eighteen faces, and the family is still open.**
