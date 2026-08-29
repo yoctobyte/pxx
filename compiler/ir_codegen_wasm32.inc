@@ -2061,6 +2061,32 @@ begin
                                  or (Syms[IRA[n]].Kind = skParam)));
 end;
 
+{ The count word, given a dyn-array/string HANDLE already on the operand stack.
+  Both Length arms below end here and differ only in how they put the handle
+  there — the dyn-array arm has it directly, the slot arm loads it from an
+  address first — so that one load is the entire difference between them and
+  this makes it the only difference in the source too.
+
+  nil is 0 elements, and the guard is required rather than defensive: a
+  declared-but-never-SetLength array holds nil, `Length(a)` on it is legal
+  Pascal and must answer 0, and without the guard it reads address -8. }
+procedure WasmEmitLenFromHandle;
+var lv: Integer;
+begin
+  lv := WasmStrSlot(1);
+  WasmLocalSet(lv);
+  WasmLocalGet(lv);
+  WasmOp($45, 'i32.eqz');
+  WasmIf(WT_I32);
+  WasmI32Const(0);
+  WasmElse;
+  WasmLocalGet(lv);
+  WasmI32Const(8);
+  WasmOp($6B, 'i32.sub');
+  WasmMemOp($28, 'i32.load', 2, 0);
+  WasmEnd;
+end;
+
 function WasmEmitLength(valNode: Integer): Boolean;
 var tk: TTypeKind; lv, ll, ls: Integer; ok: Boolean;
 begin
@@ -2089,18 +2115,29 @@ begin
   begin
     WasmEmitValueAs(valNode, WT_I32, 'Length of a dynamic array');
     if WasmBodyBroken then Exit;
-    lv := WasmStrSlot(1);
-    WasmLocalSet(lv);
-    WasmLocalGet(lv);
-    WasmOp($45, 'i32.eqz');
-    WasmIf(WT_I32);
-    WasmI32Const(0);
-    WasmElse;
-    WasmLocalGet(lv);
-    WasmI32Const(8);
-    WasmOp($6B, 'i32.sub');
+    WasmEmitLenFromHandle;
+    WasmEmitLength := True;
+    Exit;
+  end;
+
+  { A dyn-array handle held in a SLOT rather than named by one: a record or
+    class FIELD (`Length(b.Bytes)`), or a nested sub-array ELEMENT reached by
+    indexing. Both node kinds yield the ADDRESS of the handle, so this arm
+    loads once more than the arm above and is otherwise identical.
+
+    The discriminator is the TYPE, and it is the same one x86-64 uses
+    (ir_codegen.inc, the third arm of its tkLength block): the IR types such a
+    field `tyPointer`, which is exactly the word this backend's refusal message
+    has been printing all along — `Length of Pointer` was never about pointers,
+    it was this shape going unrecognised. Length of a real Pointer is not
+    legal Pascal, so no compiling program can reach this arm by that route. }
+  if ((IRKind[valNode] = IR_FIELD) or (IRKind[valNode] = IR_INDEX))
+     and (tk = tyPointer) then
+  begin
+    WasmEmitValueAs(valNode, WT_I32, 'address of a dynamic-array handle');
+    if WasmBodyBroken then Exit;
     WasmMemOp($28, 'i32.load', 2, 0);
-    WasmEnd;
+    WasmEmitLenFromHandle;
     WasmEmitLength := True;
     Exit;
   end;
