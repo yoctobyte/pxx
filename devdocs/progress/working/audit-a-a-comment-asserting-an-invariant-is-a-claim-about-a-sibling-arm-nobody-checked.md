@@ -728,3 +728,66 @@ read-only *by construction* — findings are filed as tickets, no source is edit
 property was worth building in rather than merely intending. Worth stating
 explicitly in the charter: **an audit that edits nothing cannot leak anything,
 and that is a reason to keep it read-only even when the fix looks obvious.**
+
+---
+
+## 2026-08-30 — pass 5 (frankD): the `must never` family. **The prediction held, with one exception that is the best question of the sweep.**
+
+Face 71 predicted this family would be the low-yield half, and it was — but the
+prediction was run to give it a chance to fail, not to confirm it, so the null
+result is reported as a result.
+
+**Nine single-site `must never` / `must always` claims checked; eight hold, and
+they hold for a structural reason worth writing down.** A single-site `must
+never` is not really a claim about elsewhere — it is an **instruction with its
+enforcement on the next line**:
+
+| claim | enforcement | distance |
+| --- | --- | --- |
+| `symtab.inc:578` "must never abort a build" | `if UsesEdgeCount >= MAX_USES_EDGES then Exit;` | 2 lines |
+| `symtab.inc:6906` "must never answer a binary query" | `if (firstHit < 0) and (ParamCount = 2)` | 2 lines |
+| `ir.inc:4953` "every arg must be temp-captured" | `if InlineBodyHasCall[cpi] then anyImpure := True;` | 3 lines |
+| `ir.inc:5696` "must never reach the differing-kind rejection" | `if op = Ord(tkStar) then Exit;` | 3 lines |
+| `pylib.pas:38` "which pylib must never depend on" | the `uses` clause, sysutils absent | 2 lines |
+| `pasparser_proc.inc:3461` "a Pascal `uses` must never start pulling Python in" | `if isNilPy and pyLookupOK and ...` | 2 lines |
+| `dbg_filetable.inc:114` (pass 1) | `InternKey` on both twins | same routine |
+| `ir_codegen_arm32.inc:278` (pass 4) | the constant and flags word, adjacent | same block |
+
+**That is the mechanism behind face 71, stated positively.** These claims survive
+not because anyone re-checks them but because *the sentence and the thing that
+makes it true cannot drift apart* — they are the same edit. The claims that
+failed all evening were the ones where the sentence and its truth-maker live in
+different edits: a count vs. a backend list, a scope vs. a target gate, a "one
+place" vs. three call sites, a documented layout vs. six prologues.
+
+**The predictor is not distance, and it is not self-vs-sibling either. It is
+whether the sentence and its truth-maker can be changed independently.**
+Everything that failed could; everything that held could not. That subsumes both
+earlier hypotheses — proximity usually *implies* co-editing, which is why
+distance looked like the axis, and instance 8 is the exception that proves it (11
+lines apart but describing a loop's *behaviour*, which the loop's edits can
+change without touching the words).
+
+### The exception, and it is the best question the sweep produced
+
+`ir_codegen.inc:10036` — *"the `RcProcHasExc` **gate that stands today**"* — and
+`:10100` — *"Anything that stops keeping the slot current **must refuse** a body
+that has one."*
+
+`RcProcHasExc` and the finer `SymWrittenInProtectedSpan` are consumed by
+**exactly one thing between them: the two adjacent arguments of a
+`PXXDBG a.resid` `WriteLn`.** Neither appears in any `if`, any `Exit`, or
+anything reaching codegen. **The gate that "stands today" is a print statement.**
+
+Either no gate is needed (the landing-pad refresh carries correctness and these
+are instrumentation ahead of "-O3 item 3"), or an -O3 correctness gate on x86-64
+bodies containing a `try` was never wired. **I could not settle it read-only and
+the code is hours old**, so it is filed as Track U —
+[[decide-a-the-o3-residency-exception-gate-that-stands-today-is-only-a-debug-print]]
+— rather than guessed at in either direction.
+
+It is also this ticket's shape with the arms one level apart: **a comment
+asserting that an enforcement exists, where the enforcement is a print
+statement.** And it fits the predictor exactly — the sentence and its truth-maker
+are separately editable, because wiring a gate and describing one are different
+edits.
