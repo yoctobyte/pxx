@@ -133,4 +133,4 @@ detection both exit 1; the tell is an empty or malformed report body.
 
 ## Log
 - 2026-08-29 — resolved.
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 8a995527e.
