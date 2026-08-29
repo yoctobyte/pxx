@@ -190,4 +190,4 @@ inference, method dispatch, selector chains, variant receivers, intrinsic
 shadowing and lambda returns. All green.
 
 Self-host fixedpoint `321f9f53086f`, converged in 1 round.
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit f245e918e.
