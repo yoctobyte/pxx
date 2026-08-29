@@ -444,4 +444,4 @@ splitting beat a partial claim.
 step the coordinator has since wired into it.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit b25e3ac49.
