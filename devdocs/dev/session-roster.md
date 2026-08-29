@@ -16825,3 +16825,83 @@ construction (face 31, two breaks in two days). `forwardlint` runs clean there.
 > one positioned to tell them apart.** Re-derive every owner-blocked item before
 > surfacing it again — this is rule 2's second half and I broke it four times on
 > one list.
+
+## 2026-08-29 ~20:30 — tooling fix, four dispatches, three self-corrections from lanes
+
+**Fleet.** frankA busy (`builtinheap.pas`, aarch64 stage-2 under qemu). frankwasm
+on `ir.inc` (granted). pxx-a5 on N p72. frankB on the reactor slot-0 bug.
+frank-optimize-b4 on the LowerCase one-liner, then its O queue. frank-rust holds
+the only `working/` lock (`feature-rust-option-type`, live log, leave alone).
+`neo-76` / `vibestorm-38` / `neuzelaar2-a7` are the owner's ad-hoc sessions, not
+mine to dispatch.
+
+**TOOLING — a work-tag was ERASING the declared file-lane** (`5a183936a`).
+`track_letter`'s O/E/S/M arms returned the bare tag and discarded the ticket's own
+`track:` frontmatter, so **14 O tickets were invisible to `ready --track A`** and
+**4 E tickets invisible to Track B, whose entire visible queue was 6.** Track F has
+appended rather than replaced since it was added, with the reasoning written on the
+`track` property — the other four were written earlier and missed it. Fixed by
+`_tag_onto`; the S and M arms sit above where `explicit` is computed, so that block
+is hoisted (it only reads frontmatter, no side effects). Measured: A 90→104
+(exactly the O count), B 6→10 (exactly the E count), unfiltered ready **315 before
+and after**, tag counts unchanged.
+
+**I nearly filed this as the wrong bug.** I released b4's `-O3` umbrella from a
+stale lock, gave it the frontmatter it lacked, could not find it in `--track A`,
+and wrote `NOT RANKED — investigate`. It ranked fine. **I was reading the wrong
+queue** — the ticket was under `[O]`. The instrument was fine and my query was
+wrong, which is the same shape as every "correct answer to the wrong question"
+in these notes.
+
+**Remaining half is DATA, not code:** 39 of 336 ranked tickets have no `track:`
+field at all. The S tickets that gained nothing from the fix are among them — the
+tag is all anyone sees and nothing states which gate applies. Candidate `progress
+check` line: warn when a work-tag ticket declares no file-lane. **Calibrate before
+landing** (NEAR-DUP's threshold was measured over 341 tickets).
+
+**Grant filed and then WIDENED — `ir.inc` to the wasm32 lane**
+(`chore-a-grant-wasm32-lane-holds-ir-inc-for-the-11207-mistyping`, `5d75a8f05`,
+widened `50bf88683`). frankwasm blocked correctly on it not being on
+origin/master — it had checked at `b93fab100`, one below my commit. **Blocking was
+right even though the file was there**: it could not distinguish a race from a lost
+commit, and being wrong the other way is the failure the ticket exists to prevent.
+frankA declined to take the file back: *"the 11207 mistyping is precisely the kind
+of thing that should be fixed by whoever can actually observe it."* Scope is now
+the managed-string arg-temp decision **across all its sites**, not the line number
+— frankwasm re-derived its own ticket and found the claimed correct sibling at
+`:11329` does not exist, and **zero of seven** sites carry the guard.
+
+**Faces 40-43 landed** (index now 43, still OPEN, never write "all N"):
+40 a ticket certifying a gap as inert describes the REFUSAL standing in front of
+it, so the fix removes both (frankwasm, wasm32 `EmitZeroFrameSlot`);
+41 a build aborts at its FIRST overflowing consumer, so the ticket names the
+earliest not the largest — the recommended 21 MB floor would have fixed aarch64
+and left arm32 broken, **looking complete** (frankA, MAX_CODE);
+42 *"the fix already exists one site over"* is the most dispatch-accelerating
+sentence a ticket can contain and therefore the one most needing re-derivation —
+it converts a design question into a copy-paste (frankwasm, self-caught);
+43 **a leak is an accidental lifetime extension** — `0d91dc88f` did not create
+pxx-a5's years-old alias, it removed the padding hiding it; do NOT revert; expect
+more that look unrelated to strings; sweep the MECHANISM with `-dPXX_HEAP_DEBUG`
+(`$DD` on free) rather than the shape (frankA).
+
+**Routed to Track T:** heap-debug sweep of NilPy + C at HEAD, sha to be named in
+the report. frankA could not run it (hook refuses suites, correctly) and routed
+rather than reaching around it.
+
+**Recorded on `decide-does-the-legacy-gtk-alias-still-point-at-gtk-2`:** Track T
+installed `libgtk2.0-dev` on `seven` while the ticket was open, so **seven's green
+on `test_c_gtk*` is no longer evidence** — a constant-pass shape manufactured
+mid-decision, disclosed unprompted by the lane that made it. Package stays
+(re-redding four jobs while a decision is pending is a worse default). The
+decision is cheaper than it looks: those four tests compile against `test/my_gtk.h`,
+a local stub, and never touch GTK at runtime — so retiring the alias costs them
+nothing.
+
+**frankB cannot verify its own dispatch and was told so.** The reactor slot-0
+aliasing needs 17 threads; frankB's box has 12. Dispatched with two halves, the
+second mattering more: make the defect reachable **without** 24 cores, or bank why
+it cannot be. A test needing a 24-core host rots exactly the way this one did.
+
+**Standing corrections to me tonight, all accepted:** the rdrand exclusion was
+already shipped when I listed it open; my `NOT RANKED` was a wrong query.

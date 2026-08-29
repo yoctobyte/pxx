@@ -1796,3 +1796,104 @@ check it against a second source.*
 **Cheap guard:** a ticket asserting that a sibling site is already correct should
 cite it by content, not by line number. Line numbers move; a quoted clause that no
 longer exists is visible, and `ir.inc:11329` is not.
+
+### 43. A LEAK IS AN ACCIDENTAL LIFETIME EXTENSION — fixing it does not create bugs, it removes the padding that was hiding them
+
+frankA, 2026-08-29, analysing `0d91dc88f` against pxx-a5's min/max alias.
+
+`if F(x) = 'lit'` never released F's result: 40 bytes per evaluation, unbounded.
+The fix emits the release. Within a 4-commit window a years-old aliasing bug in
+an unrelated frontend became observable, and the fix was the obvious suspect.
+
+**It was the cause, and it is correct, and it must not be reverted.** The
+mechanism is not aliasing:
+
+> For as long as that string was leaked, any stale reference to it kept reading
+> **valid, correct bytes**, and the block was never recycled under anyone.
+> Freeing it puts the block back in the allocator, so a pre-existing
+> use-after-free — or an in-place mutation through an alias — stops being benign
+> and starts reading a neighbour.
+
+The alias did not become wrong on 2026-08-29. **It became observable.** A leak is
+an accidental lifetime extension, and every latent reference into leaked memory is
+being silently protected by the defect.
+
+The ruling-out matters as much as the finding: the one way the commit could
+genuinely introduce a dangling reference is an owned operand feeding a **second**
+consumer, which cannot happen — there is no CSE or node-sharing pass, so the IR is
+a tree and each node has exactly one consumer. The predicate also predates the
+commit (`2f78eb737`). So the change adds no aliasing.
+
+**Three consequences, and the third is the actionable one.**
+
+1. **Do not revert to restore quiet.** The leak was unbounded with every answer
+   correct — the shape that silently kills a long-running process. Restoring it to
+   keep latent aliases benign trades a real defect for the *concealment* of real
+   defects. "My fix exposed a bug" is an easy thing to over-correct on.
+2. **Expect more, and expect them to look unrelated to strings.** Any latent alias
+   whose target happened to be a leaked comparison temp. The population is defined
+   by what the leak was covering, not by what the fix touched.
+3. **Sweep the mechanism, not the shape.** A shape sweep — 52 const-param callees
+   invoked with `CurTok.SVal`, 3 advancing the cursor — closes one family.
+   `-dPXX_HEAP_DEBUG` stamps freed bytes `$DD` instead of leaving them readable,
+   which converts the whole class from *"reads a plausible recycled value"* into
+   *"reads `$DD` at the first touch"* regardless of shape. Face 36 says the bug
+   that survives is the one whose wrong value is plausible; this is the
+   instrument that removes the plausibility. Routed to Track T.
+
+General form: **every memory fix is also a change to which latent bugs are
+observable.** A defect that extends a lifetime is protective by accident, and its
+removal is a reachability change — the same reasoning as face 40, one layer down
+in the runtime rather than in the compiler's own refusals.
+
+### 44. A NEW FRONTEND'S BUGS ARE MOSTLY UNCALLED SUBSTRATE — nine rungs in a row, and the streak is the finding
+
+frank-rust, 2026-08-29, rung 14 of the Rust ladder.
+
+Rust procs never called `EmitManagedLocalsZeroInit`, so a managed local's slot
+started as **stale stack bytes** and its first assignment released whatever those
+bytes happened to point at. Invisible for the frontend's whole life, because until
+this rung it had no managed type.
+
+The symptom is face 36 for the third time and deserves restating: a two-`push`
+function returned the right answer in isolation and **segfaulted only once its
+caller happened to hold a string local of its own.** The failing program was the
+one that did nothing wrong. Byte-identical in mechanism to
+`bug-nilpy-string-local-truncates-at-255`, and fixed identically — **the shared
+helper already existed; this frontend had simply never called it.**
+
+**That was the ninth consecutive rung whose fix was calling something already in
+the substrate.** Nine is no longer a run of luck; it is a measurement of where a
+new frontend's defects actually live, and it converts `ir-as-substrate.md` from a
+design preference into an empirical claim: **when a young frontend misbehaves, the
+prior should be "it is not calling the shared machinery", not "the shared
+machinery lacks this".** The corollary is the standing rule, now with a number
+behind it — *grep for the incumbent before building.*
+
+Note what the streak does NOT license. The same rung produced a genuine
+duplication call in the opposite direction: `format!` deliberately does **not**
+share `println!`'s `{}` splitter, and that was written into the divergences doc
+specifically so a later reader would not "fix" it. One emits WRITES, the other
+builds a VALUE; all they share is scanning `{}` out of a literal, and sharing it
+would hand back an ordered item list neither caller wants in order to couple an
+output path to an expression path. **Share the AST and the IR; duplicate the
+parser and its helpers** — the streak is about the substrate layer, and reading it
+as "always share" inverts
+`the-substrate-is-ast-and-ir-not-the-parser.md`.
+
+Two more from the same rung, both worth their own line:
+
+- **`String` and `&str` map to ONE managed AnsiString, and the argument is
+  unusually strong.** They differ in exactly one observable — mutating a buffer
+  while another name views it — and that is precisely what rustc's borrow checker
+  makes unrepresentable. So this is not "unlikely to matter": **the reference
+  implementation statically forbids the only experiment that could distinguish
+  them.** That is a much better warrant for collapsing two types than "we have not
+  seen a case", and it is the shape to look for whenever a frontend asks whether
+  two source types need two representations.
+- **Position, not content, separated the cases the gate had to split.** A string
+  literal inside `println!("...")` is a const_str the write path consumes directly
+  and needs no runtime; the same literal anywhere else becomes a value and does.
+  A content-based scan would have pulled 60KB of runtime into all 18 existing
+  tests; the position-based one kept every one of them byte-for-byte identical in
+  code size, which is how the gate was verified rather than asserted.
