@@ -141,7 +141,6 @@ _none_
 | bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing | A+T | 45 | bug | 2461 Makefile assertions are a bare `test \"$$(...)\" = \"...\"`, which prints NOTHING when it fails. job_reason() is the log tail by deliberate design, so for those jobs the reason it records is whatever the recipe printed just before — and for the 480 cross-target ones that is two compile summaries with different code sizes, which reads exactly like a codegen divergence. It misled a Track T session for hours. The repo already uses `diff -u` in 362 places; the good pattern exists and is not reached. Fix edits Makefile, which is Track A's file-lane. | — |
 | bug-t-a-test-targets-timeout-class-is-decided-by-a-substring-and-is-right-by-accident | T | 45 | bug | testmgr's classify() picks a job's timeout class by substring-matching the make -n recipe text. test-nilpy gets corpus/1200s because its recipe happens to contain 'sqlite', 'lua' and 'uforth' -- nothing about NilPy. Delete one test file and the whole suite silently drops to unit/90s, turning every slow-but-passing run into a false RED. uforth already fell through this exact hole. | — |
 | bug-t-auto-close-on-one-green-is-sound-for-a-deterministic-test-and-unsound-for-a-racy-one | T | 50 | bug | The watcher auto-closes a regression ticket on a single green. For a ~12%-failure race that is the EXPECTED outcome with the defect fully present -- and it happened: the reactor-exhaustion ticket was auto-closed while the bug was live. Nothing in the ticket stub tells the closer whether it is holding a deterministic test or a racy one. | — |
-| bug-t-check-test-wiring-credits-a-directory-that-a-truncated-token-named | T | 45 | bug | A directory reference is credited from any token that looks like one | — |
 | bug-t-fpc-seed-canary-red-cited-lines-that-cannot-contain-the-identifier | T | 30 | bug | One gate.sh quick run reported the FPC seed canary RED with 'symtab.inc(5934,30) Identifier not found ByRefArgNeedsLvalue' — but line 5934 of that file contains an unrelated loop, and the real call sites are at 6185/6186, AFTER the definition at 6099. Not reproducible: fpc compiled the identical tree rc=0 twice by hand and the next gate.sh run was GREEN. Evidence points at the canary reading a stale/other tree state, the same class the fixedpoint step already defends against; a false RED costs an agent a full investigation. | — |
 | bug-t-progress-check-cannot-see-an-orphan-fragment-or-a-duplicated-slug | T | 45 | bug | `progress.sh check` validates ticket CONTENT but not the ticket SET: it cannot see a file with no frontmatter, nor one slug present in two ranked folders. Both occurred together on `bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open` — two appends addressed to `backlog/` while the ticket lived in `backlog_new/` created an empty-headed orphan there, and the ranker then offered the slug twice, once complete-but-analysis-free and once carrying all the analysis with no frontmatter. Neither the checker nor the board reported anything. | — |
 | bug-t-the-deploy-recipe-builds-a-box-that-reports-but-cannot-measure | T | 50 | bug | `trackt setup --fetch-corpus` provisions library_candidates/ only. It never runs, mentions or checks tools/install_externals.sh or tools/install_cross_sysroot.sh, so a box built strictly to track-t.md's documented deploy recipe comes up able to publish verdicts and unable to run ten of the jobs behind them. The corpus half self-announces as SKIP; the sysroot half goes RED, and a red is read as a defect in the tree — on seven's first full tier it auto-filed an 18-job cascade naming twelve innocent Rust commits. | — |
@@ -161,6 +160,7 @@ _none_
 | chore-t-a-wikilink-to-a-ticket-that-does-not-exist-is-never-detected | T | 30 | chore | 52 distinct ticket-convention [[wikilinks]] across devdocs/progress resolve to no ticket (71 references; 13 cited by live, non-done tickets). Some are renames leaving a dead trail; some appear never to have been filed, which is work hidden behind a link that looks like a citation. Nothing checks. | — |
 | chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile | T | 20 | chore | The second, weaker half of the split_jobs lint: flag any job that RUNS a /tmp binary no line in that job produces. Prototyped and deliberately NOT shipped — it yields 5-7 candidates depending on how recipe lines are segmented, and every one needs individual adjudication. Shipping it half-tuned would produce exactly the noisy guard that gets muted. | — |
 | chore-t-lint-fall-open-target-chains-without-the-false-positives | T | 30 | chore | A per-target {$ifdef CPU_x} run with no terminal arm is the shape behind bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open (5 instances, fixed). Sweeping the tree finds 21 more such runs — and 5 of 5 inspected are NOT defects: they are const tables (an armless target gets an undefined-identifier COMPILE ERROR, i.e. fail-closed) or function bodies with a pre-chain initialiser that is deliberate and documented. A naive lint would have filed 21 phantom tickets, two of them into Track A. The ticket is the three distinctions, not the grep. | — |
+| chore-t-six-orphan-gui-tests-the-blanket-was-hiding | B | 30 | chore | The six the blanket was hiding | — |
 | chore-t-split-lib-test-into-jobs-that-name-what-failed | T | 45 | chore | One lib-test job bundles several sources, so its tstate key names only the FIRST of them: `lib-test#src:test/crtl_exp2.c` is really `crtl_exp2.c examples/tk/hello.npy +5`, and a timeout in the tk step reads as a C-math regression. Split it so a job names what failed. Do it while lib-test is green — the baseline is recorded here. | — |
 | chore-t-test-binaries-hardcode-unsweepable-tmp-paths | T | 35 | chore | 60 /tmp paths are hardcoded in 37 COMPILED TEST SOURCES and written by the test binary at runtime, so no Makefile sweep can reach them and testmgr does not privatize them either. Two concurrent runs still share those files EVEN UNDER testmgr. Split out of chore-makefile-testtmp-parameterize, which closed the recipe half. | — |
 | chore-t-the-breadth-line-omits-its-zero-instead-of-printing-it | T | 25 | chore |  | — |
@@ -612,9 +612,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2646)
+## done (2647)
 
-2646 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2647 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (51)
 
@@ -797,7 +797,6 @@ _none_
 - [p 45] [N] bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind
 - [p 45] [A+T] bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing
 - [p 45] [T] bug-t-a-test-targets-timeout-class-is-decided-by-a-substring-and-is-right-by-accident
-- [p 45] [T] bug-t-check-test-wiring-credits-a-directory-that-a-truncated-token-named
 - [p 45] [T] bug-t-progress-check-cannot-see-an-orphan-fragment-or-a-duplicated-slug
 - [p 45] [A] chore-a-typesize-answers-8-for-a-record-and-the-warning-is-where-no-caller-looks
 - [p 45] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
@@ -899,6 +898,7 @@ _none_
 - [p 30] [T] chore-t-a-standing-collector-cannot-say-so-to-the-ranker
 - [p 30] [T] chore-t-a-wikilink-to-a-ticket-that-does-not-exist-is-never-detected
 - [p 30] [T] chore-t-lint-fall-open-target-chains-without-the-false-positives
+- [p 30] [B] chore-t-six-orphan-gui-tests-the-blanket-was-hiding
 - [p 30] [U] decide-is-binds-the-cpyext-runtime-the-ratified-extension-module-check
 - [p 30] [U] decide-is-real-a-double-or-fpcs-80-bit-extended
 - [p 30] [U] decide-two-devdocs-directories-make-a-wrong-grep-look-like-a-refutation

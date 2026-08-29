@@ -61,7 +61,9 @@ def _tree(makefile="", tools=None, tests=None, unwired=""):
     for name, body in (tools or {}).items():
         open(os.path.join(root, "tools", name), "w").write(body)
     for name in (tests or []):
-        open(os.path.join(root, "test", name), "w").write("x\n")
+        full = os.path.join(root, "test", name)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        open(full, "w").write("x\n")
     open(os.path.join(root, "test", "UNWIRED.txt"), "w").write(unwired)
     for cmd in (["git", "init", "-q"],
                 ["git", "add", "-A"]):
@@ -194,6 +196,99 @@ def t_a_reasonless_exemption_is_still_refused():
     return "an exemption with no reason is still refused"
 
 
+# ---------------------------------- 5. a DIRECTORY reference vs a truncation --
+#
+# `-Futest/case_units` names a directory and never the unit inside it, so
+# crediting the whole directory is right. The rule that implemented it -- a
+# token with a `/` and no extension -- was satisfied just as well by a path the
+# collector could not finish reading, because its pattern excludes `$`:
+#
+#     local src="$ROOT/test/gui/$name.pas"      ->  token `test/gui/`
+#
+# which blanketed all 26 files under test/gui while gui_suite.sh ran eleven of
+# them. Five were run by nothing and the report said zero. These guards pin
+# each arm, because the arms are one character apart and the wrong one fails
+# SILENTLY -- it can only remove entries from the report, never add one.
+
+
+def t_a_variable_truncated_path_does_not_blanket_its_directory():
+    """The defect, in its smallest form."""
+    root = _tree(tools={"suite.sh": 'src="$ROOT/test/gui/$name.pas"\n'},
+                 tests=["gui/ran.pas", "gui/orphan.pas"])
+    rc, out = _run(root)
+    assert "test/gui/orphan.pas" in out, \
+        "a path truncated at a shell variable blanketed its whole directory " \
+        "-- the false all-clear this classifier exists to stop: %s" % out
+    assert rc == 1
+    return "a path truncated at a variable does not blanket its directory"
+
+
+def t_a_bare_stem_in_the_same_script_credits_that_file_only():
+    """The other half: the script DOES supply $name, as a bare word."""
+    root = _tree(tools={"suite.sh": 'src="$ROOT/test/gui/$name.pas"\n'
+                                    'run_gui_test ran\n'},
+                 tests=["gui/ran.pas", "gui/orphan.pas"])
+    _, out = _run(root)
+    assert "test/gui/ran.pas" not in out, \
+        "a file whose stem the same script names as a bare word was reported " \
+        "unwired -- a false RED, which trains people to skip the check: %s" % out
+    assert "test/gui/orphan.pas" in out, out
+    return "a bare stem in the same script credits that file, and only it"
+
+
+def t_a_same_stem_path_component_elsewhere_does_not_credit():
+    """Measured, not hypothetical: gui_suite.sh names apps/ide/eliah/main.pas,
+    which credited test/gui/helloworld/main.pas -- a different file that merely
+    shares a stem. A path component naming something else is not evidence."""
+    root = _tree(tools={"suite.sh": 'src="$ROOT/test/gui/$name.pas"\n'
+                                    'other="$ROOT/apps/eliah/main.pas"\n'},
+                 tests=["gui/main.pas"])
+    _, out = _run(root)
+    assert "test/gui/main.pas" in out, \
+        "a same-stem PATH COMPONENT for an unrelated file was accepted as " \
+        "evidence that this one runs: %s" % out
+    return "a same-stem path component elsewhere is not evidence"
+
+
+def t_a_glob_over_a_directory_still_blankets_it():
+    """The one truncation that IS a directory reference: it runs them all."""
+    root = _tree(makefile="all:\n\tfor p in test/corpus/*.pas; do ./run $$p; done\n",
+                 tests=["corpus/a.pas", "corpus/b.pas"])
+    rc, out = _run(root)
+    assert "test/corpus" not in out, \
+        "a glob over a directory stopped counting as running its contents: %s" % out
+    assert rc == 0, out
+    return "a glob over a directory still blankets it"
+
+
+def t_a_search_path_flag_still_blankets_its_directory():
+    """The case the rule was written for must not regress."""
+    root = _tree(makefile="all:\n\t./pxx -Futest/units test/main.pas\n",
+                 tests=["units/helper.pas", "main.pas"])
+    rc, out = _run(root)
+    assert "test/units/helper.pas" not in out, \
+        "-Fu<dir> stopped crediting the units inside it: %s" % out
+    assert rc == 0, out
+    return "a -Fu<dir> search path still blankets its directory"
+
+
+def t_the_checker_does_not_scan_its_own_source():
+    """A tool must not be its own witness.
+
+    The checker lives in tools/ and scans tools/, so its own SKIP_DIRS literal
+    was collected as a reference to the directories it names. Nothing was lost
+    at the time -- those directories are skipped anyway -- but a literal path
+    written into this file would silently exempt whatever it named, with no
+    rule behind it.
+    """
+    root = _tree(tools={"check_test_wiring.py": 'SKIP = ("test/orphan.pas",)\n'},
+                 tests=["orphan.pas"])
+    _, out = _run(root)
+    assert "test/orphan.pas" in out, \
+        "the checker credited a path named in its own source: %s" % out
+    return "the checker does not read its own source as evidence"
+
+
 TESTS = [t_a_commented_mention_does_not_wire_a_file,
          t_a_hash_comment_inside_a_recipe_body_does_not_wire,
          t_a_real_rule_still_wires,
@@ -204,7 +299,13 @@ TESTS = [t_a_commented_mention_does_not_wire_a_file,
          t_the_advisory_cites_its_evidence,
          t_an_advisory_alone_does_not_fail_the_check,
          t_a_real_unwired_file_still_fails,
-         t_a_reasonless_exemption_is_still_refused]
+         t_a_reasonless_exemption_is_still_refused,
+         t_a_variable_truncated_path_does_not_blanket_its_directory,
+         t_a_bare_stem_in_the_same_script_credits_that_file_only,
+         t_a_same_stem_path_component_elsewhere_does_not_credit,
+         t_a_glob_over_a_directory_still_blankets_it,
+         t_a_search_path_flag_still_blankets_its_directory,
+         t_the_checker_does_not_scan_its_own_source]
 
 
 def main():
