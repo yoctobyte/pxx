@@ -506,4 +506,4 @@ Gate: `lib-test` green at v391 (full run, no skips); `lib_synapse_ssl` rebuilt
 and re-run after the header edit — `version=ok`, `SYNAPSE-SSL OK`.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit a8a9d176d.
