@@ -169,4 +169,4 @@ builds fine under `--target=riscv32 --platform=esp`. Correcting that claim
 belongs in that ticket and is not touched here.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit cf72dd641.
