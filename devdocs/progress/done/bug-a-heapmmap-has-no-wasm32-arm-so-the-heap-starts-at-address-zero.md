@@ -356,4 +356,4 @@ the intrinsic.
 the pre-existing `rparser.inc` `RExprRecId` seed break, Track R's, unrelated).
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 3a7d75f12.

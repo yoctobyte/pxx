@@ -74,7 +74,7 @@ different shas — which is itself worth preserving.
 **Resolve both, citing the same sha.**
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 9d14b759d.
 ========
 **REJECTED as a duplicate, 2026-08-29 (frankA — its own filer).** Same defect,
 same file, same one-line fix as

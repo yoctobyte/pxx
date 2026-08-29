@@ -75,7 +75,7 @@ the moment the seed's health matters, and it is currently the moment nothing
 asks.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 9d14b759d.
 
 ---
 
