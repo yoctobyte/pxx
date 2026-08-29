@@ -42064,7 +42064,7 @@ end;
 procedure PyParseFactorCore;
 var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
     rndRawArg: Integer;      { round(x, n): the argument node before the float unbox }
-    intBaseArg, atRecv, atFld, atDflt, atProp: Integer; trialProcMark, trialLamMark: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
+    intBaseArg, atRecv, atFld, atDflt, atProp: Integer; trialProcMark, trialLamMark, trialSymMark, trialFrameMark: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     nestCtorCi: Integer;   { `TOuter.TInner.Create` — the nested class, resolved by scope }
     nestScanCi, nestScanPos, nestDepth, nestI: Integer;   { …walking N levels of it }
@@ -43671,6 +43671,14 @@ begin
           feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
         trialProcMark := ProcCount;
         trialLamMark  := PyPendLamCount;
+        { SymCount is the table a rewound trial parse dirties MOST -- measured at
+          +6 for a single comprehension, +1 for an ordinary temp -- and it was
+          the one missing from this ticket's inherited rollback list, which named
+          seven tables that never move and omitted the three that do.
+          SymRollbackTo already existed and simply was not called here; the
+          FrameSize restore is its pair, exactly as at the routine-exit site. }
+        trialSymMark   := SymCount;
+        trialFrameMark := FrameSize;
         lenSavedHoist := PyHoistPark;
         Next; Expect(tkLParen, '('); ParseArgExpr;
         lenTrialHoist := PyHoistPark;
@@ -43724,6 +43732,8 @@ begin
         { no class rewrite: rewind and take the ordinary overload path }
         ProcRollbackTo(trialProcMark);
         PyPendLamCount := trialLamMark;
+        SymRollbackTo(trialSymMark);
+        FrameSize := trialFrameMark;
         TokPos := intBaseArg - 1; Next;
       end;
       { ...unless the program declares its own `len`, which REPLACES the
@@ -43781,6 +43791,14 @@ begin
           feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
         trialProcMark := ProcCount;
         trialLamMark  := PyPendLamCount;
+        { SymCount is the table a rewound trial parse dirties MOST -- measured at
+          +6 for a single comprehension, +1 for an ordinary temp -- and it was
+          the one missing from this ticket's inherited rollback list, which named
+          seven tables that never move and omitted the three that do.
+          SymRollbackTo already existed and simply was not called here; the
+          FrameSize restore is its pair, exactly as at the routine-exit site. }
+        trialSymMark   := SymCount;
+        trialFrameMark := FrameSize;
         lenSavedHoist := PyHoistPark;
         Next; Expect(tkLParen, '('); ParseArgExpr;
         lenTrialHoist := PyHoistPark;
@@ -43861,6 +43879,8 @@ begin
           the ordinary overload path, unchanged byte for byte }
         ProcRollbackTo(trialProcMark);
         PyPendLamCount := trialLamMark;
+        SymRollbackTo(trialSymMark);
+        FrameSize := trialFrameMark;
         TokPos := intBaseArg - 1; Next;
       end;
       { hex/bin/oct of an ARBITRARY-PRECISION int. Python's take any width, while
@@ -43901,6 +43921,14 @@ begin
           feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
         trialProcMark := ProcCount;
         trialLamMark  := PyPendLamCount;
+        { SymCount is the table a rewound trial parse dirties MOST -- measured at
+          +6 for a single comprehension, +1 for an ordinary temp -- and it was
+          the one missing from this ticket's inherited rollback list, which named
+          seven tables that never move and omitted the three that do.
+          SymRollbackTo already existed and simply was not called here; the
+          FrameSize restore is its pair, exactly as at the routine-exit site. }
+        trialSymMark   := SymCount;
+        trialFrameMark := FrameSize;
         lenSavedHoist := PyHoistPark;
         Next; Expect(tkLParen, '('); ParseArgExpr;
         lenTrialHoist := PyHoistPark;
@@ -43935,6 +43963,8 @@ begin
         { a machine-width argument: rewind, take the ordinary overload }
         ProcRollbackTo(trialProcMark);
         PyPendLamCount := trialLamMark;
+        SymRollbackTo(trialSymMark);
+        FrameSize := trialFrameMark;
         TokPos := intBaseArg - 1; Next;
       end;
       if (name = 'int') and (not PyUserShadowsProc(name)) then

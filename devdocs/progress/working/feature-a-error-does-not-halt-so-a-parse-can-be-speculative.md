@@ -717,3 +717,86 @@ pre-existing `SymRollbackTo`. What does not exist:
   to decide last.
 
 Syntax errors still halt at the first one, deliberately.
+
+## Slice 7 landed 2026-08-30 (frankA) — the rollback list was wrong in both directions
+
+Slice 6 left a list of tables a rollback "must handle", inherited from an
+earlier session and **never run**: `UClsCount`, `StrCount`, `UClsAliasCount`,
+`CompiledUnitCount`, `PyImpAliasCount`, `ResPendCount`, `PasSrcRangeCount`.
+Slice 7 opened by measuring it instead of implementing it.
+
+### The measurement
+
+Snapshot **fourteen** counters at each trial-parse entry, diff them at the
+rewind (`PXXDBG=n.trial`, reverted). Six hand-written programs, each provoking a
+different construct inside a `len()` / f-string argument, rather than sampled
+tests — the point was to *provoke* each table, not hope something did.
+
+| counter | moves across a rewind? | when |
+| --- | --- | --- |
+| `SymCount` | **yes — 4 of 6 cases, up to +6** | any expression needing a temp |
+| `ProcCount` | yes | a lambda |
+| `PyPendLamCount` | yes | a lambda |
+| the seven inherited names | **never** | — |
+| `NestedTypeCount`, `AliasCount`, `ArrTypeCount`, `EnumTypeCount` | **never** | — |
+
+**Zero of the seven listed tables move. The most-dirtied table of all,
+`SymCount`, was not on the list.** The list is not a list with gaps; it has no
+demonstrated relationship to what a trial parse touches. Rollback code for those
+seven would have looked exactly as finished as rollback code for the right
+three.
+
+**And `NestedTypeCount` — which I predicted would matter and said so before
+measuring — does not move either.** It was a good prediction from the
+`ParsingClassBodyCi` bug earlier the same night and it was wrong: NilPy cannot
+declare a class-like type inside an expression, so the trial parse never reaches
+`AddNestedType`. Recorded because the method is only worth anything if it is
+allowed to contradict the person running it.
+
+### The fix
+
+`SymRollbackTo` **already existed** and simply was not called at these six sites
+— slice 6 wired up procs and pending lambdas and left symbols. Now called, with
+its `FrameSize` restore, exactly as paired at the routine-exit site
+(`pyparser.inc:30121`). Verified working directly: `POST want=475 got=475`.
+
+### What this does NOT do, stated plainly
+
+**There is no observable symptom today.** Unlike slice 6's proc leak — which
+emitted a dead lambda body, measurable as ~350 B per occurrence — the symbol
+leak changes **nothing** in the output: program `B` compiles byte-identical
+before and after this slice (`code=1252974 data=55100 bss=50460 procs=1859`
+both ways).
+
+**Correcting an over-read of my own from earlier in this slice.** I first
+compared a comprehension inside `len()` against one outside and reported the
++48 B `bss` difference as the leak made visible. It is not: those two programs
+are not a controlled pair — the "outside" version declares an extra named
+binding (`zs`) that the other does not, so +48 B was a difference between two
+*different programs*. The honest control is the same program before and after
+the fix, and that control says **no change**. Slice 6's pair was properly
+controlled (identical list literal, only the boundary moved) and its numbers
+stand; this one was not, and its first number did not.
+
+So this slice is **hygiene for the primitive, not a bug fix**, and it is the
+same "safe by accident" story one level on: nothing breaks today only because
+every rewind here is followed by a re-parse that re-creates the symbols. A
+speculative parse that ABANDONS an attempt without re-parsing — which is exactly
+what item 1 needs — would leak them for real.
+
+### Still open
+
+- **Nothing ties an `Error()` to a rollback point.** The three tables a trial
+  parse dirties are now all rolled back, so the *state-unwind* question in
+  "Shape, not a prescription" is answered for the shapes that exist today. What
+  does not exist is a `TryParse` that marks, attempts, notices `ErrCount` rose,
+  and unwinds — and no consumer needs one yet.
+- **"Which errors are fatal" is still undecided**, and still the right thing to
+  decide last.
+- Syntax errors still halt at the first one, deliberately.
+
+**Gate:** self-host fixedpoint 1 round `ce851914b6eb`; `tools/gate.sh quick`
+GREEN; slice 6's counter gate re-run unchanged (A==B 1860, D==C 1861); the six
+slice-7 programs all matching CPython. Per the note above, the fixedpoint is
+"the compiler still builds" for a change on the NilPy side, not evidence about
+the change — the CPython agreement is.
