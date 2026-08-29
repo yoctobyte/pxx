@@ -1403,3 +1403,48 @@ Two things to take from it:
   minutes' work once the `.wat` could be produced and the WAT/binary pair could
   be compared. Decoding the binary by hand first was the slow path, and it is
   the one you take when the fast path does not exist yet.
+
+## A comparison with no floor: two totally-failed runs diff clean
+
+`FAIL` compares equal to `FAIL`. So a differential harness that emits a per-case
+verdict and is then diffed will report **perfect agreement** when both sides
+managed to run *nothing* — and it reports it in exactly the same words it uses
+when both sides ran everything and agreed.
+
+Measured, 2026-08-29. A corpus harness compiled 8 programs for 6 targets with two
+compiler binaries and diffed the hash lists. It did not export `PXX_HOME`, and
+the binaries under test had been copied into a scratchpad, so neither could find
+its RTL. All 48 rows on both sides were `FAIL`. The diff was empty. The result
+was read as "48/48 byte-identical across all six targets", written into a commit
+message, and cited in a ticket — for **four separate steps** of an optimisation
+campaign. Every one of the four conclusions turned out to be true when re-run
+properly, which is luck, not method: the evidence had been vacuous the whole time.
+
+> **A comparison that can succeed by measuring nothing has no floor.** It is most
+> confident exactly when it is least informed, and no amount of staring at the
+> output distinguishes the two cases.
+
+Same signature as `make compiler/pascal26` printing `up to date` in a freshly
+seeded tree (CLAUDE.md): a success message in the wrong dialect, with everything
+downstream healthy. Both belong to the family this whole document is about — the
+expensive failures here do not crash, they return a plausible answer.
+
+**So give every differential harness a floor, and make it refuse rather than
+answer emptily:**
+
+- **Count the comparisons you actually made, print the count, and exit non-zero
+  when it is zero.** One line. It is the whole fix.
+- **Report the count alongside the verdict**, so "identical" is never read
+  without its sample size. "identical (25 rows)" cannot be misread; "identical"
+  can.
+- **Subtract the rows that can never work** — 3 of those 8 corpus files were
+  `unit`s, compilable standalone on no target ever, and 8 rows were xtensa, which
+  has no dynamic-symbol support. Their permanent `FAIL`s were the noise that made
+  a screen of `FAIL` look normal.
+- **Set the environment inside the harness, not in the caller's shell.** The bug
+  was one missing `export` in a script that had been correct every time it
+  happened to be invoked from the right directory.
+
+And the discipline that catches it when the harness is someone else's: **before
+believing a clean differential, make it fail on purpose.** Point it at a
+deliberately broken binary. If it still says "identical", it was never looking.
