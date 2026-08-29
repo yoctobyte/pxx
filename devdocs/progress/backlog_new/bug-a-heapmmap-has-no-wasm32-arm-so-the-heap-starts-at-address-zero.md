@@ -182,3 +182,61 @@ live set is a handful of short strings the free list recycles inside the first
 kilobyte. That script asserts `PXXAlloc` still returns an address below 1024,
 so **it will FAIL by design the day this ticket lands**, which is the signal to
 rewrite its scope note and re-measure the slice at a realistic size.
+
+---
+
+## GRANT, 2026-08-29 — the arena arm is RELEASED to Track A. Written fresh, not merged.
+
+Filed here rather than left in message traffic, because an authorisation is a
+finding about what is permitted and an unfiled grant does not read as missing —
+it reads as covered.
+
+**What is released:** writing the wasm32 static-arena arm **fresh on master**,
+under Track A, in the shape this ticket already specifies and the shape
+`PXX_ESP` already ships. Whoever holds Track A may take this at p70 without a
+wasm grant of any kind.
+
+**What stays ungranted, unchanged:** merging frankwasm's branch work. `75c0b7488`
+is on `origin/wasm` and is not an ancestor of master; nothing on that branch is
+pre-approved, and the wasm-arms ledger
+(`feature-a-merge-the-wasm-branch-the-shared-file-arms` [A p40]) still governs
+five arms across two lanes. **Branch permission is not merge permission.**
+
+### Correcting my own gate — "never the RTL arm alone" does not apply here
+
+I had been holding this ticket on a two-halves rule: the RTL arena arm and the
+`memory.grow` intrinsic land together or neither lands. frankA asked me to say
+whether that still binds. Re-derived against the ticket instead of repeating it,
+**it does not, and the ticket says so in its own body**:
+
+> `memory.grow` is the eventual answer and is **NOT this ticket**. It needs a new
+> intrinsic (`__pxxmemorygrow`), a new token in `defs.inc`, and a parser change —
+> for a target that does not yet need to grow.
+
+The two-halves rule came from the **merge ledger**, where the hazard is taking
+half of a branch's coupled work. It was carried across to this ticket by slug
+association and it does not transfer: **the arena is not half of anything.** It
+is the complete fix for a target that never grows its heap, which is precisely
+what ESP shipped and has run on since.
+
+**And the arithmetic runs the other way from the gate.** Today the heap bump
+pointer starts at **0**, hands out 8/32/56, reads back correctly, and begins
+overwriting BSS at roughly 1 KB — silent memory corruption with no fault,
+because address 0 is a legal wasm address with no page protection. A fixed arena
+that eventually exhausts gives a **clean, checkable failure**. Holding the arena
+back until `memory.grow` exists keeps silent corruption in place in order to
+avoid shipping a heap that cannot grow. That is the wrong direction on every
+axis: the gate was protecting the more dangerous state.
+
+**The general shape, since this is the third time this week:** a constraint
+earned in one context, carried to a neighbouring ticket by name rather than by
+its reason, and then re-justified every time it was restated because restating
+is cheaper than re-deriving. It survived three restatements in the coordinator's
+own prompt. **A gate whose original reason is not re-checked is indistinguishable
+from a gate that is still correct** — and the ticket it was blocking contained
+the refutation in plain prose the whole time.
+
+**Do not** add `{$error}` to the missing arm. `builtinheap.pas` compiles into
+every program on every target; a terminal directive there refuses every unported
+build, including programs that never allocate. See the correction appended to
+`bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open`.
