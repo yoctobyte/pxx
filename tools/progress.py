@@ -181,6 +181,11 @@ def strip_quotes(value: str) -> str:
     return value
 
 
+# An explicit "do not claim me" marker in a ticket body. Deliberately narrow:
+# two spellings, both of which an author writes on purpose.
+_NODISPATCH_RE = re.compile(r"NOT DISPATCHABLE|do not claim", re.I)
+
+
 def normalize_track(value: str) -> str:
     t = value.upper()
     t = t.replace("TRACK", "")
@@ -300,6 +305,25 @@ class Ticket:
             m = re.search(r"^#\s+(.+)$", self.text, re.MULTILINE)
             s = m.group(1).strip() if m else ""
         return s.replace("|", r"\|")
+
+    @property
+    def not_dispatchable(self) -> bool:
+        """True when the ticket says IN ITS OWN TEXT that it must not be claimed.
+
+        Keyed on an explicit human marker, never on `owner:` -- measured
+        2026-08-29: 16 of 332 ranked tickets carry an owner and most are RETIRED
+        session names (`claude-A`, `agent-AN`, `fable-a-n`) on perfectly
+        dispatchable backlog items. Suppressing on `owner` would have hidden ~14
+        real tickets to catch one bad dispatch. The marker matches 4 tickets, all
+        of which mean it.
+
+        Why it is needed at all: `unfinished/` conflates two states -- "parked,
+        re-claim it" and "held right now by another agent's live checkout" --
+        and only the second must not be dispatched. `feature-target-wasm` opens
+        with "NOT DISPATCHABLE ... Do not claim" and `next` was printing a
+        paste-ready claim command for it (found by frankB, 2026-08-29).
+        """
+        return bool(_NODISPATCH_RE.search(self.text))
 
     @property
     def owner(self) -> str:
@@ -698,6 +722,8 @@ class Board:
             # unfinished/ ranks, but say so: it is re-claim work, not new work.
             if t.status == "unfinished":
                 extra += " [parked — re-claim, do not duplicate]"
+            if t.not_dispatchable:
+                extra += " [!! DO NOT CLAIM — the ticket says so; read it]"
             lines.append(f"  [{tag}p{eff[t.slug]:>3}] [{t.track}] {t.slug}{extra}")
         return "\n".join(lines) + "\n"
 
@@ -705,6 +731,11 @@ class Board:
         """The single top-of-queue ticket to grab — the 'do tickets at will'
         entry point. Prints the winner plus why it's on top."""
         rt = self.ready_tickets(track_filter)
+        # Drop tickets that declare themselves unclaimable. `next` prints a
+        # paste-ready `claim` line, so offering one of these is an invitation;
+        # `ready` still lists them (flagged) because seeing them is useful.
+        skipped = [t for t in rt if t.not_dispatchable]
+        rt = [t for t in rt if not t.not_dispatchable]
         if not rt:
             scope = f" for Track {track_filter}" if track_filter else ""
             return f"no ready ticket{scope} (all blocked or none in urgent/backlog/unfinished)\n"
@@ -728,6 +759,10 @@ class Board:
             f"  {t.path.relative_to(ROOT)}",
             f"  claim: tools/progress.sh claim {t.slug} <your-agent-id>",
         ]
+        if skipped:
+            lines.append(
+                f"  (skipped {len(skipped)} higher-ranked ticket(s) marked "
+                f"do-not-claim: {', '.join(t.slug for t in skipped)})")
         return "\n".join(lines) + "\n"
 
     def cmd_autorate(self, write: bool = False, track_filter: str = "") -> str:
