@@ -16424,3 +16424,46 @@ has been executed by a suite**. `make lib-test` covers 221. The other 2255 meet
 their first execution in seven's first sweep. **A wide red against these shas is
 ONE systematic cause, not 2000 regressions** — relayed to seven and to pxx-a5
 before the sweep, because a warning like that is worth nothing after the report.
+
+## The Track T handover closed, and the expiry caught the thing the probe could not
+
+`seven` published its first verdict at 2026-08-29T16:30:49Z: **1646 jobs, 1630
+pass, 15 red, 1 skip, at `e417731e9007`, native tier, 100.7s wall.** Verified
+here independently — `seven.json` on `origin/master`, `twatch --status` now
+reads `UP — commits through e417731e9007 tested`. **Expiry retired; plexus's
+daemon stays stopped.**
+
+**The blocker was never push access, and this is why the expiry existed.** Seven
+proved push access properly — a real remote ref created and deleted, not a
+dry-run, on the reasoning that a dry-run only proves `receive-pack` was granted.
+That proof was valid. The first cycle then ran all 1645 jobs, produced the
+verdict, and **died at `git commit` with exit 128: `Author identity unknown`** —
+no `~/.gitconfig` on the box and the deploy script never set one.
+
+**The measurement succeeded and the publish failed, so the box would have read
+as QUIET rather than DOWN.** Every instrument pointed the right way: the probe
+was valid, the run was green, and tstate would simply have stopped advancing.
+Nothing in the fleet would have reported it. **The forty-minute expiry was the
+only instrument in play that could have caught it, and it fired on a measured
+absence rather than on a judgement about the box.**
+
+The lesson is not "seven was careless" — it was careful, and the careful probe
+was aimed one step short of the failure. **A capability probe proves the
+capability, not the pipeline.** Publishing needs push access *and* an identity
+*and* a commit that succeeds; proving the first says nothing about the rest, and
+the parts that were not probed are exactly the parts that failed.
+
+Fixed per-repo rather than `--global`, matching the identity every existing
+`tstate(` commit carries, so no global state on the owner's box was touched and
+the history stays uniform. The daemon self-recovered on retry.
+
+**And the conversion-defect hypothesis is REFUTED with evidence, not absence.**
+Of the 1630 passing jobs, **1159 executed `tools/expect_same.sh`** (seven's
+measurement, relayed). So most of the 2255 assertions that had never been
+executed by anything have now run, and they assert. Not one of the 15 reds is a
+conversion defect. frankB raised that warning unprompted before any sweep
+existed, which is the only time such a warning is worth anything, and it gets
+the measurement back.
+
+All 15 reds are host coupling — see face twenty-six, which is seven's refusal to
+accept them as a baseline.

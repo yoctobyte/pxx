@@ -5,11 +5,12 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:23 blocked:6 backlog:300 backlog_new:5 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2579 rejected:46`
+`working:2 unfinished:23 blocked:6 backlog:300 backlog_new:5 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2579 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-opt-o3-register-pressure` [O] — owner: frank-optimize-b4
+- `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
 ## unfinished (23) — parked mid-flight; re-claim, do not duplicate
 

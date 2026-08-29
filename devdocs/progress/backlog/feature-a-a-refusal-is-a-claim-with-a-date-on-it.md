@@ -772,6 +772,52 @@ that makes it safe and ask which neighbouring constructs lack it. Here the
 property was "does not establish a frame", and a call does. A justification
 whose scope is not stated is a justification that will be applied one line over.
 
+## Face twenty-six — a red for a HOST reason masks a real regression in that job, permanently, and reads as still-red rather than as coverage loss
+
+Found by `seven` (Track T), 2026-08-29, in its own first baseline — and it
+refused to leave it as a baseline, which is the finding.
+
+**The instance.** A new watcher box published its first verdict: 1646 jobs,
+1630 pass, 15 red. Every one of the 15 is **host coupling**, not a repo defect —
+4 gtk (no dev packages), 3 sqlite3, 3 tcl/tk, 1 `Illegal instruction` from
+`RDRAND` on a **Xeon E5645 (Westmere, 2010)** that predates the instruction, and
+4 under triage.
+
+The tempting move is to accept them as this host's baseline and diff future runs
+against it. **That is the trap:**
+
+> **A job that is red for a host reason is not a neutral constant. It masks a
+> real regression in exactly that job, permanently — and it reads as STILL-RED
+> rather than as COVERAGE LOSS.**
+
+Once `test_sqlite_crud` is red because `libsqlite3-dev` is absent, it is red
+forever, and a genuine sqlite regression landing later changes nothing anyone
+can see. The baseline diff says "no new reds". It is the never-changed-number
+failure wearing a red coat instead of a green one.
+
+**And it is strictly worse than a SKIP.** A SKIP announces that it did not run —
+this repo's own tooling prints `coverage — N job(s) SKIPPED on seven (absent
+corpus or unmet precondition): green here does not cover them`. A host-coupled
+red announces nothing, because the report distinguishes reds by *count*, not by
+*cause*. **The failing state is indistinguishable from the state it hides.**
+
+| condition | how the matrix reads |
+| --- | --- |
+| job red because the host lacks a package | 1 red, unchanged from baseline |
+| job red because the host lacks a package AND a real regression landed | 1 red, unchanged from baseline |
+
+**The two correct responses, and they differ by fixability.** Where a package
+closes it (`libgtk-3-dev`, `libsqlite3-dev`, `tcl-dev`, `tk-dev`, `csmith`), the
+red is provisioning debt and should be *fixed*, not baselined. Where no package
+can — the missing `RDRAND` is a permanent property of 2010 silicon — it must
+become a **documented host-capability exclusion**, so the job reports as *not
+applicable here* rather than as failing. An exclusion is honest about coverage;
+a permanent red is not.
+
+**The general form.** *Any per-environment failure absorbed into a baseline
+converts a coverage gap into a silent one.* The gap is real either way — what
+baselining removes is the ability to ever notice it again.
+
 ## Face eighteen — when the compiler is its own test input, a diff cannot tell a CODEGEN change from a SOURCE change
 
 Found by frankwasm, 2026-08-29, and it nearly cost twenty lines of inert code.
