@@ -103,4 +103,4 @@ filed for Track T as
 
 Nothing to do in Track B: `lib/rtl` and the synapse corpus were correct
 throughout, which is what the predecessor ticket concluded too.
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 5fa31b24c.
