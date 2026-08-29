@@ -156,4 +156,4 @@ Nothing here touches what a bare `#include <gtk/gtk.h>` resolves to, so
 depend on it: the assertion reports whichever answer that fork gets.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit e8e006c38.
