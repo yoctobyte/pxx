@@ -6026,6 +6026,15 @@ test-core: $(COMPILER)
 	# pins that several write!s accumulate rather than overwrite.
 	./$(COMPILER) test/test_rust_traits.rs $(TESTTMP)/test_rust_traits26
 	tools/expect_same.sh test_rust_traits26 "$$($(TESTTMP)/test_rust_traits26)" "$$(printf 'area 16 15\nmv 12-28\nts 12-28\nvia <12-28>\ntag [w=7]\ndbg Move { from: 12, to: 28 }')"
+	# ArrayVec-shaped fixed-capacity vector of structs. The rung is
+	# `[Name { .. }; N]` -- a repeat array whose element is a STRUCT literal --
+	# in both positions it can appear: a `let` initializer and a struct FIELD
+	# initializer. Rust's `[e; N]` on a Copy type evaluates e once and copies it
+	# N-1 times, and that is exactly the lowering: the literal fills slot 0 and
+	# every other slot is a whole-record copy. `tail` pins that the slots past
+	# `len` still hold the constructor's fill value.
+	./$(COMPILER) test/test_rust_movelist.rs $(TESTTMP)/test_rust_movelist26
+	tools/expect_same.sh test_rust_movelist26 "$$($(TESTTMP)/test_rust_movelist26)" "$$(printf 'a 7 8 1 7\nb 2 3\nfresh 0 -1 -1\npush 2 12 6 4\nswap 6 12\nfill 5 10 18 70\ntail -1 0\ntwo 5 1 10 1')"
 	# Ada frontend skeleton (feature-esoteric-ada): for-range accumulate, if/elsif/else,
 	# while, bare loop + exit-when, Put_Line -- all lowering onto existing shared IR.
 	./$(COMPILER) test/test_ada_skeleton.adb $(TESTTMP)/test_ada_skeleton26

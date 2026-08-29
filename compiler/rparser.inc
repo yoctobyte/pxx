@@ -2740,6 +2740,38 @@ begin
   if vi >= 0 then Result := REnumVariants[vi].EnumCi;
 end;
 
+{ A struct name followed by an open brace, where the name is a plain
+  (non-enum) struct: a struct literal, in a position where the grammar has
+  already ruled out a block. Deliberately NOT folded into
+  RPeekExprAggregateCi -- that one runs at every RParsePrimary, and in
+  statement position an open brace after an expression is a BLOCK (the `if`,
+  `while` and `match` heads all end that way), so reading the pair as a
+  literal is only safe inside a bracket run. }
+function RPeekStructLitCi: Integer;
+var ci: Integer;
+begin
+  Result := -1;
+  if CurTok.Kind <> tkIdent then Exit;
+  ci := FindUClass(CurTok.SVal);
+  if ci < 0 then Exit;
+  if REnumCi[ci] then Exit;
+  if Tokens[TokPos].Kind <> tkBegin then Exit;
+  Result := ci;
+end;
+
+{ `base[k]` with a literal index. `base` is deliberately SHARED by every element
+  node built from it rather than rebuilt per slot -- a target lvalue is a pure
+  address chain, so the AST is a DAG here and that is fine (the field-store and
+  array-literal arms have always done it). }
+function RArrIndexNode(baseNode, k, tk: Integer): Integer;
+var idxNode: Integer;
+begin
+  idxNode := AllocNode(AN_INT_LIT); ASTIVal[idxNode] := k; ASTTk[idxNode] := Ord(tyInt64);
+  Result := AllocNode(AN_INDEX);
+  ASTLeft[Result] := baseNode; ASTRight[Result] := idxNode;
+  ASTTk[Result] := tk;
+end;
+
 { Parses the aggregate literal at the cursor into an already-existing target
   LVALUE (a node, so the target can be a local, a fn's Result slot, or a FIELD
   of one) and returns the chain of field stores. A literal is the only way a
@@ -2759,12 +2791,37 @@ function RParseAggregateIntoNode(targetNode, ci: Integer): Integer; forward;
     `squares: [0; 64]` / `[a, b, c]`   -> unrolled to one store per element
     anything else                      -> an ordinary expression assignment }
 function RStoreFieldValue(fieldNode, fieldRec, arrLen: Integer): Integer;
-var valNode, assignNode, idxNode, elemNode, k, n: Integer;
+var valNode, assignNode, idxNode, elemNode, k, n, aggCi: Integer;
 begin
   Result := -1;
   if (arrLen > 0) and (CurTok.Kind = tkLBrack) then
   begin
     Next;
+    aggCi := RPeekStructLitCi;
+    if aggCi >= 0 then
+    begin
+      { A struct-literal repeat as a field initializer. Rust's `[e; N]` on a
+        Copy type is "evaluate once, copy N-1 times", and that is literally
+        what this emits -- the literal fills slot 0 and every other slot is a
+        whole-record copy of it. The scalar arm below re-evaluates per slot
+        instead (a documented deviation); it cannot be done that way here,
+        because an aggregate literal has no expression form to re-evaluate. }
+      Result := RParseAggregateIntoNode(RArrIndexNode(fieldNode, 0, ASTTk[fieldNode]), aggCi);
+      Expect(tkSemicolon, ';');
+      if CurTok.Kind <> tkInteger then Error('Rust: repeat count must be an integer literal');
+      n := CurTok.IVal;
+      Next;
+      Expect(tkRBrack, ']');
+      if n <> arrLen then Error('Rust: repeat count does not match the array field length');
+      for k := 1 to n - 1 do
+      begin
+        assignNode := AllocNode(AN_ASSIGN);
+        ASTLeft[assignNode] := RArrIndexNode(fieldNode, k, ASTTk[fieldNode]);
+        ASTRight[assignNode] := RArrIndexNode(fieldNode, 0, ASTTk[fieldNode]);
+        Result := RSeqAppend(Result, assignNode);
+      end;
+      Exit;
+    end;
     valNode := RParseExpr;
     if CurTok.Kind = tkSemicolon then
     begin
@@ -2962,7 +3019,7 @@ end;
 function RParseArrayLiteral(const name: AnsiString; annotTk: TTypeKind;
                             annotLen: Integer): Integer;
 var symIdx, seq, k, ci, ci2, vi, valNode, tagNode, fieldNode, assignNode,
-    arrLen: Integer;
+    arrLen, aggCi: Integer;
     arrElemTk: TTypeKind;
     isArr: Boolean;
 begin
@@ -2970,6 +3027,46 @@ begin
   arrElemTk := annotTk;
   arrLen := annotLen;
     Next; { [ }
+    aggCi := RPeekStructLitCi;
+    if aggCi >= 0 then
+    begin
+      { A struct-literal repeat -- same evaluate-once/copy-the-rest lowering as
+        the struct-field arm in RStoreFieldValue, and for the same reason. The
+        count is scanned ahead of the parse because AllocArray needs the length
+        before the element can be stored, and in `[e; N]` the count comes
+        AFTER e. }
+      ci := TokPos - 1; vi := 1;
+      while (vi > 0) and (Tokens[ci].Kind <> tkEOF) do
+      begin
+        if Tokens[ci].Kind in [tkLBrack, tkLParen, tkBegin] then Inc(vi)
+        else if Tokens[ci].Kind in [tkRBrack, tkRParen, tkEnd] then Dec(vi)
+        else if (Tokens[ci].Kind = tkSemicolon) and (vi = 1) then Break;
+        Inc(ci);
+      end;
+      if (Tokens[ci].Kind <> tkSemicolon) or (Tokens[ci + 1].Kind <> tkInteger) then
+        Error('Rust: an array of struct literals needs the repeat form: [Name { .. }; N]');
+      k := Tokens[ci + 1].IVal;
+      if isArr and (k <> arrLen) then Error('Rust: repeat count does not match the [T; N] annotation');
+      arrLen := k;
+      if arrLen <= 0 then Error('Rust: array length must be positive');
+      arrElemTk := tyRecord;
+      LastTypeRecId := REC_UCLASS_BASE + aggCi;
+      symIdx := AllocArray(name, tyRecord, 0, arrLen - 1);
+      seq := RParseAggregateIntoNode(
+        RArrIndexNode(RMakeIdent(symIdx), 0, Ord(tyRecord)), aggCi);
+      Expect(tkSemicolon, ';');
+      Next; { the count, already read by the scan }
+      Expect(tkRBrack, ']');
+      for k := 1 to arrLen - 1 do
+      begin
+        assignNode := AllocNode(AN_ASSIGN);
+        ASTLeft[assignNode] := RArrIndexNode(RMakeIdent(symIdx), k, Ord(tyRecord));
+        ASTRight[assignNode] := RArrIndexNode(RMakeIdent(symIdx), 0, Ord(tyRecord));
+        seq := RSeqAppend(seq, assignNode);
+      end;
+      Result := seq;
+      Exit;
+    end;
     valNode := RParseExpr;
     if not isArr then
     begin

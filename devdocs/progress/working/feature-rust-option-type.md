@@ -432,3 +432,77 @@ signatures, not from the ladder's list — and both are ahead of it now:
   compared a tkFor token against the string 'for' through GetTokenStr, which is
   empty for a keyword), plus `impl fmt::Display` rerouted to a String method
   with `write!` appending to it. `test_rust_derive.rs`, `test_rust_traits.rs`.
+
+### Rung 16 — `[Name { .. }; N]`: repeat arrays of struct literals (ArrayVec shape)
+
+The last frontend gap between the corpus chess engine and *valid* Rust. The
+engine writes
+
+```rust
+let mut mv: [Move; 256];        // uninitialised -- rustc rejects this
+```
+
+and hand-threads a count through `fn add(ms: &[Move], n: i64, ..) -> i64`. The
+ArrayVec shape that replaces it —
+
+```rust
+struct MoveList { data: [Move; 256], len: i64 }
+impl MoveList { fn new() -> MoveList { MoveList { data: [Move { .. }; 256], len: 0 } } }
+```
+
+— needed exactly **one** thing that did not exist: a repeat-array literal whose
+element is a struct literal. Everything else the shape wants was already there
+and the ladder's earlier note that "`list[i] = some_move` (record-value copy) is
+not yet wired" turned out to be **stale** — measured before touching anything:
+array-of-struct fields, `self.data[self.len].from = f` through `&mut self`,
+`fn get(&self, i) -> Move`, `fn fill(ml: &mut MoveList)` with `fill(&mut ml)`,
+and whole-record copies through array elements (`a[i] = a[j]`, `let m: Move =
+a[0]`) all worked already. `[0; 64]` worked; `[Move { .. }; 8]` said
+`undefined variable Move`.
+
+**The lowering is Rust's own definition.** `[e; N]` for a `Copy` type is
+"evaluate `e` once, copy it into the other N-1 slots", so that is what is
+emitted: `RParseAggregateIntoNode` fills slot 0, then N-1 `AN_ASSIGN` whole-record
+copies from slot 0. Note this is *stricter* than the scalar arm right next to it,
+which re-evaluates the element expression per slot (a deviation documented since
+it was written). The aggregate arm cannot do that even if it wanted to — an
+aggregate literal has no expression form to re-evaluate, which is the same
+"no AST node carries a whole struct value" constraint that shapes every other
+aggregate path in this frontend.
+
+Both positions, one shape each:
+
+- `RParseArrayLiteral` — the `let` form, annotated (`let a: [Move; 4] = ..`) and
+  inferred (`let b = [Move { .. }; 3]`). The count must be **scanned ahead**
+  before the element is parsed, because `AllocArray` needs the length up front
+  and in `[e; N]` the count comes *after* `e`.
+- `RStoreFieldValue` — the struct-field form, `data: [Move { .. }; 256]`, which
+  is the one `MoveList::new()` actually needs.
+
+Two new helpers, both deliberately narrow:
+
+- `RPeekStructLitCi` — a plain (non-enum) struct name followed by `{`. It is
+  **not** folded into `RPeekExprAggregateCi`, which runs at every
+  `RParsePrimary`: in statement position an open brace after an expression is a
+  *block* (`if x {`, `while x {`, `match x {`), so reading the pair as a literal
+  is only sound inside a bracket run, where the grammar has already ruled a
+  block out.
+- `RArrIndexNode(base, k, tk)` — `base[k]` with a literal index, sharing `base`
+  across every element node rather than rebuilding it. Safe for the same reason
+  `RParseAggregateIntoNode` already reuses its target: a target lvalue is a pure
+  address chain, so the AST is a DAG here.
+
+**Trap hit while writing it:** pxx nests `{ }` comments. Three comment blocks
+written with `[Name { .. }; N]` inside them closed early and produced
+`unterminated comment` pointing at the *first* of the three, ~200 lines above
+the real one. Prose in this file must not contain braces.
+
+Test `test/test_rust_movelist.rs` → `test_rust_movelist26`, oracle hand-computed.
+`tail -1 0` is the load-bearing line: it pins that the slots past `len` still
+hold the constructor's fill value, i.e. that the N-1 copies actually happened
+rather than the array being left as zeroed bss.
+
+**Gap found and NOT taken:** `ml.get(0).from` — a field access on a *call*
+result — is a parse error (`unexpected token near: ml get >>> from`). The test
+binds `let m: Move = ml.get(0);` first. That is a real Rust shape and worth a
+rung of its own; it is not on the path to the corpus rewrite.
