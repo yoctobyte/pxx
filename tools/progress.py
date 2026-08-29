@@ -1263,6 +1263,15 @@ pre code{background:none;padding:0}
         # A check that cries wolf earns the habit of being scrolled past, so
         # recalibrate if the board ever grows a legitimate family of
         # same-topic tickets rather than loosening it by reflex.
+        #
+        # WHAT THIS CANNOT DECIDE, and the wording above is careful about it:
+        # slug similarity is evidence of a shared SUBJECT, never of a shared
+        # CAUSE. twatch files per JOB, so one commit reding a family of related
+        # tests legitimately produces N tickets with near-identical slugs --
+        # those are TRUE positives that must NOT be merged (pxx-a5, 2026-08-29,
+        # the two nilpy fallback-import regressions: two different .npy files,
+        # one cause, both correctly filed and both correctly separate).
+        # The scan surfaces the pair; a human decides identity.
         for _i in range(len(slug_toks)):
             _st1, _n1, _t1 = slug_toks[_i]
             for _j in range(_i + 1, len(slug_toks)):
@@ -1272,7 +1281,9 @@ pre code{background:none;padding:0}
                     lines.append(
                         f"NEAR-DUP: {_st1}/{_n1} and {_st2}/{_n2} share "
                         f"{len(_shared)} slug words ({', '.join(sorted(_shared))}) "
-                        f"— check they are not one ticket filed twice")
+                        f"— same ticket filed twice, or one CAUSE with N "
+                        f"legitimately separate tickets? Do not merge on the "
+                        f"score alone")
                     problems = 1
 
         for t in self.by_status["unfinished"]:

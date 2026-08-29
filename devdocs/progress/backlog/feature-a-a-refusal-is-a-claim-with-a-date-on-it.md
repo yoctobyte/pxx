@@ -1601,3 +1601,30 @@ green, forever, and every later change is measured against it.
 test against the previous feature's edge, not just its own.* And hand-compute the
 oracle wherever the right answer is independently knowable — 64 was knowable, and
 knowing it is the entire reason the bug did not ship.
+
+### 37. A guard watching for an ABSENT input does not see a MALFORMED command
+
+pxx-a5's sixth aperture in its own harness, and the first its invariant missed.
+
+`test_classparent26` reported **FAIL**; it passed when run by hand. Cause: make's
+**`@` silent prefix** was left in, so the shell ran `@tools/expect_same.sh`, got
+*command not found*, and the recipe's own `|| { echo "FAIL"; exit 1; }` fired.
+**The tool faithfully reported a failure it had manufactured.**
+
+The invariant in place — *never FAIL on an input that was not demonstrably
+produced* — is a good guard and it was looking the wrong way. It covers the case
+where **nothing ran**. Here **something ran and failed**; it simply was not the
+command the recipe meant to run. So the aperture sat in the one place the guard
+does not look, which is where apertures always sit.
+
+**The general form:** a guard on the *inputs* of a step says nothing about
+whether the *step itself* is the one you wrote. `@`, a typo'd binary, a stale
+`PATH`, a shell builtin shadowing a script — all produce a real execution, a real
+non-zero status, and a real-looking failure.
+
+**And the direction analysis is the part that made the earlier greens
+trustworthy**, so it belongs in the face: an unstripped `@` can only turn a
+**pass into a FAIL or SKIP, never a fail into a pass.** When a harness defect is
+found, the question that decides how much history to distrust is *which way can
+this bias?* — not *how bad is it?* A defect that can only produce false negatives
+leaves every recorded green intact.
