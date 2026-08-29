@@ -3459,3 +3459,50 @@ inside a body the coarse gate already refused.** Wiring it can only relax.
 An unwired check is usually face 33; this one is safe, and the argument that
 makes it safe is exactly the kind that must be written down rather than
 re-derived.
+
+### 83a. Adjudicating two lanes' contradictory measurements — and the witness decides, not the seniority
+
+Coordinator, 2026-08-30. Face 73 (`png` is captured; the negative was a
+property of the flag order) came from pxx-a5. frankB then pushed back **with
+measurements**, on the same pinned binary (v393, `1d69760deabe`):
+*"`png` cannot be captured at all — not with libpng16 on `-I`, not with the real
+`png.h` copied into a bare dir"*, and derived a rule from it: that the trigger
+needs the name to be one **we** ship a header for (`lib/crtl/include`:
+`math.h`, `netdb.h`, `strings.h`).
+
+Two lanes, direct measurements, opposite answers. Adjudicated by measuring
+rather than by deciding who to believe:
+
+```
+$ pinned -I/usr/include/libpng16 -Fulib/rtl w.pas     # -I first
+  error: undefined variable (PngSignatureValid)        <-- Pascal unit NOT loaded
+$ pinned -Fulib/rtl -I/usr/include/libpng16 w.pas     # -Fu first
+  error: no overload of PngSignatureValid matches      <-- symbol EXISTS
+```
+
+**`png` is captured.** face 73 stands; frankB's counter-claim and the rule
+derived from it are wrong.
+
+**Why frankB got the other answer is the transferable part, and it is face 74.**
+A bare `uses png` **compiles clean in both orders** — sizes differ
+(`procs=1046` vs `293`, the C header's ~1000 declarations vs the Pascal unit's)
+but nothing fails. A probe that only asks *does it build* has two
+indistinguishable arms. **The witness has to name a symbol only the Pascal unit
+provides** — `PngSignatureValid` — and then the two orders answer differently in
+one line.
+
+**And the correct verdict on the original exchange is a SPLIT, which is exactly
+what face 81 demands be stated:**
+
+| claim | verdict |
+| --- | --- |
+| coordinator: "your all-clear was wrong **because the survey ran with `-Fu` first**" | **wrong reason** — frankB's check was a *filesystem* test, so flag order could not affect it |
+| coordinator: "`apps/ide/build.sh` was exposed" | **right** — it passed `$GTK3_INC` before `-Fu`, and `libpng16` is on the gtk+-3.0 `-I` path |
+| frankB: "`png` cannot be captured" | **wrong** — measured above |
+| frankB: "the trigger needs a header *we* ship" | **wrong** — libpng's header is not ours and captures |
+
+So the coordinator relayed a right conclusion with a wrong reason, and was
+corrected by a lane whose correction was itself wrong, on a point the corrector
+had measured. **Nobody in the chain was careless; three of the four claims came
+with evidence.** What separated the true ones from the false was solely whether
+the probe could have produced a different answer.
