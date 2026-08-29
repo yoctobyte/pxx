@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:23 blocked:8 backlog:317 backlog_new:15 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2650 rejected:51`
+`working:3 unfinished:23 blocked:8 backlog:317 backlog_new:15 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2651 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
@@ -61,7 +61,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` regression-cascade-4e27dc2be114
 - `[p 70] [B]` regression-lib-test-crtl-reachability-4
 - `[p 70] [P]` regression-test-core-test-mgmt-operators
-- `[p 70] [N]` regression-test-nilpy-test-nilpy-relative-import-in-package
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-startswith-tuple
 - `[p 70] [T]` regression-test-pascal-conformance-shard0-6-2
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
@@ -82,5 +81,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
 - `[p 62] [A]` feature-unicodestring-model
+- `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 
 _308 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

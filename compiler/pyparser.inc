@@ -173,6 +173,15 @@ var
     -(pi + 1). }
   PyImpAliasSym: array[0..63] of Integer;
   PyImpAliasSrc: array[0..63] of Integer;
+  { Which from-import STATEMENT queued this entry, as that statement's own
+    token index. The self-capture scan asks "did the SAME statement just bind
+    this name?", and neither cheaper answer survives: a queue INDEX is wrong
+    because PyParseImportRun is visited TWICE over the same tokens, so a
+    statement's first-pass entries sit BELOW its second-pass base and the guard
+    silently stops firing; the raw queue is wrong because it spans every
+    statement in the run. The token index is stable across both passes and
+    unique per statement, so it is what actually identifies a statement. }
+  PyImpAliasStmt: array[0..63] of Integer;
   PyImpAliasCount: Integer;
   { The alias NAMES, kept after PyFlushImportAliases drains the queue above —
     call sites run long after the flush and still have to know that a name was
@@ -36394,7 +36403,9 @@ var impName, impAlias, impRoot, impReal: AnsiString; isCount: Boolean;
     aliasUnitTarget: Integer;   { the unit a from-imported SUBMODULE name really names }
     aliasSelfIdx: Integer;      { scans the pending alias queue, so a source
                                   name is not captured by an alias this same
-                                  import run created a moment earlier }
+                                  from-import STATEMENT created a moment earlier }
+    aliasStmtTok: Integer;      { THIS from-import statement's token index --
+                                  the stamp the scan below matches on }
 begin
   while (CurTok.Kind = tkUses) or PyIsIdent('from') do
   begin
@@ -36482,6 +36493,11 @@ begin
           fails, with the unit resolver's own "unit source not found: X". }
         PyRelativeLevel := impLevel;
         PyParseImportUnit(impName);
+        { The queue is PER-RUN and this loop is PER-STATEMENT, so entries have
+          to say WHICH statement queued them. This statement's token index is
+          that identity: unique per statement, and the same on both of the two
+          passes this block is visited on. See PyImpAliasStmt's declaration. }
+        aliasStmtTok := TokPos;
         while CurTok.Kind = tkIdent do
         begin
           { Record the name against the IMPORTING module (ParseUsesUnit has
@@ -36572,6 +36588,35 @@ begin
                 `5 18`. CPython binds every name in one from-import from the
                 SOURCE module, simultaneously.
 
+                THE SCAN IS PER-STATEMENT, NOT PER-RUN, and that distinction
+                is the whole of bug-n-a-second-from-import-of-the-same-module-
+                drops-its-alias. PyParseImportRun loops over every consecutive
+                `from`/`import` statement and the queue accumulates across all
+                of them, so scanning the WHOLE queue also matched entries a
+                PREVIOUS statement queued. Inside a pulled module every
+                from-imported name is queued -- aliased or not, that is the
+                re-export binding -- so
+
+                    from .two import A, B          # queues A and B
+                    from .two import A as RENAMED  # source A is now "queued"
+
+                looked exactly like self-capture, `aliasRealSym` was cleared,
+                and RENAMED was never allocated: `undefined variable`.
+
+                Matching on the STATEMENT STAMP rather than on a queue index is
+                the load-bearing part, and the obvious cheaper version is wrong
+                in a way that is invisible from the failing test. This block is
+                visited TWICE over the same tokens, so a statement's first-pass
+                entries sit BELOW the count its second pass starts from: an
+                `aliasStmtBase := PyImpAliasCount` taken at statement start
+                gives an EMPTY range on the second pass, the guard stops firing
+                altogether, and `from M import f as g, g as f` silently
+                regresses from `5 18` to `5 5` while the relative-import test
+                this was written for still passes. Measured, three-way, against
+                a same-base control; the token index is stable across both
+                passes and unique per statement, so it is what actually names a
+                statement.
+
                 Skipping only the queue is deliberately narrower than looking
                 the name up in the exporting unit, which is what this tried
                 first: `from pkgprobe.sub import greet` resolves through a shim
@@ -36582,7 +36627,8 @@ begin
                 bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module }
               if aliasRealSym >= 0 then
                 for aliasSelfIdx := 0 to PyImpAliasCount - 1 do
-                  if PyImpAliasSym[aliasSelfIdx] = aliasRealSym then
+                  if (PyImpAliasStmt[aliasSelfIdx] = aliasStmtTok)
+                     and (PyImpAliasSym[aliasSelfIdx] = aliasRealSym) then
                   begin
                     aliasRealSym := -1;
                     Break;
@@ -36611,6 +36657,7 @@ begin
                   Inc(PyAliasNameCount);
                 end;
                 PyImpAliasSym[PyImpAliasCount] := aliasSym;
+                PyImpAliasStmt[PyImpAliasCount] := aliasStmtTok;
                 if aliasRealSym >= 0 then
                   PyImpAliasSrc[PyImpAliasCount] := aliasRealSym
                 else
