@@ -36,6 +36,73 @@ An output path ending in `.o` also selects object-output mode, the same as
 passing `--emit-obj`. An output path ending in `.so` selects shared-library
 mode, the same as passing `--shared`.
 
+## Information flags
+
+These answer a question about the toolchain itself and need **no source file**.
+Each exits 0.
+
+| Flag | Answers |
+| --- | --- |
+| `--help`, `-h` | usage, plus the options worth remembering |
+| `--version` | generation, the frontends built in, the host |
+| `--where`, `--config` | every path the compiler resolves, and which tier it came from |
+| `--list-targets` | the `--target=` values, and which of them run on this host |
+| `--list-libraries` | the units this binary can actually find, grouped by directory |
+| `--doctor` | what this box can do — cross-run, ESP, gdb, FPC seed, gcc |
+
+`--version` names the compiler generation — the same number a
+`{$IF PXX_VERSION >= n}` directive tests:
+
+```
+pxx (pascal26) — self-hosting Pascal-dialect compiler
+  generation:  26   (the value {$IF PXX_VERSION >= n} tests)
+  frontends:   pascal c nilpy rust zig ada basic fortran algol erlang lolcode whitespace
+  host arch:   x86-64 linux
+```
+
+That frontend list is every frontend compiled into the binary, and they sit at
+very different stages. The ones these docs cover are Pascal, [C](../targets/c-frontend.md)
+and [Nil Python](../targets/nil-python.md); the rest are experimental frontends
+and language probes, and their presence in the list is not a support claim.
+
+### `--where` — the one to reach for first
+
+When a build cannot find a unit or a header, `--where` is the answer, because it
+prints the paths **from the code that resolves them** rather than from a rule
+written down separately. It marks each root that does not exist `[MISSING]`, and
+ends with the tier order in force:
+
+```
+Library roots (as ParseUsesUnit resolves them):
+  /opt/pxx/lib/rtl/   [RTL]
+  /opt/pxx/lib/pcl/   [PCL]
+  ...
+
+Pascal unit search roots, in order (-Fu goes in FRONT of these):
+  /opt/pxx/../lib/rtl/platform/posix/   [MISSING]
+  /opt/pxx/lib/rtl/platform/posix/
+
+Tier order: -Fu/-I  >  PXX_HOME/PXX_LIBPATH  >  pxx.cfg  >  exe-dir defaults.
+```
+
+`--config` is an alias for it, byte-identical, for when the question is phrased
+as "which `pxx.cfg` is in effect?" rather than "where is the RTL?".
+
+One subtlety worth knowing: `-Fu` and `-I` given **before** `--where` on the
+command line appear in its output, and ones given after it do not — `--where`
+answers where it is read.
+
+### `--doctor` — capability, not correctness
+
+`--doctor` reports what this box can do with this binary: native compilation,
+whether the RTL, builtin units and C headers were found, which cross targets can
+actually be *run* here through qemu, whether an ESP-IDF and Espressif toolchain
+are present, and whether an FPC seed, gdb and gcc are around for compiler
+development. Every `no` row names what to install.
+
+**Nothing in it is fatal.** Compiling and running a native program needs none of
+the optional rows; each `no` costs exactly the one capability its row names.
+
 ## Options
 
 | Option | Effect |
@@ -162,6 +229,11 @@ Use `-Fu` for project-local units:
 Search roots are checked in flag order before the default library roots. That
 lets a project override or add units deliberately without changing the checkout.
 
+The full order — flags, then environment, then `pxx.cfg`, then the defaults
+guessed from the binary's location — is printed by `pxx --where` (see
+[Information flags](#information-flags) above), which reads it from the resolver
+itself. Prefer running it over trusting a copy of the rule.
+
 Use `-I` for C headers. It also feeds the Pascal unit search path, which is
 useful for generated bindings that sit next to the imported header:
 
@@ -169,9 +241,50 @@ useful for generated bindings that sit next to the imported header:
 ./pxx -Iinclude main.pas main
 ```
 
+## Environment and `pxx.cfg`
+
+Three environment variables and one optional config file sit between the
+command-line flags and the defaults the compiler guesses from its own location.
+Run `pxx --where` to see which of them are actually in effect — it prints all
+of them, set or unset.
+
+| Variable | Effect |
+| --- | --- |
+| `PXX_HOME=<root>` | Install root. Its `lib/` and `compiler/builtin/` **replace** the roots guessed from the binary's own directory. |
+| `PXX_LIBPATH=a:b` | Extra Pascal unit roots, inserted after `-Fu` and before the defaults. |
+| `PXX_CONFIG=<file>` | Use this config file instead of searching for one. |
+
+`PXX_HOME` is what makes an unpacked tarball work from any directory, and it is
+honoured **all-or-nothing**: the exe-dir guesses are not kept underneath it as a
+fallback. Point it at the wrong root and the RTL is simply not found —
+
+```
+error: uses: unit source not found: platform_backend
+```
+
+— which is `--where` territory, and every root will be marked `[MISSING]`.
+
+### The config file
+
+If `PXX_CONFIG` is unset, the compiler takes the first of these that exists:
+`./pxx.cfg`, `~/.config/pxx/pxx.cfg`, `<exe dir>/pxx.cfg`. Three directives are
+understood today:
+
+```
+home      /opt/pxx
+unitpath  /opt/units
+incpath   /opt/inc
+```
+
+`--where` echoes the file it chose and the directives it read from it, so a
+config that is not taking effect is one command away from explaining itself.
+Per-library define and mode manifests are not implemented.
+
 ## Examples
 
 ```sh
+./pxx --where
+./pxx --doctor
 ./pxx hello.pas hello
 ./pxx -g hello.pas hello
 ./pxx --target=aarch64 hello.pas hello.a64

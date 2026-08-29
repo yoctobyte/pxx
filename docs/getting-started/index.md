@@ -33,6 +33,11 @@ PXX writes a complete Linux ELF executable directly — no `as`, no `ld`.
 See [First program](./first-program.md) for the same example with a short
 explanation of the source layout and compiler arguments.
 
+If that build instead says `unit source not found`, the compiler is looking in
+the wrong place rather than the program being wrong. Run `pxx --where`: it
+prints every root it resolves and marks the missing ones, and it needs no source
+file. See [checking an install](../install/#checking-an-install-and-fixing-unit-source-not-found).
+
 ## Debugging with gdb
 
 Add `-g` to emit DWARF debug info:

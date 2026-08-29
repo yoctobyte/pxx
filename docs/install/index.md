@@ -65,6 +65,53 @@ The generated wrapper embeds the current library search roots. Re-run
 `tools/install.sh` after moving the checkout or after adding new library
 directories that should be visible to every compile.
 
+## Checking an install, and fixing "unit source not found"
+
+Two commands answer almost every question about an install, and neither needs a
+source file:
+
+```sh
+pxx --where     # every path this binary resolves, and which tier set it
+pxx --doctor    # what this box can do: cross-run, ESP, gdb, FPC seed, gcc
+```
+
+**`unit source not found` is the usual first failure**, and `--where` is the
+one-command answer. It prints the roots from the code that resolves them and
+marks each one that does not exist `[MISSING]`, so a wrong root is visible
+rather than inferred:
+
+```
+Library roots (as ParseUsesUnit resolves them):
+  /opt/pxx/lib/rtl/   [MISSING]   [RTL]
+```
+
+`pxx --doctor` answers the other half — what is *available* rather than where it
+is. Nothing it reports is fatal: compiling and running a native program needs
+none of the optional rows, and every `no` costs exactly the capability its row
+names.
+
+### Running from an unpacked tarball: `PXX_HOME`
+
+Called directly, the compiler guesses its library roots from its own directory.
+`PXX_HOME` replaces that guess, and is what makes an unpacked tarball work from
+anywhere without installing a wrapper:
+
+```sh
+PXX_HOME=/opt/pxx /opt/pxx/bin/pascal26 hello.pas hello
+```
+
+(A wrapper made by `tools/install.sh` passes its bundled roots as `-Fu`, and
+those outrank `PXX_HOME` — so set one or use the other, not both.)
+
+It is honoured **all-or-nothing** — the exe-dir guesses are *not* kept
+underneath it as a fallback — so pointing it at the wrong root replaces working
+paths with broken ones and the RTL stops resolving. If a build breaks right
+after you set it, run `pxx --where`.
+
+`PXX_LIBPATH=a:b` adds extra unit roots without replacing anything, and a
+`pxx.cfg` can set the same things persistently. Both are covered in the
+[command-line reference](../reference/cli.md#environment-and-pxxcfg).
+
 ## Optional libraries and tools
 
 The default checkout is self-contained. Extra source trees and vendor SDKs are
