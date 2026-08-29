@@ -18,10 +18,17 @@ open-ended work of unknown value, and bundling them would have turned a
 one-ticket chore into a campaign.
 
 ```
-test/gui/test_gtk_signals.pas       test/gui/test_pcl_showmessage.pas
-test/gui/test_gtk_window.pas        test/gui/test_pcl_window.pas
-test/gui/test_pcl_helloworld.pas    test/gui/helloworld/main.pas
+gui/test_gtk_signals.pas       gui/test_pcl_showmessage.pas
+gui/test_gtk_window.pas        gui/test_pcl_window.pas
+gui/test_pcl_helloworld.pas    gui/helloworld/main.pas
 ```
+
+(Paths given relative to `test/`, deliberately. Spelling them in full inside a
+tracked file under `tools/` would credit them and shrink the very report this
+ticket is the output of — it happened once already, see the CORRECTION in
+[[bug-t-check-test-wiring-credits-a-directory-that-a-truncated-token-named]].
+A ticket under `devdocs/` is not scanned, so this is belt-and-braces, but the
+habit is the point.)
 
 `grep -rl <stem> Makefile tools/` returns nothing for any of them.
 `tools/gui_suite.sh` runs eleven of the seventeen `.pas` subjects under
