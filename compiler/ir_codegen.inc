@@ -10033,7 +10033,16 @@ end;
 { Is `idx` written anywhere inside a try-protected span of this body?
 
   This is the axis the -O3 item-3 gate actually turns on, and it is finer than
-  the RcProcHasExc gate that stands today. A raise longjmps back to the try's
+  the RcProcHasExc gate that stands today. That gate is ENFORCED IN symtab.inc,
+  not here: `ResidentSlotIsDead` and `FloatResidentSlotIsDead` each open with
+  `if RcProcHasExc then Exit`. This file only sets the flag (UnifiedResidencyAssign
+  below) and prints it (the a.resid probe), so a grep confined to ir_codegen.inc
+  finds a variable that is assigned and displayed and never tested -- the exact
+  shape of a gate someone forgot to wire. It was read that way once; hence this
+  sentence. NOTE this function itself is instrumentation for now: the a.resid
+  WriteLn is its only consumer. That is not a hole, because the coarse gate is
+  strictly STRONGER -- it refuses the whole body, this would refuse only symbols
+  written inside the span -- so wiring it can only ever relax, never tighten. A raise longjmps back to the try's
   ExcSetJmp, which restores r12-r15 (aarch64 x19-x28) from the jmp_buf — so a
   resident register is ROLLED BACK to its value at try-entry. If the symbol was
   written inside the protected region, that rolled-back register is stale and
@@ -10098,7 +10107,8 @@ begin
   { Before any early exit: the exception landing pad refreshes residents FROM
     their frame slots, so it is the one slot reader that residency cannot see
     through. Anything that stops keeping the slot current must refuse a body
-    that has one. Conservative default is True. }
+    that has one -- and the two things that do are in symtab.inc, not here:
+    ResidentSlotIsDead and FloatResidentSlotIsDead. Conservative default is True. }
   RcProcHasExc := False;
   for k := 0 to IRCount - 1 do
     if IRKind[k] = IR_EXC_ENTER then begin RcProcHasExc := True; Break; end;
