@@ -58,7 +58,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (311)
+## backlog (312)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -82,6 +82,7 @@ _none_
 | bug-a-set-membership-truncates-the-test-value-on-32-bit-backends | A | 25 | bug |  | — |
 | bug-a-shr-on-a-32-bit-operand-is-evaluated-at-64-bits | A | 40 | bug | Pascal's shr is a LOGICAL shift at the operand's own width. pxx performs it at 64 bits regardless of the operand's declared type, so a negative Integer shifted right yields a 63-bit value instead of a 32-bit one. Writing it back to an Integer then truncates to a third answer, so the same expression gives two different wrong results depending on whether it is stored. | — |
 | bug-a-shr-reaches-the-ir-spelled-as-tkident | A | 20 | bug | Pascal's shr is lexed as an identifier — there is no tkShr token for it — so an IR_BINOP carrying shr carries Ord(tkIdent) as its operator. ir.inc:8878 substitutes Ord(tkShr) for exactly one consumer. Every other consumer must repeat that substitution or silently mistake `shr` for whatever it does with tkIdent. The wasm32 backend is now the second arm; normalise at IRAppend instead. | — |
+| bug-a-target-enumerations-in-comments-are-stale-and-one-of-them-hid-a-live-bug | A | 20 | bug | Sweep of every comment that ENUMERATES targets, checked against a derived backend list. Three miscounts: PXXVarBinOp's 'the other four targets' (five call it), symtab.inc's 'Every 32-bit backend (i386, arm32, riscv32)' (xtensa is a fourth and does NOT consult the shared decision), and PXXStrCmp3's 'the four cross backends' — that last one already filed as a live bug. A count reads as a complete enumeration, so nobody counts. | — |
 | bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture | A | 40 | bug | Five Makefile guards check the pinned stable with `test -x`, which tests the executable BIT — a property of the file, not of whether this CPU can run it. On a non-x86-64 host every guard reports healthy and the recipe then dies at exec with `Exec format error`, after printing a message saying there is no pinned stable at a path where one demonstrably is. Found on `via` (aarch64), where the repo ships only `stable_linux_amd64`. A reader would reasonably conclude the checkout is broken. | — |
 | bug-a-testtmp-defaults-to-a-path-every-checkout-shares | A+T | 55 | bug | Makefile:49 is `TESTTMP ?= /tmp` — a fixed path, not per-checkout and not per-PID. Every agent's suite writes its test binaries to the same names in the same directory, so two concurrent runs on one box overwrite each other's artefacts. The failure mode is a wrong verdict, not a crash. CORRECTED 2026-08-29 (see body): testmgr ALREADY privatizes recipe /tmp paths per PID, so this is true only of bare `make`; the recipe half closed in b2cab6b6b; and the proposed fix would blind four testmgr expressions at once — blocked on the prerequisite. | chore-t-teach-testmgr-the-testtmp-value-before-anyone-changes-it |
 | bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire | A | 45 | bug |  | — |
@@ -968,6 +969,7 @@ _none_
 - [p 20] [A] bug-a-irtoplevelstmt-parameter-is-a-node-index-named-k
 - [p 20] [A] bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets
 - [p 20] [A] bug-a-shr-reaches-the-ir-spelled-as-tkident
+- [p 20] [A] bug-a-target-enumerations-in-comments-are-stale-and-one-of-them-hid-a-live-bug
 - [p 20] [N] bug-n-exec-ignores-a-caller-supplied-builtins-mapping
 - [p 20] [N] bug-n-name-on-a-builtin-type-is-unimplemented
 - [p 20] [A] chore-a-sweep-the-unwired-tests-into-the-suite

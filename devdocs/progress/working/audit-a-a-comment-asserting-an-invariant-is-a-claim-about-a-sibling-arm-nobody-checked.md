@@ -458,3 +458,105 @@ bug and the oldest lie respectively.**
 comment containing a target enumeration ("the four cross backends", "x86-64 and
 i386", "i386/ARM32/AArch64") checked against the actual backend list — that is
 where both of pass 2's findings live.
+
+---
+
+## 2026-08-29 — pass 3 (frankD): the enumeration sweep, and a RETRACTION
+
+### Retraction first
+
+Pass 2's ticket said *"hosted xtensa does not currently run"*. **That was measured
+on the pinned compiler v393 (`1d69760deabe`, pinned 22:29) and frankS landed the
+hosted-xtensa read/write fix at 23:21** (`0cff74f62`). `pxx --where` shows the
+pinned compiler resolves builtin units from its own frozen
+`stable_linux_amd64/default/builtin/`, which differs from the repo's
+`compiler/builtin/builtinheap.pas` — so the toolchain measured could not have
+contained the fix. Withdrawn in the ticket, in place, with the reason.
+
+The mechanism is worth recording because it is this audit's own shape: I ran
+`git merge-base --is-ancestor` and got "yes", and **let a fact about the TREE
+stand in for a fact about the BINARY.** The sha CLAUDE.md tells you to name is
+the compiler's. A run of the repro on frankS's verified build is requested.
+
+The finding itself is unaffected — it never rested on the run — and the size
+delta (ordered compare **52 bytes cheaper** than equality on xtensa, 4 bytes
+dearer on riscv32) is self-evidencing: it does not depend on running anything, or
+on my reading of the guard being right.
+
+### The census method has a blind spot, and I inherited it by reproducing it
+
+claude-N's census matches `FindProc('<name>')`. **xtensa reaches four helpers
+through name-taking wrappers** (`XtensaHelperProc`, `EmitXtensaHelperCall`,
+`EmitVarHelperCallXtensa`, `EmitStrRefCallXtensa`), and i386/arm32/riscv32 have
+one each. Those call sites are invisible to the matcher.
+
+Re-run against **any** helper-name string literal in a backend file:
+
+| | census method | corrected |
+| --- | --- | --- |
+| reached by x86-64 | 45 | 46 |
+| cross-only | 30 | **33** |
+
+Newly visible: `PXXVarRetain`, `PXXVarReleasePayload` (386/arm/rv32/xt),
+`__pxx_divsi3`, `__pxx_modsi3` (xt). `PXXRecordRetainIntf` moves out of cross-only.
+
+**Reproducing a method reproduces its bias** — my pass-2 reproduction agreed
+exactly (45/30) and that agreement was worth nothing, because it was the same
+matcher. Agreement between two runs of one method is not corroboration. The
+census's own methodology note warns that *"the prose describing the absence
+produced the appearance of presence"*; this is the inverse — **an indirection
+produced the appearance of absence** — and it should be added there.
+
+**It did not affect the xtensa finding.** Re-checked against every `'PXX*'`
+literal in `ir_codegen_xtensa.inc`: `PXXStrCmp3` is absent under any matcher.
+
+It did surface a **tenth documented pair** the census missed:
+`EmitVariantClearA64Ex` (`ir_codegen_aarch64.inc:549`) is aarch64's hand-emitted
+twin of `PXXVarReleasePayload`, and its comment names the twin correctly. Add it
+to the pair table.
+
+### The enumeration sweep
+
+Backend list **derived** at sweep time, per the constraint: 7 `TARGET_*`
+constants, 6 `ir_codegen*.inc` files, 5 cross backends. Filed as
+[[bug-a-target-enumerations-in-comments-are-stale-and-one-of-them-hid-a-live-bug]].
+
+**Three wrong, five right.** The wrong ones: `PXXStrCmp3`'s "four cross backends"
+(the live bug), `PXXVarBinOp`'s "the other four targets" (five call it; no defect,
+the fix is in the shared helper), and `symtab.inc:3333`'s *"Every 32-bit backend
+(i386, arm32, riscv32)"* — xtensa is a fourth 32-bit backend and does **not**
+consult `Arg32Class`, which is the consolidation that exists because nine
+hand-written copies drifted. No defect claimed there; it is a question for A.
+
+The five that are correct are recorded in the ticket, because an audit that only
+writes down failures cannot tell a reader whether the seam is sound.
+
+### And the likely mechanical cause of "four"
+
+`ls compiler/ir_codegen_*.inc` — one underscore — returns **four** files, because
+x86-64 is `ir_codegen.inc` and i386 is `ir_codegen386.inc`. The glob that looks
+like it enumerates the cross backends silently omits i386. **The inconsistent file
+naming is a plausible generator of the exact off-by-one that cost a live bug**,
+which makes this the one finding in three passes with a mechanical root cause
+rather than a human one.
+
+### Distance table, pass 3
+
+Both new rows from pass 2 held up and gained instances. Nothing in pass 3 moved
+the *distance* axis — which is itself the result. Across three passes the axis
+that predicts catchability is not distance but **whether the claim is falsifiable
+by a command**:
+
+| claim shape | falsifiable by | caught? |
+| --- | --- | --- |
+| a COUNT of targets | `ls compiler/ir_codegen*.inc` | never, until it broke |
+| a SCOPE ("x86-64 only") | `grep -rn "x86-64.only"` | never, 54 days |
+| a LAYOUT ("[fp]/[fp+PtrSize]") | reading a second backend | never |
+| a CHOKE POINT ("the only place") | grep for the payload offset | never |
+| a claim about a SIBLING's instruction sequence | reading the sibling | **held** (`PXXStrCmp3` on x86-64) |
+| a claim about the ROUTINE'S OWN mechanism | reading 8 lines down | **failed** (instance 8, `ir.inc:12732`) |
+
+The last two rows are the ones that should be uncomfortable: **the claims that
+held were the ones about someone else's code, and the claims that failed were the
+ones about the author's own.** That is the opposite of the intuition the audit
+started from, and it is now supported by nine instances rather than one.

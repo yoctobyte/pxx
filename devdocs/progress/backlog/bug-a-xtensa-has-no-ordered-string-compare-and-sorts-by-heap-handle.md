@@ -74,18 +74,36 @@ end.
 | --- | --- |
 | x86-64 native | `ok: zzz >= aaa` / `ok: aaa < zzz` |
 | riscv32 under `qemu-riscv32` | `ok: zzz >= aaa` / `ok: aaa < zzz` |
-| xtensa under `qemu-xtensa` | **could not run — see below** |
+| xtensa under `qemu-xtensa` | **not yet measured on a valid toolchain — see below** |
 
-**I could not demonstrate the wrong output, and I am not going to claim I did.**
-Hosted xtensa does not currently run: `program hello; begin WriteLn('hi'); end.`
-built with `--target=xtensa --platform=posix` **hangs** under `qemu-xtensa`
-(killed at 120s), and the `strord` binary above dies with `uncaught target signal
-7 (Bus error)`. That is a separate problem — hosted xtensa is still the open
-[[feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle]] — and it is also the
-reason this bug survived: **the target has no working oracle, so the defect could
-not surface as a red.**
+**I could not demonstrate the wrong output — and my first attempt to say why was
+itself wrong, so it is withdrawn here rather than quietly edited.**
 
-What *is* measured, and is enough on its own:
+The attempt hung on hello-world (killed at 120s) and bus-errored on the repro,
+and this ticket originally reported that as *"hosted xtensa does not currently
+run"*. **That measurement is void.** It ran on the pinned compiler **v393 /
+`1d69760deabe`, pinned 22:29**, and frankS landed hosted-xtensa read/write
+syscalls at **23:21** — `0cff74f62`, wall 3 of the qemu-xtensa oracle, verified
+byte-identical to the x86-64 oracle on both ABIs. `pxx --where` confirms the
+pinned compiler resolves builtin units from its own frozen
+`stable_linux_amd64/default/builtin/`, which differs from the repo's
+`compiler/builtin/builtinheap.pas` — so the toolchain I measured could not have
+contained that fix under any invocation.
+
+*"Hosted xtensa hangs"* was therefore **a claim about the past stated in the
+present tense** — the provenance trap CLAUDE.md's *"hunt async, verify against a
+known sha"* exists to prevent. The sha I needed to name was the **compiler's**,
+not the tree's; `git merge-base` said the fix was in my checkout and I let that
+stand in for the binary. A run on frankS's verified build is requested, and this
+ticket will record whatever it prints, `WRONG:` or not.
+
+**One thing survives the retraction.** For most of this bug's life the target
+genuinely had no working oracle, which remains the best available explanation for
+how a wrong `<` on an entire target went unnoticed while four sibling backends
+were fixed. The oracle arrived the same evening the bug was found, from the lane
+that owns the file — [[feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle]].
+
+**Nothing in the finding depends on that run**, which is why it is filed now:
 
 - the guard and the fallthrough above, read directly;
 - `PXXStrCmp3` is called by four backends and not by xtensa (grep, comments
