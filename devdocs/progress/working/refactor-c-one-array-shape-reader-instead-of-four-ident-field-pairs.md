@@ -4,6 +4,8 @@ prio: 75
 type: refactor
 blocked-by: []
 summary: "Four C readers ask what a decayed array steps by, and all four are written as an AN_IDENT branch beside an AN_FIELD branch. Three field branches were never finished: five ordinary expressions SEGFAULT (`**a.s`, `*(*(a.m+1)+2)`, `strcmp(*(a.s+1),\"cd\")`), one loads four bytes of a char row. Three of the pairs were repaired one at a time on 2026-08-29; this replaces the shape with one reader so there is no fifth pass."
+status: working
+owner: frankC
 ---
 
 # One array-shape reader, instead of four ident/field pairs

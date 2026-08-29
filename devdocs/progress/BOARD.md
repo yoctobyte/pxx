@@ -8,13 +8,14 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (3)
+## working (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-the-fpc-seed-canary-skips-a-break-already-on-master | A | 50→80 | bug |  | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
 | refactor-a-the-pointer-suffix-walk-has-six-copies-in-the-pascal-frontend | A | 55 | refactor | The pointer/field/index suffix walk is duplicated SIX times in the Pascal frontend (not four, as the parent ticket says -- listed, not counted). Each copy stamps a different subset of the node tags the rest of the compiler reads, which is why four separate tickets have now ended 'the metadata was there, the reader was missing'. None can be deleted without the others agreeing on the tags, so this is one refactor, not six fixes. | — |
+| refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs | C | 75 | refactor | Four C readers ask what a decayed array steps by, and all four are written as an AN_IDENT branch beside an AN_FIELD branch. Three field branches were never finished: five ordinary expressions SEGFAULT (`**a.s`, `*(*(a.m+1)+2)`, `strcmp(*(a.s+1),\"cd\")`), one loads four bytes of a char row. Three of the pairs were repaired one at a time on 2026-08-29; this replaces the shape with one reader so there is no fifth pass. | — |
 
 ## unfinished (22)
 
@@ -385,11 +386,11 @@ _none_
 | bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked | P | 60 | bug | `r := s` where r is a record and s an AnsiString is correctly rejected (`incompatible types: cannot assign AnsiString to record`). The same assignment to an ELEMENT of an array of that record — `rs[1] := s` for a dyn array, `fx[0] := s` for a fixed one — compiles clean and segfaults at run time. FPC rejects all three. One concept, two paths, and the check lives on only one of them: the classic double-case shape. Found 2026-08-29 by the wasm32 lane through a botched line in its own test, which is the only reason anyone looked. | — |
 | bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets | P | 65 | bug | `SizeOf(Extended)` answers 10 while a variable declared `Extended` occupies 8 and an array of four occupies 32. Same two-table split as [[bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets]], in the same function, left unfixed for the sibling type when Real was corrected. Self-inconsistent within our own compiler, so any stride or GetMem computed from SizeOf(Extended) is two bytes too long per element. | — |
 | bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step | T | 45 | bug | A test job takes its name from its FIRST source file, but the red is usually a later step -- so the auto-filed regression stub's `track:` guess is derived from a filename that has nothing to do with the failure. Wrong three times on one job: crtl-reachability -1 (red was crtl-map), -3, and -4 (red was lib/pcl's GTK3 guard, Track B). The stub says `track GUESSED from the test path` but the path is not evidence about the defect at all. | — |
+| bug-t-concurrent-sync-runs-can-squash-two-commits-into-one | T | 45 | bug | With several checkouts syncing at once, tools/sync.sh's rebase-and-retry loop squashed two separate commits into one: the second commit's content survived, its message and its `resolves:` line did not. Silent — the tree is clean, the push succeeds, and the only tell is a `git log` one shorter than expected. | — |
 | bug-t-the-hardcoded-tmp-guard-recommends-a-variable-testmgr-strips | T | 55 | bug | tools/testmgr_hardcoded_tmp_devtest.py tells you to read $TESTTMP instead of hardcoding /tmp. But testmgr launches every job through an environment ALLOWLIST, and TESTTMP is in neither ENV_ALLOW nor the ENV_ALLOW_PREFIXES (PXX_ TESTMGR_ LC_ QEMU_), so it does not reach the job at all. Every test that followed the advice falls back to /tmp under testmgr and collides exactly as a hardcoded literal would — guard green, defect intact. Five existing tests are in that state. TESTMGR_TMP is the variable that survives, and testmgr already sets it per run to a pid-keyed dir it creates. | — |
 | feature-t-check-flags-a-lane-blocker-that-has-no-in-edges | T | 40 | feature | prio propagates down dependency edges, so a ticket with in-degree zero inherits nothing — and a ticket that blocks a LANE rather than a ticket never gets an edge, because blocked-by: would be a false claim. Such a ticket under-ranks itself permanently and no checker sees it: from the ranker's side an in-degree of zero is indistinguishable from a leaf. Proposal: `progress.sh check` flags a ticket whose body names a track as its beneficiary and has no in-edges. Threshold MUST be calibrated against the live board before landing. | — |
 | refactor-a-one-rule-spelled-two-ways-at-two-strictnesses-in-ir-lowering | A | 40 | refactor | ir.inc:10426 reads `(CProgramMode or IsNodePChar(dest))` -- one rule expressed two ways at two different strictnesses, with the dialect flag standing in for the property it implies. Normalising it DELETES an entry from the C carve-out inventory rather than moving one, so it makes that refactor smaller. | — |
 | refactor-a-target-dispatch-chains-fail-open | A | 50 | refactor | Not a missing-helper ticket: TARGET_PTR_SIZE exists and is read at 129 sites. The narrow, verified gap is that several per-target if/else-if chains have no final else, so adding target #7 (wasm32) or #8 (riscv64) matches no arm and configures nothing, silently. lexer.inc:936 is the worked example. Fix is a mandatory else that Errors, not a collapse of the 180 TargetArch sites — util.inc:87 already documents why collapsing is wrong. | — |
-| refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs | C | 75 | refactor | Four C readers ask what a decayed array steps by, and all four are written as an AN_IDENT branch beside an AN_FIELD branch. Three field branches were never finished: five ordinary expressions SEGFAULT (`**a.s`, `*(*(a.m+1)+2)`, `strcmp(*(a.s+1),\"cd\")`), one loads four bytes of a char row. Three of the pairs were repaired one at a time on 2026-08-29; this replaces the shape with one reader so there is no fifth pass. | — |
 | refactor-p-the-char-array-is-not-a-string-rule-is-spelled-five-times | P | 40 | refactor | The `bug-p-a-char-array-is-not-a-string-in-any-direction` rule is implemented at FIVE separate sites in ir.inc, each carrying a comment pointing at the others. root-cause-over-microfix calls three copies a design flaw; this is five. Found during the cir.inc inventory, in Pascal's ground, not C's. | — |
 
 ## experimental (20)
@@ -687,7 +688,6 @@ _none_
 
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [P] feature-pascal-corpus-oop
-- [p 75] [C] refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - [p 70] [A+O] feature-opt-o3-register-pressure
 - [p 70] [P] regression-cascade-4e27dc2be114
@@ -810,6 +810,7 @@ _none_
 - [p 45] [T] bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step
 - [p 45] [A+T] bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing
 - [p 45] [T] bug-t-a-test-targets-timeout-class-is-decided-by-a-substring-and-is-right-by-accident
+- [p 45] [T] bug-t-concurrent-sync-runs-can-squash-two-commits-into-one
 - [p 45] [T] bug-t-progress-check-cannot-see-an-orphan-fragment-or-a-duplicated-slug
 - [p 45] [A] chore-a-typesize-answers-8-for-a-record-and-the-warning-is-where-no-caller-looks
 - [p 45] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed

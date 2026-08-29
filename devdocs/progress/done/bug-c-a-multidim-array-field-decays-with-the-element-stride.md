@@ -104,6 +104,27 @@ arm does.
   [[bug-c-a-struct-field-partial-index-uses-the-outer-row-stride]] earlier the
   same day. The field spelling of this whole family is uncovered.
 
+## Note on the commit this cites
+
+It landed as **one** commit with
+[[refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag]], not two.
+They were committed separately (`5348f20ef`, `34a72721c` locally) and a
+contended rebase — four `tools/sync.sh` runs in flight at once across sibling
+checkouts — squashed them while resolving repeated `BOARD*.md` conflicts. So
+`72de20420`'s message describes only the refactor, and the fix recorded here is
+in it without being named by it. That is why this ticket and the refactor's
+cite the same sha.
+
+Nothing was lost: verified at HEAD after the squash — `make compiler/pascal26`
+converged, `cll_array_pointer_base` / `cfield_partial_index_stride` /
+`carr2d_decay_stride` / `cptrdiff_elem_types` / `cfield_2d_row_decay_b62` all
+pass, and the `int`/`char`/`double` field probes still match gcc. The loss is
+documentary, and it is recorded here because the commit cannot be: the sha is
+public and `tstate` verdicts and `resolve` citations are keyed by it, so
+rewriting it would break more than it fixes.
+
+Filed as tooling: [[bug-t-concurrent-sync-runs-can-squash-two-commits-into-one]].
+
 ## Log
 - 2026-08-29 — found, fixed, tested (frankC). Ownership of `ir.inc` granted and
   filed on master at `25de2c21d`; `tools/fleet_dirt.sh` across 16 checkouts

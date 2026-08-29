@@ -5,13 +5,14 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:22 blocked:8 backlog:311 backlog_new:15 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2668 rejected:52`
+`working:4 unfinished:22 blocked:8 backlog:311 backlog_new:15 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2668 rejected:52`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-the-fpc-seed-canary-skips-a-break-already-on-master` [A] — owner: unrecorded
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 - `refactor-a-the-pointer-suffix-walk-has-six-copies-in-the-pascal-frontend` [A] — owner: frankA
+- `refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs` [C] — owner: frankC
 
 ## unfinished (22) — parked mid-flight; re-claim, do not duplicate
 
@@ -53,7 +54,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
-- `[p 75] [C]` refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [P]` regression-cascade-4e27dc2be114
@@ -81,5 +81,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [A]` bug-a-an-array-constructor-in-argument-position-leaks-its-dynamic-array
 - `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
 - `[p 60] [N]` bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
+- `[p 60] [P]` bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
 
 _301 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
