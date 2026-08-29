@@ -2,6 +2,7 @@
 track: N
 prio: 72
 type: feature
+status: done
 ---
 
 # Measured stdlib coverage: json and re are solid; os, time and math.fabs are absent
@@ -221,3 +222,69 @@ names.
 The `os.sep` route is the cheapest of these and is the one I would take next:
 the `sys` module already resolves attributes at runtime, so it is wiring an
 existing mechanism rather than adding a syscall to six const blocks.
+
+## 2026-08-29 (later) — time.time() and os.listdir() done; the ticket is closed
+
+Both needed a PAL syscall rather than a shim, which is what had kept them open.
+`compiler/builtin/pypal.pas` gained `NR_CLOCK_GETTIME` and `NR_GETDENTS64`
+across its six blocks, plus `PyPalClockRealtime` / `PyPalGetdents` /
+`PyPalHasGetdents`.
+
+**Which targets were actually executed: x86-64 only.** i386, aarch64 and
+riscv32 are header-transcribed and NOT run. arm32's `getdents64` is not filled
+at all. That distinction is recorded in the table's own comment, not just here,
+because a wrong syscall number is invisible on five of six targets.
+
+Numbers were read one arch at a time from this machine's kernel headers, never
+derived from a sibling — i386 and arm32 sit +27 apart for five syscalls in this
+table and **220 vs 217** for `getdents64`, so the offset that looks like a rule
+is not one.
+
+The 32-bit targets use `clock_gettime64` (403) rather than the legacy
+`clock_gettime`, because **riscv32 does not have the legacy one**
+(`asm-generic/unistd.h` gates `__NR_clock_gettime 113` on
+`__ARCH_WANT_TIME32_SYSCALLS || __BITS_PER_LONG != 32`, and riscv32 defines
+neither) — and because it makes `TPyPalTimespec` one layout on every target and
+y2038-clean.
+
+`import time` resolves the NAME to the C header, so `time.time()` was binding
+to C's `time(2)` — the same wrong-target shape as `math.floor`, intercepted the
+same way.
+
+### The final state of this ticket's table
+
+| name | state |
+| --- | --- |
+| `re.split` / `subn` / `finditer` | **done** — and `m.end()` with them |
+| `os.sep` / `os.linesep` | **done** |
+| `os.listdir` | **done**, except arm32 → [[bug-n-pypal-arm32-getdents64-is-unfilled]] |
+| `time.time()` | **done** |
+| `copy.copy` | already worked by the time it was re-measured |
+| `copy.deepcopy` | **not done, deliberately** → [[decide-nilpy-deepcopy-over-the-container-subset]]; the module documents it as absent ON PURPOSE and the owner decides |
+| `sys.maxsize` / `version` / `byteorder` | designed refusal, unchanged — not a gap to plug blindly |
+| `math`, twelve names | never this ticket's → [[feature-nilpy-math-module-twelve-absent-names-measured]] |
+
+### Filed rather than folded in
+
+- [[bug-n-a-module-alias-does-not-resolve-for-attribute-lookup]] — `import sys
+  as s; s.platform` does not compile. Pre-existing, verified as such.
+- [[bug-n-pypal-arm32-getdents64-is-unfilled]] — the deliberate hole above.
+- [[bug-n-pypal-ppoll-passes-a-64-bit-timespec-on-32-bit-targets]] —
+  pre-existing, exposed by reusing `TPyPalTimespec`: one struct that is right
+  for the clock on every target and wrong for ppoll on the 32-bit ones.
+
+### Two things worth carrying elsewhere
+
+- **`make compiler/pascal26` does not compile `pylib.pas`.** It is linked into
+  NilPy programs, not into the compiler, so a broken interface section there
+  passes the entire self-host fixedpoint and surfaces only when a `.npy` is
+  compiled. The gate is real; its scope is narrower than it looks.
+- **`PyStdlibCallAhead`'s base whitelist and `PyStdlibCallProc`'s table are one
+  concept in two places.** `time.time` sat in the table doing nothing until
+  `time` was added to the whitelist. Now commented at the whitelist.
+
+Closing: every name in this ticket is either done, filed as its own ticket, or
+an owner decision. Nothing is left here that a next session could pick up.
+
+## Log
+- 2026-08-29 — resolved, commit PENDING-COMMIT.
