@@ -5,9 +5,10 @@ track: T
 type: bug
 prio: 45
 blocked-by: []
-status: backlog
+status: working
 found: 2026-08-29
 found-by: frank-coordinator
+owner: pxx-a5
 ---
 
 # A reopened fuzz finding erases the history that makes it useful
