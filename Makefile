@@ -2602,6 +2602,13 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_generic_forward_template_reference.pas $(TESTTMP)/test_gen_fwd26
 	@$(TESTTMP)/test_gen_fwd26 | diff -u test/test_generic_forward_template_reference.expected - \
 	  || { echo 'test_generic_forward_template_reference: FAIL - declaration order matters again'; exit 1; }
+	@# a call whose RESULT is a metaclass must work in ALL FOUR node kinds a call
+	@# can be spelled as -- AN_CALL plus the two virtual rewrites and AN_INTF_CALL.
+	@# The non-virtual rows are controls: they always worked.
+	@# bug-a-nodemetaclassci-does-not-know-a-virtual-class-method-call
+	@./$(COMPILER) test/test_metaclass_call_spellings.pas $(TESTTMP)/test_metacall26
+	@$(TESTTMP)/test_metacall26 | diff -u test/test_metaclass_call_spellings.expected - \
+	  || { echo 'test_metaclass_call_spellings: FAIL - a metaclass-returning call lost its class'; exit 1; }
 	@# a CLASS method's result must carry the RETURN type's record, not the
 	@# receiver's: f.MakeC.Tag looked Tag up on f's class. Where both classes had
 	@# a member of that name it silently called the WRONG one on the wrong object.

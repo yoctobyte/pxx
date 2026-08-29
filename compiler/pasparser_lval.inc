@@ -2568,8 +2568,19 @@ begin
             ExpectCallRParen(mpi);
           end
           else CheckMethodCallArity(mpi);
+          { Continue the selector loop rather than exiting, so a trailing
+            `.field` / `.M2(...)` / `[i]` on the RESULT is parsed -- the same
+            call the class-method and instance-method arms below make. Exiting
+            here did not fail loudly: the trailing selector was DROPPED and the
+            expression evaluated to the intermediate result, so a metaclass-
+            returning `g.IGet.Lookup(21)` silently yielded the metaclass
+            pointer instead of calling Lookup.
+            bug-a-nodemetaclassci-does-not-know-a-virtual-class-method-call }
           node := mcallNode;
-          Result := node; Exit;
+          tk := Procs[mpi].RetType;
+          recName := ProcRetRecId[mpi];
+          if (tk <> tyClass) and (tk <> tyRecord) then recName := REC_NONE;
+          Continue;
         end;
         if UMthIsStatic[mmi] then
         begin

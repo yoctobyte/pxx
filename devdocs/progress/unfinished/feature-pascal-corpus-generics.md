@@ -2,7 +2,7 @@
 track: P
 prio: 65
 owner: unassigned
-blocked-by: [bug-a-nodemetaclassci-does-not-know-a-virtual-class-method-call]
+blocked-by: []
 status: unfinished
 type: feature
 ---
@@ -1061,3 +1061,31 @@ it was three hundred lines from a sibling arm that had it and documented why.
 - The stage dir is gone between sessions; `tools/install_lib_candidates.sh
   rtl-generics` + symlinking `packages/rtl-generics/src/*.pas` and `inc/` into a
   scratch dir with a `uses generics.defaults` driver reproduces in under a minute.
+
+## 2026-08-29 (frankA) — blocker cleared, wall past 3341, and it was three defects not one
+
+[[bug-a-nodemetaclassci-does-not-know-a-virtual-class-method-call]] is resolved,
+so the `blocked-by:` edge added an hour ago is cleared. The unit is past **3341**
+and now stops on `@TEquals.Class: the address of a routine with no body was
+taken` — a fourth distinct failure class on this rung, and again not generics
+machinery.
+
+**The ticket I filed named one missing row; there were three.** Two virtual
+spellings refused outright and the INTERFACE spelling was silently wrong,
+yielding the metaclass pointer instead of calling through it. Worth knowing
+because of *how* it was found: each shape had to be compiled in its own program.
+The compiler aborts on the first error, so a single file containing all six rows
+reports only the first and reads as "one bug" — which is exactly what the
+original ticket concluded.
+
+**One of the two was not a missing table row at all.** `AN_INTF_CALL` had to be
+added to `NodeMetaclassCi` *and* the interface arm in `pasparser_lval.inc` had to
+stop exiting the selector loop, because that arm never consulted the predicate —
+it dropped the trailing selector before anyone could ask. A predicate cannot
+answer a question nobody asks it, and "the enumeration is missing a row" would
+have fixed half the bug and looked complete.
+
+Still open from this sweep, and NOT blocking:
+[[bug-p-a-call-chained-onto-a-class-method-result-is-dropped]] — the class-NAME
+receiver (`TFactory.MakeC.Tag`) is still silently wrong, and its obvious cause is
+recorded as refuted.

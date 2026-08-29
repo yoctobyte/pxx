@@ -11742,8 +11742,22 @@ begin
        (UFldPtrElemRec[mcFi] >= REC_UCLASS_BASE) then
       Result := UFldPtrElemRec[mcFi] - REC_UCLASS_BASE;
   end
-  else if ASTKind[node] = AN_CALL then
+  else if (ASTKind[node] = AN_CALL) or
+          (ASTKind[node] = AN_CLASS_VIRTUAL_CALL) or
+          (ASTKind[node] = AN_VIRTUAL_CALL) or
+          (ASTKind[node] = AN_INTF_CALL) then
   begin
+    { FOUR node kinds spell "a call", and the row above said AN_CALL. A call is
+      built as AN_CALL and then REWRITTEN in place when the dispatch is not
+      static: GenMakeStaticMethodCall swaps in AN_CLASS_VIRTUAL_CALL for a
+      virtual CLASS method, the instance arm allocates AN_VIRTUAL_CALL for a
+      virtual one, and an interface receiver gets AN_INTF_CALL. All four keep
+      the Procs[] index in ASTIVal -- the vtable/IMT slot rides in ASTSOffset or
+      ASTRight -- so one lookup serves them all.
+      Measured: of a metaclass-returning `GetSvc`, the non-virtual class and
+      instance spellings worked, both VIRTUAL ones died as "a pointer has no
+      members", and the INTERFACE one silently yielded the metaclass pointer.
+      bug-a-nodemetaclassci-does-not-know-a-virtual-class-method-call }
     si := Integer(ASTIVal[node]);
     if (si >= 0) and (si < ProcCount) and (Procs[si].RetType = tyPointer) and
        (IntToTypeKind(ProcRetPtrElemTk[si]) = tyClass) and

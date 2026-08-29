@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:22 blocked:6 backlog:295 backlog_new:6 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2571 rejected:46`
+`unfinished:22 blocked:6 backlog:294 backlog_new:6 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2572 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
@@ -27,7 +27,7 @@ _none — no lane is locked._
 - `feature-opt-o3-register-pressure` [O]
 - `feature-pascal-corpus-expansion` [P]
 - `feature-pascal-corpus-fpc-testsuite` [P]
-- `feature-pascal-corpus-generics` [P] — blocked-by: bug-a-nodemetaclassci-does-not-know-a-virtual-class-method-call
+- `feature-pascal-corpus-generics` [P]
 - `feature-pascal-type-helpers` [A]
 - `feature-port-rtl-over-libc` [A]
 - `feature-real-dynlib-loader` [B] — blocked-by: bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream
@@ -68,7 +68,6 @@ _none — no lane is locked._
 - `[p 70] [N]` regression-tools-devtest-00-2
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
-- `[p 65] [A]` bug-a-nodemetaclassci-does-not-know-a-virtual-class-method-call (unblocks 1)
 - `[p 65] [P]` bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 65] [P]` bug-p-two-different-nested-specializations-of-one-template-collide
@@ -77,5 +76,6 @@ _none — no lane is locked._
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [O]` feature-opt-bulk-copy-is-byte-at-a-time
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
+- `[p 65] [P]` feature-pascal-corpus-generics
 
 _276 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

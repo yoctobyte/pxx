@@ -1,0 +1,6 @@
+plain fn      : 42
+class nonvirt : 42
+inst  nonvirt : 42
+class VIRTUAL : 42
+inst  VIRTUAL : 42
+interface     : 42
