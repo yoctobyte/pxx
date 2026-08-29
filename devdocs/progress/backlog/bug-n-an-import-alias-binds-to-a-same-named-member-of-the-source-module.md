@@ -154,6 +154,20 @@ changed; only the record was stale. Found by a sweep (see
 `chore-t-nothing-re-checks-a-blocked-by-edge-after-its-blocker-closes`); 14 tickets repo-wide
 carry at least one `blocked-by` naming a closed ticket, five of them fully unblocked.
 
-**Track N is NOT being dispatched** (owner deprioritized it and reserved the call, 2026-08-27).
-This ticket is rankable again and correctly filed, but do not auto-claim it on a cold-start
-"take the global top" — ask the owner first.
+**SUPERSEDED 2026-08-29 — Track N IS being dispatched again.** The paragraph below
+was correct when written and is kept so a reader meets it where it was relied on.
+
+> ~~**Track N is NOT being dispatched** (owner deprioritized it and reserved the call, 2026-08-27).
+> This ticket is rankable again and correctly filed, but do not auto-claim it on a cold-start
+> "take the global top" — ask the owner first.~~
+
+The owner lifted it, 2026-08-29, verbatim: *"track A+C+P+N is highest prio at all
+times and the hardest to parallelize. having track A idling is a waste of time and
+tokens."* N is named explicitly in the highest-priority set, and the statement is
+two days newer than the reservation it replaces. **Claim it normally.**
+
+Recorded by the coordinator rather than left in message traffic: the reservation
+was durable prose on master and its lifting has to be too, or the next agent
+re-reads the ticket and re-refuses. frankA declined this dispatch on the strength
+of the old paragraph and was right to — the paragraph was the only thing on master
+that spoke to it.

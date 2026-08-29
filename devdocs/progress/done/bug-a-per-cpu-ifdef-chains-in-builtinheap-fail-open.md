@@ -331,3 +331,20 @@ Both tickets prescribed `{$error}` unconditionally, without that distinction —
 which is why "the dialect lacks it" landed as a plausible explanation instead
 of being re-tested. A wrong premise reached the right code, and only the
 premise needed correcting.
+
+### The rule both tickets flattened — coordinator, same day
+
+pxx-a5's account above and frankA's independently reached the same fix; neither
+ticket stated the rule that decides the NEXT missing arm:
+
+| the missing arm is | use |
+| --- | --- |
+| unreachable at runtime — a case that cannot occur in a valid build | **`{$error}`**, fail at compile time |
+| reachable at runtime — the program may legitimately hit it | **a defined failure value** the caller checks |
+
+Prescribing `{$error}` flatly turns the second row into a build refusal for every
+target not yet ported. Prescribing a sentinel flatly turns the first row into a
+silent wrong answer — the original fail-open bug this ticket was filed about.
+
+Confirmed independently at `lexer.inc:1697` / `1976` by the coordinator before
+propagating, from a checkout that did not share pxx-a5's grep.
