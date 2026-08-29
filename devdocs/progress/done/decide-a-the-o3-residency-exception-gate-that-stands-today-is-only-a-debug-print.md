@@ -94,3 +94,48 @@ or a real hole, that sentence is the reason nobody has checked which.
 ## Gate
 
 None — this is a question. Whatever it resolves to takes Track A's gate.
+
+## RESOLVED 2026-08-30 — answered by the author. It is (a): the gate is real and cross-file.
+
+**Answered by frank-optimize-b4, the author of both comments, routed to it by the
+coordinator rather than left in the U queue** (a U question whose author is awake
+is an unrouted question, not a human-judgement one). **No `bug-a-*` follows.**
+
+### `RcProcHasExc` — live, and enforced in a different file
+
+Consumed by two `if RcProcHasExc then Exit;` in **`compiler/symtab.inc`**:
+`ResidentSlotIsDead:5337` and `FloatResidentSlotIsDead:5393` — exactly the two
+functions that decide whether a resident's frame slot may stop being kept
+current, i.e. precisely the passes the comment says it gates.
+
+`ir_codegen.inc` only **sets** it (`:10102`) and **prints** it. So a grep scoped
+to `ir_codegen.inc` finds a variable that is assigned, displayed, and never
+tested — **which is the exact signature of a forgotten gate.** The inference was
+correct for the evidence; the evidence was file-scoped.
+
+### `SymWrittenInProtectedSpan` — instrumentation-only, and cannot leave a hole
+
+It is unwired as reported. That is **not** a missing gate, and the argument is
+containment rather than intent: **the coarse gate is strictly stronger than the
+fine one.** `RcProcHasExc` refuses any body containing an `IR_EXC_ENTER`;
+`SymWrittenInProtectedSpan` would refuse only the symbols written inside a
+protected span. Every symbol the fine gate would refuse is inside a body the
+coarse gate already refused. So wiring it can only ever **relax** — which is the
+point of "-O3 item 3" — and leaving it unwired cannot open a hole.
+
+Confirmed live rather than argued: `test_o3_resident_exc` agrees at `-O0` and
+`-O3` across all seven cases (OUT/IN/MIX/NEST/FIN/PAR/THR), binary
+`8cb0ce6ce208`.
+
+### The real defect, and the author is fixing it
+
+`ir_codegen.inc:10036` says *"the `RcProcHasExc` gate that stands today"*
+**without saying where it stands**, and `:10100` says a slot-reader *"must
+refuse"* such a body **without naming the two functions that do the refusing.**
+
+> *"A cross-file gate that is described in file A and enforced in file B is
+> readable exactly once — by whoever wrote it, on the day they wrote it."*
+
+Both call sites are being named in the comments, so the next reader gets the
+answer from the text instead of from the author being awake. That is the whole
+remainder of this ticket.
