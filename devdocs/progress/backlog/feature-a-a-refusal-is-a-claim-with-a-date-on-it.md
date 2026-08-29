@@ -671,6 +671,45 @@ problem, with time rather than file-set as the axis.
 
 **Seventeen faces, and the family is still open.**
 
+### Worked instance of face seventeen — a green from an adjacent lane reads as coverage of work it never touched
+
+pxx-a5, 2026-08-29, volunteering a negative nobody asked for.
+
+It ran two quick tiers that evening; both green. frankB had converted 2476
+Makefile assertions the same day, none of them suite-executed. **A green tier
+from the Track T lane, on the same repo, on the same evening, is exactly the
+thing that would be mistaken for coverage of those conversions** — by any lane
+reading the board, and by the coordinator relaying it.
+
+It checked instead of letting it stand: **`test-quick`'s 208 recipe lines use
+`expect_same.sh` exactly ZERO times**, and its tree at the sha it ran carried
+only the 498 cross-target conversions, none of the 1978 native ones. So the
+2476 remain exactly as unexecuted as claimed, and nothing it ran that evening is
+evidence about them.
+
+**The shape.** A green run's report says what passed. It does not say what it
+touched, and the two are indistinguishable downstream — a passing tier and a
+tier that never reached the code both produce the same green. Face seventeen
+says an instrument's scope is invisible in its own output; **this is that
+failure crossing between lanes**, where it is worse, because the reader has no
+access to the run's contents at all and only sees the verdict.
+
+**The guard, and it is a habit rather than a mechanism:** when your green sits
+adjacent in time or subject to someone else's unverified work, **state what it
+does NOT cover, unprompted.** The cost is one grep. The alternative is that
+absence of a contradiction gets read as confirmation, and nobody ever asks,
+because nothing looks wrong.
+
+Same session, the same lane also declined to treat a freed constraint as
+permission: told that plexus's cores had come free, it re-read the load
+(4.30/8.84/10.71 against 12 cores), noted six sessions were still live and that
+the owner's standing instruction is to leave roughly half the CPU free, and
+**wrote the changed fact into its two blocked measurement tickets instead of
+launching the sweeps** — so the next reader re-reads the load rather than
+inheriting "blocked on a busy box" as a standing truth. *A peer's read on what
+is affordable does not outrank the owner's instruction*, and a stale blocker in
+a ticket is the same failure family one level up.
+
 ## Face eighteen — when the compiler is its own test input, a diff cannot tell a CODEGEN change from a SOURCE change
 
 Found by frankwasm, 2026-08-29, and it nearly cost twenty lines of inert code.
