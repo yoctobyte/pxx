@@ -55,9 +55,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 70] [T]` regression-cascade-154d1aa3fba6
 - `[p 70] [P]` regression-cascade-4e27dc2be114
-- `[p 70] [B]` regression-lib-test-crtl-reachability-3
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-relative-import-in-package
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-startswith-tuple
+- `[p 70] [P]` regression-test-threads-test-sched-reactor-exhaustion-5
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [P]` bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)

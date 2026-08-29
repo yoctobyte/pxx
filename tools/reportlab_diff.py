@@ -79,7 +79,16 @@ def run_case(name, body, tmp, tol):
     ref_py = os.path.join(tmp, name + "_ref.py")
     open(ref_py, "w").write(head % ref_pdf + body + tail)
     env = dict(os.environ, PYTHONPATH=ORACLE)
-    subprocess.run([sys.executable, ref_py], check=True, env=env)
+    # NOT check=True. A CalledProcessError here escapes main() and exits 1, and
+    # the Makefile renders exit 1 as "the mimic diverged from the oracle" — a
+    # specific, plausible verdict about a comparison that never happened. The
+    # ORACLE failing is never evidence about the mimic, so it gets its own
+    # prefix and main() turns it into 77.
+    r = subprocess.run([sys.executable, ref_py], check=False, env=env,
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        last = (r.stderr.strip().split("\n") or [""])[-1]
+        return name, "ORACLE FAIL: " + last
 
     cand_py = os.path.join(tmp, name + "_cand.py")
     open(cand_py, "w").write(head % cand_pdf + body + tail)
@@ -121,17 +130,39 @@ def main():
     if shutil.which("pdftotext") is None:
         print("pdftotext absent (poppler-utils) — cannot extract glyph positions")
         return 77
+    # THIRD arm of the same idea, and the one that was missing: the oracle is
+    # PRESENT but does not IMPORT. Host `seven` has the reportlab source fetched
+    # and no Pillow, so `from PIL import Image` deep inside rl_config kills the
+    # reference script, and this probe reported the mimic as diverged.
+    # `os.path.isdir` answers "were the files fetched", which is not the same
+    # question as "does the oracle run" — and the two differ exactly on a box
+    # that fetched the source without its dependencies.
+    probe = subprocess.run([sys.executable, "-c", "import reportlab.pdfgen.canvas"],
+                           env=dict(os.environ, PYTHONPATH=ORACLE),
+                           capture_output=True, text=True)
+    if probe.returncode != 0:
+        last = (probe.stderr.strip().split("\n") or [""])[-1]
+        print("reportlab oracle present but not importable: %s" % last)
+        print("  its own dependencies are missing (Pillow, for `from PIL import Image`)")
+        return 77
     # 1e-3 pt is ~350nm on paper: far below anything renderable, and above
     # pdftotext's own printed precision (it emits ~5 decimal places).
     tol = 1e-3
     names = sys.argv[1:] or sorted(CASES)
-    bad = 0
+    bad = broken = 0
     with tempfile.TemporaryDirectory() as tmp:
         for n in names:
             name, msg = run_case(n, CASES[n], tmp, tol)
             print("%-12s %s" % (name, msg))
-            if not msg.startswith("ok"):
+            if msg.startswith("ORACLE FAIL"):
+                broken += 1
+            elif not msg.startswith("ok"):
                 bad += 1
+    # An oracle that did not run outranks any divergence count: with no
+    # reference output there is nothing to have diverged FROM.
+    if broken:
+        print("reportlab oracle failed to run — nothing was compared")
+        return 77
     print("REPORTLAB DIFF: %s" % ("OK" if bad == 0 else "%d case(s) diverged" % bad))
     return 1 if bad else 0
 
