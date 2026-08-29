@@ -185,6 +185,21 @@ def strip_quotes(value: str) -> str:
 # two spellings, both of which an author writes on purpose.
 _NODISPATCH_RE = re.compile(r"NOT DISPATCHABLE|do not claim", re.I)
 
+# twatch auto-files a regression stub with a `track:` GUESSED from the test
+# source path, and says so -- in the BODY. The ranker, `next`, and the sole-A
+# guard all read FRONTMATTER, where a guess is indistinguishable from a
+# declaration. That is the exact shape meta-track-w-collision-windows-vs-website
+# describes, and it is not theoretical: on 2026-08-29 an ascii-cache regression
+# whose defect was in ir_codegen.inc/defs.inc (Track A) carried `track: N`,
+# guessed from its `.npy` test. Two agents were dispatched onto it at once and
+# the sole-A guard -- which keys off that field -- never fired.
+#
+# NOT a reason to drop the guess. twatch's own comment records why it exists:
+# four stubs needed the same hand edit on 2026-08-16 alone, and "a wrong lane a
+# triager can see beats no lane at all". The defect is that the guess is
+# invisible to tools, so this makes it visible without changing it.
+_GUESSED_TRACK_RE = re.compile(r"Track guessed as \*{0,2}([A-Z+]+)")
+
 
 def normalize_track(value: str) -> str:
     t = value.upper()
@@ -324,6 +339,32 @@ class Ticket:
         paste-ready claim command for it (found by frankB, 2026-08-29).
         """
         return bool(_NODISPATCH_RE.search(self.text))
+
+    @property
+    def guessed_track(self) -> str:
+        """The lane letter twatch GUESSED, when that guess is still standing.
+
+        Returns "" when the ticket was not auto-filed, or when a human has
+        since corrected it. The discriminator is that the guessed letter is
+        written into the note, so it can be compared against frontmatter: if
+        they differ, somebody re-laned it on purpose and the note is a stale
+        record of how the ticket started, not a live warning. Measured over the
+        six live stubs carrying the note -- five still match their guess, and
+        the sixth (crtl-reachability-3, retracked C->B by frankC an hour
+        earlier) is correctly excluded. Zero false positives.
+
+        Of the five that DO match, at least two are wrong right now:
+        regression-fpc-bootstrap-compiler-2 is guessed P and is a Track R
+        duplicate forward, and the reactor-exhaustion stub is guessed P from a
+        threads test whose subject is the scheduler. So this is not a
+        hypothetical annotation -- the guess is wrong roughly as often as it is
+        right, which is precisely why it must not read as a declaration.
+        """
+        m = _GUESSED_TRACK_RE.search(self.text)
+        if not m:
+            return ""
+        guessed = normalize_track(m.group(1))
+        return guessed if guessed == self.track else ""
 
     @property
     def owner(self) -> str:
@@ -724,6 +765,9 @@ class Board:
                 extra += " [parked — re-claim, do not duplicate]"
             if t.not_dispatchable:
                 extra += " [!! DO NOT CLAIM — the ticket says so; read it]"
+            if t.guessed_track:
+                extra += (" [track GUESSED from the test path — the defect may "
+                          "be in another lane; verify before claiming]")
             lines.append(f"  [{tag}p{eff[t.slug]:>3}] [{t.track}] {t.slug}{extra}")
         return "\n".join(lines) + "\n"
 
@@ -763,6 +807,13 @@ class Board:
             lines.append(
                 f"  (skipped {len(skipped)} higher-ranked ticket(s) marked "
                 f"do-not-claim: {', '.join(t.slug for t in skipped)})")
+        if t.guessed_track:
+            lines.append(
+                f"  NOTE: this ticket's track was GUESSED from its test source "
+                f"path, not declared. The defect may be in another lane — a "
+                f"regression's test and its cause are routinely in different "
+                f"ones. Verify the lane before you claim it, and re-lane it if "
+                f"the guess is wrong.")
         return "\n".join(lines) + "\n"
 
     def cmd_autorate(self, write: bool = False, track_filter: str = "") -> str:
