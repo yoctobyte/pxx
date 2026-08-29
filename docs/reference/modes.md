@@ -29,6 +29,7 @@ model as a whole; the individual switches are listed on the
   | --- | --- | --- |
   | `--require-forward` | Routine defined/declared before its call site. | Whole-source pre-scan finds it anywhere. |
   | `--strict-overload` | Explicit `overload;` on overloaded routines. | Marker not required. |
+  | `--strict-overload-width` | Narrowest integer overload that **fits**, as FPC picks. | An exact-width match wins; otherwise the widest candidate. |
   | `--strict-operator` | Reject `=` / `<>` on class operands. | Value-equality operators allowed. |
   | `--strict-case` | Inverted-range and duplicate/overlapping `case` labels are errors. | First-match, no diagnostics. |
   | `--strict-visibility` | `private` / `protected` / `strict` access is enforced. | Markers parsed, access granted anywhere. |
@@ -60,6 +61,35 @@ model as a whole; the individual switches are listed on the
   dialect — so requiring the marker would reject the very libraries FPC-oriented
   code links against. It remains available as a standalone switch for
   marker-clean code.
+
+### `--strict-overload-width` — parity on request
+
+Also **not** in the umbrella, and for a sharper version of the same reason:
+`--strict-overload` changes which programs are *accepted*, but
+`--strict-overload-width` changes which **body a call binds to**. Enrolling it
+would change what the corpora `--strict-fpc` is proven against actually resolve
+to, so that is a separate measured decision and it has not been made.
+
+FPC picks the narrowest integer overload that fits. The default dialect keeps an
+exact-width match and otherwise lands on the widest candidate. Given
+`F(Int64)` and `F(LongInt)` declared in that order:
+
+| argument | default | `--strict-overload-width` |
+| --- | --- | --- |
+| `Integer`, `LongInt`, a literal, an alias of `Integer` | `LongInt` | `LongInt` |
+| `SmallInt`, `Byte` | `Int64` | **`LongInt`** |
+| `Cardinal` | `Int64` | `Int64` |
+
+**The `Cardinal` row is the one that carries the rule.** It shows the choice is
+narrowest-that-*fits*, not narrowest-declared: `LongInt` is the same width as
+`Cardinal` but cannot hold its top half, so `Int64` is the narrowest that fits
+and the flag changes nothing there. The unsigned set behaves the same way — with
+`U(QWord)`, `U(LongWord)`, `U(Word)`, a `Byte` argument picks `QWord` by default
+and `Word` under the flag.
+
+**The default is intended, not a bug.** The widening is the dialect; the flag is
+FPC parity on request. It is command-line only — there is no
+`{$STRICT_OVERLOAD_WIDTH}` directive.
 
 - **`--mimic-fpc` — the compatibility preset.** For compiling FPC-oriented code.
   It is `--strict-fpc` **plus** what makes PXX present *as* FPC: the curated FPC

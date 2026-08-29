@@ -148,6 +148,7 @@ effect where one exists.
 | `--require-forward` | A routine must be defined above its call, `forward;`-declared, in an interface section, or be a class method — no whole-source pre-scan. First check under `--strict`. | `{$STRICT ON}` |
 | `--strict-overload` | Require explicit `overload;` on overloaded routines. | `{$STRICT_OVERLOAD ON}` |
 | `--permissive-overload` | Relax the overload marker requirement (the default). | `{$STRICT_OVERLOAD OFF}` |
+| `--strict-overload-width` | Among integer overloads, pick the **narrowest that fits**, as FPC does, instead of the default dialect's widening. Changes which body a call binds to, so it is deliberately **not** in `--strict-fpc`; see [modes](./modes.md), which carries the value table. | — command line only |
 | `--strict-operator` | FPC-parity rejection of `=` / `<>` on class operands (lax default allows them). | `{$STRICT_OPERATOR ON}` |
 | `--strict-case` | FPC-parity `case`-label diagnostics: inverted ranges, duplicate/overlapping labels. | `{$STRICT_CASE ON}` |
 | `--strict-visibility` | Enforce `private` / `protected` / `strict` member access (lax default parses the markers but grants access anywhere). | `{$STRICT_VISIBILITY ON}` |
