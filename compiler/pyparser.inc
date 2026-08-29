@@ -42017,7 +42017,7 @@ end;
 procedure PyParseFactorCore;
 var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
     rndRawArg: Integer;      { round(x, n): the argument node before the float unbox }
-    intBaseArg, atRecv, atFld, atDflt, atProp: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
+    intBaseArg, atRecv, atFld, atDflt, atProp: Integer; trialProcMark, trialLamMark: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     nestCtorCi: Integer;   { `TOuter.TInner.Create` — the nested class, resolved by scope }
     nestScanCi, nestScanPos, nestDepth, nestI: Integer;   { …walking N levels of it }
@@ -43613,6 +43613,17 @@ begin
         intBaseArg := TokPos;            { rewind point: CurTok = pystr_of }
         { park the hoist queue across the TRIAL parse — see the len() intercept
           below for what a discarded parse's leftover hoists do }
+        { A trial parse REGISTERS as well as queues: a lambda in this argument
+          runs RegisterProc('$pylam'+N) and pushes PyPendLam*, and the rewind
+          below undid neither -- so the abandoned attempt left an orphan proc
+          whose body was still compiled and emitted (measured: +1 proc and
+          ~350 B of dead code per lambda inside a len()/f-string argument,
+          scaling linearly). Nothing was WRONG, only because PyLamSeq is
+          monotonic so the retry mints a fresh name instead of colliding; a
+          construct named from the SOURCE would have duplicated.
+          feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+        trialProcMark := ProcCount;
+        trialLamMark  := PyPendLamCount;
         lenSavedHoist := PyHoistPark;
         Next; Expect(tkLParen, '('); ParseArgExpr;
         lenTrialHoist := PyHoistPark;
@@ -43664,6 +43675,8 @@ begin
           end;
         end;
         { no class rewrite: rewind and take the ordinary overload path }
+        ProcRollbackTo(trialProcMark);
+        PyPendLamCount := trialLamMark;
         TokPos := intBaseArg - 1; Next;
       end;
       { ...unless the program declares its own `len`, which REPLACES the
@@ -43710,6 +43723,17 @@ begin
           reason PyParseMethod records: PySeqAppend mutates the saved chain's
           tail in place, so a plain restore cannot unlink anything.
           bug-nilpy-len-of-a-string-method-on-a-file-read-answers-zero }
+        { A trial parse REGISTERS as well as queues: a lambda in this argument
+          runs RegisterProc('$pylam'+N) and pushes PyPendLam*, and the rewind
+          below undid neither -- so the abandoned attempt left an orphan proc
+          whose body was still compiled and emitted (measured: +1 proc and
+          ~350 B of dead code per lambda inside a len()/f-string argument,
+          scaling linearly). Nothing was WRONG, only because PyLamSeq is
+          monotonic so the retry mints a fresh name instead of colliding; a
+          construct named from the SOURCE would have duplicated.
+          feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+        trialProcMark := ProcCount;
+        trialLamMark  := PyPendLamCount;
         lenSavedHoist := PyHoistPark;
         Next; Expect(tkLParen, '('); ParseArgExpr;
         lenTrialHoist := PyHoistPark;
@@ -43788,6 +43812,8 @@ begin
         end;
         { a pylib container class, or a non-class argument: rewind and take
           the ordinary overload path, unchanged byte for byte }
+        ProcRollbackTo(trialProcMark);
+        PyPendLamCount := trialLamMark;
         TokPos := intBaseArg - 1; Next;
       end;
       { hex/bin/oct of an ARBITRARY-PRECISION int. Python's take any width, while
@@ -43817,6 +43843,17 @@ begin
       begin
         intBaseArg := TokPos;
         { same parked TRIAL parse as the two intercepts above }
+        { A trial parse REGISTERS as well as queues: a lambda in this argument
+          runs RegisterProc('$pylam'+N) and pushes PyPendLam*, and the rewind
+          below undid neither -- so the abandoned attempt left an orphan proc
+          whose body was still compiled and emitted (measured: +1 proc and
+          ~350 B of dead code per lambda inside a len()/f-string argument,
+          scaling linearly). Nothing was WRONG, only because PyLamSeq is
+          monotonic so the retry mints a fresh name instead of colliding; a
+          construct named from the SOURCE would have duplicated.
+          feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+        trialProcMark := ProcCount;
+        trialLamMark  := PyPendLamCount;
         lenSavedHoist := PyHoistPark;
         Next; Expect(tkLParen, '('); ParseArgExpr;
         lenTrialHoist := PyHoistPark;
@@ -43849,6 +43886,8 @@ begin
           Exit;
         end;
         { a machine-width argument: rewind, take the ordinary overload }
+        ProcRollbackTo(trialProcMark);
+        PyPendLamCount := trialLamMark;
         TokPos := intBaseArg - 1; Next;
       end;
       if (name = 'int') and (not PyUserShadowsProc(name)) then
