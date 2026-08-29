@@ -85,4 +85,4 @@ value is that a C program printing a null pointer no longer shows up as a
 divergence to be eyeballed and dismissed in a gcc differential run.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit e885d94ef.
