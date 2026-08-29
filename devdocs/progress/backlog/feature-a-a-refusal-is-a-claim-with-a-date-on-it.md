@@ -3077,3 +3077,87 @@ and the widening commit edited that line without touching the sentence).
 Consequence for where audit effort goes: **the cross-file assertion that looks
 most alarming is the one most likely to be true**, and the throwaway line
 describing the function it sits in is the one to check.
+
+### 72. A control that could only ever produce ONE outcome is not a control — and it reads as the strongest kind
+
+pxx-a5, 2026-08-29, resolving the `-I` capture bug by **disproving both of the
+ticket's negative results**, either of which would have shaped the fix.
+
+The control that killed the search-order theory was: *"`-I` at a dir holding an
+**empty** `strings.h` does not capture, therefore it takes a header with
+content, therefore it is not search-order precedence."* Sound-looking, and it
+sent two sessions away from the actual mechanism.
+
+**The unit search accepts a candidate on `Length(UnitContent) > 0` — on
+content, never on existence.** So an empty header is indistinguishable from a
+missing one **by construction**. The experiment had exactly one possible
+outcome *whatever the cause was*. It produced a true observation and zero bits.
+
+The mechanism it hid is three lines of existing code: `-I<dir>` calls both
+`AddCIncludeDir` and `AddPasUnitDir`; the `PasUnitDirs` loop probes
+`.pas/.pp/.c/.h` **per root in flag order**; and it runs before the
+compiler-anchored RTL dir. No C-side behaviour is involved at all — the
+"parseable content" refinement built on top of the bad control was a second
+wrong story fitted to the same data.
+
+Distinct from **62** (*a control is not a control until it has failed once*):
+there the control was never exercised in the failing direction; here it
+**cannot** be. Ask what result would have falsified it. If the answer is
+"none", it is an observation wearing a control's clothes — and it is more
+dangerous than no control, because everyone downstream stops looking.
+
+### 73. A survey's negative can be a property of the COMMAND LINE rather than of the thing surveyed
+
+Same ticket, same day, and the coordinator relayed this one to three lanes as
+settled fact.
+
+frankwasm cross-producted every RTL unit name against every header on gtk+-3.0's
+include roots, found `lib/rtl/png.pas` vs `/usr/include/libpng16/png.h`,
+**compiled it, and reported it as a clean negative** — the row that turned
+"header with content" into "parseable content". Excellent method; the compile
+was the expensive test and it was run.
+
+**It inverts.** `png` captures exactly like `strings` under a bare
+`-I/usr/include/libpng16` *and* under the full gtk+-3.0 flags. It survived only
+because `-Fulib/rtl` preceded the include roots in that particular invocation,
+and the loop is searched **in flag order**.
+
+Two consequences, and the second is the general one:
+
+- **`apps/ide/build.sh` was EXPOSED, not clean** — it passes `$GTK3_INC`
+  *before* `-Fu"$ROOT/lib/rtl"`, which is the capturing order.
+- **A collision survey run with `-Fu` first reports zero collisions however many
+  exist.** The negative was not a weak claim about headers; it was a true claim
+  about an argument order, mistaken for one about the code.
+
+**66 said a relayed negative is a claim like any other. This is 66 turned on the
+relay itself** — the coordinator carried frankwasm's row to three lanes with its
+own authority attached, having verified nothing, one hour after banking the face
+that says not to. *The rule you are enforcing is the one you will not apply to
+yourself.*
+
+Worth keeping: the finding was **preserved verbatim under a banner** rather than
+deleted when it was overturned, because the fourth collision it found is real
+and is now in the test's header comment. A retraction that erases the work
+destroys the part that was right.
+
+### 74. A test whose two arms are byte-identical cannot witness the thing it is named for
+
+pxx-a5, same day, found only by poisoning a copy of the shadowed file.
+
+The first cut of the fix deferred C behind **other C** as well, so
+`-Futest/gtk3stock`'s `gtk3_c.h` lost to `lib/pcl/gtk3_c.h` — a real shadow,
+silently defeated. `test_c_gtk3_stock` could not see it: **both headers include
+the installed GTK surface, so the two builds are byte-identical**, and its own
+comment already admitted its `readelf` row "structurally cannot" assert the
+version. The test was passing on a property no arm of it could distinguish.
+
+The remedy is the transferable part: **give the witness an asymmetry the
+compiler must reveal from outside.** `test/uses_shadow/math_ext.h` declares
+`abs` and omits `labs`, so a program calling `labs` answers *which file did the
+`uses` resolve to* by whether it links — an observable that does not depend on
+reading the compiler's mind. Five later C probes were guarded the same way.
+
+Note the discipline that made it stick: the broken first cut was **rebuilt** to
+confirm the new test goes red against it, then restored. A witness that has not
+been shown failing against the defect it was written for is a hope (**62**).
