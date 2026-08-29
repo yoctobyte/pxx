@@ -23,13 +23,32 @@ program DynSlice;
     * nil IS ZERO ELEMENTS. `Length(a)` on a declared-but-never-SetLength array
       is legal and answers 0; without a guard it reads address -8. }
 
+type
+  { Named, because `const p: array of Integer` is an OPEN ARRAY parameter — a
+    different feature with its own refusal. This slice is about the dynamic
+    array itself, so the parameters must name a dyn-array TYPE. }
+  TIntArr = array of Integer;
 var
-  a, b, a2: array of Integer;
+  a, b, a2: TIntArr;
   s: array of string;
   i, n: Integer;
 
 { A local so the SCOPE-EXIT release has something to release. Its leak is a
   different mechanism from an assignment's and check_dyn.sh probes them apart. }
+{ The three parameter modes for a dynamic array. They differ only in how many
+  times the callee must deref its slot, which is precisely what was wrong. }
+procedure PassConst(const p: TIntArr);
+begin writeln('const len=', Length(p), ' p0=', p[0], ' p2=', p[2]); end;
+
+procedure PassValue(p: TIntArr);
+begin writeln('value len=', Length(p), ' p0=', p[0], ' p2=', p[2]); end;
+
+procedure PassVar(var p: TIntArr);
+begin
+  writeln('var   len=', Length(p), ' p0=', p[0], ' p2=', p[2]);
+  p[0] := 99;          { by-reference: the caller must see this }
+end;
+
 procedure Local;
 var t: array of Integer;
 begin
@@ -95,5 +114,21 @@ begin
   writeln('after alias free: a0=', a[0], ' a5=', a[5]);
 
   Local;
+
+  { PASSING ONE TO A ROUTINE — absent from this slice until 2026-08-29, and the
+    omission hid a silent wrong answer for the whole of Phase 9a. `const` and
+    by-value dyn-array parameters answered Length 0 and index 0 on wasm32 while
+    the body reported as FULLY LOWERED; only `var` was right, because its extra
+    indirection made the callee's second deref correct by accident.
+
+    Every mode is here, because the three differ in exactly the deref depth
+    that was wrong and testing one proves nothing about the others. }
+  SetLength(a, 3);
+  a[0] := 11; a[1] := 22; a[2] := 33;
+  PassConst(a);
+  PassValue(a);
+  PassVar(a);
+  writeln('after passvar: a0=', a[0], ' len=', Length(a));
+
   writeln('done');
 end.

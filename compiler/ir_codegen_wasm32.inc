@@ -925,7 +925,27 @@ begin
   if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
   begin
     WasmLValueAddr(si);
-    WasmMemOp($28, 'i32.load', 2, 0);   { slot -> data pointer }
+    { ONE deref for a local, TWO for a by-reference parameter, and the
+      difference is not this arm's to invent — WasmLValueAddr already performed
+      the first when the ABI oracle says the slot holds a value address.
+
+        local        slot -> handle.                      One load, here.
+        var/out      slot -> caller's slot -> handle.     Oracle's load, then this one.
+        by-value     slot -> handle.                      Oracle's load IS the one.
+
+      The by-value row is why this needs saying. The caller emits IR_LEA on the
+      argument, and IR_LEA on a dynamic array yields the DATA POINTER on this
+      target (the arm above, and riscv32's IR_DYNUNIQUE note) — so what arrives
+      in a by-value array parameter's slot is already the handle, not an address
+      of one. Loading again reads the first ELEMENT and calls it a handle, and
+      the symptom is not a trap: Length answers 0, indexing answers 0, and the
+      body reports as fully lowered. `var` worked throughout precisely because
+      its extra indirection made the second load correct.
+
+      IsRef, not the oracle alone, is the discriminator: the oracle is true for
+      every array parameter and cannot tell the two apart. }
+    if (not ABIParamSlotHoldsValueAddr(si)) or Syms[si].IsRef then
+      WasmMemOp($28, 'i32.load', 2, 0);
     Exit;
   end;
   if (Syms[si].Kind = skParam) and Syms[si].IsArray and not Syms[si].IsRef then
