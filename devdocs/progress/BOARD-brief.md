@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:20 blocked:5 backlog:316 backlog_new:7 experimental:22 rainy-day:45 float:21 done-followup:3 decided:116 done:2609 rejected:51`
+`working:1 unfinished:20 blocked:5 backlog:315 backlog_new:7 experimental:22 rainy-day:45 float:21 done-followup:3 decided:116 done:2611 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
@@ -42,7 +42,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 327, ranked
+## Ready — top 30 of 326, ranked
 
 - `[p 85] [R]` bug-r-a-duplicate-forward-in-rparser-breaks-the-fpc-seed-build
 - `[p 75] [P]` feature-pascal-corpus-expansion
@@ -58,7 +58,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-parent-call-after-instantiation
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-relative-import-in-package
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-startswith-tuple
-- `[p 70] [P]` regression-test-threads-test-sched-reactor-exhaustion-2
 - `[p 70] [N]` regression-tools-devtest-00-2
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
@@ -74,5 +73,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
+- `[p 62] [N]` feature-nilpy-enum-class
 
-_297 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_296 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

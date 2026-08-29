@@ -49,7 +49,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (316)
+## backlog (315)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -171,6 +171,7 @@ _none_
 | decide-does-the-legacy-gtk-alias-still-point-at-gtk-2 | U | 50 | decide | `uses gtk` maps to stem gtk-x11-2.0 (GTK 2) while everything else in the tree targets GTK 3 — lib/pcl/gtk3.pas, gtk3widgets.pas and gtk3gl.pas all bind libgtk-3.so.0, and `uses gtk3_c` maps to stem gtk-3. The four test_c_gtk*.pas tests use the legacy alias, so a box must install GTK 2 to make them green. Fork: retarget the alias, rename the tests, or keep GTK 2 deliberately. | — |
 | decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal | U | 40→60 | decide | 24 of wasm32's 52 remaining compiler.pas refusals are the sys* intrinsics (tkSysOpen 15, tkSyswrite 6, tkArgStr 3), and they collapse to ONE blocked primitive: opening a file under WASI. That needs preopen resolution, rights computation and errno mapping, which exist once in lib/rtl/platform/wasi/platform_backend.pas -- a unit compiler.pas deliberately does not link, because the compiler bootstraps on intrinsics to avoid an RTL dependency. Three ways out, each with a real cost: duplicate the capability model into builtinheap.pas, link the PAL into the compiler, or factor the WASI helpers into a shared include. The choice spans Track A and Track B files, so it is not the wasm lane's to make. | — |
 | decide-install-qemu-system-and-a-freebsd-image-on-plexus | U | 55 | decide | The FreeBSD port needs a bootable FreeBSD kernel and plexus has none — qemu-user is installed, qemu-system is not, and no VM image exists anywhere on the box. Installing a system emulator and fetching a multi-GB OS image is a change to the owner's workstation, so it is the owner's call. One-line answer unblocks feature-t-freebsd-image-and-runner and, behind it, feature-port-freebsd-native. | — |
+| decide-is-binds-the-cpyext-runtime-the-ratified-extension-module-check | U | 30 | decide | decide-nilpy-import-rule-vs-a-cpyext-extension-module ratified `PyInit_<name>` as the extension-module criterion; the implementation substituted 'the unit binds the cpyext runtime' after measuring that PyInit_<name> holds for only 3 of the 6 real units, and flagged the deviation for the owner to overrule. Nobody overruled it either way, and it is now shipped, pinned in v391, and — as of this ticket — documented on the public website. Ratify the substitution or order it changed. | — |
 | decide-is-real-a-double-or-fpcs-80-bit-extended | U | 30 | decide | `writeln(3.14159)` prints ` 3.1415899999999999E+000` in pxx and ` 3.14158999999999999993E+0000` in FPC, because pxx's Real is a 64-bit Double and FPC's is the x87 80-bit Extended. Making them agree means implementing an 80-bit float type; keeping them apart means declaring the difference permanent. Both are defensible and neither is a bug. | — |
 | decide-nilpy-deepcopy-over-the-container-subset | U | 40 | decide | `copy.deepcopy`: implement over the subset, or keep the loud absence? | — |
 | decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample | U | 55 | decide | A fourth-corpus probe (reportlab 4.2.5, 421 .py) at pin v389 found that NONE of its 30 distinct first walls is a wall the webencodings/html5lib/tinycss2 family produced — because 89% of its failures are missing library surface and it never reaches the mechanism layer. The family's mechanism walls are not wrong, they are CONDITIONAL: they are what a corpus hits once its import surface is already covered. The three corpora that generated the whole 55-70 ranking are self-contained web parsers with almost no stdlib footprint. On a corpus with an ordinary footprint, landing the entire mechanism cluster would move compile count by ~zero. prio: is the human's field, so the re-ranking call is the owner's. | — |
@@ -187,7 +188,6 @@ _none_
 | decide-two-devdocs-directories-make-a-wrong-grep-look-like-a-refutation | U | 30 | decide | devdocs/dev/ (50 files) and devdocs/developer/ (58 files) both hold internal developer docs. A grep in the wrong one returns silence, which reads like a refuted citation rather than a mislocated file. Decide whether to consolidate, and if so which name wins, given 631 citations point at dev/ and 40 at developer/. | — |
 | decide-where-a-persistent-fpc-trunk-oracle-lives | U | 30 | decide | The FPC trunk oracle works but has nowhere to live: a trunk build is ~4 min and ~1GB, it must sit OUTSIDE the repo, and installing into ~ needs the owner's say-so. Three options with different refresh obligations. Filed because closing feature-t-fpc-probe-needs-a-trunk-oracle with item 3 undone would otherwise lose it. | — |
 | docs-d-document-exec-eval-and-the-builtins-incompatibility | D | 35 | docs | docs/targets/nil-python.md tells the public `eval`/`exec` do not exist (\"No eval of runtime-constructed code\") — but the explicit-dict form has worked since 2026-07-31 via pyeval's tree-walker. Document what exec/eval DO support, the refused ambient form, and the decided __builtins__ incompatibility (decided 2026-08-19, permanent for now). | — |
-| docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out | D | 45 | docs | docs/language/name-resolution.md:47 and docs/targets/nil-python.md:260 quote the bare-import refusal message and state the rule with no carve-out. As of 2026-08-20 a unit declaring {$PYEXTENSION} and binding the cpyext runtime IS bare-importable, so both pages are now wrong in the direction that makes a working program look unsupported. | — |
 | docs-d-nilchecks-directive-and-flag | D | 30 | docs | {$NILCHECKS ON\|OFF} and --no-nil-check shipped 2026-08-21 and are not in docs/reference/directives.md or modes.md. The row is unusual enough to be worth a sentence: the directive is tri-state, so ON and OFF do different things depending on which site class you are looking at. | — |
 | docs-toolchain-cli-flags | D | 35 | docs | Document the toolchain information flags (--help / --version / --where / --config / --list-targets / --list-libraries / --doctor, PXX_HOME, PXX_LIBPATH, pxx.cfg) | — |
 | feature-a-a-refusal-is-a-claim-with-a-date-on-it | A | 35 | feature |  | — |
@@ -362,7 +362,6 @@ _none_
 | regression-test-nilpy-test-nilpy-parent-call-after-instantiation | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy red at b898d0543fc8 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-relative-import-in-package | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_relative_import_in_package.npy red at ee62e6dc0582 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-startswith-tuple | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_startswith_tuple.npy red at b898d0543fc8 (auto-filed by twatch) | — |
-| regression-test-threads-test-sched-reactor-exhaustion-2 | P | 70 | regression | regression: test-threads#src:test/test_sched_reactor_exhaustion.pas red at dd9450b0ce75 (auto-filed by twatch) | — |
 | regression-tools-devtest-00-2 | N | 70 | regression | regression: tools-devtest#00 red at 8787cfe4235a — a new hardcoded /tmp path in a NilPy test | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-d-document-own-language-first-in-the-language-reference | D | 15 | task | The user-facing half of the name-resolution rules: 'a name from your own language wins, and an explicit foreign import overrides it'. Internal map is devdocs/dev/name-resolution.md; the language reference says nothing. Blocked until the symbol rule is actually built — documenting behaviour the compiler does not have is worse than documenting nothing. | feature-a-own-language-first-symbol-resolution |
@@ -614,9 +613,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2609)
+## done (2611)
 
-2609 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2611 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (51)
 
@@ -690,7 +689,6 @@ _none_
 - [p 70] [N] regression-test-nilpy-test-nilpy-parent-call-after-instantiation
 - [p 70] [N] regression-test-nilpy-test-nilpy-relative-import-in-package
 - [p 70] [N] regression-test-nilpy-test-nilpy-startswith-tuple
-- [p 70] [P] regression-test-threads-test-sched-reactor-exhaustion-2
 - [p 70] [N] regression-tools-devtest-00-2
 - [p 68] [E] feature-demo-songformatter-pxx-target
 - [p 68] [N] feature-nilpy-user-defined-decorators
@@ -804,7 +802,6 @@ _none_
 - [p 45] [T] chore-t-tools-devtest-is-one-job-that-runs-86-guards
 - [p 45] [U] decide-should-the-rust-topic-branch-be-retired-onto-master
 - [p 45] [U] decide-t-refuse-unscoped-pattern-kills-in-a-hook
-- [p 45] [D] docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out
 - [p 45] [A] feature-a-a-variant-has-no-null-tag
 - [p 45] [A] feature-a-classinfo-returns-the-typinfo-header
 - [p 45] [A] feature-a-dynamic-array-of-frozen-strings
@@ -899,6 +896,7 @@ _none_
 - [p 30] [T] chore-t-a-standing-collector-cannot-say-so-to-the-ranker
 - [p 30] [T] chore-t-a-wikilink-to-a-ticket-that-does-not-exist-is-never-detected
 - [p 30] [T] chore-t-lint-fall-open-target-chains-without-the-false-positives
+- [p 30] [U] decide-is-binds-the-cpyext-runtime-the-ratified-extension-module-check
 - [p 30] [U] decide-is-real-a-double-or-fpcs-80-bit-extended
 - [p 30] [U] decide-two-devdocs-directories-make-a-wrong-grep-look-like-a-refutation
 - [p 30] [U] decide-where-a-persistent-fpc-trunk-oracle-lives
