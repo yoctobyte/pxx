@@ -8,11 +8,13 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| feature-opt-o3-register-pressure | O | 70 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 
-## unfinished (22)
+## unfinished (21)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -27,7 +29,6 @@ _none_
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 65 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
-| feature-opt-o3-register-pressure | O | 70 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-pascal-corpus-expansion | P | 75 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 | feature-pascal-corpus-fpc-testsuite | P | 65 | feature | Pascal corpus rung 1 — FPC test-suite subset (conformance) | — |
 | feature-pascal-corpus-generics | P | 65 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
@@ -656,7 +657,6 @@ _none_
 - [p 70] [P] bug-p-a-call-chained-onto-a-class-method-result-is-dropped
 - [p 70] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - [p 70] [N] feature-nilpy-staticmethod-and-classmethod
-- [p 70] [O] feature-opt-o3-register-pressure [parked — re-claim, do not duplicate]
 - [p 70] [P] feature-pascal-typed-and-untyped-files
 - [p 70] [P] regression-cascade-4e27dc2be114
 - [p 70] [A+S] regression-test-emit-obj-cxtensa-obj

@@ -16154,3 +16154,107 @@ the campaign and the one I trust least in magnitude"*, because qemu does not mod
 the store-to-load-forwarding stall W2 removes. **Direction solid, size a proxy
 artifact.** Four passes now unswept by the opt tier; **no promotion candidates**,
 all behind `-O3`.
+
+## A hung compile sat unnoticed for forty hours, and nothing in this fleet was watching
+
+Found 2026-08-29 by frankB, by accident, running `ps` while diagnosing something
+else: a `pxx` process from its own checkout, **state R, 100% of a core, elapsed
+1 day 16:47**, compiling a five-line file. No timeout fired, no watchdog, no log
+line. It was burning a full core on the box whose core contention every lane has
+been calling the binding constraint on the test matrix — for most of two days,
+invisibly.
+
+frankB killed it, reproduced it bounded first (`timeout 60` → rc 124 — a
+*bounded* reproduction before the evidence is destroyed, which is the part worth
+copying), and filed `bug-n-compiling-html5lib-trie-never-terminates` [N p55].
+
+I swept the whole box immediately after: nothing older than seven seconds, no
+`make` or compile over an hour, load average 8.50 / 10.40 / 11.93 on 12 cores.
+So it was **one** process and not a population. The fleet fact survives that
+anyway, and it is the more valuable half of the report: **if one hung compile can
+sit for forty hours unnoticed, the fleet has no instrument that would notice a
+second one.** A hang is worse than a segfault for an automated driver — a crash
+returns and a hang holds a core forever.
+
+**The sweep is now part of the coordinator tick**, not a filed ticket. It costs
+one `ps` and a ticket would sit in a queue behind p70s; a check nobody is
+assigned to run is not a check. What it looks for is a `pascal26`/`make` process
+older than an hour — for a compiler whose whole self-host build is ~12s, an hour
+is four orders of magnitude past normal and needs no tuning to be unambiguous.
+
+Note what made this findable at all: frankB was looking at something else. The
+generator-family signature applies to the fleet's own health — "no hang report"
+and "no instrument that could produce a hang report" read identically from
+inside.
+
+## Two `make lib-test` runs died to SIGTERM, and the line numbers are the diagnosis
+
+Same session, and I think this one is the harness rather than the box. frankB's
+runs were killed at **line 352** and **line 103** of ~1198, `make: *** Terminated`,
+no exit line, 44G free, nothing in dmesg. It correctly refused to assert a cause.
+
+The discriminator is which axis the two kills agree on. **A resource limit kills
+you at a resource threshold, so it lands near the same PLACE each time. A
+wall-clock limit kills you at the same TIME, which lands at a different place
+every run, depending on load.** 352 versus 103 is a factor of three in
+throughput — exactly the spread six agents plus twatch's clone against 12 cores
+produces, and consistent with the load averages measured minutes later.
+
+The wall clock that fits is the **Bash tool's own**: 120s default, 600s maximum,
+and it SIGTERMs the process group on expiry. That also explains the two negative
+findings — no dmesg entry and no OOM — because the kernel was never involved.
+
+**Filed as a hypothesis with a falsifier, not a finding**, and the falsifier is
+cheap: if it is the timeout, the two runs' WALL TIMES are nearly identical while
+their line counts differ 3x. If the wall times differ as much as the line numbers
+do, the story is wrong. frankB was asked to check that before believing me —
+a mechanism that explains every observation is exactly the kind that gets adopted
+without being tested, and I have shipped a wrong causal story behind a correct
+measurement once already this week.
+
+**The remedy is `run_in_background`, not a larger timeout.** Raising the ceiling
+picks a number that six agents' load will invalidate; backgrounding removes the
+clock. And explicitly NOT splitting the run into pieces that each fit under the
+wall — that is the workaround shape, and it would have hidden the cause while
+looking like a fix.
+
+## A queue head its own lane cannot work is worse than an empty queue
+
+pxx-a5 flagged that `next --track T` headed with
+`bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing`, whose
+remaining half is 480 conversions in `Makefile` — Track A's file-lane. It
+declined to retrack it, on the grounds that retracking IS the dispatch call and
+that call is mine. Correct, and the restraint is worth more than the flag.
+
+Retracked `T` → **`A+T`** (`88e7c97af`): A is the file-lane, T is the work-tag,
+per the two-axes model. Dropping T would have lost what the ticket is *about*;
+leaving it as T alone left it in a queue whose agents cannot act on it.
+
+The ranker still shows it under `--track T`, which is right — it genuinely is a
+T-subject ticket needing an A file-holder — but now it is **labelled `[A+T]`**, and
+the label is the actual fix. **An unworkable head occupies the ranker's top slot
+and every `next --track T` re-offers it, so the lane reads as busy while nothing
+is takeable.** That is strictly worse than a dry queue, which at least reports
+itself honestly.
+
+## Occupancy cannot be read from the repo — only from the session
+
+frank-optimize-b4 wanted `compiler/symtab.inc` for -O3 item 3's exception-frame
+gate, and offered three pieces of evidence that it was free: the metaclass ticket
+in `done/`, the fix landed as `72dbc9ba0`, `working/` empty. It stopped and asked
+anyway. Right call, and I answered the same way: **all three are statements about
+what has been COMMITTED, and none of them can see an uncommitted edit in a
+session's tree — which is precisely the state a lock exists to protect.**
+`ListAgents` cannot see it either; frankA read `idle` throughout, and treating
+exactly that reading as a park line is the mistake I made the day before.
+
+So the question went to frankA, which is the only source that can answer it.
+Generalised: **the repo can prove a lane BUSY and can never prove one FREE.**
+
+Dispatched frankA to `bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream`
+[A p70, unblocks 2] partly for that reason — it is lexer-stack machinery, so it
+keeps `symtab.inc` clear whichever way the answer goes. Its variance table (ten
+measured orderings; the same failure reported against two *different* files, one
+of them a line past EOF of a 269-line file) is what makes it settleable by
+reduction rather than resemblance: the failing and passing cases differ by an
+ordering, not by a construct.
