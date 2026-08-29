@@ -643,3 +643,38 @@ Remaining: ~40 first-tier phrase hits (the `must never` single-site family, whic
 face 71 predicts is lower yield than the self-descriptions just swept), the
 unaudited `builtinheap` twins (`PXXStrEq`, `PXXVarClear`, console-read; float→text
 stays out as Track F), prior #2, row 7.
+
+---
+
+## 2026-08-29 — the xtensa finding is DEMONSTRATED, and my retraction was wrong about why
+
+frankS ran the repro: **both comparisons print `WRONG:`, on both ABIs** — a
+consistent total order, exactly inverted, which is the signature of ordering by
+handle. Provenance is recorded precisely in the ticket, including that it does
+**not** run on pushed master and rests on an unpushed `HeapMmap` arm plus
+`--xtensa-soft-mulhigh`.
+
+**The part that belongs in this audit** is what it did to my own retraction.
+
+I withdrew *"hosted xtensa hangs"* because it was measured on a compiler
+predating frankS's fix. That reasoning was sound and the `--where` proof was
+right. **But the hang was not caused by the missing fix.** `HeapMmap` in
+`builtinheap.pas` has arms for x86-64, aarch64, arm32, i386, riscv32, wasm32 and
+bare-ESP and **no `CPU_XTENSA` arm** — hosted xtensa fell through to
+`Result := -1`, took `-1` as the heap base, and faulted on the first allocation.
+No hosted xtensa program that allocated anything had *ever* run, on any pin.
+
+So the observation I retracted was **correct**; only my explanation of it was
+wrong — and I replaced one wrong explanation with another while treating the act
+of retracting as evidence of rigour. **A retraction is a claim too, and it is the
+one kind nobody asks you to prove, because it is self-critical.** That is a
+seventh instance of this ticket's shape and the only one whose author was the
+auditor: a confident sentence, adjacent to the thing it describes, never diffed
+against a second source.
+
+Note also that `HeapMmap`'s missing arm is *itself* the pass-3 shape — a
+per-target dispatch with seven arms and a silent terminal fallthrough where an
+eighth belongs. The enumeration ticket's rule covers it exactly: **a construct
+that enumerates targets and ends in a default is asserting the default is right
+for everything it did not name.** Worth adding to that ticket's fix list as a
+pattern rather than a site.

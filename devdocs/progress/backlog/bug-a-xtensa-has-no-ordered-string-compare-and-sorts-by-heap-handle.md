@@ -5,7 +5,7 @@ type: bug
 status: open
 found: 2026-08-29
 found-by: frankD
-summary: "`'zzz' < 'aaa'` on xtensa compares the two heap HANDLES as signed ints and answers by allocation order. This is the exact defect PXXStrCmp3 was added to fix — it was applied to i386/aarch64/arm32/riscv32 and xtensa was not visited, and the helper's own comment says 'the four cross backends' when there are five."
+summary: "DEMONSTRATED: both comparisons print WRONG on both ABIs. `'zzz' < 'aaa'` on xtensa compares the two heap HANDLES as signed ints and answers by allocation order — the exact defect PXXStrCmp3 was added to fix, applied to i386/aarch64/arm32/riscv32 with xtensa never visited, because the helper's own comment says 'the four cross backends' when there are five. Fix accepted by frankS."
 ---
 
 # xtensa has no ordered string compare: `a < b` sorts by heap handle
@@ -74,7 +74,65 @@ end.
 | --- | --- |
 | x86-64 native | `ok: zzz >= aaa` / `ok: aaa < zzz` |
 | riscv32 under `qemu-riscv32` | `ok: zzz >= aaa` / `ok: aaa < zzz` |
-| xtensa under `qemu-xtensa` | **not yet measured on a valid toolchain — see below** |
+| xtensa under `qemu-xtensa`, Call0 | **`WRONG: zzz < aaa` / `WRONG: aaa >= zzz`** |
+| xtensa under `qemu-xtensa`, windowed | **`WRONG: zzz < aaa` / `WRONG: aaa >= zzz`** |
+
+## DEMONSTRATED — frankS, 2026-08-29
+
+**Both comparisons print `WRONG:`, on both ABIs.** Not one — both. The order is a
+consistent total order, just the inverted one: `'zzz'` happens to take the lower
+handle, so handle order comes out exactly opposite to lexicographic order and
+both tests fall the wrong way. A different allocation pattern would have given
+one right by luck. **That is the signature of ordering by handle**, and it is
+this ticket demonstrated rather than inferred.
+
+**Provenance — read this before citing it.** The repro does **not** run on pushed
+master `1ec7725af`; there it dies with SIGBUS before comparing anything. The two
+lines above come from:
+
+> **frankS working tree at `1ec7725af` plus an unpushed `HeapMmap` xtensa arm,
+> `qemu-xtensa` 10.2.1, both ABIs, with `--xtensa-soft-mulhigh`.**
+
+Two caveats that belong with any quotation of this result: the `HeapMmap` arm is
+not yet granted or pushed, and `--xtensa-soft-mulhigh` means the oracle is **not
+bit-identical to hardware for multiplies** (no qemu-xtensa core implements
+MUL32HIGH, and integer formatting strength-reduces div-by-10 into a 64-bit
+multiply). Neither touches string comparison, so neither weakens this result —
+but a verdict that omits them is overclaiming. To be re-cited cleanly once the
+heap arm lands.
+
+### Why it could not run before, which is its own finding
+
+`HeapMmap` in `builtinheap.pas` has arms for x86-64, aarch64, arm32, i386,
+riscv32, wasm32 and bare-ESP, and **no `CPU_XTENSA` arm**. Hosted xtensa fell
+through to the terminal `Result := -1`, so the heap base was `-1` and the first
+allocation faulted at `$FFFFFFFF`. **No hosted xtensa program that allocated
+anything had ever run.** frankS's numbers, measured under qemu rather than read
+off a table, because xtensa diverges from the generic ABI twice: `__NR_mmap2` is
+**80** (generic 222 is literally `Unknown syscall 222` there, the same shape as
+read=12/write=13 vs 63/64), and `MAP_ANONYMOUS` is **$800**, so flags are `$802`
+— not the 34 every other arm passes. The second is the half that fails quietly:
+with 34 the kernel sees no ANONYMOUS bit, tries to map fd -1, and returns EBADF,
+a negative errno `PXXAlloc` deliberately does not check, which then becomes the
+heap base and faults somewhere else entirely.
+
+### A correction to my own correction
+
+The retraction below was **right to make and wrong about why.** I withdrew the
+hang because it was measured on a compiler predating frankS's fix — true, and the
+`--where` argument for it is sound. But the hang was not caused by the missing
+fix: the program **could not have worked on any pin**, because nothing had ever
+allocated successfully on hosted xtensa. So the observation I retracted was
+correct; only my explanation of it was wrong, and I replaced a wrong explanation
+with a different wrong explanation while congratulating myself on the rigour.
+
+The rule that survives is still the right one — *name the binary, not the tree* —
+but it is worth recording that **applying it correctly does not make the
+resulting story true.** A retraction is a claim too, and mine went unchecked
+because it was self-critical, which is the one kind of claim nobody asks you to
+prove.
+
+---
 
 **I could not demonstrate the wrong output — and my first attempt to say why was
 itself wrong, so it is withdrawn here rather than quietly edited.**
@@ -129,6 +187,13 @@ While there, fix `PXXStrCmp3`'s header comment to say **five**, or better, to
 stop counting: *"the cross backends that do not call this helper have no ordered
 string compare at all"* is the durable form, because it stays true when a sixth
 target lands.
+
+## Owner
+
+**Routed to frankS and accepted** (2026-08-29). It holds
+`ir_codegen_xtensa.inc` and the only working hosted-xtensa build; it will widen
+the `:1622` guard with a `PXXStrCmp3` lowering on the riscv32 shape and check the
+frozen-`tyString` and `Char` operand forms, not only handle-vs-handle.
 
 ## Gate
 
