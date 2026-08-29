@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:2 unfinished:21 blocked:6 backlog:300 backlog_new:5 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2584 rejected:46`
+`urgent:1 working:2 unfinished:21 blocked:5 backlog:300 backlog_new:5 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2585 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
@@ -40,14 +40,13 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-threadsafe-heap-optimize` [A]
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
-## blocked (6) — has an unmet blocker; do not claim
+## blocked (5) — has an unmet blocker; do not claim
 
 - `bug-b-nilpy-random-is-never-seeded-and-its-first-draw-is-the-low-bound` [N] — blocked-by: decide-does-nilpy-random-seed-itself-at-import
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
 - `bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio` [T] — blocked-by: decide-t-per-assertion-subjects-or-accept-the-file-level-label
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
-- `regression-lib-test-lib-synapse` [B] — blocked-by: bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream
 
 ## Ready — top 30 of 312, ranked
 
