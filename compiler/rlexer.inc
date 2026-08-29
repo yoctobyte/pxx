@@ -284,6 +284,9 @@ begin
            else CurTok.Kind := tkSlash;
          end;
     '%': CurTok.Kind := tkMod;
+    { the `?` postfix try operator -- tkQuestion already exists in the shared
+      token set (Pascal's ternary), so no new token kind is needed }
+    '?': CurTok.Kind := tkQuestion;
     '(': CurTok.Kind := tkLParen;
     ')': CurTok.Kind := tkRParen;
     '[': CurTok.Kind := tkLBrack;

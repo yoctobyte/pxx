@@ -5924,6 +5924,20 @@ test-core: $(COMPILER)
 	cat test/rust_unity/*.rs > $(TESTTMP)/rust_unity.rs
 	./$(COMPILER) $(TESTTMP)/rust_unity.rs $(TESTTMP)/test_rust_unity26
 	tools/expect_same.sh test_rust_unity26 "$$($(TESTTMP)/test_rust_unity26)" "$$(printf 'side 1 occupied 3\nflipped 2\nmob 2 4 2\ntbl 2 4 8 2\nkf0 132096')"
+	# Rust Result<T, E> and the `?` try operator (feature-rust-corpus-chess, the
+	# rung after the unity build). Result monomorphizes onto the SAME enum
+	# machinery Option uses -- __tag at 0, Ok.0/Err.0 overlapping past it -- so
+	# match/return/field access need no Result-specific code downstream. `?`
+	# desugars to `match e ... Err(e) => return Err(e)`, with the operand
+	# materialization and the early return HOISTED out of the expression and
+	# flushed by RParseStatement, since neither fits in an expression node.
+	# `place` and `pick` pin a payload-SIZING bug this rung exposed: a
+	# monomorphized payload occupies RecSize, not TypeSize(tyRecord), which
+	# answers 8. Option had it wrong since it was written and got away with it
+	# because Option<Square> is exactly 8 bytes -- Option<Big> SEGFAULTED on
+	# master and Result<Pos, i64> read `4 2` back as `4 0`. Neither failed loudly.
+	./$(COMPILER) test/test_rust_result.rs $(TESTTMP)/test_rust_result26
+	tools/expect_same.sh test_rust_result26 "$$($(TESTTMP)/test_rust_result26)" "$$(printf '1 ok 11\n2 err 7\n3 ok 14\n4 err 7\n5 ok 120\n6 err 7\npos 4 2\npos err 3\nbig 10 11 12 13\nbig none')"
 	# Ada frontend skeleton (feature-esoteric-ada): for-range accumulate, if/elsif/else,
 	# while, bare loop + exit-when, Put_Line -- all lowering onto existing shared IR.
 	./$(COMPILER) test/test_ada_skeleton.adb $(TESTTMP)/test_ada_skeleton26
