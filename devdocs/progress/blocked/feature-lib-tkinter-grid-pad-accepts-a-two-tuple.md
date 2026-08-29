@@ -3,7 +3,7 @@ track: B
 prio: 45
 type: feature
 blocked-by: [bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped]
-summary: "`widget.grid(padx=(8, 6))` — tkinter's two-tuple pad, meaning (left, right) — is rejected by the facade: `no overload of grid matches these arguments`. A scalar `padx=8` works. Real tkinter accepts both for padx and pady on grid and pack. One line of songformatter's settings.py needs it; it is the module's only remaining wall."
+summary: "CORRECTED 2026-08-29 by the lane that filed it: the facade is NOT missing the two-tuple pad. padx/pady are already Variant, the braced pair is already emitted, and `grid info` on a live widget reports `-padx {8 6}`. The call is rejected by bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped — a METHOD call with an earlier default left unbound and an object-valued Variant. Nothing to change in lib/pcl; kept open only to track the app-side consequence."
 status: working
 owner: frank-b
 ---
@@ -12,6 +12,66 @@ owner: frank-b
 
 - **Type:** feature (library surface, tkinter facade) — **Track B**.
 - **Filed:** 2026-08-29 by the wasm lane against pin v392 (`60b060bb54a8`).
+
+
+> ## CORRECTION 2026-08-29 — the diagnosis below is WRONG, the measurement is not
+>
+> Written by the wasm lane, which filed this ticket and got its cause wrong.
+> frankB investigated and **changed nothing in `lib/pcl`**, which is the right
+> outcome and the one this ticket as written would have prevented.
+>
+> **The facade was already complete.** `lib/pcl/tkinter.pas:104` declares
+> `const padx: Variant = 0`, and line 106 carries the comment *"padx/pady are
+> VARIANT: tkinter takes either a number or a (left, right)"* — the exact
+> semantics the "Fix" section below proposes adding. frankB confirmed the
+> emitter too, by asking **Tk itself** rather than our own formatter: `grid
+> info` on a live widget reports `-padx {8 6}`.
+>
+> **The real cause** is
+> [[bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped]]:
+>
+> ```python
+> c = v6.TC(a=0, v=(8, 6))     # OK    — constructor
+> c.meth(a=0, v=(8, 6))        # FAILS — method
+> ```
+>
+> A **method** call, an **earlier default left unbound**, and an
+> **object-valued Variant** are all three required. So this was never about
+> tuples, and it explains the table below exactly: `padx=8` works because
+> scalars are unaffected; `padx=(8, 6)` fails because `sticky`, `columnspan`
+> and `rowspan` were skipped ahead of it. Re-verified here — the app's spelling
+> fails, `grid(row=0, column=0, sticky="e", columnspan=1, rowspan=1,
+> padx=(8, 6), pady=2)` compiles, and `grid(padx=(8, 6))` **alone** also fails,
+> which the tuple theory cannot explain and the skipped-default one predicts.
+>
+> **How I got it wrong, since I had written the rule three times the same
+> evening.** `no overload of grid matches these arguments` plus "scalar works,
+> tuple fails" reads as *the tuple form is unimplemented* — and that reading is
+> available without opening a single file. I never opened `tkinter.pas`. This
+> is the ticket I closed hours earlier saying *a diagnostic that names a cause
+> may be naming the discriminator*, and the cost of checking was one grep. I
+> skipped it because the story was coherent, and a coherent story is precisely
+> the input that makes verification feel unnecessary.
+>
+> Operational form, because "verify your claims" is too weak to act on: **a
+> ticket that proposes a fix must QUOTE the code it proposes to change** — not
+> cite it, quote it. I could not have written "padx must become Variant"
+> underneath a line reading `const padx: Variant = 0`.
+>
+> **The one-line workaround is deliberately NOT taken.** Naming every option is
+> legitimate and is not a compiler-appeasement reshape — nothing is renamed or
+> rerouted, the app just spells out options it already sets. It is still an
+> **app-source edit**, and this track's principal goal is that songformatter's
+> source stays unmodified CPython, to the point that the single app-side change
+> that does exist (the fallback import) is scheduled for removal once dotted
+> imports land. Spending the principal goal to save one N ticket is the wrong
+> trade from here. `settings.py` stays as CPython wrote it and waits on the N
+> fix. If the owner wants the app moving tonight at that price, the spelling is
+> in the paragraph above and it works.
+>
+> Everything below is the original filing, left intact. The measurement table
+> is sound; the "Fix" section is the part that was invented.
+
 
 ## Repro
 
