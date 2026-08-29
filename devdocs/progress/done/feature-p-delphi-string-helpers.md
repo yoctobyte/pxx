@@ -247,6 +247,14 @@ longer* — and it would have sent this session to fix six working spellings.
 
 ### What is left, and it is a pin rather than a defect
 
+> **CLOSED 2026-08-29, same evening: the pin landed.** v390
+> (`867207f2b418`, commit `41caa9c82`) carries the helper-property fix, so the
+> 35th row went in and `lib_string_helpers` gates `s.Length` — 35 rows
+> byte-identical to fpc 3.2.2. The section below is left as written because it
+> is an accurate record of why the row could not land at the time, and because
+> the general fact it states outlives this ticket. Only the "one loose end"
+> is closed; the structural point is not.
+
 Nothing in the frontend and nothing in the library. The one loose end is that
 `test/lib_string_helpers.pas` gates 34 rows and not 35: `lib-test` builds with
 `$(PXX_STABLE)`, the pin predates today's compiler fix, and a `Length` row would
