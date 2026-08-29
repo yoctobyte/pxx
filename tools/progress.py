@@ -341,6 +341,29 @@ class Ticket:
         return bool(_NODISPATCH_RE.search(self.text))
 
     @property
+    def is_idea(self) -> bool:
+        """A brainstorm PARENT, not a unit of work.
+
+        `next` prints a paste-ready `claim` line, so offering one of these is an
+        invitation to scope inflation: `idea-c-realworld-test-targets` [p60] is
+        the ranked head of Track C, its own status line says "not scheduled --
+        user prefers moving elsewhere next", and its remaining candidates are
+        DOOM, micropython and p2c -- each a multi-session campaign. Its concrete
+        items already spun out into their own tickets. It presented as the head
+        to every agent dispatched onto C (found by frankC, 2026-08-29, which
+        skipped it rather than claiming it).
+
+        This is rule 7 in tool form: a ranked queue says a ticket is UNBLOCKED,
+        not that it has work left in it, and `ready`/`next` cannot tell those
+        apart. Lowering the prio would have been the wrong fix -- the priority
+        is honest, it is the TYPE that is wrong for dispatch. So they stay
+        ranked and visible in `ready`, annotated, and only `next` declines to
+        hand one over. Measured: 5 such tickets across the ranked buckets.
+        """
+        return (self.slug.startswith("idea-")
+                or self.fm.get("type", "").strip().strip('"').lower() == "idea")
+
+    @property
     def guessed_track(self) -> str:
         """The lane letter twatch GUESSED, when that guess is still standing.
 
@@ -765,6 +788,9 @@ class Board:
                 extra += " [parked — re-claim, do not duplicate]"
             if t.not_dispatchable:
                 extra += " [!! DO NOT CLAIM — the ticket says so; read it]"
+            if t.is_idea:
+                extra += (" [idea — a brainstorm parent, not a unit of work; "
+                          "spin out a concrete ticket instead of claiming it]")
             if t.guessed_track:
                 extra += (" [track GUESSED from the test path — the defect may "
                           "be in another lane; verify before claiming]")
@@ -778,8 +804,8 @@ class Board:
         # Drop tickets that declare themselves unclaimable. `next` prints a
         # paste-ready `claim` line, so offering one of these is an invitation;
         # `ready` still lists them (flagged) because seeing them is useful.
-        skipped = [t for t in rt if t.not_dispatchable]
-        rt = [t for t in rt if not t.not_dispatchable]
+        skipped = [t for t in rt if t.not_dispatchable or t.is_idea]
+        rt = [t for t in rt if not (t.not_dispatchable or t.is_idea)]
         if not rt:
             scope = f" for Track {track_filter}" if track_filter else ""
             return f"no ready ticket{scope} (all blocked or none in urgent/backlog/unfinished)\n"
@@ -805,8 +831,9 @@ class Board:
         ]
         if skipped:
             lines.append(
-                f"  (skipped {len(skipped)} higher-ranked ticket(s) marked "
-                f"do-not-claim: {', '.join(t.slug for t in skipped)})")
+                f"  (skipped {len(skipped)} higher-ranked ticket(s) — "
+                f"do-not-claim or brainstorm-parent: "
+                f"{', '.join(t.slug for t in skipped)})")
         if t.guessed_track:
             lines.append(
                 f"  NOTE: this ticket's track was GUESSED from its test source "

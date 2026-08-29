@@ -2,6 +2,8 @@
 prio: 70
 track: B
 summary: "NOT the crtl steps the job is named after — those are green at HEAD. tools/reportlab_diff.py exits 1 when the vendored oracle is PRESENT but does not IMPORT (host seven has no Pillow), so the Makefile prints 'the mimic diverged from the oracle' when nothing was compared. Third arm of a guard that already handles two. Track B file."
+status: done
+owner: frankB
 ---
 
 > **Track guessed as C** from the test source. The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -128,3 +130,82 @@ verdict; it does not restore the coverage.
 
 *(Left unfixed by frankC deliberately — Track C does not edit Track B files.
 One-line-shaped change, fully specified above.)*
+
+---
+
+## Fixed — 2026-08-29 (frankB, Track B). Two arms, not one; and one consequence in the dispatch is wrong.
+
+frankC's diagnosis is correct and I did not re-derive it: the crtl steps the job
+is *named* after are green, and the red is `tools/reportlab_diff.py` exiting 1
+when the oracle is present but not importable.
+
+### Reproduced first, in two scratch roots
+
+`os.path.isdir(ORACLE)` answers **"were the files fetched"**. That is not the
+same question as **"does the oracle run"**, and the two differ exactly on a box
+that fetched the source without its dependencies — which is `seven`.
+
+Building a scratch root to reproduce turned up a *second* failure class that the
+specified guard would not have caught:
+
+| | scratch root | before | after |
+| --- | --- | --- | --- |
+| **A** oracle present, **not importable** (seven's exact shape) | `reportlab/__init__.py` importing an absent module | exit **1** — "the mimic diverged" | exit **77**, naming the missing dependency |
+| **B** oracle **imports**, reference script fails anyway | a stub `Canvas` that raises on use | exit **1** — "the mimic diverged" | exit **77**, `ORACLE FAIL: TypeError: ...` |
+
+I hit **B** by accident: my first stand-in imported cleanly and only failed
+later, and it produced a verdict identical to A's. An upfront import probe cannot
+see it. So the fix has two arms:
+
+1. **The specified guard** — probe `import reportlab.pdfgen.canvas` with
+   `PYTHONPATH=ORACLE` before running any case; on failure print the real
+   `ModuleNotFoundError` and return 77. Deterministic, and names the actual
+   missing dependency instead of guessing.
+2. **A backstop in `run_case`** — the reference invocation drops `check=True`
+   and returns `ORACLE FAIL: <last stderr line>`; `main()` turns any such case
+   into 77 rather than counting it as a divergence. This is the arm that
+   generalises: **the oracle failing is never evidence about the mimic**,
+   whatever the reason, and only this arm holds for reasons nobody predicted.
+
+Unchanged where it should be: the real oracle on this box still gives
+`REPORTLAB DIFF: OK`, exit 0, and the two pre-existing guards (oracle absent,
+`pdftotext` absent) still return 77.
+
+The Makefile already maps 77 → `SKIP reportlab_diff` **and** appends
+`reportlab-diff` to `lib-test.skipped`, so on `seven` this now both skips and
+appears in the summary's `SKIPPED:` inventory.
+
+### Consequence 1 in the dispatch is FALSE — there is no hidden coverage
+
+The dispatch says *"the recipe `exit 1`s there, so every lib-test step after the
+reportlab block has never run on `seven`"*, and to expect new reds. **Nothing
+runs after it.** The reportlab block is the last substantive step in `lib-test`:
+
+- `lib-test:` spans 14244-15594; the reportlab block is 15577-15582; the only
+  thing between it and the next target is the summary `echo` at 15583.
+- The last executable step *before* it is `lib_inttohex_strict` (15568-15570) —
+  which is **exactly** what this ticket's own log tail ends with, one line above
+  the traceback.
+- `lib_synapse_ssl` is at **14726**, far earlier. The order in the summary
+  line's enumeration is not execution order, which is the natural way to read it
+  wrongly.
+
+So: no steps were skipped, no reds are pending, and nothing needs filing into
+other lanes. What `seven` actually lost is the **summary line itself** — so that
+host has never printed its own `SKIPPED:` inventory either, and its coverage
+caveat has been invisible for the same reason its verdict was wrong.
+
+Not a criticism of the dispatch: it is the *reasonable* reading, and it would
+have been right for a failure anywhere else in a 1350-line recipe. It is wrong
+only because this step is last, which nothing in the log tail shows.
+
+### Consequence 2 stands, verbatim
+
+After this fix the job **reports honestly and still compares nothing** on
+`seven`. The guard converts a false divergence into a truthful skip; it does not
+restore coverage. Installing Pillow there is a provisioning action on the owner's
+box and is his call — it is in the morning report, not in this ticket.
+
+Gate: `make lib-test` green at **v392**, exit 0, no `SKIPPED:` clause on this
+box; both scratch roots re-run against the patched script.
+- 2026-08-29 — resolved, commit cf7be54dd.

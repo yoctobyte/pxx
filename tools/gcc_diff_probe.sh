@@ -596,6 +596,20 @@ int main(void) {
   return 0;
 }
 C
+probe printf-p-null <<'C'
+#include <stdio.h>
+int main(void) {
+  /* Only the NULL case can be diffed: a real address differs between the gcc
+     and pxx builds, so the non-null form is asserted by shape in the C tests
+     instead. glibc renders NULL as "(nil)" and treats it as a plain STRING --
+     the '0' flag is ignored and precision neither pads nor truncates, which is
+     what separates this from a digit swap. compat-c-printf-p-of-null */
+  printf("[%p]\n", (void*)0);
+  printf("[%10p][%-10p][%5p]\n", (void*)0, (void*)0, (void*)0);
+  printf("[%010p][%.3p][%.0p]\n", (void*)0, (void*)0, (void*)0);
+  return 0;
+}
+C
 probe printf-width-prec <<'C'
 #include <stdio.h>
 int main(void) {

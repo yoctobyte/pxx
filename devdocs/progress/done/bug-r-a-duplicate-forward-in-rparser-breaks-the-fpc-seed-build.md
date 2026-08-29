@@ -3,7 +3,7 @@ slug: bug-r-a-duplicate-forward-in-rparser-breaks-the-fpc-seed-build
 track: R
 prio: 85
 type: bug
-status: backlog
+status: done
 blocked-by: []
 summary: "compiler/rparser.inc declares `function RParseAggregateIntoNode(targetNode, ci: Integer): Integer; forward;` TWICE — :1498 (from e3043236b) and :2786 (from fcfe1cba1). FPC rejects the second: `Error: Function is already declared Public/Forward`, and the whole compile aborts. This breaks the FPC-SEED BOOTSTRAP for every lane, not just Track R. It does NOT show up as a gate failure for a clean tree — the canary's arming rule skips it once the break is on origin/master; it fires on the next person to touch compiler/ and names R's file (split out as bug-a-the-fpc-seed-canary-skips-a-break-already-on-master). pxx itself tolerates the duplicate, so self-host is green and nothing else complains — the seed is the only thing that notices."
 owner: unassigned
@@ -111,3 +111,6 @@ one. Track T or A, whoever holds `tools/forwardlint.py`.
 
 `tools/gate.sh quick` green — specifically the `FPC seed canary` step — plus
 Rust tests still passing and the self-host fixedpoint unchanged.
+
+## Log
+- 2026-08-29 — resolved, commit 85e88c3a3.

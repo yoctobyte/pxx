@@ -17466,3 +17466,113 @@ include list is flat, so whichever root goes first decides the GTK version for e
 C consumer at once. frankC's recommendation, which I endorse: scope the include root
 by the stem that already picks the soname, so one fact drives both. Caveat to carry:
 the owner's box has GTK **2** headers as the working set.
+
+## 2026-08-29, later — grants on the record, and Track C is not a staffable lane
+
+**FILE GRANTS ISSUED (an authorisation is a finding about what is permitted).**
+
+| session | granted | rationale |
+| --- | --- | --- |
+| **frankS** | `ir_codegen_xtensa.inc`, `lib/rtl/platform/esp/**`, `examples/esp32/**`, and `compiler.pas`'s ESP profile plumbing (`AddDefaultPasUnitDirs` / `DeriveTargetPlatform`) | uncontended; frankA holds `ir.inc`/`pyparser.inc`, not `compiler.pas` |
+| **frankS** | `lib/crtl` ESP close/dispatch path only | `lib/crtl` is claimed by **both** B and C in CLAUDE.md — a real doc ambiguity; frankC is running csmith, not editing |
+| **frank-optimize-b4** | `ir_codegen.inc` + `symtab.inc`, own checkout | **note `ir.inc` ≠ `ir_codegen.inc`** — b4 flagged that my "stay out of `ir.inc`" was one character from blocking its slice |
+| **pxx-a5** | read-only everywhere, twice | a reading audit collides with nobody, and both times it returned more than a fix would have |
+
+### Track C is not an independently staffable lane — measured
+
+frankC worked the C queue and found **four of six ranked C tickets need a Track A
+file**. I confirmed the cause: **`ir.inc` carries 40 `CProgramMode` references and
+there is no `cir.inc`**, while C owns `clexer`/`cparser`/`cpreproc`. C is the
+frontend whose parser was carved out and whose **lowering was left behind**. P had
+this and fixed it via the `pasparser_*` split; R, Z, N all own their files.
+
+**I staffed C tonight off `ready --track C` = 9. Exactly one was workable.** The
+count was honest and the lane was not staffable, and no tool could have told me.
+Filed as `refactor-a-c-exclusive-lowering-has-no-carved-out-file-...` [A p45].
+
+Same family as the two annotations I landed today (guessed track, brainstorm
+parent): **`ready` answers "is it unblocked", never "can THIS agent do it"**. The
+first two were annotatable; this one needs a real refactor.
+
+### Findings banked (workers cannot see each other)
+
+- **frankwasm — the prescribed fix would have turned the job green and changed
+  nothing.** The ticket *and* the guard's own message told tests to read
+  `$TESTTMP`; testmgr builds job env from an **allowlist** and strips it. Guard
+  green, collision intact — *"a red ratchet is a disabled ratchet"* one step later
+  and harder to see, because now nobody is looking. **Five existing tests are in
+  that state**, all having followed the guard's advice faithfully — which is why
+  fixing the advice beats fixing them one at a time. Second half filed [T p55]:
+  the guard cannot distinguish a test that ISOLATES from one that merely stopped
+  saying `/tmp` out loud, so it calls all five clean — **a check that cannot fail**.
+- **pxx-a5 — the fix was two lines, not one.** `AllocArray` AND `AllocDynArray`
+  both skip `RecName`. Why it slipped: every allocator's comment says *"every
+  `Alloc*` must reset EVERY parallel array"* and `RecName` is a **field**, not a
+  parallel array — **a rule stated over one representation did not cover the thing
+  that behaves identically in another**, and the comment made it look covered.
+  Also: **20 reads guarded by `TypeKind = tyRecord` and nothing else, which is not
+  a guard** — an array-of-record symbol *has* `tyRecord`, it holds the ELEMENT
+  kind. A live silent C bug fell out (`_Generic` selects `struct B` where gcc says
+  `other`). And **today's passing case passes by accident** — the recycled slot
+  happened to hold no record id.
+- **frankS — `--where` reported the pre-derivation default** because it was handled
+  inside the argument loop while derivation ran after it, defeating the invariant
+  stated in `AddDefaultPasUnitDirs`'s own header comment. Third instance today of
+  **a comment true where it is written and false where it is used**. Also corrected
+  the ticket's own reachability estimate: not "latent, papered over by four `-Fu`
+  sites" but a **hard compile failure for any real user** — in-tree builds were the
+  only ones papered over. *The estimate was wrong; the diagnosis was exact.*
+- **frankC — the ticket's stated fix was wrong, three of six spellings.** glibc
+  treats `%p` of null as a **string**, so it leaves the numeric path outright. And
+  it ran the new probe against the **pre-fix** source to confirm it fails.
+- **frank-optimize-b4 — did NOT fold shifts into the existing imm-fold arm**,
+  because that would reproduce every width fixup in a second place. Test pairs each
+  constant count with a **variable-count twin in the same program**, so a wrong
+  encoding surfaces as two arms disagreeing rather than as a value with no oracle.
+
+### Operational
+
+- **Timing benchmarks are invalid right now** — box at 13.92/12 cores, seven
+  concurrent `pascal26`. Told b4 to use retired-instruction counts (load-invariant)
+  and take wall clock only when quiet, stamping both with binary sha AND load.
+- **`sync.sh` can exceed a 2-minute tool timeout under this many writers.** Push
+  with a bounded retry loop that regenerates BOARD files between attempts; they are
+  generated, so `--theirs` then regenerate is always correct.
+- Closed `bug-r-a-duplicate-forward-...` [R p85] myself — it sat at the head of the
+  **global** ranked queue while already fixed. Three sessions found it, one fixed
+  it, nobody closed it.
+
+### Measured and NOT built: a prose-blocker checker
+
+frankS hit `bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file`, whose body ended
+*"Do that one first"* naming a real blocker, with **no `blocked-by` in frontmatter** —
+so it kept surfacing in `ready --track S` as claimable with nothing claimable in it.
+frankS added the edge; the blocker correctly inherited its priority.
+
+`progress check` **states** that convention (`progress.py:1747`) and does not enforce
+it, which is the "a check that cannot fail" shape I have been fixing all night. So I
+went to build the enforcement — and measured first.
+
+**Result: not worth building.** Across **342 ranked tickets**, prose containing a
+blocking phrase AND naming a real ticket slug on the same line, with no frontmatter
+edge: **2 hits, both false positives.**
+
+- `feature-pascal-corpus-passrc` — *"Land the small ones first"* is deliberate
+  sequencing advice, and the same paragraph says *"Re-rate `prio:` upward once those
+  are green."* The author chose prio-based ordering over an edge, on purpose.
+- `feature-pascal-corpus-expansion` — matched only because the referenced slug
+  **contains the word "prerequisite"**.
+
+A first, looser pass (blocking phrase alone, no slug requirement) returned 30+ hits
+because *"depends on"* and *"blocked by"* are ordinary English. That version would
+have earned the habit of being scrolled past within a day — forwardlint's own comment
+names this failure mode, and it applies to the checker I was about to write.
+
+**So the population is one instance, already fixed by the finder.** Recording this so
+the next person who notices the unenforced convention does not rebuild the measurement.
+
+**What the scan could NOT have seen**, stated because a non-existence claim needs its
+blind spot named: a blocking relationship phrased across two lines, or naming its
+blocker in prose rather than by slug, or expressed only as a `[[wikilink]]` with no
+blocking verb near it. The narrow signal is what made it clean, and narrow means it
+misses. The finding is "no evidence of a population", not "there is none".

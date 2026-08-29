@@ -91,6 +91,12 @@ failures are crashes (still one dominant class — see below).
 - **A residual crash class.** `/tmp` findings are gone by now, but it reproduces in
   minutes: run the harness and reduce (recipe below). Last known unreduced crashers were
   csmith seeds 901 and 1502 (generated with the DEFAULT csmith flags).
+  **Both of those seeds PASS at HEAD as of 2026-08-29** (frankC, `--seed 901`
+  and `--seed 1502`, each `1/1 agreed with the gcc oracle, no findings`), so
+  this bullet's named repros are stale — something between 2026-07-13 and now
+  fixed them and nobody re-checked. Whether the crash CLASS is gone or just
+  these two representatives is not established: a fresh crasher has to be
+  found before the bullet can be closed, which is what a batch is for.
 - **Bitfield LAYOUT** ([[bug-c-bitfield-packing-sizeof-vs-gcc]]) — `sizeof` of a packed
   bitfield struct is 12 where gcc gives 8. Values are right, so the checksum oracle CANNOT
   see it; it breaks ABI/interop instead.

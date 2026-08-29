@@ -3,8 +3,8 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `4614092ab517` | 2026-08-29T19:44:41Z | GREEN (native) | 412.8s | `49bd043061c1` RED |
-| seven | `7d3382f03453` | 2026-08-29T19:42:35Z | GREEN (native) | 106.3s | `ee62e6dc0582` RED |
+| plexus | `0c8459022373` | 2026-08-29T20:10:02Z | GREEN (native) | 386.8s | `49bd043061c1` RED |
+| seven | `9beb2af4946c` | 2026-08-29T20:09:05Z | GREEN (native) | 106.5s | `7d3382f03453` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -35,6 +35,5 @@
   - `test-sqlite-threads-aarch64#src:compiler/.pascal26.fixedpoint`
   - `tools-devtest#00`
   </details>
-- **lib-test#src:test/lib_synapse.pas** — test/lib_synapse.pas tools/expect_same.sh (seven): bad `ee62e6dc0582`, last good `unknown`, 0 commit(s) in range
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +34 (seven): bad `ee62e6dc0582`, last good `154d1aa3fba6`, 41 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_relative_import_in_package.npy** — test/test_nilpy_relative_import_in_package.npy test/test_nilpy_relative_import_in_package.expected +1 (seven): bad `ee62e6dc0582`, last good `154d1aa3fba6`, 76 commit(s) in range

@@ -4458,6 +4458,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil, pNotDouble, pDone: Integer;
     pUnsNeg, pUnsDone, pAppendDone: Integer;
     w1RightReg: Integer;   { -O3 W1: 0 = the normal rcx contract, else r12..r15 }
+    shiftImmCnt: Integer;  { -O1 W1: >= 0 = a constant shift count NOT materialised into rcx }
     strCmpRel: Boolean;    { this comparison releases an owned string operand }
     pAnsiAlloc, pAnsiShared, pAnsiTooSmall, pAnsiNoZeroGrow, pAnsiFastDone: Integer;
     pAnsiUseNeededNil, pAnsiUseNeededSmall, pAnsiMinDone, pAnsiCapDone: Integer;
@@ -5850,6 +5851,7 @@ begin
           recursive, so a local cannot leak into a nested binop). 0 = the right
           operand is in rcx, which is every path but the one below. }
         w1RightReg := 0;
+        shiftImmCnt := -1;
 
         { -O3 in-tree XMM fusion: a call-free float arithmetic tree evaluates
           straight into xmm2..xmm6 and bridges to the rax value model once. }
@@ -6026,7 +6028,26 @@ begin
             contract downstream is IDENTICAL: rax = left value, rcx = right
             value; the constant's evaluation has no side effects. }
           IREmitNode(left);
-          if (IRIVal[right] >= -2147483648) and (IRIVal[right] <= 2147483647) then
+          { A SHIFT by a constant count does not want the count in rcx at all —
+            x86 has an immediate form. The imm-fold arm above deliberately
+            excludes shifts because they carry width fixups it does not
+            reproduce, so this does not fold the whole op: it drops ONLY the
+            `mov rcx, k`, leaves every width fixup exactly where it is, and the
+            arms below emit `shr rax, k` instead of `shr rax, cl`.
+
+            Measured before writing: `acc := acc + j - (i shr 1)` at -O3 emitted
+            `mov rcx,1 / cdqe / shr rax,cl` in a 22-instruction loop body — the
+            cdqe is real (native-width promotion), the mov is not.
+            feature-opt-o3-register-pressure W1.
+            Gated to -O3 even though the arm around it is -O1, per the campaign
+            rule: new work lands at -O3 and is promoted to -O2 per pass after
+            the full gate. That also buys the cleanest possible verification —
+            -O0/-O1/-O2 must come out BYTE-IDENTICAL and only -O3 may differ. }
+          if (OptLevel >= 3) and
+             ((op = tkIdent) or (op = tkShr) or (op = tkShl)) and
+             (IRIVal[right] >= 0) and (IRIVal[right] <= 63) then
+            shiftImmCnt := Integer(IRIVal[right])
+          else if (IRIVal[right] >= -2147483648) and (IRIVal[right] <= 2147483647) then
           begin
             EmitB($48); EmitB($C7); EmitB($C1); EmitI32(Integer(IRIVal[right])); { mov rcx, imm32 (sign-extended) }
           end
@@ -6466,7 +6487,7 @@ begin
                 else
                   begin EmitB($89); EmitB($C0); end;          { mov eax, eax (zero-extend) }
               end;
-              EmitB($48); EmitB($D3); EmitB($E8);             { shr rax, cl }
+              EmitShiftRax($E8, True, shiftImmCnt);          { shr rax, cl|imm }
               { A NARROW result of a SIGNED operand keeps the operand's type, so
                 the 32-bit answer must be read back as signed — that is what FPC
                 does (`LongInt shr n` is a LongInt). Only a count of ZERO can
@@ -6487,7 +6508,7 @@ begin
             begin
               if TypeSize(IntToTypeKind(IRTk[left])) < 8 then
                 begin EmitB($48); EmitB($98); end;            { cdqe (sign-extend) }
-              EmitB($48); EmitB($D3); EmitB($F8);             { sar rax, cl }
+              EmitShiftRax($F8, True, shiftImmCnt);          { sar rax, cl|imm }
             end;
           { `shl` in a 64-bit register on a <8-byte operand leaves a value shifted
             into bit 31 looking positive (1 shl 31 read 2147483648, not
@@ -6505,9 +6526,9 @@ begin
                 bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths }
               if StrictShiftWidth and (TypeSize(IntToTypeKind(IRTk[left])) < 8) and
                  (TypeSize(IntToTypeKind(IRTk[node])) < 8) then
-                begin EmitB($D3); EmitB($E0); end             { shl eax, cl }
+                EmitShiftRax($E0, False, shiftImmCnt)          { shl eax, cl|imm }
               else
-                begin EmitB($48); EmitB($D3); EmitB($E0); end; { shl rax, cl }
+                EmitShiftRax($E0, True, shiftImmCnt);          { shl rax, cl|imm }
               { ...unless the frontend asked for a NATIVE-width result, in which
                 case there is nothing to wrap back to: `1 shl 40` is 2^40 and
                 `1 shl 31` is 2147483648. Pascal-only — C's `<<` keeps its

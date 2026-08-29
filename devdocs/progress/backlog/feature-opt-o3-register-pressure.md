@@ -2591,3 +2591,67 @@ a smaller slice, needing an addressing analysis that does not exist yet.
 number remains is a placeholder that sits at low prio forever — the exact backlog
 leak CLAUDE.md names. The remainder is priced and closed; if someone wants it
 later, this table is the starting point and the answer it gives today is no.
+
+---
+
+## 2026-08-29 — W1 slice 1 measured DYNAMICALLY: 1 instruction per iteration, 4.54%
+
+The umbrella asks W1 to be justified on a dynamic profile, not a static sweep.
+Here is the dynamic number for slice 1 (the constant shift count), and the method
+matters as much as the figure.
+
+**`perf` is unavailable on this box** — `perf_event_paranoid = 4` denies
+unprivileged access to every event, hardware and software alike, and lifting it
+is a root sysctl change on the owner's workstation. Not done, not worked around.
+
+**`qemu-x86_64 -one-insn-per-tb -d exec` was used instead, and it is the better
+instrument here.** It emits one log line per instruction *executed*, so the count
+is **exact and deterministic** rather than sampled — no multiplexing, no skid, and
+**completely load-invariant**, which on a box that sat between 9.5 and 16.4 all
+evening is the property that actually decides whether a number is worth writing
+down. The cost is a ~100x slowdown, paid for by shrinking `n`: the loop is
+straight-line with a single back-edge, so the per-iteration count is constant and
+the measurement scales exactly.
+
+| n | BASE retired | HEAD retired | delta | delta/n | saved |
+| --- | --- | --- | --- | --- | --- |
+| 2 000 | 44 211 | 42 211 | 2 000 | 1.000 | 4.52% |
+| 20 000 | 440 227 | 420 227 | 20 000 | 1.000 | 4.543% |
+| 50 000 | 1 100 235 | 1 050 235 | 50 000 | 1.000 | 4.544% |
+
+**delta is exactly n at all three sizes** — one instruction removed per iteration,
+with no residue. Per-iteration cost 22.0047 → 21.0047 instructions; the fractional
+tail is the fixed prologue amortising away, and it converges as it should.
+
+The loop body, counted from the execution trace rather than from the listing: **18
+addresses hit exactly n times, 3 hit n-1 times** (the increment tail, skipped on
+the final iteration) = **22 instructions per iteration in BASE, 21 in HEAD**.
+Note this **corrects the earlier "1-of-18" static claim** — 18 was the
+straight-line body, and it omitted the loop-control tail that also retires every
+iteration. The honest denominator is 22, so the saving is **4.55% of the loop's
+dynamic instruction stream**, not 5.6%.
+
+**Provenance, proven by content rather than by filename** — binaries
+`85655efad0ff` (HEAD, has the slice) and `272e95c5ec9c` (BASE, pre-slice),
+compiling the same `three.pas` at `-O3`. The loop body differs in exactly one
+instruction and nothing else:
+
+```
+BASE:  mov rax,r12 / mov rcx,0x1 / cdqe / shr rax,cl     48 c7 c1 01 00 00 00 + 48 d3 e8  = 10 B
+HEAD:  mov rax,r12 /              cdqe / shr rax,0x1                        48 c1 e8 01  =  4 B
+```
+
+6 bytes per site, matching the static sweep's figure, and `code=16683B` →
+`code=16659B` = 24 B over 4 sites. A filename is not evidence of what a binary
+contains; a diff of the emitted loop is.
+
+**Load average is recorded because a perf number without it has the same
+unstated-`as-of` problem as a benchmark without its baseline sha** — 9.51 at the
+start of the run, 16.44 shortly before. It does not matter here, which is exactly
+the point of choosing an instrument whose output cannot depend on it.
+
+**Wall clock is still owed** and is deliberately not taken: the box carried seven
+concurrent `pascal26` processes, a `stage_2a` fixedpoint and a `pinned` at 106%
+over 12 cores. Best-of-five alternation is a sound design for a mildly noisy box
+and is not one at 1.2x oversubscription with self-host builds landing at random.
+It goes in when the fleet quiets, stamped with its own load.

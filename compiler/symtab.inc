@@ -4490,6 +4490,13 @@ begin
   SymBlockId[SymCount] := CurBlockId;
   Syms[SymCount].ElemType := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;
+  { RecName is meaningless for an array -- its record id is ElemRecName above --
+    but slots are RECYCLED, so leaving it alone inherits the previous occupant's
+    id (an AllocParam'd `struct B` by value is the reproducer). The reset rule
+    these allocators follow says "every parallel array"; RecName is a field of
+    the record rather than a parallel array, which is exactly why it was missed.
+    bug-a-allocarray-leaves-recname-stale-on-a-recycled-symbol-slot }
+  Syms[SymCount].RecName := REC_NONE;
   Syms[SymCount].IsRef    := False;
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
@@ -4619,6 +4626,13 @@ begin
   SymBlockId[SymCount] := CurBlockId;
   Syms[SymCount].ElemType    := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;
+  { RecName is meaningless for an array -- its record id is ElemRecName above --
+    but slots are RECYCLED, so leaving it alone inherits the previous occupant's
+    id (an AllocParam'd `struct B` by value is the reproducer). The reset rule
+    these allocators follow says "every parallel array"; RecName is a field of
+    the record rather than a parallel array, which is exactly why it was missed.
+    bug-a-allocarray-leaves-recname-stale-on-a-recycled-symbol-slot }
+  Syms[SymCount].RecName := REC_NONE;
   Syms[SymCount].IsRef       := False;
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
@@ -5106,6 +5120,37 @@ begin
   else
   begin
     EmitB($4C); EmitB(opcode); EmitB($C0 or ((reg - 8) shl 3));
+  end;
+end;
+
+{ One shift emitter for rax, `modrm` naming the form ($E8 shr, $F8 sar,
+  $E0 shl) and `w64` selecting REX.W.
+
+  `immCnt >= 0` emits the IMMEDIATE form (`shr rax, k`) and the caller must NOT
+  have materialised the count into rcx; `immCnt < 0` keeps the cl contract
+  (`shr rax, cl`).
+
+  It exists so the two forms cannot drift apart. There are four shift sites in
+  the static integer path (logical shr, arithmetic sar, and shl in its 32- and
+  64-bit widths), each wrapped in its own width-fixup logic, and adding a second
+  hand-written encoding to each is how the arm nobody re-derives ends up wrong
+  -- devdocs/dev/normalise-dont-special-case.md. The width fixups stay exactly
+  where they are; only the final instruction changes.
+
+  A count of 0..63 only: hardware masks both cl and imm8 to 6 bits so larger and
+  negative constants would also agree, but a constant count above the width is
+  exactly where a silent mismatch would live, and the existing path handles it
+  unchanged. }
+procedure EmitShiftRax(modrm: Byte; w64: Boolean; immCnt: Integer);
+begin
+  if w64 then EmitB($48);
+  if immCnt >= 0 then
+  begin
+    EmitB($C1); EmitB(modrm); EmitB(Byte(immCnt));
+  end
+  else
+  begin
+    EmitB($D3); EmitB(modrm);
   end;
 end;
 

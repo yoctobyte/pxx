@@ -194,6 +194,13 @@ const
   MAX_REACTORS = 64;
 {$endif}
 
+const
+  { Upper bound on the loser-side wait in the exhaustion fatal below. Sized to
+    be unreachable in practice (the winner needs one write syscall) while still
+    being a bound: ~1e7 lock-prefixed compare-exchanges is a fraction of a
+    second, so a wedged winner costs a late fatal, never a hung process. }
+  FATAL_SPIN_MAX = 10000000;
+
 type
   TReactor = record
     coSp    : array[0..MAX_CO-1] of Int64;       { saved stack pointer }
@@ -216,6 +223,7 @@ var
   reactors : array[0..MAX_REACTORS-1] of TReactor;
   regLock  : Integer;   { atomic spinlock guarding slot attachment (0=free 1=held) }
   fatalOnce: Integer;   { 0 until a thread claims the reactor-exhaustion fatal }
+  fatalDone: Integer;   { 0 until that thread has finished WRITING it }
 
 function SelfTid: Int64;
 begin
@@ -227,7 +235,7 @@ end;
   (already attached) is lock-free; attachment is guarded by a tiny atomic
   spinlock (contended only briefly at worker-thread startup). }
 function CurR: PReactor;
-var me, ignore: Int64; i, slot: Integer;
+var me, ignore: Int64; i, slot, spins: Integer;
 begin
   me := SelfTid;
   for i := 0 to MAX_REACTORS - 1 do
@@ -244,6 +252,7 @@ begin
     deliberately-shared errno slot is.
     bug-a-the-17th-thread-silently-aliases-reactor-slot-0 }
   slot := -1;
+  spins := 0;
   for i := 0 to MAX_REACTORS - 1 do
     if reactors[i].used = 0 then begin slot := i; Break; end;
   if slot < 0 then
@@ -273,7 +282,24 @@ begin
       what a workaround becomes the moment the bug behind it closes. }
     ignore := __pxxatomic_xchg(@regLock, 0);
     if __pxxatomic_cas(@fatalOnce, 0, 1) = 0 then
+    begin
       writeln('fatal: scheduler out of reactor slots (MAX_REACTORS)');
+      ignore := __pxxatomic_xchg(@fatalDone, 1);
+    end
+    else
+      { A LOSER MUST NOT TAKE THE PROCESS DOWN WHILE THE WINNER IS WRITING.
+        Halt is exit_group now, so the first refused thread to reach it ends
+        every thread -- including the one mid-writeln. That lost the message
+        outright: status 216 with an empty log, i.e. a fatal that reports its
+        number and not its reason. Measured here at 24 workers, 1 run in 15 with
+        the output on a FILE (0 in 15 at 4 workers, and 0 in 12 on a pipe --
+        which is why the harness saw it on `seven` and the pipe-shaped local
+        check did not). regression-test-threads-test-sched-reactor-exhaustion-5.
+        Bounded, so a winner that never arrives degrades to a slightly-late
+        fatal rather than to a hang -- exhaustion must stay loud, and a hang is
+        the one outcome worse than a quiet exit. }
+      while (__pxxatomic_cas(@fatalDone, 0, 0) = 0) and (spins < FATAL_SPIN_MAX) do
+        Inc(spins);
     Halt(216);
   end;
   reactors[slot].coCount := 0;
