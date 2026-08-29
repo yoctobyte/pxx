@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:21 blocked:5 backlog:313 backlog_new:7 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2605 rejected:51`
+`working:1 unfinished:21 blocked:5 backlog:313 backlog_new:7 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2606 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
@@ -54,7 +54,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-cascade-154d1aa3fba6
 - `[p 70] [P]` regression-cascade-4e27dc2be114
 - `[p 70] [C]` regression-lib-test-crtl-reachability-3
-- `[p 70] [B]` regression-lib-test-lib-synapse-2
 - `[p 70] [N]` regression-test-core-test-nilpy-str-ascii-cache
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-parent-call-after-instantiation
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-relative-import-in-package
@@ -75,5 +74,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
+- `[p 62] [A]` feature-a-typeref-migrate-consumers
 
 _295 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
