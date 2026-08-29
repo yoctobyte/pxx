@@ -716,4 +716,66 @@ runs, one sha — **before** trusting any diff.
 > matters — you have **no reason to go looking for a third explanation.** It is
 > what made the second measurement readable.
 
-**Eighteen faces, and the family is still open.**
+## Face nineteen — targets agree because they SHARE the property that absorbs the bug, not because the code is right
+
+Found by frankwasm, 2026-08-29, writing up its own three instances — and the
+write-up corrected the claim it started from, which is the interesting part.
+
+**The instance.** An open-array-of-string argument is spilled through a hidden
+temp `ir.inc:11207` declares `tyAnsiString` but which actually holds an array
+data pointer (`bug-a-open-array-of-string-arg-spilled-through-a-managed-string-temp`).
+On every register backend the mistyped retain and the scope-exit release
+**cancel**: the program is correct, and stays clean under `PXX_HEAP_DEBUG`
+across 2000 iterations. wasm32 type-checks the store rather than emitting a
+machine word, so it is the only target that can see it at all.
+
+**The claim I first made, and why it was too narrow.** I reported this as the
+third shared-frontend mistyping "visible only to wasm32". Checking the lane's
+own tickets before writing it down, that is **not** what the other two say:
+
+| ticket | absorbed by | visible on |
+| --- | --- | --- |
+| open-array-of-string temp (today) | every register target, via ARC cancellation | wasm32 only |
+| `procedure of object` hard-sized 16 bytes | 64-bit targets, where 16 is correct | **all five** 32-bit targets |
+| `in` truncates a 64-bit test value | 64-bit targets, where no truncation occurs | i386 and arm32 |
+
+Only the first is wasm-only. So the honest face is not "wasm32 is the oracle" —
+it is one level up, and it covers all three:
+
+> **A defect is invisible on every target that happens to have the property
+> which makes it harmless.** Those targets then AGREE with each other, and
+> their agreement reads as verification. It is not: they are not independent
+> witnesses, they are one witness with several names.
+
+**Why this is not just face thirteen.** Thirteen is two arms sharing an
+upstream in the *code*. Here the shared upstream is a **property of the
+targets** — 64-bit width, a register calling convention, an untyped machine
+word — that nothing in the test output names, and that no one chose. x86-64,
+aarch64 and the 64-bit path agree about a 16-byte method pointer because 16 is
+right *for them*; that is not four confirmations, it is one.
+
+**The operational consequence, which is the part worth acting on.** "It passes
+on the default target" and even "it passes on three targets" carry almost no
+information about a width- or convention-sensitive defect, because the default
+set is not diverse along the axis that matters. The cheap counter is to ask,
+before believing a green matrix: **what do these targets have in common, and is
+it the thing under test?** Where the answer is "yes", one target of the other
+kind is worth more than three of the same kind.
+
+**Why the wasm lane keeps finding these, stated without flattering the lane.**
+It is not that wasm32 is more correct. It is that wasm is the only target where
+the *machine* checks the type instead of the calling convention assuming it, so
+it is diverse along exactly the axis the register targets share. That makes it
+a useful oracle for one class of defect and no better than any other target for
+the rest — the same bounded claim face seventeen makes about an instrument's
+scope.
+
+**And the priority note, because it is invisible from the `prio:` field.** The
+open-array ticket is p30 by its symptom, which is a single refused body on one
+target. Its actual value is the diagnosis: it says a whole class of argument is
+mistyped in the shared frontend. **The honest case for fixing it is the
+diagnosis, not the symptom** — and a ranker that reads only severity cannot see
+that, which is worth knowing about every ticket whose value is what it reveals
+rather than what it breaks.
+
+**Nineteen faces, and the family is still open.**
