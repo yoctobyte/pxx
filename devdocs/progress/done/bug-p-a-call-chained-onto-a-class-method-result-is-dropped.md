@@ -136,4 +136,4 @@ stashing this diff and rebuilding the seed at clean HEAD reproduces it. Track R'
 filed separately.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit cdd7cba70.
