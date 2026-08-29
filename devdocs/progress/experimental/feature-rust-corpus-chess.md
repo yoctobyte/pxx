@@ -26,9 +26,9 @@ as the real modules hit them: ~~`Option<T>` (chess.rs wall, stage 2)~~ **DONE
 2026-08-29**, ~~array-typed STRUCT FIELDS (`squares: [Piece; 64]`)~~ **DONE
 2026-08-29**, ~~array-typed return values (`fn -> [T; N]`, attacks.rs)~~ **DONE
 2026-08-29**, ~~`if` as an EXPRESSION (`let x = if c { a } else { b };` — not on
-the original list)~~ **DONE 2026-08-29**, the unity build for data
-modules (tables.rs, stage 3), then `Result`/`?`, `String`/`format!`,
-derives/traits.
+the original list)~~ **DONE 2026-08-29**, ~~the unity build for data
+modules (tables.rs, stage 3)~~ **DONE 2026-08-29**, then `Result`/`?`,
+`String`/`format!`, derives/traits.
 Do NOT claim the real source compiles — only the adapted branch does.
 
 **Note on where the engine sources live:** they are NOT on the `frank-rust`
@@ -316,4 +316,22 @@ pure swallowing/trivia, cheap and high-leverage.
   the compiler with pxx. `python3 tools/forwardlint.py` catches it and nothing
   invoked it. Fixed, both duplicate p80 tickets resolved, and forwardlint is
   now part of this lane's pre-push routine.
+
+- 2026-08-29 - **stage 3 done: the unity build compiles and runs.**
+  `test/rust_unity/` is four modules with real cross-module references, and
+  `cat` is the whole build step - the zlib-runner trick, as planned. What
+  concatenation does NOT fix is the module qualifiers, and that is the part the
+  frontend supplies: `RStripTopItems` collects the crate root's `mod x;`
+  declarations in a first pass and strips `<mod>::` / `crate::` / `self::` /
+  `super::` in a second, so `crate::attacks::popcount(...)` flattens while
+  `Board::new` and `Color::White` survive. Telling those two apart by the `mod`
+  declarations is exact; a rule about capitalisation would not have been.
+
+  **Stated limit: there is no rustc on this box**, so the corpus is a
+  real-crate-SHAPED fixture, not a conformance one. It has not been checked
+  against rustc and the Makefile comment says so.
+
+  Stages 0-3 of the staged plan are now complete. Next on the original list:
+  `Result`/`?`, `String`/`format!`, derives/traits - and the ArrayVec
+  replacement (stage 4), which is corpus work rather than frontend work.
 

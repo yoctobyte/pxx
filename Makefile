@@ -5909,6 +5909,21 @@ test-core: $(COMPILER)
 	# prescan. -9 = 1*1 + (-1)*2 + 8*3 + (-8)*4, by hand.
 	./$(COMPILER) test/test_rust_module_items.rs $(TESTTMP)/test_rust_mitems26
 	tools/expect_same.sh test_rust_mitems26 "$$($(TESTTMP)/test_rust_mitems26)" "$$(printf 'weighted -9\nnames 65 66 67\nzeros 0 0\nsize 64 files 8 mask 255\narea 64\nalias 4 12 5\nsq 7')"
+	# Rust UNITY BUILD (feature-rust-corpus-chess stage 3): four .rs modules
+	# concatenated into one translation unit, the same trick test/zlib/runner.c
+	# uses. `cat` IS the build step -- there is no module system and none is
+	# wanted. What the frontend supplies is what concatenation does NOT: module
+	# QUALIFIERS are stripped (`crate::attacks::popcount` and `board::Board::new`
+	# become flat names) using the `mod x;` declarations in the crate root to tell
+	# a module path from a TYPE path, since `Board::new` must survive.
+	# Oracles are hand-computed knight mobilities: a1 = 2, b2 = 4, c3..f6 = 8,
+	# h8 = 2; occupied = 3 bits; knight_from(0) = {10,17} = 132096.
+	# NOTE: the corpus is written in real-crate shape but is NOT verified against
+	# rustc -- there is no rustc on the build host. It is a shape fixture, not a
+	# conformance one.
+	cat test/rust_unity/*.rs > $(TESTTMP)/rust_unity.rs
+	./$(COMPILER) $(TESTTMP)/rust_unity.rs $(TESTTMP)/test_rust_unity26
+	tools/expect_same.sh test_rust_unity26 "$$($(TESTTMP)/test_rust_unity26)" "$$(printf 'side 1 occupied 3\nflipped 2\nmob 2 4 2\ntbl 2 4 8 2\nkf0 132096')"
 	# Ada frontend skeleton (feature-esoteric-ada): for-range accumulate, if/elsif/else,
 	# while, bare loop + exit-when, Put_Line -- all lowering onto existing shared IR.
 	./$(COMPILER) test/test_ada_skeleton.adb $(TESTTMP)/test_ada_skeleton26
