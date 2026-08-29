@@ -1,0 +1,60 @@
+# bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped
+#
+# A NilPy keyword call to a METHOD that leaves an earlier defaulted parameter
+# unbound was REFUSED outright when the argument was object-valued (a tuple or
+# a list): `no overload of grid matches these arguments`. It blocked tkinter's
+# `grid(padx=(8, 6))`, and through it songformatter's settings.py.
+#
+# The keyword binder was never at fault. The call never reached it: the
+# speculative type-aware overload probe (FindUMethOverloadAhead) parses the
+# argument list to learn argument TYPES, steps over each `name=` so the name is
+# not parsed as an expression, and then indexes parameters POSITIONALLY. So the
+# second argument of `grid(row=0, padx=(8, 6))` was judged against `sticky`,
+# a tuple landed on an AnsiString slot, the reference-shaped-argument guard
+# fired, and a legal call was refused.
+#
+# BOTH HALVES ARE ASSERTED, and that is the point of the test rather than a
+# flourish. songformatter grids two identical widgets nine lines apart --
+#
+#     .grid(row=r, column=0, columnspan=2, sticky="we", padx=8,      pady=(10, 2))   # bound
+#     .grid(row=r, column=0,               sticky="e",  padx=(8, 6), pady=2)         # refused
+#
+# -- same class, same method, tuple in both, opposite outcomes. A fix tested
+# only against the refused call would pass while silently breaking the accepted
+# one, and a fix that made every tuple bind everywhere would look equally
+# green. So every row below names which slot the tuple lands on.
+#
+# The free-procedure and constructor rows are CONTROLS: they reach the callee
+# by a different path that never runs this probe, and they bound correctly
+# throughout. They are here to catch a fix that over-reaches, not as evidence.
+import 'kwpadprobe.pas' as kw
+
+w = kw.TWidget()
+
+# --- the refused half: the tuple's positional slot is NOT its own parameter ---
+w.grid(row=1, padx=(8, 6))            # arg 2 sits over `sticky` (AnsiString)
+w.grid(padx=(8, 6))                   # arg 1 sits over `row` (Integer)
+w.grid(sticky="e", padx=(8, 6))       # arg 2 sits over `padx` only by luck of count
+w.grid(row=1, pady=(10, 2))           # the tuple is the LAST option
+
+# --- the accepted half: every earlier option supplied, no gap at all ---
+w.grid(row=1, sticky="we", padx=8, pady=(10, 2))
+w.grid(row=1, sticky="e", padx=(8, 6), pady=2)
+
+# --- a leading positional argument, then keywords ---
+w.grid(1, padx=(8, 6))
+
+# --- scalars must be unaffected ---
+w.grid(row=1, padx=8)
+
+# --- lists behave exactly like tuples ---
+w.grid(row=1, padx=[8, 6])
+
+# --- controls: paths that never run the probe ---
+kw.freegrid(row=1, padx=(8, 6))
+
+# --- a keyword that names no parameter is still an ERROR, not silently
+#     abstained into acceptance. Kept as prose, not code, because it must not
+#     compile: `w.grid(row=1, nosuch=(8, 6))` reports
+#     "TWidget.grid has no parameter named 'nosuch'".
+print("done")

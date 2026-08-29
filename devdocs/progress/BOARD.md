@@ -371,7 +371,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (16)
+## backlog_new (15)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -379,7 +379,6 @@ _none_
 | bug-a-an-array-constructor-in-argument-position-leaks-its-dynamic-array | A | 60 | bug | `Take([...])` — an array CONSTRUCTOR passed to an open-array parameter — heap-allocates a dyn-array temp per call and never releases it. 64 bytes leaked per `Format('%d-%s', [i, 'x'])`; 2M Format calls reach 125 MB RSS. Element type is irrelevant (128 B/call for strings, 40 B/call for integers). The sibling arm — a fixed-array VARIABLE passed to the same parameter — was fixed in 2026-06 (bug-open-array-copy-temp-leak, 692db33) by replacing the heap temp with a frame buffer; the constructor arm still allocates. Same concept, two paths, fix landed on one. | — |
 | bug-a-emitzeroframeslot-has-no-wasm32-arm | A | 55 | bug | EmitZeroFrameSlot (compiler/symtab.inc:10074) is the single owner of the zero-init contract and has TWO per-target chains, one per size class. The wide one (> pointer) ends in Error and fails loud — that is what this ticket originally described. The narrow one (<= pointer, which is EVERY managed scalar) ends in an UNGUARDED else that emits x86-64 bytes, so wasm32 falls open there and has been doing so since the managed-string phase. Measured 2026-08-28 with a probe build. Output is byte-identical with the fall-through removed, so Code[] is unread on this target and nothing wrong has been PRODUCED — it is latent, not active. Carries one open design question: the wasm32 backend now zeroes its own managed scalars in its prologue, so there are three mechanisms for one guarantee on this target. | — |
 | bug-c-sizeof-a-partial-index-answers-the-element-not-the-row | C | 80 | bug | `sizeof(m[0])` on `int m[3][4]` answers 4, not 16 — so `memcpy(dst[1], src[1], sizeof(src[1]))` copies ONE element instead of the row, and `sizeof(a[0])/sizeof(a[0][0])` answers 1 instead of 4. Silent, no cast or pointer arithmetic in sight, and it is wrong on a plain global array — not a struct-field defect. A second, different wrong answer (8) comes back for the unparenthesised form through a field. | — |
-| bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped | N | 55 | bug | A NilPy keyword call to a METHOD that leaves an earlier defaulted parameter unbound rejects an object-valued (tuple/list) argument: `no overload of X matches these arguments`. The identical signature and call binds correctly through the INSTANTIATION path and through a unit-level procedure. Scalars are unaffected. Blocks tkinter's `grid(padx=(8, 6))`. | — |
 | bug-nilpy-render-backend-py-compile-does-not-terminate | N | 55 | bug | songformatter's render_backend.py (413 lines) does not finish compiling: killed at 25:00.06 wall clock, 95% CPU, RSS FLAT at 102 MB, state R — spinning, not allocating. The 2026-07-31 record says it compiled. Bounded rather than diagnosed: lines 1..296 compile in 7s, the whole file spins. Filed with no proposed cause because every cause tried so far has been wrong, and each wrong one is recorded so nobody re-walks it. | — |
 | bug-p-a-default-value-is-accepted-on-an-open-array-parameter | P | 40 | bug | `procedure P(const a: array of string = 'x')` compiles clean, and calling `P` with no argument prints a pointer as a length (435728179526). The default-value check reads Params[i].TypeKind without also testing IsArray — and an open-array parameter records its ELEMENT kind in TypeKind — so it sees a string parameter and demands a string literal. The array-constructor spelling `= ['x']` is correctly rejected, but with the same wrong reason: `a string parameter's default must be a string literal`. FPC rejects both. | — |
 | bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked | P | 60 | bug | `r := s` where r is a record and s an AnsiString is correctly rejected (`incompatible types: cannot assign AnsiString to record`). The same assignment to an ELEMENT of an array of that record — `rs[1] := s` for a dyn array, `fx[0] := s` for a fixed one — compiles clean and segfaults at run time. FPC rejects all three. One concept, two paths, and the check lives on only one of them: the classic double-case shape. Found 2026-08-29 by the wasm32 lane through a botched line in its own test, which is the only reason anyone looked. | — |
@@ -622,9 +621,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2669)
+## done (2670)
 
-2669 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2670 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (55)
 
@@ -734,7 +733,6 @@ _none_
 - [p 58] [N] feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep
 - [p 58] [P] feature-p-packrecords-c-directive
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3) [parked — re-claim, do not duplicate]
-- [p 55] [N] bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped (unblocks 1)
 - [p 55] [U] decide-install-qemu-system-and-a-freebsd-image-on-plexus (unblocks 1)
 - [p 55] [U] decide-which-gtk-a-bare-gtk-gtk-h-means (unblocks 1)
 - [p 55] [A] feature-nilpy-object-reclamation (unblocks 1) [parked — re-claim, do not duplicate]
@@ -1026,7 +1024,6 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
-- **1** — bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped
 - **1** — bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching
 - **1** — bug-p-a-qualified-type-name-cannot-be-a-generic-argument
 - **1** — compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees

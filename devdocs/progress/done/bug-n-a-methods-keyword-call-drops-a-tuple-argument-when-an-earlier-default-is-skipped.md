@@ -4,8 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "A NilPy keyword call to a METHOD that leaves an earlier defaulted parameter unbound rejects an object-valued (tuple/list) argument: `no overload of X matches these arguments`. The identical signature and call binds correctly through the INSTANTIATION path and through a unit-level procedure. Scalars are unaffected. Blocks tkinter's `grid(padx=(8, 6))`."
-status: new
-owner: ""
+status: done
+owner: frankwasm
 ---
 
 # A method's keyword call drops a tuple argument when an earlier default is skipped
@@ -199,3 +199,104 @@ and why the collision question had to be asked at all. Worth its own ticket
 independently of who lands this fix — the `isNilPy` branching in that file is
 dense (lines 613, 634, 1147, 1767, 1851, 1888, 2131), so this is a carve-out
 question, not a one-line move.
+
+---
+
+## Resolution, 2026-08-30 (frankwasm), under the grant at `e268f9990`
+
+### It was never the keyword binder
+
+`PyKwArgIndex` and `PyBindKwArgs` are correct and the call never reaches them.
+The refusal comes from `FindUMethOverloadAhead`
+(`compiler/pasparser_call.inc:1733`), the speculative type-aware method-overload
+probe, which runs first.
+
+The probe parses the argument list speculatively to learn argument **types**.
+For a NilPy `name=expr` it steps over the keyword name — deliberately, so the
+name is not parsed as an expression and reported as an undefined variable — and
+its own comment records the assumption:
+
+```pascal
+      { NilPy `name=expr`: step over the keyword before probing, or the name is
+        parsed as an expression and reported as an undefined variable — an
+        OVERLOADED façade method could not be called with keyword arguments at
+        all (`canvas.create_window((0,0), window=w)`). The probe only needs the
+        argument's TYPE; which parameter it binds to is settled later by
+        PyKwArgIndex. }
+```
+
+That is true of what the two loops below it want to know and **false of how
+they index**, which is positional — `Procs[pi].Params[base + j]`. So for
+`meth(a=0, v=(8,6))` against `meth(a: Integer; s: AnsiString; v: Variant)`,
+argument 1 is judged against **`s`**, a reference-shaped argument lands on a
+string slot, the guard fires, and a legal call is refused.
+
+Predicted from the code, then measured before any edit. Every row of the
+ticket's boundary table follows from it, including why the constructor and the
+unit-level procedure pass: different paths, no probe.
+
+| shape | predicted | measured |
+| --- | --- | --- |
+| tuple's positional slot is `s` (AnsiString) | refuse | FAILS |
+| tuple's positional slot is `a` (Integer) | refuse | FAILS |
+| no gap — tuple lands on its own Variant slot | bind | OK |
+| scalar argument (not reference-shaped) | bind | OK |
+
+### The second exposure, which is the more serious half
+
+The **ranking** loop indexes positionally too. With more than one candidate, an
+overloaded method called with keywords that skip a default is ranked against
+the wrong parameters — that is silent wrong-overload selection, not a
+diagnostic. Same root, so one fix closes both; a fix aimed only at the reported
+symptom would have repaired the refusal and left the silent one in place.
+
+### The fix
+
+A helper `OverloadArgParamIdx(pi, base, j, kwTok)` resolves argument `j` to its
+declared parameter: `base + j` when positional, and the named parameter when the
+argument was `name=`. The probe now **records** the keyword name as a token
+index instead of discarding it, and both loops index through the helper.
+
+It **abstains** (returns -1, callers skip that argument) when the name matches
+no declared parameter, because a callee with `**kwargs` legitimately takes it —
+and an abstention can only ever drop a check, never manufacture a refusal. That
+is this file's own standing rule: an unsound refusal of a legal program is worse
+than the looseness it replaces. A wrong keyword name is still rejected, by
+`PyKwArgIndex`, with its proper diagnostic.
+
+### Verification
+
+New gated test `test_nilpy_keyword_call_tuple_on_a_skipped_default.npy` with
+`kwpadprobe.pas`, a facade shaped like `grid()` — ordinal, then **string**, then
+Variant, so a skipped option lands the tuple on the string's slot. It is
+**verified to fail on the baseline** (`no overload of grid matches these
+arguments`) as well as pass here.
+
+**Both halves are asserted**, which is the point of the test rather than a
+flourish. The refused shapes *and* the accepted ones (`sticky` supplied, no gap)
+are pinned, because a fix repairing the refusal while breaking its neighbour
+would pass any test that only watches the failure — and songformatter grids two
+identical widgets nine lines apart, one of each. Also pinned: a leading
+positional argument then keywords, scalars, lists, and the free-procedure
+control that never runs the probe.
+
+Attribution measured against **HEAD-without-this-patch** (`f8f879988222`) rather
+than an older sha, both compilers built from the same base.
+
+### Songformatter
+
+`settings.py` **compiles** — both line 178 (accepted) and line 183 (refused).
+`key_analysis.py` compiles. `convertrawtext.py` and `SongFormatter.py` now reach
+a later, unrelated wall reported at `key_analysis.py:82`; that one is
+**pre-existing and not from this fix** — with the tuple-pad trigger removed from
+a copy of the app so the baseline can reach the same depth, `f8f879988222` hits
+the identical failure. Filed separately.
+
+### Gate
+
+`make compiler/pascal26` fixedpoint `bcb428ba25ac`; **`tools/gate.sh quick`
+GREEN** (A's gate, as the grant requires — this is Pascal-frontend ground shared
+with Track A, so the fixedpoint alone is not sufficient).
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
