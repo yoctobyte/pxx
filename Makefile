@@ -3876,6 +3876,21 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_imulresid326 "$$($(TESTTMP)/test_imulresid326)" "$$(printf 'acc=20000053834\none=5000013460\ndone')"
 	./$(COMPILER) -O0 test/test_imul_resident_left.pas $(TESTTMP)/test_imulresid026
 	tools/expect_same.sh test_imulresid026 "$$($(TESTTMP)/test_imulresid026)" "$$(printf 'acc=20000053834\none=5000013460\ndone')"
+	# the AN_FOR hidden INIT temp is elided at -O3 when both bounds are re-emittable
+	# (literal / plain scalar var / pure arithmetic over those). The temp enforces
+	# "evaluate both bounds before assigning the control variable"; eliding it
+	# re-emits the initial bound AFTER the limit's code, so every row here is a
+	# shape where that reordering is observable -- bounds that MENTION the control
+	# variable, both directions, plus a call-bearing bound that must still capture.
+	# callorder is the row that matters: eliding a call-bearing bound swaps the two
+	# calls while leaving the call COUNT and the iteration count unchanged, so a
+	# counter cannot see it and only the order log can. That row was added after
+	# breaking the elision on purpose and watching the counter version pass.
+	# Counts verified against FPC 3.2.2; -O0 is the control that still captures.
+	./$(COMPILER) -O3 test/test_for_init_temp_elision.pas $(TESTTMP)/test_forinit326
+	tools/expect_same.sh test_forinit326 "$$($(TESTTMP)/test_forinit326)" "$$(printf 'plain=5\nident=5\nselfinit=3\nselfboth=1\narithself=4\ndownself=7\ncallbound=302\ncallorder=iL\ndone')"
+	./$(COMPILER) -O0 test/test_for_init_temp_elision.pas $(TESTTMP)/test_forinit026
+	tools/expect_same.sh test_forinit026 "$$($(TESTTMP)/test_forinit026)" "$$(printf 'plain=5\nident=5\nselfinit=3\nselfboth=1\narithself=4\ndownself=7\ncallbound=302\ncallorder=iL\ndone')"
 	# The bulk-copy helpers' BYTE TAIL, at every length 0..17: string SetLength
 	# (grow and shrink), dyn-array SetLength, Copy() at every offset and count,
 	# aliasing-vs-Copy, and concat. Every expectation diffed against FPC 3.2.2.

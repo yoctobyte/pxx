@@ -4848,6 +4848,80 @@ begin
   end;
 end;
 
+{ -O3: is this for-loop BOUND safe to re-emit at its point of use instead of
+  being materialised into a hidden temp?
+
+  AN_FOR must evaluate both bounds before assigning the control variable, and
+  the initial bound is normally captured into a temp to achieve that — because
+  `initValNode` is a value node the backend re-emits at the STORE, so leaving it
+  uncaptured moves the initial expression's side effects after the limit's, and
+  Pascal's order is initial-then-final
+  (bug-a-for-loop-limit-is-evaluated-after-the-control-variable-is-assigned).
+
+  That capture costs a store plus a load at every loop ENTRY — measured at
+  exactly 2 instructions per entry, and 8% of a program whose inner loop is
+  entered 20000 times and runs twice. It is only NECESSARY when re-emitting the
+  initial bound later could observe something different. For a literal or a plain
+  scalar variable it cannot: it has no side effects to reorder, and the only
+  thing that could change its value between the two points is the LIMIT's own
+  lowering — so BOTH bounds must pass this test, not just the initial one. When
+  they do, the store can simply be appended after the limit and the bound
+  re-emitted there, which is what the pre-fix code did for free and correctly,
+  for this subset only.
+
+  The allow-list is closed and the DEFAULT IS FALSE — an unknown node kind is
+  assumed impure. That is the opposite default from CASTLValueHasSideEffect
+  nearby, deliberately: that one is permissive because a wrong "no side effect"
+  there merely misses an optimisation, while a wrong answer HERE silently
+  restores a wrong iteration count, which is the bug this lowering was fixed for
+  two hours before this was written.
+
+  AN_CALL is out for the obvious reason. AN_INDEX and AN_FIELD are out for a
+  less obvious one and it is a judgement call, not an oversight: they are reads
+  and a pure limit cannot write what they read, but they can FAULT (range check,
+  nil base), and I would rather not reason about fault ORDERING inside a
+  lowering this recently broken. The census says they cost little — allowing
+  binop and unary already covers about 80% of the loops that pay for the temp
+  (`init=3 limit=5`, a variable up to an expression, is the single most common
+  shape at 87 of ~250 in compiler.pas), while AN_INDEX and AN_FIELD inits are 46
+  between them. Cheap to add later with its own proof.
+
+  Deliberately mirrors InlineArgIsPure, which answers the same question for a
+  substituted inline argument. Kept separate rather than shared: that one may
+  widen for inlining reasons that have nothing to do with evaluation order, and
+  this predicate guards a rule whose violation is a SILENT wrong iteration count.
+  A shared helper would let one caller's convenience change the other's
+  correctness. }
+function ForBoundReEmittable(boundAST, depth: Integer): Boolean;
+begin
+  ForBoundReEmittable := False;
+  if (boundAST < 0) or (boundAST >= ASTNodeCount) or (depth > 12) then Exit;
+  case ASTKind[boundAST] of
+    AN_INT_LIT, AN_BOOL_LIT:
+      ForBoundReEmittable := True;
+    AN_IDENT:
+      begin
+        if ASTIVal[boundAST] < 0 then Exit;
+        if ASTIVal[boundAST] >= SymCount then Exit;
+        if Syms[ASTIVal[boundAST]].IsArray then Exit;
+        { A bare AN_IDENT can name a parameterless FUNCTION in this dialect (the
+          `bare own name` form), and calling one is emphatically not re-emittable.
+          Requiring a data symbol kind excludes it by construction rather than by
+          hoping the parser produced AN_CALL. }
+        ForBoundReEmittable :=
+          (Syms[ASTIVal[boundAST]].Kind = skGlobal) or
+          (Syms[ASTIVal[boundAST]].Kind = skLocal) or
+          (Syms[ASTIVal[boundAST]].Kind = skParam);
+      end;
+    AN_NEG, AN_NOT:
+      ForBoundReEmittable := ForBoundReEmittable(ASTLeft[boundAST], depth + 1);
+    AN_BINOP:
+      ForBoundReEmittable :=
+        ForBoundReEmittable(ASTLeft[boundAST], depth + 1) and
+        ForBoundReEmittable(ASTRight[boundAST], depth + 1);
+  end;
+end;
+
 { Try to expand a direct call to an inline-eligible proc. Returns the IR value
   node of the spliced expression, or -1 if it cannot inline (arg count mismatch)
   — the caller then lowers a normal call. Pure args (literal / plain scalar ident)
@@ -12162,8 +12236,22 @@ begin
         so the ordinary `for i := 1 to 10` allocates nothing and emits exactly
         what it did before.
         bug-a-for-loop-limit-is-evaluated-after-the-control-variable-is-assigned }
+      { PXXDBG=a.forinit -- REPORT ONLY, prices how far the re-emittable test has
+        to widen. The narrow "literal or plain scalar ident on BOTH bounds" form
+        fired on the microbenchmark and on NOTHING in mandelbrot / lispdemo /
+        jsondemo, so print what the bounds of a costing loop actually ARE. }
+      if PxxDbgEnabled('a.forinit') and (ASTKind[initNode] <> AN_INT_LIT) then
+        WriteLn('PXXDBG a.forinit init=', ASTKind[initNode],
+                ' limit=', ASTKind[limitNode]);
       initValNode := IRLowerAST(initNode);
-      if IRKind[initValNode] <> IR_CONST_INT then
+      { -O3: skip the capture when BOTH bounds are a literal or a plain scalar
+        variable. Then re-emitting the initial bound at the store observes
+        exactly what capturing it would have — nothing it reads can be written
+        by the limit's lowering, and it has no side effects of its own to
+        reorder. Everything else still captures. See ForBoundReEmittable. }
+      if (IRKind[initValNode] <> IR_CONST_INT) and
+         not ((OptLevel >= 3) and ForBoundReEmittable(initNode, 0) and
+              ForBoundReEmittable(limitNode, 0)) then
       begin
         forInitTmp := AllocVar('', IntToTypeKind(IRTk[initValNode]));
         IRAppend(IR_STORE_SYM, forInitTmp, initValNode, -1, 0, IRTk[initValNode]);
