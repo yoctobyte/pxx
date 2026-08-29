@@ -2209,3 +2209,45 @@ site *and* wrong about which argument spellings do. The lone survivor,
 — an `<> AN_IDENT` exclusion beside each predicate catches it first. **Patching
 the inferred shape would have fixed one arm of six and closed the ticket saying
 so.**
+
+### 52. THE POPULATION INHERITED FROM WHEREVER THE FIRST LOOK LANDED — third instance in two days, and the third was written by an author who had just banked the second
+
+frank-optimize-b4, 2026-08-29, and it named the pattern on itself.
+
+Three instances inside two days, all the same mechanism:
+
+| where | the stated population | the real one |
+| --- | --- | --- |
+| `bulk-copy` ticket | "at least four more places" | eight |
+| `forwardlint` / `LowerCase` | one site (the earliest reported) | eight |
+| b4's own parked note | "the skGlobal and tySingle arms" use x1 | four code paths across three arms |
+
+The first two are an *instrument* reporting its first hit — a linter that stops at
+the earliest site, a build that aborts at its first overflowing consumer (face 41),
+a probe that tries one spelling and concludes about a module (face 48). The third
+is the one worth the face:
+
+**b4's note was one day old, written by a session that had just banked the
+`forwardlint` version of this exact error, and knowing the shape did not stop it
+producing the shape.** The missed arm was a by-ref-param deref — not exotic,
+simply not where the first look landed.
+
+That kills the obvious defence. *Remember the rule* does not work, because the
+author who remembered it best still wrote the undercount, one day later, about
+their own code. **A note that names a set is a hypothesis about that set, and it
+does not become a measurement by being written down — including when you wrote
+it.** Your own prior enumeration is the least suspicious source available and
+therefore the one that draws no check (the standing rule: *the check gets spent on
+the candidate you doubt, not the one you like*).
+
+**Procedural form, since the mnemonic form demonstrably fails:** before acting on
+a count you did not just take, re-enumerate. Not "consider whether it might be
+stale" — run the grep again. Every instance here cost one command to falsify, and
+in frankwasm's case (six of seven call shapes refusing where the ticket claimed
+one) the re-enumeration is what stopped a fix landing on one arm of six with a
+ticket saying it was complete.
+
+**The general shape across all of them:** an enumeration and a *sample* are
+indistinguishable once written into prose. "The sites are X and Y" and "the sites I
+found before I stopped looking are X and Y" render identically, and only the second
+is ever true of a first pass.
