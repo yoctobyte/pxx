@@ -962,3 +962,45 @@ true. **A correct measurement carrying a wrong causal story is more dangerous
 than a wrong number**, and this is that rule with the story spelled out: the fact
 was right, its consequences were wrong in three directions, and the ticket
 priced it as a live fleet-wide hazard.
+
+## Face twenty-three — a comparison with zero comparands succeeds, and reports the most reassuring number available
+
+Found by frank-optimize-b4, 2026-08-29, in its own campaign harness. Recorded
+here for the index; the working notes are at `50e931c4f` and the playbook entry
+at `325213daf`.
+
+**The instance.** Four steps of the -O3 campaign were cited as "48/48 corpus
+hashes byte-identical". The harness did not export `PXX_HOME`, so the binaries
+under test could not find their RTL and **all 48 rows FAILed on both sides**.
+FAIL compares equal to FAIL. The diff was empty. An empty diff was read as total
+agreement; it was total absence.
+
+| condition | evidence produced |
+| --- | --- |
+| all 48 outputs identical | empty diff, "48/48" |
+| all 48 runs failed identically | empty diff, "48/48" |
+
+Note which way the ambiguity points: **the broken case produces the most
+reassuring possible reading.** A comparison measuring nothing does not look
+weak, it looks perfect — and the number it reports is the maximum.
+
+Re-run against real binaries, every conclusion held, at 25 real rows rather than
+48 (8 xtensa have no dynamic-symbol support; 15 are 3 corpus files that are
+units and cannot compile standalone). So nothing landed on bad evidence — **but
+it stood on nothing until the re-run, and that is luck rather than method.**
+
+**The remedy is the general guard for this whole family, and it is one line.**
+The harness now **counts its comparisons, prints the count next to the verdict,
+and exits 2 rather than answering emptily.** Face seventeen says an instrument's
+scope is invisible in its own output; this is the fix: **make the instrument
+report its N.** A verdict with no denominator is not a verdict.
+
+It was then verified by pointing it at a deliberately broken binary and at a
+reconstruction of the original bug — so the control has failed once, which is
+the only thing that makes a control a control.
+
+**Where else this shape lives, already recorded:** `make compiler/pascal26` in a
+tree seeded with a copied-in binary, which exits 0 having proved no fixedpoint;
+a SKIPped corpus job read as green; a `for` loop over a glob that matches
+nothing. Each is a zero-iteration success. **Any operation whose success is
+defined over a set should report the set's size.**
