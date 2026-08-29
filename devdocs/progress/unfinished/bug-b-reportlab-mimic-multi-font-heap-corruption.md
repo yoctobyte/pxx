@@ -3,7 +3,7 @@ track: N
 prio: 30
 type: bug
 summary: "ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains"
-status: working
+status: unfinished
 owner: agent-AN
 ---
 

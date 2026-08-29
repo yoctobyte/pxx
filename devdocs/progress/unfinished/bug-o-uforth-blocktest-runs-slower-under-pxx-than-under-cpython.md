@@ -3,7 +3,7 @@ summary: "uforth's blocktest word set takes 413s compiled by pxx against CPython
 type: bug
 track: O
 prio: 65
-status: working
+status: unfinished
 
 owner: agent-AN
 ---

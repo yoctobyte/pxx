@@ -4,7 +4,7 @@ prio: 45
 type: feature
 blocked-by: [bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped]
 summary: "CORRECTED 2026-08-29 by the lane that filed it: the facade is NOT missing the two-tuple pad. padx/pady are already Variant, the braced pair is already emitted, and `grid info` on a live widget reports `-padx {8 6}`. The call is rejected by bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped — a METHOD call with an earlier default left unbound and an object-valued Variant. Nothing to change in lib/pcl; kept open only to track the app-side consequence."
-status: working
+status: blocked
 owner: frank-b
 ---
 

@@ -1888,6 +1888,60 @@ def git_tracked(path: Path) -> bool:
     ).returncode == 0
 
 
+# Folder-name synonyms nobody should be nagged about. `open` in backlog/ and
+# `new` in backlog_new/ are what people write and mean exactly the destination,
+# so rewriting them would be churn in every move diff for no reader benefit.
+_STATUS_SYNONYMS = {"backlog": {"open"}, "backlog_new": {"new"}}
+
+
+def sync_status_to_folder(path: Path, status: str) -> None:
+    """Bring a ticket's SELF-DESCRIBED status into line with the folder it now
+    sits in. Updates only fields that already exist -- it never invents a claim
+    a ticket was not making.
+
+    Why this belongs in the move rather than in `check`: on 2026-08-30 a park
+    commit moved feature-a-typeref-migrate-consumers from working/ to backlog/
+    and cleared its owner, correctly and deliberately, while leaving
+    `status: working` in its own frontmatter. The act of RELEASING the ticket is
+    what made it look held. Every reader is told to open a ticket at HEAD before
+    claiming it, so the header saying `working` is read as "someone has this"
+    and the ticket is skipped -- by careful readers especially, since the
+    careless ones never opened it.
+
+    Both spellings are handled because they drift independently: a prose
+    `- **Status:**` bullet and a frontmatter `status:` field are different text
+    in different places, and a ticket can carry either, both, or neither.
+    """
+    text = path.read_text(encoding="utf-8")
+    orig = text
+
+    fm = re.match(r"---\n(.*?)\n---\n", text, re.S)
+    if fm:
+        cur = re.search(r"(?mi)^status:\s*(.*)$", fm.group(1))
+        if cur:
+            val = cur.group(1).strip().strip('"').lower()
+            if val != status and val not in _STATUS_SYNONYMS.get(status, set()):
+                block = re.sub(r"(?mi)^status:\s*.*$", f"status: {status}",
+                               fm.group(1), count=1)
+                text = text.replace(fm.group(0), f"---\n{block}\n---\n", 1)
+
+    def _prose(m: "re.Match[str]") -> str:
+        val = m.group(2).strip().lower().rstrip(".,:*")
+        if val == status or val in _STATUS_SYNONYMS.get(status, set()):
+            return m.group(0)
+        return f"{m.group(1)}{status}"
+
+    # Only the bare `- **Status:** word` form. A bullet that continues into a
+    # sentence ("unfinished -- agent half done, parked awaiting X") is prose
+    # carrying a reason, and silently truncating someone's explanation to one
+    # word is a worse outcome than a stale word.
+    text = re.sub(r"(?mi)^(\s*-\s*\*\*Status:\*\*\s*)(\w+)\s*$", _prose,
+                  text, count=1)
+
+    if text != orig:
+        path.write_text(text, encoding="utf-8")
+
+
 def move_ticket(src: Path, dst: Path) -> None:
     dst.parent.mkdir(parents=True, exist_ok=True)
     if git_tracked(src):
@@ -1895,6 +1949,7 @@ def move_ticket(src: Path, dst: Path) -> None:
     else:
         shutil.move(str(src), str(dst))
         subprocess.run(["git", "add", str(dst)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    sync_status_to_folder(dst, dst.parent.name)
 
 
 def set_prio_auto(path: Path, value: int) -> None:
