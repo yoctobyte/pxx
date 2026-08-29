@@ -70,3 +70,34 @@ which is why that commit is labelled `docs(S)` and contains compiler code. The
 sentence is corrected rather than the history, because the sha is already cited
 elsewhere and `master` is not rebased here. **So this IS reproducible on master
 from `dc62fe3cd` onward**, which is the part that changes what a reader does.
+
+
+---
+
+## RESOLVED — frankS, 2026-08-30
+
+**Both halves fixed on Call0 (the default ABI), and the ticket's own guess about
+the cause was wrong in the useful direction.**
+
+It said "do not assume it is the allocator" and pointed at interior ansistring
+payload arithmetic. The payload arithmetic was fine. The cause was one level
+further out: the managed-string arms addressed their EXPRESSION-STACK slots with
+the windowed discipline (`sp + argBase + 4*idx`) while Call0 moves sp on every
+push and never maintains `XtSpillDepth`, so every offset read a neighbouring
+live slot. Concat's SIGSEGV and `Copy`'s SIGBUS were the same defect as
+ansistring `=` returning a heap handle. Fixed in
+[[bug-a-xtensa-has-no-ordered-string-compare-and-sorts-by-heap-handle]] with
+`XtensaSlotOff` / `XtensaDropSlots`.
+
+Verified against the x86-64 oracle: concat x1, x20 and x200, and `Copy`, all
+exact on Call0.
+
+**What is left is NOT this ticket.** `Copy` still bus-errors under
+`--xtensa-abi=windowed`, together with frozen strings and dynarray `SetLength` —
+three faults that predate this work (the pre-change compiler bus-errors
+identically) and are filed as
+[[bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength]].
+
+The instruction to split when the causes diverge is what happened, one direction
+each: the two symptoms filed here turned out to share a cause with a *third*
+ticket, and the windowed remainder turned out not to belong to any of them.

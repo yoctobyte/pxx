@@ -2,7 +2,7 @@
 track: A+S
 prio: 45
 type: bug
-status: open
+status: done
 found: 2026-08-29
 found-by: frankD
 summary: "DEMONSTRATED: both comparisons print WRONG on both ABIs. `'zzz' < 'aaa'` on xtensa compares the two heap HANDLES as signed ints and answers by allocation order — the exact defect PXXStrCmp3 was added to fix, applied to i386/aarch64/arm32/riscv32 with xtensa never visited, because the helper's own comment says 'the four cross backends' when there are five. Fix accepted by frankS."
@@ -216,3 +216,6 @@ under `qemu-xtensa`. Until then the size delta is the check: after the fix, xten
 Check `>=`/`<=`/`>` too, and check the frozen-`tyString` and `Char` operand
 shapes, not just handle-vs-handle — the equality arm handles three operand
 shapes and the ordered arm will need the same three.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

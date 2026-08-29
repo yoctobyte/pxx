@@ -57,7 +57,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (314)
+## backlog (313)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -69,7 +69,6 @@ _none_
 | bug-a-aarch64-cannot-build-programs-with-an-aggregate-result-past-8-params | A | 55 | bug | jsondemo and life do not build for aarch64 at all -- 'aggregate result with more than 8 params not supported', raised from builtin/pylib.pas, so it fires for any program pulling that unit in. The sharp part is not the two programs: it silently narrows the corpus available for BEHAVIOURAL verification on aarch64, while census tables built from target-independent IR keep listing those same programs as aarch64 data points. Two purposes, one list, only one of them ever checked. | — |
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
 | bug-a-function-result-assignment-does-not-narrow-to-the-result-type | A | 40 | bug | `function F(a: Int64): Integer; begin F := a; end` returns the full 64-bit value: F(4294967299) prints 4294967299 where FPC prints 3. The same assignment to a variable, to a var parameter, or through a cast all narrow correctly. One arm of a double case, and the broken arm is the one with no diagnostic — the caller reads a value the declared result type cannot hold. | — |
-| bug-a-hosted-xtensa-segfaults-on-string-concatenation | A+S | 40 | bug | Hosted xtensa segfaults on string concatenation, and bus-errors in Copy | — |
 | bug-a-irtoplevelstmt-parameter-is-a-node-index-named-k | A | 20 | bug | ir_codegen.inc:8813 declares IRTopLevelStmt(k: Integer) and its body is `case IRKind[k] of`, so the parameter is a node index. The name reads as a kind, and passing IRKind[i] compiles cleanly and indexes the IR array with an opcode number — a silently-wrong-value trap with no diagnostic, in a function every backend author will call. Rename plus a one-line comment closes the class. | — |
 | bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa | A | 25 | bug | A proc's managed locals (AnsiString, interfaces, dynamic arrays) are released by a proc CLEANUP FRAME that five targets have and two do not. wasm32 and xtensa both fall outside TargetHasProcCleanupFrame, so an exception unwinding THROUGH a frame leaks everything that frame owned. Silent by construction: an unwind leak prints nothing. | — |
 | bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice | A | 55 | bug | ManagedLocalZeroBytes is a chain of per-kind arms, each of which has to remember to ask IsArray. Two arms have already shipped without it — interfaces (2026) and Variants (2026-08-27, a5 memory-corruption fix). Two more arms explicitly say `not IsArray` and nothing says whether that is a decision or the same omission a third time. | — |
@@ -90,7 +89,7 @@ _none_
 | bug-a-the-div-by-zero-check-is-still-missing-on-xtensa | A+S | 25 | bug | The last target without a pre-divide zero check. The other five landed 2026-08-23; xtensa was left out because it cannot be RUN on this box (bare profile emits an ESP image, not a Linux ELF), its branches carry only an 8-bit displacement, its windowed ABI rotates the register window on a call, and its divide is two shapes depending on XtensaSoftDivide. | — |
 | bug-a-the-ir-frame-op-doc-asserts-a-frame-layout-riscv32-does-not-use | A | 25 | bug | defs.inc:816 documents IR_FRAME with 'the saved-fp chain IS walkable: [fp] = the caller's fp, [fp + PtrSize] = the return address' — stated as universal. It is false on riscv32, where s0 points at the BOTTOM of the frame and the links sit at +8/+12. ir.inc:4977 knows this and says assuming the common layout 'would have silently walked into the locals'. The lowering is correct (it asks FramePrevFpOffset/FrameRetAddrOffset); the DOC a backend implementer reads is not. | — |
 | bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july | A | 25 | bug | --threadsafe has accepted x86-64/i386/aarch64/arm32 since 07fee0844 (2026-07-06), but five comments across four files still say it is x86-64-only. One of them sits ONE LINE above the four-target condition the same commit edited. No live defect; the code is right everywhere. A new audit sub-shape: a SCOPE WIDENING invalidates every comment that stated the old scope, and there is no sibling arm to grep. | — |
-| bug-a-xtensa-has-no-ordered-string-compare-and-sorts-by-heap-handle | A+S | 45 | bug | DEMONSTRATED: both comparisons print WRONG on both ABIs. `'zzz' < 'aaa'` on xtensa compares the two heap HANDLES as signed ints and answers by allocation order — the exact defect PXXStrCmp3 was added to fix, applied to i386/aarch64/arm32/riscv32 with xtensa never visited, because the helper's own comment says 'the four cross backends' when there are five. Fix accepted by frankS. | — |
+| bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength | A+S | 40 | bug | The xtensa WINDOWED ABI bus-errors on frozen strings, Copy, and dynarray SetLength | — |
 | bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead | C | 55 | bug | A `static`/`static inline` function DEFINED in a .h reached through `uses` has its body discarded and becomes an external, so the program links a DT_NEEDED on a lib<header>.so that does not exist and dies at load. The identical function in a .c compiles and runs. Discovered while fixing bug-a-a-c-include-path-captures-a-pascal-uses; it is the OTHER half of that ticket's silent arm and survives its fix. | — |
 | bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict | N | 40 | bug | pylib treats VT_CHAR and VT_STRING as ONE string type in ordering, repr, concat and text extraction — but `PyVarEq` bails on `p^.VType <> q^.VType` before it ever gets there, and `PyVarHashKey` has no VT_CHAR arm either. So a char-tagged key stores fine and then misses every lookup. No NilPy-reachable repro today (the pystr_ofchar boundary converts at every crossing), but this is the mechanism that turned Counter(str) into a SILENT 0 instead of a loud KeyError. | — |
 | bug-n-a-classmethod-cannot-call-another-through-cls | N | 55 | bug | A classmethod cannot reach another one through its own receiver | — |
@@ -626,9 +625,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2655)
+## done (2657)
 
-2655 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2657 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (51)
 
@@ -807,7 +806,6 @@ _none_
 - [p 45] [A] audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol
 - [p 45] [A] bug-a-a-c-headers-variadic-tail-is-dropped-on-import
 - [p 45] [A] bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire
-- [p 45] [A+S] bug-a-xtensa-has-no-ordered-string-compare-and-sorts-by-heap-handle
 - [p 45] [N] bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name
 - [p 45] [N] bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart
 - [p 45] [N] bug-n-a-nilpy-test-writes-a-fixed-tmp-path-so-concurrent-runs-race
@@ -846,11 +844,11 @@ _none_
 - [p 42] [P] feature-pascal-builtin-tobject-class
 - [p 40] [B] chore-t-six-orphan-gui-tests-the-blanket-was-hiding (unblocks 1)
 - [p 40] [A] bug-a-function-result-assignment-does-not-narrow-to-the-result-type
-- [p 40] [A+S] bug-a-hosted-xtensa-segfaults-on-string-concatenation
 - [p 40] [A] bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse
 - [p 40] [A] bug-a-nilpy-on-cross-targets-four-remaining-walls [parked — re-claim, do not duplicate]
 - [p 40] [A] bug-a-shr-on-a-32-bit-operand-is-evaluated-at-64-bits
 - [p 40] [A] bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture
+- [p 40] [A+S] bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength
 - [p 40] [N] bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict
 - [p 40] [N] bug-n-the-dunder-subscript-arm-is-duplicated-verbatim-in-two-lvalue-parsers
 - [p 40] [N] bug-n-tk-got-files-are-invisible-to-testmgr-privatization
