@@ -243,7 +243,7 @@
  ],
  "host": "seven",
  "idle_yield": {
-  "aborts": 2,
+  "aborts": 3,
   "phase": "pin-verify",
   "target": "4d1613c173cd8f58852cfd92333aeb623bb5f593"
  },
