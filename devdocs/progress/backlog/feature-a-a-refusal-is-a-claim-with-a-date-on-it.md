@@ -3630,3 +3630,72 @@ tuple is involved. A fix validated against `test_nilpy_startswith_tuple.npy`
 alone passes while `.find` and `.count` stay broken — so the regression test
 needs a str→int row, a str→bool row, a str→str control **and** a
 literal-receiver control.
+
+### 87. Branching on a boolean hides its magnitude — print `Ord(x)`, do not `if x`
+
+frankS, 2026-08-30, and it is the fourth member of tonight's provenance family:
+**trusting a rendering of a value instead of the value.**
+
+Before writing xtensa's ordered-string arm, frankS measured the **equality** arm
+it would be modelled on. On Call0 — **the default ABI** — ansistring `=`
+returns a **heap handle** instead of 0/1. Non-zero, so `if a = b` was simply
+always true: `'zz' = 'aa'` answered true, **and so did `<>`**, which is how two
+tests contradicted each other.
+
+**It was only visible because `Ord(a = b)` was printed rather than branched on.**
+`545267744` and `true` are indistinguishable through an `if`. A boolean is the
+one type where the language's own control flow destroys the evidence — every
+wrong value renders as the same word.
+
+Same family as *"I have the right tree" standing in for "I have the right
+binary"*: the artefact was inspected through something that normalises it.
+
+### 88. Four sites, one concept, and the ONE correct hand-written copy is what made the broken spelling look like house style
+
+Same ticket, and the root cause underneath 87.
+
+The managed-string arms addressed expression-stack slots as
+`sp + argBase + 4*idx`. **That is the WINDOWED discipline** — windowed keeps
+`sp` fixed and indexes upward. **Call0 moves `sp` on every push** and never
+maintains `XtSpillDepth`, so `argBase` there is a stale counter and every offset
+read a neighbouring **live** slot rather than faulting. *The wrong value was
+always a plausible one.*
+
+One defect, four symptoms, all measured: `=` returning a heap handle;
+`s := s + x` in a loop SIGSEGVing and `Copy` bus-erroring (**frankS's own concat
+ticket from two hours earlier, whose guessed cause — interior payload arithmetic
+— was wrong**); `PXXStrSetLen` receiving its arguments reversed; and 12 bytes of
+stack leaked per compare and per concat.
+
+**The detail worth keeping:** the fourth site, `PXXDynSetLen`, **already had
+Call0 right, by hand.** It was routed through the new helper anyway — *"one
+correct hand-written copy sitting beside three broken ones is precisely what made
+the broken spelling look like the house style."* A correct duplicate is not
+neutral; it launders its neighbours.
+
+And the ordered arm was deliberately **not** cloned from the equality arm: one
+arm serving both, differing only in callee and tail, *"since 'a second path is
+the one nobody visits' is how this bug happened in the first place."*
+
+**The header was fixed by DELETING the count, not by correcting 4 to 5** —
+*"correcting four to five would have left the trap armed for the sixth target."*
+That is frankD's rule applied by a different lane within hours of it being
+written.
+
+### 89. "The other arm is the broken one" is a conclusion, not an observation
+
+frankS, same day, flagging it against its own filed ticket.
+
+Three windowed-ABI faults remain (frozen strings, `Copy`, dynarray
+`SetLength`). The obvious read is *windowed is the broken arm* — and it is
+wrong. **Call0 and windowed differ in two independent ways, and the defect
+fixed today had Call0 wrong for months while windowed was right.** Neither arm
+is the trustworthy one.
+
+Confirmed as pre-existing rather than assumed: the change was **stashed**, the
+pre-change compiler rebuilt, and the identical bus errors reproduced — so the
+three are not fallout from this work and are not claimed as such.
+
+Sharpened by the stakes: **windowed is the ESP-IDF ABI**, so on real hardware
+those three would have been unexplained crashes with nothing to compare
+against — which is the oracle argument again, from the third direction tonight.
