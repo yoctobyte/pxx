@@ -3287,3 +3287,56 @@ affected.
 zero value must be initialised where compilation begins, not where one
 frontend begins. Grep for the *initialiser*, not the declaration — the
 declaration is in the shared file and looks fine.
+
+### 78. ADJACENT values make an operand observable; distinct, far-apart, memorable values make it invisible
+
+frank-optimize-b4, 2026-08-29 — and it inverts the instinct, which is why it is
+worth stating rather than assuming.
+
+Writing a codegen test, the natural move is to pick values that are distinct,
+far apart and memorable, so a wrong answer is obvious to a human reading the
+output. b4 did exactly that, deliberately. **It produces maximally insensitive
+rows.**
+
+The row was `if a > b` with `b = -5000000001`. That comparison is true for
+**whatever junk a wrong register holds**, so a genuine break — `r13` → `r14` —
+passed. The value was easy to read and impossible to fail against.
+
+**The fix is straddling.** With `blo = a-1` and `bhi = a+1`, the pair
+`a > blo` / `a < bhi` is true **only** for a register holding *exactly* `a`, and
+only for those two slots — so one shape catches a wrong reg field, a wrong rm
+field **and** a wrong displacement together. Mirrored (`blo < a`, `bhi > a`) for
+the reversed operand roles. Six deliberate breaks now move it: mem reg field,
+mem displacement ±1 slot, both reg/rm forms, each REX bit.
+
+Generalises past codegen: **a test value's job is to be adjacent to the wrong
+answer, not far from it.** Far-apart values test that the program ran; adjacent
+values test that it computed. The readable choice and the sensitive choice pull
+in opposite directions, and readability wins by default because nobody is
+checking sensitivity.
+
+### 79. "The patch applied" is not "the behaviour changed" — and an edit-script assertion proves only the first
+
+Same session, same day, and it is the reason face 78 was nearly missed.
+
+b4's first deliberate break was
+`$85 or ((lreg-8) shl 3)` → `$85 or (lreg-8)` — visibly a wrong ModRM reg field.
+**For `r13`, the only register that occurs, it emits the identical byte**,
+because `$85` already has bit 2 set. The break was an **identity**.
+
+The edit script asserted the source matched **exactly once**, which is a
+genuinely good hygiene check — and it proves the patch was applied to the right
+place. It says **nothing about the encoding changing.** So a passing test was
+read as *"the test is vacuous"* when in fact **the break was vacuous**, and the
+diagnosis was pointed at the wrong artefact entirely.
+
+Pairs with **62** (*a control is not a control until it has failed once*): here
+the control did fail to fire, and the conclusion drawn was about the test rather
+than about the control. **When a deliberate break does not turn a test red, the
+break is a suspect too** — verify the injected fault actually changes the
+artefact (the bytes, the output, the sha), not merely the source.
+
+Third occasion in this campaign that a control looked adequate and was not,
+which is why b4 moved it to the head of the ticket as a standing rule rather
+than leaving it inside a slice write-up. **A lesson recorded where it was
+learned is a lesson filed under the wrong subject.**
