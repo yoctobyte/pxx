@@ -56,6 +56,16 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
     exit 1
 fi
 
+# A rebase leaves one of these two directories behind for its whole duration.
+# `git status` says so in prose; this is the same fact in a form a script can
+# branch on, and the branch matters -- see the note in the conflict loop.
+rebase_in_progress() {
+    d=$(git rev-parse --git-path rebase-merge 2>/dev/null)
+    [ -d "$d" ] && return 0
+    d=$(git rev-parse --git-path rebase-apply 2>/dev/null)
+    [ -d "$d" ]
+}
+
 rebase_onto_origin() {
     git fetch --no-write-fetch-head -q origin "$BRANCH"
 
@@ -80,7 +90,33 @@ rebase_onto_origin() {
             git add $BOARD_GLOB
             if ! GIT_EDITOR=true git rebase --continue >/dev/null 2>&1; then
                 if [ -z "$(git diff --name-only --diff-filter=U)" ]; then
-                    break      # rebase finished (or nothing left to apply)
+                    # No unmerged paths and --continue still refused. TWO very
+                    # different states look identical here and conflating them
+                    # is how a commit was silently lost on 2026-08-30:
+                    #
+                    #   (a) the rebase FINISHED. Nothing to do.
+                    #   (b) the commit became EMPTY -- every change it carried
+                    #       was a generated board file and --ours took the other
+                    #       side -- so git wants `--skip` and the rebase is STILL
+                    #       IN PROGRESS.
+                    #
+                    # Breaking out on (b) drops us to the amend below WHILE
+                    # REBASING, which rewrites the last APPLIED commit and folds
+                    # the pending one into it. Exit 0, clean tree, successful
+                    # push, and the only tell is a git log one commit shorter
+                    # than expected -- which nobody checks after a push that
+                    # worked. Two commits landed as one under the first message;
+                    # the code survived, the second message, its measurements
+                    # and its `resolves:` line did not.
+                    if rebase_in_progress; then
+                        git rebase --skip >/dev/null 2>&1 || {
+                            echo "sync: rebase is stuck and I will not guess" >&2
+                            echo "sync: resolve it, then: git rebase --continue" >&2
+                            exit 1
+                        }
+                        continue
+                    fi
+                    break      # (a) genuinely finished
                 fi
             fi
         done
@@ -88,6 +124,18 @@ rebase_onto_origin() {
 
     # The boards can also be merely stale after a clean rebase — regenerate and
     # fold them into the top commit rather than leaving a dangling diff.
+    #
+    # NEVER while a rebase is in progress: HEAD is then a partially-replayed
+    # commit, not yours, and amending it destroys the boundary between two of
+    # your commits. See the note above -- this is the second half of that fix,
+    # and it is the half that holds even if some future path reaches here
+    # mid-rebase by a route nobody anticipated.
+    if rebase_in_progress; then
+        echo "sync: still mid-rebase after resolution — refusing to amend" >&2
+        echo "sync: this would fold two of your commits into one; run:" >&2
+        echo "sync:   git status   # then finish or abort the rebase by hand" >&2
+        exit 1
+    fi
     tools/progress.sh board-md >/dev/null 2>&1 || true
     if [ -n "$(git status --porcelain -- $BOARD_GLOB)" ]; then
         git add $BOARD_GLOB
