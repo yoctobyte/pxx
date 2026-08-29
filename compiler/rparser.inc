@@ -96,6 +96,15 @@ var
   RSliceElemTk: array[0..MAX_UCLASS-1] of TTypeKind;
   { REC_UCLASS_BASE+ci of a record slice's element (REC_NONE for scalar slices) }
   RSliceElemRec: array[0..MAX_UCLASS-1] of Integer;
+  { Option<T> (feature-rust-corpus-chess stage 2): monomorphized on demand,
+    one auto-registered enum UClass per concrete T. Marked here as well as in
+    REnumCi so the Some/None literal path can be resolved against an EXPECTED
+    type instead of the global bare-variant table (every instantiation
+    declares variants spelled `Some`/`None`, so the bare lookup is ambiguous
+    by construction the moment a second T appears). }
+  ROptionCi: array[0..MAX_UCLASS-1] of Boolean;
+  ROptionElemTk: array[0..MAX_UCLASS-1] of TTypeKind;
+  ROptionElemRec: array[0..MAX_UCLASS-1] of Integer;
 
 function RStoredName(const s: AnsiString): Integer;
 var i: Integer;
@@ -217,6 +226,10 @@ var
 function RScalarTypeName(tk: TTypeKind): AnsiString;
 begin
   case tk of
+    tyInt8: Result := 'i8';
+    tyUInt8: Result := 'u8';
+    tyInt16: Result := 'i16';
+    tyUInt16: Result := 'u16';
     tyInteger: Result := 'i32';
     tyInt64: Result := 'i64';
     tyUInt32: Result := 'u32';
@@ -262,6 +275,57 @@ end;
 function RSliceClassFor(elemTk: TTypeKind): Integer;
 begin
   Result := RSliceClassForRec(elemTk, REC_NONE);
+end;
+
+{ One auto-registered enum UClass per concrete `Option<T>` — the ladder's
+  stage-2 "monomorphized generic enum". Layout is exactly what a hand-written
+  `enum OptionI64 { None, Some(i64) }` gets from RRegisterEnums: __tag (i64)
+  at 0, the payload as the mangled field "Some.0" at the first aligned offset
+  past it. Tags follow Rust's declaration order (None = 0, Some = 1), so a
+  zeroed slot reads as None. Registering the two variants in REnumVariants is
+  what makes `match` work with no further change: RParseMatch resolves arm
+  names with RFindVariantInEnum against the scrutinee's own class. }
+function ROptionClassForRec(elemTk: TTypeKind; elemRec: Integer): Integer;
+var name: AnsiString; ci, vi, payOff, align: Integer;
+begin
+  if (elemTk = tyRecord) and (elemRec >= REC_UCLASS_BASE) then
+    name := 'Option<rec' + RIntToStr(elemRec) + '>'
+  else
+    name := 'Option<' + RScalarTypeName(elemTk) + '>';
+  ci := FindUClass(name);
+  if ci < 0 then
+  begin
+    ci := AddUClass(RStoredName(name), Length(name));
+    UClsIsRecord[ci] := True;
+    REnumCi[ci] := True;
+    ROptionCi[ci] := True;
+    ROptionElemTk[ci] := elemTk;
+    ROptionElemRec[ci] := elemRec;
+    AddUField(ci, RStoredName('__tag'), 5, 0, Ord(tyInt64), REC_NONE);
+    align := 8;
+    if TypeAlign(elemTk) > align then align := TypeAlign(elemTk);
+    payOff := AlignTo(8, TypeAlign(elemTk));
+    AddUField(ci, RStoredName('Some.0'), 6, payOff, Ord(elemTk), elemRec);
+    UClsAlign[ci] := align;
+    UClsSize_[ci] := AlignTo(payOff + TypeSize(elemTk), align);
+    if REnumVariantCount + 2 > R_MAX_VARIANTS then Error('Rust: too many enum variants');
+    vi := REnumVariantCount; Inc(REnumVariantCount);
+    REnumVariants[vi].EnumCi := ci;
+    REnumVariants[vi].Name := 'None';
+    REnumVariants[vi].Tag := 0;
+    REnumVariants[vi].Kind := RVAR_UNIT;
+    vi := REnumVariantCount; Inc(REnumVariantCount);
+    REnumVariants[vi].EnumCi := ci;
+    REnumVariants[vi].Name := 'Some';
+    REnumVariants[vi].Tag := 1;
+    REnumVariants[vi].Kind := RVAR_TUPLE;
+  end;
+  Result := ci;
+end;
+
+function RIsOptionRec(recId: Integer): Boolean;
+begin
+  Result := (recId >= REC_UCLASS_BASE) and ROptionCi[recId - REC_UCLASS_BASE];
 end;
 
 function RIsSliceSym(symIdx: Integer): Boolean;
@@ -340,6 +404,18 @@ begin
   Next; { consume the matching > }
 end;
 
+{ Set only while the single statement of a BARE (unbraced) match arm is
+  being parsed -- `Some(v) => n = v,` has no `;`, its terminator is the arm
+  comma or the match's closing brace. RParseBlock clears it for the duration
+  of any nested block, so the leniency does not leak into `{ ... }` bodies. }
+var RInMatchArm: Boolean;
+
+procedure RExpectStmtEnd;
+begin
+  if RInMatchArm and (CurTok.Kind <> tkSemicolon) then Exit;
+  Expect(tkSemicolon, ';');
+end;
+
 function RSeqAppend(head, stmt: Integer): Integer;
 var tail: Integer;
 begin
@@ -407,6 +483,46 @@ begin
   end;
   Error('Rust: unknown type ' + name);
   Result := tyUnknown;
+end;
+
+{ Reads a type at token index j, advances j past it, and returns the
+  CANONICAL name to hand to RTypeKindFromName. Only generic form handled is
+  `Option<T>`, which registers the concrete instantiation as a side effect and
+  answers with that class's name — so every type site in the frontend gains
+  Option support by routing its `GetTokenStr(j)` through here, without any of
+  them learning what a generic is. }
+function RTypeNameAt(var j: Integer): AnsiString;
+var innerTk: TTypeKind; innerRec, ci: Integer;
+begin
+  if Tokens[j].Kind <> tkIdent then Error('Rust: expected a type name');
+  Result := GetTokenStr(j);
+  if (Result = 'Option') and (Tokens[j + 1].Kind = tkLt) then
+  begin
+    Inc(j, 2);
+    { sequence the side-effecting RTypeKindFromName (sets LastTypeRecId)
+      before reading LastTypeRecId -- do NOT rely on arg eval order. }
+    innerTk := RTypeKindFromName(RTypeNameAt(j), True);
+    innerRec := LastTypeRecId;
+    if Tokens[j].Kind = tkShr then
+      Error('Rust: nested Option<Option<T>> is not supported yet (the >> lexes as a shift)');
+    if Tokens[j].Kind <> tkGt then Error('Rust: expected > closing Option<');
+    Inc(j);
+    ci := ROptionClassForRec(innerTk, innerRec);
+    Result := RTypeNameOf(ci);
+  end
+  else
+    Inc(j);
+end;
+
+{ Cursor-based twin of RTypeNameAt: CurTok must be the type's first token; on
+  return CurTok is the token after the type. }
+function RTypeNameCur: AnsiString;
+var j: Integer;
+begin
+  j := TokPos - 1;
+  Result := RTypeNameAt(j);
+  TokPos := j;
+  Next;
 end;
 
 function RWiden(a, b: TTypeKind): TTypeKind;
@@ -650,6 +766,40 @@ begin
           Exit;
         end;
         Result := node;
+        Exit;
+      end;
+      { o.is_some() / o.is_none() / o.unwrap() on an Option<T> — pure field
+        reads off the tagged union, no RTL call and no new AST node.
+        `unwrap()` does NOT panic on None (it reads the payload slot as-is):
+        this frontend has no panic path yet, and a checked unwrap is a
+        follow-up once one exists. Documented in the ticket, not silent. }
+      if (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) and
+         (Tokens[TokPos + 1].Kind = tkLParen) and (Tokens[TokPos + 2].Kind = tkRParen) and
+         RIsOptionRec(Syms[symIdx].RecName) and
+         ((GetTokenStr(TokPos) = 'is_some') or (GetTokenStr(TokPos) = 'is_none') or
+          (GetTokenStr(TokPos) = 'unwrap')) then
+      begin
+        Next; { . }
+        methodName := CurTok.SVal;
+        ci := Syms[symIdx].RecName;
+        Next; Next; { name ( }
+        Expect(tkRParen, ')');
+        if methodName = 'unwrap' then
+        begin
+          fieldNode := AllocNode(AN_FIELD);
+          ASTLeft[fieldNode] := node;
+          ASTSOffset[fieldNode] := RStoredName('Some.0'); ASTSLen[fieldNode] := 6;
+          ASTTk[fieldNode] := Ord(RecFieldType(ci, 'Some.0'));
+          Result := fieldNode;
+          Exit;
+        end;
+        fieldNode := AllocNode(AN_FIELD);
+        ASTLeft[fieldNode] := node;
+        ASTSOffset[fieldNode] := RStoredName('__tag'); ASTSLen[fieldNode] := 5;
+        ASTTk[fieldNode] := Ord(tyInt64);
+        argNode := AllocNode(AN_INT_LIT); ASTTk[argNode] := Ord(tyInt64);
+        if methodName = 'is_some' then ASTIVal[argNode] := 1 else ASTIVal[argNode] := 0;
+        Result := RBinOp(tkEq, fieldNode, argNode, tyBoolean);
         Exit;
       end;
       { a.len() / s.len() — array length constant / slice __len field }
@@ -1038,7 +1188,8 @@ var name, typeName, variantName, fname, mangled: AnsiString;
     symIdx, ci, structCi, fTokIdx, ci2, vi, k, tagOff, tagNode, tagAssign: Integer;
     annotTk, arrElemTk: TTypeKind; hasType, qualified, isArr: Boolean;
     identNode, fieldNode, valNode, assignNode, seq, arrLen, loNode, hiNode: Integer;
-    arrElemRecId: Integer;
+    arrElemRecId, optCi: Integer;
+    payTk: TTypeKind; isSome: Boolean;
 begin
   Next; { let }
   if CurTok.Kind = tkMut then Next;
@@ -1056,9 +1207,8 @@ begin
         `arr[i].field` resolves via ResolveNodeRec(AN_INDEX). }
       Next;
       if CurTok.Kind <> tkIdent then Error('Rust: expected element type in [T; N]');
-      arrElemTk := RTypeKindFromName(CurTok.SVal, True);
+      arrElemTk := RTypeKindFromName(RTypeNameCur, True);
       arrElemRecId := LastTypeRecId;
-      Next;
       Expect(tkSemicolon, ';');
       if CurTok.Kind <> tkInteger then Error('Rust: array length must be an integer literal (skeleton)');
       arrLen := CurTok.IVal;
@@ -1070,10 +1220,9 @@ begin
     else
     begin
       if CurTok.Kind <> tkIdent then Error('Rust: expected type after :');
-      typeName := CurTok.SVal;
+      typeName := RTypeNameCur;
       structCi := FindUClass(typeName);
       annotTk := RTypeKindFromName(typeName, True);
-      Next;
     end;
     hasType := True;
   end;
@@ -1214,6 +1363,65 @@ begin
     ASTLeft[assignNode] := fieldNode;
     ASTRight[assignNode] := RBinOp(tkMinus, hiNode, loNode, tyInt64);
     Result := RSeqAppend(seq, assignNode);
+    Exit;
+  end;
+  { Option<T> literal RHS: `Some(expr)` / `None`. Resolved against the
+    ANNOTATED class when there is one, otherwise against the payload
+    expression's own type (`let x = Some(3);` infers Option<i64>) -- never
+    through the bare-variant table, which by construction cannot tell two
+    instantiations' `Some` apart. A bare `None` has nothing to infer from, so
+    it needs the annotation. Checked ahead of the general enum-literal branch
+    below because those names are deliberately NOT unique across enums here. }
+  if (CurTok.Kind = tkIdent) and ((CurTok.SVal = 'Some') or (CurTok.SVal = 'None')) and
+     (FindUClass(CurTok.SVal) < 0) and (RFindVariantBare(CurTok.SVal) < 0) then
+  begin
+    isSome := CurTok.SVal = 'Some';
+    Next;
+    optCi := -1;
+    if hasType and (annotTk = tyRecord) and (structCi >= 0) and ROptionCi[structCi] then
+      optCi := structCi
+    else if hasType then
+      Error('Rust: Some/None initializer needs an Option<T> annotation, not ' + typeName);
+    valNode := -1;
+    if isSome then
+    begin
+      Expect(tkLParen, '(');
+      valNode := RParseExpr;
+      Expect(tkRParen, ')');
+      if optCi < 0 then
+      begin
+        payTk := IntToTypeKind(ASTTk[valNode]);
+        if payTk = tyInteger then payTk := tyInt64;
+        if payTk = tyRecord then
+          Error('Rust: Some(<struct>) needs an explicit Option<T> annotation');
+        optCi := ROptionClassForRec(payTk, REC_NONE);
+      end;
+    end
+    else if optCi < 0 then
+      Error('Rust: `let ' + name + ' = None;` needs an Option<T> type annotation');
+    LastTypeRecId := REC_UCLASS_BASE + optCi;
+    symIdx := AllocVar(name, tyRecord);
+    identNode := RMakeIdent(symIdx);
+    tagOff := RStoredName('__tag');
+    fieldNode := AllocNode(AN_FIELD);
+    ASTLeft[fieldNode] := identNode; ASTSOffset[fieldNode] := tagOff; ASTSLen[fieldNode] := 5;
+    ASTTk[fieldNode] := Ord(tyInt64);
+    tagNode := AllocNode(AN_INT_LIT); ASTTk[tagNode] := Ord(tyInt64);
+    if isSome then ASTIVal[tagNode] := 1 else ASTIVal[tagNode] := 0;
+    tagAssign := AllocNode(AN_ASSIGN); ASTLeft[tagAssign] := fieldNode; ASTRight[tagAssign] := tagNode;
+    seq := RSeqAppend(-1, tagAssign);
+    if isSome then
+    begin
+      mangled := 'Some.0';
+      fieldNode := AllocNode(AN_FIELD);
+      ASTLeft[fieldNode] := identNode;
+      ASTSOffset[fieldNode] := RStoredName(mangled); ASTSLen[fieldNode] := Length(mangled);
+      ASTTk[fieldNode] := Ord(RecFieldType(REC_UCLASS_BASE + optCi, mangled));
+      assignNode := AllocNode(AN_ASSIGN);
+      ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := valNode;
+      seq := RSeqAppend(seq, assignNode);
+    end;
+    Result := seq;
     Exit;
   end;
   { enum literal RHS: bare `Variant(...)`/`Variant { .. }`/`Variant`, or
@@ -1486,9 +1694,22 @@ begin
     if CurTok.Kind <> tkGt then Error('Rust: expected => after match pattern');
     Next;
 
-    Expect(tkBegin, '{');
-    bodyNode := RSeqAppend(bindsSeq, RParseBlock);
-    Expect(tkEnd, '}');
+    { Rust writes most arms as a bare expression (`Some(v) => f(v),`) and
+      reserves the braced block for multi-statement arms. `match` is a
+      statement here, so a bare arm is just one statement -- no
+      value-of-a-match machinery needed for the common spelling. }
+    if CurTok.Kind = tkBegin then
+    begin
+      Next;
+      bodyNode := RSeqAppend(bindsSeq, RParseBlock);
+      Expect(tkEnd, '}');
+    end
+    else
+    begin
+      RInMatchArm := True;
+      bodyNode := RSeqAppend(bindsSeq, RParseStatement);
+      RInMatchArm := False;
+    end;
     Eat(tkComma);
 
     arms[armCount].IsWildcard := isWildcard;
@@ -1767,18 +1988,18 @@ begin
     tkFor: begin Result := RParseFor; Exit; end;
     tkBegin: begin Next; Result := RParseBlock; Expect(tkEnd, '}'); Exit; end;
     tkSemicolon: begin Next; Result := -1; Exit; end;
-    tkLet: begin Result := RParseLet; Expect(tkSemicolon, ';'); Exit; end;
+    tkLet: begin Result := RParseLet; RExpectStmtEnd; Exit; end;
     tkExit:
     begin
       Next;
       node := AllocNode(AN_EXIT);
       if CurTok.Kind <> tkSemicolon then ASTLeft[node] := RParseExpr;
-      Expect(tkSemicolon, ';');
+      RExpectStmtEnd;
       Result := node;
       Exit;
     end;
-    tkBreak: begin Next; Expect(tkSemicolon, ';'); Result := AllocNode(AN_BREAK); Exit; end;
-    tkContinue: begin Next; Expect(tkSemicolon, ';'); Result := AllocNode(AN_CONTINUE); Exit; end;
+    tkBreak: begin Next; RExpectStmtEnd; Result := AllocNode(AN_BREAK); Exit; end;
+    tkContinue: begin Next; RExpectStmtEnd; Result := AllocNode(AN_CONTINUE); Exit; end;
   end;
 
   if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'match') then begin Result := RParseMatch; Exit; end;
@@ -1788,7 +2009,7 @@ begin
      ((CurTok.SVal = 'println') or (CurTok.SVal = 'print')) then
   begin
     Result := RParsePrintln(CurTok.SVal = 'println');
-    Expect(tkSemicolon, ';');
+    RExpectStmtEnd;
     Exit;
   end;
 
@@ -1828,7 +2049,7 @@ begin
     lhsNode := RMakeIdent(symIdx);
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := lhsNode; ASTRight[node] := rhsNode;
-    Expect(tkSemicolon, ';');
+    RExpectStmtEnd;
     Result := node;
     Exit;
   end;
@@ -1852,7 +2073,7 @@ begin
     ASTTk[fieldNode] := Ord(RecFieldType(Syms[symIdx].RecName, fname));
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := fieldNode; ASTRight[node] := rhsNode;
-    Expect(tkSemicolon, ';');
+    RExpectStmtEnd;
     Result := node;
     Exit;
   end;
@@ -1872,19 +2093,23 @@ begin
     ASTRight[node] := RParseExpr;
     Result := node;
   end;
-  Expect(tkSemicolon, ';');
+  RExpectStmtEnd;
 end;
 
 function RParseBlock: Integer;
-var stmt: Integer;
+var stmt: Integer; savedArm: Boolean;
 begin
   Result := -1;
+  { a braced body is ordinary code again, even when it is a match arm's -- so
+    the bare-arm semicolon leniency stops at the brace, it does not leak in. }
+  savedArm := RInMatchArm; RInMatchArm := False;
   while CurTok.Kind <> tkEnd do
   begin
     if CurTok.Kind = tkEOF then Error('Rust: unterminated block (missing })');
     stmt := RParseStatement;
     Result := RSeqAppend(Result, stmt);
   end;
+  RInMatchArm := savedArm;
 end;
 
 { ===== Top-level: struct/fn signature prescan, then body compilation ===== }

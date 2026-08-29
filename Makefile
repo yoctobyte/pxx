@@ -5729,6 +5729,14 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_rust_chess_search26)" = "$$(printf 'mate1 1 score 999999\nshallow 0 score 200\nmate2 1 score 999997\nmate2shallow 0 score 500\nstarteval 0')"
 	# Rust tuple structs — two field-bearing structs, smaller first
 	# (bug-uclass-field-window-stale-base fixed: second struct's field window re-bases)
+	# Rust Option<T> (feature-rust-corpus-chess stage 2): each concrete
+	# Option<T> is an auto-registered tagged-union enum (__tag + "Some.0"),
+	# so match/is_some/is_none/unwrap fall out of the existing enum machinery.
+	# Two instantiations live in the one program on purpose -- that is what
+	# makes the bare-variant table ambiguous and the expected-type resolution
+	# load-bearing. Bare (unbraced) match arms covered here too.
+	./$(COMPILER) test/test_rust_option.rs $(TESTTMP)/test_rust_option26
+	test "$$($(TESTTMP)/test_rust_option26)" = "$$(printf 'a some 42\nb none\nn 84\nn -7\na is_some\nb is_none\nunwrap 42\nc 200\nd 9\ne wild')"
 	./$(COMPILER) test/test_rust_tuple_struct.rs $(TESTTMP)/test_rust_tuple26
 	test "$$($(TESTTMP)/test_rust_tuple26)" = "$$(printf 'a 300 b 44 s 7')"
 	# Rust associated fns + Self (Type::fn / Self::fn call paths, mixed with methods)
