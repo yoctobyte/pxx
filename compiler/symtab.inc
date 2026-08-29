@@ -6954,7 +6954,10 @@ begin
 end;
 
 { Append idx to its bucket's FIFO chain. Called once per RegisterProc; proc
-  names are immutable after registration, so the index never goes stale. }
+  names are immutable after registration, so the index never goes stale.
+
+  "Never goes stale" was also read as "and so rollback can never be needed",
+  which is a different claim and is false — see ProcRollbackTo below. }
 procedure ProcHashInsert(idx: Integer);
 var b: Integer;
 begin
@@ -6965,6 +6968,63 @@ begin
   else
     ProcHashNext[ProcHashTail[b]] := idx;
   ProcHashTail[b] := idx;
+end;
+
+{ Truncate the proc table to newCount, unlinking the removed range from the
+  bucket chains. The counterpart of SymRollbackTo, and what lets a SPECULATIVE
+  parse back out: feature-a-error-does-not-halt-so-a-parse-can-be-speculative.
+
+  It is not a mirror image of SymRollbackTo, because the two hashes are built
+  the opposite way round and that is load-bearing in both:
+
+    SymHashInsert  is LIFO (newest-first) -- so the highest live index is
+                   always its bucket's HEAD, and each pop is O(1).
+    ProcHashInsert is FIFO (append at tail) -- because ProcChainHead's contract
+                   is REGISTRATION ORDER, which overload resolution walks. So
+                   the chain cannot be flipped to LIFO to make this cheaper.
+
+  Descending order gives the same invariant the other way up: indices are handed
+  out in increasing order and appended in that order, so within a bucket the
+  chain is sorted by index. Walking i downwards, every index above i is already
+  gone, so i is its bucket's current TAIL -- and unlinking a tail needs its
+  predecessor, which is the one walk this does.
+
+  NO analogue of SymRollbackTo's typed-const exception, and the asymmetry is
+  worth stating rather than rediscovering: that rule exists because a symbol's
+  INDEX outlives its scope (the -O2 inliner verifies copied bodies after
+  SymCount has come back down). RegisterProc reinitialises every field of a
+  slot it hands out, and a rolled-back proc by definition has no emitted call
+  referring to it, so a reclaimed proc index carries nothing forward. If that
+  ever stops being true, this is where the exception goes.
+
+  Callers must roll back what they queued as well as what they registered --
+  PyPendLam* for a lambda, which is a plain stack with its own mark. }
+procedure ProcRollbackTo(newCount: Integer);
+var i, b, p: Integer;
+begin
+  for i := ProcCount - 1 downto newCount do
+  begin
+    b := NameFoldHash(Procs[i].Name);
+    if ProcHashHead[b] = i then
+    begin
+      { i is the whole chain: it is the tail by the invariant above, and the
+        head by this test. }
+      ProcHashHead[b] := -1;
+      ProcHashTail[b] := -1;
+    end
+    else
+    begin
+      p := ProcHashHead[b];
+      while (p >= 0) and (ProcHashNext[p] <> i) do p := ProcHashNext[p];
+      if p >= 0 then
+      begin
+        ProcHashNext[p] := -1;
+        ProcHashTail[b] := p;
+      end;
+    end;
+    ProcHashNext[i] := -1;
+  end;
+  ProcCount := newCount;
 end;
 
 { First candidate (registration order) for a name; walk via ProcHashNext.
