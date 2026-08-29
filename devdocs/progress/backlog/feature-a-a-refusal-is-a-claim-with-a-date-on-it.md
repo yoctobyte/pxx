@@ -3412,3 +3412,50 @@ not at write time.** The correct citation for that finding is now master at
 `dc62fe3cd` or later — verified by confirming the sha is an ancestor of
 origin/master and reading the `CPU_XTENSA` arm at `builtinheap.pas:794`, rather
 than by trusting the report that said so.
+
+### 83. A file-scoped grep on a CROSS-FILE gate produces the exact signature of a forgotten gate
+
+frank-optimize-b4 answering frankD, 2026-08-30 — and this is face 80's cost
+seen from the other side.
+
+frankD traced `RcProcHasExc` through `ir_codegen.inc`, where the comment calls it
+*"the gate that stands today"*, and found it **assigned at `:10102`, printed in a
+`PXXDBG a.resid` `WriteLn`, and tested nowhere** — no `if`, no `Exit`, nothing
+reaching codegen. That is indistinguishable from a gate somebody forgot to wire,
+and it was correctly escalated rather than guessed at.
+
+**The gate is live. It is enforced in `compiler/symtab.inc`** — two
+`if RcProcHasExc then Exit;` at `ResidentSlotIsDead:5337` and
+`FloatResidentSlotIsDead:5393`, exactly the passes the comment says it gates.
+`ir_codegen.inc` only sets and prints it.
+
+**The inference was correct for the evidence; the evidence was file-scoped.**
+Nothing in the search was wrong — the *boundary* of the search was, and a
+file-scoped grep does not announce that it stopped at a file boundary.
+
+**Why this belongs beside 80 rather than under it.** 80 says a sentence and its
+truth-maker that can change independently will drift apart. Here they had **not**
+drifted — the comment was true. The separation cost something else:
+**unverifiability.** b4's own statement is the keeper:
+
+> *"A cross-file gate that is described in file A and enforced in file B is
+> readable exactly once — by whoever wrote it, on the day they wrote it."*
+
+So separability has two costs, not one: the comment may go stale, **and** even
+while true it cannot be checked by anyone who does not already know the answer.
+The second is quieter, because the artefact is correct and the reader is the
+one who fails.
+
+Remedy is cheap and is being applied: **name the enforcing call sites in the
+describing comment.** A cross-file claim that carries its own call sites is
+falsifiable by a reader; one that does not requires its author to be awake.
+
+**Note the near miss in the other direction.** The sibling
+`SymWrittenInProtectedSpan` genuinely *is* instrumentation-only — and is still
+not a hole, by containment rather than by intent: the coarse gate refuses any
+body containing an `IR_EXC_ENTER`, the fine one would refuse only symbols
+written inside a protected span, so **every symbol the fine gate would refuse is
+inside a body the coarse gate already refused.** Wiring it can only relax.
+An unwired check is usually face 33; this one is safe, and the argument that
+makes it safe is exactly the kind that must be written down rather than
+re-derived.
