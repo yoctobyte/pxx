@@ -445,3 +445,24 @@ step the coordinator has since wired into it.
 
 ## Log
 - 2026-08-29 — resolved, commit b25e3ac49.
+
+> **INDEPENDENT VERIFICATION of the combined fix — pxx-a5, 2026-08-29.** I had
+> built a duplicate of the rebind row (`PyNameRebindTok` in `pyparser.inc`, a
+> name-keyed token scan) before learning frankA had already landed it in
+> `symtab.inc` at `b25e3ac49`. **Discarded unpushed rather than merged** — two
+> mechanisms for one concept is the defect this ticket already contains three
+> instances of, and adding a fourth to avoid wasting an hour's work would have
+> been the worst possible trade.
+>
+> It was not wasted, because building it produced two shapes that were in
+> neither account, and re-measuring them against frankA's fix at `650034e60`
+> confirms it handles both:
+>
+> | shape | pxx | CPython | |
+> | --- | --- | --- | --- |
+> | `from M import f, g` / `if False: g = f` / `g(1,5)` | 18 | 18 | conditional rebinding must NOT count |
+> | `from M import f, g` / `g(1,5)` / `g = f` | 18 | 18 | a rebinding below the call has not run |
+>
+> Both matter for upward compatibility: the first program is legal in CPython
+> and the import must survive a branch that never runs. All seven rows verified
+> green at `650034e60` with no local changes.
