@@ -287,4 +287,4 @@ Closing: every name in this ticket is either done, filed as its own ticket, or
 an owner decision. Nothing is left here that a next session could pick up.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 7c4e1b5df.
