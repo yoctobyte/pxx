@@ -173,7 +173,25 @@ def t_a_target_boundary_stops_setup_carrying_over():
     return "setup does not carry across a target boundary"
 
 
-TESTS = [t_a_producer_before_the_previous_assertion_is_found,
+def t_a_make_recipe_prefix_is_not_part_of_the_command():
+    """`@`, `-`, `+` are make syntax and must be stripped before exec.
+
+    Left in, the shell runs `@tools/expect_same.sh` -> command not found -> the
+    recipe's own `|| { echo FAIL; }` fires, and a PASSING test is reported as a
+    failure. Found against test_classparent26, which passes when run by hand.
+    """
+    out, rc = run(HEAD + "\tprintf 'v\\n' > $(TESTTMP)/p.txt\n"
+                         "\t@tools/expect_same.sh at "
+                         "\"$$(cat $(TESTTMP)/p.txt)\" \"v\"\n")
+    assert "FAIL" not in verdicts(out), \
+        "a silent-prefixed recipe line was reported as a failure:\n%s" % out
+    assert "ok" in verdicts(out), out
+    assert rc == 0, "rc=%d" % rc
+    return "make's @/-/+ recipe prefixes are stripped before exec"
+
+
+TESTS = [t_a_make_recipe_prefix_is_not_part_of_the_command,
+         t_a_producer_before_the_previous_assertion_is_found,
          t_a_redirect_is_not_read_as_an_output_path,
          t_an_unresolvable_producer_is_a_skip_not_a_fail,
          t_a_real_mismatch_is_still_a_fail,

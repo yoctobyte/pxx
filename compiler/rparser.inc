@@ -2969,12 +2969,81 @@ end;
   a single AN_WRITE / AN_WRITELN. {{ }} escapes are not handled. }
 function RParsePrintln(isLn: Boolean): Integer;
 var fmtOff, fmtLen, i, segStart: Integer;
-    node, lastArg, argNode, litNode: Integer;
+    node, lastArg, argNode, litNode, seq, emitted: Integer;
     argExprs: array[0..7] of Integer;
     argCount, argUsed: Integer;
 
-  procedure AddArg(exprNode: Integer);
+  { A string literal as a one-argument write node. }
+  function WriteLit(const t: AnsiString): Integer;
+  var w, a2, l2: Integer;
   begin
+    l2 := AllocNode(AN_STR_LIT);
+    ASTSOffset[l2] := RStoredName(t); ASTSLen[l2] := Length(t);
+    ASTTk[l2] := Ord(tyString);
+    a2 := AllocNode(AN_ARG);
+    ASTLeft[a2] := l2; ASTRight[a2] := -1;
+    w := AllocNode(AN_WRITE);
+    ASTLeft[w] := a2;
+    WriteLit := w;
+  end;
+
+  { Close the write node under construction and hand it to the sequence.
+    `asLn` turns it into the WRITELN that ends the statement. }
+  procedure FlushWrite(asLn: Boolean);
+  begin
+    if (node < 0) and asLn then
+    begin
+      { every placeholder was a bool, so there is no trailing text -- but the
+        newline still has to happen }
+      node := AllocNode(AN_WRITE);
+      ASTLeft[node] := -1;
+    end;
+    if node < 0 then Exit;
+    if asLn then ASTKind[node] := AN_WRITELN;
+    seq := RSeqAppend(seq, node);
+    Inc(emitted);
+    node := -1;
+    lastArg := -1;
+  end;
+
+  procedure AddArg(exprNode: Integer);
+  var ifNode, pairNode: Integer;
+  begin
+    { Rust prints a bool as `true`/`false`; the shared Write renders tyBoolean
+      in Pascal's spelling, `TRUE`/`FALSE`. That is a WRONG STRING in the
+      output of any Rust program that prints one -- silent, and invisible until
+      somebody reads the output expecting Rust.
+
+      Chosen in the FRONTEND rather than taught to the shared writer, because
+      the spelling is a property of the language and not of the value: Pascal's
+      `TRUE` is correct for Pascal and must stay.
+
+      Lowered as a branch between two literal WRITES rather than as a ternary
+      over two strings. That was the first attempt and it does not work here:
+      a string-valued ternary needs a temp and the managed-string runtime,
+      which this frontend deliberately does not emit (`wantAnsiRuntime` is
+      False -- Rust strings are &str slices), so it failed with `call to a
+      runtime stub that was never emitted`. Splitting the write costs one
+      branch and no runtime at all. }
+    if IntToTypeKind(ASTTk[exprNode]) = tyBoolean then
+    begin
+      FlushWrite(False);
+      pairNode := AllocNode(AN_PAIR);
+      ASTLeft[pairNode] := WriteLit('true');
+      ASTRight[pairNode] := WriteLit('false');
+      ifNode := AllocNode(AN_IF);
+      ASTLeft[ifNode] := exprNode;
+      ASTRight[ifNode] := pairNode;
+      seq := RSeqAppend(seq, ifNode);
+      Inc(emitted);
+      Exit;
+    end;
+    if node < 0 then
+    begin
+      node := AllocNode(AN_WRITE);
+      ASTLeft[node] := -1;
+      lastArg := -1;
+    end;
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := exprNode;
     ASTRight[argNode] := -1;
@@ -3010,10 +3079,10 @@ begin
   end;
   Expect(tkRParen, ')');
 
-  node := AllocNode(AN_WRITE);
-  if isLn then ASTKind[node] := AN_WRITELN;
-  ASTLeft[node] := -1;
+  node := -1;
   lastArg := -1;
+  seq := -1;
+  emitted := 0;
   argUsed := 0;
 
   segStart := 0;
@@ -3036,8 +3105,12 @@ begin
   end;
   AddSegment(fmtOff + segStart, fmtLen - segStart);
   if argUsed < argCount then Error('Rust: more arguments than {} placeholders');
+  FlushWrite(isLn);
 
-  Result := node;
+  { the overwhelmingly common case is one write node and no bool -- hand it
+    back unwrapped, so nothing about the AST changes for a format string that
+    never needed splitting }
+  if emitted = 1 then Result := ASTLeft[seq] else Result := seq;
 end;
 
 { An AGGREGATE LITERAL in a value position of a record-returning fn: stores

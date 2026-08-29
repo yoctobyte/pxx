@@ -14,6 +14,14 @@ import datetime as _dt
 import os
 import math
 import re
+
+_DUP_STOP = {
+    "a", "an", "the", "is", "and", "or", "to", "of", "in", "for", "on", "it",
+    "that", "not", "be", "are", "so", "its", "has", "have", "with", "by", "as",
+    "at", "from", "but", "no", "does", "do", "can", "when", "why", "what",
+    "which", "than", "then", "this", "bug", "feature", "chore", "decide",
+    "regression", "meta", "idea",
+}
 import shutil
 import subprocess
 import sys
@@ -1204,6 +1212,7 @@ pre code{background:none;padding:0}
         # Neither condition has a legitimate case, and both are one line to
         # test — which is the whole argument for testing them.
         seen_slug: dict[str, str] = {}
+        slug_toks: list[tuple[str, str, set[str]]] = []
         for st in self.RANKED_STATUSES:
             d = PROG / st
             if not d.is_dir():
@@ -1226,6 +1235,9 @@ pre code{background:none;padding:0}
                         f"NO-FRONTMATTER: {st}/{path.name} does not start with '---' — "
                         f"an orphan fragment or a truncated ticket, not a ticket the ranker can read")
                     problems = 1
+                slug_toks.append((st, path.name, {
+                    t for t in re.split(r"[-_.]", path.stem.lower())
+                    if len(t) > 2 and t not in _DUP_STOP}))
                 prev = seen_slug.get(path.name)
                 if prev is not None:
                     lines.append(
@@ -1235,6 +1247,33 @@ pre code{background:none;padding:0}
                     problems = 1
                 else:
                     seen_slug[path.name] = st
+
+        # --- near-duplicate slugs -----------------------------------------
+        # Two lanes filing the same ticket minutes apart is real and measured
+        # (2026-08-29, twice in one evening: the EmitLoadVarA64 pair and the
+        # LowerCase pair, the second of which this coordinator caused by
+        # re-filing a ticket a previous session of its own had verified a day
+        # earlier). DUP-SLUG above catches only IDENTICAL filenames, which is
+        # the case that never happens -- two people describing one bug choose
+        # different words.
+        #
+        # Threshold 4 is calibrated, not guessed. Measured over the 341 ranked
+        # tickets on master that day: 3 pairs flagged, 3 genuine duplicates,
+        # ZERO false positives; threshold 5 caught 1 and missed two real ones.
+        # A check that cries wolf earns the habit of being scrolled past, so
+        # recalibrate if the board ever grows a legitimate family of
+        # same-topic tickets rather than loosening it by reflex.
+        for _i in range(len(slug_toks)):
+            _st1, _n1, _t1 = slug_toks[_i]
+            for _j in range(_i + 1, len(slug_toks)):
+                _st2, _n2, _t2 = slug_toks[_j]
+                _shared = _t1 & _t2
+                if len(_shared) >= 4:
+                    lines.append(
+                        f"NEAR-DUP: {_st1}/{_n1} and {_st2}/{_n2} share "
+                        f"{len(_shared)} slug words ({', '.join(sorted(_shared))}) "
+                        f"— check they are not one ticket filed twice")
+                    problems = 1
 
         for t in self.by_status["unfinished"]:
             tr = t.track

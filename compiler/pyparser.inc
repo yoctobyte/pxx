@@ -174,6 +174,16 @@ var
   PyImpAliasSym: array[0..63] of Integer;
   PyImpAliasSrc: array[0..63] of Integer;
   PyImpAliasCount: Integer;
+  { The alias NAMES, kept after PyFlushImportAliases drains the queue above —
+    call sites run long after the flush and still have to know that a name was
+    bound by `import ... as`. Only aliases: a PLAIN `from M import greet` must
+    NOT appear here, because an optional (`try:`) import allocates a
+    module-level var for the plain spelling too, and treating that var as a
+    rebinding shadows the real import with None. That is exactly what a first
+    attempt at this did, and test_nilpy_fallback_import_try_wins caught it. }
+  PyAliasNameId: array[0..255] of Integer;
+  PyAliasNameUnit: array[0..255] of Integer;
+  PyAliasNameCount: Integer;
   PyTypingChanged: Boolean;
   PyHiddenSeq: Integer;   { serial for hidden for-in loop temps }
   { One parsed `def` header, filled by PyParseDefHeader and read by both its
@@ -848,6 +858,23 @@ begin
     Result := PySeqAppend(Result, asgn);
   end;
   PyImpAliasCount := base;
+end;
+
+{ Was this name bound by `from M import X as NAME` in the unit being parsed?
+  The read side of PyAliasNameId; see its declaration for why plain imports are
+  deliberately absent. }
+function PyNameIsImportAlias(const nm: AnsiString): Boolean;
+var i, ni: Integer;
+begin
+  Result := False;
+  if (nm = '') or (PyAliasNameCount = 0) then Exit;
+  ni := InternStr(LowerCase(nm));
+  for i := 0 to PyAliasNameCount - 1 do
+    if (PyAliasNameId[i] = ni) and (PyAliasNameUnit[i] = CurrentUnitIdx) then
+    begin
+      Result := True;
+      Exit;
+    end;
 end;
 
 function PyFlushImportAliases(seq: Integer): Integer;
@@ -36059,6 +36086,9 @@ var impName, impAlias, impRoot, impReal: AnsiString; isCount: Boolean;
     aStrIdx, realStrIdx, optSym, impLevel: Integer;
     aliasSym, aliasCi, aliasRealSym, aliasRealProc: Integer;
     aliasUnitTarget: Integer;   { the unit a from-imported SUBMODULE name really names }
+    aliasSelfIdx: Integer;      { scans the pending alias queue, so a source
+                                  name is not captured by an alias this same
+                                  import run created a moment earlier }
 begin
   while (CurTok.Kind = tkUses) or PyIsIdent('from') do
   begin
@@ -36227,6 +36257,30 @@ begin
                 scope is what makes the un-aliased spelling resolve, and this is
                 the same lookup. }
               aliasRealSym := FindSym(impReal);
+              { SELF-CAPTURE. The alias bindings of one from-import are queued,
+                not yet materialised, and each creates a real module-level var
+                the NEXT item's flat FindSym can then find: in
+                `from M import f as g, g as f`, resolving the source `g` of the
+                second item found the `g` the FIRST item had just allocated, so
+                both names ended up meaning M.f — pxx `5 5` where CPython says
+                `5 18`. CPython binds every name in one from-import from the
+                SOURCE module, simultaneously.
+
+                Skipping only the queue is deliberately narrower than looking
+                the name up in the exporting unit, which is what this tried
+                first: `from pkgprobe.sub import greet` resolves through a shim
+                (`pkgprobe_sub -> mimic_pkgprobe_sub`), and a unit-scoped
+                lookup bound `greet` to None there — the try-branch fallback
+                test caught it. A queued alias is never the source of another
+                item in the same run; that is the whole claim being made here.
+                bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module }
+              if aliasRealSym >= 0 then
+                for aliasSelfIdx := 0 to PyImpAliasCount - 1 do
+                  if PyImpAliasSym[aliasSelfIdx] = aliasRealSym then
+                  begin
+                    aliasRealSym := -1;
+                    Break;
+                  end;
               aliasRealProc := -1;
               if aliasRealSym < 0 then aliasRealProc := FindProc(impReal);
               if (aliasRealSym >= 0) or (aliasRealProc >= 0) then
@@ -36243,6 +36297,12 @@ begin
                 begin
                   Syms[aliasSym].RecName := Syms[aliasRealSym].RecName;
                   SymSyncTypeRef(aliasSym);
+                end;
+                if PyAliasNameCount < 256 then
+                begin
+                  PyAliasNameId[PyAliasNameCount] := InternStr(LowerCase(impAlias));
+                  PyAliasNameUnit[PyAliasNameCount] := CurrentUnitIdx;
+                  Inc(PyAliasNameCount);
                 end;
                 PyImpAliasSym[PyImpAliasCount] := aliasSym;
                 if aliasRealSym >= 0 then
@@ -41671,8 +41731,19 @@ begin
     parsed with one argument and failed with two. Confined to this NilPy
     intercept: Pascal code still gets the record, which is what `var f: Text`
     means there. }
+  { ...unless the name was bound by `from M import <non-class> as NAME`. The
+    alias is a module-level binding to a FUNCTION, and it must not be read as
+    a construction just because M also happens to declare a class by that
+    spelling: `from M import f as C` then `C(1,5)` CONSTRUCTED M's class C and
+    printed an object where CPython prints 5 — silently, and with the argument
+    list quietly reinterpreted as constructor args.
+    A genuine class alias (`from M import Box as BoxAlias`) is NOT affected:
+    it takes the RegisterUClassAlias branch at the import site, which does not
+    record a name here, so BoxAlias stays an exact ctor name.
+    bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module }
   if (CurTok.Kind = tkIdent) and
      PyIsExactCtorName(CurTok.SVal) and
+     (not PyNameIsImportAlias(CurTok.SVal)) and
      (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
   begin
     CurASTNode := PyClassCreateExpr;
@@ -45696,6 +45767,7 @@ begin
          ((Syms[idx].Kind in [skLocal, skParam]) or
           ((Syms[idx].Kind = skGlobal) and PyDefRebound(procIdx)) or
           ((Syms[idx].Kind = skGlobal) and (SymUnitIdx[idx] = CurrentUnitIdx) and
+           PyNameIsImportAlias(name) and
            (ProcUnitIdx[procIdx] >= 0) and
            (ProcUnitIdx[procIdx] <> CurrentUnitIdx))) then
         procIdx := -1;

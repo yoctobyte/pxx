@@ -94,7 +94,17 @@ def make_vars(lines, tmp):
 
 def expand(line, vars_):
     line = VAR_REF.sub(lambda m: vars_.get(m.group(1), m.group(0)), line)
-    return line.replace("$$", "$").strip()
+    line = line.replace("$$", "$").strip()
+    # make's RECIPE PREFIXES: @ (silent), - (ignore errors), + (always run).
+    # They are make syntax, not part of the command. Left in place, the shell
+    # ran `@tools/expect_same.sh ...`, got "command not found", and the
+    # recipe's own `|| { echo FAIL; ...; exit 1; }` fired -- so the tool
+    # reported a FAIL for a test that passes when actually run. The invariant
+    # below did not catch it because a command DID run and DID fail; it just
+    # was not the command make would have run.
+    while line[:1] in ("@", "-", "+"):
+        line = line[1:].lstrip()
+    return line
 
 
 def unexpanded(cmd):

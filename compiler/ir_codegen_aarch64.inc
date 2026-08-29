@@ -2040,7 +2040,20 @@ begin
           if IRKind[right] = IR_CONST_INT then
             WriteLn('PXXDBG a.a64binop CONST')
           else if IRKind[right] = IR_LOAD_SYM then
-            WriteLn('PXXDBG a.a64binop LEAFSYM')
+          begin
+            { Split the leaf-sym population by whether the OP is commutative.
+              A commutative op does not care which register holds which
+              operand, so it can be served by `mov x1,x0; load right->x0` --
+              two instructions, no stack, and NO change to EmitLoadVarA64 or
+              to any op arm. A non-commutative one would need reversed
+              encodings per arm. }
+            if (op = Ord(tkPlus)) or (op = Ord(tkStar)) or (op = Ord(tkAnd)) or
+               (op = Ord(tkOr)) or (op = Ord(tkXor)) or
+               (op = Ord(tkEq)) or (op = Ord(tkNeq)) then
+              WriteLn('PXXDBG a.a64binop LEAFSYM_COMM')
+            else
+              WriteLn('PXXDBG a.a64binop LEAFSYM_NONCOMM');
+          end
           else
             WriteLn('PXXDBG a.a64binop OTHER');
         end;

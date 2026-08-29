@@ -2616,6 +2616,15 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_class_method_result_type.pas $(TESTTMP)/test_clsmeth_ret26
 	@$(TESTTMP)/test_clsmeth_ret26 | diff -u test/test_class_method_result_type.expected - \
 	  || { echo 'test_class_method_result_type: FAIL - a class method result lost its type'; exit 1; }
+	@# ...and the same chain through a bare CLASS NAME receiver: TFactory.MakeC.Tag
+	@# evaluated to the INTERMEDIATE result, because both arms that build a
+	@# TClassName.ClassMethod call returned it without applying the selector tail,
+	@# and the leftover .Tag was eaten by the statement parser's skip-to-';'. Two
+	@# arms (expression and statement position), so fixing one left the other wrong.
+	@# bug-p-a-call-chained-onto-a-class-method-result-is-dropped
+	@./$(COMPILER) test/test_class_name_receiver_chain.pas $(TESTTMP)/test_clsname_chain26
+	@$(TESTTMP)/test_clsname_chain26 | diff -u test/test_class_name_receiver_chain.expected - \
+	  || { echo 'test_class_name_receiver_chain: FAIL - a chain on a class-name receiver was dropped'; exit 1; }
 	@# a SECOND class of the same name in one unit must be refused, naming it
 	@./$(COMPILER) test/test_pascal_duplicate_class_fail.pas $(TESTTMP)/test_pascal_dup_class26 2>&1 \
 	  | grep -q 'duplicate class name TFoo' \
@@ -5938,6 +5947,15 @@ test-core: $(COMPILER)
 	# master and Result<Pos, i64> read `4 2` back as `4 0`. Neither failed loudly.
 	./$(COMPILER) test/test_rust_result.rs $(TESTTMP)/test_rust_result26
 	tools/expect_same.sh test_rust_result26 "$$($(TESTTMP)/test_rust_result26)" "$$(printf '1 ok 11\n2 err 7\n3 ok 14\n4 err 7\n5 ok 120\n6 err 7\npos 4 2\npos err 3\nbig 10 11 12 13\nbig none')"
+	@echo '--- rust: println! spells a bool true/false, not Pascal TRUE ---'
+	# A wrong STRING in real output, not a missing one -- the exact plausible
+	# failure that survives to be found late. Lowered as a branch between two
+	# literal writes: a string-valued ternary would need the managed-string
+	# runtime, which this frontend deliberately does not emit.
+	# `end`/`{}{}`/`print!` pin the lowering edges: an empty trailing chunk must
+	# still carry the newline, and adjacent bools must not swallow each other.
+	./$(COMPILER) test/test_rust_bool_print.rs $(TESTTMP)/test_rust_bool26
+	tools/expect_same.sh test_rust_bool26 "$$($(TESTTMP)/test_rust_bool26)" "$$(printf 'pair true false\ntrue\nfalse\nlead false mid 7 tail\ntruefalse\nend true\nfalse start\nm true false\ncmp false true\nnot false\np false q true\nplain 42 unchanged')"
 	# Ada frontend skeleton (feature-esoteric-ada): for-range accumulate, if/elsif/else,
 	# while, bare loop + exit-when, Put_Line -- all lowering onto existing shared IR.
 	./$(COMPILER) test/test_ada_skeleton.adb $(TESTTMP)/test_ada_skeleton26
