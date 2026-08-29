@@ -582,8 +582,30 @@ static int __crtl_vformat(char *buf, size_t cap, const char *fmt, va_list ap) {
       if (alt && prec <= nl && num[0] != '0') prec = nl + 1;
     } else if (k == 'p') {
       uv = (unsigned long long)(unsigned long)va_arg(ap, void *);
-      nl = __crtl_utoa(num, uv, 16, 0); s = num;
-      prefix = "0x"; preflen = 2;
+      if (uv == 0) {
+        /* glibc renders a null pointer as "(nil)", and the gcc oracle we diff
+           against IS glibc -- so `0x0` here makes every C program that prints a
+           null pointer show up as a divergence that has to be eyeballed and
+           dismissed. %p's representation is implementation-defined (musl prints
+           0x0 too), so this is oracle agreement, not correctness.
+           compat-c-printf-p-of-null-prints-0x0-not-nil
+
+           It leaves the NUMERIC path rather than just swapping the digits,
+           because glibc treats this as a plain string and the two remaining
+           knobs both disagree otherwise -- measured, not assumed:
+             %010p -> "     (nil)"  the '0' flag is ignored, not applied
+             %.3p  -> "(nil)"       precision neither pads nor truncates
+           Clearing prec is what keeps the integer-precision block below from
+           claiming this conversion; clearing zero is what keeps the field pad
+           spaces. Width still applies, left-justify still applies, both via the
+           ordinary string path. */
+        s = "(nil)"; nl = 5;
+        prefix = ""; preflen = 0;
+        zero = 0; prec = -1;
+      } else {
+        nl = __crtl_utoa(num, uv, 16, 0); s = num;
+        prefix = "0x"; preflen = 2;
+      }
     } else if (k == 'c') {
       one[0] = (char)va_arg(ap, int); one[1] = 0; s = one; nl = 1;
     } else if (k == 's') {

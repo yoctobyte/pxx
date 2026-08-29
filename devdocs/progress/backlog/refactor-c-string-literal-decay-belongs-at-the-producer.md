@@ -51,3 +51,26 @@ case) computes its own base and must be re-pointed or left consistent.
 `--tier quick` is not the judge here. The C corpora — zlib, sqlite, quickjs,
 tcc, lua — are what actually exercise every string path, and they run on Track
 T. Land this behind a full corpus run, not a quick gate.
+
+## Ownership: this is a Track A change, not Track C — 2026-08-29 (frankC)
+
+Raised by frankC and routed to **A** by frank-coordinator. Recording the reason,
+because the ticket's own `track: C` reads the other way and the next agent will
+hit the same fork:
+
+The change lands in `compiler/ir.inc` (`IRLowerAST`'s producer arm, plus the
+three consumer skips). Two rules in CLAUDE.md point in opposite directions —
+Track C owns *"C-exclusive C→IR lowering"*, and *"anything in `lexer.inc`,
+`ir*.inc`, `symtab.inc`, `defs.inc`, the backends → file a Track A ticket, do not
+edit it under Track C."* **The second wins: file-lanes exist for collision
+avoidance, not as a taxonomy, so the rule is about the FILE and not the topic.**
+A C-exclusive change under `CProgramMode` that happens to live in a shared file
+is still a shared-file edit, and two agents in `ir.inc` is exactly the collision
+the letters exist to prevent.
+
+`track:` left as `C` deliberately — it is a C-frontend defect and belongs in C's
+queue for visibility — but **the edit needs the A slot**. Whoever takes it should
+hold Track A or confirm no one else is in `ir.inc`.
+
+Nothing here is started; no code was touched. The analysis in the sections above
+is the handoff — it should not need re-deriving.
