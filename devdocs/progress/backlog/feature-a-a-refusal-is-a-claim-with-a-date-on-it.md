@@ -2387,3 +2387,42 @@ calls `exit_group` via `__pxxrawsyscall` to work around this, so
 Reverting that to a plain `Halt(216)` is part of the fix — otherwise the repair
 ships beside a green test guarding nothing. A workaround installed while a bug is
 open becomes a blindfold the moment it is closed.
+
+### 56. AN OPEN TICKET WHOSE TITLE MATCHES YOUR SYMPTOM IS A MAGNET FOR FALSE ATTRIBUTION
+
+frankB, 2026-08-29, and it is a face about a *non*-finding, which is why it is worth
+keeping.
+
+Three `lib-test` background runs were killed mid-flight, at 386 and 665 lines, at
+unrelated points, with no test failure in any of them. There is an open ticket
+called `chore-t-unit-class-est-mem-is-below-what-lib-test-00-actually-peaks-at` —
+*"lib-test admitted on a memory promise the box cannot keep."*
+
+**"lib-test got SIGTERMed" plus a ticket titled "lib-test peaks above its memory
+estimate" is a very inviting pair.** It explains the symptom, it names a known
+defect, it is already filed so it needs no new ticket, and joining them costs one
+sentence.
+
+It is wrong. frankB checked instead: the box had **38 GB available**, `lib-test`
+peaks around **600 MB**, and `dmesg` shows **no OOM kill**. The three runs also
+stopped at three unrelated places, which independently rules out a specific test.
+The actual cause was its own session's background-task handling stopping a long
+command — **nothing in the repo, and specifically no new data point for that
+ticket.**
+
+**The hazard is structural and grows with the backlog.** With 336 open tickets,
+almost any symptom has a plausible-sounding match by title, and attributing to an
+existing ticket feels like *diligence* — you searched, you found the known issue,
+you avoided filing a duplicate. It produces a confident wrong cause with no new
+artefact to review, and it also **corrupts the ticket it attaches to**, which now
+carries a fabricated data point that will be cited by the next person.
+
+frankB's own statement of the rule: **an explanation that fits is not an
+explanation that was tested.** Same family as the reproduction-condition error
+(face 49) and the one-sample table (face 50), all three found by the same lane in
+one evening — a fitting story, adopted before anything falsified it.
+
+**The disposal here is the model:** it is written down as a negative result *so
+nobody chases the wrong lead*, and explicitly says the memory ticket gains nothing
+from it. A negative result nobody records gets rediscovered; a wrong attribution
+nobody corrects gets inherited.
