@@ -330,4 +330,4 @@ and its own benchmark. Alignment handling (the ticket's step 3) was never
 measured and is now moot: `PXXBlockCopy` already carries the alignment guard.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit d42be856b.
