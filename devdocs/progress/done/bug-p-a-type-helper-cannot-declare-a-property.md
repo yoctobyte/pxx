@@ -4,6 +4,7 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "A `property` declared inside a `type helper` is not dispatched: `s.Len` where the helper declares `property Len: SizeInt read GetLen` is refused with `a string has no members here`, while `s.GetLen` — the same accessor called directly — works. Properties on a plain record work. This blocks `s.Length`, the headline member of Delphi's TStringHelper, because FPC declares Length as a property over GetLength rather than as a method."
+status: done
 ---
 
 # A type helper's `property` is not dispatched, only its methods are
@@ -83,3 +84,62 @@ through a variable receiver, with the `.expected` produced by fpc under
 `{$modeswitch typehelpers}`. Keep the record-property case in the same test as
 the control, since it is the arm that already works and is what stops the fix
 being written as a special case.
+
+## Fixed 2026-08-29 (frankB) — the guard was too narrow, not the machinery
+
+Three lines, and none of them a property path.
+
+```pascal
+mci := FindHelperForType(Syms[idx].TypeKind, Syms[idx].RecName);
+if (mci >= 0) and ((FindUMeth(mci, GetTokenStr(TokPos)) >= 0) or
+                   (FindUProp(mci, GetTokenStr(TokPos)) >= 0)) then
+```
+
+`pasparser_lval.inc`, the TYPE-HELPER dispatch block. The block already hands
+the receiver to `ParseClassRecordSelectors` with the helper as the record id,
+and that is the same machinery advanced records use — **it has resolved
+properties all along**. The guard asked `FindUMeth` and nothing else, so a
+property-named member failed the test and fell through to
+`a string has no members here`. The property arm was never missing; it was
+never reached. Widening the guard is therefore `normalise-dont-special-case` in
+its cheapest form: no second path was added, one was stopped being excluded.
+
+**Measured after:** `s.Length` on an `AnsiString` prints 5 where fpc 3.2.2
+prints 5, through sysutils' real `TStringHelper` — a consumer that already
+existed, because [[feature-p-delphi-string-helpers]] declared it the FPC way and
+left it platonic rather than respelling it as a method. The library needed no
+edit at all when the compiler caught up, which is the no-appeasement rule
+paying out rather than merely being observed.
+
+### Gate
+
+`make compiler/pascal26` → converged after 1 round, `56b95ec7a505`.
+`test/test_type_helper_property.pas` + `.expected` wired into `test-core`,
+carrying **both arms**: the helper property (the fix) and a record property (the
+control that always worked). The control is the point — the defect was the
+intersection of two working features, so a test of only the broken arm would let
+the fix be rewritten as a helper special case. Verified negative: the test
+compiles and passes on the new binary and fails on the pinned one with
+`a value of this type has no members`.
+
+Checked for over-widening rather than assumed: `test_scalar_member_fail.pas` and
+`test_scalar_member_int_fail.pas` are both still correctly refused, and the
+record-property control still answers 42.
+
+### Two things found on the way, neither filed as new
+
+**`private` is not enforced.** `s.GetLength` compiles here and is
+`Illegal qualifier` in FPC, because FPC declares that accessor private.
+Attributed before assuming: it compiles on the **pinned** binary too, so it
+predates this fix, and `private` is not enforced on a plain record either — it
+is general, not helper-specific. Already parked as
+`rainy-day/idea-visibility-enforcement`, so it is noted here rather than
+re-filed. By CLAUDE.md's table it is *we accept a form FPC rejects* → not a
+defect.
+
+**The sibling gap this ticket was paired with is already gone.** See the
+string-helpers ticket: all six receiver forms work today, verified on the
+pinned binary, so the fix was not mine and the recorded table was stale.
+
+## Log
+- 2026-08-29 — resolved, commit PENDING-COMMIT.

@@ -2,7 +2,7 @@
 track: P
 prio: 70
 type: feature
-status: working
+status: done
 owner: frankB
 ---
 
@@ -210,3 +210,69 @@ receiver generalisation recorded above (literal, call-result and chained
 receivers). Neither is Track B. **Re-tracking this to P alone is now correct** —
 the 2026-08-25 entry's warning that a claimant would find themselves editing
 `lib/` no longer applies, because that editing is done.
+
+## 2026-08-29 (frankB, second pass) — P side done; half of it was already done
+
+Took the P side on dispatch. It was two items and **only one existed.**
+
+### The property gap — fixed
+
+[[bug-p-a-type-helper-cannot-declare-a-property]], resolved. The helper dispatch
+guard in `pasparser_lval.inc` asked `FindUMeth` and never `FindUProp`, so a
+property-named member fell through to `a string has no members here` even though
+`ParseClassRecordSelectors` — the machinery the block already delegates to — has
+resolved properties all along. Widening the guard is three lines and adds no
+path. `s.Length` now prints 5 where fpc prints 5, through the sysutils
+declaration landed earlier today, **with no change to the library**.
+
+### The receiver generalisation — already fixed, and the table above is stale
+
+The 2026-08-25 entry records five spellings pxx refused. All of them work, and
+so does a sixth:
+
+| spelling | fpc | pxx today |
+| --- | --- | --- |
+| `s.ToUpper` (variable) | AB | AB |
+| `'xy'.ToUpper` (literal) | XY | XY |
+| `F.ToUpper` (call result) | QQ | QQ |
+| `Copy(s,1,1).ToUpper` (intrinsic call) | A | A |
+| `s.ToUpper.ToLower` (chained) | ab | ab |
+| `(F).ToUpper` (parenthesised) | QQ | QQ |
+
+**Attributed before claiming it:** all six also work on the **pinned** binary,
+which predates today's fix, so this was someone else's work between 2026-08-25
+and now and nothing here caused it. The table above is a false limit — the shape
+frankA named this week, *a false limit is quieter than a false fix and survives
+longer* — and it would have sent this session to fix six working spellings.
+
+### What is left, and it is a pin rather than a defect
+
+Nothing in the frontend and nothing in the library. The one loose end is that
+`test/lib_string_helpers.pas` gates 34 rows and not 35: `lib-test` builds with
+`$(PXX_STABLE)`, the pin predates today's compiler fix, and a `Length` row would
+therefore red B's gate on a compiler that is correct.
+
+That is worth stating as a general fact rather than as this test's quirk:
+**Track B's gate can only ever assert what the PIN can do**, so a library
+feature riding an unpinned compiler fix is ungatable there until the pin moves.
+The mechanism is gated meanwhile in `test-core` by
+`test/test_type_helper_property.pas`, which builds with the freshly-built
+compiler. The test file carries the one-line instruction for the next pin, and
+the 35-row version was verified byte-identical to fpc before being reverted, so
+the row is known-good rather than hoped-for.
+
+I did not pin to close the gap. A pin holds the repo lock and five other
+sessions were live; that is the coordinator's call to schedule, not a
+convenience for finishing my own row.
+
+### Scope honesty
+
+The members landed are the subset this ticket's Scope names, not FPC's whole
+`TStringHelper`. Absent by choice and not by accident: the `Char`-receiver
+overloads, `IndexOfAny`/`LastIndexOfAny`, the `*Unquoted` family, the
+`TStringSplitOptions` and quote-aware `Split` arms, `Compare`/`CompareText` and
+the other class functions, and `Chars`/`Empty`. They are additive and nothing in
+tree needs them; a later batch can add them against the same oracle harness.
+
+## Log
+- 2026-08-29 — resolved, commit PENDING-COMMIT.
