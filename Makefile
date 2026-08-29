@@ -5938,6 +5938,15 @@ test-core: $(COMPILER)
 	# master and Result<Pos, i64> read `4 2` back as `4 0`. Neither failed loudly.
 	./$(COMPILER) test/test_rust_result.rs $(TESTTMP)/test_rust_result26
 	tools/expect_same.sh test_rust_result26 "$$($(TESTTMP)/test_rust_result26)" "$$(printf '1 ok 11\n2 err 7\n3 ok 14\n4 err 7\n5 ok 120\n6 err 7\npos 4 2\npos err 3\nbig 10 11 12 13\nbig none')"
+	@echo '--- rust: println! spells a bool true/false, not Pascal TRUE ---'
+	# A wrong STRING in real output, not a missing one -- the exact plausible
+	# failure that survives to be found late. Lowered as a branch between two
+	# literal writes: a string-valued ternary would need the managed-string
+	# runtime, which this frontend deliberately does not emit.
+	# `end`/`{}{}`/`print!` pin the lowering edges: an empty trailing chunk must
+	# still carry the newline, and adjacent bools must not swallow each other.
+	./$(COMPILER) test/test_rust_bool_print.rs $(TESTTMP)/test_rust_bool26
+	tools/expect_same.sh test_rust_bool26 "$$($(TESTTMP)/test_rust_bool26)" "$$(printf 'pair true false\ntrue\nfalse\nlead false mid 7 tail\ntruefalse\nend true\nfalse start\nm true false\ncmp false true\nnot false\np false q true\nplain 42 unchanged')"
 	# Ada frontend skeleton (feature-esoteric-ada): for-range accumulate, if/elsif/else,
 	# while, bare loop + exit-when, Put_Line -- all lowering onto existing shared IR.
 	./$(COMPILER) test/test_ada_skeleton.adb $(TESTTMP)/test_ada_skeleton26
