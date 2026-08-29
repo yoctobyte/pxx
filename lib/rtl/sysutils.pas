@@ -69,6 +69,65 @@ type
   TReplaceFlag  = (rfReplaceAll, rfIgnoreCase);
   TReplaceFlags = set of TReplaceFlag;
 
+  { Delphi's TStringHelper surface — method-style string access
+    (feature-p-delphi-string-helpers). FPC compiles this under
+    {$modeswitch typehelpers}; it is the default style in anything written to
+    Delphi 2009+ conventions, so a program using it is the normal case rather
+    than an exotic one.
+
+    INDEXING IS 0-BASED, which is Delphi's convention and NOT Pascal's. So
+    `s.Substring(2)` drops two characters where `Copy(s, 2, n)` keeps from the
+    second, and `s.IndexOf` answers one less than `Pos`. Getting that backwards
+    is a silent wrong answer, so every value below was taken from fpc 3.2.2
+    under {$modeswitch typehelpers} rather than derived:
+
+      'Hello World'.Substring(2)     = 'llo World'    (not 'ello World')
+      'Hello World'.IndexOf('o')     = 4              (Pos says 5)
+      'a-b-a'.IndexOf('zz')          = -1             (Pos says 0)
+      'abc'.Substring(9)             = ''             out of range, not an error
+      'abc'.Substring(-1)            = 'abc'          negative clamps to 0
+      'abc'.Substring(1, 99)         = 'bc'           count clamps to the tail
+      'abc'.PadLeft(2)               = 'abc'          never truncates
+      'a-b-a'.Replace('a', 'X')      = 'X-b-X'        replaces ALL by default
+      ''.Split([','])                = one element    not zero
+
+    `Length` is declared as a PROPERTY because that is how FPC declares it, and
+    it does NOT work yet: pxx does not dispatch a property through a type
+    helper, only a method — [[bug-p-a-type-helper-cannot-declare-a-property]].
+    Every other member here works today. The declaration stays platonic rather
+    than being respelled as a method, per CLAUDE.md's no-compiler-appeasement
+    rule; it starts working when that bug is fixed, with no change here. }
+  TStringHelper = type helper for AnsiString
+  private
+    { private because FPC declares it private -- `s.GetLength` is an
+      `Illegal qualifier` there, so exposing it here would be a divergence
+      invented to work around the property gap. }
+    function GetLength: SizeInt;
+  public
+    property Length: SizeInt read GetLength;
+    function IsEmpty: Boolean;
+    function ToUpper: AnsiString;
+    function ToLower: AnsiString;
+    function Trim: AnsiString;
+    function TrimLeft: AnsiString;
+    function TrimRight: AnsiString;
+    function Substring(AStartIndex: SizeInt): AnsiString; overload;
+    function Substring(AStartIndex: SizeInt; ALen: SizeInt): AnsiString; overload;
+    function IndexOf(const AValue: AnsiString): SizeInt; overload;
+    function IndexOf(const AValue: AnsiString; StartIndex: SizeInt): SizeInt; overload;
+    function LastIndexOf(const AValue: AnsiString): SizeInt;
+    function StartsWith(const AValue: AnsiString): Boolean;
+    function EndsWith(const AValue: AnsiString): Boolean;
+    function Contains(const AValue: AnsiString): Boolean;
+    function Replace(const OldValue, NewValue: AnsiString): AnsiString; overload;
+    function Replace(const OldValue, NewValue: AnsiString; Flags: TReplaceFlags): AnsiString; overload;
+    function Split(const Separators: array of Char): TStringArray;
+    function PadLeft(ATotalWidth: SizeInt): AnsiString; overload;
+    function PadLeft(ATotalWidth: SizeInt; PaddingChar: Char): AnsiString; overload;
+    function PadRight(ATotalWidth: SizeInt): AnsiString; overload;
+    function PadRight(ATotalWidth: SizeInt; PaddingChar: Char): AnsiString; overload;
+  end;
+
   { FPC SysUtils event-log severity (eventlog.pp et al). }
   TEventType  = (etCustom, etInfo, etWarning, etError, etDebug);
   TEventTypes = set of TEventType;
@@ -138,19 +197,25 @@ type
 
       WHAT THIS ACTUALLY DOES, since the name promises more than it delivers:
       it DEREFERENCES the pointer and constructs. There is no resource-string
-      mechanism behind it — no translation table, no runtime replacement — and
-      pxx's `resourcestring` sections are parsed as plain const sections
-      (`compiler/pasparser_proc.inc:4783`), so a resourcestring here IS its
-      literal. That is a deliberate choice rather than a stub: the observable
-      behaviour is identical to FPC's for a program that never re-translates,
-      which is every program in the corpora, and a real mechanism can be slid
-      underneath without changing this signature.
+      mechanism behind it — no translation table, no runtime replacement. That
+      is a deliberate choice rather than a stub: the observable behaviour is
+      identical to FPC's for a program that never re-translates, which is every
+      program in the corpora, and a real mechanism can be slid underneath
+      without changing this signature.
 
-      CALL SITES ARE BLOCKED TODAY, and not by this code: `@SFoo` on a
-      resourcestring is `error: undefined variable`, because a const has no
-      address ([[bug-p-a-resourcestring-is-not-addressable]], filed). These
-      constructors work with any `^string`; the FPC spelling of the argument
-      does not compile until that lands. }
+      NO LONGER BLOCKED (2026-08-28). This paragraph used to say `@SFoo` was
+      `error: undefined variable` because a resourcestring section was parsed as
+      a plain const section and a const has no address. It is now parsed as
+      initialised string STORAGE — which is what FPC's runtime-replaceable
+      resourcestring actually is — so `CreateRes(@SArgumentOutOfRange)` compiles
+      and runs. [[bug-p-a-resourcestring-is-not-addressable]], resolved.
+      These constructors still work with any `^string`.
+
+      One deliberate divergence, in FPC's favour: FPC REFUSES a direct
+      `SFoo := 'x'` (*Variable identifier expected*) while pxx accepts it, since
+      ours is an ordinary initialised variable. That is the "we accept a form FPC
+      rejects" row of CLAUDE.md's compat table — not a defect, and writing
+      THROUGH the pointer works in both. }
     constructor CreateRes(ResString: PResStringRec);
     constructor CreateResFmt(ResString: PResStringRec; const args: array of const);
   end;
@@ -5502,6 +5567,187 @@ begin
     until now (feature-a-emitted-nil-checks). }
   raise EAccessViolation.Create('Access violation (nil reference)');
 end;
+
+
+{ ---- TStringHelper — Delphi's method-style string surface ----------------
+  Every routine here delegates to the intrinsic or to this unit's own function,
+  self-qualified as `sysutils.X` because the helper method shadows the global
+  of the same name and an unqualified call would recurse. All index arithmetic
+  converts between Delphi's 0-based convention and Pascal's 1-based one at the
+  boundary; see the declaration's table for the fpc-derived values. }
+
+function TStringHelper.GetLength: SizeInt;
+begin
+  GetLength := System.Length(Self);
+end;
+
+function TStringHelper.IsEmpty: Boolean;
+begin
+  IsEmpty := System.Length(Self) = 0;
+end;
+
+function TStringHelper.ToUpper: AnsiString;
+begin
+  ToUpper := sysutils.UpperCase(Self);
+end;
+
+function TStringHelper.ToLower: AnsiString;
+begin
+  ToLower := sysutils.LowerCase(Self);
+end;
+
+function TStringHelper.Trim: AnsiString;
+begin
+  Trim := sysutils.Trim(Self);
+end;
+
+function TStringHelper.TrimLeft: AnsiString;
+begin
+  TrimLeft := sysutils.TrimLeft(Self);
+end;
+
+function TStringHelper.TrimRight: AnsiString;
+begin
+  TrimRight := sysutils.TrimRight(Self);
+end;
+
+{ 0-based start. A start past the end yields '' and a negative one clamps to 0
+  -- fpc answers '' for 'abc'.Substring(9) and 'abc' for 'abc'.Substring(-1),
+  neither of which is an error. }
+function TStringHelper.Substring(AStartIndex: SizeInt): AnsiString;
+begin
+  Substring := Self.Substring(AStartIndex, System.Length(Self));
+end;
+
+function TStringHelper.Substring(AStartIndex: SizeInt; ALen: SizeInt): AnsiString;
+begin
+  if AStartIndex < 0 then AStartIndex := 0;
+  if ALen < 0 then ALen := 0;
+  Substring := Copy(Self, AStartIndex + 1, ALen);
+end;
+
+{ 0-based, and -1 when absent -- Pos is 1-based and 0 when absent, so the
+  conversion is the same subtraction in both cases and needs no special case. }
+function TStringHelper.IndexOf(const AValue: AnsiString): SizeInt;
+begin
+  IndexOf := sysutils.Pos(AValue, Self) - 1;
+end;
+
+function TStringHelper.IndexOf(const AValue: AnsiString; StartIndex: SizeInt): SizeInt;
+var tail: AnsiString; p: SizeInt;
+begin
+  if StartIndex < 0 then StartIndex := 0;
+  tail := Copy(Self, StartIndex + 1, System.Length(Self));
+  p := sysutils.Pos(AValue, tail);
+  if p = 0 then IndexOf := -1
+  else IndexOf := p - 1 + StartIndex;
+end;
+
+function TStringHelper.LastIndexOf(const AValue: AnsiString): SizeInt;
+var i, n, m: SizeInt;
+begin
+  LastIndexOf := -1;
+  n := System.Length(Self);
+  m := System.Length(AValue);
+  if (m = 0) or (m > n) then Exit;
+  for i := n - m + 1 downto 1 do
+    if Copy(Self, i, m) = AValue then
+    begin
+      LastIndexOf := i - 1;
+      Exit;
+    end;
+end;
+
+function TStringHelper.StartsWith(const AValue: AnsiString): Boolean;
+begin
+  StartsWith := Copy(Self, 1, System.Length(AValue)) = AValue;
+end;
+
+function TStringHelper.EndsWith(const AValue: AnsiString): Boolean;
+var n, m: SizeInt;
+begin
+  n := System.Length(Self);
+  m := System.Length(AValue);
+  EndsWith := (m <= n) and (Copy(Self, n - m + 1, m) = AValue);
+end;
+
+function TStringHelper.Contains(const AValue: AnsiString): Boolean;
+begin
+  Contains := sysutils.Pos(AValue, Self) > 0;
+end;
+
+{ FPC's two-argument Replace replaces EVERY occurrence: 'a-b-a'.Replace('a','X')
+  is 'X-b-X', not 'X-b-a'. }
+function TStringHelper.Replace(const OldValue, NewValue: AnsiString): AnsiString;
+begin
+  Replace := sysutils.StringReplace(Self, OldValue, NewValue, [rfReplaceAll]);
+end;
+
+function TStringHelper.Replace(const OldValue, NewValue: AnsiString; Flags: TReplaceFlags): AnsiString;
+begin
+  Replace := sysutils.StringReplace(Self, OldValue, NewValue, Flags);
+end;
+
+{ Splitting '' yields ONE empty element, not zero, and adjacent separators yield
+  an empty element between them -- 'a,,b' is three parts. }
+function TStringHelper.Split(const Separators: array of Char): TStringArray;
+var i, j, n, cnt: SizeInt; isSep: Boolean; cur: AnsiString;
+begin
+  n := System.Length(Self);
+  SetLength(Split, 0);
+  cnt := 0;
+  cur := '';
+  for i := 1 to n do
+  begin
+    isSep := False;
+    for j := 0 to High(Separators) do
+      if Self[i] = Separators[j] then isSep := True;
+    if isSep then
+    begin
+      SetLength(Split, cnt + 1);
+      Split[cnt] := cur;
+      cnt := cnt + 1;
+      cur := '';
+    end
+    else
+      cur := cur + Self[i];
+  end;
+  SetLength(Split, cnt + 1);
+  Split[cnt] := cur;
+end;
+
+{ Never truncates: padding to a width the string already exceeds returns it
+  unchanged. }
+function TStringHelper.PadLeft(ATotalWidth: SizeInt): AnsiString;
+begin
+  PadLeft := Self.PadLeft(ATotalWidth, ' ');
+end;
+
+function TStringHelper.PadLeft(ATotalWidth: SizeInt; PaddingChar: Char): AnsiString;
+var i, n: SizeInt; pad: AnsiString;
+begin
+  n := System.Length(Self);
+  if n >= ATotalWidth then begin PadLeft := Self; Exit; end;
+  pad := '';
+  for i := 1 to ATotalWidth - n do pad := pad + PaddingChar;
+  PadLeft := pad + Self;
+end;
+
+function TStringHelper.PadRight(ATotalWidth: SizeInt): AnsiString;
+begin
+  PadRight := Self.PadRight(ATotalWidth, ' ');
+end;
+
+function TStringHelper.PadRight(ATotalWidth: SizeInt; PaddingChar: Char): AnsiString;
+var i, n: SizeInt; pad: AnsiString;
+begin
+  n := System.Length(Self);
+  if n >= ATotalWidth then begin PadRight := Self; Exit; end;
+  pad := '';
+  for i := 1 to ATotalWidth - n do pad := pad + PaddingChar;
+  PadRight := Self + pad;
+end;
+
 
 initialization
   DefaultSystemCodePage := CP_UTF8;   { byte-transparent -- see the declaration }

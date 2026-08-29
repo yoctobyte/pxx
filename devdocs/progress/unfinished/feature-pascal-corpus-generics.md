@@ -1,8 +1,8 @@
 ---
 track: P
 prio: 65
-owner: claude-A
-blocked-by: [gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo]
+owner: unassigned
+blocked-by: []
 status: unfinished
 type: feature
 ---
@@ -11,7 +11,7 @@ type: feature
 
 - **Type:** feature (compat — generics × classes × interfaces)
 - **Track:** P — tag: compat
-- **Status:** unfinished — parked 2026-08-25, blocked on the Track B typinfo/PTypeData gap (see the last recon entry)
+- **Status:** unfinished (parked — the 3341 blocker is cleared; next wall is a new failure class)
   runs, fpjson's suite is 203/203).
 - **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
   [[feature-pascal-corpus-oop]].
@@ -881,3 +881,211 @@ While chasing this, note that the `in: <path>` line under a diagnostic named a
 [[bug-a-a-diagnostic-in-a-used-unit-names-the-wrong-source-file]]. Anyone driving
 a corpus unit reads that line to find the wall; trust the `near:` window over it
 until that is fixed.
+
+
+## 2026-08-28 (frankA) — `blocked-by:` edge cleared, and BOTH blockers checked by behaviour
+
+The frontmatter edge to `gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo`
+was stale: that gap is in `done/`. Nobody walked the edge when it closed, which
+is the missing-edge family — resolving a blocker is an event on the BLOCKER, and
+the edge lives on the DEPENDENT.
+
+**Checked by running code, not by the ticket's location**, because "filed as
+done" and "the capability works" are different claims:
+
+```pascal
+td := GetTypeData(TypeInfo(TSmall));     { TSmall = -128..127 }
+WriteLn(Ord(td^.OrdType), td^.MinValue, td^.MaxValue);   { 4, -128, 127 }
+```
+
+Correct for that subrange, so the gap really is delivered. Edge cleared.
+
+### The second blocker was recorded in PROSE only, and it is also satisfied
+
+The body's *"Blocked on the TObject root-method slice"* section says the edge to
+[[feature-pascal-builtin-tobject-class]] was *"recorded as a `blocked-by:` edge"*
+— **it never was**; frontmatter carried only the typinfo one. That is the same
+family pointing the other way: a prose claim about an edge, invisible to
+`progress.sh check`, which reads frontmatter.
+
+Measured too. What this rung needs is that `Equals`/`GetHashCode` be virtual and
+overridable, since every default comparer overrides them:
+
+```pascal
+type TFoo = class
+  function Equals(Obj: TObject): Boolean; override;
+  function GetHashCode: PtrInt; override;
+end;
+var o: TObject;  { o := TFoo.Create; o.GetHashCode -> 42 }
+```
+
+Compiles, and dispatches through the VMT to `TFoo` from a `TObject`-typed
+variable. So the capability is present and no edge is added.
+
+**Two honest limits on that check.** `feature-pascal-builtin-tobject-class`
+remains open in `backlog/` for its *wider* scope (`var o: TObject`,
+`TObject.Create`, the classinfo-blob decision) — this only establishes that the
+part this rung named is available. And **FPC rejected my override probe**, so
+there is no oracle behind it: signature parity with FPC (`PtrInt` vs `Integer`,
+mode) is unverified, and by the dead-oracle rule that probe proves the capability
+exists in pxx and nothing about whether it matches FPC. Anyone relying on parity
+should re-probe with a compiling FPC control first.
+
+> **SUPERSEDED 2026-08-28 (coordinator), by frankB's section below —
+> "One free result on the way".** The second limit is withdrawn: **FPC did not
+> reject the override, the PROBE did.** Under `{$mode objfpc}{$H+}` it compiles
+> and runs on FPC 3.2.2, and the oracle now exists as a five-row table. frankA's
+> *conclusion* stands and is no longer oracle-less; only the "unverified"
+> qualifier is dead. The **first** limit — `feature-pascal-builtin-tobject-class`
+> staying open for its wider scope — is unaffected and still holds.
+>
+> The paragraph above is left intact because it is an accurate record of what
+> that session ran and concluded. It is marked here rather than rewritten,
+> because a reader who stops at this section would otherwise act on a limit that
+> no longer exists — which is the same failure as a stall note outliving its
+> blocker, sixty lines earlier in the same file.
+
+## 2026-08-28 (frankB) — the wall moved 2082 → 3250, and the new one is reduced to 14 lines
+
+Picked up from frankA's edge-clearing. Verified the coordinator's framing against
+HEAD before starting, on its own instruction — `blocked-by: []`, both limits
+recorded as relayed, and nothing else claimed in `working/`.
+
+### Environment: this checkout had neither the corpus nor a compiler
+
+Recorded because the ticket's re-stage note has now been true three times and the
+next session will hit it again. `/tmp/generics-stage` was gone (a fourth
+machine), `library_candidates/rtl-generics` was absent, and this is a Track B
+checkout that had **never bootstrapped** — `make compiler/pascal26` answered
+*"self-hosted compiler seed missing. Run: make bootstrap"*. Fetched the corpus
+with `tools/install_lib_candidates.sh rtl-generics` (release_3_2_2, the same
+commit the previous drives used, so the line numbers below are comparable), then
+`make bootstrap` and `make compiler/pascal26` → **converged after 1 round**,
+sha `c786d570e173`, which differs from `pinned` `325b4479` — both halves of
+CLAUDE.md's fresh-tree check, since a copied-in seed makes that build a silent
+no-op.
+
+### The RTTI blocker really is cleared, by the corpus rather than by a probe
+
+frankA verified `GetTypeData` on a subrange directly. The corpus now agrees:
+driving `uses generics.defaults` no longer stops at **2082**, it stops at
+**3250**. A wall that moves is the strongest available evidence that the thing
+under it was the blocker.
+
+### The new wall, reduced
+
+`generics.defaults.pas:3250` — `FOrdinal := TGOrdinalStringComparer<T, THashFactory>.Create;`
+inside a generic class function. Filed as
+[[bug-p-a-generic-specialized-before-its-declaration-is-unresolvable]] with a
+14-line repro whose **only** difference from a compiling program is the order of
+two type declarations, and with fpc 3.2.2 accepting both orderings.
+
+Seven variations were ruled out one at a time (mode, inheritance, arity, arity
+overloading, `class var`, `class function`, statement nesting); the ticket lists
+them so the ladder is not re-walked. Two further measurements put the failure at
+**instantiation time**: with nothing instantiating the outer template it
+compiles, and with a concrete type argument in place of the parameter it
+compiles.
+
+The ticket's own standing advice paid off twice here. The `in:` line named
+`generics.defaults.pas` for a diagnostic whose `near:` window showed a token
+stream from elsewhere — trust `near:`, as the entry above says. And the wall
+looked novel and was the same family the entry above names: one path working and
+its sibling missing.
+
+### Parked, not blocked
+
+Handing this back to `unfinished/` with the diagnosis banked rather than
+microfixing it. The mechanism lives in `DelphiRewriteGenericUses`, delicate
+enough that its own comments record a previous runaway, and a wrong root cause
+written into a ticket is this rung's documented failure mode — the entry above
+this one is a corrected one. The next session on this rung should take the P
+bug first: the corpus cannot advance past 3250 until it is fixed, and it is now
+a 14-line problem rather than a 9,550-line one.
+
+**One free result on the way.** frankA recorded that FPC rejected its
+`Equals`/`GetHashCode` override probe, leaving that check without an oracle.
+That was a probe defect, not an FPC limitation — under `{$mode objfpc}{$H+}` the
+override compiles and runs on FPC 3.2.2. The oracle now exists:
+
+| probe | fpc 3.2.2 | pxx |
+| --- | --- | --- |
+| no `{$mode}` | rejected — `class` unavailable in default mode | — |
+| `GetHashCode: Integer; override` | **rejected** — *"no method in an ancestor class to be overridden: GetHashCode:LongInt"* | **compiles** |
+| `GetHashCode: PtrInt; override` (objfpc) | OK | compiles, prints 42 |
+| same under `{$mode delphi}` | OK | compiles |
+| `Equals(Obj: TObject): Boolean; override` | OK | compiles, prints TRUE |
+
+So the parity form matches the oracle exactly and frankA's conclusion stands —
+now with an oracle behind it. The one divergence is that pxx accepts the
+`Integer` return where FPC demands `PtrInt`; checked whether that is the silent
+kind, and it is not — a narrow override returning `-7` reads back as `-7`
+through a `TObject`-typed variable, so it is sign-extended rather than
+truncated. By CLAUDE.md's table that is *we accept a form FPC rejects* → not a
+defect, a line for the divergences doc.
+
+## Recon 2026-08-29 (frankA) — the 3341 wall reduced; three defects, one of them Track A
+
+The wall reached by the previous entry's fix is
+`AFactory.GetHashService.LookupEqualityComparer(ATypeInfo, ASize)` at
+`generics.defaults.pas:3341`, in `_LookupVtableInfoEx` — a **plain, non-generic,
+unit-level function**. First time this rung's frontier has not been generics
+machinery at all, which is the useful news: the next walls here are probably not
+more of the same.
+
+Reduced from 9,550 lines to 30, fpc-oracled. The sweep found **three distinct
+defects**, separated one variable at a time rather than folded into one:
+
+| # | defect | lane | state |
+| --- | --- | --- | --- |
+| 1 | `NodeMetaclassCi` doesn't know `AN_CLASS_VIRTUAL_CALL` | **A** (`symtab.inc`) | filed — [[bug-a-nodemetaclassci-does-not-know-a-virtual-class-method-call]]; **this is the 3341 wall** |
+| 2 | a class-method call keeps the RECEIVER's class | P | **fixed** — [[bug-p-a-class-method-call-keeps-the-receivers-class]] |
+| 3 | a call chained onto a class-method result via a class NAME is dropped | P | filed — [[bug-p-a-call-chained-onto-a-class-method-result-is-dropped]] |
+
+**#2 is the one worth reading even though it is not the wall.** It compiled
+`f.GetObjC.OnlyOnFactory(14)` — a member of the *receiver's* class, resolved
+against the *returned* object — and printed the receiver method's answer. FPC
+rejects the program. A silent wrong-dispatch, one missing `recName :=` line, and
+it was three hundred lines from a sibling arm that had it and documented why.
+
+**Parked here, blocked on #1**, which is Track A's file and not mine to edit.
+
+### Do not re-walk these
+
+- The obvious cause of #3 — the `Exit` in `ParseLValueAST`'s class-name arm where
+  both instance arms `Continue` — is **refuted**. Patching it left
+  `PXXDBG=a.ast` byte-identical; those tokens are consumed elsewhere. Reverted
+  rather than kept as a plausible no-op. Details in the ticket.
+- `virtual` is the entire variable for #1: non-virtual leaves the node `AN_CALL`
+  (8) and works, virtual rewrites it to `AN_CLASS_VIRTUAL_CALL` (88) and fails.
+- The stage dir is gone between sessions; `tools/install_lib_candidates.sh
+  rtl-generics` + symlinking `packages/rtl-generics/src/*.pas` and `inc/` into a
+  scratch dir with a `uses generics.defaults` driver reproduces in under a minute.
+
+## 2026-08-29 (frankA) — blocker cleared, wall past 3341, and it was three defects not one
+
+[[bug-a-nodemetaclassci-does-not-know-a-virtual-class-method-call]] is resolved,
+so the `blocked-by:` edge added an hour ago is cleared. The unit is past **3341**
+and now stops on `@TEquals.Class: the address of a routine with no body was
+taken` — a fourth distinct failure class on this rung, and again not generics
+machinery.
+
+**The ticket I filed named one missing row; there were three.** Two virtual
+spellings refused outright and the INTERFACE spelling was silently wrong,
+yielding the metaclass pointer instead of calling through it. Worth knowing
+because of *how* it was found: each shape had to be compiled in its own program.
+The compiler aborts on the first error, so a single file containing all six rows
+reports only the first and reads as "one bug" — which is exactly what the
+original ticket concluded.
+
+**One of the two was not a missing table row at all.** `AN_INTF_CALL` had to be
+added to `NodeMetaclassCi` *and* the interface arm in `pasparser_lval.inc` had to
+stop exiting the selector loop, because that arm never consulted the predicate —
+it dropped the trailing selector before anyone could ask. A predicate cannot
+answer a question nobody asks it, and "the enumeration is missing a row" would
+have fixed half the bug and looked complete.
+
+Still open from this sweep, and NOT blocking:
+[[bug-p-a-call-chained-onto-a-class-method-result-is-dropped]] — the class-NAME
+receiver (`TFactory.MakeC.Tag`) is still silently wrong, and its obvious cause is
+recorded as refuted.

@@ -78,7 +78,7 @@ called by a builtin lowering sitting above the machinery it shares.
 
 ### Option 4 (now the recommendation): a static forward lint in the fast loop
 
-frankwasm built `forwardlint.py` — **~1 second**, reads the same files FPC reads and
+frankwasm built `forwardlint.py` — **4.1 seconds** (see the correction below), reads the same files FPC reads and
 asks FPC's question directly. **Verified against BOTH historical breaks**: deleting
 today's forward reports line 1313; deleting the *original* one — the break that cost
 several commits before the canary found it — reports line 1065; the fixed file is
@@ -96,9 +96,148 @@ unattractive, since a second is not a serial FPC build.
 | 1. targeted trigger | ~0 | **empirically: nothing** — missed twice | **disproven** |
 | 2. FPC build in the loop | serial FPC build per fix | everything | unattractive on cost |
 | 3. leave as-is | 0 | nothing | — |
-| **4. static forward lint** | **~1s** | the whole observed failure class, by design a miss not a false alarm | **built + verified** |
+| **4. static forward lint** | **4.1s** | the whole observed failure class, by design a miss not a false alarm | **built + verified** |
 
 **Still a Track U decision**, because putting anything in the mandatory loop touches
 the gating section of `CLAUDE.md`, which is the owner's file. But the question is no
 longer *"is it worth a serial FPC build?"* — it is *"should a verified one-second
 lint join the loop?"*, which is a materially easier call.
+
+### CORRECTION 2026-08-28: 4.1s, not ~1s — and the narrow version had to be thrown away
+
+**The ~1s figure was wrong and it was load-bearing**, so it is corrected in place above
+rather than quietly. It measured a three-file version that **does not work on this repo**:
+pointed at the whole compiler it reported **seventeen failures on a tree FPC builds clean**,
+because this codebase declares cross-file forwards in dedicated files (`forwards.inc`,
+`pyforwards.inc`, `frontend_forwards.inc`) that a per-file view cannot see.
+
+The shipped version (`tools/forwardlint.py`, `c7690064e`) expands `compiler.pas`'s
+`{$include}` chain in order and asks FPC's question over the real stream: **206,768 lines
+in 4.1s, 17 → 0**, re-verified in both directions against both historical breaks. Still
+**~11x faster than the 46-second FPC build**, so the cost argument survives — but the
+number in this ticket was wrong and the version it described is gone.
+
+Two further false-alarm sources had to be removed to get there, and both are worth reading
+before anyone writes a similar tool:
+
+- a declaration regex anchored at `^` cannot see `{$ifndef PXX_NO_ARM32}procedure Foo; forward;{$endif}`;
+- **braces nest in practice**: standard Pascal says the first `}` closes the comment, but
+  **both pxx and FPC** accept `{ ... span_{nd-1} ... }` as one comment. Measured with a
+  six-line program after the scanner ended a comment early and reported a name that appears
+  only in prose. **A tokenizer that disagrees with both compilers about where a comment ends
+  is not a check; it is a generator of plausible-looking failures.**
+
+### Whoever adopts this must expect ONE note on a clean tree
+
+`forwardlint` prints a NOTE (not a failure) on today's master, reproduced by the coordinator
+independently: `pasparser_expr.inc:1924` calls `LowerCase` before this codebase declares it
+at `pasparser_proc.inc:2384`, and it is forward-declared **nowhere**. It compiles either
+way — FPC resolves that call to its **own** system-unit routine — which is exactly why it is
+a note.
+
+**That note should be fixed before this joins any loop, not allowlisted.** A check that
+prints something permanent on a clean tree is on the path to being ignored, which is this
+repo's own recorded rule about checks that cry wolf. Filed separately as
+`bug-a-lowercase-resolves-to-two-different-routines-depending-on-the-seed`.
+
+## Worked example, 2026-08-28 — the loop was green while the seed build was red
+
+Added by the coordinator. This decision had been arguing in the abstract; frankA hit
+the exact case while landing wall 6 (`35f485537`).
+
+`make compiler/pascal26` — the mandatory loop, and the byte-identical self-host
+fixedpoint — was **GREEN**. The **FPC seed build was not**: `GenericMethodBodyEnd`
+is defined below its caller, which pxx resolves either way and FPC does not. The
+optional `tools/gate.sh quick` caught it. Had it been skipped — and the loop says
+it MAY be skipped — the tree would have been pushed in a state that cannot be
+rebuilt from the seed.
+
+**Why the mandatory step cannot ever catch this class:** the fixedpoint only
+exercises **pxx compiling pxx**. A construct pxx accepts and FPC rejects is
+invisible to it *by construction*, not by oversight. That is the `bug-a-fpc-seed-drift`
+shape, and no amount of care inside the per-fix loop will surface it, because the
+instrument does not read that axis at all.
+
+This is the second time in one day the optional gate caught something the mandatory
+one structurally could not.
+
+**What it does NOT settle:** the cost side. Adding the seed build to the mandatory
+loop lengthens the one step that is deliberately ~12s and on every fix's critical
+path, and the loop's whole design is that breadth is offloaded to Track T. The
+question is still whether this class is frequent enough to pay that on every commit,
+or whether it belongs in `gate.sh quick` (where it already is) with the loop simply
+saying so more loudly. **The decision remains the owner's** — it changes the
+mandatory loop, which is CLAUDE.md's own text.
+
+## Field evidence, 2026-08-28 (frankA) — three RED gate cycles in one session, all four failures pre-detectable
+
+Not an opinion on the decision; a measurement of the current cost, from a Track P
+session that hit this class **four times while landing one fix**.
+
+The refactor lifted `ScanDelphiMethodImplsForNestedSpecs` above three helpers it
+calls. Every `make compiler/pascal26` was green — including the byte-identical
+self-host fixedpoint — and the binary was **identical across all three repairs**
+(`5c9d52bdd0bf` throughout), because forwards change nothing pxx can observe.
+
+What the loop actually looked like:
+
+| cycle | caught by | reported | cost |
+| --- | --- | --- | --- |
+| 1 | `gate.sh quick` | 3 identifiers | ~90s + rebuild |
+| 2 | `gate.sh quick` | 1 more (`IsDelphiGenMethImplHdr`) | ~90s + rebuild |
+| 3 | `tools/forwardlint.py` | **0 remaining, confirmed** | 4s |
+
+**The compounding failure is not the drift, it is that FPC reports one batch at a
+time.** After cycle 1 I fixed exactly the three names the error listed, which felt
+complete and was not — the fourth was invisible until the third-listed one stopped
+aborting compilation. Fixing from the error message is inherently whack-a-mole;
+the lint answers the whole question in one pass. That asymmetry is the argument,
+and it does not depend on which way the decision goes.
+
+Second data point for the "is it silent when correct?" question this ticket raises:
+on today's master `forwardlint` printed **exactly one note** — the known
+`LowerCase` divergence already filed as
+`bug-a-lowercase-resolves-to-two-different-routines-depending-on-the-seed` — and
+zero other noise. The signal-to-noise premise holds up on a tree in mid-refactor,
+not just a clean one.
+
+**Note for whoever decides:** the tool was already in `tools/`, and I did not
+reach for it until the third cycle, having gone twice around on error messages
+first. So "it exists and is documented in a backlog ticket" demonstrably does not
+get it run — which is a point *for* wiring it somewhere mandatory, but it is the
+owner's call and CLAUDE.md's gating section is the owner's file. Not editing
+either.
+
+## Two more measured instances, 2026-08-29 — and the second is a new shape
+
+Track P hit FPC seed drift **twice in one session** while resolving
+`bug-p-a-generic-specialized-before-its-declaration-is-unresolvable` (`3a011ed6f`).
+Both times `make compiler/pascal26` was **green throughout**; the optional
+`gate.sh quick` went **RED**. Same invisibility-by-construction as the
+`4bdd3a017` instance already recorded above: the fixedpoint exercises pxx
+compiling pxx, so a helper called from an include above its definition is a class
+the mandatory loop **cannot** see.
+
+That brings the count to **three measured instances**, and the decision is now
+being made by arithmetic on how often anyone happens to run the optional gate.
+
+**The second occurrence is a different shape and is the one worth the owner's
+attention.** The forwards **existed** — they had simply ended up below a caller
+that a later refactor had lifted above them. So the natural defence, *"I already
+added forwards"*, was **true and useless**: the fix that resolved the first
+occurrence stayed in place, stayed correct, and did not prevent the second.
+
+> A guard whose correctness depends on **relative position** is re-broken by any
+> edit that moves either side, and the person who added it will remember adding
+> it. *"I already handled that"* is a memory of an action, not a measurement of
+> the current file.
+
+This matters for the decision because it changes what the canary would be *worth*.
+If the drift were a one-off omission, a discipline note would cover it. A
+positional dependency that silently re-breaks under unrelated refactors is exactly
+the kind of thing a mechanical check catches and a human convention does not — and
+it costs nothing when green.
+
+**Not re-recommending a direction** — that was stated when this was filed and the
+call is the owner's. Recording the count and the new shape so the decision is made
+on current evidence rather than on the single instance it was filed with.

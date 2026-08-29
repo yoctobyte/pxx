@@ -1296,6 +1296,56 @@ def covered_tiers(tier):
     return {tier}                     # opt (and any future disjoint tier)
 
 
+def breadth_full_run(st):
+    """The newest COMPLETE `full` tier run on this host, or {}. -> dict.
+
+    `last_full` is the last REPLACING run (full=True), NOT the last `full`
+    TIER -- a historical name. Under the shipped default (mid_tier ==
+    deep_tier == full) the two coincide, which is the only reason the breadth
+    banner reading `last_full` has been correct.
+
+    They diverge the moment mid_tier is set to `limited`: that run replaces,
+    so it refreshes `last_full`, and it covers no cross target at all. The
+    banner would reset its clock on it and vouch for coverage that never ran.
+
+    The fallback exists for state published before `last_by_tier` did, and
+    only fires when `last_full` SAYS it was a full tier -- so it can promote a
+    true full run that predates the map, and can never promote a `limited` one.
+    """
+    rec = last_run_at_tier(st, "full")
+    if not rec and (st.get("last_full") or {}).get("tier") == "full":
+        rec = st["last_full"]
+    return rec or {}
+
+
+def last_run_at_tier(st, tier):
+    """Newest COMPLETE run at EXACTLY `tier`, or {}.
+
+    `last_full` cannot answer this. It is the last REPLACING run (full=True),
+    which excludes the disjoint tiers entirely -- `opt` and `slow` run
+    full=False and so never touch it -- and under a configured `mid_tier` it
+    names a tier that is not `full` at all. So "this tree was swept at -O3" and
+    "opt has never visited this sha" were indistinguishable to every consumer,
+    which is the same absent-signal-read-as-a-negative-result defect as a
+    skipped job scoring as a pass, one level up in tier composition.
+
+    EXACT match, never `covered_tiers`: coverage is not execution, and a
+    `native` run cannot vouch for a `full` tier's jobs.
+
+    Falls back to scanning `history` for state written before `last_by_tier`
+    existed, so the answer self-heals instead of reporting "never" for a host
+    with months of runs. History is capped, so the fallback can OVERSTATE the
+    age of the last run; it can never invent coverage that did not happen.
+    """
+    hit = (st.get("last_by_tier") or {}).get(tier)
+    if hit:
+        return hit
+    for h in reversed(st.get("history") or []):
+        if (h.get("tier") or "") == tier:
+            return h
+    return {}
+
+
 def job_bounding_tier(st, name, report_tier):
     """The tier whose last run bounds this job's blame range.
 
@@ -1350,6 +1400,52 @@ def last_covering_sha(st, tier, exclude_sha):
         if tier in covered_tiers(h.get("tier") or ""):
             return h.get("sha")
     return None
+
+
+def job_anchor(st, name):
+    """The sha where this job last RAN AND PASSED, or why there is no such sha.
+
+    The last-good end of a regression range. It exists because
+    `last_covering_sha()` answers a DIFFERENT question -- "which earlier run's
+    tier CONTAINED this job" -- and tier coverage is not execution. A job whose
+    corpus is absent SKIPs, which is correct on its own terms and is recorded
+    as PASSLIKE, so the containing run looked like a clean anchor.
+
+    Measured 2026-08-27 (bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-
+    last-good, filed by frankB out of the synapse triage): `external/synapse`
+    was absent on plexus, three synapse jobs SKIPped for their whole life, and
+    the moment the corpus landed the first real execution failed. That was
+    published as a regression over NINE commits, five of them touching `lib/`
+    or the pin, every one of them innocent -- the defect predated the entire
+    range, which frankB proved by rebuilding the declared last-good's own tree
+    under the pin actually in force there and watching it fail too.
+
+        A first-ever run is not a regression, and a sha where a job did not
+        execute is not a last-good.
+
+    Returns `(sha, "")` when an execution-backed anchor exists, and
+    `(None, reason)` when the job is KNOWN never to have passed. The third
+    case -- `(None, "")` -- means "no opinion": state written before
+    `job_last_pass` existed, where the caller must keep its old fallback rather
+    than blank a range it has no evidence against. That distinction is the
+    whole migration story; without it, upgrading would suppress every range on
+    the box for a cycle.
+
+    Deliberately does NOT reclassify `skip`. It stays PASSLIKE for the run
+    verdict and for reg_open, because a run whose corpus is absent must still
+    be able to come back GREEN and a box that legitimately cannot run a job
+    must not hold a regression open forever. `skip` is correct as a verdict and
+    catastrophic as an anchor; this splits the two readings instead of moving
+    `skip` from one bucket to the other, which would fix the anchor by breaking
+    the verdict.
+    """
+    lp = (st.get("job_last_pass") or {}).get(name)
+    if lp:
+        return lp, ""
+    if (st.get("jobs") or {}).get(name) == "skip":
+        return None, ("its last recorded status was SKIP — it did not run at "
+                      "that sha, so that sha is not a last-good")
+    return None, ""
 
 
 def job_key(j):
@@ -1511,6 +1607,43 @@ def cascade_still_red(r, st):
 # than by treating a third state as non-gating. Green must mean "ran and
 # passed". Now made worse by test-uforth, which self-skips on any box without
 # ~/projects/uforth (feature-t-enroll-uforth-in-the-tiers).
+def closure_status(r, authoritative, gone=frozenset()):
+    """WHY an open regression closed: "pass", "skip", "gone", or "mixed".
+
+    `reg_open()` asks one question — is the merged status still red — and both
+    `pass` and `skip` answer no. So an entry closes identically whether the job
+    started PASSING or merely stopped RUNNING, and until now the record could
+    not tell them apart. That is the same information gap as
+    bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-last-good, one level
+    up in the data model: a skip and a pass are both simply "not red".
+
+    It is not academic. The auto-close writes "`<job>` passes at <sha>" into the
+    ticket it retires, and a `done/` ticket is where a finding stops being
+    looked at. A job whose corpus went missing got a permanent written claim
+    that it passed.
+
+    Deliberately does NOT change what closes. Whether a skip SHOULD close an
+    open regression is a live question with real costs on both sides
+    (decide-t-should-a-skip-close-an-open-regression, Track U) and this is the
+    instrument that would let it be answered with a count instead of a
+    principle. Recording the reason loses nothing either way, which is exactly
+    why it is not one of that decision's options.
+
+    "gone" outranks the rest: an entry closed because its job no longer exists
+    did not pass and did not skip, it stopped being a job.
+    """
+    jobs = r["cascade"] if r.get("cascade") else [r.get("job")]
+    live = [j for j in jobs if j and j not in gone]
+    if not live:
+        return "gone"
+    seen = {authoritative.get(j, "red") for j in live}
+    if seen == {"pass"}:
+        return "pass"
+    if seen == {"skip"}:
+        return "skip"
+    return "mixed"          # a cascade closing on a mixture of both
+
+
 PASSLIKE = ("pass", "skip")
 
 
@@ -1560,6 +1693,36 @@ def diff_jobs(prev_jobs, report):
 # How many red jobs may carry a reason. tstate is committed to git, so this is
 # a repo-size bound, not a memory one: a mass red must not commit a novel.
 JOB_REASON_CAP = 60
+
+# A pin verify stores reasons for its NEW reds only, each truncated to this
+# many characters, at most this many entries. Both numbers are the bound the
+# ticket asked to be stated and measured: 20 x 200 = 4 KB worst case against a
+# 737 KB plexus.json (0.54%), and the realistic case is far smaller -- reasons
+# run ~147 characters at the median and the measured worst incident (v367 at
+# d47acfee770c, 2026-08-19) had 11 new reds, so ~1.6 KB.
+PIN_VERIFY_REASON_MAX = 200
+PIN_VERIFY_REASON_CAP = 20
+
+
+def pin_verify_why(report, base_reds, reds):
+    """Reasons to store on a pin verify, bounded. -> (why, new_red).
+
+    NEW reds only. A red already in `pin_baseline.reds` was failing before this
+    pin and is not what anyone is triaging; spending shared-file bytes on it
+    buys nothing and dilutes the entries that matter.
+
+    A job whose run recovered no log contributes NO entry rather than an empty
+    one. An empty reason next to a job name reads as "there was no reason",
+    which is a claim; absence reads as "not recorded", which is the truth.
+
+    Truncation is per entry so one pathological log cannot crowd out nineteen
+    useful ones -- the failure mode of a single shared byte budget.
+    """
+    fresh = {job_key(j): (j.get("reason") or "") for j in report["jobs"]}
+    new_red = [k for k in reds if k not in base_reds]
+    why = {k: fresh[k][:PIN_VERIFY_REASON_MAX]
+           for k in new_red[:PIN_VERIFY_REASON_CAP] if fresh.get(k)}
+    return why, new_red
 
 
 def update_job_reasons(st, report, jobs):
@@ -1644,6 +1807,12 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
              # later, and "verify against a KNOWN sha" is unusable if the report
              # does not name the binary (task-t-seed-from-stable-defeats-rebuild).
              "compiler_sha256: %s" % (report.get("compiler_sha256") or "unknown"),
+             # How much of the suite this verdict actually SPEAKS for. A skip
+             # is passlike, so without these two numbers a GREEN here is
+             # indistinguishable from a GREEN that ran everything.
+             "skips: %s" % ((report.get("skips") or {}).get("count", "unknown")),
+             "skip_holes: %s" % ((report.get("skips")
+                                  or {}).get("coverage_holes", "unknown")),
              "---", ""]
     if report.get("timed_out") or report.get("verdict") == "TIMEOUT":
         lines += ["> **THIS RUN HAS NO VERDICT.** It hit its %s-second deadline "
@@ -1672,6 +1841,55 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
                       "tree. A `%s` verdict covers x86-64 only — do not read it "
                       "as matrix coverage."
                       % (fmt_age(age), fmt_age(age), report["tier"]), ""]
+
+    # What this verdict does NOT speak for. The breadth and -O3 notes below ask
+    # it of a whole tier; this asks it of the jobs inside THIS run, which is
+    # the version that bites without warning: the tier was right, the run
+    # completed, and a chunk of it quietly did not execute.
+    skips = report.get("skips") or {}
+    holes = skips.get("coverage_holes") or 0
+    if holes:
+        lines += ["> **COVERAGE: %d job(s) DID NOT RUN on this box** (of %d "
+                  "skipped). They are scored passlike, so they are invisible "
+                  "in the verdict above — a `%s` here speaks for the jobs that "
+                  "ran, not for the suite."
+                  % (holes, skips.get("count") or holes, report["verdict"]), ""]
+    if skips.get("by_reason"):
+        lines += ["<details><summary>skipped jobs, by reason (%d)</summary>"
+                  % (skips.get("count") or 0), ""]
+        for why, names in sorted(skips["by_reason"].items()):
+            shown = " ".join(names[:12])
+            more = "" if len(names) <= 12 else " …+%d more" % (len(names) - 12)
+            lines += ["- **%s** — %s%s" % (why, shown, more)]
+        lines += ["", "</details>", ""]
+
+    # -O3 coverage: the breadth note's question, one tier over. `opt` is
+    # DISJOINT from the quick<native<limited<full chain and runs only as idle
+    # watcher work, so a GREEN verdict here is silent about every optimisation
+    # level above the default -- and silence read as absence is how "no -O3
+    # failures" and "nobody swept -O3" came to produce identical evidence.
+    # Measured 2026-08-28 across the archive: 690 of 2296 shas with a gate-tier
+    # verdict had ever been swept by `opt` (30%), with nothing in any report
+    # saying which 30%.
+    if st is not None and report["tier"] != "opt":
+        lo = last_run_at_tier(st, "opt")
+        if not lo.get("sha"):
+            lines += ["> **-O3: this host has never completed an `opt` tier.** "
+                      "Nothing here compiled above the default `-O`.", ""]
+        elif lo.get("sha") != sha:
+            age = secs_since(lo.get("date") or "")
+            lines += ["> **-O3 IS UNTESTED ON THIS TREE.** The newest `opt` "
+                      "sweep is %s old and ran at `%s` (%s). `opt` is disjoint "
+                      "from `%s`, so no optimisation level above the default "
+                      "has seen this sha."
+                      % (fmt_age(age) if age is not None else "of unknown age",
+                         (lo.get("sha") or "?")[:12], lo.get("verdict") or "?",
+                         report["tier"]), ""]
+        else:
+            # The citable positive. An -O3 -> -O2 promotion needs to point at a
+            # verdict and say "this sha's -O3 was swept"; this line is that.
+            lines += ["> `-O3`: swept on THIS sha by the `opt` tier (%s)."
+                      % (lo.get("verdict") or "?"), ""]
 
     # stable key -> source file(s), so a reader sees WHICH test without
     # mapping job numbers back to Makefile lines (numbers shift with edits)
@@ -2494,6 +2712,12 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # one rule, not a second invented one that could disagree with it.
     closed_regs = [r for r in st["open_regressions"]
                    if not reg_open(r, authoritative, gone)]
+    # Stamped here, where `authoritative` and `gone` are both in hand, rather
+    # than re-derived by the consumer -- the stub closer would otherwise have to
+    # reconstruct the merged map and could disagree with the predicate that
+    # actually closed the entry.
+    for r in closed_regs:
+        r["closed_by"] = closure_status(r, authoritative, gone)
     srcmap = {job_key(j): j.get("src", "") for j in report["jobs"]}
     namemap = {job_key(j): j["name"] for j in report["jobs"]}
     # The FAILURE KIND, carried onto the ledger entry. A `timeout` is a DURATION
@@ -2561,6 +2785,26 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # updated for this run yet, so it names the tier the job's PREVIOUS status
     # came from — which is exactly the tier whose last run bounds the range.
     def range_for(name):
+        # EXECUTION FIRST. Everything below this block reasons about tier
+        # COVERAGE -- which earlier run would have contained this job -- and
+        # that is a strictly weaker fact than "the job ran there and passed".
+        # A skipped job is contained by every run that could have run it, so
+        # the coverage answer is confidently wrong exactly when the job never
+        # executed. See job_anchor().
+        #
+        # Note this is a NO-OP for the common case: when the previous status
+        # was a real `pass`, job_last_pass names the parent sha and the range
+        # comes out identical to what the coverage path produced. It differs
+        # only where the old answer had no execution behind it, which is the
+        # whole point and is why the blast radius is small.
+        aname, why = job_anchor(st, name)
+        if aname and aname != sha:
+            try:
+                return testable_only(clone.commits_between(aname, sha)), aname
+            except (RuntimeError, subprocess.SubprocessError, OSError):
+                pass          # unreachable sha (rewritten history): fall through
+        elif why:
+            return [], ""     # known never to have passed: no interval can hold it
         prev_tier = job_bounding_tier(st, name, report["tier"])
         if parent_ran_job(st, name, report["tier"]):
             return rng, good        # the parent's run DID contain it
@@ -2660,6 +2904,17 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                           "the cause is in the box or the job's own inputs, not "
                           "in the commits"
                           % (name, (jgood or "?")[:12], sha[:12]), flush=True)
+            never_passed = bool(job_anchor(st, name)[1])
+            if never_passed and not jrng:
+                # Same epistemic position as first_seen, reached differently:
+                # first_seen never appeared in the map at all, this one appeared
+                # carrying `skip`. Both mean "no earlier passing sha", and an
+                # empty range is the honest answer to both.
+                print("twatch: %s is red at %s and has NEVER been observed to "
+                      "pass on this host — %s. No range opened; a first real "
+                      "execution failing is a finding, not a regression from "
+                      "the commits around it"
+                      % (name, sha[:12], job_anchor(st, name)[1]), flush=True)
             if name in first_seen:
                 # No earlier passing sha exists, so no interval can contain the
                 # cause. An EMPTY range is the honest answer and the machinery
@@ -2715,6 +2970,12 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                          "good": jgood, "range": jrng, "opened": utcnow(),
                          "status": statmap.get(name, "fail"),
                          "first_seen": name in first_seen,
+                         # Sixth field of the "this range cannot mean what it
+                         # appears to mean" family, and the fifth face of
+                         # bug-t-a-blame-range-is-computed-from-what-changed-
+                         # not-from-what-the-job-can-see, whose closure
+                         # enumerated four.
+                         "never_passed": never_passed,
                          "pin_axis": pin_axis,
                          "bad_untestable": bad_untestable,
                          "no_testable_change": no_testable_change,
@@ -2760,6 +3021,18 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                   "timed_out": bool(report.get("timed_out")),
                   "deadline": report.get("deadline"),
                   "unreached": report.get("unreached")}
+    # Newest COMPLETE run at each tier, so a consumer can ask "did tier X see
+    # this tree?" without a cross-file join into runs-<host>.ndjson. Written
+    # for EVERY tier including the disjoint ones, which is the whole point:
+    # `last_full` is the last REPLACING run and the disjoint tiers run
+    # full=False, so before this key nothing in the state could say whether a
+    # sha had been swept above the default -O.
+    #
+    # Incomplete (torn-down) runs are excluded on the same ground the report
+    # banner states: what a run did not reach is UNKNOWN, not covered.
+    if not incomplete:
+        st["last_by_tier"] = dict(st.get("last_by_tier", {}),
+                                  **{report["tier"]: dict(st["last"])})
     if full and not incomplete:
         # Evict by COVERAGE, not wholesale.
         #
@@ -2789,6 +3062,13 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # "this run could have run it and didn't -> gone" from "not my tier".
     st["job_tier"] = dict(st.get("job_tier", {}),
                           **{k: report["tier"] for k in now})
+    # ...and the sha each job last RAN AND PASSED at, which is the only honest
+    # anchor for a regression range (job_anchor). Literally "pass": `skip` is
+    # deliberately excluded, because a job that did not run cannot vouch for a
+    # sha. Written from `now`, so it advances only for jobs THIS run actually
+    # reported -- a quick tier does not silently vouch for a full tier's jobs.
+    st["job_last_pass"] = dict(st.get("job_last_pass", {}),
+                               **{k: sha for k, v in now.items() if v == "pass"})
     st["history"] = (st["history"] +
                      [{"sha": sha, "date": st["last"]["date"],
                        "verdict": report["verdict"], "tier": report["tier"],
@@ -2818,6 +3098,9 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
         st["jobs"] = {k: v for k, v in st["jobs"].items() if k not in dead}
         st["job_tier"] = {k: v for k, v in (st.get("job_tier") or {}).items()
                           if k not in dead}
+        st["job_last_pass"] = {k: v for k, v
+                               in (st.get("job_last_pass") or {}).items()
+                               if k not in dead}
         authoritative = {k: v for k, v in authoritative.items() if k not in dead}
     update_job_reasons(st, report, st["jobs"])
     # Shadow only — records the pin it WOULD have made, moves nothing.
@@ -2835,6 +3118,19 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                             # lacks it; absent means "not known", not "false".
                             "timed_out": bool(report.get("timed_out")),
                             "unreached": report.get("unreached"),
+                            # Jobs that RAN NOTHING but scored passlike. Its
+                            # sibling `unreached` has been archived since the
+                            # teardown work; skips had no key at all, so no
+                            # consumer of this archive could tell a sweep that
+                            # covered 3031 of 3081 jobs from one that covered
+                            # 3081. Count and coverage-hole count only -- the
+                            # per-reason grouping lives in the report md, which
+                            # is where a human reads it; this is the field a
+                            # query filters on. Absent on rows before
+                            # 2026-08-28: "not known", never zero.
+                            "skips": (report.get("skips") or {}).get("count"),
+                            "skip_holes": (report.get("skips")
+                                           or {}).get("coverage_holes"),
                             "deadline": report.get("deadline"),
                             "wall": report["wall"], "new_red": new_red,
                             "fixed": fixed,
@@ -2919,6 +3215,44 @@ QUIET_HOST_SECS = 2 * 86400
 # Jobs whose red predictably drags a whole dependent class down — listed in
 # the cascade ticket as root-cause suspects when present in the red set.
 CASCADE_ROOT_JOBS = ("fpc-bootstrap", "selfhost-fixedpoint")
+
+
+def cascade_suspects_line(roots):
+    """The Root-cause suspects line of an auto-filed cascade ticket. -> str.
+
+    SAY WHAT WAS CHECKED AND STOP. The empty case used to read
+
+        none of the known root jobs — likely a broken build or harness event
+
+    whose first clause is a fact about the red set and whose second clause is
+    invented: nothing in the filing path looks at the build, the harness, the
+    box or the range before writing it. It converted the absence of ONE narrow
+    signal into a positive claim about the cause.
+
+    That got worse when the Range section landed (8ec77190c), because the two
+    sections then sat adjacent and disagreed. On the live incident
+    (regression-cascade-4e27dc2be114) this line said "likely a harness event"
+    while the Range section four lines below named
+    `e1109d7bcbf9 feat(A,N): a bare NilPy import resolves to Python, not a
+    Pascal unit` -- which was the actual cause. A ticket containing its own
+    refutation, with nothing telling a reader which half to prefer, is worse
+    than one that never guessed: the reader who trusts the first line stops
+    looking.
+
+    Face 1 publishes SIGNAL, NOT JUDGMENT (this file's own header). A guess at
+    a cause is judgment, and it is the one thing an auto-filer must not emit --
+    it is read by someone who was not there and has no way to discount it.
+
+    The known-root list is spelled out rather than named, because a reader of
+    the filed ticket cannot see the constant.
+    """
+    if roots:
+        return ", ".join("`%s`" % r for r in roots)
+    return ("none of the known root jobs (%s). That is the ONLY heuristic "
+            "applied here — it does not imply a harness event, and nothing "
+            "in this filing looked at the build, the box or the range. See "
+            "the Range section below for commits worth checking."
+            % ", ".join("`%s`" % j for j in CASCADE_ROOT_JOBS))
 
 
 def revert_of_range(clone, sha, parent):
@@ -3562,8 +3896,7 @@ and blaming are different questions and this line answers the first.)
 dev track triages the root; individual tickets only for whatever remains red
 after the root is fixed.*
 """ % (len(new_red), span, host, len(new_red), utcnow(),
-            ", ".join("`%s`" % r for r in roots) if roots
-            else "none of the known root jobs — likely a broken build or harness event",
+            cascade_suspects_line(roots),
             cascade_range_note(clone, reg, pin_jobs),
             report["tier"], sha, joblist))
     write_ticket(os.path.join(clone.path, rel), body)
@@ -3900,13 +4233,40 @@ def close_stub_tickets(clone, host, closed, sha, report):
         # Name the sha the job PASSED at and the tier that judged it: a close
         # with no evidence is indistinguishable from a lost ticket, and
         # progress.sh check requires done/ tickets to log something citable.
+        # WHAT the close is evidence of, in the ticket's own words. This line
+        # used to say "`<job>` passes at <sha>" unconditionally, and a
+        # regression closed because its job stopped RUNNING got a permanent
+        # written claim that it passed -- in `done/`, which is where a finding
+        # stops being read. The status that closed it is now carried on the
+        # entry (closure_status); absent means an entry stamped by an older
+        # watcher, and reads as the old wording rather than guessing.
+        why = r.get("closed_by")
+        if why == "skip":
+            what = ("`%s` is no longer red at %s (tier %s) — but it SKIPPED "
+                    "rather than passed, so this is evidence that the job "
+                    "stopped running here, NOT that the bug is fixed. It was "
+                    "red at %s. Re-check before trusting the close"
+                    % (r.get("job") or slug, sha[:12], report["tier"],
+                       (r.get("bad") or "?")[:12]))
+        elif why == "gone":
+            what = ("`%s` no longer exists as a job at %s (renamed, removed, "
+                    "or a selector shift), so nothing can report it. It was "
+                    "red at %s; the close records disappearance, not a fix"
+                    % (r.get("job") or slug, sha[:12],
+                       (r.get("bad") or "?")[:12]))
+        elif why == "mixed":
+            what = ("the jobs this cascade swept are no longer red at %s "
+                    "(tier %s), but not all of them PASSED — some only "
+                    "skipped. It was red at %s; treat the close as partial"
+                    % (sha[:12], report["tier"], (r.get("bad") or "?")[:12]))
+        else:
+            what = ("`%s` passes at %s (tier %s); it was red at %s"
+                    % (r.get("job") or slug, sha[:12], report["tier"],
+                       (r.get("bad") or "?")[:12]))
         body = (body.rstrip("\n") + "\n- %s — auto-closed by the %s watcher: "
-                "`%s` passes at %s (tier %s); it was red at %s. Reopening is "
-                "by a fresh NEW-RED stub, since a second red is a second "
-                "finding with its own range.\n"
-                % (utcnow()[:10], host,
-                   r.get("job") or slug, sha[:12], report["tier"],
-                   (r.get("bad") or "?")[:12]))
+                "%s. Reopening is by a fresh NEW-RED stub, since a second red "
+                "is a second finding with its own range.\n"
+                % (utcnow()[:10], host, what))
         dst = os.path.join(pdir, "done", slug + ".md")
         with open(dst, "w") as f:
             f.write(body)
@@ -4184,11 +4544,32 @@ def publish_ledger(clone, host, ledger_loc, ledger_pub, findings, sha,
             shutil.copy(os.path.join(findings, f), os.path.join(dst, f))
             kept += 1
     if new:
-        msg = ("tstate(%s): fuzz %s — NEW: %s (%d divergence(s) in %d programs)"
-               % (host, sha[:12], ", ".join(new), ndiv, nprog))
-        print("twatch: fuzz — NEW signature(s) %s; published to tstate/fuzz (NOT "
-              "ticketed: needs triage, the generator is the first suspect). Fuzzing "
-              "throttles until it is fixed." % ", ".join(new), flush=True)
+        # NEW and REOPENED are different news and must not share a word.
+        # `NEW` is what people grep for and act on, and a reopen was announced
+        # in its vocabulary -- ec2f50d8c said "NEW: fpc-self_if" for a
+        # signature first seen 2026-07-14 and marked fixed 2026-08-16. A
+        # reopen is arguably the MORE interesting of the two: something that
+        # was fixed came back, which is a regression with a bracket around it.
+        #
+        # Read back from the ledger rather than threaded through the caller:
+        # `reopened_from_fixed` is set by the writer at the moment it knows,
+        # and a signature only re-enters `new` by being newly opened or newly
+        # reopened, so the flag partitions this list exactly.
+        try:
+            with open(ledger_pub) as f:
+                _fnd = ((json.load(f) or {}).get("findings") or {})
+        except (OSError, ValueError):
+            _fnd = {}          # unreadable ledger: say NEW, never say nothing
+        reopened = [s for s in new
+                    if (_fnd.get(s) or {}).get("reopened_from_fixed")]
+        firsts = [s for s in new if s not in reopened]
+        parts = ([("NEW: %s" % ", ".join(firsts))] if firsts else []) + \
+                ([("REOPENED: %s" % ", ".join(reopened))] if reopened else [])
+        msg = ("tstate(%s): fuzz %s — %s (%d divergence(s) in %d programs)"
+               % (host, sha[:12], "; ".join(parts), ndiv, nprog))
+        print("twatch: fuzz — %s; published to tstate/fuzz (NOT ticketed: needs "
+              "triage, the generator is the first suspect). Fuzzing throttles "
+              "until it is fixed." % "; ".join(parts), flush=True)
     else:
         msg = "tstate(%s): fuzz %s — ledger update" % (host, sha[:12])
         print("twatch: fuzz — ledger status changed; published", flush=True)
@@ -5027,9 +5408,47 @@ def verify_pin(clone, host, st, ver, sha, tier, abort_check=None):
     reds = [job_key(j) for j in report["jobs"]
             if j["status"] not in ("pass", "skip")]
     st = load_state(clone, host)
+    # WHY the new reds are red, stored HERE rather than left to `job_reason`.
+    #
+    # `job_reason` is the current red set from the NEWEST run -- set-or-clear,
+    # which is correct and is exactly why it cannot answer this question. The
+    # two diverge precisely when it matters: at the v367 verify
+    # (d47acfee770c, 2026-08-19) 20 reds were listed and `job_reason` held 9,
+    # and those 9 were the INHERITED reds still failing at HEAD. The 11 a
+    # reader actually had to triage -- the new ones, the ones a `make revert`
+    # fires on -- were the 11 with no reason recorded anywhere, because they
+    # were green again by the time the newest run wrote the map.
+    #
+    # STORED, not pointed at. The ticket left that fork open: a pointer (run
+    # id + host) into the verify's own report JSON is cheaper here and carries
+    # every reason. Two things settle it for storing:
+    #
+    #   * a pointer resolves only while that box is up and its log unreaped,
+    #     and the moment you need a pin verify's reason is a moment when
+    #     things are already broken. `report_job()` already drops `log` for
+    #     this reason -- a path does not survive the box.
+    #   * a SECOND box is arriving. tstate is the shared file every host and
+    #     every track reads; a pointer keyed to host + run id is unresolvable
+    #     from the other box by construction, so the pointer design gets worse
+    #     exactly as the fleet grows. That fact post-dates the ticket.
+    #
+    # Bounded three ways, because this file is fetched by every track: new
+    # reds only (a red already in the baseline is not what anyone is
+    # triaging), a per-entry character cap, and an entry-count cap that SAYS
+    # what it dropped -- a cap that trims silently turns "we kept 20 of 40"
+    # into "there were 20".
+    base_reds = set((st.get("pin_baseline") or {}).get("reds") or [])
+    why, new_red = pin_verify_why(report, base_reds, reds)
+    if len(new_red) > PIN_VERIFY_REASON_CAP:
+        print("twatch: pin verify has %d new red(s); storing reasons for the "
+              "first %d, %d without one"
+              % (len(new_red), PIN_VERIFY_REASON_CAP,
+                 len(new_red) - PIN_VERIFY_REASON_CAP), flush=True)
     st["pin_verify"] = {"ver": ver, "sha": sha, "tier": tier,
                         "verdict": verdict, "date": utcnow(),
                         "red": reds[:20]}
+    if why:
+        st["pin_verify"]["why"] = why
     save_state(clone, host, st)
     with open(os.path.join(clone.path, TSTATE_REL,
                            "runs-%s.ndjson" % host), "a") as f:
@@ -6015,6 +6434,16 @@ def report_running_code(clone_path):
     whether the matrix is being covered; running-stale-but-covering is a real
     state and not the same as down. Says nothing at all when it cannot tell,
     rather than guessing — an unreadable watch.json is not evidence of drift.
+
+    THE SHAPE, stated once because it generalises past this daemon: staleness
+    here has TWO hops — origin -> the clone's disk (closed by a `git pull`) and
+    the clone's disk -> the resident process (closed only by a RESTART). This
+    check answers the second, and it is the one no amount of pulling can fix.
+    Measured again 2026-08-28: the clone's `twatch.py` was byte-identical to
+    the fix on master while the daemon had been running the previous code for
+    hours. **A deploy that is correct on disk and stale in memory reports the
+    disk version if anyone asks it** — every filesystem-level check, including
+    a sha256 of the source, confirms the wrong hop.
     """
     if not clone_path:
         return
@@ -6253,9 +6682,28 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
         # hours behind — and the cross targets run nowhere else. Always printed
         # when the host has ever run one, because the age is the boundary of the
         # claim and a boundary nobody can see is not checked.
-        if lf.get("date") and not quiet:
-            age = secs_since(lf["date"], now)
-            behind = testable_behind(repo, lf.get("sha", ""), ref)
+        # WHICH RUN VOUCHES FOR THE CROSS TARGETS -- and it is not `last_full`.
+        #
+        # `last_full` is the last REPLACING run (full=True), NOT the last
+        # `full` TIER; the name is a historical accident. Under the shipped
+        # default (mid_tier == deep_tier == full) the two coincide, which is
+        # the only reason reading it here has been correct.
+        #
+        # Configure mid_tier to `limited` -- exactly what
+        # chore-t-the-tier-ladder-ratio-is-stale-by-its-own-criterion
+        # contemplates doing -- and they diverge: a `limited` run refreshes
+        # `last_full`, covers NO cross target, and would silently reset this
+        # banner's clock. The line would then vouch for coverage that never
+        # ran, and its whole job is to say when nothing vouches. That is the
+        # failure direction with no output to notice, so it is fixed BEFORE
+        # the experiment rather than after.
+        #
+        # last_run_at_tier() answers the question exactly: the newest COMPLETE
+        # run at that tier, exact match, never covered_tiers.
+        lf_full = breadth_full_run(st)
+        if lf_full.get("date") and not quiet:
+            age = secs_since(lf_full["date"], now)
+            behind = testable_behind(repo, lf_full.get("sha", ""), ref)
             stale = age is not None and age > BREADTH_STALE_SECS
             print("tstate:   breadth — newest full tier is %s old%s%s"
                   % (fmt_age(age) if age is not None else "?",
@@ -6264,6 +6712,14 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
                      "  [STALE — no cross-target verdict on this tree; native "
                      "GREEN does NOT cover i386/arm32/riscv32/aarch64]"
                      if stale else ""))
+        elif lf.get("date") and not quiet:
+            # The host has run SOMETHING to completion, but never a `full`
+            # tier. Silence here would read as "breadth is fine"; the absence
+            # of a full tier is precisely the thing this line exists to report.
+            print("tstate:   breadth — NO `full` tier recorded on %s (newest "
+                  "complete run is `%s`): nothing here vouches for "
+                  "i386/arm32/riscv32/aarch64"
+                  % (st.get("host", "?"), lf.get("tier", "?")))
         # PIN VERIFY — a different question from every line above it, which are
         # all about `last_full`: the newest tier on the newest tree. "Is the
         # binary every track is currently BUILDING on sound?" is answered by
@@ -6293,8 +6749,12 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
             # most reassuring possible way to be wrong.
             if base.get("reds") is not None and base.get("pin") == pv.get("ver"):
                 fresh = [j for j in pv_red if j not in set(base["reds"])]
-                vs = ", %d new vs the %s baseline" % (len(fresh), pv["ver"])
+                n_new = len(fresh)
+                vs = ", %d new vs the %s baseline" % (n_new, pv["ver"])
             else:
+                # None, not 0. "no new reds" and "cannot tell" are different
+                # states and the reason lines below branch on the difference.
+                n_new = None
                 vs = ", no baseline recorded for %s (new-vs-inherited unknown)" \
                      % pv.get("ver", "?")
             print("tstate:   pin verify — %s at %s %s (%s, %s old)%s%s"
@@ -6351,6 +6811,32 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
                           "single run"
                           % (co["sha"][:12], fmt_age(co["gap"]), co["n"],
                              adj(co["what"])))
+            # WHY each new red is red. Printed last in this block on purpose:
+            # it is the question a reader asks AFTER the corroboration line
+            # tells them which of the reds are real. Before that line, a reason
+            # invites triage of a flake.
+            #
+            # `job_reason` cannot answer this -- it holds the CURRENT red set
+            # from the newest run, so the inherited reds still failing at HEAD
+            # keep their reasons and the new ones, already green again, have
+            # none. That is set-or-clear working correctly, and it is why the
+            # reasons are stored on the verify itself.
+            why = pv.get("why") or {}
+            if why:
+                shown = [j for j in pv_red if j in why]
+                print("tstate:            ...why (%d of %s new red(s) carry a "
+                      "stored reason, from the verify run itself):"
+                      % (len(shown), n_new if n_new is not None else "?"))
+                for j in shown:
+                    print("tstate:              %s: %s" % (j, why[j]))
+            elif n_new is None or n_new > 0:
+                # Absence is a fact too, and an unexplained one reads as "no
+                # reason existed". Say which it is: a verify predating the
+                # stored-reason field carries none and never will.
+                print("tstate:            ...no stored reasons (this verify "
+                      "predates them, or the run recovered no log) — the "
+                      "reasons in `job_reason` belong to the NEWEST run, not "
+                      "to this verify, so do not read them as these")
         nskip = sum(1 for s in (st.get("jobs") or {}).values() if s == "skip")
         if nskip:
             print("tstate:   coverage — %d job(s) SKIPPED on %s (absent corpus "

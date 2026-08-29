@@ -286,7 +286,16 @@ begin
      (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) then
   begin
     mci := FindHelperForType(Syms[idx].TypeKind, Syms[idx].RecName);
-    if (mci >= 0) and (FindUMeth(mci, GetTokenStr(TokPos)) >= 0) then
+    { A PROPERTY counts as a member here too, not just a method. FPC declares
+      TStringHelper.Length as `property Length: SizeInt read GetLength` over a
+      PRIVATE accessor, so a method-only guard makes the single most-used member
+      of that surface unreachable while every sibling works —
+      bug-p-a-type-helper-cannot-declare-a-property. ParseClassRecordSelectors
+      below already resolves properties (it is the same machinery advanced
+      records use), so this widens the GUARD rather than adding a second path:
+      the property arm was never missing, it was merely never reached. }
+    if (mci >= 0) and ((FindUMeth(mci, GetTokenStr(TokPos)) >= 0) or
+                       (FindUProp(mci, GetTokenStr(TokPos)) >= 0)) then
     begin
       node := AllocNode(AN_IDENT);
       ASTIVal[node] := idx;
@@ -2566,9 +2575,21 @@ begin
               Inc(mai);
             end;
             ExpectCallRParen(mpi);
-          end;
+          end
+          else CheckMethodCallArity(mpi);
+          { Continue the selector loop rather than exiting, so a trailing
+            `.field` / `.M2(...)` / `[i]` on the RESULT is parsed -- the same
+            call the class-method and instance-method arms below make. Exiting
+            here did not fail loudly: the trailing selector was DROPPED and the
+            expression evaluated to the intermediate result, so a metaclass-
+            returning `g.IGet.Lookup(21)` silently yielded the metaclass
+            pointer instead of calling Lookup.
+            bug-a-nodemetaclassci-does-not-know-a-virtual-class-method-call }
           node := mcallNode;
-          Result := node; Exit;
+          tk := Procs[mpi].RetType;
+          recName := ProcRetRecId[mpi];
+          if (tk <> tyClass) and (tk <> tyRecord) then recName := REC_NONE;
+          Continue;
         end;
         if UMthIsStatic[mmi] then
         begin
@@ -2581,6 +2602,15 @@ begin
           mcallNode := GenMakeStaticMethodCall(mpi, mselfArg);
           node := mcallNode;
           tk := Procs[mpi].RetType;
+          { The RESULT's record, not the receiver's -- the instance-METHOD arm
+            below sets this on the same three lines and this one did not, so the
+            receiver's class survived into the next selector: `f.GetObjC.M`
+            resolved M against f's class instead of the returned one. Where the
+            two classes both had M that CALLED THE WRONG METHOD on the wrong
+            object silently (fpc: "identifier idents no member").
+            bug-p-a-class-method-call-keeps-the-receivers-class }
+          recName := ProcRetRecId[mpi];
+          if (tk <> tyClass) and (tk <> tyRecord) then recName := REC_NONE;
           Continue;
         end
         else
@@ -2781,7 +2811,9 @@ begin
               a method whose parameters plainly do have defaults. Two questions
               wearing one name; this arm needs only the second half.
               bug-p-a-parenless-call-to-an-all-defaulted-virtual-method-segfaults }
-            FillDefaultArgs(mpi, 1, mcallNode, mlastArg);
+            FillDefaultArgs(mpi, 1, mcallNode, mlastArg)
+          else
+            CheckMethodCallArity(mpi);
           { Continue the selector loop (not Exit) so trailing `.field` / `[i]` on
             the method result are parsed: obj.M(args).field, obj.M.field, chained
             obj.M1.M2. The result's record (ProcRetRecId) drives field
@@ -3011,7 +3043,8 @@ begin
       Inc(mai);
     end;
     ExpectCallRParen(mpi);
-  end;
+  end
+  else CheckMethodCallArity(mpi);
   Result := mcallNode;
 end;
 
@@ -4309,7 +4342,8 @@ begin
             Inc(mai);
           end;
           ExpectCallRParen(mpi);
-        end;
+        end
+        else CheckMethodCallArity(mpi);
         tk := Procs[mpi].RetType;
         if (tk = tyClass) or (tk = tyRecord) then recId := ProcRetRecId[mpi]
         else recId := REC_NONE;

@@ -854,11 +854,42 @@ def kill_run(pid, why):
         pass
 
 
+# THE SCRATCH ROOT, read once. `$(TESTTMP)` is the directory the Makefile's
+# recipes build into; its default is `/tmp`, so with the variable unset every
+# derivation below is byte-identical to the literals that were here before.
+#
+# It is read at all because four expressions in make_dry_run(), plus TMP_RE,
+# _REASON_TMP_RE and RUN_TMP, hardcoded the literal prefix as it appears in
+# `make -n` output -- and the comment on them said what happens if the default
+# ever moves: "all four go blind AT ONCE and fail silently -- no privatization
+# (concurrent runs collide again) and no producer/consumer merge (which is how
+# test-core#555/#556 went red on 2026-07-12). Teach them the value before
+# setting it; do not set it and hope." This is teaching them the value.
+#
+# WHAT FOLLOWS IT AND WHAT DOES NOT is a per-site judgment, not a sweep:
+#
+#   follows  anything matching or generating a path that appears in RECIPE
+#            text -- TMP_RE, the three make_dry_run expressions,
+#            _REASON_TMP_RE, the pinned-path root, and RUN_TMP itself (the
+#            privatized destination must sit under the same root the recipes
+#            name, or the rewrite points the two halves at different files).
+#
+#   stays    paths OTHER tools own and write themselves: `/tmp/pxx-build-*`
+#            (the self-host build's own per-invocation root), `/tmp/tbench-*`
+#            and `/tmp/pasmith*` (the bench and the fuzzers),
+#            `/tmp/pxx_c_conformance.*` (that script's own scratch). Those do
+#            not read TESTTMP, so following it here would make the reaper stop
+#            finding them -- a silent leak rather than a silent collision, but
+#            silent either way.
+TESTTMP = (os.environ.get("TESTTMP") or "/tmp").rstrip("/") or "/tmp"
+TESTTMP_RE = re.escape(TESTTMP)
+
+
 def reap_stale(info):
     """Clean up after a run that died without releasing its lock."""
     pid = info.get("pid", -1)
     kill_run(pid, "wedged (no heartbeat for >%ds)" % HEARTBEAT_STALE)
-    scratch = "/tmp/testmgr-scratch-%d" % pid
+    scratch = "%s/testmgr-scratch-%d" % (TESTTMP, pid)
     if os.path.isdir(scratch):
         shutil.rmtree(scratch, ignore_errors=True)
     try:
@@ -960,7 +991,7 @@ def sweep_orphan_tmp():
     # SIGKILL left behind — and SIGKILL is routine here, because testmgr kills
     # its own over-budget jobs, which is exactly why the EXIT trap inside
     # run_c_conformance.sh cannot be relied on (a trap never runs on SIGKILL).
-    for pat, sep in (("/tmp/testmgr-scratch-*", "-"),
+    for pat, sep in ((TESTTMP + "/testmgr-scratch-*", "-"),
                      ("/tmp/pxx_c_conformance.*", "."),
                      # the self-host build's per-invocation root (Makefile
                      # PXX_TMP); pid-keyed for exactly this reason
@@ -998,8 +1029,8 @@ def sweep_orphan_tmp():
     # ways: by age, and by count, so a busy night cannot accumulate unboundedly
     # inside the age window (128 dirs / 392 MB observed in well under 24h).
     logdirs = []
-    for p in glob.glob("/tmp/testmgr-*"):
-        if p.startswith("/tmp/testmgr-scratch-"):
+    for p in glob.glob(TESTTMP + "/testmgr-*"):
+        if p.startswith(TESTTMP + "/testmgr-scratch-"):
             continue
         try:
             if os.path.isdir(p):
@@ -1248,7 +1279,7 @@ CORPUS_GUARD_RE = re.compile(r"\[\s+-[a-z]\s+library_candidates/")
 # private per-run substitute for the recipes' literal /tmp/ paths (see
 # Job.script); created in main(), world-unreadable is not needed — /tmp
 # hygiene only, the OS reaps it
-RUN_TMP = "/tmp/testmgr-scratch-%d" % os.getpid()
+RUN_TMP = "%s/testmgr-scratch-%d" % (TESTTMP, os.getpid())
 # The run's OWN copy of the compiler. `compiler/pascal26` is a single mutable
 # path and a prerequisite of every test target, so any unrelated make (a
 # `make pxx-debug` for a gdb build, say) can replace it mid-run: observed
@@ -1293,7 +1324,16 @@ IDLE_KEEP_SECS = 2 * 3600
 # only passed on boxes where a stale /tmp/libfoo.so from an earlier serial
 # `make` happened to survive; on a freshly booted box they were red.
 # The lookahead keeps /tmpfoo and /tmp.bak alone.
-TMP_RE = re.compile(r"/tmp(?![\w.-])(?:/[A-Za-z0-9_.+-]+)*")
+TMP_RE = re.compile(TESTTMP_RE + r"(?![\w.-])(?:/[A-Za-z0-9_.+-]+)*")
+
+# make_dry_run()'s three, hoisted to module scope beside TMP_RE. They share its
+# reason for existing (the literal prefix as it appears in `make -n` output) and
+# were unreachable to a guard while they were locals -- which is how four
+# expressions came to hardcode the same assumption with only a comment holding
+# them together. Constants either way; nothing depends on rebuilding them.
+DRY_TMP_RE = re.compile(TESTTMP_RE + r"/[A-Za-z0-9_./+-]+")
+DRY_SO_PROD_RE = re.compile(r"-o\s+" + TESTTMP_RE + r"/\S+\.so\b")
+DRY_LOADER_DIR_RE = re.compile(r"LD_LIBRARY_PATH=" + TESTTMP_RE + r"(?![\w./-])")
 
 
 def pinned_tmp_paths(lines):
@@ -1330,7 +1370,7 @@ def pinned_tmp_paths(lines):
                 out.update(TMP_RE.findall(f.read()))
         except OSError:
             continue
-    return {p for p in out if p != "/tmp"}
+    return {p for p in out if p != TESTTMP}
 
 
 class Job:
@@ -1348,6 +1388,17 @@ class Job:
         self.t0 = self.t1 = None
         self.timeout = None       # set after calibration
         self.status = "queued"    # queued|running|pass|fail|timeout|skipped|skip
+        # WHY this job skipped, in the job's own terms. "" while it has not.
+        #
+        # A skip is PASSLIKE -- PASSLIKE = ("pass", "skip") -- so it costs a run
+        # nothing and shows up nowhere a verdict is read. The full-tier sweep of
+        # 2026-08-26 skipped every conformance shard and every real-program
+        # corpus, ~50 of 3081 jobs, and reported in the vocabulary of a run that
+        # covered all of them. `unreached` already exists for the jobs a
+        # teardown never decided, with exactly this reasoning in its comment;
+        # skips were the case that got missed, and they are the worse one,
+        # because a skipped job is not merely undecided -- it is scored as fine.
+        self.skip_reason = ""
         self.logpath = None
         self.requeued = False
         self.attempts = 0         # launch count; retriable classes may re-run
@@ -1406,7 +1457,7 @@ class Job:
                 continue                      # recipe comment: shell no-op
             body = TMP_RE.sub(
                 lambda m: m.group(0) if m.group(0) in pinned
-                else RUN_TMP + m.group(0)[len("/tmp"):], ln)
+                else RUN_TMP + m.group(0)[len(TESTTMP):], ln)
             # point every invocation at the run's snapshot (see RUN_COMPILER)
             if os.path.exists(RUN_COMPILER):
                 body = COMPILER_PATH_RE.sub(RUN_COMPILER, body)
@@ -1443,7 +1494,7 @@ REASON_LINES = 6          # substantive lines, at most
 # The run's scratch dir is pid-keyed (RUN_TMP), so an unscrubbed path changes on
 # every run and dirties tstate even when nothing else moved. Same literal /tmp
 # prefix the four regexes in make_dry_run() key off -- see the note there.
-_REASON_TMP_RE = re.compile(r"/tmp/[A-Za-z0-9_./+-]+")
+_REASON_TMP_RE = re.compile(TESTTMP_RE + r"/[A-Za-z0-9_./+-]+")
 # The last line of nearly every failing log, and it carries nothing the job's
 # status and name do not already say. Keeping it would give every job the same
 # reason, which is the current defect wearing a longer string.
@@ -1520,7 +1571,14 @@ def report_job(j):
             # `log` is a path on THIS box in a temp dir the OS reaps; a consumer
             # that keeps the report cannot read it later. `reason` is the part
             # that has to survive.
-            "reason": job_reason(j) if j.status not in ("pass", "skip") else "",
+            # A SKIP carries its own reason, not "". Excluding skip here is what
+            # made the 2026-08-26 sweep unable to say why any of ~50 jobs --
+            # every conformance shard, every real-program corpus -- did not run.
+            # `job_reason` is the red-log tail and is meaningless for a job that
+            # never failed; `skip_reason` is recorded where the skip happened.
+            "reason": (j.skip_reason if j.status == "skip"
+                       else "" if j.status == "pass"
+                       else job_reason(j)),
             "log": j.logpath}
 
 
@@ -1656,6 +1714,36 @@ def job_subject(job):
         if m:
             return m.group(1).lower()
     return ""
+
+
+# A skip whose cause is "this box lacks the corpus" is a COVERAGE HOLE: the job
+# would have run anywhere else, and the verdict is narrower than it looks. A
+# recipe that guards itself out for its own reasons may be neither -- that is
+# the recipe's business, and the harness does not get to decide. So the two are
+# counted separately and the second is never silently folded into the first,
+# which is what the single hardcoded "(corpus absent)" label did to the FPC
+# canary skips for seven weeks.
+SKIP_HOLE_PREFIXES = ("corpus absent:", "tool absent:")
+
+
+def skip_summary(jobs):
+    """Skips, counted and grouped by reason. Always a dict, never None.
+
+    Present even when empty, so a consumer tests a field instead of inferring
+    from absence -- the same rule `timed_out`/`deadline` are always-present for.
+    """
+    by = {}
+    holes = 0
+    for j in jobs:
+        if j.status != "skip":
+            continue
+        why = j.skip_reason or "(the job did not say)"
+        by.setdefault(why, []).append(j.name)
+        if why.startswith(SKIP_HOLE_PREFIXES):
+            holes += 1
+    return {"count": sum(len(v) for v in by.values()),
+            "coverage_holes": holes,
+            "by_reason": {k: sorted(v) for k, v in sorted(by.items())}}
 
 
 def job_selector(job):
@@ -1987,9 +2075,8 @@ def split_jobs(target, lines):
     # (concurrent runs collide again) and no producer/consumer merge (which is
     # how test-core#555/#556 went red on 2026-07-12).  Teach them the value
     # before setting it; do not set it and hope.
-    tmp_re = re.compile(r"/tmp/[A-Za-z0-9_./+-]+")
-    so_prod_re = re.compile(r"-o\s+/tmp/\S+\.so\b")
-    loader_dir_re = re.compile(r"LD_LIBRARY_PATH=/tmp(?![\w./-])")
+    tmp_re, so_prod_re = DRY_TMP_RE, DRY_SO_PROD_RE
+    loader_dir_re = DRY_LOADER_DIR_RE
     LOADER_DIR = "\0so-loader-dir"
     parent = list(range(len(groups)))
     def find(x):
@@ -2298,7 +2385,7 @@ def fpc_canary_job():
     source" IS the signal.  ADVISORY — a red here is a notice for Track A
     (it's compiler/** drift), not a gate on anyone's push.
     """
-    out = "/tmp/p26_fpc_canary"                    # -> private scratch
+    out = TESTTMP + "/p26_fpc_canary"              # -> private scratch
     cmd = " ".join([FPC_BIN] + FPC_FLAGS +
                    ["-FU" + out + "_u", "-FE" + out + "_u",
                     "-o" + out, COMPILER_SRC.strip('"')])
@@ -2878,18 +2965,34 @@ class Manager:
     _SKIP_RE_CACHE = {}
 
     def _self_skipped(self, job):
+        """The recipe's own SKIP line, or "" if it did not skip.
+
+        Returns the LINE rather than a bool so the reason survives into the
+        report. Callers still read it as a truth value -- "" is falsy -- so the
+        skip/pass decision is unchanged; what is new is that the answer carries
+        its own justification instead of the caller having to reconstruct one.
+
+        A recipe that says only `foo: SKIP` yields the bare marker, which is
+        still better than "": it distinguishes "the job declined" from "the
+        harness skipped it", and those have different owners.
+        """
         if not job.logpath or not os.path.exists(job.logpath):
-            return False
+            return ""
         pat = self._SKIP_RE_CACHE.get(job.target)
         if pat is None:
-            pat = re.compile(rb"(?m)^%s: (?:corpus )?SKIP\b"
+            pat = re.compile(rb"(?m)^(%s: (?:corpus )?SKIP\b.*)$"
                              % re.escape(job.target.encode()))
             self._SKIP_RE_CACHE[job.target] = pat
         try:
             with open(job.logpath, "rb") as f:
-                return bool(pat.search(f.read()))
+                m = pat.search(f.read())
         except OSError:
-            return False
+            return ""
+        if not m:
+            return ""
+        # Bounded: this lands in a JSON report that is committed to git, and a
+        # recipe is free to print a paragraph after the marker.
+        return m.group(1).decode("utf-8", "replace").strip()[:200]
 
     def reap(self):
         done = []
@@ -2905,7 +3008,13 @@ class Manager:
                     # checkout RED — the exact false red the enrolment ticket
                     # forbids. "skip" is the pass-equivalent did-not-run status
                     # (corpus-absent uses it), which is what this is.
-                    job.status = "skip" if self._self_skipped(job) else "pass"
+                    # ...and it says WHY, in the words the recipe used. A
+                    # self-skip is the one kind whose reason only the job
+                    # knows, so discarding its own SKIP line and re-deriving
+                    # the cause later is guesswork the harness never has to do.
+                    why = self._self_skipped(job)
+                    job.status = "skip" if why else "pass"
+                    job.skip_reason = why
                     if job.attempts > 1:
                         job.flaky = True   # failed earlier, recovered on retry
                     self.running.remove(job)
@@ -4805,6 +4914,7 @@ def main():
         for j in jobs:
             if j.target == "fpc-bootstrap":
                 j.status = "skip"
+                j.skip_reason = "tool absent: %s is not on PATH" % FPC_BIN
     # self-skip jobs whose corpus tree is absent (twatch-setup contract:
     # "corpus jobs self-skip"); recipes with their own guard never get here
     absent, nabsent = {}, 0
@@ -4817,6 +4927,11 @@ def main():
                           if not os.path.isdir(os.path.join(REPO, root, m))})
         if missing:
             j.status = "skip"
+            # Name the tree(s), not just the fact. "corpus absent" sends the
+            # reader to the setup docs; "corpus absent: external/c-testsuite"
+            # sends them to the one command that fixes it.
+            j.skip_reason = "corpus absent: %s" % ", ".join(
+                "%s/%s" % (root, m) for root, m in missing)
             nabsent += 1
             for key in missing:
                 absent[key] = absent.get(key, 0) + 1
@@ -4891,7 +5006,7 @@ def main():
     ncarried = sum(1 for j in jobs if j.status == "carried")
     print("testmgr: tier=%s jobs=%d%s%s cap=%d%s scale=%.2f logs=%s"
           % (args.tier, len(run_jobs),
-             " skip=%d(corpus-absent)" % nskip if nskip else "",
+             " skip=%d(pre-run: corpus or tool absent)" % nskip if nskip else "",
              " carried=%d(resumed)" % ncarried if ncarried else "",
              mgr.hard_cap,
              (" cores<=%.0f/%d" % (mgr.core_budget, mgr.nproc)
@@ -4957,7 +5072,13 @@ def main():
                 note += ", expected %.0fs" % j.exp_dur
         # advisory reds are reported, but they are a NOTICE for the owning
         # track — not part of the gate, and not "the first failure"
-        state = ("NOTICE" if j.advisory and j.status != "pass"
+        # SKIP outranks NOTICE. An advisory job that did not run was rendering
+        # as NOTICE -- "advisory and not pass" is true of a skip -- so the FPC
+        # canary on a box without fpc printed in the vocabulary of a canary
+        # that ran and found drift. Caught by forcing the skip end-to-end
+        # rather than by reading this expression, which looks right.
+        state = ("SKIP" if j.status == "skip"
+                 else "NOTICE" if j.advisory and j.status != "pass"
                  else "FLAKY" if j.flaky
                  else j.status.upper())
         if j.flaky:
@@ -4979,6 +5100,13 @@ def main():
                 and first_fail is None:
             first_fail = j
     npass = sum(1 for j in jobs if j.status == "pass")
+    # RECOMPUTED, not the pre-run `nskip`. That one is counted before the
+    # Manager runs, so it misses every job that skipped itself DURING the run
+    # -- those stayed in the denominator and were never named, which made a
+    # self-skipping job look like a job that ran and did not pass. Two
+    # different silences, one variable.
+    skips = skip_summary(jobs)
+    nskip = skips["count"]
     flaky = [j.name for j in jobs if j.flaky]
     # Jobs that never ran because a job they DEPEND on failed are counted and
     # named separately. Without this the summary read "0/167 pass" for a run
@@ -4995,7 +5123,10 @@ def main():
     # visible at all.
     ntorn = sum(1 for j in jobs if j.status == "interrupted")
     print("  %d/%d pass%s%s%s%s%s" % (npass, len(jobs) - nskip - ncarried,
-                                    ", %d skip (corpus absent)" % nskip if nskip else "",
+                                    (", %d skip (%d a coverage hole)"
+                                     % (nskip, skips["coverage_holes"])
+                                     if skips["coverage_holes"] else
+                                     ", %d skip" % nskip) if nskip else "",
                                     ", %d carried from an aborted earlier slice"
                                     % ncarried if ncarried else "",
                                     ", %d killed mid-run, no verdict" % ntorn
@@ -5005,6 +5136,17 @@ def main():
                                     ", %d flaky (passed on retry)" % len(flaky) if flaky else ""))
     if flaky:
         print("  flaky (recovered on retry, NOT red): %s" % " ".join(flaky))
+    # Name them, grouped, the way the red list is named. A count tells a reader
+    # that something did not run; only the names say WHICH signal is missing,
+    # and "every conformance shard and every real program" is a different fact
+    # from "50 jobs". The 2026-08-26 sweep is the case: 1.6% of jobs, and it
+    # happened to be the entire answer to "do real programs still work".
+    if skips["count"]:
+        print("  SKIPPED (did not run; scored passlike, NOT counted as red):")
+        for why, names in skips["by_reason"].items():
+            shown = " ".join(names[:6])
+            more = "" if len(names) <= 6 else "  ...+%d more" % (len(names) - 6)
+            print("    %s\n      %s%s" % (why, shown, more))
     print_est_mem_accuracy(jobs)
     # Co-tenancy belongs in the REPORT, not just the scrollback: twatch turns
     # this text into a tstate report someone reads days later while deciding
@@ -5128,6 +5270,14 @@ def main():
                # partial run looks complete.
                "unreached": sum(1 for j in jobs
                                 if j.status in ("skipped", "interrupted")),
+               # Jobs that RAN NOTHING but scored as passlike. `unreached`
+               # above covers the ones a teardown never decided; this covers
+               # the ones the harness or the recipe declined, which is the
+               # worse case precisely because it is not an anomaly -- it is a
+               # normal, quiet, green-looking outcome. Without it a run that
+               # covered 3031 of 3081 jobs publishes the same shape as one that
+               # covered 3081.
+               "skips": skip_summary(jobs),
                "flaky": [j.name for j in jobs if j.flaky],
                # "sel": the STABLE way to name this job again later (twatch
                # bisects and files tickets on it).  j.name is a positional

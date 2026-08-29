@@ -4359,6 +4359,67 @@ begin
   end;
 end;
 
+{ ---- Owned managed-string operands of a COMPARISON ------------------------
+
+  A string comparison consumes its operands and produces a Boolean, so an
+  operand that arrived OWNED (a call result at rc=1, or a nested concat's temp)
+  dies here and nobody else will release it. Concat has asked this since
+  bug-a-a-string-function-result-in-a-concat-leaks-on-every-cross-target; the
+  comparison arms never did, so `if F(x) = 'lit'` leaked F's result on every
+  evaluation -- 40 bytes an iteration, unbounded, with every answer correct
+  (bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64).
+
+  Note which way round that pair sits. There, the predicate was right on x86-64
+  and missing from the four cross backends. Here it is right on the four cross
+  backends and missing from x86-64. One predicate, three site kinds, five
+  backends: the answer is hand-copied into fifteen places, and the repo has now
+  been wrong at BOTH ends of that matrix. These two helpers exist so x86-64's
+  three sites share one copy instead of three; the fifteen-way duplication
+  across backends is the part still standing, and it is the ticket's open
+  question, not something this fix closes.
+
+  Contract: rax = LHS, rcx = RHS on entry to every string-comparison emitter,
+  and all three of them (EmitStrCmpReg, EmitAnsiStrCmpReg, EmitAnsiStrCmp3Reg)
+  are stack-neutral and never reference rsp -- so the operands keep their slots
+  across the comparison. Emitted only when something is actually owned, so code
+  for the ordinary borrow-vs-literal case is unchanged. }
+
+function IRStrCmpOwnsOperand(n: Integer): Boolean;
+begin
+  IRStrCmpOwnsOperand := (IntToTypeKind(IRTk[n]) = tyAnsiString) and
+                         IRNodeOwnsManagedStr(n);
+end;
+
+function IRStrCmpNeedsRelease(left, right: Integer): Boolean;
+begin
+  IRStrCmpNeedsRelease := IRStrCmpOwnsOperand(left) or IRStrCmpOwnsOperand(right);
+end;
+
+procedure IREmitStrCmpSaveOperands;
+begin
+  EmitB($48); EmitB($83); EmitB($EC); EmitB($10);              { sub rsp, 16 }
+  EmitB($48); EmitB($89); EmitB($44); EmitB($24); EmitB($08);  { mov [rsp+8], rax }
+  EmitB($48); EmitB($89); EmitB($4C); EmitB($24); EmitB($00);  { mov [rsp], rcx }
+end;
+
+procedure IREmitStrCmpReleaseOperands(left, right: Integer);
+begin
+  EmitB($50);                                                  { push cmp result }
+  if IRStrCmpOwnsOperand(left) then
+  begin
+    EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($10); { mov rax, [rsp+16] }
+    IREmitCodeCall(AnsiStrReleaseAddr);
+  end;
+  if IRStrCmpOwnsOperand(right) then
+  begin
+    EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] }
+    IREmitCodeCall(AnsiStrReleaseAddr);
+  end;
+  EmitB($58);                                                  { pop cmp result }
+  EmitB($48); EmitB($83); EmitB($C4); EmitB($10);              { add rsp, 16 }
+end;
+
+
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
@@ -4374,6 +4435,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil, pNotDouble, pDone: Integer;
     pUnsNeg, pUnsDone, pAppendDone: Integer;
     w1RightReg: Integer;   { -O3 W1: 0 = the normal rcx contract, else r12..r15 }
+    strCmpRel: Boolean;    { this comparison releases an owned string operand }
     pAnsiAlloc, pAnsiShared, pAnsiTooSmall, pAnsiNoZeroGrow, pAnsiFastDone: Integer;
     pAnsiUseNeededNil, pAnsiUseNeededSmall, pAnsiMinDone, pAnsiCapDone: Integer;
     pDynZero, pDynNoOld, pDynKeepCopy, pDynNoRetain, pDynNoRetainCount: Integer;
@@ -5131,6 +5193,16 @@ begin
         end
         else
         begin
+          { -O3 W2: `x := x <op> y` with x register-resident does the ALU on the
+            resident register itself, deleting the two reg-reg moves that
+            bracket it -- and that bracket is the loop-carried recurrence when x
+            is an accumulator. See W2InPlaceEligible in symtab.inc for why rax
+            may be left dead here and why the frame slot stays authoritative. }
+          if (OptLevel >= 3) and (not InLValueWrite) and W2InPlaceEligible(node) then
+          begin
+            EmitW2InPlace(node);
+            Exit;
+          end;
           IREmitNode(IRB[node]);
           { {$Q+}: integer arithmetic runs at 64-bit register width by design,
             so a Q-tagged binop's own flags check is exact and never fires for
@@ -6461,6 +6533,12 @@ begin
               begin
                 lhsTk := IntToTypeKind(IRTk[left]);
                 rhsTk := IntToTypeKind(IRTk[right]);
+                { Saved around the WHOLE block, not around the emitter call:
+                  the two char arms below compare inline and never reach
+                  EmitAnsiStrCmpReg, so `F(x) = 'c'` leaks through exactly the
+                  same hole if only the else-arm is covered. }
+                strCmpRel := IRStrCmpNeedsRelease(left, right);
+                if strCmpRel then IREmitStrCmpSaveOperands;
                 if (lhsTk = tyAnsiString) and (rhsTk = tyChar) then
                 begin
                   EmitB($51);                                                  { push rcx }
@@ -6507,11 +6585,18 @@ begin
                 end
                 else
                   EmitAnsiStrCmpReg(op = tkEq, lhsTk, rhsTk);
+                if strCmpRel then IREmitStrCmpReleaseOperands(left, right);
               end
               else if ((op = tkEq) or (op = tkNeq)) and
                   ((IntToTypeKind(IRTk[left]) = tyString) or
                    (IntToTypeKind(IRTk[right]) = tyString)) then
               begin
+                { No release pair here, and it is a proof rather than an
+                  oversight: this is the ELSE-IF after the tyAnsiString block,
+                  so neither side can be tyAnsiString, and a tyString is a
+                  frozen buffer that owns nothing. IRStrCmpNeedsRelease would
+                  be constantly False. If that guard above ever widens, this
+                  block needs the save/release pair the other two have. }
                 lhsTk := IntToTypeKind(IRTk[left]);
                 rhsTk := IntToTypeKind(IRTk[right]);
                 if (lhsTk = tyString) and (rhsTk = tyChar) then
@@ -6562,7 +6647,10 @@ begin
                   ((IntToTypeKind(IRTk[right]) = tyAnsiString) or
                    (IntToTypeKind(IRTk[right]) = tyString)) then
               begin
+                strCmpRel := IRStrCmpNeedsRelease(left, right);
+                if strCmpRel then IREmitStrCmpSaveOperands;
                 EmitAnsiStrCmp3Reg(op, IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right]));
+                if strCmpRel then IREmitStrCmpReleaseOperands(left, right);
               end
               else
               begin
@@ -9379,8 +9467,29 @@ begin
               refreshed from their authoritative frame slots right after).
               rax is dead at the handler label (IR_EXC_MATCH reloads it). }
             EmitB($0F); EmitB($84); excSkip := CodeLen; EmitI32(0);   { jz over the refresh (normal path) }
-            for f := 0 to RcResidentCount - 1 do
-              RegcallRefreshResident(RcResidentSym[f]);
+            { PXXDBG=a.noexcrefresh -- DISCRIMINATOR, diagnostic only. Suppresses
+              this refresh so that the three mechanisms which could explain "a
+              resident's frame slot is read on the unwind path" produce three
+              DIFFERENT values in the handler, instead of one correct one:
+
+                handler sees the LATEST value    -> the registers survived the
+                  raise; the refresh is dead code and the exception gate on
+                  ResidentSlotIsDead can be deleted outright
+                handler sees the TRY-ENTRY value -> ExcLongJmp rolled the
+                  register back from the jmp_buf; the refresh is load-bearing
+                  and the slot must stay current for anything written inside
+                  the protected region
+                handler sees $5EEDADAD           -> combined with a.poisonslot:
+                  some OTHER reader of the slot exists, and it is not this loop
+
+              Written down because a correctness suite cannot tell "the slot is
+              never read" from "the slot is read and happens to hold the right
+              value" -- which is why item 3 needed poisoning rather than tests.
+              A characterisation that names the reader but not the discriminator
+              gets re-derived wrongly by the next holder. }
+            if not PxxDbgEnabled('a.noexcrefresh') then
+              for f := 0 to RcResidentCount - 1 do
+                RegcallRefreshResident(RcResidentSym[f]);
             FloatPoolRestore;
             FloatResidencyRefreshAll;
             if LabelPositions[lblId] <> -1 then
@@ -9645,6 +9754,61 @@ end;
   Mutually exclusive with the W1 r12/r13 callee scratch: CalleeScratchAssign
   bails when residency claimed the registers (int picks fill lowest-first, so
   any int resident occupies r12). }
+{ Is `idx` written anywhere inside a try-protected span of this body?
+
+  This is the axis the -O3 item-3 gate actually turns on, and it is finer than
+  the RcProcHasExc gate that stands today. A raise longjmps back to the try's
+  ExcSetJmp, which restores r12-r15 (aarch64 x19-x28) from the jmp_buf — so a
+  resident register is ROLLED BACK to its value at try-entry. If the symbol was
+  written inside the protected region, that rolled-back register is stale and
+  the frame slot is the only surviving copy: the slot must stay current and the
+  landing-pad refresh is load-bearing. If it was written only OUTSIDE, the
+  try-entry value IS the current value, the register is already right, and the
+  refresh is a no-op. Measured, not argued — PXXDBG=a.noexcrefresh moves exactly
+  the written-inside symbols and leaves the written-outside ones alone, within a
+  single body (see test_o3_resident_exc's MIX case).
+
+  The span runs from IR_EXC_ENTER to the IR_LABEL it names as its handler, NOT
+  to the IR_EXC_LEAVE that closes the protected block. That looks like slop and
+  is load-bearing in two places:
+
+    - try/finally lowers its finally body TWICE, once on the normal path after
+      IR_EXC_LEAVE and once after the handler label. Ending the span at the
+      LEAVE would cover neither copy, and the second copy runs after the
+      rollback has already happened.
+    - a nested try's whole ENTER..LABEL span lies inside its parent's, so an
+      inner HANDLER's stores are correctly seen as inside the outer region.
+
+  Over-approximating is the safe direction: it keeps a dual-write that was not
+  strictly needed. Under-approximating loses a value silently, on the unwind
+  path, which no test that does not raise can see. Do not "tighten" this to the
+  IR_EXC_LEAVE.
+
+  Index ranges work because IRAppend is called in lowering order: the ENTER is
+  appended before the protected body is lowered and the handler label after, so
+  every node created while lowering that body falls in between. }
+function SymWrittenInProtectedSpan(idx: Integer): Boolean;
+var e, h, k, lbl: Integer;
+begin
+  SymWrittenInProtectedSpan := False;
+  for e := 0 to IRCount - 1 do
+    if IRKind[e] = IR_EXC_ENTER then
+    begin
+      lbl := IRA[e];
+      h := IRCount;                          { unterminated span -> to end of body }
+      for k := e + 1 to IRCount - 1 do
+        if (IRKind[k] = IR_LABEL) and (Integer(IRIVal[k]) = lbl) then
+        begin h := k; Break; end;
+      for k := e + 1 to h - 1 do
+        if ((IRKind[k] = IR_STORE_SYM) or (IRKind[k] = IR_ZERO_SYM) or
+            (IRKind[k] = IR_EXC_STORE)) and (IRA[k] = idx) then
+        begin
+          SymWrittenInProtectedSpan := True;
+          Exit;
+        end;
+    end;
+end;
+
 procedure UnifiedResidencyAssign;
 var k, j, t, best, bestCnt, lbl, si, nsyms: Integer;
     islot, fslot, nFree, reg, saveOff: Integer;
@@ -9655,6 +9819,13 @@ var k, j, t, best, bestCnt, lbl, si, nsyms: Integer;
     seen: Boolean;
 begin
   FrResidentCount := 0;
+  { Before any early exit: the exception landing pad refreshes residents FROM
+    their frame slots, so it is the one slot reader that residency cannot see
+    through. Anything that stops keeping the slot current must refuse a body
+    that has one. Conservative default is True. }
+  RcProcHasExc := False;
+  for k := 0 to IRCount - 1 do
+    if IRKind[k] = IR_EXC_ENTER then begin RcProcHasExc := True; Break; end;
   if OptLevel < 3 then Exit;
   if CurProc < 0 then Exit;
   if RcSuppressAssign then Exit;
@@ -9810,7 +9981,9 @@ begin
       Inc(islot);
       if PxxDbgEnabled('a.resid') then
         WriteLn('PXXDBG a.resid ASSIGN proc=', Procs[CurProc].Name,
-                ' sym=', Syms[si].Name, ' reg=r', reg, ' loads=', bestCnt);
+                ' sym=', Syms[si].Name, ' reg=r', reg, ' loads=', bestCnt,
+                ' exc=', Ord(RcProcHasExc),
+                ' excwr=', Ord(SymWrittenInProtectedSpan(si)));
     end;
   end;
 end;

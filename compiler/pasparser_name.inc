@@ -41,11 +41,28 @@ end;
   ALeft, ARight: Integer): Integer;` and ~30 siblings per class. These lex as
   type-keyword tokens whose SVal is EMPTY, so name reads at the sites that
   accept this predicate must go through GetTokenStr, never SVal. }
+{ ONE list, because the index-addressed twin below re-stated it and the two had
+  already drifted -- its own comment claimed they shared a predicate while it
+  carried a private copy of the set. `default` is the drift that mattered.
+
+  `Default` is a METHOD NAME in the wild: `TComparer<T>.Default` is
+  rtl-generics' central idiom and Delphi's own RTL spells it the same way. It
+  lexes as tkDefault because the word is also a property modifier and an array
+  default -- but those are MODIFIER positions, never a method-name position, so
+  accepting it here cannot reinterpret them.
+  bug-p-a-method-cannot-be-named-Default }
+function IsMethodNameKind(k: TTokenKind): Boolean;
+begin
+  IsMethodNameKind := k in [tkIdent, tkRead, tkwrite, tkReadln, tkwriteln,
+                            tkArgCount, tkArgStr, tkDefault,
+                            tkInteger_T, tkBoolean_T, tkChar_T, tkString_T,
+                            tkReal_T, tkLongWord_T, tkSingle_T, tkDouble_T,
+                            tkExtended_T];
+end;
+
 function IsMethodNameTok: Boolean;
 begin
-  IsMethodNameTok := IsMemberNameTok or
-    (CurTok.Kind in [tkInteger_T, tkBoolean_T, tkChar_T, tkString_T, tkReal_T,
-                     tkLongWord_T, tkSingle_T, tkDouble_T, tkExtended_T]);
+  IsMethodNameTok := IsMethodNameKind(CurTok.Kind);
 end;
 
 { A token that may stand as a CONCRETE type argument of a specialization —
@@ -74,10 +91,7 @@ end;
 function IsMethodNameTokAt(idx: Integer): Boolean;
 begin
   IsMethodNameTokAt := (idx >= 0) and (idx < TokCount) and
-    (Tokens[idx].Kind in [tkIdent, tkRead, tkwrite, tkReadln, tkwriteln,
-                          tkArgCount, tkArgStr,
-                          tkInteger_T, tkBoolean_T, tkChar_T, tkString_T, tkReal_T,
-                          tkLongWord_T, tkSingle_T, tkDouble_T, tkExtended_T]);
+                       IsMethodNameKind(Tokens[idx].Kind);
 end;
 
 function IsDeclNameTok: Boolean;

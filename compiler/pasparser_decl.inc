@@ -109,6 +109,19 @@ begin
   EnumTypeValCount[etid] := EnumValCount - EnumTypeValBase[etid];
 end;
 
+{ What a bare scalar `string` IS, in one place. Managed (tyAnsiString) is the
+  default string model; `-uPXX_MANAGED_STRING` undefines the flag and keeps the
+  legacy frozen tyString. Two callers ask this -- ParseTypeKind for a written
+  `string`, and the `resourcestring` path, which is handed no type to parse --
+  and they MUST agree: hardcoding tyString in the second gave a frozen 8.4 MB
+  buffer behind a `^string` that means ^AnsiString, which read as an empty
+  string and then segfaulted on the deref. }
+function BareStringKind: TTypeKind;
+begin
+  if PasDefineExists('PXX_MANAGED_STRING') then BareStringKind := tyAnsiString
+  else BareStringKind := tyString;
+end;
+
 function ParseTypeKind: TTypeKind;
 var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci, tkQUnit: Integer;
     qtOuter, qtNested: Integer;   { `TOuter.TInner` — the nested-type lookup }
@@ -312,13 +325,12 @@ begin
         Result := tyFixedString;
         Exit;
       end
-      else if PasDefineExists('PXX_MANAGED_STRING') then
+      else
         { Scalar bare `string` -> managed AnsiString (slice 4p2: managed is the
           default string model). `string[N]`/`shortstring` stay frozen
-          tyFixedString; `-uPXX_MANAGED_STRING` keeps everything frozen tyString. }
-        Result := tyAnsiString
-      else
-        Result := tyString;
+          tyFixedString; `-uPXX_MANAGED_STRING` keeps everything frozen tyString.
+          Answered by BareStringKind so the resourcestring path cannot drift. }
+        Result := BareStringKind;
     tkReal_T:     if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then Result := tySingle else Result := tyDouble;
     tkSingle_T:   Result := tySingle;
     tkDouble_T:   Result := tyDouble;
@@ -2031,7 +2043,51 @@ begin
   end;
 end;
 
-procedure ParseConstSection(clsCi, clsVis: Integer);
+{ Storage + a kind-1 pending init for a string-literal span: the two things a
+  named string needs to be a VARIABLE rather than a literal alias. Shared by the
+  typed-const arm (`const S: string = 'x'`) and by `resourcestring`, which is the
+  same object under another keyword — FPC calls a resourcestring a
+  runtime-replaceable variable, and that is what makes `@S` legal there.
+
+  Factored out rather than copied because these two arms have already drifted
+  apart once: the typed arm carried a StrConst registration with no storage until
+  bug-p-a-typed-string-constant-cannot-be-assigned, and the tell was the same
+  NAME-RESOLUTION diagnostic (`undefined variable`) that resourcestrings still
+  gave afterwards. One arm was fixed, its sibling was not, and the sibling stayed
+  broken for exactly as long as the two mechanisms existed separately. }
+procedure DeclareInitialisedStringVar(const nm: AnsiString; sOff, sLen: Integer;
+                                      tk: TTypeKind);
+var vIdx, savedRecId: Integer; savedIsSub: Boolean;
+begin
+  { AllocVar reads the AMBIENT type context -- `Syms[].RecName := LastTypeRecId`
+    and `SymIsSub := LastTypeIsSub` -- which every caller that reached it through
+    a parsed type declaration has just set for itself. This one did not: it is
+    handed a TTypeKind directly, so without this the new symbol inherits whatever
+    type was parsed last and is born wearing a stale record id. Measured, not
+    theorised: a `resourcestring` in a program that had parsed a record gave an
+    8.4 MB bss for one string and segfaulted on the first deref, while reading it
+    by name still worked -- so the value was right and only the SHAPE was wrong,
+    which is the far-from-the-cause failure the debugging playbook warns about.
+    Stack discipline on both, for the nested on-demand unit compile. }
+  savedRecId := LastTypeRecId;
+  savedIsSub := LastTypeIsSub;
+  LastTypeRecId := REC_NONE;
+  LastTypeIsSub := False;
+  vIdx := AllocVar(nm, tk);
+  LastTypeRecId := savedRecId;
+  LastTypeIsSub := savedIsSub;
+  EnsurePendingInitCapacity(PendingInitCount);
+  PendingInitSym[PendingInitCount]    := vIdx;
+  PendingInitElem[PendingInitCount]   := PI_ELEM_NONE;
+  PendingInitFOff[PendingInitCount]   := -1;
+  PendingInitKind[PendingInitCount]   := 1;
+  PendingInitVal[PendingInitCount]    := sOff;
+  PendingInitValAux[PendingInitCount] := sLen;
+  PendingInitTk[PendingInitCount]     := Ord(tk);
+  Inc(PendingInitCount);
+end;
+
+procedure ParseConstSection(clsCi, clsVis: Integer; isResStr: Boolean);
 { clsCi >= 0 (the owning UClass) when this is a class-body `const` section, else
   -1 for a unit/program/record const section. The class context is held in the
   GLOBAL ParsingClassConstCi (so ConstEvalFactor can resolve a SIBLING class const
@@ -2472,17 +2528,8 @@ begin
             Next;
           end;
           AllocStaticLocal := constIsStatic;
-          cIdx := AllocVar(name, cTk);
+          DeclareInitialisedStringVar(name, scOff, scLen, cTk);
           AllocStaticLocal := False;
-          EnsurePendingInitCapacity(PendingInitCount);
-          PendingInitSym[PendingInitCount]    := cIdx;
-          PendingInitElem[PendingInitCount]   := PI_ELEM_NONE;
-          PendingInitFOff[PendingInitCount]   := -1;
-          PendingInitKind[PendingInitCount]   := 1;
-          PendingInitVal[PendingInitCount]    := scOff;
-          PendingInitValAux[PendingInitCount] := scLen;
-          PendingInitTk[PendingInitCount]     := Ord(cTk);
-          Inc(PendingInitCount);
         end
         else
         begin
@@ -2696,16 +2743,28 @@ begin
               Error('const string concatenation: expected a string/char literal or string constant');
             Next;
           until not Eat(tkPlus);
-          if StrConstCount >= MAX_TYPEALIAS then Error('too many string constants');
-          StrConstName[StrConstCount] := name;
-          StrConstOwner[StrConstCount] := CurProc;
-          StrConstSOff[StrConstCount] := scOff;
-          StrConstSLen[StrConstCount] := scLen;
-          StrConstUnitIdx[StrConstCount] := CurrentUnitIdx; Inc(StrConstCount);
+          if isResStr then
+            { `resourcestring S = 'a' + 'b'` — storage, not a literal alias. }
+            DeclareInitialisedStringVar(name, scOff, scLen, BareStringKind)
+          else
+          begin
+            if StrConstCount >= MAX_TYPEALIAS then Error('too many string constants');
+            StrConstName[StrConstCount] := name;
+            StrConstOwner[StrConstCount] := CurProc;
+            StrConstSOff[StrConstCount] := scOff;
+            StrConstSLen[StrConstCount] := scLen;
+            StrConstUnitIdx[StrConstCount] := CurrentUnitIdx; Inc(StrConstCount);
+          end;
         end
-        else if Tokens[TokPos-1].SLen = 1 then
+        else if (Tokens[TokPos-1].SLen = 1) and (not isResStr) then
         begin
-          { A ONE-CHARACTER untyped constant is a CHAR, which is what FPC types
+          { NOT for a `resourcestring`: a one-character one is still a STRING with
+            an address (`resourcestring SComma = ',';` then `@SComma`), and
+            collapsing it to a Char const would put back the very thing this
+            parameter removes — silently, and only for the one-character ones. It
+            falls through to the plain-literal arm below.
+
+            A ONE-CHARACTER untyped constant is a CHAR, which is what FPC types
             it as — not a string of length one. Registered as a char const here,
             at the point of CLASSIFICATION, rather than teaching each consumer
             to recognise a one-character AN_STR_LIT: measured against FPC 3.2.2,
@@ -2731,13 +2790,22 @@ begin
         else
         begin
           { Untyped string constant: remember the literal's source span; a use of
-            the name builds an AN_STR_LIT over it. }
-          if StrConstCount >= MAX_TYPEALIAS then Error('too many string constants');
-          StrConstName[StrConstCount] := name;
-          StrConstOwner[StrConstCount] := CurProc;
-          StrConstSOff[StrConstCount] := Tokens[TokPos-1].SOffset;
-          StrConstSLen[StrConstCount] := Tokens[TokPos-1].SLen;
-          StrConstUnitIdx[StrConstCount] := CurrentUnitIdx; Inc(StrConstCount);
+            the name builds an AN_STR_LIT over it. A `resourcestring` instead gets
+            real storage initialised from that span — same span, different object:
+            a variable, which is what makes `@S` legal and what FPC's
+            runtime-replaceable resourcestring actually is. }
+          if isResStr then
+            DeclareInitialisedStringVar(name, Tokens[TokPos-1].SOffset,
+                                        Tokens[TokPos-1].SLen, BareStringKind)
+          else
+          begin
+            if StrConstCount >= MAX_TYPEALIAS then Error('too many string constants');
+            StrConstName[StrConstCount] := name;
+            StrConstOwner[StrConstCount] := CurProc;
+            StrConstSOff[StrConstCount] := Tokens[TokPos-1].SOffset;
+            StrConstSLen[StrConstCount] := Tokens[TokPos-1].SLen;
+            StrConstUnitIdx[StrConstCount] := CurrentUnitIdx; Inc(StrConstCount);
+          end;
           Next;
         end;
       end
@@ -3388,7 +3456,7 @@ begin
       behaviour rather than quietly tightening it. }
     if CurTok.Kind = tkConst then
     begin
-      ParseConstSection(ci, 0);
+      ParseConstSection(ci, 0, False);
       continue;
     end;
 
@@ -4632,7 +4700,7 @@ begin
             { Scope this const section to the class: each entry registers under a
               mangled key + a ClassConst registry row (owner ci + visibility)
               instead of the global tables — bug-pascal-class-const-visibility. }
-            ParseConstSection(ci, curVis);
+            ParseConstSection(ci, curVis, False);
             continue;
           end;
 
@@ -5926,6 +5994,18 @@ begin
     nothing was streamed). }
   { NOT from a nested class-local type section: flushing there would splice
     the pending method impls into the middle of the enclosing class body. }
+  { Late nested-specialization declarations, BEFORE the pending flush: in mode
+    Delphi a template mentioned inside another template's method body may not
+    have been declared yet when that class was specialized, so its prerequisite
+    was invisible then and is discoverable only now. Emitted here, they are
+    parsed before the parser reaches the method impls that need them.
+    bug-p-a-generic-specialized-before-its-declaration-is-unresolvable }
+  if TypeSectionDepth = 0 then
+  begin
+    Dec(TokPos);
+    EmitLateNestedSpecDecls;
+    Next;
+  end;
   if (PendingSpecCount > 0) and (TypeSectionDepth = 0) then
   begin
     Dec(TokPos);

@@ -1,5 +1,5 @@
 ---
-track: T
+track: A+T
 prio: 45
 type: bug
 blocked-by: []
@@ -115,3 +115,525 @@ other A edits to `Makefile`.
 ## Log
 - 2026-08-26 — found while triaging the aarch64 red whose reason it corrupted;
   measured; filed. Nothing landed: the fix edits A's file-lane.
+
+---
+
+## Adjacent instance, 2026-08-28 — an assertion that could not fail at all
+
+Added by Track T on the coordinator's ask, with the relationship stated
+precisely rather than assumed, because the two are **not the same mechanism**:
+
+| | this ticket | the instance below |
+| --- | --- | --- |
+| the assertion | **fails silently** | **never fails** |
+| what you see | a red job with a wrong reason | a green suite |
+| what it costs | hours chasing the wrong lead | a defect ships |
+
+The fix proposed above — a helper that prints both operands on mismatch — does
+**not** address the instance below, because there is no mismatch to print. They
+belong to one family (*an assertion that does not assert what it appears to*)
+and want two different fixes. Recorded here so the family has one place, not
+because one fix covers both.
+
+### The instance
+
+While landing
+[[bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-last-good]]
+(`0dec0194a`), a guard asserted that an execution check ran *before* the
+tier-coverage fallback in `range_for()`:
+
+```python
+assert body.index("job_anchor") < body.index("parent_ran_job")
+```
+
+`job_anchor` also appears in the **block comment above the call**. So
+`body.index("job_anchor")` found the *prose*, not the call, and the assertion
+passed no matter where the call actually sat. Deliberately moving
+`parent_ran_job` above the call — restoring the original bug with the fix still
+visibly present in the file — fired **zero of twelve** guards.
+
+It is now anchored on the expression:
+
+```python
+call = body.index("aname, why = job_anchor(st, name)")
+assert call < body.index("parent_ran_job")
+```
+
+### The rule, and the reason it survived a careful read
+
+> **An assertion that matches TEXT can be satisfied by PROSE.** Anchor a guard
+> on the expression, never on a name that also appears in a comment.
+
+This applies to every source-inspecting guard in `tools/*devtest*.py`, of which
+there are now several — including three added the same night, in the ticket that
+found this. Those inspect source precisely because the property under test is
+structural (ordering, which predicate a statement uses, whether a warning
+precedes a signal), and a structural property is exactly the kind a substring
+can appear to satisfy.
+
+**It was found by running a mutation, not by reading the test.** That is the
+transferable half: reading a test to check whether it can fail draws on the
+same understanding that wrote it, so it shares the test's blind spots by
+construction. Breaking the code and watching which guard fires does not.
+
+The four mutations run against that ticket, and what each caught:
+
+| break | guards fired |
+| --- | --- |
+| drop the skip branch (the original bug) | 2 |
+| `PASSLIKE = ("pass",)` (the mirror image) | 4 |
+| map advances on `PASSLIKE` (bug one level deeper) | 1 |
+| **call moved below the coverage path** | **0 → 1 after the fix** |
+
+The one that caught nothing is the one where the fix is still in the file and
+merely unreachable — the variant least likely to be noticed in review.
+
+---
+
+## 2026-08-29 — STEP 1 IS DONE AND NAMED. What remains is a Track A dispatch.
+
+`tools/expect_same.sh` exists, with 11 guards in `tools/expect_same_devtest.py`
+and four mutations proving they fire. Filed and closed as its own ticket —
+[[feature-t-expect-same-a-recipe-assertion-that-prints-its-mismatch]] — rather
+than as step 1 of this one, so this ticket does not read as half-built work.
+The reasoning is worth keeping: **a parent with step 1 landed and 480
+conversions outstanding is worse than an untouched one for whoever inherits
+it**, because "in progress" hides that nobody is on it.
+
+```
+tools/expect_same.sh <label> <actual> <expected>
+```
+
+Exit 0 in silence on equality; on mismatch a labelled unified diff of both
+operands, exit 1. So a converted recipe line reads:
+
+```make
+	tools/expect_same.sh aarch64-fima "$$(tools/run_target.sh aarch64 $(TESTTMP)/x)" "$$($(TESTTMP)/x_x64)"
+```
+
+Four properties beyond "it diffs", each guarded, because the reason field is the
+deliverable and not the diff: the **label** is in the output (the tail must say
+which assertion spoke); `-` is **expected** and `+` is **actual** (pinned, since
+transposition is its own wasted hour); **no absolute `/tmp` path** (testmgr
+rewrites those, so a leaked one varies by construction); and the text is
+**byte-stable across runs** (`diff -u` stamps mtimes on its header lines, and a
+reason that changes every run reads as a *new* failure to anything comparing
+this run's reds against the last).
+
+One deliberate non-change: two empty operands still **pass**, because 480 call
+sites is the wrong place to alter pass/fail semantics — but a warning naming the
+label now goes to stderr, so a vacuous pass is at least visible.
+
+### What is left: exactly the mechanical conversion this ticket describes
+
+Unchanged in shape from the plan above — convert the **480 cross-target**
+assertions first (highest damage, one shape, mechanical), leave the other ~1,981
+until one or two have proven themselves. That work edits `Makefile`, so it
+carries **Track A's file ownership and gate**, and per this ticket's own Gate
+section must not land concurrently with other A edits to `Makefile`.
+
+Nothing here is blocked any more. The helper is a dependency that now exists.
+
+## Retracked `T` → `A+T` by the coordinator, 2026-08-29
+
+**This is a dispatch call, made rather than left implicit.** pxx-a5 flagged that
+`next --track T` headed with this ticket and **no T agent can take it** — its
+remaining half edits `Makefile`, Track A's file-lane. It declined to retrack,
+correctly: retracking *is* the dispatch call and that call is mine.
+
+**Why `A+T` and not plain `A`.** CLAUDE.md's two axes settle it: **A is the
+file-lane** (Makefile — who owns this file when two agents run at once) and **T is
+the work-tag** (test diagnostics — what kind of work this is). Exactly the shape of
+`A+O`, `A+S`, `B+F`. Dropping the `T` would lose what the ticket is *about*;
+keeping only `T` puts it in a queue whose agents cannot act on it.
+
+> **A queue head that its own lane cannot work is worse than an empty queue** — it
+> occupies the ranker's top slot and every `next --track T` re-offers it, so the
+> lane reads as busy while nothing is takeable.
+
+**Step 1 is DONE and this is now a clean Track A dispatch:** `tools/expect_same.sh`
+landed (`b194ef7ec`) as its own closed unit — labelled output, `-` expected / `+`
+actual pinned by a guard, no absolute `/tmp` path (testmgr rewrites those), and
+**byte-stable across runs** because `diff -u` stamps mtimes on its header lines and
+a reason that changes every run reads as a NEW failure to anything comparing this
+run's reds against the last.
+
+What remains is **480 mechanical conversions in `Makefile`**, against a helper that
+exists and is guarded, **nothing blocked**. The gate constraint stands: it must not
+land concurrently with other Track A edits to `Makefile`.
+
+## 2026-08-29 — batch 1 landed: 474 converted. And the "480" was never 480.
+
+Dispatched to Track A+T. Before converting anything I censused the recipe lines
+rather than trusting the figure this ticket has carried since 2026-08-26, because
+the figure is what sets the scope. It has drifted, and more importantly it was
+always a **single number over six different shapes**:
+
+| shape | count | convertible? |
+| --- | --- | --- |
+| clean output-compare, `test "$$(run_target ARCH $(TESTTMP)/BIN)" = "EXP"` | **474** | yes — **converted, this commit** |
+| exit-status check, `test "$$?" = "143"` | 37 | **no — see below** |
+| piped-stdin compare, `printf … \| tools/run_target.sh …` | 35 | yes, different regex — batch 2 |
+| in-loop (trailing `\` inside `for arch in …`) | 13 | yes, different shape — batch 3 |
+| other test shapes | 9 | case by case |
+| bare run, no assertion at all | 9 | nothing to convert |
+| **total `run_target.sh` recipe lines** | **547** | |
+
+**The 37 exit-status checks are not convertible and must not be made to look
+converted.** `expect_same.sh` compares two strings; `test "$$?" = "143"` asserts a
+*signal*. Wrapping it would be a semantic change wearing a mechanical diff's
+clothes — precisely the failure this ticket is about, since the result would read
+as covered while asserting something else. They keep their silence and are listed
+here so the next reader knows it was a decision, not an oversight.
+
+### What batch 1 actually did
+
+One line changed per hunk; nothing else in any recipe was touched, so the diff is
+474 independent 1↔1 hunks and stays reviewable.
+
+```make
+-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_hello)" = "Hello"
++	tools/expect_same.sh i386/test_i386_hello "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_hello)" "Hello"
+```
+
+Label is `ARCH/BIN`. Across all 474 that is **unique — zero collisions** — which
+is what makes the label worth having: a tstate reason line now names the job.
+
+### Verified by count and by construction, not by the suite going green
+
+The suite going green would prove nothing here: these assertions *already* pass.
+A conversion that silently dropped an assertion would also be green. So:
+
+- 474 lines changed, file length unchanged (15424 → 15424).
+- Every diff hunk changes exactly one line (checked with `git diff -U0` on the
+  hunk headers; zero hunks with a count ≠ 1).
+- For all 474: leading tab/`@`/`-` prefix, the **actual** operand, and the
+  **expected** operand are byte-identical to the originals, and the label equals
+  `ARCH/BIN` from that same line. Zero drift.
+- All 474 rewritten lines parse as shell (`bash -n` over the extracted set, with
+  `$$`→`$` and `$(TESTTMP)`→`/tmp`), and `make` parses the Makefile.
+- `expect_same.sh` exercised live on both arms: silent exit 0 on match, exit 1
+  with a `diff -u` naming the label on mismatch.
+
+The first check is the one that matters: it is the difference between "the
+transformation applied" and "the file still builds".
+
+### Remaining
+
+Batches 2 (35 piped-stdin) and 3 (13 in-loop) are still bare `test`. They are
+different regexes and land separately, for the same reason batch 1 kept one
+assertion per hunk.
+
+## 2026-08-29 — batches 2 and 3: 498 converted. The census corrected itself again.
+
+Batch 1's shape table was itself too coarse, and converting exposed it. The
+"35 piped-stdin" and "9 other" buckets were not two shapes — they were one
+regex's worth of standalone compares (14) plus in-loop lines double-counted from
+the backslash bucket. **The real terminal figures, and these are measured after
+the conversion rather than predicted before it:**
+
+| shape | count | outcome |
+| --- | --- | --- |
+| clean output-compare | 474 | converted (batch 1) |
+| standalone compare, pipes/`printf` on either side | 14 | converted (batch 2) |
+| in-loop compare (`for arch in …`, trailing `\`) | 10 | converted (batch 3) |
+| **total converted** | **498** | |
+| exit-status check, `test "$$?" = "N"` | 37 | **not convertible — by decision** |
+| in-loop non-assertions (a capture, a redirect, an `if`) | 3 | nothing to compare |
+| bare run, no assertion at all | 9 | nothing to compare |
+
+That the number moved twice under measurement is the point of the row about the
+480: **a count over heterogeneous shapes is a guess wearing a number's clothes**,
+and the only thing that ever settles it is doing the transformation and counting
+what is left.
+
+### The 37 that stay silent, and why that is finished work
+
+`test "$$?" = "143"` asserts a **signal**. `expect_same.sh` compares two strings.
+Wrapping them would produce a diff that looks exactly like the other 498 while
+asserting something different — a semantic change in a mechanical diff's
+clothing, landing in a review too large to catch it. They keep their silence, and
+they are listed here so the next reader knows this was decided and measured, not
+skipped. If they ever need a diagnostic it wants a *different* helper, one that
+compares exit statuses and says so.
+
+### Batch 3's shape, which is not batch 1's
+
+In-loop lines carry a trailing `\` and sometimes a `|| { echo …; exit 1; }`
+trailer — and in one case (`Makefile:4200`) the `||` is on the *following*
+continuation line, so it guards the converted command exactly as it guarded the
+`test`. Every trailer was preserved verbatim; none were tidied, even the four
+whose `echo "cross … FAIL on $$arch"` is now partly redundant with
+`expect_same.sh`'s own output. Tidying them would be a second thing per hunk.
+
+Labels here interpolate: `$$arch/lib_net_$$arch` resolves at run time, so the
+failing job names its own architecture without the recipe being unrolled.
+
+Verified as batch 1 was — 14 and 10 changed lines, every hunk 1↔1, prefix,
+operands and trailer byte-identical, file length unchanged, zero label collisions
+against the 474 — plus, because a loop fragment cannot be parsed alone, the two
+enclosing **recipe blocks** were reassembled, make-expanded and passed through
+`bash -n` whole, with a check that all 10 changed lines fell inside a block that
+was actually checked. `make` parses the file and the self-host fixedpoint builds.
+
+## 2026-08-29 — tranche two: the native output-compares
+
+### First, a correction to the scope figure, which was wrong in a new way
+
+The handoff said "2007 remaining, of which 376 are the same not-convertible
+exit-status class". **The 376 are not inside the 2007.** `test "$$?" = "143"`
+does not contain `test "$$(`, so the two greps count disjoint sets. The real
+remaining total is **2383**, and the not-convertible class sits entirely outside
+the set being converted rather than inside it. Same failure as the 480, one level
+down: a subset relation asserted between two numbers that were produced by two
+different filters.
+
+### Shapes, measured
+
+| shape | count | outcome |
+| --- | --- | --- |
+| **A** standalone, line ends after the expected string | **1946** | converting |
+| **C** standalone with a trailer after the expected (`-ge`, `\|\|`, …) | 40 | not this pass |
+| **B** continuation line (trailing `\`) | 19 | not this pass |
+| `test` not at the start of the command (`ulimit -v …; test …`) | 2 | not this pass |
+| exit-status checks, disjoint from the above | 376 | **not convertible** |
+
+Only shape A is a single regex. C is not one shape at all — `-ge` is an integer
+comparison, not a string equality, and `expect_same.sh` cannot express it.
+
+### Labels collide here, and that is the real difference from tranche one
+
+Tranche one had zero collisions because `ARCH/BIN` was unique by construction.
+Here 1946 assertions run over **1709 distinct binaries**: 192 names are reused,
+the worst ten times (`lib_writefloat_fixed26`), because one binary is asserted
+repeatedly through different `head`/`tail`/`grep` pipelines. So the label needs a
+disambiguator, and it is `.N` — appended **only** to names that occur more than
+once, so 1517 labels stay clean.
+
+Not `#N`: inside a recipe `#` is passed through to the shell rather than treated
+as a make comment, and it is safe only because it lands mid-word. A label
+convention whose safety depends on never being at a word boundary is a trap for
+whoever next edits one of these lines by hand.
+
+The full 1946-row label map is computed **once, over the whole set, before any
+batch is applied**, so uniqueness holds across batches that land separately —
+computing it per batch would let batch 5 silently reuse a bare name from batch 4.
+Checked against the 498 already landed: no clashes.
+
+### Batching by rule, not by line range
+
+`test-core` 1164 · `test-nilpy` 408 · `lib-test` 221 · everything else 153. One
+suite per commit, so a reviewer reasons about one suite at a time and the blast
+radius of any mistake is one suite rather than a line range that straddles three.
+
+### The census corrected itself a third time, and the correction was mine
+
+Bucket **C** ("standalone with a trailer after the expected", 40) was not that
+shape either. **32 of the 40 are plain shape A whose *expected* operand contains
+double quotes** — `= "$$(printf "miss\nhit")"` — which my `[^"]*` expected-side
+pattern excluded, so they were filed under a description that did not apply to
+them. They converted with the same regex once the expected side was allowed to
+contain quotes. Batch 5.
+
+Only **8** of the original 40 were really not shape A: 6 numeric comparisons
+(`-ge`, `-lt`) and 2 lines where `test` is not the leading command
+(`ulimit -v 800000; test …`).
+
+Three censuses, three corrections, each one found by *doing* the conversion
+rather than by reading harder. The pattern is worth stating plainly: **a shape
+census is a claim about what a regex will match, and the only instrument that
+measures it is that regex.**
+
+### Verification found a bug — in the verifier
+
+Batch 5 reported two DRIFT lines at `Makefile:1795` and `:3507`. The
+transformation was correct; **the checker was wrong.** Its greedy
+`"(.*)" "(.*)"` split the rewritten line at the wrong `" "`, because those two
+expected strings contain `" "` inside them (`printf '…' "'V'" "'V'" "'V'"`). The
+verifier reproduced, in itself, the exact failure it was verifying against.
+
+So the check was replaced with the one that actually settles it. The *only* thing
+this transformation can get wrong is splitting at the wrong separator, and that is
+possible only if a line contains more than one `" = "`. Measured across every
+line converted this session: **every original had exactly one.** Zero ambiguous
+splits, and each rewritten line rebuilds exactly from its own parsed parts.
+
+### Terminal state
+
+| | |
+| --- | --- |
+| `expect_same.sh` call sites in `Makefile` | **2476** |
+| converted this session | 2476 (498 cross-target + 1978 native) |
+| remaining bare `test "$$(…)"` | **29** |
+| — of which numeric comparisons (`-ge`/`-lt`) | 6 |
+| — continuation lines (trailing `\`) | 19 |
+| — `test` not the leading command | 2 |
+| exit-status checks, disjoint set | 376 |
+
+The 6 numeric and the 376 exit-status checks are **not convertible**:
+`expect_same.sh` compares two strings, and neither `-ge` nor `$$?` is a string
+equality. Converting them would be a semantic change wearing a mechanical diff's
+clothes. The 19 continuation lines and 2 non-leading ones are convertible but are
+each a different shape; at 21 lines they are hand work, not a regex, and they are
+left rather than half-automated.
+
+One native assertion was executed end to end, both arms, to match the
+cross-target proof: `test_wcw26.5` (a `head|tail|tr` pipeline with a `.N` label)
+passes silently and on mismatch prints `expect_same: MISMATCH [test_wcw26.5]`
+with the diff.
+
+---
+
+## CORRECTION 2026-08-29 — "not convertible" is WRONG, and it is the dangerous kind of wrong
+
+**Raised by frank-rust, measured by frank-coordinator.** Every passage above
+saying the 376 exit-status checks (and the 37 cross-target ones) are **not
+convertible** is incorrect. They are convertible **verbatim**. The passages are
+left as written — this correction is appended where a reader meets the claim
+rather than editing a session record, but the conclusion is superseded.
+
+### The argument that was made, and why it does not hold
+
+> *"`expect_same.sh` compares two strings, and `test "$$?" = "143"` is asserting
+> a signal, not an output. Converting those would be a semantic change wearing a
+> mechanical diff's clothes."*
+
+The premise is a category claim and it is false. **`test "X" = "Y"` with `=` IS
+a string comparison in POSIX sh** — it is the same operator the 2476 converted
+lines used. That the string happens to denote an exit status is a fact about
+what the value *means*, not about how it is compared. `expect_same.sh` compares
+two strings; so does the line being replaced.
+
+### Measured, not argued
+
+```
+$ sh -c 'exit 42'; tools/expect_same.sh probe_match "$?" "42"
+  → rc=0, silent
+
+$ sh -c 'exit 7';  tools/expect_same.sh probe_mismatch "$?" "42"
+  expect_same: MISMATCH [probe_mismatch]
+  --- expected
+  +++ actual
+  @@ -1 +1 @@
+  -42
+  +7
+  → rc=1
+
+$ sh -c 'kill -TERM $$' >/dev/null 2>&1; tools/expect_same.sh test_sig_dfl "$?" "143"
+  → rc=0        (the Makefile:4323 shape)
+
+$ sh -c 'exit 7'; test "$?" = "42"
+  → rc=1, PRINTED NOTHING
+```
+
+`$?` is expanded by the shell before the helper is exec'd, so it still carries
+the preceding command's status. Same exit codes, same pass/fail semantics, one
+extra behaviour: it says what it saw.
+
+### These are the lines that need it MOST, not least
+
+Look at what they do:
+
+```make
+$(TESTTMP)/test_sig_dfl_b33626 >/dev/null 2>&1; test "$$?" = "143"
+```
+
+**The subject's own output is discarded.** So when this fails, `job_reason()`'s
+log tail cannot even reach the program under test — it records whatever the
+*previous* recipe line printed. That is the parent defect in its purest form,
+and the 376 are its worst instances, not its exempt ones.
+
+### Why this correction is filed loudly
+
+A **false limit is quieter than a false fix and survives longer.** A wrong
+conversion gets re-tested by the next run; a documented "not convertible,
+by decision" is *believed* — it reads as considered, it names a reason, and it
+answers the question a reader would otherwise have asked. It was recorded four
+times in this ticket, in three tables, as a decision rather than an oversight,
+which is exactly what would have made it permanent.
+
+The **scoping** decision was still right: leaving them out of a mechanical batch
+of 2476 was correct, because they are a different shape and mixing shapes is how
+a mechanical change stops being mechanical. **They are tranche three, not an
+exclusion.** Re-file them that way.
+
+### Still genuinely not convertible
+
+The **6 numeric comparisons** (`-ge`, `-lt`). Those are orderings, not equality,
+and no string compare expresses them. That exclusion stands.
+
+## 2026-08-29 — tranche three: the 376 I had wrongly ruled out, and the campaign closes
+
+**The "not convertible" verdict on the 376 exit-status checks was wrong, and it
+was mine.** Recorded four times in three tables as a decision with a reason
+attached. The reason does not hold:
+
+`test "X" = "Y"` is a **string comparison in POSIX sh** — the same operator the
+other 2476 lines used. That the string denotes an exit status is a fact about
+what the value *means*, not about how it is *compared*. `$?` is expanded by the
+shell before the helper is exec'd, so it still carries the preceding command's
+status. Measured inside a real make recipe, not a bare shell:
+
+```make
+sh -c 'exit 42'; tools/expect_same.sh probe-a-rc "$$?" "42"          → silent, rc 0
+sh -c 'kill -TERM $$$$' >/dev/null 2>&1; … "$$?" "143"               → silent, rc 0
+sh -c 'exit 7';  tools/expect_same.sh probe-c-rc "$$?" "42"          → MISMATCH, -42 +7,
+                                                                       recipe aborts
+```
+
+The error has a name: **ranking the datatype instead of the mechanism** — the
+same failure Track F's charter exists to prevent, where a ticket does not become
+a float ticket by containing a `Double`. An assertion does not become
+inconvertible by comparing a number that denotes a signal. And it was made while
+writing a census whose entire subject was that a shape claim must be measured
+rather than described; the same reflex on both sides of the page.
+
+**These were the lines that needed it most.** `Makefile:4323` is the parent
+defect with nothing left to fall back on:
+
+```make
+$(TESTTMP)/test_sig_dfl_b33626 >/dev/null 2>&1; test "$$?" = "143"
+```
+
+The subject's own output is **discarded**, so on failure `job_reason()`'s log
+tail cannot reach the program under test at all — it records whatever the
+*previous* recipe line printed. Filed as exempt from the very defect they
+exemplify.
+
+### Converted
+
+| batch | count | shape |
+| --- | --- | --- |
+| exit-status | **375** | `cmd; test "$$?" = "N"` → `cmd; tools/expect_same.sh <bin>-rc "$$?" "N"` |
+| stragglers | **22** | 19 continuation lines (trailer preserved), 3 non-leading (`ulimit …; test …`), 2 with a trailing comment, 1 whitespace separator (`"   = "`), 1 `test` inside an `if/then/else` one-liner |
+
+Labels take an `-rc` suffix so the reason line says which *kind* of assertion
+failed, with `.N` on collision. Zero duplicates across all 2879 call sites.
+
+### Terminal state of the whole campaign
+
+| | |
+| --- | --- |
+| `expect_same.sh` call sites | **2879** |
+| remaining bare `test` assertions | **7** |
+| — numeric comparisons (`-ge`) | 6 — **genuinely not convertible** |
+| — a line of prose in a comment | 1 — not an assertion |
+
+The 6 `-ge` exclusions stand and are the only real ones: an ordering is not a
+string equality, and `expect_same.sh` compares two strings. They want a
+different helper, not this one.
+
+### Two instrument notes from this tranche
+
+The ambiguity guard reported `Makefile:14309` as an **ambiguous separator**. It
+was not: the line spells the separator `"   = "` with extra spaces, so the guard
+counted **zero** occurrences and its message conflated *none* with *many*. The
+skip was right and the reason given for it was wrong — which is worse than no
+message, because it names a cause. Same family as everything else in this
+ticket, in the checker again.
+
+And the verification for the stragglers was an **inverse** check rather than a
+re-derivation: rebuild the original line from the rewritten one by dropping the
+label and restoring ` = `, then compare to what was there. A checker that
+re-parses with the same regex that wrote the line cannot fail; one that
+reconstructs the input can.

@@ -172,6 +172,7 @@ PXXDBG=a.ast:myproc compiler/pascal26 prog.py out  # its AST before lowering
 PXXDBG=a.symptr:p  compiler/pascal26 prog.pas out  # what a pointer DECL recorded
 PXXDBG=a.opovl     compiler/pascal26 prog.pas out  # operator lookups + candidates
 PXXDBG=a.srcmap:*  compiler/pascal26 prog.pas out  # token->file map + every plant
+PXXDBG=a.poisonslot compiler/pascal26 -O3 prog.pas out # does ANYTHING still read that slot?
 make pxx-debug && gdb --args compiler/pascal26-debug prog.py /tmp/out
 ```
 
@@ -184,6 +185,55 @@ each candidate for that operator with its stored right-operand key, and the
 answer; "my operator did not fire" otherwise has four indistinguishable causes.
 Both were added while chasing a bug whose FIRST fix attempt was written against
 an assumed layout, compiled, and changed nothing.
+
+`a.poisonslot` answers a DIFFERENT shape of question, and it is the one to reach
+for when the blocker is an audit rather than a bug: *does anything still read X?*
+
+At `-O3` a register-resident local is dual-written — register and frame slot
+both current — and the optimisation that stops writing the slot is safe only if
+nothing reads it. The readers you can find by grep are easy; the question that
+stops you is whether some direct `[rbp+off]` emit, somewhere in 10k lines, still
+does. **That is an audit with no completion criterion: unanswerable by grep,
+unfalsifiable by reading, and normally the point where the work gets parked.**
+
+The probe converts it into one experiment. It fills the slot with `$5EEDADAD`
+immediately after each dual-write, so a surviving reader returns *garbage*
+instead of a plausible value:
+
+> **A stale slot and a correct slot are indistinguishable. A poisoned one is
+> not.**
+
+Same trick as `-dPXX_HEAP_DEBUG`'s `$DD` fill, one level up — and it works for
+the same reason. Run the corpus under it and any reader announces itself.
+
+Measured on the run it was built for: **2 of 19 programs changed behaviour, and
+both were the ones with `try`/`except` in a loop** — one hung, the other printed
+`1592634797` (`$5EEDADAD`) straight back. The culprit was the exception landing
+pad, which re-syncs residents *from* the slot and so is the one reader residency
+cannot see through. No amount of careful reading had found it; the probe found
+it in one run, and the resulting gate (`RcProcHasExc`) is what made the
+optimisation land.
+
+**The rule that makes it evidence rather than decoration: a poison probe must
+call the SAME predicate as the change it is testing** — `PoisonResidentSlot`
+calls `ResidentSlotIsDead`, the function the optimisation itself gates on. Copy
+the condition instead and you poison a *neighbouring* set, so a green result is
+evidence about something you are not shipping. This is the whole reason the
+result can be trusted.
+
+Two things it does NOT tell you, which matter as much as what it does:
+
+- **It writes exactly `TypeSize` bytes.** A wider store would corrupt the
+  neighbouring slot and manufacture the bug it is hunting.
+- **It covers only what it poisons.** It fills GPR residents; float residents
+  (xmm8/xmm9) were never poisoned, so nothing is known about them and their
+  dual-write stayed. *Not covered is not the same as fine* — a null result is
+  only worth what the probe's reach is worth, so state the reach whenever you
+  report one.
+
+Generalise the shape, not the flag: when you are blocked on "is there a reader /
+writer / caller I have not found", **poison the thing rather than auditing for
+its users**, and make the poison match the change's own predicate.
 
 `a.srcmap:*` answers the third variant of the same question: *is the map wrong,
 or is the index into it wrong?* It prints the token->file range table (each
@@ -1353,3 +1403,48 @@ Two things to take from it:
   minutes' work once the `.wat` could be produced and the WAT/binary pair could
   be compared. Decoding the binary by hand first was the slow path, and it is
   the one you take when the fast path does not exist yet.
+
+## A comparison with no floor: two totally-failed runs diff clean
+
+`FAIL` compares equal to `FAIL`. So a differential harness that emits a per-case
+verdict and is then diffed will report **perfect agreement** when both sides
+managed to run *nothing* — and it reports it in exactly the same words it uses
+when both sides ran everything and agreed.
+
+Measured, 2026-08-29. A corpus harness compiled 8 programs for 6 targets with two
+compiler binaries and diffed the hash lists. It did not export `PXX_HOME`, and
+the binaries under test had been copied into a scratchpad, so neither could find
+its RTL. All 48 rows on both sides were `FAIL`. The diff was empty. The result
+was read as "48/48 byte-identical across all six targets", written into a commit
+message, and cited in a ticket — for **four separate steps** of an optimisation
+campaign. Every one of the four conclusions turned out to be true when re-run
+properly, which is luck, not method: the evidence had been vacuous the whole time.
+
+> **A comparison that can succeed by measuring nothing has no floor.** It is most
+> confident exactly when it is least informed, and no amount of staring at the
+> output distinguishes the two cases.
+
+Same signature as `make compiler/pascal26` printing `up to date` in a freshly
+seeded tree (CLAUDE.md): a success message in the wrong dialect, with everything
+downstream healthy. Both belong to the family this whole document is about — the
+expensive failures here do not crash, they return a plausible answer.
+
+**So give every differential harness a floor, and make it refuse rather than
+answer emptily:**
+
+- **Count the comparisons you actually made, print the count, and exit non-zero
+  when it is zero.** One line. It is the whole fix.
+- **Report the count alongside the verdict**, so "identical" is never read
+  without its sample size. "identical (25 rows)" cannot be misread; "identical"
+  can.
+- **Subtract the rows that can never work** — 3 of those 8 corpus files were
+  `unit`s, compilable standalone on no target ever, and 8 rows were xtensa, which
+  has no dynamic-symbol support. Their permanent `FAIL`s were the noise that made
+  a screen of `FAIL` look normal.
+- **Set the environment inside the harness, not in the caller's shell.** The bug
+  was one missing `export` in a script that had been correct every time it
+  happened to be invoked from the right directory.
+
+And the discipline that catches it when the harness is someone else's: **before
+believing a clean differential, make it fail on purpose.** Point it at a
+deliberately broken binary. If it still says "identical", it was never looking.

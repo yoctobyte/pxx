@@ -1,0 +1,7 @@
+OUT i=200 acc=20100 seen=9453
+IN  i=200 acc=20100 seen=9453
+MIX i=300 ins=900 out=600 a=633 b=422
+NEST i=120 x=1120 y=1077
+FIN i=90 x=10090 n=90
+PAR i=150 p=1150 seen=1099
+THR i=60 acc=1830 seen=861

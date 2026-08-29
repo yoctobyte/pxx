@@ -688,6 +688,7 @@ procedure UnifiedResidencyAssignA64;
 var k, j, t, best, bestCnt, lbl, si, nsyms: Integer;
     islot, fslot, saveOff, reg: Integer;
     Counts: array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
+    LCounts: array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
     CSyms:  array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
     seen: Boolean;
 begin
@@ -695,6 +696,14 @@ begin
     resident arrays — this mirror must not touch them there. }
   if TargetArch <> TARGET_AARCH64 then Exit;
   FrResidentCount := 0;
+  { Recomputed here rather than inherited. UnifiedResidencyAssign does set it
+    for every target (it runs before its own arch check), so this is currently
+    redundant -- but item 3's correctness on aarch64 would then depend on the
+    x86-64 pass having run first, which is a coupling nothing states and a
+    reordering would silently break. Same IR, same answer, one scan. }
+  RcProcHasExc := False;
+  for k := 0 to IRCount - 1 do
+    if IRKind[k] = IR_EXC_ENTER then begin RcProcHasExc := True; Break; end;
   if OptLevel < 3 then Exit;
   if CurProc < 0 then Exit;
   if RcSuppressAssign then Exit;
@@ -719,14 +728,39 @@ begin
           if si < 0 then Continue;
           seen := False;
           for best := 0 to nsyms - 1 do
-            if CSyms[best] = si then begin Inc(Counts[best]); seen := True; Break; end;
+            if CSyms[best] = si then
+            begin
+              Inc(Counts[best]);
+              if IRKind[j] = IR_LOAD_SYM then Inc(LCounts[best]);
+              seen := True; Break;
+            end;
           if (not seen) and (nsyms < MAX_LOOPSYM_SCAN) then
           begin
-            CSyms[nsyms] := si; Counts[nsyms] := 1; Inc(nsyms);
+            CSyms[nsyms] := si; Counts[nsyms] := 1;
+            if IRKind[j] = IR_LOAD_SYM then LCounts[nsyms] := 1
+            else LCounts[nsyms] := 0;
+            Inc(nsyms);
           end;
         end;
     end;
   if nsyms = 0 then Exit;
+  { PXXDBG=a.resid — the same tally dump the x86-64 pass carries, and it matters
+    MORE here: residency decisions are invisible in the emitted bytes on every
+    target, but on aarch64 a dev box typically has no disassembler for them at
+    all, so this is not merely cheaper than reading the output — it is the only
+    way to see what the pass decided. }
+  if PxxDbgEnabled('a.resid') then
+    for k := 0 to nsyms - 1 do
+    begin
+      si := CSyms[k];
+      Write('PXXDBG a.resid TALLY proc=', Procs[CurProc].Name,
+            ' sym=', Syms[si].Name, ' count=', Counts[k],
+            ' loads=', LCounts[k],
+            ' type=', Syms[si].TypeKind, ' kind=', Syms[si].Kind);
+      if Syms[si].IsArray then Write(' array');
+      if SymSlotEscapes(si) then Write(' escapes');
+      WriteLn(' target=aarch64');
+    end;
   { Ranked selection, per-class budgets: int x19..x24 (slot i -> x(19+i)),
     float d8..d13 (slot i -> d(8+i)). No regcall on aarch64, so the whole GPR
     pool is free. }
@@ -735,7 +769,7 @@ begin
   begin
     best := -1; bestCnt := 0;
     for k := 0 to nsyms - 1 do
-      if Counts[k] > bestCnt then
+      if LCounts[k] > bestCnt then
       begin
         si := CSyms[k];
         if Syms[si].IsArray then Continue;
@@ -754,16 +788,26 @@ begin
             here said so -- slots 4 and 5 wrote past the end of all three, which
             is bug-a-aarch64-o3-segfaults-the-compiler-on-an-empty-program. }
           if RcResidentCount >= RC_RESIDENT_SLOTS then Continue;
-          if Counts[k] <= 3 then Continue;      { int threshold: > 3 loop accesses }
+          { Admission is by LOADS, and one is enough — ported from x86-64's
+            UnifiedResidencyAssign (item 1 of feature-opt-o3-register-pressure,
+            worth 1.9-2.1x there). Residency removes READS; a store dual-writes
+            through a register move. The old test here was `Counts[k] <= 3` over
+            loads AND stores, which ranked a store-heavy local above a
+            load-bearing one and excluded a loop-carried accumulator at exactly
+            3 accesses while registers sat idle. A loop-carried accumulator must
+            never sit in the frame while a GPR is free. The bound that remains
+            is the register pool, not a threshold. }
+          if LCounts[k] < 1 then Continue;      { int: at least one loop LOAD }
           if not RegcallScalarType(Syms[si].TypeKind) then Continue;
           if ResidentRegOf(si) <> 0 then Continue;
         end;
         if SymSlotEscapes(si) then Continue;
-        best := k; bestCnt := Counts[k];
+        best := k; bestCnt := LCounts[k];   { same scale the loop above tests }
       end;
     if best < 0 then Break;
     si := CSyms[best];
     Counts[best] := 0;
+    LCounts[best] := 0;
     FrameSize := AlignTo(FrameSize + 8, 8);
     saveOff := -FrameSize;
     if Syms[si].TypeKind = tyDouble then
@@ -776,6 +820,9 @@ begin
       A64FrameAddr9(Syms[si].Offset);
       EmitI32($FD400120 or (8 + fslot));            { ldr d(8+fslot), [x9] }
       FrResidentSym[fslot] := si;
+      if PxxDbgEnabled('a.resid') then
+        WriteLn('PXXDBG a.resid ASSIGN proc=', Procs[CurProc].Name,
+                ' sym=', Syms[si].Name, ' reg=d', 8 + fslot, ' loads=', bestCnt);
       Inc(fslot);
       FrResidentCount := fslot;
     end
@@ -789,6 +836,13 @@ begin
       RcResidentSym[RcResidentCount] := si;
       RcResidentReg[RcResidentCount] := reg;
       RcResidentSaveOff[RcResidentCount] := saveOff;
+      { The pick, not just the tally. On x86-64 a disassembly is the fallback
+        evidence that a register was actually claimed; on aarch64 a dev box
+        usually has no disassembler for the output at all, so without this line
+        there is NO way to tell an admitted local from a rejected one. }
+      if PxxDbgEnabled('a.resid') then
+        WriteLn('PXXDBG a.resid ASSIGN proc=', Procs[CurProc].Name,
+                ' sym=', Syms[si].Name, ' reg=x', reg, ' loads=', bestCnt);
       Inc(RcResidentCount);
       Inc(islot);
     end;
@@ -954,6 +1008,213 @@ begin
   EmitI32($AA0003E0 or rreg);              { mov x19..x24, x0 }
 end;
 
+{ -O3: refresh a resident's register cache from the value ALREADY IN X0, rather
+  than re-reading the frame slot written one instruction ago.
+
+  Straight port of x86-64's RegcallRefreshResidentFromRax, and it is the same
+  argument: EmitStoreVarA64's dual-write stores x0's low `sz` bytes and then had
+  to get the canonically extended value back into x19..x24 -- and did it by
+  RELOADING the slot, which on aarch64 costs an immediate materialisation, an
+  `add x9, x29, x9` and a load, all on the critical path of every store to a
+  resident. Re-extending x0 yields the identical value by construction (the slot
+  holds exactly those bytes), so the reload is pure latency.
+
+  This is the residency mechanism working AGAINST itself: the pass exists to
+  break the loop-carried store-forward chain through the frame slot, and the
+  refresh was re-creating one per store.
+
+  It is also a PREREQUISITE for item 3, not merely an optimisation beside it:
+  once the dual-write is skipped the slot is stale, so a refresh that reads the
+  slot would load garbage. aarch64 could not have taken item 3 without this.
+
+  Extension encodings are the ones already used elsewhere in this file
+  (sxtb/sxth/sxtw at :1340-1342, the `mov w9, w0` zero-extend at :1348) with the
+  destination register changed, rather than derived fresh. }
+procedure RegcallRefreshResidentFromX0A64(idx: Integer);
+var tk: TTypeKind; sz: Integer; sgn: Boolean; rreg: Integer;
+begin
+  rreg := ResidentRegOf(idx);
+  if rreg = 0 then Exit;
+  tk := Syms[idx].TypeKind;
+  if TypeIsFloat(tk) or ((Syms[idx].Kind = skParam) and Syms[idx].IsRef) then
+  begin
+    RegcallRefreshResidentA64(idx);   { not a plain scalar in x0 -- slow form }
+    Exit;
+  end;
+  sz := TypeSize(tk);
+  sgn := TypeSigned(tk);
+  if sz = 1 then
+  begin
+    if sgn then EmitI32($93401C00)      { sxtb x0, w0 }
+    else EmitI32($53001C00);            { uxtb w0, w0 }
+  end
+  else if sz = 2 then
+  begin
+    if sgn then EmitI32($93403C00)      { sxth x0, w0 }
+    else EmitI32($53003C00);            { uxth w0, w0 }
+  end
+  else if sz = 4 then
+  begin
+    if sgn then EmitI32($93407C00)      { sxtw x0, w0 }
+    else EmitI32($2A0003E0);            { mov w0, w0 (zero-extends) }
+  end;
+  { sz = 8: x0 already holds the canonical value }
+  EmitI32($AA0003E0 or rreg);           { mov x19..x24, x0 }
+end;
+
+{ aarch64 half of PXXDBG=a.poisonslot. Same contract as the x86-64 one, and
+  deliberately gated on the SAME shared predicate (ResidentSlotIsDead), so the
+  experiment poisons exactly the set item 3 stops writing on this target too.
+  Writes exactly TypeSize bytes -- a wider store would corrupt the neighbouring
+  slot and manufacture the bug it is hunting. x1 is the scratch EmitStoreVarA64
+  itself uses two lines below, which is the evidence it is free here. }
+procedure PoisonResidentSlotA64(idx: Integer);
+var sz: Integer;
+begin
+  if not PxxDbgEnabled('a.poisonslot') then Exit;
+  if not ResidentSlotIsDead(idx) then Exit;
+  sz := TypeSize(Syms[idx].TypeKind);
+  EmitLoadImmA64(9, Syms[idx].Offset);
+  EmitI32($8B0903A9);                   { add x9, x29, x9 }
+  EmitLoadImmA64(1, Integer($5EEDADAD));
+  if sz = 1 then EmitI32($39000121)     { strb w1, [x9] }
+  else if sz = 2 then EmitI32($79000121){ strh w1, [x9] }
+  else if sz = 4 then EmitI32($B9000121){ str  w1, [x9] }
+  else EmitI32($F9000121);              { str  x1, [x9] }
+end;
+
+{ -O3 W2 on aarch64 -- in-place ALU on a register-resident destination.
+
+  Shares x86-64's predicate exactly (W2InPlaceEligible in symtab.inc, which is
+  target-agnostic because ResidentRegOf is), and only the ENCODING differs. That
+  is deliberate: one predicate means one definition of what is safe, and the
+  aarch64 poison experiment then validates the same set the x86-64 one did.
+
+  The win is LARGER here than on x86-64, for a reason that is worth recording
+  because it is not about W2 at all: the aarch64 integer binop has no operand
+  scheduling. It still emits the full push/eval/mov/pop dance --
+
+      IREmitNodeAarch64(left) / str x0,[sp,#-16]! / IREmitNodeAarch64(right)
+      / mov x1,x0 / ldr x0,[sp],#16 / add x0,x0,x1
+
+  -- which x86-64 stopped doing at -O1 years ago (LeafSymRcxLoadable). So
+  `s := s + j` with both operands resident costs about eight instructions
+  including a stack round trip, and W2 replaces the whole staging with two:
+
+      add x20, x20, x21 / sxtw x20, w20
+
+  W2 does not FIX that gap, it bypasses it for the shapes it covers. Porting
+  -O1's leaf-operand direct load to aarch64 is the real repair and is a separate,
+  wider-blast-radius item (it would move -O1 and -O2 output): filed as its own
+  work, not smuggled in here.
+
+  Immediate form is restricted to tkPlus/tkMinus with a 12-bit magnitude, which
+  is what `add/sub xd, xn, #imm12` encodes directly. AND/ORR/EOR immediates use
+  aarch64's bitmask encoding, which is not a simple field, so those fall through
+  to the general path rather than being approximated. }
+{ aarch64 narrowing of the shared W2 predicate, and it exists because the first
+  version of this port did NOT have it and was wrong.
+
+  W2InPlaceEligible admits all five ops with a constant right operand, because
+  x86-64 encodes every one of them as `81 /digit imm32`. aarch64 does not: only
+  add/sub have a plain 12-bit immediate field, while and/orr/eor use the bitmask
+  encoding, which is not a simple field. Emitting the shared predicate's verdict
+  through this encoding turned `a := a and $00FFFFFF` into
+  `add x20, x20, #(low 12 bits)` -- wrong operation AND a truncated operand.
+
+  Caught by test_o3_resident_inplace at -O3, which is the program written for
+  exactly this and the reason it covers all five ops rather than the two the
+  benchmark exercises. The comment above claimed the restriction; nothing
+  enforced it. A shared predicate is only shared where the two targets can
+  actually express the same set -- narrow it on the side that cannot. }
+function W2InPlaceEligibleA64(node: Integer): Boolean;
+var v, rt, iv: Integer; op: TTokenKind;
+begin
+  W2InPlaceEligibleA64 := False;
+  if not W2InPlaceEligible(node) then Exit;
+  v := IRB[node];
+  rt := IRB[v];
+  if IRKind[rt] = IR_CONST_INT then
+  begin
+    op := IntToTokenKind(IRC[v]);
+    if not ((op = tkPlus) or (op = tkMinus)) then Exit;
+    iv := Integer(IRIVal[rt]);
+    if (iv < -4095) or (iv > 4095) then Exit;
+  end;
+  W2InPlaceEligibleA64 := True;
+end;
+
+procedure EmitW2InPlaceA64(node: Integer);
+var d, v, rt, r, q, sz, opc, iv: Integer; op: TTokenKind; sgn: Boolean;
+begin
+  d := IRA[node];
+  v := IRB[node];
+  rt := IRB[v];
+  r := ResidentRegOf(d);
+  op := IntToTokenKind(IRC[v]);
+
+  if IRKind[rt] = IR_CONST_INT then
+  begin
+    iv := Integer(IRIVal[rt]);
+    { A negative immediate is the same instruction with the opposite mnemonic;
+      doing it here rather than refusing keeps `i := i - 1` on the fast path. }
+    if ((op = tkPlus) and (iv < 0)) or ((op = tkMinus) and (iv > 0)) then
+      EmitI32($D1000000 or (Abs(iv) shl 10) or (r shl 5) or r)   { sub xr, xr, #imm }
+    else
+      EmitI32($91000000 or (Abs(iv) shl 10) or (r shl 5) or r);  { add xr, xr, #imm }
+  end
+  else
+  begin
+    q := ResidentRegOf(IRA[rt]);
+    opc := $CA000000;                                     { eor }
+    if op = tkPlus then opc := $8B000000                  { add }
+    else if op = tkMinus then opc := $CB000000            { sub }
+    else if op = tkAnd then opc := $8A000000              { and }
+    else if op = tkOr then opc := $AA000000;              { orr }
+    EmitI32(opc or (q shl 16) or (r shl 5) or r);         { <op> xr, xr, xq }
+  end;
+
+  { Dual-write, unless item 3 has established that nothing can read the slot. }
+  sz := TypeSize(Syms[d].TypeKind);
+  sgn := TypeSigned(Syms[d].TypeKind);
+  if not ResidentSlotIsDead(d) then
+  begin
+    EmitLoadImmA64(9, Syms[d].Offset);
+    EmitI32($8B0903A9);                                   { add x9, x29, x9 }
+    if sz = 1 then EmitI32($39000120 or r)                { strb wr, [x9] }
+    else if sz = 2 then EmitI32($79000120 or r)           { strh wr, [x9] }
+    else if sz = 4 then EmitI32($B9000120 or r)           { str  wr, [x9] }
+    else EmitI32($F9000120 or r);                         { str  xr, [x9] }
+  end;
+
+  { Re-extend in place -- the identical size/sign rule the refresh applies. }
+  if sz = 1 then
+  begin
+    if sgn then EmitI32($93401C00 or (r shl 5) or r)      { sxtb xr, wr }
+    else EmitI32($53001C00 or (r shl 5) or r);            { uxtb wr, wr }
+  end
+  else if sz = 2 then
+  begin
+    if sgn then EmitI32($93403C00 or (r shl 5) or r)      { sxth xr, wr }
+    else EmitI32($53003C00 or (r shl 5) or r);            { uxth wr, wr }
+  end
+  else if sz = 4 then
+  begin
+    if sgn then EmitI32($93407C00 or (r shl 5) or r)      { sxtw xr, wr }
+    else EmitI32($2A0003E0 or (r shl 16) or r);           { mov wr, wr (zero-extends) }
+  end;
+
+  { PXXDBG=a.w2 -- did it FIRE? There is no aarch64 disassembler on a typical dev
+    box, and a pass that silently stops firing is invisible to every correctness
+    check we own (this campaign's own central lesson: W2's first x86-64 build
+    refused `i := i + 1` with every test still green). Without this line there is
+    no instrument that can answer the question on this target. }
+  if PxxDbgEnabled('a.w2') then
+    WriteLn('PXXDBG a.w2 FIRE proc=', Procs[CurProc].Name,
+            ' sym=', Syms[d].Name, ' op=', Ord(op),
+            ' reg=x', r, ' slotdead=', ResidentSlotIsDead(d));
+end;
+
 procedure EmitStoreVarA64(idx: Integer);
 var tk: TTypeKind; sz: Integer;
 begin
@@ -1006,6 +1267,14 @@ begin
     else
       EmitI32($F9000020); { str x0, [x1] }
   end
+  else if ResidentSlotIsDead(idx) then
+  begin
+    { -O3 item 3: nothing can read this slot, so skip the whole dual-write --
+      on aarch64 that is the immediate materialisation and the `add` as well as
+      the store, three instructions rather than x86-64's one. The refresh below
+      is unaffected: at OptLevel >= 3 it re-extends x0 and never reads memory,
+      which is exactly why RegcallRefreshResidentFromX0A64 had to land first. }
+  end
   else
   begin
     EmitLoadImmA64(9, Syms[idx].Offset);
@@ -1044,7 +1313,13 @@ begin
     if (Syms[idx].TypeKind = tyDouble) and (FloatResidentXmmOf(idx) <> 0) then
       EmitI32($9E670000 or FloatResidentXmmOf(idx))     { fmov d8..d13, x0 }
     else if ResidentRegOf(idx) <> 0 then
-      RegcallRefreshResidentA64(idx);
+    begin
+      if OptLevel >= 3 then
+        RegcallRefreshResidentFromX0A64(idx)   { same value, no store-to-load forward }
+      else
+        RegcallRefreshResidentA64(idx);
+      PoisonResidentSlotA64(idx);
+    end;
   end;
 end;
 
@@ -1275,6 +1550,14 @@ begin
             EmitI32($910020C6);                    { add x6, x6, #8 }
             EmitA64CopyBytes(4, 5, 6);
           end;
+          Exit;
+        end;
+        { -O3 W2: `x := x <op> y` with x resident does the ALU on the resident
+          register itself, which on aarch64 also bypasses the binop's push/pop
+          operand staging entirely. Same predicate as x86-64. }
+        if (OptLevel >= 3) and (not InLValueWrite) and W2InPlaceEligibleA64(node) then
+        begin
+          EmitW2InPlaceA64(node);
           Exit;
         end;
         IREmitNodeAarch64(IRB[node]);
@@ -3804,8 +4087,14 @@ begin
               resident from its authoritative frame slot. x0 is dead at the
               handler label (IR_EXC_MATCH reloads it). }
             excSkip := CodeLen; EmitI32($B4000000);                   { cbz x0, .normal (patched) }
-            for f := 0 to RcResidentCount - 1 do
-              RegcallRefreshResidentA64(RcResidentSym[f]);
+            { PXXDBG=a.noexcrefresh -- the aarch64 half of the discriminator
+              documented at the x86-64 IR_EXC_ENTER arm. Same three-way reading:
+              latest value = registers survived, try-entry value = ExcLongJmp
+              rolled x19..x24 back from the jmp_buf, $5EEDADAD (with
+              a.poisonslot) = a reader other than this loop. }
+            if not PxxDbgEnabled('a.noexcrefresh') then
+              for f := 0 to RcResidentCount - 1 do
+                RegcallRefreshResidentA64(RcResidentSym[f]);
             FloatPoolRestoreA64;
             FloatResidencyRefreshAllA64;
             if LabelPositions[lblId] <> -1 then

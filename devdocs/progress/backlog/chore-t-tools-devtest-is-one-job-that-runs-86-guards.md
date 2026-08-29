@@ -1,6 +1,8 @@
 ---
 track: T
 prio: 45
+status: backlog
+
 ---
 
 # chore(T): `tools-devtest#00` is ONE job that serially runs 86 guards, and every number about it is now wrong
@@ -100,3 +102,74 @@ scratch bare repo first and confirm nothing keys off `tools-devtest#00` as a
 literal name. `devdocs/progress/tstate/**` history does — old entries name
 `#00` and must stay readable. Check `repair_regressions` and the pinstatus
 join before renaming anything.
+
+---
+
+## 2026-08-29 — parked again on the same precondition, and that is now the finding
+
+Claimed, then released without implementing. The ticket's own first step is
+*"measure per-file process overhead on an idle box"*, and the box is at **load
+17.33** (twelve cores) — worse than the load 12 that deferred it when filed. A
+per-file timing distribution measured under ~1.4x oversubscription is not a
+distribution anyone should act on, and the whole point of the measurement is to
+choose between per-file jobs and a bucketed tail.
+
+Nothing implemented, because implementing without it is guessing at the one
+question the ticket says not to guess at.
+
+### The precondition has now failed twice, which changes the plan
+
+**"Wait for an idle box" is not a plan on this machine.** plexus is the owner's
+workstation *and* carries the watcher, and it has been at load >12 on both
+occasions anyone came to do this. A step gated on a condition that keeps not
+arriving is indistinguishable from a step nobody does.
+
+The replacement is cheap and load-proof: **instrument the recipe to record each
+guard's duration during the runs it already performs**, and read the
+distribution off a few natural runs instead of commissioning a sweep. The data
+wanted here is exactly what `make tools-devtest` is already doing 95 times in a
+row — the only thing missing is that it does not write down how long each one
+took.
+
+That also fixes the measurement's own version of this ticket's defect: a sweep
+run once by hand on a quiet box measures a machine state that never occurs in
+production, whereas the recipe's own timings are the real ones, under the real
+load, continuously.
+
+Whoever picks this up: do the instrumentation first, let it ride for a few
+runs, then decide per-file vs bucketed on data that describes the box the job
+actually runs on. It is also the smaller change, and it is not load-sensitive.
+
+### Current numbers, since they moved again
+
+95 guard files (`86` in the ticket body, `46` in testmgr's note above
+`REASON_MAX`, `~30s` in the Makefile comment). 94 green, 1 RED
+(`testmgr_hardcoded_tmp_devtest.py`, the pre-existing NilPy `/tmp` race filed to
+Track N). Three full runs today, each ~4 minutes wall.
+
+The count in this ticket's title is already stale, which is its own argument.
+
+
+### Correction, 2026-08-29 (same day): the box has TWELVE cores, not six
+
+I wrote "six cores" above from the watcher's `--max-cores 6`, which is its own
+budget, not the machine's. `nproc` is **12**. So load 17.33 was ~1.4x
+oversubscription, not 3x — still loaded, and still the wrong condition for this
+measurement, but I overstated it and the numbers are corrected in place.
+
+**And the constraint has since moved.** The owner had plexus's watcher daemon
+stopped this evening; load fell to **4.30** on those 12 cores (5-min 8.84,
+15-min 10.71 — the trend is the daemon leaving). The box's largest continuous
+consumer is gone.
+
+That does NOT make this measurable right now: plexus is still the owner's
+workstation, six sessions are live, and load 4.30 is not idle. But the reason
+this ticket has been deferred twice is materially weaker than it was this
+morning, and it is the first time that has been true. Whoever picks it up
+should re-read the load rather than inherit "blocked on a busy box" from here.
+
+- 2026-08-29 — the count in the title is now stale: `verify_assertions_devtest.py`
+  added 9, so the single job runs 95. Noted rather than retitled, because the
+  number is the symptom and the shape is the ticket — and it will be stale again
+  by the time anyone reads this, which is itself part of the argument for
+  splitting the job rather than counting it.

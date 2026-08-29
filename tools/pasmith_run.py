@@ -413,22 +413,69 @@ def ledger_record(led, sig, cls, kind, seed, gen_args, note, sha):
     (or has reopened after being marked fixed) -- i.e. if this is news."""
     e = led["findings"].get(sig)
     now = utcnow()
-    if e is None or e.get("status") == "fixed":
-        reopened = e is not None
+    if e is None:
         led["findings"][sig] = {
             "sig": sig, "class": cls, "kind": kind, "status": "open",
             "opened": now, "first_seed": seed, "first_sha": sha,
             "examples": [{"seed": seed, "args": gen_args, "sha": sha}],
             "hits": 1, "note": note, "ticket": None,
-            "reopened_from_fixed": reopened,
+            "reopened_from_fixed": False,
         }
         return True
+
+    news = False
+    if e.get("status") == "fixed":
+        # REOPEN -- mutate in place, exactly as recheck() does when it marks a
+        # finding fixed. This edge used to fall into the branch above and
+        # REPLACE the whole entry, so `reopened_from_fixed: True` survived
+        # while every fact about the reopen was destroyed: first_seed,
+        # first_sha and opened took the new run's values, fixed/fixed_sha were
+        # deleted, hits reset to 1, examples replaced, and the ticket link
+        # dropped. A flag that records THAT an event happened while deleting
+        # the evidence is worse than no flag -- it tells a reader there is a
+        # history and gives them nothing to read.
+        #
+        # What is actually lost is a BISECT BRACKET: fixed_sha (last known
+        # good) and the reopening sha bound the window in which the finding
+        # came back, which is where a regression hunt starts. The ledger held
+        # both, one at a time, and then neither.
+        #
+        # Survived since at least 2026-07-14 because it was only ever observed
+        # on `fpc-self_*` -- FPC contradicting itself, where pxx is not
+        # involved and no bisect was ever wanted. The erasure is generic; the
+        # finding class it sat on is what made it free.
+        #
+        # The reopening SEED is kept here as well as in `examples`, because
+        # examples is capped at EXAMPLES_PER_SIG and a busy signature would
+        # otherwise drop the one reproducer that matters most.
+        e["reopens"] = e.get("reopens", []) + [{
+            "fixed": e.pop("fixed", None),
+            "fixed_sha": e.pop("fixed_sha", ""),
+            "reopened": now,
+            "reopened_sha": sha,
+            "reopened_seed": seed,
+        }]
+        # "ticketed", not "open", when the link survived: `ledger_ticket()`
+        # keeps those two paired (a ticket implies status ticketed), and both
+        # count as open for throttling (`ledger_open`). Forcing "open" here
+        # would hand back an entry carrying a ticket slug while claiming
+        # nobody had filed one -- re-introducing, in a second field, the same
+        # split between a fact and its evidence that this whole fix is about.
+        e["status"] = "ticketed" if e.get("ticket") else "open"
+        e["reopened_from_fixed"] = True
+        # Current-truth fields follow the latest sighting; identity and history
+        # (opened, first_*, ticket) deliberately do not.
+        e["class"], e["kind"], e["note"] = cls, kind, note
+        news = True
+
+    # Shared by both a reopen and an ordinary repeat hit: a reopen IS a hit,
+    # and splitting these was what let the two drift apart in the first place.
     e["hits"] = e.get("hits", 0) + 1
     e["last_seen"] = now
     ex = e.setdefault("examples", [])
     if len(ex) < EXAMPLES_PER_SIG and all(x["seed"] != seed for x in ex):
         ex.append({"seed": seed, "args": gen_args, "sha": sha})
-    return False
+    return news
 
 
 def recheck(led, oracles, workdir, sha=None):

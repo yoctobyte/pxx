@@ -7,9 +7,225 @@ prio: 75
 - **Type:** feature — umbrella (frontend stress corpus)
 - **Track:** P (Pascal frontend; shares `lexer.inc`/`parser.inc` with A, so bugs
   found land as Track P — A-gated — or Track A core)
-- **Status:** working
+- **Status:** unfinished (parked)
   neglected by comparison — user call).
 - **Owner:** frankA
+
+---
+
+## PARKED 2026-08-28 (frankA) — what the next holder needs
+
+Moved out of `working/` because `working/` is a **live lock**, and a lock held by
+a parked session reads as "someone is on it" while nothing is happening.
+Everything is pushed; HEAD at park was `bc0100404`. Nothing is reverted or
+half-applied.
+
+**Two open items, both Track P, both unclaimed:**
+
+1. **Wall 6, Delphi half — an ORDERING defect**, in
+   [[bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body]]
+   (`unfinished/`). `GenericMethodCount=0` when the Delphi specialization runs.
+   The enabling fact is banked there: `LexAll` fills `Tokens[]` before the parser
+   starts, so the method bodies are **unindexed, not unavailable** — a bounding
+   job, not a reordering one. **Read the "do not weaken the prerequisite scan"
+   note before touching it**; the obvious sweep over-approximates on `T`/`U` and
+   would produce a silently wrong specialization instead of an absent one.
+2. **[[bug-p-two-different-nested-specializations-of-one-template-collide]]**
+   (p65, new). Newly reachable, not a regression. Its "where to start" is
+   explicitly a hypothesis from the error's shape, **not** a measurement.
+
+Wall 7 is a third, independent, and smaller: [[bug-p-a-resourcestring-is-not-addressable]]
+(p55) — it moves the corpus without touching either of the above.
+
+**A correction worth keeping, because it was wrong in a way that looked right:**
+wall 7 was first recorded here as Track B, "the constant exists at
+`lib/rtl/rtlconsts.pas:13`, so it is a visibility/export gap". The constant does
+exist and it *is* exported — and neither fact is the defect. The corpus writes
+`CreateRes(@SArgumentOutOfRange)`, which takes an **address**, and a plain
+`const` has none. Worse, our copy is not even the symbol in play: the corpus
+declares its own under a `resourcestring` section in `generics.strings.pas:25-26`
+(`resourcestring` at :25, `SArgumentOutOfRange` at :26 — I cited `:24` here and
+to the coordinator, off by one, in the middle of an exchange about how a
+`file:line` is exactly what makes a wrong answer persuasive). Conclusive:
+`generics.defaults.pas:42` does not use `RtlConsts` at all, so our copy is not
+merely the wrong candidate, it is out of scope in the unit where the failures
+were measured.
+*"The symbol is there"* and *"its address can be taken"* both fail with the
+symbol present, and only the second one is the bug.
+
+## 2026-08-28 (frankA, park) — the third ordering defect is DIAGNOSED, not fixed
+
+Parked deliberately with **no code changed**, per the stopping boundary agreed
+with the coordinator. `generics.defaults.pas` stands at `:3250`.
+
+The ticket's own direction — "emit the prerequisite at the end of the type
+section" — was **refuted by measurement before being acted on**: in the failing
+order the scan finds nothing at all (`nested=0`), so there is no emission to
+move. Discovery is not merely mis-placed, it is impossible at that time: the
+referenced template is not yet declared, so its use has not been rewritten, and
+marking it would require knowing it is a template.
+
+The replacement direction (discover at *materialisation* time, where all
+templates are known) is sound but not small: `NestedSpecKnown` consults
+REGISTERED specializations, not inserted tokens, so emitting a declaration
+around the stream cannot work in either order — the method's streaming has to be
+deferred and retried once the declaration is parsed, without breaking
+`BufferGenericMethod`'s "materialised exactly once" invariant. Both dead
+variants are written into the ticket so they are not re-attempted.
+
+**Three ordering defects fell today and the remaining count is unknown, not
+small.** Each was invisible until its predecessor fell. Whoever picks this up
+should decide whether rung 6 deserves a fourth on its own merits — the test the
+coordinator set is the right one: *stop when a defect is only worth fixing
+because it advances the corpus.* None of today's three was that; all three are
+plain-Pascal bugs with short repros that FPC compiles, and they would bite anyone
+writing that code with no corpus in sight.
+
+## 2026-08-28 (frankA, later still) — the false cycle is gone; rung 6's wall is a THIRD ordering defect
+
+`bug-p-mutually-referencing-generics-are-rejected-as-circular` resolved. A
+prerequisite found in a METHOD BODY is materialisation-time and is now emitted
+without deferring; only class-body (declaration-time) edges defer. The
+distinction needed no new state — the scans already run class body first, so the
+boundary is one index — which is also what kept it inside Track P, since the
+`NSpec*` arrays live in `defs.inc` and a per-edge flag would have crossed into A.
+
+`generics.defaults.pas` **`:994` → `:3250`** (2256 lines).
+
+The new stop is the same ordering family a third time, and it is filed:
+[[bug-p-a-generic-prerequisite-is-emitted-before-the-referenced-template-exists]]
+(p60). The rewrite emits a template's alias right behind *that template's own*
+declaration, so a prerequisite naming a template declared LATER in the same type
+section lands before it exists:
+
+| | line |
+| --- | --- |
+| `TGStringComparer<T, THashFactory>` declared | ~985 |
+| `TGOrdinalStringComparer<T, THashFactory>` declared | **1002** |
+| `TGStringComparer.Ordinal`'s body names it | 3250 |
+
+**Rung 6 has now yielded three ordering defects in a row** (wall 6, the false
+cycle, this), each revealed only by fixing the one in front of it. That is worth
+saying plainly to whoever sizes the rung next: the wall count is not a work
+estimate, and each of these was invisible until its predecessor fell.
+
+`generics.collections.pas` still dies at the same `defaults` line without
+reaching one of its own.
+
+## 2026-08-28 (frankA, later) — wall 6 is DOWN; rung 6's wall is now ONE defect, in both units
+
+`bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body` is
+resolved — the mode-Delphi ordering defect. The prerequisite scan now also reads
+this template's not-yet-buffered method impls, bounded by the header offsets the
+rewrite recorded (`GenMethImplSOff`), never by argument shape. The banked warning
+held: the tempting raw-token sweep over-approximates on `T`/`U` and would have
+registered a silently wrong specialization.
+
+| | `generics.defaults.pas` stops at |
+| --- | --- |
+| before | `:3231` — `undefined variable (specialize)` |
+| after | `:994` — `circular generic specialization` |
+
+**Earlier in the file, and better.** The old error meant a prerequisite was never
+discovered; the new one means it *is* discovered and our machinery cannot order
+it. The circularity is **pre-existing** — the same objfpc repro gives the
+identical error on this tree with the fix stashed — and is filed as
+[[bug-p-mutually-referencing-generics-are-rejected-as-circular]] (p60).
+
+`generics.collections.pas` dies at the same `defaults:994`, still without
+reaching a line of its own. So rung 6 is now behind **one** defect in both units,
+and it is a real one: `TDel<T> = class(TEq<T>)` is a declaration-time dependency
+while `TEq<T>`'s method body constructing a `TDel<T>` is materialisation-time,
+and we treat both as blocking. FPC compiles it and prints 7.
+
+## 2026-08-28 (frankA) — wall 7 is DOWN; rung 6 is behind wall 6 alone, measured
+
+`bug-p-a-resourcestring-is-not-addressable` is resolved: a `resourcestring`
+section now declares initialised string storage, so `@SArgumentOutOfRange`
+compiles. Attribution is clean — `pinned` is the WRONG baseline here (it predates
+other landed-but-unpinned fixes and dies at `:2205` on an unrelated wall), so the
+before-measurement was taken by rebuilding this same tree with the change
+stashed:
+
+| | `generics.defaults.pas` stops at |
+| --- | --- |
+| before (same tree, change stashed) | `:2960` — `undefined variable (SArgumentOutOfRange)`, the first of the 7 `CreateRes` sites |
+| after | `:3231` — `undefined variable (specialize)`, the Delphi-mode ordering defect |
+
+~271 lines, past all seven sites. **The new stop is wall 6**, already diagnosed
+and parked in
+`unfinished/bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body`
+— not a new wall, and its ticket already carries the warning not to weaken the
+prerequisite scan to make the corpus advance.
+
+`generics.collections.pas` still holds **18** of the 25 `CreateRes(@…)` sites.
+Probed directly after this fix (2026-08-28): it still cannot be assessed, and now
+for a precisely known reason — it `uses Generics.Defaults`, so it dies at
+`generics.defaults.pas:3231`, **wall 6**, without reaching a line of its own.
+
+So this fix's value in collections is real but **unrealisable until wall 6
+falls**, and those 18 sites are not evidence collections is close — nothing about
+that unit has been measured. Wall 6 now gates both units, which raises what
+finishing it is worth without changing anything about how it should be done: its
+ticket's warning stands, and *do not weaken the prerequisite scan to make the
+corpus advance*.
+
+## LIVE STATUS — rung 6 (`rtl-generics`). THE ONE CANONICAL TABLE.
+
+**Every other wall table in this file is a dated snapshot of what was true when it
+was written, and they disagree with each other by design.** Three of them
+accumulated because each session appended its measurement rather than editing the
+last — right for the record, wrong for anyone asking "where is this now", who
+then reads whichever table they scroll to first. Wall 4 sat `filed` in one table
+and `(to file / relay to frankB)` in another while it was actually **done**.
+**Update THIS table. Leave the snapshots alone.**
+
+Last measured 2026-08-28 against binary `c3cd377d5`, on the **pristine**
+corpus (no stubs).
+
+| # | wall | owner | status |
+| --- | --- | --- | --- |
+| 1 | typinfo surface | B | **DONE** — facade `cfa72767f` |
+| 2 | generic method header binds to same-named non-generic class | P | **DONE** — `042bcbb32` |
+| 3 | nested `specialize X<T>` in expression position | P | open, diagnosis banked, not reached by the probe yet |
+| 4 | SysUtils: `EArgumentOutOfRangeException`, `CreateRes`, `Error`/`TRuntimeError` | B | **DONE** — all three declared in `lib/rtl/sysutils.pas` (191, 154/155, 208/268); verified by compiling a `raise EArgumentOutOfRangeException` program, not by grep |
+| 5 | method pointers | P | **DONE** — defect A `9ab19fb21`, defect B `6d2a841a1` (parse) + `2c155cce2` (lowering). All 7 shapes match FPC |
+| 6 | generic class specialized by the ENCLOSING generic's type parameter | P | **partly done.** objfpc works (`c3cd377d5`); `:3250` no longer fails. **Delphi mode still blocked** — see below |
+| 7 | `@SArgumentOutOfRange` — a `resourcestring` is not addressable | **P** | open — **not a new row's worth**: it is [[bug-p-a-resourcestring-is-not-addressable]] (p55, backlog). 5 corpus sites |
+
+**Rung 6 is now behind wall 6 alone.** Wall 5 fell on 2026-08-28 and the compile
+advanced roughly 900 lines, from `generics.defaults.pas:2381` to `:3250`, where
+it meets an ALREADY-DIAGNOSED ticket:
+[[bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body]],
+parked in `unfinished/` with its repro and diagnosis banked. So the next step is
+to un-park that ticket, not to diagnose anything new.
+
+**Wall 3 IS wall 6 — resolved, not merely suspected.** The question was asked of
+the two DEFECTS rather than the two row numbers (the snapshot tables below number
+them inconsistently, and one snapshot already had them as a single row): wall 6's
+ticket concludes its real defect is *"a nested `specialize X<T>` group is not
+supported in EXPRESSION position"*, which is verbatim wall 3's subject. One
+defect, one ticket, no separate wall-3 ticket needed.
+
+**What is left on wall 6 is an ORDERING defect, not the scan.** `generics.defaults.pas`
+is `{$MODE DELPHI}`, and `--debug` shows `GenericMethodCount=0` at the moment the
+Delphi specialization runs: the rewrite emits its aliases near the top of the
+token stream, so `ParseSpecialization` executes before any method body has been
+buffered — even though those methods appear EARLIER in the source. Scanning more
+cannot help; there is nothing to scan yet. Full measurement in the ticket.
+
+Three defects fell on the way (`c3cd377d5`): the header test that read what
+FOLLOWS a group instead of what precedes it, the prerequisite scan that never
+looked in method bodies, and — with nothing to do with generics at all — **a
+method could not be named `Default`**, which is the name `TComparer<T>.Default`
+needs. Also newly exposed and filed:
+[[bug-p-two-different-nested-specializations-of-one-template-collide]].
+
+Under wall 5, the root cause is now
+[[bug-p-a-method-call-with-missing-arguments-is-accepted-and-reads-garbage]]
+(p80): a method mentioned without its arguments is compiled as a zero-arg call
+reading garbage, which is why a cast to a method-pointer type takes the call
+reading. Fix that first; defect B may fall out of it.
 
 ## Why (the gap)
 The C frontend got a driven ladder (c-testsuite → zlib → cjson → lua → sqlite →
@@ -290,12 +506,27 @@ generics implementation**. Method: stub each wall out in a throwaway copy
 wall becomes visible. Stubs are labelled `{PROBE: ...}` in that copy and exist
 only to see past a wall — nothing here is a claim that the unit compiles.
 
+*(SNAPSHOT 2026-08-28, stubbed copy — superseded. Live table at the top.)*
+
 | # | wall | owner | sites | ticket |
 | --- | --- | --- | --- | --- |
 | 1 | typinfo: `PTypeData` fields, `PTypeInfo`, `GetTypeData`, `TTypeKind`, `TOrdType`, `TFloatType` | **B** | see list below | `feature-typinfo-facade-unit` (p72) |
 | 2 | generic method header binds to same-named non-generic class | **P** | ~700 lines gated | `bug-p-a-generic-methods-out-of-line-header-binds-to-a-same-named-non-generic-class` |
 | 3 | `TGeneric<T>.ClassMethod` inside another generic's body | **P** | 13 in `defaults`, ~357-ish shape count in `collections` | `bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body` |
-| 4 | SysUtils gaps: `EArgumentOutOfRangeException`, `Exception.CreateRes`, `System.Error`/`TRuntimeError` | **B** | 3 + 3 + 7 | (to file / relay to frankB) |
+| 4 | SysUtils gaps: `EArgumentOutOfRangeException`, `Exception.CreateRes`, `System.Error`/`TRuntimeError` | **B** | ~~3 + 3~~ **7 + 7** + 7 (see note) | (to file / relay to frankB) |
+
+> **The two `3`s in row 4 were one wrong measurement reported twice.** Re-measured
+> 2026-08-28: `generics.defaults.pas` has **7** `EArgumentOutOfRangeException`
+> sites and **7** `CreateRes(@SArgumentOutOfRange)` sites — and they are *the same
+> seven lines* (2960, 3049, 3075, 3078, 3182, 3218, 3221), because each line
+> spells both. So the two symbols never had independent counts to agree on; one
+> figure was recorded under two headings, which is what made it look corroborated.
+> A count that stops at 3 where the truth is 7 is the shape of an error-limited
+> compile, not of a grep. Corpus-wide the real figure is **28** `CreateRes(@…)`
+> sites — 18 in `generics.collections.pas`, 7 here, plus one each of
+> `SDuplicatesNotAllowed` / `SDictionaryKeyDoesNotExist` / `SArgumentNilNode` —
+> so this blocks **collections** harder than defaults, and collections has not
+> been probed past its earlier walls.
 
 After stubbing all four, `generics.defaults.pas` produced **no further distinct
 errors** — the walls above are the complete set for that unit, not a prefix of
@@ -351,6 +582,8 @@ is the only thing that keeps this section honest.
 
 ### Current state of the five walls
 
+*(SNAPSHOT — superseded. Live table at the top.)*
+
 | # | wall | owner | status |
 | --- | --- | --- | --- |
 | 1 | typinfo surface | B | facade landed `cfa72767f`; **type-level API only** — its instance-taking overloads are still unreachable, see below |
@@ -379,3 +612,82 @@ and a `blocked-by:` edge between them would rank correctly for the wrong reason.
 synthetic overload repros written during this session passed on both and were
 never broken; they were a step away from being recorded as proof that the
 overload half was fixed. Run the "before". It is the only thing that catches it.
+
+---
+
+## Rung 6 re-probed on the PRISTINE corpus (2026-08-28, later)
+
+Re-ran the diagnostic as this section said to, now that the typinfo facade
+(`cfa72767f`) has landed and wall 2 is fixed. **This time with no stubs at all** —
+the earlier partition was measured through a stubbed copy, and stubs are what
+made it a partition rather than a compile.
+
+**Binary `ea689da902bb`. `generics.defaults.pas` now reaches line 2411.**
+
+*(SNAPSHOT — superseded. Live table at the top.)*
+
+| wall | status now |
+| --- | --- |
+| 1 — typinfo | **gone**: the facade covers it; no stub needed anywhere |
+| 2 — generic method header binding | **gone**: fixed `042bcbb32` |
+| 3 — nested `specialize` in expression position | not reached yet |
+| 4 — SysUtils gaps | not reached yet |
+| 5 — method pointers | **the current blocker**, 28 sites |
+
+So two of the five walls are genuinely down, and rung 6 is now behind **one**
+defect rather than a list. That is a materially better position than the
+partition described, and it was worth re-measuring rather than assuming.
+
+### Wall 5 turned out to be bigger than filed, and the first boundary was wrong
+
+Filed as "the address of a virtual class method cannot be lowered". Measuring
+eight shapes instead of four shows it is **two independent defects**, and
+neither is really about `virtual`:
+
+- **a CLASS method cannot become a method pointer at all** — `m := TSvc.CPick;
+  m(5)` segfaults with no cast anywhere, while the instance twin works;
+- **an inline cast of a method reference fails even for an instance method** —
+  going through a variable works, casting in expression position does not.
+
+Full table, repro and direction:
+[[bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults]] (p70). The
+`virtual` ticket is its honest-exit sibling — same shape, `IR_UNSUPPORTED`
+instead of a bad pointer.
+
+**Worth recording how the first table went wrong**, since this section is where
+the method gets described: four shapes looked like a clean boundary
+("everything adjacent works, only the inline cast is broken") and the two rows
+that separate the defects — `class → var`, and `instance` with an inline cast —
+had not been tried. The fix that boundary implied would have left half the bug
+in place. Vary the shape until the table has no untested neighbours, not until
+it looks tidy.
+
+## Rung 6 progress, 2026-08-28 (frankA) — `:3250` → `:3341`, and the wall list keeps growing
+
+Five defects landed today, four of them walls this unit was standing behind:
+resourcestring addressability, wall 6 (a generic class method call inside
+another generic's body), mutually-referencing generics rejected as circular, and
+— in one fix closing two tickets — a generic specialized before its declaration
+(`bug-p-a-generic-specialized-before-its-declaration-is-unresolvable` +
+`bug-p-a-generic-prerequisite-is-emitted-before-the-referenced-template-exists`).
+
+`generics.defaults.pas` moved `:2960 → :3231 → :994 → :3250 → :3341` across the
+day. Note the `:994` — the third fix moved the failure *backwards*, because a
+construct that had been rejected outright started compiling and reached a new
+error earlier in the file. **A line number going down is not a regression here**,
+and reading it as one would have wasted a session.
+
+The new stop is a *different class* of error — `"LookupEqualityComparer": a
+pointer has no members` — not another `specialize`. That is the first time today
+the unit has failed on something other than generic prerequisite resolution, so
+the next wall is probably not more of the same machinery.
+
+**The rung-6 partition is still superseded, and today is more evidence for the
+warning above, not less.** Four walls cleared, and the unit is still not through.
+Re-run `$SCRATCH/rg/probe.sh` before estimating anything; do not read the wall
+list as a work estimate.
+
+`CORPUS_EXPECTED` untouched throughout, and the prerequisite scan was not
+weakened to make the corpus advance — the fix adds a *second* run of the same
+scan at a later time; both original scans stay, and `test_generic_cycle_fail`
+still correctly refuses.

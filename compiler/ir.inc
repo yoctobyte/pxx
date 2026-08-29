@@ -676,6 +676,7 @@ function IRLowerAST(node: Integer): Integer; forward;
 function IRLowerVariantAsScalar(argAST: Integer; target: TTypeKind): Integer; forward;
 function IRVariantAddr(argAST: Integer): Integer; forward;
 function IRMethodRefCode(mref: Integer): Integer; forward;
+function IRMethodRefToTemp(mref: Integer): Integer; forward;
 function IRMaterializeIntfCast(node: Integer; doTrap: Boolean): Integer; forward;
 { defined near IRWrapChkBounds, used from IRLowerAddress's AN_DEREF arm far above it
   — the FPC seed needs the forward (bug-a-fpc-seed-drift-emitasmx64-forward). }
@@ -1483,6 +1484,17 @@ begin
   if ASTKind[node] = AN_ADDR then
   begin
     Result := IRLowerAddress(ASTLeft[node]);
+    Exit;
+  end;
+  { A method REFERENCE in an ADDRESS position -- `TMethod(TSel(obj.M)).Code`,
+    which is how rtl-generics reads a comparer's code half. There was a VALUE
+    arm (the code half alone, in IRLowerAST) but no ADDRESS arm, so reading a
+    field through a method-pointer cast fell to the IR_UNSUPPORTED tail. Reading
+    `.Code`/`.Data` needs the 16-byte pair to exist somewhere, so materialise it.
+    bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults }
+  if ASTKind[node] = AN_METHODREF then
+  begin
+    Result := IRMethodRefToTemp(node);
     Exit;
   end;
   { A class/interface CAST is a pure reinterpret, so the address of the cast is
@@ -3414,19 +3426,7 @@ begin
      (pathIdx < Procs[cpi].ParamCount) and
      (Procs[cpi].Params[pathIdx].TypeKind = tyRecord) then
   begin
-    savedLastTypeRecId := LastTypeRecId;
-    LastTypeRecId := EnsureMethodPtrRec;
-    tmpSym := AllocVar('', tyRecord);
-    LastTypeRecId := savedLastTypeRecId;
-    tmpAddr := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
-    value := IRMethodRefCode(argAST);   { VMT-resolved for a virtual method }
-    IRAppend(IR_STORE_MEM, tmpAddr, value, -1, 0, Ord(tyPointer));   { Code @0 }
-    srcAddr := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
-    value := IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger));
-    srcAddr := IRAppend(IR_BINOP, srcAddr, value, Ord(tkPlus), 0, Ord(tyPointer));
-    value := IRLowerAST(ASTLeft[argAST]);                            { Data = Self }
-    IRAppend(IR_STORE_MEM, srcAddr, value, -1, 0, Ord(tyPointer));
-    Result := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
+    Result := IRMethodRefToTemp(argAST);
     Exit;
   end;
   { Implicit class -> interface coercion: a class argument given to an interface
@@ -5138,10 +5138,63 @@ begin
     Exit;
   end;
   selfVal := IRLowerAST(ASTLeft[mref]);
+  { WHERE THE VMT LIVES DEPENDS ON WHAT SELF IS, and getting this wrong yields a
+    plausible wrong code pointer rather than a crash.
+
+      instance receiver  -- Self is the object, whose VMT is at [Self + 0];
+      CLASS receiver     -- Self is the RTTI BLOB (an AN_CLASSREF, which is what
+                            a `class function` takes as its hidden self), and a
+                            blob's +0 is its NAME pointer. Its VMT sits at +24.
+
+    Same split, same reason and same constant as AN_CLASS_VIRTUAL_CALL's arm
+    above, which cannot reuse IR_VIRTUAL_CALL for exactly this. Dereferencing a
+    blob as though it were an object reads the name pointer as a VMT and indexes
+    off it.
+    bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults }
+  if ASTKind[ASTLeft[mref]] = AN_CLASSREF then
+    selfVal := IRAppend(IR_BINOP, selfVal,
+                 IRAppend(IR_CONST_INT, -1, -1, -1, 24, Ord(tyInteger)),
+                 Ord(tkPlus), 0, Ord(tyPointer));
   vmt := IRAppend(IR_LOAD_MEM, selfVal, -1, -1, 0, Ord(tyPointer));
+  { slot * 8 on EVERY target -- the VMT keeps 8-byte slots even on ILP32; the
+    same convention the AN_CLASS_VIRTUAL_CALL arm documents. }
   slotK := IRAppend(IR_CONST_INT, -1, -1, -1, ASTRight[mref] * 8, Ord(tyInteger));
   codeAddr := IRAppend(IR_BINOP, vmt, slotK, Ord(tkPlus), 0, Ord(tyPointer));
   IRMethodRefCode := IRAppend(IR_LOAD_MEM, codeAddr, -1, -1, 0, Ord(tyPointer));
+end;
+
+{ Materialise an AN_METHODREF into a hidden 16-byte {Code, Data} temp and return
+  its ADDRESS.
+
+  A method reference is not a linear-lowerable value: it is a PAIR, and every
+  context that wants it as a value has to build that pair somewhere. Three
+  contexts do -- a method-pointer ARGUMENT, an ADDRESS position (`TMethod(TSel(
+  obj.M)).Code`, how rtl-generics reads a comparer's code half), and an
+  assignment, which differs in that it stores into an EXISTING destination
+  rather than a temp and so keeps its own store.
+
+  The first two were about to be two copies of the same eleven lines, which is
+  where root-cause-over-microfix.md says to stop and count. Code at +0, Data at
+  +TARGET_PTR_SIZE (8 on 64-bit, 4 on i386/arm32), matching the user TMethod's
+  layout; the code half is VMT-resolved for a virtual method so a reference
+  taken through a base-typed variable captures the override.
+  bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults }
+function IRMethodRefToTemp(mref: Integer): Integer;
+var savedRecId, tmpSym, tmpAddr, value, dataAddr, ofsNode: Integer;
+begin
+  savedRecId := LastTypeRecId;
+  LastTypeRecId := EnsureMethodPtrRec;
+  tmpSym := AllocVar('', tyRecord);
+  LastTypeRecId := savedRecId;
+  tmpAddr := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
+  value := IRMethodRefCode(mref);                                  { Code @ +0 }
+  IRAppend(IR_STORE_MEM, tmpAddr, value, -1, 0, Ord(tyPointer));
+  dataAddr := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
+  ofsNode := IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger));
+  dataAddr := IRAppend(IR_BINOP, dataAddr, ofsNode, Ord(tkPlus), 0, Ord(tyPointer));
+  value := IRLowerAST(ASTLeft[mref]);                              { Data = Self }
+  IRAppend(IR_STORE_MEM, dataAddr, value, -1, 0, Ord(tyPointer));
+  Result := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
 end;
 
 { Resolve an AN_FIELD node to (record id, field index). Returns True and sets the
@@ -5783,6 +5836,51 @@ begin
      not (TypeIsFloat(IntToTypeKind(ASTTk[ASTRight[node]])) and
           (TypeSize(IntToTypeKind(ASTTk[ASTRight[node]])) < TypeSize(wantTk))) then
     ASTTk[node] := Ord(wantTk);
+end;
+
+{ MEASUREMENT PROBE, not a check (PXXDBG=p.arity, off by default).
+
+  A METHOD call with too few arguments is accepted and the missing parameter is
+  read as garbage: `s.IPick;` on a one-parameter method compiles, and the
+  callee reads whatever the register held. A FREE routine in the same position
+  is rejected. Measured on `pinned`, so this is not a regression.
+
+  It lives HERE rather than in the parser because the Pascal frontend writes
+  the method-call argument loop out EIGHT times (pasparser_call x1, _expr x2,
+  _lval x5) and pyparser six more; AN_CALL lowering is the one place every arm
+  converges, with both the proc index and the arg chain in hand. That makes the
+  COUNT cheap and complete, which is what is wanted before deciding whether the
+  real check is a fix or a campaign.
+
+  Deliberately writeln and not WarnAt: a measurement must not touch WarnCount
+  or interact with -Werror, or it changes the thing it is measuring.
+  bug-p-a-method-call-with-missing-arguments-is-accepted-and-reads-garbage }
+procedure PxxArityProbe(node, cpi: Integer);
+var cur, n: Integer;
+begin
+  if not PxxDbgEnabled('p.arity') then Exit;
+  if (cpi < 0) or (cpi >= ProcCount) then Exit;
+  if (cpi < Length(ProcVariadic)) and ProcVariadic[cpi] then Exit;
+  n := 0;
+  cur := ASTLeft[node];
+  while cur <> -1 do
+  begin
+    Inc(n);
+    cur := ASTRight[cur];
+  end;
+  { A short chain is NOT automatically a defect. The METHOD paths materialise
+    trailing defaults as real AN_ARG nodes (FillDefaultArgs), so a short chain
+    there means garbage; the FREE-routine path leaves the chain short and lets
+    codegen supply the defaults, which measured correct. So consult the
+    declared-default flag for the FIRST missing parameter — defaults are
+    trailing in Pascal, so that one flag settles the whole tail. Without this
+    the probe reports every defaulted free call (`urlopen(url)`), which is the
+    false positive it first produced. }
+  if (n < Procs[cpi].ParamCount) and
+     ((n >= MAX_PROC_PARAMS) or
+      (not ProcParamHasDefault[cpi * MAX_PROC_PARAMS + n])) then
+    writeln('PXX-ARITY: line ', ASTLine[node], ': ', Procs[cpi].Name,
+            ' wants ', Procs[cpi].ParamCount, ' got ', n);
 end;
 
 function IRLowerAST(node: Integer): Integer;
@@ -7312,6 +7410,7 @@ begin
       first := -1; last := -1;
       item := ASTLeft[node];
       pathIdx := 0;
+      PxxArityProbe(node, cpi);   { PXXDBG=p.arity measurement, no-op by default }
       while item <> -1 do
       begin
         IRCoerceCharArrayArg(cpi, pathIdx, item);
@@ -10553,6 +10652,7 @@ begin
       last := -1;
       cpi := ASTIVal[node];
       item := ASTLeft[node];
+      PxxArityProbe(node, cpi);   { PXXDBG=p.arity measurement, no-op by default }
       { Inline expansion (feature-inline-routines, -O2): splice a retained inline
         body in place of the call when the target is inline-eligible and all args
         are side-effect-free. Falls through to a normal call if IRInlineExpand
@@ -12663,6 +12763,7 @@ begin
       slot := ASTRight[node];
       item := ASTLeft[node];
       pathIdx := 0;
+      PxxArityProbe(node, cpi);   { PXXDBG=p.arity measurement, no-op by default }
       while item <> -1 do
       begin
         isRefArg := False;
