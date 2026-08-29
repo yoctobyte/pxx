@@ -1187,6 +1187,55 @@ pre code{background:none;padding:0}
                 lines.append(f"NO-OWNER: {t.slug} is in working/ but has no Owner")
                 problems = 1
 
+        # --- the ticket SET, not ticket content ---------------------------
+        # Everything above validates tickets we managed to PARSE. These two
+        # check the set of files itself, and both were invisible until
+        # 2026-08-29, when they happened together on
+        # bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open.
+        #
+        # Two appends were addressed to backlog/<slug>.md while the ticket sat
+        # in backlog_new/. A shell append to a missing path CREATES it, so the
+        # appends reported success and the analysis landed in a file with no
+        # frontmatter and no body, while the real ticket got none of it. The
+        # ranker then offered the slug TWICE, both entries reading as coherent
+        # when opened alone, and neither able to announce the other. It
+        # survived a day of ranked queues and a board regeneration.
+        #
+        # Neither condition has a legitimate case, and both are one line to
+        # test — which is the whole argument for testing them.
+        seen_slug: dict[str, str] = {}
+        for st in self.RANKED_STATUSES:
+            d = PROG / st
+            if not d.is_dir():
+                continue
+            for path in sorted(d.glob("*.md")):
+                # README.md documents a folder's charter (backlog_new/, float/,
+                # experimental/ each have one); BOARD*.md are generated.
+                if path.name == "README.md" or path.name.startswith("BOARD"):
+                    continue
+                head = ""
+                try:
+                    with path.open(encoding="utf-8", errors="replace") as fh:
+                        head = fh.readline()
+                except OSError as exc:
+                    lines.append(f"UNREADABLE: {st}/{path.name} — {exc}")
+                    problems = 1
+                    continue
+                if head.strip() != "---":
+                    lines.append(
+                        f"NO-FRONTMATTER: {st}/{path.name} does not start with '---' — "
+                        f"an orphan fragment or a truncated ticket, not a ticket the ranker can read")
+                    problems = 1
+                prev = seen_slug.get(path.name)
+                if prev is not None:
+                    lines.append(
+                        f"DUP-SLUG: {path.name} is in BOTH {prev}/ and {st}/ — "
+                        f"unresolvable by construction: claiming one leaves the other ranked, "
+                        f"and the two bodies can differ. Merge by hand; do not auto-pick.")
+                    problems = 1
+                else:
+                    seen_slug[path.name] = st
+
         for t in self.by_status["unfinished"]:
             tr = t.track
             if tr == "A" or "A+" in tr or "+A" in tr:
