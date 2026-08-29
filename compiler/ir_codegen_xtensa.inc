@@ -1504,22 +1504,53 @@ begin
         elemSize := Integer(IRIVal[node]);
 
         IREmitNodeXtensa(left);               { base: handle (read) / slot addr (write) }
-        { Managed-string index: read position already has the handle (IR_LEA
-          loaded it); write position holds the slot address -> clone-if-shared
-          via PXXStrUnique to get a writable handle (COW). }
-        if (IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
-           not Syms[IRA[left]].IsArray and InLValueWrite then
+        { Managed-string index. THREE base shapes reach here and xtensa handled
+          only the write half of one of them:
+
+            a SCALAR managed string   (IR_LEA)  — read: IR_LEA already loaded
+              the handle, nothing to do; write: the slot address, needs COW.
+            a BY-REF managed param    (IR_LEA, skParam+IsRef) — IR_LEA stops at
+              the caller's SLOT ADDRESS (ABIParamSlotHoldsValueAddr supplies
+              that deref), so a READ index is still one deref short of the
+              handle: `d[1]` on a `var d: AnsiString` read the wrong byte
+              (32 where the oracle says 65) while Length(d) and WriteLn(d) were
+              both correct — which is what made it look like an index bug rather
+              than a base bug.
+            a FIELD or ELEMENT        (IR_FIELD / IR_INDEX, 1-byte stride) —
+              `r.f[1]`, `a[i][1]`. The base is the field's SLOT ADDRESS. Read
+              gave the wrong byte; WRITE was worse: neither the COW call nor the
+              deref ran, so the character store landed in the HANDLE SLOT
+              itself and the string read back EMPTY.
+
+          riscv32 has all three (bug-a-riscv32-setlength-on-string-array-element-
+          loses-length); arm32 has all three; xtensa had the first one's write
+          arm alone. Ported verbatim rather than re-derived. }
+        if ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
+            not Syms[IRA[left]].IsArray) or
+           (((IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX)) and
+            (IRTk[left] = Ord(tyAnsiString)) and (elemSize = 1)) then
         begin
-          procIdx := FindProc('PXXStrUnique');
-          if procIdx < 0 then Error('compiler error: PXXStrUnique not found');
-          if XtensaABI = XTENSA_ABI_WINDOWED then
+          if InLValueWrite then
           begin
-            xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
-            EmitCallProc(procIdx);
-            xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);   { a2 = unique handle }
+            { clone-if-shared: PXXStrUnique takes the SLOT ADDRESS and returns a
+              writable handle, so it serves the scalar and the field/element
+              base identically. }
+            procIdx := FindProc('PXXStrUnique');
+            if procIdx < 0 then Error('compiler error: PXXStrUnique not found');
+            if XtensaABI = XTENSA_ABI_WINDOWED then
+            begin
+              xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+              EmitCallProc(procIdx);
+              xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);   { a2 = unique handle }
+            end
+            else
+              EmitCallProc(procIdx);                       { a2 = unique handle }
           end
-          else
-            EmitCallProc(procIdx);                            { a2 = unique handle }
+          else if (IRKind[left] = IR_LEA) and (Syms[IRA[left]].Kind = skParam) and
+                  Syms[IRA[left]].IsRef then
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0)   { &handle -> handle }
+          else if (IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX) then
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);  { slot -> handle }
         end;
         XtensaPushA2;
 

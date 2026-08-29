@@ -1,0 +1,70 @@
+---
+track: A+S
+type: bug
+prio: 45
+status: open
+found: 2026-08-30
+found-by: frankS
+---
+
+# `Write` of any real SIGBUSes on xtensa — while `Str` of the same value is correct
+
+`WriteLn(d)` where `d` is a `Double`, a `Single`, or a float literal faults with
+SIGBUS on hosted xtensa. Every other thing you can do with that value works.
+
+## Repro
+
+`--target=xtensa --platform=posix --xtensa-soft-mulhigh`, Call0, qemu-xtensa.
+
+```pascal
+program t; var d: Double;
+begin d := 7; WriteLn('A'); WriteLn('B ', d); WriteLn('C'); end.
+{ x86-64: A / B  7.0000000000000000E+000 / C
+  xtensa: A / B  <SIGBUS> }
+```
+
+Same fault for `WriteLn(d:0:2)`, for a `Single`, and for a bare literal
+`WriteLn(7.5:0:2)`. It faults *after* emitting the leading string argument, so
+the first part of the line reaches stdout and the process dies mid-`WriteLn`.
+
+## What still works — this is the whole diagnostic value of the ticket
+
+Measured against the x86-64 oracle, all identical, all on the same binary that
+faults above:
+
+| | xtensa | oracle |
+| --- | --- | --- |
+| the value's raw bits (`p := @d; p^` as Int64) | `hi=1075576832 lo=0` | same |
+| passing it by value to a user proc, bits read inside | `hi=1075576832 lo=0` | same |
+| float arithmetic (`Trunc(d * 2)`) | `14` | same |
+| **`Str(d:0:2, s)`, then `WriteLn(s)`** | **`[7.00]`** | same |
+
+So the value model is right, the ABI for a by-value real is right, float
+arithmetic is right, and **the float-to-decimal conversion itself is right** —
+`Str` produces the correct characters. Only the `Write`/`WriteLn` path for a
+real argument faults. Look at how the compiler marshals a real into the write
+runtime, not at the conversion or the value model.
+
+## Not Track F
+
+Per `CLAUDE.md`'s F charter: **a crash is not F.** "Rank the mechanism, never
+the datatype" — the subject here is a faulting argument-marshalling path that
+happens to carry a float, not the accuracy or the formatting of a rendered
+value. `Str` already renders it correctly, which is the direct evidence that
+rendering is not the defect. Ordinary A+S bug at ordinary priority.
+
+## Scope
+
+Blocks `test_cross_float`, `test_cross_float_return` and
+`test_single_in_aggregate` — three of the 13 remaining divergences in
+[[bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs]] — and it
+masks anything else float-shaped, because the natural probe for a float defect
+is to print the float. It cost a wrong first diagnosis tonight: the probe for
+the missing `IR_STORE_MEM` float branch faulted here instead, and that branch
+had to be measured by reading raw bits back as an `Int64` and by ablation.
+
+## Bound
+
+Object-level plus observable output, hosted profile, Call0,
+`--xtensa-soft-mulhigh`, binary `4c878d2df324`, against x86-64 built from the
+same source. Windowed not checked. Not checked on real or emulated ESP silicon.

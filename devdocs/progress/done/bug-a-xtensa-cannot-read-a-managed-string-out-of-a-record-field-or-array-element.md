@@ -2,7 +2,7 @@
 track: A+S
 type: bug
 prio: 45
-status: open
+status: done
 found: 2026-08-30
 found-by: frankS
 ---
@@ -151,3 +151,62 @@ and that fault is **pre-existing and not from this change** — a plain
 `var f: string[16]; f := 'FROZEN'` symbol store, no aggregate anywhere, SIGBUSes
 under windowed on code this commit does not touch
 ([[bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength]]).
+
+---
+
+## THE THIRD CLUSTER — indexing, and it did NOT fall out of the store fix
+
+Worth recording because it looked like it should. With the stores fixed,
+`WriteLn(r.f)` and `Length(r.f)` are correct and `r.f[1]` is still wrong.
+
+Indexing a managed string needs the HANDLE, and three base shapes arrive at
+`IR_INDEX` with three different things in the register. Xtensa had the write
+half of one of them:
+
+| base | read | write |
+| --- | --- | --- |
+| scalar (`IR_LEA`) | `IR_LEA` already loaded the handle — ok | slot addr → `PXXStrUnique` — ok |
+| **by-ref param** (`IR_LEA`, skParam+IsRef) | **the CALLER'S SLOT ADDRESS — one deref short** | ok |
+| **field / element** (`IR_FIELD`/`IR_INDEX`, 1-byte stride) | **the field's slot address — one deref short** | **neither COW nor deref ran; the character store landed in the HANDLE SLOT** |
+
+Measured, Call0, against both oracles:
+
+| | xtensa before | oracle |
+| --- | --- | --- |
+| `d[1]`, `var d: AnsiString` | 32 | 65 |
+| `r.f[1]` | 32 | 65 |
+| `a[0][1]` | 72 | 80 |
+| `r.f[2] := 'z'; WriteLn(r.f)` | `[]` | `[AzCDE]` |
+| `a[0][2] := 'z'; WriteLn(a[0])` | `[]` | `[PzRST]` |
+
+All five now identical to both oracles, **on Call0 and on windowed**.
+
+**What made the by-ref row hard to see:** `Length(d)` and `WriteLn(d)` on the
+same parameter were both CORRECT. Only the index was wrong, so the signature
+read as "the index operator is broken" when the base was.
+`test_cross_var_string_param` carried exactly this — it was the last line of
+that test still diverging after the ABI-predicate fix, and it is now green.
+
+riscv32 and arm32 both have all three rows
+([[bug-a-riscv32-setlength-on-string-array-element-loses-length]]). Ported
+verbatim rather than re-derived: **this is the same missing-row shape three
+times in one night** — the ABI predicate, `IR_STORE_MEM`, `IR_INDEX` — and
+re-deriving it a fourth time is how the fourth row goes missing.
+
+### Bound and close
+
+Binary `4c878d2df324`, hosted Call0 `--xtensa-soft-mulhigh`, plus the windowed
+re-run of the index matrix. The 142-source differential: **63 → 64 match, 13 →
+12 differ**, cfail unchanged at 66, zero regressions; `test-xtensa` regenerated
+from the measured list and now runs 64 programs.
+
+The ticket's subject — reading a managed string out of an aggregate — is fixed
+for stores, reads and indexing, on both ABIs. Resolved. What remains is
+elsewhere: `Write` of a real SIGBUSes
+([[bug-a-xtensa-write-of-any-real-sigbuses-while-str-of-the-same-value-works]],
+filed tonight from the probe that misled the float branch), and the 12 residual
+divergences stay on
+[[bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs]].
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
