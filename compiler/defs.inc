@@ -1680,8 +1680,15 @@ type
     RecId     : Integer;    { record/class id when Kind is a record/class kind, REC_NONE otherwise }
     ElemTk    : Integer;    { array ELEMENT's TTypeKind ordinal, tyUnknown if not an array }
     ElemRec   : Integer;    { array ELEMENT's record id, REC_NONE if not set }
+    { NOTE: these two are named `Base` and currently hold the IMMEDIATE pointee,
+      which is the same thing only at depth <= 1. `^PChar` has PtrBaseTk =
+      tyPointer here while its real base is tyChar. Re-pointing them at the
+      ultimate base is decide-typeref-gains-a-pointer-depth-field's fold and
+      needs ir.inc's char-pointer check to guard on PtrDepth in the same change;
+      until then, read them as "immediate pointee" regardless of the name. }
     PtrBaseTk : Integer;    { typed pointer's pointed-at TTypeKind ordinal, tyUnknown if unset }
     PtrBaseRec: Integer;    { typed pointer's pointed-at record id, REC_NONE if unset }
+    PtrDepth  : Integer;    { typed pointer nesting: PChar = 1, ^PChar / char** = 2. 0 = unknown/not a pointer }
     ProcSig   : Integer;    { procedural-type signature: Procs[] index (BodyAddr=-1), -1 if not proc-typed }
     DynDepth  : Integer;    { dynamic-array nesting depth: 0 = not dynamic, 1 = array of T, 2 = array of array of T, ... }
     ArrLen    : Integer;    { fixed-array element count, -1 = not a fixed array }

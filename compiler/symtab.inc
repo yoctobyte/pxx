@@ -3880,6 +3880,7 @@ begin
     SymTR[idx].ArrLen := -1;
   SymTR[idx].ProcSig  := SymProcSig[idx];
   SymTR[idx].DynDepth := SymDynDepth[idx];
+  SymTR[idx].PtrDepth := SymPtrDepth[idx];
 end;
 
 procedure EnsureSymCapacity(need: Integer);
@@ -3924,13 +3925,25 @@ procedure SetSymPointerType(idx: Integer; elemTk: TTypeKind; elemRec, depth, bas
   needs both halves.
 
   The Alloc* chokepoints write all five together. Twenty-one sites outside
-  symtab.inc write PtrElemTk after creation, and measured 2026-08-24 only nine
-  of them (all in cparser.inc) touch depth at all -- so twelve symbols carried
-  an immediate pointee over depth 0 and base tyUnknown, which reads as "not a
-  typed pointer" to the predicates that consult the triple. That is the
-  "one of six parallel arrays not written" class this file's SymTR comment names,
-  and it is why feature-a-typeref-migrate-consumers cannot re-point
-  TTypeRef.PtrBaseTk at the real base yet.
+  symtab.inc used to write PtrElemTk after creation, and measured 2026-08-24 only
+  nine of them (all in cparser.inc) touched depth at all -- so twelve symbols
+  carried an immediate pointee over depth 0 and base tyUnknown, which reads as
+  "not a typed pointer" to the predicates that consult the triple. That is the
+  "one of six parallel arrays not written" class this file's SymTR comment names.
+
+  THAT IS HISTORY, not the current state -- re-measured 2026-08-30, and the
+  correction matters because the stale version was the stated reason the
+  migration could not proceed. All 21 sites now go through this helper:
+  `Syms[..].PtrElemTk :=` and `SymPtrDepth[..] :=` outside this file both return
+  ZERO, against a live population of 21 helper calls (ast_syminfer 6, cparser 9,
+  pasparser_decl 2, pyparser 2, pasparser_proc 1, pasparser_stmt 1) -- so the
+  zero means "converted", not "no such sites". The write side is in lockstep.
+
+  What still blocks re-pointing TTypeRef.PtrBaseTk at the real base is therefore
+  NOT the write side: it is that ir.inc's char-pointer check reads PtrBaseTk as
+  the immediate pointee and must start guarding on PtrDepth in the SAME change.
+  decide-typeref-gains-a-pointer-depth-field is answered and PtrDepth now exists
+  and is populated; the fold is one coordinated edit away.
 
   Pass depth = 0 when the caller genuinely does not know (a pointee that is
   itself a pointer, from a source that records no depth); the fields then read
