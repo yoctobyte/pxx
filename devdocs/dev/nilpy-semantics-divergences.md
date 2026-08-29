@@ -383,9 +383,10 @@ namespace, which writes into the caller's own locals, is a COMPILE ERROR here
 and names itself:
 
 ```
-exec(src) with no namespace is not supported — it would bind into the
-caller's own locals, which are compiled stack slots with no run-time name
-table. Use the explicit form Python also has: d = {}; exec(src, d, d)
+Nil Python: exec(src) with no namespace is not supported — it would bind
+into the caller's own locals, which are compiled stack slots with no run-time
+name table. Use the explicit form Python also has: d = {}; exec(src, d, d),
+then read the results out of d
 ```
 
 Loud, at compile time, with the working spelling in the message. That is the
