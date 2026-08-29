@@ -425,3 +425,59 @@ Checked against the 498 already landed: no clashes.
 `test-core` 1164 · `test-nilpy` 408 · `lib-test` 221 · everything else 153. One
 suite per commit, so a reviewer reasons about one suite at a time and the blast
 radius of any mistake is one suite rather than a line range that straddles three.
+
+### The census corrected itself a third time, and the correction was mine
+
+Bucket **C** ("standalone with a trailer after the expected", 40) was not that
+shape either. **32 of the 40 are plain shape A whose *expected* operand contains
+double quotes** — `= "$$(printf "miss\nhit")"` — which my `[^"]*` expected-side
+pattern excluded, so they were filed under a description that did not apply to
+them. They converted with the same regex once the expected side was allowed to
+contain quotes. Batch 5.
+
+Only **8** of the original 40 were really not shape A: 6 numeric comparisons
+(`-ge`, `-lt`) and 2 lines where `test` is not the leading command
+(`ulimit -v 800000; test …`).
+
+Three censuses, three corrections, each one found by *doing* the conversion
+rather than by reading harder. The pattern is worth stating plainly: **a shape
+census is a claim about what a regex will match, and the only instrument that
+measures it is that regex.**
+
+### Verification found a bug — in the verifier
+
+Batch 5 reported two DRIFT lines at `Makefile:1795` and `:3507`. The
+transformation was correct; **the checker was wrong.** Its greedy
+`"(.*)" "(.*)"` split the rewritten line at the wrong `" "`, because those two
+expected strings contain `" "` inside them (`printf '…' "'V'" "'V'" "'V'"`). The
+verifier reproduced, in itself, the exact failure it was verifying against.
+
+So the check was replaced with the one that actually settles it. The *only* thing
+this transformation can get wrong is splitting at the wrong separator, and that is
+possible only if a line contains more than one `" = "`. Measured across every
+line converted this session: **every original had exactly one.** Zero ambiguous
+splits, and each rewritten line rebuilds exactly from its own parsed parts.
+
+### Terminal state
+
+| | |
+| --- | --- |
+| `expect_same.sh` call sites in `Makefile` | **2476** |
+| converted this session | 2476 (498 cross-target + 1978 native) |
+| remaining bare `test "$$(…)"` | **29** |
+| — of which numeric comparisons (`-ge`/`-lt`) | 6 |
+| — continuation lines (trailing `\`) | 19 |
+| — `test` not the leading command | 2 |
+| exit-status checks, disjoint set | 376 |
+
+The 6 numeric and the 376 exit-status checks are **not convertible**:
+`expect_same.sh` compares two strings, and neither `-ge` nor `$$?` is a string
+equality. Converting them would be a semantic change wearing a mechanical diff's
+clothes. The 19 continuation lines and 2 non-leading ones are convertible but are
+each a different shape; at 21 lines they are hand work, not a regex, and they are
+left rather than half-automated.
+
+One native assertion was executed end to end, both arms, to match the
+cross-target proof: `test_wcw26.5` (a `head|tail|tr` pipeline with a `.N` label)
+passes silently and on mismatch prints `expect_same: MISMATCH [test_wcw26.5]`
+with the diff.
