@@ -158,3 +158,36 @@ count, page size, cache line, endianness, pointer width, clock granularity.
 Track T's cross-host comparison is what made this cheap: *three of seven's native
 reds read `pass` on plexus, which is the shape that says suspect host coupling* —
 and for two of the three that was right. This was the third, and it inverted.
+
+## Sweep: is this a pattern or an incident? — ONE instance, and the tree already holds BOTH correct answers
+
+Asked of all of `lib/rtl` (a loop that searches for a free slot and leaves a
+default in place when it finds none). The reactor table is the only accidental
+instance. What makes that interesting is the other two arms, which are correct in
+*different* ways:
+
+| site | ceiling | exhaustion is | on exhaustion |
+| --- | --- | --- | --- |
+| `scheduler.pas:207` `CurR` (reactors) | 16 | **never detected** — `slot := 0` is the initializer | silently aliases a live thread's reactor ⇒ corruption |
+| `scheduler.pas:254` `MAX_CO` (coroutines) | 64 | detected | `writeln('fatal: ... out of coroutine slots'); Halt(216)` |
+| `sockets.pas:237` `ErrnoSlot` | 64 | detected — `free := -1` sentinel, `if free < 0` | shares slot 0 **on purpose**, with the reason in a comment |
+
+`sockets.pas` is the same fallback the reactor path performs by accident, except
+it is chosen, checked, and argued:
+
+```pascal
+  { More live threads than slots: slot 0 is shared rather than refused, because
+    a wrong errno is recoverable and a crash in a socket wrapper is not. }
+  if free < 0 then free := 0;
+```
+
+**Do not copy that answer here.** Its rationale is a claim about errno, and it
+does not transfer: a wrong errno is recoverable, a shared *reactor* is coroutine
+state driven by two threads at once. The transferable part is the `-1` sentinel
+and the explicit test — the shape that makes exhaustion a decision instead of a
+fallthrough. Between the two precedents, `MAX_CO`'s refusal is the one whose
+consequence matches this table.
+
+Also worth noting for sizing: both other tables are **64**, four times the
+reactor ceiling, and neither is reachable on this box's 24 threads. `MAX_REACTORS
+= 16` is the only limit in `lib/rtl` that ordinary hardware now exceeds.
