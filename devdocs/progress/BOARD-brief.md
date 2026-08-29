@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:22 blocked:7 backlog:311 backlog_new:14 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2672 rejected:55`
+`working:5 unfinished:22 blocked:7 backlog:311 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2673 rejected:55`
 
 ## Held now (working/ — do not touch these files)
 
@@ -50,9 +50,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 330, ranked
+## Ready — top 30 of 329, ranked
 
-- `[p 80] [C]` bug-c-sizeof-a-partial-index-answers-the-element-not-the-row
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
@@ -82,5 +81,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
 - `[p 60] [N]` bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - `[p 60] [P]` bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
+- `[p 60] [U]` decide-does-track-r-work-on-master-like-every-other-lane
 
-_300 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_299 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

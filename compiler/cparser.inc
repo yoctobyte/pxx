@@ -2417,9 +2417,165 @@ begin
           + ' — a BUILD_BUG_ON/static-assert of this shape is FAILING');
 end;
 
+{ The sizeof TYPE-DESCRIPTOR WALK: from an already-consumed base identifier,
+  follow a postfix chain of `[i]` / `.f` / `->f` and answer the size of what it
+  lands on. Returns False when a link cannot be resolved, leaving `sz` untouched
+  so the caller keeps its conservative pointer-size default rather than a
+  confidently wrong answer.
+
+  `cArrLen >= 0` means "array of cTk"; cRec is the record id when cTk is
+  tyRecord, cPtrTk/cPtrRec the pointee when cTk is tyPointer. Walked as a type
+  descriptor rather than as per-shape special cases, so the chain composes to
+  any depth.
+
+  WHY IT IS A PROCEDURE. There were two sizeof implementations. This one served
+  the UNPARENTHESISED spelling (`sizeof a[0]`), and a second, per-shape one
+  served the parenthesised spelling — with no multi-dimension rule at all, so
+  `sizeof(m[0])` on `int m[3][4]` answered 4 where `sizeof m[0]` answered 16.
+  One parenthesis decided whether
+
+      memcpy(dst[1], src[1], sizeof(src[1]))
+
+  copied a row or a single element, silently, on a plain global array. The
+  comment on this walk had named that exact failure -- "without the spans
+  `sizeof m[0]` would answer the element size and ARRAY_SIZE(m) would count 15
+  rather than 3" -- while the other path had it, because a fix to one arm of a
+  double case does not reach its sibling (devdocs/dev/normalise-dont-special-case.md).
+  Both spellings now walk here.
+  bug-c-sizeof-a-partial-index-answers-the-element-not-the-row }
+function CSizeofDescriptorWalk(si: Integer; var sz: Integer): Boolean;
+var cArrLen, cRec, cPtrRec, cNDims, cDim, cSpanSym, recId, depth: Integer;
+    cTk, cPtrTk: TTypeKind; cOK: Boolean;
+    cFldRec: Integer; fieldName, cFldName: AnsiString;
+begin
+  cOK := True;
+  cPtrTk := tyUnknown; cPtrRec := REC_NONE;
+  cNDims := 0; cDim := 0; cSpanSym := si;
+  cFldRec := REC_NONE; cFldName := '';
+  if Syms[si].IsArray then
+  begin
+    { ArrLen is the FLATTENED element count; a multidimensional array keeps
+      its per-dim spans in SymArrDimSpan, and one subscript peels ONE dim
+      (int[3][5] -> int[5], not int). Without the spans `sizeof m[0]` would
+      answer the element size and ARRAY_SIZE(m) would count 15 rather than 3. }
+    cArrLen := Syms[si].ArrLen;
+    cTk := Syms[si].ElemType;
+    cRec := Syms[si].ElemRecName;
+    cNDims := SymArrNDims[si];
+  end
+  else
+  begin
+    cArrLen := -1;
+    cTk := Syms[si].TypeKind;
+    cRec := Syms[si].RecName;
+    cPtrTk := Syms[si].PtrElemTk;
+    cPtrRec := Syms[si].PtrElemRec;
+  end;
+  while cOK do
+  begin
+    if CurTok.Kind = tkLBrack then
+    begin
+      { one subscript peels one level: an element of the array, or the
+        pointee of a pointer. The index expression is skipped balanced so
+        `a[f(i)][j]` and `a[b[0]]` do not stop at an inner `]`. }
+      if cArrLen >= 0 then
+      begin
+        if (cNDims > 1) and (cDim < cNDims - 1) then
+        begin
+          { One subscript peels ONE dimension, so divide out that dim's span.
+            A multidim RECORD FIELD keeps its spans somewhere else than a
+            symbol does -- UFldArrDimSpan, reached by RecFieldArrDimSpanAt --
+            and this used to bail to the pointer-size default rather than
+            look, on the stated grounds that they were "not reachable by
+            symbol index". True of symbol indices, and the record helper
+            already existed: `sizeof s.m[0]` on `int m[3][4]` answered 8 for
+            int, char and double alike, a row measured as a pointer.
+            bug-c-sizeof-a-partial-index-answers-the-element-not-the-row }
+          if cSpanSym >= 0 then
+          begin
+            cArrLen := cArrLen div SymArrDimSpan[cSpanSym * MAX_ARR_DIMS + cDim];
+            Inc(cDim);
+          end
+          else if (cFldRec <> REC_NONE) and
+                  (RecFieldArrDimSpanAt(cFldRec, cFldName, cDim) > 0) then
+          begin
+            cArrLen := cArrLen div RecFieldArrDimSpanAt(cFldRec, cFldName, cDim);
+            Inc(cDim);
+          end
+          else cOK := False;
+        end
+        else cArrLen := -1;
+      end
+      else if cTk = tyPointer then
+      begin
+        cTk := cPtrTk; cRec := cPtrRec;
+        cPtrTk := tyUnknown; cPtrRec := REC_NONE;
+      end
+      else cOK := False;
+      depth := 0;
+      while CurTok.Kind <> tkEOF do
+      begin
+        if CurTok.Kind = tkLBrack then Inc(depth)
+        else if CurTok.Kind = tkRBrack then
+        begin
+          Dec(depth);
+          if depth = 0 then begin Next; Break; end;
+        end;
+        Next;
+      end;
+    end
+    else if (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) then
+    begin
+      { `.` and `->` both lex as tkDot. An ARRAY base reaches its element's
+        record through cRec, which is how `arr->field` sizes. }
+      recId := REC_NONE;
+      if cTk = tyRecord then recId := cRec
+      else if cTk = tyPointer then recId := cPtrRec;
+      if recId = REC_NONE then begin cOK := False; Break; end;
+      Next;   { consume '.' / '->' }
+      fieldName := CurTok.SVal;
+      Next;   { consume the field name }
+      cTk := RecFieldType(recId, fieldName);
+      cRec := REC_NONE; cPtrTk := tyUnknown; cPtrRec := REC_NONE;
+      cNDims := 0; cDim := 0; cSpanSym := -1;
+      cFldRec := REC_NONE; cFldName := '';
+      if RecFieldIsArray(recId, fieldName) and (RecFieldArrLen(recId, fieldName) >= 0) then
+      begin
+        cArrLen := RecFieldArrLen(recId, fieldName);
+        cNDims := RecFieldArrNDims(recId, fieldName);
+        cFldRec := recId; cFldName := fieldName;   { for RecFieldArrDimSpanAt in the subscript arm }
+        if cTk = tyRecord then cRec := RecFieldRecId(recId, fieldName);
+      end
+      else
+      begin
+        cArrLen := -1;
+        if cTk = tyRecord then cRec := RecFieldRecId(recId, fieldName)
+        else if cTk = tyPointer then
+        begin
+          cPtrTk := RecFieldPtrElemTk(recId, fieldName);
+          cPtrRec := RecFieldPtrElemRec(recId, fieldName);
+        end;
+      end;
+    end
+    else Break;
+  end;
+  if cOK then
+  begin
+    if cArrLen >= 0 then
+    begin
+      if cTk = tyRecord then sz := cArrLen * RecSize(cRec)
+      else sz := cArrLen * TypeSize(cTk);
+    end
+    else if cTk = tyRecord then sz := RecSize(cRec)
+    else sz := TypeSize(cTk);
+  end;
+  Result := cOK;
+end;
+
 function ParseCSizeof: Integer;
 var node, sz, si, depth, recId, arrLen, savedPos, procIdx, cRec, cPtrRec, cArrLen: Integer;
     cNDims, cDim, cSpanSym: Integer;
+    cFldRec: Integer; cFldName: AnsiString;   { the record field the descriptor walk is inside, for its dim spans }
     vlaSz: Integer;   { VLA operand: its `$vlasz$` companion local, else -1 }
     tk, elemTk, cTk, cPtrTk: TTypeKind; fieldName: AnsiString; cOK: Boolean;
 begin
@@ -2584,122 +2740,15 @@ begin
       if si >= 0 then
       begin
         Next;
-        if CurTok.Kind = tkDot then
-        begin
-          recId := REC_NONE;
-          if Syms[si].TypeKind = tyPointer then
-            recId := Syms[si].PtrElemRec
-          else if Syms[si].TypeKind = tyRecord then
-          begin
-            { an ARRAY of records keeps the element record in ElemRecName
-              (RecName is unset) — `arr->field` sizing, c-testsuite 00205's
-              `sizeof(cases->c)/sizeof(cases->c[0])` }
-            if Syms[si].IsArray then recId := Syms[si].ElemRecName
-            else recId := Syms[si].RecName;
-          end;
-          { Walk the WHOLE member chain, not just its first link. `->` and `.`
-            both lex as tkDot, so `sizeof(d.info->date)` used to size `info`
-            (a POINTER, 8) and let the balanced-paren scan swallow `->date`,
-            where the answer is 64. Direct `.` access was right, which is why
-            this survived: the obvious test passes.
-
-            Where the real array is SMALLER than a pointer the bogus 8 is a
-            BOUND that overflows — `memset(h.s->buf, 'X', sizeof(h.s->buf))`
-            wrote 8 bytes into 4 and clobbered the next field, silently. See
-            bug-cfront-sizeof-array-member-through-pointer-gives-pointer-size. }
-          while (CurTok.Kind = tkDot) and (recId <> REC_NONE) do
-          begin
-            Next;
-            if CurTok.Kind <> tkIdent then Break;
-            fieldName := CurTok.SVal;
-            { Another `.`/`->` after this field? Then this link is intermediate:
-              step into the field's own record and keep walking. Anything that
-              is neither a record nor a pointer-to-record ends the walk with
-              recId = REC_NONE, leaving the default pointer-size answer rather
-              than a confidently wrong one. }
-            if Tokens[TokPos].Kind = tkDot then
-            begin
-              if RecFieldType(recId, fieldName) = tyPointer then
-                recId := RecFieldPtrElemRec(recId, fieldName)
-              else if RecFieldType(recId, fieldName) = tyRecord then
-                recId := RecFieldRecId(recId, fieldName)
-              else
-                recId := REC_NONE;
-              Next;   { onto the next tkDot }
-              Continue;
-            end;
-            if recId <> REC_NONE then
-            begin
-              if Tokens[TokPos].Kind = tkLBrack then
-              begin
-                if RecFieldIsArray(recId, fieldName) then
-                begin
-                  elemTk := RecFieldType(recId, fieldName);
-                  if elemTk = tyRecord then
-                    sz := RecSize(RecFieldRecId(recId, fieldName))
-                  else
-                    sz := TypeSize(elemTk);
-                end
-                else if RecFieldType(recId, fieldName) = tyPointer then
-                begin
-                  elemTk := RecFieldPtrElemTk(recId, fieldName);
-                  if elemTk = tyRecord then
-                    sz := RecSize(RecFieldPtrElemRec(recId, fieldName))
-                  else
-                    sz := TypeSize(elemTk);
-                end
-                else if RecFieldType(recId, fieldName) = tyRecord then
-                  sz := RecSize(RecFieldRecId(recId, fieldName))
-                else
-                  sz := TypeSize(RecFieldType(recId, fieldName));
-              end
-              else if RecFieldIsArray(recId, fieldName) and (RecFieldArrLen(recId, fieldName) >= 0) then
-              begin
-                arrLen := RecFieldArrLen(recId, fieldName);
-                elemTk := RecFieldType(recId, fieldName);
-                if elemTk = tyRecord then
-                  sz := arrLen * RecSize(RecFieldRecId(recId, fieldName))
-                else
-                  sz := arrLen * TypeSize(elemTk);
-              end
-              else if RecFieldType(recId, fieldName) = tyRecord then
-                sz := RecSize(RecFieldRecId(recId, fieldName))
-              else
-                sz := TypeSize(RecFieldType(recId, fieldName));
-            end;
-            Break;   { terminal link: the chain is measured }
-          end;
-        end
-        else
-        begin
-        if CurTok.Kind = tkLBrack then
-        begin
-          { `sizeof(arr[i])` / `sizeof(p[i])` — the size of ONE element, not the
-            whole array. Without this, the ubiquitous `ArraySize(x)` idiom
-            `sizeof(x)/sizeof(x[0])` folded to 1 (whole/whole), so e.g. sqlite's
-            built-in-extension loop ran a single iteration. }
-          if Syms[si].IsArray then
-          begin
-            if Syms[si].ElemType = tyRecord then sz := RecSize(Syms[si].ElemRecName)
-            else sz := TypeSize(Syms[si].ElemType);
-          end
-          else if Syms[si].TypeKind = tyPointer then
-          begin
-            if Syms[si].PtrElemTk = tyRecord then sz := RecSize(Syms[si].PtrElemRec)
-            else sz := TypeSize(Syms[si].PtrElemTk);
-          end
-          else sz := TypeSize(Syms[si].TypeKind);
-        end
-        else if Syms[si].IsArray then
-        begin
-          if Syms[si].ElemType = tyRecord then
-            sz := Syms[si].ArrLen * RecSize(Syms[si].ElemRecName)
-          else
-            sz := Syms[si].ArrLen * TypeSize(Syms[si].ElemType);
-        end
-        else if Syms[si].TypeKind = tyRecord then sz := RecSize(Syms[si].RecName)
-        else sz := TypeSize(Syms[si].TypeKind);
-        end;
+        { The parenthesised spelling used to have its OWN per-shape sizing here
+          -- a `.`-chain walk and a `[` arm -- and that copy had no multi-dimension
+          rule, so `sizeof(m[0])` on `int m[3][4]` answered the ELEMENT size where
+          the unparenthesised `sizeof m[0]` answered the row. One parenthesis decided
+          whether `memcpy(dst[1], src[1], sizeof(src[1]))` copied a row or one int,
+          silently, on a plain global array. Both spellings now walk the same type
+          descriptor; the ~115 lines deleted here were that second copy.
+          bug-c-sizeof-a-partial-index-answers-the-element-not-the-row }
+        if not CSizeofDescriptorWalk(si, sz) then ;   { False leaves sz at the default }
       end;
     end;
     { General-expression operand none of the special cases consumed (e.g.
@@ -2780,112 +2829,7 @@ begin
       answer — the same conservative choice the parenthesized walk makes. }
     if si >= 0 then
     begin
-      cOK := True;
-      cPtrTk := tyUnknown; cPtrRec := REC_NONE;
-      cNDims := 0; cDim := 0; cSpanSym := si;
-      if Syms[si].IsArray then
-      begin
-        { ArrLen is the FLATTENED element count; a multidimensional array keeps
-          its per-dim spans in SymArrDimSpan, and one subscript peels ONE dim
-          (int[3][5] -> int[5], not int). Without the spans `sizeof m[0]` would
-          answer the element size and ARRAY_SIZE(m) would count 15 rather than 3. }
-        cArrLen := Syms[si].ArrLen;
-        cTk := Syms[si].ElemType;
-        cRec := Syms[si].ElemRecName;
-        cNDims := SymArrNDims[si];
-      end
-      else
-      begin
-        cArrLen := -1;
-        cTk := Syms[si].TypeKind;
-        cRec := Syms[si].RecName;
-        cPtrTk := Syms[si].PtrElemTk;
-        cPtrRec := Syms[si].PtrElemRec;
-      end;
-      while cOK do
-      begin
-        if CurTok.Kind = tkLBrack then
-        begin
-          { one subscript peels one level: an element of the array, or the
-            pointee of a pointer. The index expression is skipped balanced so
-            `a[f(i)][j]` and `a[b[0]]` do not stop at an inner `]`. }
-          if cArrLen >= 0 then
-          begin
-            if (cNDims > 1) and (cDim < cNDims - 1) then
-            begin
-              { the spans of a multidim RECORD FIELD are not reachable by symbol
-                index, so a subscript into one cannot be sized -- bail to the
-                default rather than answer the element size. }
-              if cSpanSym < 0 then cOK := False
-              else
-              begin
-                cArrLen := cArrLen div SymArrDimSpan[cSpanSym * MAX_ARR_DIMS + cDim];
-                Inc(cDim);
-              end;
-            end
-            else cArrLen := -1;
-          end
-          else if cTk = tyPointer then
-          begin
-            cTk := cPtrTk; cRec := cPtrRec;
-            cPtrTk := tyUnknown; cPtrRec := REC_NONE;
-          end
-          else cOK := False;
-          depth := 0;
-          while CurTok.Kind <> tkEOF do
-          begin
-            if CurTok.Kind = tkLBrack then Inc(depth)
-            else if CurTok.Kind = tkRBrack then
-            begin
-              Dec(depth);
-              if depth = 0 then begin Next; Break; end;
-            end;
-            Next;
-          end;
-        end
-        else if (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) then
-        begin
-          { `.` and `->` both lex as tkDot. An ARRAY base reaches its element's
-            record through cRec, which is how `arr->field` sizes. }
-          recId := REC_NONE;
-          if cTk = tyRecord then recId := cRec
-          else if cTk = tyPointer then recId := cPtrRec;
-          if recId = REC_NONE then begin cOK := False; Break; end;
-          Next;   { consume '.' / '->' }
-          fieldName := CurTok.SVal;
-          Next;   { consume the field name }
-          cTk := RecFieldType(recId, fieldName);
-          cRec := REC_NONE; cPtrTk := tyUnknown; cPtrRec := REC_NONE;
-          cNDims := 0; cDim := 0; cSpanSym := -1;
-          if RecFieldIsArray(recId, fieldName) and (RecFieldArrLen(recId, fieldName) >= 0) then
-          begin
-            cArrLen := RecFieldArrLen(recId, fieldName);
-            cNDims := RecFieldArrNDims(recId, fieldName);
-            if cTk = tyRecord then cRec := RecFieldRecId(recId, fieldName);
-          end
-          else
-          begin
-            cArrLen := -1;
-            if cTk = tyRecord then cRec := RecFieldRecId(recId, fieldName)
-            else if cTk = tyPointer then
-            begin
-              cPtrTk := RecFieldPtrElemTk(recId, fieldName);
-              cPtrRec := RecFieldPtrElemRec(recId, fieldName);
-            end;
-          end;
-        end
-        else Break;
-      end;
-      if cOK then
-      begin
-        if cArrLen >= 0 then
-        begin
-          if cTk = tyRecord then sz := cArrLen * RecSize(cRec)
-          else sz := cArrLen * TypeSize(cTk);
-        end
-        else if cTk = tyRecord then sz := RecSize(cRec)
-        else sz := TypeSize(cTk);
-      end;
+      if not CSizeofDescriptorWalk(si, sz) then ;   { False leaves sz at the default }
     end
     else if (procIdx >= 0) and (CurTok.Kind = tkLParen) then
     begin

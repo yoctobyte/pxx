@@ -122,6 +122,38 @@ address and dereferenced. That is precisely the failure
 [[bug-c-deref-of-a-pointer-to-array-loads-instead-of-decaying]] describes and
 fixed — for idents only.
 
+## GREP FOR THE INCUMBENT BEFORE BUILDING — 2026-08-30 (frankC)
+
+**This ticket proposed to build two things that already existed.** Both were
+found by looking for the incumbent before writing code, and neither was found by
+the census, the grep, or reading the routines the ticket names. It is the
+finding, not the preamble:
+
+| the ticket wanted to build | what was already there | why nobody used it |
+| --- | --- | --- |
+| a shared array-shape reader | `NodeArrNDInfo` — ident, field **and** deref-of-pointer-to-array | its caller guards it with `ASTKind[node] = AN_IDENT` |
+| a multi-dimension rule for `sizeof` | the `sizeof` **type-descriptor walk** | it served only the *unparenthesised* spelling |
+
+The second is the worse of the two and worth stating on its own, because it
+defeats a search for the symptom rather than merely surviving one. The surviving
+`sizeof` walk's comment reads:
+
+> *"Without the spans `sizeof m[0]` would answer the element size and
+> ARRAY_SIZE(m) would count 15 rather than 3."*
+
+**Written by someone who understood the bug completely, in the arm that did not
+have it.** A grep for the symptom lands on that comment and reads it as
+*handled* — and it genuinely was handled, just not on the path a parenthesis
+takes. [[bug-c-sizeof-a-partial-index-answers-the-element-not-the-row]] closed
+it by deleting the second implementation: 107 lines gone, `cparser.inc` ~100
+lines shorter, and the census's `sizeof` **and** `sizeof-row` rows green across
+all six spellings. `sizeof(garr[0].m)` answering 224 — the whole struct — was
+listed here as a separate open item and needed no patch of its own; the
+normalisation took it. **That is the argument for normalising rather than
+patching, arriving as a measurement instead of a principle.**
+
+Census after that fix: **28 wrong cells, down from 33, nothing regressed.**
+
 ## The accessor already exists, and one caller filters out half of it — 2026-08-30 (frankC)
 
 Found before writing any code, by asking frankS's question instead of mine

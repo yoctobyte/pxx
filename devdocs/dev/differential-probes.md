@@ -25,6 +25,7 @@ of this page for what happened the last time nobody did.
 | `tools/pydiff.py` | CPython | does NilPy agree with CPython? | N |
 | `tools/lib_cross_sweep.sh` | **pxx on x86-64** | does a cross target agree with the native build? | B |
 | `tools/crtl_decl_probe.sh` | — (census) | is a declared crtl function actually IMPLEMENTED, or silently binding to libc? | B |
+| `tools/c_array_shape_census.py` | gcc | does every way C can *reach* an array agree with every way it can *use* one? | C |
 
 `crtl_decl_probe` is the odd one out: it has no oracle. It answers *"is the
 symbol there at all"*, which is the question **before** `gcc_diff_probe`'s
@@ -35,6 +36,52 @@ that script automates it.
 `lib_cross_sweep` is also not a parity probe: its oracle is **our own** x86-64
 output, which `lib-test` already proves green. Anything a cross target prints
 differently is a target-dependent bug.
+
+`c_array_shape_census.py` is a **matrix**, not a corpus, and it exists for a
+failure mode the others cannot reach. It crosses every way C can REACH an array
+— a global ident, a local, `s.m`, `p->m`, `s.in.m`, `arr[i].m` — with everything
+C can DO with one: decay stride, partial index, no-op deref, `sizeof`, pointer
+difference, assignment to an `int (*)[4]`, passing to a function, load width,
+and the 3-D forms. One standalone program per cell, gcc deciding each.
+
+**Why a matrix rather than reading the code.** The routines that answer these
+questions are written as an `AN_IDENT` branch beside an `AN_FIELD` branch, and
+the failure mode is not a branch that *drifted* but one that was never finished.
+*A search for duplicated logic cannot find the place where the logic is missing*
+(frankS, 2026-08-29) — grep-for-the-sibling finds divergent copies and returns
+clean when every arm is wrong together. A behavioural cell is wrong whether the
+handling code is divergent **or absent**, and cannot tell the difference, which
+is precisely the property needed. On its first run it found `sizeof(m[0])`
+answering 4 instead of 16 on a *plain global array* — so
+`memcpy(dst[1], src[1], sizeof(src[1]))` copied one element and returned — a bug
+with no correct sibling arm anywhere to be noticed against.
+
+**Report the cells that PASS.** A construct confirmed correct across all six
+spellings is the only thing that stops the same ground being swept a fifth time,
+and it is worth more than the failures: four of the six spellings had never been
+probed at all before the census, and two same-day fixes were shown to generalise
+to them unaided rather than assumed to.
+
+**What it is blind to, and the first one bit immediately:**
+
+- **One spelling per cell.** The harness parenthesises every `sizeof`, so its
+  `sizeof` row read as one universal defect when it was **two** mechanisms with
+  two different wrong answers — `sizeof(m[0])` = 4 everywhere, `sizeof gs.m[0]`
+  = 8 through a field. An isolated hand probe disagreed with the grid and both
+  were right. **A census cell that disagrees with a hand probe is a signal to
+  vary the shape, not to pick a winner.**
+- **The enumeration is only as complete as your model of the language.** It is
+  closed and countable in principle — defined by C, not by the codebase — but a
+  construct nobody listed is invisible, and it will not tell you it is missing.
+- **A wrong answer that coincides with the right one passes.** `char` rows are
+  8 bytes and so is a pointer, so the char column looked correct while measuring
+  entirely the wrong thing; only running `int`, `char` **and** `double` showed
+  it. Two element types would have blessed it.
+- **It localises nothing.** A cell names a construct and a spelling, never a
+  routine. That is the price of asking about behaviour, and the reason it pairs
+  with a grep rather than replacing one.
+- **Native x86-64 at the default `-O` only**, and gcc is the judge, so anything
+  C leaves implementation-defined or undefined is not adjudicated.
 
 ## Self-differential probes — pxx against pxx under a changed condition
 

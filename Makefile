@@ -7305,6 +7305,12 @@ test-core: $(COMPILER)
 	$(TESTTMP)/cstruct_layout_stress_b13426; tools/expect_same.sh cstruct_layout_stress_b13426-rc "$$?" "42"
 	./$(COMPILER) test/csizeof_paren_index_b29.c $(TESTTMP)/csizeof_paren_index_b2926
 	$(TESTTMP)/csizeof_paren_index_b2926; tools/expect_same.sh csizeof_paren_index_b2926-rc "$$?" "42"
+	# ... and the same subscript on a MULTI-dim array, where one subscript peels
+	# ONE dimension. Both spellings, six ways of reaching the array, and the two
+	# idioms it cost: memcpy sized from the row, and sizeof(a)/sizeof(a[0]).
+	# bug-c-sizeof-a-partial-index-answers-the-element-not-the-row
+	./$(COMPILER) test/csizeof_partial_index_row.c $(TESTTMP)/csizeof_partial_index_row26
+	$(TESTTMP)/csizeof_partial_index_row26; tools/expect_same.sh csizeof_partial_index_row26-rc "$$?" "42"
 	./$(COMPILER) test/cmulti_decl_ptr_b30.c $(TESTTMP)/cmulti_decl_ptr_b3026
 	$(TESTTMP)/cmulti_decl_ptr_b3026; tools/expect_same.sh cmulti_decl_ptr_b3026-rc "$$?" "42"
 	./$(COMPILER) test/ccall_field_b31.c $(TESTTMP)/ccall_field_b3126
