@@ -32,3 +32,6 @@ pascal26:10: error: undefined variable (RENAMED)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-29 — auto-closed by the seven watcher: `test-nilpy#src:test/test_nilpy_relative_import_in_package.npy` passes at 084ee09ef0ae (tier full); it was red at ee62e6dc0582. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
