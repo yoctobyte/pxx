@@ -74,6 +74,20 @@ function PyPalPoll(fd: Int64; events: Int64; timeoutMs: Int64): Int64;
   result. }
 function PyPalReadlink(path: Pointer; buf: Pointer; bufsz: Int64): Int64;
 
+{ CLOCK_REALTIME seconds+nanoseconds. False when this target has no number, so
+  the caller raises rather than reporting the epoch. }
+function PyPalClockRealtime(var sec: Int64; var nsec: Int64): Boolean;
+
+{ One getdents64 fill. Returns bytes written to buf, 0 at end of directory,
+  negative on error (including -1 for "no number on this target"). }
+function PyPalGetdents(fd: Int64; buf: Pointer; n: Int64): Int64;
+
+{ Whether this target HAS a getdents64 number, asked separately because the
+  error return cannot carry it: -1 is also EPERM, so a caller that only saw the
+  return value would report a permission problem on a target that simply has no
+  entry in the table. arm32 is that target today. }
+function PyPalHasGetdents: Boolean;
+
 implementation
 
 { ===== the per-arch syscall table — the only place numbers appear ============
@@ -83,6 +97,44 @@ implementation
   the most common call on the most common target look unsupported. (It did —
   every file open and os.environ lookup failed softly while getcwd and
   path.exists worked, because only those two avoided the guard.) }
+
+{ NR_CLOCK_GETTIME and NR_GETDENTS64 (added 2026-08-29) — read one arch at a
+  time out of this machine's kernel headers, never derived from a sibling.
+  Deriving is the specific trap here: i386 and arm32 sit +27 apart for
+  openat/unlinkat/renameat/ppoll/readlinkat in the table above, and that offset
+  does NOT extend to getdents64 (i386 220, arm32 217). One arch's number is
+  evidence about that arch only.
+
+  CLOCK: the 64-bit targets use clock_gettime; the 32-bit ones use
+  clock_gettime64 (403), NOT the legacy 32-bit clock_gettime. Two reasons, and
+  the first is correctness rather than taste:
+    * riscv32 does not HAVE the legacy one. asm-generic/unistd.h gates
+      __NR_clock_gettime 113 on `__ARCH_WANT_TIME32_SYSCALLS || __BITS_PER_LONG
+      != 32`, and riscv32 (time64-only from the start) defines neither.
+    * it makes the struct UNIFORM. clock_gettime64 takes a __kernel_timespec —
+      two 64-bit fields — which is byte-identical to the 64-bit targets'
+      struct timespec, so TPyPalTimespec is one layout on every target rather
+      than a per-arch record. It is also y2038-clean by construction.
+  The time64 block (403..414) was deliberately assigned the SAME numbers on
+  every 32-bit ABI, which is why 403 is right for i386, arm32 and riscv32
+  alike; confirmed here against both i386's own header and the kernel's generic
+  syscall.tbl (`403 32 clock_gettime64`).
+
+  VERIFIED HOW, name by name — this is the part a reader needs, because a wrong
+  number is invisible on five of six targets and issues an UNRELATED syscall:
+    x86-64   header  /usr/include/x86_64-linux-gnu/asm/unistd_64.h  (228, 217)
+    i386     header  .../asm/unistd_32.h  (clock_gettime64 403, getdents64 220)
+    aarch64  header  /usr/include/asm-generic/unistd.h  (113, 61)
+    riscv32  header  same, 32-bit arm of the gate above  (403, 61)
+    arm32    clock_gettime64 403 — from the uniform time64 block, cross-checked
+             against two independent sources above.
+             getdents64 = -1, DELIBERATELY. This machine carries no arm32
+             syscall table (arch/arm/tools/syscall.tbl is absent from the
+             installed headers) and the number cannot be derived from i386.
+             -1 is this table's own "no such call" sentinel, so os.listdir
+             fails softly on arm32 instead of issuing whatever 217 happens to
+             mean there. Fill it in from an arm32 header, not from memory:
+             bug-n-pypal-arm32-getdents64-is-unfilled }
 
 const
 {$ifdef CPUX86_64}
@@ -100,6 +152,8 @@ const
   NR_FACCESSAT = -1;     { not needed: plain access exists }
   NR_PPOLL     = 271;
   NR_READLINKAT= 267;
+  NR_CLOCK_GETTIME = 228;
+  NR_GETDENTS64 = 217;
   PYPAL_HAVE   = True;
 {$endif}
 {$ifdef CPUAARCH64}
@@ -117,6 +171,8 @@ const
   NR_FACCESSAT = 48;
   NR_PPOLL     = 73;
   NR_READLINKAT= 78;
+  NR_CLOCK_GETTIME = 113;
+  NR_GETDENTS64 = 61;
   PYPAL_HAVE   = True;
 {$endif}
 {$ifdef CPU_I386}
@@ -134,6 +190,8 @@ const
   NR_FACCESSAT = -1;
   NR_PPOLL     = 309;
   NR_READLINKAT= 305;
+  NR_CLOCK_GETTIME = 403;
+  NR_GETDENTS64 = 220;
   PYPAL_HAVE   = True;
 {$endif}
 {$ifdef CPU_ARM32}
@@ -151,6 +209,8 @@ const
   NR_FACCESSAT = -1;
   NR_PPOLL     = 336;
   NR_READLINKAT= 332;
+  NR_CLOCK_GETTIME = 403;
+  NR_GETDENTS64 = -1;
   PYPAL_HAVE   = True;
 {$endif}
 { no table for this target — every entry point fails softly }
@@ -169,6 +229,8 @@ const
   NR_FACCESSAT = -1;
   NR_PPOLL     = -1;
   NR_READLINKAT= -1;
+  NR_CLOCK_GETTIME = -1;
+  NR_GETDENTS64 = -1;
   PYPAL_HAVE   = False;
 {$endif}{$endif}{$endif}{$endif}{$endif}
 
@@ -187,6 +249,8 @@ const
   NR_FACCESSAT = 48;
   NR_PPOLL     = 73;
   NR_READLINKAT= 78;
+  NR_CLOCK_GETTIME = 403;
+  NR_GETDENTS64 = 61;
   PYPAL_HAVE   = True;
 {$endif}
 
@@ -323,6 +387,47 @@ begin
   else if NR_FACCESSAT >= 0 then
     r := __pxxrawsyscall(NR_FACCESSAT, PYPAL_AT_FDCWD, Int64(path), 0, 0, 0, 0);
   PyPalAccessOk := r = 0;
+end;
+
+{ CLOCK_REALTIME, as seconds + nanoseconds. Boolean rather than an Int64 return
+  because there is no in-band value for failure: 0 seconds is a legal (if
+  absurd) answer, and a caller that reported the epoch on an unsupported target
+  would be wrong QUIETLY -- which on a clock is the whole failure mode. On the
+  32-bit targets NR_CLOCK_GETTIME is clock_gettime64, whose __kernel_timespec
+  is two 64-bit fields, so TPyPalTimespec is the right shape everywhere. }
+function PyPalClockRealtime(var sec: Int64; var nsec: Int64): Boolean;
+var ts: TPyPalTimespec; r: Int64;
+begin
+  PyPalClockRealtime := False;
+  sec := 0;
+  nsec := 0;
+  if NR_CLOCK_GETTIME < 0 then Exit;
+  ts.tv_sec := 0;
+  ts.tv_nsec := 0;
+  { arg 1 is CLOCK_REALTIME (0) — the wall clock time.time() reports, not the
+    monotonic one; they differ across a settimeofday and Python promises this. }
+  r := __pxxrawsyscall(NR_CLOCK_GETTIME, 0, Int64(@ts), 0, 0, 0, 0);
+  if r < 0 then Exit;
+  sec := ts.tv_sec;
+  nsec := ts.tv_nsec;
+  PyPalClockRealtime := True;
+end;
+
+{ One getdents64 fill. The BUFFER WALK is the caller's job, not this unit's:
+  the kernel packs variable-length records and decoding them is data handling,
+  while this unit's whole contract is "reach the kernel and nothing else".
+  Returns bytes written, 0 at end of directory, negative on error — and -1 on a
+  target with no number, which arm32 currently is. }
+function PyPalGetdents(fd: Int64; buf: Pointer; n: Int64): Int64;
+begin
+  PyPalGetdents := -1;
+  if NR_GETDENTS64 < 0 then Exit;
+  PyPalGetdents := __pxxrawsyscall(NR_GETDENTS64, fd, Int64(buf), n, 0, 0, 0);
+end;
+
+function PyPalHasGetdents: Boolean;
+begin
+  PyPalHasGetdents := NR_GETDENTS64 >= 0;
 end;
 
 end.

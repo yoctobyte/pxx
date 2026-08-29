@@ -51,7 +51,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (314)
+## backlog (316)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -59,6 +59,7 @@ _none_
 | bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted | A | 25 | bug |  | — |
 | bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce | A | 30 | bug | Raised out of decide-how-much-string-machinery-the-basic-frontend-gets, decided 2026-08-25. That decision accepted ~100 KB BASIC binaries on the grounds that binary size is a GENERAL problem with a general answer (reachability-gated emission), not a per-frontend one. But feature-emission-size-dce is marked done while a Pascal hello-world is still 63,760 bytes -- so either the pass is not reaching this, or the done ticket's scope was narrower than its title. | — |
 | bug-a-aarch64-cannot-build-programs-with-an-aggregate-result-past-8-params | A | 55 | bug | jsondemo and life do not build for aarch64 at all -- 'aggregate result with more than 8 params not supported', raised from builtin/pylib.pas, so it fires for any program pulling that unit in. The sharp part is not the two programs: it silently narrows the corpus available for BEHAVIOURAL verification on aarch64, while census tables built from target-independent IR keep listing those same programs as aarch64 data points. Two purposes, one list, only one of them ever checked. | — |
+| bug-a-allocarray-leaves-recname-stale-on-a-recycled-symbol-slot | A | 55 | bug | `AllocArray` leaves `RecName` stale on a recycled symbol slot | — |
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
 | bug-a-for-loop-limit-is-evaluated-after-the-control-variable-is-assigned | A | 70 | bug | `for n := 1 to n do` runs ONE iteration where FPC runs five, and `for n := 1 to n - 1` runs ZERO where FPC runs four; downto is wrong the same way (9 vs 3). Pascal evaluates the initial AND final expressions BEFORE assigning the control variable; ir.inc:12130 stores the control variable first and lowers the limit after, so a limit that reads the control variable sees the new value. Silent wrong iteration count -- no diagnostic, no crash. ROOT CAUSE LOCATED: three statements in the wrong order, plus one ordering subtlety noted below. | — |
 | bug-a-function-result-assignment-does-not-narrow-to-the-result-type | A | 40 | bug | `function F(a: Int64): Integer; begin F := a; end` returns the full 64-bit value: F(4294967299) prints 4294967299 where FPC prints 3. The same assignment to a variable, to a var parameter, or through a cast all narrow correctly. One arm of a double case, and the broken arm is the one with no diagnostic — the caller reads a value the declared result type cannot hold. | — |
@@ -129,6 +130,7 @@ _none_
 | bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
 | bug-p-an-unknown-compiler-directive-is-silently-ignored | P | 35 | bug | compiler/lexer.inc's {$...} handler is an if/else chain of 34 CaseEqual(command, ...) arms with no terminal else, so ANY directive outside those 34 is silently ignored — no warning, no note, exit 0. {$FATAL} is one confirmed instance (bug-p-fatal-directive-is-silently-ignored) and the mechanism guarantees there are others. Filed separately from the {$FATAL} ticket on purpose: fixing {$FATAL} closes that ticket and leaves this generator intact. | — |
 | bug-p-fatal-directive-is-silently-ignored | P | 35 | bug | {$FATAL text} and {$MESSAGE FATAL text} are silently ignored: the frontend handles warning/message/error and treats every other directive as a no-op, so a guard block that means 'stop, this configuration is unsupported' compiles clean and produces a binary that should not exist. | — |
+| bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out | P | 35 | bug | ParseFactorCore's carve-out to PyParseFactorCore is partial: 36 NilPy diagnostics remain on the Pascal arm and 10 exist verbatim on BOTH arms, so a correction to one of them lands on one arm and silently leaves the other stale. | — |
 | bug-p-qword-div-by-a-literal-above-2-63-is-signed | P | 55 | bug | `QWord div` / `mod` by a literal >= 2^63 divides SIGNED and returns a wrong value | — |
 | bug-p-set-membership-item-constant-truncated-to-32-bits | P | 25 | bug |  | — |
 | bug-p-sysopen-intrinsic-shadows-a-user-function-name | P | 15 | bug | sysopen/syswrite/sysclose/sysfchmod are compiler INTRINSICS with dedicated tokens (tkSysOpen &c), so the lexer never produces an identifier for them and a user program cannot declare a function with one of those names. The diagnostic is `expected name`, which does not mention the reservation. Real but nearly unreachable: prio 15. | — |
@@ -382,11 +384,10 @@ _none_
 | bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets | P | 65 | bug | `SizeOf(Extended)` answers 10 while a variable declared `Extended` occupies 8 and an array of four occupies 32. Same two-table split as [[bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets]], in the same function, left unfixed for the sibling type when Real was corrected. Self-inconsistent within our own compiler, so any stride or GetMem computed from SizeOf(Extended) is two bytes too long per element. | — |
 | refactor-a-target-dispatch-chains-fail-open | A | 50 | refactor | Not a missing-helper ticket: TARGET_PTR_SIZE exists and is read at 129 sites. The narrow, verified gap is that several per-target if/else-if chains have no final else, so adding target #7 (wasm32) or #8 (riscv64) matches no arm and configures nothing, silently. lexer.inc:936 is the worked example. Fix is a mandatory else that Errors, not a collapse of the 180 TargetArch sites — util.inc:87 already documents why collapsing is wrong. | — |
 
-## experimental (21)
+## experimental (20)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-rust-slice-param-fn-erases-mains-record-array-element-type | R | 30 | bug | A fn with a slice param and >=2 params erases `main`'s record-array element type | — |
 | feature-erlang-frontend-scoping | A | 65 | feature | Erlang frontend — scoping only | — |
 | feature-esoteric-ada | A | 65 | feature | Esoteric probe: Ada | — |
 | feature-esoteric-cobol | A | 45 | feature | Esoteric probe: COBOL | — |
@@ -686,9 +687,9 @@ _none_
 - [p 70] [T] regression-cascade-154d1aa3fba6
 - [p 70] [P] regression-cascade-4e27dc2be114
 - [p 70] [B] regression-lib-test-crtl-reachability-3
-- [p 70] [N] regression-test-nilpy-test-nilpy-parent-call-after-instantiation
-- [p 70] [N] regression-test-nilpy-test-nilpy-relative-import-in-package
-- [p 70] [N] regression-test-nilpy-test-nilpy-startswith-tuple
+- [p 70] [N] regression-test-nilpy-test-nilpy-parent-call-after-instantiation [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [N] regression-test-nilpy-test-nilpy-relative-import-in-package [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [N] regression-test-nilpy-test-nilpy-startswith-tuple [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-tools-devtest-00-2
 - [p 68] [E] feature-demo-songformatter-pxx-target
 - [p 68] [N] feature-nilpy-user-defined-decorators
@@ -730,6 +731,7 @@ _none_
 - [p 55] [U] decide-which-gtk-a-bare-gtk-gtk-h-means (unblocks 1)
 - [p 55] [A] feature-nilpy-object-reclamation (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 55] [A] bug-a-aarch64-cannot-build-programs-with-an-aggregate-result-past-8-params
+- [p 55] [A] bug-a-allocarray-leaves-recname-stale-on-a-recycled-symbol-slot
 - [p 55] [A] bug-a-emitzeroframeslot-has-no-wasm32-arm
 - [p 55] [A] bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice
 - [p 55] [A+T] bug-a-testtmp-defaults-to-a-path-every-checkout-shares
@@ -867,6 +869,7 @@ _none_
 - [p 35] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
 - [p 35] [P] bug-p-an-unknown-compiler-directive-is-silently-ignored
 - [p 35] [P] bug-p-fatal-directive-is-silently-ignored
+- [p 35] [P] bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out
 - [p 35] [T] chore-t-a-stable-gated-red-should-name-pin-lag-before-flakiness
 - [p 35] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
 - [p 35] [D] docs-toolchain-cli-flags
