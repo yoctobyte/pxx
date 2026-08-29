@@ -1,13 +1,58 @@
 { SPDX-License-Identifier: MPL-2.0 }
 const
 
-  { 16 MB. Sized by MEASUREMENT, not by guess: compiler.pas emits 7415348 B at
-    -O2/default, 7458182 at -O1, 7561519 at -O3 and 8394698 at -O0. The old 8 MB
-    cap put every level at 88-90% of the limit and -O0 over it by 6090 bytes --
-    a self-compile that failed at one -O level only, which no gate runs (see
-    bug-a-self-compile-at-o0-overflows-the-code-buffer). Costs virtual BSS only:
-    Code[] plus AsmDisProcAtPos (4 B per code byte, and touched only by -S). }
-  MAX_CODE      = 16777216;
+  { 32 MB. Sized by MEASUREMENT, not by guess, TWICE -- and the second time the
+    measurement that mattered was on a target nobody had compiled the compiler
+    for. History, because both bumps were the same mistake at different scales:
+
+      8 MB  -> 16 MB   compiler.pas emits 7415348 B at -O2/default, 7458182 at
+                       -O1, 7561519 at -O3, 8394698 at -O0. Every level sat at
+                       88-90% of the old cap and -O0 was over it by 6090 bytes:
+                       a self-compile that failed at ONE -O level, which no gate
+                       runs (bug-a-self-compile-at-o0-overflows-the-code-buffer).
+      16 MB -> 32 MB   the cap was sized against x86-64 ALONE. Measured at HEAD,
+                       `compiler.pas -dPXX_MANAGED_STRING`, one compiler, one
+                       source, only --target differing:
+
+                           x86-64     9316078 B     (55.5% of the old 16 MB cap)
+                           i386      10902436 B     (65.0%)
+                           aarch64   20446704 B     -- 121.9%, OVERFLOWED
+                           arm32     21568956 B     -- 128.6%, OVERFLOWED
+
+    aarch64 is 2.19x x86-64 and arm32 is 2.31x, and that is ORDINARY DENSITY for
+    a fixed-width ISA against x86-64's variable-length encoding -- confirmed
+    runaway-free on four unrelated programs whose ratios span only 2.27-2.34
+    (hello, an inliner stress, a variant/class cross, a collections program).
+    A concentration would have shown as one program well off that. None is.
+    So the compiler needed just 1.80x to breach the cap and both 32-bit-pointer
+    ARM targets are naturally past 2.1x: the cap did not shrink, the target list
+    grew underneath it.
+
+    ARM32 WAS ALSO BROKEN AND NOBODY HAD SAID SO. The ticket reported aarch64;
+    arm32 is 1.1 MB WORSE and `make cross-bootstrap` builds both. It went
+    unreported because that target overflows in the same place for the same
+    reason, and nothing runs it -- see below.
+
+    At 32 MB the worst target (arm32) sits at 64.3%, roughly where x86-64 sat
+    under the old cap, so the headroom is now the same for the densest target
+    rather than for the sparsest.
+
+    THE COST IS NOTHING, and the note this replaces was wrong about that: it
+    said "costs virtual BSS only", which was true when these were fixed arrays.
+    Both are `array of` now -- Code[] doubles on demand in GrowCode and stops at
+    MAX_CODE, and AsmDisProcAtPos is SetLength'd to the ACTUAL CodeLen. So the
+    constant is a ceiling, not an allocation, and raising it costs zero bytes
+    until a program actually emits them. Measured: BSS moved 76206356 ->
+    76249388 across the bump, i.e. not with it.
+
+    WHY IT ROTTED: `make cross-bootstrap` runs ONLY on a manual tag dispatch in
+    release.yml, never per-commit (ci.yml is deliberately light -- no FPC, no
+    QEMU, no cross targets). Nothing was red because nothing asked, while the
+    website advertises ARM as supported. Making it per-commit is a real and
+    larger question (it needs FPC and qemu, and costs minutes per push) and is
+    deliberately NOT folded in here.
+    bug-a-cross-bootstrap-aarch64-overflows-max-code }
+  MAX_CODE      = 33554432;
   LOCAL_STR_CAP = 256;     { max string length for local/stack variables }
   DEFAULT_STR_CAP = 255;   { default capacity (max chars) for tyFixedString/tyShortString when no string[N] size given }
   LINE_BUF_SIZE = 4096;    { readln stdin line buffer }
