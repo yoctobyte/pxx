@@ -211,3 +211,94 @@ like passes and are not — they compile and then return wrong values, because
 the function name collides with one of its own locals. That is a separate
 defect, filed as
 [[bug-n-a-local-named-after-its-own-def-aliases-the-function-result]].
+
+---
+
+## ROOT-CAUSED, 2026-08-30 (frankwasm) — and it is bigger than `split`
+
+### The site
+
+`compiler/pasparser_lval.inc:275-308`, the **TYPE-HELPER dispatch**:
+
+```pascal
+  if (idx >= 0) and (CurTok.Kind = tkDot) and
+     (Syms[idx].RecName < REC_UCLASS_BASE) and (not Syms[idx].IsArray) and
+     not (Syms[idx].TypeKind in [tyRecord, tyClass, tyVariant, tyPointer]) and
+     (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) then
+  begin
+    mci := FindHelperForType(Syms[idx].TypeKind, Syms[idx].RecName);
+    if (mci >= 0) and ((FindUMeth(mci, GetTokenStr(TokPos)) >= 0) or
+                       (FindUProp(mci, GetTokenStr(TokPos)) >= 0)) then
+    begin
+      ...
+      Result := node;
+      Exit;
+    end;
+  end;
+```
+
+**There is no `isNilPy` guard.** `sysutils.pas:100` declares
+`TStringHelper = type helper for AnsiString`, so once any imported unit pulls
+sysutils, a NilPy receiver statically typed `str` has a helper in scope. This
+block `Exit`s with the Pascal helper before the NilPy str-method loop in
+`pasparser_expr.inc:8559` (`PyIsStrBaseTk` → `PyParseStrMethod`) is ever
+reached. **The Pascal helper wins over the Python method, silently.**
+
+### The collision set is four names, not one
+
+Pascal member lookup is case-insensitive, so `TStringHelper`'s surface collides
+with Python's `str` on:
+
+| Python | TStringHelper | how it fails |
+| --- | --- | --- |
+| `split(sep, maxsplit)` | `Split(array of Char)` | **arity** → `unexpected token`, the reported wall |
+| `startswith(tuple)` | `StartsWith(AnsiString)` | **argument type** → `no overload of startswith matches these arguments` |
+| `startswith(str)` | `StartsWith(AnsiString)` | **compiles** — silently the Pascal method |
+| `endswith(str)` | `EndsWith(AnsiString)` | **compiles** — silently the Pascal method |
+| `replace(old, new)` | `Replace(Old, New)` | **compiles** — silently the Pascal method |
+
+Measured, same file, only the def's name changed (see below):
+
+```
+label.startswith(("C", "D"))   helper reached  -> no overload of startswith matches these arguments
+label.startswith(("C", "D"))   helper missed   -> ok
+```
+
+The last three rows are the reason this matters beyond one wall: they are the
+**silent-wrong-behavior** class, so by CLAUDE.md's compat escape rule they are a
+`bug-`, not a compat item. `str.replace` takes an optional third `count`;
+`TStringHelper.Replace`'s third parameter is `TReplaceFlags`. Any NilPy program
+that reaches the helper and passes three arguments gets a different function
+under the same spelling.
+
+### What the def-name effect actually is
+
+The unexplained name table above is now localised, though not explained: the
+name decides whether `FindHelperForType` / `FindUMeth` at line 288 **finds** the
+helper. Failing names are the ones where it succeeds. Re-measured tonight on
+`9ea7174aa`:
+
+```
+ok :  a  b  f  a1  a2  word  split
+ERR:  aa ab zz ff qq zzz aaa abc foo bar baz parse tonic x1 zzzz wzzz zzzw zzzz2
+```
+
+`return label.split(" ", 1)`, `x = label.split(" ", 1)` and
+`tonic, mode = label.split(" ", 1)` all behave identically, so the tuple-unpack
+in the original report was **not** a condition — only the name is. I do not know
+why the name moves the lookup, and I am not guessing; but the fix below makes
+it moot for every str method, which is why chasing it further is not on the
+critical path.
+
+### Proposed fix (NOT applied — needs a Track A grant)
+
+One condition at `pasparser_lval.inc:283`: in NilPy mode, when the receiver is a
+str base and the member names a known Python str method (`PyStrMethodInfo`),
+skip the type-helper dispatch and let `PyParseStrMethod` have it. Python's
+`str` surface owns its own spellings; the Pascal helper is for Pascal receivers.
+
+**File ownership:** `pasparser_lval.inc` is Pascal-frontend ground shared with
+Track A — same situation as the `pasparser_call.inc` change in
+[[bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped]],
+which needed a grant and A's gate (`gate.sh quick`), not just the fixedpoint.
+Not applied under Track N.
