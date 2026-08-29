@@ -2486,6 +2486,16 @@ var
     per def rather than once per occurrence.
     bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name }
   ProcPyRebindTok: array of Integer;
+  { Token index of an `import ... as <this proc's name>` that rebinds the name in
+    the module being compiled, or -1. SEPARATE from ProcPyRebindTok, which caches
+    a TOKEN SCAN: an import alias's rebinding is a SYNTHESISED assignment
+    (PyFlushImportAliases emits `ALIAS = NAME` into the module body) and so has
+    no `g =` tokens for that scan to find. Two different records because they
+    answer the same question from two different sources, and folding the stamp
+    into the scan's cache would make "explicitly recorded" and "computed and
+    cached" indistinguishable.
+    bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module }
+  ProcPyAliasRebindTok: array of Integer;
   ProcHdrTok  : array of Integer; { SOffset of a MAIN-program top-level header (pre-scan/forward stamp); 0 = always visible (builtins, units, interface, methods, nested). Compared against CurBodyHdrTok under RequireForward. }
   ProcRetRecId : array of Integer; { record id for tyRecord results }
   ProcAggregateDestSym : array of Integer; { hidden caller-result pointer local, or -1 }

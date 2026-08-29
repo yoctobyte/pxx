@@ -4,8 +4,8 @@ prio: 85
 type: bug
 blocked-by: [decide-how-a-compiled-def-carries-its-signature-when-boxed]
 summary: "RE-SCOPED: not about import aliases. A name that names a `def` is resolved to that def at EVERY call site and any later rebinding is ignored — `def a…; def b…; b = a; b(1,5)` answers 18 (the original b) where CPython answers 5, with no import anywhere. The alias spelling is one way to rebind. Blocked: the correct destination is the dynamic call path, which cannot yet carry defaults (see the decision ticket)."
-status: backlog
-owner: unassigned
+status: done
+owner: frankA
 ---
 
 # An import alias binds to a same-named member of the SOURCE module
@@ -276,3 +276,172 @@ looks like an unrelated resolution bug — which is how it first got mis-recorde
 Recorded by the Track T agent on `seven` under the provenance rule: my box's
 sweep produced the regression, so the narrowing is mine to leave behind. The
 rule itself is Track N's.
+> **ANSWERED — frankA, 2026-08-29.** Done, before reading this note, and the
+> answer is clean. Both named tests plus four more import-shaped ones were run
+> with `-Futest/nilpy_units` against the pinned baseline and against the tree
+> carrying BOTH agents' fixes, and every one is **byte-identical**:
+> `fallback_import`, `fallback_import_mixed`, `fallback_import_try_wins`,
+> `bare_import_is_python`, `dotted_import`,
+> `class_named_after_its_imported_base`.
+>
+> The warning's other half was also worth its length: a bare invocation without
+> `-Futest/nilpy_units` **does** report an unrelated-looking failure, and it cost
+> me a false alarm before I ran the baseline. I read six build failures as
+> regressions from my own change; the pinned compiler produced the same six. The
+> flag is the difference, exactly as recorded here.
+>
+> The rule that landed is narrower than the one that caused the earlier
+> regression, which is likely why fallback-import is untouched: it does not say
+> "a module-level var beats an imported proc". It says the module-level
+> ASSIGNMENT that rebinds the name must be found even when the def lives in
+> another unit's region of the shared token array — an ordering test, still
+> gated on an assignment actually existing at depth 0 in this module. A plain
+> optional import allocates the var without assigning at module level, so it
+> never satisfies it.
+
+---
+
+> **CONCURRENCY NOTE — frankA, 2026-08-29.** The section above and the one below
+> are **two agents fixing this ticket at the same time, neither able to see the
+> other.** Both are kept, in the order they landed. The split is clean and almost
+> comically complementary: the other agent could not take the last row because
+> `PyDefRebindTok` lives in `compiler/symtab.inc`, **Track A's file, held by me** —
+> and that row is the only one I fixed, because I had A. Meanwhile I split the
+> class-constructor and crossing-alias rows out as unreachable from the proc arm,
+> which is exactly what the other agent had already fixed.
+>
+> Nothing here is contradictory, but the two accounts diagnose *different*
+> mechanisms and each is right about its own. Read them together: theirs covers
+> the call site, the import parser's simultaneous binding, and the constructor
+> path; mine covers the cross-unit token scan and the alias's tokenless
+> synthesised assignment. The combined result is re-measured at the bottom.
+>
+> The follow-on ticket I filed
+> (`bug-n-an-import-alias-cannot-shadow-a-class-or-cross-with-another-alias`) is
+> **obsolete on arrival** for both of its rows and is withdrawn to `rejected/`
+> with a pointer here.
+
+---
+
+## RESOLVED 2026-08-29 (frankA) — and the 2026-08-18 re-scope was WRONG
+
+Taken after the coordinator relayed the owner's lifting of the Track N
+reservation (the superseded paragraph above). Measured first, differential
+against CPython on every row, before reading the analysis below it — which is
+how the following came out.
+
+### The re-scope is stale: the same-file rows now PASS
+
+The section above concludes *"a name that names a `def` is resolved to that
+`def` at every call site, and any later rebinding is ignored"*, and offers the
+import-free program as proof:
+
+```python
+def a(x, lo=7):        return lo
+def b(x, lo=3, hi=13): return lo + hi
+b = a
+print(b(1, 5))         # recorded: pxx 18, CPython 5
+```
+
+**At HEAD that prints 5.** It was fixed in the meantime by
+`bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name`, whose
+`PyDefRebound` is the machinery this ticket then reuses. So the generalisation
+that renamed this ticket was true when written and is no longer, and the
+**original title was right all along**: what survived is import-specific.
+
+Worth stating because the re-scope was a *reduction* — the good kind of move —
+and it still went stale. A ticket re-scoped by measurement carries a
+measurement's shelf life.
+
+### Root cause: `Tokens[]` is ONE array shared by every unit
+
+The rebinding rule was already correct; it just could not see across a unit
+boundary. `PyDefRebindTok` scans forward from `ProcPyDefTok[pi]` for a depth-0
+`name =`. A NilPy import **appends** the module's tokens after the program's, so
+for an imported def that index points into the *other* unit's region:
+
+```
+PROBE g: procIdx=1856 idx=471 pydeftok=205755 rebindtok=-1 rebound=0
+         tokpos=28 procunit=637 curunit=-1 tokcount=205801
+```
+
+The def sits at token **205755** of **205801**; the rebinding is at token **28**,
+*behind* it. The scan had 46 tokens of another unit's tail to look at and
+correctly found nothing. **A def's position does not order the statements of a
+different module** — so when the units differ the scan now starts at the top of
+the stream, where the module being compiled is, and is not cached (the answer
+depends on which unit is being compiled, and there is one slot per proc).
+
+Same-unit lookups — every NilPy program that never imports — keep the cache and
+the old path byte for byte.
+
+### The second mechanism: an alias's rebinding has NO TOKENS
+
+`from M import f as g` is a real binding — `PyFlushImportAliases` emits
+`g = f` into the module body — but it is **synthesised**, so a token scan can
+never find it however it is aimed. That needed a separate record:
+`ProcPyAliasRebindTok`, stamped at the import's own token for every proc on the
+chain named by the alias, and consulted by `PyDefRebound` when the scan comes
+back empty. Deliberately NOT folded into `ProcPyRebindTok`, which caches a scan:
+one array must not mean both "computed and cached" and "explicitly recorded".
+
+Stamped only for a genuine rename (`impAlias <> impReal`) — `from M import g`
+binds the name to the proc it already meant, and stamping that would unbind a
+name nothing rebound. That is the `H` control below.
+
+### Verified — every row, against CPython
+
+| shape | before | after |
+| --- | --- | --- |
+| `from M import f as g`, `g(1)` | 16 | **7** |
+| `from M import f as g`, `g(1, 5)` | 18 | **5** |
+| `from M import g`, then `g = <local def>` | 16 | **99** |
+| `from M import f, g`, then `g = f` | 18 | **5** |
+| **H** `from M import g`, no rebinding | 16 | 16 (unmoved) |
+| a call written ABOVE the import | — | correct (ordering kept) |
+| fresh alias `f as zz` | 5 | 5 (unmoved) |
+| same-file `b = a` | 5 | 5 (unmoved) |
+| `from M import g`, `g = 42`, `print(g)` | 42 | 42 (unmoved) |
+
+Regression test `test/test_nilpy_import_alias_collides.npy` + fixture
+`test/nilpy_aliasmod.py`, wired into the Makefile. It prints `7 5 2 99 7` on the
+fix and `16 18 2 2 14` on the pinned baseline — **run the baseline; a test that
+passes on both proves nothing.** Row 3 of it is an ordering control: the
+rebinding below has not run yet, so that call must still reach the import.
+
+### A blind probe, recorded because it nearly cost the diagnosis
+
+`print(type(g))` answered `NoneType` in pxx and `<class 'function'>` in CPython,
+which read as "the assignment never landed" and pointed at the wrong mechanism
+entirely. It was the **control** that killed it: the same probe answers
+`NoneType` on the rows that WORK, so `type()` of a function value is simply
+unimplemented and the probe could not distinguish anything. Running it on a
+known-good case cost ten seconds and saved the wrong root cause.
+
+### NOT fixed here — split out, not forgotten
+
+Two rows of the table above need different mechanisms and are filed as
+[[bug-n-an-import-alias-cannot-shadow-a-class-or-cross-with-another-alias]] (N,
+p60):
+
+- **`from M import f as C` where M has a CLASS `C`** still constructs it. The
+  stamp walks the PROC chain and a class is not on it; `FindUClass` consults the
+  alias table only *after* the real class scan succeeds, so a shadowing row
+  there is unreachable by construction. Needs a "this name is not a class here"
+  concept tested before the scan — a real change to a resolver with many callers.
+- **`from M import f as g, g as f`** answers `5 5` where CPython answers `5 18`:
+  crossing aliases must both read the pre-import bindings. That is a
+  simultaneity question in `PyFlushImportAliasesFrom`'s drain order, not a
+  resolution question.
+
+Both were rows of this ticket; neither is a variation of the arm that landed, so
+splitting beat a partial claim.
+
+### Gate
+
+`make compiler/pascal26` — `converged after 1 round(s)`, fixedpoint
+`e55fdee01ac5`. `tools/gate.sh quick` green, including the FPC seed / forward-decl
+step the coordinator has since wired into it.
+
+## Log
+- 2026-08-29 — resolved, commit b25e3ac49.

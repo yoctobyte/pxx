@@ -8059,9 +8059,31 @@ end;
   scanning the module for each would be quadratic in a file like the uforth
   corpus. }
 function PyDefRebindTok(pi: Integer): Integer;
-var i, depth: Integer; nm: AnsiString;
+var i, depth: Integer; nm: AnsiString; crossUnit: Boolean;
 begin
-  if ProcPyRebindTok[pi] <> -2 then
+  { WHOSE token stream is ProcPyDefTok an index into? All of them -- Tokens[] is
+    one array shared by the program and every unit it pulls, and a NilPy import
+    APPENDS the module's tokens after the program's. So for a def in ANOTHER
+    unit, ProcPyDefTok points into that unit's region, and scanning forward from
+    it can never reach a rebinding written in the module being compiled:
+
+        from mmod import g          # mmod's `def g` lands at token 205755
+        def loc(x, lo=99): return lo
+        g = loc                     # ...this is at token ~20, BEHIND it
+        print(g(1))                 # CPython 99, pxx 16 (mmod's g)
+
+    Measured: pydeftok=205755, tokcount=205801, the assignment at tokpos=28 --
+    the scan had 46 tokens of another unit's tail to look at and correctly found
+    nothing. The def's position simply does not order the statements of a
+    different module, so when the units differ the scan starts at the top of the
+    stream instead, where the program being compiled is.
+
+    Not cached in that case: the answer depends on which unit is being compiled,
+    and ProcPyRebindTok is one slot per proc. Same-unit lookups -- every NilPy
+    program that never imports -- keep the cache and the old path exactly.
+    bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module }
+  crossUnit := ProcUnitIdx[pi] <> CurrentUnitIdx;
+  if (not crossUnit) and (ProcPyRebindTok[pi] <> -2) then
   begin
     Result := ProcPyRebindTok[pi];
     Exit;
@@ -8069,7 +8091,10 @@ begin
   Result := -1;
   nm := Procs[pi].Name;
   depth := 0;
-  i := ProcPyDefTok[pi];          { the `def` token itself; see defs.inc on the -1 }
+  if crossUnit then
+    i := 0
+  else
+    i := ProcPyDefTok[pi];        { the `def` token itself; see defs.inc on the -1 }
   while i < TokCount do
   begin
     if Tokens[i].Kind = tkIndent then Inc(depth)
@@ -8089,7 +8114,7 @@ begin
     end;
     Inc(i);
   end;
-  ProcPyRebindTok[pi] := Result;
+  if not crossUnit then ProcPyRebindTok[pi] := Result;
 end;
 
 { Has an ordinary module-level assignment taken this def's name over, AT THE
@@ -8105,8 +8130,36 @@ function PyDefRebound(pi: Integer): Boolean;
 var rb: Integer;
 begin
   Result := False;
-  if (pi < 0) or (ProcPyDefTok[pi] <= 0) then Exit;
+  if pi < 0 then Exit;
+  { ProcPyDefTok = 0 means "not a module-level def written in THIS unit" -- an
+    imported name, or a pylib routine. Such a proc was excluded here, which made
+    the rebinding rule answer only for names the module defines itself:
+
+        from mmod import g          # g names mmod's g
+        def loc(x, lo=99): return lo
+        g = loc
+        print(g(1))                 # CPython 99, pxx 16 (mmod's g)
+
+    A module-level assignment rebinds the name whatever it previously named --
+    that is one rule in CPython, not one rule for local defs and another for
+    imports -- and PyDefRebindTok already scans the CURRENT unit's tokens from
+    the top for a depth-0 `name =`, so 0 is the right place for it to start.
+    The skGlobal test at the call site is what keeps this honest: it fires only
+    when the name really does denote a module-level VARIABLE here, i.e. the
+    assignment actually happened.
+    bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module }
   rb := PyDefRebindTok(pi);
+  { An import alias rebinds the name with a SYNTHESISED assignment, which the
+    token scan above cannot see because it has no tokens:
+
+        from mmod import f as g     # binds g to f -- and mmod also HAS a g
+        print(g(1))                 # CPython 7, pxx 16 (mmod's g)
+
+    PyFlushImportAliases emits `g = f` into the module body, so the binding is
+    real and lands before any statement of the module; the stamp records the
+    import's own token position, which is why no ordering test is lost.
+    bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module }
+  if (rb < 0) and (ProcPyAliasRebindTok[pi] >= 0) then rb := ProcPyAliasRebindTok[pi];
   if rb < 0 then Exit;
   Result := (CurProc >= 0) or (rb < TokPos);
 end;
@@ -9157,7 +9210,7 @@ begin
   SetLength(ProcFlexColumn, n);  SetLength(ProcExternal, n);  SetLength(ProcCModule, n);
   SetLength(ProcCaseSensitive, n);  SetLength(ProcLibrary, n);  SetLength(ProcExtName, n);
   SetLength(ProcCdecl, n);  SetLength(ProcVariadic, n);  SetLength(ProcNamedGP, n);
-  SetLength(ProcNamedFP, n);  SetLength(ProcUnitIdx, n);  SetLength(ProcPyDefTok, n);  SetLength(ProcPyRebindTok, n);
+  SetLength(ProcNamedFP, n);  SetLength(ProcUnitIdx, n);  SetLength(ProcPyDefTok, n);  SetLength(ProcPyRebindTok, n);  SetLength(ProcPyAliasRebindTok, n);
   SetLength(ProcHdrTok, n);  SetLength(ProcRetRecId, n);  SetLength(ProcAggregateDestSym, n);
   SetLength(ProcRetIsDynArray, n);  SetLength(ProcRetFixedArrBytes, n);  SetLength(ProcRetArrAi, n);
   SetLength(ProcIsAsync, n);  SetLength(ProcIsGenerator, n);  SetLength(ProcIsStackless, n);
@@ -9214,6 +9267,7 @@ begin
   ProcUnitIdx[ProcCount]      := CurrentUnitIdx;
   ProcPyDefTok[ProcCount]     := 0;   { 0 = visible everywhere; see defs.inc }
   ProcPyRebindTok[ProcCount]  := -2;  { -2 = not computed; see defs.inc }
+  ProcPyAliasRebindTok[ProcCount] := -1;  { -1 = no import alias rebinds this name }
   ProcHdrTok[ProcCount]       := 0;   { 0 = always visible; ParseSubroutine stamps main-program headers }
   ProcRetRecId[ProcCount]     := REC_NONE;
   ProcAggregateDestSym[ProcCount] := -1;
