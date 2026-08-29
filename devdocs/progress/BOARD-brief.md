@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:23 blocked:8 backlog:314 backlog_new:15 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2658 rejected:51`
+`working:2 unfinished:23 blocked:8 backlog:314 backlog_new:14 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2659 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
@@ -49,7 +49,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 335, ranked
+## Ready — top 30 of 334, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -57,7 +57,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [T]` regression-cascade-154d1aa3fba6
 - `[p 70] [P]` regression-cascade-4e27dc2be114
-- `[p 70] [B]` regression-lib-test-crtl-reachability-4
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-relative-import-in-package-2
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-startswith-tuple
 - `[p 70] [T]` regression-test-pascal-conformance-shard0-6-2
@@ -81,5 +80,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [A]` feature-unicodestring-model
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - `[p 60] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 1)
+- `[p 60] [A]` audit-a-builtinheap-invariants-x86-64-inlines-past
 
-_305 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_304 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

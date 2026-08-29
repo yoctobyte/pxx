@@ -3,7 +3,8 @@ prio: 70
 track: B
 type: regression
 summary: "NOT the crtl-reachability step, and NOT Track C. tools/lib_units_compile.py compiles every lib unit with NO include flags, so lib/pcl's <gtk/gtk.h> resolves to GTK2 and e8e006c38's version guard correctly #errors. EIGHT PCL units fail, not the three the log shows. Fix: pass the GTK3 include root (the Makefile already computes it as GTK3_INC). Second defect in the same file: failure output is truncated to 3 lines and all 3 are warnings, so the actual #error never reaches any report."
-status: backlog
+status: done
+owner: frank-b
 ---
 
 > **Track guessed as C** from the test source. The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -170,3 +171,57 @@ the recommended shape.
 `python3 tools/lib_units_compile.py` green on a box with GTK3 dev headers
 (28s here, no compiler rebuild — it runs against `$(PXX_STABLE)`). No self-host
 gate needed: nothing under `compiler/**` changes.
+
+## Resolution (frank-b, 2026-08-30) — already fixed, both halves, by two commits
+
+Verified rather than assumed: `PXX_STABLE=stable_linux_amd64/default/pinned
+python3 tools/lib_units_compile.py` → **142 units compile, 0 failures**, and
+`make lib-test` is green end to end (407s, run before the last edit; the edits
+since only reorder flags and correct comments, and the sweep was re-run after).
+
+**Half one — the eight units — was mine, `74161c581`.** Same diagnosis frankC
+reached: `9396b32c7` put `lib/pcl` on the stock GTK3 headers, and this file
+passed no include flags, so `<gtk/gtk.h>` resolved to GTK2 and the version guard
+correctly `#error`ed. I hit it independently by running `make lib-test` and
+seeing it red before I had read this ticket.
+
+**Half two — the truncated failure output — was Track T's, `151adfbeb`.**
+`failure_excerpt()` ranks error-bearing lines ahead of the host-header warnings
+and reports what it dropped. It is better than the fix I had started writing:
+it restores source order so the excerpt still reads like the log. I stopped and
+kept theirs.
+
+## On frankC's recommendation: agreed on the conclusion, and it is stronger than it argued
+
+frankC advised **against** `EXTRA_ARGS`, because four of the eight units
+(`extctrls`, `forms`, `graphics`, `interfaces`) reach GTK3 transitively and
+never name it, so a hand-kept list goes stale silently. Agreed, and that is
+exactly what `74161c581` does not do: it keys on **the unit's own file being
+under `lib/pcl`**, not on a list of which units happen to need GTK, so a
+transitive edge appearing or disappearing changes nothing.
+
+**But its alternative — "pass it to every probe, inert where unneeded" — is
+false, and dangerously so. The flag is not inert.** An include root passed ahead
+of the Pascal search captures any `uses` whose stem matches a header on it.
+`GTK3_INC` carries `/usr/include/libpng16`, which collides with
+`lib/rtl/png.pas`. Measured on pinned v393:
+
+```
+pinned $GTK3_INC w.pas              -> error: undefined variable (PngLastError)
+pinned -Fulib/rtl $GTK3_INC w.pas   -> ok  (procs=293, the Pascal unit)
+```
+
+So passing it to every probe would have captured `png` — and **silently**, because
+a bare `uses png` compiles clean either way; the arms differ only in the size
+line (`procs=1046` for libpng's ~1000 declarations vs `293`). That is the same
+class of defect as this ticket's own half two: a report that cannot show the
+thing it is for.
+
+Directory scoping is therefore the right call for a second reason frankC did not
+have, and the file now also emits the Pascal roots **before** the include roots
+and names them explicitly — the default search path cannot be ordered ahead of a
+flag, because it is not one.
+
+I had this wrong first, in the opposite direction, and the correction is
+recorded in `410cb71a8`.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
