@@ -348,6 +348,16 @@ begin
   Result := (fi >= 0) and UFldIsArray[fi];
 end;
 
+{ Its element count, or 0 when the field is not a fixed array. }
+function RFieldArrLen(recId: Integer; const name: AnsiString): Integer;
+var fi: Integer;
+begin
+  Result := 0;
+  if recId < REC_UCLASS_BASE then Exit;
+  fi := FindUField(recId - REC_UCLASS_BASE, name);
+  if (fi >= 0) and UFldIsArray[fi] then Result := UFldArrLen[fi];
+end;
+
 function RIsSliceSym(symIdx: Integer): Boolean;
 begin
   Result := (Syms[symIdx].TypeKind = tyRecord) and
@@ -601,6 +611,66 @@ begin
   end;
 end;
 
+{ o.is_some() / o.is_none() / o.unwrap() / o.unwrap_or(d) over an Option<T>
+  whose VALUE is `baseNode` -- a plain variable, a record field, an array
+  element, anything that is an lvalue. Pure field reads off the tagged union
+  plus, for unwrap_or, the shared AN_TERNARY the C and Zig frontends use for
+  `?:` / `orelse`; no RTL call and no new AST node.
+
+  `unwrap()` does NOT panic on None (it reads the payload slot as-is): this
+  frontend has no panic path yet, and a checked unwrap is a follow-up once one
+  exists. Documented in the ticket, not silent.
+
+  The base node is REUSED as the receiver of both reads in unwrap_or, which is
+  safe for the same reason the compound-assign desugar reuses its target: an
+  lvalue here is a pure address chain with no side effects to repeat.
+
+  CurTok must be the method name on entry; the whole call is consumed. }
+function RIsOptionAccessorName(const m: AnsiString): Boolean;
+begin
+  Result := (m = 'is_some') or (m = 'is_none') or (m = 'unwrap') or (m = 'unwrap_or');
+end;
+
+function ROptionField(baseNode, optRec: Integer; const fname: AnsiString): Integer;
+begin
+  Result := AllocNode(AN_FIELD);
+  ASTLeft[Result] := baseNode;
+  ASTSOffset[Result] := RStoredName(fname); ASTSLen[Result] := Length(fname);
+  if fname = '__tag' then ASTTk[Result] := Ord(tyInt64)
+  else ASTTk[Result] := Ord(RecFieldType(optRec, fname));
+end;
+
+function RParseOptionAccessor(baseNode, optRec: Integer): Integer;
+var mname: AnsiString; argNode, pairNode: Integer;
+begin
+  mname := CurTok.SVal;
+  Next; Next; { method name, ( }
+  if mname = 'unwrap_or' then
+  begin
+    argNode := RParseExpr;
+    Expect(tkRParen, ')');
+    pairNode := AllocNode(AN_PAIR);
+    ASTLeft[pairNode] := ROptionField(baseNode, optRec, 'Some.0');
+    ASTRight[pairNode] := argNode;
+    argNode := AllocNode(AN_INT_LIT); ASTIVal[argNode] := 1; ASTTk[argNode] := Ord(tyInt64);
+    Result := AllocNode(AN_TERNARY);
+    ASTLeft[Result] := RBinOp(tkEq, ROptionField(baseNode, optRec, '__tag'),
+                              argNode, tyBoolean);
+    ASTRight[Result] := pairNode;
+    ASTTk[Result] := Ord(RecFieldType(optRec, 'Some.0'));
+    Exit;
+  end;
+  Expect(tkRParen, ')');
+  if mname = 'unwrap' then
+  begin
+    Result := ROptionField(baseNode, optRec, 'Some.0');
+    Exit;
+  end;
+  argNode := AllocNode(AN_INT_LIT); ASTTk[argNode] := Ord(tyInt64);
+  if mname = 'is_some' then ASTIVal[argNode] := 1 else ASTIVal[argNode] := 0;
+  Result := RBinOp(tkEq, ROptionField(baseNode, optRec, '__tag'), argNode, tyBoolean);
+end;
+
 function RParsePrimary: Integer;
 var node, fieldNode, symIdx, procIdx, argNode, lastArg, fTokIdx, gfi, ci: Integer;
     name, methodName, fullName: AnsiString;
@@ -799,61 +869,15 @@ begin
         `unwrap()` does NOT panic on None (it reads the payload slot as-is):
         this frontend has no panic path yet, and a checked unwrap is a
         follow-up once one exists. Documented in the ticket, not silent. }
-      { o.unwrap_or(d) — a value select over the tag, via the shared
-        AN_TERNARY the C and Zig frontends already use for `?:` / `orelse`. }
-      if (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) and
-         (Tokens[TokPos + 1].Kind = tkLParen) and
-         (GetTokenStr(TokPos) = 'unwrap_or') and
-         RIsOptionRec(Syms[symIdx].RecName) then
-      begin
-        ci := Syms[symIdx].RecName;
-        Next; Next; Next; { . unwrap_or ( }
-        argNode := RParseExpr;
-        Expect(tkRParen, ')');
-        fieldNode := AllocNode(AN_FIELD);
-        ASTLeft[fieldNode] := node;
-        ASTSOffset[fieldNode] := RStoredName('Some.0'); ASTSLen[fieldNode] := 6;
-        ASTTk[fieldNode] := Ord(RecFieldType(ci, 'Some.0'));
-        lastArg := AllocNode(AN_PAIR);
-        ASTLeft[lastArg] := fieldNode; ASTRight[lastArg] := argNode;
-        gfi := AllocNode(AN_FIELD);
-        ASTLeft[gfi] := RMakeIdent(symIdx);
-        ASTSOffset[gfi] := RStoredName('__tag'); ASTSLen[gfi] := 5;
-        ASTTk[gfi] := Ord(tyInt64);
-        fTokIdx := AllocNode(AN_INT_LIT); ASTIVal[fTokIdx] := 1; ASTTk[fTokIdx] := Ord(tyInt64);
-        Result := AllocNode(AN_TERNARY);
-        ASTLeft[Result] := RBinOp(tkEq, gfi, fTokIdx, tyBoolean);
-        ASTRight[Result] := lastArg;
-        ASTTk[Result] := Ord(RecFieldType(ci, 'Some.0'));
-        Exit;
-      end;
-      if (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) and
-         (Tokens[TokPos + 1].Kind = tkLParen) and (Tokens[TokPos + 2].Kind = tkRParen) and
-         RIsOptionRec(Syms[symIdx].RecName) and
-         ((GetTokenStr(TokPos) = 'is_some') or (GetTokenStr(TokPos) = 'is_none') or
-          (GetTokenStr(TokPos) = 'unwrap')) then
+      { o.is_some() / is_none() / unwrap() / unwrap_or(d) on an Option
+        VARIABLE. The field twin of this is in the `.field` arm below; both
+        call the one RParseOptionAccessor. }
+      if (CurTok.Kind = tkDot) and RIsOptionRec(Syms[symIdx].RecName) and
+         (Tokens[TokPos].Kind = tkIdent) and (Tokens[TokPos + 1].Kind = tkLParen) and
+         RIsOptionAccessorName(GetTokenStr(TokPos)) then
       begin
         Next; { . }
-        methodName := CurTok.SVal;
-        ci := Syms[symIdx].RecName;
-        Next; Next; { name ( }
-        Expect(tkRParen, ')');
-        if methodName = 'unwrap' then
-        begin
-          fieldNode := AllocNode(AN_FIELD);
-          ASTLeft[fieldNode] := node;
-          ASTSOffset[fieldNode] := RStoredName('Some.0'); ASTSLen[fieldNode] := 6;
-          ASTTk[fieldNode] := Ord(RecFieldType(ci, 'Some.0'));
-          Result := fieldNode;
-          Exit;
-        end;
-        fieldNode := AllocNode(AN_FIELD);
-        ASTLeft[fieldNode] := node;
-        ASTSOffset[fieldNode] := RStoredName('__tag'); ASTSLen[fieldNode] := 5;
-        ASTTk[fieldNode] := Ord(tyInt64);
-        argNode := AllocNode(AN_INT_LIT); ASTTk[argNode] := Ord(tyInt64);
-        if methodName = 'is_some' then ASTIVal[argNode] := 1 else ASTIVal[argNode] := 0;
-        Result := RBinOp(tkEq, fieldNode, argNode, tyBoolean);
+        Result := RParseOptionAccessor(node, Syms[symIdx].RecName);
         Exit;
       end;
       { a.len() / s.len() — array length constant / slice __len field }
@@ -937,6 +961,46 @@ begin
         methodName := CurTok.SVal;
         node := fieldNode;
         Next;
+        { `s.field.method(..)` — a method on a RECORD-typed field. Same
+          lowering as a method on a plain variable (self passed by address);
+          the only new part is that the receiver's class comes from the field
+          rather than from a symbol. `self.side.flip()` is how the engine
+          spells it, and it was refused. }
+        ci := RecFieldRecId(Syms[symIdx].RecName, methodName);
+        { `b.ep.is_none()` — the accessors again, on a FIELD of Option type. }
+        if RIsOptionRec(ci) and (CurTok.Kind = tkDot) and
+           (Tokens[TokPos].Kind = tkIdent) and (Tokens[TokPos + 1].Kind = tkLParen) and
+           RIsOptionAccessorName(GetTokenStr(TokPos)) then
+        begin
+          Next; { . }
+          Result := RParseOptionAccessor(node, ci);
+          Exit;
+        end;
+        if (ci >= REC_UCLASS_BASE) and (CurTok.Kind = tkDot) and
+           (Tokens[TokPos].Kind = tkIdent) and (Tokens[TokPos + 1].Kind = tkLParen) then
+        begin
+          Next;
+          fullName := RTypeNameOf(ci - REC_UCLASS_BASE) + '::' + CurTok.SVal;
+          procIdx := FindProc(fullName);
+          if procIdx < 0 then
+            Error('Rust: ' + RTypeNameOf(ci - REC_UCLASS_BASE) + ' has no method ' + CurTok.SVal);
+          Next; Next; { method name, ( }
+          fieldNode := AllocNode(AN_CALL);
+          ASTIVal[fieldNode] := procIdx;
+          ASTTk[fieldNode] := Ord(Procs[procIdx].RetType);
+          lastArg := AllocNode(AN_ARG);
+          ASTLeft[lastArg] := node; ASTRight[lastArg] := -1;
+          ASTLeft[fieldNode] := lastArg;
+          if CurTok.Kind <> tkRParen then
+            repeat
+              argNode := AllocNode(AN_ARG);
+              ASTLeft[argNode] := RParseExpr; ASTRight[argNode] := -1;
+              ASTRight[lastArg] := argNode; lastArg := argNode;
+            until not Eat(tkComma);
+          Expect(tkRParen, ')');
+          Result := fieldNode;
+          Exit;
+        end;
         { `s.arr[i]` — indexing a fixed-array FIELD. AN_INDEX over the
           AN_FIELD, the same node pair Pascal's `r.arr[i]` builds; read or
           write (AN_INDEX is already an accepted assign target). }
@@ -1445,7 +1509,14 @@ begin
   Result := REC_NONE;
   if node < 0 then Exit;
   if ASTKind[node] = AN_CALL then Result := ProcRetRecId[ASTIVal[node]]
-  else if ASTKind[node] = AN_IDENT then Result := Syms[ASTIVal[node]].RecName;
+  else if ASTKind[node] = AN_IDENT then Result := Syms[ASTIVal[node]].RecName
+  { A FIELD / INDEX / DEREF target: the shared ResolveNodeRec already answers
+    these (it is what the record-field codegen itself uses). AN_IDENT stays
+    special-cased above because ResolveNodeRec answers an ARRAY symbol with its
+    ELEMENT record, which is not what a whole-value context wants. }
+  else if (ASTKind[node] = AN_FIELD) or (ASTKind[node] = AN_INDEX) or
+          (ASTKind[node] = AN_DEREF) then
+    Result := ResolveNodeRec(node);
 end;
 
 { Emits the field stores that materialize an Option<T> into an EXISTING target
@@ -1515,14 +1586,90 @@ begin
   if vi >= 0 then Result := REnumVariants[vi].EnumCi;
 end;
 
-{ Parses the aggregate literal at the cursor into the ALREADY-ALLOCATED
-  target symbol and returns the chain of field stores. A literal is the only
-  way a whole struct/enum value comes into existence here -- no AST node
-  carries one through an expression -- so it is always N stores into a named
-  slot, and every context that can name a slot (a `let`'s fresh local, a
-  record-returning fn's Result) uses this one implementation. }
-function RParseAggregateInto(targetSym, ci: Integer): Integer;
-var vi, k, tagNode, fieldNode, valNode, assignNode, seq, fTokIdx: Integer;
+{ Parses the aggregate literal at the cursor into an already-existing target
+  LVALUE (a node, so the target can be a local, a fn's Result slot, or a FIELD
+  of one) and returns the chain of field stores. A literal is the only way a
+  whole struct/enum value comes into existence here -- no AST node carries one
+  through an expression -- so it is always N stores into a named slot, and
+  every context that can name one uses this single implementation.
+
+  The target node is REUSED as the base of each store rather than rebuilt.
+  That is safe because a target lvalue is a pure address chain (ident, field,
+  index over them) with no side effects to repeat -- the same property the
+  compound-assign desugar relies on. }
+function RParseAggregateIntoNode(targetNode, ci: Integer): Integer; forward;
+
+{ One field's initializer, stored into an already-built field node. Three
+  shapes, and the recursion is what makes a nested literal work:
+    `ep: None` / `side: Color::White`  -> a nested aggregate literal
+    `squares: [0; 64]` / `[a, b, c]`   -> unrolled to one store per element
+    anything else                      -> an ordinary expression assignment }
+function RStoreFieldValue(fieldNode, fieldRec, arrLen: Integer): Integer;
+var valNode, assignNode, idxNode, elemNode, k, n: Integer;
+begin
+  Result := -1;
+  if (arrLen > 0) and (CurTok.Kind = tkLBrack) then
+  begin
+    Next;
+    valNode := RParseExpr;
+    if CurTok.Kind = tkSemicolon then
+    begin
+      { `[v; N]` repeat. Deviation, same one the let-level array literal
+        documents: the element expression is re-evaluated per slot. }
+      Next;
+      if CurTok.Kind <> tkInteger then Error('Rust: repeat count must be an integer literal');
+      n := CurTok.IVal;
+      Next;
+      Expect(tkRBrack, ']');
+      if n <> arrLen then Error('Rust: repeat count does not match the array field length');
+      for k := 0 to n - 1 do
+      begin
+        idxNode := AllocNode(AN_INT_LIT); ASTIVal[idxNode] := k; ASTTk[idxNode] := Ord(tyInt64);
+        elemNode := AllocNode(AN_INDEX);
+        ASTLeft[elemNode] := fieldNode; ASTRight[elemNode] := idxNode;
+        ASTTk[elemNode] := ASTTk[fieldNode];
+        assignNode := AllocNode(AN_ASSIGN);
+        ASTLeft[assignNode] := elemNode; ASTRight[assignNode] := valNode;
+        Result := RSeqAppend(Result, assignNode);
+      end;
+      Exit;
+    end;
+    k := 0;
+    while True do
+    begin
+      if k >= arrLen then Error('Rust: too many elements for the array field');
+      idxNode := AllocNode(AN_INT_LIT); ASTIVal[idxNode] := k; ASTTk[idxNode] := Ord(tyInt64);
+      elemNode := AllocNode(AN_INDEX);
+      ASTLeft[elemNode] := fieldNode; ASTRight[elemNode] := idxNode;
+      ASTTk[elemNode] := ASTTk[fieldNode];
+      assignNode := AllocNode(AN_ASSIGN);
+      ASTLeft[assignNode] := elemNode; ASTRight[assignNode] := valNode;
+      Result := RSeqAppend(Result, assignNode);
+      Inc(k);
+      if not Eat(tkComma) then Break;
+      if CurTok.Kind = tkRBrack then Break;
+      valNode := RParseExpr;
+    end;
+    Expect(tkRBrack, ']');
+    Exit;
+  end;
+  if fieldRec >= REC_UCLASS_BASE then
+  begin
+    k := RPeekAggregateCi(fieldRec - REC_UCLASS_BASE);
+    if k >= 0 then
+    begin
+      Result := RParseAggregateIntoNode(fieldNode, k);
+      Exit;
+    end;
+  end;
+  valNode := RParseExpr;
+  assignNode := AllocNode(AN_ASSIGN);
+  ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := valNode;
+  Result := RSeqAppend(-1, assignNode);
+end;
+
+function RParseAggregateIntoNode(targetNode, ci: Integer): Integer;
+var vi, k, tagNode, fieldNode, assignNode, seq, fTokIdx: Integer;
     variantName, fname, mangled: AnsiString;
 begin
   seq := -1;
@@ -1538,7 +1685,7 @@ begin
     variantName := REnumVariants[vi].Name;
     Next;
     fieldNode := AllocNode(AN_FIELD);
-    ASTLeft[fieldNode] := RMakeIdent(targetSym);
+    ASTLeft[fieldNode] := targetNode;
     ASTSOffset[fieldNode] := RStoredName('__tag'); ASTSLen[fieldNode] := 5;
     ASTTk[fieldNode] := Ord(tyInt64);
     tagNode := AllocNode(AN_INT_LIT);
@@ -1553,15 +1700,14 @@ begin
         k := 0;
         if CurTok.Kind <> tkRParen then
           repeat
-            valNode := RParseExpr;
             mangled := variantName + '.' + RIntToStr(k);
             fieldNode := AllocNode(AN_FIELD);
-            ASTLeft[fieldNode] := RMakeIdent(targetSym);
+            ASTLeft[fieldNode] := targetNode;
             ASTSOffset[fieldNode] := RStoredName(mangled); ASTSLen[fieldNode] := Length(mangled);
             ASTTk[fieldNode] := Ord(RecFieldType(REC_UCLASS_BASE + ci, mangled));
-            assignNode := AllocNode(AN_ASSIGN);
-            ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := valNode;
-            seq := RSeqAppend(seq, assignNode);
+            seq := RSeqAppend(seq, RStoreFieldValue(fieldNode,
+              RecFieldRecId(REC_UCLASS_BASE + ci, mangled),
+              RFieldArrLen(REC_UCLASS_BASE + ci, mangled)));
             Inc(k);
           until not Eat(tkComma);
         Expect(tkRParen, ')');
@@ -1574,15 +1720,14 @@ begin
           if CurTok.Kind <> tkIdent then Error('Rust: expected field name in variant literal');
           fname := CurTok.SVal; Next;
           Expect(tkColon, ':');
-          valNode := RParseExpr;
           mangled := variantName + '.' + fname;
           fieldNode := AllocNode(AN_FIELD);
-          ASTLeft[fieldNode] := RMakeIdent(targetSym);
+          ASTLeft[fieldNode] := targetNode;
           ASTSOffset[fieldNode] := RStoredName(mangled); ASTSLen[fieldNode] := Length(mangled);
           ASTTk[fieldNode] := Ord(RecFieldType(REC_UCLASS_BASE + ci, mangled));
-          assignNode := AllocNode(AN_ASSIGN);
-          ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := valNode;
-          seq := RSeqAppend(seq, assignNode);
+          seq := RSeqAppend(seq, RStoreFieldValue(fieldNode,
+            RecFieldRecId(REC_UCLASS_BASE + ci, mangled),
+            RFieldArrLen(REC_UCLASS_BASE + ci, mangled)));
           if not Eat(tkComma) then Break;
         end;
         Expect(tkEnd, '}');
@@ -1599,15 +1744,14 @@ begin
     k := 0;
     if CurTok.Kind <> tkRParen then
       repeat
-        valNode := RParseExpr;
         mangled := RIntToStr(k);
         fieldNode := AllocNode(AN_FIELD);
-        ASTLeft[fieldNode] := RMakeIdent(targetSym);
+        ASTLeft[fieldNode] := targetNode;
         ASTSOffset[fieldNode] := RStoredName(mangled); ASTSLen[fieldNode] := Length(mangled);
         ASTTk[fieldNode] := Ord(RecFieldType(REC_UCLASS_BASE + ci, mangled));
-        assignNode := AllocNode(AN_ASSIGN);
-        ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := valNode;
-        seq := RSeqAppend(seq, assignNode);
+        seq := RSeqAppend(seq, RStoreFieldValue(fieldNode,
+          RecFieldRecId(REC_UCLASS_BASE + ci, mangled),
+          RFieldArrLen(REC_UCLASS_BASE + ci, mangled)));
         Inc(k);
       until not Eat(tkComma);
     Expect(tkRParen, ')');
@@ -1619,21 +1763,27 @@ begin
   begin
     if CurTok.Kind <> tkIdent then Error('Rust: expected field name in struct literal');
     fTokIdx := TokPos - 1;
+    fname := CurTok.SVal;
     Next;
     Expect(tkColon, ':');
-    valNode := RParseExpr;
     fieldNode := AllocNode(AN_FIELD);
-    ASTLeft[fieldNode] := RMakeIdent(targetSym);
+    ASTLeft[fieldNode] := targetNode;
     ASTSOffset[fieldNode] := Tokens[fTokIdx].SOffset;
     ASTSLen[fieldNode] := Tokens[fTokIdx].SLen;
-    ASTTk[fieldNode] := Ord(RecFieldType(REC_UCLASS_BASE + ci, GetTokenStr(fTokIdx)));
-    assignNode := AllocNode(AN_ASSIGN);
-    ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := valNode;
-    seq := RSeqAppend(seq, assignNode);
+    ASTTk[fieldNode] := Ord(RecFieldType(REC_UCLASS_BASE + ci, fname));
+    seq := RSeqAppend(seq, RStoreFieldValue(fieldNode,
+      RecFieldRecId(REC_UCLASS_BASE + ci, fname),
+      RFieldArrLen(REC_UCLASS_BASE + ci, fname)));
     if not Eat(tkComma) then Break;
   end;
   Expect(tkEnd, '}');
   Result := seq;
+end;
+
+{ Same, into a named symbol. }
+function RParseAggregateInto(targetSym, ci: Integer): Integer;
+begin
+  Result := RParseAggregateIntoNode(RMakeIdent(targetSym), ci);
 end;
 
 { `let [mut] name [: Type] [= expr];` — mut is accepted and ignored (no
@@ -1914,10 +2064,11 @@ function RParseMatch: Integer;
 var scrutSym, recId, enumCi, vi, i, armCount,
     condNode, bodyNode, bindsSeq, pairNode, chain, preSeq: Integer;
     variantName: AnsiString;
-    isWildcard: Boolean;
+    isWildcard, savedTail: Boolean;
     arms: array[0..R_MAX_MATCH_ARMS-1] of TRMatchArm;
 begin
   Next; { 'match' }
+  savedTail := RTailOK; RTailOK := False;
   scrutSym := RParseScrutinee(preSeq);
   recId := Syms[scrutSym].RecName;
   if recId < REC_UCLASS_BASE then Error('Rust: match scrutinee must be an enum value');
@@ -1967,9 +2118,18 @@ begin
     end
     else
     begin
+      { A bare arm is one statement, and it INHERITS the match's own
+        tail-ness: `fn flip(self) -> Color { match self { White => Black,
+        Black => White } }` is a match EXPRESSION in Rust, and its arms are
+        the fn's return values. Matches modelled as statements get the same
+        effect by letting each arm's single statement be a tail. Stated
+        explicitly rather than left to fall out of the flag not being
+        cleared, which is how it behaved before. }
       RInMatchArm := True;
+      RTailOK := savedTail;
       bodyNode := RSeqAppend(bindsSeq, RParseStatement);
       RInMatchArm := False;
+      RTailOK := False;
     end;
     Eat(tkComma);
 
@@ -1996,6 +2156,7 @@ begin
       chain := condNode;
     end;
   end;
+  RTailOK := savedTail;
   Result := RSeqAppend(preSeq, chain);
 end;
 
@@ -2229,6 +2390,24 @@ begin
   Result := node;
 end;
 
+{ An AGGREGATE LITERAL in a value position of a record-returning fn: stores
+  it into the Result slot and hands back that chain plus a valueless AN_EXIT,
+  or -1 when the cursor is not at one. Shared by explicit `return <lit>;` and
+  by the implicit tail, which are the same thing written two ways. The
+  enclosing fn's return record is the expected class, which is what lets a
+  BARE `Some`/`None` resolve there at all. }
+function RTryReturnAggregate: Integer;
+var ci: Integer;
+begin
+  Result := -1;
+  if (CurProc < 0) or (Procs[CurProc].RetType <> tyRecord) then Exit;
+  if ProcRetRecId[CurProc] < REC_UCLASS_BASE then Exit;
+  ci := RPeekAggregateCi(ProcRetRecId[CurProc] - REC_UCLASS_BASE);
+  if ci < 0 then Exit;
+  Result := RSeqAppend(RParseAggregateInto(Procs[CurProc].RetSymIdx, ci),
+                       AllocNode(AN_EXIT));
+end;
+
 function RParseStatement: Integer;
 var name, fname: AnsiString; symIdx, node, rhsNode, lhsNode, baseNode, fieldNode, fTokIdx: Integer;
     opTk: TTokenKind; isSome: Boolean;
@@ -2252,19 +2431,12 @@ begin
         struct or enum value through an expression). The enclosing fn's return
         record is the expected class, which is what lets a BARE `Some`/`None`
         resolve at all. }
-      if (CurProc >= 0) and (Procs[CurProc].RetType = tyRecord) and
-         (ProcRetRecId[CurProc] >= REC_UCLASS_BASE) then
+      node := RTryReturnAggregate;
+      if node >= 0 then
       begin
-        symIdx := RPeekAggregateCi(ProcRetRecId[CurProc] - REC_UCLASS_BASE);
-        if symIdx >= 0 then
-        begin
-          node := RSeqAppend(
-            RParseAggregateInto(Procs[CurProc].RetSymIdx, symIdx),
-            AllocNode(AN_EXIT));
-          RExpectStmtEnd;
-          Result := node;
-          Exit;
-        end;
+        RExpectStmtEnd;
+        Result := node;
+        Exit;
       end;
       node := AllocNode(AN_EXIT);
       if CurTok.Kind <> tkSemicolon then ASTLeft[node] := RParseExpr;
@@ -2274,6 +2446,16 @@ begin
     end;
     tkBreak: begin Next; RExpectStmtEnd; Result := AllocNode(AN_BREAK); Exit; end;
     tkContinue: begin Next; RExpectStmtEnd; Result := AllocNode(AN_CONTINUE); Exit; end;
+  end;
+
+  { the implicit tail written as an aggregate literal --
+    `fn new(i: u8) -> Square { Square(i) }`, which is how an associated
+    constructor is spelled in real source. Same lowering as the explicit
+    `return Square(i);` right above, and only in a fn body (RTailOK). }
+  if RTailOK then
+  begin
+    node := RTryReturnAggregate;
+    if node >= 0 then begin Result := node; Exit; end;
   end;
 
   if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'match') then begin Result := RParseMatch; Exit; end;
@@ -2328,6 +2510,32 @@ begin
     Exit;
   end;
 
+  { `b = Board { .. };` — re-assigning a whole aggregate to an existing record
+    variable, the plain-identifier twin of the field case below. }
+  if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkAssign) then
+  begin
+    symIdx := FindSym(CurTok.SVal);
+    if (symIdx >= 0) and (Syms[symIdx].TypeKind = tyRecord) and
+       (Syms[symIdx].RecName >= REC_UCLASS_BASE) then
+    begin
+      name := CurTok.SVal;
+      Next; Next; { name = }
+      fTokIdx := RPeekAggregateCi(Syms[symIdx].RecName - REC_UCLASS_BASE);
+      if fTokIdx >= 0 then
+      begin
+        Result := RParseAggregateIntoNode(RMakeIdent(symIdx), fTokIdx);
+        RExpectStmtEnd;
+        Exit;
+      end;
+      node := AllocNode(AN_ASSIGN);
+      ASTLeft[node] := RMakeIdent(symIdx);
+      ASTRight[node] := RParseExpr;
+      RExpectStmtEnd;
+      Result := node;
+      Exit;
+    end;
+  end;
+
   if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkDot) and
      (Tokens[TokPos + 1].Kind = tkIdent) and (Tokens[TokPos + 2].Kind = tkAssign) then
   begin
@@ -2338,13 +2546,28 @@ begin
     fname := CurTok.SVal;
     fTokIdx := TokPos - 1;
     Next; Expect(tkAssign, '=');
-    rhsNode := RParseExpr;
     baseNode := RMakeIdent(symIdx);
     fieldNode := AllocNode(AN_FIELD);
     ASTLeft[fieldNode] := baseNode;
     ASTSOffset[fieldNode] := Tokens[fTokIdx].SOffset;
     ASTSLen[fieldNode] := Tokens[fTokIdx].SLen;
     ASTTk[fieldNode] := Ord(RecFieldType(Syms[symIdx].RecName, fname));
+    { `self.ep = Some(sq);` — an aggregate literal stored straight into a
+      record-typed FIELD. The same RParseAggregateIntoNode the `let` and
+      `return` paths use, with the TARGET as the base node instead of a fresh
+      local; nothing else can express a whole enum value in this position. }
+    node := RecFieldRecId(Syms[symIdx].RecName, fname);
+    if node >= REC_UCLASS_BASE then
+    begin
+      node := RPeekAggregateCi(node - REC_UCLASS_BASE);
+      if node >= 0 then
+      begin
+        Result := RParseAggregateIntoNode(fieldNode, node);
+        RExpectStmtEnd;
+        Exit;
+      end;
+    end;
+    rhsNode := RParseExpr;
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := fieldNode; ASTRight[node] := rhsNode;
     RExpectStmtEnd;
@@ -2362,7 +2585,8 @@ begin
     how real source spells a one-line accessor; an explicit `return` is the
     exception there, not the rule. RTailOK is what confines this to a fn body
     -- see RParseFnBody. }
-  if RTailOK and (CurTok.Kind = tkEnd) then
+  if RTailOK and ((CurTok.Kind = tkEnd) or
+                  (RInMatchArm and (CurTok.Kind = tkComma))) then
   begin
     node := AllocNode(AN_EXIT);
     ASTLeft[node] := Result;
@@ -2377,6 +2601,24 @@ begin
   begin
     opTk := CurTok.Kind;
     Next;
+    { `self.ep = Some(sq);` — an aggregate literal stored straight into a
+      record-typed FIELD (or array element). Same RParseAggregateIntoNode the
+      `let` and `return` paths use, with the TARGET as the base node instead
+      of a fresh local; nothing else can express a whole enum value here. }
+    if opTk = tkAssign then
+    begin
+      symIdx := RExprRecId(Result);
+      if symIdx >= REC_UCLASS_BASE then
+      begin
+        fTokIdx := RPeekAggregateCi(symIdx - REC_UCLASS_BASE);
+        if fTokIdx >= 0 then
+        begin
+          Result := RParseAggregateIntoNode(Result, fTokIdx);
+          RExpectStmtEnd;
+          Exit;
+        end;
+      end;
+    end;
     rhsNode := RParseExpr;
     { Compound forms on a FIELD / INDEX / slice target desugar the way the
       plain-identifier ones above do -- `self.n += 1` is `self.n = self.n + 1`

@@ -16,6 +16,25 @@
 // `pick` case below is the assertion for that: its `if/else` arms each hold a
 // call, and the function must run past them to its own tail.
 
+// A `match` in tail position is a match EXPRESSION in Rust and its arms are
+// the fn's return values, aggregate or scalar. Modelled here by letting a
+// bare arm inherit the match's own tail-ness -- `Color::flip` below.
+enum Color { White, Black }
+impl Color {
+    fn flip(self) -> Color {
+        match self {
+            Color::White => Color::Black,
+            Color::Black => Color::White,
+        }
+    }
+    fn code(self) -> i64 {
+        match self {
+            Color::White => 1,
+            Color::Black => 2,
+        }
+    }
+}
+
 struct Square(u8);
 struct Point { x: i64, y: i64 }
 enum Shape { Circle(i64), Rect { w: i64, h: i64 }, Nothing }
@@ -89,4 +108,10 @@ fn main() {
     let a = pick(3);
     let b = pick(-3);
     println!("pick {} {}", a, b);
+
+    // tail match, both arm shapes
+    let c1 = White;
+    let c2 = c1.flip();
+    let c3 = c2.flip();
+    println!("flip {} {} {}", c1.code(), c2.code(), c3.code());
 }

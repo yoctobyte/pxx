@@ -81,10 +81,10 @@ when there is none, against the payload expression's own type.
 - A non-variable scrutinee must be a call or a plain variable: `RExprRecId`
   answers for `AN_CALL` and `AN_IDENT`, so `match self.some_field` (a
   record-typed FIELD) is not resolvable yet and says so.
-- Option accessors (`is_some`/`unwrap`/`unwrap_or`) want a plain VARIABLE,
-  not an arbitrary expression: `maybe(4).unwrap_or(-1)` is refused, `let m =
-  maybe(4); m.unwrap_or(-1)` works. Same shape as the old match-scrutinee
-  narrowing, and the same fix would lift it (materialize into a temp).
+- Option accessors work on any LVALUE receiver (variable, field, element)
+  but not on a call result: `maybe(4).unwrap_or(-1)` is still refused, `let m
+  = maybe(4); m.unwrap_or(-1)` works. Materializing a temp would lift it, the
+  same fix the match scrutinee got.
 - `println!` evaluates each argument as it reaches that placeholder, so a
   side-effecting argument interleaves with the format text — Rust evaluates
   all arguments first. Noticed while writing the tail-return test.
@@ -132,6 +132,18 @@ signatures, not from the ladder's list — and both are ahead of it now:
    trailing expression is a block VALUE, and treating one as a return would
    turn `if c { f() }` into an early exit; `test_rust_value_positions.rs`
    pins that anti-case. `test/test_rust_value_positions.rs`.
+7. **DONE** — the rest of the engine's own idioms, driven by writing
+   `chess.rs`-shaped source and fixing what it hit, one wall at a time:
+   nested aggregate literals and array initializers inside a struct literal
+   (`Board { squares: [0; 64], ep: None, .. }`), an aggregate literal as an
+   ASSIGNMENT rhs (`self.ep = Some(sq);`), a method on a record-typed FIELD
+   (`self.side.flip()`), a tail `match` whose arms are the fn's return values
+   (`fn flip(self) -> Color { match self { .. } }`), and the Option accessors
+   on any lvalue receiver rather than only a plain variable (`b.ep.is_none()`).
+   The literal parser now takes a target NODE instead of a symbol, which is
+   what let `let` / `return` / field-assign / nested-field all share it.
+   `test/test_rust_engine_shapes.rs` is the acceptance shape: every construct
+   in it was refused at the start of this window.
 
 ## Log
 - 2026-08-29 — unit 1 landed (see the ladder ticket's log for the detail).
@@ -143,3 +155,10 @@ signatures, not from the ladder's list — and both are ahead of it now:
   compound assignment on a field/index target.
 - 2026-08-29 — rung 6 landed: aggregate literals in return position (one
   shared implementation with `let`), and implicit tail returns.
+- 2026-08-29 — rung 7 landed: nested/array struct-literal fields, aggregate
+  assignment rhs, methods on record fields, tail matches, Option accessors on
+  any lvalue. `test_rust_engine_shapes.rs` compiles and runs.
+- 2026-08-29 — merged `origin/master` into the topic branch at this rung
+  boundary (the cadence the coordinator asked for), and converted this
+  ticket's five Makefile assertions to `tools/expect_same.sh` so they are not
+  new instances of the defect Track B spent the day removing.
