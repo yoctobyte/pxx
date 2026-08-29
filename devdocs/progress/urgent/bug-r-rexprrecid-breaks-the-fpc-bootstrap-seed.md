@@ -56,3 +56,18 @@ FAILs rather than rebuilding until the message goes away.
 Related: [[bug-a-fpc-seed-drift-emitasmx64-forward]],
 [[decide-should-the-fpc-seed-canary-be-in-the-mandatory-loop]] (this is a fourth
 measured instance for that decision).
+
+---
+
+## DUPLICATE — same bug as `bug-r-rparser-calls-rexprrecid-before-declaring-it-so-the-fpc-bootstrap-seed-does-not-compile`
+
+Two independent filings minutes apart, both p80, both Track R, both correct.
+Kept rather than deleted: two people finding the same repo-wide break by two
+routes within minutes is the system working, and the line numbers differ between
+them (`:1293`/`:1507` vs `:1416`/`:1754`) because they were measured against
+different shas — which is itself worth preserving.
+
+**Authoritative at `e05286f44`:** call at `rparser.inc:1416`, declaration at
+`:1754`, five siblings already forwarded at `:63-67`.
+
+**Resolve both, citing the same sha.**

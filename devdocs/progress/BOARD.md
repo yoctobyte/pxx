@@ -15,10 +15,10 @@ lives in git, not in a timestamp._
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| feature-opt-o3-register-pressure | O | 70 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
+| feature-opt-o3-register-pressure | O | 70→50 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
 
-## unfinished (21)
+## unfinished (22)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -33,6 +33,7 @@ lives in git, not in a timestamp._
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 65 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
+| feature-opt-o3-register-pressure | O | 50 | feature |  | — |
 | feature-pascal-corpus-expansion | P | 75 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 | feature-pascal-corpus-fpc-testsuite | P | 65 | feature | Pascal corpus rung 1 — FPC test-suite subset (conformance) | — |
 | feature-pascal-corpus-generics | P | 65 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
@@ -54,7 +55,7 @@ lives in git, not in a timestamp._
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (301)
+## backlog (302)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -129,6 +130,7 @@ lives in git, not in a timestamp._
 | bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
 | bug-p-an-unknown-compiler-directive-is-silently-ignored | P | 35 | bug | compiler/lexer.inc's {$...} handler is an if/else chain of 34 CaseEqual(command, ...) arms with no terminal else, so ANY directive outside those 34 is silently ignored — no warning, no note, exit 0. {$FATAL} is one confirmed instance (bug-p-fatal-directive-is-silently-ignored) and the mechanism guarantees there are others. Filed separately from the {$FATAL} ticket on purpose: fixing {$FATAL} closes that ticket and leaves this generator intact. | — |
 | bug-p-fatal-directive-is-silently-ignored | P | 35 | bug | {$FATAL text} and {$MESSAGE FATAL text} are silently ignored: the frontend handles warning/message/error and treats every other directive as a no-op, so a guard block that means 'stop, this configuration is unsupported' compiles clean and produces a binary that should not exist. | — |
+| bug-p-lowercase-resolves-to-a-different-implementation-in-the-seed-build | P | 45 | bug | pasparser_expr.inc:1927 uses LowerCase before this codebase declares it at pasparser_proc.inc:2384. FPC resolves it to its OWN system-unit LowerCase; pxx resolves it to ours. Both builds succeed, so no gate fires — but the FPC-seeded compiler and the self-hosted compiler are running DIFFERENT implementations of LowerCase at this call site. Not a build failure: a silent behavioural fork between two builds of the same source. | — |
 | bug-p-qword-div-by-a-literal-above-2-63-is-signed | P | 55 | bug | `QWord div` / `mod` by a literal >= 2^63 divides SIGNED and returns a wrong value | — |
 | bug-p-set-membership-item-constant-truncated-to-32-bits | P | 25 | bug |  | — |
 | bug-p-sysopen-intrinsic-shadows-a-user-function-name | P | 15 | bug | sysopen/syswrite/sysclose/sysfchmod are compiler INTRINSICS with dedicated tokens (tkSysOpen &c), so the lexer never produces an identifier for them and a user program cannot declare a function with one of those names. The diagnostic is `expected name`, which does not mention the reservation. Real but nearly unreachable: prio 15. | — |
@@ -759,6 +761,7 @@ lives in git, not in a timestamp._
 - [p 50] [D] docs-devnotes-ai-assisted-build [parked — re-claim, do not duplicate]
 - [p 50] [C] feature-c-import-a-pascal-unit-under-a-mangled-name [parked — re-claim, do not duplicate]
 - [p 50] [A] feature-nested-routine-fixed-array-capture
+- [p 50] [O] feature-opt-o3-register-pressure [parked — re-claim, do not duplicate]
 - [p 50] [A] feature-release-checksums-repro
 - [p 50] [A] refactor-a-target-dispatch-chains-fail-open
 - [p 50] [C] refactor-c-string-literal-decay-belongs-at-the-producer
@@ -772,6 +775,7 @@ lives in git, not in a timestamp._
 - [p 45] [N] bug-n-a-nilpy-test-writes-a-fixed-tmp-path-so-concurrent-runs-race
 - [p 45] [N] bug-n-object-is-the-one-builtin-type-name-that-is-not-a-value
 - [p 45] [N] bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind
+- [p 45] [P] bug-p-lowercase-resolves-to-a-different-implementation-in-the-seed-build
 - [p 45] [A+T] bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing
 - [p 45] [T] bug-t-progress-check-cannot-see-an-orphan-fragment-or-a-duplicated-slug
 - [p 45] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed

@@ -2320,7 +2320,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-lib-test-lib-classes-tthread | T | 70 | regression | regression: lib-test#src:test/lib_classes_tthread.pas red at 459e96f985d1 (auto-filed by twatch) | — |
 | regression-lib-test-lib-mimic-xml-etree-elementtree-2 | N | 45 | regression | regression: lib-test#src:test/lib_mimic_xml_etree_elementtree.npy red at fd93e4a71c37 (auto-filed by twatch) | — |
 | regression-lib-test-lib-mimic-xml-etree-elementtree | N | 70 | regression | regression: lib-test#src:test/lib_mimic_xml_etree_elementtree.npy red at 1b9b43e5b511 (auto-filed by twatch) | — |
-| regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
+| regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | — |
 | regression-lib-test-lib-tls | T | 70 | regression | regression: lib-test#src:test/lib_tls.pas red at 459e96f985d1 (auto-filed by twatch) | — |
 | regression-nilpy-dataclass-dict-factory-test-core-red | N | 70 | regression | test-core RED: `test_nilpy_dataclass_dict_factory.npy` | — |
 | regression-op-overload-class-eq-strict-operator | A | 50 | regression | regression: test_op_overload.pas red — b369 made class = / <> rejection unconditional | — |

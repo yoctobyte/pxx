@@ -198,6 +198,33 @@ else
   echo "  SKIP  pinned builds live lib/rtl (no pinned binary or fixture)"
 fi
 
+# THE SEED CANARY. Same placement argument as the block above: before the case,
+# so no mode can forget it.
+#
+# `make compiler/pascal26` compiles compiler.pas WITH PXX. So the per-fix loop --
+# and the byte-identical self-host fixedpoint with it, our strongest signal --
+# is blind BY CONSTRUCTION to breakage that only FPC sees, because the only
+# compiler it ever consults is the one under test. pxx resolves names across the
+# whole unit; FPC resolves in source order. A call placed above its declaration
+# with no `forward;` therefore self-hosts green and makes `compiler.pas`
+# uncompilable by FPC -- which is the path a fresh checkout with NO trusted
+# binary must take to exist at all.
+#
+# Twice in two days, in two unrelated frontends (WasmDataAddr 2026-08-28,
+# RExprRecId 2026-08-29), every gate green both times.
+#
+# tools/forwardlint.py already existed for this and exits 1 correctly. NOTHING
+# INVOKED IT -- so it caught both and told no one. A trigger nobody is assigned
+# to watch is not a trigger; that, not the missing check, was the defect.
+#
+# Costs ~1s: it reads the include stream, it does not build anything.
+if [ -f tools/forwardlint.py ] && [ -f compiler/compiler.pas ]; then
+  step "fpc seed compiles (forward decls)" "$LOGDIR/forwardlint.log" \
+       python3 tools/forwardlint.py                                   || RC=1
+else
+  echo "  SKIP  fpc seed compiles (no forwardlint.py or compiler.pas)"
+fi
+
 case "$MODE" in
   quick|full)
     # QUICK = the native confirm CLAUDE.md actually prescribes: testmgr --tier

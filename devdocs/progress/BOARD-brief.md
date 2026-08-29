@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 working:2 unfinished:22 blocked:5 backlog:301 backlog_new:5 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2585 rejected:46`
+`urgent:2 working:2 unfinished:22 blocked:5 backlog:302 backlog_new:5 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2585 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
@@ -50,7 +50,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 315, ranked
+## Ready — top 30 of 316, ranked
 
 - `[p 80] [R]` bug-r-rexprrecid-breaks-the-fpc-bootstrap-seed
 - `[p 80] [R]` bug-r-rparser-calls-rexprrecid-before-declaring-it-so-the-fpc-bootstrap-seed-does-not-compile
@@ -83,4 +83,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [O]` feature-opt-bulk-copy-is-byte-at-a-time
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 
-_285 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_286 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
