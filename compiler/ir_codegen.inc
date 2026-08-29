@@ -7786,6 +7786,26 @@ begin
               Patch32(pAnsiNoZeroGrow, CodeLen - (pAnsiNoZeroGrow + 4));
               EmitB($48); EmitB($8B); EmitB($54); EmitB($24); EmitB($08); { mov rdx, [rsp+8] = n }
               EmitB($48); EmitB($89); EmitB($56); EmitB($F8);           { mov [rsi-8], rdx }
+              { INVALIDATE the cached ASCII answer: this branch resizes the block
+                IN PLACE and the bytes between the old and new length were
+                written by nobody, so whatever the meta word claimed about them
+                is stale. Clearing both bits returns it to "not looked yet"
+                (PXX_FLAG_ASCII_KNOWN $1000 | PXX_FLAG_ASCII $0400), so the next
+                query rescans instead of trusting a claim made about different
+                bytes. The alloc branch below needs no equivalent — it builds a
+                fresh block through PXXHdrInit, which stamps LEGACY.
+
+                Latent until NilPy strings stopped collapsing: `Result := ''`
+                used to publish NIL, so a SetLength after it always took the
+                alloc branch and got a clean header. With a real zero-length
+                block the in-place branch is reachable, and pystr_repeat --
+                `Result := ''; SetLength(Result, total)` -- inherited "ASCII,
+                known" from when the block was EMPTY. `"é" * 3` then answered
+                isascii()=True and len()=6 (bytes) instead of 3 (characters),
+                because the character path keys on exactly that flag.
+                regression: test_nilpy_str_ascii_cache. }
+              EmitB($48); EmitB($81); EmitB($66); EmitB($E8);           { and qword [rsi-24], ... }
+              EmitB($FF); EmitB($EB); EmitB($FF); EmitB($FF);           { ...NOT (ASCII_KNOWN or ASCII) }
               EmitB($C6); EmitB($04); EmitB($16); EmitB(0);             { mov byte [rsi+rdx], 0 }
               EmitB($58);                                               { pop rax = old data }
               EmitB($59);                                               { pop rcx = n }
