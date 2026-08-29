@@ -50,3 +50,37 @@ still ungranted.
    A is the integrator lane.
 
 Resolve this chore when the fix is pushed and the file is released.
+
+## Scope WIDENED, 2026-08-29 — the concept, not the line number
+
+frankwasm re-derived its own ticket before touching anything and found the
+load-bearing claim in it false. The ticket said *"the same file already gets this
+right one site over"* at `ir.inc:11329`. On current master that line is in a
+`tyVariant` **default-parameter** branch, unrelated to the managed-string arg
+temp. It then checked every candidate: all four `argIsManagedTemp` predicates
+(11060, 11305, 11813, 12931) and all seven
+`hiddenArgSym := AllocVar('', tyAnsiString)` sites (11069, 11360, 11532, 11704,
+11831, 12825, 12951). **Not one tests `IsArray`.**
+
+So there is no correct sibling to copy from. Seven sites, one concept — *does
+this parameter want an owning managed-string temp?* — and zero guarded. By
+`root-cause-over-microfix`'s own counting rule that is a design flaw, not a typo
+at one site, and the likely right fix is **one predicate every site calls**,
+deleting six copies rather than adding a seventh clause.
+
+**The grant therefore covers the managed-string arg-temp decision across all its
+sites in `ir.inc`, not the single line `:11207`.** Granting the line number would
+have forced the microfix the repo has a document telling us not to make, and
+would have left six sites for someone to rediscover.
+
+Unchanged: `compiler/ir.inc` only — another shared file needs another grant;
+master, as fresh work, **not** merge permission for anything on the `wasm`
+branch; and **frankA still wins if it needs the file.** A seven-site consolidation
+is a larger edit than the original one-liner, so that yield condition matters more
+now, not less. frankA has been told the scope changed.
+
+**Condition added with the widening:** measure which of the seven sites can
+actually fire — a repro exercising the direct, constructor, indirect, virtual and
+interface call paths with an open-array-of-string argument — **before** editing.
+Shape implying a bug is not the bug, and the count of unguarded sites is what
+justifies consolidating rather than patching.

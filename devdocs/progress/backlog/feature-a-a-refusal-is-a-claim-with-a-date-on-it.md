@@ -1760,3 +1760,39 @@ Two corollaries earned in the same fix:
   without its denominator is not a measurement of headroom, and the board cannot
   tell a cap at 20% from one at 99%. Filed as `feature-a-report-fixed-cap-headroom`
   [A p40], sorted by percent so the top row is the next to bite.
+
+### 42. "The fix already exists one site over" is the most dispatch-accelerating sentence a ticket can contain — and therefore the one that most needs re-deriving
+
+frankwasm, 2026-08-29, self-caught before touching the file.
+
+Its own ticket claimed the codebase already handled this correctly one site away,
+naming `ir.inc:11329` and the clause to copy. Re-checked on master before editing:
+that line is a `tyVariant` default-parameter branch, and **none** of the four
+`argIsManagedTemp` predicates or seven `hiddenArgSym` allocation sites tests the
+clause at all. There was no correct sibling.
+
+**Why this sentence is uniquely dangerous.** It converts a design question into a
+copy-paste. A reader who believes it stops asking *how many mechanisms serve this
+one concept?* — the question that would have found seven unguarded sites and a
+missing shared predicate — because the answer is presupposed: at least one site is
+right, so the concept is understood, so the job is transcription. It also reads as
+the *most* diligent kind of ticket, the author having apparently already located
+the fix. It survives review for the same reason it misleads.
+
+The actual state was zero of seven guarded — a design flaw by
+`root-cause-over-microfix`'s counting rule, where the right repair deletes six
+copies instead of adding a seventh clause. **The microfix and the overhaul were
+separated entirely by one unverified sentence**, and the microfix was the larger
+long-term cost.
+
+Distinct from face 40, and the author drew the line itself: face 40 is a claim
+that was *true when written* and falsified by the fix. This is a claim that was
+**never true** and was carried by nobody re-deriving it — including into a
+priority and a dispatch. Same family as a wrong root cause recorded in a ticket:
+not a missing fact, a present fact nobody diffed. The repo's standing rule already
+covers it and it still happened — *before writing a conclusion into a ticket,
+check it against a second source.*
+
+**Cheap guard:** a ticket asserting that a sibling site is already correct should
+cite it by content, not by line number. Line numbers move; a quoted clause that no
+longer exists is visible, and `ir.inc:11329` is not.
