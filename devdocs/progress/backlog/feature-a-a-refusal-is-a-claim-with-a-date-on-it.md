@@ -2426,3 +2426,63 @@ one evening — a fitting story, adopted before anything falsified it.
 nobody chases the wrong lead*, and explicitly says the memory ticket gains nothing
 from it. A negative result nobody records gets rediscovered; a wrong attribution
 nobody corrects gets inherited.
+
+### 57. IDENTICAL CODE, OPPOSITE VERDICTS — when the contract lives in another file, a pattern is safe in one frontend and dead in the next
+
+frank-rust, 2026-08-29, closing the face-53 audit. **17 candidates, 1 defect, 16
+correct** — and the count is not the finding.
+
+Whether `GetTokenStr(i) = 'word'` works at all turns on **one line per frontend**:
+which token kinds get their source text copied into `TokChars`.
+
+| lexer | stores token text for | text-vs-keyword compare |
+| --- | --- | --- |
+| `lexer.inc` (Pascal) | **every word token** — `CurTok.SVal := s`, unconditional after `Keyword(s)` | **SAFE** |
+| `rlexer` / `pylexer` / `zlexer` / `clexer` | `tkIdent` + `tkString` (+ one or two each) | **DEAD** |
+
+**Pascal is the outlier, and it is the outlier in the SAFE direction.** That is the
+entire explanation for the bug's existence: the idiom is genuinely correct where
+most of this codebase's Pascal was written, and it was carried into a frontend
+where it silently cannot work. **A habit imported from the majority dialect of the
+repo, into a file with a different contract.** It also predicts the next instance —
+a new frontend written by someone fluent in the Pascal side. The reviewer's
+question is therefore never "is this line right?" but "which lexer is this parser
+paired with?", and the answer is not visible at the call site.
+
+**The audit's own method is the second half.** The first grep covered one spelling
+in three frontends. Widened to **all eleven**, across `GetTokenStr` /
+`CurTok.SVal` / `Tokens[..].SVal` **and the `CaseEqual(text, 'word')` spelling the
+first pass could not see** — each parser checked against **its own** lexer's table.
+**561 comparisons scanned, one dead guard: a base rate of 1-in-561.**
+
+**And the widening produced four phantom bugs that were caught only by running
+them.** Four Pascal sites — `Byte(x)`, `LongWord(x)`, `Byte(p^) := v`,
+`Integer(x)` — compare `CurTok.SVal` against words the Pascal lexer turns into
+`tkInteger_T`/`tkLongWord_T`, and look **exactly** like the Rust defect. All four
+are live. Verified by execution, not reading: **`Byte(321)` prints `65`, which
+happens only if the `CaseEqual` branch was taken.**
+
+> Had I stopped at the grep I would have filed four phantom bugs into Track A.
+
+That is face 52's discipline paying out prospectively: the ticket was filed as
+*candidates, not findings*, with `self`-in-`pyparser` named as probably correct —
+and the warning caught four cases nobody had anticipated. **A list produced by a
+grep is a list of places to look, and it stops being that the moment it is written
+in a ticket's table format.**
+
+**The expensive-half question (face 53's corollary) was answered, in both
+directions.** `RImpls` was empty forever and is read *only* by the generic-bounds
+machinery, which had no other way to be satisfied — so no third behaviour was
+silently wrong and the damage stops at "`impl Trait for Type` did not compile".
+The inverse was also checked: every one of `RKeyword`'s 14 tokens is matched
+somewhere in `rparser.inc`, so there is no keyword the lexer emits that the parser
+can never consume. **Asking the inverse is what turns "I found no more" into a
+bounded claim.**
+
+**Filed rather than built** — `feature-t-lint-token-text-compared-against-a-keyword`
+[T p35], since `tools/**` is Track T's lane. The ticket carries the one design note
+that decides whether it is worth having: **a lint that skips the text-storage half
+turns those four live Pascal sites into false positives**, and a linter that cries
+wolf gets scrolled past, which is worse than no lint. Priced at p35 against a
+measured 1-in-561 base rate — a never-again lint, not a backlog of hits. **Pricing
+a proposed check against its measured base rate is the right way to file one.**
