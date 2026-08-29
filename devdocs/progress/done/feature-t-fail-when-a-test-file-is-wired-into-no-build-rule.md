@@ -379,4 +379,4 @@ reads as closed rather than as someone's abandoned work.
 
 ## Log
 - 2026-08-29 — resolved.
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 072a3c6c5.
