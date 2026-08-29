@@ -359,11 +359,10 @@ _none_
 | task-d-document-warn-ignored-directives | D | 20 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (5)
+## backlog_new (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64 | A | 70 | bug | x86-64 releases an owned managed-string operand after a CONCAT (ir_codegen.inc:6105/6110) and not after a COMPARISON, so `if F(x) = 'lit'` leaks F's result on every evaluation — 40 bytes per iteration, measured as 401032 bytes over 10000 iterations against 1032 on wasm32 and 0 under FPC. Present on x86-64 ALONE: i386, arm32, aarch64 and riscv32 each carry the release at all THREE sites (concat, equality, ordered), x86-64 at one. Exact mirror of bug-a-a-string-function-result-in-a-concat-leaks-on-every-cross-target, which was the same predicate missing from the four cross backends while x86-64 had it. Silent, unbounded, and in one of the most common idioms in the language. | — |
 | bug-a-a-typed-const-record-is-built-by-startup-code-not-stored-as-data | A | 35 | bug | The sibling of bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data, which fixed the SCALAR array case only. A typed const whose element or type is a RECORD is still BSS plus generated stores: measured at 116 bytes of code per 16-byte record — the same ~29 bytes per field the original ticket measured — while an Integer array of identical total size costs zero code and lands in .data. Found by the wasm32 lane, where it is not a size issue but a correctness one: the emitted stores are top-level chunks, and a target whose startup does not run reads zeros. | — |
 | bug-a-emitzeroframeslot-has-no-wasm32-arm | A | 55 | bug | EmitZeroFrameSlot (compiler/symtab.inc:10074) is the single owner of the zero-init contract and has TWO per-target chains, one per size class. The wide one (> pointer) ends in Error and fails loud — that is what this ticket originally described. The narrow one (<= pointer, which is EVERY managed scalar) ends in an UNGUARDED else that emits x86-64 bytes, so wasm32 falls open there and has been doing so since the managed-string phase. Measured 2026-08-28 with a probe build. Output is byte-identical with the fall-through removed, so Code[] is unread on this target and nothing wrong has been PRODUCED — it is latent, not active. Carries one open design question: the wasm32 backend now zeroes its own managed scalars in its prologue, so there are three mechanisms for one guarantee on this target. | — |
 | bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero | A | 70 | bug | HeapMmap in compiler/builtin/builtinheap.pas is a chain of per-target {$ifdef}s with no wasm32 arm, so on wasm32 it assigns Result nothing and returns 0. PXXAlloc does not check the result (on Linux a failed mmap returns a negative errno that faults on access), so the heap bump pointer starts at 0 and hands out addresses 8, 32, 56... Measured: two objects at 8 and 32, both readable and correct. It works until roughly 1 KB has been allocated and then silently overwrites BSS, because address 0 is a legal wasm address with no page protection. Fix is one additive arm, exactly the shape the PXX_ESP static arena already has. | — |
@@ -599,9 +598,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2579)
+## done (2580)
 
-2579 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2580 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (46)
 
@@ -662,7 +661,6 @@ _none_
 - [p 75] [P] feature-pascal-corpus-oop
 - [p 72] [N] feature-nilpy-stdlib-coverage-gaps-measured
 - [p 70] [A] bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream (unblocks 2) [parked — re-claim, do not duplicate]
-- [p 70] [A] bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64
 - [p 70] [A] bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero
 - [p 70] [P] bug-p-a-call-chained-onto-a-class-method-result-is-dropped
 - [p 70] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative

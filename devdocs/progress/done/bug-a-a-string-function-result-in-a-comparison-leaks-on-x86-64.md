@@ -4,8 +4,8 @@ prio: 70
 type: bug
 blocked-by: []
 summary: "x86-64 releases an owned managed-string operand after a CONCAT (ir_codegen.inc:6105/6110) and not after a COMPARISON, so `if F(x) = 'lit'` leaks F's result on every evaluation — 40 bytes per iteration, measured as 401032 bytes over 10000 iterations against 1032 on wasm32 and 0 under FPC. Present on x86-64 ALONE: i386, arm32, aarch64 and riscv32 each carry the release at all THREE sites (concat, equality, ordered), x86-64 at one. Exact mirror of bug-a-a-string-function-result-in-a-concat-leaks-on-every-cross-target, which was the same predicate missing from the four cross backends while x86-64 had it. Silent, unbounded, and in one of the most common idioms in the language."
-status: new
-owner: ""
+status: done
+owner: frankB
 ---
 
 # A string function result in a COMPARISON leaks on x86-64
@@ -137,3 +137,117 @@ sixteenth.
   again instead of asserting it independently.
 - Frozen strings (`tyString`) are unaffected: they are buffers, not handles,
   and own nothing.
+
+## 2026-08-29 — FIXED (frankB). Three sites, not two, and the ticket named the wrong one.
+
+Reproduced at HEAD before reading any code: 1032 / 41032 / 401032 at n = 0 /
+1000 / 10000, exactly as filed. 40 bytes per iteration.
+
+### The ticket's site list was wrong, in a way that mattered
+
+It names `EmitStrCmpReg` (`=`/`<>`) and `EmitAnsiStrCmp3Reg` (ordered). There
+are **three** comparison emitters on x86-64, and the leaking one is the third:
+
+| block | guard | emitter | owned operand possible? |
+| --- | --- | --- | --- |
+| 1 | `=`/`<>`, either side `tyAnsiString` | `EmitAnsiStrCmpReg` | **yes — this is the leak** |
+| 2 | `=`/`<>`, either side `tyString` | `EmitStrCmpReg` | **no — provably** |
+| 3 | `<` `<=` `>` `>=`, either side managed | `EmitAnsiStrCmp3Reg` | yes |
+
+Block 2 is the one the ticket asked for, and it is the one place a release
+would have been **dead code**: it is the `else if` *after* block 1, so neither
+side can be `tyAnsiString`, and a `tyString` is a frozen buffer that owns
+nothing. Adding the pair there would have looked like a fix and changed no
+emitted byte. That is recorded in a comment at the block rather than left for
+the next reader to re-derive, along with the condition that would make it
+needed.
+
+### And the release cannot go around the emitter call
+
+Blocks 1 and 3 each have **inline arms** for `AnsiString` vs `Char` that
+compare in place and never reach the emitter at all. `F(x) = 'c'` takes one of
+those, so a release attached to the emitter call site alone would still have
+leaked, and the repro that found this bug would not have caught the remainder.
+The save/release therefore wraps the **whole block**, covering all three arms
+uniformly. Verified: the char arms are stack-neutral on both paths (`push rcx`
+… `pop rax` on the equal path, `pop rcx` on the not-equal path).
+
+### The fix
+
+`ir_codegen.inc` only. Four helpers above `IREmitNode` — `IRStrCmpOwnsOperand`,
+`IRStrCmpNeedsRelease`, `IREmitStrCmpSaveOperands`,
+`IREmitStrCmpReleaseOperands` — so x86-64's three sites share **one** copy of
+the predicate instead of three. Emitted only when an operand is actually
+owned, so codegen for the ordinary borrow-vs-literal case is unchanged.
+
+Contract relied on, and it was checked rather than assumed: `rax` = LHS,
+`rcx` = RHS at every string-comparison emitter, and all three emitters are
+stack-neutral and never reference `rsp`, so the saved slots survive the
+comparison. (The `EmitB($50)` bytes inside two of them are ModRM in
+`mov rdx,[rax-8]`, not `push rax` — a naive opcode grep says otherwise.)
+
+**The `-O3` W1 hazard, ruled out both ways.** `w1RightReg` can put the right
+operand in `r12..r15` instead of `rcx`, which would make `mov [rsp], rcx` save
+garbage and release a wrong pointer. It cannot reach here: W1 is gated to
+`W1AluRightEligible` — "the plain integer ops that read rcx as `<op> rax, rcx`
+and nothing else — the string/set/float arms below run their own
+multi-register sequences and keep the normal contract" — and `w1RightReg` is
+consulted **zero** times anywhere in the comparison arms. Confirmed
+structurally *and* measured at `-O0`/`-O1`/`-O2`/`-O3`.
+
+### Measured
+
+| program | before | after |
+| --- | --- | --- |
+| ticket repro, n=10000 | 401032 | **1032** |
+| ticket repro, n=1000000 | (40001032) | **1032** |
+| ordered + both char arms + `<>`, n=1000000 | — | **1032** |
+| both operands owned (`F = F`) + nested concat, n=1000..10⁶ | — | **1112, constant** |
+
+The 1112 is a one-time free-list effect, not a leak: constant from n=1000 to
+n=1,000,000. Flatness across three orders of magnitude is the property, not the
+absolute number.
+
+Correctness: a 9-case program (borrow surviving 5000 comparisons, ordered
+operators, call-vs-call, nested concat, both char arms, empty strings) is
+**byte-identical to the FPC 3.2.2 oracle** at every `-O` level, and runs clean
+under `-dPXX_HEAP_DEBUG`. Self-host fixedpoint converged (2 rounds, expected —
+codegen changed); the compiler is itself a heavy user of string comparison.
+
+### The census the ticket asked for, done by code and not by line number
+
+All five backends now carry the release at all three site kinds. Verified by
+which runtime helper each pair sits next to, **because the ticket's line
+numbers are already stale** — it lists aarch64 at 1541/1631/1680 where the
+pairs are actually at 1824/1914/1963:
+
+| backend | Concat | StrEq | StrCmp3 |
+| --- | --- | --- | --- |
+| `ir_codegen386.inc` | 2177 | 2465 | 2536 |
+| `ir_codegen_arm32.inc` | 1831 | 1918 | 1968 |
+| `ir_codegen_aarch64.inc` | 1824 | 1914 | 1963 |
+| `ir_codegen_riscv32.inc` | 2015 | 2049 | 2088 |
+| `ir_codegen.inc` (x86-64) | 6177 | *(shared helper)* | *(shared helper)* |
+
+**Sibling checked before closing:** the `AnsiString`-vs-`Char` inline arms exist
+on x86-64 **and i386** (2 each) and on none of arm32/aarch64/riscv32. i386's
+were measured directly — `C = 'x'` in a loop under `run_target.sh i386` is flat
+at 1032 for n=0 and n=10000, so i386 already covers them. No second arm left
+broken.
+
+### What this does NOT fix
+
+The ticket's wider question stands, and deliberately: **the predicate is still
+hand-copied across backends.** This reduced x86-64 from three copies to one; the
+cross-backend total is still twelve, in four files. A shared
+`IRReleaseOwnedStrOperands` hook, or an oracle asserting each site kind is
+paired with a release, would need to touch `ir_codegen386/arm32/aarch64/riscv32`
+— outside this ticket's file and outside the dispatch. **Not attempted here;
+left open as the sixteenth-copy problem the ticket names.**
+
+Also unchanged, by design: `test/wasm/check_strop.sh` on branch `wasm` asserts
+the native build still leaks. That assertion is now false and will fail — which
+is the signal the ticket predicted, not a regression.
+
+## Log
+- 2026-08-29 — resolved, commit PENDING-COMMIT.

@@ -4359,6 +4359,67 @@ begin
   end;
 end;
 
+{ ---- Owned managed-string operands of a COMPARISON ------------------------
+
+  A string comparison consumes its operands and produces a Boolean, so an
+  operand that arrived OWNED (a call result at rc=1, or a nested concat's temp)
+  dies here and nobody else will release it. Concat has asked this since
+  bug-a-a-string-function-result-in-a-concat-leaks-on-every-cross-target; the
+  comparison arms never did, so `if F(x) = 'lit'` leaked F's result on every
+  evaluation -- 40 bytes an iteration, unbounded, with every answer correct
+  (bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64).
+
+  Note which way round that pair sits. There, the predicate was right on x86-64
+  and missing from the four cross backends. Here it is right on the four cross
+  backends and missing from x86-64. One predicate, three site kinds, five
+  backends: the answer is hand-copied into fifteen places, and the repo has now
+  been wrong at BOTH ends of that matrix. These two helpers exist so x86-64's
+  three sites share one copy instead of three; the fifteen-way duplication
+  across backends is the part still standing, and it is the ticket's open
+  question, not something this fix closes.
+
+  Contract: rax = LHS, rcx = RHS on entry to every string-comparison emitter,
+  and all three of them (EmitStrCmpReg, EmitAnsiStrCmpReg, EmitAnsiStrCmp3Reg)
+  are stack-neutral and never reference rsp -- so the operands keep their slots
+  across the comparison. Emitted only when something is actually owned, so code
+  for the ordinary borrow-vs-literal case is unchanged. }
+
+function IRStrCmpOwnsOperand(n: Integer): Boolean;
+begin
+  IRStrCmpOwnsOperand := (IntToTypeKind(IRTk[n]) = tyAnsiString) and
+                         IRNodeOwnsManagedStr(n);
+end;
+
+function IRStrCmpNeedsRelease(left, right: Integer): Boolean;
+begin
+  IRStrCmpNeedsRelease := IRStrCmpOwnsOperand(left) or IRStrCmpOwnsOperand(right);
+end;
+
+procedure IREmitStrCmpSaveOperands;
+begin
+  EmitB($48); EmitB($83); EmitB($EC); EmitB($10);              { sub rsp, 16 }
+  EmitB($48); EmitB($89); EmitB($44); EmitB($24); EmitB($08);  { mov [rsp+8], rax }
+  EmitB($48); EmitB($89); EmitB($4C); EmitB($24); EmitB($00);  { mov [rsp], rcx }
+end;
+
+procedure IREmitStrCmpReleaseOperands(left, right: Integer);
+begin
+  EmitB($50);                                                  { push cmp result }
+  if IRStrCmpOwnsOperand(left) then
+  begin
+    EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($10); { mov rax, [rsp+16] }
+    IREmitCodeCall(AnsiStrReleaseAddr);
+  end;
+  if IRStrCmpOwnsOperand(right) then
+  begin
+    EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] }
+    IREmitCodeCall(AnsiStrReleaseAddr);
+  end;
+  EmitB($58);                                                  { pop cmp result }
+  EmitB($48); EmitB($83); EmitB($C4); EmitB($10);              { add rsp, 16 }
+end;
+
+
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
@@ -4374,6 +4435,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil, pNotDouble, pDone: Integer;
     pUnsNeg, pUnsDone, pAppendDone: Integer;
     w1RightReg: Integer;   { -O3 W1: 0 = the normal rcx contract, else r12..r15 }
+    strCmpRel: Boolean;    { this comparison releases an owned string operand }
     pAnsiAlloc, pAnsiShared, pAnsiTooSmall, pAnsiNoZeroGrow, pAnsiFastDone: Integer;
     pAnsiUseNeededNil, pAnsiUseNeededSmall, pAnsiMinDone, pAnsiCapDone: Integer;
     pDynZero, pDynNoOld, pDynKeepCopy, pDynNoRetain, pDynNoRetainCount: Integer;
@@ -6471,6 +6533,12 @@ begin
               begin
                 lhsTk := IntToTypeKind(IRTk[left]);
                 rhsTk := IntToTypeKind(IRTk[right]);
+                { Saved around the WHOLE block, not around the emitter call:
+                  the two char arms below compare inline and never reach
+                  EmitAnsiStrCmpReg, so `F(x) = 'c'` leaks through exactly the
+                  same hole if only the else-arm is covered. }
+                strCmpRel := IRStrCmpNeedsRelease(left, right);
+                if strCmpRel then IREmitStrCmpSaveOperands;
                 if (lhsTk = tyAnsiString) and (rhsTk = tyChar) then
                 begin
                   EmitB($51);                                                  { push rcx }
@@ -6517,11 +6585,18 @@ begin
                 end
                 else
                   EmitAnsiStrCmpReg(op = tkEq, lhsTk, rhsTk);
+                if strCmpRel then IREmitStrCmpReleaseOperands(left, right);
               end
               else if ((op = tkEq) or (op = tkNeq)) and
                   ((IntToTypeKind(IRTk[left]) = tyString) or
                    (IntToTypeKind(IRTk[right]) = tyString)) then
               begin
+                { No release pair here, and it is a proof rather than an
+                  oversight: this is the ELSE-IF after the tyAnsiString block,
+                  so neither side can be tyAnsiString, and a tyString is a
+                  frozen buffer that owns nothing. IRStrCmpNeedsRelease would
+                  be constantly False. If that guard above ever widens, this
+                  block needs the save/release pair the other two have. }
                 lhsTk := IntToTypeKind(IRTk[left]);
                 rhsTk := IntToTypeKind(IRTk[right]);
                 if (lhsTk = tyString) and (rhsTk = tyChar) then
@@ -6572,7 +6647,10 @@ begin
                   ((IntToTypeKind(IRTk[right]) = tyAnsiString) or
                    (IntToTypeKind(IRTk[right]) = tyString)) then
               begin
+                strCmpRel := IRStrCmpNeedsRelease(left, right);
+                if strCmpRel then IREmitStrCmpSaveOperands;
                 EmitAnsiStrCmp3Reg(op, IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right]));
+                if strCmpRel then IREmitStrCmpReleaseOperands(left, right);
               end
               else
               begin
