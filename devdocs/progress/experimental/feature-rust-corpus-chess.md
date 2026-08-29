@@ -291,3 +291,29 @@ pure swallowing/trivia, cheap and high-leverage.
   **stage 3 (the unity build for data modules) is now the next item on the
   original gap list.**
 
+- 2026-08-29 — rung 10: **the stage-0 trivia sweep is finally real rather than
+  a swallow.** `[pub] type Alias = Target;` now aliases (resolved in
+  RTypeNameAt, the one canonical type-name reader, so nothing downstream needs
+  alias knowledge), and top-level `const NAME: [T; N] = [...]` registers a
+  global filled at startup instead of being skipped whole. Those two are
+  exactly what the 2026-07-09 baseline note meant by *"every module dies within
+  its first 4 lines"*: `pub type Bitboard = u64;` names a bitboard engine's
+  central type, and the attack tables ARE const arrays.
+
+  Deviation stated rather than hidden: a const array is a mutable global here,
+  not `.rodata`. No compiling program can observe it, and real `.rodata`
+  initializers are Track A work that would buy the engine nothing.
+
+  `test_rust_module_items.rs`. Stage 3's remaining half is the mechanical part
+  — a `runner.rs` concatenation, the zlib trick — now that the items a
+  concatenation produces all parse.
+
+- 2026-08-29 — **an FPC-seed break landed and was caught by frankwasm, not by
+  any gate.** `RExprRecId` was called above its declaration with no `forward`;
+  pxx resolves across the unit, FPC resolves in source order, so the compiler
+  self-hosted byte-identically while `compiler.pas` would not compile under FPC
+  at all. The per-fix loop cannot see this class by construction — it compiles
+  the compiler with pxx. `python3 tools/forwardlint.py` catches it and nothing
+  invoked it. Fixed, both duplicate p80 tickets resolved, and forwardlint is
+  now part of this lane's pre-push routine.
+

@@ -5,17 +5,12 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 working:2 unfinished:22 blocked:5 backlog:303 backlog_new:5 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2586 rejected:46`
+`working:2 unfinished:22 blocked:5 backlog:303 backlog_new:5 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2588 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-opt-o3-register-pressure` [O] — owner: frank-optimize-b4
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
-
-## urgent (2) — jump the queue
-
-- `bug-r-rexprrecid-breaks-the-fpc-bootstrap-seed` [R]
-- `bug-r-rparser-calls-rexprrecid-before-declaring-it-so-the-fpc-bootstrap-seed-does-not-compile` [R]
 
 ## unfinished (22) — parked mid-flight; re-claim, do not duplicate
 
@@ -50,10 +45,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 317, ranked
+## Ready — top 30 of 315, ranked
 
-- `[p 80] [R]` bug-r-rexprrecid-breaks-the-fpc-bootstrap-seed
-- `[p 80] [R]` bug-r-rparser-calls-rexprrecid-before-declaring-it-so-the-fpc-bootstrap-seed-does-not-compile
 - `[p 85] [N]` bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
 - `[p 75] [P]` feature-pascal-corpus-expansion
@@ -82,5 +75,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [O]` feature-opt-bulk-copy-is-byte-at-a-time
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
+- `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
+- `[p 62] [A]` feature-a-typeref-migrate-consumers
 
-_287 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_285 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

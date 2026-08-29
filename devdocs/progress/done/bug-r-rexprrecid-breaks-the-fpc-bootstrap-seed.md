@@ -4,7 +4,7 @@ prio: 80
 type: bug
 blocked-by: []
 summary: "compiler/rparser.inc:1293 calls RExprRecId, defined at :1507. pxx resolves across the unit so `make compiler/pascal26` is green; FPC resolves in SOURCE ORDER, so the bootstrap seed build fails with `Identifier not found \"RExprRecId\"` and master cannot be built from FPC. Invisible to the documented per-fix loop by construction; caught by gate.sh quick's seed canary and by tools/forwardlint.py. One-line fix: a forward declaration."
-status: urgent
+status: done
 owner: unassigned
 ---
 
@@ -71,3 +71,6 @@ different shas — which is itself worth preserving.
 `:1754`, five siblings already forwarded at `:63-67`.
 
 **Resolve both, citing the same sha.**
+
+## Log
+- 2026-08-29 — resolved, commit PENDING-COMMIT.
