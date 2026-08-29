@@ -4,7 +4,7 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "MEASURED — it is DENSITY, raise the cap. aarch64 codegen runs 2.295x x86-64 across four unrelated programs (spread 2.27-2.34); the compiler needs only 1.80x to breach MAX_CODE, so predicted aarch64 size is 20.4 MB against a 16 MB cap. Runaway ruled out. ~21 MB floor, 32 MB gives headroom, A's call. Originally: `make cross-bootstrap` for aarch64 fails at HEAD with `code overflow: emitted code exceeds MAX_CODE` in compiler/pyparser.inc. Same pinned stable, same source, only the target differs — x86-64 emits 9,343,257 B (56% of the 16 MiB cap) while aarch64 exceeds it, so that backend needs >1.8x the code density for identical input. The error's own suggested remedy does not apply: default and -O2 overflow identically. Unseen because cross-bootstrap runs ONLY on a manual tag dispatch in release.yml, never per-commit, so it can rot at HEAD indefinitely — while the website advertises aarch64 as a supported target."
-status: working
+status: done
 owner: frankA
 ---
 
@@ -206,3 +206,87 @@ corrected in place.
   16->32), and all three were found by a program failing rather than by anyone
   looking, because no cap's utilisation is reported anywhere. Filed as
   [[feature-a-report-fixed-cap-headroom]] (A, p40) rather than built here.
+
+### Gate — stage 1 verified here, stage 2 offloaded, and WHY
+
+**Stage 1, the thing this ticket is about, is verified natively:** the aarch64
+cross-compile of `compiler.pas` that previously died with `code overflow` now
+succeeds, and so do arm32 and i386. `make compiler/pascal26` converged after 1
+round throughout. That is the defect and it is closed.
+
+**Stage 2 — the byte-identical fixedpoint under qemu — is handed to Track T, and
+the run started here was ABANDONED rather than reported.** It ran for an hour at
+98.7% CPU and would have produced a number. That number would have been
+worthless, and the reason is worth recording because nothing would have said so:
+
+> the run reads `compiler/compiler.pas` **and its ~200 includes lazily, from the
+> working tree, over the whole hour**. Two unrelated fixes landed in that tree
+> while it ran, and `tools/sync.sh`'s rebase rewrote every file in `compiler/`
+> at 22:03 — mid-run. So the binary it was building came from an unknown MIX of
+> sources and **cannot be attributed to any sha**.
+
+A fixedpoint verdict whose inputs mutated underneath it is not a weak result, it
+is not a result: it would have compared two binaries and reported identical or
+differing with equal confidence either way. Same family as the copied-in-seed
+no-op in CLAUDE.md — an artefact whose provenance is assumed, where the assuming
+step emits a normal-looking success.
+
+**The general rule this earns:** a long-running verification must read from a
+checkout that cannot change under it — a detached clone at the sha, or a
+snapshot copy — never from the tree you are still working in. "Hunt async,
+verify against a known sha" needs the sources pinned too, not just the binary.
+
+So the cross fixedpoint goes to Track T against the pushed sha `b93fab100`,
+which is what T's matrix is for, rather than costing another hour of the box
+whose contention is the binding constraint on the whole test matrix.
+
+**Also not run: `cross-bootstrap-arm32`.** arm32 overflowed the same cap and was
+fixed by the same change, so it wants the same stage-2 sweep and for the same
+reason belongs to T.
+
+## Log
+- 2026-08-29 — resolved, commit PENDING-COMMIT.
+
+### The number that closes stage 1
+
+The aarch64 cross-compile emits **`code=20446704B`** — 20.4 MB. The old cap was
+16,777,216 (16 MB), so the overflow was real and not marginal: aarch64 needed
+~22% more than the ceiling allowed. 32 MB leaves ~39% headroom. This is the
+measurement the ticket wanted, and it comes from a stage that ran to completion
+on native x86-64, so it is attributable.
+
+### A success message for a run that was killed — the fourth of its kind
+
+Worth recording separately from the provenance note above, because it is a
+different failure and it very nearly landed the wrong way.
+
+The stage-2 job was backgrounded. After killing it, its harness notification
+read **"completed (exit code 0)"**, while the captured log ends:
+
+```
+make: *** [Makefile:12504: cross-bootstrap-aarch64] Terminated
+```
+
+The 0 came from the backgrounding wrapper, not from `make`. **A terminated
+build was announced as a completed one**, and the only thing that contradicted
+it was reading the log. Had the run been killed by something other than me — OOM
+at 4.1 GB RSS, a reboot, the operator — the notification would have been the
+whole signal, and it said PASS.
+
+That makes four in this family, all logged the same way and all in one day:
+
+1. `make compiler/pascal26` is a **no-op that exits 0** in a fresh tree seeded
+   with a copied-in binary (CLAUDE.md);
+2. `twatch`'s `verify_pin` could be **entered but never finish**, reading from
+   outside as slowness;
+3. the watcher's **restart succeeds and serves stale code**, because its clone is
+   detached and `git pull` fails by construction;
+4. this one — a **killed build reported as completed, exit 0**.
+
+The shared shape is not "a bug in X". It is: *an operation that did not do its
+job emits the same signal as one that did*, and in every case the honest
+information existed one layer down and nobody had reason to look. The rule that
+falls out is cheap: **do not accept an exit code as a verdict for a long job —
+require the job's own terminal line** (`converged after N round(s)`,
+`gate: GREEN`, `N/N pass`). Absence of that line is the tell, and there is no
+error to wait for.
