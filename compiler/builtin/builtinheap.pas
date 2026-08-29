@@ -791,6 +791,27 @@ begin
   { hosted linux (qemu-user): generic syscall ABI mmap = 222 (byte offset, 0 here).
     prot=PROT_READ|PROT_WRITE=3, flags=MAP_PRIVATE|MAP_ANONYMOUS=0x22=34. }
   Result := __pxxrawsyscall(222, 0, len, 3, 34, -1, 0);
+{$elseif defined(CPU_XTENSA)}
+  { hosted linux (qemu-user). TWO numbers differ from every arm above and BOTH
+    were measured under qemu-xtensa 10.2.1, not read off a table:
+
+      mmap2 = 80.  Xtensa has its OWN syscall numbering, the same one that puts
+      read at 12 and write at 13 rather than the generic 63/64. Generic 222 --
+      the number the riscv32 arm three lines up uses -- is `Unknown syscall 222`
+      here; qemu names 80 as mmap2.
+
+      MAP_ANONYMOUS = $800, so flags = MAP_PRIVATE|MAP_ANONYMOUS = $802 = 2050,
+      NOT the 34 every other arm passes. Xtensa is one of the architectures with
+      non-standard MAP_* values. This is the half that fails QUIETLY-ish: with
+      34 the kernel sees MAP_PRIVATE|0x20 with no ANONYMOUS bit, tries to map
+      fd -1, and returns EBADF -- a negative errno that PXXAlloc deliberately
+      does not check, so it becomes the heap base and faults later.
+
+    Until this arm existed xtensa fell through to the terminal `Result := -1`
+    below, which is exactly what it looks like: SIGBUS at $FFFFFFFF on the first
+    allocation. No hosted xtensa program that allocated anything had ever run.
+    feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle }
+  Result := __pxxrawsyscall(80, 0, len, 3, 2050, -1, 0);
 {$else}
   { No arm for this target. -1, not 0: every caller reaches this through
     PXXAlloc, which does NOT check the result (deliberately -- on a hosted
