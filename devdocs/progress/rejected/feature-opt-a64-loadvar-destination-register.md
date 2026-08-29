@@ -5,7 +5,20 @@ prio: 55
 type: feature
 blocked-by: []
 summary: "EmitLoadVarA64 hardcodes x0, which is why the aarch64 leaf-operand collapse (1185b3489) could only do the CONST half. Giving it a destination-register parameter unlocks the LEAFSYM half — a further 12.6-16.3% of every integer binop on the target. Filed rather than smuggled into the port because duplicating the helper is the second-path failure this repo has a document about."
-status: new
+status: rejected
+---
+
+# `EmitLoadVarA64` needs a destination register — DUPLICATE
+
+**Closed as a duplicate of
+[[feature-opt-emitloadvara64-needs-a-destination-register-parameter]]**, which
+the coordinator filed for the same work within minutes of this one. That ticket
+is the survivor: it is already ranked in `backlog/` and now carries the
+hazard analysis (the `x1`-scratch self-clobber) that this one predates.
+
+Kept rather than deleted because `1185b3489` and the umbrella ticket both cite
+this slug. Everything below is the original text.
+
 ---
 
 # `EmitLoadVarA64` needs a destination register
