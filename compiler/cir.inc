@@ -258,3 +258,40 @@ begin
     load-back the ordinary scalar arms append }
   Result := IRAppend(IR_LOAD_MEM, addr, -1, -1, 0, lvTk);
 end;
+
+function CNodeIsDecayedRow(node: Integer): Boolean;
+{ Is this node the pre-scaled byte add that cparser builds for a DECAYED ROW —
+  a partial index (`m[1]` on `int m[3][4]`, `s.m[1][2]` on a field) or the no-op
+  deref of a pointer-to-array?
+
+  Those three builders compute `&base + flat*stride` themselves, so the offset
+  is ALREADY IN BYTES and pointer arithmetic must not scale it a second time.
+
+  How that used to be said, and why it is said here instead: the builders
+  retagged their base `ASTTk[base] := Ord(tyInt64)`, which made
+  IRNodePointerBase answer False and so kept the lowering's pointer-arith arms
+  off the node. That is a flag stored in the type field, and tyInt64 is equally
+  the honest tag of `long long a[8]` — so IRNodePointerBase had to guess which
+  of the two it was looking at, from the node's DECLARATION. It guessed wrong
+  three times, each silently:
+
+    long long q - p                gcc n    pxx 0       (the ticket's own bug)
+    (char*)(m+1)-(char*)m on
+      long long m[3][4]            gcc 32   pxx 1
+    *(s.v+3), long long v[8]
+      as a struct FIELD            gcc 3    pxx 0
+
+  The first was patched by whitelisting the shape that carries tyInt64 honestly
+  (a fixed-extent 1-D array IDENT); the second and third are the shapes that
+  whitelist did not reach, and they stayed wrong until the flag moved out of the
+  type field entirely.
+
+  ASTSLen on an AN_BINOP means exactly one thing in C mode — the three builders
+  above are its only writers — and IRPointerStride was already reading it to
+  answer what the row steps by. So the marker existed; the sentinel was a second,
+  lossy copy of it.
+  refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag }
+begin
+  Result := CProgramMode and (node >= 0) and (ASTKind[node] = AN_BINOP) and
+            (ASTSLen[node] > 0) and (IntToTypeKind(ASTTk[node]) = tyPointer);
+end;

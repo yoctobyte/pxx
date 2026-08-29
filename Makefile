@@ -7781,6 +7781,12 @@ test-core: $(COMPILER)
 	$(TESTTMP)/carr2d_param_row_length26; tools/expect_same.sh carr2d_param_row_length26-rc "$$?" "42"
 	./$(COMPILER) test/carr2d_decay_stride.c $(TESTTMP)/carr2d_decay_stride26
 	$(TESTTMP)/carr2d_decay_stride26; tools/expect_same.sh carr2d_decay_stride26-rc "$$?" "42"
+	# The same decays with a `long long` element type, and through a struct
+	# FIELD -- the two axes IRNodePointerBase's tyInt64 whitelist did not reach.
+	# refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag
+	# bug-c-a-multidim-array-field-decays-with-the-element-stride
+	./$(COMPILER) test/cll_array_pointer_base.c $(TESTTMP)/cll_array_pointer_base26
+	$(TESTTMP)/cll_array_pointer_base26; tools/expect_same.sh cll_array_pointer_base26-rc "$$?" "42"
 	# ...and the OTHER reading of the same tag. An AN_IDENT for `long long a[8]`
 	# carries tyInt64 -- its element kind -- and the pointer-base test bailed on
 	# tyInt64 outright, so a signed 64-bit array was never a pointer base: `a + 1`

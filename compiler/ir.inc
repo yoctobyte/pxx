@@ -688,6 +688,7 @@ function IRLowerBitFieldStore(fieldNode, rhsValue: Integer; storageTk: TTypeKind
 function IRAddrMayCall(n, depth: Integer): Boolean; forward;
 function IRAssignIsSharedCompound(node: Integer): Boolean; forward;
 function IRLowerCompoundAssign(node: Integer): Integer; forward;
+function CNodeIsDecayedRow(node: Integer): Boolean; forward;
 { defined near IRWrapChkBounds, used from IRLowerAddress's AN_DEREF arm far above it
   — the FPC seed needs the forward (bug-a-fpc-seed-drift-emitasmx64-forward). }
 function IRWrapNilChk(ptrVal, astNode: Integer; defaultOn: Boolean): Integer; forward;
@@ -2127,41 +2128,27 @@ end;
 
 function IRNodePointerBase(node: Integer): Boolean;
 { Is this node something pointer ARITHMETIC scales against — a pointer, or an
-  array that decays to one?
+  array that decays to one? It asks the declaration and nothing else.
 
-  tyInt64 on a C node is AMBIGUOUS, and that is the whole difficulty here. The
-  partial-index builder in cparser.inc RETAGS its base `ASTTk[base] :=
-  Ord(tyInt64)` as a SENTINEL meaning "this add is raw bytes, already scaled —
-  do not scale me again" (`m[1]` on `int m[3][4]`). But tyInt64 is also the
-  honest element tag of `long long a[8]`, and the blanket `<> tyInt64` bail this
-  function used to carry could not tell the two apart: a signed 64-bit array was
-  never a pointer base, so `a + 1` stepped ONE BYTE instead of eight, while
-  `unsigned long long a[8]` (tyUInt64) stepped correctly. A sign bit decided a
-  stride. `a[1]` was always right — indexing scales itself — so the layout
-  looked fine and only the decayed form was wrong.
+  It USED TO carry a tyInt64 special case, because cparser's decayed-row
+  builders marked "already byte-scaled, do not scale me again" by retagging
+  their base tyInt64 — a flag in the type field, indistinguishable from the
+  honest tag of `long long a[8]`. This function had to guess which meaning it
+  was looking at, and every version of that guess was wrong for some real
+  program: first a blanket bail (`long long q - p` answered 0), then a
+  whitelist for the one shape that carries tyInt64 honestly, which still read
+  `(char*)(m+1)-(char*)m` on `long long m[3][4]` as 1 instead of 32 and
+  `*(s.v+3)` on a `long long v[8]` FIELD as 0 instead of 3.
 
-  Tell them apart by asking whether the node's own DECLARATION explains the tag:
-  a fixed-extent, single-dimension array whose element type really is tyInt64
-  carries it honestly and decays like any other array. Everything else keeps the
-  bail, which is what the multi-dimensional row cases need — a 2-D array's ident
-  is retagged in place, and there the sentinel reading is the right one.
-
-  The real fix is for the sentinel to stop borrowing a type tag; filed as
-  [[refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag]].
+  The flag now lives on the add node as an ASTSLen stamp, which means one thing;
+  `CNodeIsDecayedRow` reads it, and the pointer-arith arms consult that directly
+  rather than inferring it from a type. There is nothing left here to
+  disambiguate.
+  refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag,
   bug-c-pointer-difference-on-a-long-long-element-type }
-var symIdx: Integer;
 begin
   Result := IntToTypeKind(ASTTk[node]) = tyPointer;
   if Result or (not CProgramMode) then Exit;
-  if IntToTypeKind(ASTTk[node]) = tyInt64 then
-  begin
-    symIdx := -1;
-    if ASTKind[node] = AN_IDENT then symIdx := ASTIVal[node];
-    if (symIdx < 0) or (not Syms[symIdx].IsArray) or
-       (Syms[symIdx].ArrLen = -1) or (SymArrNDims[symIdx] > 1) or
-       (Syms[symIdx].ElemType <> tyInt64) then
-      Exit;
-  end;
   Result := CNodeDecaysToPointer(node);
 end;
 
@@ -2220,6 +2207,20 @@ begin
     if CProgramMode and RecFieldIsArray(recId, fieldName) and
        (RecFieldDynDepth(recId, fieldName) = 0) then
     begin
+      { A MULTI-dimensional array FIELD decays to a pointer to its ROW, exactly
+        as the AN_IDENT arm above says a multi-dim array does — `s.m + 1` on
+        `struct { int m[3][4]; }` steps 16 bytes. This arm answered the ELEMENT
+        type and stopped, so it stepped 4 (1 for a char row, 8 for a double
+        row), and `int (*r)[4] = s.m + 1; r[0][2]` silently read a different
+        element. The bare-array spelling was fixed in
+        bug-c-a-multidim-array-decays-with-the-element-stride and this arm, one
+        screen below it in the same routine, was not touched.
+        bug-c-a-multidim-array-field-decays-with-the-element-stride }
+      if RecFieldArrNDims(recId, fieldName) > 1 then
+      begin
+        Result := RecFieldRowStride(recId, fieldName);
+        Exit;
+      end;
       elemTk := RecFieldType(recId, fieldName);
       recId := ResolveNodeRec(node);
     end
@@ -2240,12 +2241,11 @@ begin
   end
   else if ASTKind[node] = AN_BINOP then
   begin
-    { A DECAYED ARRAY ROW (`m[1]` on `int m[3][4]`) is built as a raw byte add
-      over a base retagged tyInt64, so neither operand can answer what the
-      result steps by; the partial-index builder stamps it here.
-      bug-c-a-decayed-array-row-steps-one-byte }
-    if CProgramMode and (ASTSLen[node] > 0) and
-       (IntToTypeKind(ASTTk[node]) = tyPointer) then
+    { A DECAYED ARRAY ROW (`m[1]` on `int m[3][4]`) is built as a raw byte add,
+      so neither operand can answer what the result steps by; the builder stamps
+      it, and that stamp is also what marks the add pre-scaled.
+      bug-c-a-multidim-array-decays-with-the-element-stride }
+    if CNodeIsDecayedRow(node) then
     begin
       Result := ASTSLen[node];
       Exit;
@@ -8969,7 +8969,14 @@ begin
       end
       else
       begin
+        { A DECAYED ROW is already in bytes -- cparser multiplied by the
+          stride when it built the add -- so none of the three pointer-arith
+          arms below may scale it again. It used to be kept out of them by
+          retagging its base tyInt64, which is the sentinel this refactor
+          removed; the marker is now read where it is written.
+          refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag }
         if (ASTIVal[node] = Ord(tkMinus)) and
+           (not CNodeIsDecayedRow(node)) and
            IRNodePointerBase(ASTLeft[node]) and
            IRNodePointerBase(ASTRight[node]) then
         begin
@@ -9000,6 +9007,7 @@ begin
           end;
         end
         else if ((ASTIVal[node] = Ord(tkPlus)) or (ASTIVal[node] = Ord(tkMinus))) and
+           (not CNodeIsDecayedRow(node)) and
            IRNodePointerBase(ASTLeft[node]) and
            TypeIsOrdinal(IntToTypeKind(ASTTk[ASTRight[node]])) then
         begin
@@ -9014,6 +9022,7 @@ begin
           Result := IRAppend(IR_BINOP, left, right, Integer(ASTIVal[node]), 0, Ord(tyPointer));
         end
         else if (ASTIVal[node] = Ord(tkPlus)) and
+                (not CNodeIsDecayedRow(node)) and
                 TypeIsOrdinal(IntToTypeKind(ASTTk[ASTLeft[node]])) and
                 IRNodePointerBase(ASTRight[node]) then
         begin

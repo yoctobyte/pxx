@@ -56,7 +56,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (312)
+## backlog (311)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -357,7 +357,6 @@ _none_
 | refactor-a-two-predicates-answer-what-a-caret-yields | A | 55 | refactor | Two functions type a dereference. NodePtrElem knows more SPELLINGS (index-into-base, pointer FIELD, inline PTR_CAST, pointer arithmetic); ResolveDerefShape knows more ABOUT each (remaining depth, ultimate base). Swapping a call site from one to the other trades one kind of knowledge for the other, silently — which is exactly what shipped a regression on 2026-08-25. | — |
 | refactor-a-viscachevis-is-indexed-by-a-string-id-and-sized-by-a-unit-count | A | 45 | refactor | VisCacheVis is subscripted by a Strs[] index but sized by MAX_UNITS, a unit COUNT. The two are unrelated quantities, so the array's bound has no relationship to the values that index it. Three range checks now stand between that mismatch and memory corruption; one of them was missing and cost a multi-session bug (bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream). Separate the domains so the checks are belt-and-braces rather than load-bearing. | — |
 | refactor-c-string-literal-decay-belongs-at-the-producer | C | 50 | refactor | The +8 that turns a C string literal's handle into a char* is duplicated at three consumers (assign, return, call argument), each keyed on `ASTKind[...] = AN_STR_LIT`. Any wrapper node defeats all three at once -- which is exactly how bug-c-a-pointer-cast-of-a-string-literal-points-at-the-length-prefix happened. Do the decay once, at the producer. | — |
-| refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag | C | 40 | refactor | cparser's partial-index builder marks 'this add is raw bytes, do not scale' by RETAGGING its base ASTTk to tyInt64 — a type tag used as a flag. tyInt64 is also the honest element tag of a `long long` array, and that collision cost a real bug. | — |
 | refactor-n-two-import-handlers-are-twins | N | 45 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
 | refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too | P | 55 | refactor | The parser carve-out is done, but Pascal still shares lexer.inc with Track A — so the A/P no-concurrent-edit rule still binds, now over 2,566 lines instead of 37,249. Carve the Pascal-specific lexing into paslexer.inc the way C, NilPy, Rust and Zig already have their own, and the A/P slot stops existing. | — |
@@ -373,7 +372,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (14)
+## backlog_new (15)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -390,6 +389,7 @@ _none_
 | feature-t-check-flags-a-lane-blocker-that-has-no-in-edges | T | 40 | feature | prio propagates down dependency edges, so a ticket with in-degree zero inherits nothing — and a ticket that blocks a LANE rather than a ticket never gets an edge, because blocked-by: would be a false claim. Such a ticket under-ranks itself permanently and no checker sees it: from the ranker's side an in-degree of zero is indistinguishable from a leaf. Proposal: `progress.sh check` flags a ticket whose body names a track as its beneficiary and has no in-edges. Threshold MUST be calibrated against the live board before landing. | — |
 | refactor-a-one-rule-spelled-two-ways-at-two-strictnesses-in-ir-lowering | A | 40 | refactor | ir.inc:10426 reads `(CProgramMode or IsNodePChar(dest))` -- one rule expressed two ways at two different strictnesses, with the dialect flag standing in for the property it implies. Normalising it DELETES an entry from the C carve-out inventory rather than moving one, so it makes that refactor smaller. | — |
 | refactor-a-target-dispatch-chains-fail-open | A | 50 | refactor | Not a missing-helper ticket: TARGET_PTR_SIZE exists and is read at 129 sites. The narrow, verified gap is that several per-target if/else-if chains have no final else, so adding target #7 (wasm32) or #8 (riscv64) matches no arm and configures nothing, silently. lexer.inc:936 is the worked example. Fix is a mandatory else that Errors, not a collapse of the 180 TargetArch sites — util.inc:87 already documents why collapsing is wrong. | — |
+| refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs | C | 75 | refactor | Four C readers ask what a decayed array steps by, and all four are written as an AN_IDENT branch beside an AN_FIELD branch. Three field branches were never finished: five ordinary expressions SEGFAULT (`**a.s`, `*(*(a.m+1)+2)`, `strcmp(*(a.s+1),\"cd\")`), one loads four bytes of a char row. Three of the pairs were repaired one at a time on 2026-08-29; this replaces the shape with one reader so there is no fifth pass. | — |
 | refactor-p-the-char-array-is-not-a-string-rule-is-spelled-five-times | P | 40 | refactor | The `bug-p-a-char-array-is-not-a-string-in-any-direction` rule is implemented at FIVE separate sites in ir.inc, each carrying a comment pointing at the others. root-cause-over-microfix calls three copies a design flaw; this is five. Found during the cir.inc inventory, in Pascal's ground, not C's. | — |
 
 ## experimental (20)
@@ -622,9 +622,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2666)
+## done (2668)
 
-2666 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2668 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (52)
 
@@ -687,6 +687,7 @@ _none_
 
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [P] feature-pascal-corpus-oop
+- [p 75] [C] refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - [p 70] [A+O] feature-opt-o3-register-pressure
 - [p 70] [P] regression-cascade-4e27dc2be114
@@ -872,7 +873,6 @@ _none_
 - [p 40] [A] feature-writeln-as-library
 - [p 40] [N] perf-nilpy-remaining-perbyte-string-builders
 - [p 40] [A] refactor-a-one-rule-spelled-two-ways-at-two-strictnesses-in-ir-lowering
-- [p 40] [C] refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag
 - [p 40] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
 - [p 40] [P] refactor-p-the-char-array-is-not-a-string-rule-is-spelled-five-times
 - [p 40] [T] regression-demos-00-2

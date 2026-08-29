@@ -3412,8 +3412,10 @@ begin
         begin
           { the no-op deref: same address, one dimension further in. Built as
             the raw byte add the partial index uses, so one shape carries a
-            decayed row everywhere. }
-          if ASTKind[operand] = AN_IDENT then ASTTk[operand] := Ord(tyInt64);
+            decayed row everywhere. The add is marked pre-scaled by the ASTSLen
+            stamp below, NOT by retagging the base tyInt64 — see the note at the
+            partial-index arm.
+            refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag }
           node := AllocNode(AN_INT_LIT);
           ASTIVal[node] := 0; ASTTk[node] := Ord(tyInt64);
           Result := AllocNode(AN_BINOP);
@@ -3754,14 +3756,24 @@ begin
             decays to a POINTER to the remaining sub-array — g[1][3] on
             int[2][9][7] is int(*)[7]. Address = &base + Horner(first nIdx dims)
             * product(remaining dim spans) * elemsize. Built as a raw byte add
-            (the array ident decays to its base address, tagged tyInt64),
-            mirroring the struct-field partial-index path above; the pointer value
-            is then assignable to an int(*)[..] variable and re-indexed through it.
-            (bug-c-partial-multidim-array-index.) }
+            (the array ident decays to its base address), mirroring the
+            struct-field partial-index path above; the pointer value is then
+            assignable to an int(*)[..] variable and re-indexed through it.
+            (bug-c-partial-multidim-array-index.)
+
+            HOW "raw bytes, do not scale me again" IS RECORDED. This arm used to
+            retag the base `ASTTk[node] := Ord(tyInt64)`, which stopped the
+            pointer-arithmetic lowering from multiplying the already-multiplied
+            offset a second time. That was a FLAG written into the type field,
+            and tyInt64 is also the honest tag of a `long long` array — so the
+            readers had to guess which meaning they were looking at, and both
+            guesses were wrong for some real program. The fact now lives only in
+            the ASTSLen stamp on the resulting add, which means one thing and is
+            what IRPointerStride already read.
+            refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag }
           flatNode := BuildFlatNDIndex(nIdx);
           rowStride := TypeSize(Syms[ASTIVal[node]].ElemType);
           for ndi := nIdx to NDInfoNDims - 1 do rowStride := rowStride * NDInfoSpan[ndi];
-          ASTTk[node] := Ord(tyInt64);
           strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := rowStride; ASTTk[strideLit] := Ord(tyInt64);
           mulNode := AllocNode(AN_BINOP); ASTIVal[mulNode] := Ord(tkStar);
           ASTLeft[mulNode] := flatNode; ASTRight[mulNode] := strideLit; ASTTk[mulNode] := Ord(tyInt64);
@@ -3882,8 +3894,11 @@ begin
         else
         begin
           { partial index -> row pointer. rowStride = product(remaining spans)*elem.
-            Tag operands tyInt64 so the add is raw 64-bit (no pointer-stride scale);
-            the AN_FIELD value decays to its address as the base.
+            The offset operands are tyInt64 so the add is raw 64-bit; the
+            AN_FIELD value decays to its address as the base. What says "already
+            byte-scaled, do not scale me again" is the ASTSLen stamp on the
+            resulting add, not the base's type tag — see the array arm above.
+            refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag
 
             RecFieldRowStride answers for ONE subscript — it is
             elem*product(span[1..n-1]), the OUTER row. This arm is reached with
@@ -3909,7 +3924,6 @@ begin
             spanD := RecFieldArrDimSpanAt(ResolveNodeRec(ASTLeft[baseFld]), GetASTIdentName(baseFld), ndi2);
             if spanD > 0 then rowStride := rowStride * spanD;
           end;
-          ASTTk[baseFld] := Ord(tyInt64);
           strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := rowStride; ASTTk[strideLit] := Ord(tyInt64);
           mulNode := AllocNode(AN_BINOP); ASTIVal[mulNode] := Ord(tkStar);
           ASTLeft[mulNode] := flatNode; ASTRight[mulNode] := strideLit; ASTTk[mulNode] := Ord(tyInt64);
