@@ -176,3 +176,42 @@ generator family (index: `feature-a-a-refusal-is-a-claim-with-a-date-on-it`).
 `seven` (owner's box, owner's installs). Re-sweep after provisioning and re-file
 whatever is still red — expected: the four pre-existing regressions and nothing
 else.
+
+### Independent corroboration, frankB — measured at HEAD, arrived at separately
+
+Reached the same verdict by a different route before seeing the triage above.
+**Nine of nine green locally.** Built and run at `c50d99081` with a self-hosted
+HEAD compiler (binary `3afb7bdcef3f`) through `tools/run_target.sh`:
+
+| targets | test | result |
+| --- | --- | --- |
+| aarch64 · i386 · arm32 | `test_extern_c` | `12345 -99 5 0` — correct |
+| aarch64 · i386 · arm32 | `test_cdecl_indirect` | `4.0 1024.0 12.0` — correct |
+| aarch64 · i386 · arm32 | `test_extern_c_float` | six values — correct |
+
+Values identical to the x64 oracle each one diffs against.
+
+**And the recorded reason now carries the discriminator.** `job_reason` for
+these is an `expect_same` diff:
+
+```
+test-aarch64#src:test/test_extern_c.pas
+  @@ -1,4 +1 @@ | -12345 | -99 | -5 | -0 | +
+```
+
+Four lines expected; **`actual` is empty** — the `+` has nothing after it. So on
+`seven` these produced **no output at all** rather than wrong output, which is
+what separates "did not run / did not link" from "computed the wrong value" and
+points at provisioning without needing the box. Before the assertion conversion
+this same failure recorded two compile summaries with different code sizes,
+which reads as a codegen divergence — i.e. it would have pointed at the Rust
+range, exactly the incriminating framing the triage above had to argue down.
+
+Caveat on my half of it: absence on a *different* box is weaker evidence than it
+looks. It cannot distinguish "fixed since" from "never true here", and only the
+triage above, made from the box's own state, settles that.
+
+For the record, the assertion-conversion commits sit outside the range in both
+directions: batches 1–5 are ancestors of the last good `e417731e9007` (inside
+`seven`'s own 1630-pass sweep), and `c0030946e` / `7e11ab09e` / `0d91dc88f` land
+after `154d1aa3fba6` and were never part of this run.
