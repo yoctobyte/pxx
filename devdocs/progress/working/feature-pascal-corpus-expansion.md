@@ -762,7 +762,7 @@ Everything is pushed. Nothing is reverted or half-applied; no code is mid-edit.
 
 **State:** `generics.defaults.pas` compiles end to end.
 `generics.collections.pas` is the next unit and its wall is
-[[bug-p-a-generic-type-parameter-is-unknown-when-a-specialization-is-materialised-cross-unit]]
+[[bug-p-a-delphi-mode-generic-from-a-used-unit-cannot-be-specialized]]
 (rung 9), which carries **two refuted hypotheses with the measurements that
 refuted them** — the macros are fine, and it is not the forward-decl case bug.
 Its first job is a two-unit reduction, which has not been built.
@@ -773,3 +773,33 @@ Also still open: [[bug-p-two-different-nested-specializations-of-one-template-co
 ticket** — that older note was stale on two of its three items by the time it
 was read, which is the failure mode this one will have too. Re-measure the
 corpus first; it takes one compile.
+
+### Rung 9 RE-DIAGNOSED 2026-08-29 (frankA) — and the first framing was wrong
+
+The wall behind `generics.defaults.pas` was filed as *"unknown type: TKey — a
+generic type parameter is out of scope"*, marked **observed, not diagnosed**.
+Good thing: reduced, it is not about type parameters, not about `TKey`, and not
+about the macros. It is
+
+> **in `{$MODE DELPHI}`, a generic declared in a USED UNIT cannot be
+> specialized at all** — `var o: TOne<Integer>;` answers `unknown type: TOne`.
+
+Same-unit works. The objfpc `specialize TOne<Integer>` spelling works
+cross-unit. Only the Delphi angle-bracket surface fails, and a ONE-parameter
+generic fails, so arity is irrelevant too. Eleven lines reproduce it.
+
+Cause, measured: `DelphiRewriteGenericUses` sweeps the **shared** `Tokens[]`
+starting at `insertAt` — just past the template's own declaration — and the main
+program is lexed BEFORE the unit it uses, so the program's use sits below that
+index and is never rewritten. Renamed to
+[[bug-p-a-delphi-mode-generic-from-a-used-unit-cannot-be-specialized]] and
+**banked, not microfixed**: the obvious "start at 0" is wrong on where the minted
+alias must live and re-widens the surface of the already-recorded
+`bug-a-the-delphi-generic-rewrite-is-not-idempotent`.
+
+**Note for the ladder: this is the SECOND ordering defect in that one rewrite**
+— wall 6's was `GenericMethodCount=0` because the same rewrite emits near the top
+of the token stream before method bodies are buffered. Two ordering defects in
+one mechanism is the smell `root-cause-over-microfix.md` names; the next holder
+should read wall 6's ticket alongside this one and ask whether a single
+restructuring closes both, rather than fixing this arm alone.
