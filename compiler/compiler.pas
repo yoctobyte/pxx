@@ -142,6 +142,13 @@ procedure BuildCSysIncludeDirs; forward;    { the host `<>` fallback table — c
 {$include pasparser_proc.inc}
 {$include pasparser_prog.inc}
 {$include ir.inc}
+{ Track C's C-EXCLUSIVE lowering, carved out of ir.inc (slice 1 of
+  refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed).
+  AFTER ir.inc, not before: cir.inc calls IRLowerAST, which ir.inc already
+  forward-declares -- putting cir.inc first would need a second forward for it
+  and that is a duplicate the FPC seed rejects. So ir.inc carries five forwards
+  for what it calls the other way. }
+{$include cir.inc}
 function GetOrAllocNodeDynDesc(node: Integer): Integer; forward;
 function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
 { "does this operand already own its +1" — the ONE predicate for managed-string
