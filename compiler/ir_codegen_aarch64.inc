@@ -696,6 +696,14 @@ begin
     resident arrays — this mirror must not touch them there. }
   if TargetArch <> TARGET_AARCH64 then Exit;
   FrResidentCount := 0;
+  { Recomputed here rather than inherited. UnifiedResidencyAssign does set it
+    for every target (it runs before its own arch check), so this is currently
+    redundant -- but item 3's correctness on aarch64 would then depend on the
+    x86-64 pass having run first, which is a coupling nothing states and a
+    reordering would silently break. Same IR, same answer, one scan. }
+  RcProcHasExc := False;
+  for k := 0 to IRCount - 1 do
+    if IRKind[k] = IR_EXC_ENTER then begin RcProcHasExc := True; Break; end;
   if OptLevel < 3 then Exit;
   if CurProc < 0 then Exit;
   if RcSuppressAssign then Exit;
@@ -1000,6 +1008,81 @@ begin
   EmitI32($AA0003E0 or rreg);              { mov x19..x24, x0 }
 end;
 
+{ -O3: refresh a resident's register cache from the value ALREADY IN X0, rather
+  than re-reading the frame slot written one instruction ago.
+
+  Straight port of x86-64's RegcallRefreshResidentFromRax, and it is the same
+  argument: EmitStoreVarA64's dual-write stores x0's low `sz` bytes and then had
+  to get the canonically extended value back into x19..x24 -- and did it by
+  RELOADING the slot, which on aarch64 costs an immediate materialisation, an
+  `add x9, x29, x9` and a load, all on the critical path of every store to a
+  resident. Re-extending x0 yields the identical value by construction (the slot
+  holds exactly those bytes), so the reload is pure latency.
+
+  This is the residency mechanism working AGAINST itself: the pass exists to
+  break the loop-carried store-forward chain through the frame slot, and the
+  refresh was re-creating one per store.
+
+  It is also a PREREQUISITE for item 3, not merely an optimisation beside it:
+  once the dual-write is skipped the slot is stale, so a refresh that reads the
+  slot would load garbage. aarch64 could not have taken item 3 without this.
+
+  Extension encodings are the ones already used elsewhere in this file
+  (sxtb/sxth/sxtw at :1340-1342, the `mov w9, w0` zero-extend at :1348) with the
+  destination register changed, rather than derived fresh. }
+procedure RegcallRefreshResidentFromX0A64(idx: Integer);
+var tk: TTypeKind; sz: Integer; sgn: Boolean; rreg: Integer;
+begin
+  rreg := ResidentRegOf(idx);
+  if rreg = 0 then Exit;
+  tk := Syms[idx].TypeKind;
+  if TypeIsFloat(tk) or ((Syms[idx].Kind = skParam) and Syms[idx].IsRef) then
+  begin
+    RegcallRefreshResidentA64(idx);   { not a plain scalar in x0 -- slow form }
+    Exit;
+  end;
+  sz := TypeSize(tk);
+  sgn := TypeSigned(tk);
+  if sz = 1 then
+  begin
+    if sgn then EmitI32($93401C00)      { sxtb x0, w0 }
+    else EmitI32($53001C00);            { uxtb w0, w0 }
+  end
+  else if sz = 2 then
+  begin
+    if sgn then EmitI32($93403C00)      { sxth x0, w0 }
+    else EmitI32($53003C00);            { uxth w0, w0 }
+  end
+  else if sz = 4 then
+  begin
+    if sgn then EmitI32($93407C00)      { sxtw x0, w0 }
+    else EmitI32($2A0003E0);            { mov w0, w0 (zero-extends) }
+  end;
+  { sz = 8: x0 already holds the canonical value }
+  EmitI32($AA0003E0 or rreg);           { mov x19..x24, x0 }
+end;
+
+{ aarch64 half of PXXDBG=a.poisonslot. Same contract as the x86-64 one, and
+  deliberately gated on the SAME shared predicate (ResidentSlotIsDead), so the
+  experiment poisons exactly the set item 3 stops writing on this target too.
+  Writes exactly TypeSize bytes -- a wider store would corrupt the neighbouring
+  slot and manufacture the bug it is hunting. x1 is the scratch EmitStoreVarA64
+  itself uses two lines below, which is the evidence it is free here. }
+procedure PoisonResidentSlotA64(idx: Integer);
+var sz: Integer;
+begin
+  if not PxxDbgEnabled('a.poisonslot') then Exit;
+  if not ResidentSlotIsDead(idx) then Exit;
+  sz := TypeSize(Syms[idx].TypeKind);
+  EmitLoadImmA64(9, Syms[idx].Offset);
+  EmitI32($8B0903A9);                   { add x9, x29, x9 }
+  EmitLoadImmA64(1, Integer($5EEDADAD));
+  if sz = 1 then EmitI32($39000121)     { strb w1, [x9] }
+  else if sz = 2 then EmitI32($79000121){ strh w1, [x9] }
+  else if sz = 4 then EmitI32($B9000121){ str  w1, [x9] }
+  else EmitI32($F9000121);              { str  x1, [x9] }
+end;
+
 procedure EmitStoreVarA64(idx: Integer);
 var tk: TTypeKind; sz: Integer;
 begin
@@ -1052,6 +1135,14 @@ begin
     else
       EmitI32($F9000020); { str x0, [x1] }
   end
+  else if ResidentSlotIsDead(idx) then
+  begin
+    { -O3 item 3: nothing can read this slot, so skip the whole dual-write --
+      on aarch64 that is the immediate materialisation and the `add` as well as
+      the store, three instructions rather than x86-64's one. The refresh below
+      is unaffected: at OptLevel >= 3 it re-extends x0 and never reads memory,
+      which is exactly why RegcallRefreshResidentFromX0A64 had to land first. }
+  end
   else
   begin
     EmitLoadImmA64(9, Syms[idx].Offset);
@@ -1090,7 +1181,13 @@ begin
     if (Syms[idx].TypeKind = tyDouble) and (FloatResidentXmmOf(idx) <> 0) then
       EmitI32($9E670000 or FloatResidentXmmOf(idx))     { fmov d8..d13, x0 }
     else if ResidentRegOf(idx) <> 0 then
-      RegcallRefreshResidentA64(idx);
+    begin
+      if OptLevel >= 3 then
+        RegcallRefreshResidentFromX0A64(idx)   { same value, no store-to-load forward }
+      else
+        RegcallRefreshResidentA64(idx);
+      PoisonResidentSlotA64(idx);
+    end;
   end;
 end;
 
