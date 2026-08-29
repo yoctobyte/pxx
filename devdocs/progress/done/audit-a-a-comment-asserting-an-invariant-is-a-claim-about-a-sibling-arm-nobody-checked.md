@@ -857,4 +857,4 @@ are separately editable, because wiring a gate and describing one are different
 edits.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 7cacf0328.
