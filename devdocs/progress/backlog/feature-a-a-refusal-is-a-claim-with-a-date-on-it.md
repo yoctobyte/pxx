@@ -1004,3 +1004,65 @@ tree seeded with a copied-in binary, which exits 0 having proved no fixedpoint;
 a SKIPped corpus job read as green; a `for` loop over a glob that matches
 nothing. Each is a zero-iteration success. **Any operation whose success is
 defined over a set should report the set's size.**
+
+## Face twenty-four — a checker built from the same model as the thing checked inherits its blind spot
+
+Found by frankB, 2026-08-29, in its own verification script, at the end of a
+session it had spent verifying by construction.
+
+**The instance.** Converting 2476 Makefile assertions of the form
+`test "A" = "B"`, frankB verified each rewrite by re-parsing it with a greedy
+`"(.*)" "(.*)"` split and comparing the operands. Two lines reported DRIFT. The
+transformation was correct; **the verifier was wrong, and wrong in the exact way
+it was checking for** — those lines' expected operands contain `" "` inside them
+(`printf '…' "'V'" "'V'"`), so the greedy split chose the wrong quote pair.
+
+**The checker's failure mode was the checked transformation's failure mode.**
+That is structural, not coincidence: the verifier was written out of the same
+understanding of the problem that produced the conversion, so it inherited the
+same model, and **a checker cannot see what its author's model omits.**
+
+**And it failed LOUDLY, which is the trap.** It reported DRIFT — noise that looks
+exactly like the check working. A checker that misfires in the direction of its
+own blind spot produces evidence of diligence at the moment it is least
+informative.
+
+**The replacement, and the distinction worth keeping.** The first check
+*inspected* the transformation by re-deriving it. The second establishes a
+**property of the inputs**: the only thing splitting `test "A" = "B"` can get
+wrong is the separator; that is possible only where a line holds more than one
+`" = "`; and every original line converted this session contained exactly one.
+Zero ambiguous splits.
+
+> **A check that shares an author's model with the thing it checks is a
+> repetition. A check over the inputs is a measurement.**
+
+Corollary already recorded elsewhere and confirmed here: the checking layer is
+written with less suspicion than the layer checked, because it is "just the
+harness".
+
+### Companion — a shape census measures the regex, not the file
+
+frankB's second correction the same hour, and it stands alone. It filed 40 lines
+as "standalone with a trailer after the expected"; 32 were plain shape A whose
+expected operand contains double quotes, and the expected-side pattern was
+`[^"]*`. **They were filed under a description of the regex's blind spot rather
+than of the lines.**
+
+> **A shape census is a claim about what a regex will match, and the only
+> instrument that measures it is that regex.** Reading harder never finds this;
+> running it does.
+
+Third time this campaign's counts moved under measurement — 480, then 474, then
+498; and separately 40 → 8+32. **A number over heterogeneous shapes is a guess
+wearing a number's clothes.**
+
+### And a subset relation is a claim about the filters, not the file
+
+Same campaign: 376 exit-status checks were reported as being *within* 2007
+convertible assertions. They are not — `test "$?"` does not contain
+`test "$$(`, so the two greps count **disjoint** sets and the not-convertible
+class sat entirely outside the convertible one. **A subset relation asserted
+between two numbers produced by two different filters is a guess about the
+filters.** Neither the worker nor the coordinator derived it before planning
+against it.
