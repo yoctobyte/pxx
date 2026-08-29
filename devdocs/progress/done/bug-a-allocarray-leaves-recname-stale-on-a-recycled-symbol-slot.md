@@ -1,6 +1,7 @@
 ---
 prio: 55
 track: A
+status: done
 ---
 # `AllocArray` leaves `RecName` stale on a recycled symbol slot
 
@@ -306,3 +307,82 @@ frontend's *other* features happen to line up. One concept, several
 implementations, and a fix on one arm is no evidence about the others — the same
 thing the `builtinheap` twin census found one level down, in
 [[audit-a-builtinheap-invariants-x86-64-inlines-past]].
+
+---
+
+## 2026-08-29 — FIXED, both allocators, two tests
+
+`RecName := REC_NONE` in `AllocArray` (`symtab.inc:4499`) and `AllocDynArray`
+(`:4635`), beside each one's existing `ElemRecName` write. Self-host fixedpoint
+`converged after 1 round(s)`, binary `8dad6220bb2a`.
+
+**Reproduced before fixing, in both faces.** A fix whose failure I have not seen
+is a fix I cannot verify, so both were driven to red first:
+
+| face | pre-fix | post-fix | oracle |
+| --- | --- | --- | --- |
+| C `_Generic` on array-of-A | `B B 3` | `other other 3` | gcc: `other other 3` |
+| Rust `cells[0].id` | `error: unexpected token near: cells >>> id` | `106 11` | — |
+
+**The mechanism confirmed itself** across five C shapes. Only the by-value record
+param leaves a dirty slot:
+
+| shape | gcc | pxx pre-fix |
+| --- | --- | --- |
+| no function at all | `other` | `other` |
+| param `struct B *` | `other` | `other` |
+| param `struct B` by value | `other` | **`B`** |
+
+A pointer param allocates no record symbol, so it leaves nothing behind — which
+is why the pointer case never fired.
+
+**The shape is load-bearing, and finding it needed a sweep rather than a guess.**
+The Rust repro only fires with **two** params on the function and the array as
+`main`'s **first** local; at one param, or with any local ahead of the array, the
+recycled slot does not line up and nothing happens. Six combinations were tried
+before one reproduced. Same alignment as the C case (two params, array first),
+which is not a coincidence — it is the slot arithmetic.
+
+**Correction to the analysis, made after measuring:** the second array `ctl` in
+the C test was written as a "control that was always right". It was not — pre-fix
+the program printed `B B`, so the staleness reached both arrays. The comment was
+corrected before landing rather than after. The real controls are the deleted-
+function and pointer-param variants above, which cannot live in the same file.
+
+**The `AllocDynArray` line is DEFENSIVE — it is not observable today, and the
+earlier "`array of TRec` is exposed" reading does not hold.** Checked rather than
+assumed:
+
+- The Rust frontend has **no `Vec`** (`grep -c '\bVec\b' rparser.inc` = 0), so
+  Rust never reaches `AllocDynArray` at all. Rust's exposure is entirely through
+  `AllocArray` (fixed arrays), which is the half proven above.
+- `AllocDynArray`'s callers are Pascal (`pasparser_*`) and shared temps in
+  `ir.inc`. Pascal reads `ElemRecName` by design.
+- A Pascal `array of TRec` probe after a by-value record param produced
+  **byte-identical binaries** before and after the fix.
+
+It lands anyway: `RecName` is genuinely meaningless for a dynamic array, and
+fixing one allocator while leaving its twin recreates the exact asymmetry that
+caused this bug. Latent-until-someone-writes-the-caller is the same shape as the
+`PXXMemMove` finding — worth closing while the context is here, not worth
+claiming as verified.
+
+**Root cause, and why the guard rail missed it.** Every allocator carries a
+comment saying slot recycling means *"reset EVERY parallel array"*. `RecName` is
+a **field of the record**, not a parallel array — so a rule written about parallel
+arrays did not cover the field that behaves exactly like one. The comment now
+says so at both sites, because the next person adding an allocator will read the
+comment, not this ticket.
+
+**Left open, deliberately not folded in:** the audit's **20 `RecName` reads
+guarded by `TypeKind = tyRecord` and nothing else**. That is not a guard for an
+array symbol, which *has* `tyRecord` because the field holds the ELEMENT kind.
+This fix makes those reads safe by keeping `RecName` clean; it does not make the
+guards correct. A check that looks like a type check and is not, in 20 places, is
+its own ticket.
+
+Found by frank-rust, audited across all five frontends by pxx-a5, landed here
+because Track A+O held `symtab.inc`.
+
+## Log
+- 2026-08-29 — resolved, commit PENDING-COMMIT.
