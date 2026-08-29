@@ -5,11 +5,10 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:21 blocked:6 backlog:292 backlog_new:6 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2568 rejected:46`
+`working:1 unfinished:21 blocked:6 backlog:292 backlog_new:6 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2569 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-t-a-reopened-fuzz-finding-erases-the-history-that-makes-it-useful` [T] — owner: pxx-a5
 - `feature-opt-o3-register-pressure` [O] — owner: frank-optimize-b4
 
 ## unfinished (21) — parked mid-flight; re-claim, do not duplicate
