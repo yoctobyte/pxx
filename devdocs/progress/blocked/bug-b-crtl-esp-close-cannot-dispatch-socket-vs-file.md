@@ -3,6 +3,7 @@ summary: "On ESP-IDF, close() cannot serve both file and socket fds — PalClose
 type: bug
 track: B
 prio: 30
+blocked-by: [feature-pal-esp-posix-fd-semantics]
 ---
 
 # crtl `close()` cannot dispatch socket vs file on ESP
@@ -101,3 +102,39 @@ live in one namespace and a single `close()` is simply correct. That ticket
 subsumes option 2 here, and makes option 1 a workaround for something already
 scheduled to change. Do that one first.
 
+
+## 2026-08-29 (frankS): the "do that one first" was never in frontmatter
+
+**No code change. Moved to `blocked/` and given the `blocked-by` this ticket has
+been describing in prose since 2026-08-09.**
+
+The 2026-08-09 note ends *"Root fix … [[feature-pal-esp-posix-fd-semantics]] …
+subsumes option 2 here, and makes option 1 a workaround for something already
+scheduled to change. **Do that one first.**"* That is a dependency, and it was
+stated only in the body. Frontmatter carried no `blocked-by`, and frontmatter is
+what the ranker reads — so this kept surfacing in `ready --track S` at p30 as an
+unblocked ticket with nothing claimable in it, and was dispatched to me tonight
+on exactly that basis. Same shape as
+`meta-track-w-collision-windows-vs-website`: one side declared in frontmatter,
+the other in prose, and neither grep saw the other.
+
+Re-verified before parking rather than taking the previous sessions' word:
+
+- The 2026-08-09 defang is really in the tree —
+  `lib/rtl/platform/esp/platform_backend.pas:392` refuses `handle < 4096` with
+  `PAL_ERR_UNSUPPORTED`, so the memory-corruption consequence is gone and what
+  remains is the deliberate Track S refusal.
+- The remaining work is still hardware-gated, and the code says so itself in
+  that same comment: *"confirming they ARE distinguishable on real IDF needs
+  hardware nobody has run this against."* This box has no ESP32, no ESP-IDF, no
+  `IDF_PATH` and no `qemu-system-*` of any kind.
+- The blocker is hardware-gated too, so this is not a one-hop wait:
+  `feature-pal-esp-posix-fd-semantics`'s own acceptance requires *"an ESP-IDF
+  link/run smoke on C3 and S3, not only host `--platform=esp` unsupported-path
+  tests"*.
+
+So the correct state is blocked-on-the-root-fix, not ready. Nothing here should
+be microfixed in the meantime: option 1 (an fd registry in crtl) was already
+rejected on inspection because `PalPollSet` passes the caller's `pollfd` array
+straight to `lwip_poll`, so any fd tagging has to be undone there too, and
+option 2 is precisely what the blocker rewrites.
