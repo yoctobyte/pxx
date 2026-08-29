@@ -17319,3 +17319,150 @@ conflate. pxx-a5 → `regression-test-core-test-nilpy-str-ascii-cache` [N p70].
 **Fleet is now 10 roles + the watchdog.** Recorded ceiling was "4 died at once on an
 account limit, 2026-08-25"; six ran fine two nights, ten is new territory — the
 watchdog is what makes it recoverable rather than a gamble.
+
+## 2026-08-29, late — the seed break, a double dispatch I caused, two tooling fixes
+
+**The watchdog never died.** I spent a stretch diagnosing its "exit" and there was
+none: `pane_current_command` reads `bash` while the loop BODY runs and `sleep` only
+during the wait, so `bash` meant *working*, not dead. A traced run confirmed it —
+30 `agent_alive` calls, correct `claude` detection, clean cycles. **A process whose
+liveness you infer from a snapshot of what it happens to be executing is one you
+will misdiagnose at exactly the wrong moment.** Check for the child (`sleep`), or
+check the log, and do not read a shell name as a verdict. frankS was ALIVE in that
+same trace while I still had it listed as pending.
+
+### The FPC seed break — three independent finds, one report loop I failed to close
+
+`compiler/rparser.inc` forward-declared `RParseAggregateIntoNode` twice (`:1498`
+from `e3043236b`, `:2786` pre-existing). pxx tolerates a repeated forward; **FPC
+rejects it and aborts the whole compile**, so `make bootstrap` was red and no fresh
+tree could be seeded. Found independently by **frankC**, **frankA** and **pxx-a5**.
+Fixed by frank-rust in `20efe74ef` — delete `:2786`, keep `:1498`, because the call
+at `:1506` needs a forward before it.
+
+**My error, worth keeping:** I first told frank-rust "which of the two to delete is
+your call". Wrong — deleting `:1498` trades one FPC rejection for another. The call
+at `:1506` was **in the grep output I had already run** and I did not read my own
+evidence against the advice I was giving. Corrected within minutes; frank-rust had
+already done it right.
+
+**My second error, and the one with a general form:** frankC reported the break,
+and 90 minutes later was still carrying it as live while three other sessions knew
+it was fixed. **A worker who reports a blocker has no way to learn it was cleared —
+they cannot see each other, and I told the fixers and not the reporter.** New
+standing rule: *tell the reporter, not just the fixer.*
+
+### A double dispatch — and the field that caused it
+
+**I sent frankA and pxx-a5 at the same ascii-cache regression.** Nothing collided,
+which was luck about which regions each touched. Cause: the stub carried
+`track: N`, **guessed by twatch from its `.npy` test extension**, while the defect
+and both fixes were in `ir_codegen.inc` / `defs.inc` — Track A. The sole-A guard
+keys off exactly that field, so it never fired, and the ticket looked like a
+frontend item safe to hand a second agent.
+
+**A guessed track and a declared track are indistinguishable in frontmatter**, and
+the note saying it was guessed is in the BODY — the same shape as
+`meta-track-w-collision-windows-vs-website`. A regression's TEST and its CAUSE are
+routinely in different lanes; for codegen regressions that is the common case, not
+an edge.
+
+Fixed in `73822997e`: `ready`/`next` now annotate a **still-standing** guess.
+Measured over all six live stubs first — five annotated, and the one frankC had
+retracked C→B correctly excluded, because the guessed letter is compared against
+frontmatter so a human correction clears the flag. Ready count 327 before and
+after: it annotates, it never hides. **Two of the five live guesses are wrong right
+now**, including one guessed `P` that is a Track R duplicate forward.
+
+I did NOT drop the guess, though pxx-a5 suggested it. twatch's own comment records
+that four stubs needed the same hand edit on 2026-08-16 for want of a lane —
+*"a wrong lane a triager can see beats no lane at all"*. The guess was never the
+defect; its invisibility to tools was. (`tools/twatch.py` is Track T's file, so I
+read the marker it already writes rather than changing what it emits.)
+
+### forwardlint now catches a DUPLICATE forward (`52eb9dc2f`)
+
+The seed canary asked FPC's *ordering* question and not its *uniqueness* one, so it
+printed `ok` on a tree whose bootstrap was broken. **Both arms measured on the live
+defect, not a fixture** — FAIL naming `:1498` as the survivor while the bug was
+present (independently the same verdict frankA reached by running FPC), `ok` once R
+deleted `:2786`. A control is not a control until it has failed once; this one
+failed on the real tree and then cleared *for the right reason* rather than because
+I broke the check.
+
+Keeps the file's MISS-not-false-alarm bias, enforced twice: skips anything under a
+`{$ifdef}` (the scanner does not evaluate conditionals) and anything marked
+`overload`. Does **not** close the general hole, and says so: `make
+compiler/pascal26` compiles with pxx, so the per-fix loop is blind to FPC-only
+breakage **by construction** (face 31). This catches one shape of it.
+
+### `gate: RED` exited 0 — I reproduced it in my own hands
+
+frankA reported it; ten minutes later my own pin gate FAILED the self-host
+fixedpoint and the harness said *"completed (exit code 0)"*. My cause was my own
+(I ended the command with `tail`, so I got `tail`'s status) — **which is the
+point**: the exit code answers a different question than the gate does. Fifth
+instance; belongs to `devdocs/dev/a-success-message-is-not-a-verdict.md`. Require
+the job's own terminal line, never the exit status.
+
+Also: my first pin gate went RED on a **stale local `compiler/pascal26`** — again.
+The gate diagnosed it by name (`is OLDER than the last commit touching compiler/`),
+which is the tooling working. Rebuild printed `converged after 2 round(s)`.
+
+### Findings banked from workers (they cannot see each other)
+
+- **frank-optimize-b4 — the provenance rule has a hole for SOURCES.** A
+  `pinned`-vs-`HEAD` **compiler** A/B does not test an RTL change: `builtinheap.pas`
+  is read from `PXX_HOME` at compile time, so two compilers use the *working tree's*
+  copy. It read 1.74 vs 1.76 — a flat line from measuring the same RTL twice — and
+  nearly buried a 3.0x patch. **"I A/B'd two compilers" reads as more rigorous than
+  "I A/B'd two RTLs", and it is the wrong axis.**
+- **b4 — the x86-64 correctness test is nearly vacuous, proven by breaking it.**
+  Deleting `PXXBlockCopy`'s byte tail still PASSED natively; the same break gave 415
+  failures under `--target=aarch64`. Note now sits in the Makefile beside the recipe.
+- **b4 — `.expected` files are NOT auto-discovered here**; every test is wired by
+  hand. Two tests it called permanently covered had never run. Face 33 again.
+- **b4 — a banked speedup decays as the tree moves under it.** Its 23x became 3.6x;
+  the `-O3` umbrella independently records 1.29x becoming 1.04x. A benchmark in a
+  ticket is a measurement with an **unstated `as-of`**, and the unstated part rots.
+- **pxx-a5 — when a builtinheap helper's comment asserts an invariant, check whether
+  x86-64 calls it. Three of three so far did not.** x86-64 open-codes past
+  `PXXStrUnique` entirely (indexed writes reach the hand-emitted
+  `AnsiStrUniqueAddr`, which never touches the meta word). **A comment asserting an
+  invariant is a claim about every caller, written where only one can see it** — true
+  on five targets, false on the one everybody develops on. Census dispatched.
+- **frankA — choose canaries by the MECHANISM touched, not by topic.** It picked ten
+  by string topic and none touched the ASCII/character-count mechanism. Selecting a
+  canary by topic inherits the author's blind spot.
+- **frankC — assert the VERSION, not just the link.** `gtk_main` exists in GTK2 and
+  GTK3, so a clean run would pass against the wrong library. Also: a two-month park
+  on `feature-c-gtk3-header-final-wiring` was caused by a **wrong `-I` root recorded
+  as a deep importer limitation.** A false limit is quieter than a false fix.
+- **frankD — a quoted diagnostic is the cheapest oracle Track D has**, because
+  nothing compiles an error string. It verified by extracting the fenced block and
+  string-comparing to stderr, and caught a truncated quote in a file it was not even
+  editing (fixed, `d6cd7ebb9` — the dropped clause was the half the note's own
+  argument depended on).
+
+### Filed by me
+
+- `bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out`
+  [P p35] — the `ParseFactorCore` → `PyParseFactorCore` carve-out is deliberate and
+  **partial**: 36 NilPy diagnostics remain on the Pascal arm and **10 are verbatim on
+  both**, including the ambient-exec refusal now quoted on the public website. The
+  double arm is invisible from either side. Filed rather than relayed — *a finding
+  in message traffic dies with the session that received it*.
+- Taken from frankA's queue: `bug-a-the-fpc-seed-canary-skips-a-break-already-on-master`
+  [A p80] — `gate.sh` arms the seed canary only when `compiler/` differs from
+  origin/master, so **a break already on master is invisible to every clean tree**
+  (`SKIP`, never `FAIL`) and then fires inside the next agent's gate naming a file
+  that is not theirs. Tooling is mine; frankA's context belongs on the compiler.
+
+### Open for the owner
+
+Unchanged from the previous section, plus: **`decide-which-gtk-a-bare-gtk-gtk-h-means`
+[U p55]** — both GTK2 and GTK3 answer to `#include <gtk/gtk.h>` and the system
+include list is flat, so whichever root goes first decides the GTK version for every
+C consumer at once. frankC's recommendation, which I endorse: scope the include root
+by the stem that already picks the soname, so one fact drives both. Caveat to carry:
+the owner's box has GTK **2** headers as the working set.
