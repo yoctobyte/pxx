@@ -146,6 +146,7 @@ _none_
 | chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring | A | 40 | chore | Wire the nine that pass, then gate the checker | bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed |
 | chore-doc-pascal-dialect-divergences-pointer-difference | D | 25 | chore | Re-filed from decide-pointer-difference-unit and decide-should-a-null-variant-raise-like-fpc, both decided 2026-08-25. Two divergences from FPC are now CHOSEN rather than merely inherited, and a chosen divergence that is not written down is indistinguishable from a bug to the next reader. Both entries land in devdocs/dev/pascal-dialect-divergences.md. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
+| chore-t-a-stable-gated-red-should-name-pin-lag-before-flakiness | T | 35 | chore | twatch's auto-filed note tells the reader 'this commit CANNOT be the cause ... look at flakiness or box load' whenever a $(PXX_STABLE)-gated job goes red. The deduction is right and the conclusion is wrong: unchanged stable bytes rule out the COMMIT, not the PINNED BINARY, which is stale relative to any compiler fix landed since the last pin. That third branch is missing and it is the common case — the watcher re-files the same already-fixed finding every sweep until the pin moves. | — |
 | chore-t-a-standing-collector-cannot-say-so-to-the-ranker | T | 30 | chore | A ticket that is a DESTINATION for findings rather than a task — a standing collector — has no way to say so, so it ranks like work forever. feature-crtl-implement-libc-assumptions said in prose since 2026-07-20 that it has no done state and should not sit in the ready queue; it sat at the head of Track B's queue at p45 for five weeks and was dispatched to an agent as work on 2026-08-28. progress.py reads status and prio, not prose. | — |
 | chore-t-a-wikilink-to-a-ticket-that-does-not-exist-is-never-detected | T | 30 | chore | 52 distinct ticket-convention [[wikilinks]] across devdocs/progress resolve to no ticket (71 references; 13 cited by live, non-done tickets). Some are renames leaving a dead trail; some appear never to have been filed, which is work hidden behind a link that looks like a citation. Nothing checks. | — |
 | chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile | T | 20 | chore | The second, weaker half of the split_jobs lint: flag any job that RUNS a /tmp binary no line in that job produces. Prototyped and deliberately NOT shipped — it yields 5-7 candidates depending on how recipe lines are segmented, and every one needs individual adjudication. Shipping it half-tuned would produce exactly the noisy guard that gets muted. | — |
@@ -354,7 +355,6 @@ _none_
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 | regression-fpc-bootstrap-compiler-2 | P | 40 | regression | advisory: fpc-bootstrap#src:compiler/compiler.pas red at a6698ac28e8b (auto-filed by twatch) | — |
 | regression-lib-test-crtl-reachability-3 | C | 70 | regression | regression: lib-test#src:tools/crtl_reachability.py red at ee62e6dc0582 (auto-filed by twatch) | — |
-| regression-lib-test-lib-synapse-2 | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at ee62e6dc0582 (auto-filed by twatch) | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 | regression-test-core-test-nilpy-str-ascii-cache | N | 70 | regression | regression: test-core#src:test/test_nilpy_str_ascii_cache.npy red at a6698ac28e8b (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-parent-call-after-instantiation | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy red at b898d0543fc8 (auto-filed by twatch) | — |
@@ -610,9 +610,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2605)
+## done (2606)
 
-2605 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2606 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (51)
 
@@ -681,7 +681,6 @@ _none_
 - [p 70] [T] regression-cascade-154d1aa3fba6
 - [p 70] [P] regression-cascade-4e27dc2be114
 - [p 70] [C] regression-lib-test-crtl-reachability-3
-- [p 70] [B] regression-lib-test-lib-synapse-2
 - [p 70] [N] regression-test-core-test-nilpy-str-ascii-cache
 - [p 70] [N] regression-test-nilpy-test-nilpy-parent-call-after-instantiation
 - [p 70] [N] regression-test-nilpy-test-nilpy-relative-import-in-package
@@ -867,6 +866,7 @@ _none_
 - [p 35] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
 - [p 35] [P] bug-p-an-unknown-compiler-directive-is-silently-ignored
 - [p 35] [P] bug-p-fatal-directive-is-silently-ignored
+- [p 35] [T] chore-t-a-stable-gated-red-should-name-pin-lag-before-flakiness
 - [p 35] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
 - [p 35] [D] docs-d-document-exec-eval-and-the-builtins-incompatibility
 - [p 35] [D] docs-toolchain-cli-flags
