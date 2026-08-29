@@ -50,6 +50,67 @@ Short toggles use a trailing `+` (on) or `-` (off); the long forms take
 | `{$I+}` / `{$I-}` · `{$IOCHECKS ON\|OFF}` | IO-result checking after file operations. | On | |
 | `{$R+}` / `{$R-}` · `{$RANGECHECKS ON\|OFF}` | Range checking. | Off | |
 | `{$Q+}` / `{$Q-}` · `{$OVERFLOWCHECKS ON\|OFF}` | Integer overflow checking. | Off | |
+| `{$NILCHECKS ON\|OFF}` | Nil-pointer checking. | tri-state — see below | `--no-nil-check` |
+
+### `{$NILCHECKS}` is tri-state
+
+The Default column cannot hold one answer, because there is not one. The
+compiler distinguishes *on*, *off*, and **the author said nothing** — and the
+two kinds of site resolve that third state in opposite directions:
+
+| Site | Said nothing | `{$NILCHECKS ON}` | `{$NILCHECKS OFF}` |
+| --- | --- | --- | --- |
+| **Calls** — a method on a nil instance, a call through a nil procvar, method pointer, or interface | **checked** | checked | unchecked |
+| **Bare derefs** — `p^`, `p^.f`, `p^[i]` | **unchecked** | checked | unchecked |
+
+So `{$NILCHECKS ON}` *adds* the deref checks and `{$NILCHECKS OFF}` *removes*
+the call checks; each is a no-op for the other class. `--no-nil-check` is the
+master off for both, and it **outranks the directive** — a source that says
+`{$NILCHECKS ON}` still gets no checks under that flag.
+
+The split follows the cost. A call check is about 2% and replaces a fault that
+lands frames away from the call, or on a target with no signal runtime does not
+land at all. A deref check is a test inside whatever loop the deref sits in —
+measured at +6% on a loop doing nothing else — and on PC targets the MMU
+already reports it at exactly the right instruction.
+
+### What a checked site does when it fires
+
+It calls `PXXNilRef`, which prints `Runtime error 216 (nil reference)` and
+halts. **With `SysUtils` in the program it instead raises a catchable
+`EAccessViolation`**, and that is the point of the feature — a raw memory fault
+can never offer it, because `try..except` does not run for one.
+
+The same program shows both halves. Unchecked, the `except` never runs:
+
+```pascal
+program uncatchnil;
+uses sysutils;
+var p: ^Integer;
+begin
+  p := nil;
+  try
+    WriteLn(p^);
+  except
+    on E: Exception do WriteLn('caught: ', E.ClassName);
+  end;
+  WriteLn('still running');
+end.
+```
+
+```
+Segmentation fault (core dumped)
+```
+
+Add `{$NILCHECKS ON}` after the `uses` clause and the identical program prints:
+
+```
+caught: EAccessViolation
+still running
+```
+
+A call on a nil instance is already checked without the directive, and carries
+the reason in its message — `EAccessViolation: Access violation (nil reference)`.
 
 ## Strictness and dialect switches
 

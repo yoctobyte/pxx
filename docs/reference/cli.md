@@ -160,6 +160,7 @@ effect where one exists.
 | `-O0` … `-O3` | Optimization level. `-O2` is the proven default; `-O3` carries newer, still-promoting passes. `-g` implies `-O0` unless an `-O` level is given explicitly. |
 | `--no-default-rtl` | Do not pull the default standard-unit surface (textfile + builtin). Used by the compiler self-build. |
 | `--no-div-check` | Opt out of the integer div/mod pre-divide zero check (default on: divide by zero raises a clean runtime error rather than a raw `SIGFPE`). |
+| `--no-nil-check` | Opt out of **all** emitted nil checks, including those a source turned on with `{$NILCHECKS ON}`. Call sites are checked by default (a method on a nil instance, or a call through a nil procvar, method pointer or interface); bare `p^` derefs are not. A checked site raises a catchable `EAccessViolation` with `SysUtils`, else `Runtime error 216`. See [directives](./directives.md#nilchecks-is-tri-state). |
 | `--no-signals` | Opt out of the default signal runtime (graceful `SIGINT`/`SIGTERM` dispatch + `SetSignalHandler`). PC targets only. |
 | `--fpc-float-errors` | Emulate FPC's float error behaviour: unmask invalid / zero-divide / overflow at entry (the set FPC itself unmasks) and report a trap as FPC's runtime error — 208 float division by zero, 205 overflow, 207 invalid. Off by default; see below. x86-64 only, and it needs the signal runtime (so not with `--no-signals`). |
 | `--no-unhandled-handler` | Do not install the default unhandled-exception handler. |

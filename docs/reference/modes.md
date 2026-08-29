@@ -68,6 +68,24 @@ model as a whole; the individual switches are listed on the
   in-source equivalent is `{$MIMIC FPC}`. For the FPC-specific details of what
   ports and what does not, see [FPC compatibility](../language/fpc-compatibility.md).
 
+### Runtime checks are a separate axis
+
+Everything above decides whether a *program is accepted* — it is dialect
+strictness. The **runtime check** switches are a different question: whether the
+compiler emits a test that fires while the program runs. They are not part of
+`--strict` or `--mimic-fpc` and are not affected by them.
+
+| Switch | Emits | Default |
+| --- | --- | --- |
+| `{$R+}` / `{$RANGECHECKS ON}` | range checks | off |
+| `{$Q+}` / `{$OVERFLOWCHECKS ON}` | integer overflow checks | off |
+| `{$I+}` / `{$IOCHECKS ON}` | IO-result checks | on (and `--mimic-fpc` keeps it on) |
+| `{$NILCHECKS ON\|OFF}` / `--no-nil-check` | nil-pointer checks | tri-state: calls checked, derefs not |
+| `--no-div-check` | (opt-*out*) div/mod zero check | on |
+
+`{$NILCHECKS}` is the one that does not have a single default — see
+[directives](./directives.md#nilchecks-is-tri-state).
+
 ## Why lax is the default
 
 PXX is its own dialect first and an FPC-compatibility tool second. The lax
