@@ -3195,6 +3195,44 @@ QUIET_HOST_SECS = 2 * 86400
 CASCADE_ROOT_JOBS = ("fpc-bootstrap", "selfhost-fixedpoint")
 
 
+def cascade_suspects_line(roots):
+    """The Root-cause suspects line of an auto-filed cascade ticket. -> str.
+
+    SAY WHAT WAS CHECKED AND STOP. The empty case used to read
+
+        none of the known root jobs — likely a broken build or harness event
+
+    whose first clause is a fact about the red set and whose second clause is
+    invented: nothing in the filing path looks at the build, the harness, the
+    box or the range before writing it. It converted the absence of ONE narrow
+    signal into a positive claim about the cause.
+
+    That got worse when the Range section landed (8ec77190c), because the two
+    sections then sat adjacent and disagreed. On the live incident
+    (regression-cascade-4e27dc2be114) this line said "likely a harness event"
+    while the Range section four lines below named
+    `e1109d7bcbf9 feat(A,N): a bare NilPy import resolves to Python, not a
+    Pascal unit` -- which was the actual cause. A ticket containing its own
+    refutation, with nothing telling a reader which half to prefer, is worse
+    than one that never guessed: the reader who trusts the first line stops
+    looking.
+
+    Face 1 publishes SIGNAL, NOT JUDGMENT (this file's own header). A guess at
+    a cause is judgment, and it is the one thing an auto-filer must not emit --
+    it is read by someone who was not there and has no way to discount it.
+
+    The known-root list is spelled out rather than named, because a reader of
+    the filed ticket cannot see the constant.
+    """
+    if roots:
+        return ", ".join("`%s`" % r for r in roots)
+    return ("none of the known root jobs (%s). That is the ONLY heuristic "
+            "applied here — it does not imply a harness event, and nothing "
+            "in this filing looked at the build, the box or the range. See "
+            "the Range section below for commits worth checking."
+            % ", ".join("`%s`" % j for j in CASCADE_ROOT_JOBS))
+
+
 def revert_of_range(clone, sha, parent):
     """Has anything in (parent, sha] already been REVERTED on the watched branch?
 
@@ -3836,8 +3874,7 @@ and blaming are different questions and this line answers the first.)
 dev track triages the root; individual tickets only for whatever remains red
 after the root is fixed.*
 """ % (len(new_red), span, host, len(new_red), utcnow(),
-            ", ".join("`%s`" % r for r in roots) if roots
-            else "none of the known root jobs — likely a broken build or harness event",
+            cascade_suspects_line(roots),
             cascade_range_note(clone, reg, pin_jobs),
             report["tier"], sha, joblist))
     write_ticket(os.path.join(clone.path, rel), body)

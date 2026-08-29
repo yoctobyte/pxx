@@ -114,6 +114,38 @@ def main():
         check(note5.count("\n- `") == twatch.CASCADE_SUSPECTS,
               "lists exactly CASCADE_SUSPECTS entries")
 
+        # --- the Root-cause suspects line: signal, not judgment -----------
+        # bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence.
+        # The empty case said "likely a broken build or harness event", which
+        # is a claim about the cause drawn from the absence of ONE narrow
+        # signal. Worse once the Range section existed: on
+        # regression-cascade-4e27dc2be114 the two sections sat adjacent and
+        # disagreed, and the Range section was right.
+        empty = twatch.cascade_suspects_line([])
+        check("none of the known root jobs" in empty,
+              "the empty case still states the FACT it actually checked")
+        check("likely" not in empty.lower(),
+              "the empty case makes no hedged guess at a cause")
+        # `harness event` may appear ONLY inside the disclaimer. Anchored on
+        # the disclaimer rather than banning the words, because the useful
+        # sentence is the one that names what this line does NOT mean.
+        check("harness event" not in empty.lower()
+              or "does not imply a harness event" in empty.lower(),
+              "the words `harness event` appear only as something ruled out")
+        check("only heuristic" in empty.lower(),
+              "the empty case says this was the only heuristic applied")
+        check("Range section" in empty,
+              "the empty case points the reader at the evidence that exists")
+        for j in twatch.CASCADE_ROOT_JOBS:
+            check(j in empty,
+                  "the known root job `%s` is named, not left to a constant "
+                  "the ticket's reader cannot see" % j)
+        got = twatch.cascade_suspects_line(["fpc-bootstrap#00"])
+        check(got == "`fpc-bootstrap#00`",
+              "a non-empty suspects list is reported bare, with no editorial")
+        check("heuristic" not in got and "Range" not in got,
+              "the disclaimer is not pasted onto the case that HAS suspects")
+
     print()
     if fails:
         print("FAILED %d check(s)" % len(fails))
