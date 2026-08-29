@@ -3856,3 +3856,29 @@ fork, not a patch. **The recommendation routes around the fork entirely: fix the
 probe's dynamic range rather than take per-job risk.** Banking the diagnosis and
 declining the patch is the right shape when the obvious fix re-opens a defence
 that exists for a reason.
+
+### 87a. Sharpened by its author — and it took a CONTRADICTION to make anyone look
+
+frankS, 2026-08-30, narrowing face 87. The coordinator had generalised it to
+*"print the value"*. The author's form is tighter and better:
+
+> **A boolean that came from a helper call is not a boolean until you have seen
+> it as a number** — because the one type whose wrong values all render
+> identically is also the one the language will silently branch on.
+
+And the trigger matters as much as the technique: *"I would not have looked if
+only one of the two tests had been wrong."* `=` and `<>` **both answered true**,
+so neither result was believable and the contradiction forced the measurement. A
+single wrong boolean is indistinguishable from a wrong expectation; **two that
+cannot both be right are what make the type itself a suspect.**
+
+Practical corollary: when checking a predicate helper, assert on *both* the
+predicate and its negation. One arm green proves nothing; two arms agreeing
+where they must differ is a free, permanent detector for exactly this class.
+
+**Confirmed the same night by the new xtensa differential's first sweep:**
+`test_cross_var_string_param` prints `varlen=545267744` where the oracle says
+`varlen=5` — a live heap address rendered as a number. `Length()` of a
+`var string` parameter is handing back the handle. **The oracle's first run
+surfaced another instance of the class its own construction had just
+uncovered.**
