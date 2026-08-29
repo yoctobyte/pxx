@@ -1039,7 +1039,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_loop_else.npy $(TESTTMP)/test_nilpy_loop_else26
 	tools/expect_same.sh test_nilpy_loop_else26.1 "$$($(TESTTMP)/test_nilpy_loop_else26)" "$$(printf 'for-else ran\nwhile-else ran\nafter break loop\nm = 2\nempty loop else ran\nouter 1\nouter 2\nouter else ran\nouter else ran, inner skipped\nplain break i = 2\nrange else ran\nrange break i = 1\nfound\nexhausted')"
 	./$(COMPILER) test/test_nilpy_try_else.npy $(TESTTMP)/test_nilpy_try_else26
-	test "$$($(TESTTMP)/test_nilpy_try_else26)" = "$$(printf 'else ran, x = 1\nhandler ran\nbody\nelse\nfinally\nhandler2\nfinally2\ninner body\nouter handler caught the else'"'"'s raise\nearly\nelse\nplain except still works')"
+	tools/expect_same.sh test_nilpy_try_else26 "$$($(TESTTMP)/test_nilpy_try_else26)" "$$(printf 'else ran, x = 1\nhandler ran\nbody\nelse\nfinally\nhandler2\nfinally2\ninner body\nouter handler caught the else'"'"'s raise\nearly\nelse\nplain except still works')"
 	./$(COMPILER) test/test_nilpy_membership_bool_return.npy $(TESTTMP)/test_nilpy_membership_bool_return26
 	tools/expect_same.sh test_nilpy_membership_bool_return26.1 "$$($(TESTTMP)/test_nilpy_membership_bool_return26)" "$$(printf 'True\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\n3\n3\n3')"
 	# a sibling .py MODULE: unit scoping, its own initialisation, both import forms
@@ -1187,17 +1187,17 @@ test-nilpy: $(COMPILER)
 	# tuple-vs-variant equality, round(x, n), enumerate() as a value,
 	# and the standard exception names
 	./$(COMPILER) test/test_nilpy_tuple_eq_round_enum.npy $(TESTTMP)/test_nilpy_treq26
-	test "$$($(TESTTMP)/test_nilpy_treq26)" = "$$(printf "miss\nhit\nFalse True\n1.23 2\n{'a': 25.0}\n1 b\n0 a\ncaught: nope")"
+	tools/expect_same.sh test_nilpy_treq26 "$$($(TESTTMP)/test_nilpy_treq26)" "$$(printf "miss\nhit\nFalse True\n1.23 2\n{'a': 25.0}\n1 b\n0 a\ncaught: nope")"
 	# a string method on the RESULT of an unannotated def
 	./$(COMPILER) test/test_nilpy_method_on_call_result.npy $(TESTTMP)/test_nilpy_mcall26
-	test "$$($(TESTTMP)/test_nilpy_mcall26)" = "$$(printf "['200', '100']\n640 480\npadded")"
+	tools/expect_same.sh test_nilpy_mcall26 "$$($(TESTTMP)/test_nilpy_mcall26)" "$$(printf "['200', '100']\n640 480\npadded")"
 	# an unavailable optional import compiles and fails only if used; map()
 	./$(COMPILER) test/test_nilpy_optional_and_map.npy $(TESTTMP)/test_nilpy_opt_map26
-	test "$$($(TESTTMP)/test_nilpy_opt_map26)" = "$$(printf "False\n200 100\n['1', '2']\n[1.5, 2.0]")"
+	tools/expect_same.sh test_nilpy_opt_map26 "$$($(TESTTMP)/test_nilpy_opt_map26)" "$$(printf "False\n200 100\n['1', '2']\n[1.5, 2.0]")"
 	# a mixed-type conditional as a comprehension element, and that
 	# comprehension assigned back to the parameter it reads
 	./$(COMPILER) test/test_nilpy_ternary_comp.npy $(TESTTMP)/test_nilpy_ternary_comp26
-	test "$$($(TESTTMP)/test_nilpy_ternary_comp26)" = "$$(printf "[0, 'x', 2]\n[0, 'x', 2]\n['a', 'b']")"
+	tools/expect_same.sh test_nilpy_ternary_comp26 "$$($(TESTTMP)/test_nilpy_ternary_comp26)" "$$(printf "[0, 'x', 2]\n[0, 'x', 2]\n['a', 'b']")"
 	# isinstance last in a genexpr filter; f(*[a,b,c]) argument unpacking
 	./$(COMPILER) test/test_nilpy_genexp_isinstance_star.npy $(TESTTMP)/test_nilpy_genexp_star26
 	tools/expect_same.sh test_nilpy_genexp_star26.1 "$$($(TESTTMP)/test_nilpy_genexp_star26)" "$$(printf '5\n[1, 5, 3]\nTrue\n6\n6')"
@@ -1683,13 +1683,13 @@ test-nilpy: $(COMPILER)
 	@# a LIFTED lambda (compiled, not interpreted) discarded its own return
 	@# value unconditionally -- fixed for scalar/string results
 	./$(COMPILER) test/test_nilpy_lifted_lambda_return_value.npy $(TESTTMP)/test_nilpy_liftedret26
-	test "$$($(TESTTMP)/test_nilpy_liftedret26)" = "$$(printf '%b' '5\n('"'"'hello'"'"', '"'"'hello world'"'"')\n49\nABC\n['"'"'hi'"'"']')"
+	tools/expect_same.sh test_nilpy_liftedret26 "$$($(TESTTMP)/test_nilpy_liftedret26)" "$$(printf '%b' '5\n('"'"'hello'"'"', '"'"'hello world'"'"')\n49\nABC\n['"'"'hi'"'"']')"
 	@# sorted(key=...) now recognizes a lifted lambda / plain def / bound method
 	./$(COMPILER) test/test_nilpy_sorted_key_dispatch.npy $(TESTTMP)/test_nilpy_sortedkey26
-	test "$$($(TESTTMP)/test_nilpy_sortedkey26)" = "$$(printf '%b' '['"'"'a'"'"', '"'"'cc'"'"', '"'"'bbb'"'"']\n['"'"'a'"'"', '"'"'cc'"'"', '"'"'bbb'"'"']\n['"'"'a'"'"', '"'"'bbb'"'"', '"'"'cc'"'"']\n[3, 2, 1]')"
+	tools/expect_same.sh test_nilpy_sortedkey26 "$$($(TESTTMP)/test_nilpy_sortedkey26)" "$$(printf '%b' '['"'"'a'"'"', '"'"'cc'"'"', '"'"'bbb'"'"']\n['"'"'a'"'"', '"'"'cc'"'"', '"'"'bbb'"'"']\n['"'"'a'"'"', '"'"'bbb'"'"', '"'"'cc'"'"']\n[3, 2, 1]')"
 	@# a builtin (`f = len`) captured as a bare value no longer segfaults
 	./$(COMPILER) test/test_nilpy_builtin_value_wrapper.npy $(TESTTMP)/test_nilpy_builtinval26
-	test "$$($(TESTTMP)/test_nilpy_builtinval26)" = "$$(printf '%b' '['"'"'a'"'"', '"'"'cc'"'"', '"'"'bbb'"'"']\n['"'"'a'"'"', '"'"'cc'"'"', '"'"'bbb'"'"']\n3\n5\n3\n['"'"'a'"'"', '"'"'cc'"'"', '"'"'bbb'"'"']\n['"'"'a'"'"', '"'"'bbb'"'"', '"'"'cc'"'"']')"
+	tools/expect_same.sh test_nilpy_builtinval26 "$$($(TESTTMP)/test_nilpy_builtinval26)" "$$(printf '%b' '['"'"'a'"'"', '"'"'cc'"'"', '"'"'bbb'"'"']\n['"'"'a'"'"', '"'"'cc'"'"', '"'"'bbb'"'"']\n3\n5\n3\n['"'"'a'"'"', '"'"'cc'"'"', '"'"'bbb'"'"']\n['"'"'a'"'"', '"'"'bbb'"'"', '"'"'cc'"'"']')"
 	@# map(f, xs) / filter(f, xs) over an arbitrary callable, and filter(None, xs)
 	./$(COMPILER) test/test_nilpy_map_filter_callable.npy $(TESTTMP)/test_nilpy_mapfilter26
 	tools/expect_same.sh test_nilpy_mapfilter26 "$$($(TESTTMP)/test_nilpy_mapfilter26)" "$$(printf '%b' '[2, 4, 6]\n[1, 2, 3]\n[3, 6, 9]\n[1, 2, 3]\n[2, 3]\n[2, 3]\n[1, 2, 3]')"
@@ -1775,7 +1775,7 @@ test-nilpy: $(COMPILER)
 	@# a comprehension's loop variable is scoped to itself, not the enclosing
 	@# scope: an outer binding of the same name must survive untouched
 	./$(COMPILER) test/test_nilpy_comprehension_scope.npy $(TESTTMP)/test_nilpy_compscope26
-	test "$$($(TESTTMP)/test_nilpy_compscope26)" = "$$(printf '%b' '5 [1, 2, 3]\nouter {'"'"'a'"'"': 1, '"'"'b'"'"': 1}\n99 [1, 2]\nouter [[1, 2]]\n[1, 2, 3] [9]\n7 [0, 2, 4]')"
+	tools/expect_same.sh test_nilpy_compscope26 "$$($(TESTTMP)/test_nilpy_compscope26)" "$$(printf '%b' '5 [1, 2, 3]\nouter {'"'"'a'"'"': 1, '"'"'b'"'"': 1}\n99 [1, 2]\nouter [[1, 2]]\n[1, 2, 3] [9]\n7 [0, 2, 4]')"
 	./$(COMPILER) test/test_nilpy_dynattr.npy $(TESTTMP)/test_nilpy_dynattr26
 	tools/expect_same.sh test_nilpy_dynattr26 "$$($(TESTTMP)/test_nilpy_dynattr26)" "$$(printf '%b' '105\n110')"
 	./$(COMPILER) test/test_nilpy_dynattr_class.npy $(TESTTMP)/test_nilpy_dynattr_class26
@@ -1792,7 +1792,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_overload_decorator.npy $(TESTTMP)/test_nilpy_overload26
 	tools/expect_same.sh test_nilpy_overload26 "$$($(TESTTMP)/test_nilpy_overload26)" "$$(printf '1 a 4 3\n5 q 2 7')"
 	./$(COMPILER) test/test_nilpy_unhashable_eq_without_hash.npy $(TESTTMP)/test_nilpy_unhashable26
-	test "$$($(TESTTMP)/test_nilpy_unhashable26)" = "$$(printf 'handle: 2 from a from b\nwith hash: 1 x\nstore: unhashable type: %s\nget: unhashable type: %s\nin: unhashable type: %s\nplain: 1 two tuple' "'V'" "'V'" "'V'")"
+	tools/expect_same.sh test_nilpy_unhashable26 "$$($(TESTTMP)/test_nilpy_unhashable26)" "$$(printf 'handle: 2 from a from b\nwith hash: 1 x\nstore: unhashable type: %s\nget: unhashable type: %s\nin: unhashable type: %s\nplain: 1 two tuple' "'V'" "'V'" "'V'")"
 	./$(COMPILER) test/test_nilpy_exec_stub.npy $(TESTTMP)/test_nilpy_exec_stub26
 	tools/expect_same.sh test_nilpy_exec_stub26 "$$($(TESTTMP)/test_nilpy_exec_stub26)" "$$(printf '5 1\n10 30\n4 8\n42\n3 7\n15')"
 	./$(COMPILER) test/test_nilpy_genexpr.npy $(TESTTMP)/test_nilpy_genexpr26
@@ -1868,7 +1868,7 @@ test-nilpy: $(COMPILER)
 	@# print(sep=) — read by a prescan, since separators are injected before
 	@# the keyword is reached; nested sep= must not be mistaken for print's
 	./$(COMPILER) test/test_nilpy_print_sep.npy $(TESTTMP)/test_nilpy_print_sep26
-	test "$$($(TESTTMP)/test_nilpy_print_sep26)" = "$$(printf 'a-b\na, b, c\n1|2|3\nab\nx\na b\na-b!\nx+y z\na_m n\nq>r\nn=5::tail\n{'"'"'a'"'"': 1}#d\n[1, 2] l')"
+	tools/expect_same.sh test_nilpy_print_sep26 "$$($(TESTTMP)/test_nilpy_print_sep26)" "$$(printf 'a-b\na, b, c\n1|2|3\nab\nx\na b\na-b!\nx+y z\na_m n\nq>r\nn=5::tail\n{'"'"'a'"'"': 1}#d\n[1, 2] l')"
 	@# .format() with three or more placeholders (and with none)
 	./$(COMPILER) test/test_nilpy_format_multiarg.npy $(TESTTMP)/test_nilpy_format_multiarg26
 	tools/expect_same.sh test_nilpy_format_multiarg26 "$$($(TESTTMP)/test_nilpy_format_multiarg26)" "$$(printf '1 two 3.5\n1 3.5 two\n3.5-3.5\n    1|two  |3.50\n1 2 3 4 5 6 7 8\n1\n1 two\ntwotwo\n   1\n{literal} 1\nplain')"
@@ -1894,10 +1894,10 @@ test-nilpy: $(COMPILER)
 	tools/expect_same.sh test_nilpy_implret26 "$$($(TESTTMP)/test_nilpy_implret26)" "$$(printf '1073794252\n0\nTrue\n0\nTrue')"
 	@# a[i] = b[j] = v must store into EVERY target, not just the rightmost
 	./$(COMPILER) test/test_nilpy_chained_subscript_assign.npy $(TESTTMP)/test_nilpy_chainedsub26
-	test "$$($(TESTTMP)/test_nilpy_chainedsub26)" = "$$(printf '[3, 3]\n%s\n42 42\n[6, 2, 3]' "['x', 'y'] 7 7")"
+	tools/expect_same.sh test_nilpy_chainedsub26 "$$($(TESTTMP)/test_nilpy_chainedsub26)" "$$(printf '[3, 3]\n%s\n42 42\n[6, 2, 3]' "['x', 'y'] 7 7")"
 	@# enumerate/zip/items/most_common pairs print with parens, like real tuples
 	./$(COMPILER) test/test_nilpy_builtin_pairs_are_tuples.npy $(TESTTMP)/test_nilpy_pairtuples26
-	test "$$($(TESTTMP)/test_nilpy_pairtuples26)" = "$$(printf '%b' "[(0, 'a'), (1, 'b')]\n[(1, 'a'), (2, 'b')]\n[('a', 1), ('b', 2)]\n[('a', 3), ('b', 1), ('c', 1)]")"
+	tools/expect_same.sh test_nilpy_pairtuples26 "$$($(TESTTMP)/test_nilpy_pairtuples26)" "$$(printf '%b' "[(0, 'a'), (1, 'b')]\n[(1, 'a'), (2, 'b')]\n[('a', 1), ('b', 2)]\n[('a', 3), ('b', 1), ('c', 1)]")"
 	@# chr() encodes UTF-8 across the whole Unicode range; only a value outside
 	@# range(0x110000) raises. It used to truncate mod 256, then to refuse >255.
 	./$(COMPILER) test/test_nilpy_chr_range_check.npy $(TESTTMP)/test_nilpy_chrrange26
@@ -1959,7 +1959,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_none_str_field.npy $(TESTTMP)/test_nilpy_none_str_field26
 	$(TESTTMP)/test_nilpy_none_str_field26 | diff -u test/test_nilpy_none_str_field.expected -
 	./$(COMPILER) test/test_nilpy_bytes_repr.npy $(TESTTMP)/test_nilpy_bytes_repr26
-	test "$$($(TESTTMP)/test_nilpy_bytes_repr26)" = "$$(printf "b'abc\\\\n'\nb'abc'\nb'held'\nb'tab\\\\there'\nb\"q'q\"\nb'dq\"dq'")"
+	tools/expect_same.sh test_nilpy_bytes_repr26 "$$($(TESTTMP)/test_nilpy_bytes_repr26)" "$$(printf "b'abc\\\\n'\nb'abc'\nb'held'\nb'tab\\\\there'\nb\"q'q\"\nb'dq\"dq'")"
 	./$(COMPILER) test/test_nilpy_slices.npy $(TESTTMP)/test_nilpy_slices26
 	tools/expect_same.sh test_nilpy_slices26 "$$($(TESTTMP)/test_nilpy_slices26)" "$$(printf 'cde\nabc\nfgh\nabcdefgh\nfgh\nab\ndef\n\n\nab\n3\n3\n65\n67\n2\n66\n90\n65\n66\n0\n3\n20\n20\n40\n50\n5')"
 	./$(COMPILER) test/test_nilpy_set.npy $(TESTTMP)/test_nilpy_set26
@@ -2435,17 +2435,17 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_variant_polymorphic_builtins.npy $(TESTTMP)/test_nilpy_variant_polymorphic_builtins26
 	tools/expect_same.sh test_nilpy_variant_polymorphic_builtins26 "$$($(TESTTMP)/test_nilpy_variant_polymorphic_builtins26)" "$$(printf '2 abab abab\n0  \n3 xyzxyz xyzxyz\n1 qq qq\n9 9\n-6 -6\n0 0\n3.0 3.0\n-1.0 -1.0\n97 1 aaa\n122 1 zzz\n3\n2')"
 	./$(COMPILER) test/test_nilpy_list_repeat.npy $(TESTTMP)/test_nilpy_list_repeat26
-	test "$$($(TESTTMP)/test_nilpy_list_repeat26)" = "$$(printf '[0, 0, 0, 0] 4\n['"'"'a'"'"', '"'"'a'"'"', '"'"'a'"'"'] 3\n[1, 2, 1, 2]\n[] []\n[[0], [0]]\n[[0, 9], [0, 9]]\n[0, 1, 2]')"
+	tools/expect_same.sh test_nilpy_list_repeat26 "$$($(TESTTMP)/test_nilpy_list_repeat26)" "$$(printf '[0, 0, 0, 0] 4\n['"'"'a'"'"', '"'"'a'"'"', '"'"'a'"'"'] 3\n[1, 2, 1, 2]\n[] []\n[[0], [0]]\n[[0, 9], [0, 9]]\n[0, 1, 2]')"
 	./$(COMPILER) test/test_nilpy_function_values.npy $(TESTTMP)/test_nilpy_function_values26
 	tools/expect_same.sh test_nilpy_function_values26 "$$($(TESTTMP)/test_nilpy_function_values26)" "$$(printf '1\n11\nONE\n12\nONE 13\nTEN 23\n34')"
 	./$(COMPILER) test/test_nilpy_variant_builtin_sweep.npy $(TESTTMP)/test_nilpy_variant_builtin_sweep26
-	test "$$($(TESTTMP)/test_nilpy_variant_builtin_sweep26)" = "$$(printf '3 1 5 7\n7 14 -7 True\n7 1 A\n-2 1 -3 5\n3 6 3 True\n-3 2 A\n0 0 0 5\n0 0 0 False\n0 1 A\n1.5 -1.5 3.0\n2.5 2.5 5.0\n2 ['"'"'a'"'"', '"'"'b'"'"'] True AB\n1 ['"'"'c'"'"'] True C\n0 [] False ')"
+	tools/expect_same.sh test_nilpy_variant_builtin_sweep26 "$$($(TESTTMP)/test_nilpy_variant_builtin_sweep26)" "$$(printf '3 1 5 7\n7 14 -7 True\n7 1 A\n-2 1 -3 5\n3 6 3 True\n-3 2 A\n0 0 0 5\n0 0 0 False\n0 1 A\n1.5 -1.5 3.0\n2.5 2.5 5.0\n2 ['"'"'a'"'"', '"'"'b'"'"'] True AB\n1 ['"'"'c'"'"'] True C\n0 [] False ')"
 	./$(COMPILER) test/test_nilpy_none.npy $(TESTTMP)/test_nilpy_none26
-	test "$$($(TESTTMP)/test_nilpy_none26)" = "$$(printf '1 text None\nTrue False\nFalse True\nNone None 1\n1 False\nNone True\nx False\n[1, None, '"'"'x'"'"']\nmissing\nfalsy ok\nFalse True')"
+	tools/expect_same.sh test_nilpy_none26 "$$($(TESTTMP)/test_nilpy_none26)" "$$(printf '1 text None\nTrue False\nFalse True\nNone None 1\n1 False\nNone True\nx False\n[1, None, '"'"'x'"'"']\nmissing\nfalsy ok\nFalse True')"
 	./$(COMPILER) test/test_nilpy_variant_arith_nested.npy $(TESTTMP)/test_nilpy_variant_arith_nested26
 	tools/expect_same.sh test_nilpy_variant_arith_nested26 "$$($(TESTTMP)/test_nilpy_variant_arith_nested26)" "$$(printf '66\n509\n72\n8.0\na-b-')"
 	./$(COMPILER) test/test_nilpy_builtins_list_enum.npy $(TESTTMP)/test_nilpy_builtins_list_enum26
-	test "$$($(TESTTMP)/test_nilpy_builtins_list_enum26)" = "$$(printf '[3, 1, 2] [3, 1, 2, 9]\n['"'"'a'"'"', '"'"'b'"'"', '"'"'c'"'"']\n[2, 1, 3]\n['"'"'y'"'"', '"'"'x'"'"']\n0xff 0x0 -0x10 0xfff\n2\n1\n3\n0 a\n1 b\n2 c\n0 h\n1 i\n0 x 1\n1 y 1')"
+	tools/expect_same.sh test_nilpy_builtins_list_enum26 "$$($(TESTTMP)/test_nilpy_builtins_list_enum26)" "$$(printf '[3, 1, 2] [3, 1, 2, 9]\n['"'"'a'"'"', '"'"'b'"'"', '"'"'c'"'"']\n[2, 1, 3]\n['"'"'y'"'"', '"'"'x'"'"']\n0xff 0x0 -0x10 0xfff\n2\n1\n3\n0 a\n1 b\n2 c\n0 h\n1 i\n0 x 1\n1 y 1')"
 	./$(COMPILER) test/test_nilpy_unpack.npy $(TESTTMP)/test_nilpy_unpack26
 	tools/expect_same.sh test_nilpy_unpack26 "$$($(TESTTMP)/test_nilpy_unpack26)" "$$(printf '1 2\n2 1\np 2 3.5\n7 8\na 1\nb 2\nc 3\n6\na 1\nb 2\nc 3')"
 	./$(COMPILER) test/test_nilpy_comparison_chaining.npy $(TESTTMP)/test_nilpy_comparison_chaining26
@@ -2795,7 +2795,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_method_string_result_ownership.npy $(TESTTMP)/test_nilpy_method_string_result26
 	tools/expect_same.sh test_nilpy_method_string_result26 "$$($(TESTTMP)/test_nilpy_method_string_result26)" "$$(printf 'lit 7 kk-7 kk 9\n3 1 4 2 1\nzz 99 zz\n300 zz-99')"
 	./$(COMPILER) test/test_nilpy_sorted_sequences.npy $(TESTTMP)/test_nilpy_sorted_sequences26
-	test "$$($(TESTTMP)/test_nilpy_sorted_sequences26)" = "$$(printf '[('"'"'a'"'"', 1), ('"'"'b'"'"', 2)]\n[[1, '"'"'a'"'"'], [2, '"'"'b'"'"']]\n[('"'"'a'"'"', 1), ('"'"'a'"'"', 2)]\n[(1,), (1, 2), (1, 2, 3)]\n[1, 2, 3]\n['"'"'a'"'"', '"'"'b'"'"']\n[[1, [2, 1]], [1, [2, 3]]]\n('"'"'b'"'"', 0) ('"'"'a'"'"', 1)\n[('"'"'b'"'"', 2), ('"'"'a'"'"', 1)]')"
+	tools/expect_same.sh test_nilpy_sorted_sequences26 "$$($(TESTTMP)/test_nilpy_sorted_sequences26)" "$$(printf '[('"'"'a'"'"', 1), ('"'"'b'"'"', 2)]\n[[1, '"'"'a'"'"'], [2, '"'"'b'"'"']]\n[('"'"'a'"'"', 1), ('"'"'a'"'"', 2)]\n[(1,), (1, 2), (1, 2, 3)]\n[1, 2, 3]\n['"'"'a'"'"', '"'"'b'"'"']\n[[1, [2, 1]], [1, [2, 3]]]\n('"'"'b'"'"', 0) ('"'"'a'"'"', 1)\n[('"'"'b'"'"', 2), ('"'"'a'"'"', 1)]')"
 	./$(COMPILER) test/test_nilpy_is_identity.npy $(TESTTMP)/test_nilpy_is_identity26
 	tools/expect_same.sh test_nilpy_is_identity26.2 "$$($(TESTTMP)/test_nilpy_is_identity26)" "$$(printf 'False True True False\nTrue False\nFalse True True\nTrue\nFalse True\nTrue\nTrue False False True\nFalse True\ncopied same')"
 	./$(COMPILER) test/test_nilpy_callable_param_heap_callable.npy $(TESTTMP)/test_nilpy_callable_param26
@@ -2856,7 +2856,7 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_split_none26 | diff -u test/test_nilpy_split_none_separator.expected -
 	@# a MULTI-name `for` target whose names are already bound at module scope
 	./$(COMPILER) test/test_nilpy_for_multiname_target_reuses_name.npy $(TESTTMP)/test_nilpy_for_multiname26
-	test "$$($(TESTTMP)/test_nilpy_for_multiname26)" = "$$(printf 'x,y\nx,y\nx,y\nx,y\n[%s]\nx,y\npqr\n3 10\none 2\nann ann,zz\nbo bo,zz\nfn x,y' "'x', 'y'")"
+	tools/expect_same.sh test_nilpy_for_multiname26 "$$($(TESTTMP)/test_nilpy_for_multiname26)" "$$(printf 'x,y\nx,y\nx,y\nx,y\n[%s]\nx,y\npqr\n3 10\none 2\nann ann,zz\nbo bo,zz\nfn x,y' "'x', 'y'")"
 	@# a missing attribute raises AttributeError instead of answering None
 	./$(COMPILER) test/test_nilpy_missing_attribute_raises.npy $(TESTTMP)/test_nilpy_missattr26
 	tools/expect_same.sh test_nilpy_missattr26 "$$($(TESTTMP)/test_nilpy_missattr26)" "$$(printf 'caught foo\ncaught upper\ncaught nope\ncaught getx\nTrue\nFalse\n1\ndef\n42\nAB')"
@@ -2879,13 +2879,13 @@ test-nilpy: $(COMPILER)
 	else echo "/usr/bin/time absent; exception-object RSS leak guard skipped"; fi
 	@# `target[key] op= value` on a dict/list/Counter subscript (found already fixed)
 	./$(COMPILER) test/test_nilpy_augmented_subscript_assign.npy $(TESTTMP)/test_nilpy_augsubassign26
-	test "$$($(TESTTMP)/test_nilpy_augsubassign26)" = "$$(printf '{'"'"'a'"'"': 2}\n[6, 2]\n2\n14\n[1, 1, 30]')"
+	tools/expect_same.sh test_nilpy_augsubassign26 "$$($(TESTTMP)/test_nilpy_augsubassign26)" "$$(printf '{'"'"'a'"'"': 2}\n[6, 2]\n2\n14\n[1, 1, 30]')"
 	@# print() evaluates every argument before writing any of them
 	./$(COMPILER) test/test_nilpy_print_arg_eval_order.npy $(TESTTMP)/test_nilpy_printorder26
-	test "$$($(TESTTMP)/test_nilpy_printorder26)" = "$$(printf '%b' 'label = ERR\n1 2 3\na b c\n[1, 2] {'"'"'k'"'"': 1}\nx 5 3.14 True None\nbefore side\n1 2 3\nlead 1 2 3')"
+	tools/expect_same.sh test_nilpy_printorder26 "$$($(TESTTMP)/test_nilpy_printorder26)" "$$(printf '%b' 'label = ERR\n1 2 3\na b c\n[1, 2] {'"'"'k'"'"': 1}\nx 5 3.14 True None\nbefore side\n1 2 3\nlead 1 2 3')"
 	@# mixed str/number `and`/`or` returns the operand, not a Boolean
 	./$(COMPILER) test/test_nilpy_mixed_type_bool_op.npy $(TESTTMP)/test_nilpy_boolop26
-	test "$$($(TESTTMP)/test_nilpy_boolop26)" = "$$(printf '%b' '5\nx\nx\na\nx\n1\n5\nx\n0\ntruthy\ndefault\ndefault\ndefault\nval\n5\n['"'"'12'"'"', '"'"'+'"'"', '"'"'34'"'"', '"'"'*'"'"', '"'"'2'"'"']')"
+	tools/expect_same.sh test_nilpy_boolop26 "$$($(TESTTMP)/test_nilpy_boolop26)" "$$(printf '%b' '5\nx\nx\na\nx\n1\n5\nx\n0\ntruthy\ndefault\ndefault\ndefault\nval\n5\n['"'"'12'"'"', '"'"'+'"'"', '"'"'34'"'"', '"'"'*'"'"', '"'"'2'"'"']')"
 	@# math.floor/math.ceil must return an int, not the RTL Math unit's own
 	@# Double->Double Floor/Ceil that `import math` would otherwise reach
 	./$(COMPILER) test/test_nilpy_math_floor_ceil_int.npy $(TESTTMP)/test_nilpy_mathfloor26
@@ -3016,7 +3016,7 @@ test-nilpy: $(COMPILER)
 	@# /= and **= on a class instance dispatch __itruediv__ / __ipow__ (then the
 	@# binary form and rebind). Both used to raise 'expected a number, got object'.
 	./$(COMPILER) test/test_nilpy_truediv_pow_assign_class_dunder.npy $(TESTTMP)/test_nilpy_tdivpow26
-	test "$$($(TESTTMP)/test_nilpy_tdivpow26)" = "$$(printf '5\n9\n25 32\n3\n8\n4\n16\n81\n[2, 1.0]\n[32, 1.0]\n[2.0, 2.0]\n{'"'"'a'"'"': 9}\n2.0\n1024\n0.5\n1180591620717411303424\nTypeError')"
+	tools/expect_same.sh test_nilpy_tdivpow26 "$$($(TESTTMP)/test_nilpy_tdivpow26)" "$$(printf '5\n9\n25 32\n3\n8\n4\n16\n81\n[2, 1.0]\n[32, 1.0]\n[2.0, 2.0]\n{'"'"'a'"'"': 9}\n2.0\n1024\n0.5\n1180591620717411303424\nTypeError')"
 	@# hasattr over a receiver whose class is a RUN-TIME fact (list element, dict
 	@# value, untyped parameter): the declared-field half is answered by testing
 	@# the object's class against the set that declares the name.
@@ -3039,7 +3039,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_unary_minus_precedence.npy $(TESTTMP)/test_nilpy_unary_minus_precedence26
 	tools/expect_same.sh test_nilpy_unary_minus_precedence26 "$$($(TESTTMP)/test_nilpy_unary_minus_precedence26)" "$$(printf -- '-4 1 -4 1\n-4 -1 3 -1\n-14 -5 -3.5 -9 9\n-4.0 0.5 0\n-4 1 -14 -3\n3 3')"
 	./$(COMPILER) test/test_nilpy_print_container.npy $(TESTTMP)/test_nilpy_print_container26
-	test "$$($(TESTTMP)/test_nilpy_print_container26)" = "$$(printf "['a', 'bb']\n[1, 2, 3]\n[]\n[1.5, True, 'x']\n['a', 'b']\n{'k': 'v', 'n': 2}\n[[1, 2], ['a']]")"
+	tools/expect_same.sh test_nilpy_print_container26 "$$($(TESTTMP)/test_nilpy_print_container26)" "$$(printf "['a', 'bb']\n[1, 2, 3]\n[]\n[1.5, True, 'x']\n['a', 'b']\n{'k': 'v', 'n': 2}\n[[1, 2], ['a']]")"
 	./$(COMPILER) test/test_nilpy_one_char_string.npy $(TESTTMP)/test_nilpy_one_char_string26
 	tools/expect_same.sh test_nilpy_one_char_string26 "$$($(TESTTMP)/test_nilpy_one_char_string26)" "$$(printf 'd 1\ndx\nq!\nz! 1\na 1\nbb 2\n97 b True ab\naaa True')"
 	./$(COMPILER) test/test_nilpy_inheritance.npy $(TESTTMP)/test_nilpy_inheritance26
@@ -3419,7 +3419,7 @@ test-nilpy: $(COMPILER)
 	# %r is repr(), not str(): the conversion switch lumped 's' and 'r' together,
 	# so "%r" % "v" printed v instead of 'v'. Only string operands diverged.
 	./$(COMPILER) test/test_nilpy_percent_repr.npy $(TESTTMP)/test_nilpy_pctrepr26
-	test "$$($(TESTTMP)/test_nilpy_pctrepr26)" = "$$(printf '%b' '\047v\047\nv\n5\n2.5\n[1, 2]\n{\047k\047: 1}\nk=\047v\047\n\047a\047 and \047b\047\n[    \047ab\047]\n[\047ab\047    ]\nTrue\nx y\n42 03.14 ff\n"it\047s"\n"it\047s"\n\047say "hi"\047\n\047both \\\047 and "\047\n\047plain\047\n["it\047s", \047say "hi"\047]\n\047tab\\there\047')"
+	tools/expect_same.sh test_nilpy_pctrepr26 "$$($(TESTTMP)/test_nilpy_pctrepr26)" "$$(printf '%b' '\047v\047\nv\n5\n2.5\n[1, 2]\n{\047k\047: 1}\nk=\047v\047\n\047a\047 and \047b\047\n[    \047ab\047]\n[\047ab\047    ]\nTrue\nx y\n42 03.14 ff\n"it\047s"\n"it\047s"\n\047say "hi"\047\n\047both \\\047 and "\047\n\047plain\047\n["it\047s", \047say "hi"\047]\n\047tab\\there\047')"
 	# str.format must honour EXPLICIT positional indices: the field was thrown
 	# away and arguments substituted sequentially, so "{1}{0}" printed in the
 	# wrong order. Only reordering/repeating indices expose it.
@@ -3504,7 +3504,7 @@ test-nilpy: $(COMPILER)
 	# testmgr extracts this line and runs it directly, so a %%-escape means two
 	# different things in the two paths. Same family as the absolute-/tmp-path trap
 	# in devdocs/dev/gating-and-waiting.md.
-	test "$$($(TESTTMP)/test_cpyext_errformat26)" = "$$(printf 'U=[keyname]\nS=[1234]\nR=[%s]\nA=[%s]\nmix=[keyname][77]\ns=[txt] d=[-5]\nld=[9876543210] zd=[42]\npct=[100%s] c=[Z]\nx=[ff] wide=[    7]\nfmt=[keyname][5]' "'keyname'" "'keyname'" "%")"
+	tools/expect_same.sh test_cpyext_errformat26 "$$($(TESTTMP)/test_cpyext_errformat26)" "$$(printf 'U=[keyname]\nS=[1234]\nR=[%s]\nA=[%s]\nmix=[keyname][77]\ns=[txt] d=[-5]\nld=[9876543210] zd=[42]\npct=[100%s] c=[Z]\nx=[ff] wide=[    7]\nfmt=[keyname][5]' "'keyname'" "'keyname'" "%")"
 	./$(COMPILER) -DPy_LIMITED_API=0x030c0000 -DCYTHON_COMPRESS_STRINGS=0 -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_cython.npy $(TESTTMP)/test_cpyext_cython26
 	tools/expect_same.sh test_cpyext_cython26 "$$($(TESTTMP)/test_cpyext_cython26)" "$$(printf '42\n0\n3000000\n1\n720\n3628800\n479001600\n22\n22\n22\n22\n42\nbadkw raised\ncython_function_or_method\ncyadd\ncysub\na,b\nn,i,r')"
 	# A str-method NAME a user class also declares (find/index/count/title/strip/
@@ -10055,7 +10055,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_loop_else.npy $(TESTTMP)/test_nilpy_loop_else26
 	tools/expect_same.sh test_nilpy_loop_else26.2 "$$($(TESTTMP)/test_nilpy_loop_else26)" "$$(printf 'for-else ran\nwhile-else ran\nafter break loop\nm = 2\nempty loop else ran\nouter 1\nouter 2\nouter else ran\nouter else ran, inner skipped\nplain break i = 2\nrange else ran\nrange break i = 1\nfound\nexhausted')"
 	./$(COMPILER) test/test_nilpy_try_else.npy $(TESTTMP)/test_nilpy_try_else26
-	test "$$($(TESTTMP)/test_nilpy_try_else26)" = "$$(printf 'else ran, x = 1\nhandler ran\nbody\nelse\nfinally\nhandler2\nfinally2\ninner body\nouter handler caught the else'"'"'s raise\nearly\nelse\nplain except still works')"
+	tools/expect_same.sh test_nilpy_try_else26.2 "$$($(TESTTMP)/test_nilpy_try_else26)" "$$(printf 'else ran, x = 1\nhandler ran\nbody\nelse\nfinally\nhandler2\nfinally2\ninner body\nouter handler caught the else'"'"'s raise\nearly\nelse\nplain except still works')"
 	./$(COMPILER) test/test_nilpy_membership_bool_return.npy $(TESTTMP)/test_nilpy_membership_bool_return26
 	tools/expect_same.sh test_nilpy_membership_bool_return26.2 "$$($(TESTTMP)/test_nilpy_membership_bool_return26)" "$$(printf 'True\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\n3\n3\n3')"
 	# a sibling .py MODULE: unit scoping, its own initialisation, both import forms
@@ -10339,17 +10339,17 @@ test-core: $(COMPILER)
 	# tuple-vs-variant equality, round(x, n), enumerate() as a value,
 	# and the standard exception names
 	./$(COMPILER) test/test_nilpy_tuple_eq_round_enum.npy $(TESTTMP)/test_nilpy_treq26
-	test "$$($(TESTTMP)/test_nilpy_treq26)" = "$$(printf "miss\nhit\nFalse True\n1.23 2\n{'a': 25.0}\n1 b\n0 a\ncaught: nope")"
+	tools/expect_same.sh test_nilpy_treq26.2 "$$($(TESTTMP)/test_nilpy_treq26)" "$$(printf "miss\nhit\nFalse True\n1.23 2\n{'a': 25.0}\n1 b\n0 a\ncaught: nope")"
 	# a string method on the RESULT of an unannotated def
 	./$(COMPILER) test/test_nilpy_method_on_call_result.npy $(TESTTMP)/test_nilpy_mcall26
-	test "$$($(TESTTMP)/test_nilpy_mcall26)" = "$$(printf "['200', '100']\n640 480\npadded")"
+	tools/expect_same.sh test_nilpy_mcall26.2 "$$($(TESTTMP)/test_nilpy_mcall26)" "$$(printf "['200', '100']\n640 480\npadded")"
 	# an unavailable optional import compiles and fails only if used; map()
 	./$(COMPILER) test/test_nilpy_optional_and_map.npy $(TESTTMP)/test_nilpy_opt_map26
-	test "$$($(TESTTMP)/test_nilpy_opt_map26)" = "$$(printf "False\n200 100\n['1', '2']\n[1.5, 2.0]")"
+	tools/expect_same.sh test_nilpy_opt_map26.2 "$$($(TESTTMP)/test_nilpy_opt_map26)" "$$(printf "False\n200 100\n['1', '2']\n[1.5, 2.0]")"
 	# a mixed-type conditional as a comprehension element, and that
 	# comprehension assigned back to the parameter it reads
 	./$(COMPILER) test/test_nilpy_ternary_comp.npy $(TESTTMP)/test_nilpy_ternary_comp26
-	test "$$($(TESTTMP)/test_nilpy_ternary_comp26)" = "$$(printf "[0, 'x', 2]\n[0, 'x', 2]\n['a', 'b']")"
+	tools/expect_same.sh test_nilpy_ternary_comp26.2 "$$($(TESTTMP)/test_nilpy_ternary_comp26)" "$$(printf "[0, 'x', 2]\n[0, 'x', 2]\n['a', 'b']")"
 	# isinstance last in a genexpr filter; f(*[a,b,c]) argument unpacking
 	./$(COMPILER) test/test_nilpy_genexp_isinstance_star.npy $(TESTTMP)/test_nilpy_genexp_star26
 	tools/expect_same.sh test_nilpy_genexp_star26.2 "$$($(TESTTMP)/test_nilpy_genexp_star26)" "$$(printf '5\n[1, 5, 3]\nTrue\n6\n6')"
