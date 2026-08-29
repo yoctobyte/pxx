@@ -1628,3 +1628,56 @@ trustworthy**, so it belongs in the face: an unstripped `@` can only turn a
 found, the question that decides how much history to distrust is *which way can
 this bias?* — not *how bad is it?* A defect that can only produce false negatives
 leaves every recorded green intact.
+
+### 38. When the property is a COUNTER, the instrument must make the counter cost something observable
+
+frankwasm's, caught only because it falsified against a deliberately broken build.
+
+ARC correctness is invisible in output: **a record copy with the retain/release
+removed prints exactly what a correct one prints.** So the property needs a
+memory probe. The first one repeated `b := a` in a loop and measured **flat at
+1032 bytes against a build with the release deliberately removed** — a clean
+PASS on a known-broken compiler.
+
+Cause: repeating one assignment leaks a **refcount**, and a bump allocator cannot
+see a refcount. For failing to release to cost *memory*, the destination has to
+own something **new** each iteration. Rewritten that way: **18392/2712** against
+the broken build, **1032 flat** at 1000/9000/50000 against the correct one.
+
+*"I would have shipped it."*
+
+**The general rule:** when the invariant is about a **count** — a refcount, a
+handle table, a free list, an open-fd tally — an instrument that measures a
+**resource** sees nothing unless each iteration allocates a *distinct* resource
+the count is supposed to govern. Otherwise it measures the allocator, reports
+PASS, and the PASS is about the probe.
+
+This is the strongest available argument for the discipline that caught it: **run
+the probe against a build you have broken on purpose, before you trust a green.**
+A control is not a control until it has failed once — and here the control was
+the *compiler*, not the test.
+
+### 39. A defect-shaped check encodes the defect, then expires the day it is fixed — RED in the direction that reads as a new regression
+
+Three of frankwasm's checks expired on one day, all three written *specifically*
+to stop a known defect being silently encoded, and **all three encoded it anyway**
+— as the number or the inequality they compared against:
+
+| check | encoded | as |
+| --- | --- | --- |
+| `check_strop` | the string leak's magnitude | the constant `401032` it compared to |
+| `check_managed` | the heap starting at 0 | `heap base < 1024` |
+| `check_calls` | the missing arena | "the heap has no arena" |
+
+Each went red **when the defect was fixed**, in the direction a reader parses as
+*a new regression* — so a green board becomes red at the exact moment the news is
+good, and the natural reaction is to look for what broke.
+
+**What saved the pattern was that each `exit 1` named, in its own failure text,
+the paragraph to rewrite.** A check that expires is tolerable; a check that
+expires *silently*, or that expires while accusing the wrong change, is not.
+
+**Write the check as a property claim, never as a comparison against the defect's
+current shape.** "The heap does not overlap BSS" survives the fix. "The heap base
+is below 1024" is the bug, written down as an assertion, waiting to accuse
+whoever repairs it.
