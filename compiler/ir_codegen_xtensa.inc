@@ -1016,6 +1016,139 @@ begin
   if isCmp then EmitFloatCmpMapXtensa(op);
 end;
 
+{ ---- Variant support (bug-a-xtensa-codegen-has-no-variant-support) ---------
+  xtensa was the LAST backend with no IR_VAR_STORE / IR_VAR_BOX / IR_VAR_BINOP
+  arm, so `var v: Variant; v := 1;` did not compile at all here.
+
+  Modelled on the riscv32 arms (bug-a-riscv32-codegen-has-no-variant-support,
+  2026-08-27) — the 32-bit peer with the same 16-byte layout: tag at +0, a zero
+  word at +4, an 8-byte payload at +8.
+
+  THREE things do not carry over from that template, all xtensa-only:
+
+  - riscv32 preserves a register across a helper call by moving sp. That is
+    wrong here: under the WINDOWED ABI sp must stay put, or the window spill
+    area at [sp-16] desyncs (see XtensaPushA2). Every save below therefore goes
+    through XtensaPush*/XtensaPop*, which are already correct on BOTH ABIs.
+  - xtensa has no shift-right-arithmetic-IMMEDIATE, so sign-extending a 4-byte
+    payload into the high word uses the branch idiom EmitNode64Xtensa already
+    uses for the identical question, not an srai.
+  - the write dispatch the riscv32 fix also needed has NO counterpart here.
+    xtensa's IR_WRITE is `{ Bare-metal: write/writeln does nothing. }`, so there
+    is no PXXWriteVariant call site to add: `writeln(v)` compiles and emits
+    nothing, exactly as `writeln` of any other type does on this backend. }
+
+procedure EmitVarHelperCallXtensa(const name: AnsiString);
+{ a2 = variant slot address (the helper's only argument), and a2 still holds it
+  on return — every caller below keeps using the slot afterwards.
+
+  The argument/return ABI dance is EmitStrRefCallXtensa's, reused rather than
+  re-spelled so the two cannot drift; the preserve is layered on top. FindProc
+  is checked here as well so a missing VARIANT helper names itself — the shared
+  path's message says "string refcount helper", which would be a lie here. }
+var procIdx: Integer;
+begin
+  procIdx := FindProc(name);
+  if procIdx < 0 then Error('compiler error: variant helper ' + name + ' not found');
+  XtensaPushA2;
+  EmitStrRefCallXtensa(name);
+  XtensaPopA2;
+end;
+
+procedure EmitVariantPayloadXtensa(valNode: Integer; tk: TTypeKind);
+{ Emit the payload for a boxing store and leave it pushed as 8 bytes, lo word
+  first. Always 8 wide even for a 4-byte payload, so the fill's shape does not
+  depend on the payload size and the expression stack stays 8-aligned. }
+begin
+  if (tk = tyString) or (tk = tyAnsiString) then
+  begin
+    if tk = tyString then
+      EmitAnsiStringFromNodeXtensa(valNode)      { a2 = new handle (owned) }
+    else
+    begin
+      IREmitNodeXtensa(valNode);                 { a2 = handle }
+      { A CALL result / concat BINOP is already OWNED (+1) — retaining again
+        leaks one handle per boxed call result. Same test as every other
+        backend's; bug-a-runtime-variant-heap-grows-unbounded. }
+      if not (((IRKind[valNode] = IR_BINOP) and
+               (IntToTypeKind(IRTk[valNode]) = tyAnsiString)) or
+              ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0))) then
+      begin
+        XtensaPushA2;                            { save handle }
+        EmitStrRefCallXtensa('PXXStrIncRef');
+        XtensaPopA2;                             { restore handle }
+      end;
+    end;
+    xtensa_movi(reg_xtensa_a3, 0);               { high word of a handle payload }
+    XtensaPush64;
+  end
+  else if TypeIsFloat(tk) then
+  begin
+    { VT_DOUBLE's payload is 8 bytes of IEEE-754 DOUBLE bits whatever the source
+      width, and the ESP parts have no usable double FPU — EmitFloatOperandXtensa
+      is the one routine that both widens a Single and materialises an integer
+      source, and it leaves the bits in a2:a3. }
+    EmitFloatOperandXtensa(valNode, tyDouble);
+    XtensaPush64;
+  end
+  else if Is64BitXtensa(tk) then
+  begin
+    { An Int64 payload must reach the slot WHOLE: EmitNode64Xtensa guarantees
+      the full value in a2:a3, widening a narrow source in place. The 32-bit
+      twins got this wrong once —
+      bug-a-an-int64-assigned-to-a-variant-truncates-to-32-bits-on-i386-and-arm32. }
+    EmitNode64Xtensa(valNode);
+    XtensaPush64;
+  end
+  else
+  begin
+    IREmitNodeXtensa(valNode);                   { a2 = scalar }
+    xtensa_movi(reg_xtensa_a3, 0);               { defined, but the fill recomputes it }
+    XtensaPush64;
+  end;
+end;
+
+procedure EmitVariantFillXtensa(tag: Integer; payloadTk: TTypeKind);
+{ a2 = variant slot address, payload pushed by EmitVariantPayloadXtensa.
+  Clears the old value, stores tag + payload, pops, leaves the slot addr in a2.
+
+  The HIGH word is chosen from the payload's TYPE, not from the tag: a 4-byte
+  signed payload sign-extends and an unsigned one zero-fills, because
+  tyNativeInt maps to VT_INT64 and a negative NativeInt zero-filled reads as a
+  huge unsigned. See EmitVariantFillArm32 for the incident. }
+begin
+  EmitVarHelperCallXtensa('PXXVarClear');        { a2 preserved across the call }
+  EmitLoadConstXtensa(reg_xtensa_a8, tag);
+  xtensa_s32i(reg_xtensa_a8, reg_xtensa_a2, 0);
+  xtensa_movi(reg_xtensa_a8, 0);
+  xtensa_s32i(reg_xtensa_a8, reg_xtensa_a2, 4);
+  XtensaPop64ToA4A5;                             { a4:a5 = payload lo:hi }
+  xtensa_s32i(reg_xtensa_a4, reg_xtensa_a2, 8);
+  if TypeIsFloat(payloadTk) or Is64BitXtensa(payloadTk) then
+    xtensa_s32i(reg_xtensa_a5, reg_xtensa_a2, 12)
+  else
+  begin
+    if TypeSigned(payloadTk) then
+      { a5 := (a4 < 0) ? -1 : 0 — no srai on this ISA, same shape as
+        EmitNode64Xtensa's widening. }
+      EmitAsmXtensa(['movi a5, 0', 'bge a4, a5, .vpos', 'movi a5, -1', '.vpos:'])
+    else
+      xtensa_movi(reg_xtensa_a5, 0);
+    xtensa_s32i(reg_xtensa_a5, reg_xtensa_a2, 12);
+  end;
+end;
+
+procedure EmitLoadVariantAddrXtensa(node: Integer);
+{ a2 = address of a variant slot for a value-position variant node. }
+begin
+  if IRKind[node] = IR_LOAD_SYM then
+    EmitSlotAddrXtensa(reg_xtensa_a2, IRA[node])
+  else if IRKind[node] = IR_LOAD_MEM then
+    IREmitNodeXtensa(IRA[node])
+  else
+    IREmitNodeXtensa(node);
+end;
+
 procedure IREmitNodeXtensa(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, argBase, valNode, j: Integer;
@@ -1049,7 +1182,13 @@ begin
       EmitLoadDataRefXtensa(reg_xtensa_a2, UClsVMTOffset[IRA[node]]);
 
     IR_LOAD_SYM:
-      if Is64BitXtensa(Syms[IRA[node]].TypeKind) then
+      { A VARIANT in value position yields its slot ADDRESS, not a load: the
+        slot is 16 bytes and every consumer (PXXVarBinOp, a variant-to-variant
+        store) takes a pointer. Same rule as riscv32/arm32/i386.
+        bug-a-xtensa-codegen-has-no-variant-support }
+      if Syms[IRA[node]].TypeKind = tyVariant then
+        EmitSlotAddrXtensa(reg_xtensa_a2, IRA[node])
+      else if Is64BitXtensa(Syms[IRA[node]].TypeKind) then
         EmitLoadVar64Xtensa(IRA[node])
       else
         EmitLoadVarXtensa(IRA[node]);
@@ -2330,6 +2469,104 @@ begin
           if nArgs > 6 then
             xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
         end;
+      end;
+
+    IR_VAR_STORE:
+      begin
+        { IRA = dest addr, IRB = value/src addr, IRC = source TTypeKind ord. }
+        tk := IntToTypeKind(IRC[node]);
+        if tk = tyVariant then
+        begin
+          { ARC-correct 16-byte variant-to-variant copy: retain the source
+            BEFORE clearing the destination, so `v := v` cannot free what it is
+            about to read. }
+          EmitLoadVariantAddrXtensa(IRB[node]);          { a2 = src addr }
+          EmitVarHelperCallXtensa('PXXVarRetain');
+          XtensaPushA2;                                  { save src }
+          IREmitNodeXtensa(IRA[node]);                   { a2 = dest addr }
+          { ReleasePayload, not Clear: Clear zeroes the 16 slot bytes, and when
+            src and dest alias that wipes what the copy below is about to read —
+            `v := v` came back Empty.
+            bug-a-a-variant-assigned-to-itself-becomes-empty }
+          EmitVarHelperCallXtensa('PXXVarReleasePayload');
+          { src is popped AFTER the call, not held in a register across it:
+            Call0 treats a3 as caller-saved and the windowed call rotates
+            a8-a15 out, so nothing but the expression stack survives. }
+          XtensaPopA3;                                   { a3 = src }
+          xtensa_l32i(reg_xtensa_a8, reg_xtensa_a3, 0);  xtensa_s32i(reg_xtensa_a8, reg_xtensa_a2, 0);
+          xtensa_l32i(reg_xtensa_a8, reg_xtensa_a3, 4);  xtensa_s32i(reg_xtensa_a8, reg_xtensa_a2, 4);
+          xtensa_l32i(reg_xtensa_a8, reg_xtensa_a3, 8);  xtensa_s32i(reg_xtensa_a8, reg_xtensa_a2, 8);
+          xtensa_l32i(reg_xtensa_a8, reg_xtensa_a3, 12); xtensa_s32i(reg_xtensa_a8, reg_xtensa_a2, 12);
+        end
+        else
+        begin
+          j := VariantTagForTk(tk, 'Variant :=');
+          { A CODE ADDRESS overrides the type-kind answer — defs.inc's
+            VT_CALLABLE_TAG; the x86-64 arm carries the full note. }
+          if IRSrcIsCallable(IRB[node]) then j := VT_CALLABLE_TAG;
+          EmitVariantPayloadXtensa(IRB[node], tk);
+          IREmitNodeXtensa(IRA[node]);                   { a2 = dest addr }
+          EmitVariantFillXtensa(j, tk);
+        end;
+      end;
+
+    IR_VAR_BOX:
+      begin
+        { Box a scalar into a temp variant (IRA = temp addr); addr -> a2. }
+        tk := IntToTypeKind(IRC[node]);
+        j := VariantTagForTk(tk, 'Variant operand');
+        if IRSrcIsCallable(IRB[node]) then j := VT_CALLABLE_TAG;
+        EmitVariantPayloadXtensa(IRB[node], tk);
+        IREmitNodeXtensa(IRA[node]);                     { a2 = temp addr }
+        EmitVariantFillXtensa(j, tk);                    { leaves addr in a2 }
+      end;
+
+    IR_VAR_BINOP:
+      begin
+        { PXXVarBinOp(dest, left, right, opTk, isCompare) — five words. Built in
+          a2-a6 (the Call0 argument registers, in order) and copied up to
+          a10-a14 for the windowed ABI, which is what call8 rotates into the
+          callee's a2-a7. Five is inside both ABIs' register-argument range, so
+          nothing spills to the outgoing-argument area. }
+        sgn := IntToTypeKind(IRTk[node]) = tyBoolean;
+        IREmitNodeXtensa(IRA[node]);                     { a2 = left addr }
+        XtensaPushA2;
+        IREmitNodeXtensa(IRB[node]);                     { a2 = right addr }
+        xtensa_mov(reg_xtensa_a4, reg_xtensa_a2);        { a4 = right }
+        XtensaPopA3;                                     { a3 = left }
+        if sgn then
+          xtensa_movi(reg_xtensa_a2, 0)                  { compare: dest unused }
+        else
+          EmitLoadGlobAddrXtensa(reg_xtensa_a2, Integer(IRIVal[node]));  { dest temp }
+        EmitLoadConstXtensa(reg_xtensa_a5, IRC[node]);   { a5 = opTk }
+        if sgn then xtensa_movi(reg_xtensa_a6, 1)
+        else xtensa_movi(reg_xtensa_a6, 0);              { a6 = isCompare }
+        if XtensaABI = XTENSA_ABI_WINDOWED then
+        begin
+          xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+          xtensa_mov(reg_xtensa_a11, reg_xtensa_a3);
+          xtensa_mov(reg_xtensa_a12, reg_xtensa_a4);
+          xtensa_mov(reg_xtensa_a13, reg_xtensa_a5);
+          xtensa_mov(reg_xtensa_a14, reg_xtensa_a6);
+        end;
+        { PASCAL selects PXXVarBinOpPas — the raw dispatch with FPC's string
+          rule in front of it. NilPy keeps the raw one: Python's rules for these
+          pairs differ in every case ('5' * 3 is '555'). Choosing WHICH helper
+          to call is how the language reaches a shared runtime that cannot see
+          PyProgramMode. Falls back to the raw one when no builtin unit is
+          loaded, rather than failing to compile.
+          bug-a-pxxvarbinop-carries-the-same-string-arithmetic-defect-as-x86-64-did }
+        if PyProgramMode then
+          procIdx := FindProc('PXXVarBinOp')
+        else
+        begin
+          procIdx := FindProc('PXXVarBinOpPas');
+          if procIdx < 0 then procIdx := FindProc('PXXVarBinOp');
+        end;
+        if procIdx < 0 then Error('compiler error: PXXVarBinOp not found');
+        EmitCallProc(procIdx);
+        if XtensaABI = XTENSA_ABI_WINDOWED then
+          xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);     { result }
       end;
 
     else
