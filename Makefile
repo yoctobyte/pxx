@@ -2762,6 +2762,12 @@ test-nilpy: $(COMPILER)
 	@# class; it printed right by coincidence and type() on it segfaulted
 	./$(COMPILER) test/test_nilpy_def_returning_a_field.npy $(TESTTMP)/test_nilpy_defretfield26
 	$(TESTTMP)/test_nilpy_defretfield26 | diff -u test/test_nilpy_def_returning_a_field.expected -
+	# range() evaluates its arguments ONCE. A stop expression that reads the loop
+	# variable and is re-evaluated per iteration never terminates, so this runs
+	# under `timeout`: the failure mode is a HANG, and a runner that waits forever
+	# turns a red into a stuck job instead of a test result.
+	./$(COMPILER) test/test_nilpy_range_bound_reads_loop_var.npy $(TESTTMP)/test_nilpy_rangebound26
+	timeout 60 $(TESTTMP)/test_nilpy_rangebound26 | diff -u test/test_nilpy_range_bound_reads_loop_var.expected -
 	@# `del d[k]` where d is an unannotated (variant) dict/list parameter — the
 	@# del lowering dispatched on the receiver's STATIC type and refused it
 	./$(COMPILER) test/test_nilpy_del_on_a_variant_receiver.npy $(TESTTMP)/test_nilpy_delvar26

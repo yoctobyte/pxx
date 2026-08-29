@@ -23715,6 +23715,37 @@ begin
         ASTIVal[cmpNode] := Ord(tkGt)
       else
         ASTIVal[cmpNode] := Ord(tkLt);
+      { ...but the STOP still has to be evaluated exactly once, and on this arm
+        it was not. The runtime-step arm below binds it to a temp and its own
+        comment says why -- "the previous lowering re-ran the stop expression on
+        every iteration" -- and that fix was never applied here, so the literal
+        step kept splicing the expression straight into the guard.
+
+        Re-running it is not merely wasteful, it does not TERMINATE when the
+        stop reads the loop variable: `for n in range(3, n - 8, -1)` copies the
+        counter into `n` at the top of each body, so the bound falls in lockstep
+        with `n` and `i > stop` is never false. CPython yields 2 items; this
+        hung forever. A HANG is the worst shape this family takes -- there is no
+        wrong answer to notice and nothing to diff against the oracle, because
+        the program never reaches the compare.
+        bug-n-a-range-loop-whose-bound-reads-the-loop-variable-never-terminates
+
+        Literal stops keep the old shape: a constant cannot change and is free
+        to re-emit, the same exemption ir.inc's AN_FOR makes for IR_CONST_INT.
+        So `range(n - 1, -1, -1)` -- the shape the note above calls the
+        overwhelmingly common one -- still pays nothing. }
+      if not ((ASTKind[stopNode] = AN_INT_LIT) or
+              ((ASTKind[stopNode] = AN_NEG) and
+               (ASTLeft[stopNode] >= 0) and
+               (ASTKind[ASTLeft[stopNode]] = AN_INT_LIT))) then
+      begin
+        rngStopSym := AllocVar(PyHiddenName('stop'), tyInt64);
+        node := AllocNode(AN_ASSIGN);
+        ASTLeft[node] := PyMakeIdent(rngStopSym);
+        ASTRight[node] := stopNode;
+        Result := PySeqAppend(Result, node);
+        stopNode := PyMakeIdent(rngStopSym);
+      end;
       ASTLeft[cmpNode] := PyMakeIdent(symIdx);
       ASTRight[cmpNode] := stopNode;
       ASTTk[cmpNode] := Ord(tyBoolean);
