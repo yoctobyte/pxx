@@ -1,0 +1,53 @@
+# re.split / re.subn / re.finditer, and m.end() -- the three names the stdlib
+# coverage sweep measured absent, plus the match accessor CPython code actually
+# spells. feature-nilpy-stdlib-coverage-gaps-measured
+#
+# The interesting cases are not "does it split": they are the ones a plain scan
+# gets wrong. Groups are part of split's RESULT; a group that did not
+# participate is None and not ''; an empty match still splits; the tail piece
+# exists even when empty; and a NEGATIVE count means "do nothing" where 0 means
+# "no limit" -- the opposite of the engine's own convention.
+import re
+
+# --- split: separators ------------------------------------------------------
+print(re.split(r"\s+", "a b  c"))
+print(re.split(",", "a,b,,c"))
+print(re.split(",", "a,b,,c", 1))
+print(re.split(",", ""))
+print(re.split(",", "a,"))
+print(re.split(",", ",a"))
+
+# --- split: groups are part of the result -----------------------------------
+print(re.split(r"(\d)", "a1b2c"))
+print(re.split("(a)(b)?", "ab a"))
+
+# --- split: empty matches split, and the limit convention -------------------
+print(re.split("x*", "abc"))
+print(re.split(",", "a,b,c", -1))
+print(re.split(",", "a,b,c", 0))
+print(re.split(",", "a,b,c", 2))
+
+# --- subn: the (string, count) tuple ----------------------------------------
+print(re.subn("a", "X", "banana"))
+print(re.subn("z", "X", "banana"))
+print(re.subn("a", "X", "banana", 2))
+print(re.subn("a", "X", "banana", -1))
+print(re.subn("a", "X", "banana", 0))
+
+# --- sub: a negative count replaces NOTHING (it used to replace everything) --
+print(re.sub("a", "X", "banana", -1))
+print(re.sub("a", "X", "banana", 0))
+
+# --- finditer: match OBJECTS, so group/start/end are reachable ---------------
+for m in re.finditer(r"(\d)(\w)", "1a 2b"):
+    print(m.group(0), m.group(1), m.group(2), m.start(0), m.end(0))
+# NOTE deliberately NOT tested here: len() of the finditer result. pxx answers
+# a list, CPython a lazy callable_iterator that has no len() -- so len() works
+# here and raises there. NilPy accepting what CPython rejects is a divergence,
+# not a defect, so it is recorded in the divergences doc rather than pinned as
+# parity. What IS pinned is the shape every working CPython program uses: the
+# `for m in ...` loop above.
+
+# --- m.end() is CPython's spelling; `end` is a Pascal keyword ----------------
+m = re.search(r"b(c)", "abcd")
+print(m.start(0), m.end(0), m.group(1))
