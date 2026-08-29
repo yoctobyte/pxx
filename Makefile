@@ -9689,6 +9689,18 @@ test-core: $(COMPILER)
 	xvfb-run -a $(TESTTMP)/test_c_gtk_types26
 	./$(COMPILER) test/test_c_gtk_window.pas $(TESTTMP)/test_c_gtk_window26
 	xvfb-run -a $(TESTTMP)/test_c_gtk_window26
+	# The same program against the STOCK GTK3 headers instead of a curated
+	# binding: -Futest/gtk3stock shadows lib/pcl/gtk3_c.h with a header that just
+	# includes <gtk/gtk.h>. The -I is load-bearing and is the part still missing
+	# from the defaults -- gtk-2.0 is a system include root and gtk-3.0 is not,
+	# and both answer to `#include <gtk/gtk.h>`, so the root that comes first
+	# decides the GTK version for everyone. Which one that should be is
+	# decide-which-gtk-a-bare-gtk-gtk-h-means.
+	./$(COMPILER) -Futest/gtk3stock -I/usr/include/gtk-3.0/ test/test_c_gtk3_stock.pas $(TESTTMP)/test_c_gtk3_stock26
+	# Asserts the VERSION, not just that it links: gtk_main/gtk_main_quit exist in
+	# both GTK2 and GTK3, so a run alone would pass against the wrong library.
+	readelf -d $(TESTTMP)/test_c_gtk3_stock26 | grep -q 'libgtk-3.so.0'
+	tools/expect_same.sh test_c_gtk3_stock26 "$$(xvfb-run -a $(TESTTMP)/test_c_gtk3_stock26)" "$$(printf 'Successfully created window\nStarting gtk_main loop...\nAutoQuit called from GTK main loop!\nMain loop exited cleanly')"
 	./$(COMPILER) test/test_c_header_case_sensitive_import.pas $(TESTTMP)/test_c_header_case_sensitive_import26
 	tools/expect_same.sh test_c_header_case_sensitive_import26 "$$($(TESTTMP)/test_c_header_case_sensitive_import26)" "77"
 	# A C translation unit reached ONLY through a Pascal unit's uses clause: the
