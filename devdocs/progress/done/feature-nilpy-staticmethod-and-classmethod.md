@@ -219,4 +219,4 @@ failure is loud. The test names the gap in a comment rather than pinning it, so
 nothing records today's behaviour as intended.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 7327436d0.
