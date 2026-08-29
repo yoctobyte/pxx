@@ -241,3 +241,38 @@ The practical consequence for whoever takes the remaining row: **the table above
 is not the specification.** Before landing a change to name binding, check at
 least one shape that is not in it — an optional import, a conditional import, a
 name bound by both a def and an import.
+
+## WARNING for the remaining 2 shapes: the first 5 broke fallback-import, and it is not obvious why
+
+`15335c82c` fixed 5 of the 7 divergent shapes here and, in doing so, regressed
+`test_nilpy_fallback_import` and `test_nilpy_fallback_import_try_wins`. Bisected
+on host `seven` 2026-08-29, self-hosted compiler rebuilt at each sha (`converged
+after 2 round(s)` throughout), running the recipe's own `-Futest/nilpy_units`:
+
+| sha | result |
+| --- | --- |
+| `7b8f0afc5` (parent) | `hello fallback` / `hello try branch` |
+| **`15335c82c`** | `TypeError: object is not callable — the name is None` |
+| `2d65e9c45` (HEAD, after the follow-up fix) | `hello fallback` / `hello try branch` — **repaired** |
+
+Both regressions are closed; this note is not about them. It is about the
+**sixth shape**, which the precedence rule has now demonstrably reached once:
+
+`try: import X / except ImportError:` selects its branch at **compile** time
+(`Makefile:1127`). So the except branch's module-level assignment and the
+imported name **share a spelling by construction** — that is what the feature
+IS (`done/feature-nilpy-fallback-import`). Any rule deciding "module-level
+binding vs imported name of the same name" therefore governs fallback-import
+whether or not it was written with that case in mind, and the failure it
+produces is silent: the name binds to `None` and the program dies later at the
+call site, naming neither the import nor the rule.
+
+**Before finishing shapes 6 and 7, run those two tests with
+`-Futest/nilpy_units`.** They are the cheapest available oracle for this rule's
+blast radius, they are not in the quick tier, and a bare invocation without that
+flag reports a *different* failure (`import: no unit named pkgprobe_sub`) that
+looks like an unrelated resolution bug — which is how it first got mis-recorded.
+
+Recorded by the Track T agent on `seven` under the provenance rule: my box's
+sweep produced the regression, so the narrowing is mine to leave behind. The
+rule itself is Track N's.
