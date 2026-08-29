@@ -4,7 +4,7 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `1bffdc06510a` | 2026-08-29T16:14:10Z | GREEN (native) | 322.2s | `49bd043061c1` RED |
-| seven | `a6698ac28e8b` | 2026-08-29T18:59:57Z | RED (native) | 94.1s | `ee62e6dc0582` RED |
+| seven | `d47454937cd4` | 2026-08-29T19:02:44Z | RED (native) | 94.2s | `ee62e6dc0582` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -40,4 +40,3 @@
 - **test-nilpy#src:test/test_nilpy_relative_import_in_package.npy** — test/test_nilpy_relative_import_in_package.npy test/test_nilpy_relative_import_in_package.expected +1 (seven): bad `ee62e6dc0582`, last good `154d1aa3fba6`, 76 commit(s) in range
 - **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (seven): bad `a6698ac28e8b`, last good `ee62e6dc0582`, 17 commit(s) in range
 - **test-core#src:test/test_nilpy_str_ascii_cache.npy** — test/test_nilpy_str_ascii_cache.npy tools/expect_same.sh +1 (seven): bad `a6698ac28e8b`, last good `ee62e6dc0582`, 17 commit(s) in range
-- **test-threads#src:test/test_sched_reactor_exhaustion.pas** — test/test_sched_reactor_exhaustion.pas tools/expect_same.sh (seven): bad `a6698ac28e8b`, last good `ee62e6dc0582`, 17 commit(s) in range
