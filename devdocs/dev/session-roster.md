@@ -17747,3 +17747,67 @@ literal blocked tier name in a `## Gate` section and the PreToolUse hook refused
 the whole call. The hook substring-matches **anywhere** in an invocation,
 including inside a heredoc writing a document. Paraphrase in prose too, not just
 in commands.
+
+
+## LIVE FILE OWNERSHIP — the table that should have existed an hour ago
+
+**2026-08-29, after a near-collision only a worker's discipline caught.** frankA
+declared its files before editing (`compiler/pasparser_generic.inc`, possibly
+`lexer.inc`) and asked whether frank-rust held either. It did — **the same file,
+on the same ticket, mid-compile.**
+
+**The protocol worked; my bookkeeping did not.** frank-rust had reported its file
+set to me well before. I held it in context and never wrote it where another
+session could see it. *A file-ownership fact that lives only in the coordinator's
+context is a fact the fleet does not have* — and this seat's context is the one
+guaranteed not to persist.
+
+| session | ticket | files declared |
+| --- | --- | --- |
+| frank-rust | `bug-p-a-delphi-mode-generic-from-a-used-unit-cannot-be-specialized` [P] | `pasparser_generic.inc`, `pasparser_proc.inc`, `pasparser_prog.inc` — **live** |
+| frankA | `feature-a-error-does-not-halt-so-a-parse-can-be-speculative` [A p70] | switched off the collision |
+| pxx-a5 | `chore-a-wire-the-nine-passing-orphan-tests-...` | `Makefile` + nine Pascal subjects — **pull first, frankA moved `Makefile`** |
+| frankC | `bug-t-pasmith-calls-an-fpc-o2-bug-...` | `tools/pasmith*.py`, `tstate/fuzz/fpc-bugs/**` (grant filed) |
+| ppxx track T | deploy gap → **done** (`2ec50b9d0`, `620259afc`); next: duration signals, heap-debug sweep | `twatch-setup.sh`, `trackt.py`, `twatch.py` |
+| frankB | `feature-lib-tkinter-grid-pad-accepts-a-two-tuple` [B p45] | switched off the IDE ticket; unblocks songformatter |
+| frank-optimize-b4 | W1 slice 6 landed (`7f01306c8`); init-temp next | backend/codegen; `emit.inc` ownership **queried for frankS** |
+| frankS | hosted xtensa syscalls (`ca26f22cd`) | `compiler/xtensaenc.inc` (granted after it verified the map); needs `emit.inc` |
+| frankwasm | `feature-demo-songformatter-pxx-target` [E p68] | Track E; three tickets now pushed at `08513fb42` |
+
+**Keep this current every tick.** Two near-misses tonight were one error: **a
+claim about file ownership stated in the present tense from evidence about the
+past.** The rule frankA's message earns: **declare files, name your fallback,
+proceed on the assumption it is free** — it converts a collision into a question
+that costs one reply.
+
+## A SIBLING'S COMMIT LANDING MID-MEASUREMENT — twice in one evening
+
+Both lanes running exact measurements hit the same thing, hours apart, and
+neither was doing anything wrong.
+
+- **frankA:** first gate went RED on a stale binary — `6cc4afc17` arrived via
+  rebase and its compiler predated it. Caught because *the gate said so by name*.
+- **b4:** measured slice 6 as leaking outside its `-O3` gate — `-O0` output grew
+  82 bytes for a pass gated `OptLevel >= 3`. **It was one message from reporting
+  it.** frankA's `8b35e88fa` had landed in its checkout between the slice-5 and
+  slice-6 builds; the growth was frankA's documented +2 instructions at loop
+  entry, arriving in b4's tree while it read the diff as its own.
+
+**`tools/sync.sh` rebases, so a sibling's commit enters your checkout between two
+builds and your baseline moves silently.** Nothing announces it. Both catches
+came from a diagnostic that named the tree rather than the change:
+`converged after 2 round(s)` where every previous build said 1, and per-procedure
+`.map` extraction showing **3 procedures, +82 bytes, all RTL, none user code** —
+"only RTL, never user code" is what pointed at a foreign change.
+
+**The generalisation, which is b4's and is now its standing rule 3:** *when a
+result says something that cannot be true, suspect the baseline before the
+change.* An `-O3`-gated pass changing `-O0` output is impossible, so the
+measurement had to be wrong rather than the code — and b4's first instinct was
+still to hunt the leak in its own guard, theorising about operator precedence for
+several minutes before measuring. **The repo's own rule, broken under a
+plausible-looking wrong number.**
+
+Coordinator consequence: when a lane reports a surprising measurement, **ask what
+its baseline was and when it was built** before relaying it. That question costs
+one line and would have caught both.
