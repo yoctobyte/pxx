@@ -64,6 +64,9 @@ procedure EmitManagedRecordIntfWalk(recId: Integer; const helper: AnsiString); f
 procedure EmitAcquireHeapLock; forward;
 procedure EmitReleaseHeapLock; forward;
 {$ifndef PXX_NO_AARCH64}procedure EmitLoadVarA64(idx: Integer); forward;{$endif}
+{ Same loader, any destination register except x9 (its scratch). The
+  no-destination form above is this with rd = 0. }
+{$ifndef PXX_NO_AARCH64}procedure EmitLoadVarA64Dest(idx: Integer; rd: Integer); forward;{$endif}
 {$ifndef PXX_NO_AARCH64}procedure EmitLoadDataRefA64(rd, dataOff: Integer); forward;{$endif}
 {$ifndef PXX_NO_AARCH64}procedure EmitA64CopyBytes(countReg, srcReg, dstReg: Integer); forward;{$endif}
 {$ifndef PXX_NO_ARM32}procedure EmitArm32CopyBytes(countReg, srcReg, dstReg: Integer); forward;{$endif}

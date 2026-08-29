@@ -867,16 +867,30 @@ begin
   FxSaveOn := True;
 end;
 
-procedure EmitLoadVarA64(idx: Integer);
+{ Load a symbol into ANY general register. `EmitLoadVarA64(idx)` is this with
+  rd = 0 and is what almost everything wants; the destination parameter exists
+  for the binop path, which needs the right operand in x1 while the left sits in
+  x0 and must not get a duplicated loader to do it
+  (devdocs/dev/normalise-dont-special-case.md — the duplicate is the arm that
+  stays broken).
+
+  rd may be anything except x9, which is this routine's one scratch register.
+  That restriction is the whole reason the scratch was collapsed onto a single
+  register first: while skGlobal used x1 and locals used x9, there was no value
+  of rd that was safe for every symbol Kind, and the unsafe one was rd = 1 —
+  exactly what the caller below wants, failing only on globals. }
+procedure EmitLoadVarA64Dest(idx: Integer; rd: Integer);
 var tk: TTypeKind; sz: Integer; sgn: Boolean; rreg: Integer;
 begin
+  if rd = 9 then
+    Error('compiler error: EmitLoadVarA64Dest cannot target x9, its own scratch register');
   { -O3 unified residency: resident reads come from the register cache. The
     frame slot stays authoritative (stores dual-write); the cache holds the
     canonically extended value, exactly like a fresh frame load. }
   rreg := ResidentRegOf(idx);
   if rreg <> 0 then
   begin
-    EmitI32($AA0003E0 or (rreg shl 16));   { mov x0, x19..x24 }
+    EmitI32($AA0003E0 or (rreg shl 16) or rd);   { mov x(rd), x19..x24 }
     Exit;
   end;
   if Syms[idx].TypeKind = tyDouble then
@@ -884,7 +898,7 @@ begin
     rreg := FloatResidentXmmOf(idx);
     if rreg <> 0 then
     begin
-      EmitI32($9E660000 or (rreg shl 5));  { fmov x0, d8..d13 (value model: bits in x0) }
+      EmitI32($9E660000 or (rreg shl 5) or rd);  { fmov x(rd), d8..d13 (value model: bits in a gpr) }
       Exit;
     end;
   end;
@@ -947,30 +961,36 @@ begin
   end;
 
   { A Single is loaded as 4 bytes and widened to the double the value model
-    carries in x0; sz/sgn do not apply to it. }
+    carries in a general register; sz/sgn do not apply to it. s0/d0 are used as
+    the conversion scratch and are clobbered — as they always were. }
   if tk = tySingle then
   begin
-    EmitI32($B9400120);    { ldr w0, [x9] }
-    EmitI32($1E270000);    { fmov s0, w0 }
-    EmitI32($1E22C000);    { fcvt d0, s0 }
-    EmitI32($9E660000);    { fmov x0, d0 }
+    EmitI32($B9400120 or rd);          { ldr w(rd), [x9] }
+    EmitI32($1E270000 or (rd shl 5));  { fmov s0, w(rd) }
+    EmitI32($1E22C000);                { fcvt d0, s0 }
+    EmitI32($9E660000 or rd);          { fmov x(rd), d0 }
     Exit;
   end;
 
   if sz = 1 then
   begin
-    if sgn then EmitI32($39800120) else EmitI32($39400120);
+    if sgn then EmitI32($39800120 or rd) else EmitI32($39400120 or rd);
   end
   else if sz = 2 then
   begin
-    if sgn then EmitI32($79800120) else EmitI32($79400120);
+    if sgn then EmitI32($79800120 or rd) else EmitI32($79400120 or rd);
   end
   else if sz = 4 then
   begin
-    if sgn then EmitI32($B9800120) else EmitI32($B9400120);
+    if sgn then EmitI32($B9800120 or rd) else EmitI32($B9400120 or rd);
   end
   else
-    EmitI32($F9400120);
+    EmitI32($F9400120 or rd);
+end;
+
+procedure EmitLoadVarA64(idx: Integer);
+begin
+  EmitLoadVarA64Dest(idx, 0);
 end;
 
 procedure RegcallRefreshResidentA64(idx: Integer);
@@ -2057,18 +2077,34 @@ begin
           and a further 12.6-16.3% a leaf-sym one, across compiler.pas,
           mandelbrot, chess and jsondemo — 93.4-93.9% collapsible in total.
 
-          The leaf-sym half is NOT done here, deliberately. It needs the right
-          operand loaded into x1 while the left sits in x0, and EmitLoadVarA64
-          hardcodes x0 — with residency, dyn-array-handle and sign-extension
-          special cases that must not be duplicated into a second path, since
-          the second path is the one that stays broken
-          (devdocs/dev/normalise-dont-special-case.md). The honest fix is to
-          give EmitLoadVarA64 a destination-register parameter, which is a
-          separate change with its own blast radius. }
+          The leaf-sym half is now done too, and it is the same trade for the
+          same reason: a leaf symbol load has no side effects and cannot observe
+          the left operand, so it can be issued AFTER the left is in x0 —
+          straight into x1. It took two steps rather than one, because the
+          obvious version was wrong:
+
+            step 1  EmitLoadVarA64 used x1 as its scratch for globals and for
+                    by-ref params, and x9 for locals. WHICH register it
+                    destroyed depended on the symbol's Kind. A destination
+                    parameter would therefore have self-clobbered at exactly
+                    rd = 1 — the value wanted here — and only for globals, the
+                    arm least likely to show up in a quick test. The scratch was
+                    collapsed onto x9 alone first.
+            step 2  the destination parameter, EmitLoadVarA64Dest.
+
+          IR_LOAD_SYM lowers to precisely EmitLoadVarA64(IRA[node]) and nothing
+          else, so this is a substitution rather than a reimplementation — there
+          is no second loader to keep in step, which is the whole point of
+          having done step 1. }
         if (OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) then
         begin
           IREmitNodeAarch64(left);              { x0 = left }
           EmitLoadImmA64(1, IRIVal[right]);     { x1 = right, no stack round trip }
+        end
+        else if (OptLevel >= 3) and (IRKind[right] = IR_LOAD_SYM) then
+        begin
+          IREmitNodeAarch64(left);                 { x0 = left }
+          EmitLoadVarA64Dest(IRA[right], 1);       { x1 = right, no stack round trip }
         end
         else
         begin
