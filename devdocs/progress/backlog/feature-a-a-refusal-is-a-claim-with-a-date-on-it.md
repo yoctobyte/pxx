@@ -1845,3 +1845,55 @@ General form: **every memory fix is also a change to which latent bugs are
 observable.** A defect that extends a lifetime is protective by accident, and its
 removal is a reachability change — the same reasoning as face 40, one layer down
 in the runtime rather than in the compiler's own refusals.
+
+### 44. A NEW FRONTEND'S BUGS ARE MOSTLY UNCALLED SUBSTRATE — nine rungs in a row, and the streak is the finding
+
+frank-rust, 2026-08-29, rung 14 of the Rust ladder.
+
+Rust procs never called `EmitManagedLocalsZeroInit`, so a managed local's slot
+started as **stale stack bytes** and its first assignment released whatever those
+bytes happened to point at. Invisible for the frontend's whole life, because until
+this rung it had no managed type.
+
+The symptom is face 36 for the third time and deserves restating: a two-`push`
+function returned the right answer in isolation and **segfaulted only once its
+caller happened to hold a string local of its own.** The failing program was the
+one that did nothing wrong. Byte-identical in mechanism to
+`bug-nilpy-string-local-truncates-at-255`, and fixed identically — **the shared
+helper already existed; this frontend had simply never called it.**
+
+**That was the ninth consecutive rung whose fix was calling something already in
+the substrate.** Nine is no longer a run of luck; it is a measurement of where a
+new frontend's defects actually live, and it converts `ir-as-substrate.md` from a
+design preference into an empirical claim: **when a young frontend misbehaves, the
+prior should be "it is not calling the shared machinery", not "the shared
+machinery lacks this".** The corollary is the standing rule, now with a number
+behind it — *grep for the incumbent before building.*
+
+Note what the streak does NOT license. The same rung produced a genuine
+duplication call in the opposite direction: `format!` deliberately does **not**
+share `println!`'s `{}` splitter, and that was written into the divergences doc
+specifically so a later reader would not "fix" it. One emits WRITES, the other
+builds a VALUE; all they share is scanning `{}` out of a literal, and sharing it
+would hand back an ordered item list neither caller wants in order to couple an
+output path to an expression path. **Share the AST and the IR; duplicate the
+parser and its helpers** — the streak is about the substrate layer, and reading it
+as "always share" inverts
+`the-substrate-is-ast-and-ir-not-the-parser.md`.
+
+Two more from the same rung, both worth their own line:
+
+- **`String` and `&str` map to ONE managed AnsiString, and the argument is
+  unusually strong.** They differ in exactly one observable — mutating a buffer
+  while another name views it — and that is precisely what rustc's borrow checker
+  makes unrepresentable. So this is not "unlikely to matter": **the reference
+  implementation statically forbids the only experiment that could distinguish
+  them.** That is a much better warrant for collapsing two types than "we have not
+  seen a case", and it is the shape to look for whenever a frontend asks whether
+  two source types need two representations.
+- **Position, not content, separated the cases the gate had to split.** A string
+  literal inside `println!("...")` is a const_str the write path consumes directly
+  and needs no runtime; the same literal anywhere else becomes a value and does.
+  A content-based scan would have pulled 60KB of runtime into all 18 existing
+  tests; the position-based one kept every one of them byte-for-byte identical in
+  code size, which is how the gate was verified rather than asserted.
