@@ -7,7 +7,7 @@ type: bug
 status: done
 owner: frankwasm
 created: 2026-08-29
-commit: PENDING-COMMIT
+commit: 7c6d57201
 summary: "`JoinOpen(['x','yy','zzz'])` for `procedure JoinOpen(const a: array of string)` spills the argument through a hidden temp that ir.inc declares tyAnsiString. An open-array parameter records its ELEMENT kind in TypeKind, and six sites in ir.inc read that field without also testing IsArray, so the temp holds an array data pointer while claiming to be a managed string. Register backends absorb it; wasm32 type-checks the store and refuses the body. Fixed by consolidating the decision into one predicate, ParamWantsManagedStrTemp, and calling it from all six."
 ---
 
@@ -187,4 +187,6 @@ Track A's: `make compiler/pascal26` (the byte-identical self-host fixedpoint)
 plus the repro on both `--target=wasm32` and native, plus `tools/gate.sh quick`.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved. Fix: 7c6d57201 (compiler/ir.inc). Ticket move + the two
+  bugs found under it: 7fc0a132c. Cited to the FIX rather than to the resolve
+  commit, because the fix is what a reader of this ticket wants to open.
