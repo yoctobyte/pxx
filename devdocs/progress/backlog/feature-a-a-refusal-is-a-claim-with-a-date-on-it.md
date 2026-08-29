@@ -818,6 +818,70 @@ a permanent red is not.
 converts a coverage gap into a silent one.* The gap is real either way — what
 baselining removes is the ability to ever notice it again.
 
+## Face twenty-seven — the repro that found the bug is, by construction, the shape that reaches the code you changed
+
+Found by frankB, 2026-08-29, fixing the x86-64 comparison leak — and the finding
+is what it did NOT do.
+
+**The setup.** The ticket said `if F(x) = 'lit'` leaks 40 bytes per iteration and
+supplied a repro measuring 401032 bytes over 10000 iterations. Attach the release
+to the string-comparison emitter call, re-run the repro, watch it go flat. Done.
+
+**Why that fix would have been wrong while measuring perfectly.** Two of the three
+comparison blocks carry **inline `AnsiString`-vs-`Char` arms that compare in place
+and never reach the emitter at all.** So `F(x) = 'c'` — a Char literal — takes a
+different path from `F(x) = 'one'`, and a release attached at the emitter call
+would have left it leaking.
+
+**The ticket's repro cannot detect that, and no repro of that bug could.** A repro
+is written to *exhibit* the defect, so it necessarily travels one path to it. The
+fix site is then chosen to satisfy that path. Verification re-runs the same
+repro. **Every step is downstream of the single shape that happened to be
+reported**, and the sibling shape is invisible at all three.
+
+| condition | what the repro shows |
+| --- | --- |
+| the leak is fixed for every shape | flat at 1032 |
+| the leak is fixed for the shape the repro uses | flat at 1032 |
+
+frankB wrapped the save/release around the whole block instead, so the inline
+arms are covered too.
+
+**And the ticket named the wrong site.** It asked for `EmitStrCmpReg`; the leaking
+emitter is `EmitAnsiStrCmpReg`. A release in `EmitStrCmpReg` is **provably dead
+code** — it is the `else if` after the `tyAnsiString` block, so neither side can
+be `tyAnsiString` and a `tyString` owns nothing. It *"would have looked like the
+fix, changed no emitted byte, and left the leak running."* The block now carries
+a comment saying so and naming what would make it needed — which is the right
+artefact, because the next reader's question is exactly "why is there no release
+here".
+
+**Two instrument checks in the same fix, both of which could have inverted it:**
+
+- **A naive opcode grep reads machine code as text.** Its first instrument
+  reported a stray `push rax` in two emitters. Those `$50` bytes are ModRM in
+  `mov rdx,[rax-8]`. Had it been believed, the emitters would have looked
+  stack-dirty and the save slot unusable.
+- **`-O3` W1 could have made the save write garbage.** `w1RightReg` can place the
+  right operand in `r12..r15` rather than `rcx`, which would make `mov [rsp], rcx`
+  save the wrong pointer and release it. Confirmed unreachable structurally *and*
+  measured at every `-O` level — because **"it passes at `-O3`" would not have
+  shown whether the W1 path was exercised at all.** Face twenty-three, applied to
+  an optimisation gate.
+
+**The sibling census was done by code, because the ticket's line numbers were
+stale** (it cited aarch64 at 1541/1631/1680; the pairs are at 1824/1914/1963).
+All five backends release at all three site kinds; the inline Char arms exist on
+x86-64 **and i386** and nowhere else, and i386 was measured directly, already
+flat. *No second arm left broken this time* — which is the standing instruction
+after this bug's own mirror image went the other way.
+
+**And the residue was left open rather than closed quietly.** The predicate is
+still hand-copied twelve times across the four cross backends; x86-64 went from
+three copies to one. A shared hook reaches outside the allocated file, so it is
+recorded as the sixteenth-copy problem rather than closed with six copies and no
+note.
+
 ## Face eighteen — when the compiler is its own test input, a diff cannot tell a CODEGEN change from a SOURCE change
 
 Found by frankwasm, 2026-08-29, and it nearly cost twenty lines of inert code.
