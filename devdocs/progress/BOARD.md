@@ -50,7 +50,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
 
-## backlog (294)
+## backlog (295)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -105,6 +105,7 @@ _none_
 | bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base | N | 50 | bug | str(e) on an exception class declared in a Pascal unit dispatches __str__ by the STATIC type of the except clause, not the runtime type: `except URLError as e` gives '<urlopen error boom>' and `except Exception as e` gives 'boom' for the same object. CPython gives the same string either way. Pure-NilPy classes are NOT affected. | — |
 | bug-n-super-as-an-expression-fails-with-a-misleading-diagnostic | N | 55 | bug | `return super().hi()` (super() in expression position, documented as unsupported) is refused with `error: Nil Python: annotate the type / too dynamic [a=22 b=8]` reported at line 1 — a diagnostic that names neither the construct nor the right line. Also: `B.__init__(self)` for a second base is `class method not found`. | — |
 | bug-n-the-dunder-subscript-arm-is-duplicated-verbatim-in-two-lvalue-parsers | N | 40 | bug | The ~60-line __getitem__/__setitem__ subscript arm exists TWICE, character for character: compiler/pyparser.inc ~38087 and compiler/pasparser_lval.inc ~1290. Which one a NilPy statement reaches depends on which lvalue parser its statement path entered, so a fix applied to one and not the other silently leaves a shape behind. Both copies had to be edited to close the augmented-subscript ticket. | — |
+| bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed | N | 45 | bug | The only callers of `EvalPyStmts` encode a contract that changed under them | — |
 | bug-n-tk-got-files-are-invisible-to-testmgr-privatization | N | 40 | bug | The tk loop in `test-nilpy` spells its BINARIES by full path — that was the callbacks fix — but still captures output to `$(TESTTMP)/$$src.got`. `make -n` yields `/tmp/$src.got`, which testmgr's filename scan cannot match, so those three files are never privatized and two concurrent runs share them. Found by T's new lint, in the recipe whose earlier fix was believed complete. | — |
 | bug-n-two-node-consumers-know-an-call-but-not-its-virtual-sibling | N | 40 | bug | Found by inspection, NOT reproduced: NodeEnumIdOf's call arm and PyEvalOnce's chained-receiver test both match AN_CALL without AN_VIRTUAL_CALL, so a VIRTUAL method call loses its enum result identity and a chained call receiver is re-evaluated per link. Both predate the dunder-dispatch fix that surfaced them. | — |
 | bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind | N | 45 | bug | NilPy's TypeInfo path carries the same two defects Track A just fixed on the Pascal side: it reads GetTokenStr(TokPos) — one token PAST the type name, because Next already advanced — and it resolves the type from the TOKEN KIND rather than the spelling, so TypeInfo(byte) answers Integer (byte and integer share tkInteger_T). | — |
@@ -138,6 +139,7 @@ _none_
 | chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments | A | 15 | chore | compiler/builtin/pylib.pas still carries a no-op `pyexec` stub, plus comments in pylib.pas and pyeval.pas saying things SEGFAULT 'because pyexec is a stub'. Engine 1 landed 2026-07-31 and `exec` lowers to pyeval's EvalPyStmts — nothing calls the stub. The stale prose is the cost: it reads as an unimplemented feature and made a reader doubt a done, gated one. | — |
 | chore-a-sweep-the-unwired-tests-into-the-suite | A | 20 | chore | PAUSED 2026-08-21 after batch 4 with 15 of the original 98 files left, and all 15 are in lanes the user has DEFERRED (13 Track N pyeval/pyexec, 2 Track F softfloat) — resume when either is un-deferred; nothing is half-applied. DECIDED 2026-08-19: SWEEP the ~61 unwired test files into the suite — one job, not 61 tickets. Track A, not T, precisely because A can FIX a red in place; T would have had to file one per red. These are repro tests from fix commits that were never wired, so the bug already has a ticket in done/ — reference it, do not re-file. Never record current output as the expectation. | — |
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 55 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
+| chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring | A | 40 | chore | Wire the nine that pass, then gate the checker | bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed |
 | chore-doc-pascal-dialect-divergences-pointer-difference | D | 25 | chore | Re-filed from decide-pointer-difference-unit and decide-should-a-null-variant-raise-like-fpc, both decided 2026-08-25. Two divergences from FPC are now CHOSEN rather than merely inherited, and a chosen divergence that is not written down is indistinguishable from a bug to the next reader. Both entries land in devdocs/dev/pascal-dialect-divergences.md. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
 | chore-t-a-standing-collector-cannot-say-so-to-the-ranker | T | 30 | chore | A ticket that is a DESTINATION for findings rather than a task — a standing collector — has no way to say so, so it ranks like work forever. feature-crtl-implement-libc-assumptions said in prose since 2026-07-20 that it has no done state and should not sit in the ready queue; it sat at the head of Track B's queue at p45 for five weeks and was dispatched to an agent as work on 2026-08-28. progress.py reads status and prio, not prose. | — |
@@ -290,7 +292,6 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | bug-a-xtensa-refuses-to-lower-an-unreachable-syscall, feature-a-rdrand-cpuid-compiler-builtins |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-t-audit-tests-that-pass-with-the-implementation-removed | T | 40 | feature | frankB wrote a regression test for bug-b-resolver-sends-localhost-to-the-wire, got eight green rows, then reverted the fix to control it — and the test still passed, every row. This box's systemd-resolved is itself RFC 6761 compliant and synthesises the localhost subtree, so the broken code returned the right ANSWER and merely emitted 20 DNS queries to get it. A value assertion was testing systemd-resolved. Three instances of this shape landed in one night. This ticket is the sweep for others. | — |
-| feature-t-fail-when-a-test-file-is-wired-into-no-build-rule | T | 45 | feature | A file in test/ is not a test until a build rule runs it. Two confirmed cases of a test that existed, passed, and was referenced by nothing — one ungated for two weeks. Proposed: a check (progress.sh check or testmgr) that fails when a test/*.expected or test/*.npy has no rule referencing it, converting the class from 'someone notices' to 'CI notices'. | — |
 | feature-t-nilpy-cpython-differential-fuzzer | T | 45 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
 | feature-t-pasmith-rung-selftest | T | 30 | feature | A fuzz rung that has only ever been SILENT is indistinguishable from one that does not work. Proposes a --selftest that proves each rung's fold actually observes its construct, by MUTATING the generated program rather than by rebuilding an old compiler — cheaper, needs no checkout, and applies to rungs that were never written against a specific fix. | — |
 | feature-t-record-host-cpu-features-in-tstate | T | 20 | feature | tstate records host, sha, tier, wall and compiler_sha256 — nothing about the machine. So 'can we emit FMA?' could not be answered from the repo and needed an ssh into plexus. Record CPU model and the x86-64 feature level per host, once, in the host json. | — |
@@ -590,9 +591,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2570)
+## done (2571)
 
-2570 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2571 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (46)
 
@@ -754,6 +755,7 @@ _none_
 - [p 48] [O] feature-opt-heap-per-thread-cache
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [S] bug-a-xtensa-refuses-to-lower-an-unreachable-syscall (unblocks 1)
+- [p 45] [N] bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed (unblocks 1)
 - [p 45] [A] bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire
 - [p 45] [N] bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name
 - [p 45] [N] bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart
@@ -779,7 +781,6 @@ _none_
 - [p 45] [N] feature-nilpy-threadsafe-containers
 - [p 45] [O] feature-opt-inline-float-and-record-returning-leaves
 - [p 45] [P] feature-p-defineglobal-a-define-that-crosses-unit-boundaries
-- [p 45] [T] feature-t-fail-when-a-test-file-is-wired-into-no-build-rule
 - [p 45] [T] feature-t-nilpy-cpython-differential-fuzzer
 - [p 45] [A] refactor-a-one-program-driver-prologue-for-every-frontend
 - [p 45] [N] refactor-n-two-import-handlers-are-twins
@@ -963,6 +964,7 @@ _none_
 - **1** — bug-a-nodemetaclassci-does-not-know-a-virtual-class-method-call
 - **1** — bug-a-xtensa-refuses-to-lower-an-unreachable-syscall
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
+- **1** — bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed
 - **1** — bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching
 - **1** — decide-does-nilpy-random-seed-itself-at-import
 - **1** — decide-how-a-compiled-def-carries-its-signature-when-boxed

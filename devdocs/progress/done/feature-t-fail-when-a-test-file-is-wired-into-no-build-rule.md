@@ -4,7 +4,7 @@ prio: 45
 type: feature
 blocked-by: []
 summary: "A file in test/ is not a test until a build rule runs it. Two confirmed cases of a test that existed, passed, and was referenced by nothing — one ungated for two weeks. Proposed: a check (progress.sh check or testmgr) that fails when a test/*.expected or test/*.npy has no rule referencing it, converting the class from 'someone notices' to 'CI notices'."
-status: working
+status: done
 owner: pxx-a5
 ---
 
@@ -254,3 +254,129 @@ harness-dependent**.
 
 Those are the only entries where `UNWIRED.txt` is the right answer, and each
 carries a compiler error as its reason — an observation rather than a summary.
+
+---
+
+## 2026-08-29 — resolved. The checker had the defect it was written to catch.
+
+Backlog 98 -> 21 (other lanes wired the rest). The remaining twenty-one are now
+triaged and ticketed, and two bugs in the checker itself are fixed and guarded.
+
+### The triage discriminator was wrong, and it was wrong in the flattering direction
+
+The 2026-08-17 pass bucketed by **whether a file BUILDS**, and reported "61
+builds today -> trivially wireable". Re-run over the twenty-one survivors by
+**running** them and reading the binary's own exit code:
+
+| | build says | run says |
+| --- | --- | --- |
+| ready to wire | 19 | **9** |
+| broken | 2 | **12** |
+
+Thirteen of nineteen "buildable" tests **fail when run**. Wiring on the earlier
+signal would have added twelve reds and one segfault to the suite and called it
+coverage. *Builds* was standing in for *passes*, and it is not a proxy for it.
+
+I made the same mistake one level up on the first attempt: my triage script
+captured `$?` from a pipeline (`"$bin" | head -3`), so it recorded `head`'s
+status and reported twelve failing tests as `rc=0`. That is
+`devtest_report.py`'s own recorded lesson — *count the return code, not what
+got printed* — and it took writing it a second time to notice. **The
+measurement harness gets built with less suspicion than the thing measured**,
+again.
+
+### Do not triage against the pin
+
+First pass used `stable_linux_amd64/default/pinned` (v389, 59 testable commits
+behind). It disagrees with HEAD `f576ec79d` on **three of twenty-one**: one
+SIGSEGV and two compile errors that are all fixed at HEAD. Triaging against it
+would have filed three phantom bugs, the segfault most convincingly of all.
+Kept as a worked example on the follow-up ticket.
+
+Not wasted, though: a wired `test_class_method_to_method_pointer` **would have
+caught a real segfault at v389**. That is this ticket's thesis with a corpse
+attached.
+
+### The finding: twelve tests were invalidated by a contract change, silently
+
+All twelve `test_pyeval_*.pas` fail at HEAD with `host call push but "push" not
+in globals`. Not a regression — `ff439149e` deliberately changed the `exec()`
+host-call contract (receiver comes from the bound method, not a hardcoded `vm`
+key), shipped a **new** `.npy` test for the new contract, wired that, and left
+the twelve encoding the old one. And they are **the only callers of
+`EvalPyStmts`/`EvalPyExpr` in the tree** — so the Pascal-side entry point has
+zero live users and zero running tests. Filed:
+[[bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed]].
+
+This is the sharpest instance of the class this ticket opened with. The test did
+not rot on its own; a deliberate, correct change reached in and invalidated it,
+and the only thing that would have said so was a build rule that did not exist.
+
+### Two bugs in the checker, both about what counts as EVIDENCE
+
+Found by pulling on the one STALE exemption it was reporting.
+
+**1. A comment counted as wiring.** `wired_paths()` regex-scanned whole file
+text, so `# same shape as csqlite_file_probe.c` in a Makefile comment marked
+that file wired. The failure direction is the bad one — a commented-out mention
+makes an orphan look covered, the checker prints nothing, and there is no output
+to notice. Now skips lines whose first non-blank character is `#`. **Zero live
+instances**: the csqlite verdict turned out to have a different cause (below),
+so this fix is a class closed, not a bug observed. Said plainly because a fix
+with no measured instance should not be reported as if it had one.
+
+**2. A mention counted as PROOF, and drove a STALE verdict.**
+`test/csqlite_file_probe.c` was reported stale on the strength of
+
+```python
+("test/csqlite_file_probe.c", "/tmp/pxx_sqlite_file_probe.db")
+```
+
+— a data tuple in `testmgr_hardcoded_tmp_devtest.py` that asserts about the
+file's *content* and never builds it. The exemption was **correct** and the
+checker was inviting its deletion, which would have re-opened the gap it was
+covering.
+
+A STALE report is a strong claim, so it now needs evidence proportional to what
+acting on it costs:
+
+| evidence | verdict | fails the check |
+| --- | --- | --- |
+| file is gone, or the Makefile names it in a live line | **STALE** | yes |
+| only a `tools/` script names the path | **advisory, with the citation** | no |
+
+Deliberately **not** a heuristic for "does this script look like a runner" — a
+devtest listing test files as data mentions them exactly like a runner that
+executes them, that is a signature list wearing a different hat, and it would go
+stale silently. The reader gets `named by tools/x_devtest.py:95` and judges.
+
+**Measured reach of that aperture: twelve files are marked wired only by a
+devtest mention.** Some are genuinely run (`devtest_tls_*.pas` are those
+scripts' actual subjects), so the true unwired count is somewhere in 21..33 and
+the checker cannot currently say where. Recorded rather than guessed.
+
+### Guards
+
+11 in `tools/check_test_wiring_devtest.py`, over a throwaway git tree so every
+branch is proven to fire. Three mutations — comments count again (2 fired), any
+mention is hard STALE again (3 fired), trailing comments stripped too (1 fired).
+The last one guards a **documented aperture**: trailing comments are
+deliberately *not* stripped, because `#` is legal inside a recipe's shell
+quoting and dropping a real reference is the worse direction. A guard on
+imperfect-but-intended behaviour is what keeps it from drifting into accidental
+behaviour.
+
+### Why this closes, and what carries on
+
+The deliverable was the check. It exists, it is correct about two things it was
+wrong about, it states its own aperture, and it has guards. The remaining work
+is other lanes':
+[[bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed]] (twelve
+tests) and
+[[chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring]] (nine
+rules in `Makefile`, Track A's file-lane, plus the gate). Split out so this
+reads as closed rather than as someone's abandoned work.
+
+## Log
+- 2026-08-29 — resolved.
+- 2026-08-29 — resolved, commit PENDING-COMMIT.
