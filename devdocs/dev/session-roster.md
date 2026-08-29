@@ -16677,3 +16677,48 @@ them pass); only the conclusion drawn from it was wrong. **Verify the
 CONCLUSION, not just the observation** — a correct measurement carrying a wrong
 causal story is the dangerous shape, and I have now written that sentence three
 times and been caught by it twice.
+
+
+## 2026-08-29, close of evening — b4 parked clean, and the role's actual constraint
+
+**frank-optimize-b4 PARKED, verified release** (its own form, because the repo
+cannot answer "is this file free"): HEAD `2103881fe` = origin/master, 0 unpushed,
+0 uncommitted, and `git diff origin/master` empty for `symtab.inc`, `defs.inc`,
+`ir_codegen_aarch64.inc`, `ir_codegen.inc`. **`symtab.inc` and `defs.inc` are
+genuinely free** — routed to pxx-a5 for the `PyDefRebindTok` row.
+
+Note the shape of that proof: *no working-tree copy differing from what the next
+holder will check out, and nothing in a commit it cannot see.* A lock question
+answered by two conditions, not one. `ListAgents` cannot answer it and neither
+can `working/`.
+
+Four of four landed on the `-O3` umbrella; the fifth banked with the diagnosis
+that makes it a two-step job; one Track P bug filed; one duplicate tombstoned.
+
+### The one sentence worth keeping from tonight
+
+> *"You are the one seat whose context is guaranteed not to persist across the
+> work it coordinates, and the tooling has to carry what the seat cannot."*
+> — frank-optimize-b4
+
+Said after the coordinator re-filed a ticket a **previous session of its own
+role** had already verified (`LowerCase`, frankwasm 08-28, frontmatter reading
+*verified by frank-coordinator*). The right reading is not that the coordinator
+was careless: **workers hold one lane's context across a whole piece of work,
+while the coordinator's context is destroyed and rebuilt continuously as the work
+it tracks continues.** Memory failure here is the standing condition of the seat.
+
+**So the remedy for a coordinator mistake is never "remember next time" — it is
+to move the knowledge somewhere that outlives the session.** Both checks added
+today came from exactly that: the frontmatter scan (three orphans recovered) and
+the NEAR-DUP slug scan (caught the coordinator's own duplicate on its first run).
+
+### Two-lane restraint, unprompted, worth recording because nothing else records it
+
+pxx-a5 left a row undone rather than reach into `symtab.inc` while b4 held it.
+b4 put the `EmitLoadVarA64` ticket down rather than write the duplicate load path
+that would have hidden a global-operand clobber inside a perf commit. **Neither
+needed to be told.** b4's own framing: *staying out costs a visible gap in your
+own work and buys something invisible; nobody thanks you for the collision that
+did not happen* — which is why it asked that pxx-a5 be told, since the file will
+never say it.
