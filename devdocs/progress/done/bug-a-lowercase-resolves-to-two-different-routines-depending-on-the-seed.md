@@ -241,4 +241,4 @@ make it worse; it is the kind of thing that is invisible until someone changes
 one language's needs.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 7aba316be.
