@@ -84,7 +84,7 @@ against the pinned compiler, file a ticket in the owning lane — do not adjust
 the snippet until it passes.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit ca3815d74.
 
 ---
 
