@@ -64,3 +64,29 @@ This is why the fix is not "move the R functions to a shared file".
 probe defines — documented in the feature ticket rather than enforced, because an
 implicit "this define turns on those six" would hide exactly the coupling this
 ticket exists to remove. Doing 1-3 makes `PXX_NO_RUST` stand alone.
+
+---
+
+## MERGED 2026-08-29 — `refactor-a-the-greenfield-frontends-share-each-others-parser-helpers`
+
+Same finding, filed twice, with two independent measurements of it. Surfaced by
+`progress check`'s NEAR-DUP scan (4 shared slug words). Kept here because this
+ticket carries the layer analysis; the other is a tombstone in `rejected/`.
+
+**What the duplicate measured that this ticket did not:** omitting `rparser.inc`
+breaks **`zparser.inc` in 123 places**, plus `gparser`/`eparser`/`fparser`. This
+ticket counted **198 errors** for `PXX_NO_RUST` across six frontends. Two
+different cuts of one coupling — worth keeping both numbers, since they bound the
+job from different directions.
+
+**Its framing, which is the stronger statement of why this matters:** the
+greenfield frontends call *each other's* support functions, which is exactly what
+`devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md` says not to do —
+**share the AST and the IR, duplicate the parser and its helpers per language.**
+It costs nothing today and couples two language specs; the price is paid the
+first time one spec needs its helper to behave differently, and then it is paid
+in the wrong file.
+
+**Prio:** this ticket 22, the duplicate 18. Left at 22, not averaged and not
+raised — the higher of two independent low estimates is still a low estimate, and
+re-ranking on a merge invents a signal neither author gave.
