@@ -3010,10 +3010,26 @@ and its dynamic delta is **0**. Its limit temp is a 4-byte `movsxd`, so the
 motivated it. What it does do is shrink every program measured: `three.pas`
 -63 B, mandelbrot -213 B, lispdemo -159 B, sieve -156 B, **jsondemo -978 B**.
 
-**Verification (binary sha `36f9c3c11b99`, self-host 1 round):** `-O0`/`-O1`/
-`-O2` byte-identical against baseline `2ef7053d0926` on all five programs; `-O3`
-smaller on all five; values identical at all four levels; FPC 3.2.2 agrees with
-the test's expectation.
+**Verification.** Re-run at the LANDED HEAD after the push, because
+`tools/sync.sh` rebased a sibling compiler change (`4576ad4d1`) in underneath —
+standing rule 3, and the reason the pre-push binary sha `36f9c3c11b99` is not
+reachable from master. Controlled A/B at HEAD, baseline = HEAD with only this
+slice's `ir_codegen.inc` hunk reverted:
+
+| program | -O0 | -O1 | -O2 | -O3 base -> new |
+| --- | --- | --- | --- | --- |
+| `perf/three.pas` (scratch) | same | same | same | 18677 -> 18614 (**-63**) |
+| `bench/portable/mandelbrot.pas` | same | same | same | 25260 -> 25158 (**-102**) |
+| `examples/mandelbrot/mandelbrot.pas` | same | same | same | 122855 -> 122642 (**-213**) |
+| `examples/lisp/lispdemo.pas` | same | same | same | 105836 -> 105677 (**-159**) |
+| `examples/json/jsondemo.pas` | same | same | same | 447995 -> 447017 (**-978**) |
+| `examples/primes/sieve.pas` | same | same | same | 86753 -> 86597 (**-156**) |
+
+New binary `13d2803df79f`, baseline `261e6cd2b58f`, both self-host in 1 round.
+Values identical at all four levels; FPC 3.2.2 agrees with the test's
+expectation. **Correction to the commit message of `e9ec79125`:** it quotes
+mandelbrot at -213 alongside the other four, which reads as one program — those
+are two different mandelbrots, and both numbers above are real.
 
 **Non-vacuity — this is where the slice cost its time, and it produced standing
 rule 4 at the top of this ticket.** Six deliberate breaks now move the test:
