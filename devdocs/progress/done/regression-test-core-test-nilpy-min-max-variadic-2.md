@@ -105,4 +105,4 @@ mechanism; the shared test name is the only connection.
 
 ## Log
 - 2026-08-29 — root-caused, fixed, sibling-swept; resolved.
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 04bfa6708.
