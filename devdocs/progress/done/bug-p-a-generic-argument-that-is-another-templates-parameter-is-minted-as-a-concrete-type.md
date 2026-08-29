@@ -187,4 +187,4 @@ existing generic tests (19 named + 8 `.expected`) stay green; the reduction
 lands in `test/`; the per-fix loop.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit f12a62815.
