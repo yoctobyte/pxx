@@ -227,4 +227,4 @@ CLAUDE.md's compat table.
 Self-host fixedpoint `df3e10e20b14`, converged in 1 round.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 8b35e88fa.
