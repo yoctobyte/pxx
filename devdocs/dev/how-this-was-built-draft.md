@@ -24,28 +24,25 @@ is no longer a caution, it is a measurement: the table below was first taken on
 42%, `done/` tickets by 49%, compiler lines by 33%. A launch post carrying the
 August-14 figures would have been wrong in ten places at once.
 
-**Re-measure the whole table with one paste, and do not hand-edit a single
-number** — hand-editing one is how the other nine stay stale:
+**Re-measure with `tools/factsheet.sh` and do not hand-edit a single number** —
+hand-editing one is how the other nine stay stale. It prints the table, the sha
+it measured at, and the qualifiers that have to travel with three of the figures.
 
-```sh
-cd "$(git rev-parse --show-toplevel)" && {
-  echo "measured $(date +%F) at $(git rev-parse --short HEAD)"
-  echo "commits          $(git rev-list --count HEAD)"
-  echo "first commit     $(git log --reverse --format=%ad --date=short | head -1)"
-  echo "agent trailers   $(git log --format=%b | grep -ci 'Co-Authored-By: Claude')"
-  echo "pins             $(cat stable_linux_amd64/default/VERSION)"
-  for d in done rejected decided backlog; do
-    printf 'progress/%-9s %s\n' "$d" "$(ls devdocs/progress/$d/*.md 2>/dev/null | wc -l)"
-  done
-  echo "done w/ track:   $(grep -l '^track:' devdocs/progress/done/*.md | wc -l)"
-  echo "compiler lines   $(find compiler -name '*.inc' -o -name '*.pas' | xargs wc -l | tail -1)"
-  echo "lib lines        $(find lib -name '*.pas' -o -name '*.c' -o -name '*.h' | xargs wc -l | tail -1)"
-}
-```
+Track T owns it, and it exists because the first version of this paragraph
+referenced a path that did not exist. Two notes from its first run, both worth
+knowing before you quote anything it prints:
 
-It is a paste rather than `tools/factsheet.sh` because `tools/**` is Track T's
-lane and this is a Track D draft. If it earns a home there, that is T's call to
-make, not this document's to assume.
+- **It disagreed with the hand count above on three of ten numbers, and the hand
+  count was right each time.** Resolved decisions live in `decided/`, not `done/`;
+  pins are a ledger file (`stable_linux_amd64/default/history.log`), not a
+  commit-message pattern; and `compiler/builtin/**` is compiler source, so a
+  top-level-only glob undercounts by 14% on one missing subdirectory. Each wrong
+  definition is now a comment in the script. **The hand count could only serve as
+  the oracle because it had been published first** — which is the argument for
+  the fact sheet living in the essay at all.
+- Its header stamps the **HEAD commit's** date, not the day you ran it. Usually
+  the same; say "measured at `<sha>`" rather than "as of `<date>`" and the
+  distinction stops mattering.
 
 | claim | value | how to re-measure |
 | --- | --- | --- |
