@@ -76,5 +76,19 @@ int main(void) {
   chk((int)(*(a.m+1) - *(a.m+0)), 4);
   chk((int)(*(gm+1) - *(gm+0)), 4);
 
+  /* ...and the difference of two ELEMENT addresses is in elements, not rows.
+     &a.m[1][0]-&a.m[0][0] is 16 bytes apart over a 4-byte element = 4; asking
+     the row stride instead divides 16 by 16 and answers 1, which is what
+     IRArrayElemStride's missing field arm did.
+     bug-a-irarrayelemstride-has-no-field-arm-so-it-answers-the-row-stride */
+  chk((int)(&gm[1][0]  - &gm[0][0]),  4);
+  chk((int)(&a.m[1][0] - &a.m[0][0]), 4);
+  chk((int)(&gs[2][0]  - &gs[0][0]),  16);
+  chk((int)(&a.s[2][0] - &a.s[0][0]), 16);
+  chk((int)(&gd[1][0]  - &gd[0][0]),  3);
+  chk((int)(&a.d[1][0] - &a.d[0][0]), 3);
+  chk((int)(&gt[1][0][0]  - &gt[0][0][0]),  12);
+  chk((int)(&a.t[1][0][0] - &a.t[0][0][0]), 12);
+
   return fails == 0 ? 42 : 1;
 }

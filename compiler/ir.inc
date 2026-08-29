@@ -2350,7 +2350,7 @@ end;
   it DECAYS (a row, for a multi-dim one), and a fully indexed base wants the
   element instead. bug-c-a-multidim-array-decays-with-the-element-stride }
 function IRArrayElemStride(node: Integer): Integer;
-var symIdx: Integer;
+var symIdx, fldRec: Integer; fldName: AnsiString; fldTk: TTypeKind;
 begin
   if (node >= 0) and (ASTKind[node] = AN_IDENT) then
   begin
@@ -2363,6 +2363,28 @@ begin
         Result := 1
       else
         Result := TypeSize(Syms[symIdx].ElemType);
+      Exit;
+    end;
+  end;
+  { ...and the same array reached as a FIELD. Without this arm an AN_FIELD base
+    took the fallback below, and the fallback is exactly what this function was
+    split out to avoid: IRPointerStride answers what a multi-dim field DECAYS
+    to, which is the ROW. `&a.m[1][0] - &a.m[0][0]` on `int m[3][4]` then
+    divided 16 bytes by a 16-byte row and said 1 where gcc says 4 — the precise
+    symptom the caller's own comment names, reached through the spelling its
+    AN_IDENT test does not cover.
+    bug-a-irarrayelemstride-has-no-field-arm-so-it-answers-the-row-stride }
+  if (node >= 0) and (ASTKind[node] = AN_FIELD) then
+  begin
+    fldRec := ResolveNodeRec(ASTLeft[node]);
+    fldName := GetASTIdentName(node);
+    if RecFieldIsArray(fldRec, fldName) and
+       (RecFieldDynDepth(fldRec, fldName) = 0) then
+    begin
+      fldTk := RecFieldType(fldRec, fldName);
+      if fldTk = tyRecord then Result := RecSize(RecFieldRecId(fldRec, fldName))
+      else if fldTk = tyUnknown then Result := 1
+      else Result := TypeSize(fldTk);
       Exit;
     end;
   end;

@@ -4,8 +4,8 @@ prio: 70
 type: bug
 blocked-by: []
 summary: "`&a.m[1][0] - &a.m[0][0]` on a struct field `int m[3][4]` answers 1 where gcc says 4. IRArrayElemStride exists precisely so a FULLY indexed base gets the ELEMENT stride instead of the row stride, and its own comment names 1 as the wrong answer — but it has only an AN_IDENT arm, so an AN_FIELD base falls through to IRPointerStride and gets exactly the row stride the split was made to avoid."
-status: backlog
-owner: unassigned
+status: working
+owner: frankC
 ---
 
 # IRArrayElemStride has no AN_FIELD arm, so a field base gets the ROW stride
