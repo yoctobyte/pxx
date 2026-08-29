@@ -46,11 +46,20 @@ when there is none, against the payload expression's own type.
    as pure field reads, and unbraced match arms (`Some(v) => f(v),` — the
    spelling real source uses; the block form was the only one accepted).
    Test `test/test_rust_option.rs`, in `make test`.
-2. `Option<T>` in fn signatures — params and, the load-bearing half,
-   RETURN values. Struct/enum returns are currently rejected outright
-   (`RTypeKindFromName(..., allowStruct=False)` on the return type), and
-   `fn piece_at(..) -> Option<Piece>` is exactly that. Likely the largest
-   unit of the three.
+2. **DONE** — `Option<T>` in fn signatures: params and, the load-bearing
+   half, RETURN values, on a free fn and an impl method alike. Struct/enum
+   returns were rejected outright; allowing them turned out to be pure
+   frontend wiring — the shared machinery has always compiled a
+   record-returning routine (Pascal's `function F: TRec`), the Rust
+   frontend simply never registered `ProcRetRecId`, never allocated the
+   hidden aggregate-destination slot, and never emitted
+   `EmitAggregateDestStash`. Without the last two, Result is written
+   through a garbage pointer — the identical segfault the C frontend hit
+   on lua's by-value union return, reproduced here and fixed the same way.
+   Generalised rather than special-cased: any record return works now, not
+   just `Option<T>`. Impl-method params also gained struct/enum types
+   (they were `allowStruct=False` while free fns were already `True`) and
+   the `IsRef` flag a record param needs.
 3. `if let Some(x) = e`, `match` on an arbitrary expression (today the
    scrutinee must be a plain local), and `unwrap_or`.
 
@@ -64,3 +73,5 @@ when there is none, against the payload expression's own type.
 
 ## Log
 - 2026-08-29 — unit 1 landed (see the ladder ticket's log for the detail).
+- 2026-08-29 — unit 2 landed: Option (and records generally) through fn
+  signatures and returns.

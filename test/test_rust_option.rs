@@ -11,7 +11,37 @@
 // unannotated `Some(e)`, two distinct instantiations live in one program
 // (which is what makes the bare-variant table useless and the expected-type
 // resolution necessary), is_some/is_none/unwrap, and both match arm forms
-// (braced block and bare expression).
+// (braced block and bare expression), Option in fn signatures -- params and
+// RETURN values, on a free fn and on an impl method alike -- and a plain
+// struct return, which the same wiring enables.
+
+struct Board { ep: i64 }
+
+// the engine's own shape: a fallible lookup returning Option
+fn piece_at(sq: i64) -> Option<i64> {
+    if sq < 0 { return None; }
+    if sq > 63 { return None; }
+    return Some(sq * 3);
+}
+
+// Option as a PARAMETER (record ABI, passed by address)
+fn describe(o: Option<i64>) -> i64 {
+    if o.is_none() { return -1; }
+    return o.unwrap();
+}
+
+impl Board {
+    fn ep_square(&self) -> Option<i64> {
+        if self.ep < 0 { return None; }
+        return Some(self.ep);
+    }
+}
+
+// a plain record return -- same hidden-destination ABI, no longer refused
+fn make_board(e: i64) -> Board {
+    let b: Board = Board { ep: e };
+    return b;
+}
 
 fn main() {
     let a: Option<i64> = Some(42);
@@ -64,4 +94,25 @@ fn main() {
         Some(v) => println!("e {}", v),
         _ => println!("e wild"),
     }
+
+    // Option through a signature: returned by a free fn, taken as a param
+    let f = piece_at(5);
+    match f {
+        Some(v) => println!("f {}", v),
+        None => println!("f none"),
+    }
+    let g = piece_at(-1);
+    match g {
+        Some(v) => println!("g {}", v),
+        None => println!("g none"),
+    }
+    println!("describe {} {}", describe(f), describe(g));
+
+    // ...and by a method, off a record returned by value
+    let bd = make_board(40);
+    let h = bd.ep_square();
+    println!("h {}", h.unwrap());
+    let bd2 = make_board(-1);
+    let i = bd2.ep_square();
+    if i.is_none() { println!("i none"); }
 }

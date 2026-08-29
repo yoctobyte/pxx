@@ -5820,9 +5820,11 @@ test-core: $(COMPILER)
 	# so match/is_some/is_none/unwrap fall out of the existing enum machinery.
 	# Two instantiations live in the one program on purpose -- that is what
 	# makes the bare-variant table ambiguous and the expected-type resolution
-	# load-bearing. Bare (unbraced) match arms covered here too.
+	# load-bearing. Bare (unbraced) match arms covered here too, plus Option
+	# through a signature -- param and RETURN, free fn and impl method -- and
+	# a plain record return, which the same hidden-destination wiring enables.
 	./$(COMPILER) test/test_rust_option.rs $(TESTTMP)/test_rust_option26
-	test "$$($(TESTTMP)/test_rust_option26)" = "$$(printf 'a some 42\nb none\nn 84\nn -7\na is_some\nb is_none\nunwrap 42\nc 200\nd 9\ne wild')"
+	test "$$($(TESTTMP)/test_rust_option26)" = "$$(printf 'a some 42\nb none\nn 84\nn -7\na is_some\nb is_none\nunwrap 42\nc 200\nd 9\ne wild\nf 15\ng none\ndescribe 15 -1\nh 40\ni none')"
 	./$(COMPILER) test/test_rust_tuple_struct.rs $(TESTTMP)/test_rust_tuple26
 	test "$$($(TESTTMP)/test_rust_tuple26)" = "$$(printf 'a 300 b 44 s 7')"
 	# Rust associated fns + Self (Type::fn / Self::fn call paths, mixed with methods)

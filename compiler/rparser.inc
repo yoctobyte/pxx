@@ -1177,6 +1177,47 @@ begin
   Result := node;
 end;
 
+{ The record id a record-valued expression yields, or REC_NONE when the node
+  is not one of the shapes that carries one. }
+function RExprRecId(node: Integer): Integer;
+begin
+  Result := REC_NONE;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_CALL then Result := ProcRetRecId[ASTIVal[node]]
+  else if ASTKind[node] = AN_IDENT then Result := Syms[ASTIVal[node]].RecName;
+end;
+
+{ Emits the field stores that materialize an Option<T> into an EXISTING target
+  symbol. Shared by the `let` initializer and by `return`, which are the two
+  places a whole enum value comes into existence -- no AST node carries one
+  through an expression, so both spell it as stores into a named slot. }
+function ROptionStoreInto(targetSym, optCi: Integer; isSome: Boolean;
+  valNode: Integer): Integer;
+var fieldNode, tagNode, assignNode, seq: Integer; mangled: AnsiString;
+begin
+  fieldNode := AllocNode(AN_FIELD);
+  ASTLeft[fieldNode] := RMakeIdent(targetSym);
+  ASTSOffset[fieldNode] := RStoredName('__tag'); ASTSLen[fieldNode] := 5;
+  ASTTk[fieldNode] := Ord(tyInt64);
+  tagNode := AllocNode(AN_INT_LIT); ASTTk[tagNode] := Ord(tyInt64);
+  if isSome then ASTIVal[tagNode] := 1 else ASTIVal[tagNode] := 0;
+  assignNode := AllocNode(AN_ASSIGN);
+  ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := tagNode;
+  seq := RSeqAppend(-1, assignNode);
+  if isSome then
+  begin
+    mangled := 'Some.0';
+    fieldNode := AllocNode(AN_FIELD);
+    ASTLeft[fieldNode] := RMakeIdent(targetSym);
+    ASTSOffset[fieldNode] := RStoredName(mangled); ASTSLen[fieldNode] := Length(mangled);
+    ASTTk[fieldNode] := Ord(RecFieldType(REC_UCLASS_BASE + optCi, mangled));
+    assignNode := AllocNode(AN_ASSIGN);
+    ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := valNode;
+    seq := RSeqAppend(seq, assignNode);
+  end;
+  Result := seq;
+end;
+
 { `let [mut] name [: Type] [= expr];` — mut is accepted and ignored (no
   borrow/mutability enforcement, per the umbrella's non-goal list). Two RHS
   shapes: a plain scalar expression, or a struct literal `Type { f: v, ... }`
@@ -1401,27 +1442,7 @@ begin
       Error('Rust: `let ' + name + ' = None;` needs an Option<T> type annotation');
     LastTypeRecId := REC_UCLASS_BASE + optCi;
     symIdx := AllocVar(name, tyRecord);
-    identNode := RMakeIdent(symIdx);
-    tagOff := RStoredName('__tag');
-    fieldNode := AllocNode(AN_FIELD);
-    ASTLeft[fieldNode] := identNode; ASTSOffset[fieldNode] := tagOff; ASTSLen[fieldNode] := 5;
-    ASTTk[fieldNode] := Ord(tyInt64);
-    tagNode := AllocNode(AN_INT_LIT); ASTTk[tagNode] := Ord(tyInt64);
-    if isSome then ASTIVal[tagNode] := 1 else ASTIVal[tagNode] := 0;
-    tagAssign := AllocNode(AN_ASSIGN); ASTLeft[tagAssign] := fieldNode; ASTRight[tagAssign] := tagNode;
-    seq := RSeqAppend(-1, tagAssign);
-    if isSome then
-    begin
-      mangled := 'Some.0';
-      fieldNode := AllocNode(AN_FIELD);
-      ASTLeft[fieldNode] := identNode;
-      ASTSOffset[fieldNode] := RStoredName(mangled); ASTSLen[fieldNode] := Length(mangled);
-      ASTTk[fieldNode] := Ord(RecFieldType(REC_UCLASS_BASE + optCi, mangled));
-      assignNode := AllocNode(AN_ASSIGN);
-      ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := valNode;
-      seq := RSeqAppend(seq, assignNode);
-    end;
-    Result := seq;
+    Result := ROptionStoreInto(symIdx, optCi, isSome, valNode);
     Exit;
   end;
   { enum literal RHS: bare `Variant(...)`/`Variant { .. }`/`Variant`, or
@@ -1568,15 +1589,28 @@ begin
     Result := seq;
     Exit;
   end;
-  { plain scalar initializer }
+  { plain initializer — scalar, or a record-valued expression (today: a call
+    to a record/Option-returning fn), which gets the SOURCE's record id and
+    is copied by the shared AN_ASSIGN exactly as Pascal's `r := MakeR(x)` is. }
   valNode := RParseExpr;
-  if hasType then
+  payTk := IntToTypeKind(ASTTk[valNode]);
+  if payTk = tyRecord then
+  begin
+    optCi := RExprRecId(valNode);
+    if optCi < REC_UCLASS_BASE then
+      Error('Rust: cannot infer the record type of the initializer for ' + name);
+    if hasType and ((annotTk <> tyRecord) or (REC_UCLASS_BASE + structCi <> optCi)) then
+      Error('Rust: the type annotation on ' + name + ' does not match its initializer');
+    LastTypeRecId := optCi;
+    symIdx := AllocVar(name, tyRecord);
+  end
+  else if hasType then
   begin
     if annotTk = tyRecord then Error('Rust: struct assignment from a non-literal expression is not supported by the skeleton yet');
     symIdx := AllocVar(name, annotTk);
   end
   else
-    symIdx := AllocVar(name, IntToTypeKind(ASTTk[valNode]));
+    symIdx := AllocVar(name, payTk);
   identNode := RMakeIdent(symIdx);
   assignNode := AllocNode(AN_ASSIGN);
   ASTLeft[assignNode] := identNode;
@@ -1979,7 +2013,7 @@ end;
 
 function RParseStatement: Integer;
 var name, fname: AnsiString; symIdx, node, rhsNode, lhsNode, baseNode, fieldNode, fTokIdx: Integer;
-    opTk: TTokenKind;
+    opTk: TTokenKind; isSome: Boolean;
 begin
   case CurTok.Kind of
     tkIf: begin Result := RParseIf; Exit; end;
@@ -1992,6 +2026,33 @@ begin
     tkExit:
     begin
       Next;
+      { `return Some(e);` / `return None;` from an Option-returning fn: the
+        value is materialized into the Result slot by field stores and then a
+        plain valueless return -- the same shape `let` uses, for the same
+        reason (no AST node carries a whole enum value through an
+        expression). }
+      if (CurProc >= 0) and RIsOptionRec(ProcRetRecId[CurProc]) and
+         (CurTok.Kind = tkIdent) and
+         ((CurTok.SVal = 'Some') or (CurTok.SVal = 'None')) and
+         (FindUClass(CurTok.SVal) < 0) then
+      begin
+        isSome := CurTok.SVal = 'Some';
+        Next;
+        rhsNode := -1;
+        if isSome then
+        begin
+          Expect(tkLParen, '(');
+          rhsNode := RParseExpr;
+          Expect(tkRParen, ')');
+        end;
+        node := RSeqAppend(
+          ROptionStoreInto(Procs[CurProc].RetSymIdx,
+                           ProcRetRecId[CurProc] - REC_UCLASS_BASE, isSome, rhsNode),
+          AllocNode(AN_EXIT));
+        RExpectStmtEnd;
+        Result := node;
+        Exit;
+      end;
       node := AllocNode(AN_EXIT);
       if CurTok.Kind <> tkSemicolon then ASTLeft[node] := RParseExpr;
       RExpectStmtEnd;
@@ -2280,7 +2341,7 @@ end;
   is a no-op there). Shared by the main prescan below and by generic
   specialization, so there is one signature-parsing implementation, not two. }
 function RRegisterFnSignatureAt(i: Integer): Integer;
-var j, depth, nparams, procIdx, k: Integer; name: AnsiString;
+var j, depth, nparams, procIdx, k, retRecId: Integer; name: AnsiString;
     pnames: array[0..7] of AnsiString; ptypes: array[0..7] of TTypeKind;
     retType, sElemTk: TTypeKind;
 begin
@@ -2320,10 +2381,9 @@ begin
       if Tokens[j].Kind <> tkIdent then Error('Rust: expected element type in &[T] parameter');
       { sequence the side-effecting RTypeKindFromName (sets LastTypeRecId)
         before reading LastTypeRecId — do NOT rely on arg eval order. }
-      sElemTk := RTypeKindFromName(GetTokenStr(j), True);
+      sElemTk := RTypeKindFromName(RTypeNameAt(j), True);
       RSliceClassForRec(sElemTk, LastTypeRecId);
       ptypes[nparams] := tyRecord;
-      Inc(j);
       if Tokens[j].Kind <> tkRBrack then Error('Rust: expected ] in &[T] parameter');
       Inc(j);
     end
@@ -2331,24 +2391,27 @@ begin
     begin
       if Tokens[j].Kind <> tkIdent then Error('Rust: expected parameter type');
       { struct/enum params allowed (always passed by address, same as self —
-        see RParseTopLevelFn/RRegisterImpls); struct RETURN values stay out of
-        scope, so the return type below still passes allowStruct=False. }
-      ptypes[nparams] := RTypeKindFromName(GetTokenStr(j), True);
-      Inc(j);
+        see RParseTopLevelFn/RRegisterImpls). RETURN values too, as of the
+        Option<T> rung: the shared machinery has always compiled a
+        record-returning function (Pascal `function F: TRec` does), the Rust
+        frontend simply never registered ProcRetRecId for one. }
+      ptypes[nparams] := RTypeKindFromName(RTypeNameAt(j), True);
     end;
     Inc(nparams);
     if Tokens[j].Kind = tkComma then Inc(j);
   end;
   Inc(j); { consume ) }
   retType := tyInteger; { Rust's () return; unused Result slot, same trick C's void uses }
+  retRecId := REC_NONE;
   if (Tokens[j].Kind = tkMinus) and (Tokens[j + 1].Kind = tkGt) then
   begin
     j := j + 2;
     if Tokens[j].Kind <> tkIdent then Error('Rust: expected return type after ->');
-    retType := RTypeKindFromName(GetTokenStr(j), False);
-    Inc(j);
+    retType := RTypeKindFromName(RTypeNameAt(j), True);
+    retRecId := LastTypeRecId;
   end;
   procIdx := RegisterProc(name, True, retType, nparams, pnames, ptypes);
+  if retType = tyRecord then ProcRetRecId[procIdx] := retRecId;
   for k := 0 to nparams - 1 do
     if ptypes[k] = tyRecord then Procs[procIdx].Params[k].IsRef := True;
   Result := j;
@@ -2400,7 +2463,7 @@ end;
   ParamSize; no new codegen needed for field access through it). An
   `impl Trait for Type` additionally records (TypeCi, TraitName) in RImpls. }
 procedure RRegisterImpls;
-var i, j, ci, nparams, procIdx, selfBase: Integer;
+var i, j, k, ci, nparams, procIdx, selfBase, retRecId: Integer;
     typeName, traitName, methodName, fullName: AnsiString;
     pnamesFull: array[0..7] of AnsiString; ptypesFull: array[0..7] of TTypeKind;
     retType: TTypeKind; hasTrait: Boolean;
@@ -2467,22 +2530,28 @@ begin
           if Tokens[j].Kind <> tkColon then Error('Rust: expected : in parameter list');
           Inc(j);
           if Tokens[j].Kind <> tkIdent then Error('Rust: expected parameter type');
-          ptypesFull[nparams + selfBase] := RTypeKindFromName(GetTokenStr(j), False);
-          Inc(j);
+          ptypesFull[nparams + selfBase] := RTypeKindFromName(RTypeNameAt(j), True);
           Inc(nparams);
           if Tokens[j].Kind = tkComma then Inc(j);
         end;
         Inc(j); { consume ) }
         retType := tyInteger;
+        retRecId := REC_NONE;
         if (Tokens[j].Kind = tkMinus) and (Tokens[j + 1].Kind = tkGt) then
         begin
           j := j + 2;
           if Tokens[j].Kind <> tkIdent then Error('Rust: expected return type after ->');
-          retType := RTypeKindFromName(GetTokenStr(j), False);
-          Inc(j);
+          retType := RTypeKindFromName(RTypeNameAt(j), True);
+          retRecId := LastTypeRecId;
         end;
         fullName := typeName + '::' + methodName;
         procIdx := RegisterProc(fullName, True, retType, nparams + selfBase, pnamesFull, ptypesFull);
+        if retType = tyRecord then ProcRetRecId[procIdx] := retRecId;
+        { a record/enum param travels by address, exactly like self — without
+          this the caller passes the value while AllocParam(isRef=True)
+          dereferences it (the same mismatch the self note below records). }
+        for k := 0 to nparams + selfBase - 1 do
+          if ptypesFull[k] = tyRecord then Procs[procIdx].Params[k].IsRef := True;
         { RegisterProc always defaults Params[].IsRef to False — self is
           always passed by address (see the file-header note), so this must
           be set explicitly or the caller passes self by raw value while the
@@ -2682,6 +2751,7 @@ procedure RParseTopLevelImpl;
 var typeName, traitName, fname, pname, fullName: AnsiString;
     ci, procIdx, nparams, i, idx, savedSC, savedFS, patchPos, bodyNode, selfBase: Integer;
     pnames: array[0..7] of AnsiString; ptypes: array[0..7] of TTypeKind;
+    precids: array[0..7] of Integer;
 begin
   Next; { impl }
   if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkIdent) and (GetTokenStr(TokPos) = 'for') then
@@ -2724,9 +2794,9 @@ begin
       pname := CurTok.SVal; Next;
       Expect(tkColon, ':');
       if CurTok.Kind <> tkIdent then Error('Rust: expected parameter type');
-      ptypes[nparams] := RTypeKindFromName(CurTok.SVal, False);
+      ptypes[nparams] := RTypeKindFromName(RTypeNameCur, True);
+      precids[nparams] := LastTypeRecId;
       pnames[nparams] := pname;
-      Next;
       Inc(nparams);
       if not Eat(tkComma) then Break;
     end;
@@ -2735,7 +2805,9 @@ begin
     begin
       Next; Expect(tkGt, '>');
       if CurTok.Kind <> tkIdent then Error('Rust: expected return type after ->');
-      Next;
+      { consumed through RTypeNameCur so a multi-token `Option<T>` is skipped
+        whole; the registered signature is what actually types the method. }
+      fname := RTypeNameCur;
     end;
 
     savedSC := SymCount; savedFS := FrameSize;
@@ -2750,15 +2822,27 @@ begin
     end;
     for i := 0 to nparams - 1 do
     begin
-      LastTypeRecId := REC_NONE;
-      idx := AllocParam(pnames[i], ptypes[i], False, False);
+      LastTypeRecId := precids[i];
+      if ptypes[i] = tyRecord then
+        idx := AllocParam(pnames[i], ptypes[i], True, False)
+      else
+        idx := AllocParam(pnames[i], ptypes[i], False, False);
       Procs[procIdx].Params[i + selfBase].SymIdx := idx;
     end;
+    { a record result needs its record id on the Result slot, or the hidden
+      return buffer is sized as a scalar and every field store lands wrong. }
+    LastTypeRecId := ProcRetRecId[procIdx];
     idx := AllocVar('Result', Procs[procIdx].RetType);
     Procs[procIdx].RetSymIdx := idx;
+    { see the twin site in RParseTopLevelFn: the hidden aggregate-destination
+      slot + its prologue stash are what make a record return land anywhere
+      but a garbage pointer. }
+    if RetViaHiddenDest(Procs[procIdx].RetType) then
+      ProcAggregateDestSym[procIdx] := AllocVar('', tyPointer);
 
     patchPos := EmitProcPrologue;
     Procs[procIdx].FramePatch := patchPos;
+    EmitAggregateDestStash(procIdx);
     EmitParamSpillsForTarget(procIdx, nparams + selfBase);
 
     Expect(tkBegin, '{');
@@ -2819,11 +2903,10 @@ begin
       if CurTok.Kind <> tkIdent then Error('Rust: expected element type in &[T] parameter');
       { sequence RTypeKindFromName (sets LastTypeRecId) before reading it;
         stash the element tk in ptypes[nparams] first, then set it to tyRecord. }
-      ptypes[nparams] := RTypeKindFromName(CurTok.SVal, True);
+      ptypes[nparams] := RTypeKindFromName(RTypeNameCur, True);
       precids[nparams] := REC_UCLASS_BASE + RSliceClassForRec(ptypes[nparams], LastTypeRecId);
       ptypes[nparams] := tyRecord;
       pnames[nparams] := pname;
-      Next;
       Expect(tkRBrack, ']');
     end
     else
@@ -2832,10 +2915,9 @@ begin
       { struct/enum params allowed (see RRegisterFnSignatureAt); RTypeKindFromName
         sets LastTypeRecId as a side effect, which the NEXT param's lookup would
         clobber before we get to AllocParam below — capture it per-param now. }
-      ptypes[nparams] := RTypeKindFromName(CurTok.SVal, True);
+      ptypes[nparams] := RTypeKindFromName(RTypeNameCur, True);
       precids[nparams] := LastTypeRecId;
       pnames[nparams] := pname;
-      Next;
     end;
     Inc(nparams);
     if not Eat(tkComma) then Break;
@@ -2845,7 +2927,9 @@ begin
   begin
     Next; Expect(tkGt, '>');
     if CurTok.Kind <> tkIdent then Error('Rust: expected return type after ->');
-    Next;
+    { consumed through RTypeNameCur so a multi-token `Option<T>` is skipped
+      whole; the registered signature is what actually types the fn. }
+    pname := RTypeNameCur;
   end;
 
   savedSC := SymCount; savedFS := FrameSize;
@@ -2863,11 +2947,23 @@ begin
       idx := AllocParam(pnames[i], ptypes[i], False, False);
     Procs[procIdx].Params[i].SymIdx := idx;
   end;
+  { a record result needs its record id on the Result slot, or the hidden
+    return buffer is sized as a scalar and every field store lands wrong. }
+  LastTypeRecId := ProcRetRecId[procIdx];
   idx := AllocVar('Result', Procs[procIdx].RetType);
   Procs[procIdx].RetSymIdx := idx;
+  { A record return travels by the caller-owned hidden destination pointer
+    (RetViaHiddenDest / NRVO), exactly as it does for Pascal and C: the callee
+    needs a frame slot to stash that incoming pointer in, and the prologue
+    needs to stash it before the param-copy clobbers the register. Omit either
+    and Result is written through garbage -- the same segfault the C frontend
+    hit on lua's by-value union return. }
+  if RetViaHiddenDest(Procs[procIdx].RetType) then
+    ProcAggregateDestSym[procIdx] := AllocVar('', tyPointer);
 
   patchPos := EmitProcPrologue;
   Procs[procIdx].FramePatch := patchPos;
+  EmitAggregateDestStash(procIdx);
   EmitParamSpillsForTarget(procIdx, nparams);
 
   Expect(tkBegin, '{');
