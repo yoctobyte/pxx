@@ -2181,3 +2181,31 @@ Two more from the same verification, both about instruments hiding their own gap
   tySingle" as the x1 users; the real count was four code paths across three arms,
   the by-ref-param deref being the missed one. Same inherit-the-population shape as
   faces 41 and 48 — this time the stale population was the author's own note.
+
+**Face 42, sharpened by its own first test (frankwasm, 2026-08-29).** The
+`:11329` citation was verified at the exact commit it was filed against
+(`f018f4c86`): the line had **not moved**, and it was a `tyVariant`
+default-parameter branch carrying a correct `IsArray` guard *on a different
+question*. So the citation was never true — it was not staleness.
+
+That makes the failure mode worse than first written. **A wrong line number does
+not merely waste a lookup; it hands the next agent a plausible-looking guard on an
+adjacent question and invites them to copy it.** The nearby code is real, it does
+guard something, and it is guarding the wrong thing — which is exactly the input
+that makes a microfix feel justified.
+
+The author's statement of why the content rule works is the best form of it:
+**a line number is checkable only against a tree you may not have; a sentence
+about content is checkable against itself.**
+
+And the measure-first condition attached to that grant paid out in the direction
+nobody predicted. The ticket claimed *"only the CONSTRUCTOR spelling is
+affected."* Measured with one call shape per procedure body — so first-refusal
+counting could not hide the tail behind the head — **six of seven shapes were
+refusing**: direct and virtual constructors, and direct, indirect, virtual and
+interface calls taking a function RESULT. Wrong about which call kinds reach the
+site *and* wrong about which argument spellings do. The lone survivor,
+`Direct(av)` with a named variable, survives for a reason unrelated to `IsArray`
+— an `<> AN_IDENT` exclusion beside each predicate catches it first. **Patching
+the inferred shape would have fixed one arm of six and closed the ticket saying
+so.**
