@@ -2709,3 +2709,64 @@ is the single artefact most often thrown away.
 was not wrong — it was a **second, independent defect** that the rename walked
 past, and the eleven-line repro had found a different one sitting in front of it.
 "That framing was wrong" is the kind of line that survives unqualified for months.
+
+### 62. A COUNTER CANNOT ASSERT AN ORDERING — and "I added a control" is not "I watched it fail"
+
+frank-optimize-b4, 2026-08-29, and it is the strongest instance in this file
+because **the author wrote the rule, then broke it, then caught himself with it,
+about four hours apart.**
+
+Building the for-loop init-temp elision, b4 added a call-bearing row to its test
+**specifically** so that an accidental widening of the elision to call-bearing
+bounds would be caught — and said so, in advance, in writing. Then it broke the
+elision on purpose as a vacuity check.
+
+**The row kept passing.**
+
+Eliding a call-bearing bound *swaps* the two calls. Both orders make the same
+number of calls and produce the same iteration count, so **the call counter and
+the iteration count were both blind to the only thing that changed.** The row now
+logs call **order** — `iL` correct, `Li` broken — and the deliberate break moves
+it.
+
+**Two rules come out of this and they are different.**
+
+1. **A counter cannot assert an ordering.** Whenever the defect you fear is a
+   *permutation*, a count is structurally incapable of seeing it — and a count is
+   the cheapest assertion to write, so it is the one that gets written.
+2. **"I added a control for this" is not the claim "I watched this control
+   fail."** This is the standing rule *a control is not a control until it has
+   failed once*, and b4's case shows the rule needs its second half: **it must
+   fail in the specific way the defect would produce.** b4's control failed
+   nothing under a real break and still looked green; frankA's test, on the same
+   subject, failed a row.
+
+**Why it belongs beside face 61 rather than inside it.** 61 is a change that
+passes every gate and buys nothing. This is a *gate* that passes and proves
+nothing — the same green, from the other end. Both are cases where the careful
+step (running the suite; writing the control) produced authority the evidence did
+not support.
+
+### 59a. REFINEMENT — a census is only as good as the GRANULARITY it classifies at
+
+Same session, same night, and it sharpens 59 rather than repeating it.
+
+b4's `PXXDBG=a.forinit` reported `init=ident, limit=binop` as the dominant shape —
+**87 of ~250** in compiler.pas — so widening the elision from "plain ident" to
+"pure arithmetic" should have captured most of it. It recovered **14 B on
+mandelbrot and 28 B on jsondemo.**
+
+The blocker was invisible *in the table*: those binops mostly **contain calls**.
+`Length(s) - 1` is a binop whose child is a call. **b4 classified by root node
+kind; the disqualifying node was a child.**
+
+Face 59 says a census counts what *could* be affected and is read as what *will*
+fire. This says something narrower and nastier: **the census can be wrong about
+membership itself, at a depth its own output cannot show.** The number was real,
+correctly counted, and answering a question one level shallower than the one that
+mattered — and nothing in a bucket labelled `limit=binop` hints that half its
+members are disqualified by a grandchild.
+
+**Counter-move:** before trusting a classifier's buckets, ask what it would have
+had to look *at* to be wrong — and classify at that depth, not at the depth that
+was easy to reach.
