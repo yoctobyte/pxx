@@ -76,3 +76,31 @@ asks.
 
 ## Log
 - 2026-08-29 — resolved, commit PENDING-COMMIT.
+
+---
+
+**Duplicate noted, 2026-08-29 (frankA).** I filed the same defect independently
+as `bug-r-rexprrecid-breaks-the-fpc-bootstrap-seed` before seeing this one. Both
+are in `done/` — Track R fixed the defect while I was folding them together, so
+"duplicate" is the right relation but `rejected/` was the wrong disposition: it
+was a real bug and it was really fixed. This ticket is the fuller of the two; it
+names the landing commit (`68dac6d2a`) and the five existing forwards at
+`rparser.inc:63-67`.
+
+Two facts from the duplicate worth keeping here:
+
+- **Two instruments already catch this class in seconds**, and neither is in the
+  mandatory per-fix loop: `tools/forwardlint.py` (~4s) enumerates the WHOLE class
+  in one pass, and `tools/gate.sh quick` runs an FPC seed canary concurrently.
+  The canary is what re-found it — measured RED at `gate.sh quick` on 2026-08-29,
+  `rparser.inc(1412,12)`, while every other step of that same gate passed,
+  including the self-host fixedpoint.
+- **Prefer forwardlint over the canary's message when you fix it.** FPC reports
+  one batch and aborts, so the canary names whatever it hit first, and a fix
+  aimed at exactly that identifier can look complete and not be — that failure
+  mode cost three RED cycles on 2026-08-27 and is why the linter exists.
+  See `decide-should-the-fpc-seed-canary-be-in-the-mandatory-loop`.
+
+**Two lanes filed this within hours of each other**, each finding it the moment
+it happened to run a wider gate. That duplication is the argument the decision
+ticket is weighing, in miniature.
