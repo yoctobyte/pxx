@@ -17541,3 +17541,38 @@ first two were annotatable; this one needs a real refactor.
 - Closed `bug-r-a-duplicate-forward-...` [R p85] myself — it sat at the head of the
   **global** ranked queue while already fixed. Three sessions found it, one fixed
   it, nobody closed it.
+
+### Measured and NOT built: a prose-blocker checker
+
+frankS hit `bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file`, whose body ended
+*"Do that one first"* naming a real blocker, with **no `blocked-by` in frontmatter** —
+so it kept surfacing in `ready --track S` as claimable with nothing claimable in it.
+frankS added the edge; the blocker correctly inherited its priority.
+
+`progress check` **states** that convention (`progress.py:1747`) and does not enforce
+it, which is the "a check that cannot fail" shape I have been fixing all night. So I
+went to build the enforcement — and measured first.
+
+**Result: not worth building.** Across **342 ranked tickets**, prose containing a
+blocking phrase AND naming a real ticket slug on the same line, with no frontmatter
+edge: **2 hits, both false positives.**
+
+- `feature-pascal-corpus-passrc` — *"Land the small ones first"* is deliberate
+  sequencing advice, and the same paragraph says *"Re-rate `prio:` upward once those
+  are green."* The author chose prio-based ordering over an edge, on purpose.
+- `feature-pascal-corpus-expansion` — matched only because the referenced slug
+  **contains the word "prerequisite"**.
+
+A first, looser pass (blocking phrase alone, no slug requirement) returned 30+ hits
+because *"depends on"* and *"blocked by"* are ordinary English. That version would
+have earned the habit of being scrolled past within a day — forwardlint's own comment
+names this failure mode, and it applies to the checker I was about to write.
+
+**So the population is one instance, already fixed by the finder.** Recording this so
+the next person who notices the unenforced convention does not rebuild the measurement.
+
+**What the scan could NOT have seen**, stated because a non-existence claim needs its
+blind spot named: a blocking relationship phrased across two lines, or naming its
+blocker in prose rather than by slug, or expressed only as a `[[wikilink]]` with no
+blocking verb near it. The narrow signal is what made it clean, and narrow means it
+misses. The finding is "no evidence of a population", not "there is none".
