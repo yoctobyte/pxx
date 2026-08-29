@@ -365,4 +365,4 @@ going to imply that a clean census speaks for it.
 - [[normalise-dont-special-case]] — three landed instances, no longer a prediction
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit b0fd7f9ea.
