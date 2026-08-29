@@ -245,7 +245,7 @@ fixed by the same change, so it wants the same stage-2 sweep and for the same
 reason belongs to T.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 8380bf54a.
 
 ### The number that closes stage 1
 
