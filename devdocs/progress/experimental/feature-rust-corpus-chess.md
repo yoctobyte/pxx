@@ -22,10 +22,17 @@ slice-of-record (`&[Move]`, `slice[i].field`).
 
 **NOT done: the UNMODIFIED `~/nextlevel/engine/src` sources.** Those remain
 blocked on value-flow features the adapted branch sidesteps — in priority order
-as the real modules hit them: `Option<T>` (chess.rs wall, stage 2), array-typed
-return values (`fn -> [T; N]`, attacks.rs), the unity build for data modules
-(tables.rs, stage 3), then `Result`/`?`, `String`/`format!`, derives/traits.
+as the real modules hit them: ~~`Option<T>` (chess.rs wall, stage 2)~~ **DONE
+2026-08-29**, array-typed STRUCT FIELDS (`squares: [Piece; 64]` — chess.rs's
+Board is a mailbox, and this is now the first wall), array-typed return values
+(`fn -> [T; N]`, attacks.rs), the unity build for data modules (tables.rs,
+stage 3), then `Result`/`?`, `String`/`format!`, derives/traits.
 Do NOT claim the real source compiles — only the adapted branch does.
+
+**Note on where the engine sources live:** they are NOT on the `frank-rust`
+box (`~/nextlevel` does not exist here), so stage-2 work was driven from the
+gap list above and from the shapes the real modules are written in, not from
+re-probing the source. Re-probe before claiming a rung against the real files.
 
 - **Type:** feature — corpus / north star for Track R (X-tagged: zero prio,
   experimental; work it on user request or for fun)
@@ -211,3 +218,40 @@ pure swallowing/trivia, cheap and high-leverage.
   the real chess.rs shape closely enough that the remaining gap to the actual
   source is the value-flow features (Option/Result/? and String/format!), not
   the board/movegen/search skeleton.
+
+- 2026-08-29 — **STAGE 2 DONE: `Option<T>`** (Track R, the ~48h R window).
+  Monomorphized onto the enum machinery that already existed: one
+  auto-registered tagged-union UClass per concrete `T`, the same layout
+  `RRegisterEnums` builds for a hand-written enum (`__tag` i64 at 0, payload
+  as the mangled field `Some.0`), with `None`/`Some` pushed into
+  `REnumVariants` so `match` needed no special case at all. Same shape as the
+  borrowed-slice classes. **No new AST node, no new IR op, no shared-internals
+  change** — nothing in this rung was a Track A edit. Three pushed units:
+  1. the type + `Some`/`None` literals + `is_some`/`is_none`/`unwrap` + bare
+     (unbraced) match arms. Monomorphization forces one design point: `Some`
+     and `None` CANNOT resolve through the bare-variant table, because every
+     instantiation spells its variants the same way — so the literal resolves
+     against the EXPECTED type, or against the payload expression's own type
+     when there is no annotation.
+  2. Option through fn signatures — params and, the load-bearing half, RETURN
+     values, free fn and impl method alike. This is where the real work was:
+     struct/enum returns were rejected outright, and enabling them meant
+     registering `ProcRetRecId`, allocating the hidden aggregate-destination
+     local, and emitting `EmitAggregateDestStash` — without the last two,
+     Result is written through a garbage pointer, **the identical segfault the
+     C frontend hit on lua's by-value union return**, reproduced here and
+     fixed by the same shared convention. Generalised: ANY record return works
+     now, not just Option.
+  3. the pattern half — `match` on an arbitrary expression (materialized once
+     into a generated local), `if let PAT = e { } else { }`, `unwrap_or`. The
+     scrutinee resolution, tag test and pattern binds were extracted out of
+     `match` and shared, so `if let Rect { w, h } = s` over a user-declared
+     enum works for free.
+  Test `test/test_rust_option.rs`, in `make test`. Regressions green:
+  perft_full exact through perft5 + kiwipete + promo, engine `bestmove a1a8`,
+  search mates unchanged, self-host byte-identical at every unit.
+  **Next rung found while testing:** an array-typed STRUCT FIELD
+  (`struct Board { squares: [i64; 64] }`) is refused with `expected field
+  type`. chess.rs's Board is a mailbox array, so that is the wall now, ahead
+  of array-typed returns. Ticket: [[feature-rust-option-type]] carries the
+  narrowings.

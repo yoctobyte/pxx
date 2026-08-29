@@ -5824,6 +5824,53 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_rust_chess_search26 "$$($(TESTTMP)/test_rust_chess_search26)" "$$(printf 'mate1 1 score 999999\nshallow 0 score 200\nmate2 1 score 999997\nmate2shallow 0 score 500\nstarteval 0')"
 	# Rust tuple structs — two field-bearing structs, smaller first
 	# (bug-uclass-field-window-stale-base fixed: second struct's field window re-bases)
+	# Rust Option<T> (feature-rust-corpus-chess stage 2): each concrete
+	# Option<T> is an auto-registered tagged-union enum (__tag + "Some.0"),
+	# so match/is_some/is_none/unwrap fall out of the existing enum machinery.
+	# Two instantiations live in the one program on purpose -- that is what
+	# makes the bare-variant table ambiguous and the expected-type resolution
+	# load-bearing. Bare (unbraced) match arms covered here too, plus Option
+	# through a signature -- param and RETURN, free fn and impl method -- and
+	# a plain record return, which the same hidden-destination wiring enables.
+	# Plus the pattern half: match on an ARBITRARY expression (materialized
+	# once into a generated local), `if let` with and without else, and
+	# unwrap_or -- all of it exercised over a user-declared enum too, which is
+	# what shows this is general machinery and not an Option special case.
+	./$(COMPILER) test/test_rust_option.rs $(TESTTMP)/test_rust_option26
+	tools/expect_same.sh test_rust_option26 "$$($(TESTTMP)/test_rust_option26)" "$$(printf 'a some 42\nb none\nn 84\nn -7\na is_some\nb is_none\nunwrap 42\nc 200\nd 9\ne wild\nf 15\ng none\ndescribe 15 -1\nh 40\ni none\nj 27\nk none\nl 21\nm none\nor 15 -9\ncircle 6\nrect 15\nnothing')"
+	# Fixed-array STRUCT FIELDS (feature-rust-corpus-chess, the rung after
+	# Option): scalar and narrow-int elements, a RECORD element with
+	# field[i].member, several array fields laid out around a scalar, and the
+	# array reaching a fn through the record ABI. checksum = sum of i*i over
+	# 0..63 = 85344, which is what catches a stride or offset that is close
+	# but wrong.
+	./$(COMPILER) test/test_rust_struct_array_field.rs $(TESTTMP)/test_rust_saf26
+	tools/expect_same.sh test_rust_saf26 "$$($(TESTTMP)/test_rust_saf26)" "$$(printf 'sq 0 49 3969\nflags 200 207\nside 1\npieces 5 1 9 2\nchecksum 85344')"
+	# `&`/`&mut` parameters ALIAS the caller (feature-rust-corpus-chess): the
+	# frontend dropped the `&`, so ir.inc read the by-ref flag as the silent
+	# >8-byte ABI promotion and handed the callee a private copy -- `self.side
+	# = v` wrote into a temp and the caller saw nothing. Asserts BOTH
+	# directions: &mut/&self alias, a by-value param mutates only its own
+	# copy, which is the half a blanket "always alias" fix would break.
+	./$(COMPILER) test/test_rust_refs.rs $(TESTTMP)/test_rust_refs26
+	tools/expect_same.sh test_rust_refs26 "$$($(TESTTMP)/test_rust_refs26)" "$$(printf 'bump 5 8 13\npeek 5\nmeth 18 18\nbyval 999 caller 18\nown 555 caller 18')"
+	# Value positions the skeleton did not model (feature-rust-corpus-chess):
+	# a whole struct/enum RETURNED (`return Square(i)` / `Point { .. }` /
+	# `Circle(r)` / `Some(x)`) and Rust's implicit TAIL return. `pick` is the
+	# anti-case for the tail rule: its if/else arms hold calls, and the fn must
+	# run past them to its own tail -- a tail rule applied to any block would
+	# return from inside the if. `flip` covers a tail MATCH, whose arms are the
+	# fn's return values in Rust -- aggregate arm and scalar arm both.
+	./$(COMPILER) test/test_rust_value_positions.rs $(TESTTMP)/test_rust_vpos26
+	tools/expect_same.sh test_rust_vpos26 "$$($(TESTTMP)/test_rust_vpos26)" "$$(printf 'sq 19 file 3 rank 2\npt 3 4\ncircle 5\nrect 6 2\nnothing\nopt 40 -1\ndouble 42\npos\nneg\npick 4 -2\nflip 1 2 1')"
+	# The chess engine's OWN idioms (feature-rust-corpus-chess): a Square tuple
+	# struct with associated fns, a Color enum flipped through a tail match, a
+	# Board holding a mailbox array and an Option<Square> ep slot, and a
+	# `&mut self` move-maker whose writes the caller can see. Not a perft --
+	# the movegen corpora carry that oracle; this pins that the SHAPES compile
+	# and behave. Every construct in it was refused at the start of the day.
+	./$(COMPILER) test/test_rust_engine_shapes.rs $(TESTTMP)/test_rust_eshapes26
+	tools/expect_same.sh test_rust_eshapes26 "$$($(TESTTMP)/test_rust_eshapes26)" "$$(printf 'from f0 r1 to f0 r2\nbefore empty\nafter 1\norigin empty\nside 2 halfmove 1\nep none\nep 40 f0 r5')"
 	./$(COMPILER) test/test_rust_tuple_struct.rs $(TESTTMP)/test_rust_tuple26
 	tools/expect_same.sh test_rust_tuple26 "$$($(TESTTMP)/test_rust_tuple26)" "$$(printf 'a 300 b 44 s 7')"
 	# Rust associated fns + Self (Type::fn / Self::fn call paths, mixed with methods)
