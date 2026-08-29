@@ -516,3 +516,70 @@ verdict produced under the oracle names the flag that produced it.
   and `test_esp_bare` all still build.
 - x86-64 and riscv32 still run correctly.
 - `gate.sh quick` GREEN including the FPC seed canary.
+
+## WALL 3 GRANTED, WALL 4 DECIDED — frank-coordinator, 2026-08-29
+
+### Wall 3: `compiler/builtin/builtinheap.pas` — granted, and it was already S's
+
+**Scope: the xtensa arms of `PXXSysWrite` and `PXXSysRead` only** (`13` and `12`,
+both measured against the oracle). Nothing else in the file.
+
+frankS stopped rather than take a third file in another worker's recent lane —
+*"taking a third file unilaterally is where that stops being protocol and starts
+being habit"* — which was the right instinct and the wrong worry, because the
+grant already existed. **`builtinheap.pas:1614` says outright: *"that is Track S's
+call, not this ticket's."*** A previous ticket deferred this decision INTO S's
+lane in the source. Verified before granting: the file is clean in every clone
+(`frank-optimize`, `frankA`, `frankS`, `pxx`), and b4's working tree is
+`M compiler/ir.inc` alone.
+
+This is the newline bug and the measurement is already done: `WriteLn('x')` emits
+the string through the inline syscall and drops `PXXWriteNL` into a stub
+returning 0 — riscv32 makes **2** `write` syscalls for that program, xtensa **1**.
+
+### Wall 4: take option 3, with a shape change — and know what it does NOT buy
+
+**Decision: implement the soft multiply-high behind an opt-in flag, ESP default
+bit-for-bit unchanged.** Option 1 (unconditional on the hosted profile) is
+refused for frankS's own stated reason, and option 2 leaves the oracle unable to
+render a number.
+
+Precedent verified in-tree rather than taken on report: `XtensaSoftDivide`
+(`defs.inc:3376`), selected by `--xtensa-cpu=lx6` (`pasparser_prog.inc:869`),
+routing div/mod through `EmitXtensaSoftDivCall` for a core lacking the hardware.
+Exactly this shape.
+
+**Shape change, and frankS may overrule it on context I do not have.** The
+precedent is a **CPU-model** flag, not a capability flag, and frankS measured that
+*all five* qemu cores trap — so this is not one model's gap, it is what qemu
+implements. A value on the existing `--xtensa-cpu=` axis is therefore the closer
+fit than a peer `--xtensa-soft-mul`: one flag meaning "which core am I targeting"
+rather than two flags meaning "which core" and "which of its instructions do I
+avoid". `normalise-dont-special-case.md` — a second flag is a second path.
+
+### THE PART THAT MUST GO IN THE TICKET: the flag labels the divergence, it does not remove it
+
+Under the flag the oracle is **not** bit-identical to hardware for multiplies —
+the same cost option 1 carries. The flag makes it explicit and opt-in; it does not
+make it go away.
+
+So state the scope where a reader will hit it: **the two tickets that motivated
+this oracle are the ones it still cannot answer.** `div-by-zero-check` and
+`int64-to-float` are arithmetic, and arithmetic is the hole. What the oracle *does*
+cover — control flow, strings, calls, ARC, syscalls, both ABIs — is real and is
+most of what makes xtensa verdicts stop being object-level.
+
+Without that sentence, the next reader sees "hosted xtensa oracle works", runs an
+Int64 multiply under it, and trusts the answer. **A green from an instrument
+running a different multiply than the hardware is exactly the host-green failure:
+silent, plausible, and it waits.** Any verdict produced under the flag must name
+the flag.
+
+### `exit_group = 119` — caveat withdrawn, and the route is worth recording
+
+frankS verified it without threads, which the thread route could not have done
+(hosted xtensa has no threads; `--threadsafe` is x86-64/i386/aarch64/arm32 only):
+**qemu names the syscall.** `-strace` prints `exit(7)` for 118 and `exit_group(7)`
+for 119. b4's reasoning about *why* the distinction was load-bearing is what sent
+frankS looking for a second route rather than shipping the caveat — the reasoning
+did the work even though its test did not run.
