@@ -1672,6 +1672,36 @@ def diff_jobs(prev_jobs, report):
 # a repo-size bound, not a memory one: a mass red must not commit a novel.
 JOB_REASON_CAP = 60
 
+# A pin verify stores reasons for its NEW reds only, each truncated to this
+# many characters, at most this many entries. Both numbers are the bound the
+# ticket asked to be stated and measured: 20 x 200 = 4 KB worst case against a
+# 737 KB plexus.json (0.54%), and the realistic case is far smaller -- reasons
+# run ~147 characters at the median and the measured worst incident (v367 at
+# d47acfee770c, 2026-08-19) had 11 new reds, so ~1.6 KB.
+PIN_VERIFY_REASON_MAX = 200
+PIN_VERIFY_REASON_CAP = 20
+
+
+def pin_verify_why(report, base_reds, reds):
+    """Reasons to store on a pin verify, bounded. -> (why, new_red).
+
+    NEW reds only. A red already in `pin_baseline.reds` was failing before this
+    pin and is not what anyone is triaging; spending shared-file bytes on it
+    buys nothing and dilutes the entries that matter.
+
+    A job whose run recovered no log contributes NO entry rather than an empty
+    one. An empty reason next to a job name reads as "there was no reason",
+    which is a claim; absence reads as "not recorded", which is the truth.
+
+    Truncation is per entry so one pathological log cannot crowd out nineteen
+    useful ones -- the failure mode of a single shared byte budget.
+    """
+    fresh = {job_key(j): (j.get("reason") or "") for j in report["jobs"]}
+    new_red = [k for k in reds if k not in base_reds]
+    why = {k: fresh[k][:PIN_VERIFY_REASON_MAX]
+           for k in new_red[:PIN_VERIFY_REASON_CAP] if fresh.get(k)}
+    return why, new_red
+
 
 def update_job_reasons(st, report, jobs):
     """Keep a bounded account of WHY next to each red job. -> None (mutates st).
@@ -5319,9 +5349,47 @@ def verify_pin(clone, host, st, ver, sha, tier, abort_check=None):
     reds = [job_key(j) for j in report["jobs"]
             if j["status"] not in ("pass", "skip")]
     st = load_state(clone, host)
+    # WHY the new reds are red, stored HERE rather than left to `job_reason`.
+    #
+    # `job_reason` is the current red set from the NEWEST run -- set-or-clear,
+    # which is correct and is exactly why it cannot answer this question. The
+    # two diverge precisely when it matters: at the v367 verify
+    # (d47acfee770c, 2026-08-19) 20 reds were listed and `job_reason` held 9,
+    # and those 9 were the INHERITED reds still failing at HEAD. The 11 a
+    # reader actually had to triage -- the new ones, the ones a `make revert`
+    # fires on -- were the 11 with no reason recorded anywhere, because they
+    # were green again by the time the newest run wrote the map.
+    #
+    # STORED, not pointed at. The ticket left that fork open: a pointer (run
+    # id + host) into the verify's own report JSON is cheaper here and carries
+    # every reason. Two things settle it for storing:
+    #
+    #   * a pointer resolves only while that box is up and its log unreaped,
+    #     and the moment you need a pin verify's reason is a moment when
+    #     things are already broken. `report_job()` already drops `log` for
+    #     this reason -- a path does not survive the box.
+    #   * a SECOND box is arriving. tstate is the shared file every host and
+    #     every track reads; a pointer keyed to host + run id is unresolvable
+    #     from the other box by construction, so the pointer design gets worse
+    #     exactly as the fleet grows. That fact post-dates the ticket.
+    #
+    # Bounded three ways, because this file is fetched by every track: new
+    # reds only (a red already in the baseline is not what anyone is
+    # triaging), a per-entry character cap, and an entry-count cap that SAYS
+    # what it dropped -- a cap that trims silently turns "we kept 20 of 40"
+    # into "there were 20".
+    base_reds = set((st.get("pin_baseline") or {}).get("reds") or [])
+    why, new_red = pin_verify_why(report, base_reds, reds)
+    if len(new_red) > PIN_VERIFY_REASON_CAP:
+        print("twatch: pin verify has %d new red(s); storing reasons for the "
+              "first %d, %d without one"
+              % (len(new_red), PIN_VERIFY_REASON_CAP,
+                 len(new_red) - PIN_VERIFY_REASON_CAP), flush=True)
     st["pin_verify"] = {"ver": ver, "sha": sha, "tier": tier,
                         "verdict": verdict, "date": utcnow(),
                         "red": reds[:20]}
+    if why:
+        st["pin_verify"]["why"] = why
     save_state(clone, host, st)
     with open(os.path.join(clone.path, TSTATE_REL,
                            "runs-%s.ndjson" % host), "a") as f:
@@ -6595,8 +6663,12 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
             # most reassuring possible way to be wrong.
             if base.get("reds") is not None and base.get("pin") == pv.get("ver"):
                 fresh = [j for j in pv_red if j not in set(base["reds"])]
-                vs = ", %d new vs the %s baseline" % (len(fresh), pv["ver"])
+                n_new = len(fresh)
+                vs = ", %d new vs the %s baseline" % (n_new, pv["ver"])
             else:
+                # None, not 0. "no new reds" and "cannot tell" are different
+                # states and the reason lines below branch on the difference.
+                n_new = None
                 vs = ", no baseline recorded for %s (new-vs-inherited unknown)" \
                      % pv.get("ver", "?")
             print("tstate:   pin verify — %s at %s %s (%s, %s old)%s%s"
@@ -6653,6 +6725,32 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
                           "single run"
                           % (co["sha"][:12], fmt_age(co["gap"]), co["n"],
                              adj(co["what"])))
+            # WHY each new red is red. Printed last in this block on purpose:
+            # it is the question a reader asks AFTER the corroboration line
+            # tells them which of the reds are real. Before that line, a reason
+            # invites triage of a flake.
+            #
+            # `job_reason` cannot answer this -- it holds the CURRENT red set
+            # from the newest run, so the inherited reds still failing at HEAD
+            # keep their reasons and the new ones, already green again, have
+            # none. That is set-or-clear working correctly, and it is why the
+            # reasons are stored on the verify itself.
+            why = pv.get("why") or {}
+            if why:
+                shown = [j for j in pv_red if j in why]
+                print("tstate:            ...why (%d of %s new red(s) carry a "
+                      "stored reason, from the verify run itself):"
+                      % (len(shown), n_new if n_new is not None else "?"))
+                for j in shown:
+                    print("tstate:              %s: %s" % (j, why[j]))
+            elif n_new is None or n_new > 0:
+                # Absence is a fact too, and an unexplained one reads as "no
+                # reason existed". Say which it is: a verify predating the
+                # stored-reason field carries none and never will.
+                print("tstate:            ...no stored reasons (this verify "
+                      "predates them, or the run recovered no log) — the "
+                      "reasons in `job_reason` belong to the NEWEST run, not "
+                      "to this verify, so do not read them as these")
         nskip = sum(1 for s in (st.get("jobs") or {}).values() if s == "skip")
         if nskip:
             print("tstate:   coverage — %d job(s) SKIPPED on %s (absent corpus "

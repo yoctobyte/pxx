@@ -4,7 +4,8 @@ title: A pin verify's reds carry no reasons, so the jobs most needing triage are
 track: T
 kind: bug
 prio: 40
-status: backlog
+status: working
+owner: pxx-a5
 ---
 
 # A pin verify's reds carry no reasons
