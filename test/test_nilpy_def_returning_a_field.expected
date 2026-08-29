@@ -11,3 +11,13 @@ bool True
 s str
 6 xy o!
 3
+int 3 4
+str b3 B3
+Inner 42 42
+int 7 14
+str b3 b3!
+str sub:b3
+str b3
+float 3.0
+str 7
+str ABC

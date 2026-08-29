@@ -30822,6 +30822,51 @@ end;
   A name rebound across kinds (`v = 3` then `v = 0.5`) reports the LAST kind,
   which is what the value at the return actually is in the straight-line case
   this can see. Returns tyUnknown when nothing typed. }
+function PyRetRecvClass(scanFrom, scanTo: Integer; const recvNm: AnsiString): Integer;
+{ The class a local of this body was last bound to, from its `recv = ClassName(`
+  assignment. Token-only, like every other chase in this scan: PyInferExprType's
+  own walk reads `PyLocals[..].RecCi`, which exists in the body pass and NOT in
+  the shell pre-pass, and the two passes answering differently is a silent ABI
+  mismatch.
+
+  Written once because PyRetFieldType and PyRetMethodType are the same question
+  about the same receiver and only differ in which member table they then ask.
+  A second copy of the chase is a second chance for the two shapes to diverge,
+  which is precisely how the method form stayed broken after the field form was
+  fixed. }
+var k, pi: Integer;
+begin
+  PyRetRecvClass := -1;
+  for k := scanFrom to scanTo - 1 do
+    if (Tokens[k].Kind = tkIdent) and (k + 3 < TokCount) and
+       (Tokens[k + 1].Kind = tkAssign) and (Tokens[k + 2].Kind = tkIdent) and
+       (Tokens[k + 3].Kind = tkLParen) and
+       CaseEqual(GetTokenStr(k), recvNm) then
+    begin
+      { the LAST such binding wins, as everywhere else in this scan }
+      if FindUClassNonRecord(GetTokenStr(k + 2)) >= 0 then
+        PyRetRecvClass := FindUClassNonRecord(GetTokenStr(k + 2))
+      else
+      begin
+        { `c = get()` — bound from a DEF that returns an instance, not from a
+          constructor. Same receiver, same defect: without this the chase falls
+          through and types the return as the receiver's class again. Measured
+          as the one probe still segfaulting after the constructor form was
+          fixed, which is why it is here rather than in a follow-up ticket.
+
+          Safe against the intrinsic-collision family (PyIsClassTypeExact,
+          PyIsExactCtorName, PyDottedRootIsLocal): FindProc folds case, so `hi`
+          finds Pascal's `Hi` — but the guard demands a CLASS return with a real
+          rec id, and no intrinsic has one. A def defined later in the file has
+          no RetType yet, answers -1, and is left alone. }
+        pi := FindProc(GetTokenStr(k + 2));
+        if (pi >= 0) and (Procs[pi].RetType = tyClass) and
+           (ProcRetRecId[pi] >= REC_UCLASS_BASE) then
+          PyRetRecvClass := ProcRetRecId[pi] - REC_UCLASS_BASE;
+      end;
+    end;
+end;
+
 function PyRetFieldType(scanFrom, scanTo: Integer; const recvNm, fldNm: AnsiString;
                         var fldRec: Integer): TTypeKind;
 { The type of `recv.fld` where `recv` is a local of this body — for a def whose
@@ -30840,25 +30885,50 @@ function PyRetFieldType(scanFrom, scanTo: Integer; const recvNm, fldNm: AnsiStri
   mismatch. So the receiver's class is recovered the way the rest of this file
   does it — from the `recv = ClassName(` assignment in the body — and the field
   type from the class's own registered field. }
-var k, ci, fi: Integer;
+var ci, fi: Integer;
 begin
   PyRetFieldType := tyUnknown;
   fldRec := REC_NONE;
-  ci := -1;
-  for k := scanFrom to scanTo - 1 do
-    if (Tokens[k].Kind = tkIdent) and (k + 3 < TokCount) and
-       (Tokens[k + 1].Kind = tkAssign) and (Tokens[k + 2].Kind = tkIdent) and
-       (Tokens[k + 3].Kind = tkLParen) and
-       CaseEqual(GetTokenStr(k), recvNm) and
-       (FindUClassNonRecord(GetTokenStr(k + 2)) >= 0) then
-      { the LAST such binding wins, as everywhere else in this scan }
-      ci := FindUClassNonRecord(GetTokenStr(k + 2));
+  ci := PyRetRecvClass(scanFrom, scanTo, recvNm);
   if ci < 0 then Exit;
   fi := FindUField(ci, fldNm);
   if fi < 0 then Exit;
   PyRetFieldType := IntToTypeKind(UFldTk[fi]);
   if (PyRetFieldType = tyClass) and (UFldRec_[fi] >= REC_UCLASS_BASE) then
     fldRec := UFldRec_[fi];
+end;
+
+function PyRetMethodType(scanFrom, scanTo: Integer; const recvNm, mthNm: AnsiString;
+                         var mthRec: Integer; var recvCi: Integer): TTypeKind;
+{ The type of `recv.mth(...)` where `recv` is a local of this body — the METHOD
+  sibling of PyRetFieldType, and the arm that was missing.
+
+  `def make(): c = C(); return c.call()` was typed tyClass (C), the RECEIVER's
+  class, exactly as `return q.n` had been. The field form was fixed and the
+  call form was not, so the two shapes of one concept answered differently:
+  a field read printed the right value, a method call SEGFAULTED at the caller,
+  which reads a returned string handle as an object pointer. It reproduces with
+  no inheritance, no name collision and no `None` — one local, one method.
+  regression-test-nilpy-test-nilpy-parent-call-after-instantiation
+
+  `recvCi` is reported back so the caller can tell "receiver is not a local of
+  this body" (leave the expression alone — `math.sqrt(2.0)` is a
+  module-qualified call and must keep its route) from "receiver IS a known
+  local but the method's type is not resolvable here". The second case must
+  NOT be left to fall through: the expression chase then types the return as
+  the receiver's class, which is the defect. tyVariant is the honest answer and
+  the one the equivalent two-statement spelling already produces. }
+var si: Integer;
+begin
+  PyRetMethodType := tyUnknown;
+  mthRec := REC_NONE;
+  recvCi := PyRetRecvClass(scanFrom, scanTo, recvNm);
+  if recvCi < 0 then Exit;
+  si := FindUMeth(recvCi, mthNm);
+  if si < 0 then Exit;
+  PyRetMethodType := Procs[UMthProc_[si]].RetType;
+  if (PyRetMethodType = tyClass) and (ProcRetRecId[UMthProc_[si]] >= REC_UCLASS_BASE) then
+    mthRec := ProcRetRecId[UMthProc_[si]];
 end;
 
 function PyRetNameType(scanFrom, scanTo: Integer; const nm: AnsiString): TTypeKind;
@@ -30985,6 +31055,7 @@ function PyInferDefRetTypeScanInner(methodStart: Integer; var retRec: Integer;
                                var sawNone: Boolean): TTypeKind;
 var j, pdepth, bdepth, e, k, e2, rec2, bodyScanStart, curRec: Integer;
     tupDepth, chainRec: Integer;
+    recvCi2: Integer;   { the method arm's receiver class, or -1 if not a local here }
     t2, cur, chainCur: TTypeKind;
     seenAny, tupComma: Boolean;
     tupLamHdr: Boolean;   { inside a lambda's PARAMETER list — its commas are not tuple commas }
@@ -31335,6 +31406,44 @@ begin
             PyInferLastCi := rec2 - REC_UCLASS_BASE
           else
             PyInferLastCi := -1;
+        end;
+      end;
+      { `return q.m(...)` — the METHOD sibling of the arm above, and the shape
+        it was never given. Same defect, one token further along: the chase
+        below types the RECEIVER and nothing resolves the call, so the def
+        answered tyClass and the caller read a returned string handle as an
+        object pointer. A field read printed fine; a method call segfaulted.
+        `t = q.m(); return t` was always correct, which is what identifies this
+        as the return-type scan rather than the call.
+
+        Receiver not a local of this body -> untouched, so `math.sqrt(2.0)`
+        keeps its module-qualified route. Receiver known but the method
+        unresolvable (defined later, or inherited from somewhere this scan
+        cannot see) -> tyVariant, NOT the fallthrough: letting it fall through
+        is what lets the chase claim the receiver's class, and claiming the
+        class is the bug, not the fallback.
+        regression-test-nilpy-test-nilpy-parent-call-after-instantiation }
+      if (e >= j + 6) and (Tokens[j + 1].Kind = tkIdent) and
+         (Tokens[j + 2].Kind = tkDot) and (Tokens[j + 3].Kind = tkIdent) and
+         (Tokens[j + 4].Kind = tkLParen) and (Tokens[e - 1].Kind = tkRParen) and
+         (PyEndOfGroup(j + 4, e) = e) then
+      begin
+        rec2 := REC_NONE;
+        recvCi2 := -1;
+        t2 := PyRetMethodType(bodyScanStart, j, GetTokenStr(j + 1),
+                              GetTokenStr(j + 3), rec2, recvCi2);
+        if t2 <> tyUnknown then
+        begin
+          cur := t2;
+          if (t2 = tyClass) and (rec2 >= REC_UCLASS_BASE) then
+            PyInferLastCi := rec2 - REC_UCLASS_BASE
+          else
+            PyInferLastCi := -1;
+        end
+        else if recvCi2 >= 0 then
+        begin
+          cur := tyVariant;
+          PyInferLastCi := -1;
         end;
       end;
       { The same chase, for an EXPRESSION rather than a bare ident.
