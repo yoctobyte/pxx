@@ -9,6 +9,24 @@ owner: frankA
 
 # `Error()` halts, so no parse can be speculative
 
+> **STATE 2026-08-29 — read this before the history below, which is long.**
+> Want #2 (multiple errors per compile) **already works**; slices 1-5 landed it.
+> What is left is want #1, a trial parse that can FAIL and back out.
+>
+> **The one-sentence reason it is worth doing now:** the trial parses already in
+> the tree are safe **by accident of a naming scheme, not by design** — a retry
+> mints `$pylam2` because `PyLamSeq` is monotonic, so the leak is a growth leak
+> and never a corruption leak. **Any speculative parse over a construct named
+> from the SOURCE — a def, a class, a method — re-registers the same name and
+> gets the duplicate the counter has been hiding.** That is exactly what item
+> 1's NilPy pre-pass must trial-parse, so the landmine is aimed at the very work
+> this ticket exists to enable.
+>
+> `ProcRollbackTo` landed 2026-08-29 (`8abf3782d`), additively and with no
+> callers. Wiring it into the two rewind sites is measured and green but held:
+> `compiler/pyparser.inc` is another agent's declared file.
+
+
 - **Type:** feature (compiler core) — **Track A**.
   Split out 2026-08-14 by the user while re-pricing
   [[decide-reprice-nilpy-ast-typing-module-scope]]:
