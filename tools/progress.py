@@ -95,9 +95,45 @@ PENDING_COMMIT = "PENDING-COMMIT"
 # placeholder does so mid-line, inside backticks or a table cell — and this
 # bug's own ticket does exactly that, so an unanchored pattern reports the
 # ticket about the bug as an instance of the bug.
+#
+# THIRD SPELLING, 2026-08-29: `resolved: PENDING-COMMIT`. Seven tickets in
+# done/ carried it and BOTH tools were blind — check reported nothing and sync
+# filled nothing, so the tickets read as fully recorded while citing no commit
+# at all. The previous fix taught the two tools to agree with each other; it did
+# not stop a third key appearing, because it enumerated key names instead of
+# describing the shape.
+#
+# So match ANY frontmatter key rather than a list of them. The thing that makes
+# this a citation is `<key>: PENDING-COMMIT` at line start, not which key it is
+# — `normalise-dont-special-case.md`, and the reason a fourth spelling would
+# have been invisible too. Still anchored to LINE START, which is what keeps
+# prose that QUOTES the placeholder (mid-line, in backticks or a table cell)
+# from counting as owing one; this bug's own tickets do exactly that.
+# FOURTH SPELLING, same day: a Log line ENDING in the placeholder with no
+# `commit` keyword before it — `- 2026-08-29 — resolved with the root-cause
+# sibling. PENDING-COMMIT`. Two Track A tickets carried it, invisible to both
+# tools. So the Log arm matches a list item whose PENDING-COMMIT is unbackticked
+# and at end of line, which is what a citation looks like; a bullet QUOTING the
+# placeholder does so inside backticks, mid-sentence, and still does not count.
 PENDING_RE = re.compile(
-    r"^(?:commit:[ \t]+" + PENDING_COMMIT
-    + r"|-[ \t].*\bcommit[ \t]+" + PENDING_COMMIT + r")", re.M)
+    r"^(?:[A-Za-z_][A-Za-z0-9_-]*:[ \t]+" + PENDING_COMMIT
+    + r"|-[ \t][^`\n]*(?<!`)" + PENDING_COMMIT + r"[.\s]*$)", re.M)
+
+
+def fill_pending(text: str, sha: str) -> str:
+    """Replace every unfilled citation in `text` with `sha`.
+
+    THE counterpart of PENDING_RE, and deliberately in the same file. The
+    detection side has now grown four spellings; the FILL side lived in
+    sync.sh as a pair of sed literals covering two of them. Widening detection
+    alone is how `check` reported 17 forever while sync filled nothing
+    (bug-t-sync-fills-one-spelling-of-pending-commit-and-check-counts-two) —
+    the previous fix gave the two tools one DEFINITION and left them two
+    IMPLEMENTATIONS, so the same drift was still available. This is the
+    implementation, singular.
+    """
+    return PENDING_RE.sub(
+        lambda m: m.group(0).replace(PENDING_COMMIT, sha), text)
 # Buckets where a citation is OWED. A placeholder in backlog/ or working/ is
 # normal — the ticket has not landed yet, and there is no commit to cite.
 RESOLVED_BUCKETS = ("done", "decided", "done-followup")
@@ -2103,6 +2139,26 @@ def cmd_pending(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fill(args: argparse.Namespace) -> int:
+    """Fill one ticket's unfilled citations with a landed sha.
+
+    Called by tools/sync.sh in place of the sed pair it used to carry, so that
+    "what an unfilled citation looks like" has exactly one implementation as
+    well as one definition. Rewrites nothing when there is nothing to fill, so
+    it is safe to call on any path.
+    """
+    path = Path(args.path)
+    if not path.is_file():
+        print("fill: no such file: %s" % path, file=sys.stderr)
+        return 1
+    text = path.read_text(encoding="utf-8")
+    filled = fill_pending(text, args.sha)
+    if filled == text:
+        return 0
+    path.write_text(filled, encoding="utf-8")
+    return 0
+
+
 def cmd_resolve(args: argparse.Namespace) -> int:
     src = find_ticket(args.slug)
     # A decide- ticket resolves into decided/, not done/: a decision is a
@@ -2167,6 +2223,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     sp.add_argument("slug")
     sp.add_argument("owner")
     sub.add_parser("pending")
+    sp = sub.add_parser("fill")
+    sp.add_argument("path")
+    sp.add_argument("sha")
     sp = sub.add_parser("near")
     sp.add_argument("text", nargs="+")
     sp.add_argument("--track", default="")
@@ -2193,6 +2252,8 @@ def main(argv: list[str]) -> int:
         return cmd_claim(args)
     if args.cmd == "pending":
         return cmd_pending(args)
+    if args.cmd == "fill":
+        return cmd_fill(args)
     if args.cmd == "resolve":
         return cmd_resolve(args)
     if args.cmd == "near":

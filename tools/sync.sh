@@ -191,8 +191,15 @@ fill_pending_commits() {
         # Anchored to line start for the same reason progress.py's PENDING_RE is
         # — a ticket that QUOTES the placeholder mid-line is prose, not a
         # citation, and this bug's own ticket does exactly that.
-        sed -i -e "s/^commit:[[:space:]]\{1,\}PENDING-COMMIT/commit: $sha/" \
-               -e "s/^\(-[[:space:]].*commit\)[[:space:]]\{1,\}PENDING-COMMIT/\1 $sha/" "$f"
+        # ONE IMPLEMENTATION, not just one definition. This used to be a pair
+        # of sed literals covering two of the placeholder's spellings while
+        # progress.py's PENDING_RE knew about more — so `check` could report
+        # tickets this loop was structurally unable to fill, which is the exact
+        # shape of the bug that pair of literals was written to fix. Two more
+        # spellings turned up on 2026-08-29 (`resolved: PENDING-COMMIT`, and a
+        # Log line ENDING in it with no `commit` keyword) and both tools were
+        # blind to both. Substitution now lives beside detection.
+        python3 "$(dirname "$0")/progress.py" fill "$f" "$sha"
         git add "$f"
         filled="$filled $f"
     done <<EOF
