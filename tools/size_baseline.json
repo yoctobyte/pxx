@@ -1,0 +1,34 @@
+{
+  "_comment": "Written by tools/size_canary.py --update. A DELTA baseline, not a target: it freezes today's sizes so growth becomes a red, and blesses none of them. See bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss.",
+  "measured_at": {
+    "date": "2026-08-30T00:58:40+02:00",
+    "sha": "4039216a7f25"
+  },
+  "subjects": {
+    "esp32-bare": {
+      "bss": 103692,
+      "code": 43452,
+      "data": 344
+    },
+    "esp32c3-bare": {
+      "bss": 103692,
+      "code": 50528,
+      "data": 344
+    },
+    "esp32s2-bare": {
+      "bss": 103692,
+      "code": 43452,
+      "data": 344
+    },
+    "esp32s3-bare": {
+      "bss": 103692,
+      "code": 43452,
+      "data": 344
+    },
+    "x86_64-empty": {
+      "bss": 42452,
+      "code": 61279,
+      "data": 1960
+    }
+  }
+}

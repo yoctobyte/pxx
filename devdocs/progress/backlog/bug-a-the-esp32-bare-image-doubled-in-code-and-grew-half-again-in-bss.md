@@ -60,3 +60,59 @@ the commit that caused it instead of a four-month drift found by prose.
 ## Gate
 
 Whatever fixes it takes A's gate. For the canary, if anyone wants it: Track T.
+
+---
+
+## 2026-08-30 — the canary exists now (Track T). The size is still yours.
+
+`tools/size_canary.py`, baseline in `tools/size_baseline.json`, wired into
+`native` + `limited` + `full` as `size-canary#00`. **It freezes today's numbers;
+it blesses none of them.** Everything above this line is still open.
+
+What it does, and the two choices worth arguing with:
+
+- **A delta gate, not a ceiling.** A ceiling needs a number a human must
+  maintain and defend; a delta needs only the last measurement. Growth beyond
+  the allowance is a red on the commit that grew it.
+- **bss is watched tighter than code** — 5% / 2 KiB against 10% / 4 KiB —
+  because of this ticket's own argument: on a ~400 KB part the bss floor is the
+  binding constraint, not the text size. The allowance is the *larger* of the
+  fraction and an absolute floor, so a 344 B metric is not tripped by rounding
+  and a 50 KB one is not handed a free 4 KiB.
+- **Advisory**, like `demos` and the FPC canary: twatch reports and tickets it,
+  so the signal arrives, but it does not fail the tier's verdict. A ratchet that
+  reds the whole fleet until someone re-baselines is a ratchet that gets
+  switched off, and this repo has written that down twice.
+- **It prints every measurement on every run**, pass or fail. Silence on a no-op
+  is indistinguishable from silence on a never-ran, and the second is what this
+  defect actually was.
+- **Failing to MEASURE is a failure**: a compile that fails, a size line it
+  cannot parse, or a subject with no baseline are all red, with the `--update`
+  command in the message. A canary that reports no growth because it measured
+  nothing looks exactly like the good news it is not.
+
+Baseline as adopted (`4039216a7f25`, HEAD, which matches your v393 figures to
+within 24 B on xtensa):
+
+| subject | code | data | bss |
+| --- | --- | --- | --- |
+| esp32c3-bare | 50,528 | 344 | 103,692 |
+| esp32s3-bare | 43,452 | 344 | 103,692 |
+| esp32s2-bare | 43,452 | 344 | 103,692 |
+| esp32-bare | 43,452 | 344 | 103,692 |
+| x86_64-empty | 61,279 | 1,960 | 42,452 |
+
+### One measurement that fell out of building it, for the sibling ticket
+
+The last row is not padding. `x86_64-empty` is an **empty program** —
+`program e; begin end.` — and it is **61,279 B of code**.
+[[bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce]] is about a
+*hello-world* at ~63 KB. So the hello is roughly **two kilobytes of program on
+top of a sixty-one kilobyte floor**, and whatever reachability-gated emission is
+failing to gate, it is not failing on anything the program wrote. That narrows
+that ticket considerably and it is now watched too.
+
+*(Track T built the instrument. Making the numbers smaller is A+S — and when
+they do get smaller, the canary will say so out loud and ask to be
+re-baselined, because a baseline left above a real shrink is slack the next
+regression fits underneath.)*

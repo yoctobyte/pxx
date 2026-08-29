@@ -402,6 +402,18 @@ INNER_TIMEOUT_FLOOR = 20.0
 # whole build, not an inner-loop cost.
 FPC_CANARY_TIERS = ("native", "limited", "full")
 # Tiers carrying the self-host fixedpoint GATE (~20s: two compiler builds).
+# The SIZE CANARY: the code/data/bss floor of an empty image, per bare profile.
+#
+# native+limited+full, and NOT quick only because quick is the inner loop. It
+# costs ~1.06s measured — five empty-program compiles, no emulation, no corpus —
+# and its whole value is naming the COMMIT that grew the image. A full-tier-only
+# cadence would blur that across a day of them, which is how the thing it
+# watches drifted 2x over four MONTHS with no test failing: an empty ESP32 bare
+# image went from ~26 KB code / ~70 KB bss to 50,528 / 103,692, and it surfaced
+# only because a docs page quoted the old figure and someone re-measured.
+# bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss.
+SIZE_CANARY_TIERS = ("native", "limited", "full")
+
 # Not "quick": that is the inner loop, and this is a bootstrap chain. It is NOT
 # advisory — byte-identical self-host is the gate the stable binary rests on.
 SELFHOST_GATE_TIERS = ("native", "limited", "full")
@@ -2428,6 +2440,8 @@ def generate(tier):
         jobs.append(fpc_canary_job())
     if tier in SELFHOST_GATE_TIERS:
         jobs.append(selfhost_fixedpoint_job())
+    if tier in SIZE_CANARY_TIERS:
+        jobs.append(size_canary_job())
     assign_selectors(jobs)
     return jobs
 
@@ -2552,6 +2566,29 @@ def fpc_canary_job():
     j.cls = "selfhost"
     j.advisory = True
     j.est_mem = CLASSES["selfhost"]["est_mem"]
+    return j
+
+
+def size_canary_job():
+    """Has the empty-image floor moved? -> Job
+
+    A DELTA gate against tools/size_baseline.json, not a ceiling: a ceiling
+    needs a number a human must maintain and defend, a delta needs only the last
+    measurement. It blesses none of the current sizes — 103,692 B of bss on a
+    ~400 KB part is the subject of an open Track A ticket — it only makes the
+    next move visible on the commit that made it.
+
+    ADVISORY, for the same reason `demos` is: a size that grew is a decision for
+    the owning lane, not grounds to fail everyone's verdict. twatch still
+    reports and tickets it, so the signal arrives; it just does not hold the
+    tier hostage. A ratchet that reds the fleet until someone re-baselines is a
+    ratchet somebody eventually switches off, and this repo has written that
+    down twice already.
+    """
+    j = Job("size-canary", 0, ["python3 tools/size_canary.py"])
+    j.name = "size-canary#00"
+    j.cls = "unit"
+    j.advisory = True
     return j
 
 
