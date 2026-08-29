@@ -2560,3 +2560,99 @@ scheduler workaround's comment recorded a second measured fact: `Halt`'s exit pa
 a wrong status for a hang. It did not — the hang came from *serialising* the fatal,
 which this arm does not do — but that was established by running it, and the still-
 true half of the comment was kept.
+
+### 59. A POPULATION COUNT IS NOT A FIRING COUNT — a census measures what COULD be affected and reads as evidence about what WILL be
+
+frank-optimize-b4, 2026-08-29, W1 slice 5 (`81d2ec232`), and it is on the record
+because **the census was the careful step** — the one taken specifically to avoid
+guessing — and it still over-promised by two arms.
+
+Before writing the pass, b4 added `PXXDBG=a.w1left` and counted resident-left
+binops by what they feed. CMP was the biggest bucket everywhere: **2891 in
+compiler.pas against 2649 for the whole ALU family**, CMP+MULIMM at 31–52%
+across programs. A clean, measured, honest number.
+
+Guarding the two `-O1` leaf-operand arms then fired on **11 sites**, and left
+`three.pas` **byte-identical at -O3**.
+
+The gap was two arms wide, and neither was visible from the population:
+
+- most constant-right comparisons are already folded by the **`-O2`
+  cmp-immediate** arm, so they were counted in the census and gone before the
+  new arm could see them;
+- the for-loop's own compare — the motivating case, the one the slice exists for
+  — comes from the branch fold in **`IR_JUMP_IF_FALSE`**, not from the binop path
+  the census enumerated at all.
+
+Extending to those two folds is what made it real: −119 B on `three.pas`, −2772 B
+on `jsondemo`, and a dynamic delta of exactly `2n` at n=2000/20000/50000.
+
+**Why it belongs in this family.** A census is a *refusal to guess*, so its output
+inherits the authority of having been measured — and the thing it measured is not
+the thing the decision needs. "How many sites have this shape" and "how many sites
+will this arm fire on" differ by every earlier transform that already consumed the
+shape, and **nothing in the census names those transforms** because they are not
+in the population it enumerated. Same structure as face 32 (a derived number
+standing in for a measured one): here the number *is* measured, and it is measured
+about the wrong set.
+
+**The counter-move is cheap and b4 used it:** fire the guard, count the sites it
+actually hit, and treat a byte-identical output as the census being refuted rather
+than the pass being pointless. Distinct from the already-banked "a static sweep
+understates W1" caution, which is the error in the *other* direction — that one
+says the census undercounts, this one says it overcounts, and a lane holding only
+the first will read a shortfall as noise.
+
+### 60. AN EARLY RETURN MAKES A LATER, CORRECT ARM UNREACHABLE — and the correct arm's existence is what hides it
+
+frankC, 2026-08-29, `bug-t-pasmith-calls-an-fpc-o2-bug-a-generator-contract-violation`
+(`447232884`), found in a 452-program pasmith sitting whose terminal line read
+**`452 programs, 1 divergences (1 = FPC-rejected/generator bugs, 0 = NEW)`** —
+i.e. clean.
+
+It was not clean. The one divergence was bucketed `fpc-reject_compile-fail`, noted
+*"FPC REJECTED THE PROGRAM -- pasmith contract violation"*. FPC **-O0 compiles and
+runs it**, and all three pxx levels agree with its checksum. Only FPC **-O2**
+fails. The program is valid objfpc — FPC's own -O0 proves it — so the contract the
+guard claimed was violated was not.
+
+`classify()` uses `any(...)` over `(fpc-O0, fpc-O2)` and **returns**, short-
+circuiting a `fpc-self` check thirty lines below that already carries the right
+answer: *"FPC CONTRADICTS ITSELF (-O0 vs -O2) -- an FPC bug, no judgement needed;
+pxx is not involved."* So FPC self-contradiction at **runtime** is classified
+correctly, and the identical contradiction at **compile time** never reaches the
+arm written for it.
+
+**The part that makes this its own face rather than an instance of face 33.** Face
+33 is a capability nothing invokes. Here the capability is invoked, the rule is
+written **verbatim** in `tstate/fuzz/fpc-bugs/README.md`, and the destination
+directory holds a rigorously reduced example. Everything a reviewer would grep for
+is present and correct. **The bucket simply cannot be reached**, and the presence
+of the correct arm thirty lines down is exactly what makes the wrong one look
+handled — a reader who checks "do we classify FPC self-contradiction properly?"
+finds yes, and stops.
+
+**Two compounding properties, both worth naming:**
+
+- **The misclassification was into the discard set.** `N = FPC-rejected/generator
+  bugs` is *excluded from findings*, so the run reported the discard as noise and
+  printed a clean line over a real FPC codegen bug. A filter that drops signal and
+  reports the drop as noise is silent in exactly the way face 33's uninvoked
+  capability is silent, but it also produces a **positive** clean verdict, which is
+  worse: see the standing rule that a host green is the inverse of a host red and
+  waits years.
+- **Both recorded examples of the signature are this shape** (seeds 362 and 85029,
+  replayed at HEAD). The bucket's entire history is upstream FPC bugs filed as "our
+  generator is broken" — so the mislabel had already been believed twice, and the
+  ledger it wrote is itself the evidence.
+
+**The repair is the asymmetry, not a fourth bucket.** One predicate asking "do
+FPC's own levels disagree?" regardless of whether the disagreement is a compile
+failure or a checksum, routing to the `fpc-self` destination that already exists.
+Adding a bucket would be a second path, and a second path is the thing that stays
+broken — `normalise-dont-special-case.md`, one level up.
+
+**The sibling, flagged unmeasured and therefore recorded as a lead:** the
+`pxx-reject` guard immediately below uses `any` over the pxx arms the same way, so
+one pxx level failing to compile while others succeed would be labelled a frontend
+gap when it is an optimiser bug. Same double case, one branch away.
