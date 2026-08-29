@@ -103,4 +103,4 @@ exactly. The whole nilpy import-test family was run individually against both
 PRE and the fix: identical on every one except this ticket's, which goes
 ERR → PASS; the five with no `.expected` were compared by runtime output rather
 than skipped, and are byte-identical.
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 5292552cf.
