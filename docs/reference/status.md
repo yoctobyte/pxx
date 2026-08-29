@@ -58,8 +58,16 @@ The C frontend compiles standard C directly to native ELF in a single pass (see
 
 ## Pascal frontend
 
-PXX targets the Object Pascal language as Free Pascal accepts it (see
-[FPC compatibility](../language/fpc-compatibility.md)).
+PXX is an Object Pascal **dialect** of its own. It follows FPC's behaviour for
+much of the language and compiles real FPC code, but full FPC parity is not the
+goal — see [the PXX dialect](../language/dialect.md) for what it adds and
+[FPC compatibility](../language/fpc-compatibility.md) for what ports. Parity
+checks are opt-in per rule rather than on by default
+([compiler modes](./modes.md)).
+
+So "works" below means *this dialect compiles and runs the code*, not *PXX is
+indistinguishable from FPC*. Where the two disagree deliberately, the divergence
+is recorded rather than filed as a bug.
 
 ### Bundled libraries
 
@@ -116,11 +124,28 @@ a differential check against CPython on specific modules, not a conformance
 battery. Coverage of the language surface is deliberately partial, and the gaps
 are documented rather than implied.
 
+## The other frontends
+
+`pxx --version` lists twelve frontends. The three above are the ones with a
+compatibility status worth stating; the rest are covered by
+[Other frontends](../targets/other-frontends.md), which says plainly which is
+which:
+
+- **BASIC** is a real frontend with its own dialect and regression tests.
+- **Rust** and **Zig** are experimental and deliberately parked short of general
+  use.
+- **Ada, Fortran, Algol, Erlang, LOLCODE and Whitespace** are skeleton probes —
+  one test each. They exist to prove the shared AST and IR are correct by
+  feeding them programs shaped unlike anything the mainline frontends emit, and
+  a probe has no compatibility status worth tabulating. Their presence in
+  `--version` is not a support claim.
+
 ## Cross-targets
 
 Everything above describes the x86-64 host. PXX also cross-compiles to i386,
 AArch64, and ARM32 (Linux), plus the ESP32-oriented `riscv32` and `xtensa`
-embedded targets — six backends in all. Most of the above runs on the Linux
+embedded targets — six backends in all. `pxx --list-targets` also names `wasm32`,
+which is **registered only — no codegen yet**, so it is not one of the six. Most of the above runs on the Linux
 cross-targets too, but per-target status is a separate axis with its own gates.
 
 ## How this is measured
@@ -129,3 +154,19 @@ Status is produced by the project's own test manager and watcher, which run the
 smoke suites, the conformance batteries, and the real-world corpora on every
 change and publish per-revision reports. The gates — not this page — are
 authoritative for the current moment.
+
+### What this page can still get wrong
+
+The gates keep the *numbers* honest, and this page carries none. What they do
+not check is the **prose** — a claim here can quietly stop describing the
+compiler without any test going red, and that failure runs in one direction:
+docs understate what works, because a feature ships and the sentence saying it
+does not is never revisited. The structural claims above (which frontends exist,
+what each corpus demonstrates, what the two "identical" claims mean, which
+targets are real) were last re-checked against the pinned compiler on
+**2026-08-29**, pin v393.
+
+If something here disagrees with what the compiler in front of you does, the
+compiler is right and this page is stale. `pxx --version`, `pxx --list-targets`
+and `pxx --doctor` answer three of those questions directly, without a source
+file.
