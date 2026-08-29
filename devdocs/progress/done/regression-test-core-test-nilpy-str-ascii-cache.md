@@ -1,6 +1,6 @@
 ---
 prio: 70
-track: N
+track: A
 status: done
 owner: frankA
 ---
@@ -134,3 +134,110 @@ not by the topic, is the cheap version of breadth.
   Pascal's empty string still collapses to nil.
 - `make compiler/pascal26` converged; `tools/gate.sh quick`.
 - 2026-08-29 — resolved, commit 6b6190d2c.
+
+---
+
+## SECOND SITE 2026-08-29 (claude-N) — the same defect, one blob over
+
+Worked in parallel with frankA (the coordinator dispatched this ticket twice;
+see the note at the end). frankA's `df19c72a7` is correct and is the fix for the
+reported red. This section is the part it does **not** reach, measured against
+`df19c72a7` itself rather than reasoned from the diff.
+
+The section above closes with:
+
+> **The latent bug is older than my change and outlives this ticket:** a
+> Pascal-mode `SetLength` growing a known-ASCII string and then writing high
+> bytes through `s[i]` had the same staleness. ... **Now fixed for everyone**,
+> not just NilPy.
+
+True of the `SetLength` route, and that route is fixed. But the staleness does
+not need a `SetLength` at all:
+
+```pascal
+a := 'abc';        { known = 1, ascii = 1 -- honest }
+a[1] := Chr(200);  { still known = 1, ascii = 1 -- a lie, and the fast kind }
+```
+
+Built at `df19c72a7`, that block still claims ASCII while holding a byte >= $80.
+
+### Why — a third helper x86-64 inlines past
+
+`PXXStrUnique`'s own comment states the invariant the cache rests on:
+
+> the caller is about to WRITE bytes through the handle we return, so any cached
+> ASCII answer stops being true ... **this is the single choke point for byte
+> mutation, which is what makes the cache sound.**
+
+It is that choke point on i386 / arm32 / aarch64 / riscv32 / xtensa, which all
+`FindProc('PXXStrUnique')`. **x86-64 has never called it.** Indexed writes reach
+`AnsiStrUniqueAddr`, a hand-emitted blob in `ir_codegen.inc`, which does the
+refcount check and the clone and never touches the meta word. The clone arm
+needs the clear as much as the in-place arm, because `AnsiStrFromLiteral` stamps
+the flag from the **old** bytes — which is exactly why the Pascal version
+forgets at *both* of its exits.
+
+So this is the same asymmetry the section above names twice ("the same asymmetry
+that made site 3 of the original fix necessary, showing up a second time in one
+day") — appearing a **third** time, in the one place whose comment claims to be
+the reason the whole cache is sound. The pattern is now specific enough to state
+as a rule: **when a `builtinheap.pas` helper's comment asserts an invariant,
+check whether x86-64 calls it.** Three of three so far did not.
+
+### Fix
+
+`AnsiStrUniqueAddr` clears `ASCII_KNOWN|ASCII` on the handle it returns, at the
+single shared exit, guarded on nil (`done_nil` returns 0). `PXX_ASCII_CACHE_BITS`
+in `defs.inc` names the mask, in the style of `PXX_OBJ_MAGIC_TAG`, with the
+"MUST match builtinheap.pas" note. **Follow-up for A, deliberately not done
+here:** `df19c72a7` spells the same mask as four literal `EmitB`s; folding that
+site onto the constant would leave one spelling instead of two, but those lines
+landed minutes ago in a file another agent is live in, so it is not mine to
+touch mid-flight.
+
+### What the existing pin could not see
+
+`test_managed_block_meta.pas` already claimed to cover this:
+
+```pascal
+Check(not IsAscii(both), 'inline-allocated string carries no flag (unknown)');
+```
+
+`IsAscii` reads only `PXX_FLAG_ASCII`, which is False for **both** "scanned, has
+high bytes" **and** "nobody looked". The assertion could not distinguish the
+state it names from the state that is the bug, so it passed throughout against a
+block stamped KNOWN and non-ASCII. An assertion whose two outcomes are the
+answer and the defect pins nothing.
+
+Added `IsAsciiKnown`, strengthened that assertion, and added two cases: a bare
+indexed store with no `SetLength` near it, and an in-place `SetLength` grow.
+**All five fail against `stable_linux_amd64/default/pinned`**; the two
+indexed-store ones **also fail at `df19c72a7`** and pass after this change,
+which is what separates the two sites.
+
+### Verification
+
+- `test_managed_block_meta` green; the 2 new indexed-store assertions confirmed
+  RED at `df19c72a7` and green after.
+- `test_nilpy_str_ascii_cache` green.
+- Three shape probes (repeat by count, by source shape, by result byte length
+  2..13) byte-identical to **live CPython**.
+- The cache still pays: reads never invalidate, only writes do, and NilPy strings
+  are immutable — indexing all 200k characters of a long ASCII string runs in
+  **0.10s** against CPython's 0.09s.
+- Self-host fixedpoint converged, `9133bfccd790`.
+- `gate.sh quick`: `testmgr --tier quick` PASS (201s). Its one FAIL is the FPC
+  seed canary on `rparser.inc`'s duplicate forward — pre-existing, Track R's
+  file, already filed by frankA at p85.
+- x86-64 only. The other five backends call the helper; stated from the call
+  sites, not measured.
+
+### Coordination note
+
+Two agents held this ticket at once. No source conflict occurred — the rebase was
+clean and the two fixes are at different sites — but the duplicate SetLength
+clear I had written was discarded in favour of `df19c72a7`, which landed first.
+Flagged to the coordinator: the ticket's auto-guessed `track: N` (taken from the
+`.npy` test source) is what let it be dispatched as a frontend item when the
+defect and the fix are both **Track A** shared-backend files, and the sole-A
+guard keys off that field.
