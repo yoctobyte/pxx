@@ -214,9 +214,12 @@ That gate line was written before either wall was visible.
 - New: `test/test_delphi_generic_cross_unit.pas` (4/4) with
   `test/delphi_generic_units/`, and `test/test_generic_cross_unit_inline_specialize.pas`
   (1/1). Both oracles are FPC's. Both wired into `make test-core`.
-- 19 existing generic tests run individually and 8 `.expected` files diffed
+- 14 existing generic tests run individually and 8 `.expected` files diffed
   clean; `test_generic_cycle_fail` still correctly refused;
   `test_generic_spec_per_unit` still 4/4.
 - `generics.defaults.pas` still compiles alone, to the same code size.
 - `generics.collections.pas` unchanged from `pinned` — same error, same line.
 - `make compiler/pascal26`: `converged after 1 round(s)`.
+
+## Log
+- 2026-08-29 — resolved, commit `9a98d314c` (branch `rust`).
