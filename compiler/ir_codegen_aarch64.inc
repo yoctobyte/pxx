@@ -906,93 +906,71 @@ begin
     sgn := False;
   end;
 
+  { ONE scratch register for the whole helper: x9.
+
+    It used to be two, chosen by an invisible property of the symbol. The
+    skGlobal arms materialised the address in x1, the by-ref-param arms
+    dereferenced through x1, and the local/param arms used x9 — so WHICH
+    register this helper destroyed depended on the symbol's Kind, which is the
+    caller's least visible property. That is the blocker
+    feature-opt-emitloadvara64-needs-a-destination-register-parameter was parked
+    on: a destination-register parameter would self-clobber at rd=1 — the one
+    value the aarch64 leaf-operand collapse wants — and only for globals, the
+    arm least likely to appear in a quick test.
+
+    x9 is safe as the single scratch because this helper ALREADY destroyed it
+    unconditionally on its commonest path (every local, every parameter), so no
+    caller can have been relying on it surviving. The change makes x9 dead in
+    strictly more cases and x1 dead in strictly fewer. Checked at all 13 call
+    sites: the only one holding a live x9 is the residency spill, which does its
+    A64FrameAddr9 + str and is finished with x9 before it calls here.
+
+    Collapsing the scratch collapsed the code with it. The address computation
+    now happens once per Kind, and the sz/sgn load ladder — which existed in
+    THREE copies differing only in their base register — exists once.
+    devdocs/dev/normalise-dont-special-case.md: the duplicate is the arm that
+    stays broken, and this one had already drifted (see the dyn-array guard
+    above, added to the store side and forgotten on the load side). }
+
+  { x9 := the address to load from. }
+  if Syms[idx].Kind = skGlobal then
+  begin
+    EmitI32($18000049);  { ldr w9, [pc+8] }
+    EmitI32($14000002);  { b [pc+8] }
+    EmitGlobRef(Syms[idx].Offset);
+  end
+  else
+  begin
+    A64FrameAddr9(Syms[idx].Offset);
+    if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
+      EmitI32($F9400129);  { ldr x9, [x9] — follow the reference }
+  end;
+
+  { A Single is loaded as 4 bytes and widened to the double the value model
+    carries in x0; sz/sgn do not apply to it. }
   if tk = tySingle then
   begin
-    if Syms[idx].Kind = skGlobal then
-    begin
-      EmitI32($18000041);  { ldr w1, [pc+8] }
-      EmitI32($14000002);  { b [pc+8] }
-      EmitGlobRef(Syms[idx].Offset);
-      EmitI32($B9400020);  { ldr w0, [x1] }
-    end
-    else
-    begin
-      EmitLoadImmA64(9, Syms[idx].Offset);
-      EmitI32($8B0903A9);  { add x9, x29, x9 }
-      if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
-      begin
-        EmitI32($F9400121);  { ldr x1, [x9] }
-        EmitI32($B9400020);  { ldr w0, [x1] }
-      end
-      else
-        EmitI32($B9400120);  { ldr w0, [x9] }
-    end;
+    EmitI32($B9400120);    { ldr w0, [x9] }
     EmitI32($1E270000);    { fmov s0, w0 }
     EmitI32($1E22C000);    { fcvt d0, s0 }
     EmitI32($9E660000);    { fmov x0, d0 }
     Exit;
   end;
 
-  if Syms[idx].Kind = skGlobal then
+  if sz = 1 then
   begin
-    EmitI32($18000041);  { ldr w1, [pc+8] }
-    EmitI32($14000002);  { b [pc+8] }
-    EmitGlobRef(Syms[idx].Offset);
-    if sz = 1 then
-    begin
-      if sgn then EmitI32($39800020) else EmitI32($39400020);
-    end
-    else if sz = 2 then
-    begin
-      if sgn then EmitI32($79800020) else EmitI32($79400020);
-    end
-    else if sz = 4 then
-    begin
-      if sgn then EmitI32($B9800020) else EmitI32($B9400020);
-    end
-    else
-      EmitI32($F9400020);
+    if sgn then EmitI32($39800120) else EmitI32($39400120);
+  end
+  else if sz = 2 then
+  begin
+    if sgn then EmitI32($79800120) else EmitI32($79400120);
+  end
+  else if sz = 4 then
+  begin
+    if sgn then EmitI32($B9800120) else EmitI32($B9400120);
   end
   else
-  begin
-    EmitLoadImmA64(9, Syms[idx].Offset);
-    EmitI32($8B0903A9);  { add x9, x29, x9 }
-    if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
-    begin
-      EmitI32($F9400121);  { ldr x1, [x9] }
-      if sz = 1 then
-      begin
-        if sgn then EmitI32($39800020) else EmitI32($39400020);
-      end
-      else if sz = 2 then
-      begin
-        if sgn then EmitI32($79800020) else EmitI32($79400020);
-      end
-      else if sz = 4 then
-      begin
-        if sgn then EmitI32($B9800020) else EmitI32($B9400020);
-      end
-      else
-        EmitI32($F9400020);
-    end
-    else
-    begin
-      if sz = 1 then
-      begin
-        if sgn then EmitI32($39800120) else EmitI32($39400120);
-      end
-      else if sz = 2 then
-      begin
-        if sgn then EmitI32($79800120) else EmitI32($79400120);
-      end
-      else if sz = 4 then
-      begin
-        if sgn then EmitI32($B9800120) else EmitI32($B9400120);
-      end
-      else
-        EmitI32($F9400120);
-    end;
-  end;
+    EmitI32($F9400120);
 end;
 
 procedure RegcallRefreshResidentA64(idx: Integer);
