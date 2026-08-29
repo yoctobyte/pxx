@@ -1996,3 +1996,92 @@ this needed nothing from it beyond the predicate already there. **The umbrella's
 track letter does not allocate the file** — worth stating in the ticket, because
 holding an O ticket that already edits `symtab.inc` is exactly the reasoning that
 would have taken it.
+
+---
+
+## 2026-08-29 — W2 on aarch64. LANDED (`0b4805f8e`).
+
+The last of the four ports. x86-64's W2 (`x := x <op> k` on a resident becomes
+one ALU op on the register, no load, no store) now has an aarch64 half, entirely
+inside `ir_codegen_aarch64.inc`.
+
+### The shared predicate does not port unchanged, and that is the whole entry
+
+`W2InPlaceEligible` in `symtab.inc` admits all five ops — `+ - and or xor` —
+with a constant right operand. That is correct **for x86-64**, where every one of
+them encodes as `81 /digit imm32`: one form, one width, all five ops. It is a
+statement about the x86 encoding wearing the clothes of a statement about the
+optimisation.
+
+aarch64 has no such uniform form. Plain 12-bit immediates exist only for add/sub;
+`and`/`orr`/`eor` take the bitmask-immediate encoding, which this pass does not
+compute. So `W2InPlaceEligibleA64` wraps the shared predicate and narrows it:
+constants only for add/sub, `|iv| <= 4095`. Register right operands keep all five.
+
+I had written the restriction into a **comment** in the emitter and then not
+enforced it. The result was `a := a and $00FFFFFF` emitting
+`add xR,xR,#(low 12 bits)` — a wrong answer, silently, in the arm of the pass
+least likely to be exercised by anything except a test written for it.
+
+> **A comment describing a precondition is not a precondition.** The emitter knew
+> the rule; the admission check did not; only the admission check runs.
+
+Caught by `test_o3_resident_inplace` at `-O3` — the program written for exactly
+this, which is the argument for having written it. The generic corpus would not
+have caught it: it needs a *narrowing mask on a resident local inside a loop*,
+which is a shape you write on purpose or never see.
+
+### The probe shipped with the port, not after it
+
+`PXXDBG=a.w2` prints a FIRE line per site (proc, sym, op, reg, slotdead). It is
+in the same commit as the pass because **a pass that stops firing is invisible to
+every correctness check** — the program stays right and merely gets slower, and
+there is no aarch64 disassembler on this box to notice. That exact failure hid a
+`tyUnknown` miss on `i := i + 1` on the x86-64 side for half a day. Same reason
+the `a.resid` port was a precondition for item 1 rather than a courtesy.
+
+### Verification
+
+- differential, 13 programs x `-O0`/`-O2`/`-O3` vs the pre-W2 aarch64 compiler:
+  **fail=0**
+- `PXXDBG=a.poisonslot`: **fail=0**
+- the `-O3` stress test fires **381** times (this is the number that would have
+  gone to 0 unnoticed)
+- all 6 targets at default `-O`: **48/48** corpus hashes byte-identical
+- self-host fixedpoint: converged, `914994960b99`
+
+### Timing — qemu proxy, directional only
+
+`three.pas`, min of 9 interleaved reps, three independent runs, `+item3` vs
+`+item3+W2`:
+
+| run | +item3 | +W2 | ratio |
+| --- | --- | --- | --- |
+| 1 | 4.02 | 2.67 | **1.506x** |
+| 2 | 5.93 | 3.93 | **1.509x** |
+| 3 | 5.81 | 4.13 | **1.407x** |
+
+Larger than any other single step in this campaign, and the reason to distrust
+the magnitude rather than the sign: **qemu times translated instruction
+throughput**, so removing a load and a store removes translated work
+proportionally, while on real silicon most of what W2 removes is a
+store-to-load-forwarding stall qemu does not model at all. The direction is
+solid and consistent across three runs; the size is an artifact of the proxy.
+Real aarch64 hardware would settle it and this box has none.
+
+### Sweep status — unchanged, and now four items deep
+
+W2 (x86-64), item 3, the aarch64 item-1 port and this are **all unswept** by the
+opt tier (`trackt optcov <commit>`). None is a promotion candidate. `-O3` remains
+the right home for the whole set until the tier reaches them.
+
+### File boundary observed
+
+Entirely inside `ir_codegen_aarch64.inc`. `symtab.inc` is frankA's while
+`bug-a-nodemetaclassci-does-not-know-a-virtual-class-method-call` is open — and
+this is the port that most wanted to reach into it, since the honest fix for the
+encoding mismatch is arguably to split the shared predicate into an
+op-set-by-target form rather than wrap it downstream. **Wrapping was the right
+call anyway**: the narrowing is genuinely a property of the aarch64 encoding, not
+a shared concept, so it belongs in the backend even when `symtab.inc` is free.
+That the file was locked made the question visible; it did not change the answer.
