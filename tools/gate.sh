@@ -372,5 +372,19 @@ case "$MODE" in
     ;;
 esac
 
-if [ "$RC" = 0 ]; then echo "gate: GREEN"; else echo "gate: RED"; fi
+# PUBLISH THE STATUS IN THE LINE, not only in $?. gate.sh has been reported as
+# "printed RED and exited 0" three times by three different lanes — and each
+# time the tool was correct and the CALLER lost the status to a trailing
+# command: `| tail`, `; echo "exit=$?"`, `&& cp`, a cleanup line. That is not a
+# shell gotcha anyone outgrows; it is the general rule ("trust the exit code")
+# having a domain where it is exactly backwards, so the well-trained reflex
+# fires wrong.
+#
+# gate.sh cannot fix its caller's shell. What it CAN do is stop being the
+# ambiguous half: printing the code it is about to return puts the verdict and
+# the status in the same line, so a wrapper reporting 0 over `gate: RED (exit
+# 1)` is visibly the wrapper's error rather than a suspected bug in here. Same
+# property as the seed canary naming the sha it stands on — publish the evidence
+# you rely on, so a reader can check the claim instead of trusting it.
+if [ "$RC" = 0 ]; then echo "gate: GREEN (exit 0)"; else echo "gate: RED (exit $RC)"; fi
 exit "$RC"
