@@ -1296,6 +1296,28 @@ def covered_tiers(tier):
     return {tier}                     # opt (and any future disjoint tier)
 
 
+def breadth_full_run(st):
+    """The newest COMPLETE `full` tier run on this host, or {}. -> dict.
+
+    `last_full` is the last REPLACING run (full=True), NOT the last `full`
+    TIER -- a historical name. Under the shipped default (mid_tier ==
+    deep_tier == full) the two coincide, which is the only reason the breadth
+    banner reading `last_full` has been correct.
+
+    They diverge the moment mid_tier is set to `limited`: that run replaces,
+    so it refreshes `last_full`, and it covers no cross target at all. The
+    banner would reset its clock on it and vouch for coverage that never ran.
+
+    The fallback exists for state published before `last_by_tier` did, and
+    only fires when `last_full` SAYS it was a full tier -- so it can promote a
+    true full run that predates the map, and can never promote a `limited` one.
+    """
+    rec = last_run_at_tier(st, "full")
+    if not rec and (st.get("last_full") or {}).get("tier") == "full":
+        rec = st["last_full"]
+    return rec or {}
+
+
 def last_run_at_tier(st, tier):
     """Newest COMPLETE run at EXACTLY `tier`, or {}.
 
@@ -6660,9 +6682,28 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
         # hours behind — and the cross targets run nowhere else. Always printed
         # when the host has ever run one, because the age is the boundary of the
         # claim and a boundary nobody can see is not checked.
-        if lf.get("date") and not quiet:
-            age = secs_since(lf["date"], now)
-            behind = testable_behind(repo, lf.get("sha", ""), ref)
+        # WHICH RUN VOUCHES FOR THE CROSS TARGETS -- and it is not `last_full`.
+        #
+        # `last_full` is the last REPLACING run (full=True), NOT the last
+        # `full` TIER; the name is a historical accident. Under the shipped
+        # default (mid_tier == deep_tier == full) the two coincide, which is
+        # the only reason reading it here has been correct.
+        #
+        # Configure mid_tier to `limited` -- exactly what
+        # chore-t-the-tier-ladder-ratio-is-stale-by-its-own-criterion
+        # contemplates doing -- and they diverge: a `limited` run refreshes
+        # `last_full`, covers NO cross target, and would silently reset this
+        # banner's clock. The line would then vouch for coverage that never
+        # ran, and its whole job is to say when nothing vouches. That is the
+        # failure direction with no output to notice, so it is fixed BEFORE
+        # the experiment rather than after.
+        #
+        # last_run_at_tier() answers the question exactly: the newest COMPLETE
+        # run at that tier, exact match, never covered_tiers.
+        lf_full = breadth_full_run(st)
+        if lf_full.get("date") and not quiet:
+            age = secs_since(lf_full["date"], now)
+            behind = testable_behind(repo, lf_full.get("sha", ""), ref)
             stale = age is not None and age > BREADTH_STALE_SECS
             print("tstate:   breadth — newest full tier is %s old%s%s"
                   % (fmt_age(age) if age is not None else "?",
@@ -6671,6 +6712,14 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
                      "  [STALE — no cross-target verdict on this tree; native "
                      "GREEN does NOT cover i386/arm32/riscv32/aarch64]"
                      if stale else ""))
+        elif lf.get("date") and not quiet:
+            # The host has run SOMETHING to completion, but never a `full`
+            # tier. Silence here would read as "breadth is fine"; the absence
+            # of a full tier is precisely the thing this line exists to report.
+            print("tstate:   breadth — NO `full` tier recorded on %s (newest "
+                  "complete run is `%s`): nothing here vouches for "
+                  "i386/arm32/riscv32/aarch64"
+                  % (st.get("host", "?"), lf.get("tier", "?")))
         # PIN VERIFY — a different question from every line above it, which are
         # all about `last_full`: the newest tier on the newest tree. "Is the
         # binary every track is currently BUILDING on sound?" is answered by

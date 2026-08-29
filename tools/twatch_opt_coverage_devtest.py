@@ -194,7 +194,60 @@ def t_incomplete_run_is_not_coverage():
     return "written under `not incomplete`, outside the replacing branch"
 
 
-TESTS = [t_empty_state_has_no_opinion,
+# ------------------------------- which run vouches for the cross targets --
+# chore-t-the-tier-ladder-ratio-is-stale-by-its-own-criterion records this as
+# a prerequisite of its own experiment: the breadth banner read `last_full`,
+# which is the last REPLACING run, not the last `full` TIER. They coincide
+# only because the shipped default sets mid_tier == deep_tier == full.
+
+def t_breadth_prefers_the_exact_full_tier_over_last_full():
+    """The divergent case, which is what enabling mid_tier creates.
+
+    A `limited` run replaces, so it refreshes `last_full` -- and it covers no
+    cross target. Reading it would reset the banner's clock on evidence that
+    does not support it.
+    """
+    st = {"last_full": {"tier": "limited", "date": "2026-08-29T12:00:00Z",
+                        "sha": "bbbb"},
+          "last_by_tier": {"full": {"tier": "full",
+                                    "date": "2026-08-27T09:00:00Z",
+                                    "sha": "aaaa"}}}
+    rec = tw.breadth_full_run(st)
+    assert rec.get("sha") == "aaaa", \
+        "the banner would vouch for cross targets on a `limited` run: %s" % rec
+    assert rec.get("date") == "2026-08-27T09:00:00Z", rec
+    return "the OLDER real full tier wins over a newer limited run"
+
+
+def t_breadth_falls_back_for_state_predating_last_by_tier():
+    st = {"last_full": {"tier": "full", "date": "2026-08-29T12:00:00Z",
+                        "sha": "cccc"}}
+    assert tw.breadth_full_run(st).get("sha") == "cccc"
+    return "a pre-last_by_tier full run is still recognised"
+
+
+def t_the_fallback_can_never_promote_a_non_full_run():
+    """The fallback is the risky half, so pin what it refuses to do."""
+    st = {"last_full": {"tier": "limited", "date": "2026-08-29T12:00:00Z",
+                        "sha": "dddd"}}
+    assert tw.breadth_full_run(st) == {}, \
+        "the fallback promoted a `limited` run to a cross-target verdict"
+    return "the fallback refuses anything that is not a full tier"
+
+
+def t_no_full_tier_anywhere_returns_empty_not_a_guess():
+    """Empty is what makes the caller print the NO-full-tier line."""
+    assert tw.breadth_full_run({}) == {}
+    assert tw.breadth_full_run({"last_by_tier": {"native": {"tier": "native",
+                                                            "date": "x"}}}) == {}
+    return "no full tier reports nothing rather than substituting a lesser one"
+
+
+TESTS = [t_breadth_prefers_the_exact_full_tier_over_last_full,
+         t_breadth_falls_back_for_state_predating_last_by_tier,
+         t_the_fallback_can_never_promote_a_non_full_run,
+         t_no_full_tier_anywhere_returns_empty_not_a_guess,
+         t_empty_state_has_no_opinion,
          t_reads_last_by_tier,
          t_last_full_does_not_answer_for_opt,
          t_exact_tier_not_coverage,
