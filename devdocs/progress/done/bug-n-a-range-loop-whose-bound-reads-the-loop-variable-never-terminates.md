@@ -157,4 +157,4 @@ it is 23/23.
 Self-host fixedpoint `15afe4effd79`, converged in 1 round.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 8fecb286a.
