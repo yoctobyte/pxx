@@ -5,10 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:21 blocked:5 backlog:317 backlog_new:7 experimental:21 rainy-day:45 float:21 done-followup:3 decided:116 done:2616 rejected:51`
+`working:2 unfinished:21 blocked:5 backlog:316 backlog_new:7 experimental:21 rainy-day:45 float:21 done-followup:3 decided:116 done:2617 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
+- `bug-a-the-fpc-seed-canary-skips-a-break-already-on-master` [A] — owner: unrecorded
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
 ## unfinished (21) — parked mid-flight; re-claim, do not duplicate
@@ -43,10 +44,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 328, ranked
+## Ready — top 30 of 327, ranked
 
 - `[p 85] [R]` bug-r-a-duplicate-forward-in-rparser-breaks-the-fpc-seed-build
-- `[p 80] [A]` bug-a-the-fpc-seed-canary-skips-a-break-already-on-master
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [A]` bug-a-for-loop-limit-is-evaluated-after-the-control-variable-is-assigned
@@ -75,5 +75,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
+- `[p 62] [N]` feature-nilpy-enum-class
 
-_298 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_297 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

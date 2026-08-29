@@ -271,10 +271,37 @@ case "$MODE" in
     # NOT arm for a sibling's compiler commit that I merely have not pulled:
     # their push already ran this, and arming on it would fire on nearly every
     # gate in a repo this busy.
+    #
+    # SECOND ARMING RULE, added 2026-08-29. The paragraph above is right that a
+    # sibling's pushed compiler commit should not be re-gated on every run, but
+    # it justified that with "their push already ran this" -- and the gate is
+    # deliberately OPTIONAL per fix (CLAUDE.md). So "already on origin" means
+    # nobody objected, not proven green, and the gap is not theoretical: a
+    # duplicate forward in rparser.inc sat broken on master for hours while
+    # clean trees printed PASS, then surfaced inside an unrelated Track A gate
+    # naming Track R's file. Invisible where it landed, misattributed where it
+    # showed up.
+    #
+    # So the canary also arms when origin/master's compiler/ has moved past the
+    # last sha THIS CLONE actually proved. The state file is untracked and
+    # per-clone on purpose: "seed-green" is a property of a box that ran fpc,
+    # not of a commit, and tracking it would let one box's green silence every
+    # other box. Cost stays one seed build per origin/master advance -- still
+    # concurrent, still ~11s -- and a repo sitting still still pays nothing.
     seed_pid=
     seed_base=$(git merge-base origin/master HEAD 2>/dev/null) || seed_base=HEAD
-    if command -v fpc >/dev/null 2>&1 && \
-       ! git diff --quiet "$seed_base" -- compiler/ 2>/dev/null; then
+    seed_green_file="$(git rev-parse --git-dir 2>/dev/null)/pxx-seed-green"
+    seed_green=$(cat "$seed_green_file" 2>/dev/null || true)
+    seed_arm=no
+    seed_mine=no          # is there a local compiler/ change that could be the cause?
+    if ! git diff --quiet "$seed_base" -- compiler/ 2>/dev/null; then
+      seed_arm=yes; seed_mine=yes
+    elif [ -z "$seed_green" ] || ! git cat-file -e "$seed_green^{commit}" 2>/dev/null; then
+      seed_arm=yes       # nothing proved on this clone yet
+    elif ! git diff --quiet "$seed_green" HEAD -- compiler/ 2>/dev/null; then
+      seed_arm=yes       # pulled compiler/ commits this clone has never seeded
+    fi
+    if command -v fpc >/dev/null 2>&1 && [ "$seed_arm" = yes ]; then
       ( rm -rf "$LOGDIR/seed_u" && mkdir -p "$LOGDIR/seed_u" && \
         fpc -Mobjfpc -O2 -Tlinux -Px86_64 -FU"$LOGDIR/seed_u" \
             -FE"$LOGDIR/seed_u" -o"$LOGDIR/seed26" compiler/compiler.pas \
@@ -297,18 +324,37 @@ case "$MODE" in
     if [ -n "$seed_pid" ]; then
       if wait "$seed_pid"; then
         echo "  PASS  FPC seed canary (concurrent)"
+        # Record only when the tree's compiler/ IS the commit -- with local
+        # edits in flight, what we just proved is not any sha, and stamping
+        # HEAD would suppress the next run for a state never built.
+        if git diff --quiet HEAD -- compiler/ 2>/dev/null; then
+          git rev-parse HEAD > "$seed_green_file" 2>/dev/null || true
+        fi
       else
         echo "  FAIL  FPC seed canary (concurrent)  $LOGDIR/fpc-seed.log"
         # The error is thousands of lines above the tail — FPC keeps warning
         # after the error that stopped it — so surface it rather than the tail.
         grep -E "Error:|Fatal:" "$LOGDIR/fpc-seed.log" | head -5 | sed 's/^/        /'
-        echo "        a routine is called from an include EARLIER in compiler.pas"
-        echo "        than the file defining it — add a forward, see"
-        echo "        bug-a-fpc-seed-drift-emitasmx64-forward"
+        # Say WHOSE break it is before saying what it might be. When there is
+        # no local compiler/ change, the answer is not "what did I do" and an
+        # agent reading a failure inside its own gate will assume it is.
+        if [ "$seed_mine" = yes ]; then
+          echo "        this tree has local compiler/ changes — likely yours"
+        else
+          echo "        NOT YOUR CHANGE: no local compiler/ edits — this break is"
+          echo "        already on origin/master. Do not bisect your own work."
+        fi
+        echo "        two shapes both fail only under FPC (pxx accepts both):"
+        echo "          - MISSING forward: a routine called from an include EARLIER"
+        echo "            in compiler.pas than the one defining it — add a forward,"
+        echo "            see bug-a-fpc-seed-drift-emitasmx64-forward"
+        echo "          - DUPLICATE forward: the same routine forwarded twice in one"
+        echo "            file — delete the later one, see"
+        echo "            bug-r-a-duplicate-forward-in-rparser-breaks-the-fpc-seed-build"
         RC=1
       fi
     elif command -v fpc >/dev/null 2>&1; then
-      echo "  SKIP  FPC seed canary (compiler/ unchanged vs origin/master)"
+      echo "  SKIP  FPC seed canary (compiler/ unchanged, and seeded green at ${seed_green:0:12})"
     else
       echo "  SKIP  FPC seed canary (fpc not installed)"
     fi

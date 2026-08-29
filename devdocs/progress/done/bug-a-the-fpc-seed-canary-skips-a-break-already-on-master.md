@@ -3,10 +3,10 @@ slug: bug-a-the-fpc-seed-canary-skips-a-break-already-on-master
 track: A
 prio: 80
 type: bug
-status: backlog
+status: done
 blocked-by: []
 summary: "gate.sh's FPC seed canary arms only when `git diff merge-base(origin/master,HEAD) -- compiler/` is non-empty. So a seed break that is already ON origin/master is invisible to every clean tree (SKIP, never FAIL), and then fires on the next agent who touches compiler/ — naming a file and a commit that are not theirs. Observed 2026-08-29: two gates printed PASS while the seed was broken upstream, and the break surfaced hours later attributed to an unrelated Track A change."
-owner: unassigned
+owner: frankA
 ---
 
 # The seed canary skips a break that is already on master
@@ -89,3 +89,6 @@ from a minutes-long failure to a seconds-long one. Noted in the R ticket.
 `tools/gate.sh quick` on a tree whose only defect is upstream must report the
 seed FAIL, not PASS/SKIP — verifiable today by checking out `fa238413e`, which
 carries the live duplicate-forward break, with a clean working tree.
+
+## Log
+- 2026-08-29 — resolved, commit PENDING-COMMIT.
