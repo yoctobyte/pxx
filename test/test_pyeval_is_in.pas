@@ -13,6 +13,15 @@ procedure ChkStk(const lbl:AnsiString; want:Int64);
 begin vm.Top:=vm.Top-1; if vm.Data[vm.Top]=want then writeln('ok   ',lbl,' = ',want) else begin writeln('FAIL ',lbl,' got ',vm.Data[vm.Top],' want ',want); fails:=fails+1; end; end;
 begin
   fails:=0; vm:=TVM.Create; g:=TPyDict.Create; PVRec(@vmv)^.VType:=7; PVRec(@vmv)^.Payload:=Int64(Pointer(vm)); g.store('vm',vmv);
+  { exec()'s host call takes its receiver from the BOUND METHOD the callee
+    resolves to -- `env = {"push": b.push}` -- not from a global named `vm`.
+    That was uforth's own variable name leaking into the general contract and
+    ff439149e removed it; these tests were written against the old rule and
+    never updated, because nothing wired them into a build rule and so nothing
+    ran them. `vm` is still stored: the scripts below also reach it by
+    ATTRIBUTE (`vm.push(...)`), which is an ordinary global and always was.
+    bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed }
+  g.store('push', pybound_new(nil, Pointer(vm), False));
   { is None }
   vm.Top:=0; Run('x = None'+#10+'push(1 if x is None else 0)'); ChkStk('is None true',1);
   vm.Top:=0; Run('x = 5'+#10+'push(1 if x is None else 0)'); ChkStk('is None false',0);
