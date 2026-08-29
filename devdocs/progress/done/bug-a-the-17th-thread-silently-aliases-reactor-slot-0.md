@@ -324,4 +324,4 @@ fatal for a different mechanism is how a fix trades one bug for two. Recorded in
 next, with the reproduction that would settle it.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 9bd3da8b2.
