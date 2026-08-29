@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 45
+prio: 60
 type: refactor
 status: backlog
 blocked-by: []
@@ -86,3 +86,71 @@ Track C is **one agent's worth of work at a time, gated on the A slot**, not an
 independently staffable lane. A coordinator staffing C should either pair it
 with the A slot or expect it to run dry. That is the operational fact this
 ticket exists to remove.
+
+## Prio raised 45 -> 60 by the coordinator, 2026-08-29 — and why it had to be by hand
+
+**This is a coordinator call, not the owner's.** Recorded here rather than left
+implicit so it can be vetoed in one edit.
+
+The board's ranking model is *"one human `prio:` propagated down dependency
+edges — a blocker inherits the priority of what it unblocks, so you rate goals
+and the chain follows."* That mechanism **cannot fire on this ticket**, and the
+reason is measurable:
+
+```
+$ grep -rl "c-exclusive-lowering" devdocs/progress/{urgent,backlog,backlog_new,unfinished,blocked}/
+$          # zero files
+```
+
+**No ticket declares this one as a blocker**, so it has no in-edges and inherits
+nothing. It sat at 45 while ranked *below* five tickets it is the blocker for —
+frankC's words, 2026-08-29: *"that p45 is the ticket that unblocks my lane, and
+it is ranked below four things it is blocking."*
+
+**The edges were not simply forgotten — adding them would be a false claim.**
+`blocked-by:` means *cannot proceed*, and those five C tickets can proceed
+perfectly well: by an agent holding the A slot. Marking them blocked would hide
+real Track A work from Track A's queue in order to fix a ranking artefact. So
+the honest repair is the `prio:` field, which is what it is for.
+
+**Generalisable, and worth more than this ticket:** *prio propagation is only as
+good as the edges someone drew, and a structural blocker is exactly the kind
+that never gets an edge* — because it blocks a **lane**, not a ticket. Nothing
+in the tooling can see that. A ticket whose beneficiaries are "most of track X"
+will always under-rank itself, and no checker will flag it, because from the
+ranker's side an in-degree of zero is indistinguishable from a leaf.
+
+### Instance five, which is what moved the number
+
+frankC predicted this ticket's own consequence and then hit it, on
+`refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag` [C p40] — a
+ticket the coordinator picked **specifically because it looked disjoint**:
+
+```
+ParseCPostfixTail    compiler/cparser.inc:3696   Track C
+CNodePointeeTk       compiler/cparser.inc:2051   Track C
+IRNodePointerBase    compiler/ir.inc:2348        Track A   <-- the 12 lines that ARE the refactor
+IRPointerStride      compiler/ir.inc:2390        Track A
+```
+
+Neither sketched option escapes `ir.inc`: the `ASTSLen`-style stamp is read by
+`IRPointerStride`'s AN_BINOP arm, and the dedicated-AST-node option is *worse*
+for C, since a new AST node is a Track A ticket C files rather than code C
+writes. Landing only the `cparser` half would write the sentinel **twice** —
+tag and stamp, with A's reader still on the tag — which is strictly worse than
+today. The ticket's own gate line (*"the `tyInt64` special case in
+`IRNodePointerBase` is gone rather than moved"*) requires the A file by
+construction.
+
+The table above therefore reads **five of seven ranked C tickets need an A
+file**, not four of six. It has gone up, not down, since the ticket was filed
+this morning — and it went up on the very ticket chosen to test whether the lane
+had disjoint work in it.
+
+**The disposition matches the precedent already set on
+`refactor-c-string-literal-decay-belongs-at-the-producer` [C p50]:** keep
+`track: C` for visibility, note in the body that the edit needs the A slot.
+*"File-lanes exist for collision avoidance, not as a taxonomy, so the rule is
+about the FILE and not the topic."* That ruling should not need re-deriving a
+sixth time, which is itself an argument for this refactor rather than for
+another routing note.
