@@ -5895,6 +5895,19 @@ test-core: $(COMPILER)
 	# [Move; 256] move-list stand-in for the engine's ArrayVec<Move, 256>.
 	./$(COMPILER) test/test_rust_struct_array.rs $(TESTTMP)/test_rust_struct_array26
 	tools/expect_same.sh test_rust_struct_array26 "$$($(TESTTMP)/test_rust_struct_array26)" "$$(printf 'checksum 1202\nsq 30')"
+	# bug-a-allocarray-leaves-recname-stale-on-a-recycled-symbol-slot: an array
+	# symbol landing on a slot last used by a by-value record PARAM inherited that
+	# param's RecName, and RIsSliceSym (guarded only by TypeKind = tyRecord, which
+	# an array-of-record HAS, since that field holds the ELEMENT kind) then read
+	# `cells` as a &[T] slice header. Pre-fix this was a PARSE ERROR at cells[0].id.
+	# The shape is load-bearing: two params, and the array as main's first local.
+	./$(COMPILER) test/test_rust_recname_recycled_slot.rs $(TESTTMP)/test_rust_recname26
+	tools/expect_same.sh test_rust_recname26 "$$($(TESTTMP)/test_rust_recname26)" "106 11"
+	# The SILENT face of the same bug, through the C frontend and diffable against
+	# gcc: _Generic resolved an array-of-A to `struct B`. gcc says other/other/3;
+	# pre-fix pxx said B/B/3 -- compiled clean, ran clean, printed a wrong answer.
+	./$(COMPILER) test/test_c_recname_recycled_slot.c $(TESTTMP)/test_c_recname26
+	tools/expect_same.sh test_c_recname26 "$$($(TESTTMP)/test_c_recname26)" "$$(printf 'other\nother\n3')"
 	# Rust chess FULL legality (feature-rust-corpus-chess): Move packed into one i64
 	# (from|to<<6|flags<<12) replaces the engine's Move struct + ArrayVec; EP, castling,
 	# promotion, underpromotion + check detection. Node counts match the reference perft
