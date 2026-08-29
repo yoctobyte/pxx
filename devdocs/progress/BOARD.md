@@ -51,7 +51,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
 
-## backlog (295)
+## backlog (296)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -75,6 +75,7 @@ _none_
 | bug-a-shr-on-a-32-bit-operand-is-evaluated-at-64-bits | A | 40 | bug | Pascal's shr is a LOGICAL shift at the operand's own width. pxx performs it at 64 bits regardless of the operand's declared type, so a negative Integer shifted right yields a 63-bit value instead of a 32-bit one. Writing it back to an Integer then truncates to a third answer, so the same expression gives two different wrong results depending on whether it is stored. | — |
 | bug-a-shr-reaches-the-ir-spelled-as-tkident | A | 20 | bug | Pascal's shr is lexed as an identifier — there is no tkShr token for it — so an IR_BINOP carrying shr carries Ord(tkIdent) as its operator. ir.inc:8878 substitutes Ord(tkShr) for exactly one consumer. Every other consumer must repeat that substitution or silently mistake `shr` for whatever it does with tkIdent. The wasm32 backend is now the second arm; normalise at IRAppend instead. | — |
 | bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture | A | 40 | bug | Five Makefile guards check the pinned stable with `test -x`, which tests the executable BIT — a property of the file, not of whether this CPU can run it. On a non-x86-64 host every guard reports healthy and the recipe then dies at exec with `Exec format error`, after printing a message saying there is no pinned stable at a path where one demonstrably is. Found on `via` (aarch64), where the repo ships only `stable_linux_amd64`. A reader would reasonably conclude the checkout is broken. | — |
+| bug-a-testtmp-defaults-to-a-path-every-checkout-shares | A+T | 55 | bug | Makefile:49 is `TESTTMP ?= /tmp` — a fixed path, not per-checkout and not per-PID. Every agent's suite writes its test binaries to the same names in the same directory, so two concurrent runs on one box overwrite each other's artefacts. The failure mode is a wrong verdict, not a crash. | — |
 | bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire | A | 45 | bug |  | — |
 | bug-a-the-div-by-zero-check-is-still-missing-on-xtensa | A+S | 25 | bug | The last target without a pre-divide zero check. The other five landed 2026-08-23; xtensa was left out because it cannot be RUN on this box (bare profile emits an ESP image, not a Linux ELF), its branches carry only an 8-bit displacement, its windowed ABI rotates the register window on a call, and its divide is two shapes depending on XtensaSoftDivide. | — |
 | bug-a-three-pxxsys-primitives-return-a-plausible-fd-on-wasm32 | A | 55 | bug | PXXSysOpenRO, PXXSysClose and PXXSysLseek in compiler/builtin/builtinheap.pas are ifdef chains with arms for x86-64/i386/arm32/aarch64 and NO CPU_WASM32 arm and no else. On wasm32 the body is empty, Result is never assigned, and the functions return whatever is in the result slot -- measured as 7, 6 and 6, where native returns -14, -9, -9. These are not garbage-looking values: 7 is a plausible file descriptor, so `if fd < 0 then error` passes and the caller reads a file it never opened. Same family as bug-a-pxxsyswrite-has-no-wasm32-arm (done) and HeapMmap, and the same failure direction: FAIL OPEN. The minimal fix is an explicit error return, not a WASI implementation. | — |
@@ -705,6 +706,7 @@ _none_
 - [p 55] [A] feature-nilpy-object-reclamation (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 55] [A] bug-a-emitzeroframeslot-has-no-wasm32-arm
 - [p 55] [A] bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice
+- [p 55] [A+T] bug-a-testtmp-defaults-to-a-path-every-checkout-shares
 - [p 55] [A] bug-a-three-pxxsys-primitives-return-a-plausible-fd-on-wasm32
 - [p 55] [N] bug-n-a-field-assigned-from-a-module-global-expression-is-refused
 - [p 55] [N] bug-n-a-keyword-argument-through-a-class-value-is-refused-at-runtime

@@ -16189,6 +16189,16 @@ inside.
 
 ## Two `make lib-test` runs died to SIGTERM, and the line numbers are the diagnosis
 
+> **FALSIFIED the same hour, on the discriminator named below — 2026-08-29.**
+> frankB measured it: lt4 ran several minutes to line 352, lt5 ran **~54
+> seconds** to line 103. The durations differ by about the same factor as the
+> line counts, which is the opposite of the predicted signature, and neither is
+> near 120s or 600s. **And the refutation that matters more: all three runs were
+> already backgrounded, so the clock I blamed was never running on any of them.**
+> I supplied a cause and a remedy without asking how the runs were being
+> executed. The section is kept as written — see the correction that follows it.
+
+
 Same session, and I think this one is the harness rather than the box. frankB's
 runs were killed at **line 352** and **line 103** of ~1198, `make: *** Terminated`,
 no exit line, 44G free, nothing in dmesg. It correctly refused to assert a cause.
@@ -16258,3 +16268,71 @@ measured orderings; the same failure reported against two *different* files, one
 of them a line past EOF of a 269-line file) is what makes it settleable by
 reduction rather than resemblance: the failing and passing cases differ by an
 ordering, not by a construct.
+
+## The remedy I prescribed was already in force, and the green would have confirmed it
+
+The correction to the section above, and the general lesson is worth more than
+the dead hypothesis.
+
+My prescribed fix for frankB's killed suite runs was `run_in_background`. **It
+was already what it was doing.** So the next run going green — which is exactly
+what happened, lt6 exit 0 — would have read as my fix working. I would have
+taken it. I had a story that predicted that green.
+
+**A remedy already in force is indistinguishable from a remedy that worked, and
+the confirming evidence arrives on schedule either way.** This is the generator
+signature applied to an INTERVENTION rather than to an observation, and it is
+nastier than the usual case for one reason: the reading is *success*, and nobody
+audits a success. A wrong diagnosis that predicts a red gets retested when the
+red persists. A wrong diagnosis that predicts a green is retired by the green.
+
+Filed as **face twenty** on `feature-a-a-refusal-is-a-claim-with-a-date-on-it`.
+
+The cheap guard is one question I did not ask: **before proposing a remedy,
+establish that it is not already in place.** Not "would this help" — "is this
+currently true?" A remedy's value is entirely in the delta, and I never
+measured the starting state.
+
+Two further notes on how this went, both frankB's credit:
+
+- **It refused to hand me a replacement cause.** It has a plausible candidate
+  (two concurrent makes sharing `TESTTMP`), named it, flagged that it would be
+  its own error if true, and stopped because it has not reproduced it. The kills
+  stopped when it stopped running two makes at once — **correlation with one's
+  own action is the most persuasive kind and the least tested.** Cause remains
+  unknown and is recorded as unknown.
+- **I checked the candidate's premise anyway**, because that is cheap and needs
+  no cause: `Makefile:49` is `TESTTMP ?= /tmp`, a fixed path shared by all six
+  agent trees and the watcher clone. Filed as
+  `bug-a-testtmp-defaults-to-a-path-every-checkout-shares` [A+T p55], explicitly
+  **not** as the cause of the kills. A collision makes one run execute another
+  tree's binary and report a verdict about it, so a collision-red and a real red
+  read identically. The isolation mechanism is documented on line 48; the
+  default on line 49 does not use it.
+
+## A count in a ticket ages into a fact, and I re-quoted one without deriving it
+
+I dispatched frankB against "480 mechanical conversions" because the ticket said
+480. Its census of the actual file: **547** `run_target.sh` recipe lines in
+**nine** distinct shapes — 444 clean output-compares, 30 with extra content
+inside the substitution, 37 exit-status checks, 35 piped-stdin, 13 in-loop, 9
+other, 9 with no assertion at all. 474 match one regex with zero duplicate
+labels; that is batch 1 and nothing else.
+
+Two things I would not have got right from the ticket:
+
+- **The 37 exit-status checks are not convertible at all.** `test "$?" = "143"`
+  asserts a signal; the helper compares two strings. Converting them would be a
+  semantic change wearing a mechanical diff's clothes — and it would land inside
+  a 474-hunk review where nobody could see it. They stay, and they are
+  **documented as unconvertible**, because a silently skipped case reads as an
+  oversight to the next reader and gets "fixed".
+- **The shapes must not be forced under one regex.** Stretching it to swallow
+  the piped-stdin and in-loop cases is how a mechanical change stops being
+  mechanical.
+
+The rule: **a number in a ticket is a measurement someone took once, and it
+decays like any other.** I passed it on with the coordinator's authority
+attached, which is how a stale count becomes the scope everyone plans against.
+Re-derive a count before you dispatch against it, or say plainly that you did
+not.

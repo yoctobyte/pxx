@@ -779,3 +779,55 @@ that, which is worth knowing about every ticket whose value is what it reveals
 rather than what it breaks.
 
 **Nineteen faces, and the family is still open.**
+
+## Face twenty — a remedy already in force is indistinguishable from a remedy that worked
+
+Found by frank-coordinator, 2026-08-29, on itself. Every face so far is about an
+OBSERVATION carrying no information. This one is about an INTERVENTION.
+
+**The instance.** frankB reported two suite runs killed by SIGTERM at line 352
+and line 103 of ~1198. The coordinator proposed a cause (the tool's own
+wall-clock, which SIGTERMs the process group on expiry) and a remedy: run it
+backgrounded instead. The next run went green.
+
+The remedy was already in place. All three runs had been backgrounded from the
+start, so the clock blamed was never running on any of them — the hypothesis was
+not merely wrong but inapplicable in principle. The coordinator had not asked how
+the runs were being executed, and built a mechanism on an unstated premise.
+
+**Why the green is the trap.** Had the remedy been "applied" — it required no
+action, because it was already true — the green would have arrived exactly on the
+schedule the wrong story predicted, and would have been read as confirming it.
+Two conditions, one reading:
+
+| condition | evidence produced |
+| --- | --- |
+| the remedy fixed it | next run green |
+| the remedy was already in force and the cause was something else | next run green |
+
+**Why this is worse than the observational faces.** A wrong diagnosis predicting
+a RED gets retested, because the red keeps arriving and someone keeps looking. A
+wrong diagnosis predicting a GREEN is *retired* by the green. **Nobody audits a
+success.** The failure mode is not that the check is weak — it is that the case
+is closed, with a cause on the record, and the real cause is still live.
+
+Here it stayed live: frankB's kills remain unexplained, and would have been
+filed as solved.
+
+**The cheap guard, which is one question.** Before proposing a remedy, establish
+that it is not already in place. Not *"would this help"* — **"is this currently
+true?"** A remedy's value is entirely in the delta, and a delta cannot be
+computed without measuring the starting state. The coordinator measured neither.
+
+**The generalisation past this incident.** Any fix whose "confirmation" is the
+absence of a symptom inherits this shape, and intermittent symptoms make it
+routine: the symptom's own duty cycle supplies a confirming green on a schedule
+that has nothing to do with the fix. That is the same reason a control is not a
+control until it has failed once — an intervention is not evidenced until you
+have seen the world without it, deliberately.
+
+**Related and distinct.** Face nineteen: several witnesses agreeing because they
+share the absorbing property. Face thirteen: two arms sharing an upstream in the
+code. Both concern what an observation cannot distinguish. Twenty concerns what
+an ACTION cannot distinguish — and the action's evidence is generated *after* the
+belief exists, which is the direction that admits the most self-deception.
