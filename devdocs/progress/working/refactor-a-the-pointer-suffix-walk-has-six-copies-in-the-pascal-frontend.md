@@ -5,8 +5,8 @@ track: A
 prio: 55
 type: refactor
 blocked-by: []
-status: backlog
-owner: ""
+status: working
+owner: frankA
 created: 2026-08-30
 found-by: frankA (splitting item 4 out of feature-a-typeref-migrate-consumers)
 summary: "The pointer/field/index suffix walk is duplicated SIX times in the Pascal frontend (not four, as the parent ticket says -- listed, not counted). Each copy stamps a different subset of the node tags the rest of the compiler reads, which is why four separate tickets have now ended 'the metadata was there, the reader was missing'. None can be deleted without the others agreeing on the tags, so this is one refactor, not six fixes."

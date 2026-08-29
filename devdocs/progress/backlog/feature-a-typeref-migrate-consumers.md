@@ -19,6 +19,16 @@ See `devdocs/dev/type-identity-as-substrate.md` for the full design and why
 this matters (the "one of six parallel arrays not written" bug class — four
 such bugs landed in one session per that note's evidence table).
 
+> **The candidate lane order below is OVERTAKEN by this ticket's own later
+> sections — do not plan off it.** Measured 2026-08-30: lane 1 (`TSymbol`) is
+> substantially landed, and lane 4 (proc returns) *and* record/class fields are
+> **DONE**. Lanes 2 and 3 are not the live work. The live item is step 3 (the
+> `TTypeRef` fold), whose Track U blocker
+> [[decide-typeref-gains-a-pointer-depth-field]] was **answered on 2026-08-25**
+> (`28c19f214`) and sat unnoticed for five days — `PtrDepth` has since landed,
+> readers-free. What remains is one coordinated commit that needs `ir.inc`. See
+> the 2026-08-30 section at the bottom.
+
 ## Landing rule (unchanged from the parent ticket)
 
 Each lane migrates ONE entity kind's parallel arrays to a single `TTypeRef`
