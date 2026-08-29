@@ -373,7 +373,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (13)
+## backlog_new (12)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -385,7 +385,6 @@ _none_
 | bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets | P | 65 | bug | `SizeOf(Extended)` answers 10 while a variable declared `Extended` occupies 8 and an array of four occupies 32. Same two-table split as [[bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets]], in the same function, left unfixed for the sibling type when Real was corrected. Self-inconsistent within our own compiler, so any stride or GetMem computed from SizeOf(Extended) is two bytes too long per element. | — |
 | bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step | T | 45 | bug | A test job takes its name from its FIRST source file, but the red is usually a later step -- so the auto-filed regression stub's `track:` guess is derived from a filename that has nothing to do with the failure. Wrong three times on one job: crtl-reachability -1 (red was crtl-map), -3, and -4 (red was lib/pcl's GTK3 guard, Track B). The stub says `track GUESSED from the test path` but the path is not evidence about the defect at all. | — |
 | bug-t-concurrent-sync-runs-can-squash-two-commits-into-one | T | 45 | bug | With several checkouts syncing at once, tools/sync.sh's rebase-and-retry loop squashed two separate commits into one: the second commit's content survived, its message and its `resolves:` line did not. Silent — the tree is clean, the push succeeds, and the only tell is a `git log` one shorter than expected. | — |
-| bug-t-the-hardcoded-tmp-guard-recommends-a-variable-testmgr-strips | T | 55 | bug | tools/testmgr_hardcoded_tmp_devtest.py tells you to read $TESTTMP instead of hardcoding /tmp. But testmgr launches every job through an environment ALLOWLIST, and TESTTMP is in neither ENV_ALLOW nor the ENV_ALLOW_PREFIXES (PXX_ TESTMGR_ LC_ QEMU_), so it does not reach the job at all. Every test that followed the advice falls back to /tmp under testmgr and collides exactly as a hardcoded literal would — guard green, defect intact. Five existing tests are in that state. TESTMGR_TMP is the variable that survives, and testmgr already sets it per run to a pid-keyed dir it creates. | — |
 | feature-t-check-flags-a-lane-blocker-that-has-no-in-edges | T | 40 | feature | prio propagates down dependency edges, so a ticket with in-degree zero inherits nothing — and a ticket that blocks a LANE rather than a ticket never gets an edge, because blocked-by: would be a false claim. Such a ticket under-ranks itself permanently and no checker sees it: from the ranker's side an in-degree of zero is indistinguishable from a leaf. Proposal: `progress.sh check` flags a ticket whose body names a track as its beneficiary and has no in-edges. Threshold MUST be calibrated against the live board before landing. | — |
 | refactor-a-one-rule-spelled-two-ways-at-two-strictnesses-in-ir-lowering | A | 40 | refactor | ir.inc:10426 reads `(CProgramMode or IsNodePChar(dest))` -- one rule expressed two ways at two different strictnesses, with the dialect flag standing in for the property it implies. Normalising it DELETES an entry from the C carve-out inventory rather than moving one, so it makes that refactor smaller. | — |
 | refactor-a-target-dispatch-chains-fail-open | A | 50 | refactor | Not a missing-helper ticket: TARGET_PTR_SIZE exists and is read at 129 sites. The narrow, verified gap is that several per-target if/else-if chains have no final else, so adding target #7 (wasm32) or #8 (riscv64) matches no arm and configures nothing, silently. lexer.inc:936 is the worked example. Fix is a mandatory else that Errors, not a collapse of the 180 TargetArch sites — util.inc:87 already documents why collapsing is wrong. | — |
@@ -621,9 +620,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2673)
+## done (2674)
 
-2673 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2674 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (55)
 
@@ -759,7 +758,6 @@ _none_
 - [p 55] [P] bug-p-qword-div-by-a-literal-above-2-63-is-signed
 - [p 55] [P] bug-p-the-address-of-a-virtual-class-method-cannot-be-lowered
 - [p 55] [T] bug-t-a-job-that-never-passed-on-this-box-can-never-earn-a-bigger-budget
-- [p 55] [T] bug-t-the-hardcoded-tmp-guard-recommends-a-variable-testmgr-strips
 - [p 55] [A] chore-a-the-range-checked-fpc-seed-cannot-be-built
 - [p 55] [U] decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample
 - [p 55] [U] decide-settextbuf-needs-buffered-text-io-or-stays-missing

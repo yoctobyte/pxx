@@ -1822,6 +1822,12 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
              "tier: %s" % report["tier"],
              "wall: %s" % report["wall"],
              "scale: %s" % report["scale"],
+             # The two ratios behind that scale, when the harness published
+             # them. A `scale: 1.0` has two causes -- the box IS the reference
+             # speed, or the probe measured nothing -- and only these separate
+             # them. Absent on reports from an older harness, and absent is
+             # rendered as absent rather than as a zero.
+             "probe: %s" % probe_line(report.get("probe")),
              "verdict: %s" % report["verdict"],
              # ...and which HARNESS, not only which tree. A verdict whose
              # harness predates the fix it appears to contradict can then be
@@ -2308,6 +2314,21 @@ def cross_currency_block(fulls, now=None):
             "question about an OLDER tree, and it is what makes an "
             "already-fixed job still read `fail`.", ""]
     return out
+
+
+def probe_line(probe):
+    """The calibration ratios, for the report header. -> str
+
+    "unpublished" when the harness that produced the report did not carry them,
+    "no opinion" when a probe declined to measure. Neither is a number, and
+    neither may be rendered as one.
+    """
+    if not probe:
+        return "unpublished (older harness)"
+    def one(v):
+        return "no opinion" if v is None else ("%.2f" % v)
+    return "native=%s emulated=%s" % (one(probe.get("native")),
+                                      one(probe.get("emulated")))
 
 
 def fmt_age(secs):

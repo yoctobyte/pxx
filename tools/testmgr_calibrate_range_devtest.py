@@ -143,7 +143,23 @@ def main():
     check(str(tm.PROBE_EMU_ITERS) in tm.PROBE_EMU_SRC,
           "and its cost is the constant, not a literal that drifted from it")
 
-    print("\n  %d guard(s), %d FAIL" % (15, len(fails)))
+    print("7. the ratios TRAVEL WITH THE VERDICT, not just to stdout")
+    import twatch as tw                                      # noqa: E402
+    s, _ = run_calibrate(tm.PROBE_REF * 2.0, 1.3)
+    check(tm.PROBE_RATIOS["native"] == 2.0 and tm.PROBE_RATIOS["emulated"] == 1.3,
+          "calibrate() records both components", str(tm.PROBE_RATIOS))
+    check(tw.probe_line({"native": 2.0, "emulated": 1.3}) == "native=2.00 emulated=1.30",
+          "and the report header renders them")
+    check(tw.probe_line({"native": 1.4, "emulated": None})
+          == "native=1.40 emulated=no opinion",
+          "a probe that declined renders as declined, not as 0")
+    check(tw.probe_line(None) == "unpublished (older harness)",
+          "and a report from before this change says so, rather than lying")
+    run_calibrate(tm.PROBE_REF * 0.5, None)
+    check(tm.PROBE_RATIOS["emulated"] is None,
+          "None survives into the record instead of becoming a number")
+
+    print("\n  %d guard(s), %d FAIL" % (20, len(fails)))
     return 1 if fails else 0
 
 

@@ -3736,6 +3736,10 @@ class Manager:
 # should sweep it, enrol it, or wire it into a tier.
 #
 # bug-t-a-job-that-never-passed-on-this-box-can-never-earn-a-bigger-budget
+# Filled by calibrate(); published in the report so a remote box's scale can be
+# read as a measurement rather than a default.
+PROBE_RATIOS = {"native": None, "emulated": None}
+
 PROBE_EMU_ARCH = "aarch64"      # the emulator every cross-capable box has
 PROBE_EMU_ITERS = 8000000       # ~0.36s emulated on the reference box
 PROBE_EMU_REF = 0.36            # seconds: that loop under qemu-aarch64, plexus
@@ -3813,6 +3817,14 @@ def calibrate():
     native = dt / PROBE_REF
     emulated = calibrate_emulated()
     scale = max(1.0, native, emulated or 0.0)
+    # Kept for the REPORT, not only for stdout. A scale of 1.00 has two very
+    # different causes -- "this box is at the reference speed" and "the probe
+    # measured nothing" -- and only the components tell them apart. The box
+    # where that distinction is load-bearing is a remote watcher whose stdout
+    # nobody reads (bug-t-a-job-that-never-passed-on-this-box-can-never-earn-a-
+    # bigger-budget), so the numbers have to travel with the verdict.
+    PROBE_RATIOS["native"] = round(native, 2)
+    PROBE_RATIOS["emulated"] = None if emulated is None else round(emulated, 2)
     # ALWAYS printed, including the x1.00 case. "The floor is the answer" is
     # what went unnoticed for the life of this function, and a line that appears
     # only when the probe found something cannot say that it found nothing.
@@ -5555,6 +5567,9 @@ def main():
     print("\ntestmgr: %s" % verdict)
     if args.report_json:
         rep = {"tier": args.tier, "wall": round(wall, 1), "scale": round(scale, 2),
+               # The two ratios BEHIND that scale. Without them a published
+               # `scale: 1.0` cannot be told from a probe that never ran.
+               "probe": dict(PROBE_RATIOS),
                "verdict": verdict,
                # the binary these results came from, so a report's provenance is
                # identifiable after the fact instead of inferred from timestamps

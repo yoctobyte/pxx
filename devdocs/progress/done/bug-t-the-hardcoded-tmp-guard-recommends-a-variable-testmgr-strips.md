@@ -4,7 +4,7 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "tools/testmgr_hardcoded_tmp_devtest.py tells you to read $TESTTMP instead of hardcoding /tmp. But testmgr launches every job through an environment ALLOWLIST, and TESTTMP is in neither ENV_ALLOW nor the ENV_ALLOW_PREFIXES (PXX_ TESTMGR_ LC_ QEMU_), so it does not reach the job at all. Every test that followed the advice falls back to /tmp under testmgr and collides exactly as a hardcoded literal would — guard green, defect intact. Five existing tests are in that state. TESTMGR_TMP is the variable that survives, and testmgr already sets it per run to a pid-keyed dir it creates."
-status: new
+status: done
 owner: ""
 ---
 
@@ -155,3 +155,87 @@ finding, not refuted it.
 
 *(Measured by the Track T agent on plexus. No change made here — the fix is
 still the two parts above, and part 2 is the one that lasts.)*
+
+---
+
+## RESOLVED 2026-08-30 — both parts, and the second one is what makes it stick
+
+**Part 1, the message.** The guard now prints a copy-pasteable example in all
+three languages, in the order that works everywhere — `TESTMGR_TMP`, then
+`TESTTMP`, then the default — and says *why* the order is what it is, so it is
+not folklore the next author has to take on trust. It points at
+`test/test_nilpy_class_named_like_an_rtl_record.npy` as the worked example.
+
+**Part 2, the half that lasts: the guard can now tell the difference.** A second
+check reads the ENV ACCESSES in every source under `test/`, `lib/`, `examples/`,
+in source order, and fails any file whose first temp-dir read is `$TESTTMP`.
+
+**Reads, not mentions**, and that distinction is load-bearing: the worked
+example discusses both variables at length in a comment directly above the code
+that reads them, so a mention-based check would fail the one file in the tree
+that is right. `tmp_env_reads()` matches the accessor call
+(`GetEnvironmentVariable` / `GetEnv` / `getenv` / `os.environ.get` / `os.getenv`),
+so prose can neither satisfy nor break it.
+
+**Order, not presence.** A file that reads `TESTTMP` first and `TESTMGR_TMP` as
+its fallback does work under testmgr — the first read simply returns nothing.
+But it only works there. `TESTMGR_TMP` first is the order with one answer under
+testmgr *and* under plain `make`, which is the property the allowlist took away
+and the thing worth enforcing.
+
+**A ratchet, exactly like the `/tmp` half, and for the file's own stated
+reason.** The five sources are not defects — they are this guard's advice
+followed faithfully — so failing them today would red the fleet over files that
+belong to other lanes, and a red ratchet is a disabled ratchet. They are listed
+in `KNOWN_ENV_ONLY`, green, **each tagged with the lane that owns the fix**, and
+anything new fails:
+
+| source | lane |
+| --- | --- |
+| `test/lib_ioresult_fpc_codes.pas` | B |
+| `test/lib_text_seek_rename.pas` | B |
+| `test/lib_textreadnumtok.pas` | B |
+| `test/test_read_text_char.pas` | P |
+| `test/test_read_text_value_cursor.pas` | P |
+
+Each is three lines to convert, and the guard prints "remove it from
+KNOWN_ENV_ONLY" the moment a lane does. **I did not convert them here**: they are
+B's and P's files, both lanes are active tonight, and a cross-lane edit to
+`test/lib_*.pas` is exactly the collision the track letters exist to prevent.
+The list is the handoff.
+
+### What was measured rather than taken from this ticket
+
+The five were re-derived from the tree, not copied from the table above — same
+five, and one file already correct. `TMPDIR` **is** in `ENV_ALLOW`, so it
+reaches a job; testmgr does not *set* it, so `GetTempDir` still resolves to
+`/tmp` and the three `GetTempDir` fallbacks really do collide, as this ticket
+says.
+
+**A general answer this ticket does not take, noted because it is the better one
+if someone wants it:** testmgr could set `TMPDIR=RUN_TMP` for every job, and
+then every `GetTempDir` / `mkstemp` / `tempfile` user in every language would
+isolate with no test knowing the rule. It is *partial* — it fixes the three
+`GetTempDir` fallbacks and not the two that fall back to a literal `/tmp` — and
+it changes the environment of every job in the matrix, including one test that
+does `SetCurrentDir(GetTempDir)`. That is a deliberate decision, not a
+side-effect of this fix, so it is left as a note rather than taken.
+
+### Verification
+
+* `tools/testmgr_tmp_advice_devtest.py` — **23 guards**, in two halves: the
+  advice must be right, and the guard must be able to see whether it was taken.
+  Includes that the ratchet list names no file that has been deleted, since a
+  dead entry is silent slack.
+* **End-to-end, both directions:** a violating source planted under `test/` fails
+  the guard by name; the compliant version of the same file passes; the tree was
+  left clean. The guard's discrimination is measured, not asserted.
+* 105 tool devtests green; `make compiler/pascal26` fixedpoint verified.
+
+**Not run: `--tier full`.** The `Gate:` line above is superseded by CLAUDE.md's
+per-fix loop, the hook refuses the heavy tiers, and I do not take `PXX_TRACK=T`
+on my own authority. This is a Python guard with no compiled artifact; what it
+touches is covered by the devtests above.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
