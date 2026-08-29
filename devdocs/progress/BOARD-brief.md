@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:22 blocked:6 backlog:301 backlog_new:4 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2581 rejected:46`
+`working:2 unfinished:22 blocked:6 backlog:301 backlog_new:4 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2582 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
@@ -58,6 +58,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - `[p 70] [N]` feature-nilpy-staticmethod-and-classmethod
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
+- `[p 70] [T]` regression-cascade-154d1aa3fba6
 - `[p 70] [P]` regression-cascade-4e27dc2be114
 - `[p 70] [A+S]` regression-test-emit-obj-cxtensa-obj
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-parent-call-after-instantiation
@@ -77,6 +78,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
 - `[p 62] [N]` feature-nilpy-enum-class
-- `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
 
 _282 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -14032,6 +14032,14 @@ pin:
 # hard-fail (a smoke gate for track B). Keep every entry here passing; move
 # anything broken to a ticket instead of letting this go red.
 lib-test: pxx-stable-check
+	# Non-coverage accumulator. Each SKIP branch below records its own name here,
+	# and the closing summary names them -- so the LAST line a reader sees says
+	# what did not run, instead of enumerating suites the rule merely contains
+	# (bug-a-lib-test-ok-line-names-suites-that-were-skipped). Written by the
+	# branch that skips rather than re-derived at the end: re-testing the
+	# preconditions in the summary would duplicate every guard predicate, which
+	# is how the two drift apart.
+	@rm -f $(TESTTMP)/lib-test.skipped
 	@echo "=== lib-test: library smoke against $(PXX_STABLE) ==="
 	# Structural, and FIRST because it costs ~0.1s and its failure mode is
 	# invisible at run time: a crtl header declaring a function whose definition
@@ -14252,11 +14260,29 @@ lib-test: pxx-stable-check
 	# IPv6 over the PAL: sockaddr_in6 layout + loopback round trip (skips if the
 	# host has no AF_INET6 — a broken layout is the target, not the CI netstack)
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_ipv6.pas $(TESTTMP)/lib_ipv6
-	$(TESTTMP)/lib_ipv6 | tail -n 1 | grep -qE '^IPV6 (OK|SKIP)'
+	# OK and SKIP both pass -- unchanged, the host may lack AF_INET6. But a
+	# SKIP that passes SILENTLY is non-coverage the summary cannot see, and
+	# `grep -q` also discarded the line on failure, leaving job_reason() the
+	# previous recipe line. Same verdict, now recorded and diagnosed.
+	@out="$$($(TESTTMP)/lib_ipv6 | tail -n 1)"; \
+	 case "$$out" in \
+	   'IPV6 OK'*)   ;; \
+	   'IPV6 SKIP'*) echo "  ipv6: $$out"; echo ipv6 >> $(TESTTMP)/lib-test.skipped ;; \
+	   *) echo "FAIL: lib_ipv6 last line was: $$out"; exit 1 ;; \
+	 esac
 	# IPv6 through net.pas, and proof the IPv4 path still works after
 	# TNetAddress gained a Family field
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_net6.pas $(TESTTMP)/lib_net6
-	$(TESTTMP)/lib_net6 | tail -n 1 | grep -qE '^NET6 (OK|SKIP)'
+	# OK and SKIP both pass -- unchanged, the host may lack AF_INET6. But a
+	# SKIP that passes SILENTLY is non-coverage the summary cannot see, and
+	# `grep -q` also discarded the line on failure, leaving job_reason() the
+	# previous recipe line. Same verdict, now recorded and diagnosed.
+	@out="$$($(TESTTMP)/lib_net6 | tail -n 1)"; \
+	 case "$$out" in \
+	   'NET6 OK'*)   ;; \
+	   'NET6 SKIP'*) echo "  net6: $$out"; echo net6 >> $(TESTTMP)/lib-test.skipped ;; \
+	   *) echo "FAIL: lib_net6 last line was: $$out"; exit 1 ;; \
+	 esac
 	# IPV6_V6ONLY escape hatch: asserted BEHAVIOURALLY (can a v4 client reach a
 	# :: listener), not by setsockopt's return, since the point is that the
 	# option takes effect rather than being accepted and ignored.
@@ -14270,7 +14296,16 @@ lib-test: pxx-stable-check
 	# asyncnet over ::1 — the coroutine reactor is family-agnostic, so this runs
 	# the v6 socket calls against the SAME accept/recv/send the v4 tests use
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_asyncnet6.pas $(TESTTMP)/lib_asyncnet6
-	$(TESTTMP)/lib_asyncnet6 | tail -n 1 | grep -qE '^ASYNCNET6 (OK|SKIP)'
+	# OK and SKIP both pass -- unchanged, the host may lack AF_INET6. But a
+	# SKIP that passes SILENTLY is non-coverage the summary cannot see, and
+	# `grep -q` also discarded the line on failure, leaving job_reason() the
+	# previous recipe line. Same verdict, now recorded and diagnosed.
+	@out="$$($(TESTTMP)/lib_asyncnet6 | tail -n 1)"; \
+	 case "$$out" in \
+	   'ASYNCNET6 OK'*)   ;; \
+	   'ASYNCNET6 SKIP'*) echo "  asyncnet6: $$out"; echo asyncnet6 >> $(TESTTMP)/lib-test.skipped ;; \
+	   *) echo "FAIL: lib_asyncnet6 last line was: $$out"; exit 1 ;; \
+	 esac
 	# NilPy -> Tcl/Tk embed, headless. Needs xvfb-run + the system libtcl/libtk
 	# 8.6, so it SKIPS cleanly when either is missing rather than reddening a gate
 	# over an absent GUI stack. The .npy auto-closes via `after`, so it terminates
@@ -14358,7 +14393,7 @@ lib-test: pxx-stable-check
 	  tools/expect_same.sh lib_tk_htmlview "$$(xvfb-run -a $(TESTTMP)/lib_tk_htmlview)" "$$(printf 'title True\ninline True\nbullet True\nentity True\npre True\nquote True\nlink True\nreplaced x\nlabel plain & small\nok: tkhtmlview rendered')" && \
 	  echo "  tk-nilpy: ok"; \
 	else \
-	  echo "  tk-nilpy: SKIP (no xvfb-run or no libtk8.6)"; \
+	  echo "  tk-nilpy: SKIP (no xvfb-run or no libtk8.6)"; echo tk-nilpy >> $(TESTTMP)/lib-test.skipped; \
 	fi
 	# mimic_codecs — `import codecs` resolves to lib/rtl/mimic_codecs. Same
 	# CPython-as-oracle deal as nilsh: the SAME source must print the same
@@ -14468,7 +14503,7 @@ lib-test: pxx-stable-check
 	# clone; the recipe lines below are unchanged, so testmgr's per-line job
 	# split and its own CORPUS_ROOTS skip both still see them.
 ifeq ($(wildcard external/synapse),)
-	@echo "SKIP lib_synapse + lib_synapse_transitive_unit -- external/synapse absent; fetch it with: tools/install_externals.sh"
+	@echo "SKIP lib_synapse + lib_synapse_transitive_unit -- external/synapse absent; fetch it with: tools/install_externals.sh"; echo synapse-ssl >> $(TESTTMP)/lib-test.skipped
 else
 	$(PXX_STABLE) --mimic-fpc -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posix test/lib_synapse.pas $(TESTTMP)/lib_synapse
 	tools/expect_same.sh lib_synapse "$$($(TESTTMP)/lib_synapse)" "$$(printf 'b64=SGVsbG8sIFdvcmxkIQ==\nb64d=Hello, World!\nmd5=900150983cd24fb0d6963f7d28e17f72\nsha1=a9993e364706816aba3e25717850c26c9cd0d89d\ncrc32=3421780262\nurl=a%%20b&c\nsrv-got=ping\ncli-got=pong')"
@@ -15002,7 +15037,7 @@ endif
 	$(PXX_STABLE) test/cstring_batch.c $(TESTTMP)/cstring_batch
 	@if command -v gcc >/dev/null 2>&1; then \
 	  if ! gcc -w -o $(TESTTMP)/cstring_batch_gcc test/cstring_batch.c 2> $(TESTTMP)/cstring_batch_oracle.err; then \
-	    echo "SKIP: cstring_batch (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cstring_batch_oracle.err))"; \
+	    echo "SKIP: cstring_batch (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cstring_batch_oracle.err))"; echo cstring_batch >> $(TESTTMP)/lib-test.skipped; \
 	    $(TESTTMP)/cstring_batch >/dev/null; \
 	  else \
 	  $(TESTTMP)/cstring_batch_gcc > $(TESTTMP)/cstring_batch_gcc.txt; \
@@ -15011,14 +15046,14 @@ endif
 	    { echo 'FAIL: cstring_batch differs from gcc'; exit 1; }; \
 	  echo 'cstring_batch: identical to gcc'; \
 	fi; \
-	else echo 'cstring_batch: SKIP (no gcc)'; $(TESTTMP)/cstring_batch >/dev/null; fi
+	else echo 'cstring_batch: SKIP (no gcc)'; echo cstring_batch >> $(TESTTMP)/lib-test.skipped; $(TESTTMP)/cstring_batch >/dev/null; fi
 	# strerror was a stub returning "error" for every errnum, which made perror
 	# and strerror_r useless. Table generated FROM gcc, so both streams are
 	# diffed against it — stderr separately, since perror writes there.
 	$(PXX_STABLE) test/cerrno_strings.c $(TESTTMP)/cerrno_strings
 	@if command -v gcc >/dev/null 2>&1; then \
 	  if ! gcc -w -o $(TESTTMP)/cerrno_strings_gcc test/cerrno_strings.c 2> $(TESTTMP)/cerrno_strings_oracle.err; then \
-	    echo "SKIP: cerrno_strings (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cerrno_strings_oracle.err))"; \
+	    echo "SKIP: cerrno_strings (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cerrno_strings_oracle.err))"; echo cerrno_strings >> $(TESTTMP)/lib-test.skipped; \
 	    $(TESTTMP)/cerrno_strings >/dev/null 2>&1; \
 	  else \
 	  $(TESTTMP)/cerrno_strings_gcc > $(TESTTMP)/cerrno_gcc.out 2> $(TESTTMP)/cerrno_gcc.err; \
@@ -15028,7 +15063,7 @@ endif
 	    { echo 'FAIL: cerrno_strings differs from gcc'; exit 1; }; \
 	  echo 'cerrno_strings: identical to gcc'; \
 	fi; \
-	else echo 'cerrno_strings: SKIP (no gcc)'; $(TESTTMP)/cerrno_strings >/dev/null 2>&1; fi
+	else echo 'cerrno_strings: SKIP (no gcc)'; echo cerrno_strings >> $(TESTTMP)/lib-test.skipped; $(TESTTMP)/cerrno_strings >/dev/null 2>&1; fi
 	# LINKAGE, not just output: this file calls htons/ntohl, and the whole point
 	# of bug-cfront-spurious-dt-needed-libc-with-no-imports is that doing so used
 	# to make the binary pull a glibc DT_NEEDED for a function crtl implements.
@@ -15040,7 +15075,7 @@ endif
 	  test "$$n" = "0" || { echo "FAIL: cerrno_strings has $$n DT_NEEDED, want 0"; \
 	    readelf -d $(TESTTMP)/cerrno_strings | grep NEEDED; exit 1; }; \
 	  echo 'cerrno_strings: statically linked, no DT_NEEDED'; \
-	else echo 'cerrno_strings: linkage check SKIP (no readelf)'; fi
+	else echo 'cerrno_strings: linkage check SKIP (no readelf)'; echo cerrno_strings >> $(TESTTMP)/lib-test.skipped; fi
 	# printf %a/%A, the +/space flags on float conversions, and NAN's sign.
 	# %a was a CRASH off x86-64: it fell to the unknown-conversion path, which
 	# did not consume the double, so stack-based varargs shifted and the next
@@ -15048,7 +15083,7 @@ endif
 	$(PXX_STABLE) test/cprintf_hexfloat.c $(TESTTMP)/cprintf_hexfloat
 	@if command -v gcc >/dev/null 2>&1; then \
 	  if ! gcc -w -o $(TESTTMP)/cprintf_hexfloat_gcc test/cprintf_hexfloat.c -lm 2> $(TESTTMP)/cprintf_hexfloat_oracle.err; then \
-	    echo "SKIP: cprintf_hexfloat (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cprintf_hexfloat_oracle.err))"; \
+	    echo "SKIP: cprintf_hexfloat (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cprintf_hexfloat_oracle.err))"; echo cprintf_hexfloat >> $(TESTTMP)/lib-test.skipped; \
 	    $(TESTTMP)/cprintf_hexfloat >/dev/null; \
 	  else \
 	  $(TESTTMP)/cprintf_hexfloat_gcc > $(TESTTMP)/chf_gcc.out; $(TESTTMP)/cprintf_hexfloat > $(TESTTMP)/chf_pxx.out; \
@@ -15056,14 +15091,14 @@ endif
 	    { echo 'FAIL: cprintf_hexfloat differs from gcc'; exit 1; }; \
 	  echo 'cprintf_hexfloat: identical to gcc'; \
 	fi; \
-	else echo 'cprintf_hexfloat: SKIP (no gcc)'; $(TESTTMP)/cprintf_hexfloat >/dev/null; fi
+	else echo 'cprintf_hexfloat: SKIP (no gcc)'; echo cprintf_hexfloat >> $(TESTTMP)/lib-test.skipped; $(TESTTMP)/cprintf_hexfloat >/dev/null; fi
 	# read/write/close/lseek: declared by <unistd.h>, implemented nowhere until
 	# 2026-08-05, so raw I/O silently imported them from glibc. Diffed against
 	# gcc; the linkage is asserted too, since the diff passes either way here.
 	$(PXX_STABLE) test/cposix_io.c $(TESTTMP)/cposix_io
 	@if command -v gcc >/dev/null 2>&1; then \
 	  if ! gcc -w -o $(TESTTMP)/cposix_io_gcc test/cposix_io.c 2> $(TESTTMP)/cposix_io_oracle.err; then \
-	    echo "SKIP: cposix_io (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cposix_io_oracle.err))"; \
+	    echo "SKIP: cposix_io (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cposix_io_oracle.err))"; echo cposix_io >> $(TESTTMP)/lib-test.skipped; \
 	    $(TESTTMP)/cposix_io >/dev/null; \
 	  else \
 	  $(TESTTMP)/cposix_io_gcc > $(TESTTMP)/cposix_io_gcc.out; $(TESTTMP)/cposix_io > $(TESTTMP)/cposix_io_pxx.out; \
@@ -15071,13 +15106,13 @@ endif
 	    { echo 'FAIL: cposix_io differs from gcc'; exit 1; }; \
 	  echo 'cposix_io: identical to gcc'; \
 	fi; \
-	else echo 'cposix_io: SKIP (no gcc)'; $(TESTTMP)/cposix_io >/dev/null; fi
+	else echo 'cposix_io: SKIP (no gcc)'; echo cposix_io >> $(TESTTMP)/lib-test.skipped; $(TESTTMP)/cposix_io >/dev/null; fi
 	# atof/bsearch diffed against gcc; rand asserts only the PROPERTIES C fixes,
 	# since the sequence is deliberately not glibc's and must not be compared
 	$(PXX_STABLE) test/cstdlib_batch3.c $(TESTTMP)/cstdlib_batch3
 	@if command -v gcc >/dev/null 2>&1; then \
 	  if ! gcc -w -o $(TESTTMP)/cstdlib_batch3_gcc test/cstdlib_batch3.c 2> $(TESTTMP)/cstdlib_batch3_oracle.err; then \
-	    echo "SKIP: cstdlib_batch3 (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cstdlib_batch3_oracle.err))"; \
+	    echo "SKIP: cstdlib_batch3 (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cstdlib_batch3_oracle.err))"; echo cstdlib_batch3 >> $(TESTTMP)/lib-test.skipped; \
 	    $(TESTTMP)/cstdlib_batch3 >/dev/null; \
 	  else \
 	  $(TESTTMP)/cstdlib_batch3_gcc > $(TESTTMP)/csb3_gcc.out; $(TESTTMP)/cstdlib_batch3 > $(TESTTMP)/csb3_pxx.out; \
@@ -15085,7 +15120,7 @@ endif
 	    { echo 'FAIL: cstdlib_batch3 differs from gcc'; exit 1; }; \
 	  echo 'cstdlib_batch3: identical to gcc'; \
 	fi; \
-	else echo 'cstdlib_batch3: SKIP (no gcc)'; $(TESTTMP)/cstdlib_batch3 >/dev/null; fi
+	else echo 'cstdlib_batch3: SKIP (no gcc)'; echo cstdlib_batch3 >> $(TESTTMP)/lib-test.skipped; $(TESTTMP)/cstdlib_batch3 >/dev/null; fi
 	@if command -v readelf >/dev/null 2>&1; then \
 	  for b in $(TESTTMP)/cposix_io $(TESTTMP)/cstdlib_batch3; do \
 	    n=$$(readelf -d $$b 2>/dev/null | grep -c NEEDED); \
@@ -15099,7 +15134,7 @@ endif
 	$(PXX_STABLE) test/cwctype.c $(TESTTMP)/cwctype
 	@if command -v gcc >/dev/null 2>&1; then \
 	  if ! gcc -w -o $(TESTTMP)/cwctype_gcc test/cwctype.c 2> $(TESTTMP)/cwctype_oracle.err; then \
-	    echo "SKIP: cwctype (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cwctype_oracle.err))"; \
+	    echo "SKIP: cwctype (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cwctype_oracle.err))"; echo cwctype >> $(TESTTMP)/lib-test.skipped; \
 	    $(TESTTMP)/cwctype >/dev/null; \
 	  else \
 	  $(TESTTMP)/cwctype_gcc > $(TESTTMP)/cwctype_gcc.out; $(TESTTMP)/cwctype > $(TESTTMP)/cwctype_pxx.out; \
@@ -15107,7 +15142,7 @@ endif
 	    { echo 'FAIL: cwctype differs from gcc'; exit 1; }; \
 	  echo 'cwctype: identical to gcc'; \
 	fi; \
-	else echo 'cwctype: SKIP (no gcc)'; $(TESTTMP)/cwctype >/dev/null; fi
+	else echo 'cwctype: SKIP (no gcc)'; echo cwctype >> $(TESTTMP)/lib-test.skipped; $(TESTTMP)/cwctype >/dev/null; fi
 	# and it must be STATICALLY linked -- these functions existing as glibc
 	# imports is the bug this file was written for, and the output diff above
 	# passes either way on a glibc host
@@ -15121,7 +15156,7 @@ endif
 	$(PXX_STABLE) test/cstrtol_range.c $(TESTTMP)/cstrtol_range
 	@if command -v gcc >/dev/null 2>&1; then \
 	  if ! gcc -w -o $(TESTTMP)/cstrtol_range_gcc test/cstrtol_range.c 2> $(TESTTMP)/cstrtol_range_oracle.err; then \
-	    echo "SKIP: cstrtol_range (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cstrtol_range_oracle.err))"; \
+	    echo "SKIP: cstrtol_range (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cstrtol_range_oracle.err))"; echo cstrtol_range >> $(TESTTMP)/lib-test.skipped; \
 	    $(TESTTMP)/cstrtol_range >/dev/null; \
 	  else \
 	  $(TESTTMP)/cstrtol_range_gcc > $(TESTTMP)/cstrtol_gcc.txt; \
@@ -15130,14 +15165,14 @@ endif
 	    { echo 'FAIL: cstrtol_range differs from gcc'; exit 1; }; \
 	  echo 'cstrtol_range: identical to gcc'; \
 	fi; \
-	else echo 'cstrtol_range: SKIP (no gcc)'; $(TESTTMP)/cstrtol_range >/dev/null; fi
+	else echo 'cstrtol_range: SKIP (no gcc)'; echo cstrtol_range >> $(TESTTMP)/lib-test.skipped; $(TESTTMP)/cstrtol_range >/dev/null; fi
 	# localtime honouring the timezone. Run ONCE PER ZONE with TZ in the
 	# environment — glibc caches the zone until tzset(), so a self-contained
 	# setenv loop silently compares UTC against UTC and passes for every zone.
 	$(PXX_STABLE) test/ctime_localtime.c $(TESTTMP)/ctime_localtime
 	@if command -v gcc >/dev/null 2>&1 && [ -d /usr/share/zoneinfo ]; then \
 	  if ! gcc -w -o $(TESTTMP)/ctime_localtime_gcc test/ctime_localtime.c 2> $(TESTTMP)/ctime_localtime_oracle.err; then \
-	    echo "SKIP: ctime_localtime (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/ctime_localtime_oracle.err))"; \
+	    echo "SKIP: ctime_localtime (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/ctime_localtime_oracle.err))"; echo ctime_localtime >> $(TESTTMP)/lib-test.skipped; \
 	    $(TESTTMP)/ctime_localtime >/dev/null; \
 	  else \
 	  for z in UTC Europe/Amsterdam America/New_York Asia/Kolkata Australia/Sydney; do \
@@ -15148,14 +15183,14 @@ endif
 	  done; \
 	  echo 'ctime_localtime: identical to gcc (5 zones)'; \
 	fi; \
-	else echo 'ctime_localtime: SKIP (no gcc or no zoneinfo)'; $(TESTTMP)/ctime_localtime >/dev/null; fi
+	else echo 'ctime_localtime: SKIP (no gcc or no zoneinfo)'; echo ctime_localtime >> $(TESTTMP)/lib-test.skipped; $(TESTTMP)/ctime_localtime >/dev/null; fi
 	# sscanf's EOF-vs-0 return contract, and the math surface. The boundary
 	# cases are the point: EOF means input ran out before any conversion, 0
 	# means input was there and did not match, and callers loop on != EOF.
 	$(PXX_STABLE) test/cscanf_math.c $(TESTTMP)/cscanf_math
 	@if command -v gcc >/dev/null 2>&1; then \
 	  if ! gcc -w -o $(TESTTMP)/cscanf_math_gcc test/cscanf_math.c -lm 2> $(TESTTMP)/cscanf_math_oracle.err; then \
-	    echo "SKIP: cscanf_math (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cscanf_math_oracle.err))"; \
+	    echo "SKIP: cscanf_math (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cscanf_math_oracle.err))"; echo cscanf_math >> $(TESTTMP)/lib-test.skipped; \
 	    $(TESTTMP)/cscanf_math >/dev/null; \
 	  else \
 	  $(TESTTMP)/cscanf_math_gcc > $(TESTTMP)/csm_gcc.txt 2>&1; \
@@ -15164,13 +15199,13 @@ endif
 	    { echo 'FAIL: cscanf_math differs from gcc'; exit 1; }; \
 	  echo 'cscanf_math: identical to gcc'; \
 	fi; \
-	else echo 'cscanf_math: SKIP (no gcc)'; $(TESTTMP)/cscanf_math >/dev/null; fi
+	else echo 'cscanf_math: SKIP (no gcc)'; echo cscanf_math >> $(TESTTMP)/lib-test.skipped; $(TESTTMP)/cscanf_math >/dev/null; fi
 	# dup/dup2 — asserted behaviourally (the duplicate reads the same file, and
 	# dup2 lands on the descriptor it was given), not just that it returned >= 0.
 	$(PXX_STABLE) test/cdup.c $(TESTTMP)/cdup
 	@if command -v gcc >/dev/null 2>&1; then \
 	  if ! gcc -w -o $(TESTTMP)/cdup_gcc test/cdup.c 2> $(TESTTMP)/cdup_oracle.err; then \
-	    echo "SKIP: cdup (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cdup_oracle.err))"; \
+	    echo "SKIP: cdup (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cdup_oracle.err))"; echo cdup >> $(TESTTMP)/lib-test.skipped; \
 	    $(TESTTMP)/cdup >/dev/null; \
 	  else \
 	  $(TESTTMP)/cdup_gcc > $(TESTTMP)/cdup_gcc.txt 2>&1; $(TESTTMP)/cdup > $(TESTTMP)/cdup_pxx.txt 2>&1; \
@@ -15178,14 +15213,14 @@ endif
 	    { echo 'FAIL: cdup differs from gcc'; exit 1; }; \
 	  echo 'cdup: identical to gcc'; \
 	fi; \
-	else echo 'cdup: SKIP (no gcc)'; $(TESTTMP)/cdup >/dev/null; fi
+	else echo 'cdup: SKIP (no gcc)'; echo cdup >> $(TESTTMP)/lib-test.skipped; $(TESTTMP)/cdup >/dev/null; fi
 	# chdir/symlink/link. Behavioural: chdir must make a RELATIVE path resolve
 	# against the new directory, lstat must see a link where stat follows it.
 	# Run from /tmp because the test chdir's around.
 	$(PXX_STABLE) test/cfileops.c $(TESTTMP)/cfileops
 	@if command -v gcc >/dev/null 2>&1; then \
 	  if ! gcc -w -o $(TESTTMP)/cfileops_gcc test/cfileops.c 2> $(TESTTMP)/cfileops_oracle.err; then \
-	    echo "SKIP: cfileops (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cfileops_oracle.err))"; \
+	    echo "SKIP: cfileops (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cfileops_oracle.err))"; echo cfileops >> $(TESTTMP)/lib-test.skipped; \
 	    (cd $(TESTTMP) && $(TESTTMP)/cfileops) >/dev/null; \
 	  else \
 	  (cd $(TESTTMP) && $(TESTTMP)/cfileops_gcc) > $(TESTTMP)/cfo_gcc.txt 2>&1; \
@@ -15194,14 +15229,14 @@ endif
 	    { echo 'FAIL: cfileops differs from gcc'; exit 1; }; \
 	  echo 'cfileops: identical to gcc'; \
 	fi; \
-	else echo 'cfileops: SKIP (no gcc)'; (cd $(TESTTMP) && $(TESTTMP)/cfileops) >/dev/null; fi
+	else echo 'cfileops: SKIP (no gcc)'; echo cfileops >> $(TESTTMP)/lib-test.skipped; (cd $(TESTTMP) && $(TESTTMP)/cfileops) >/dev/null; fi
 	# struct stat's fields: nlink/uid/gid/rdev and atime/ctime were hardcoded.
 	# Asserted through consequences — nlink rises with a hard link and falls
 	# when it is removed, a directory's nlink counts its subdirectories.
 	$(PXX_STABLE) test/cstat_fields.c $(TESTTMP)/cstat_fields
 	@if command -v gcc >/dev/null 2>&1; then \
 	  if ! gcc -w -o $(TESTTMP)/cstat_fields_gcc test/cstat_fields.c 2> $(TESTTMP)/cstat_fields_oracle.err; then \
-	    echo "SKIP: cstat_fields (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cstat_fields_oracle.err))"; \
+	    echo "SKIP: cstat_fields (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cstat_fields_oracle.err))"; echo cstat_fields >> $(TESTTMP)/lib-test.skipped; \
 	    $(TESTTMP)/cstat_fields >/dev/null; \
 	  else \
 	  $(TESTTMP)/cstat_fields_gcc > $(TESTTMP)/csf_gcc.txt 2>&1; \
@@ -15210,14 +15245,14 @@ endif
 	    { echo 'FAIL: cstat_fields differs from gcc'; exit 1; }; \
 	  echo 'cstat_fields: identical to gcc'; \
 	fi; \
-	else echo 'cstat_fields: SKIP (no gcc)'; $(TESTTMP)/cstat_fields >/dev/null; fi
+	else echo 'cstat_fields: SKIP (no gcc)'; echo cstat_fields >> $(TESTTMP)/lib-test.skipped; $(TESTTMP)/cstat_fields >/dev/null; fi
 	# Process/user ids, pipe, kill, sleep, getpagesize. Behavioural: the pipe
 	# must move bytes and kill(pid,0) must tell a live process from an absent
 	# one, so a stub returning success would fail here.
 	$(PXX_STABLE) test/cproc_ids.c $(TESTTMP)/cproc_ids
 	@if command -v gcc >/dev/null 2>&1; then \
 	  if ! gcc -w -o $(TESTTMP)/cproc_ids_gcc test/cproc_ids.c 2> $(TESTTMP)/cproc_ids_oracle.err; then \
-	    echo "SKIP: cproc_ids (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cproc_ids_oracle.err))"; \
+	    echo "SKIP: cproc_ids (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cproc_ids_oracle.err))"; echo cproc_ids >> $(TESTTMP)/lib-test.skipped; \
 	    $(TESTTMP)/cproc_ids >/dev/null; \
 	  else \
 	  $(TESTTMP)/cproc_ids_gcc > $(TESTTMP)/cpi_gcc.txt 2>&1; \
@@ -15226,14 +15261,14 @@ endif
 	    { echo 'FAIL: cproc_ids differs from gcc'; exit 1; }; \
 	  echo 'cproc_ids: identical to gcc'; \
 	fi; \
-	else echo 'cproc_ids: SKIP (no gcc)'; $(TESTTMP)/cproc_ids >/dev/null; fi
+	else echo 'cproc_ids: SKIP (no gcc)'; echo cproc_ids >> $(TESTTMP)/lib-test.skipped; $(TESTTMP)/cproc_ids >/dev/null; fi
 	# isatty via the TCGETS ioctl. Checks /dev/null and a directory as well as
 	# a real tty (/dev/ptmx): the tempting fstat+S_ISCHR implementation answers
 	# 1 for /dev/null, so a one-sided test would pass against it.
 	$(PXX_STABLE) test/cisatty.c $(TESTTMP)/cisatty
 	@if command -v gcc >/dev/null 2>&1; then \
 	  if ! gcc -w -o $(TESTTMP)/cisatty_gcc test/cisatty.c 2> $(TESTTMP)/cisatty_oracle.err; then \
-	    echo "SKIP: cisatty (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cisatty_oracle.err))"; \
+	    echo "SKIP: cisatty (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cisatty_oracle.err))"; echo cisatty >> $(TESTTMP)/lib-test.skipped; \
 	    $(TESTTMP)/cisatty >/dev/null; \
 	  else \
 	  $(TESTTMP)/cisatty_gcc > $(TESTTMP)/cia_gcc.txt 2>&1; $(TESTTMP)/cisatty > $(TESTTMP)/cia_pxx.txt 2>&1; \
@@ -15241,14 +15276,14 @@ endif
 	    { echo 'FAIL: cisatty differs from gcc'; exit 1; }; \
 	  echo 'cisatty: identical to gcc'; \
 	fi; \
-	else echo 'cisatty: SKIP (no gcc)'; $(TESTTMP)/cisatty >/dev/null; fi
+	else echo 'cisatty: SKIP (no gcc)'; echo cisatty >> $(TESTTMP)/lib-test.skipped; $(TESTTMP)/cisatty >/dev/null; fi
 	# crtl against gcc's libc, which is the oracle for this surface: the whole
 	# output is diffed against the SAME file built by gcc, so there are no
 	# recorded expectations to drift.
 	$(PXX_STABLE) test/crtl_libc_oracle.c $(TESTTMP)/crtl_libc_oracle
 	@if command -v gcc >/dev/null 2>&1; then \
 	  if ! gcc -o $(TESTTMP)/crtl_libc_oracle_gcc test/crtl_libc_oracle.c -lm 2> $(TESTTMP)/crtl_libc_oracle_oracle.err; then \
-	    echo "SKIP: crtl_libc_oracle (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/crtl_libc_oracle_oracle.err))"; \
+	    echo "SKIP: crtl_libc_oracle (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/crtl_libc_oracle_oracle.err))"; echo crtl-oracle >> $(TESTTMP)/lib-test.skipped; \
 	  else \
 	  $(TESTTMP)/crtl_libc_oracle_gcc > $(TESTTMP)/crtl_libc_gcc.txt; \
 	  $(TESTTMP)/crtl_libc_oracle > $(TESTTMP)/crtl_libc_pxx.txt; \
@@ -15259,13 +15294,13 @@ endif
 	    diff $(TESTTMP)/crtl_libc_gcc.txt $(TESTTMP)/crtl_libc_pxx.txt; exit 1; \
 	  fi; \
 	  fi; \
-	else echo "  crtl-oracle: SKIP (no gcc to diff against)"; fi
+	else echo "  crtl-oracle: SKIP (no gcc to diff against)"; echo crtl-oracle >> $(TESTTMP)/lib-test.skipped; fi
 	# setjmp/longjmp + fenv against gcc. Separate file: longjmp unwinds out of
 	# the enclosing function, so it must not share a main() with the rest.
 	$(PXX_STABLE) test/crtl_setjmp_oracle.c $(TESTTMP)/crtl_setjmp_oracle
 	@if command -v gcc >/dev/null 2>&1; then \
 	  if ! gcc -o $(TESTTMP)/crtl_setjmp_gcc test/crtl_setjmp_oracle.c -lm 2> $(TESTTMP)/crtl_setjmp_oracle.err; then \
-	    echo "SKIP: crtl_setjmp_oracle (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/crtl_setjmp_oracle.err))"; \
+	    echo "SKIP: crtl_setjmp_oracle (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/crtl_setjmp_oracle.err))"; echo crtl-setjmp >> $(TESTTMP)/lib-test.skipped; \
 	  else \
 	  $(TESTTMP)/crtl_setjmp_gcc > $(TESTTMP)/crtl_setjmp_g.txt; \
 	  $(TESTTMP)/crtl_setjmp_oracle > $(TESTTMP)/crtl_setjmp_p.txt; \
@@ -15276,7 +15311,7 @@ endif
 	    diff $(TESTTMP)/crtl_setjmp_g.txt $(TESTTMP)/crtl_setjmp_p.txt; exit 1; \
 	  fi; \
 	  fi; \
-	else echo "  crtl-setjmp: SKIP (no gcc to diff against)"; fi
+	else echo "  crtl-setjmp: SKIP (no gcc to diff against)"; echo crtl-setjmp >> $(TESTTMP)/lib-test.skipped; fi
 	# exec() as a library, driven from a .npy: the whole output is diffed
 	# against CPython's for the same file (test/lib_pyexec.npy is valid .py)
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_pyexec.npy $(TESTTMP)/lib_pyexec
@@ -15333,9 +15368,18 @@ endif
 	# and NOTHING was compared -- skip loudly, exactly like the synapse guard
 	# above, so a fresh clone does not read a missing vendor tree as a divergence.
 	@rc=0; tools/reportlab_diff.py || rc=$$?; \
-	 if [ $$rc = 77 ]; then echo "SKIP reportlab_diff -- prerequisite absent (see line above)"; \
+	 if [ $$rc = 77 ]; then echo "SKIP reportlab_diff -- prerequisite absent (see line above)"; echo reportlab-diff >> $(TESTTMP)/lib-test.skipped; \
 	 elif [ $$rc != 0 ]; then echo "reportlab_diff: the mimic diverged from the oracle"; exit 1; fi
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + strtofloat-roundtrip + strtofloat-lemire + mimic-six + mimic-warnings + mimic-xml-etree + mimic-collections-abc + pyexec + format-ge + namevalue + markdown + inttohex + reportlab-diff + synapse-ssl) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	# `ok` means everything ATTEMPTED passed -- so the line must name what was
+	# not attempted. The enumeration above is what this rule CONTAINS; without
+	# the clause below it reads as an inventory of what RAN, and a loud SKIP
+	# 750 lines earlier does not reach the reader of the last line, nor
+	# job_reason(), which takes the log TAIL. Same standard tstate already
+	# meets: seven prints "coverage -- N job(s) SKIPPED ...: green here does
+	# not cover them". awk dedupes rather than `sort -u`, which merges
+	# distinct identifiers under some locales.
+	@sk="$$(awk '!a[$$0]++' $(TESTTMP)/lib-test.skipped 2>/dev/null | tr '\n' ' ' | sed 's/ *$$//')"; \
+	 echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + strtofloat-roundtrip + strtofloat-lemire + mimic-six + mimic-warnings + mimic-xml-etree + mimic-collections-abc + pyexec + format-ge + namevalue + markdown + inttohex + reportlab-diff + synapse-ssl) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')$${sk:+ -- SKIPPED: $$sk (green here does NOT cover them)}"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check
