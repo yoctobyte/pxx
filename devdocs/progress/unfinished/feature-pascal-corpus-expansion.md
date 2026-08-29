@@ -754,3 +754,22 @@ one remaining park item; it is the next rung's subject.
 | 9 | `unknown type: TKey` — generic type param out of scope in a materialised specialization | P | **open, new** |
 
 Still open and untouched: [[bug-p-two-different-nested-specializations-of-one-template-collide]].
+
+### PARKED again 2026-08-29 (frankA) — rung 6 done, rung 9 open and unclaimed
+
+Out of `working/` because it is a live lock and nothing is happening on it.
+Everything is pushed. Nothing is reverted or half-applied; no code is mid-edit.
+
+**State:** `generics.defaults.pas` compiles end to end.
+`generics.collections.pas` is the next unit and its wall is
+[[bug-p-a-generic-type-parameter-is-unknown-when-a-specialization-is-materialised-cross-unit]]
+(rung 9), which carries **two refuted hypotheses with the measurements that
+refuted them** — the macros are fine, and it is not the forward-decl case bug.
+Its first job is a two-unit reduction, which has not been built.
+
+Also still open: [[bug-p-two-different-nested-specializations-of-one-template-collide]].
+
+**Read the 2026-08-29 section above before the park note at the TOP of this
+ticket** — that older note was stale on two of its three items by the time it
+was read, which is the failure mode this one will have too. Re-measure the
+corpus first; it takes one compile.

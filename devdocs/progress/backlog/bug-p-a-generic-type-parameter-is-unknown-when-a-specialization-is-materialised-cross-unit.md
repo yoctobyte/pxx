@@ -68,3 +68,38 @@ NAME or the substituted argument reaches the inner declaration.
 
 `uses Generics.Collections` compiles; `generics.defaults.pas` keeps compiling on
 its own; a reduced two-unit repro in `test/`; the per-fix loop.
+
+## Two hypotheses already REFUTED by measurement (2026-08-29, frankA)
+
+Recorded so the next holder does not spend them again. Neither is the cause.
+
+**1. "It is the `{$DEFINE X := ...}` macros."** `generics.collections.pas:30`
+turns `{$MACRO ON}` on and defines its type-parameter lists as macros —
+`{$DEFINE TREE_CONSTRAINTS := TKey, TValue, TInfo}` — which are then used as
+generic parameter lists (`TCustomAVLTreeMap<TREE_CONSTRAINTS>`, :638). Since the
+error names `TKey`, a macro expanding literally in the wrong scope is the
+obvious first suspect. Measured, both work and match FPC:
+
+```pascal
+{$MACRO ON}
+{$DEFINE MYT := Integer}    var x: MYT;                  -> 42   (fpc: 42)
+{$DEFINE PARAMS := TA, TB}  type TPairX<PARAMS> = record -> 7 x  (fpc: 7 x)
+```
+
+So macro substitution is supported, and a macro expanding to a comma-separated
+generic parameter LIST is supported. Whatever fails needs more than this.
+
+**2. "It is the `&`-escaped identifier / the forward-decl case bug."** No —
+that was the PREVIOUS wall
+([[bug-p-a-forward-declaration-does-not-bind-a-differently-cased-body]], fixed).
+This wall is what appears behind it. `generics.defaults.pas` compiles end to end
+on its own; the failure needs `uses Generics.Collections`.
+
+### What that leaves
+
+The distinguishing feature is still **cross-unit**: an outer specialization in
+`collections` materialising a generic class declared in `defaults`, where the
+outer parameter NAME rather than its substituted argument reaches the inner
+declaration. That remains the description-from-the-error, not a measurement —
+the reduction (two units, outer generic specializing an inner one) has NOT been
+built yet, and is still the first job.
