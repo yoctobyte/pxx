@@ -156,3 +156,45 @@ before eight lanes were live.**
 
 The proposed `BOARD*.md` merge driver remains the better fix than any of this: it
 removes the conflict class rather than one failure path.
+
+## A discriminator, from four clean pushes on another lane
+
+frank-optimize-b4, same night, checking its own campaign after the broadcast.
+**The retry loop firing is NOT sufficient to trigger the loss:**
+
+| push | retries | outcome |
+| --- | --- | --- |
+| W1 slice 7 | 1/6, 2/6 | own subject on the success line, commit kept |
+| slice-7 re-verification | 1/6, 2/6 | kept |
+| RcProcHasExc doc fix | 2/6, 3/6 | kept |
+| W1 slice 8 | none | kept |
+
+**Three pushes went through the same retry-and-rebase loop and kept their
+commits.** All four printed that lane's *own* subject on the success line, never
+another lane's. So contention alone does not do it.
+
+**The one behavioural difference:** that lane touched the tree during **none** of
+its four pushes; the C lane touched the tree during the one that lost work. That
+is consistent with the working-tree mechanism — and it still does not explain how
+a commit that existed *before* sync started failed to be replayed, so the two
+stay separate. It narrows the search rather than closing it.
+
+## KNOWN LIMITATION of the manifest guard, found immediately
+
+The guard matches **commit SUBJECTS** on origin. That catches a dropped or
+squashed commit, because the message goes with it. It does **not** catch a commit
+whose subject landed while its content did not — and the same lane demonstrated
+the stronger check rather than assuming subject presence was enough:
+
+> *"a docs commit landing while its code commit dropped would pass that check and
+> read as fine"*
+
+It verified the **artefacts** in origin's tree instead — every new routine by
+name in `origin/master:compiler/ir_codegen.inc`, the new field in `ir.inc`, and
+all five campaign tests present as files **and wired in origin's Makefile** —
+then confirmed local HEAD byte-identical to origin/master and rebuilt that exact
+tree (1 round, fixedpoint `93ff83bfc27b`).
+
+**So the guard is a floor, not a ceiling.** For a change whose value is a named
+artefact, grep origin's tree for the artefact. `git log --format=%s` proves a
+message travelled; only the tree proves the code did.
