@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| feature-opt-bulk-copy-is-byte-at-a-time | O | 65 | feature | STALE HEADLINE -- re-priced 2026-08-29 at 1fd403b28: BOTH proposed fixes already landed (PXXBlockCopy word loop; the __pxxblockmove/rep-movsb intrinsic, 0f6a04644 + 2b85f8c8f), so the 23x and the 3.3x describe a compiler that no longer exists and must not be re-quoted. What remains is 8 open-coded byte loops in 5 routines (the ticket said 4 sites and missed PXXStrSetLen, the hottest), each now a one-line call to the already-landed PXXBlockCopy/PXXMemZero. Re-measure Copy() vs FPC before trusting prio 65. Also recorded: PXXMemMove is forward-only on every target and corrupts overlapping dst>src -- latent, no caller reaches it. | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
 
 ## unfinished (20)
@@ -57,6 +58,7 @@ _none_
 | bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce | A | 30 | bug | Raised out of decide-how-much-string-machinery-the-basic-frontend-gets, decided 2026-08-25. That decision accepted ~100 KB BASIC binaries on the grounds that binary size is a GENERAL problem with a general answer (reachability-gated emission), not a per-frontend one. But feature-emission-size-dce is marked done while a Pascal hello-world is still 63,760 bytes -- so either the pass is not reaching this, or the done ticket's scope was narrower than its title. | — |
 | bug-a-aarch64-cannot-build-programs-with-an-aggregate-result-past-8-params | A | 55 | bug | jsondemo and life do not build for aarch64 at all -- 'aggregate result with more than 8 params not supported', raised from builtin/pylib.pas, so it fires for any program pulling that unit in. The sharp part is not the two programs: it silently narrows the corpus available for BEHAVIOURAL verification on aarch64, while census tables built from target-independent IR keep listing those same programs as aarch64 data points. Two purposes, one list, only one of them ever checked. | — |
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
+| bug-a-for-loop-limit-is-evaluated-after-the-control-variable-is-assigned | A | 70 | bug | `for n := 1 to n do` runs ONE iteration where FPC runs five, and `for n := 1 to n - 1` runs ZERO where FPC runs four; downto is wrong the same way (9 vs 3). Pascal evaluates the initial AND final expressions BEFORE assigning the control variable; ir.inc:12130 stores the control variable first and lowers the limit after, so a limit that reads the control variable sees the new value. Silent wrong iteration count -- no diagnostic, no crash. ROOT CAUSE LOCATED: three statements in the wrong order, plus one ordering subtlety noted below. | — |
 | bug-a-function-result-assignment-does-not-narrow-to-the-result-type | A | 40 | bug | `function F(a: Int64): Integer; begin F := a; end` returns the full 64-bit value: F(4294967299) prints 4294967299 where FPC prints 3. The same assignment to a variable, to a var parameter, or through a cast all narrow correctly. One arm of a double case, and the broken arm is the one with no diagnostic — the caller reads a value the declared result type cannot hold. | — |
 | bug-a-irtoplevelstmt-parameter-is-a-node-index-named-k | A | 20 | bug | ir_codegen.inc:8813 declares IRTopLevelStmt(k: Integer) and its body is `case IRKind[k] of`, so the parameter is a node index. The name reads as a kind, and passing IRKind[i] compiles cleanly and indexes the IR array with an opcode number — a silently-wrong-value trap with no diagnostic, in a function every backend author will call. Rename plus a one-line comment closes the class. | — |
 | bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa | A | 25 | bug | A proc's managed locals (AnsiString, interfaces, dynamic arrays) are released by a proc CLEANUP FRAME that five targets have and two do not. wasm32 and xtensa both fall outside TargetHasProcCleanupFrame, so an exception unwinding THROUGH a frame leaks everything that frame owned. Silent by construction: an unwind leak prints nothing. | — |
@@ -272,7 +274,6 @@ _none_
 | feature-nilpy-walrus-operator | N | 35 | feature | `:=` (walrus) — the assignment expression is not parsed | — |
 | feature-opt-alloc-intent-hint | A+O | 10 | feature | Allocation-intent hint: tell the RTL growth policy how a buffer will be used | — |
 | feature-opt-arch-level-and-dispatch | A+O | 25 | feature | What x86-64 feature level does pxx emit for? Referenced as 'if raised' by two existing tickets and never filed; raised by the user 2026-08-15 when FMA came up. MEASURED: our own gate box plexus is a Xeon E5-2620 v2 (Ivy Bridge, 2013) with AVX but NO FMA and no AVX2 — x86-64-v2, not v3. So a v2 bump is safe and FMA would SIGILL on the machine that gates every push. Includes the answer to the 'dispatch defeats inlining' objection: multiversion whole FUNCTIONS, not instructions. | — |
-| feature-opt-bulk-copy-is-byte-at-a-time | O | 65 | feature | STALE HEADLINE -- re-priced 2026-08-29 at 1fd403b28: BOTH proposed fixes already landed (PXXBlockCopy word loop; the __pxxblockmove/rep-movsb intrinsic, 0f6a04644 + 2b85f8c8f), so the 23x and the 3.3x describe a compiler that no longer exists and must not be re-quoted. What remains is 8 open-coded byte loops in 5 routines (the ticket said 4 sites and missed PXXStrSetLen, the hottest), each now a one-line call to the already-landed PXXBlockCopy/PXXMemZero. Re-measure Copy() vs FPC before trusting prio 65. Also recorded: PXXMemMove is forward-only on every target and corrupts overlapping dst>src -- latent, no caller reaches it. | — |
 | feature-opt-dynarray-grows-in-place | A+O | 40 | feature | A growing dynamic array leaves its whole geometric series behind as garbage | — |
 | feature-opt-emitasmx64-reparses-fixed-strings | A+O | 60 | feature | `EmitAsmX64` re-parses the same hardcoded assembly strings on every compile — ~12% of a NilPy compile | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
@@ -678,6 +679,7 @@ _none_
 - [p 85] [R] bug-r-a-duplicate-forward-in-rparser-breaks-the-fpc-seed-build
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [P] feature-pascal-corpus-oop
+- [p 70] [A] bug-a-for-loop-limit-is-evaluated-after-the-control-variable-is-assigned
 - [p 70] [P] bug-p-a-delphi-mode-generic-from-a-used-unit-cannot-be-specialized
 - [p 70] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - [p 70] [A+O] feature-opt-o3-register-pressure
@@ -699,7 +701,6 @@ _none_
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source [parked — re-claim, do not duplicate]
 - [p 65] [N] feature-nilpy-iter-and-next-over-a-container
 - [p 65] [N] feature-nilpy-thirdparty-libraries-as-targets [parked — re-claim, do not duplicate]
-- [p 65] [O] feature-opt-bulk-copy-is-byte-at-a-time
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite [parked — re-claim, do not duplicate]
 - [p 65] [P] feature-pascal-corpus-generics [parked — re-claim, do not duplicate]
 - [p 62] [U] decide-nilpy-what-version-does-sys-version-info-claim
