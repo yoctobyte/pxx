@@ -645,7 +645,7 @@ meant to label one.
 Recorded here because this is where a reader will hit it, per the coordinator's
 requirement:
 
-Under `--xtensa-cpu=<the new value>` the oracle is **not bit-identical to hardware
+Under `--xtensa-soft-mulhigh` the oracle is **not bit-identical to hardware
 for multiplies**. It is the same cost option 1 would have carried; the flag makes
 it explicit and opt-in rather than absent. And the scope is not academic —
 **the two tickets that motivated this oracle are precisely the ones it still cannot
@@ -796,3 +796,64 @@ The flag **labels** the divergence and does not remove it. The oracle is not
 bit-identical to hardware for multiplies under it. Div-by-zero-check and
 int64-to-float are arithmetic and are exactly what it still cannot answer. **Any
 verdict produced under the flag must name the flag.**
+---
+
+## WALL 4 LANDED — frankS, 2026-08-29
+
+`--xtensa-soft-mulhigh`, a **capability flag and a sibling of
+`--xtensa-soft-divide`**, not a value on the `--xtensa-cpu=` axis. The
+coordinator overruled the `cpu=` shape on my own divide measurement, and the
+argument is the right one: a `cpu=` value asserts a *package* of capabilities by
+naming a part, and the package is exactly what is false here. Bundling divide in
+would have claimed something no core it named actually lacks; a `cpu=qemu` value
+re-introduces that bundling one level up, for whichever capability splits next.
+The cluster now reads `XtensaSoftDivide` / `XtensaSoftMulHigh` — two independent
+capability gaps, which is the finding.
+
+### What was measured, and one measurement I got wrong first
+
+| claim | evidence |
+| --- | --- |
+| ESP/default path bit-for-bit unchanged | 8/8 artefacts identical, pre-wall-4 compiler vs wall-4 compiler with no flag |
+| the flag produces correct arithmetic | 12/12 cases match the x86-64 oracle, **7 of 8 cores, both ABIs** |
+| the default still emits `muluh` | default build SIGILLs under qemu on both ABIs — the hardware-correct instruction the emulator lacks |
+| the two flags are independent | 4 flag combinations → 4 distinct outputs; neither subsumes the other |
+| the flag reaches div/mod nowhere | one `muluh` site (`:740`), one `XtensaSoftMulHigh` read (`:712`); the two `XtensaSoftDivide` reads at `:1747`/`:1752` are ~1000 lines from every diff hunk (all inside 708-746) |
+
+**The baseline was poisoned on the first attempt and the numbers said so.** I
+captured "before" hashes using the compiler *on disk*, which was still the
+temporary forced-on build (`e65494e3a126`) — I had `git checkout`'d the source
+and not rebuilt. Every artefact then "diverged", which reads as a broken default
+path. The tell was in the same table: the flag-ON hash equalled the *baseline*
+hash exactly, which is impossible unless the baseline was itself a flag-ON build.
+Rebuilding the baseline from a stashed clean tree gave 8/8 identical.
+
+This is CLAUDE.md's *"hunt async, verify against a known sha"* in miniature, and
+worth recording because the failure was silent and plausible: nothing errored,
+and the wrong conclusion available was **"wall 4 changed the ESP default"** —
+alarming, actionable, and false. `git checkout` of a source file does not roll
+back the binary built from it.
+
+Two smaller ones kept for whoever runs a sweep: `dsp3400` SIGILLs on a *plain*
+`mull`, so it has no MUL32 at all and no multiply-high policy reaches it — it is
+not a counterexample; and `lx106` has no windowed option, so **an ABI sweep must
+pin its core list.**
+
+### Still open on this ticket
+
+Steps 3-4 of the original scope: a `tools/run_target.sh` xtensa arm, and
+promoting a cross differential from skipped/build-only to green. The oracle
+itself now works — hosted `Write`/`WriteLn`, exit status, both ABIs, and
+arithmetic under the flag.
+
+### Not fixed by this, and say so when citing it
+
+`--xtensa-soft-mulhigh` **labels** the divergence; it does not remove it. Under
+it the oracle is not bit-identical to hardware for multiplies, and
+[[bug-a-the-div-by-zero-check-is-still-missing-on-xtensa]] and
+[[bug-a-xtensa-cannot-lower-an-int64-to-float-conversion]] are *arithmetic* —
+they remain exactly what it cannot answer. **Any verdict produced under the flag
+must name the flag.**
+
+`docs/reference/cli.md` lists the xtensa flags (rows at :114 and :176) and now
+wants a `--xtensa-soft-mulhigh` row. That is `docs/**` = **Track D**, not mine.

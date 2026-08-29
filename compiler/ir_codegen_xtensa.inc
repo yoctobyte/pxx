@@ -706,15 +706,45 @@ begin
       'sub a3, a3, a9',     { hi -= borrow }
       'mov a2, a8' ])
   else if op = Ord(tkStar) then
+  begin
     { low 64 of (a5:a4) * (a3:a2) }
+    EmitAsmXtensa(['mull a8, a4, a2']);          { lo = low(Llo*Rlo) }
+    if XtensaSoftMulHigh then
+      { high(Llo*Rlo) without MUL32HIGH. Split both operands at 16 and
+        recombine, carrying through the mid products; every intermediate fits
+        in 32 bits unsigned (worst case (2^16-1)^2 + (2^16-1) < 2^32), so no
+        step can overflow and no step needs a second word.
+
+        No EXTUI encoder is needed: SAR is set to 16 ONCE and every `srl`
+        below reads it, which is this file's own idiom — see the 64-bit header
+        note above ("the MSB of a word is extracted with `srl` after presetting
+        SAR=31"). The mask comes from `movi -1` + that same shift because
+        movi's imm12 is too narrow to hold $FFFF.
+
+        Scratch is a9..a13 only: a2..a5 and a8 are live across this, and a7/a15
+        are the windowed and Call0 frame pointers. }
+      EmitAsmXtensa([
+        'movi a12, 16', 'ssr a12',                 { SAR := 16, for every srl below }
+        'movi a13, -1', 'srl a13, a13',            { a13 = $0000FFFF }
+        'and a10, a4, a13',                        { xl }
+        'and a11, a2, a13',                        { yl }
+        'mull a9, a10, a11', 'srl a9, a9',         { c0   = high16(xl*yl) }
+        'srl a12, a2',                             { yh }
+        'mull a10, a10, a12', 'add a9, a9, a10',   { mid  = xl*yh + c0 }
+        'srl a10, a4',                             { xh }
+        'mull a11, a10, a11',                      { xh*yl }
+        'and a13, a9, a13', 'add a11, a11, a13',   { mid2 = xh*yl + low16(mid) }
+        'srl a11, a11', 'srl a9, a9', 'add a9, a9, a11',
+        'mull a10, a10, a12', 'add a9, a9, a10'])  { += xh*yh -> a9 = high(Llo*Rlo) }
+    else
+      EmitAsmXtensa(['muluh a9, a4, a2']);         { high(Llo*Rlo) }
     EmitAsmXtensa([
-      'mull a8, a4, a2',    { lo = low(Llo*Rlo) }
-      'muluh a9, a4, a2',   { high(Llo*Rlo) }
       'mull a10, a4, a3',   { low(Llo*Rhi) }
       'mull a11, a5, a2',   { low(Lhi*Rlo) }
       'add a9, a9, a10',
       'add a3, a9, a11',
-      'mov a2, a8' ])
+      'mov a2, a8' ]);
+  end
   else if op = Ord(tkAnd) then
     EmitAsmXtensa(['and a2, a4, a2', 'and a3, a5, a3'])
   else if op = Ord(tkOr) then

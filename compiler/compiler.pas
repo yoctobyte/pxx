@@ -830,6 +830,7 @@ begin
   TargetArch := TARGET_X86_64;
   XtensaABI := XTENSA_ABI_CALL0;
   XtensaSoftDivide := False;
+  XtensaSoftMulHigh := False;
   XtensaHasFpu := False;
   XtensaFastDoubles := False;
   TARGET_PTR_SIZE := 8;
@@ -1097,6 +1098,16 @@ begin
       { ESP32 classic (LX6): no hardware divide option. Route div/mod through
         the software shift-subtract helpers. }
       XtensaSoftDivide := True;
+      Inc(i);
+    end
+    else if option = '--xtensa-soft-mulhigh' then
+    begin
+      { No qemu-xtensa core implements MUL32HIGH (all 8 SIGILL on `muluh`),
+        though all 8 DO have the divide option — so this is a peer of
+        --xtensa-soft-divide above and deliberately does not touch it. A
+        capability, not a part: the emulator is the only thing it is true of.
+        A verdict produced under it must name it. }
+      XtensaSoftMulHigh := True;
       Inc(i);
     end
     else if option = '--xtensa-fpu' then

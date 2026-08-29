@@ -3374,6 +3374,27 @@ var
     software shift-subtract helpers __pxx_divsi3/__pxx_modsi3 for ESP32 classic
     (LX6), which has the multiply option but not the divide option. }
   XtensaSoftDivide : Boolean;
+  { Xtensa 32-bit multiply-high policy, and a SIBLING of XtensaSoftDivide
+    rather than a facet of it — that pairing is the finding, not a filing
+    convenience. Default False = native `muluh` (the MUL32HIGH option, present
+    on every shipping ESP32 LX6/LX7 part). True (via --xtensa-soft-mulhigh)
+    expands high(a*b) into a shift/mask/mull sequence.
+
+    It exists because NO qemu-xtensa core implements MUL32HIGH: measured
+    2026-08-29 against qemu-xtensa 10.2.1, all EIGHT cores it exposes SIGILL on
+    `muluh` while all eight run quos/rems. So the two gaps are INDEPENDENT, and
+    that is why this is a capability flag and not a value on the --xtensa-cpu=
+    axis. A cpu= value asserts a package of capabilities by naming a part, and
+    the package is exactly what is false here — a bundled flag would have
+    claimed something about divide that no core it named actually lacks. The
+    next capability that splits would have wanted to attach to the same value
+    and claimed more than was measured.
+
+    Opt-in, because it is a property of the EMULATOR and of no chip: under it
+    the oracle is not bit-identical to hardware for multiplies, so any verdict
+    produced with it set must name the flag.
+    feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle }
+  XtensaSoftMulHigh : Boolean;
   { Xtensa single-precision hardware FPU. Default False = single-width float ops
     go through the soft kernels (correct on EVERY xtensa part, incl ESP32-S2
     which has NO FPU). True (via --xtensa-fpu) lowers single +,-,* to the
