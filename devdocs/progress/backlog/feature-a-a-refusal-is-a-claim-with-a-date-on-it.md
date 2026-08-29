@@ -2770,3 +2770,69 @@ members are disqualified by a grandchild.
 **Counter-move:** before trusting a classifier's buckets, ask what it would have
 had to look *at* to be wrong — and classify at that depth, not at the depth that
 was easy to reach.
+
+### 63. A TICKET THAT PROPOSES A FIX MUST QUOTE THE CODE IT PROPOSES TO CHANGE
+
+frankwasm, 2026-08-29, **and it is here because the author broke it while holding
+it** — it wrote a version of "verify your claims" into three separate artefacts
+the same evening and then filed a ticket asking for a change that was already in
+the file.
+
+It filed `feature-lib-tkinter-grid-pad-accepts-a-two-tuple` [B p45] proposing that
+`padx`/`pady` become `Variant` so they could take a `(left, right)` pair.
+`lib/pcl/tkinter.pas:104` already reads:
+
+```pascal
+const padx: Variant = 0
+```
+
+with line 106 carrying a comment stating **the exact semantics the ticket
+proposed adding**. frankB investigated, changed nothing in `lib/pcl`, and found
+the real cause was an N binding bug.
+
+**Why the obvious lesson is useless and this one is not.** frankwasm's own
+diagnosis: it had the rule as *"verify your claims"*, which **has no trigger, so
+it fires never**. The operational form does:
+
+> **A ticket that proposes a fix must QUOTE the code it proposes to change.**
+> Not cite it — quote it.
+
+*"I could not have written 'padx must become Variant' underneath a line reading
+`const padx: Variant = 0`."* The trigger is mechanical (am I proposing a change?)
+and so is the check (is there a quoted line?). Compare "be careful", which is
+advice, and rule 7 of the sibling-arm audit, which is the same defect one layer
+over — a prescription contradicted by its own ticket body.
+
+**How the wrong reading was available without opening a file:** *"no overload of
+grid matches these arguments"* plus *"scalar works, tuple fails"* reads as **the
+tuple form is unimplemented**. That is face 34 again — a diagnostic that names a
+cause, is correct about the fact, and points away from the fix, because the thing
+it names is the **discriminator** rather than the defect. Cost of checking: one
+grep.
+
+### 63a. THE SUMMARY LINE IS THE DANGEROUS PART OF A WRONG TICKET
+
+Same ticket, and the sharper half. frankB dispositioned it correctly — moved it
+to `blocked/` with a `blocked-by:` on the real N bug — and **left the body
+intact**, which is the right courtesy toward another agent's work.
+
+The result was a **blocked, owned, triaged-looking ticket whose one-line summary
+still said the facade rejects the tuple**. So the next reader is handed a library
+edit that must not happen, by a ticket that looks settled.
+
+**This is the closed-ticket hazard wearing its opposite face.** Earlier the same
+night: a ticket in `done/` matching a live symptom, which would have **closed a
+live question**. Here: an owned ticket with a false cause, which would have
+**opened a dead one**. Both are cases where *the disposition looks settled and the
+content is wrong*, and in both the artefact's filing status is what stops anyone
+re-reading it.
+
+frankwasm corrected it in place (`abdd61a2d`) rather than re-filing or moving to
+`rejected/`, on the grounds that frankB had already dispositioned and owned it —
+**their placement stands; only the false cause was mine to fix** — and threw away
+a `rejected/` copy it had written rather than leave two tickets with one slug.
+That is the right protocol when two agents share a ticket.
+
+**Verification worth copying:** it checked three rows before amending, and the
+third settles it — `grid(padx=(8, 6))` **alone** also fails. The tuple theory
+cannot explain that row; "an earlier default was skipped" predicts it.
