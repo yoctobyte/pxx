@@ -7,6 +7,61 @@ owner: ""
 
 # -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator
 
+## READ FIRST — three standing rules for every slice in this campaign
+
+Each of these was paid for once. They are here, at the top, rather than inside
+the write-up of the slice that learned them, because that is where the next
+slice will actually read them.
+
+**1. Every `-O3` pass needs its OWN control test. The self-host gate cannot see
+an `-O3`-only defect.** Not "might not" — cannot: `make compiler/pascal26` builds
+the compiler at the DEFAULT `-O` level, so no `OptLevel >= 3` arm runs while
+building it. Demonstrated on purpose, not inferred: slice 5's comparison encoding
+was deliberately broken in the ModRM field, `-O3` printed `acc=0`, and the
+fixedpoint reported `converged after 1 round(s)` the whole time. CLAUDE.md
+records this scope limit in the abstract from a defect found after the fact; this
+is the same limit shown with a known-bad input and a green gate.
+
+The pattern that works, and the one to copy: **run the test at BOTH `-O0` and
+`-O3` against ONE expectation.** Because the pass is `-O3`-gated, `-O0` is a
+control that provably cannot use the new code, so a wrong encoding shows up as
+two optimisation levels disagreeing rather than as a number with no oracle. Add
+an independent oracle (FPC) on top. Then **break the pass on purpose and confirm
+the test goes red** — a control that has never failed is not known to be a
+control.
+
+**2. A population count is not a firing count.** A census measures what COULD be
+affected and reads as evidence about what WILL be. Slice 5's census said CMP was
+the largest bucket in every program (2891 vs 2649 ALU in compiler.pas, 31-52%
+with MULIMM); the first implementation fired on **11 sites** and left the
+benchmark byte-identical, because the `-O2` cmp-immediate fold and the
+`IR_JUMP_IF_FALSE` branch fold had already consumed most of the population being
+counted. The gap was two arms wide and invisible until the pass was fired.
+This is a *different* failure from "the static sweep understates W1" further
+down — that one under-reports a real effect; this one over-reports a possible
+one. **Count the population to choose the target; count the firings to claim a
+result.**
+
+**3. Rebuild your baseline at HEAD, and check what rebased in under you.**
+`tools/sync.sh` does a `pull --rebase`, so other lanes' compiler changes arrive
+in your tree between two of your own builds. Slice 6 was measured against a
+baseline that predated frankA's for-loop fix (`8b35e88fa`) landing in this
+checkout, and the result read as **"slice 6 leaked outside its `-O3` gate and made
+`-O0` output 82 bytes bigger"** — an alarming and completely false conclusion.
+The tell was the self-host printing `converged after 2 round(s)` where every
+previous build said 1; rebuilding the true baseline at HEAD gave 1 round and
+byte-identical `-O0`/`-O1`/`-O2`, with the *same* final binary sha. The binary had
+been right the whole time.
+
+Two things made it cheap to catch, and both are worth keeping: per-procedure
+size extraction from the `.map` (only 3 procedures had changed, all RTL, none
+user code — a whole-binary `cmp` says only "everything differs"), and the fact
+that an `-O3`-gated pass changing `-O0` output is *impossible*, so the
+contradiction pointed at the measurement rather than at the code. **When a
+result says something that cannot be true, suspect the baseline before the
+change.**
+
+
 - **Type:** feature (codegen — optimization) — **Track O** (Optimization lane;
   file-ownership **Track A** — edits the shared `ir_codegen.inc` / `symtab.inc` /
   backends, so it obeys A's no-concurrent-edit rule + self-host gate) — umbrella
@@ -2747,3 +2802,63 @@ limit CLAUDE.md records: the fixedpoint gate cannot see an `-O3`-only defect.
 That is the reason this test exists rather than leaning on the gate.
 
 Landed `81d2ec232`. `-O2` promotion not taken — coordinator's call, after soak.
+
+---
+
+## 2026-08-29 — W1 slice 6 LANDED behind -O3: resident left operand × constant → three-operand imul
+
+The second deletable bucket from slice 5's census (MULIMM, 422 sites in
+compiler.pas). `imul` is the **only** form in the `-O1` immediate-fold arm with a
+three-operand encoding, so a resident left operand can be its *source* while rax
+stays its *destination* and the `mov rax, rN` in front disappears. The five arms
+beside it — add/sub/and/or/xor — are short accumulator encodings that read *and*
+write rax, so a resident left has to be moved there and this does not help them.
+
+**No type screen, and that is a decision rather than an omission.** The
+equivalence is at the **register** level, not the type level: `EmitLoadVar`'s
+resident arm emits the move and nothing else, and the consumer here is the very
+next instruction emitted — there is no path below that could reach a different
+arm expecting rax loaded. That last clause is exactly what slice 5's *register-
+form* compare does not have, which is why that one needs a whitelist and this one
+does not. Same campaign, two arms, opposite answers, for a reason that is
+written down at both sites.
+
+**Verification** (against a baseline rebuilt at HEAD — see standing rule 3):
+
+| check | result |
+| --- | --- |
+| `-O0`/`-O1`/`-O2` vs baseline | **byte-identical**, all five programs |
+| `-O3` size | −18 / −27 / −15 / −15 / −159 B |
+| values `-O0`..`-O3` | identical, and equal to FPC 3.2.2 |
+| self-host fixedpoint | converged after 1 round, `76c14ec57dcc` |
+| dynamic, three-local loop | delta exactly `n` at n=20000 and n=50000 |
+
+The emitted loop now opens `49 69 c4 03 00 00 00` — `imul rax, r12, 0x3`.
+
+**Cumulative W1 on that loop: 22 → 19 retired instructions per iteration =
+13.6%**, one instruction each from slices 1, 5 and 6, every one of them measured
+as an exact delta rather than estimated.
+
+**The test puts the changed arm and the five unchanged ones in one program**, so
+a mistake in `imul` cannot hide behind the five that still work. Non-vacuous by
+construction check: swapping the reg/rm fields — the specific mistake this
+encoding invites, because the operand roles are the **opposite** way round from
+this campaign's compare emitters — made `-O3` produce no output at all while
+`-O0` stayed correct.
+
+Landed `7f01306c8`. `-O2` promotion not taken — coordinator's call, after soak.
+
+### What is left in W1, and what it is worth
+
+The census bucket that remains is **ALU** (2649 sites in compiler.pas), and it is
+*not* a third easy slice: add/sub/and/or/xor write their result to rax, so a
+resident left operand cannot stay in place. `lea rax,[rN+rM]` could serve the
+commutative subset but does not set flags, which needs a liveness answer this
+campaign does not have. Priced and parked, not filed — per the backlog-leak rule,
+a ticket justified by a number remaining is a placeholder.
+
+Still genuinely open, and larger than any of the three landed slices: the
+`mov r8,rax` / `mov rax,r8` park around a right subtree, and the for-limit temp
+reloaded from the frame every iteration. Note the ticket's own earlier warning
+before touching the latter — making the limit a constant measured *slower*
+(0.87 vs 0.79), so it is not the obvious win it looks like.
