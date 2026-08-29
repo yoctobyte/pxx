@@ -15691,3 +15691,61 @@ than three, and three of those are regressions with a culprit already identified
 [A p70] is unclaimed and sits on the **HeapMmap** ground that is **UNGRANTED** to
 frankwasm. It is a legitimate Track A ticket at p70 and taking it is not a wasm
 grant; the two-halves rule (never the RTL arm alone) still binds whoever picks it up.
+
+### The fuzz-ledger erasure was WIDER than I measured — and I missed the worst field
+
+`a3387878e` (writer) + `658666ea8` (announce), pxx-a5. I asked it to tell me if
+reading the writer showed the erasure **narrower** than I claimed. It showed it
+**wider**, by one field, and that field costs more than the one I led with.
+
+**`ticket` was erased too.** A signature someone had already filed a ticket for
+comes back looking **untriaged, and gets triaged again.** I built my table by
+diffing the entry across the reopen and then wrote it up as the loss — the bisect
+bracket, which is real but recoverable from git. Duplicate triage is not
+recoverable; it is spent twice and nobody knows it.
+
+> **A table that looks complete is an enumeration declared complete** — my own
+> rule, and I broke it inside the ticket that was *about* a record destroying its
+> own evidence. I listed the fields a diff showed me and stopped, because eight
+> rows with an obvious pattern reads as exhaustive. The check I skipped is the one
+> the ticket demanded of everyone else: **what could this instrument not have
+> shown me?** A diff shows fields that CHANGED between two states — it cannot
+> distinguish "unaffected" from "absent in both because this entry never had one".
+
+pxx-a5 also found the consequence I would not have: the status must return as
+`ticketed`, not `open`, when the link survives — because `ledger_ticket()` keeps
+that pair together and both count as open for throttling. Handing back a ticket
+slug beside `status: open` would **split a fact from its evidence in a second
+field**, which is the defect the ticket exists to fix.
+
+**What held:** the preserve path *did* already exist (`recheck()` mutates in
+place); only the reopen edge replaced wholesale, on an `or`. One path rejoining
+another, no new machinery — as the ticket predicted. And my "generalise the
+mechanism, not the harm" line is now **measured rather than inferred**: it audited
+every writer into `findings[sig]` (`ledger_record`, `ledger_ticket`, `recheck`,
+the publish path) and the wholesale assignment was the **only** overwriting
+transition.
+
+**The guards were run against the unfixed writer first, per the ticket's demand —
+6 of 10 failed, the ticket-link guard among them.** That is the difference between
+a guard and a decoration, and it is why the extra field is known empirically
+rather than argued. The bracket now lives in a `reopens: [...]` list, so it
+survives repeated cycles instead of being one pair the next reopen overwrites.
+An unreadable ledger degrades to `NEW`, never to silence: **a mislabelled event
+beats an invisible one.**
+
+### For seven's handoff: half the tooling needs no restart
+
+pxx-a5 verified both hops rather than assuming either — **skip publishing and
+`-O3` attribution are already LIVE** in the resident watcher (resident `code_fp`
+== clone disk == the `twatch.py` of `27479e46d`). Seven will read reports that
+already carry the attribution. Exactly one commit is not live: today's `REOPENED`
+announce, folded into the next natural restart rather than restarting for it.
+
+The structural fact worth carrying into the handoff:
+
+> **`testmgr.py` is re-spawned as a subprocess per run, so testmgr changes go live
+> on the clone's next pull with NO restart. Only `twatch.py` itself is pinned into
+> the resident image.** So *"the watcher needs restarting for tooling changes"* is
+> true of about half the tooling and false of the rest — and guessing wrong in the
+> "safe" direction costs a needless restart into a breadth run.
