@@ -89,7 +89,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 .PHONY: test-esp-idf
 .PHONY: fuzz-csmith
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-fgl test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-selfcompile-odiff test-emit-obj test-sqlite-threads test-sqlite-parity stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-fgl test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-xtensa test-selfcompile-odiff test-emit-obj test-sqlite-threads test-sqlite-parity stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos tools-devtest tools-devtest-sh c-interop-devtest tls-openssl-devtest tls13-handshake-devtest truststore-devtest tls-native-seam-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -12562,6 +12562,210 @@ test-riscv32: $(COMPILER)
 	tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_cusweep; tools/expect_same.sh riscv32/test_rv32x_cusweep-rc "$$?" "42"
 	# SKIP test/cunsigned_div_mod_b123.c on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	@echo "riscv32 c-entry + c-args + c-double-to-int + c-unsigned-arith + c-unsigned-div + hello + stackless-generator + readln + eof-stdin + exception + args + typed-const + global-init + set-param + inline-asm + record-byval-wide + bignum-ops + shared-pascal-battery ok"
+
+
+# ---------------------------------------------------------------------------
+# HOSTED XTENSA DIFFERENTIAL — same programs, xtensa vs the x86-64 oracle.
+#
+# New on 2026-08-30, and it is the first time xtensa has EVER been run in this
+# repo. Until feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle landed the
+# IR_SYSCALL lowering, the exit syscall, read/write, and the HeapMmap arm, an
+# xtensa binary either spun in EmitExit's self-loop or faulted at $FFFFFFFF on
+# its first allocation — so every xtensa ticket ended in "do not land this on
+# inspection", and three separate wrong-answer bugs survived in the backend
+# precisely because nothing could run it.
+#
+# TWO COMPILE-TIME FLAGS ARE LOAD-BEARING and neither is cosmetic:
+#
+#   --platform=posix        or the ESP PAL is selected and every syscall lowers
+#                           to PAL_ERR_UNSUPPORTED (-38) instead of trapping.
+#   --xtensa-soft-mulhigh   or ANY numeric output SIGILLs: no qemu-xtensa core
+#                           implements MUL32HIGH (measured, all 8), and integer
+#                           formatting strength-reduces div-by-10 into a 64-bit
+#                           multiply.
+#
+# WHAT A GREEN HERE DOES NOT MEAN. Under --xtensa-soft-mulhigh the emulator is
+# NOT bit-identical to hardware for multiplies — the flag LABELS that
+# divergence, it does not remove it. A verdict from this target must name the
+# flag, and the two tickets that motivated the oracle (div-by-zero-check,
+# int64-to-float) are arithmetic and remain exactly what it cannot answer.
+#
+# THIS IS THE CALL0 ABI ONLY. Windowed (the ESP-IDF ABI) still faults on frozen
+# strings, Copy and dynarray SetLength —
+# bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength.
+#
+# The list is what was MEASURED to match, not what ought to. 55 of the 142
+# sources test-riscv32 uses; the 21 that diverge are filed as
+# bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs and are
+# deliberately NOT listed here — a differential that skips its own failures
+# silently is how xtensa got into this state.
+test-xtensa: $(COMPILER)
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/hello.pas $(TESTTMP)/test_xtensa_hello
+	./$(COMPILER) test/hello.pas $(TESTTMP)/test_xtensa_hello_x64
+	tools/expect_same.sh xtensa/hello "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_hello)" "$$($(TESTTMP)/test_xtensa_hello_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_arm32_virtual_wide.pas $(TESTTMP)/test_xtensa_test_arm32_virtual_wide
+	./$(COMPILER) test/test_arm32_virtual_wide.pas $(TESTTMP)/test_xtensa_test_arm32_virtual_wide_x64
+	tools/expect_same.sh xtensa/test_arm32_virtual_wide "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_arm32_virtual_wide)" "$$($(TESTTMP)/test_xtensa_test_arm32_virtual_wide_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_async_sl.pas $(TESTTMP)/test_xtensa_test_async_sl
+	./$(COMPILER) test/test_async_sl.pas $(TESTTMP)/test_xtensa_test_async_sl_x64
+	tools/expect_same.sh xtensa/test_async_sl "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_async_sl)" "$$($(TESTTMP)/test_xtensa_test_async_sl_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_const_record_temp.pas $(TESTTMP)/test_xtensa_test_const_record_temp
+	./$(COMPILER) test/test_const_record_temp.pas $(TESTTMP)/test_xtensa_test_const_record_temp_x64
+	tools/expect_same.sh xtensa/test_const_record_temp "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_const_record_temp)" "$$($(TESTTMP)/test_xtensa_test_const_record_temp_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_aggregate_return.pas $(TESTTMP)/test_xtensa_test_cross_aggregate_return
+	./$(COMPILER) test/test_cross_aggregate_return.pas $(TESTTMP)/test_xtensa_test_cross_aggregate_return_x64
+	tools/expect_same.sh xtensa/test_cross_aggregate_return "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_aggregate_return)" "$$($(TESTTMP)/test_xtensa_test_cross_aggregate_return_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_case_range.pas $(TESTTMP)/test_xtensa_test_cross_case_range
+	./$(COMPILER) test/test_cross_case_range.pas $(TESTTMP)/test_xtensa_test_cross_case_range_x64
+	tools/expect_same.sh xtensa/test_cross_case_range "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_case_range)" "$$($(TESTTMP)/test_xtensa_test_cross_case_range_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_const_alias.pas $(TESTTMP)/test_xtensa_test_cross_const_alias
+	./$(COMPILER) test/test_cross_const_alias.pas $(TESTTMP)/test_xtensa_test_cross_const_alias_x64
+	tools/expect_same.sh xtensa/test_cross_const_alias "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_const_alias)" "$$($(TESTTMP)/test_xtensa_test_cross_const_alias_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_exception.pas $(TESTTMP)/test_xtensa_test_cross_exception
+	./$(COMPILER) test/test_cross_exception.pas $(TESTTMP)/test_xtensa_test_cross_exception_x64
+	tools/expect_same.sh xtensa/test_cross_exception "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_exception)" "$$($(TESTTMP)/test_xtensa_test_cross_exception_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_frozen_strlen_deref.pas $(TESTTMP)/test_xtensa_test_cross_frozen_strlen_deref
+	./$(COMPILER) test/test_cross_frozen_strlen_deref.pas $(TESTTMP)/test_xtensa_test_cross_frozen_strlen_deref_x64
+	tools/expect_same.sh xtensa/test_cross_frozen_strlen_deref "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_frozen_strlen_deref)" "$$($(TESTTMP)/test_xtensa_test_cross_frozen_strlen_deref_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_global_init.pas $(TESTTMP)/test_xtensa_test_cross_global_init
+	./$(COMPILER) test/test_cross_global_init.pas $(TESTTMP)/test_xtensa_test_cross_global_init_x64
+	tools/expect_same.sh xtensa/test_cross_global_init "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_global_init)" "$$($(TESTTMP)/test_xtensa_test_cross_global_init_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_heap.pas $(TESTTMP)/test_xtensa_test_cross_heap
+	./$(COMPILER) test/test_cross_heap.pas $(TESTTMP)/test_xtensa_test_cross_heap_x64
+	tools/expect_same.sh xtensa/test_cross_heap "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_heap)" "$$($(TESTTMP)/test_xtensa_test_cross_heap_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_int64_byref.pas $(TESTTMP)/test_xtensa_test_cross_int64_byref
+	./$(COMPILER) test/test_cross_int64_byref.pas $(TESTTMP)/test_xtensa_test_cross_int64_byref_x64
+	tools/expect_same.sh xtensa/test_cross_int64_byref "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_int64_byref)" "$$($(TESTTMP)/test_xtensa_test_cross_int64_byref_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_int64.pas $(TESTTMP)/test_xtensa_test_cross_int64
+	./$(COMPILER) test/test_cross_int64.pas $(TESTTMP)/test_xtensa_test_cross_int64_x64
+	tools/expect_same.sh xtensa/test_cross_int64 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_int64)" "$$($(TESTTMP)/test_xtensa_test_cross_int64_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_many_params.pas $(TESTTMP)/test_xtensa_test_cross_many_params
+	./$(COMPILER) test/test_cross_many_params.pas $(TESTTMP)/test_xtensa_test_cross_many_params_x64
+	tools/expect_same.sh xtensa/test_cross_many_params "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_many_params)" "$$($(TESTTMP)/test_xtensa_test_cross_many_params_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_multidim.pas $(TESTTMP)/test_xtensa_test_cross_multidim
+	./$(COMPILER) test/test_cross_multidim.pas $(TESTTMP)/test_xtensa_test_cross_multidim_x64
+	tools/expect_same.sh xtensa/test_cross_multidim "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_multidim)" "$$($(TESTTMP)/test_xtensa_test_cross_multidim_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_named_array.pas $(TESTTMP)/test_xtensa_test_cross_named_array
+	./$(COMPILER) test/test_cross_named_array.pas $(TESTTMP)/test_xtensa_test_cross_named_array_x64
+	tools/expect_same.sh xtensa/test_cross_named_array "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_named_array)" "$$($(TESTTMP)/test_xtensa_test_cross_named_array_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_ptr_arith.pas $(TESTTMP)/test_xtensa_test_cross_ptr_arith
+	./$(COMPILER) test/test_cross_ptr_arith.pas $(TESTTMP)/test_xtensa_test_cross_ptr_arith_x64
+	tools/expect_same.sh xtensa/test_cross_ptr_arith "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_ptr_arith)" "$$($(TESTTMP)/test_xtensa_test_cross_ptr_arith_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_record_2darray.pas $(TESTTMP)/test_xtensa_test_cross_record_2darray
+	./$(COMPILER) test/test_cross_record_2darray.pas $(TESTTMP)/test_xtensa_test_cross_record_2darray_x64
+	tools/expect_same.sh xtensa/test_cross_record_2darray "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_record_2darray)" "$$($(TESTTMP)/test_xtensa_test_cross_record_2darray_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_setlen_str.pas $(TESTTMP)/test_xtensa_test_cross_setlen_str
+	./$(COMPILER) test/test_cross_setlen_str.pas $(TESTTMP)/test_xtensa_test_cross_setlen_str_x64
+	tools/expect_same.sh xtensa/test_cross_setlen_str "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_setlen_str)" "$$($(TESTTMP)/test_xtensa_test_cross_setlen_str_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_shortcircuit.pas $(TESTTMP)/test_xtensa_test_cross_shortcircuit
+	./$(COMPILER) test/test_cross_shortcircuit.pas $(TESTTMP)/test_xtensa_test_cross_shortcircuit_x64
+	tools/expect_same.sh xtensa/test_cross_shortcircuit "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_shortcircuit)" "$$($(TESTTMP)/test_xtensa_test_cross_shortcircuit_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_static_open_array.pas $(TESTTMP)/test_xtensa_test_cross_static_open_array
+	./$(COMPILER) test/test_cross_static_open_array.pas $(TESTTMP)/test_xtensa_test_cross_static_open_array_x64
+	tools/expect_same.sh xtensa/test_cross_static_open_array "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_static_open_array)" "$$($(TESTTMP)/test_xtensa_test_cross_static_open_array_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_string.pas $(TESTTMP)/test_xtensa_test_cross_string
+	./$(COMPILER) test/test_cross_string.pas $(TESTTMP)/test_xtensa_test_cross_string_x64
+	tools/expect_same.sh xtensa/test_cross_string "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_string)" "$$($(TESTTMP)/test_xtensa_test_cross_string_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_str_length_index.pas $(TESTTMP)/test_xtensa_test_cross_str_length_index
+	./$(COMPILER) test/test_cross_str_length_index.pas $(TESTTMP)/test_xtensa_test_cross_str_length_index_x64
+	tools/expect_same.sh xtensa/test_cross_str_length_index "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_str_length_index)" "$$($(TESTTMP)/test_xtensa_test_cross_str_length_index_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_strresult.pas $(TESTTMP)/test_xtensa_test_cross_strresult
+	./$(COMPILER) test/test_cross_strresult.pas $(TESTTMP)/test_xtensa_test_cross_strresult_x64
+	tools/expect_same.sh xtensa/test_cross_strresult "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_strresult)" "$$($(TESTTMP)/test_xtensa_test_cross_strresult_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_typed_const.pas $(TESTTMP)/test_xtensa_test_cross_typed_const
+	./$(COMPILER) test/test_cross_typed_const.pas $(TESTTMP)/test_xtensa_test_cross_typed_const_x64
+	tools/expect_same.sh xtensa/test_cross_typed_const "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_typed_const)" "$$($(TESTTMP)/test_xtensa_test_cross_typed_const_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_variant.pas $(TESTTMP)/test_xtensa_test_cross_variant
+	./$(COMPILER) test/test_cross_variant.pas $(TESTTMP)/test_xtensa_test_cross_variant_x64
+	tools/expect_same.sh xtensa/test_cross_variant "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_variant)" "$$($(TESTTMP)/test_xtensa_test_cross_variant_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_variant_payload_widths.pas $(TESTTMP)/test_xtensa_test_cross_variant_payload_widths
+	./$(COMPILER) test/test_cross_variant_payload_widths.pas $(TESTTMP)/test_xtensa_test_cross_variant_payload_widths_x64
+	tools/expect_same.sh xtensa/test_cross_variant_payload_widths "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_variant_payload_widths)" "$$($(TESTTMP)/test_xtensa_test_cross_variant_payload_widths_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_variant_single.pas $(TESTTMP)/test_xtensa_test_cross_variant_single
+	./$(COMPILER) test/test_cross_variant_single.pas $(TESTTMP)/test_xtensa_test_cross_variant_single_x64
+	tools/expect_same.sh xtensa/test_cross_variant_single "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_variant_single)" "$$($(TESTTMP)/test_xtensa_test_cross_variant_single_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_write_pchar.pas $(TESTTMP)/test_xtensa_test_cross_write_pchar
+	./$(COMPILER) test/test_cross_write_pchar.pas $(TESTTMP)/test_xtensa_test_cross_write_pchar_x64
+	tools/expect_same.sh xtensa/test_cross_write_pchar "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_write_pchar)" "$$($(TESTTMP)/test_xtensa_test_cross_write_pchar_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_dynarray_copy.pas $(TESTTMP)/test_xtensa_test_dynarray_copy
+	./$(COMPILER) test/test_dynarray_copy.pas $(TESTTMP)/test_xtensa_test_dynarray_copy_x64
+	tools/expect_same.sh xtensa/test_dynarray_copy "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_dynarray_copy)" "$$($(TESTTMP)/test_xtensa_test_dynarray_copy_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_dynarray_global_after_method.pas $(TESTTMP)/test_xtensa_test_dynarray_global_after_method
+	./$(COMPILER) test/test_dynarray_global_after_method.pas $(TESTTMP)/test_xtensa_test_dynarray_global_after_method_x64
+	tools/expect_same.sh xtensa/test_dynarray_global_after_method "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_dynarray_global_after_method)" "$$($(TESTTMP)/test_xtensa_test_dynarray_global_after_method_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_frozen_string_cross_b305.pas $(TESTTMP)/test_xtensa_test_frozen_string_cross_b305
+	./$(COMPILER) test/test_frozen_string_cross_b305.pas $(TESTTMP)/test_xtensa_test_frozen_string_cross_b305_x64
+	tools/expect_same.sh xtensa/test_frozen_string_cross_b305 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_frozen_string_cross_b305)" "$$($(TESTTMP)/test_xtensa_test_frozen_string_cross_b305_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_halt_exit_code.pas $(TESTTMP)/test_xtensa_test_halt_exit_code
+	./$(COMPILER) test/test_halt_exit_code.pas $(TESTTMP)/test_xtensa_test_halt_exit_code_x64
+	tools/expect_same.sh xtensa/test_halt_exit_code "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_halt_exit_code)" "$$($(TESTTMP)/test_xtensa_test_halt_exit_code_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_i386_arith.pas $(TESTTMP)/test_xtensa_test_i386_arith
+	./$(COMPILER) test/test_i386_arith.pas $(TESTTMP)/test_xtensa_test_i386_arith_x64
+	tools/expect_same.sh xtensa/test_i386_arith "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_i386_arith)" "$$($(TESTTMP)/test_xtensa_test_i386_arith_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_i386_loops.pas $(TESTTMP)/test_xtensa_test_i386_loops
+	./$(COMPILER) test/test_i386_loops.pas $(TESTTMP)/test_xtensa_test_i386_loops_x64
+	tools/expect_same.sh xtensa/test_i386_loops "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_i386_loops)" "$$($(TESTTMP)/test_xtensa_test_i386_loops_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_i386_procs.pas $(TESTTMP)/test_xtensa_test_i386_procs
+	./$(COMPILER) test/test_i386_procs.pas $(TESTTMP)/test_xtensa_test_i386_procs_x64
+	tools/expect_same.sh xtensa/test_i386_procs "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_i386_procs)" "$$($(TESTTMP)/test_xtensa_test_i386_procs_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_i386_varparam.pas $(TESTTMP)/test_xtensa_test_i386_varparam
+	./$(COMPILER) test/test_i386_varparam.pas $(TESTTMP)/test_xtensa_test_i386_varparam_x64
+	tools/expect_same.sh xtensa/test_i386_varparam "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_i386_varparam)" "$$($(TESTTMP)/test_xtensa_test_i386_varparam_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_i386_write.pas $(TESTTMP)/test_xtensa_test_i386_write
+	./$(COMPILER) test/test_i386_write.pas $(TESTTMP)/test_xtensa_test_i386_write_x64
+	tools/expect_same.sh xtensa/test_i386_write "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_i386_write)" "$$($(TESTTMP)/test_xtensa_test_i386_write_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_inheritance_dispatch.pas $(TESTTMP)/test_xtensa_test_inheritance_dispatch
+	./$(COMPILER) test/test_inheritance_dispatch.pas $(TESTTMP)/test_xtensa_test_inheritance_dispatch_x64
+	tools/expect_same.sh xtensa/test_inheritance_dispatch "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_inheritance_dispatch)" "$$($(TESTTMP)/test_xtensa_test_inheritance_dispatch_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_inline_expand.pas $(TESTTMP)/test_xtensa_test_inline_expand
+	./$(COMPILER) test/test_inline_expand.pas $(TESTTMP)/test_xtensa_test_inline_expand_x64
+	tools/expect_same.sh xtensa/test_inline_expand "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_inline_expand)" "$$($(TESTTMP)/test_xtensa_test_inline_expand_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_interfaces_as.pas $(TESTTMP)/test_xtensa_test_interfaces_as
+	./$(COMPILER) test/test_interfaces_as.pas $(TESTTMP)/test_xtensa_test_interfaces_as_x64
+	tools/expect_same.sh xtensa/test_interfaces_as "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_interfaces_as)" "$$($(TESTTMP)/test_xtensa_test_interfaces_as_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_interfaces_inherit.pas $(TESTTMP)/test_xtensa_test_interfaces_inherit
+	./$(COMPILER) test/test_interfaces_inherit.pas $(TESTTMP)/test_xtensa_test_interfaces_inherit_x64
+	tools/expect_same.sh xtensa/test_interfaces_inherit "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_interfaces_inherit)" "$$($(TESTTMP)/test_xtensa_test_interfaces_inherit_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_interfaces_is.pas $(TESTTMP)/test_xtensa_test_interfaces_is
+	./$(COMPILER) test/test_interfaces_is.pas $(TESTTMP)/test_xtensa_test_interfaces_is_x64
+	tools/expect_same.sh xtensa/test_interfaces_is "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_interfaces_is)" "$$($(TESTTMP)/test_xtensa_test_interfaces_is_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_interfaces_param.pas $(TESTTMP)/test_xtensa_test_interfaces_param
+	./$(COMPILER) test/test_interfaces_param.pas $(TESTTMP)/test_xtensa_test_interfaces_param_x64
+	tools/expect_same.sh xtensa/test_interfaces_param "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_interfaces_param)" "$$($(TESTTMP)/test_xtensa_test_interfaces_param_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_interfaces.pas $(TESTTMP)/test_xtensa_test_interfaces
+	./$(COMPILER) test/test_interfaces.pas $(TESTTMP)/test_xtensa_test_interfaces_x64
+	tools/expect_same.sh xtensa/test_interfaces "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_interfaces)" "$$($(TESTTMP)/test_xtensa_test_interfaces_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_managed_strlen_deref.pas $(TESTTMP)/test_xtensa_test_managed_strlen_deref
+	./$(COMPILER) test/test_managed_strlen_deref.pas $(TESTTMP)/test_xtensa_test_managed_strlen_deref_x64
+	tools/expect_same.sh xtensa/test_managed_strlen_deref "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_managed_strlen_deref)" "$$($(TESTTMP)/test_xtensa_test_managed_strlen_deref_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_methcall.pas $(TESTTMP)/test_xtensa_test_methcall
+	./$(COMPILER) test/test_methcall.pas $(TESTTMP)/test_xtensa_test_methcall_x64
+	tools/expect_same.sh xtensa/test_methcall "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_methcall)" "$$($(TESTTMP)/test_xtensa_test_methcall_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_methodptr.pas $(TESTTMP)/test_xtensa_test_methodptr
+	./$(COMPILER) test/test_methodptr.pas $(TESTTMP)/test_xtensa_test_methodptr_x64
+	tools/expect_same.sh xtensa/test_methodptr "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_methodptr)" "$$($(TESTTMP)/test_xtensa_test_methodptr_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_not_int64_expr.pas $(TESTTMP)/test_xtensa_test_not_int64_expr
+	./$(COMPILER) test/test_not_int64_expr.pas $(TESTTMP)/test_xtensa_test_not_int64_expr_x64
+	tools/expect_same.sh xtensa/test_not_int64_expr "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_not_int64_expr)" "$$($(TESTTMP)/test_xtensa_test_not_int64_expr_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_record_temp_byval_arg.pas $(TESTTMP)/test_xtensa_test_record_temp_byval_arg
+	./$(COMPILER) test/test_record_temp_byval_arg.pas $(TESTTMP)/test_xtensa_test_record_temp_byval_arg_x64
+	tools/expect_same.sh xtensa/test_record_temp_byval_arg "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_record_temp_byval_arg)" "$$($(TESTTMP)/test_xtensa_test_record_temp_byval_arg_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_stackless_gen.pas $(TESTTMP)/test_xtensa_test_stackless_gen
+	./$(COMPILER) test/test_stackless_gen.pas $(TESTTMP)/test_xtensa_test_stackless_gen_x64
+	tools/expect_same.sh xtensa/test_stackless_gen "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_stackless_gen)" "$$($(TESTTMP)/test_xtensa_test_stackless_gen_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_uint32_write.pas $(TESTTMP)/test_xtensa_test_uint32_write
+	./$(COMPILER) test/test_uint32_write.pas $(TESTTMP)/test_xtensa_test_uint32_write_x64
+	tools/expect_same.sh xtensa/test_uint32_write "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_uint32_write)" "$$($(TESTTMP)/test_xtensa_test_uint32_write_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_uint64_ops.pas $(TESTTMP)/test_xtensa_test_uint64_ops
+	./$(COMPILER) test/test_uint64_ops.pas $(TESTTMP)/test_xtensa_test_uint64_ops_x64
+	tools/expect_same.sh xtensa/test_uint64_ops "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_uint64_ops)" "$$($(TESTTMP)/test_xtensa_test_uint64_ops_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_variant_class_cross.pas $(TESTTMP)/test_xtensa_test_variant_class_cross
+	./$(COMPILER) test/test_variant_class_cross.pas $(TESTTMP)/test_xtensa_test_variant_class_cross_x64
+	tools/expect_same.sh xtensa/test_variant_class_cross "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_variant_class_cross)" "$$($(TESTTMP)/test_xtensa_test_variant_class_cross_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_xtensa_test_variant_self_assign_is_a_no_op
+	./$(COMPILER) test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_xtensa_test_variant_self_assign_is_a_no_op_x64
+	tools/expect_same.sh xtensa/test_variant_self_assign_is_a_no_op "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_variant_self_assign_is_a_no_op)" "$$($(TESTTMP)/test_xtensa_test_variant_self_assign_is_a_no_op_x64)"
+	@echo "hosted xtensa: 55 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello

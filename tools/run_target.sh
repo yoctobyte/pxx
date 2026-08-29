@@ -5,7 +5,7 @@
 #
 #   tools/run_target.sh <arch> <binary> [args...]
 #
-# arch: x86_64 | i386 | aarch64 | arm32 | riscv32 | riscv64
+# arch: x86_64 | i386 | aarch64 | arm32 | riscv32 | riscv64 | xtensa
 #
 # Exit code is the program's exit code (QEMU passes it through), so the
 # existing `test "$(...)" = ...` Makefile assertions work unchanged.
@@ -78,6 +78,31 @@ case "$arch" in
   riscv64)
     need qemu-riscv64
     exec qemu-riscv64 "$bin" "$@"
+    ;;
+  xtensa)
+    # Hosted xtensa under qemu-xtensa user mode. Newest arm, and the only one
+    # whose target was unrunnable until 2026-08-29: xtensa had no IR_SYSCALL
+    # lowering, no exit syscall, and no HeapMmap arm, so every binary either
+    # spun in EmitExit's self-loop or faulted at $FFFFFFFF on its first
+    # allocation. feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle
+    #
+    # TWO THINGS THE CALLER MUST GET RIGHT, and neither is visible here because
+    # both are COMPILE-time:
+    #
+    #   --platform=posix, or the ESP PAL is selected and syscalls lower to
+    #   PAL_ERR_UNSUPPORTED (-38) instead of trapping to the kernel.
+    #
+    #   --xtensa-soft-mulhigh, or ANY numeric output SIGILLs. No qemu-xtensa
+    #   core implements MUL32HIGH -- measured, all 8 cores -- and integer
+    #   formatting strength-reduces div-by-10 into a 64-bit multiply. Under
+    #   that flag the emulator is NOT bit-identical to hardware for multiplies,
+    #   so a verdict produced here must name the flag.
+    #
+    # No -cpu: the default core runs everything the ESP parts need. Two cores
+    # are NOT interchangeable and a sweep must pin its list -- dsp3400 has no
+    # MUL32 at all, and lx106 (the ESP8266 core) has no windowed ABI option.
+    need qemu-xtensa
+    exec qemu-xtensa "$bin" "$@"
     ;;
   *)
     echo "unknown arch: $arch" >&2
