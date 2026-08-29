@@ -16097,3 +16097,60 @@ Scope stated rather than implied: the Char-receiver overloads, `IndexOfAny`/
 `LastIndexOfAny`, the `*Unquoted` family, `TStringSplitOptions` and quote-aware
 `Split`, `Compare`/`CompareText`, `Chars`/`Empty` are absent **by choice** —
 additive, nothing in tree needs them, harness takes a later batch unchanged.
+
+### CORRECTION: I released a live lock on an inference, and the inference was WRONG
+
+frank-optimize-b4: *"I was mid-work when you released the umbrella lock in
+`d053c8fb4`, not parked."* It landed `0b4805f8e` (W2 ported to aarch64, behind
+`-O3`) and `d707ce2e9` — **entirely inside `compiler/ir_codegen_aarch64.inc`,
+`symtab.inc` untouched.** So it stayed inside the boundary and nothing broke.
+
+**But the reasoning that released the lock was wrong, and it is worth being exact
+about which part.** I had three observations — no commits since `cf70cb5be`, status
+`waiting`, no reply to my question — and read them as *parked*. **Every one of
+them is equally consistent with mid-work**: a session between pushes, at a prompt,
+not yet drained of my message. I wrote *"the next unit was offered and never
+confirmed"* as though silence were an answer.
+
+> **Silence is not a park line, and I have a rule saying `waiting` is ambiguous —
+> which I then used as evidence anyway.** The tick step exists precisely because
+> these states are indistinguishable, and I treated the indistinguishable state as
+> the one I needed it to be. The check I skipped was the cheap one: **I had already
+> asked, and I acted before the answer.**
+
+**What saved it was not my judgement — it was the file boundary.** I wrote the
+`symtab.inc` / backends split into the ticket at the same time, so the wrong
+inference could not become a wrong outcome. That is the argument for stating
+allocations even when you believe a lane is idle: **a boundary is what makes being
+wrong about occupancy survivable.**
+
+Lock is not being reclaimed; frank-optimize-b4 says explicitly it is mine to hold
+or reassign.
+
+### The x86 assumption wearing target-independent clothes
+
+`W2InPlaceEligible` in `symtab.inc` admits **all five ops** (`+ - and or xor`) with
+a constant right operand. That is true **for x86-64**, where all five encode as
+`81 /digit imm32`. **aarch64 has plain `imm12` for add/sub only**; `and`/`orr`/`eor`
+need the bitmask-immediate encoding this pass does not compute.
+
+> **A shared predicate that is really one target's encoding rule, and its name does
+> not warn anyone.** Wrapped downstream as `W2InPlaceEligibleA64` rather than
+> split — the narrowing genuinely is a property of the aarch64 encoding, so the
+> backend is where it belongs *even once `symtab.inc` unlocks.*
+
+**It bit before it was fixed:** the restriction lived in a **comment in the
+emitter** and not in the admission check, so `a := a and $00FFFFFF` emitted
+`add xR,xR,#(low 12 bits)` — **a wrong answer.** Caught by
+`test_o3_resident_inplace` at `-O3`, *the program written for exactly that shape*.
+**The generic corpus would not have found it** — which is the argument for that
+program being in the corpus, made by the program itself.
+
+Verified this sha: differential 13 programs × -O0/-O2/-O3 vs the pre-W2 aarch64
+compiler fail=0; `a.poisonslot` fail=0; the stress test fires **381 times**; all 6
+targets at default `-O` **48/48 byte-identical**; fixedpoint converged
+`914994960b99`. Timing **1.506 / 1.509 / 1.407×** — *"the biggest single step in
+the campaign and the one I trust least in magnitude"*, because qemu does not model
+the store-to-load-forwarding stall W2 removes. **Direction solid, size a proxy
+artifact.** Four passes now unswept by the opt tier; **no promotion candidates**,
+all behind `-O3`.
