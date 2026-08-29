@@ -4,7 +4,7 @@ track: P
 prio: 65
 type: bug
 status: unfinished
-blocked-by: []
+blocked-by: [bug-p-a-qualified-type-name-cannot-be-a-generic-argument]
 summary: "`TEnum<TPair>` where TPair is a type nested INSIDE the enclosing template is minted eagerly as `TEnum$TPair`, giving `unknown type: TPair` at TEnum's own line. Same shape as bug-p-a-generic-argument-that-is-another-templates-parameter-is-minted-as-a-concrete-type, which is fixed — that one catches PARAMETER names via a token-level scan, and a nested type name is not a parameter, so it slips through. 23-line repro, FPC prints 4. This is the current stop for `uses Generics.Collections` (generics.collections.pas:120, TEnumerator<TDictionaryPair>). Two mechanisms for one concept: read the whitelist analysis below before adding a third."
 owner: unassigned
 ---
@@ -139,6 +139,29 @@ SPEC TEnum$TPair = TEnum nested=0             <- ...and emitted with TPair RAW
 substitution set applied when a template is specialized covers its PARAMETERS
 (`TKey` -> `Integer`) and not the type names its own body declares, so a nested
 name used as a generic argument survives into a top-level declaration unmapped.
+
+### CORRECTION, same day, after probing: the remainder is NOT one mapping
+
+The paragraph below said "one mapping is missing, not the machinery". Measured,
+that is **wrong** — or at best true only of the route it assumed. The correct
+emission is the QUALIFIED form
+`TEnum$... = specialize TEnum<TDict$Integer$LongInt.TPair>`, and pxx **cannot
+parse a qualified type name in an argument position at all**:
+
+```
+TE = specialize TEnum<TOuter.TPair>;
+  -> Expected: >, but got: .          (FPC compiles this and prints 5)
+```
+
+Filed as `bug-p-a-qualified-type-name-cannot-be-a-generic-argument` and now this
+ticket's `blocked-by`. A generic argument is modelled as exactly ONE TOKEN
+across five tests and one storage type (`NSpecArg: array of TRawToken`), so the
+qualified route needs that widened first.
+
+The other route — hoisting a specialization's nested types to their own
+top-level `$`-aliases — is still open and avoids qualified names entirely.
+**Neither route has been measured.** Choose deliberately and write the choice
+here; do not discover it halfway.
 
 **A probe that bounds the remaining work:** a nested type of a specialization is
 already materialised correctly and usable — `TDict<Integer, LongInt>` with

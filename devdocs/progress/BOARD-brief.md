@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:23 blocked:8 backlog:310 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2648 rejected:51`
+`working:4 unfinished:23 blocked:8 backlog:311 backlog_new:13 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2648 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
@@ -20,7 +20,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
-- `bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument` [P]
+- `bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument` [P] — blocked-by: bug-p-a-qualified-type-name-cannot-be-a-generic-argument
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A]
 - `feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle` [A+S]
@@ -67,10 +67,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [P]` bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
+- `[p 65] [P]` bug-p-a-qualified-type-name-cannot-be-a-generic-argument (unblocks 1)
 - `[p 65] [A]` bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 65] [P]` bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
-- `[p 65] [P]` bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument
 - `[p 65] [P]` bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets
 - `[p 65] [P]` bug-p-two-different-nested-specializations-of-one-template-collide
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
