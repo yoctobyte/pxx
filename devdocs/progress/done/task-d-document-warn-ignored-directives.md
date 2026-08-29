@@ -66,7 +66,7 @@ Both pages build and the flag name matches the implementation exactly
 (`--warn-ignored-directives`).
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit cee8f568f.
 
 ---
 
