@@ -4,7 +4,7 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `c1c32faf6562` | 2026-08-29T21:16:08Z | RED (native) | 410.9s | `49bd043061c1` RED |
-| seven | `b26e7ed366f3` | 2026-08-29T21:02:15Z | RED (native) | 115.3s | `9beb2af4946c` RED |
+| seven | `b26e7ed366f3` | 2026-08-29T21:17:05Z | RED (full) | 869.1s | `b26e7ed366f3` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -38,3 +38,5 @@
   </details>
 - **test-nilpy#src:test/test_nilpy_relative_import_in_package.npy** — test/test_nilpy_relative_import_in_package.npy test/test_nilpy_relative_import_in_package.expected +1 (seven): bad `ee62e6dc0582`, last good `154d1aa3fba6`, 76 commit(s) in range
 - **test-core#src:test/test_mgmt_operators.pas** — test/test_mgmt_operators.pas test/test_mgmt_operators.expected +5 (seven): bad `d1378175eec1`, last good `9beb2af4946c`, 7 commit(s) in range
+- **demos#00** (seven): bad `b26e7ed366f3`, last good `9beb2af4946c`, 20 commit(s) in range
+- **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +36 (seven): bad `b26e7ed366f3`, last good `9beb2af4946c`, 20 commit(s) in range
