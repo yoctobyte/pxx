@@ -6053,14 +6053,23 @@ begin
            ((op = tkPlus) or (op = tkMinus) or (op = tkStar) or
             (op = tkAnd) or (op = tkOr) or (op = tkXor)) then
         begin
-          IREmitNode(left);   { rax = left }
+          { -O3 W1 slice 6: `imul` is the ONE form here with a three-operand
+            encoding, so a resident left operand can be its source while rax
+            stays its destination and the `mov rax, rN` goes away. The other
+            five arms are short accumulator encodings that read and write rax,
+            so a resident left has to be moved and this does not help them.
+            Census (PXXDBG=a.w1left): MULIMM is 422 sites in compiler.pas, the
+            second deletable bucket after CMP. }
+          if (OptLevel >= 3) and (op = tkStar) and (IRKind[left] = IR_LOAD_SYM) then
+            w1LeftReg := ResidentRegOf(IRA[left]);
+          if w1LeftReg = 0 then IREmitNode(left);   { rax = left }
           case op of
             tkPlus:  begin EmitB($48); EmitB($05); EmitI32(IRIVal[right]); end;             { add rax, imm32 }
             tkMinus: begin EmitB($48); EmitB($2D); EmitI32(IRIVal[right]); end;             { sub rax, imm32 }
             tkAnd:   begin EmitB($48); EmitB($25); EmitI32(IRIVal[right]); end;             { and rax, imm32 }
             tkOr:    begin EmitB($48); EmitB($0D); EmitI32(IRIVal[right]); end;             { or  rax, imm32 }
             tkXor:   begin EmitB($48); EmitB($35); EmitI32(IRIVal[right]); end;             { xor rax, imm32 }
-            tkStar:  begin EmitB($48); EmitB($69); EmitB($C0); EmitI32(IRIVal[right]); end; { imul rax, rax, imm32 }
+            tkStar:  EmitImulRaxLeftImm32(w1LeftReg, IRIVal[right]);                       { imul rax, rax|rN, imm32 }
           end;
           Exit;
         end;

@@ -5171,6 +5171,28 @@ end;
   the exercise, one instruction. Both forms sign-extend imm32 to 64 bits, so
   signed and unsigned comparisons keep their meaning either way -- the same
   property the cmp-immediate fold itself relies on. }
+{ `imul rax, <left>, imm32`. reg = 0 is the usual `imul rax, rax, imm32`;
+  reg = 12..15 names the SOURCE in the r/m field (REX.B) while rax stays the
+  destination in the reg field -- the three-operand form, so unlike the four
+  other imm-fold arms beside it (add/sub/and/or/xor, all short accumulator
+  encodings that both read and write rax) this one can take its input from
+  somewhere other than its output. Same 7 bytes either way; the saving is the
+  whole `mov rax, rN` in front.
+
+  No type screen, and that is not an oversight. The equivalence here is at the
+  REGISTER level, not the type level: EmitLoadVar's resident arm emits the move
+  and nothing else, so rN and rax hold the same 64 bits, and the consumer is the
+  very next instruction emitted -- there is no path below that could reach a
+  different arm expecting rax loaded. That last clause is exactly what the
+  register-form compare does NOT have, which is why that one needs a whitelist
+  and this one does not. }
+procedure EmitImulRaxLeftImm32(reg: Integer; imm: Integer);
+begin
+  EmitB($48 or Ord(reg <> 0)); EmitB($69);
+  if reg = 0 then EmitB($C0) else EmitB($C0 or (reg - 8));
+  EmitI32(imm);
+end;
+
 procedure EmitCmpLeftImm32(reg: Integer; imm: Integer);
 begin
   if reg = 0 then

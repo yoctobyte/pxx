@@ -3860,6 +3860,22 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_cmpresid326 "$$($(TESTTMP)/test_cmpresid326)" "$$(printf 'acc=393213\none=131071\ndone')"
 	./$(COMPILER) -O0 test/test_cmp_resident_left.pas $(TESTTMP)/test_cmpresid026
 	tools/expect_same.sh test_cmpresid026 "$$($(TESTTMP)/test_cmpresid026)" "$$(printf 'acc=393213\none=131071\ndone')"
+	# a register-RESIDENT left operand times a CONSTANT uses imul's three-operand
+	# form at -O3 (`imul rax, r12, k`). imul is the ONLY form in the immediate-fold
+	# arm that can take its input from somewhere other than its output; the five
+	# beside it (add/sub/and/or/xor) are short accumulator encodings and are
+	# UNCHANGED -- the test exercises all six side by side so a mistake in the
+	# imul arm cannot hide behind the five that still work.
+	# Note the operand roles are the OPPOSITE way round from the compare emitters
+	# in this campaign: here the source is r/m (REX.B) and the destination is reg.
+	# Same -O0/-O3 control pair as the compare test. Verified against FPC 3.2.2 and
+	# checked non-vacuous by swapping the reg/rm fields on purpose -- -O3 then
+	# produced no output at all while -O0 stayed correct.
+	# feature-opt-o3-register-pressure W1 slice 6
+	./$(COMPILER) -O3 test/test_imul_resident_left.pas $(TESTTMP)/test_imulresid326
+	tools/expect_same.sh test_imulresid326 "$$($(TESTTMP)/test_imulresid326)" "$$(printf 'acc=20000053834\none=5000013460\ndone')"
+	./$(COMPILER) -O0 test/test_imul_resident_left.pas $(TESTTMP)/test_imulresid026
+	tools/expect_same.sh test_imulresid026 "$$($(TESTTMP)/test_imulresid026)" "$$(printf 'acc=20000053834\none=5000013460\ndone')"
 	# The bulk-copy helpers' BYTE TAIL, at every length 0..17: string SetLength
 	# (grow and shrink), dyn-array SetLength, Copy() at every offset and count,
 	# aliasing-vs-Copy, and concat. Every expectation diffed against FPC 3.2.2.
