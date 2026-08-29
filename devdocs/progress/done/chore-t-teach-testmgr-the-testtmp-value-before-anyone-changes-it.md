@@ -172,4 +172,4 @@ compiled sources across 37 files — which no default can reach.
 
 ## Log
 - 2026-08-29 — resolved.
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 10e405656.
