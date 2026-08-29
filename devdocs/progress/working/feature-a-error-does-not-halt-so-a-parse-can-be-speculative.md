@@ -22,9 +22,11 @@ owner: frankA
 > 1's NilPy pre-pass must trial-parse, so the landmine is aimed at the very work
 > this ticket exists to enable.
 >
-> `ProcRollbackTo` landed 2026-08-29 (`db7dfec69`), additively and with no
-> callers. Wiring it into the two rewind sites is measured and green but held:
-> `compiler/pyparser.inc` is another agent's declared file.
+> **Slice 6 landed 2026-08-29**: `ProcRollbackTo` (`db7dfec69`) and its wiring
+> into all six rewind sites (`d6cb27a9a`). A rewound trial parse now unregisters
+> what it registered. The primitive item 1 needs therefore **exists**; what is
+> still missing is the part that ties an ERROR to a rollback point, and the
+> decision about which errors are fatal.
 
 
 - **Type:** feature (compiler core) — **Track A**.
@@ -662,3 +664,56 @@ one a trial parse measurably dirties *today* — five parallel arrays plus
 `PyPendLamCount`, consumed by a `while PyPendLamCount > mark` loop that already
 takes a **mark**. That loop's existing mark discipline is the shape the rollback
 should follow, not a new invention.
+
+
+## Slice 6 landed 2026-08-29 (frankA) — the primitive exists, and it closed a live leak on the way
+
+`ProcRollbackTo` (`db7dfec69`) + wiring at all six rewind sites (`d6cb27a9a`).
+
+**The recommendation was tested rather than inherited, and that changed it.** The
+previous section recommended landing `ProcRollbackTo` first and called it
+groundwork whose *"only known consumer (NilPy typing) is deferred, so the ranking
+argument for doing it now is weak."* Measuring first found a **consumer already in
+the tree** and a **live defect**: the `len()` and f-string intercepts leaked one
+proc and ~350 B of dead code per lambda in a trial-parsed argument. The
+prerequisite was a bug fix. Numbers and method are in the MEASURED section above.
+
+### What ProcRollbackTo is, and the asymmetry that will get "simplified"
+
+Not a mirror of `SymRollbackTo`, and the reason is in the code:
+
+| | insert | so rollback… |
+| --- | --- | --- |
+| `SymHashInsert` | **LIFO**, newest-first | the highest live index is its bucket's **head** — O(1) pop |
+| `ProcHashInsert` | **FIFO**, append at tail | the highest live index is its bucket's **tail** — needs its predecessor |
+
+The FIFO order is load-bearing: `ProcChainHead`'s contract is *registration
+order*, which overload resolution walks, so the chain **cannot** be flipped to
+LIFO to make rollback cheap. Descending iteration recovers the invariant the
+other way up — indices are handed out and appended in increasing order, so within
+a bucket the chain is sorted by index, and walking downwards makes each index its
+bucket's current tail.
+
+**No analogue of `SymRollbackTo`'s typed-const exception**, and the code says why
+rather than leaving it to be rediscovered: that rule exists because a symbol
+*index* outlives its scope (the -O2 inliner verifies copied bodies after
+`SymCount` has come back down). `RegisterProc` reinitialises every field of a
+slot it hands out, and a rolled-back proc has no emitted call referring to it.
+
+### What is still open — and it is now a smaller question
+
+Item 1 is **not** finished. What exists is the state-unwind primitive for two
+tables (`ProcCount` via `ProcRollbackTo`, `PyPendLam*` via its own mark) plus the
+pre-existing `SymRollbackTo`. What does not exist:
+
+- **Nothing ties an `Error()` to a rollback point.** `ErrorRecover` returns; no
+  caller wraps a parse in a mark/rollback pair keyed on `ErrCount` rising.
+- **The other tables in the previous section's list are unproven** —
+  `UClsCount`, `StrCount`, `UClsAliasCount`, `CompiledUnitCount`,
+  `PyImpAliasCount`, `ResPendCount`, `PasSrcRangeCount`. Counters are cheap; the
+  overload chains and any per-symbol widening a trial parse performed are not,
+  and a high-water-mark rollback that ignores them looks correct and is not.
+- **"Which errors are fatal" is still undecided**, and is still the right thing
+  to decide last.
+
+Syntax errors still halt at the first one, deliberately.
