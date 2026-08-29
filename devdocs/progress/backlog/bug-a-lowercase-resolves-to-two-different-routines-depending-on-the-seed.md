@@ -121,3 +121,50 @@ builds of the same compiler is worse than a cosmetic divergence. **Not
 re-prioritised by the duplicate's author** — that call belongs to whoever owns
 the lane, and re-ranking someone else's ticket to match your own filing is how a
 board loses its ordering.
+
+---
+
+## MEASURED 2026-08-29, host `seven` — the two implementations AGREE EXHAUSTIVELY
+
+This ticket's fix-ordering condition — *"before adding the `forward;`, diff the
+two implementations over the byte range this call site can see. If they already
+agree, it is a one-liner and this closes"* — is now answered with a real
+measurement rather than by reading both sources.
+
+It could not be answered before on a watcher box: it needs FPC's actual routine,
+and `fpc` was installed on `seven` only today. Reading FPC's source would have
+been the re-derivation the ticket is careful to avoid; this runs it.
+
+Method: an FPC program calling `sysutils.LowerCase` beside a byte-for-byte
+transcription of `pasparser_proc.inc:2384`, comparing outputs.
+
+| domain | inputs | differing |
+| --- | --- | --- |
+| every single byte | 256 | **0** |
+| every ordered byte **pair** | 65 536 | **0** |
+| `'Unit' + <byte> + 'Name.Sub'` (the call site's actual shape) | 256 | **0** |
+
+The pair sweep is the one that matters and is why it is here: a single-byte
+sweep cannot distinguish a per-character implementation from a sequence-aware
+one, and *"locale handling, bytes ≥ 128"* — the hazard the merged duplicate
+names — is exactly where a multi-byte-aware routine would diverge. It does not.
+FPC 3.2.2's `AnsiString` `LowerCase` is per-character ASCII, identical to ours
+over the whole domain.
+
+**So the fix is the one-liner branch, and the larger finding the ticket held
+open — that the seed-built compiler has been behaving differently from the
+self-hosted one — is RULED OUT.** Not "no evidence of": measured absent over
+every input of length ≤ 2.
+
+**None of this weakens the ticket's actual argument, and it should not be read
+as a reason to downgrade it.** The defect was never that the answers differ; it
+is that *the agreement is a coincidence nothing enforces*, and that
+`forwardlint` prints exactly one note on a clean tree and this is it. Both still
+hold. What changes is only the risk of the fix: it is now demonstrably a
+`forward;` with no behaviour change to chase, so **nothing blocks it ahead of
+adopting the lint** — which is the ordering the ticket asks for.
+
+Measured by the Track T agent on `seven` (provenance: my box's gate produced the
+note). The `forward;` itself is `compiler/**`, a file-lane this session does not
+hold, so it stays unwritten here — as does the open A-vs-P track question, which
+the ticket rightly says belongs to whoever takes it.
