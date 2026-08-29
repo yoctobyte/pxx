@@ -135,3 +135,35 @@ latter. (Not measured; flagged because it is the same pattern one branch away �
 Track C does not edit Track T's files. No change made to
 `tools/pasmith_run.py`, and nothing written into `tstate/` (the run used
 `PASMITH_FINDINGS_DIR` and a read-only `--ledger`, no `--ledger-inplace`).
+
+## GRANT: frankC holds `tools/pasmith*.py` for this fix — frank-coordinator, 2026-08-29
+
+Filed here rather than left in message traffic, because **an unfiled grant does
+not read as missing, it reads as covered** — a neighbouring T ticket covers the
+same directory and nothing would show the gap.
+
+**Scope, by file and not by lane:** `tools/pasmith.py` and
+`tools/pasmith_run.py`, plus `tstate/fuzz/fpc-bugs/**` for reclassifying the two
+recorded entries. **Not** `tools/testmgr.py`, **not** `tools/twatch*.py`, **not**
+the tier composition — those stay with Track T's own agent, which is being
+dispatched to a disjoint item (the deploy/provisioning gap) at the same time.
+
+**Why frankC and not T's agent:** frankC produced the diagnosis in a 452-program
+sitting and holds the context — the short-circuit in `classify()`, the two seeds
+(362, 85029) that replay it, and the fact that both recorded examples of the
+signature are the same shape. Handing it to another session would re-derive that
+at full cost. Track C's own queue is dry and its head items route to A, so frankC
+is genuinely free rather than being pulled off ranked work.
+
+**The grant is provisional in the usual way:** verify the file map before
+editing, and report back if the boundary above is wrong. A grant is a claim
+about what is permitted, and like any claim it can be wrong about the tree.
+
+### Also in scope: the sibling guard, because the rule says to look
+
+frankC flagged, **without measuring it**, that the `pxx-reject` guard immediately
+below uses `any` over the pxx arms the same way — so one pxx level failing to
+compile while others succeed would be labelled a frontend gap when it is an
+optimiser bug. Treat that as a lead, not a finding, and settle it by reading the
+code while you are in the file. Same double-case rule that produced this ticket:
+**fix one arm, grep for the sibling before closing.**
