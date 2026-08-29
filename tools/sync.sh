@@ -268,11 +268,71 @@ $(printf '%s\n' $filled)"
     echo "sync: filled PENDING-COMMIT —$filled"
 }
 
+# ---------------------------------------------------------------------------
+# THE MANIFEST. Captured BEFORE the first rebase, because the rebase is what
+# loses things.
+#
+# On 2026-08-30 sync.sh DROPPED an entire commit: four consecutive
+# rebase(start)/rebase(finish) pairs each landed on origin's tip and never
+# replayed the local commit, leaving the branch pointing at origin. Then it
+# pushed SOMEBODY ELSE'S commit and printed "sync: pushed — <their subject>".
+# `git rev-list --count origin/master..HEAD` said 0, exit code 0, tree clean.
+# Every single signal said pushed. The work existed only in the reflog.
+#
+# That was the second loss in two hours from the same tool -- the first folded
+# two commits into one -- and both were caught by the SAME check, run by hand:
+# name what you expect to land, then look for it on origin AFTER the push, BY
+# CONTENT. Checking by sha manufactures false alarms, because an ordinary
+# rebase rewrites every sha; checking the exit code, the ahead-count or the
+# tree state catches neither loss, since all three are exactly what a healthy
+# push leaves behind.
+#
+# So the check moves into the tool. A guard that has to be remembered is a
+# guard for the two hours after someone is burned by it.
+manifest=$(git log --format=%s "origin/$BRANCH..HEAD" 2>/dev/null)
+manifest_n=$(printf '%s' "$manifest" | grep -c . || true)
+
+# Did every commit we set out to push actually arrive? Subject match against
+# origin, which survives the sha rewriting that a rebase does by design.
+verify_manifest_landed() {
+    [ "$manifest_n" -gt 0 ] || return 0
+    git fetch --no-write-fetch-head -q origin "$BRANCH" 2>/dev/null
+    landed=$(git log --format=%s -400 "origin/$BRANCH" 2>/dev/null)
+    missing=""
+    while IFS= read -r subj; do
+        [ -n "$subj" ] || continue
+        printf '%s\n' "$landed" | grep -qxF "$subj" || missing="$missing
+  $subj"
+    done <<EOF
+$manifest
+EOF
+    [ -n "$missing" ] || return 0
+
+    echo "sync: *** $(printf '%s' "$missing" | grep -c .) OF $manifest_n COMMIT(S) DID NOT LAND ***" >&2
+    echo "sync: expected on origin/$BRANCH but absent:$missing" >&2
+    echo "sync:" >&2
+    echo "sync: YOUR WORK IS NOT LOST -- it is in the reflog. Do NOT reset --hard." >&2
+    echo "sync: find it and replay it onto current HEAD:" >&2
+    echo "sync:     git reflog --date=iso | head -30      # look for 'commit:' lines" >&2
+    echo "sync:     git cherry-pick <sha>                 # conflicts are normal here" >&2
+    echo "sync: then re-run tools/sync.sh and check this line again." >&2
+    exit 1
+}
+
 rebase_onto_origin
 
 if [ "$PUSH" = "1" ]; then
     push_or_die
-    echo "sync: pushed — $(git log --oneline -1)"
+    verify_manifest_landed
+    # Report what WE landed, not whatever HEAD happens to be. HEAD after a
+    # rebase is frequently another lane's commit, and printing it is how a
+    # dropped commit read as a successful push.
+    if [ "$manifest_n" -gt 0 ]; then
+        echo "sync: pushed $manifest_n commit(s), all verified on origin:"
+        printf '%s\n' "$manifest" | sed 's/^/  /'
+    else
+        echo "sync: nothing of ours to push — origin/$BRANCH at $(git log --oneline -1 "origin/$BRANCH")"
+    fi
     fill_pending_commits
 else
     echo "sync: up to date — $(git log --oneline -1)"
