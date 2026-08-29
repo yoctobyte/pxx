@@ -14067,7 +14067,7 @@ lib-test: pxx-stable-check
 	@$(TESTTMP)/lib_string_helpers > $(TESTTMP)/lib_string_helpers.out 2>&1; \
 	  diff -u test/lib_string_helpers.expected $(TESTTMP)/lib_string_helpers.out \
 	  || { echo "FAIL: lib_string_helpers differs from the fpc 3.2.2 oracle (left=expected, right=ours)"; exit 1; }
-	@echo "  lib-test: TStringHelper — 34 rows byte-identical to fpc 3.2.2"
+	@echo "  lib-test: TStringHelper — 35 rows byte-identical to fpc 3.2.2"
 	# SysUtils directory manipulation, DateToStr/TimeToStr/DateTimeToStr,
 	# GetTickCount64 and TextToFloat. CreateDir on an existing directory is
 	# FALSE and DateTimeToStr drops the time half at midnight — both measured,

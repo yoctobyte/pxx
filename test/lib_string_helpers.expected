@@ -1,3 +1,4 @@
+Length=15
 IsEmpty=FALSE
 Trim=[Hello World]
 TrimLeft=[Hello World  ]

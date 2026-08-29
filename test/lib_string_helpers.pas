@@ -15,27 +15,25 @@
   negative Substring starts, a pad narrower than the string, and Split on ''
   (which is ONE empty element, not none).
 
-  `Length` WORKS now and is still not gated here, which needs explaining.
+  `Length` is gated, and the two commits it took are the interesting part.
 
   It is a PROPERTY in FPC over a PRIVATE `GetLength`, and pxx dispatched only
-  METHODS through a type helper — so the surface's most-used member was the one
-  that did not work while every sibling did. Widening the helper guard in
-  `pasparser_lval.inc` fixed it, with no change to the library declaration,
-  which had been written the FPC way and left platonic for exactly that moment.
+  METHODS through a type helper — so the most-used member of this surface was
+  the one that did not work while every sibling did. It was NOT left out because
+  `s.GetLength` could stand in: FPC declares that accessor private, so a
+  GetLength row would gate a member the reference does not expose.
 
-  But THIS file is built by `$(PXX_STABLE)`, the pinned binary, and the pin
-  predates that fix — so a `Length` row here reds `lib-test` on a compiler that
-  is correct. Track B's gate can only ever assert what the PIN can do, which
-  means a library feature riding an unpinned compiler fix is ungatable here
-  until the pin moves. The mechanism is gated meanwhile by
-  `test/test_type_helper_property.pas` in `test-core`, which builds with the
-  freshly-built compiler.
+  The fix was three lines in `pasparser_lval.inc` and needed no change to the
+  sysutils declaration, which had been written the FPC way and left platonic for
+  exactly that. But the row still could not land with it, because THIS file is
+  built by `$(PXX_STABLE)` and the pin predated the fix — so for one pin cycle
+  `s.Length` was correct in the compiler and would have RED this gate.
 
-  AT THE NEXT PIN: add `writeln('Length=', s.Length);` as the first row and
-  regenerate `.expected` with the command in the Makefile rule. Nothing else
-  changes. Verified against the post-fix compiler: 35 rows, byte-identical.
-  It was NOT left out because `s.GetLength` could substitute — that would gate
-  a member FPC does not expose, since the accessor is private there. }
+  That is a structural property of the stable-binary boundary rather than a
+  quirk of this test: **Track B's gate can only ever assert what the PIN can
+  do**, so a library feature riding an unpinned compiler fix is ungatable here
+  until the pin moves. Landed at pin v390 (867207f2b418). Worth remembering the
+  next time a correct library change appears to fail its own gate. }
 program lib_string_helpers;
 {$mode objfpc}{$H+}{$modeswitch typehelpers}
 uses sysutils;
@@ -45,6 +43,7 @@ var
   i: Integer;
 begin
   s := '  Hello World  ';
+  writeln('Length=', s.Length);
   writeln('IsEmpty=', s.IsEmpty);
   writeln('Trim=[', s.Trim, ']');
   writeln('TrimLeft=[', s.TrimLeft, ']');
