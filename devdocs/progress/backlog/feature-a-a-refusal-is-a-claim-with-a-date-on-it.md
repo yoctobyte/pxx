@@ -3161,3 +3161,75 @@ reading the compiler's mind. Five later C probes were guarded the same way.
 Note the discipline that made it stick: the broken first cut was **rebuilt** to
 confirm the new test goes red against it, then restored. A witness that has not
 been shown failing against the defect it was written for is a hope (**62**).
+
+### 75. A correct observation retracted on a coordinator's wrong theory leaves nothing behind to re-test
+
+The coordinator, 2026-08-29. frankD reported *"hosted xtensa hangs on hello-world
+under qemu (120s, killed)"* and could not demonstrate the xtensa string-compare
+bug because of it. The coordinator noticed frankD's binary was pinned v393,
+predating frankS's wall-3 fix, and told it the measurement was **stale**. frankD
+retracted.
+
+**The retraction was wrong.** frankS then demonstrated why: `HeapMmap` in
+`builtinheap.pas` has arms for x86-64, aarch64, arm32, i386, riscv32, wasm32 and
+bare-ESP and **no `CPU_XTENSA` arm at all**, so hosted xtensa fell through to
+`Result := -1`, the heap base was `-1`, and the first allocation faulted at
+`$FFFFFFFF`. *"That program could not have worked on any pin."*
+
+**Two claims were bundled in one message and only one of them was sound:**
+
+| claim | verdict |
+| --- | --- |
+| your *justification* is unsound — `merge-base --is-ancestor` answers about the tree, not the binary | **right** (face 69) |
+| therefore your *observation* is stale | **wrong** — it was true, for a cause nobody had found |
+
+The methodological correction was correct and is what made the substantive one
+credible. **A right criticism carries a wrong one home.**
+
+Why this is worse than a wrong fix and not merely equal to one: a wrong fix gets
+re-tested by the next person to touch the code. **A retracted observation is
+gone** — nothing points at it, no test covers it, and the retraction carries the
+coordinator's authority. Same family as *a false limit is quieter than a false
+fix*, one step further: here the limit was removed rather than added, and the
+truth went with it.
+
+Operationally: **when correcting someone's method, say explicitly whether the
+conclusion also falls.** They are separable, they usually are separate, and the
+person being corrected cannot tell which you meant.
+
+### 76. The self-host fixedpoint is structurally BLIND to C lowering — the one gate everyone trusts cannot see Track C at all
+
+frankC, 2026-08-29, refusing to hand up a green gate it knew proved nothing.
+
+`make compiler/pascal26` is the per-fix loop's whole gate and is, for free, the
+byte-identical self-host fixedpoint. **Compiling `compiler.pas` is compiling
+Pascal.** `CProgramMode` is never set, so no C-exclusive lowering routine is ever
+called. For the seven routines of the `cir.inc` slice-1 relocation, the
+fixedpoint **goes green whatever is done to them — including deleting their
+bodies.**
+
+And the `parser.inc` precedent inverts here rather than transferring.
+`compiler.pas:126` records that each `pasparser_*` slice is *"a contiguous range
+re-included where it sat, which is what makes the carve-out provable by the
+self-host fixedpoint rather than by reading it."* That argument works **because
+Pascal parsing is what the fixedpoint exercises.** A C carve-out is the exact
+case where it does not.
+
+This is **31** (*a gate using the artefact as its own oracle cannot see defects
+in what produces it*) with a sharper edge: the gate is not merely weak here, it
+is **orthogonal**. And it is invisible, because the gate's output is identical in
+both worlds.
+
+**The remedy frankC built is the transferable part, and it is cheap.** For a
+claim of *pure relocation*, output equality is too weak — relocation must
+produce **identical machine code**. Ten C tests exercising all seven routines,
+each compiled and `sha256`'d against the pre-move compiler `261e6cd2b58f`, all
+ten required to rebuild byte-identical afterwards. The fixedpoint still runs, but
+is reported as what it actually is here: a check that *the rest of the compiler*
+still builds.
+
+**Standing rule adopted for this refactor and for every per-arm extraction: a
+C-side byte-identical gate, captured BEFORE the move.** Generalises past C — any
+lane whose code the self-host build does not execute (C, NilPy, Rust, Zig, the
+cross backends) is gated by something that cannot fail on its changes, and needs
+its own oracle rather than the shared one.
