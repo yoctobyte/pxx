@@ -317,6 +317,54 @@ signatures, not from the ladder's list — and both are ahead of it now:
     single-token type-alias narrowing — all three had been living only in this
     ticket, which is the wrong place for them once the ticket closes.
 
+13. **DONE** — `Result<T, E>` and the `?` try operator, and the payload-sizing
+    bug the rung exposed in **Option**.
+
+    Result monomorphizes onto the same enum machinery as Option: one
+    auto-registered UClass per concrete `(T, E)`, `__tag` at 0 and `Ok.0` /
+    `Err.0` overlapping past it. That is what a tagged union is, so `match`,
+    `return Ok(..)` / `return Err(..)` and field access all worked the moment
+    the class existed and the type reader learned two parameters — **seventh
+    rung where the machinery was already there.**
+
+    `?` desugars to what the reference says it means: `match e { Ok(v) => v,
+    Err(e) => return Err(e) }`. Two of those three pieces cannot live in an
+    expression node — the operand is evaluated once and read twice (so it must
+    be materialized), and the Err arm RETURNS. So the statement half is hoisted
+    into `RPendingPreSeq` and only `temp.Ok.0` is the expression's value.
+    `RParseStatement` is the **single** flush point, as a wrapper around the
+    old body rather than a line at each exit: the inner function has a dozen
+    exits, and the one that gets forgotten is the one that silently drops the
+    early return.
+
+    Guard rather than a silent mis-lowering: a `?` in a **`while` condition**
+    would hoist out of the loop and evaluate once, so it is refused. `if` is
+    not guarded — its condition genuinely is evaluated once, so the hoist is
+    correct there.
+
+    Narrowing: the two error types must be **identical**. Rust inserts
+    `From::from` on the Err arm, which needs trait dispatch this frontend does
+    not have; requiring a match errors loudly instead of converting wrongly.
+
+    **THE FIND: a monomorphized payload was sized with `TypeSize`, which
+    answers 8 for a record.** `symtab.inc` says so in its own comment on that
+    line — *caller must use RecSize() for full record size*. Option has had
+    this wrong since it was written and got away with it because
+    `Option<Square>` is exactly 8 bytes. Measured, not argued: at master's
+    rparser, `Option<Big>` (32 bytes) **SEGFAULTED**, and `Result<Pos, i64>`
+    read `Pos { file: 4, rank: 2 }` back as `4 0`. Neither failed at the point
+    of the mistake. Fixed for both through one `RPayloadSize`/`RPayloadAlign`
+    pair, and both cases are pinned in the test.
+
+    That is the second time this window that adding a feature has surfaced a
+    latent bug in the feature next to it, and both times the tell was the same:
+    a value that was plausible rather than absent.
+
+    `forwardlint` also earned its place immediately — it caught `RParseTryOp`
+    being called above its declaration **before** the push, which is the
+    failure that reached master this morning. FPC bootstrap re-verified
+    directly: 210839 lines, 0 errors.
+
 ## Log
 - 2026-08-29 — unit 1 landed (see the ladder ticket's log for the detail).
 - 2026-08-29 — unit 2 landed: Option (and records generally) through fn
@@ -351,3 +399,6 @@ signatures, not from the ladder's list — and both are ahead of it now:
   stripped using the crate root's own `mod x;` declarations, so a `cat` of four
   modules compiles and runs. `test/rust_unity/`.
 - 2026-08-29 - `devdocs/dev/rust-semantics-divergences.md` created.
+- 2026-08-29 - rung 12 landed: Result<T, E>, the `?` operator, and a fix for
+  the record-payload sizing bug it exposed in Option (segfault on master).
+  `test_rust_result.rs`.

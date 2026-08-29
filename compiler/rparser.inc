@@ -75,6 +75,9 @@ function RParseIfExpr: Integer; forward;
   `python3 tools/forwardlint.py` is what does catch it.
   bug-r-rexprrecid-breaks-the-fpc-bootstrap-seed }
 function RExprRecId(node: Integer): Integer; forward;
+{ RParseUnary's postfix `?` calls this well above its definition; same
+  source-order rule as RExprRecId right above. }
+function RParseTryOp(valNode: Integer): Integer; forward;
 function RSpecializeGenericFn(gfi: Integer; const concreteTypeName: AnsiString): Integer; forward;
 
 const
@@ -122,6 +125,19 @@ var
   ROptionCi: array[0..MAX_UCLASS-1] of Boolean;
   ROptionElemTk: array[0..MAX_UCLASS-1] of TTypeKind;
   ROptionElemRec: array[0..MAX_UCLASS-1] of Integer;
+  { Result<T, E>, monomorphized the same way — see RResultClassForRec. }
+  RResultCi: array[0..MAX_UCLASS-1] of Boolean;
+  RResultOkTk: array[0..MAX_UCLASS-1] of TTypeKind;
+  RResultOkRec: array[0..MAX_UCLASS-1] of Integer;
+  RResultErrTk: array[0..MAX_UCLASS-1] of TTypeKind;
+  RResultErrRec: array[0..MAX_UCLASS-1] of Integer;
+  { Statements hoisted out of an EXPRESSION, to run before the statement that
+    contains it. Today the only producer is the `?` try operator, which has to
+    materialize its operand and can return early -- neither of which an
+    expression node can express. RParseStatement is the single flush point,
+    which is what makes this one mechanism rather than a special case per
+    statement kind. -1 = nothing pending. }
+  RPendingPreSeq: Integer;
   { `fn f() -> [T; N]` — the element COUNT, per proc; 0 = the return is not an
     array. Element kind lives in Procs[].RetType and element record id in
     ProcRetRecId, exactly as they do for Pascal's `function F: TArr`, so this
@@ -383,6 +399,32 @@ end;
   zeroed slot reads as None. Registering the two variants in REnumVariants is
   what makes `match` work with no further change: RParseMatch resolves arm
   names with RFindVariantInEnum against the scrutinee's own class. }
+{ A monomorphized generic's payload occupies its OWN full size, and for a
+  record that is RecSize. `TypeSize(tyRecord)` answers 8 -- a pointer -- and
+  says so in its own comment in symtab.inc: *caller must use RecSize() for full
+  record size*. Getting it wrong does not fail loudly; the union is simply too
+  small and the payload's tail is written past the end of the value.
+
+  `Option<Square>` survived that for a whole rung because Square is exactly 8
+  bytes. `Result<Pos, i64>` did not: `Pos { file: 4, rank: 2 }` read back as
+  `4 0`, with `rank` landing outside the class. Which is the same shape as
+  every other expensive bug here -- a plausible wrong value, not a crash. }
+function RPayloadSize(tk: TTypeKind; rec: Integer): Integer;
+begin
+  if (tk = tyRecord) and (rec >= REC_UCLASS_BASE) then Result := RecSize(rec)
+  else Result := TypeSize(tk);
+end;
+
+function RPayloadAlign(tk: TTypeKind; rec: Integer): Integer;
+begin
+  if (tk = tyRecord) and (rec >= REC_UCLASS_BASE) then
+  begin
+    Result := UClsAlign[rec - REC_UCLASS_BASE];
+    if Result <= 0 then Result := 8;
+  end
+  else Result := TypeAlign(tk);
+end;
+
 function ROptionClassForRec(elemTk: TTypeKind; elemRec: Integer): Integer;
 var name: AnsiString; ci, vi, payOff, align: Integer;
 begin
@@ -401,11 +443,11 @@ begin
     ROptionElemRec[ci] := elemRec;
     AddUField(ci, RStoredName('__tag'), 5, 0, Ord(tyInt64), REC_NONE);
     align := 8;
-    if TypeAlign(elemTk) > align then align := TypeAlign(elemTk);
-    payOff := AlignTo(8, TypeAlign(elemTk));
+    if RPayloadAlign(elemTk, elemRec) > align then align := RPayloadAlign(elemTk, elemRec);
+    payOff := AlignTo(8, RPayloadAlign(elemTk, elemRec));
     AddUField(ci, RStoredName('Some.0'), 6, payOff, Ord(elemTk), elemRec);
     UClsAlign[ci] := align;
-    UClsSize_[ci] := AlignTo(payOff + TypeSize(elemTk), align);
+    UClsSize_[ci] := AlignTo(payOff + RPayloadSize(elemTk, elemRec), align);
     if REnumVariantCount + 2 > R_MAX_VARIANTS then Error('Rust: too many enum variants');
     vi := REnumVariantCount; Inc(REnumVariantCount);
     REnumVariants[vi].EnumCi := ci;
@@ -419,6 +461,75 @@ begin
     REnumVariants[vi].Kind := RVAR_TUPLE;
   end;
   Result := ci;
+end;
+
+{ `Result<T, E>` — the same monomorphize-onto-the-enum-machinery trick
+  ROptionClassForRec uses, with TWO payload variants instead of one and a
+  half. Ok.0 and Err.0 live at the SAME offset: that is what a tagged union is,
+  and it is what the hand-written `enum Shape` path already builds, so nothing
+  downstream needs to know Result exists any more than it needed to know Option
+  did.
+
+  Tags follow the declaration order Rust writes them in, Ok = 0 and Err = 1,
+  rather than Option's None = 0 / Some = 1. Nothing depends on the numbers
+  matching across the two — a tag is only ever compared against its own
+  class's variant table — but they are worth stating because "the payload one
+  is 1" would be a plausible and wrong thing to assume from Option alone. }
+function RResultClassForRec(okTk: TTypeKind; okRec: Integer;
+                            errTk: TTypeKind; errRec: Integer): Integer;
+var name: AnsiString; ci, vi, payOff, align, endOff: Integer;
+
+  function ArgName(tk: TTypeKind; rec: Integer): AnsiString;
+  begin
+    if (tk = tyRecord) and (rec >= REC_UCLASS_BASE) then
+      ArgName := 'rec' + RIntToStr(rec)
+    else
+      ArgName := RScalarTypeName(tk);
+  end;
+
+begin
+  name := 'Result<' + ArgName(okTk, okRec) + ',' + ArgName(errTk, errRec) + '>';
+  ci := FindUClass(name);
+  if ci < 0 then
+  begin
+    ci := AddUClass(RStoredName(name), Length(name));
+    UClsIsRecord[ci] := True;
+    REnumCi[ci] := True;
+    RResultCi[ci] := True;
+    RResultOkTk[ci] := okTk;
+    RResultOkRec[ci] := okRec;
+    RResultErrTk[ci] := errTk;
+    RResultErrRec[ci] := errRec;
+    AddUField(ci, RStoredName('__tag'), 5, 0, Ord(tyInt64), REC_NONE);
+    align := 8;
+    if RPayloadAlign(okTk, okRec) > align then align := RPayloadAlign(okTk, okRec);
+    if RPayloadAlign(errTk, errRec) > align then align := RPayloadAlign(errTk, errRec);
+    payOff := AlignTo(8, align);
+    AddUField(ci, RStoredName('Ok.0'), 4, payOff, Ord(okTk), okRec);
+    AddUField(ci, RStoredName('Err.0'), 5, payOff, Ord(errTk), errRec);
+    endOff := payOff + RPayloadSize(okTk, okRec);
+    if payOff + RPayloadSize(errTk, errRec) > endOff then
+      endOff := payOff + RPayloadSize(errTk, errRec);
+    UClsAlign[ci] := align;
+    UClsSize_[ci] := AlignTo(endOff, align);
+    if REnumVariantCount + 2 > R_MAX_VARIANTS then Error('Rust: too many enum variants');
+    vi := REnumVariantCount; Inc(REnumVariantCount);
+    REnumVariants[vi].EnumCi := ci;
+    REnumVariants[vi].Name := 'Ok';
+    REnumVariants[vi].Tag := 0;
+    REnumVariants[vi].Kind := RVAR_TUPLE;
+    vi := REnumVariantCount; Inc(REnumVariantCount);
+    REnumVariants[vi].EnumCi := ci;
+    REnumVariants[vi].Name := 'Err';
+    REnumVariants[vi].Tag := 1;
+    REnumVariants[vi].Kind := RVAR_TUPLE;
+  end;
+  Result := ci;
+end;
+
+function RIsResultRec(recId: Integer): Boolean;
+begin
+  Result := (recId >= REC_UCLASS_BASE) and RResultCi[recId - REC_UCLASS_BASE];
 end;
 
 function RIsOptionRec(recId: Integer): Boolean;
@@ -621,7 +732,7 @@ end;
   Option support by routing its `GetTokenStr(j)` through here, without any of
   them learning what a generic is. }
 function RTypeNameAt(var j: Integer): AnsiString;
-var innerTk: TTypeKind; innerRec, ci: Integer;
+var innerTk, okTk, errTk: TTypeKind; innerRec, okRec, errRec, ci: Integer;
 begin
   if Tokens[j].Kind <> tkIdent then Error('Rust: expected a type name');
   { an alias resolves to its target HERE, so nothing downstream has to know
@@ -639,6 +750,26 @@ begin
     if Tokens[j].Kind <> tkGt then Error('Rust: expected > closing Option<');
     Inc(j);
     ci := ROptionClassForRec(innerTk, innerRec);
+    Result := RTypeNameOf(ci);
+  end
+  else if (Result = 'Result') and (Tokens[j + 1].Kind = tkLt) then
+  begin
+    { `Result<T, E>` — two params, otherwise the same monomorphize-on-demand
+      as Option. Each argument's kind and record id are captured immediately
+      after its own RTypeKindFromName call, because that call is what sets
+      LastTypeRecId and the second one would otherwise clobber the first. }
+    Inc(j, 2);
+    okTk := RTypeKindFromName(RTypeNameAt(j), True);
+    okRec := LastTypeRecId;
+    if Tokens[j].Kind <> tkComma then Error('Rust: expected , between Result<T, E> parameters');
+    Inc(j);
+    errTk := RTypeKindFromName(RTypeNameAt(j), True);
+    errRec := LastTypeRecId;
+    if Tokens[j].Kind = tkShr then
+      Error('Rust: a nested generic closing with >> is not supported yet (the >> lexes as a shift)');
+    if Tokens[j].Kind <> tkGt then Error('Rust: expected > closing Result<');
+    Inc(j);
+    ci := RResultClassForRec(okTk, okRec, errTk, errRec);
     Result := RTypeNameOf(ci);
   end
   else
@@ -823,13 +954,17 @@ begin
   Result := (m = 'is_some') or (m = 'is_none') or (m = 'unwrap') or (m = 'unwrap_or');
 end;
 
-function ROptionField(baseNode, optRec: Integer; const fname: AnsiString): Integer;
+{ A field node on an enum value: the `__tag` or a mangled payload
+  (`Some.0`, `Err.0`, `Circle.w`). Named for Option when Option was the only
+  monomorphized generic here; it was never Option-specific and Result uses it
+  unchanged. }
+function REnumField(baseNode, enumRec: Integer; const fname: AnsiString): Integer;
 begin
   Result := AllocNode(AN_FIELD);
   ASTLeft[Result] := baseNode;
   ASTSOffset[Result] := RStoredName(fname); ASTSLen[Result] := Length(fname);
   if fname = '__tag' then ASTTk[Result] := Ord(tyInt64)
-  else ASTTk[Result] := Ord(RecFieldType(optRec, fname));
+  else ASTTk[Result] := Ord(RecFieldType(enumRec, fname));
 end;
 
 function RParseOptionAccessor(baseNode, optRec: Integer): Integer;
@@ -842,11 +977,11 @@ begin
     argNode := RParseExpr;
     Expect(tkRParen, ')');
     pairNode := AllocNode(AN_PAIR);
-    ASTLeft[pairNode] := ROptionField(baseNode, optRec, 'Some.0');
+    ASTLeft[pairNode] := REnumField(baseNode, optRec, 'Some.0');
     ASTRight[pairNode] := argNode;
     argNode := AllocNode(AN_INT_LIT); ASTIVal[argNode] := 1; ASTTk[argNode] := Ord(tyInt64);
     Result := AllocNode(AN_TERNARY);
-    ASTLeft[Result] := RBinOp(tkEq, ROptionField(baseNode, optRec, '__tag'),
+    ASTLeft[Result] := RBinOp(tkEq, REnumField(baseNode, optRec, '__tag'),
                               argNode, tyBoolean);
     ASTRight[Result] := pairNode;
     ASTTk[Result] := Ord(RecFieldType(optRec, 'Some.0'));
@@ -855,12 +990,12 @@ begin
   Expect(tkRParen, ')');
   if mname = 'unwrap' then
   begin
-    Result := ROptionField(baseNode, optRec, 'Some.0');
+    Result := REnumField(baseNode, optRec, 'Some.0');
     Exit;
   end;
   argNode := AllocNode(AN_INT_LIT); ASTTk[argNode] := Ord(tyInt64);
   if mname = 'is_some' then ASTIVal[argNode] := 1 else ASTIVal[argNode] := 0;
-  Result := RBinOp(tkEq, ROptionField(baseNode, optRec, '__tag'), argNode, tyBoolean);
+  Result := RBinOp(tkEq, REnumField(baseNode, optRec, '__tag'), argNode, tyBoolean);
 end;
 
 function RParsePrimary: Integer;
@@ -1293,6 +1428,13 @@ begin
     Exit;
   end;
   Result := RParsePrimary;
+  { postfix `?`, applied after the primary so it composes with `.field` and
+    calls: `self.board.piece_at(sq)?` }
+  while CurTok.Kind = tkQuestion do
+  begin
+    Next;
+    Result := RParseTryOp(Result);
+  end;
 end;
 
 { `expr as T` — numeric cast (binds tighter than * per Rust). v1: retag
@@ -1581,6 +1723,75 @@ begin
   Result := RBinOp(tkEq, fieldNode, valNode, tyBoolean);
 end;
 
+{ `expr?` -- Rust's try operator, desugared to exactly what the reference says
+  it means: `match expr { Ok(v) => v, Err(e) => return Err(e) }`.
+
+  Two of those three pieces cannot live in an expression node. The operand has
+  to be materialized (it is evaluated once and read twice, and it may be a
+  call), and the Err arm RETURNS from the enclosing function. So the statement
+  half is hoisted into RPendingPreSeq and flushed by RParseStatement, and only
+  the value half -- `temp.Ok.0` -- is what the expression evaluates to. Same
+  shape RParseScrutinee already uses for a non-variable match subject, for the
+  same reason.
+
+  Narrowing, deliberate: the two error types must be IDENTICAL. Rust inserts a
+  `From::from` conversion on the Err arm, which needs trait dispatch this
+  frontend does not have; requiring a match is the honest version, and it
+  errors loudly rather than converting wrongly. }
+function RParseTryOp(valNode: Integer): Integer;
+var recId, ci, retCi, tempSym, errVi, retErrVi: Integer;
+    seq, asgn, ifNode, pairNode, thenSeq: Integer;
+    tempName: AnsiString;
+begin
+  recId := RExprRecId(valNode);
+  if not RIsResultRec(recId) then
+    Error('Rust: `?` needs a Result<T, E> value');
+  ci := recId - REC_UCLASS_BASE;
+  if (CurProc < 0) or not RIsResultRec(ProcRetRecId[CurProc]) then
+    Error('Rust: `?` needs the enclosing fn to return Result<T, E>');
+  retCi := ProcRetRecId[CurProc] - REC_UCLASS_BASE;
+  if (RResultErrTk[retCi] <> RResultErrTk[ci]) or
+     (RResultErrRec[retCi] <> RResultErrRec[ci]) then
+    Error('Rust: `?` error types must match -- this frontend has no From conversion');
+
+  { __tryN := expr }
+  LastTypeRecId := recId;
+  tempName := '__try' + RIntToStr(RTempSerial); Inc(RTempSerial);
+  tempSym := AllocVar(tempName, tyRecord);
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := RMakeIdent(tempSym);
+  ASTRight[asgn] := valNode;
+  seq := RSeqAppend(-1, asgn);
+
+  { if __tryN is Err: copy the payload into the enclosing Result and return }
+  errVi := RFindVariantInEnum(ci, 'Err');
+  retErrVi := RFindVariantInEnum(retCi, 'Err');
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := REnumField(RMakeIdent(Procs[CurProc].RetSymIdx),
+                              ProcRetRecId[CurProc], '__tag');
+  ASTRight[asgn] := AllocNode(AN_INT_LIT);
+  ASTIVal[ASTRight[asgn]] := REnumVariants[retErrVi].Tag;
+  ASTTk[ASTRight[asgn]] := Ord(tyInt64);
+  thenSeq := RSeqAppend(-1, asgn);
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := REnumField(RMakeIdent(Procs[CurProc].RetSymIdx),
+                              ProcRetRecId[CurProc], 'Err.0');
+  ASTRight[asgn] := REnumField(RMakeIdent(tempSym), recId, 'Err.0');
+  thenSeq := RSeqAppend(thenSeq, asgn);
+  thenSeq := RSeqAppend(thenSeq, AllocNode(AN_EXIT));
+
+  pairNode := AllocNode(AN_PAIR);
+  ASTLeft[pairNode] := thenSeq;
+  ASTRight[pairNode] := -1;
+  ifNode := AllocNode(AN_IF);
+  ASTLeft[ifNode] := RTagTest(tempSym, errVi);
+  ASTRight[ifNode] := pairNode;
+  seq := RSeqAppend(seq, ifNode);
+
+  RPendingPreSeq := RSeqAppend(RPendingPreSeq, seq);
+  Result := REnumField(RMakeIdent(tempSym), recId, 'Ok.0');
+end;
+
 function RParseIf: Integer;
 var node, pairNode, condNode, thenNode, elseNode, preSeq, scrutSym,
     enumCi, vi, bindsSeq: Integer;
@@ -1814,6 +2025,11 @@ begin
   Next; { while }
   node := AllocNode(AN_WHILE);
   ASTLeft[node] := RParseExpr;
+  { A `?` in the CONDITION would hoist its operand out of the loop and
+    evaluate it once -- silently, and wrongly. Refused rather than mis-lowered.
+    `if` is fine and is not guarded: its condition really is evaluated once. }
+  if RPendingPreSeq >= 0 then
+    Error('Rust: `?` is not supported in a `while` condition (it would be hoisted out of the loop)');
   Expect(tkBegin, '{');
   ASTRight[node] := RParseBlock;
   Expect(tkEnd, '}');
@@ -2871,7 +3087,28 @@ begin
   ASTLeft[Result] := valNode;
 end;
 
+{ The single flush point for statements hoisted out of an expression (today:
+  the `?` try operator's operand materialization and its early-return arm).
+  A wrapper rather than a line at each `Exit` because RParseStatementInner has
+  a dozen exits and the one that gets forgotten is the one that silently drops
+  the early return.
+
+  Save/restore rather than assign, so a nested statement -- an `if` body, a
+  match arm -- flushes its own pending work at its own level instead of
+  letting it escape to the enclosing statement. }
+function RParseStatementInner: Integer; forward;
+
 function RParseStatement: Integer;
+var saved: Integer;
+begin
+  saved := RPendingPreSeq;
+  RPendingPreSeq := -1;
+  Result := RParseStatementInner;
+  if RPendingPreSeq >= 0 then Result := RSeqAppend(RPendingPreSeq, Result);
+  RPendingPreSeq := saved;
+end;
+
+function RParseStatementInner: Integer;
 var name, fname: AnsiString; symIdx, node, rhsNode, lhsNode, baseNode, fieldNode, fTokIdx: Integer;
     opTk: TTokenKind; isSome: Boolean;
 begin
@@ -4305,6 +4542,7 @@ begin
   REnumVariantCount := 0;
   RTraitCount := 0; RImplCount := 0; RGenericFuncCount := 0;
   RAliasCount := 0;
+  RPendingPreSeq := -1;
   RStripTopItems;
   TokPos := 0;
   Next;

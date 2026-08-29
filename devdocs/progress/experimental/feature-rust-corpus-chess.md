@@ -27,8 +27,8 @@ as the real modules hit them: ~~`Option<T>` (chess.rs wall, stage 2)~~ **DONE
 2026-08-29**, ~~array-typed return values (`fn -> [T; N]`, attacks.rs)~~ **DONE
 2026-08-29**, ~~`if` as an EXPRESSION (`let x = if c { a } else { b };` — not on
 the original list)~~ **DONE 2026-08-29**, ~~the unity build for data
-modules (tables.rs, stage 3)~~ **DONE 2026-08-29**, then `Result`/`?`,
-`String`/`format!`, derives/traits.
+modules (tables.rs, stage 3)~~ **DONE 2026-08-29**, ~~`Result`/`?`~~ **DONE
+2026-08-29**, then `String`/`format!`, derives/traits.
 Do NOT claim the real source compiles — only the adapted branch does.
 
 **Note on where the engine sources live:** they are NOT on the `frank-rust`
@@ -334,4 +334,28 @@ pure swallowing/trivia, cheap and high-leverage.
   Stages 0-3 of the staged plan are now complete. Next on the original list:
   `Result`/`?`, `String`/`format!`, derives/traits - and the ArrayVec
   replacement (stage 4), which is corpus work rather than frontend work.
+
+- 2026-08-29 - rung 12: **`Result<T, E>` and `?`.** Result monomorphizes onto
+  the same enum machinery as Option, so `match` / `return Ok(..)` / field
+  access worked the moment the class existed and the type reader learned two
+  parameters. `?` desugars to the reference's own `match e ... Err(e) => return
+  Err(e)`, with the operand materialization and the early return hoisted out of
+  the expression (neither fits in an expression node) and flushed at a single
+  point in RParseStatement. A `?` in a `while` condition is REFUSED rather than
+  hoisted out of the loop.
+
+  **The rung's real find is a bug in Option, not in Result.** A monomorphized
+  payload was sized with `TypeSize`, which answers 8 for a record and says so
+  in its own comment in symtab.inc. Option has had this wrong since it was
+  written and got away with it because `Option<Square>` is exactly 8 bytes.
+  Measured against master's rparser: `Option<Big>` (32 bytes) **segfaulted**,
+  and `Result<Pos, i64>` read `Pos { file: 4, rank: 2 }` back as `4 0`. Fixed
+  for both through one payload-size/align pair; both cases pinned.
+
+  Second time this window that adding a feature surfaced a latent bug in the
+  feature beside it, and both times the tell was a plausible value rather than
+  an absent one.
+
+  Remaining on the original gap list: `String`/`format!`, derives/traits, and
+  the ArrayVec replacement (corpus work, not frontend work).
 
