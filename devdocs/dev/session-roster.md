@@ -17125,3 +17125,75 @@ rule from a sample of one"* — same error as its `Halt` table, same evening. It
 **frank-rust asked for its lock to stay** — `feature-rust-option-type` is the live
 log for the whole Track R window. **Not renaming it mid-flight**; renaming a lock
 breaks a citation someone else may hold. Rename at close if it still matters.
+
+## 2026-08-29 ~23:00 — the success-message doc is placed; faces 56-57; lib-test green on v391
+
+**NEW DOC: `devdocs/dev/a-success-message-is-not-a-verdict.md`** (`bd2d284cd`).
+frankA found the FOURTH instance and was right that it is one rule, not four
+cases: **for a long job, do not accept an exit code as its verdict — require the
+job's own terminal line** (`converged after N round(s)`, `gate: GREEN`, `N/N
+pass`). Absence of the line is the tell and there is never an error to wait for.
+
+The four: the copied-in-seed no-op exiting 0; `verify_pin` entered but never
+finishing; the watcher restarting successfully onto stale code; and **a KILLED
+aarch64 build whose notification read "completed (exit code 0)"** while the log
+ended `make: *** Terminated` — the 0 came from the backgrounding wrapper. frankA's
+hinge sentence, now the doc's: *"I only knew better because I was the one who
+killed it."* **A verdict you can only distrust because you happen to know the cause
+is not a verdict.**
+
+**COMPANION RULE IN THE SAME DOC — PIN THE SOURCES, NOT JUST THE BINARY.** frankA
+threw away an hour of aarch64 stage-2: it reads `compiler.pas` and ~200 includes
+**lazily over an hour**, and `sync.sh`'s rebase rewrote all of `compiler/` mid-run,
+so the binary cannot be attributed to any sha. *"A fixedpoint verdict whose inputs
+mutated underneath it is not a weak result; it is not a result."* A long
+verification must read from a checkout that cannot change under it. Both aarch64
+and arm32 sweeps go to T against the pushed sha.
+
+**FACE 56 (frankB) — an open ticket whose title matches your symptom is a magnet
+for false attribution.** Killed `lib-test` runs + a ticket titled "lib-test peaks
+above its memory estimate" is an inviting pair; frankB checked instead — 38 GB
+free, ~600 MB peak, no OOM, three unrelated stop points — and filed it as a
+NEGATIVE result saying the memory ticket gains nothing. With 336 open tickets,
+attributing to an existing one *feels like diligence* and corrupts the ticket it
+attaches to. *"An explanation that fits is not an explanation that was tested."*
+
+**FACE 57 (frank-rust) — identical code, opposite verdicts.** The face-53 audit
+closed: **17 candidates, 1 defect, 16 correct**, then widened to ELEVEN frontends,
+three spellings plus the `CaseEqual` form the first pass could not see, each parser
+against **its own** lexer — **561 comparisons, 1 dead guard.** The finding is the
+table: Pascal's `lexer.inc` stores text for **every word token**; the other lexers
+only `tkIdent`+`tkString`. **Pascal is the outlier in the SAFE direction**, which
+explains why the idiom exists and predicts the next instance (a new frontend by
+someone fluent in the Pascal side). **Four Pascal sites look exactly like the bug
+and are LIVE** — proved by running (`Byte(321)` prints 65), not reading; filing the
+grep as findings would have put four phantom bugs into Track A. My candidates-not-
+findings wording earned itself. No N or Z tickets needed. Lint filed as
+`feature-t-lint-token-text-compared-against-a-keyword` [T p35], priced against the
+measured 1-in-561 base rate.
+
+**PIN CONFIRMED FROM THE OTHER SIDE.** frankB: `lib-test` GREEN vs v391, **no
+`SKIPPED:` clause at all**, all three synapse jobs including `SYNAPSE-SSL OK`. Red
+at v390, green at v391, same command/corpus/box. A controlled comparison, not an
+inference.
+
+**Track P: `generics.defaults.pas` (3,358 lines) compiles END TO END** (`5e114130b`).
+Root cause: **Pascal is case-insensitive, so `function Bar; forward;` and a body
+written `function bar;` are one routine** — `FindProcOverloadRec` compared with `=`
+only, so the body registered a second proc and the declared one stayed bodiless.
+**Four other lookups in `symtab.inc` already carry the `CaseEqual` pair** — third
+one-arm-of-a-double-case tonight (with `Halt`'s five backends and the
+managed-string temp's seven sites). frankA's two hypotheses were both refuted by
+experiment; the minimal repro named the defect outright.
+
+**Dispatched:** frank-rust → ArrayVec/`MoveList`, the last ladder item (**R is
+X-tagged and never a priority by charter** — said plainly so a morning redirect
+reads as direction, not judgement). frankB → self-dispatch from `--track B`,
+approved, with the two cautions (ranked ≠ has work; check the FILE). b4 → Halt
+`exit_group`. pxx-a5 → staticmethod/classmethod. frankA → `feature-pascal-corpus-expansion`,
+holding `symtab.inc` + `test/` + corpus, **announced per the new norm — which is
+working on its first night.**
+
+**Product feedback drafted (queued locally, NOT sent):** killed background command
+reported as `completed (exit code 0)`; long background commands terminated mid-run
+with OOM ruled out. Two sessions, one hour, independent.
