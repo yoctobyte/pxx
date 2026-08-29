@@ -194,7 +194,79 @@ def t_a_plain_second_hit_is_not_a_reopen():
     return "an ordinary repeat hit still just counts"
 
 
+# ------------------------------------------------------- the announcement --
+# The ledger knowing it is a reopen is half the fix; the commit subject people
+# grep is the other half. ec2f50d8c said "NEW: fpc-self_if" for a signature the
+# ledger itself knew had been fixed and come back.
+
+def _announce(findings_map, new):
+    import json
+    import tempfile
+
+    ts = importlib.util.spec_from_file_location(
+        "tw", os.path.join(HERE, "twatch.py"))
+    tw = importlib.util.module_from_spec(ts)
+    ts.loader.exec_module(tw)
+
+    class _C(object):
+        def __init__(self, p):
+            self.path = p
+            self.msgs = []
+
+        def publish(self, m):
+            self.msgs.append(m)
+
+    d = tempfile.mkdtemp()
+    loc = os.path.join(d, "LEDGER.json")
+    pub = os.path.join(d, "pub", "LEDGER.json")
+    os.makedirs(os.path.dirname(pub), exist_ok=True)
+    if findings_map is not None:
+        json.dump({"findings": findings_map}, open(loc, "w"))
+    else:                       # unreadable ledger
+        open(loc, "w").write("{ not json")
+    c = _C(d)
+    tw.publish_ledger(c, "plexus", loc, pub, os.path.join(d, "absent"),
+                      "eb1b200ee92f" + "0" * 28, nprog=200, ndiv=1, new=new)
+    return c.msgs[-1]
+
+
+def t_a_reopen_is_announced_as_reopened():
+    m = _announce({"b": {"reopened_from_fixed": True}}, ["b"])
+    assert "REOPENED: b" in m, m
+    assert "NEW:" not in m, "a reopen was announced in the vocabulary of a first sighting: %s" % m
+    return "a reopen says REOPENED, not NEW"
+
+
+def t_a_first_sighting_still_says_new():
+    m = _announce({"a": {"reopened_from_fixed": False}}, ["a"])
+    assert "NEW: a" in m and "REOPENED" not in m, m
+    return "a genuine first sighting still says NEW"
+
+
+def t_both_kinds_in_one_run_are_reported_apart():
+    m = _announce({"a": {"reopened_from_fixed": False},
+                   "b": {"reopened_from_fixed": True}}, ["a", "b"])
+    assert "NEW: a" in m and "REOPENED: b" in m, m
+    return "a mixed run names each kind separately"
+
+
+def t_an_unreadable_ledger_still_announces():
+    """Degrade to NEW, never to silence.
+
+    The announcement is the only thing a human sees; losing it because the
+    partition could not be computed would trade a mislabelled event for an
+    invisible one, which is strictly worse.
+    """
+    m = _announce(None, ["a"])
+    assert "NEW: a" in m, m
+    return "an unreadable ledger degrades to NEW, not to nothing"
+
+
 TESTS = [t_first_sighting_is_recorded,
+         t_a_reopen_is_announced_as_reopened,
+         t_a_first_sighting_still_says_new,
+         t_both_kinds_in_one_run_are_reported_apart,
+         t_an_unreadable_ledger_still_announces,
          t_reopen_keeps_the_original_opened_date,
          t_reopen_keeps_the_first_seed_and_sha,
          t_reopen_preserves_the_bisect_bracket,

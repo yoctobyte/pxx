@@ -4455,11 +4455,32 @@ def publish_ledger(clone, host, ledger_loc, ledger_pub, findings, sha,
             shutil.copy(os.path.join(findings, f), os.path.join(dst, f))
             kept += 1
     if new:
-        msg = ("tstate(%s): fuzz %s — NEW: %s (%d divergence(s) in %d programs)"
-               % (host, sha[:12], ", ".join(new), ndiv, nprog))
-        print("twatch: fuzz — NEW signature(s) %s; published to tstate/fuzz (NOT "
-              "ticketed: needs triage, the generator is the first suspect). Fuzzing "
-              "throttles until it is fixed." % ", ".join(new), flush=True)
+        # NEW and REOPENED are different news and must not share a word.
+        # `NEW` is what people grep for and act on, and a reopen was announced
+        # in its vocabulary -- ec2f50d8c said "NEW: fpc-self_if" for a
+        # signature first seen 2026-07-14 and marked fixed 2026-08-16. A
+        # reopen is arguably the MORE interesting of the two: something that
+        # was fixed came back, which is a regression with a bracket around it.
+        #
+        # Read back from the ledger rather than threaded through the caller:
+        # `reopened_from_fixed` is set by the writer at the moment it knows,
+        # and a signature only re-enters `new` by being newly opened or newly
+        # reopened, so the flag partitions this list exactly.
+        try:
+            with open(ledger_pub) as f:
+                _fnd = ((json.load(f) or {}).get("findings") or {})
+        except (OSError, ValueError):
+            _fnd = {}          # unreadable ledger: say NEW, never say nothing
+        reopened = [s for s in new
+                    if (_fnd.get(s) or {}).get("reopened_from_fixed")]
+        firsts = [s for s in new if s not in reopened]
+        parts = ([("NEW: %s" % ", ".join(firsts))] if firsts else []) + \
+                ([("REOPENED: %s" % ", ".join(reopened))] if reopened else [])
+        msg = ("tstate(%s): fuzz %s — %s (%d divergence(s) in %d programs)"
+               % (host, sha[:12], "; ".join(parts), ndiv, nprog))
+        print("twatch: fuzz — %s; published to tstate/fuzz (NOT ticketed: needs "
+              "triage, the generator is the first suspect). Fuzzing throttles "
+              "until it is fixed." % "; ".join(parts), flush=True)
     else:
         msg = "tstate(%s): fuzz %s — ledger update" % (host, sha[:12])
         print("twatch: fuzz — ledger status changed; published", flush=True)
