@@ -77,6 +77,15 @@ PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
 # this variable is what goes away if gtk-3.0 ever becomes a default root.
 # pkg-config first so a box with GTK3 installed elsewhere still builds; the
 # literal path is the fallback, not the source of truth.
+# FLAG ORDER IS LOAD-BEARING: emit the Pascal -Fu roots BEFORE $(GTK3_INC).
+# A -I root is a unit search root too, searched in flag order, so an include
+# root ahead of -Fu can capture a `uses` and bind it to a same-named C header:
+# gtk's pkg-config cflags carry /usr/include/libpng16, whose png.h collides
+# with lib/rtl/png.pas. Nothing built here uses png today, so the order is the
+# only thing between us and a silent dynamic import -- do not reflow it.
+# Track A fixed the mechanism in 4576ad4d1, but these recipes build with
+# $(PXX_STABLE), which is still the pre-fix pin.
+# bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import
 GTK3_INC ?= $(shell pkg-config --cflags-only-I gtk+-3.0 2>/dev/null || echo -I/usr/include/gtk-3.0/)
 # Where `make demos` writes built demo binaries. Defaults to an in-checkout,
 # gitignored dir so the binaries are convenient to run/inspect after a build;
@@ -15160,15 +15169,15 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_exp2.c $(TESTTMP)/crtl_exp2
 	$(TESTTMP)/crtl_exp2; tools/expect_same.sh crtl_exp2-rc "$$?" "42"
 	@if command -v xvfb-run >/dev/null 2>&1 && [ -e /usr/lib/$$(uname -m)-linux-gnu/libtk8.6.so.0 ]; then \
-	  $(PXX_STABLE) $(GTK3_INC) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/hello.npy $(TESTTMP)/lib_tk_hello >/dev/null && \
+	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix $(GTK3_INC) examples/tk/hello.npy $(TESTTMP)/lib_tk_hello >/dev/null && \
 	  tools/expect_same.sh lib_tk_hello "$$(xvfb-run -a $(TESTTMP)/lib_tk_hello)" "ok: nilpy tk window shown and closed" && \
-	  $(PXX_STABLE) $(GTK3_INC) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/widgets.npy $(TESTTMP)/lib_tk_widgets >/dev/null && \
+	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix $(GTK3_INC) examples/tk/widgets.npy $(TESTTMP)/lib_tk_widgets >/dev/null && \
 	  tools/expect_same.sh lib_tk_widgets "$$(xvfb-run -a $(TESTTMP)/lib_tk_widgets | tail -n 4)" "$$(printf 'entry = typed into an entry\ntext  = and into a text widget\nlabel = widgets, one TkEval each\nok: nilpy tk widgets shown and closed')" && \
-	  $(PXX_STABLE) $(GTK3_INC) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/kwargs.npy $(TESTTMP)/lib_tk_kwargs >/dev/null && \
+	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix $(GTK3_INC) examples/tk/kwargs.npy $(TESTTMP)/lib_tk_kwargs >/dev/null && \
 	  tools/expect_same.sh lib_tk_kwargs "$$(xvfb-run -a $(TESTTMP)/lib_tk_kwargs | tr -d '\n')" "get HELLOafter-delete LOvar bkwargs ok" && \
-	  $(PXX_STABLE) $(GTK3_INC) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/callbacks.npy $(TESTTMP)/lib_tk_callbacks >/dev/null && \
+	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix $(GTK3_INC) examples/tk/callbacks.npy $(TESTTMP)/lib_tk_callbacks >/dev/null && \
 	  tools/expect_same.sh lib_tk_callbacks "$$(xvfb-run -a $(TESTTMP)/lib_tk_callbacks | tail -n 6)" "$$(printf 'trace fired\nstr trace fired\nbbox [1, 1, 10, 10]\nhits 1\nscroll ok True True\nlambda scroll ok True True')" && \
-	  $(PXX_STABLE) $(GTK3_INC) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/htmlview.npy $(TESTTMP)/lib_tk_htmlview >/dev/null && \
+	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix $(GTK3_INC) examples/tk/htmlview.npy $(TESTTMP)/lib_tk_htmlview >/dev/null && \
 	  tools/expect_same.sh lib_tk_htmlview "$$(xvfb-run -a $(TESTTMP)/lib_tk_htmlview)" "$$(printf 'title True\ninline True\nbullet True\nentity True\npre True\nquote True\nlink True\nreplaced x\nlabel plain & small\nok: tkhtmlview rendered')" && \
 	  echo "  tk-nilpy: ok"; \
 	else \
@@ -16216,7 +16225,7 @@ demos: pxx-stable-check
 	 for src in `grep -rlE '^[[:space:]]*program[[:space:]]' examples --include='*.pas' | grep -v '/esp32/' | sort`; do \
 	   dir=`dirname $$src`; base=`basename $$src .pas`; n=$$((n+1)); \
 	   ts=; grep -qE '^[[:space:]]*uses.*palparallel|\bpalparallel\b' "$$src" && ts=--threadsafe; \
-	   if $(PXX_STABLE) $(GTK3_INC) $$ts -Fu$$dir $$fu -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix "$$src" "$(DEMO_OUT)/$$base" >$(DEMO_OUT)/.build.log 2>&1; then \
+	   if $(PXX_STABLE) $$ts -Fu$$dir $$fu -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix $(GTK3_INC) "$$src" "$(DEMO_OUT)/$$base" >$(DEMO_OUT)/.build.log 2>&1; then \
 	     printf '  OK    %s\n' "$$src"; ok=$$((ok+1)); \
 	   else \
 	     printf '  FAIL  %s  -- %s\n' "$$src" "`tail -1 $(DEMO_OUT)/.build.log`"; fail=1; \

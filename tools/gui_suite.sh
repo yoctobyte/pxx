@@ -14,6 +14,15 @@ PXX_STABLE="${PXX_STABLE:-"$ROOT/stable_linux_amd64/default/pinned"}"
 # (decide-which-gtk-a-bare-gtk-gtk-h-means). pkg-config when it is available,
 # so a box that installs GTK3 somewhere else still works; the literal path is
 # the fallback, not the source of truth.
+# FLAG ORDER IS LOAD-BEARING: emit the Pascal -Fu roots BEFORE $GTK3_INC.
+# A -I root is a unit search root too, searched in flag order, so an include
+# root ahead of -Fu can capture a `uses` and bind it to a same-named C header:
+# gtk's pkg-config cflags carry /usr/include/libpng16, whose png.h collides
+# with lib/rtl/png.pas. Nothing built here uses png today, so the order is the
+# only thing between us and a silent dynamic import -- do not reflow it.
+# Track A fixed the mechanism in 4576ad4d1, but these recipes build with
+# $PXX_STABLE, which is still the pre-fix pin.
+# bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import
 GTK3_INC="$(pkg-config --cflags-only-I gtk+-3.0 2>/dev/null || true)"
 [ -n "$GTK3_INC" ] || GTK3_INC="-I/usr/include/gtk-3.0/"
 
@@ -33,7 +42,7 @@ run_gui_test() {
   # a previous run's binary gets tested and the suite reports on code that is
   # no longer there.
   rm -f "$out"
-  if ! "$PXX_STABLE" $GTK3_INC -Fulib/pcl "$src" "$out" >"$log" 2>&1; then
+  if ! "$PXX_STABLE" -Fulib/pcl $GTK3_INC "$src" "$out" >"$log" 2>&1; then
     say "FAIL  $name -- compile: $(tail -1 "$log")"
     fail=1
     return
@@ -56,10 +65,10 @@ widgetset_matrix() {
   local src="$ROOT/test/gui/test_pcl_widgets.pas"
   local a="/tmp/gui_ws_default" b="/tmp/gui_ws_gtk3"
   local log="/tmp/gui_ws.log"
-  if ! "$PXX_STABLE" $GTK3_INC -Fulib/pcl -Fulib/rtl "$src" "$a" >"$log" 2>&1; then
+  if ! "$PXX_STABLE" -Fulib/pcl -Fulib/rtl $GTK3_INC "$src" "$a" >"$log" 2>&1; then
     say "FAIL  widgetset -- default build: $(tail -1 "$log")"; fail=1; return
   fi
-  if ! "$PXX_STABLE" $GTK3_INC -dWIDGETSET_GTK3 -Fulib/pcl -Fulib/rtl "$src" "$b" >"$log" 2>&1; then
+  if ! "$PXX_STABLE" -dWIDGETSET_GTK3 -Fulib/pcl -Fulib/rtl $GTK3_INC "$src" "$b" >"$log" 2>&1; then
     say "FAIL  widgetset -- explicit gtk3: $(tail -1 "$log")"; fail=1; return
   fi
   if ! cmp -s "$a" "$b"; then
@@ -68,7 +77,7 @@ widgetset_matrix() {
   # every unsupported cell refuses, and says why
   local ws
   for ws in WIDGETSET_WIN32 WIDGETSET_QT; do
-    if "$PXX_STABLE" $GTK3_INC "-d$ws" -Fulib/pcl -Fulib/rtl "$src" /tmp/gui_ws_bad >"$log" 2>&1; then
+    if "$PXX_STABLE" "-d$ws" -Fulib/pcl -Fulib/rtl $GTK3_INC "$src" /tmp/gui_ws_bad >"$log" 2>&1; then
       say "FAIL  widgetset -- -d$ws built instead of refusing"; fail=1; return
     fi
     if ! grep -q 'widgetset' "$log"; then
@@ -101,7 +110,7 @@ gtk_version_check() {
   local src="$ROOT/test/gui/test_gtk_ffi.pas"
   local out="/tmp/gui_gtk_version" log="/tmp/gui_gtk_version.log"
   rm -f "$out"
-  if ! "$PXX_STABLE" $GTK3_INC -Fulib/pcl "$src" "$out" >"$log" 2>&1; then
+  if ! "$PXX_STABLE" -Fulib/pcl $GTK3_INC "$src" "$out" >"$log" 2>&1; then
     say "FAIL  gtk version -- compile: $(tail -1 "$log")"; fail=1; return
   fi
   if ! readelf -d "$out" | grep -q 'libgtk-3\.so\.0'; then
@@ -135,7 +144,7 @@ solitaire_smoke() {
   local src="$ROOT/examples/solitaire_gui/solitaire_gui.pas"
   local out="/tmp/gui_test_solitaire" log="/tmp/gui_test_solitaire.log"
   rm -f "$out"
-  if ! "$PXX_STABLE" $GTK3_INC -Fulib/pcl -Fuexamples/solitaire_gui "$src" "$out" >"$log" 2>&1; then
+  if ! "$PXX_STABLE" -Fulib/pcl -Fuexamples/solitaire_gui $GTK3_INC "$src" "$out" >"$log" 2>&1; then
     say "FAIL  solitaire_gui -- compile: $(tail -1 "$log")"; fail=1; return
   fi
   solitaire_built=1
@@ -224,7 +233,7 @@ life_smoke() {
   local src="$ROOT/examples/life/life.pas"
   local out="/tmp/gui_test_life" log="/tmp/gui_test_life.log"
   rm -f "$out"
-  if ! "$PXX_STABLE" $GTK3_INC -Fulib/pcl -Fulib/rtl "$src" "$out" >"$log" 2>&1; then
+  if ! "$PXX_STABLE" -Fulib/pcl -Fulib/rtl $GTK3_INC "$src" "$out" >"$log" 2>&1; then
     say "FAIL  life -- compile: $(tail -1 "$log")"; fail=1; return
   fi
   if ! have_xvfb; then
@@ -251,7 +260,7 @@ eliah_smoke() {
   #   OK    eliah_ide (real window 1100x727)
   # two lines apart -- a red that reads half-green.
   rm -f "$out"
-  if ! "$PXX_STABLE" $GTK3_INC -Fulib/pcl -Fulib/rtl -Fuapps/ide/garin "$src" "$out" >"$log" 2>&1; then
+  if ! "$PXX_STABLE" -Fulib/pcl -Fulib/rtl -Fuapps/ide/garin $GTK3_INC "$src" "$out" >"$log" 2>&1; then
     say "FAIL  eliah_ide -- compile: $(tail -1 "$log")"; fail=1; return
   fi
   eliah_built=1
