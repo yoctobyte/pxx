@@ -2594,6 +2594,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-uforth-core | T | 70 | regression | regression: test-uforth#core red at 44193e547f6d (auto-filed by twatch) | — |
 | regression-test-zlib-00 | T | 70 | regression | regression: test-zlib#00 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-testmgr-conformance-shard-timeout-under-load | T | 60 | regression | Track T: c-conformance shards time out under full parallel load (false REDs) | — |
+| regression-tools-devtest-00-2 | N | 70 | regression | regression: tools-devtest#00 red at 8787cfe4235a — a new hardcoded /tmp path in a NilPy test | — |
 | regression-tools-devtest-00 | T | 70 | regression | regression: tools-devtest#00 red at 1b9b43e5b511 (auto-filed by twatch) | — |
 | task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc | A | 45 | task | Carve NilPy's lvalue/member parsing out of `parser.inc` (split 2) | — |
 | task-a-carve-nilpy-selectors-out-of-parser-inc | A | 45 | task | Carve NilPy's selector/subscript parsing out of `parser.inc` | — |
