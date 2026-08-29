@@ -28,7 +28,11 @@ program eliah;
   garin docmodel as emulated boxes, clicking a box hit-tests the model and shows
   a selection outline + the node's fields in the object-inspector pane below. }
 
-uses gtk3, controls, stdctrls, extctrls, graphics, forms, menus, sysutils,
+{ gtk3_c is listed explicitly, not inherited through gtk3. A unit's INTERFACE
+  uses-clause does not re-export its imports, so `uses gtk3` alone leaves
+  gtk_main_quit, gtk_button_clicked and g_timeout_add undefined here even though
+  gtk3 itself sees them. lib/pcl/gtk3widgets.pas spells it the same way. }
+uses gtk3_c, gtk3, controls, stdctrls, extctrls, graphics, forms, menus, sysutils,
      buffer, runner, docmodel, designer, lfmload, builder, project, perspective,
      registry, typinfo, selection, classes_lite, resources, lfm;
 
@@ -330,13 +334,39 @@ begin
 end;
 
 { click a diagnostic -> jump the editor to its line (compiler lines are 1-based,
-  the memo caret is 0-based) }
+  the memo caret is 0-based).
+
+  When the diagnostic names a file -- an include or a `uses`d unit -- the line
+  number belongs to THAT file, so we open it first. Jumping without opening is
+  the bug this fixes: the caret lands on a real line of the wrong buffer, which
+  looks like a working jump and is not.
+
+  If the named file cannot be opened we move the caret NOWHERE and say so. A
+  half-done jump is exactly the failure being repaired, so falling back to "then
+  at least scroll the current file" would reintroduce it. }
 procedure TEliahForm.OnErrorClick(Sender: TObject);
-var idx, line: Integer;
+var idx, line: Integer; f: AnsiString; b: TIdeBuffer;
 begin
   idx := Errors.ItemIndex;
   if (idx < 0) or (idx >= Diags.Count) then Exit;
   line := Diags.DiagLine(idx);
+  f := Diags.DiagFile(idx);
+  if (f <> '') and (f <> curFile) then
+  begin
+    b := TIdeBuffer.Create;
+    if not b.LoadFromFile(f) then
+    begin
+      { the path is relative to the compiler's working directory, which is the
+        IDE's. A miss is worth reporting rather than swallowing: it means the
+        two have diverged, and the user needs to know the jump did not happen. }
+      Output.Text := '$ diagnostic names a file that will not open: ' + f;
+      Exit;
+    end;
+    curFile := f;
+    Editor.Text := b.Text;
+    if EndsWithLfm(f) then OpenDesign(f);
+    UpdateTitle;
+  end;
   if line > 0 then Editor.CaretToLine(line - 1);
 end;
 
@@ -424,7 +454,14 @@ begin
     Errors.AddItem('(no diagnostics)')
   else
     for i := 0 to Diags.Count - 1 do
-      Errors.AddItem('L' + IntToStr(Diags.DiagLine(i)) + ': ' + Diags.DiagMsg(i));
+      { name the file when the diagnostic has one, so the row says which file
+        its line number belongs to. Without it two rows reading "L63: ..." are
+        indistinguishable while pointing into different files. }
+      if Diags.DiagFile(i) <> '' then
+        Errors.AddItem(ExtractFileName(Diags.DiagFile(i)) + ':' +
+                       IntToStr(Diags.DiagLine(i)) + ': ' + Diags.DiagMsg(i))
+      else
+        Errors.AddItem('L' + IntToStr(Diags.DiagLine(i)) + ': ' + Diags.DiagMsg(i));
 end;
 
 procedure TEliahForm.OnRun(Sender: TObject);
@@ -1219,6 +1256,34 @@ begin
     if EliahForm.Diags.DiagLine(0) <> 3 then begin writeln('SMOKE FAIL: diag line wrong'); Halt(1); end;
     EliahForm.Errors.ItemIndex := 0;
     EliahForm.OnErrorClick(nil);   { jump to the error line — must not crash }
+    { a diagnostic with no `in:` must not move the editor off the file being
+      compiled: '' means the main unit, which is already open }
+    if EliahForm.curFile <> '/tmp/eliah_bad.pas' then
+      begin writeln('SMOKE FAIL: fileless diagnostic changed the open file'); Halt(1); end;
+
+    { the include case: the error is on line 3 of the .inc, and the compiler
+      names it on an `in:` line. Clicking must OPEN THAT FILE -- keeping the
+      number and staying put is the bug (a real line of the wrong buffer).
+      feature-demo-ide-jump-into-includes-and-units }
+    if not WriteAllText('/tmp/eliah_inc.inc',
+         'procedure Bogus;' + #10 + 'begin' + #10 + '  if then;' + #10 + 'end;' + #10) then
+      begin writeln('SMOKE FAIL: could not write the include'); Halt(1); end;
+    if not WriteAllText('/tmp/eliah_incmain.pas',
+         'program incmain;' + #10 + '{$I /tmp/eliah_inc.inc}' + #10 + 'begin' + #10 + 'end.' + #10) then
+      begin writeln('SMOKE FAIL: could not write the include main'); Halt(1); end;
+    EliahForm.curFile := '/tmp/eliah_incmain.pas';
+    EliahForm.OnCompile(nil);
+    if EliahForm.Diags.Count < 1 then begin writeln('SMOKE FAIL: no include diagnostics'); Halt(1); end;
+    if EliahForm.Diags.DiagFile(0) <> '/tmp/eliah_inc.inc' then
+      begin writeln('SMOKE FAIL: diagnostic did not carry the include path'); Halt(1); end;
+    if EliahForm.Diags.DiagLine(0) <> 3 then
+      begin writeln('SMOKE FAIL: include diag line wrong'); Halt(1); end;
+    EliahForm.Errors.ItemIndex := 0;
+    EliahForm.OnErrorClick(nil);
+    if EliahForm.curFile <> '/tmp/eliah_inc.inc' then
+      begin writeln('SMOKE FAIL: clicking an include diagnostic did not open the include'); Halt(1); end;
+    if Pos('procedure Bogus', EliahForm.Editor.Text) = 0 then
+      begin writeln('SMOKE FAIL: the include was not loaded into the editor'); Halt(1); end;
 
     { designer mouse-select: click inside the sample OK button (x=28..108,
       y=92..120) -> it must become the selection and fill the inspector. }

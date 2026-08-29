@@ -206,3 +206,26 @@ would land a check that is red on arrival, which the parent ticket explicitly
 refused to do because it teaches people to skip the step.
 
 So the gate waits on those twelve being wired, and on nothing else.
+
+## And the whole of `apps/ide` (frank-b, 2026-08-29)
+
+Appended after this ticket moved to `working/` — I am not claiming it, this is
+information for whoever holds it.
+
+Wider than the two GTK files above: `grep -n "eliah\|apps/ide" Makefile` returns
+**nothing**. `apps/ide/test.sh` (the headless garin gate, 168 assertions) and
+`apps/ide/build.sh` (the GTK face) are run by no target.
+
+The cost was not theoretical. `build.sh` never passed a GTK3 include root, so
+by the time I touched it **eliah did not compile at all** — five undefined
+GTK3-only symbols — and separately its `uses` clause was missing `gtk3_c`,
+which an interface uses-clause does not re-export. Two independent breakages
+sitting in a face that a `make` target would have caught the day either landed.
+Both are fixed in `feature-demo-ide-jump-into-includes-and-units`; they were
+found only because that ticket required building the thing.
+
+That is this ticket's own argument one size up: an unwired *test* fails to
+catch its bug; an unwired *app* stops building and no one is told.
+
+Ready to wire as-is, nothing needs writing first: `apps/ide/test.sh` is
+headless and fast, and `--smoke` under `xvfb-run` is the face's own gate.

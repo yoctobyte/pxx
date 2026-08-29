@@ -1895,6 +1895,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-demo-chess | E | 53 | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
 | feature-demo-file-browser | E | 50 | feature | Flagship Demo — Midnight Commander-like TUI file browser (libc-free) | — |
 | feature-demo-gui-solitaire | B+E | 50 | feature | Demo — GUI Patience / Solitaire | — |
+| feature-demo-ide-jump-into-includes-and-units | B+E | 35 | feature | garin's diagnostic parser keys off `a number between the first two colons` and carries no file, on the stated assumption that the compiler names one main unit. Since 2026-08-21 that is no longer true: a diagnostic in an include or a `uses`d unit is followed by an `in: <path>` line, which the IDE currently drops, so jump-to-error lands on the wrong file. | — |
 | feature-demo-life | E | 50 | feature | Demo — Conway's Game of Life | — |
 | feature-demo-lisp | E | 50 | feature | Demo — Lisp / Scheme interpreter | — |
 | feature-demo-mandelbrot-asm-autozoom | B+E | 40 | feature | Demo — real-time auto-zoom Mandelbrot with a per-target ASM iteration kernel | — |
