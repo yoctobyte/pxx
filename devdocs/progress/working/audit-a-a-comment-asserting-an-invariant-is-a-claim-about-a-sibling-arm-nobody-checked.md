@@ -560,3 +560,86 @@ The last two rows are the ones that should be uncomfortable: **the claims that
 held were the ones about someone else's code, and the claims that failed were the
 ones about the author's own.** That is the opposite of the intuition the audit
 started from, and it is now supported by nine instances rather than one.
+
+---
+
+## 2026-08-29 — pass 4 (frankD): the phrase hits, in face 71's order
+
+Face 71 says the claims that fail are the ones a routine makes about **its own**
+mechanism, not the alarming cross-file assertions. So this pass took the
+`is what makes X sound/safe/correct` and `every consumer must` families first
+— the self-descriptions — rather than working the list top to bottom.
+
+**That ordering paid on the first item.**
+[[bug-a-the-ascii-cache-consumer-still-says-byte-mutation-has-one-place]]:
+`pylib.pas:3361` justifies trusting the ASCII cache with *"PXXStrUnique forgets
+it whenever bytes are about to change, **which is the one place they can**."*
+There are four. All four are correct today, so no defect — but this is
+**instance #4's own sentence, one indirection away, still standing after the
+fix.** #4 corrected `PXXStrUnique`'s header; nobody grepped for who else had
+written the same claim down.
+
+And the surviving copy is in the worse place: `PXXStrUnique`'s header is read by
+someone editing `PXXStrUnique`; `pylib.pas:3361` is **the consumer's warrant for
+trusting the cache at all**, so a reader who believes it concludes a new
+mutation site is safe as long as it routes through `PXXStrUnique` — which is
+precisely the reasoning that produced sites 2 and 3. Site 3 (the in-place
+`SetLength` resize, `ir_codegen.inc:7912`) **postdates the fix**: it was added,
+correctly invalidated by its author, and the sentence claiming it could not exist
+was not revisited. *The count was wrong, then it was fixed in one place, then the
+world moved and made it wronger.*
+
+### Checked and HOLDING (pass 4)
+
+- `builtinheap.pas:127-129` — *"`PXX_FLAG_ASCII`'s ABSENCE means 'unknown', not
+  'non-ASCII' — a consumer must scan."* Holds; the single external consumer
+  scans on `-1`.
+- `ir.inc:5049-5060` — `FramePrevFpOffset`/`FrameRetAddrOffset`, *"the only place
+  the frame layout is encoded"*. **Defensible**, and the best-written instance in
+  the sweep: it tabulates all five targets, states riscv32's `+8/+12` exception
+  outright, and refuses xtensa two lines above rather than guessing. Its claim is
+  about *update sites*, not about prose, so `defs.inc:816` does not falsify it —
+  it just means the `defs.inc` entry is a second place that encodes the layout
+  and gets it wrong.
+- `ir_codegen.inc:7909-7926` — the in-place-resize invalidation, whose comment
+  carries the measured failure it prevents. A model.
+- `ir_codegen_arm32.inc:270-279` — *"this constant and the flags word below must
+  always change TOGETHER"*, with the cross-target note *"x86-64 sidesteps the
+  whole question; aarch64/riscv32 have no restorer to get wrong."* Holds, and it
+  is a **correct four-target enumeration with its exceptions named** — the shape
+  pass 3's ticket asks for.
+
+### A fifth count-shaped error, in `tools/**` (flagged, not taken)
+
+The coordinator surfaced two tooling instances while checking pass 3. Checking
+the first turned up another of the same shape: `tools/csmith_fuzz.py:140` says
+*"compiler/defs.inc **stops at** `TARGET_RISCV32 = 5`"*, dated **2026-08-20**.
+`TARGET_WASM32 = 6` landed **2026-08-27** (`290ee8ca4d`). Seven days. Same
+mechanism as `--threadsafe`: a scope widened and the sentence stating the old
+boundary stayed. `tools/**` is Track T/the coordinator's; flagged, not touched.
+
+That makes **six** instances of the count/scope shape found in one evening:
+`PXXStrCmp3`'s "four cross backends" (live bug), `PXXVarBinOp`'s "the other four
+targets", `symtab.inc:3333`'s "Every 32-bit backend", `--threadsafe`'s
+"x86-64-only" ×5, `pylib.pas:3361`'s "the one place they can", and
+`csmith_fuzz.py:140`'s "stops at". **The audit's original shape — two arms, one
+commented, the sibling unchecked — accounts for one of the six.** The other five
+are counts and scopes that went stale under an edit elsewhere, and every one of
+them is falsifiable by a single command.
+
+### Where that leaves the ticket
+
+The founding premise ("the sibling arm nobody checked") is real but is the
+*minority* shape. The dominant one is **a sentence stating a boundary that
+something later moved** — a target count, a target list, a scope, a "one place".
+If this ticket produces one durable rule it should be that one, and the rule is
+mechanical rather than dispositional:
+
+> **A comment that contains a COUNT, a LIST of targets, or the words "only" /
+> "every" / "always" is asserting something a command can check. Write the
+> command in the comment, or write a sentence that carries no number.**
+
+Remaining: ~40 first-tier phrase hits (the `must never` single-site family, which
+face 71 predicts is lower yield than the self-descriptions just swept), the
+unaudited `builtinheap` twins (`PXXStrEq`, `PXXVarClear`, console-read; float→text
+stays out as Track F), prior #2, row 7.

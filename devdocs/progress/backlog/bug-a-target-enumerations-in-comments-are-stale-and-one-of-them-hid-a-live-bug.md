@@ -110,6 +110,16 @@ prefer a phrase that does not carry a number.** "The cross backends" cannot go
 stale; "the four cross backends" went stale the day xtensa landed and cost a
 wrong `<` on a whole target.
 
+### Not a tool bug — a mechanical generator of a HUMAN error
+
+Correcting my own framing, because the wrong word would send someone hunting for
+a broken tool: **nothing in `tools/**`, the Makefile or CI runs that glob.** No
+machine executes `ir_codegen_*.inc` anywhere in the repo. It is a shell idiom
+that returns four when the answer is six, sitting exactly where a person reaches
+for a quick enumeration before writing a sentence. That is a worse category than
+a tool bug and a less searchable one, but it is not a tool bug, and this ticket
+should not read as though a script needs fixing.
+
 ## Gate
 
 Comment-only for #1's count and #2; #3 is a question for A, not an edit.

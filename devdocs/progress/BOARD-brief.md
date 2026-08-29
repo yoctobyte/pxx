@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:23 blocked:8 backlog:314 backlog_new:15 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2649 rejected:51`
+`working:4 unfinished:23 blocked:8 backlog:315 backlog_new:15 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2649 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
@@ -51,7 +51,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 335, ranked
+## Ready — top 30 of 336, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -84,4 +84,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
 - `[p 62] [A]` feature-unicodestring-model
 
-_305 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_306 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
