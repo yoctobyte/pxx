@@ -152,7 +152,12 @@ rebase_onto_origin() {
 # writers live and the watcher publishing tstate continuously, this exhausted its
 # budget TWICE IN A ROW on one resolve — and a tight fetch/rebase/push loop landed
 # it first try immediately after, so it was retry budget, not a real conflict.
-SYNC_PUSH_TRIES="${SYNC_PUSH_TRIES:-6}"
+# Raised 6 -> 12 on 2026-08-30: the budget was exhausted for real tonight,
+# with eight lanes pushing and the watcher publishing tstate continuously.
+# The retries are cheap (fetch + rebase of generated boards) and the cost of
+# running out is a hand re-run, so the budget should be set by how busy the
+# tree gets rather than by how busy it usually is.
+SYNC_PUSH_TRIES="${SYNC_PUSH_TRIES:-12}"
 
 push_with_retry() {
     tries=0
