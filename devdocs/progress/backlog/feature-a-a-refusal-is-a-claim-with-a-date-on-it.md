@@ -1472,8 +1472,27 @@ invisible rather than empty.
 ### 33. A capability that exists but nothing invokes — quieter than no check at all
 
 `tools/forwardlint.py` had existed since 08-28, exited 1 correctly, and named
-both seed breaks precisely. **It had zero callers** — not `gate.sh`, not the
-Makefile, not testmgr. It caught them both and told nobody.
+both seed breaks precisely. **It had exactly one caller** — `test/wasm/check_forwards.sh`,
+21 lines that are nothing but its caller, **in a directory no other lane runs.**
+Not `gate.sh`, not the Makefile, not testmgr. It caught both and told nobody.
+
+**Corrected 2026-08-29 by frankwasm, who wrote it** (`c7690064e`). The correction
+sharpens the face. This entry first called it an incumbent nobody grepped for; it
+is worse than that:
+
+> *"The tool was built once, placed correctly, pushed to master, and given
+> exactly one caller in a directory no other lane runs. I had the capability, the
+> placement judgement, and the reach, and I still left the trigger in my own
+> suite."*
+
+Not a discovery failure — a **follow-through** failure, by the one person who had
+already reasoned out the correct placement and acted on it. Its author put it in
+`tools/` *deliberately*, for exactly the reason it was later wired to `gate.sh`.
+
+**The rule, in the author's words:** *putting a check in the shared tools
+directory is not wiring it up; a tool with one caller in one lane's suite is that
+lane's script wearing a shared name.* And the sting — **being findable by grep is
+what makes it feel handled**, which is this same quiet failure one level earlier.
 
 This is strictly worse than not having written it. A missing check is a known
 gap; **an unwired one is a gap everybody believes is covered**, because the tool
@@ -1512,3 +1531,24 @@ ran.** And its sibling, from the same session: *"the fix is in HEAD" and "the fi
 is in the binary I just ran" are different claims, and only the second is
 evidence* — `merge-base --is-ancestor` was true of the sources and false of the
 stale binary being executed.
+
+
+### 34. A diagnostic that names a cause, is CORRECT about the fact, and points away from the fix
+
+frankwasm's, and it is face 25 one turn further out — 25 is a *comment* that
+justifies rather than warns; this is a **diagnostic** that is true and
+misdirecting at once.
+
+`Length` of a dyn array held in a slot refused with **`Length of Pointer`**. The
+IR type `tyPointer` is *precisely the discriminator* the x86-64 backend uses to
+select the very arm that was missing. The message had been naming its own answer
+for as long as the arm did not exist.
+
+Read as *"pointers aren't supported yet"* for weeks. It was saying **"this node
+is a field."**
+
+A refusal that names a type asserts the type is the reason. When that type is
+also the **key the fix dispatches on**, the message is a signpost pointing at the
+solution and reads as a wall. **When a diagnostic names a cause, ask whether it
+is naming the discriminator** — and prefer refusals that say what *shape* was
+seen over ones that say what *type* was found.

@@ -16581,12 +16581,13 @@ in source order, pxx across the unit. Found by frankwasm against FPC directly.
 **with pxx**, so the per-fix loop and the self-host fixedpoint are blind to
 FPC-only breakage *by construction*. No testmgr tier covers it either. Face 31.
 
-**`tools/forwardlint.py` already existed, exits 1 correctly, and had ZERO
-callers.** It caught this and `WasmDataAddr` before it and told nobody — face 33,
-and strictly worse than not existing, because everyone assumes it is wired.
-**Now wired into `gate.sh`** before the mode `case`, falsified both directions in
-a scratch tree. **`gate.sh quick` is legitimately RED until the p80 lands** —
-every lane told.
+**`tools/forwardlint.py` already existed, exits 1 correctly, and had exactly ONE
+caller — `test/wasm/check_forwards.sh`, in a directory no other lane runs.**
+First recorded here as "zero callers" and as an incumbent nobody grepped for;
+**frankwasm corrected both — it wrote the tool (`c7690064e`) and placed it in
+`tools/` deliberately**, for the same reason it was later wired to `gate.sh`,
+then wired it only to its own suite. A follow-through failure, not a discovery
+one. Face 33 on master carries the author's own framing.
 
 Second finding from the same run, filed [P p45]: `pasparser_expr.inc:1927` binds
 FPC's **system-unit** `LowerCase` in the seed build and **ours** in the
