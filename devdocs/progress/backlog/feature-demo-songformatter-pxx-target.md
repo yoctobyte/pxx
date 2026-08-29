@@ -569,6 +569,21 @@ Two things had to be true for that, and only one of them was about this app:
    `-Ilib/crtl/include …` is the interim; **any measurement of this app must
    pass it** or it is measuring glibc's headers.
 
+   > **SUPERSEDED 2026-08-29 — DO NOT PASS `-I` ANY MORE.** The bug above is
+   > done, so the workaround is obsolete, and it is no longer merely
+   > unnecessary: `-Ilib/crtl/include` makes `uses strings` bind to that
+   > directory's `strings.h` instead of `lib/rtl/strings.pas`, so three of the
+   > five modules die with `undefined variable (StrPas)` raised from inside
+   > `lib/pcl/tk.pas` — which reads as a broken Tk facade and is nothing of the
+   > kind. `math` and `netdb` collide the same way. Filed as
+   > [[bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import]].
+   > Measure with no flags at all; the modules compile that way.
+   >
+   > The general lesson, since this cost the first hour of the 08-29 pass: **a
+   > workaround that outlives the bug it worked around does not go quiet, it
+   > starts lying** — and it lies inside the measurement it was written to
+   > protect, which is the one place nobody re-checks.
+
 ### Where it stops now
 
 `Unhandled exception: TypeError: expected a number, got object`, with no other
