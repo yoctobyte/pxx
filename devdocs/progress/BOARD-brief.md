@@ -5,11 +5,10 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:22 blocked:8 backlog:310 backlog_new:14 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2670 rejected:55`
+`working:3 unfinished:22 blocked:7 backlog:311 backlog_new:15 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2670 rejected:55`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-a-an-array-constructor-in-argument-position-leaks-its-dynamic-array` [A] — owner: frankA
 - `bug-a-the-fpc-seed-canary-skips-a-break-already-on-master` [A] — owner: unrecorded
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 - `refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs` [C] — owner: frankC
@@ -39,18 +38,17 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-threadsafe-heap-optimize` [A]
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
-## blocked (8) — has an unmet blocker; do not claim
+## blocked (7) — has an unmet blocker; do not claim
 
 - `bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file` [B+S] — blocked-by: feature-pal-esp-posix-fd-semantics
 - `bug-b-nilpy-random-is-never-seeded-and-its-first-draw-is-the-low-bound` [N] — blocked-by: decide-does-nilpy-random-seed-itself-at-import
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
 - `bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio` [T] — blocked-by: decide-t-per-assertion-subjects-or-accept-the-file-level-label
-- `chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring` [A] — blocked-by: chore-t-six-orphan-gui-tests-the-blanket-was-hiding
 - `feature-lib-tkinter-grid-pad-accepts-a-two-tuple` [B] — blocked-by: bug-n-a-methods-keyword-call-drops-a-tuple-argument-when-an-earlier-default-is-skipped
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 329, ranked
+## Ready — top 30 of 331, ranked
 
 - `[p 80] [C]` bug-c-sizeof-a-partial-index-answers-the-element-not-the-row
 - `[p 75] [P]` feature-pascal-corpus-expansion
@@ -79,8 +77,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [A]` feature-unicodestring-model
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - `[p 60] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 1)
+- `[p 60] [A]` bug-a-an-array-constructor-in-argument-position-leaks-its-dynamic-array
 - `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
 - `[p 60] [N]` bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
-- `[p 60] [P]` bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
 
-_299 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_301 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
