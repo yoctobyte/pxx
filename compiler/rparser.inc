@@ -64,6 +64,7 @@ function RParseExpr: Integer; forward;
 function RParseBlock: Integer; forward;
 function RParseStatement: Integer; forward;
 function RParseIf: Integer; forward;
+function RParseIfExpr: Integer; forward;
 function RSpecializeGenericFn(gfi: Integer; const concreteTypeName: AnsiString): Integer; forward;
 
 const
@@ -783,6 +784,9 @@ var node, fieldNode, symIdx, procIdx, argNode, lastArg, fTokIdx, gfi, ci: Intege
     name, methodName, fullName: AnsiString;
 begin
   case CurTok.Kind of
+    { statement-position `if` never reaches here -- RParseStatement dispatches
+      it to RParseIf first -- so this arm is only the value form. }
+    tkIf: begin Result := RParseIfExpr; Exit; end;
     tkInteger:
     begin
       node := AllocNode(AN_INT_LIT); ASTIVal[node] := CurTok.IVal;
@@ -1593,6 +1597,130 @@ begin
   node := AllocNode(AN_IF);
   ASTLeft[node] := condNode;
   ASTRight[node] := pairNode;
+  Result := node;
+end;
+
+{ Is the `if` at the cursor an if-EXPRESSION in TAIL position -- `fn pick(n:
+  i64) -> i64 { if n > 0 { 1 } else { -1 } }`, which is how real Rust writes a
+  two-way accessor -- rather than an ordinary if-STATEMENT that merely happens
+  to be last?
+
+  Decided by a token scan, not by trying one parse and rewinding: Error()
+  aborts, so there is no backtracking to rewind TO, and a speculative parse
+  would leave allocated nodes behind either way.
+
+  The discriminator is Rust's own: a block has a VALUE when its last token
+  before the closing brace is not a semicolon and the block is not empty.
+  Require that of both arms, require the `else` (an if with no else has no
+  value -- Rust says so too), and require the whole thing to be followed by a
+  closing brace or a comma, which is what puts it in tail position. Anything failing any of those is a statement and goes to RParseIf
+  unchanged, so this cannot capture an if that was working before. }
+function RIfBlockHasValue(openIdx: Integer; var closeIdx: Integer): Boolean;
+var depth, i: Integer;
+begin
+  Result := False;
+  closeIdx := -1;
+  if Tokens[openIdx].Kind <> tkBegin then Exit;
+  depth := 0; i := openIdx;
+  while Tokens[i].Kind <> tkEOF do
+  begin
+    if Tokens[i].Kind = tkBegin then Inc(depth)
+    else if Tokens[i].Kind = tkEnd then
+    begin
+      Dec(depth);
+      if depth = 0 then begin closeIdx := i; Break; end;
+    end;
+    Inc(i);
+  end;
+  if closeIdx < 0 then Exit;
+  { non-empty, and not statement-terminated }
+  Result := (closeIdx > openIdx + 1) and (Tokens[closeIdx - 1].Kind <> tkSemicolon);
+end;
+
+function RIfIsTailValue: Boolean;
+var i, closeIdx: Integer;
+begin
+  Result := False;
+  if not RTailOK then Exit;
+  i := TokPos - 1;
+  if Tokens[i].Kind <> tkIf then Exit;
+  Inc(i);
+  if Tokens[i].Kind = tkLet then Exit;   { `if let` is its own form }
+  { the condition cannot contain a bare open-brace -- Rust forbids a struct
+    literal there for exactly this reason -- so the first one we meet opens
+    the then-block }
+  while (Tokens[i].Kind <> tkBegin) and (Tokens[i].Kind <> tkEOF) and
+        (Tokens[i].Kind <> tkSemicolon) do Inc(i);
+  if not RIfBlockHasValue(i, closeIdx) then Exit;
+  if Tokens[closeIdx + 1].Kind <> tkElse then Exit;
+  i := closeIdx + 2;
+  while Tokens[i].Kind = tkIf do
+  begin
+    { `else if` chain: each rung must itself be a valued if }
+    Inc(i);
+    while (Tokens[i].Kind <> tkBegin) and (Tokens[i].Kind <> tkEOF) and
+          (Tokens[i].Kind <> tkSemicolon) do Inc(i);
+    if not RIfBlockHasValue(i, closeIdx) then Exit;
+    if Tokens[closeIdx + 1].Kind <> tkElse then Exit;
+    i := closeIdx + 2;
+  end;
+  if not RIfBlockHasValue(i, closeIdx) then Exit;
+  { tail position: the fn body's closing brace, or a bare match arm's comma }
+  Result := (Tokens[closeIdx + 1].Kind = tkEnd) or
+            (RInMatchArm and (Tokens[closeIdx + 1].Kind = tkComma));
+end;
+
+{ `if c { a } else { b }` in a VALUE position -- `let df = if k < 4 { 1 } else
+  { 2 };`, which is how real Rust spells what Pascal spells with a temp and two
+  assignments. It is not the statement `if`: that one is RParseIf above, still
+  dispatched from RParseStatement, and untouched.
+
+  Lowers to the shared AN_TERNARY (Left = condition, Right = AN_PAIR(then,
+  else)) -- the same node the C frontend builds for `c ? a : b` and Pascal for
+  its own if-expression, so only the SELECTED arm is evaluated and nothing new
+  reaches the IR. No Track A change; as with every rung in this window the
+  mechanism was already there.
+
+  Two deliberate narrowings. The `else` is REQUIRED, because an if-expression
+  with no else has no value -- Rust says the same thing, in its own words
+  (`()` is not `i64`). And each arm is a single EXPRESSION, not a block with
+  statements and a tail: a block-with-value needs a hidden temp and a
+  statement-sequence-in-expression-position, which is a different feature from
+  this one and is not what the engine's tables use. }
+function RParseIfExpr: Integer;
+var condNode, thenNode, elseNode, pairNode, node: Integer;
+    thenTk, elseTk: TTypeKind;
+begin
+  Next; { if }
+  condNode := RParseExpr;
+  Expect(tkBegin, '{');
+  thenNode := RParseExpr;
+  Expect(tkEnd, '}');
+  if CurTok.Kind <> tkElse then
+    Error('Rust: an `if` used as a value needs an `else` arm');
+  Next;
+  if CurTok.Kind = tkIf then
+    { parens force an actual recursive CALL rather than a read of this
+      function's own Result alias -- the same Pascal gotcha RParseIf records }
+    elseNode := RParseIfExpr()
+  else
+  begin
+    Expect(tkBegin, '{');
+    elseNode := RParseExpr;
+    Expect(tkEnd, '}');
+  end;
+  pairNode := AllocNode(AN_PAIR);
+  ASTLeft[pairNode] := thenNode;
+  ASTRight[pairNode] := elseNode;
+  node := AllocNode(AN_TERNARY);
+  ASTLeft[node] := condNode;
+  ASTRight[node] := pairNode;
+  { Matching arms keep their exact kind -- RWiden alone would collapse a
+    u64/u64 pair to i32, which is the literal-suffix bug wearing a hat. }
+  thenTk := IntToTypeKind(ASTTk[thenNode]);
+  elseTk := IntToTypeKind(ASTTk[elseNode]);
+  if thenTk = elseTk then ASTTk[node] := Ord(thenTk)
+  else ASTTk[node] := Ord(RWiden(thenTk, elseTk));
   Result := node;
 end;
 
@@ -2593,7 +2721,15 @@ var name, fname: AnsiString; symIdx, node, rhsNode, lhsNode, baseNode, fieldNode
     opTk: TTokenKind; isSome: Boolean;
 begin
   case CurTok.Kind of
-    tkIf: begin Result := RParseIf; Exit; end;
+    tkIf:
+    begin
+      { a tail if-EXPRESSION is a value, not a statement -- see RIfIsTailValue.
+        Parsed as an expression here and wrapped by the ordinary tail check
+        below, so it shares one path with every other tail value. }
+      if RIfIsTailValue then Result := RReturnValue(RParseIfExpr)
+      else Result := RParseIf;
+      Exit;
+    end;
     tkWhile: begin Result := RParseWhile; Exit; end;
     tkLoop: begin Result := RParseLoop; Exit; end;
     tkFor: begin Result := RParseFor; Exit; end;

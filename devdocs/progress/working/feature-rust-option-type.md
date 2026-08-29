@@ -197,6 +197,38 @@ signatures, not from the ladder's list — and both are ahead of it now:
    - indexing a call result directly (`f()[0]`) is not parsed; Pascal has
      `ProcRetArrAi` for exactly that and the Rust side does not populate it.
 
+9. **DONE** — `if` as an EXPRESSION, in both spellings: `let x = if c { a }
+   else { b };` and the tail form `fn pick(n: i64) -> i64 { if n > 0 { 1 } else
+   { -1 } }`. Named as the next wall by rung 8's own probe, which had to be
+   rewritten around its absence.
+
+   Lowers to the shared **AN_TERNARY** — Left = condition, Right =
+   AN_PAIR(then, else) — the same node the C frontend builds for `c ? a : b`
+   and Pascal for its own if-expression. So only the selected arm is evaluated
+   and nothing new reaches the IR. Fifth rung with no Track A change.
+
+   The tail form is the interesting half. It cannot be decided by trying the
+   expression parse and rewinding, because `Error()` aborts — there is nothing
+   to rewind to, and a speculative parse leaves allocated nodes behind whether
+   it succeeds or not. `RIfIsTailValue` decides it by a token scan using
+   **Rust's own discriminator**: a block has a value when it is non-empty and
+   its last token before the closing brace is not a semicolon. Require that of
+   every arm, require the `else` (an if with no else has no value — Rust says
+   the same, in its own words), and require a closing brace or a comma after
+   it, which is what makes it a tail. Anything failing any of those goes to
+   `RParseIf` unchanged, so the check cannot capture an `if` that worked
+   before; `side_effect` in the test is the pin for that direction.
+
+   One narrowing kept: an arm is a single expression, not a block with
+   statements and a trailing value. A block-with-value needs a hidden temp and
+   a statement sequence in expression position, which is a different feature
+   and not one the engine's tables use.
+
+   Matching arm types keep their exact kind rather than going through
+   `RWiden`, which would collapse a `u64`/`u64` pair to i32 — the rung-8
+   literal-suffix bug wearing a different hat, and worth stating because the
+   generic-looking helper is the obvious thing to reach for.
+
 ## Log
 - 2026-08-29 — unit 1 landed (see the ladder ticket's log for the detail).
 - 2026-08-29 — unit 2 landed: Option (and records generally) through fn
@@ -220,3 +252,5 @@ signatures, not from the ladder's list — and both are ahead of it now:
   integer-literal suffix fix. `test_rust_array_return.rs` is the acceptance
   shape; its knight-table oracle is hand-checked rather than recorded from a
   run, because the bug it pins produced *plausible* numbers.
+- 2026-08-29 — rung 9 landed: `if` as an expression, statement and tail forms,
+  on the shared AN_TERNARY. `test_rust_if_expr.rs`.

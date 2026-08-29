@@ -5890,6 +5890,15 @@ test-core: $(COMPILER)
 	# run: knight(0) = {10,17} = 132096, knight(27) = {10,12,17,21,33,37,42,44}.
 	./$(COMPILER) test/test_rust_array_return.rs $(TESTTMP)/test_rust_aret26
 	tools/expect_same.sh test_rust_aret26 "$$($(TESTTMP)/test_rust_aret26)" "$$(printf 'kt0 132096\nkt27 22136263676928\nnonzero 64\nnb 200 7 255 1\ncs 3 4 7 7\nrs 5 10 15 20\ncopy 200 1\nsh 2147483648 4294967296 17592186044416\nbig 4294967296')"
+	# Rust `if` as an EXPRESSION -- `let x = if c ... else ...;` and the tail form
+	# `fn pick(n) -> i64 ...`. Lowers to the shared AN_TERNARY, the same node the
+	# C frontend builds for `c ? a : b`, so only the SELECTED arm is evaluated:
+	# `guard` pins that by dividing by zero in the arm that must not run.
+	# `side_effect` is the guard on the other side -- an if-STATEMENT that merely
+	# happens to be last in its body must stay a statement. acc is hand-computed:
+	# sum over k of dr*(k+1) with df = 1 for k<4 else 2, dr = -df for even k = 6.
+	./$(COMPILER) test/test_rust_if_expr.rs $(TESTTMP)/test_rust_ifexpr26
+	tools/expect_same.sh test_rust_ifexpr26 "$$($(TESTTMP)/test_rust_ifexpr26)" "$$(printf 'pick 1 -1\nsign 1 -1 0\nmask 9223372036854775808 1\nguard 7 25\nacc 6\narg 10\nnest 100\npos\nneg')"
 	# Ada frontend skeleton (feature-esoteric-ada): for-range accumulate, if/elsif/else,
 	# while, bare loop + exit-when, Put_Line -- all lowering onto existing shared IR.
 	./$(COMPILER) test/test_ada_skeleton.adb $(TESTTMP)/test_ada_skeleton26
