@@ -271,4 +271,4 @@ this ticket's test and the new one.
 
 Gate: `make compiler/pascal26` fixedpoint `9ad99b56e769`; `tools/gate.sh quick`
 GREEN.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 7ddcb9650.
