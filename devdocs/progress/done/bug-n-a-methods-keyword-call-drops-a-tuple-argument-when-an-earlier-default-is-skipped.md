@@ -299,4 +299,4 @@ GREEN** (A's gate, as the grant requires — this is Pascal-frontend ground shar
 with Track A, so the fixedpoint alone is not sufficient).
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 51b0753e7.
