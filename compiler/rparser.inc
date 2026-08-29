@@ -110,6 +110,16 @@ var
   ROptionCi: array[0..MAX_UCLASS-1] of Boolean;
   ROptionElemTk: array[0..MAX_UCLASS-1] of TTypeKind;
   ROptionElemRec: array[0..MAX_UCLASS-1] of Integer;
+  { `fn f() -> [T; N]` — the element COUNT, per proc; 0 = the return is not an
+    array. Element kind lives in Procs[].RetType and element record id in
+    ProcRetRecId, exactly as they do for Pascal's `function F: TArr`, so this
+    is the one piece of shape the shared tables do not already carry in a form
+    the Rust body parser can read back. (ProcRetFixedArrBytes carries the byte
+    count, which is what the ABI needs and NOT enough to allocate the slot.) }
+  RProcRetArrLen: array[0..MAX_PROCS-1] of Integer;
+  { set by RRetTypeAt/RRetTypeCur as a side effect, in LastTypeRecId's style:
+    the element count of a just-parsed `[T; N]` return type, 0 for any other. }
+  RRetArrLen: Integer;
 
 function RStoredName(const s: AnsiString): Integer;
 var i: Integer;
@@ -561,6 +571,103 @@ begin
   Next;
 end;
 
+{ The return-type clause after `->`, in RTypeNameAt's index form. Handles the
+  ordinary `-> T` and the FIXED-ARRAY `-> [T; N]`, returning the element kind
+  in both cases and setting RRetArrLen to N (0 when it was not an array).
+
+  Rust spells the array type inline where Pascal needs a named one, but what it
+  lowers to is the ABI Pascal's `function F: TArr` has used since
+  bug-a-set-and-array-function-results-come-back-empty, unchanged:
+  Procs[].RetType holds the ELEMENT kind, the aggregate nature lives in
+  ProcRetFixedArrBytes, and ABIRetViaHiddenDestProc joins the two so the caller
+  allocates the scratch and the callee's epilogue copies into it. The kind
+  alone cannot show the aggregate -- that is the whole reason the byte count is
+  recorded separately -- so an array return that skips ProcRetFixedArrBytes
+  does not fail loudly, it returns one element's width and leaves the rest
+  garbage.
+
+  Which makes this the third rung running where the shared machinery already
+  had the mechanism and the Rust frontend had simply never reached for it
+  (record returns and &mut aliasing were the other two). }
+function RRetTypeAt(var j: Integer): TTypeKind;
+var n: Integer;
+begin
+  RRetArrLen := 0;
+  if Tokens[j].Kind = tkLBrack then
+  begin
+    Inc(j);
+    if Tokens[j].Kind <> tkIdent then Error('Rust: expected element type in [T; N] return');
+    Result := RTypeKindFromName(RTypeNameAt(j), True);
+    if Tokens[j].Kind <> tkSemicolon then Error('Rust: expected ; in [T; N] return type');
+    Inc(j);
+    if Tokens[j].Kind <> tkInteger then Error('Rust: array return length must be an integer literal');
+    n := Tokens[j].IVal;
+    if n <= 0 then Error('Rust: array return length must be positive');
+    Inc(j);
+    if Tokens[j].Kind <> tkRBrack then Error('Rust: expected ] closing a [T; N] return type');
+    Inc(j);
+    RRetArrLen := n;
+    Exit;
+  end;
+  if Tokens[j].Kind <> tkIdent then Error('Rust: expected return type after ->');
+  Result := RTypeKindFromName(RTypeNameAt(j), True);
+end;
+
+{ Cursor-based twin, mirroring RTypeNameCur: CurTok must be the token after
+  `->`; on return CurTok is the token after the type. }
+function RRetTypeCur: TTypeKind;
+var j: Integer;
+begin
+  j := TokPos - 1;
+  Result := RRetTypeAt(j);
+  TokPos := j;
+  Next;
+end;
+
+{ Record a fixed-array return's shape on the proc. Called from the SIGNATURE
+  prepass rather than from the body, and that is load-bearing: a call site is
+  lowered while the CALLER's body is parsed, which may be long before the
+  callee's own body is reached, and IRBuildHiddenDest reads
+  ProcRetFixedArrBytes at that moment. Set it at body time instead and
+  `fn main` placed above its callee silently gets the scalar path. }
+procedure RNoteRetArray(procIdx, n: Integer; elemTk: TTypeKind; elemRec: Integer);
+var sz: Integer;
+begin
+  if n <= 0 then Exit;
+  RProcRetArrLen[procIdx] := n;
+  if elemTk = tyRecord then sz := RecSize(elemRec) else sz := TypeSize(elemTk);
+  ProcRetFixedArrBytes[procIdx] := n * sz;
+end;
+
+{ Non-consuming, in RPeekAggregateCi's style: is the cursor at a call whose
+  callee returns `[T; N]`? Answers from the REGISTERED signature rather than by
+  parsing speculatively and rewinding, which is what lets `let t = attacks();`
+  -- the form real source is written in -- allocate the right shape before the
+  expression exists. -1 when it is not one.
+
+  Both spellings, because both appear in the engine: a plain `f()` and a method
+  `recv.m()`, the latter resolved through the receiver's class to the mangled
+  `Type::method`. Narrowing: the receiver must be a plain record VARIABLE, the
+  same limit every other place in this file that needs a static record type
+  without a general node-type resolver. }
+function RPeekArrayRetProc: Integer;
+var symIdx: Integer;
+begin
+  Result := -1;
+  if CurTok.Kind <> tkIdent then Exit;
+  if Tokens[TokPos].Kind = tkLParen then
+    Result := FindProc(CurTok.SVal)
+  else if (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos + 1].Kind = tkIdent) and
+          (Tokens[TokPos + 2].Kind = tkLParen) then
+  begin
+    symIdx := FindSym(CurTok.SVal);
+    if (symIdx < 0) or (Syms[symIdx].RecName < REC_UCLASS_BASE) then Exit;
+    Result := FindProc(RTypeNameOf(Syms[symIdx].RecName - REC_UCLASS_BASE) +
+                       '::' + GetTokenStr(TokPos + 1));
+  end;
+  if (Result >= 0) and (RProcRetArrLen[Result] = 0) then Result := -1;
+end;
+
 function RWiden(a, b: TTypeKind): TTypeKind;
 begin
   if (a = tyDouble) or (b = tyDouble) or (a = tySingle) or (b = tySingle) then Result := tyDouble
@@ -678,7 +785,19 @@ begin
   case CurTok.Kind of
     tkInteger:
     begin
-      node := AllocNode(AN_INT_LIT); ASTIVal[node] := CurTok.IVal; ASTTk[node] := Ord(tyInteger);
+      node := AllocNode(AN_INT_LIT); ASTIVal[node] := CurTok.IVal;
+      { A suffix (`1u64`, `7usize`) is spelled exactly like the type name, so
+        the one mapper answers for both. Unsuffixed, Rust's default is i32 --
+        kept, EXCEPT that a value which does not fit one widens to i64 rather
+        than silently truncating, which is the same judgement rustc makes when
+        it refuses the literal outright. Both halves are about wrong VALUES:
+        the suffix was lexed and dropped, so `1u64 << 44` evaluated to 0. }
+      if CurTok.SVal <> '' then
+        ASTTk[node] := Ord(RTypeKindFromName(CurTok.SVal, False))
+      else if (CurTok.IVal > 2147483647) or (CurTok.IVal < -2147483648) then
+        ASTTk[node] := Ord(tyInt64)
+      else
+        ASTTk[node] := Ord(tyInteger);
       Next; Result := node;
     end;
     tkFloat:
@@ -1930,6 +2049,38 @@ begin
     Result := seq;
     Exit;
   end;
+  { whole-array RHS: `let t: [T; N] = build();` or `let t = build();` where
+    `build` returns `[T; N]`, and `let b: [T; N] = a;` copying another array.
+    One branch covers all three because the shared lowering already does: an
+    AN_ASSIGN whose LHS is a fixed-array ident emits IR_COPY_REC from a CALL
+    (sized by ProcRetFixedArrBytes -- the call's value IS the hidden
+    destination's address) and from an LVALUE array alike.
+
+    Without it the annotated form fell through to the scalar path and `t` was
+    allocated as ONE element, so `t[0]` was not even an index -- the parse
+    failed rather than miscompiling, which is the lucky half of this. The
+    UNANNOTATED form is the one that matters for real source, since `let t =
+    attacks();` is how it is actually written, and there the callee's
+    registered return shape is the only thing that knows the length. }
+  k := -1;
+  if not hasType then k := RPeekArrayRetProc;
+  if isArr or (k >= 0) then
+  begin
+    if not isArr then
+    begin
+      arrElemTk := Procs[k].RetType;
+      arrElemRecId := ProcRetRecId[k];
+      arrLen := RProcRetArrLen[k];
+    end;
+    valNode := RParseExpr;
+    if arrElemTk = tyRecord then LastTypeRecId := arrElemRecId;
+    symIdx := AllocArray(name, arrElemTk, 0, arrLen - 1);
+    assignNode := AllocNode(AN_ASSIGN);
+    ASTLeft[assignNode] := RMakeIdent(symIdx);
+    ASTRight[assignNode] := valNode;
+    Result := assignNode;
+    Exit;
+  end;
   { borrowed slice RHS: `&arr[lo..hi]` — __ptr := &arr[lo], __len := hi-lo
     (the Zig frontend's slice-creation shape ported back) }
   if (CurTok.Kind = tkAmp) and (Tokens[TokPos].Kind = tkIdent) and
@@ -2408,6 +2559,35 @@ begin
                        AllocNode(AN_EXIT));
 end;
 
+{ A value in RETURN position -- the explicit `return <expr>;` and the implicit
+  tail are the same thing written two ways, so they go through here.
+
+  For an ARRAY-returning fn the plain AN_EXIT is wrong and wrong QUIETLY: it
+  lowers as a scalar store into Result, which for a fixed-array Result writes
+  the source's ADDRESS into element 0 and leaves the rest untouched. Measured,
+  not reasoned -- `store_sym Result := lea(a)` where a 32-byte copy belongs.
+  The caller then copied its 32 bytes faithfully, so `[0,1,4,9]` came back as a
+  stack address and three zeros, with nothing anywhere reporting a fault.
+
+  So lower it the way the record rung already lowers `return Some(x)`: an
+  explicit assignment into the Result slot, which reaches the whole-array
+  IR_COPY_REC arm, then a VALUELESS return. Same shape and the same underlying
+  reason -- no AST node carries a whole aggregate through an expression. }
+function RReturnValue(valNode: Integer): Integer;
+var node: Integer;
+begin
+  if (valNode >= 0) and (CurProc >= 0) and (RProcRetArrLen[CurProc] > 0) then
+  begin
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := RMakeIdent(Procs[CurProc].RetSymIdx);
+    ASTRight[node] := valNode;
+    Result := RSeqAppend(node, AllocNode(AN_EXIT));
+    Exit;
+  end;
+  Result := AllocNode(AN_EXIT);
+  ASTLeft[Result] := valNode;
+end;
+
 function RParseStatement: Integer;
 var name, fname: AnsiString; symIdx, node, rhsNode, lhsNode, baseNode, fieldNode, fTokIdx: Integer;
     opTk: TTokenKind; isSome: Boolean;
@@ -2438,8 +2618,8 @@ begin
         Result := node;
         Exit;
       end;
-      node := AllocNode(AN_EXIT);
-      if CurTok.Kind <> tkSemicolon then ASTLeft[node] := RParseExpr;
+      if CurTok.Kind <> tkSemicolon then node := RReturnValue(RParseExpr)
+      else node := RReturnValue(-1);
       RExpectStmtEnd;
       Result := node;
       Exit;
@@ -2588,9 +2768,7 @@ begin
   if RTailOK and ((CurTok.Kind = tkEnd) or
                   (RInMatchArm and (CurTok.Kind = tkComma))) then
   begin
-    node := AllocNode(AN_EXIT);
-    ASTLeft[node] := Result;
-    Result := node;
+    Result := RReturnValue(Result);
     Exit;
   end;
   if ((CurTok.Kind = tkAssign) or (CurTok.Kind in
@@ -2896,9 +3074,9 @@ end;
   is a no-op there). Shared by the main prescan below and by generic
   specialization, so there is one signature-parsing implementation, not two. }
 function RRegisterFnSignatureAt(i: Integer): Integer;
-var j, depth, nparams, procIdx, k, retRecId: Integer; name: AnsiString;
+var j, depth, nparams, procIdx, k, retRecId, retArrLen: Integer; name: AnsiString;
     pnames: array[0..7] of AnsiString; ptypes: array[0..7] of TTypeKind;
-    pbyref: array[0..7] of Boolean; prec: array[0..7] of Integer;
+    pbyref, parr: array[0..7] of Boolean; prec: array[0..7] of Integer;
     retType, sElemTk: TTypeKind;
 begin
   name := GetTokenStr(i + 1);
@@ -2931,6 +3109,7 @@ begin
       __ptr+__len UClass) and keeps its existing handling -- a copy of a slice
       HEADER still points at the same elements, so it never depended on this. }
     pbyref[nparams] := False;
+    parr[nparams] := False;
     if Tokens[j].Kind = tkAmp then
     begin
       pbyref[nparams] := True;
@@ -2944,8 +3123,28 @@ begin
       { sequence the side-effecting RTypeKindFromName (sets LastTypeRecId)
         before reading LastTypeRecId — do NOT rely on arg eval order. }
       sElemTk := RTypeKindFromName(RTypeNameAt(j), True);
-      prec[nparams] := REC_UCLASS_BASE + RSliceClassForRec(sElemTk, LastTypeRecId);
-      ptypes[nparams] := tyRecord;
+      if Tokens[j].Kind = tkSemicolon then
+      begin
+        { `&[T; N]` — a REFERENCE TO AN ARRAY, which Rust distinguishes from
+          the `&[T]` SLICE right below it and the engine's table code relies on
+          the difference: a slice is a two-word view and an array reference is
+          just the address, so `t[i]` on the two lowers differently. Registered
+          as an ordinary by-address array param, which is what pxx's own array
+          params already are (ABIParamSlotIsPointer answers True on isArray),
+          so the length is not needed here -- AllocParam stamps the open-array
+          ArrLen and nothing bounds-checks it. }
+        Inc(j);
+        if Tokens[j].Kind <> tkInteger then Error('Rust: array parameter length must be an integer literal');
+        Inc(j);
+        parr[nparams] := True;
+        ptypes[nparams] := sElemTk;
+        prec[nparams] := LastTypeRecId;
+      end
+      else
+      begin
+        prec[nparams] := REC_UCLASS_BASE + RSliceClassForRec(sElemTk, LastTypeRecId);
+        ptypes[nparams] := tyRecord;
+      end;
       if Tokens[j].Kind <> tkRBrack then Error('Rust: expected ] in &[T] parameter');
       Inc(j);
     end
@@ -2966,15 +3165,19 @@ begin
   Inc(j); { consume ) }
   retType := tyInteger; { Rust's () return; unused Result slot, same trick C's void uses }
   retRecId := REC_NONE;
+  retArrLen := 0;
   if (Tokens[j].Kind = tkMinus) and (Tokens[j + 1].Kind = tkGt) then
   begin
     j := j + 2;
-    if Tokens[j].Kind <> tkIdent then Error('Rust: expected return type after ->');
-    retType := RTypeKindFromName(RTypeNameAt(j), True);
+    retType := RRetTypeAt(j);
     retRecId := LastTypeRecId;
+    retArrLen := RRetArrLen;
   end;
   procIdx := RegisterProc(name, True, retType, nparams, pnames, ptypes);
   if retType = tyRecord then ProcRetRecId[procIdx] := retRecId;
+  RNoteRetArray(procIdx, retArrLen, retType, retRecId);
+  for k := 0 to nparams - 1 do
+    Procs[procIdx].Params[k].IsArray := parr[k];
   for k := 0 to nparams - 1 do
     if ptypes[k] = tyRecord then
     begin
@@ -3034,7 +3237,7 @@ end;
   ParamSize; no new codegen needed for field access through it). An
   `impl Trait for Type` additionally records (TypeCi, TraitName) in RImpls. }
 procedure RRegisterImpls;
-var i, j, k, ci, nparams, procIdx, selfBase, retRecId: Integer;
+var i, j, k, ci, nparams, procIdx, selfBase, retRecId, retArrLen: Integer;
     typeName, traitName, methodName, fullName: AnsiString;
     pnamesFull: array[0..7] of AnsiString; ptypesFull: array[0..7] of TTypeKind;
     pbyrefFull: array[0..7] of Boolean;
@@ -3124,16 +3327,18 @@ begin
         Inc(j); { consume ) }
         retType := tyInteger;
         retRecId := REC_NONE;
+        retArrLen := 0;
         if (Tokens[j].Kind = tkMinus) and (Tokens[j + 1].Kind = tkGt) then
         begin
           j := j + 2;
-          if Tokens[j].Kind <> tkIdent then Error('Rust: expected return type after ->');
-          retType := RTypeKindFromName(RTypeNameAt(j), True);
+          retType := RRetTypeAt(j);
           retRecId := LastTypeRecId;
+          retArrLen := RRetArrLen;
         end;
         fullName := typeName + '::' + methodName;
         procIdx := RegisterProc(fullName, True, retType, nparams + selfBase, pnamesFull, ptypesFull);
         if retType = tyRecord then ProcRetRecId[procIdx] := retRecId;
+        RNoteRetArray(procIdx, retArrLen, retType, retRecId);
         { a record/enum param travels by address, exactly like self — without
           this the caller passes the value while AllocParam(isRef=True)
           dereferences it (the same mismatch the self note below records). }
@@ -3343,6 +3548,41 @@ end;
   and the tySingle narrow, and takes the all-stack path when a proc has more
   than six parameters. refactor-a-the-missing-layer-between-frontends-and-backends }
 
+{ Allocate the routine's `Result` slot, plus the frame slot its prologue
+  stashes the incoming hidden-destination pointer in when the return travels
+  that way. Both body parsers -- free fn and impl method -- had a copy of this
+  from the record-return rung, and an array return would have made it three
+  copies of a thing whose failure mode is silent.
+
+  Three shapes reach it. A SCALAR is a plain local. A RECORD needs its record
+  id on the slot, or the hidden buffer is sized as a scalar and every field
+  store lands wrong. A FIXED ARRAY must be allocated AS an array: AllocVar
+  reserves ONE ELEMENT, because Procs[].RetType holds the ELEMENT kind for an
+  array-returning routine, so `Result[i] := v` would index off a single slot
+  and write over the rest of the frame -- which is Pascal's
+  bug-a-nd-array-function-result-indexes-the-wrong-slot, reachable here for
+  exactly the same reason and not by coincidence: the kind alone cannot show
+  the aggregate.
+
+  ABIRetViaHiddenDestProc, not RetViaHiddenDest, decides the hidden slot -- it
+  is the query that reads ProcRetFixedArrBytes as well as the kind, and the
+  kind-only one answers False for every array return. }
+procedure RAllocResultSlot(procIdx: Integer);
+var idx: Integer;
+begin
+  LastTypeRecId := ProcRetRecId[procIdx];
+  if RProcRetArrLen[procIdx] > 0 then
+  begin
+    idx := AllocArray('Result', Procs[procIdx].RetType, 0, RProcRetArrLen[procIdx] - 1);
+    Syms[idx].Kind := skLocal;
+  end
+  else
+    idx := AllocVar('Result', Procs[procIdx].RetType);
+  Procs[procIdx].RetSymIdx := idx;
+  if ABIRetViaHiddenDestProc(procIdx) then
+    ProcAggregateDestSym[procIdx] := AllocVar('', tyPointer);
+end;
+
 { `impl [Trait for] Type { fn method(&self, ...) -> RetType { .. } ... }` —
   methods were already RegisterProc'd (mangled "Type::method") by
   RRegisterImpls; this compiles each body, same shape as RParseTopLevelFn
@@ -3415,10 +3655,10 @@ begin
     if CurTok.Kind = tkMinus then
     begin
       Next; Expect(tkGt, '>');
-      if CurTok.Kind <> tkIdent then Error('Rust: expected return type after ->');
-      { consumed through RTypeNameCur so a multi-token `Option<T>` is skipped
-        whole; the registered signature is what actually types the method. }
-      fname := RTypeNameCur;
+      { consumed through RRetTypeCur so a multi-token `Option<T>` or `[T; N]`
+        is skipped WHOLE; the registered signature is what actually types the
+        method, so the value is discarded here on purpose. }
+      RRetTypeCur;
     end;
 
     savedSC := SymCount; savedFS := FrameSize;
@@ -3441,16 +3681,7 @@ begin
       Procs[procIdx].Params[i + selfBase].SymIdx := idx;
     end;
 
-    { a record result needs its record id on the Result slot, or the hidden
-      return buffer is sized as a scalar and every field store lands wrong. }
-    LastTypeRecId := ProcRetRecId[procIdx];
-    idx := AllocVar('Result', Procs[procIdx].RetType);
-    Procs[procIdx].RetSymIdx := idx;
-    { see the twin site in RParseTopLevelFn: the hidden aggregate-destination
-      slot + its prologue stash are what make a record return land anywhere
-      but a garbage pointer. }
-    if RetViaHiddenDest(Procs[procIdx].RetType) then
-      ProcAggregateDestSym[procIdx] := AllocVar('', tyPointer);
+    RAllocResultSlot(procIdx);
 
     patchPos := EmitProcPrologue;
     Procs[procIdx].FramePatch := patchPos;
@@ -3484,7 +3715,7 @@ procedure RParseTopLevelFn;
 var name, pname: AnsiString;
     procIdx, nparams, i, idx, savedSC, savedFS, patchPos, bodyNode: Integer;
     pnames: array[0..7] of AnsiString; ptypes: array[0..7] of TTypeKind;
-    precids: array[0..7] of Integer;
+    precids: array[0..7] of Integer; parr: array[0..7] of Boolean;
 begin
   Next; { fn }
   if CurTok.Kind <> tkIdent then Error('Rust: expected function name');
@@ -3503,6 +3734,7 @@ begin
     if CurTok.Kind <> tkIdent then Error('Rust: expected parameter name');
     pname := CurTok.SVal; Next;
     Expect(tkColon, ':');
+    parr[nparams] := False;
     if CurTok.Kind = tkAmp then
     begin
       Next;
@@ -3510,14 +3742,27 @@ begin
     end;
     if CurTok.Kind = tkLBrack then
     begin
-      { &[T] / &mut [T] borrowed-slice parameter }
+      { &[T] / &mut [T] borrowed slice, or &[T; N] — a reference to a whole
+        ARRAY, which is a different thing (see the twin site in
+        RRegisterFnSignatureAt). }
       Next;
       if CurTok.Kind <> tkIdent then Error('Rust: expected element type in &[T] parameter');
       { sequence RTypeKindFromName (sets LastTypeRecId) before reading it;
         stash the element tk in ptypes[nparams] first, then set it to tyRecord. }
       ptypes[nparams] := RTypeKindFromName(RTypeNameCur, True);
-      precids[nparams] := REC_UCLASS_BASE + RSliceClassForRec(ptypes[nparams], LastTypeRecId);
-      ptypes[nparams] := tyRecord;
+      if CurTok.Kind = tkSemicolon then
+      begin
+        Next;
+        if CurTok.Kind <> tkInteger then Error('Rust: array parameter length must be an integer literal');
+        Next;
+        parr[nparams] := True;
+        precids[nparams] := LastTypeRecId;
+      end
+      else
+      begin
+        precids[nparams] := REC_UCLASS_BASE + RSliceClassForRec(ptypes[nparams], LastTypeRecId);
+        ptypes[nparams] := tyRecord;
+      end;
       pnames[nparams] := pname;
       Expect(tkRBrack, ']');
     end
@@ -3538,10 +3783,10 @@ begin
   if CurTok.Kind = tkMinus then
   begin
     Next; Expect(tkGt, '>');
-    if CurTok.Kind <> tkIdent then Error('Rust: expected return type after ->');
-    { consumed through RTypeNameCur so a multi-token `Option<T>` is skipped
-      whole; the registered signature is what actually types the fn. }
-    pname := RTypeNameCur;
+    { consumed through RRetTypeCur so a multi-token `Option<T>` or `[T; N]` is
+      skipped WHOLE; the registered signature is what actually types the fn,
+      so the value is discarded here on purpose. }
+    RRetTypeCur;
   end;
 
   savedSC := SymCount; savedFS := FrameSize;
@@ -3550,7 +3795,13 @@ begin
   Procs[procIdx].ScopeBase := SymCount;
   for i := 0 to nparams - 1 do
   begin
-    if ptypes[i] = tyRecord then
+    if parr[i] then
+    begin
+      { `&[T; N]` — an ordinary by-address array param (see the parse site). }
+      LastTypeRecId := precids[i];
+      idx := AllocParam(pnames[i], ptypes[i], False, True);
+    end
+    else if ptypes[i] = tyRecord then
     begin
       LastTypeRecId := precids[i];
       idx := AllocParam(pnames[i], ptypes[i], True, False);
@@ -3559,19 +3810,13 @@ begin
       idx := AllocParam(pnames[i], ptypes[i], False, False);
     Procs[procIdx].Params[i].SymIdx := idx;
   end;
-  { a record result needs its record id on the Result slot, or the hidden
-    return buffer is sized as a scalar and every field store lands wrong. }
-  LastTypeRecId := ProcRetRecId[procIdx];
-  idx := AllocVar('Result', Procs[procIdx].RetType);
-  Procs[procIdx].RetSymIdx := idx;
-  { A record return travels by the caller-owned hidden destination pointer
-    (RetViaHiddenDest / NRVO), exactly as it does for Pascal and C: the callee
-    needs a frame slot to stash that incoming pointer in, and the prologue
-    needs to stash it before the param-copy clobbers the register. Omit either
-    and Result is written through garbage -- the same segfault the C frontend
-    hit on lua's by-value union return. }
-  if RetViaHiddenDest(Procs[procIdx].RetType) then
-    ProcAggregateDestSym[procIdx] := AllocVar('', tyPointer);
+  { A record or array return travels by the caller-owned hidden destination
+    pointer (NRVO), exactly as it does for Pascal and C: the callee needs a
+    frame slot to stash that incoming pointer in, and the prologue needs to
+    stash it before the param-copy clobbers the register. Omit either and
+    Result is written through garbage -- the same segfault the C frontend hit
+    on lua's by-value union return. }
+  RAllocResultSlot(procIdx);
 
   patchPos := EmitProcPrologue;
   Procs[procIdx].FramePatch := patchPos;

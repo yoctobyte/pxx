@@ -213,8 +213,20 @@ begin
       while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['a'..'z','0'..'9']) do Inc(SrcPos);
       CurTok.Kind := tkFloat; CurTok.IVal := StrToDoubleBits(s); Exit;
     end;
+    { INTEGER literal suffix -- `1u64`, `0i32`, `7usize`. Carried through on
+      CurTok.SVal (which RLexAll stores for tkInteger like it does for an
+      ident, and which shared Next reads back out of TokChars) so the parser
+      can TYPE the literal instead of defaulting every one to i32.
+
+      This was a silent wrong-value bug, not a missing feature: the suffix was
+      lexed and discarded, so `1u64 << 44` shifted a 32-bit signed 1 and
+      evaluated to 0, and `1u64 << 31` to 0xFFFFFFFF80000000 -- both without a
+      diagnostic. A bitboard engine is made of exactly that expression. }
+    numStart := SrcPos;
     while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['a'..'z','0'..'9']) do Inc(SrcPos);
-    CurTok.Kind := tkInteger; CurTok.IVal := n; Exit;
+    CurTok.Kind := tkInteger; CurTok.IVal := n;
+    CurTok.SVal := Copy(Source, numStart, SrcPos - numStart);
+    Exit;
   end;
 
   if c = '"' then
@@ -358,7 +370,9 @@ begin
     Tokens[TokCount].Kind := k;
     Tokens[TokCount].IVal := CurTok.IVal;
     Tokens[TokCount].Line := CurTok.Line;
-    if (k = tkIdent) or (k = tkString) or (k = tkLifetime) then
+    { tkInteger joins them because a Rust integer literal carries its WIDTH in
+      a suffix (`1u64`), and SOffset/SLen is how a raw token carries text. }
+    if (k = tkIdent) or (k = tkString) or (k = tkLifetime) or (k = tkInteger) then
     begin
       off := TokCharLen;
       len := Length(CurTok.SVal);
