@@ -4,8 +4,8 @@ prio: 65
 type: bug
 blocked-by: []
 summary: "A NilPy program that imports unit A (declaring `Text = class`) before unit B SILENTLY REBINDS `Text` inside B — an ordinary Pascal unit that never names A: SizeOf goes 4128 (the RTL file record) -> 8 (a class pointer), and it COMPILES. `import tkinter` then `import configparser` is the arm where it happens to hit an overload check. TRIAGED 2026-08-29: the cause stated below is WRONG — NilPy DID inherit the visibility fix and the class lookup returns the correct row; an earlier arm of ParseTypeRef claims the name and IsClassType is never reached. Three-file repro, no tkinter needed. Handed off to A/N (pasparser_decl.inc / symtab.inc)."
-status: unfinished
-owner: unassigned (handed off by frankC — see Triage 2026-08-29)
+status: working
+owner: frankA
 ---
 
 # NilPy import order leaks a class name into a later-compiled RTL unit

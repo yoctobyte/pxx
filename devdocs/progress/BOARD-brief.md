@@ -5,19 +5,19 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:24 blocked:8 backlog:311 backlog_new:11 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2648 rejected:51`
+`working:3 unfinished:23 blocked:8 backlog:311 backlog_new:11 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2648 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-the-fpc-seed-canary-skips-a-break-already-on-master` [A] — owner: unrecorded
+- `bug-nilpy-import-order-leaks-a-class-name-into-a-later-compiled-rtl-unit` [N] — owner: frankA
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
-## unfinished (24) — parked mid-flight; re-claim, do not duplicate
+## unfinished (23) — parked mid-flight; re-claim, do not duplicate
 
 - `audit-a-a-comment-asserting-an-invariant-is-a-claim-about-a-sibling-arm-nobody-checked` [A]
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
-- `bug-nilpy-import-order-leaks-a-class-name-into-a-later-compiled-rtl-unit` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `docs-devnotes-ai-assisted-build` [D]
@@ -50,7 +50,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 330, ranked
+## Ready — top 30 of 329, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -67,7 +67,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [P]` bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
 - `[p 65] [A]` bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import
-- `[p 65] [N]` bug-nilpy-import-order-leaks-a-class-name-into-a-later-compiled-rtl-unit
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 65] [P]` bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
 - `[p 65] [P]` bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument
@@ -82,5 +81,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
+- `[p 62] [A]` feature-unicodestring-model
 
-_300 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_299 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
