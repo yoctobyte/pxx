@@ -7259,8 +7259,32 @@ begin
             ASTIVal[mselfArg] := ci;
             ASTTk[mselfArg] := Ord(tyPointer);
             GenVirtSlot := UMthVirSlot[mmi];
-          mcallNode := GenMakeStaticMethodCall(mpi, mselfArg);
+            mcallNode := GenMakeStaticMethodCall(mpi, mselfArg);
             LastExprTk := Procs[mpi].RetType;
+            { ...and the RESULT may carry a selector tail: `TFactory.GetObj.Inst(14)`.
+              This arm used to Exit with the bare call, so the trailing `.Inst(14)`
+              was left in the token stream -- where ParseStatementAST's catch-all
+              `while not (CurTok.Kind in [...]) do Next` silently ate it. The call
+              to GetObj RAN, the chained call VANISHED, exit 0, and the assignment
+              stored the object pointer where 42 belonged. It also made
+              `TFactory.GetObj.NoSuchXY` COMPILE, because a tail that is skipped is
+              never resolved. Same shared walker the instance-reached arm uses
+              (pasparser_lval.inc:2602) -- the result's record, never the
+              receiver's.
+              bug-p-a-call-chained-onto-a-class-method-result-is-dropped }
+            if CurTok.Kind = tkDot then
+            begin
+              tk := LastExprTk;
+              if (tk = tyClass) or (tk = tyRecord) then
+              begin
+                recName := ProcRetRecId[mpi];
+                if recName <> REC_NONE then
+                begin
+                  mcallNode := ParseClassRecordSelectors(mcallNode, recName, tk);
+                  LastExprTk := tk;
+                end;
+              end;
+            end;
             CurASTNode := mcallNode;
             Exit;
           end;
