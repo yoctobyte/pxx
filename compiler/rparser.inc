@@ -127,6 +127,12 @@ var
     with `__` followed by our digits by accident, and there is no block
     scoping to roll back into anyway. }
   RTempSerial: Integer;
+  { Set only while the body of a `fmt` method under `impl fmt::Display` is
+    being parsed. Inside it, two forms mean something they mean nowhere else:
+    `write!(f, ..)` appends to the returned String, and `Ok(())` is a no-op.
+    A narrow, clearly-delimited mode beats teaching those two spellings to the
+    whole statement parser. }
+  RInDisplayFmt: Boolean;
   { `{:?}` over a record, flattened to an alternating list: item i is the
     literal text RDbgText[i] followed by the field read RDbgNode[i] (-1 when
     the item is text only). A LIST, and not a rendered result, because the two
@@ -606,6 +612,19 @@ begin
   end;
 end;
 
+{ Traits that need no `trait` declaration in the source because the frontend
+  knows them. `Display` is the one with behaviour attached (its `fmt` is
+  rerouted, see RRegisterImpls); the rest are here so `impl Default for X` and
+  friends register their methods as ordinary mangled procs instead of failing
+  on an unknown trait. }
+function RIsBuiltinTrait(const name: AnsiString): Boolean;
+begin
+  Result := (name = 'Display') or (name = 'Debug') or (name = 'Default') or
+            (name = 'Clone') or (name = 'Copy') or (name = 'PartialEq') or
+            (name = 'Eq') or (name = 'PartialOrd') or (name = 'Ord') or
+            (name = 'From') or (name = 'Into');
+end;
+
 function RFindTrait(const name: AnsiString): Integer;
 var i: Integer;
 begin
@@ -1049,6 +1068,26 @@ end;
   must be used wherever "is this a string" is asked -- checking tyAnsiString
   alone silently drops every literal. }
 
+{ `impl fmt::Display for X` registered `X::fmt(&self) -> String` (see
+  RRegisterImpls). This is how every rendering path asks whether a record has
+  one, and builds the call if it does -- `{}` in println!/format!, and
+  `.to_string()`. Returns -1 when the type has no Display, which is what makes
+  `{}` on a plain struct an error instead of a silent first-field write. }
+function RDisplayCall(recvNode, recId: Integer): Integer;
+var procIdx, argNode: Integer;
+begin
+  Result := -1;
+  if recId < REC_UCLASS_BASE then Exit;
+  procIdx := FindProc(RTypeNameOf(recId - REC_UCLASS_BASE) + '::fmt');
+  if procIdx < 0 then Exit;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(tyAnsiString);
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := recvNode; ASTRight[argNode] := -1;
+  ASTLeft[Result] := argNode;
+end;
+
 { A literal string as an AST node. Three callers wanted their own copy of
   these four lines before it was lifted. }
 function RStrLit(const t: AnsiString): Integer;
@@ -1072,10 +1111,22 @@ end;
   too. Not on a record or a class, though -- `impl Piece { fn to_string(&self) }`
   is ordinary Rust and stealing it would replace a user's own rendering with a
   number, silently. }
-function RStrMethodApplies(recvTk: TTypeKind; const m: AnsiString): Boolean;
+function RStrMethodApplies(recvTk: TTypeKind; recId: Integer; const m: AnsiString): Boolean;
 begin
-  Result := (RIsStrTk(recvTk) and RIsStrMethodName(m)) or
-            ((m = 'to_string') and (recvTk <> tyRecord) and (recvTk <> tyClass));
+  if recvTk = tyClass then begin Result := False; Exit; end;
+  { A RECORD's `to_string()` is Rust's ToString blanket impl over Display, so
+    it is ours to lower -- but only when the type has no `to_string` of its
+    OWN, which wins. Without that check a hand-written `fn to_string(&self)`
+    would be silently replaced by the derived rendering, which is the same
+    mistake as stealing `clone`. RStrOf then errors if the type has no
+    Display either, so the failure is a message and not a wrong string. }
+  if recvTk = tyRecord then
+  begin
+    Result := (m = 'to_string') and (recId >= REC_UCLASS_BASE) and
+              (FindProc(RTypeNameOf(recId - REC_UCLASS_BASE) + '::to_string') < 0);
+    Exit;
+  end;
+  Result := (RIsStrTk(recvTk) and RIsStrMethodName(m)) or (m = 'to_string');
 end;
 
 { `s.method(...)` on a string. Two callers -- the identifier arm below (a
@@ -1157,6 +1208,18 @@ begin
   tk := IntToTypeKind(ASTTk[node]);
   if RIsStrTk(tk) then begin Result := node; Exit; end;
 
+  { a record renders through its own `impl fmt::Display` if it has one --
+    which is what makes `x.to_string()` work on a Display type, since
+    Rust's ToString blanket impl is exactly that. }
+  if tk = tyRecord then
+  begin
+    procIdx := RDisplayCall(node, RExprRecId(node));
+    if procIdx < 0 then
+      Error('Rust: this type has no `impl fmt::Display`, so it cannot become a string');
+    Result := procIdx;
+    Exit;
+  end;
+
   { A bool is two literals and a branch. Unlike println!'s bool -- which must
     avoid the string runtime because println! does not otherwise need it --
     format! has the runtime by definition, so the ternary is available here
@@ -1210,7 +1273,11 @@ end;
   a shared scanner would have to hand back an ordered item list neither caller
   wants in that form. Duplicating ~20 lines of brace scanning is cheaper than
   the abstraction that couples an output path to an expression path. }
-function RParseFormat: Integer;
+{ The body of `format!`, starting AT the format literal and consuming through
+  the closing `)`. Split out so write!/writeln! -- which have a formatter
+  argument in front of the literal -- can reuse the whole thing instead of
+  rewinding the cursor into a shape RParseFormat would accept. }
+function RParseFormatTail: Integer;
 var fmtOff, fmtLen, i, segStart, specStart, argCount, argUsed: Integer;
     argExprs: array[0..7] of Integer;
     acc: Integer;
@@ -1250,8 +1317,14 @@ var fmtOff, fmtLen, i, segStart, specStart, argCount, argUsed: Integer;
     if (IntToTypeKind(ASTTk[exprNode]) = tyRecord) and (recId >= REC_UCLASS_BASE) then
     begin
       if not dbg then
-        Error('Rust: `{}` needs Display and this type has none -- use `{:?}`, ' +
-              'or format the fields');
+      begin
+        k := RDisplayCall(exprNode, recId);
+        if k < 0 then
+          Error('Rust: `{}` needs Display and this type has none -- use `{:?}`, ' +
+                'implement `fmt::Display`, or format the fields');
+        Append(k);
+        Exit;
+      end;
       RDbgCount := 0;
       RDebugExpand(exprNode, recId, '');
       for k := 0 to RDbgCount - 1 do
@@ -1276,10 +1349,7 @@ var fmtOff, fmtLen, i, segStart, specStart, argCount, argUsed: Integer;
   end;
 
 begin
-  Next; { format }
-  Next; { ! }
-  Expect(tkLParen, '(');
-  if CurTok.Kind <> tkString then Error('Rust: format! needs a string literal format');
+  if CurTok.Kind <> tkString then Error('Rust: format!/write! need a string literal format');
   fmtOff := Tokens[TokPos - 1].SOffset;
   fmtLen := Tokens[TokPos - 1].SLen;
   Next;
@@ -1328,6 +1398,48 @@ begin
     ASTTk[acc] := Ord(tyString);
   end;
   Result := acc;
+end;
+
+function RParseFormat: Integer;
+begin
+  Next; { format }
+  Next; { ! }
+  Expect(tkLParen, '(');
+  Result := RParseFormatTail;
+end;
+
+{ `write!(f, "fmt", args)` / `writeln!(...)` inside a Display `fmt` body.
+
+  APPENDS to the method's Result rather than returning it, so a body with
+  several writes accumulates and a body with one behaves identically. That is
+  what makes the reroute honest: `write!` really is "add this text", and the
+  trait's Formatter is the thing being replaced, not the semantics.
+
+  The formatter argument is parsed and DISCARDED -- it names the writer this
+  frontend does not have. Discarding it is safe precisely because the reroute
+  gives the method exactly one place to write to. }
+function RParseWriteMacro(isLn: Boolean): Integer;
+var fmtNode, asgn: Integer;
+begin
+  if not RInDisplayFmt then
+    Error('Rust: write!/writeln! are only supported inside a `impl fmt::Display` fmt body');
+  Next; { write / writeln }
+  Next; { ! }
+  Expect(tkLParen, '(');
+  if CurTok.Kind <> tkIdent then Error('Rust: write! expects the formatter as its first argument');
+  Next;                                  { the formatter -- discarded }
+  Expect(tkComma, ',');
+
+  fmtNode := RParseFormatTail;           { the literal and its args, through `)` }
+
+  if isLn then
+    fmtNode := RBinOp(tkPlus, fmtNode, RStrLit(Chr(10)), tyAnsiString);
+
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := RMakeIdent(Procs[CurProc].RetSymIdx);
+  ASTRight[asgn] := RBinOp(tkPlus, RMakeIdent(Procs[CurProc].RetSymIdx),
+                           fmtNode, tyAnsiString);
+  Result := asgn;
 end;
 
 { ===== derives: aggregates in expression position =====
@@ -1718,7 +1830,7 @@ begin
         record type nobody wrote has no method. }
       if (CurTok.Kind = tkDot) and
          (Tokens[TokPos].Kind = tkIdent) and (Tokens[TokPos + 1].Kind = tkLParen) and
-         RStrMethodApplies(Syms[symIdx].TypeKind, GetTokenStr(TokPos)) then
+         RStrMethodApplies(Syms[symIdx].TypeKind, Syms[symIdx].RecName, GetTokenStr(TokPos)) then
       begin
         Next; { . }
         Result := RParseStrMethod(node, symIdx);
@@ -1919,7 +2031,7 @@ begin
     can read back. }
   while (CurTok.Kind = tkDot) and
         (Tokens[TokPos].Kind = tkIdent) and (Tokens[TokPos + 1].Kind = tkLParen) and
-        RStrMethodApplies(IntToTypeKind(ASTTk[Result]), GetTokenStr(TokPos)) do
+        RStrMethodApplies(IntToTypeKind(ASTTk[Result]), RExprRecId(Result), GetTokenStr(TokPos)) do
   begin
     Next; { . }
     Result := RParseStrMethod(Result, -1);
@@ -3693,8 +3805,14 @@ var fmtOff, fmtLen, i, segStart, specStart: Integer;
     if (IntToTypeKind(ASTTk[exprNode]) = tyRecord) and (recId >= REC_UCLASS_BASE) then
     begin
       if not dbg then
-        Error('Rust: `{}` needs Display and this type has none -- use `{:?}`, ' +
-              'or print the fields');
+      begin
+        k := RDisplayCall(exprNode, recId);
+        if k < 0 then
+          Error('Rust: `{}` needs Display and this type has none -- use `{:?}`, ' +
+                'implement `fmt::Display`, or print the fields');
+        AddArg(k);
+        Exit;
+      end;
       RDbgCount := 0;
       RDebugExpand(exprNode, recId, '');
       for k := 0 to RDbgCount - 1 do
@@ -3907,6 +4025,38 @@ begin
   begin
     Result := RParsePrintln(CurTok.SVal = 'println');
     RExpectStmtEnd;
+    Exit;
+  end;
+
+  if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkLogNot) and
+     (Tokens[TokPos + 1].Kind = tkLParen) and
+     ((CurTok.SVal = 'write') or (CurTok.SVal = 'writeln')) then
+  begin
+    Result := RParseWriteMacro(CurTok.SVal = 'writeln');
+    { `write!(f, ..)?;` is the idiomatic spelling: the `?` propagates the
+      fmt::Result to the caller. Once the reroute has replaced the Result with
+      a String there is nothing left to propagate, so the `?` is consumed and
+      dropped rather than sent to RParseTryOp, which would look for an
+      enclosing fn returning Result and refuse. }
+    if CurTok.Kind = tkQuestion then Next;
+    { a `write!` is usually the TAIL expression of a fmt body and carries no
+      semicolon -- so the terminator is optional here, unlike println!'s }
+    if CurTok.Kind = tkSemicolon then Next;
+    Exit;
+  end;
+
+  { `Ok(())` as the tail of a Display fmt body: the trait's way of saying
+    "wrote it all", and there is nothing left to say once write! appends
+    directly. A no-op rather than an error, because every real Display impl
+    ends with one. }
+  if RInDisplayFmt and (CurTok.Kind = tkIdent) and (CurTok.SVal = 'Ok') and
+     (Tokens[TokPos].Kind = tkLParen) and (Tokens[TokPos + 1].Kind = tkLParen) and
+     (Tokens[TokPos + 2].Kind = tkRParen) and (Tokens[TokPos + 3].Kind = tkRParen) then
+  begin
+    Next; Next; Next; Next; Next;
+    if CurTok.Kind = tkSemicolon then Next;
+    Result := AllocNode(AN_BLOCK);
+    ASTLeft[Result] := -1;
     Exit;
   end;
 
@@ -4511,14 +4661,32 @@ begin
     begin
       hasTrait := False; traitName := '';
       j := i + 1;
-      if (Tokens[j].Kind = tkIdent) and (Tokens[j + 1].Kind = tkIdent) and
-         (GetTokenStr(j + 1) = 'for') then
+      { `impl fmt::Display for X` -- a trait name may be path-qualified, and
+        the qualifier is not a module this frontend knows, so it is simply the
+        last segment that names the trait.
+
+        NOTE THE `tkFor`. Both arms tested `GetTokenStr(..) = 'for'` against a
+        token that the lexer classifies as tkFor, whose SOffset/SLen are zero
+        -- so the comparison was against the empty string and could never
+        succeed. `impl Trait for Type` had therefore NEVER been recognised;
+        every one of them was read as `impl <Trait>` and died with "impl for
+        unknown type Area". Dead code that looked live, found by trying to
+        extend it. }
+      if (Tokens[j].Kind = tkIdent) and (Tokens[j + 1].Kind = tkPathSep) and
+         (Tokens[j + 2].Kind = tkIdent) and (Tokens[j + 3].Kind = tkFor) then
+      begin
+        traitName := GetTokenStr(j + 2);
+        hasTrait := True;
+        j := j + 4;
+      end
+      else if (Tokens[j].Kind = tkIdent) and (Tokens[j + 1].Kind = tkFor) then
       begin
         traitName := GetTokenStr(j);
-        if RFindTrait(traitName) < 0 then Error('Rust: unknown trait ' + traitName);
         hasTrait := True;
         j := j + 2;
       end;
+      if hasTrait and (RFindTrait(traitName) < 0) and (not RIsBuiltinTrait(traitName)) then
+        Error('Rust: unknown trait ' + traitName);
       if Tokens[j].Kind <> tkIdent then Error('Rust: expected type name after impl');
       typeName := GetTokenStr(j);
       ci := FindUClass(typeName);
@@ -4563,6 +4731,40 @@ begin
           selfBase := 1;
         end;
         nparams := 0;
+        { `fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result` is rerouted to
+          `fn fmt(&self) -> String`. The Formatter and the fmt::Result are the
+          trait's plumbing for a writer this frontend does not have; what a
+          Display impl actually says is "here is my text", and a String says
+          that with no trait dispatch, no writer object and no new machinery --
+          which is exactly the shortcut the corpus ticket predicted would be
+          cheaper than real trait dispatch. The param and the return
+          annotation are skipped WHOLE so `fmt::Formatter` and `fmt::Result`
+          never have to resolve as types. }
+        if hasTrait and (traitName = 'Display') and (methodName = 'fmt') then
+        begin
+          while (Tokens[j].Kind <> tkRParen) and (Tokens[j].Kind <> tkEOF) do Inc(j);
+          Inc(j); { ) }
+          if (Tokens[j].Kind = tkMinus) and (Tokens[j + 1].Kind = tkGt) then
+          begin
+            j := j + 2;
+            Inc(j);                                  { fmt }
+            if Tokens[j].Kind = tkPathSep then j := j + 2;   { ::Result }
+          end;
+          fullName := typeName + '::fmt';
+          procIdx := RegisterProc(fullName, True, tyAnsiString, selfBase, pnamesFull, ptypesFull);
+          ProcRetRecId[procIdx] := REC_NONE;
+          Procs[procIdx].Params[0].IsRef := True;
+          ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS] := True;
+          { skip the body }
+          k := 0;
+          while Tokens[j].Kind <> tkBegin do Inc(j);
+          repeat
+            if Tokens[j].Kind = tkBegin then Inc(k)
+            else if Tokens[j].Kind = tkEnd then Dec(k);
+            Inc(j);
+          until (k = 0) or (Tokens[j].Kind = tkEOF);
+          Continue;
+        end;
         while Tokens[j].Kind <> tkRParen do
         begin
           if Tokens[j].Kind = tkMut then Inc(j);
@@ -4853,9 +5055,21 @@ var typeName, traitName, fname, pname, fullName: AnsiString;
     ci, procIdx, nparams, i, idx, savedSC, savedFS, patchPos, bodyNode, selfBase: Integer;
     pnames: array[0..7] of AnsiString; ptypes: array[0..7] of TTypeKind;
     precids: array[0..7] of Integer;
+    isDisplayFmt: Boolean;
 begin
   Next; { impl }
-  if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkIdent) and (GetTokenStr(TokPos) = 'for') then
+  traitName := '';
+  { path-qualified trait name (`fmt::Display for X`) -- the twin of the
+    prepass's; both must agree or the body parser will not know it is looking
+    at a Display impl. }
+  if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkPathSep) and
+     (Tokens[TokPos + 1].Kind = tkIdent) and (Tokens[TokPos + 2].Kind = tkFor) then
+  begin
+    Next; Next;                 { qualifier, :: }
+    traitName := CurTok.SVal;
+    Next; Next;                 { trait name, 'for' }
+  end
+  else if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkFor) then
   begin
     traitName := CurTok.SVal;
     Next; Next; { trait name, 'for' }
@@ -4893,7 +5107,22 @@ begin
       selfBase := 1;
     end;
     nparams := 0;
-    while CurTok.Kind <> tkRParen do
+    { the Display reroute's body-side twin: the Formatter param and the
+      `-> fmt::Result` are skipped whole, exactly as the prepass skipped them,
+      and the body is parsed with RInDisplayFmt on. }
+    isDisplayFmt := (traitName = 'Display') and (fname = 'fmt');
+    if isDisplayFmt then
+    begin
+      while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do Next;
+      Next;                                       { ) }
+      if CurTok.Kind = tkMinus then
+      begin
+        Next; Expect(tkGt, '>');
+        Next;                                     { fmt }
+        if CurTok.Kind = tkPathSep then begin Next; Next; end;   { ::Result }
+      end;
+    end;
+    while (not isDisplayFmt) and (CurTok.Kind <> tkRParen) do
     begin
       if CurTok.Kind = tkMut then Next;
       if nparams + selfBase >= 6 then Error('Rust: too many parameters (limit is 6 incl. self)');
@@ -4912,14 +5141,17 @@ begin
       Inc(nparams);
       if not Eat(tkComma) then Break;
     end;
-    Expect(tkRParen, ')');
-    if CurTok.Kind = tkMinus then
+    if not isDisplayFmt then
     begin
-      Next; Expect(tkGt, '>');
-      { consumed through RRetTypeCur so a multi-token `Option<T>` or `[T; N]`
-        is skipped WHOLE; the registered signature is what actually types the
-        method, so the value is discarded here on purpose. }
-      RRetTypeCur;
+      Expect(tkRParen, ')');
+      if CurTok.Kind = tkMinus then
+      begin
+        Next; Expect(tkGt, '>');
+        { consumed through RRetTypeCur so a multi-token `Option<T>` or `[T; N]`
+          is skipped WHOLE; the registered signature is what actually types the
+          method, so the value is discarded here on purpose. }
+        RRetTypeCur;
+      end;
     end;
 
     savedSC := SymCount; savedFS := FrameSize;
@@ -4950,7 +5182,9 @@ begin
     EmitParamSpillsForTarget(procIdx, nparams + selfBase);
 
     Expect(tkBegin, '{');
+    RInDisplayFmt := isDisplayFmt;
     bodyNode := RParseFnBody;
+    RInDisplayFmt := False;
     Expect(tkEnd, '}');
 
     { Zero every managed local before the body -- see the twin in

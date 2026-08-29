@@ -5994,6 +5994,16 @@ test-core: $(COMPILER)
 	# printed its FIRST FIELD -- a plausible wrong value in real output.
 	./$(COMPILER) test/test_rust_derive.rs $(TESTTMP)/test_rust_derive26
 	tools/expect_same.sh test_rust_derive26 "$$($(TESTTMP)/test_rust_derive26)" "$$(printf 'val 1 3 0\ntag 0 7\nflip 3 1\nclone 1 2 eq true ne false\narr 1 3 0\nknights 1\nnest 1\ndbg Pos { f: 1, r: 2 }\ndeep Line { a: Pos { f: 1, r: 2 }, b: Pos { f: 3, r: 4 }, w: 9 }\nscal 5 "hi" true '"'"'q'"'"'\nvia Pos { f: 1, r: 2 }')"
+	@echo '--- rust: impl Trait for Type, and fmt::Display rerouted ---'
+	# The trait-impl path had NEVER RUN: both parsers compared a tkFor token
+	# against the string 'for' via GetTokenStr, which is empty for a keyword,
+	# so `impl Trait for Type` was always read as `impl <Trait>`. Dead code
+	# that looked live; found by trying to extend it.
+	# Display is REROUTED, not dispatched: `fn fmt(&self, f) -> Result`
+	# registers as `fn fmt(&self) -> String` and write! appends to it. `tag`
+	# pins that several write!s accumulate rather than overwrite.
+	./$(COMPILER) test/test_rust_traits.rs $(TESTTMP)/test_rust_traits26
+	tools/expect_same.sh test_rust_traits26 "$$($(TESTTMP)/test_rust_traits26)" "$$(printf 'area 16 15\nmv 12-28\nts 12-28\nvia <12-28>\ntag [w=7]\ndbg Move { from: 12, to: 28 }')"
 	# Ada frontend skeleton (feature-esoteric-ada): for-range accumulate, if/elsif/else,
 	# while, bare loop + exit-when, Put_Line -- all lowering onto existing shared IR.
 	./$(COMPILER) test/test_ada_skeleton.adb $(TESTTMP)/test_ada_skeleton26
