@@ -4,7 +4,7 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `1bffdc06510a` | 2026-08-29T16:14:10Z | GREEN (native) | 322.2s | `49bd043061c1` RED |
-| seven | `154d1aa3fba6` | 2026-08-29T16:51:31Z | RED (full) | 959.2s | `154d1aa3fba6` RED |
+| seven | `ee55e39e0d93` | 2026-08-29T16:57:50Z | RED (native) | 104.2s | `154d1aa3fba6` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -35,3 +35,4 @@
   - `test-sqlite-threads-aarch64#src:compiler/.pascal26.fixedpoint`
   - `tools-devtest#00`
   </details>
+- **test-core#src:test/test_nilpy_min_max_variadic.npy** — test/test_nilpy_min_max_variadic.npy tools/expect_same.sh (seven): bad `1d98cf21375f`, last good `154d1aa3fba6`, 4 commit(s) in range

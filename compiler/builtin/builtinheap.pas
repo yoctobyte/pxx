@@ -1504,21 +1504,26 @@ end;
 
 function PXXSysRead(fd, buf, count: NativeInt): Int64;
 begin
-  Result := 0;   { xtensa (bare-only): no read syscall — dead stub there }
-{$ifdef CPUX86_64}
+{$if defined(CPUX86_64)}
   Result := __pxxrawsyscall(0, fd, buf, count);
-{$endif}
-{$ifdef CPU_I386}
+{$elseif defined(CPU_I386)}
   Result := __pxxrawsyscall(3, fd, buf, count);
-{$endif}
-{$ifdef CPU_ARM32}
+{$elseif defined(CPU_ARM32)}
   Result := __pxxrawsyscall(3, fd, buf, count);
-{$endif}
-{$ifdef CPUAARCH64}
+{$elseif defined(CPUAARCH64)}
   Result := __pxxrawsyscall(63, fd, buf, count);
-{$endif}
-{$ifdef CPU_RISCV32}
+{$elseif defined(CPU_RISCV32)}
   Result := __pxxrawsyscall(63, fd, buf, count);   { hosted linux (qemu-user) }
+{$elseif defined(CPU_XTENSA)}
+  { Was the PRE-CHAIN DEFAULT, inherited by every unnamed target rather than
+    chosen for this one; kept byte-for-byte so this restructure changes no
+    target's behaviour, but 0 means "read 0 bytes, no error" — EOF — and if
+    xtensa ever reaches here that is a silent lie, not a dead stub. Deciding
+    that is Track S's call, not this ticket's. }
+  Result := 0;   { xtensa (bare-only): no read syscall — dead stub there }
+{$else}
+  { No arm. -1 is the POSIX failure value; a fall-through 0 would report EOF. }
+  Result := -1;
 {$endif}
 end;
 
@@ -1538,8 +1543,7 @@ function PXXSysWrite(fd, buf, count: NativeInt): Int64;
 var iov: array[0..1] of Integer; nw: Integer;
 {$endif}
 begin
-  Result := 0;
-{$ifdef CPU_WASM32}
+{$if defined(CPU_WASM32)}
   { One iovec: [ptr, len]. WASI returns an ERRNO, not a byte count — the count
     is written to *nwritten — so the two are not interchangeable and a caller
     reading the return value as a length would get 0 on success. }
@@ -1548,21 +1552,23 @@ begin
   nw := 0;
   if __wasi_fd_write(fd, @iov[0], 1, @nw) = 0 then Result := nw
   else Result := -1;
-{$endif}
-{$ifdef CPUX86_64}
+{$elseif defined(CPUX86_64)}
   Result := __pxxrawsyscall(1, fd, buf, count);
-{$endif}
-{$ifdef CPU_I386}
+{$elseif defined(CPU_I386)}
   Result := __pxxrawsyscall(4, fd, buf, count);
-{$endif}
-{$ifdef CPU_ARM32}
+{$elseif defined(CPU_ARM32)}
   Result := __pxxrawsyscall(4, fd, buf, count);
-{$endif}
-{$ifdef CPUAARCH64}
+{$elseif defined(CPUAARCH64)}
   Result := __pxxrawsyscall(64, fd, buf, count);
-{$endif}
-{$ifdef CPU_RISCV32}
+{$elseif defined(CPU_RISCV32)}
   Result := __pxxrawsyscall(64, fd, buf, count);   { hosted linux (qemu-user) }
+{$elseif defined(CPU_XTENSA)}
+  { As in PXXSysRead: this was the pre-chain default, not a choice made for
+    xtensa. Preserved exactly. 0 means "wrote nothing, successfully". }
+  Result := 0;
+{$else}
+  { No arm. See PXXSysOpenRO. }
+  Result := -1;
 {$endif}
 end;
 
@@ -1860,49 +1866,55 @@ end;
   ESP has no filesystem here, so the whole group is excluded. }
 function PXXSysOpenRO(path: Pointer): Int64;
 begin
-{$ifdef CPUX86_64}
+{$if defined(CPUX86_64)}
   Result := __pxxrawsyscall(2, Int64(path), 0, 0);
-{$endif}
-{$ifdef CPU_I386}
+{$elseif defined(CPU_I386)}
   Result := __pxxrawsyscall(5, Int64(path), 0, 0);
-{$endif}
-{$ifdef CPU_ARM32}
+{$elseif defined(CPU_ARM32)}
   Result := __pxxrawsyscall(5, Int64(path), 0, 0);
-{$endif}
-{$ifdef CPUAARCH64}
+{$elseif defined(CPUAARCH64)}
   Result := __pxxrawsyscall(56, -100, Int64(path), 0, 0);
+{$else}
+  { NO ARM FOR THIS TARGET — see the group comment above. Returning the POSIX
+    failure value is the whole point: before this was one chain it was four
+    separate {$ifdef}/{$endif} blocks with no terminal else and no pre-chain
+    default, so an armless target left `Result` NEVER ASSIGNED and
+    PXXStrLoadFile's `if fd < 0 then Exit` tested the return slot's leftover
+    contents. }
+  Result := -1;
 {$endif}
 end;
 
 function PXXSysLseek(fd, offset, whence: NativeInt): Int64;
 begin
-{$ifdef CPUX86_64}
+{$if defined(CPUX86_64)}
   Result := __pxxrawsyscall(8, fd, offset, whence);
-{$endif}
-{$ifdef CPU_I386}
+{$elseif defined(CPU_I386)}
   Result := __pxxrawsyscall(19, fd, offset, whence);
-{$endif}
-{$ifdef CPU_ARM32}
+{$elseif defined(CPU_ARM32)}
   Result := __pxxrawsyscall(19, fd, offset, whence);
-{$endif}
-{$ifdef CPUAARCH64}
+{$elseif defined(CPUAARCH64)}
   Result := __pxxrawsyscall(62, fd, offset, whence);
+{$else}
+  { No arm — see PXXSysOpenRO. A garbage size here is the worse half of the
+    defect: PXXStrLoadFile feeds it straight to PXXAlloc(size + hdr + 1). }
+  Result := -1;
 {$endif}
 end;
 
 function PXXSysClose(fd: NativeInt): Int64;
 begin
-{$ifdef CPUX86_64}
+{$if defined(CPUX86_64)}
   Result := __pxxrawsyscall(3, fd);
-{$endif}
-{$ifdef CPU_I386}
+{$elseif defined(CPU_I386)}
   Result := __pxxrawsyscall(6, fd);
-{$endif}
-{$ifdef CPU_ARM32}
+{$elseif defined(CPU_ARM32)}
   Result := __pxxrawsyscall(6, fd);
-{$endif}
-{$ifdef CPUAARCH64}
+{$elseif defined(CPUAARCH64)}
   Result := __pxxrawsyscall(57, fd);
+{$else}
+  { No arm — see PXXSysOpenRO. }
+  Result := -1;
 {$endif}
 end;
 

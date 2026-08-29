@@ -5181,6 +5181,111 @@ begin
   ResidentSlotIsDead := True;
 end;
 
+{ Is the poison probe active for the body being emitted?
+
+  `PXXDBG=a.poisonslot` poisons every eligible slot in the program; and that is
+  what makes a whole-program poison run's per-CASE reading WRONG, which cost a
+  measurement on 2026-08-29. The RTL float formatting path -- PXXWriteFloatNat,
+  FloatToStrSig, FloatToExpStr, PXXWriteFloatFixed -- is itself full of float
+  residents, and EVERY Writeln of a real goes through it. So with the control
+  on, every line of output moves whether or not that line's OWN residents were
+  read, and a proc correctly excluded by the gate (WithExcFrame, which has an
+  exception frame) moved too. The instrument was measuring its own printer.
+
+  `PXXDBG=a.poisonslot:<Proc>` restricts poisoning to one body, which is what
+  makes a per-case control meaningful: poison Recurrence alone, and any change
+  in the REC line is about Recurrence's residents rather than about the
+  formatter that printed them.
+
+  `a.poisonslot:*` and the bare topic both mean "everywhere". }
+function PoisonProbeSelects: Boolean;
+var sel: AnsiString;
+begin
+  PoisonProbeSelects := False;
+  sel := PxxDbgArg('a.poisonslot');
+  if sel = '' then
+  begin
+    PoisonProbeSelects := PxxDbgEnabled('a.poisonslot');
+    Exit;
+  end;
+  if sel = '*' then
+  begin
+    PoisonProbeSelects := True;
+    Exit;
+  end;
+  if CurProc < 0 then Exit;
+  PoisonProbeSelects := (sel = Procs[CurProc].Name);
+end;
+
+{ The float analogue of ResidentSlotIsDead. Separate function rather than a
+  branch inside it because the two ask about different register files: the int
+  one goes through ResidentRegOf (RcResidentSym, r12-r15) and would answer
+  False for every float resident, which is exactly why -O3 item 3 has never
+  reached them.
+
+  tyDouble only, matching the residency pass: tySingle and tyExtended NARROW on
+  the way to the slot, so their frame slot is not a same-value cache of the
+  register and the dual-write is a real conversion, not a duplicate. }
+function FloatResidentSlotIsDead(idx: Integer): Boolean;
+begin
+  FloatResidentSlotIsDead := False;
+  if OptLevel < 3 then Exit;
+  if RcProcHasExc then Exit;
+  if FloatResidentXmmOf(idx) = 0 then Exit;
+  if Syms[idx].TypeKind <> tyDouble then Exit;
+  if not ((Syms[idx].Kind = skLocal) or (Syms[idx].Kind = skParam)) then Exit;
+  if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then Exit;
+  FloatResidentSlotIsDead := True;
+end;
+
+{ PXXDBG=a.poisonslot, float half -- same instrument, same argument as the int
+  PoisonResidentSlot below: turn "is there a reader of this slot I did not think
+  of" from an audit with no completion criterion into one experiment.
+
+  Grep says the only non-residency-aware reader is FloatResidencyRefreshAll at
+  the IR_EXC_ENTER landing pad, and that FloatPoolSave/FloatPoolRestore are NOT
+  readers because they use the separate FxSaveBase pool rather than the
+  variable's own slot. Grep is not evidence; this is.
+
+  Poisons with a quiet NaN (imm32 $FFF8DEAD sign-extended to
+  $FFFFFFFFFFF8DEAD -- sign 1, exponent all ones, mantissa non-zero) rather than
+  with the int probe's recognisable $5EEDADAD. The int poison's job is to be
+  RECOGNISABLE in output; a float poison's job is to PROPAGATE. An absurd but
+  finite double can be consumed by arithmetic into something that merely looks
+  wrong, or be rounded, compared or clamped into looking right; a NaN survives
+  every arithmetic path to the output. Detection beats legibility here because
+  the value is read by float math before anyone prints it.
+
+  Exactly 8 bytes: tyDouble, and a wider store would corrupt the neighbouring
+  slot and manufacture the bug it is looking for. }
+procedure PoisonFloatResidentSlot(idx: Integer);
+begin
+  if not PoisonProbeSelects then Exit;
+  if not FloatResidentSlotIsDead(idx) then Exit;
+  if PxxDbgEnabled('a.poisonfire') then
+    WriteLn('PXXDBG a.poisonfire proc=', Procs[CurProc].Name,
+            ' sym=', Syms[idx].Name, ' xmm=', FloatResidentXmmOf(idx));
+  EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[idx].Offset);
+  EmitI32(Integer($FFF8DEAD));                { mov qword [rbp+off], NaN }
+  { PXXDBG=a.poisonctl -- THE CONTROL, and it must be run before the poison
+    result is believed. Reloads the resident register FROM the slot we just
+    poisoned, manufacturing exactly the reader the experiment is looking for
+    (slot -> xmm, the shape FloatResidencyRefreshAll has at the landing pad).
+
+    With the control on, output MUST change. If it does not, the harness cannot
+    see a reader at all and a clean poison run means nothing -- the programs are
+    not exercising the poisoned sites, or the residents do not reach the output.
+    A probe that has never failed is not evidence; it is an untested assertion.
+    Measured 2026-08-29 after an empty-diff read as agreement earlier the same
+    day. }
+  if PxxDbgEnabled('a.poisonctl') then
+  begin
+    EmitB($F2); EmitB($44); EmitB($0F); EmitB($10);
+    EmitB($85 or ((FloatResidentXmmOf(idx) - 8) shl 3));
+    EmitI32(Syms[idx].Offset);                { movsd xmm(8+k), [rbp+off] }
+  end;
+end;
+
 { PXXDBG=a.poisonslot -- overwrite a RESIDENT local's frame slot with $AD bytes
   immediately after the dual-write, so that anything which still READS that slot
   gets a loudly wrong value instead of a plausible one.
@@ -5209,7 +5314,7 @@ end;
 procedure PoisonResidentSlot(idx: Integer);
 var sz: Integer;
 begin
-  if not PxxDbgEnabled('a.poisonslot') then Exit;
+  if not PoisonProbeSelects then Exit;
   { Deliberately the SAME predicate the optimisation uses, not a copy of it: the
     experiment is only evidence if it poisons exactly the slots item 3 stops
     writing. }
@@ -5680,6 +5785,7 @@ begin
     begin
       EmitB($44); EmitB($0F); EmitB($28);
       EmitB($C0 or ((FloatResidentXmmOf(idx) - 8) shl 3));  { movaps xmm8/xmm9, xmm0 }
+      PoisonFloatResidentSlot(idx);
     end;
     Exit;
   end;
