@@ -379,11 +379,6 @@
   }
  ],
  "host": "seven",
- "idle_yield": {
-  "aborts": 1,
-  "phase": "pin-verify",
-  "target": "f4654ba1e3cdf2a5b9738bca6f401a0c408269fd"
- },
  "job_last_pass": {
   "demos#00": "ee62e6dc0582f6a018102c4e1d1d9a083d7e4f32",
   "fpc-bootstrap#src:compiler/compiler.pas": "ee62e6dc0582f6a018102c4e1d1d9a083d7e4f32",
