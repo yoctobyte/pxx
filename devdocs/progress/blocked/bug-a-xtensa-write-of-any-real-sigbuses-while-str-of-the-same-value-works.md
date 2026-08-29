@@ -2,7 +2,8 @@
 track: A+S
 type: bug
 prio: 45
-status: open
+status: blocked
+blocked-by: [bug-a-a-hidden-aggregate-result-temp-gets-an-unaligned-frame-slot]
 found: 2026-08-30
 found-by: frankS
 ---
@@ -68,3 +69,47 @@ had to be measured by reading raw bits back as an `Int64` and by ablation.
 Object-level plus observable output, hosted profile, Call0,
 `--xtensa-soft-mulhigh`, binary `4c878d2df324`, against x86-64 built from the
 same source. Windowed not checked. Not checked on real or emulated ESP silicon.
+
+---
+
+## ROOT CAUSE FOUND — and it is not in the write path at all. frankS, 2026-08-30
+
+Traced with tools this box was believed not to have: the ESP-IDF toolchain ships
+`xtensa-esp-elf-objdump` (and a gdb, and a riscv32 pair) under
+`~/.espressif/tools/**`, off `PATH` until `export.sh` is sourced. I had recorded
+earlier the same night that there was no xtensa disassembler here. There is.
+
+`qemu-xtensa -strace` gives the shape immediately:
+
+```
+write(1,0x807d598,2)B  = 2
+write(1,0x207ffb9f,1)  = 1
+--- SIGBUS {si_signo=SIGBUS, si_code=1, si_addr=0x207ff537} ---
+```
+
+**`si_code=1` is `BUS_ADRALN`** and `0x207ff537` is an ODD address. Not a wild
+pointer — a misaligned one. `qemu-xtensa -d in_asm` names the block, and
+`--debug` (which prints `proc N: NAME at OFFSET`) names the routine:
+**`PxxSciDigits17`**, 45 bytes in, still in its prologue:
+
+```
+08074264: movi a8, -1649
+08074267: add  a8, a15, a8
+0807426a: movi a9, 0
+0807426d: s32i a9, a8, 0     <-- a15 - 1649 is odd
+```
+
+That is the **hidden-aggregate-temp nil-init**, and the slot it writes has an
+odd frame offset. Filed as
+[[bug-a-a-hidden-aggregate-result-temp-gets-an-unaligned-frame-slot]], with the
+eight offending slots read out of the compiler's own symbol table and the
+riscv32 disassembly showing **identical offsets** — so it is shared layout in
+`ir.inc`/`symtab.inc`, not xtensa codegen, and xtensa is only the target that
+traps it.
+
+`Str(d:0:2, s)` is correct because it reaches the same formatting code from a
+call site whose frame does not carry those temps. Nothing about the write path
+was ever wrong.
+
+**Blocked, not fixed:** `ir.inc` and `symtab.inc` are a Track S stop-line. The
+fix is one line in Track A's files and belongs to A.
