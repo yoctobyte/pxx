@@ -1597,10 +1597,21 @@ begin
         + '(--target=esp32c3, esp32s3, ...) or the generic --target=riscv32 / '
         + '--target=xtensa, which mean esp32c3 / esp32s3'); Halt(1); end;
   { The thread-safe runtime (heap/ARC locks, statement-atomic I/O) exists on
-    x86-64 (hand-emitted lock blobs) and i386 (Pascal softlock in builtinheap
-    via PXX_TS_SOFTLOCK + the 386 I/O lock stubs); on other targets
-    --threadsafe would silently emit an UNLOCKED runtime. Fail clearly instead
-    (feature-threadsafe-heap-contract / feature-i386-threadsafe-locks). }
+    x86-64 (hand-emitted lock blobs), i386 (Pascal softlock in builtinheap via
+    PXX_TS_SOFTLOCK + the 386 I/O lock stubs), and aarch64/arm32 (IR_ATOMIC
+    lowered to the load-exclusive/store-exclusive loop, plus each backend's own
+    port of EmitIoLockStubs). On other targets --threadsafe would silently emit
+    an UNLOCKED runtime, so fail clearly instead
+    (feature-threadsafe-heap-contract / feature-i386-threadsafe-locks).
+
+    THE CONDITION BELOW IS THE AUTHORITY on which targets are supported, and
+    the only place that list should be written down. Corrected 2026-08-30: this
+    comment named two targets while the code three lines under it admitted
+    four, and two other sites had copied the older, narrower answer
+    (builtinheap.pas PXXStrIncRef, ir_codegen_aarch64.inc EmitHeapAllocLockedA64
+    -- the latter inside the very backend that implements it). A target list
+    duplicated into a comment rots the moment a target is added, which is the
+    expected direction of travel; pointing here does not. }
   if ThreadSafeMode and (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_I386)
      and (TargetArch <> TARGET_AARCH64) and (TargetArch <> TARGET_ARM32) then
   begin writeln(StdErr, '--threadsafe is x86-64/i386/aarch64/arm32 only: the heap/ARC/I-O locks are not implemented on this target yet'); Halt(1); end;

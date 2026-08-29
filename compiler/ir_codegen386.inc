@@ -4096,7 +4096,14 @@ begin
         begin
           { Managed-string assignment: produce the new handle in eax, then
             publish into the slot (store new, release old). i386 calls the
-            Pascal helpers directly (no shim/lock; threadsafe is x86-64-only). }
+            Pascal helpers directly, with no codegen-side shim or lock — the
+            locking lives INSIDE those helpers (PXX_TS_SOFTLOCK), exactly as
+            EmitAcquireHeapLock386 above describes. Corrected 2026-08-30: this
+            read "threadsafe is x86-64-only", which has been false since
+            07fee0844 (2026-07-06). "The call site does not lock" and "the
+            target cannot be threadsafe" are different statements and only the
+            first is true here.
+            bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july }
           valNode := IRB[node];
           if IRKind[valNode] = IR_CONST_STR then
           begin
@@ -4239,7 +4246,14 @@ begin
       begin
         { ARC-correct whole-record copy: retain src's managed fields, release
           dest's old ones (via the layout-RTTI helpers), then bulk-copy.
-          Threadsafe locking is x86-64-only; i386 runs single-threaded. }
+          Locking is inside the Pascal helpers on i386 (PXX_TS_SOFTLOCK), not
+          at this call site — see EmitAcquireHeapLock386. Corrected 2026-08-30:
+          this read "Threadsafe locking is x86-64-only; i386 runs
+          single-threaded", and the second clause is the dangerous half: it is
+          the premise a reader would carry into writing a hand-emitted i386 arm,
+          and a hand-emitted arm is precisely where the softlock does NOT reach,
+          because the softlock lives in the helpers such an arm would replace.
+          bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july }
         IREmitNode386(IRB[node]);                    { eax = src }
         EmitB($50);                                  { push src  ([esp+4]) }
         IREmitNode386(IRA[node]);                    { eax = dest }

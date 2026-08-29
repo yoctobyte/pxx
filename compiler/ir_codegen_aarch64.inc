@@ -74,7 +74,14 @@ end;
 
 procedure EmitHeapAllocLockedA64;
 { x0 = requested payload bytes. Returns payload pointer in x0. Delegates to the
-  Pascal PXXAlloc(size, align=8). Threadsafe locking is x86-64-only. }
+  Pascal PXXAlloc(size, align=8).
+
+  The HEAP allocator lock is not hand-emitted here — this path delegates to the
+  Pascal allocator, which takes PXXHeapSpin under PXX_TS_SOFTLOCK. Corrected
+  2026-08-30: this read "Threadsafe locking is x86-64-only", 212 lines above
+  this file's OWN port of EmitIoLockStubs and its IR_ATOMIC lowering. aarch64
+  supports --threadsafe; see the gate in compiler.pas (the ThreadSafeMode target
+  check), which is the authority on the target list. }
 var procIdx: Integer;
 begin
   EmitLoadImmA64(1, 8);              { mov x1, #8 (align) }

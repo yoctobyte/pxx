@@ -167,3 +167,59 @@ them knows the doc arm is already done and does not re-fix it — and because th
 spread is the argument for the ticket's own prio: **a stale comment that only a
 compiler engineer reads is a nuisance; the same claim in a doc is what a lane
 plans around.**
+
+## 2026-08-30 — six of eight fixed (frank-optimize-b4). There were SIX false sites, not five.
+
+**This supersedes the "still open and still Track A's" line in the doc-arm
+section directly above**, which was written before these landed; that section's
+own content — the two doc fixes — stands.
+
+Found independently while chasing face 113 through `compiler/**`, before this
+ticket was read — which is why it is worth saying that the two searches
+converged on the same seam from opposite ends, and that neither found the whole
+set alone.
+
+**A sixth false site, not in the table above:** `ir_codegen_aarch64.inc:77`,
+`EmitHeapAllocLockedA64` — *"Threadsafe locking is x86-64-only."* It sits **212
+lines above this same file's own port of `EmitIoLockStubs`**, and the file also
+carries the `IR_ATOMIC` lowering that makes aarch64 one of the four. By the
+distance metric in the table it is the second-worst after site 1, and it is in
+the backend the claim denies.
+
+The ticket says `grep -rn "x86-64.only" compiler/` "finds all five in under a
+second". It does — it also finds **~70 hits**, of which the overwhelming
+majority are *other* features that genuinely are x86-64-only (DWARF Tier 1, the
+asm frontend, `__pxxTlsBase`, `--fpc-mem-errors`, `pypal`'s file ops). The grep's
+recall was never the problem; the **classification** of its output was, and one
+threadsafe site got read as one of the many legitimate ones. Same shape as this
+campaign's standing rule 2: *a census is only as good as the granularity it
+classifies at* — and it cost an enumeration that was presented as complete.
+
+### Fixed (comment-only, byte-identical: `9a682089048c` with and without the edits)
+
+| # | site | state |
+| --- | --- | --- |
+| 2 | `builtinheap.pas` `PXXStrIncRef` | **fixed** — both halves were false; the `{$ifdef PXX_TS_SOFTLOCK}` arm 12 lines down is atomic |
+| 3 | `defs.inc` `IR_IO_LOCK` | **fixed** — named the three backend ports |
+| 4 | `ir_codegen386.inc` managed-string assign | **fixed** — "the call site does not lock" ≠ "the target cannot be threadsafe" |
+| 5 | `ir_codegen386.inc` `IR_COPY_REC_MANAGED` | **fixed** — kept the ticket's own warning about why "i386 runs single-threaded" is the dangerous half |
+| 6 | `ir_codegen_aarch64.inc` `EmitHeapAllocLockedA64` | **fixed** — the site this ticket did not list |
+| — | `compiler.pas` (near-miss) | **fixed** — and made the load-bearing change: that gate is now stated to be **the authority**, and the other sites point at it instead of repeating the list |
+
+### NOT fixed — other lanes hold the files, so filed rather than touched
+
+| # | site | holder |
+| --- | --- | --- |
+| 1 | `ir.inc:12540` — the worst one, one line above the four-target condition | **frankC** |
+| — | `ir_codegen_xtensa.inc:359` (near-miss, correct in effect) | **frankS** |
+
+### The structural fix, which matters more than the six edits
+
+Every corrected site now **points at `compiler.pas`'s `ThreadSafeMode` gate as
+the authority** rather than restating the target list. The list was duplicated
+into six comments; a widening invalidated all six at once and there was no
+sibling arm to grep, which is exactly what this ticket identified as the new
+shape. A pointer cannot go stale on a widening — only the authority can, and it
+is the code. The ticket's *"grep for the old scope string before you commit"* is
+still the right habit; not writing the list down six times is what makes the
+habit cheap.

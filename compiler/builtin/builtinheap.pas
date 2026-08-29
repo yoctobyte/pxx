@@ -2063,9 +2063,16 @@ end;
 
 { Managed-string refcount retain/release for targets without the hand-emitted
   atomic blob (i386 and other cross targets). p = data pointer; refcount lives
-  at [p-16], length at [p-8]. NON-atomic — threadsafe mode is x86-64 only and
-  keeps its lock-prefixed inline version. PXXStrDecRef frees the block (base =
-  p-16) when the count reaches zero. nil is ignored. }
+  at [p-16], length at [p-8]. PXXStrDecRef frees the block (base = p-16) when
+  the count reaches zero. nil is ignored.
+
+  Non-atomic in the DEFAULT build; under --threadsafe (PXX_TS_SOFTLOCK) the
+  increments below use __pxxatomic_add. Corrected 2026-08-30: this said
+  "NON-atomic — threadsafe mode is x86-64 only", and both halves had stopped
+  being true — the ifdef'd body twelve lines down is atomic, and --threadsafe
+  covers more than x86-64. For WHICH targets, see the gate in compiler.pas
+  (the ThreadSafeMode target check); that condition is the authority and this
+  comment deliberately does not repeat the list. }
 procedure PXXStrIncRef(p: Pointer);
 var rcAddr: Int64;
 {$ifdef PXX_TS_SOFTLOCK}
