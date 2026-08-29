@@ -17,6 +17,14 @@
 
 struct Board { ep: i64 }
 
+// a user-declared enum, to prove `if let` and the expression scrutinee are
+// general machinery and not an Option special case
+enum Shape {
+    Circle(i64),
+    Rect { w: i64, h: i64 },
+    Nothing,
+}
+
 // the engine's own shape: a fallible lookup returning Option
 fn piece_at(sq: i64) -> Option<i64> {
     if sq < 0 { return None; }
@@ -115,4 +123,37 @@ fn main() {
     let bd2 = make_board(-1);
     let i = bd2.ep_square();
     if i.is_none() { println!("i none"); }
+
+    // match on an ARBITRARY expression: evaluated once into a generated local
+    match piece_at(9) {
+        Some(v) => println!("j {}", v),
+        None => println!("j none"),
+    }
+    match piece_at(-3) {
+        Some(v) => println!("k {}", v),
+        None => println!("k none"),
+    }
+
+    // if let, with and without an else
+    if let Some(v) = piece_at(7) { println!("l {}", v); }
+    if let Some(v) = piece_at(-4) {
+        println!("m {}", v);
+    } else {
+        println!("m none");
+    }
+
+    // unwrap_or: a value select over the tag (shared AN_TERNARY)
+    println!("or {} {}", f.unwrap_or(-9), g.unwrap_or(-9));
+
+    // ...and all of it over a user-declared enum, tuple and struct variants
+    let s1 = Circle(6);
+    if let Circle(r) = s1 { println!("circle {}", r); }
+    let s2 = Rect { w: 3, h: 5 };
+    if let Rect { w, h } = s2 { println!("rect {}", w * h); }
+    let s3 = Nothing;
+    if let Circle(r) = s3 {
+        println!("not reached {}", r);
+    } else {
+        println!("nothing");
+    }
 }

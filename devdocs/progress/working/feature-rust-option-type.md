@@ -60,8 +60,16 @@ when there is none, against the payload expression's own type.
    just `Option<T>`. Impl-method params also gained struct/enum types
    (they were `allowStruct=False` while free fns were already `True`) and
    the `IsRef` flag a record param needs.
-3. `if let Some(x) = e`, `match` on an arbitrary expression (today the
-   scrutinee must be a plain local), and `unwrap_or`.
+3. **DONE** — the pattern half. `match` now accepts an ARBITRARY
+   expression as its scrutinee (`match self.piece_at(sq)`, the spelling
+   real source uses), evaluated once into a generated local; `if let
+   PAT = e { .. } else { .. }` lands as a one-arm match; `unwrap_or(d)`
+   is a value select over the tag via the shared AN_TERNARY the C and Zig
+   frontends already use. None of it is Option-specific — the scrutinee
+   resolution, the tag test and the pattern binds were extracted out of
+   `match` into `RParseScrutinee` / `RTagTest` / `RParsePatternBinds` and
+   are shared, so `if let Rect { w, h } = s` over a user-declared enum
+   works for free.
 
 ## Known narrowings (documented, not silent)
 
@@ -70,8 +78,17 @@ when there is none, against the payload expression's own type.
 - `Option<Option<T>>` is refused with a clear error: the `>>` lexes as a
   shift token, and splitting it is not worth doing before something needs it.
 - `let x = None;` with no annotation is an error — nothing to infer from.
+- A non-variable scrutinee must be a call or a plain variable: `RExprRecId`
+  answers for `AN_CALL` and `AN_IDENT`, so `match self.some_field` (a
+  record-typed FIELD) is not resolvable yet and says so.
+- **pxx brace comments NEST.** A `{` written inside a `{ ... }` comment
+  opens a second one, and the comment then runs to the *next* `}` —
+  which in this file was a `'}'` string 150 lines later, reported as
+  `unexpected character` on an innocent blank line. Cost a build cycle;
+  worth knowing before writing a comment that quotes Rust syntax.
 
 ## Log
 - 2026-08-29 — unit 1 landed (see the ladder ticket's log for the detail).
 - 2026-08-29 — unit 2 landed: Option (and records generally) through fn
   signatures and returns.
+- 2026-08-29 — unit 3 landed: expression scrutinees, `if let`, `unwrap_or`.

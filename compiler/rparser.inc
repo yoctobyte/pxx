@@ -102,6 +102,11 @@ var
     type instead of the global bare-variant table (every instantiation
     declares variants spelled `Some`/`None`, so the bare lookup is ambiguous
     by construction the moment a second T appears). }
+  { serial for the compiler-generated locals that materialize a non-variable
+    match/if-let scrutinee (`__scrut0`, ...); a Rust identifier cannot start
+    with `__` followed by our digits by accident, and there is no block
+    scoping to roll back into anyway. }
+  RTempSerial: Integer;
   ROptionCi: array[0..MAX_UCLASS-1] of Boolean;
   ROptionElemTk: array[0..MAX_UCLASS-1] of TTypeKind;
   ROptionElemRec: array[0..MAX_UCLASS-1] of Integer;
@@ -773,6 +778,34 @@ begin
         `unwrap()` does NOT panic on None (it reads the payload slot as-is):
         this frontend has no panic path yet, and a checked unwrap is a
         follow-up once one exists. Documented in the ticket, not silent. }
+      { o.unwrap_or(d) — a value select over the tag, via the shared
+        AN_TERNARY the C and Zig frontends already use for `?:` / `orelse`. }
+      if (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) and
+         (Tokens[TokPos + 1].Kind = tkLParen) and
+         (GetTokenStr(TokPos) = 'unwrap_or') and
+         RIsOptionRec(Syms[symIdx].RecName) then
+      begin
+        ci := Syms[symIdx].RecName;
+        Next; Next; Next; { . unwrap_or ( }
+        argNode := RParseExpr;
+        Expect(tkRParen, ')');
+        fieldNode := AllocNode(AN_FIELD);
+        ASTLeft[fieldNode] := node;
+        ASTSOffset[fieldNode] := RStoredName('Some.0'); ASTSLen[fieldNode] := 6;
+        ASTTk[fieldNode] := Ord(RecFieldType(ci, 'Some.0'));
+        lastArg := AllocNode(AN_PAIR);
+        ASTLeft[lastArg] := fieldNode; ASTRight[lastArg] := argNode;
+        gfi := AllocNode(AN_FIELD);
+        ASTLeft[gfi] := RMakeIdent(symIdx);
+        ASTSOffset[gfi] := RStoredName('__tag'); ASTSLen[gfi] := 5;
+        ASTTk[gfi] := Ord(tyInt64);
+        fTokIdx := AllocNode(AN_INT_LIT); ASTIVal[fTokIdx] := 1; ASTTk[fTokIdx] := Ord(tyInt64);
+        Result := AllocNode(AN_TERNARY);
+        ASTLeft[Result] := RBinOp(tkEq, gfi, fTokIdx, tyBoolean);
+        ASTRight[Result] := lastArg;
+        ASTTk[Result] := Ord(RecFieldType(ci, 'Some.0'));
+        Exit;
+      end;
       if (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) and
          (Tokens[TokPos + 1].Kind = tkLParen) and (Tokens[TokPos + 2].Kind = tkRParen) and
          RIsOptionRec(Syms[symIdx].RecName) and
@@ -1117,10 +1150,182 @@ begin
   Result := left;
 end;
 
+{ Resolves a match/if-let scrutinee. A plain variable is used directly;
+  anything else -- `match self.piece_at(sq)`, the spelling real source uses --
+  is evaluated ONCE into a generated local and matched through that. preSeq
+  receives the materializing assignment, or stays -1 for the variable case.
+  Disambiguation is free: an expression scrutinee is followed by the opening
+  brace of the match/if-let body, and this frontend has no struct-literal
+  expression form for that brace to be confused with. }
+function RParseScrutinee(var preSeq: Integer): Integer;
+var scrutIdent: AnsiString; scrutNode, recId, assignNode: Integer;
+begin
+  preSeq := -1;
+  if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkBegin) then
+  begin
+    scrutIdent := CurTok.SVal;
+    Result := FindSym(scrutIdent);
+    if Result < 0 then Error('Rust: undefined variable ' + scrutIdent);
+    Next;
+    Exit;
+  end;
+  scrutNode := RParseExpr;
+  recId := RExprRecId(scrutNode);
+  if recId < REC_UCLASS_BASE then Error('Rust: match scrutinee must be an enum value');
+  LastTypeRecId := recId;
+  scrutIdent := '__scrut' + RIntToStr(RTempSerial); Inc(RTempSerial);
+  Result := AllocVar(scrutIdent, tyRecord);
+  assignNode := AllocNode(AN_ASSIGN);
+  ASTLeft[assignNode] := RMakeIdent(Result); ASTRight[assignNode] := scrutNode;
+  preSeq := RSeqAppend(-1, assignNode);
+end;
+
+{ Parses the payload pattern that follows a variant name -- `(a, b)` for a
+  tuple variant, `{ f, g }` for a struct one, nothing for a unit variant --
+  and returns the chain of assignments that materialize each bound name as a
+  fresh local read out of the scrutinee's mangled payload field. Shared by
+  `match` arms and `if let`, which bind identically. }
+function RParsePatternBinds(scrutSym, enumCi, vi: Integer;
+  const variantName: AnsiString): Integer;
+var i, bindSym, fieldNode, assignNode: Integer;
+    bindName, mangled: AnsiString; fieldTk: TTypeKind;
+
+  procedure BindOne(const nm: AnsiString);
+  begin
+    fieldTk := RecFieldType(REC_UCLASS_BASE + enumCi, mangled);
+    if fieldTk = tyRecord then LastTypeRecId := RecFieldRecId(REC_UCLASS_BASE + enumCi, mangled)
+    else LastTypeRecId := REC_NONE;
+    bindSym := AllocVar(nm, fieldTk);
+    fieldNode := AllocNode(AN_FIELD);
+    ASTLeft[fieldNode] := RMakeIdent(scrutSym);
+    ASTSOffset[fieldNode] := RStoredName(mangled); ASTSLen[fieldNode] := Length(mangled);
+    ASTTk[fieldNode] := Ord(Syms[bindSym].TypeKind);
+    assignNode := AllocNode(AN_ASSIGN);
+    ASTLeft[assignNode] := RMakeIdent(bindSym); ASTRight[assignNode] := fieldNode;
+    Result := RSeqAppend(Result, assignNode);
+  end;
+
+begin
+  Result := -1;
+  case REnumVariants[vi].Kind of
+    RVAR_TUPLE:
+    begin
+      Expect(tkLParen, '(');
+      i := 0;
+      if CurTok.Kind <> tkRParen then
+        repeat
+          if CurTok.Kind <> tkIdent then Error('Rust: expected bind name in tuple pattern');
+          bindName := CurTok.SVal; Next;
+          if bindName <> '_' then
+          begin
+            mangled := variantName + '.' + RIntToStr(i);
+            BindOne(bindName);
+          end;
+          Inc(i);
+        until not Eat(tkComma);
+      Expect(tkRParen, ')');
+    end;
+    RVAR_STRUCT:
+    begin
+      Expect(tkBegin, '{');
+      while CurTok.Kind <> tkEnd do
+      begin
+        if CurTok.Kind <> tkIdent then Error('Rust: expected field name in struct pattern');
+        bindName := CurTok.SVal; Next;
+        mangled := variantName + '.' + bindName;
+        BindOne(bindName);
+        if not Eat(tkComma) then Break;
+      end;
+      Expect(tkEnd, '}');
+    end;
+  end; { RVAR_UNIT: no pattern payload }
+end;
+
+{ `<scrut>.__tag = <vi's tag>` — the one comparison every pattern test is. }
+function RTagTest(scrutSym, vi: Integer): Integer;
+var fieldNode, valNode: Integer;
+begin
+  fieldNode := AllocNode(AN_FIELD);
+  ASTLeft[fieldNode] := RMakeIdent(scrutSym);
+  ASTSOffset[fieldNode] := RStoredName('__tag'); ASTSLen[fieldNode] := 5;
+  ASTTk[fieldNode] := Ord(tyInt64);
+  valNode := AllocNode(AN_INT_LIT);
+  ASTIVal[valNode] := REnumVariants[vi].Tag; ASTTk[valNode] := Ord(tyInt64);
+  Result := RBinOp(tkEq, fieldNode, valNode, tyBoolean);
+end;
+
 function RParseIf: Integer;
-var node, pairNode, condNode, thenNode, elseNode: Integer;
+var node, pairNode, condNode, thenNode, elseNode, preSeq, scrutSym,
+    enumCi, vi, bindsSeq: Integer;
+    variantName: AnsiString;
 begin
   Next; { if }
+  { `if let Variant(binds) = scrutinee { .. } [else { .. }]` -- a one-arm
+    match, and lowered as exactly that: the same scrutinee materialization,
+    the same tag test, the same pattern binds. Nothing about it is
+    Option-specific; it works over any enum this frontend knows. }
+  if CurTok.Kind = tkLet then
+  begin
+    Next;
+    if CurTok.Kind <> tkIdent then Error('Rust: expected a variant pattern after `if let`');
+    variantName := CurTok.SVal; Next;
+    if CurTok.Kind = tkPathSep then begin Next; variantName := CurTok.SVal; Next; end;
+    { the pattern is parsed AFTER the scrutinee is resolved, because binding a
+      name needs the scrutinee's class -- so skip the payload here, note where
+      it began, and come back to it. }
+    scrutSym := TokPos - 1;          { reuse as the saved pattern position }
+    if CurTok.Kind = tkLParen then
+    begin
+      while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do Next;
+      Next;
+    end
+    else if CurTok.Kind = tkBegin then
+    begin
+      while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do Next;
+      Next;
+    end;
+    if CurTok.Kind <> tkAssign then Error('Rust: expected = in `if let`');
+    Next;
+    enumCi := scrutSym;              { stash the pattern position }
+    scrutSym := RParseScrutinee(preSeq);
+    if Syms[scrutSym].RecName < REC_UCLASS_BASE then
+      Error('Rust: `if let` scrutinee must be an enum value');
+    vi := Syms[scrutSym].RecName - REC_UCLASS_BASE;
+    if not REnumCi[vi] then Error('Rust: `if let` scrutinee must be an enum value');
+    { Rewind to the pattern payload, now that the scrutinee's class is known.
+      CurTok is Tokens[TokPos-1], so saving TokPos and restoring it as
+      `TokPos := saved - 1; Next` puts the cursor back on exactly the token
+      the scrutinee parse stopped at -- the body's opening brace. }
+    node := TokPos;
+    TokPos := enumCi; Next;
+    enumCi := vi;
+    vi := RFindVariantInEnum(enumCi, variantName);
+    if vi < 0 then Error('Rust: unknown variant ' + variantName + ' in `if let`');
+    bindsSeq := RParsePatternBinds(scrutSym, enumCi, vi, variantName);
+    TokPos := node - 1; Next;
+    Expect(tkBegin, '{');
+    thenNode := RSeqAppend(bindsSeq, RParseBlock);
+    Expect(tkEnd, '}');
+    elseNode := -1;
+    if CurTok.Kind = tkElse then
+    begin
+      Next;
+      if CurTok.Kind = tkIf then
+        elseNode := RParseIf()
+      else
+      begin
+        Expect(tkBegin, '{');
+        elseNode := RParseBlock;
+        Expect(tkEnd, '}');
+      end;
+    end;
+    pairNode := AllocNode(AN_PAIR);
+    ASTLeft[pairNode] := thenNode; ASTRight[pairNode] := elseNode;
+    node := AllocNode(AN_IF);
+    ASTLeft[node] := RTagTest(scrutSym, vi); ASTRight[node] := pairNode;
+    Result := RSeqAppend(preSeq, node);
+    Exit;
+  end;
   condNode := RParseExpr;
   Expect(tkBegin, '{');
   thenNode := RParseBlock;
@@ -1625,20 +1830,14 @@ end;
   Scrutinee must be a plain local variable of enum type (skeleton narrowing:
   no temp-materializing of an arbitrary scrutinee expression yet). }
 function RParseMatch: Integer;
-var scrutSym, recId, enumCi, vi, i, armCount, bindSym,
-    tagFieldNode, tagValNode, condNode, bodyNode, bindsSeq, fieldNode, assignNode,
-    pairNode, chain, fTokIdx: Integer;
-    scrutIdent, variantName, bindName, mangled: AnsiString;
+var scrutSym, recId, enumCi, vi, i, armCount,
+    condNode, bodyNode, bindsSeq, pairNode, chain, preSeq: Integer;
+    variantName: AnsiString;
     isWildcard: Boolean;
-    fieldTk: TTypeKind;
     arms: array[0..R_MAX_MATCH_ARMS-1] of TRMatchArm;
 begin
-  Next; { 'match' identifier }
-  if CurTok.Kind <> tkIdent then Error('Rust: match scrutinee must be a plain variable for now');
-  scrutIdent := CurTok.SVal;
-  scrutSym := FindSym(scrutIdent);
-  if scrutSym < 0 then Error('Rust: undefined variable ' + scrutIdent);
-  Next;
+  Next; { 'match' }
+  scrutSym := RParseScrutinee(preSeq);
   recId := Syms[scrutSym].RecName;
   if recId < REC_UCLASS_BASE then Error('Rust: match scrutinee must be an enum value');
   enumCi := recId - REC_UCLASS_BASE;
@@ -1666,60 +1865,7 @@ begin
 
     bindsSeq := -1;
     if not isWildcard then
-    begin
-      case REnumVariants[vi].Kind of
-        RVAR_TUPLE:
-        begin
-          Expect(tkLParen, '(');
-          i := 0;
-          if CurTok.Kind <> tkRParen then
-            repeat
-              if CurTok.Kind <> tkIdent then Error('Rust: expected bind name in tuple pattern');
-              bindName := CurTok.SVal; Next;
-              if bindName <> '_' then
-              begin
-                mangled := variantName + '.' + RIntToStr(i);
-                fieldTk := RecFieldType(REC_UCLASS_BASE + enumCi, mangled);
-                if fieldTk = tyRecord then LastTypeRecId := RecFieldRecId(REC_UCLASS_BASE + enumCi, mangled)
-                else LastTypeRecId := REC_NONE;
-                bindSym := AllocVar(bindName, fieldTk);
-                fieldNode := AllocNode(AN_FIELD);
-                ASTLeft[fieldNode] := RMakeIdent(scrutSym);
-                ASTSOffset[fieldNode] := RStoredName(mangled); ASTSLen[fieldNode] := Length(mangled);
-                ASTTk[fieldNode] := Ord(Syms[bindSym].TypeKind);
-                assignNode := AllocNode(AN_ASSIGN);
-                ASTLeft[assignNode] := RMakeIdent(bindSym); ASTRight[assignNode] := fieldNode;
-                bindsSeq := RSeqAppend(bindsSeq, assignNode);
-              end;
-              Inc(i);
-            until not Eat(tkComma);
-          Expect(tkRParen, ')');
-        end;
-        RVAR_STRUCT:
-        begin
-          Expect(tkBegin, '{');
-          while CurTok.Kind <> tkEnd do
-          begin
-            if CurTok.Kind <> tkIdent then Error('Rust: expected field name in struct pattern');
-            bindName := CurTok.SVal; fTokIdx := TokPos - 1; Next;
-            mangled := variantName + '.' + bindName;
-            fieldTk := RecFieldType(REC_UCLASS_BASE + enumCi, mangled);
-            if fieldTk = tyRecord then LastTypeRecId := RecFieldRecId(REC_UCLASS_BASE + enumCi, mangled)
-            else LastTypeRecId := REC_NONE;
-            bindSym := AllocVar(bindName, fieldTk);
-            fieldNode := AllocNode(AN_FIELD);
-            ASTLeft[fieldNode] := RMakeIdent(scrutSym);
-            ASTSOffset[fieldNode] := RStoredName(mangled); ASTSLen[fieldNode] := Length(mangled);
-            ASTTk[fieldNode] := Ord(Syms[bindSym].TypeKind);
-            assignNode := AllocNode(AN_ASSIGN);
-            ASTLeft[assignNode] := RMakeIdent(bindSym); ASTRight[assignNode] := fieldNode;
-            bindsSeq := RSeqAppend(bindsSeq, assignNode);
-            if not Eat(tkComma) then Break;
-          end;
-          Expect(tkEnd, '}');
-        end;
-      end; { RVAR_UNIT: no pattern payload }
-    end;
+      bindsSeq := RParsePatternBinds(scrutSym, enumCi, vi, variantName);
 
     { `=>` — two plain tokens (assign, then gt), same trick as `->` uses;
       no dedicated fat-arrow token needed. }
@@ -1748,16 +1894,7 @@ begin
 
     arms[armCount].IsWildcard := isWildcard;
     arms[armCount].BodyNode := bodyNode;
-    if not isWildcard then
-    begin
-      tagFieldNode := AllocNode(AN_FIELD);
-      ASTLeft[tagFieldNode] := RMakeIdent(scrutSym);
-      ASTSOffset[tagFieldNode] := RStoredName('__tag'); ASTSLen[tagFieldNode] := 5;
-      ASTTk[tagFieldNode] := Ord(tyInt64);
-      tagValNode := AllocNode(AN_INT_LIT);
-      ASTIVal[tagValNode] := REnumVariants[vi].Tag; ASTTk[tagValNode] := Ord(tyInt64);
-      arms[armCount].CondNode := RBinOp(tkEq, tagFieldNode, tagValNode, tyBoolean);
-    end;
+    if not isWildcard then arms[armCount].CondNode := RTagTest(scrutSym, vi);
     Inc(armCount);
   end;
   Expect(tkEnd, '}');
@@ -1778,7 +1915,7 @@ begin
       chain := condNode;
     end;
   end;
-  Result := chain;
+  Result := RSeqAppend(preSeq, chain);
 end;
 
 { Stage-0 corpus trivia (feature-rust-corpus-chess): compact the token
