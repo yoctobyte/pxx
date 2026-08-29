@@ -170,4 +170,4 @@ that once-forever instead of once-per-audit. Not built here because
 `tools/**` is Track T's lane.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit f50bb6838.
