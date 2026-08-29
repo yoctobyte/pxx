@@ -54,7 +54,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (306)
+## backlog (305)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -223,7 +223,6 @@ _none_
 | feature-cdecl-bodied-sysv-prologue | A | 58 | feature | Bodied Pascal `cdecl` procs: genuine SysV prologue (float params, >6 args) | — |
 | feature-cli-widgetset-flag | A | 20 | feature | CLI: --widgetset=<name> as sugar for -dWIDGETSET_<NAME>, so the flag reads like Lazarus' -ws | — |
 | feature-cross-frontend-interop-contract | A | 20 | feature | Cross-frontend interop contract — umbrella | — |
-| feature-demo-ide-jump-into-includes-and-units | B+E | 35 | feature | garin's diagnostic parser keys off `a number between the first two colons` and carries no file, on the stated assumption that the compiler names one main unit. Since 2026-08-21 that is no longer true: a diagnostic in an include or a `uses`d unit is followed by an `in: <path>` line, which the IDE currently drops, so jump-to-error lands on the wrong file. | — |
 | feature-demo-nilpy-ide | E | 30 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | — |
 | feature-demo-portable-userland | E | 35 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-demo-songformatter-pxx-target | E | 68 | feature | songformatter as a pxx compile target (nilpy) — GUI editor + live preview | feature-lib-pxxpdf-reportlab-compat, feature-nilpy-re-module, feature-nilpy-tkinter-facade |
@@ -611,9 +610,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2643)
+## done (2644)
 
-2643 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2644 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (51)
 
@@ -874,7 +873,6 @@ _none_
 - [p 35] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
 - [p 35] [A] feature-a-a-refusal-is-a-claim-with-a-date-on-it
 - [p 35] [A] feature-c-package-namespace-decision
-- [p 35] [B+E] feature-demo-ide-jump-into-includes-and-units
 - [p 35] [E] feature-demo-portable-userland
 - [p 35] [N] feature-nilpy-counter-api-beyond-the-constructor
 - [p 35] [N] feature-nilpy-walrus-operator
