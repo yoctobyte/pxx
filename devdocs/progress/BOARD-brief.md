@@ -5,14 +5,14 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:22 blocked:5 backlog:304 backlog_new:4 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2589 rejected:46`
+`working:2 unfinished:21 blocked:5 backlog:304 backlog_new:4 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2589 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-opt-o3-register-pressure` [O] — owner: frank-optimize-b4
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
-## unfinished (22) — parked mid-flight; re-claim, do not duplicate
+## unfinished (21) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -25,7 +25,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
-- `feature-opt-o3-register-pressure` [O]
 - `feature-pascal-corpus-expansion` [P]
 - `feature-pascal-corpus-fpc-testsuite` [P]
 - `feature-pascal-corpus-generics` [P]
@@ -45,7 +44,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 315, ranked
+## Ready — top 30 of 314, ranked
 
 - `[p 85] [N]` bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
 - `[p 75] [A]` bug-a-the-17th-thread-silently-aliases-reactor-slot-0
@@ -78,4 +77,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
 
-_285 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_284 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
