@@ -323,3 +323,55 @@ transformation applied" and "the file still builds".
 Batches 2 (35 piped-stdin) and 3 (13 in-loop) are still bare `test`. They are
 different regexes and land separately, for the same reason batch 1 kept one
 assertion per hunk.
+
+## 2026-08-29 — batches 2 and 3: 498 converted. The census corrected itself again.
+
+Batch 1's shape table was itself too coarse, and converting exposed it. The
+"35 piped-stdin" and "9 other" buckets were not two shapes — they were one
+regex's worth of standalone compares (14) plus in-loop lines double-counted from
+the backslash bucket. **The real terminal figures, and these are measured after
+the conversion rather than predicted before it:**
+
+| shape | count | outcome |
+| --- | --- | --- |
+| clean output-compare | 474 | converted (batch 1) |
+| standalone compare, pipes/`printf` on either side | 14 | converted (batch 2) |
+| in-loop compare (`for arch in …`, trailing `\`) | 10 | converted (batch 3) |
+| **total converted** | **498** | |
+| exit-status check, `test "$$?" = "N"` | 37 | **not convertible — by decision** |
+| in-loop non-assertions (a capture, a redirect, an `if`) | 3 | nothing to compare |
+| bare run, no assertion at all | 9 | nothing to compare |
+
+That the number moved twice under measurement is the point of the row about the
+480: **a count over heterogeneous shapes is a guess wearing a number's clothes**,
+and the only thing that ever settles it is doing the transformation and counting
+what is left.
+
+### The 37 that stay silent, and why that is finished work
+
+`test "$$?" = "143"` asserts a **signal**. `expect_same.sh` compares two strings.
+Wrapping them would produce a diff that looks exactly like the other 498 while
+asserting something different — a semantic change in a mechanical diff's
+clothing, landing in a review too large to catch it. They keep their silence, and
+they are listed here so the next reader knows this was decided and measured, not
+skipped. If they ever need a diagnostic it wants a *different* helper, one that
+compares exit statuses and says so.
+
+### Batch 3's shape, which is not batch 1's
+
+In-loop lines carry a trailing `\` and sometimes a `|| { echo …; exit 1; }`
+trailer — and in one case (`Makefile:4200`) the `||` is on the *following*
+continuation line, so it guards the converted command exactly as it guarded the
+`test`. Every trailer was preserved verbatim; none were tidied, even the four
+whose `echo "cross … FAIL on $$arch"` is now partly redundant with
+`expect_same.sh`'s own output. Tidying them would be a second thing per hunk.
+
+Labels here interpolate: `$$arch/lib_net_$$arch` resolves at run time, so the
+failing job names its own architecture without the recipe being unrolled.
+
+Verified as batch 1 was — 14 and 10 changed lines, every hunk 1↔1, prefix,
+operands and trailer byte-identical, file length unchanged, zero label collisions
+against the 474 — plus, because a loop fragment cannot be parsed alone, the two
+enclosing **recipe blocks** were reassembled, make-expanded and passed through
+`bash -n` whole, with a check that all 10 changed lines fell inside a block that
+was actually checked. `make` parses the file and the self-host fixedpoint builds.
