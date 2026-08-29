@@ -12,10 +12,10 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| feature-opt-o3-register-pressure | O | 70 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
+| feature-opt-o3-register-pressure | O | 70→50 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
 
-## unfinished (21)
+## unfinished (22)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -30,6 +30,7 @@ _none_
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 65 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
+| feature-opt-o3-register-pressure | O | 50 | feature |  | — |
 | feature-pascal-corpus-expansion | P | 75 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 | feature-pascal-corpus-fpc-testsuite | P | 65 | feature | Pascal corpus rung 1 — FPC test-suite subset (conformance) | — |
 | feature-pascal-corpus-generics | P | 65 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
@@ -51,7 +52,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (307)
+## backlog (308)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -271,6 +272,7 @@ _none_
 | feature-opt-bulk-copy-is-byte-at-a-time | O | 65 | feature | The runtime's bulk-copy primitives move ONE BYTE per iteration. Copy() on a 64-element array is ~23x slower than FPC's (2.54s vs 0.11s over 3M copies). A word-at-a-time loop -- ~10 lines, portable, no backend work -- was prototyped and measured at 3.3x of that back. | — |
 | feature-opt-dynarray-grows-in-place | O | 40 | feature | A growing dynamic array leaves its whole geometric series behind as garbage | — |
 | feature-opt-emitasmx64-reparses-fixed-strings | O | 60 | feature | `EmitAsmX64` re-parses the same hardcoded assembly strings on every compile — ~12% of a NilPy compile | — |
+| feature-opt-emitloadvara64-needs-a-destination-register-parameter | O | 55 | feature | EmitLoadVarA64 hardcodes x0 behind residency, dyn-array-handle and sign-extension special cases, so the aarch64 leaf-operand collapse could only be done for the CONST half. The LEAFSYM half needs the right operand in x1 while the left sits in x0; a load-to-x1 twin would duplicate every one of those special cases. Honest fix is a destination-register parameter. Unlocks a further 12-16% of all binops on aarch64. | — |
 | feature-opt-heap-per-thread-cache | O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-opt-inline-float-and-record-returning-leaves | O | 45 | feature | The inliner takes only int/ordinal leaves — it rejects any function returning a float or a record. Measured on lib/rtl/math.pas's double-double kernels: hand-inlining the exact same arithmetic took a sin kernel from 7.96 us to 2.11 us, BIT-IDENTICAL, so ~74% of that path's cost was call overhead the inliner already knows how to remove for integers. | — |
 | feature-opt-rtti-emit-on-use | O | 32 | feature | RTTI is emitted unconditionally (every class, even a classless program) — dead weight on ESP32/embedded | — |
@@ -363,7 +365,7 @@ _none_
 | task-d-document-warn-ignored-directives | D | 20 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (5)
+## backlog_new (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -371,6 +373,7 @@ _none_
 | bug-a-emitzeroframeslot-has-no-wasm32-arm | A | 55 | bug | EmitZeroFrameSlot (compiler/symtab.inc:10074) is the single owner of the zero-init contract and has TWO per-target chains, one per size class. The wide one (> pointer) ends in Error and fails loud — that is what this ticket originally described. The narrow one (<= pointer, which is EVERY managed scalar) ends in an UNGUARDED else that emits x86-64 bytes, so wasm32 falls open there and has been doing so since the managed-string phase. Measured 2026-08-28 with a probe build. Output is byte-identical with the fall-through removed, so Code[] is unread on this target and nothing wrong has been PRODUCED — it is latent, not active. Carries one open design question: the wasm32 backend now zeroes its own managed scalars in its prologue, so there are three mechanisms for one guarantee on this target. | — |
 | bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked | P | 60 | bug | `r := s` where r is a record and s an AnsiString is correctly rejected (`incompatible types: cannot assign AnsiString to record`). The same assignment to an ELEMENT of an array of that record — `rs[1] := s` for a dyn array, `fx[0] := s` for a fixed one — compiles clean and segfaults at run time. FPC rejects all three. One concept, two paths, and the check lives on only one of them: the classic double-case shape. Found 2026-08-29 by the wasm32 lane through a botched line in its own test, which is the only reason anyone looked. | — |
 | bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets | P | 65 | bug | `SizeOf(Extended)` answers 10 while a variable declared `Extended` occupies 8 and an array of four occupies 32. Same two-table split as [[bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets]], in the same function, left unfixed for the sibling type when Real was corrected. Self-inconsistent within our own compiler, so any stride or GetMem computed from SizeOf(Extended) is two bytes too long per element. | — |
+| feature-opt-a64-loadvar-destination-register | O | 55 | feature | EmitLoadVarA64 hardcodes x0, which is why the aarch64 leaf-operand collapse (1185b3489) could only do the CONST half. Giving it a destination-register parameter unlocks the LEAFSYM half — a further 12.6-16.3% of every integer binop on the target. Filed rather than smuggled into the port because duplicating the helper is the second-path failure this repo has a document about. | — |
 | refactor-a-target-dispatch-chains-fail-open | A | 50 | refactor | Not a missing-helper ticket: TARGET_PTR_SIZE exists and is read at 129 sites. The narrow, verified gap is that several per-target if/else-if chains have no final else, so adding target #7 (wasm32) or #8 (riscv64) matches no arm and configures nothing, silently. lexer.inc:936 is the worked example. Fix is a mandatory else that Errors, not a collapse of the 180 TargetArch sites — util.inc:87 already documents why collapsing is wrong. | — |
 
 ## experimental (20)
@@ -743,6 +746,8 @@ _none_
 - [p 55] [N] feature-nilpy-lambda-compiled-closure
 - [p 55] [N] feature-nilpy-no-type-inference-switch
 - [p 55] [N] feature-nilpy-str-format-named-keyword-fields
+- [p 55] [O] feature-opt-a64-loadvar-destination-register
+- [p 55] [O] feature-opt-emitloadvara64-needs-a-destination-register-parameter
 - [p 55] [P] feature-p-assertions-directive-and-position
 - [p 55] [P] feature-p-tmethod-record-for-method-pointers
 - [p 55] [P] feature-p-uses-a-unit-in-an-explicit-file
@@ -764,6 +769,7 @@ _none_
 - [p 50] [D] docs-devnotes-ai-assisted-build [parked — re-claim, do not duplicate]
 - [p 50] [C] feature-c-import-a-pascal-unit-under-a-mangled-name [parked — re-claim, do not duplicate]
 - [p 50] [A] feature-nested-routine-fixed-array-capture
+- [p 50] [O] feature-opt-o3-register-pressure [parked — re-claim, do not duplicate]
 - [p 50] [A] feature-release-checksums-repro
 - [p 50] [A] refactor-a-target-dispatch-chains-fail-open
 - [p 50] [C] refactor-c-string-literal-decay-belongs-at-the-producer
