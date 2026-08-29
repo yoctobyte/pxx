@@ -64,6 +64,17 @@ function RParseExpr: Integer; forward;
 function RParseBlock: Integer; forward;
 function RParseStatement: Integer; forward;
 function RParseIf: Integer; forward;
+function RParseIfExpr: Integer; forward;
+{ Called from RParseMatch (:1466) well above its own definition. pxx resolves
+  names across the whole unit and FPC resolves them in SOURCE ORDER, so without
+  this the file self-hosts perfectly and `compiler.pas` does not compile under
+  FPC at all -- which breaks seeding a fresh tree that has no trusted binary
+  yet. The per-fix loop structurally cannot catch that: `make compiler/pascal26`
+  compiles the compiler WITH pxx, so the only compiler it ever consults is the
+  one under test, and the byte-identical fixedpoint stays green throughout.
+  `python3 tools/forwardlint.py` is what does catch it.
+  bug-r-rexprrecid-breaks-the-fpc-bootstrap-seed }
+function RExprRecId(node: Integer): Integer; forward;
 function RSpecializeGenericFn(gfi: Integer; const concreteTypeName: AnsiString): Integer; forward;
 
 const
@@ -71,6 +82,7 @@ const
   RVAR_TUPLE  = 1;
   RVAR_STRUCT = 2;
   R_MAX_VARIANTS = 4096;
+  R_MAX_ALIASES = 256;
   R_MAX_MATCH_ARMS = 64;
 
 type
@@ -120,6 +132,77 @@ var
   { set by RRetTypeAt/RRetTypeCur as a side effect, in LastTypeRecId's style:
     the element count of a just-parsed `[T; N]` return type, 0 for any other. }
   RRetArrLen: Integer;
+  { `[pub] type Alias = Target;` -- the corpus's `pub type Bitboard = u64;`.
+    Recorded by RStripTopItems as the item is removed from the stream, and
+    resolved in RTypeNameAt, which is the one canonical type-name reader:
+    resolving THERE rather than in RTypeKindFromName means every downstream
+    user (FindUClass, the record-id lookups, the array-element paths) sees the
+    TARGET name and needs no alias knowledge of its own. Normalise rather than
+    grow a second path.
+
+    Narrowing: a SINGLE-TOKEN target only. `type M = Option<Square>;` or
+    `type Row = [u8; 8];` still vanishes exactly as every alias did before, so
+    this strictly widens what compiles and cannot break what did. }
+  RAliasName: array[0..R_MAX_ALIASES-1] of AnsiString;
+  RAliasTarget: array[0..R_MAX_ALIASES-1] of AnsiString;
+  RAliasCount: Integer;
+  { Module names declared by `mod x;` / `pub mod x;`. In a UNITY BUILD (the
+    ladder's stage 3, the same trick test/zlib/runner.c uses) several modules
+    are concatenated into one file, and everything then lives in ONE flat
+    namespace -- but the source still says `attacks::knight(sq)` and
+    `crate::board::Board::new()`. Concatenation does not fix that; the
+    qualifiers have to go.
+
+    Stripping needs to know which `Ident ::` prefixes are MODULES, because
+    `Color::White` and `Board::new` are type paths and must survive. The crate
+    root declares its modules, so `mod x;` is the answer and it is exact --
+    no heuristic about capitalisation, and an unknown `foo::bar` still errors
+    the way it should. `crate` / `self` / `super` are keywords and always go. }
+  RModName: array[0..R_MAX_ALIASES-1] of AnsiString;
+  RModCount: Integer;
+
+  { Top-level `const NAME: [T; N] = [...]` — the corpus's attack tables, and
+    the reason stage 3 is about data modules at all. Registered as a GLOBAL
+    array by RRegisterTopConsts (CurProc < 0 at prescan time, so AllocArray
+    puts it in BSS) with the element stores collected here, and prepended to
+    `main`'s body.
+
+    Deviation, deliberate and stated: Rust's `const` is a compile-time value
+    that would live in .rodata; this one is a mutable global filled at startup.
+    Every observable a compiling program has -- the values, their addresses
+    being stable, reads from any function -- is the same, and the difference is
+    a write nobody performs. Building real .rodata initializers is a shared-
+    codegen job (Track A) and would buy nothing the engine can see. }
+  RConstInitSeq: Integer;
+
+function RResolveAlias(const name: AnsiString): AnsiString;
+var i, hops: Integer; found: Boolean;
+begin
+  Result := name;
+  { bounded, so `type A = B; type B = A;` cannot spin }
+  for hops := 1 to R_MAX_ALIASES do
+  begin
+    found := False;
+    for i := 0 to RAliasCount - 1 do
+      if RAliasName[i] = Result then
+      begin
+        if RAliasTarget[i] = Result then Exit;
+        Result := RAliasTarget[i];
+        found := True;
+        Break;
+      end;
+    if not found then Exit;
+  end;
+end;
+
+function RIsModuleQualifier(const name: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := (name = 'crate') or (name = 'self') or (name = 'super');
+  if Result then Exit;
+  for i := 0 to RModCount - 1 do
+    if RModName[i] = name then begin Result := True; Exit; end;
+end;
 
 function RStoredName(const s: AnsiString): Integer;
 var i: Integer;
@@ -541,7 +624,9 @@ function RTypeNameAt(var j: Integer): AnsiString;
 var innerTk: TTypeKind; innerRec, ci: Integer;
 begin
   if Tokens[j].Kind <> tkIdent then Error('Rust: expected a type name');
-  Result := GetTokenStr(j);
+  { an alias resolves to its target HERE, so nothing downstream has to know
+    aliases exist -- see the RAliasName note }
+  Result := RResolveAlias(GetTokenStr(j));
   if (Result = 'Option') and (Tokens[j + 1].Kind = tkLt) then
   begin
     Inc(j, 2);
@@ -783,6 +868,9 @@ var node, fieldNode, symIdx, procIdx, argNode, lastArg, fTokIdx, gfi, ci: Intege
     name, methodName, fullName: AnsiString;
 begin
   case CurTok.Kind of
+    { statement-position `if` never reaches here -- RParseStatement dispatches
+      it to RParseIf first -- so this arm is only the value form. }
+    tkIf: begin Result := RParseIfExpr; Exit; end;
     tkInteger:
     begin
       node := AllocNode(AN_INT_LIT); ASTIVal[node] := CurTok.IVal;
@@ -1596,6 +1684,130 @@ begin
   Result := node;
 end;
 
+{ Is the `if` at the cursor an if-EXPRESSION in TAIL position -- `fn pick(n:
+  i64) -> i64 { if n > 0 { 1 } else { -1 } }`, which is how real Rust writes a
+  two-way accessor -- rather than an ordinary if-STATEMENT that merely happens
+  to be last?
+
+  Decided by a token scan, not by trying one parse and rewinding: Error()
+  aborts, so there is no backtracking to rewind TO, and a speculative parse
+  would leave allocated nodes behind either way.
+
+  The discriminator is Rust's own: a block has a VALUE when its last token
+  before the closing brace is not a semicolon and the block is not empty.
+  Require that of both arms, require the `else` (an if with no else has no
+  value -- Rust says so too), and require the whole thing to be followed by a
+  closing brace or a comma, which is what puts it in tail position. Anything failing any of those is a statement and goes to RParseIf
+  unchanged, so this cannot capture an if that was working before. }
+function RIfBlockHasValue(openIdx: Integer; var closeIdx: Integer): Boolean;
+var depth, i: Integer;
+begin
+  Result := False;
+  closeIdx := -1;
+  if Tokens[openIdx].Kind <> tkBegin then Exit;
+  depth := 0; i := openIdx;
+  while Tokens[i].Kind <> tkEOF do
+  begin
+    if Tokens[i].Kind = tkBegin then Inc(depth)
+    else if Tokens[i].Kind = tkEnd then
+    begin
+      Dec(depth);
+      if depth = 0 then begin closeIdx := i; Break; end;
+    end;
+    Inc(i);
+  end;
+  if closeIdx < 0 then Exit;
+  { non-empty, and not statement-terminated }
+  Result := (closeIdx > openIdx + 1) and (Tokens[closeIdx - 1].Kind <> tkSemicolon);
+end;
+
+function RIfIsTailValue: Boolean;
+var i, closeIdx: Integer;
+begin
+  Result := False;
+  if not RTailOK then Exit;
+  i := TokPos - 1;
+  if Tokens[i].Kind <> tkIf then Exit;
+  Inc(i);
+  if Tokens[i].Kind = tkLet then Exit;   { `if let` is its own form }
+  { the condition cannot contain a bare open-brace -- Rust forbids a struct
+    literal there for exactly this reason -- so the first one we meet opens
+    the then-block }
+  while (Tokens[i].Kind <> tkBegin) and (Tokens[i].Kind <> tkEOF) and
+        (Tokens[i].Kind <> tkSemicolon) do Inc(i);
+  if not RIfBlockHasValue(i, closeIdx) then Exit;
+  if Tokens[closeIdx + 1].Kind <> tkElse then Exit;
+  i := closeIdx + 2;
+  while Tokens[i].Kind = tkIf do
+  begin
+    { `else if` chain: each rung must itself be a valued if }
+    Inc(i);
+    while (Tokens[i].Kind <> tkBegin) and (Tokens[i].Kind <> tkEOF) and
+          (Tokens[i].Kind <> tkSemicolon) do Inc(i);
+    if not RIfBlockHasValue(i, closeIdx) then Exit;
+    if Tokens[closeIdx + 1].Kind <> tkElse then Exit;
+    i := closeIdx + 2;
+  end;
+  if not RIfBlockHasValue(i, closeIdx) then Exit;
+  { tail position: the fn body's closing brace, or a bare match arm's comma }
+  Result := (Tokens[closeIdx + 1].Kind = tkEnd) or
+            (RInMatchArm and (Tokens[closeIdx + 1].Kind = tkComma));
+end;
+
+{ `if c { a } else { b }` in a VALUE position -- `let df = if k < 4 { 1 } else
+  { 2 };`, which is how real Rust spells what Pascal spells with a temp and two
+  assignments. It is not the statement `if`: that one is RParseIf above, still
+  dispatched from RParseStatement, and untouched.
+
+  Lowers to the shared AN_TERNARY (Left = condition, Right = AN_PAIR(then,
+  else)) -- the same node the C frontend builds for `c ? a : b` and Pascal for
+  its own if-expression, so only the SELECTED arm is evaluated and nothing new
+  reaches the IR. No Track A change; as with every rung in this window the
+  mechanism was already there.
+
+  Two deliberate narrowings. The `else` is REQUIRED, because an if-expression
+  with no else has no value -- Rust says the same thing, in its own words
+  (`()` is not `i64`). And each arm is a single EXPRESSION, not a block with
+  statements and a tail: a block-with-value needs a hidden temp and a
+  statement-sequence-in-expression-position, which is a different feature from
+  this one and is not what the engine's tables use. }
+function RParseIfExpr: Integer;
+var condNode, thenNode, elseNode, pairNode, node: Integer;
+    thenTk, elseTk: TTypeKind;
+begin
+  Next; { if }
+  condNode := RParseExpr;
+  Expect(tkBegin, '{');
+  thenNode := RParseExpr;
+  Expect(tkEnd, '}');
+  if CurTok.Kind <> tkElse then
+    Error('Rust: an `if` used as a value needs an `else` arm');
+  Next;
+  if CurTok.Kind = tkIf then
+    { parens force an actual recursive CALL rather than a read of this
+      function's own Result alias -- the same Pascal gotcha RParseIf records }
+    elseNode := RParseIfExpr()
+  else
+  begin
+    Expect(tkBegin, '{');
+    elseNode := RParseExpr;
+    Expect(tkEnd, '}');
+  end;
+  pairNode := AllocNode(AN_PAIR);
+  ASTLeft[pairNode] := thenNode;
+  ASTRight[pairNode] := elseNode;
+  node := AllocNode(AN_TERNARY);
+  ASTLeft[node] := condNode;
+  ASTRight[node] := pairNode;
+  { Matching arms keep their exact kind -- RWiden alone would collapse a
+    u64/u64 pair to i32, which is the literal-suffix bug wearing a hat. }
+  thenTk := IntToTypeKind(ASTTk[thenNode]);
+  elseTk := IntToTypeKind(ASTTk[elseNode]);
+  if thenTk = elseTk then ASTTk[node] := Ord(thenTk)
+  else ASTTk[node] := Ord(RWiden(thenTk, elseTk));
+  Result := node;
+end;
+
 function RParseWhile: Integer;
 var node: Integer;
 begin
@@ -1911,75 +2123,29 @@ end;
   which lowers to one AN_ASSIGN per field (no single-node "construct" op
   exists for value-type structs, so the declaration is really N field
   stores chained by AN_SEQ). Trailing `;` is left for the caller. }
-function RParseLet: Integer;
-var name, typeName, variantName, fname, mangled: AnsiString;
-    symIdx, ci, structCi, fTokIdx, ci2, vi, k, tagOff, tagNode, tagAssign: Integer;
-    annotTk, arrElemTk: TTypeKind; hasType, qualified, isArr: Boolean;
-    identNode, fieldNode, valNode, assignNode, seq, arrLen, loNode, hiNode: Integer;
-    arrElemRecId, optCi: Integer;
-    payTk: TTypeKind; isSome: Boolean;
+{ `[v; N]` repeat form or `[a, b, c]` list at the cursor (CurTok on `[`),
+  allocating `name` as a fixed array and unrolling to one AN_INDEX store per
+  element -- the same per-slot shape struct literals use, and for the same
+  reason: no AST node carries a whole aggregate value.
+
+  `annotLen` > 0 is the `[T; N]` annotation (element kind in `annotTk`), 0 means
+  infer both from the literal itself. Lifted out of RParseLet so the top-level
+  `const NAME: [T; N] = [...]` prescan can share it rather than grow a second
+  copy -- the array-literal parser is exactly the kind of thing that gets fixed
+  on one arm and left broken on the other.
+
+  Repeat-form deviation, unchanged from when this lived inline: the element
+  expression is re-evaluated per slot. }
+function RParseArrayLiteral(const name: AnsiString; annotTk: TTypeKind;
+                            annotLen: Integer): Integer;
+var symIdx, seq, k, ci, ci2, vi, valNode, tagNode, fieldNode, assignNode,
+    arrLen: Integer;
+    arrElemTk: TTypeKind;
+    isArr: Boolean;
 begin
-  Next; { let }
-  if CurTok.Kind = tkMut then Next;
-  if CurTok.Kind <> tkIdent then Error('Rust: expected variable name after let');
-  name := CurTok.SVal; Next;
-  hasType := False; annotTk := tyUnknown; structCi := -1;
-  isArr := False; arrElemTk := tyUnknown; arrLen := 0; arrElemRecId := REC_NONE;
-  if CurTok.Kind = tkColon then
-  begin
-    Next;
-    if CurTok.Kind = tkLBrack then
-    begin
-      { `[T; N]` fixed-array annotation. T may be a struct/enum: a fixed array
-        of records is stored + indexed by the shared codegen (ElemRecName), and
-        `arr[i].field` resolves via ResolveNodeRec(AN_INDEX). }
-      Next;
-      if CurTok.Kind <> tkIdent then Error('Rust: expected element type in [T; N]');
-      arrElemTk := RTypeKindFromName(RTypeNameCur, True);
-      arrElemRecId := LastTypeRecId;
-      Expect(tkSemicolon, ';');
-      if CurTok.Kind <> tkInteger then Error('Rust: array length must be an integer literal (skeleton)');
-      arrLen := CurTok.IVal;
-      if arrLen <= 0 then Error('Rust: array length must be positive');
-      Next;
-      Expect(tkRBrack, ']');
-      isArr := True;
-    end
-    else
-    begin
-      if CurTok.Kind <> tkIdent then Error('Rust: expected type after :');
-      typeName := RTypeNameCur;
-      structCi := FindUClass(typeName);
-      annotTk := RTypeKindFromName(typeName, True);
-    end;
-    hasType := True;
-  end;
-  if CurTok.Kind <> tkAssign then
-  begin
-    if not hasType then Error('Rust: let without initializer needs a type annotation');
-    if isArr then
-    begin
-      { fixed array of a record type: AllocArray reads LastTypeRecId for the
-        element's size + ElemRecName (uninitialised is allowed here — pxx does
-        not enforce Rust's definite-init; the movegen fills slots field-wise). }
-      if arrElemTk = tyRecord then LastTypeRecId := arrElemRecId;
-      AllocArray(name, arrElemTk, 0, arrLen - 1);
-      Result := -1;
-      Exit;
-    end;
-    if annotTk = tyRecord then LastTypeRecId := REC_UCLASS_BASE + structCi;
-    symIdx := AllocVar(name, annotTk);
-    Result := -1;
-    Exit;
-  end;
-  Next; { = }
-  { array literal RHS: `[v; N]` repeat form or `[a, b, c]` list, unrolled
-    to one AN_INDEX store per element (no whole-array construct node —
-    the same per-slot shape struct literals use). Repeat form deviation:
-    the element expression is re-evaluated per slot. }
-  if (isArr and (CurTok.Kind = tkLBrack)) or
-     ((not hasType) and (CurTok.Kind = tkLBrack) and not RBrackHasDotDotAt(TokPos - 1)) then
-  begin
+  isArr := annotLen > 0;
+  arrElemTk := annotTk;
+  arrLen := annotLen;
     Next; { [ }
     valNode := RParseExpr;
     if not isArr then
@@ -2047,6 +2213,76 @@ begin
     until False;
     Expect(tkRBrack, ']');
     Result := seq;
+end;
+
+function RParseLet: Integer;
+var name, typeName, variantName, fname, mangled: AnsiString;
+    symIdx, ci, structCi, fTokIdx, ci2, vi, k, tagOff, tagNode, tagAssign: Integer;
+    annotTk, arrElemTk: TTypeKind; hasType, qualified, isArr: Boolean;
+    identNode, fieldNode, valNode, assignNode, seq, arrLen, loNode, hiNode: Integer;
+    arrElemRecId, optCi: Integer;
+    payTk: TTypeKind; isSome: Boolean;
+begin
+  Next; { let }
+  if CurTok.Kind = tkMut then Next;
+  if CurTok.Kind <> tkIdent then Error('Rust: expected variable name after let');
+  name := CurTok.SVal; Next;
+  hasType := False; annotTk := tyUnknown; structCi := -1;
+  isArr := False; arrElemTk := tyUnknown; arrLen := 0; arrElemRecId := REC_NONE;
+  if CurTok.Kind = tkColon then
+  begin
+    Next;
+    if CurTok.Kind = tkLBrack then
+    begin
+      { `[T; N]` fixed-array annotation. T may be a struct/enum: a fixed array
+        of records is stored + indexed by the shared codegen (ElemRecName), and
+        `arr[i].field` resolves via ResolveNodeRec(AN_INDEX). }
+      Next;
+      if CurTok.Kind <> tkIdent then Error('Rust: expected element type in [T; N]');
+      arrElemTk := RTypeKindFromName(RTypeNameCur, True);
+      arrElemRecId := LastTypeRecId;
+      Expect(tkSemicolon, ';');
+      if CurTok.Kind <> tkInteger then Error('Rust: array length must be an integer literal (skeleton)');
+      arrLen := CurTok.IVal;
+      if arrLen <= 0 then Error('Rust: array length must be positive');
+      Next;
+      Expect(tkRBrack, ']');
+      isArr := True;
+    end
+    else
+    begin
+      if CurTok.Kind <> tkIdent then Error('Rust: expected type after :');
+      typeName := RTypeNameCur;
+      structCi := FindUClass(typeName);
+      annotTk := RTypeKindFromName(typeName, True);
+    end;
+    hasType := True;
+  end;
+  if CurTok.Kind <> tkAssign then
+  begin
+    if not hasType then Error('Rust: let without initializer needs a type annotation');
+    if isArr then
+    begin
+      { fixed array of a record type: AllocArray reads LastTypeRecId for the
+        element's size + ElemRecName (uninitialised is allowed here — pxx does
+        not enforce Rust's definite-init; the movegen fills slots field-wise). }
+      if arrElemTk = tyRecord then LastTypeRecId := arrElemRecId;
+      AllocArray(name, arrElemTk, 0, arrLen - 1);
+      Result := -1;
+      Exit;
+    end;
+    if annotTk = tyRecord then LastTypeRecId := REC_UCLASS_BASE + structCi;
+    symIdx := AllocVar(name, annotTk);
+    Result := -1;
+    Exit;
+  end;
+  Next; { = }
+  { array literal RHS -- one shared implementation, see RParseArrayLiteral }
+  if (isArr and (CurTok.Kind = tkLBrack)) or
+     ((not hasType) and (CurTok.Kind = tkLBrack) and not RBrackHasDotDotAt(TokPos - 1)) then
+  begin
+    if isArr then Result := RParseArrayLiteral(name, arrElemTk, arrLen)
+    else Result := RParseArrayLiteral(name, tyUnknown, 0);
     Exit;
   end;
   { whole-array RHS: `let t: [T; N] = build();` or `let t = build();` where
@@ -2322,6 +2558,25 @@ end;
 procedure RStripTopItems;
 var src, dst, depth: Integer;
 begin
+  { Pass one collects `mod x;` names. Separate from the compaction below
+    because a `mod` item may sit BELOW a use of its qualifier, and a
+    single forward pass would then strip nothing. }
+  RModCount := 0;
+  src := 0; depth := 0;
+  while Tokens[src].Kind <> tkEOF do
+  begin
+    if Tokens[src].Kind = tkBegin then Inc(depth)
+    else if Tokens[src].Kind = tkEnd then Dec(depth)
+    else if (depth = 0) and (Tokens[src].Kind = tkIdent) and (GetTokenStr(src) = 'mod') and
+            (Tokens[src + 1].Kind = tkIdent) and (Tokens[src + 2].Kind = tkSemicolon) and
+            (RModCount < R_MAX_ALIASES) then
+    begin
+      RModName[RModCount] := GetTokenStr(src + 1);
+      Inc(RModCount);
+    end;
+    Inc(src);
+  end;
+
   src := 0; dst := 0; depth := 0;
   while Tokens[src].Kind <> tkEOF do
   begin
@@ -2336,8 +2591,36 @@ begin
     end;
     if (depth = 0) and (Tokens[src].Kind = tkIdent) and (GetTokenStr(src) = 'type') then
     begin
+      { RECORD it before dropping it. `type X = Y;` used to vanish whole and
+        every use of X then died on `unknown type X` -- which the corpus hits
+        on its first line, since `pub type Bitboard = u64;` is how a bitboard
+        engine names its one central type. Single-token targets only; anything
+        else falls through to the old drop-and-error, so this cannot break a
+        program that compiled before. }
+      if (Tokens[src + 1].Kind = tkIdent) and (Tokens[src + 2].Kind = tkAssign) and
+         (Tokens[src + 3].Kind = tkIdent) and (Tokens[src + 4].Kind = tkSemicolon) and
+         (RAliasCount < R_MAX_ALIASES) then
+      begin
+        RAliasName[RAliasCount] := GetTokenStr(src + 1);
+        RAliasTarget[RAliasCount] := GetTokenStr(src + 3);
+        Inc(RAliasCount);
+      end;
       while (Tokens[src].Kind <> tkSemicolon) and (Tokens[src].Kind <> tkEOF) do Inc(src);
       if Tokens[src].Kind = tkSemicolon then Inc(src);
+      Continue;
+    end;
+    { MODULE QUALIFIER dropped at any depth: `attacks::knight(sq)` and
+      `crate::board::Board::new()` become `knight(sq)` and `Board::new()`,
+      which is what they mean once the modules are one file. Only names a
+      `mod` item declared, plus the `crate`/`self`/`super` keywords -- a TYPE
+      path (`Color::White`, `Board::new`, `Self::EMPTY`) is left alone, which
+      is the whole reason this is a table lookup and not a rule about
+      capitalisation. Chains fall out for free: after dropping `crate ::` the
+      loop re-examines `board ::` at the same position. }
+    if (Tokens[src].Kind = tkIdent) and (Tokens[src + 1].Kind = tkPathSep) and
+       RIsModuleQualifier(GetTokenStr(src)) then
+    begin
+      Inc(src, 2);
       Continue;
     end;
     { `pub` dropped at ANY depth — item visibility at depth 0, field
@@ -2593,7 +2876,15 @@ var name, fname: AnsiString; symIdx, node, rhsNode, lhsNode, baseNode, fieldNode
     opTk: TTokenKind; isSome: Boolean;
 begin
   case CurTok.Kind of
-    tkIf: begin Result := RParseIf; Exit; end;
+    tkIf:
+    begin
+      { a tail if-EXPRESSION is a value, not a statement -- see RIfIsTailValue.
+        Parsed as an expression here and wrapped by the ordinary tail check
+        below, so it shares one path with every other tail value. }
+      if RIfIsTailValue then Result := RReturnValue(RParseIfExpr)
+      else Result := RParseIf;
+      Exit;
+    end;
     tkWhile: begin Result := RParseWhile; Exit; end;
     tkLoop: begin Result := RParseLoop; Exit; end;
     tkFor: begin Result := RParseFor; Exit; end;
@@ -3827,6 +4118,17 @@ begin
   bodyNode := RParseFnBody;
   Expect(tkEnd, '}');
 
+  { Top-level const ARRAYS are globals filled at startup (see
+    RRegisterTopConsts), and `main` is where startup is -- this frontend's
+    driver calls main() and exits, with no separate init hook to hang them on.
+    Prepended, not appended, so a const is already populated when the first
+    statement runs. }
+  if (name = 'main') and (RConstInitSeq >= 0) then
+  begin
+    bodyNode := RSeqAppend(RConstInitSeq, bodyNode);
+    RConstInitSeq := -1;
+  end;
+
   CompileAST(bodyNode);
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
@@ -3914,6 +4216,59 @@ begin
   if Result < 0 then Error('Rust: internal error specializing ' + RGenericFuncs[gfi].Name);
 end;
 
+{ Top-level `const NAME: [T; N] = [ ... ];` — registered BEFORE any function
+  body is parsed, because Rust lets a const be used above its declaration and
+  because a global must be allocated while CurProc < 0. Scalar consts stay with
+  RParseTopLevelConst and its AddConst fold; only the ARRAY form lands here,
+  which is the one that was being swallowed whole.
+
+  The literal itself goes through the same RParseArrayLiteral as `let`, which
+  is the point of having lifted it: an array-literal parser that exists twice
+  is one that gets fixed on one arm.
+
+  Cursor-mode inside a token scan: RParseArrayLiteral consumes via CurTok/Next,
+  so TokPos is positioned, the item is parsed, and the scan resumes from where
+  the parse actually stopped rather than from a re-derived index. }
+procedure RRegisterTopConsts;
+var i, depth, arrLen, savedTokPos: Integer;
+    elemTk: TTypeKind;
+    name: AnsiString;
+begin
+  RConstInitSeq := -1;
+  savedTokPos := TokPos;
+  i := 0; depth := 0;
+  while Tokens[i].Kind <> tkEOF do
+  begin
+    if Tokens[i].Kind = tkBegin then Inc(depth)
+    else if Tokens[i].Kind = tkEnd then Dec(depth)
+    else if (depth = 0) and (Tokens[i].Kind = tkIdent) and (GetTokenStr(i) = 'const') and
+            (Tokens[i + 1].Kind = tkIdent) and (Tokens[i + 2].Kind = tkColon) and
+            (Tokens[i + 3].Kind = tkLBrack) then
+    begin
+      name := GetTokenStr(i + 1);
+      TokPos := i + 3; Next;          { CurTok = '[' of the [T; N] annotation }
+      Next;                           { past '[' }
+      if CurTok.Kind <> tkIdent then Error('Rust: expected element type in a const [T; N]');
+      elemTk := RTypeKindFromName(RTypeNameCur, True);
+      Expect(tkSemicolon, ';');
+      if CurTok.Kind <> tkInteger then Error('Rust: const array length must be an integer literal');
+      arrLen := CurTok.IVal;
+      if arrLen <= 0 then Error('Rust: const array length must be positive');
+      Next;
+      Expect(tkRBrack, ']');
+      Expect(tkAssign, '=');
+      RConstInitSeq := RSeqAppend(RConstInitSeq,
+                                  RParseArrayLiteral(name, elemTk, arrLen));
+      i := TokPos - 1;
+      Continue;
+    end;
+    Inc(i);
+  end;
+  { the parse above drove the cursor; put it back where the caller had it }
+  TokPos := savedTokPos;
+  if TokPos > 0 then begin Dec(TokPos); Next; end else Next;
+end;
+
 procedure ParseRustProgram;
 var callPatch, mainIdx, jmpPatch: Integer;
 begin
@@ -3949,6 +4304,7 @@ begin
 
   REnumVariantCount := 0;
   RTraitCount := 0; RImplCount := 0; RGenericFuncCount := 0;
+  RAliasCount := 0;
   RStripTopItems;
   TokPos := 0;
   Next;
@@ -3961,6 +4317,10 @@ begin
   RRegisterStructFields;
   RRegisterTraits;
   RRegisterImpls;
+  { after the type prescans (a const array's element may be a struct) and
+    before any body is parsed (Rust allows a const to be used above its
+    declaration, and a global needs CurProc < 0) }
+  RRegisterTopConsts;
   RRegisterGenericFuncs;
   RRegisterFnSignatures;
 

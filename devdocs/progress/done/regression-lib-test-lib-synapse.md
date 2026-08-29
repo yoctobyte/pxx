@@ -1,8 +1,7 @@
 ---
 prio: 70
 track: B
-blocked-by: [bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream]
-status: blocked
+status: done
 owner: frankB
 ---
 
@@ -89,3 +88,72 @@ This ticket is now **blocked on the Track A fix** and is a red-until-then, not a
 Track B work item. `external/synapse` was fetched here (`tools/install_externals.sh`,
 pinned `b3224c3d133a`) to reproduce; it is gitignored and nothing was committed
 from it.
+
+## 2026-08-29 — FIXED by `614ec6017`, and the gated job will stay RED anyway
+
+**One fix, two tickets.** frankA's `614ec6017` ("range-check the uses-edge
+target, which was writing over PreScanPass") resolves this. Verified by
+execution, not by the log tail matching its signature — though it does: a unit
+running off its own end and dying at the *next* unit's EOF, naming
+`lib/rtl/dns_cache.pas`, a file `test/lib_synapse.pas` never mentions.
+
+External corpus fetched with `tools/install_externals.sh` (synapse
+@`b3224c3d`), since the rule skips when `external/synapse` is absent and a skip
+is not a verdict.
+
+| compiler | result |
+| --- | --- |
+| **pinned v390** (`867207f2b418`) | **RED** — `pascal26:270: error: expected implementation section, in: lib/rtl/dns_cache.pas` |
+| **HEAD `c50d99081`** (binary `3afb7bdcef3f`, contains `614ec6017`) | **GREEN** |
+
+All four of the rule's synapse assertions were then run **verbatim from the
+Makefile** — extracted with `sed`, not retyped — against HEAD-built binaries:
+`lib_synapse`, `lib_synapse_transitive_unit`, `lib_synapse_ssl.1`,
+`lib_synapse_ssl.2`. All four pass. (Retyping the expected string is how the
+first attempt produced a false mismatch: I truncated it by two lines.)
+
+### The part that matters operationally
+
+**This job builds with `$(PXX_STABLE)`, and pin v390 (`41caa9c82`, 75 minutes
+before the fix) PREDATES `614ec6017`.** So:
+
+- Track T will keep reporting this job **RED** at every sha until a pin lands
+  that includes the fix, and
+- **that red is not a second cause.** Anyone re-running the gated job now, or
+  reading the next tstate report, will see the identical error and can
+  reasonably conclude the fix did not work.
+
+This is the pin boundary in its sharp form: a `compiler/` fix is *invisible* to
+a `$(PXX_STABLE)`-gated job until the pin moves. A green here required the HEAD
+compiler, which is not what the job uses.
+
+### A provenance near-miss worth recording
+
+The first HEAD measurement I took **also failed**, identically, and I was one
+step from filing "still red at HEAD — genuine second cause". The binary was
+stale: built before the `git pull` that brought `614ec6017` into the tree.
+`git merge-base --is-ancestor` said the fix was in HEAD, which was true of the
+*sources* and false of the *binary I was running* — the same reading being true
+of what was measured and false of the question asked. Rebuilding is what caught
+it. **"The fix is in HEAD" and "the fix is in the binary I just ran" are
+different claims**, and only the second one is evidence.
+
+Resolved citing `614ec6017`. Re-run the gated job after the next pin, and if it
+is red *then*, it is a second cause.
+- 2026-08-29 — resolved, commit 3dbdc6b63.
+---
+
+## UNBLOCKED 2026-08-29 — re-test before assuming there is work here
+
+The only blocker, `bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream`,
+was **fixed and closed** by frankA at `614ec6017` — an out-of-bounds write in
+`VisibilityAllows`'s memo cache that set `PreScanPass := True` mid-parse, making
+a unit run off its own end and die at the NEXT unit's EOF.
+
+Synapse is a deep multi-unit corpus, which is exactly the shape that bug needed,
+so **this may already be green.** Re-run the job at HEAD before reading a line of
+code. If it passes, resolve it citing `614ec6017` — one fix, two tickets.
+
+Left in the ranked pool rather than closed on inference: a folder is a filing
+decision, not a measurement. It was invisible to `ready`/`next` while it sat in
+`blocked/` with a satisfied edge; found by `progress check`'s stale-edge scan.

@@ -197,6 +197,126 @@ signatures, not from the ladder's list — and both are ahead of it now:
    - indexing a call result directly (`f()[0]`) is not parsed; Pascal has
      `ProcRetArrAi` for exactly that and the Rust side does not populate it.
 
+9. **DONE** — `if` as an EXPRESSION, in both spellings: `let x = if c { a }
+   else { b };` and the tail form `fn pick(n: i64) -> i64 { if n > 0 { 1 } else
+   { -1 } }`. Named as the next wall by rung 8's own probe, which had to be
+   rewritten around its absence.
+
+   Lowers to the shared **AN_TERNARY** — Left = condition, Right =
+   AN_PAIR(then, else) — the same node the C frontend builds for `c ? a : b`
+   and Pascal for its own if-expression. So only the selected arm is evaluated
+   and nothing new reaches the IR. Fifth rung with no Track A change.
+
+   The tail form is the interesting half. It cannot be decided by trying the
+   expression parse and rewinding, because `Error()` aborts — there is nothing
+   to rewind to, and a speculative parse leaves allocated nodes behind whether
+   it succeeds or not. `RIfIsTailValue` decides it by a token scan using
+   **Rust's own discriminator**: a block has a value when it is non-empty and
+   its last token before the closing brace is not a semicolon. Require that of
+   every arm, require the `else` (an if with no else has no value — Rust says
+   the same, in its own words), and require a closing brace or a comma after
+   it, which is what makes it a tail. Anything failing any of those goes to
+   `RParseIf` unchanged, so the check cannot capture an `if` that worked
+   before; `side_effect` in the test is the pin for that direction.
+
+   One narrowing kept: an arm is a single expression, not a block with
+   statements and a trailing value. A block-with-value needs a hidden temp and
+   a statement sequence in expression position, which is a different feature
+   and not one the engine's tables use.
+
+   Matching arm types keep their exact kind rather than going through
+   `RWiden`, which would collapse a `u64`/`u64` pair to i32 — the rung-8
+   literal-suffix bug wearing a different hat, and worth stating because the
+   generic-looking helper is the obvious thing to reach for.
+
+10. **DONE** — module-level items: type aliases that actually alias, and
+    top-level `const NAME: [T; N]`. Stage 0/3 of the ladder — what a real `.rs`
+    file has *above* its first fn, and what a unity-build concatenation of
+    several modules therefore has a lot of.
+
+    Both were being *swallowed*: `RStripTopItems` dropped `type X = Y;` whole
+    (so every use of X died on `unknown type X`) and `RParseTopLevelConst`
+    skipped array consts whole (so every use died on `undefined variable`).
+    That is why the corpus's modules died in their first four lines.
+
+    - **Aliases** are recorded as the item is stripped and resolved in
+      `RTypeNameAt`, the one canonical type-name reader — so `FindUClass`, the
+      record-id lookups and the array-element paths all see the TARGET name
+      and need no alias knowledge of their own. Chained aliases resolve, with
+      a bounded loop so `type A = B; type B = A;` cannot spin. Narrowing:
+      single-token targets only, so `type Row = [u8; 8];` still vanishes as
+      before and this strictly widens what compiles.
+    - **Const arrays** become globals filled at startup, registered by a
+      PRESCAN (Rust lets a const be used above its declaration, and a global
+      needs `CurProc < 0`), with the stores prepended to `main`'s body — this
+      driver calls `main` and exits, so there is no other startup hook.
+      Deviation, stated rather than hidden: Rust's `const` is a `.rodata`
+      compile-time value and this is a mutable global. No compiling program
+      can observe the difference — values, stable addresses, reads from any
+      function are all identical — and real `.rodata` initializers are
+      shared-codegen work (Track A) that would buy the engine nothing.
+
+    The refactor is the part worth keeping: the array-literal parser was
+    lifted out of `RParseLet` into `RParseArrayLiteral` and shared with the
+    const prescan, rather than copied. An array-literal parser that exists
+    twice is one that gets fixed on one arm — this file has already paid that
+    tax three times this window.
+
+11. **FIXED (urgent, p80, not a rung)** — `RExprRecId` was called ~340 lines
+    above its own declaration with no `forward`. pxx resolves names across the
+    whole unit; **FPC resolves in source order**, so `compiler.pas` did not
+    compile under FPC at all and a fresh tree with no trusted binary could not
+    be seeded.
+
+    The reason it reached master with every gate green is structural and worth
+    internalising: `make compiler/pascal26` compiles the compiler **with pxx**,
+    so the only compiler the per-fix loop ever consults is the one under test.
+    The byte-identical self-host fixedpoint — our strongest signal — cannot see
+    FPC-only breakage by construction, and no testmgr tier covers it either.
+    `python3 tools/forwardlint.py` is what catches it, and nothing in
+    `gate.sh` or the Makefile invoked it. **Run it before pushing.**
+    Verified two ways here: forwardlint clean, and a direct
+    `fpc -Mobjfpc compiler.pas` bootstrap that now links.
+    Resolves `bug-r-rexprrecid-breaks-the-fpc-bootstrap-seed` and
+    `bug-r-rparser-calls-rexprrecid-before-declaring-it-so-the-fpc-bootstrap-seed-does-not-compile`.
+
+11. **DONE** — the stage-3 **unity build**: several `.rs` modules concatenated
+    into one translation unit, the same trick `test/zlib/runner.c` uses. `cat`
+    IS the build step; no module system, and none wanted.
+
+    What concatenation does *not* fix is the module QUALIFIERS: the source
+    still says `crate::attacks::popcount(...)` and `board::Board::new()`, and
+    those names have to become flat. Stripping them needs to tell a MODULE path
+    from a TYPE path, because `Board::new` and `Color::White` must survive — so
+    `RStripTopItems` now collects the `mod x;` declarations in a first pass and
+    strips `<mod>::`, `crate::`, `self::`, `super::` anywhere in a second.
+    Exact rather than heuristic: no rule about capitalisation, and an unknown
+    `foo::bar` still errors the way it should. Chains fall out for free, since
+    after dropping `crate ::` the loop re-examines `board ::` in place.
+
+    The two-pass split is load-bearing: a `mod` item may sit BELOW a use of its
+    own qualifier, and one forward pass would then strip nothing.
+
+    `test/rust_unity/` is four modules with real cross-module references — a
+    data module of const tables, a type module with an impl, a module reading
+    both and returning an array, and a crate root that declares them. Every
+    oracle is a hand-computed knight mobility (a1 = 2, b2 = 4, c3..f6 = 8,
+    h8 = 2), not a recorded run.
+
+    **Stated limit:** the corpus is written in real-crate shape but is NOT
+    verified against rustc — there is no rustc on this box. It is a shape
+    fixture, not a conformance one, and the Makefile comment says so. Claiming
+    otherwise would be the same overreach the claims-discipline section warns
+    about.
+
+12. **DOC** — `devdocs/dev/rust-semantics-divergences.md` created, the Rust peer
+    of the NilPy and Pascal divergence docs. Holds the const-array deviation
+    (routed there by CLAUDE.md's "an observable that no compiling program can
+    reach" row rather than by a `decide-*`, since the written rule already
+    answers it), the `println!` argument-order note from rung 6, and the
+    single-token type-alias narrowing — all three had been living only in this
+    ticket, which is the wrong place for them once the ticket closes.
+
 ## Log
 - 2026-08-29 — unit 1 landed (see the ladder ticket's log for the detail).
 - 2026-08-29 — unit 2 landed: Option (and records generally) through fn
@@ -220,3 +340,14 @@ signatures, not from the ladder's list — and both are ahead of it now:
   integer-literal suffix fix. `test_rust_array_return.rs` is the acceptance
   shape; its knight-table oracle is hand-checked rather than recorded from a
   run, because the bug it pins produced *plausible* numbers.
+- 2026-08-29 — rung 9 landed: `if` as an expression, statement and tail forms,
+  on the shared AN_TERNARY. `test_rust_if_expr.rs`.
+- 2026-08-29 — rung 10 landed: type aliases resolve, top-level const arrays
+  become startup-filled globals, and the array-literal parser is now shared
+  between `let` and the const prescan. `test_rust_module_items.rs`.
+- 2026-08-29 — urgent FPC-seed fix: `RExprRecId` forward-declared. Both
+  duplicate p80 tickets resolved.
+- 2026-08-29 - rung 11 landed: the stage-3 unity build. Module qualifiers are
+  stripped using the crate root's own `mod x;` declarations, so a `cat` of four
+  modules compiles and runs. `test/rust_unity/`.
+- 2026-08-29 - `devdocs/dev/rust-semantics-divergences.md` created.

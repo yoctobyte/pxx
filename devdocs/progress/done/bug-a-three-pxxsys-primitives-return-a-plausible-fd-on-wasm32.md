@@ -4,7 +4,7 @@ title: "PXXSysOpenRO / PXXSysClose / PXXSysLseek have no wasm32 arm and return a
 track: A
 prio: 55
 type: bug
-status: backlog
+status: done
 owner: ""
 created: 2026-08-29
 found-by: frankwasm (sizing the builtins refusal block)
@@ -87,3 +87,43 @@ not wait for it.
 
 Track A's: `make compiler/pascal26` plus the repro above on both targets. The
 wasm32 column must stop reporting plausible success.
+
+## Log
+- 2026-08-29 — resolved, commit 4eeadadc4.
+
+## Resolved 2026-08-29 — with the sibling, as one defect
+
+Fixed by the chain restructure in
+[[bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open]]; see that ticket for the
+measurements, the three corrections it needed, and what was deliberately left.
+
+**The severity argument in this ticket is the one that carried the fix, and it
+should be quoted forward: the severity is in the VALUE, not the absence.** 7 is
+a plausible file descriptor and it is stable across runs, so `if fd < 0 then
+error` passes and the caller reads a file it never opened. A 0 or a large
+negative would have been caught by the first sanity check. That is why this
+outranked "a target is missing an arm" as a framing.
+
+`PXXSysOpenRO/Close/Lseek` now return **-1** on any target with no arm —
+verified on riscv32 with this ticket's own reproducer (`-1/-1/-1`, native
+unchanged at `-14/-9/-9`) and by IR dump (`IR count=1`, an empty body, becoming
+`Result := -1`).
+
+**Not a wasm32 fix.** wasm32 cannot codegen this unit here at all
+("wasm32: code generation not implemented"), so the measurement was taken on
+**hosted riscv32**, an armless target that does build. The fix is target-shaped
+rather than wasm-shaped, so it covers wasm32, riscv32 and xtensa/IDF at once —
+and the next target too, which was the point.
+
+## Log
+- 2026-08-29 — resolved with the root-cause sibling. PENDING-COMMIT
+
+## CORRECTION 2026-08-29 — `{$error}` exists; see the sibling ticket
+
+This ticket's proposed compile-time refusal was available all along. It is
+still not the right terminal here, but for a reachability reason rather than
+an availability one: `{$error}` fires when `builtinheap.pas` is COMPILED, and
+that file is compiled into every program on every target, so it would refuse
+every wasm32/xtensa build including programs that never open a file. Full
+correction, and how the wrong answer was produced, in
+[[bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open]].
