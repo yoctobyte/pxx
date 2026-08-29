@@ -3,10 +3,19 @@ prio: 45
 track: A
 type: bug
 blocked-by: []
-summary: "A C prototype's `...` is discarded when the header is imported into Pascal, so every variadic C function is callable only with its FIXED prefix. printf imports as printf(Pointer). C mode itself calls varargs correctly, so the machinery exists and only the import discards it."
+summary: "A variadic C function imported into Pascal is callable only with its FIXED prefix: printf imports as printf(Pointer). The `...` is NOT lost -- ProcVariadic[] records it and codegen honours it -- the Pascal-side overload matcher simply never consults it. One clause in ProcArityMatches plus bounding the type-match loops."
 ---
 
-# A C header's variadic tail is dropped on import
+# A variadic C function imported into Pascal is callable only with its fixed prefix
+
+**Title and diagnosis corrected 2026-08-29, same day it was filed.** It was
+filed as "the variadic tail is dropped on import", asserting that `Procs[]` had
+no varargs flag at all. **That was wrong.** `ProcVariadic` has existed all
+along (`compiler/defs.inc:2504`), `cparser.inc:10440` sets it on every newly
+declared C proc — the same path a header import goes through — and four
+backends already honour it (`ir_codegen_aarch64.inc:2777` explicitly permits
+`nArgs <> ParamCount` when it is set). Nothing is dropped. The Pascal-side
+overload matcher simply never asks.
 
 Found 2026-08-29 by frankR while migrating `lib/pcl` off the curated
 `gtk3_c.h` ([[feature-b-migrate-pcl-off-the-curated-gtk3-header]]). It is the
@@ -34,10 +43,10 @@ variadic C function in every header: `printf`, `g_signal_emit_by_name`,
 `gtk_message_dialog_new`, `g_object_set`, `g_object_get`, `execl`, `open` — the
 whole family is reachable only through its fixed prefix.
 
-## The capability is NOT missing — only the import discards it
+## Nothing is dropped — the matcher never asks
 
-This is the part that makes the ticket cheap, and it was measured rather than
-assumed:
+This is the part that makes the ticket cheap. The first half was measured; the
+second half is read off the code path and is flagged as such below.
 
 ```c
 #include <stdio.h>
