@@ -43,6 +43,28 @@ EXTRA_ARGS = {
 # them by name. They are reachable, just not implicitly.
 EXTRA_UNIT_DIRS = ["lib/rtl/platform/esp"]
 
+# The GTK3 include root, same definition as the Makefile, tools/gui_suite.sh and
+# apps/ide/build.sh. lib/pcl/gtk3_c.h is `#include <gtk/gtk.h>` against the
+# INSTALLED headers, gtk-2.0 is a default system include root and gtk-3.0 is
+# not, and both answer to that spelling -- so without this every lib/pcl unit
+# compiles against GTK2 while linking libgtk-3.so.0.
+#
+# Applied ONLY to units under lib/pcl, and that scoping is deliberate rather
+# than tidiness: a `-I` in reach of a Pascal `uses` can capture the uses and
+# turn it into a dynamic import
+# (bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import),
+# and the RTL units that collide with shipped header names -- math, netdb,
+# strings -- all live in lib/rtl. Keeping the flag off them means this script
+# cannot trip that bug even after it is fixed or while it is not. No gtk-3.0
+# root currently contains math.h, netdb.h or strings.h, checked; scoping means
+# we do not have to keep re-checking.
+GTK3_INC = [
+    f for f in subprocess.run(
+        ["pkg-config", "--cflags-only-I", "gtk+-3.0"],
+        capture_output=True, text=True,
+    ).stdout.split() if f
+] or ["-I/usr/include/gtk-3.0/"]
+
 # Units known to be broken, deliberately, with the ticket that owns them. This
 # list must only ever shrink. An entry here is a promise that someone decided
 # to leave it broken -- not a place to park a failure you did not want to fix.
@@ -52,7 +74,7 @@ EXTRA_UNIT_DIRS = ["lib/rtl/platform/esp"]
 KNOWN_BROKEN = {}
 
 
-def compile_one(pxx, unit, tmpdir):
+def compile_one(pxx, unit, src_path, tmpdir):
     # The probe program must NOT be named after the unit it uses: the resolver
     # searches the importing file's own directory first, so a `<unit>.pas` here
     # shadows the real lib unit and every probe compiles itself.
@@ -61,6 +83,8 @@ def compile_one(pxx, unit, tmpdir):
     with open(src, "w") as f:
         f.write(f"program p;\nuses {unit};\nbegin end.\n")
     cmd = [pxx]
+    if "lib/pcl/" in str(src_path).replace(os.sep, "/"):
+        cmd += GTK3_INC
     for d in EXTRA_UNIT_DIRS:
         cmd.append("-Fu" + str(ROOT / d))
     cmd += EXTRA_ARGS.get(unit, [])
@@ -88,7 +112,7 @@ def main():
     with tempfile.TemporaryDirectory() as tmpdir:
         workers = min(os.cpu_count() or 4, 16)
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
-            futs = [ex.submit(compile_one, pxx, u, tmpdir) for u, _ in units]
+            futs = [ex.submit(compile_one, pxx, u, p, tmpdir) for u, p in units]
             for fut in concurrent.futures.as_completed(futs):
                 unit, rc, out = fut.result()
                 if rc != 0 and unit not in KNOWN_BROKEN:
