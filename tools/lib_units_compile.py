@@ -54,21 +54,23 @@ EXTRA_UNIT_DIRS = ["lib/rtl/platform/esp"]
 # than tidiness: a `-I` in reach of a Pascal `uses` can capture the uses and
 # turn it into a dynamic import
 # (bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import),
-# and the RTL units at risk all live in lib/rtl. Keeping the flag off them means
-# this script cannot trip that bug whether or not it is fixed.
+# and the units at risk are reached through the DEFAULT search path, which is not
+# a flag and so cannot be reordered ahead of the include roots. Hence the
+# explicit -Fu roots emitted before GTK3_INC in compile_one below.
 #
 # The trigger, measured on pinned v393 (which predates the compiler-side fix in
-# 4576ad4d1, so the bug was live to test against): a `uses X` is captured only
-# when BOTH the name is one we ship a header for -- lib/crtl/include holds
-# math.h, netdb.h, strings.h -- AND an -I root supplies that header. `uses math`
-# with no -I resolves correctly; with a dir holding any math.h ahead of -Fu it
-# loses Floor. `uses png` cannot be captured at all, not even with the real
-# /usr/include/libpng16 on -I, because png.h is not one we ship -- which is why
-# a name-collision survey against the include roots is the wrong instrument:
-# lib/rtl/png.pas collides with libpng16/png.h and is harmless, while the three
-# that matter collide with headers in OUR tree, not GTK's.
+# 4576ad4d1, so the bug is live for anything built with this pin): ANY header on
+# an -I root whose stem matches a Pascal unit can capture that unit's `uses`.
+# GTK3_INC carries /usr/include/libpng16, and lib/rtl/png.pas collides with its
+# png.h: with GTK3_INC and no -Fu, `uses png` then `PngLastError` is an
+# undefined variable, while the same source with -Fulib/rtl first compiles.
 #
-# GTK3_INC carries none of those three, so the scoping is belt and braces.
+# It does NOT take a header we ship, and an earlier version of this comment said
+# it did. That was derived from a probe that only asked "does it build" -- and a
+# bare `uses png` builds clean in BOTH orders, so the probe had two
+# indistinguishable arms. The only tell without naming a symbol is the size
+# line: procs=1046 for libpng's ~1000 declarations against procs=293 for the
+# Pascal unit. A witness has to name a symbol only the Pascal unit provides.
 GTK3_INC = [
     f for f in subprocess.run(
         ["pkg-config", "--cflags-only-I", "gtk+-3.0"],
@@ -94,10 +96,16 @@ def compile_one(pxx, unit, src_path, tmpdir):
     with open(src, "w") as f:
         f.write(f"program p;\nuses {unit};\nbegin end.\n")
     cmd = [pxx]
-    if "lib/pcl/" in str(src_path).replace(os.sep, "/"):
-        cmd += GTK3_INC
     for d in EXTRA_UNIT_DIRS:
         cmd.append("-Fu" + str(ROOT / d))
+    if "lib/pcl/" in str(src_path).replace(os.sep, "/"):
+        # Pascal roots BEFORE the include roots, and named explicitly rather
+        # than left to the default search path: an include root ahead of the
+        # Pascal search wins, and the default path cannot be moved ahead of a
+        # flag because it is not one. See the GTK3_INC note above.
+        cmd.append("-Fu" + str(ROOT / "lib" / "rtl"))
+        cmd.append("-Fu" + str(ROOT / "lib" / "pcl"))
+        cmd += GTK3_INC
     cmd += EXTRA_ARGS.get(unit, [])
     cmd += [src, out]
     p = subprocess.run(cmd, capture_output=True, text=True)

@@ -20,22 +20,25 @@ test -x "$PXX" || { echo "No stable compiler at $PXX" >&2; exit 1; }
 GTK3_INC="$(pkg-config --cflags-only-I gtk+-3.0 2>/dev/null || true)"
 [ -n "$GTK3_INC" ] || GTK3_INC="-I/usr/include/gtk-3.0/"
 
-# -Fu roots BEFORE the include root, deliberately. A `uses X` can be captured by
-# a C header found on an -I root and turned into a dynamic import that compiles
-# clean and dies at load on a nonexistent libX.so
-# (bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import,
-# fixed compiler-side in 4576ad4d1 so order no longer decides it -- this is
-# belt and braces, and it costs nothing).
+# -Fu roots BEFORE the include root, and this is a FIX, not a tidy-up. A `uses X`
+# is captured by a C header of the same stem found on an -I root that precedes
+# the Pascal search, and becomes a dynamic import that compiles clean and dies at
+# load on a nonexistent libX.so
+# (bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import;
+# fixed compiler-side in 4576ad4d1, which pin v393 predates).
 #
-# Measured on pinned v393, which PREDATES that fix, so the bug was live: the
-# capture needs BOTH the unit name to be one we ship a header for
-# (lib/crtl/include: math.h, netdb.h, strings.h) AND an -I root to supply that
-# header. `uses math` with no -I is fine; with a dir holding any math.h ahead of
-# -Fu it loses Floor. `uses png` cannot be captured at all -- not with
-# /usr/include/libpng16 on -I, not with png.h copied into a bare dir -- because
-# png.h is not one we ship. So GTK3_INC is safe here on both counts: it carries
-# none of those three headers, and the compiler now prefers the Pascal unit
-# regardless.
+# This script HAD the include root first, and GTK3_INC carries
+# /usr/include/libpng16, which collides with lib/rtl/png.pas. Measured on v393:
+#   pinned -I/usr/include/libpng16 -Fulib/rtl   -> undefined variable (PngLastError)
+#   pinned -Fulib/rtl -I/usr/include/libpng16   -> ok
+# so the exposure was real, not hypothetical.
+#
+# It does NOT take a header we ship -- libpng's is not ours. An earlier version
+# of this comment claimed it did, from a probe that only asked "does it build":
+# a bare `uses png` builds clean in BOTH orders and the arms are
+# indistinguishable except in the size line (procs=1046 for libpng's ~1000
+# declarations vs procs=293 for the Pascal unit). A witness must name a symbol
+# only the Pascal unit provides.
 "$PXX" \
   -Fu"$ROOT/lib/pcl" \
   -Fu"$ROOT/lib/rtl" \
