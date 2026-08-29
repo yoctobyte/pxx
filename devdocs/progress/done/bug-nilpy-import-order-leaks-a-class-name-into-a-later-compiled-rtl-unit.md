@@ -313,6 +313,30 @@ imports to expose.
 four lines from the new call site — the same bug class, recognised once for one
 variable and not generalised.
 
+### The seam is the finding, not this bug
+
+This is the **second** defect at the same seam fixed by the same move.
+`EmitTlsMainInstall` is called once before the dispatch rather than per driver
+for exactly this reason (`bug-a-threadsafe-segfaults-on-every-nilpy-program`),
+and its comment already says so: *"One call site rather than one per driver:
+each frontend emits its own entry sequence and only Pascal's puts anything in
+it."* Two instances make it a property of the seam rather than a coincidence.
+
+**Per-frontend entry setup that Pascal happens to do is a defect generator.**
+`pyparser.inc` is full of comments of the form *"ParseProgram does this; .npy
+needs it too"* — each one is a hand-mirrored fragment of `ParseProgram`'s
+prologue, added when its absence was noticed. That is the copy
+`normalise-dont-special-case.md` says stays broken, and it is being maintained
+by discovery. A third instance here should be **expected, not surprising**; the
+durable fix is to keep moving frontend-independent setup ahead of the dispatch
+rather than mirroring it into each driver.
+
+**Note on what the gate proves for a change like this.** The self-host
+fixedpoint compiles `compiler.pas`, which is Pascal — so for a defect that only
+manifests on a non-Pascal frontend it proves the compiler still builds, not that
+the change is right. That is why the regression test was verified RED against
+the stashed baseline; the fixedpoint could not have caught this bug and did not.
+
 ### Gate
 
 | | baseline | fixed |
