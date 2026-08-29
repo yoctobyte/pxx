@@ -107,16 +107,40 @@ Bare-name shims already in the tree (`re`, `configparser`, `tkinter`) are named
 directly, which was the quick path. They should move behind the same mapping when
 it lands, so the rule is one rule.
 
-## Concrete blocker for T1-by-naming
+## The blocker for T1-by-naming — RESOLVED 2026-07/08, kept for the reasoning
 
-`from reportlab.pdfgen import canvas` is a DOTTED module path. NilPy maps `import X`
-onto the Pascal unit resolver, and a unit name cannot contain a dot, so a unit
-called `reportlab` alone does not satisfy that import. A package convention is
-needed — a `lib/py/reportlab/pdfgen.pas` layout with dotted paths resolved onto it,
-or a documented mangling. Until then, T1 shims only work for modules imported by a
-single bare name (`re`, `configparser`, `tkinter`, `json`).
+**This section described a live blocker until 2026-08-30 and no longer does.**
+Read it as the argument that produced the design, not as a limit.
 
-Tracked as `feature-nilpy-dotted-package-imports`.
+The problem was real: `from reportlab.pdfgen import canvas` is a DOTTED module
+path, NilPy maps `import X` onto the Pascal unit resolver, and a unit name cannot
+contain a dot — so a unit called `reportlab` alone does not satisfy that import.
+Two ways out were offered above: a `lib/py/reportlab/pdfgen.pas` package layout
+with dotted paths resolved onto it, **or a documented mangling.**
+
+**The mangling shipped**, exactly as this page proposed it —
+`reportlab.pdfgen` → `mimic_reportlab_pdfgen`. `feature-nilpy-dotted-package-imports`
+is in `done/`, named for this page's own example, and the corpus uses the feature
+routinely: `import xml.etree.ElementTree as ET`, `from urllib.request import
+Request, urlopen`, `from six.moves import urllib_parse` all resolve today onto
+`mimic_xml_etree_elementtree`, `mimic_urllib_request`, `mimic_six_moves`. The
+package-directory layout was **not** built, which is why `lib/py/` does not exist
+— that path above is the road not taken, not a stale citation.
+
+> **Corrected 2026-08-30 (frankD), measured at `ea5d7c6e7`.** The sentence that
+> mattered was *"Until then, T1 shims only work for modules imported by a single
+> bare name (`re`, `configparser`, `tkinter`, `json`)."* **That limit has been
+> false for weeks**, and it is the second one this audit found with the same
+> signature: it does not merely assert the limit, it **explains** it — *a unit
+> name cannot contain a dot* — and a reader who accepts the mechanism stops
+> testing the conclusion. A false limit with a mechanism attached is the most
+> durable wrong thing a doc can carry, because the mechanism is still true and
+> only the consequence has moved.
+>
+> Verify rather than trust either version:
+> `ls devdocs/progress/*/feature-nilpy-dotted-package-imports.md` says where the
+> work sits, and `grep -l '^import [a-z_]*\.' test/*.npy` says whether the corpus
+> actually uses it.
 
 ## Where the current shims stand
 

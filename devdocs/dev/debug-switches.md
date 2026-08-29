@@ -226,8 +226,8 @@ shape (the C one is done and most of it is reusable).
 
 ## Related
 
-- `devdocs/progress/backlog/feature-heap-poison-and-object-trace.md` — this
+- [[feature-heap-poison-and-object-trace]] — this
   plus the retain/release trace still to come.
-- `devdocs/progress/backlog/feature-debuggability-umbrella.md` — where this sits
+- [[feature-debuggability-umbrella]] — where this sits
   relative to the compiler-side `PXXDBG` switch, real DWARF, and the CPython
   differential harness.

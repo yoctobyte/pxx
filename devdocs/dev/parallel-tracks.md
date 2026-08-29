@@ -139,7 +139,7 @@ file a Track A bug ticket with the exact compiler error or misbehavior.
 Owns: the **C-language frontend** — `compiler/clexer.inc`, `cparser.inc`,
 `cpreproc.inc`, the C-exclusive C→IR lowering, `lib/crtl` (the C runtime), and C
 tests. Goal: compile real portable C (tiny-regex → lua → sqlite); roadmap in
-`devdocs/progress/backlog/feature-c-desktop-lua-sqlite-path.md`.
+[[feature-c-desktop-lua-sqlite-path]].
 
 **Works on `master`** — like every other track. The C frontend merged to
 `master` at **v80** (2026-06-26); the old `feat/cfront` worktree at

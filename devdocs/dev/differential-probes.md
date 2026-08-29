@@ -397,3 +397,22 @@ when written and the table under it had already grown to five without anyone
 noticing the sentence above it. That is why the enumeration command now sits at
 the top of this page instead of a number — the same substitution CLAUDE.md's
 claims section makes for the two byte-identicals, applied to an index.
+
+### Two lanes found this page stale within the same hour, independently
+
+Worth recording as evidence rather than coincidence. On 2026-08-30 Track D hit
+this page on a dispatched audit of the live references and found it listing six
+of ten probes; **Track C hit it within the hour from the opposite direction**,
+while adding its own census probe, and found the heading miscounting the table
+directly beneath it. Neither knew the other was here.
+
+**A defect two lanes rediscover independently in sixty minutes is a measurement
+of the seam, not a fluke.** An index nobody can trust gets re-derived by whoever
+needs it, and the re-derivation is invisible — it looks like ordinary work. The
+cost is not the wrong number; it is every agent that quietly does the
+enumeration itself and throws the result away.
+
+Which is also the argument for the line at the top of this page. A corrected
+count would have been true on 2026-08-30 and stale at the next probe; the
+enumeration command makes the count **unnecessary** rather than **correct**, and
+only one of those survives the next tool landing.

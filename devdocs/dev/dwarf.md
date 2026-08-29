@@ -132,4 +132,4 @@ object is hard to kill on purpose. Marked here rather than claimed as verified.)
 
 - `devdocs/dev/debug-switches.md` — the `-dPXX_HEAP_DEBUG` / `-dPXX_OBJTRACE`
   switches.
-- `devdocs/progress/backlog/feature-debuggability-umbrella.md`.
+- [[feature-debuggability-umbrella]].

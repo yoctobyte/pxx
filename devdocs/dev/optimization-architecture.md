@@ -1,7 +1,7 @@
 # Optimization architecture (the `-O` arc)
 
 *Study guide to how frankonpiler optimizes. Read alongside the live ticket
-`devdocs/progress/working/feature-optimization-levels.md` (per-pass log +
+[[feature-optimization-levels]] (per-pass log +
 measurements) and the split-out tickets it links.*
 
 This document explains **what we optimize, where each optimization lives, why
