@@ -29,11 +29,16 @@ means the reference is exacting, not that the frontend is fragile — see
 [ticket flow](https://pxxc.org/status/flow/) for the curves.
 
 **What it will not do**, and this is a design boundary rather than a gap to
-close: anything requiring a live interpreter. No `eval` of runtime-constructed
-code, no monkeypatching a class after compilation, no duck typing resolved at
-run time. Function parameters and return types need annotations; locals are
-inferred. If a program's design depends on Python's dynamism, it belongs on
-CPython.
+close: anything requiring a live interpreter. No monkeypatching a class after
+compilation, no duck typing resolved at run time. Function parameters and
+return types need annotations; locals are inferred. If a program's design
+depends on Python's dynamism, it belongs on CPython.
+
+`exec` and `eval` are a narrower case than that boundary suggests, and they
+have [their own section](#exec-and-eval): the **explicit-namespace** forms —
+`exec(src, d, d)` and `eval(src, g, l)` — do run source built at run time, over
+a subset of Python. That is a tree-walker over the text, not a live
+interpreter, and the distinction is load-bearing.
 
 ### It hardens the rest of the compiler
 
@@ -476,6 +481,83 @@ Two things follow that are worth knowing before you meet them:
   `__file__` needs the data moved next to the binary, or the path supplied
   some other way (an argument, an environment variable, a config file).
 
+## `exec` and `eval`
+
+Source built at run time does execute, through a tree-walker over the text.
+Say it uncompressed, because the short version is wrong in both directions:
+**the explicit-namespace forms work, over a subset of Python.** There is no
+live interpreter behind them, and nothing about the surrounding compiled
+program becomes dynamic.
+
+```python
+d = {}
+exec("total = 0\nfor i in range(4):\n    total = total + i", d, d)
+print(d["total"])                  # 6
+
+g = {"a": 10, "b": 4}
+print(eval("a * b + 2", g, g))     # 42
+```
+
+`eval` also accepts the ambient form, `eval("1 + 2")` — an expression only
+reads, so a name it cannot see is a run-time error naming that name, never a
+silent wrong value.
+
+`exec` does **not**. The ambient form is a compile error that names the working
+spelling:
+
+```
+Nil Python: exec(src) with no namespace is not supported — it would bind into
+the caller's own locals, which are compiled stack slots with no run-time name
+table. Use the explicit form Python also has: d = {}; exec(src, d, d), then
+read the results out of d
+```
+
+It is refused rather than accepted-and-ignored because those locals are
+compiled stack slots with no run-time name table to bind into — there is
+nowhere for the result to go, and failing loudly at compile time is the only
+honest answer.
+
+### The subset
+
+Inside `exec`/`eval`: assignment and augmented assignment, `if`/`elif`/`else`,
+`while`, `for` with `break`, `def`, `return`, `raise`, `del`, and expression
+statements. Expressions cover arithmetic, bitwise, comparison and boolean
+operators, calls, attribute access, subscripts including slices, f-strings,
+`isinstance`, conditional expressions, tuple/list/dict literals, and the
+`len`/`int`/`print` builtins.
+
+Not in the subset: `import`, `class` definitions, and `exec` inside `exec`.
+Pass what the source needs in through the namespace dict instead of importing
+it there.
+
+### `__builtins__` is a documented incompatibility
+
+CPython injects a `__builtins__` key into the globals dict it hands to
+`exec`. Nil Python does not, having no module object to put there:
+
+| | CPython | Nil Python |
+| --- | --- | --- |
+| `d={}; exec("x=1", d, d); sorted(d.keys())` | `['__builtins__', 'x']` | `['x']` |
+| `d["x"]` | `1` | `1` |
+
+Only a program that **enumerates** the namespace can see the difference;
+reading a bound name agrees. This is decided and permanent for now, and the
+reason is worth stating rather than apologising for: CPython resolves every
+name miss through one run-time dict, so its `__builtins__` is live and mutating
+it changes the whole program. Nil Python resolves builtin names in compiled
+code at compile time. Any `__builtins__` it handed back would be honoured by
+exec'd source and silently ignored by every compiled call site — a key that
+half-works is worse than an absent one, so it is absent.
+
+A **separate, open** bug sits next to it: a caller-supplied mapping is
+discarded rather than honoured, so the restricted-exec idiom does not restrict.
+
+| | CPython | Nil Python |
+| --- | --- | --- |
+| `d={"__builtins__":{}}; exec("n=len([1,2,3])", d, d)` | `NameError` | `n = 3` |
+
+Do not rely on that as a sandbox. It is tracked, not decided.
+
 ## Known gotchas
 
 These are open, tracked issues — real-world `.py`/`.npy` programs can still
@@ -496,6 +578,11 @@ hit them:
 - Object reclamation (reference counting) is disabled inside an imported
   `.py` module specifically — a module compiled as the main program does not
   have this restriction.
+- An `import` inside `exec` is skipped without a diagnostic and the statements
+  after it still run, so the failure — if the imported name is used at all —
+  arrives later as `pyeval: name not defined: <module>`, pointing at the use
+  rather than at the discarded import. Pass what the source needs in through
+  the namespace dict.
 - ~~A `def`/`lambda` in a plain variable can silently do nothing or segfault
   when called.~~ ~~Missing methods segfault.~~ ~~`int("abc")` halts instead of
   raising a catchable `ValueError`.~~ ~~`"%d" % value` yields garbage.~~
