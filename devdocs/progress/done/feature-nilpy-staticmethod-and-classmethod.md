@@ -2,6 +2,7 @@
 track: N
 prio: 70
 type: feature
+status: done
 ---
 
 # `@staticmethod` and `@classmethod` are rejected
@@ -172,3 +173,50 @@ the same condition.
 Suggested gate: the four-way call — `Base.make()`, `Derived.make()`,
 `Derived().make()` through a `Base`-typed name, and a variant receiver — each
 answering the class the call was made on, diffed against CPython.
+
+## RESOLVED 2026-08-29 — both decorators land; one premise above was wrong
+
+`@staticmethod` landed first, `@classmethod` in `8d7553d0c`. Gate:
+`test/test_nilpy_classmethod.npy` is 12 lines **byte-identical to CPython**,
+covering the four-way call this ticket asked for plus a fifth form — class,
+subclass, an instance held under a base-typed name, a fresh construction, and a
+receiver deliberately named `kls` to prove nothing keys off the spelling — with
+`cls()` construction bare and with arguments, `cls.__name__`, argument-slot
+alignment, and a subclass override. Self-host fixedpoint converged.
+`test/test_nilpy_classmethod_fail.npy` is deleted; its own header said
+implementing this must retire it.
+
+**Correction to the UNBLOCKED section above.** "Slot 0 already carries the
+runtime class" was measured on the **Pascal** path and was not true of the
+NilPy one. `@staticmethod` never *reads* slot 0, so the NilPy side of that
+claim had never been exercised — `Base().probe()` passed the **instance** where
+the class was wanted. The fix is the reduction that was missing, in
+`PyParseClassMethodCall`: when the target is `UMthIsStatic` and the receiver's
+kind is `tyClass`, slot 0 becomes `GenMakeRttiOfCall(baseNode)` rather than the
+node itself. This is the shape the playbook keeps naming — *an enumeration read
+as exhaustive*: a measurement on one arm of a double case, cited as settled for
+both.
+
+Shape of the implementation, for whoever touches it next:
+
+- `PyIsClassMethodAt(defIdx)` mirrors `PyIsStaticMethodAt` and is likewise
+  asked in **both** passes, on the same condition, per this ticket's warning.
+- Slot 0 is typed `tyPointer` in both passes; the parameter symbol is renamed
+  `$clsptr` and a **variant local** named as the source names it (`cls`, `kls`,
+  whatever) is seeded in the prologue by `PyBoxClassRef($clsptr)`. So the ABI
+  slot stays a raw pointer and the user-visible name is a first-class variant.
+- The prologue is prepended with `PySeqAppend(PySeqAppend(-1, clsAsgn), body)`.
+  The single-argument spelling `PySeqAppend(clsAsgn, body)` **silently
+  discards the entire method body** — it walks `ASTRight[head]` as a chain, and
+  on a bare `AN_ASSIGN` that slot is the assigned value. It compiles, links,
+  runs, and answers 0.
+
+Not folded in, filed instead:
+[[bug-n-a-classmethod-cannot-call-another-through-cls]] — `cls(v)` constructs
+and `cls.__name__` answers, but `cls.other(v)` raises `AttributeError`.
+Dispatching a *method* on a classref value is a separate mechanism, and its
+failure is loud. The test names the gap in a comment rather than pinning it, so
+nothing records today's behaviour as intended.
+
+## Log
+- 2026-08-29 — resolved, commit PENDING-COMMIT.

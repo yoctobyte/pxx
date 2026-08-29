@@ -49,7 +49,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (316)
+## backlog (315)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -263,7 +263,6 @@ _none_
 | feature-nilpy-parallel-reduction-bigint | N | 5 | feature | Opt-in arbitrary-precision reduction for `parallel for`. v1 keeps per-worker partials in the promo-int inline tier and raises at the spill point; this adds the real bignum path, which is correct but anti-scales because every bignum op takes the global heap spinlock. | feature-nilpy-parallel-for-in |
 | feature-nilpy-process-exec-binding | N | 60 | feature | nilpy: os.system / subprocess-shaped process spawning over the RTL's libc-free execve | — |
 | feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep | N | 58 | feature | Ordinary Python forms NilPy diagnoses cleanly but does not accept. print(sep=) and str.format() with 3+ (and 0) placeholders are DONE (2026-08-08); ten rows remain: enumerate(str), type(x) other than .__name__, a non-name lambda default, dict(x=1), .update(b=2), extended-slice assign, self.__class__.__name__, nested unpacking, bare tuple, two-for comprehension | — |
-| feature-nilpy-staticmethod-and-classmethod | N | 70 | feature | `@staticmethod` and `@classmethod` are rejected | — |
 | feature-nilpy-str-format-named-keyword-fields | N | 55 | feature | `"{name} is {age}".format(name=..., age=...)` — named fields not supported | — |
 | feature-nilpy-str-surface-gaps-2026-08-09 | N | 40 | feature | str/bytes surface gaps found by the 2026-08-09 differential sweep | — |
 | feature-nilpy-threadsafe-containers | N | 45 | feature | TPyList/TPyDict corrupt under concurrent mutation — append is a read-modify-write over a buffer PyListGrow may realloc, so two threads can use-after-free. Free-threaded CPython guarantees this cannot happen; adopt that contract under --threadsafe with one-way biased sharing. | — |
@@ -612,9 +611,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2607)
+## done (2608)
 
-2607 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2608 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (51)
 
@@ -678,7 +677,6 @@ _none_
 - [p 75] [P] feature-pascal-corpus-oop
 - [p 70] [P] bug-p-a-delphi-mode-generic-from-a-used-unit-cannot-be-specialized
 - [p 70] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
-- [p 70] [N] feature-nilpy-staticmethod-and-classmethod
 - [p 70] [A+O] feature-opt-o3-register-pressure
 - [p 70] [P] feature-pascal-typed-and-untyped-files
 - [p 70] [T] regression-cascade-154d1aa3fba6
