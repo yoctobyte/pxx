@@ -1738,6 +1738,71 @@ the copy after `$sp` restore (module dies), `TypeSize` instead of
 returning the callee's own Result slot instead of the caller's destination
 (the `y=8` signature again).
 
+### Phase 9g — nested dynamic arrays: `IR_SETLEN_DYN` + `IR_DYNUNIQUE` — **DONE, 2026-08-29**
+
+Taken together because they cannot be tested apart: a nested row has to be
+`SetLength`'d before it can be indexed, and every probe for one refused on the
+other first.
+
+**Result on `compiler.pas`: 3621 of 3662, refusals 45 → 41.** Promoted, not
+just removed: `IR_DYNUNIQUE` 4 → 0 and `IR_SETLEN_DYN` 2 → 0, six gone; **two
+promoted** into a newly-reached `value of type record in array base`. Net −4.
+Denominator 3660 → 3662 again — two more functions added to a compiler that
+contains the file being edited (face eighteen).
+
+**`IR_DYNUNIQUE` is one deref, and `defs.inc:747` still says otherwise.** The
+node's own documentation reads *"Write mode: clone-if-shared then load"*. That
+stopped being true when `decide-dynamic-array-value-vs-reference-semantics`
+settled on matching FPC, where a dynamic array is a reference type all the way
+down; x86-64's arm says so at `ir_codegen.inc:5328` and the clone is gone at
+every depth. **Implementing what `defs.inc` says rather than what the backends
+do would have made wasm32 the only target with value semantics at depth** — a
+silent, plausible, target-specific divergence. The stale line is shared ground
+and is left alone; the divergence is noted here.
+
+**The bug, and it is the one the neighbouring arm carries a warning about.**
+`SetLength(m, 3)` on an `array of array of Integer` does **not** take the flat
+`-102` builtin path: it lowers to `IR_SETLEN_DYN` whose target is an `IR_LEA`,
+and `IR_LEA` on a dynamic array **auto-loads** to the data pointer, while
+`PXXDynSetLen` needs the **slot** and reads a nil handle as "nothing to do".
+The first version did exactly that: every body lowered, module valid, `123 of
+123`, and `Length(m)` answered **0**. riscv32 shipped the same bug once
+(`bug-a-riscv32-nested-dynamic-array-element-write-segfaults`).
+
+Two things about that are worth keeping:
+
+- **The `-102` arm ten lines away carries a paragraph warning about precisely
+  this, and reading it did not prevent it.** The warning is phrased about
+  `WasmLValueAddr`-vs-`IR_LEA`, and this arm reaches the slot a *third* way. A
+  warning is indexed by the shape its author hit.
+- **`InLValueWrite` looks like the fix and is not.** It is the mechanism
+  `defs.inc` names for exactly this, x86-64 sets it here, and setting it on
+  this target changes nothing — the flag is consulted by `IR_LEA`'s
+  **managed-string** arm, while the dyn-array arm loads unconditionally and
+  deliberately, because every other consumer (including a write target like
+  `a[0] := 5`, which indexes into the data) wants the data pointer. Copying the
+  register backend's mechanism would have produced code that looks correct,
+  cites the right global, and does nothing.
+
+**`check_forwards.sh` caught what the per-fix loop cannot.** The new arm called
+`WasmDataAddr` 300 lines before its declaration. pxx resolves across the unit,
+so `make compiler/pascal26` — the self-host fixedpoint — passed cleanly; **FPC
+resolves in source order, so the BOOTSTRAP SEED would have failed**. That is
+the one direction the fixedpoint is structurally blind to, being already past
+the seed. Fixed with a `forward;`.
+
+`test/wasm/check_nested.sh`, wired into `check_all.sh`, falsified three ways —
+emitting the LEA node instead of the slot address (the silent-SetLength bug),
+the symbol's descriptor instead of the node's (riscv32's stride bug), and
+dropping `IR_DYNUNIQUE`'s deref. All three trap; the richer slice turns what
+was a silent zero in the minimal repro into a hard failure.
+
+**Still refused: `Length(m[1])`**, the length of a nested ROW (2 lines). Its
+argument arrives as a bare `IR_INDEX`, whose value is the ADDRESS of the slot
+holding the inner handle, where the root case's `IR_LEA` yields the handle
+itself — one deref apart, and `WasmNodeIsDynArray` cannot separate them by node
+kind alone. Everything else about a nested row (write, read, resize) is covered.
+
 - **Milestone:** the wasm-hosted compiler's **emitted output bytes are identical
   to the native compiler's** for the same input.
 - **State this claim precisely.** It is output parity across two hosts of the

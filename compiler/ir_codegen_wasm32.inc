@@ -550,6 +550,12 @@ procedure WasmEmitCall(node: Integer; isStmt: Boolean); forward;
 procedure WasmEmitProcAddr(node: Integer); forward;
 procedure WasmEmitCallInd(node: Integer; isStmt: Boolean); forward;
 procedure WasmEmitVirtualCall(node: Integer; isStmt: Boolean); forward;
+{ IR_SETLEN_DYN's descriptor argument is emitted above where WasmDataAddr is
+  declared. pxx resolves across the whole unit and would not care; FPC resolves
+  in SOURCE ORDER, so without this the self-hosted build is fine and the
+  BOOTSTRAP SEED fails — the one direction `make compiler/pascal26` cannot see,
+  because it is already past the seed. check_forwards.sh is what caught it. }
+procedure WasmDataAddr(off: Integer); forward;
 { Not a dispatch target — WasmEmitGetMem calls it to marshal a constructor's
   arguments, and GetMem is lowered as a BUILTIN, which puts its call site above
   the indirect-call machinery it shares. Caught by the FPC canary, twice now
@@ -996,7 +1002,11 @@ begin
       WasmEmitStoreMem's address, WasmEmitManagedStore's address, and
       WasmEmitFrozenStore's address; plus IR_SETLEN_STR's slot node. The reset
       site is WasmEmitIndex's INDEX sub-expression, which is a READ even when
-      the whole IR_INDEX is a write target (`b[Length(b)] := c`). }
+      the whole IR_INDEX is a write target (`b[Length(b)] := c`).
+
+      IR_SETLEN_DYN is deliberately NOT on that list: it needs a dyn array's
+      SLOT, and the dyn-array arm below ignores this flag on purpose, so it
+      bypasses the node and calls WasmLValueAddr directly. }
     WasmLValueAddr(si);
     if not InLValueWrite then
       WasmMemOp($28, 'i32.load', 2, 0);
@@ -1512,6 +1522,63 @@ begin
                     + ' (Pascal type ' + WasmIntStr(IRTk[node]) + ')');
 end;
 
+{ A dynamic-array level: IRA is the address of the slot holding the handle, so
+  the value is one load from it. Recursion up the chain is free — IRA is itself
+  an IR_DYNUNIQUE or an element address. }
+procedure WasmEmitDynUnique(node: Integer);
+begin
+  WasmEmitValueAs(IRA[node], WT_I32, 'dynamic-array level');
+  if WasmBodyBroken then Exit;
+  WasmMemOp($28, 'i32.load', 2, 0);
+end;
+
+{ SetLength on a NESTED dynamic-array target — `SetLength(m[0], n)`, a row
+  behind a field, or an element. The root-symbol case never reaches here: it is
+  a -102 builtin and takes the flat path above.
+
+  Same RTL routine as that path, PXXDynSetLen(slotAddr, n, desc), and the same
+  slot-not-handle rule. The DESCRIPTOR is the one difference and it is the
+  whole reason this arm cannot reuse GetOrAllocSymRTTI: a nested row has the
+  same base element type as its symbol but ONE FEWER DIMENSION, so the
+  symbol's descriptor claims depth 2 and an 8-byte pointer stride. Handing that
+  to PXXDynSetLen allocates and strides as if the row held handles — riscv32
+  shipped that exact bug. GetOrAllocNodeDynDesc reads the NODE's own depth and
+  element metadata, which is what IR_SETLEN_DYN carries them for. }
+procedure WasmEmitSetLenDyn(node: Integer);
+begin
+  { PXXDynSetLen needs the SLOT, never the handle, and the two ways this node's
+    target is spelled reach it differently — which is the whole correctness of
+    the arm rather than a detail.
+
+    `SetLength(m, 3)` on an `array of array of Integer` lowers to
+    `setlen_dyn(LEA m, 3)`, and IR_LEA on a dynamic array AUTO-LOADS: it yields
+    the data pointer. PXXDynSetLen reads `arrSlot = nil` as "nothing to do", so
+    a fresh array's nil handle makes SetLength silently succeed and change
+    nothing — `Length(m)` then answers 0 with every body lowered, the module
+    valid, and no diagnostic anywhere. Measured here, not inherited: the first
+    version of this arm did exactly that.
+
+    InLValueWrite does NOT rescue it, and that is worth stating because it is
+    the obvious fix and it is wrong. The flag is consulted by IR_LEA's MANAGED
+    STRING arm; the dyn-array arm loads unconditionally, deliberately, because
+    every other consumer of a dyn array's LEA — including a write target like
+    `a[0] := 5`, which indexes into the data — wants the data pointer. Setting
+    the flag changes nothing here and would suggest a mechanism that is not
+    running. So this bypasses the node, exactly as the -102 root arm does.
+
+    A NESTED target (`SetLength(m[0], n)`) needs no such care: it arrives as an
+    IR_INDEX or IR_FIELD, whose value already IS the address of the slot
+    holding the inner handle. Only the whole-symbol spelling auto-loads. }
+  if (IRKind[IRA[node]] = IR_LEA) and (IRA[IRA[node]] >= 0) then
+    WasmLValueAddr(IRA[IRA[node]])
+  else
+    WasmEmitValueAs(IRA[node], WT_I32, 'SetLength target slot');
+  WasmEmitValueAs(IRB[node], WT_I32, 'SetLength count');
+  if WasmBodyBroken then Exit;
+  WasmDataAddr(GetOrAllocNodeDynDesc(node));
+  WasmCallRtl('PXXDynSetLen');
+end;
+
 { Emit a value node. The return is the Pascal type of what was ACTUALLY left on
   the operand stack, which is not always the type the IR recorded on the node —
   and where they differ, what was emitted is the one that has to be believed.
@@ -1535,6 +1602,20 @@ begin
       the stackless save/restore path depends on it: it writes a by-ref
       param's own slot. WasmSlotAddr is already exactly this. }
     IR_SLOTADDR  : WasmSlotAddr(IRA[node]);
+    { ONE deref, in read and write mode alike. The name is historical: this
+      node used to clone-if-shared on a write, implementing nested
+      copy-on-write, and defs.inc:747 STILL DESCRIBES THAT ("Write mode:
+      clone-if-shared then load"). It stopped being true when
+      decide-dynamic-array-value-vs-reference-semantics settled on matching
+      FPC, where a dynamic array is a reference type all the way down, and
+      x86-64's arm says so at ir_codegen.inc:5328. Implementing what defs.inc
+      says rather than what the backends do would have made this target the
+      only one with value semantics at depth.
+
+      So there is no InLValueWrite consultation here on purpose: the two modes
+      are the same operation now, and branching on a distinction that no longer
+      exists is how it comes back. }
+    IR_DYNUNIQUE : WasmEmitDynUnique(node);
     IR_CONST_STR : WasmEmitConstStr(node);
     IR_INDEX     : WasmEmitIndex(node);
     IR_FIELD     : WasmEmitField(node);
@@ -1965,10 +2046,19 @@ begin
     array's ArrLen is the open-array sentinel, not -1 — and answering no here
     is what made `Length(a)` on an open-array parameter refuse as `Length of
     Pointer` while the indexing right next to it worked. }
-  WasmNodeIsDynArray := (IRKind[n] = IR_LEA) and (IRA[n] >= 0)
-                        and Syms[IRA[n]].IsArray
-                        and ((Syms[IRA[n]].ArrLen = -1)
-                             or (Syms[IRA[n]].Kind = skParam));
+  { IR_DYNUNIQUE is a dynamic-array level BY DEFINITION — that is the whole
+    content of the node — and its value is the data pointer, the same thing
+    IR_LEA yields for a root array. So `Length(m[1])` on an `array of array of
+    Integer` reads the count word exactly where `Length(m)` does; the two
+    differ only in how the pointer was reached, which is finished by the time
+    Length is asked. Without this arm a nested row's Length refused as `Length
+    of Pointer` while the indexing beside it worked — the same shape the
+    open-array parameter had. }
+  WasmNodeIsDynArray := (IRKind[n] = IR_DYNUNIQUE)
+                        or ((IRKind[n] = IR_LEA) and (IRA[n] >= 0)
+                            and Syms[IRA[n]].IsArray
+                            and ((Syms[IRA[n]].ArrLen = -1)
+                                 or (Syms[IRA[n]].Kind = skParam)));
 end;
 
 function WasmEmitLength(valNode: Integer): Boolean;
@@ -3813,6 +3903,7 @@ begin
     IR_WRITE, IR_WRITELN : WasmEmitWrite(node);
     IR_COPY_REC      : WasmEmitCopyRec(node);
     IR_SET_COPY      : WasmEmitSetCopy(node);
+    IR_SETLEN_DYN    : WasmEmitSetLenDyn(node);
     IR_DEFAULT_MEM   : WasmEmitDefaultMem(node);
     IR_EXC_ENTER     : WasmEmitExcEnter(node);
     IR_EXC_LEAVE     : WasmEmitExcLeave(node);
