@@ -21,6 +21,15 @@ begin v := vm.outp.at(vm.outp.count-1); got := pystr_of(v);
 begin
   fails:=0; vm:=TVM.Create; vm.outp:=TPyList.Create;
   g:=TPyDict.Create; PVRec(@vmv)^.VType:=7; PVRec(@vmv)^.Payload:=Int64(Pointer(vm)); g.store('vm',vmv);
+  { exec()'s host call takes its receiver from the BOUND METHOD the callee
+    resolves to -- `env = {"push": b.push}` -- not from a global named `vm`.
+    That was uforth's own variable name leaking into the general contract and
+    ff439149e removed it; these tests were written against the old rule and
+    never updated, because nothing wired them into a build rule and so nothing
+    ran them. `vm` is still stored: the scripts below also reach it by
+    ATTRIBUTE (`vm.push(...)`), which is an ordinary global and always was.
+    bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed }
+  g.store('push', pybound_new(nil, Pointer(vm), False));
   { plain hole }
   vm.Top:=0; Run('val = 42'+#10+'push(len(f"{val}"))'); ChkStk('f{val} len',2);
   { hex format 02X }

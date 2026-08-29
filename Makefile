@@ -1773,6 +1773,37 @@ test-nilpy: $(COMPILER)
 	@# itself, not a hardcoded "vm" key
 	./$(COMPILER) test/test_nilpy_pyeval_no_vm_key.npy $(TESTTMP)/test_nilpy_novmkey26
 	tools/expect_same.sh test_nilpy_novmkey26 "$$($(TESTTMP)/test_nilpy_novmkey26)" "[42, 43]"
+	@# ...and the PASCAL-side entry point to the same contract. These twelve are
+	@# the only callers of EvalPyStmts / EvalPyExpr in the tree, so before this
+	@# the API had zero live users AND zero running tests: they encoded the
+	@# pre-ff439149e "receiver is a global named vm" rule, exited 1 on their
+	@# first host call, and were wired into no build rule, so nothing said they
+	@# had stopped meaning anything. Each halts(1) on any row, so running it IS
+	@# the assertion. bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed
+	./$(COMPILER) test/test_pyeval_bignum.pas $(TESTTMP)/tpe_bignum26
+	tools/expect_same.sh tpe_bignum26 "$$($(TESTTMP)/tpe_bignum26 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_compound.pas $(TESTTMP)/tpe_compound26
+	tools/expect_same.sh tpe_compound26 "$$($(TESTTMP)/tpe_compound26 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_def.pas $(TESTTMP)/tpe_def26
+	tools/expect_same.sh tpe_def26 "$$($(TESTTMP)/tpe_def26 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_fstring.pas $(TESTTMP)/tpe_fstring26
+	tools/expect_same.sh tpe_fstring26 "$$($(TESTTMP)/tpe_fstring26 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_is_in.pas $(TESTTMP)/tpe_is_in26
+	tools/expect_same.sh tpe_is_in26 "$$($(TESTTMP)/tpe_is_in26 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_isinstance_del_dict.pas $(TESTTMP)/tpe_isinst26
+	tools/expect_same.sh tpe_isinst26 "$$($(TESTTMP)/tpe_isinst26 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_m1.pas $(TESTTMP)/tpe_m126
+	tools/expect_same.sh tpe_m126 "$$($(TESTTMP)/tpe_m126 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_m2.pas $(TESTTMP)/tpe_m226
+	tools/expect_same.sh tpe_m226 "$$($(TESTTMP)/tpe_m226 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_m3.pas $(TESTTMP)/tpe_m326
+	tools/expect_same.sh tpe_m326 "$$($(TESTTMP)/tpe_m326 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_memory_bytes.pas $(TESTTMP)/tpe_membytes26
+	tools/expect_same.sh tpe_membytes26 "$$($(TESTTMP)/tpe_membytes26 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_slice.pas $(TESTTMP)/tpe_slice26
+	tools/expect_same.sh tpe_slice26 "$$($(TESTTMP)/tpe_slice26 | tail -1)" "ALL PASS"
+	./$(COMPILER) test/test_pyeval_trampoline_shapes.pas $(TESTTMP)/tpe_tramp26
+	tools/expect_same.sh tpe_tramp26 "$$($(TESTTMP)/tpe_tramp26 | tail -1)" "ALL PASS"
 	@# exec()'s expression grammar had no rule for ** at all
 	./$(COMPILER) test/test_nilpy_pyeval_power_operator.npy $(TESTTMP)/test_nilpy_pyevalpow26
 	tools/expect_same.sh test_nilpy_pyevalpow26 "$$($(TESTTMP)/test_nilpy_pyevalpow26)" "[1024, 512, -4, 0.5]"
