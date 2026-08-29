@@ -1,0 +1,67 @@
+# @classmethod — the half feature-nilpy-staticmethod-and-classmethod left open.
+#
+# The property the whole feature turns on is that `cls` is the class the call
+# was made ON, not the class the def was written in: `Derived.make()` must
+# build a Derived. Binding it to the declaring class would be a wrong OBJECT at
+# run time with no diagnostic, which is why this was refused by name until the
+# runtime class could actually be shown to arrive.
+#
+# Every receiver form is here because they take DIFFERENT paths in the frontend
+# and one of them was wrong while the others were right: the fresh-construction
+# form `Base().probe()` passed the instance where the class was wanted, and
+# printed a class with an empty name, while `b.probe()` on a named instance was
+# already correct.
+class Base:
+    def __init__(self):
+        self.tag = "base-init"
+    @classmethod
+    def make(cls):
+        return cls()
+    @classmethod
+    def name(cls):
+        return cls.__name__
+    @classmethod
+    def withargs(cls, a: int, b: int) -> int:
+        return a * 10 + b
+    @classmethod
+    def over(cls):
+        return "base"
+    @classmethod
+    def who(kls):                    # the receiver is positional, not named `cls`
+        return kls.__name__
+    @staticmethod
+    def st(a: int) -> int:
+        return a + 1
+
+class Derived(Base):
+    @classmethod
+    def over(cls):
+        return "derived"
+
+# --- the four receiver forms, each a different path -------------------------
+print(Base.make().tag)
+print(type(Base.make()).__name__, type(Derived.make()).__name__)
+b = Base()
+d = Derived()
+print(type(b.make()).__name__, type(d.make()).__name__)      # named instance
+print(type(Base().make()).__name__)                          # fresh construction
+print(type(Derived().make()).__name__)
+
+# --- cls itself -------------------------------------------------------------
+print(Base.name(), Derived.name())
+print(b.name(), d.name())
+print(Base.who(), Derived.who())
+
+# --- ordinary arguments still land where they should ------------------------
+print(Base.withargs(3, 4), Derived.withargs(5, 6))
+
+# --- overriding, and @staticmethod beside it, unchanged ---------------------
+print(Base.over(), Derived.over())
+print(Derived().over(), Base().over())
+print(Base.st(1), Derived.st(2))
+
+# NOT supported yet, and deliberately absent rather than pinned:
+# calling one classmethod THROUGH the receiver -- `cls.other(v)` inside a
+# classmethod -- raises AttributeError at run time. Dispatching a METHOD on a
+# classref VALUE is its own mechanism; see
+# bug-n-a-classmethod-cannot-call-another-through-cls.
