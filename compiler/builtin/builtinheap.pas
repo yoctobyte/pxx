@@ -577,8 +577,19 @@ begin
 end;
 
 const
-{$ifdef PXX_ESP}
+{$if defined(PXX_ESP)}
   HEAP_ARENA = 65536;       { single 64 KiB static arena (fits ESP SRAM) }
+{$elseif defined(CPU_WASM32)}
+  { MUST equal the WasmArena byte size below. PXXAlloc rounds any request up to
+    HEAP_ARENA and then sets HeapEnd := HeapPtr + arena, so a HEAP_ARENA larger
+    than the real buffer would hand out a HeapEnd past its end and bump straight
+    through it — the 256 MiB default would have done exactly that on a 1 MiB
+    arena, reintroducing the corruption this arm exists to remove.
+    1 MiB, not "a few": BSS feeds the module's declared minimum memory
+    (WasmFinishMemory), builtinheap links into every program, and the wasm32
+    lane measured hello-world at (memory 2) = 128 KiB today. 16 pages is
+    headroom without taxing every module for space nobody is using. }
+  HEAP_ARENA = 1048576;     { 1 MiB static arena; see WasmArena }
 {$else}
   HEAP_ARENA = 268435456;   { 256 MiB mmap chunk; anon pages fault in lazily }
 {$endif}
@@ -666,6 +677,33 @@ var
   EspArena     : array[0..8191] of Int64;
   EspArenaUsed : Integer;
 {$endif}
+{$ifdef CPU_WASM32}
+  { 1 MiB static arena, Int64 cells so the base is 8-aligned. Same shape as the
+    ESP arena above, for a different reason: wasm has no mmap to fail, and
+    linear memory has NO PAGE PROTECTION -- address 0 is legal and reads as
+    zero -- so an unassigned Result here does not fault, it hands out 8, 32,
+    56... and silently overwrites the globals at WASM_BSS_BASE once ~1 KB has
+    been allocated. The arena must be real storage, not a syscall result.
+    Declaring it in BSS is also what makes the memory exist: the backend derives
+    the module's declared page count from BSSSize (WasmFinishMemory), and BSS is
+    never emitted into the file, so this costs declared address space at
+    instantiation and not one byte of .wasm.
+    bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero }
+  WasmArena     : array[0..131071] of Int64;   { 131072 * 8 = HEAP_ARENA }
+  WasmArenaUsed : Integer;
+{$endif}
+
+{$ifdef CPU_WASM32}
+{ The wasm arena's base, as one named thing. HeapMmap's wasm arm calls this
+  instead of inlining @WasmArena[0] so the eventual memory.grow arm replaces a
+  single expression rather than a use site buried in a conditional chain.
+  Defined ABOVE its caller, not merely somewhere in the file: FPC resolves in
+  source order and the bootstrap seed build is the only thing that checks. }
+function WasmArenaBase: Int64;
+begin
+  Result := Int64(@WasmArena[0]);
+end;
+{$endif}
 
 { Anonymous mmap of len bytes; returns the base address (or the kernel's
   negative errno, which a subsequent access would fault on). }
@@ -677,27 +715,19 @@ var
 begin
   { mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0)
     via the raw-syscall intrinsic so every target lowers it natively.
-    32-bit targets use mmap2 (offset in pages; 0 either way). }
-{$ifdef CPUX86_64}
-  Result := __pxxrawsyscall(9, 0, len, 3, 34, -1, 0);
-{$endif}
-{$ifdef CPUAARCH64}
-  Result := __pxxrawsyscall(222, 0, len, 3, 34, -1, 0);
-{$endif}
-{$ifdef CPU_ARM32}
-  Result := __pxxrawsyscall(192, 0, len, 3, 34, -1, 0);
-{$endif}
-{$ifdef CPU_I386}
-  Result := __pxxrawsyscall(192, 0, len, 3, 34, -1, 0);
-{$endif}
-{$ifdef CPU_RISCV32}
-{$ifndef PXX_ESP}
-  { hosted linux (qemu-user): generic syscall ABI mmap = 222 (byte offset, 0 here).
-    prot=PROT_READ|PROT_WRITE=3, flags=MAP_PRIVATE|MAP_ANONYMOUS=0x22=34. }
-  Result := __pxxrawsyscall(222, 0, len, 3, 34, -1, 0);
-{$endif}
-{$endif}
-{$ifdef PXX_ESP}
+    32-bit targets use mmap2 (offset in pages; 0 either way).
+
+    ONE exhaustive chain with a terminal arm, not a run of independent
+    {$ifdef}/{$endif} blocks: as separate blocks a target matching none of them
+    fell through to whatever the pre-chain default was -- here nothing at all,
+    so Result was NEVER ASSIGNED and the function returned the return slot's
+    leftover contents, which on wasm32 read as 0. Same defect and same fix as
+    the five PXXSys* chains below (1ea3bdb85); this one is the instance with the
+    largest blast radius, because its wrong answer is the base of the heap.
+
+    PXX_ESP is tested FIRST: bare riscv32 defines both PXX_ESP and CPU_RISCV32,
+    and the static arena is the arm it wants. }
+{$if defined(PXX_ESP)}
   { Static arena: hand out the fixed buffer once (len is HEAP_ARENA here, so
     HeapEnd lines up). A second request means the arena is exhausted -> 0,
     which faults on the next access, signalling out-of-memory.
@@ -718,10 +748,68 @@ begin
       espZ := espZ + SizeOf(NativeInt);
     end;
   end;
-{$endif}
-end;
+{$elseif defined(CPU_WASM32)}
+  { wasm32: BSS arena, same shape as PXX_ESP above, with two deliberate
+    differences -- both of which are the whole reason this arm exists.
 
-{$ifdef PXX_ESP_IDF}
+    NO ZEROING. wasm linear memory is zero at instantiation, so PXXAlloc's
+    zero-init contract is satisfied for free. The ESP arm cannot assume that
+    (it does not know whether startup zeroed .bss); we can. This is the one
+    line that differs from the ESP shape and would otherwise read as an
+    omission, so: it is deliberate.
+
+    EXHAUSTION RETURNS -1, NOT 0. The ESP arm returns 0 because on that target
+    0 faults on the next access and so reports out-of-memory for free. On wasm
+    that idiom is precisely the bug -- 0 is a legal address, reads as zero, and
+    has no page protection, so returning it hands out a heap that overwrites
+    the globals and only traps thousands of allocations later, once the bump
+    pointer leaves the declared memory. -1 is out of bounds on the first touch,
+    which is the loud failure this target has no other way to produce.
+
+    WasmArenaBase is a named expression rather than @WasmArena[0] inlined at
+    the use site so that the eventual memory.grow arm replaces ONE thing.
+    Growth is not blocked by the module declaration -- the backend already
+    writes the no-maximum limits form, so memory.grow is legal on these modules
+    today; the only missing piece is an intrinsic to reach it from Pascal, which
+    is the wasm32 lane's half and deliberately NOT this ticket. }
+  if WasmArenaUsed <> 0 then
+    Result := -1
+  else
+  begin
+    WasmArenaUsed := 1;
+    Result := WasmArenaBase;
+  end;
+{$elseif defined(CPUX86_64)}
+  Result := __pxxrawsyscall(9, 0, len, 3, 34, -1, 0);
+{$elseif defined(CPUAARCH64)}
+  Result := __pxxrawsyscall(222, 0, len, 3, 34, -1, 0);
+{$elseif defined(CPU_ARM32)}
+  Result := __pxxrawsyscall(192, 0, len, 3, 34, -1, 0);
+{$elseif defined(CPU_I386)}
+  Result := __pxxrawsyscall(192, 0, len, 3, 34, -1, 0);
+{$elseif defined(CPU_RISCV32)}
+  { hosted linux (qemu-user): generic syscall ABI mmap = 222 (byte offset, 0 here).
+    prot=PROT_READ|PROT_WRITE=3, flags=MAP_PRIVATE|MAP_ANONYMOUS=0x22=34. }
+  Result := __pxxrawsyscall(222, 0, len, 3, 34, -1, 0);
+{$else}
+  { No arm for this target. -1, not 0: every caller reaches this through
+    PXXAlloc, which does NOT check the result (deliberately -- on a hosted
+    target a failed mmap returns a negative errno and the next access faults),
+    so the returned value IS the base of the heap. 0 is the one value that
+    fails silently on a target with no page protection, which is how wasm32
+    shipped a heap at address zero.
+
+    NOT {$error}, and this was measured rather than assumed: HeapMmap is
+    compiled unconditionally -- it is NOT inside {$ifndef PXX_ESP_IDF} -- while
+    the ESP-IDF profile redefines PXXAlloc to use calloc/free and never calls
+    it. A compile-time refusal here would therefore break every xtensa and
+    riscv32 IDF build over a function they do not use, and Track S is a live
+    campaign. Terminal arms are chosen by reachability: {$error} where a
+    missing arm cannot be reached at run time, a defined failure value where
+    the routine is compiled into everything and called by almost nothing. }
+  Result := -1;
+{$endif}
+end;{$ifdef PXX_ESP_IDF}
 { ESP-IDF profile (relocatable .o linked by idf.py): the pxx heap is backed by
   the IDF heap — calloc/free externals resolve to newlib/heap_caps at IDF link
   time. The hosted branch's linux mmap is an ecall that panics FreeRTOS
