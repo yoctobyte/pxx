@@ -21,6 +21,19 @@ and without `--xtensa-soft-mulhigh` any numeric output SIGILLs.
 
 ## The 21
 
+> Note (frankA, 2026-08-30): the `test_cross_managed_aggregate_locals` row
+> originally held this program's **raw output bytes**, pasted literally. Four
+> of them (`\xac \xc6 \xcc \xbc`) are not valid UTF-8, which made every
+> `progress.py` run — `board-md` and `check` alike — die with a
+> `UnicodeDecodeError` for **all** agents, since those tools read the whole
+> ticket tree. The bytes are evidence, so none were dropped: each is now a
+> backslash escape (`\xNN`, `\t` for the tabs), byte-for-byte identical to what
+> was captured. Two agents hit this and repaired it independently within the
+> same hour, which is itself the argument for the note: the failure surfaces far
+> from its cause — every ticket tool dies, naming a byte offset in a file the
+> agent running them never touched. Escape binary program output before pasting
+> it into a ticket.
+
 | program | xtensa | x86-64 |
 | --- | --- | --- |
 | `test_arm32_record_byval_wide` | `1 0` | `1 2` |

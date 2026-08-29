@@ -4976,6 +4976,15 @@ test-core: $(COMPILER)
 	# derefed value in contexts Writeln does not.
 	./$(COMPILER) test/test_cast_deref_chain_siblings.pas $(TESTTMP)/test_cast_sib26
 	tools/expect_same.sh test_cast_sib26 "$$($(TESTTMP)/test_cast_sib26)" "$$(printf 'a nested ^.^.^  : world\nb field arr[i]^ : world\nc len of deref  : 5\nd concat        : hello!\ne nested field  : world?')"
+	# …and the LVALUE twin of those siblings. The alias-name cast used as an
+	# ASSIGNMENT TARGET was the sixth and last copy of the postfix pointer walk,
+	# and the only one still behind on BOTH axes: no `[` in its token set (row b
+	# was `Expected: :=, but got: [`, while the same chain as an rvalue parsed),
+	# and no shape stamps on its `^` (row c stored at the wrong address, silently).
+	# Rows a/d/e/f are the depth-1 spellings lib/rtl actually uses — correct all
+	# along, and what hid the two above.
+	./$(COMPILER) test/test_cast_lvalue_suffix_siblings.pas $(TESTTMP)/test_cast_lv26
+	tools/expect_same.sh test_cast_lv26 "$$($(TESTTMP)/test_cast_lv26)" "$$(printf 'a field         : 55\nb field[i]      : 42\nc double deref  : 99\nd nested field  : 77\ne bare deref    : 8 9\nf pchar adapter : Jello')"
 	# A program naming `puint8` must compile QUIETLY: FindTypeAlias carried a
 	# leftover debug dump keyed on that exact name, printing the whole alias
 	# table to STDOUT before the pointer-alias fallback resolved it. The

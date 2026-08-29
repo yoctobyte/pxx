@@ -4572,6 +4572,7 @@ var
   aliasIdx, fieldNode, indexNode, castPrevTok, qUnit: Integer;
   castFieldName: AnsiString; castTk: TTypeKind; castRec: Integer;
   castElemTk: Integer; pcharCast: Boolean;   { PChar(p)^ := c as a statement target }
+  castElemRec, castDerefRem, castDerefBaseTk, castDerefBaseRec: Integer;   { the alias's own row, kept for the adapter fallback }
   decVal, decNode: Integer; strIsFloat: Boolean;
   valTmpSym, valTmpAssign, valTmpIdent: Integer;
   miArg, miEmpty: Integer; miIsFin: Boolean;   { Initialize/Finalize }
@@ -6555,36 +6556,75 @@ begin
               ASTTk[indexNode]   := Ord(tyPointer);
               castTk  := tyPointer;
               valNode := indexNode;
-              { Handle ^  and .field suffix chain }
-              while CurTok.Kind in [tkCaret, tkDot] do
+              { Handle the ^ / .field / [i] suffix chain.
+
+                This walk was the LAGGARD of the six postfix pointer walks in
+                the Pascal frontend, and it was behind on BOTH axes at once --
+                each gap reachable, and each already fixed on a sibling copy:
+
+                - The token set was [tkCaret, tkDot], with no `[`. So
+                  `PRec(raw)^.a[0] := 42` stopped at the subscript and reported
+                  `Expected: :=, but got: [`, while the identical RVALUE parsed
+                  fine. That is the SAME defect the record-name cast twin a few
+                  lines above already fixed
+                  (bug-p-a-record-cast-as-an-assignment-target-cannot-be-indexed)
+                  -- this is its alias-name sibling, which was never grepped for
+                  when that one was closed. Same remedy, deliberately: hand `.`
+                  and `[` to ParseClassRecordSelectors rather than grow a
+                  hand-rolled subscript arm here, which would have made a
+                  seventh copy of a walk we are trying to remove.
+
+                - The `^` arm typed EVERY level from the outer alias's immediate
+                  pointee and stamped no shape at all, so a second `^` never
+                  descended: `PPRec(raw)^^.b := 99` compiled clean and stored 99
+                  at the WRONG ADDRESS -- the target kept its old value and
+                  nothing was reported. The alias row has carried the whole
+                  triple (AliasPtrDepth / AliasPtrBaseTk / AliasPtrBaseRec) all
+                  along, and ResolveDerefShape has had an AN_PTR_CAST arm that
+                  reads it; this walk simply never asked. The three stamps below
+                  are exactly the ones the rvalue twin in pasparser_expr.inc
+                  writes, for the same readers.
+                refactor-a-the-pointer-suffix-walk-has-six-copies-in-the-pascal-frontend }
+              castElemRec := castRec;
+              while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do
               begin
                 if CurTok.Kind = tkCaret then
                 begin
                   Next;
                   fieldNode := AllocNode(AN_DEREF);
                   ASTLeft[fieldNode] := valNode;
-                  castTk := IntToTypeKind(castElemTk);
+                  castDerefRem := 0; castDerefBaseTk := Ord(tyUnknown);
+                  castDerefBaseRec := REC_NONE;
+                  castTk := IntToTypeKind(castElemTk); castRec := castElemRec;
+                  ResolveDerefShape(valNode, castTk, castRec,
+                                    castDerefRem, castDerefBaseTk, castDerefBaseRec);
+                  ASTSOffset[fieldNode] := castDerefRem;
+                  ASTSLen[fieldNode]    := castDerefBaseTk;
+                  if castDerefBaseRec > 0 then ASTIVal[fieldNode] := castDerefBaseRec;
+                  if (castTk = tyInteger) and (castRec = REC_NONE) and
+                     (castDerefRem = 0) and (castDerefBaseRec <= 0) then
+                  begin
+                    { No shape on the node at all -- the PChar ADAPTER cast
+                      (ival -2) carries no alias row for the resolver to read,
+                      so it falls to that walk's final else and answers
+                      tyInteger. For it the alias in hand IS the right answer,
+                      as it always was. Same fallback, same test, as the rvalue
+                      twin. }
+                    castTk  := IntToTypeKind(castElemTk);
+                    castRec := castElemRec;
+                  end;
                   ASTTk[fieldNode] := Ord(castTk);
                   valNode := fieldNode;
                 end
-                else { tkDot }
+                else
                 begin
-                  Next;
-                  if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then
-                    Error('expected field name after .');
-                  castPrevTok := TokPos - 1;
-                  castFieldName := '';
-                  for i := Tokens[castPrevTok].SOffset to Tokens[castPrevTok].SOffset + Tokens[castPrevTok].SLen - 1 do
-                    AppendChar(castFieldName, TokChars[i]);
-                  fieldNode := AllocNode(AN_FIELD);
-                  ASTLeft[fieldNode] := valNode;
-                  ASTSOffset[fieldNode] := Tokens[castPrevTok].SOffset;
-                  ASTSLen[fieldNode]   := Tokens[castPrevTok].SLen;
-                  castTk  := RecFieldType(castRec, castFieldName);
-                  castRec := RecFieldRecId(castRec, castFieldName);
-                  ASTTk[fieldNode] := Ord(castTk);
-                  Next;
-                  valNode := fieldNode;
+                  castPrevTok := TokPos;
+                  valNode := ParseClassRecordSelectors(valNode, castRec, castTk);
+                  castRec := ResolveNodeRec(valNode);
+                  { The walker consumes the whole chain it can, so a second turn
+                    of this loop only happens for a following `^`. If it consumed
+                    NOTHING the loop would spin, so stop rather than hang. }
+                  if TokPos = castPrevTok then Break;
                 end;
               end;
               Expect(tkAssign, ':=');
