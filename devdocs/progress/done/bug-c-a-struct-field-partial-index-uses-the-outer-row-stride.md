@@ -83,4 +83,4 @@ Both in the struct-field partial-index arm, `compiler/cparser.inc`:
 
 ## Log
 - 2026-08-29 — found, fixed, tested (frankC).
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 10676bcc2.
