@@ -86,20 +86,28 @@ both tests fall the wrong way. A different allocation pattern would have given
 one right by luck. **That is the signature of ordering by handle**, and it is
 this ticket demonstrated rather than inferred.
 
-**Provenance — read this before citing it.** The repro does **not** run on pushed
-master `1ec7725af`; there it dies with SIGBUS before comparing anything. The two
-lines above come from:
+**Provenance.** Verified on master, not taken on report:
 
-> **frankS working tree at `1ec7725af` plus an unpushed `HeapMmap` xtensa arm,
-> `qemu-xtensa` 10.2.1, both ABIs, with `--xtensa-soft-mulhigh`.**
+> **master at `dc62fe3cd` or later, `qemu-xtensa` 10.2.1, both ABIs, with
+> `--xtensa-soft-mulhigh`.**
 
-Two caveats that belong with any quotation of this result: the `HeapMmap` arm is
-not yet granted or pushed, and `--xtensa-soft-mulhigh` means the oracle is **not
-bit-identical to hardware for multiplies** (no qemu-xtensa core implements
-MUL32HIGH, and integer formatting strength-reduces div-by-10 into a 64-bit
-multiply). Neither touches string comparison, so neither weakens this result —
-but a verdict that omits them is overclaiming. To be re-cited cleanly once the
-heap arm lands.
+`dc62fe3cd` is an ancestor of `origin/master` and carries the `CPU_XTENSA` arm of
+`HeapMmap` (`builtinheap.pas:794`) — both checked here rather than accepted from
+the report, since the whole reason this section exists is that I once let a fact
+about a tree stand in for a fact about a binary.
+
+One caveat survives and belongs with any quotation of the result:
+**`--xtensa-soft-mulhigh` means the oracle is not bit-identical to hardware for
+multiplies** (no qemu-xtensa core implements MUL32HIGH, and integer formatting
+strength-reduces div-by-10 into a 64-bit multiply). It does not touch string
+comparison, so it does not weaken this result — but a verdict that omits it
+overclaims.
+
+*Superseded:* an earlier revision of this ticket said the repro did not run on
+pushed master and rested on an unpushed heap arm. **That is no longer true** —
+the arm landed in `dc62fe3cd`. Left visible rather than deleted, because this
+ticket has now been wrong twice about provenance in opposite directions and the
+pattern is more instructive than either correction.
 
 ### Why it could not run before, which is its own finding
 

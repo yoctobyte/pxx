@@ -678,3 +678,36 @@ eighth belongs. The enumeration ticket's rule covers it exactly: **a construct
 that enumerates targets and ends in a default is asserting the default is right
 for everything it did not name.** Worth adding to that ticket's fix list as a
 pattern rather than a site.
+
+### Provenance, third revision — and the pattern is the finding
+
+The xtensa ticket has now been wrong about provenance **twice, in opposite
+directions**, and both revisions are left visible rather than tidied:
+
+1. *"hosted xtensa hangs"* — measured on a pin predating the fix. Withdrawn.
+2. *"does not run on pushed master, rests on an unpushed arm"* — true when
+   written, false forty minutes later; the arm landed in `dc62fe3cd`.
+
+Both errors have the same shape as everything else in this ticket: **a sentence
+about a boundary, correct when written, invalidated by an edit elsewhere.** The
+provenance line is exactly the kind of claim the audit is about, and it went
+stale faster than any comment in the tree — twice in one evening — because the
+thing it describes was moving while it was being written.
+
+The current citation was **verified against master, not accepted from the
+report**: `dc62fe3cd` confirmed an ancestor of `origin/master`, and the
+`CPU_XTENSA` arm read at `builtinheap.pas:794`. That is the whole practice this
+ticket has been converging on, applied to the ticket's own metadata.
+
+### A hazard frankS surfaced that applies to this audit directly
+
+frankS's arm reached master through `git add -A` — a commit labelled `docs(S)`
+swept in code that its own message described as unpushed. Disclosed, granted
+retroactively, code fine, process not.
+
+**`git add -A` does not distinguish "finished" from "permitted".** This audit is
+read-only *by construction* — findings are filed as tickets, no source is edited
+— so a sweeping add can only pick up `devdocs/progress/**`, which is why the
+property was worth building in rather than merely intending. Worth stating
+explicitly in the charter: **an audit that edits nothing cannot leak anything,
+and that is a reason to keep it read-only even when the fix looks obvious.**
