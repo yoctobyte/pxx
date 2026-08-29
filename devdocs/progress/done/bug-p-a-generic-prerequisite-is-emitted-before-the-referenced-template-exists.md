@@ -303,4 +303,4 @@ Two things it needs that the neighbouring flush does not:
   not another `specialize`.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit 3a011ed6f.

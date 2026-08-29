@@ -219,4 +219,4 @@ forwards *existed*, but sat below a caller that a later refactor had lifted abov
 them, so "I already added forwards" was true and useless.
 
 ## Log
-- 2026-08-28 — resolved, commit PENDING-COMMIT.
+- 2026-08-28 — resolved, commit 3a011ed6f.
