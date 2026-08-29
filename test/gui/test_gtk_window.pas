@@ -7,7 +7,14 @@ program test_gtk_window;
 uses gtk3, gtk3_c;
 
 var
-  win, btn: PGtkWidget;
+  { Pointer, not PGtkWidget: that typedef existed only in the curated
+    lib/pcl/gtk3_c.h and has no counterpart in the stock GTK3 headers
+    the binding now includes -- there it is GtkWidget*, which pxx's C
+    import surfaces as a plain Pointer. The sibling test_c_gtk_window.pas
+    made this same switch earlier for a sharper reason: PGtkWidget was
+    never DECLARED there at all, so it was silently a 4-byte integer and
+    truncated the pointer (bug-pascal-unknown-type-silently-integer). }
+  win, btn: Pointer;
   i: Integer;
 
 begin

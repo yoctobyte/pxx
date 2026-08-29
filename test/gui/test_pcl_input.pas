@@ -116,7 +116,20 @@ begin
   ev^.button := 1;
 
   { emit the signal directly -> fires the connected trampoline (no realized-window
-    assertion as gtk_widget_event would impose headlessly). }
+    assertion as gtk_widget_event would impose headlessly).
+
+    THIS TEST CURRENTLY FAILS TO COMPILE and is deliberately left as it is.
+    g_signal_emit_by_name is variadic in the real GTK headers, and pxx's C-header
+    import drops the variadic tail, so the imported signature is the 2-argument
+    fixed prefix and these four-argument calls do not match
+    ([[bug-a-a-c-headers-variadic-tail-is-dropped-on-import]] -- the capability
+    exists, C mode calls varargs correctly, only the import discards it).
+
+    Rerouting through gtk_widget_event / gtk_widget_size_allocate would make it
+    pass today and is exactly the compiler-appeasement workaround CLAUDE.md's
+    platonic-code rule forbids -- and the comment above is the reason it would
+    also be worse: those impose a realized-window assertion this test cannot
+    satisfy headlessly. So the platonic call stays and the ticket carries it. }
   handled := 0;
   g_signal_emit_by_name(PaintBox.Handle, PC('button-press-event'), ev, @handled);
 
