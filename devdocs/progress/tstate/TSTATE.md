@@ -4,7 +4,7 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `2b33ab009963` | 2026-08-29T19:36:25Z | RED (native) | 339.3s | `49bd043061c1` RED |
-| seven | `70f761137a8d` | 2026-08-29T19:35:19Z | GREEN (native) | 104.0s | `ee62e6dc0582` RED |
+| seven | `20efe74efc43` | 2026-08-29T19:39:02Z | GREEN (native) | 116.6s | `ee62e6dc0582` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -40,4 +40,3 @@
 - **lib-test#src:test/lib_synapse.pas** — test/lib_synapse.pas tools/expect_same.sh (seven): bad `ee62e6dc0582`, last good `unknown`, 0 commit(s) in range
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +34 (seven): bad `ee62e6dc0582`, last good `154d1aa3fba6`, 41 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_relative_import_in_package.npy** — test/test_nilpy_relative_import_in_package.npy test/test_nilpy_relative_import_in_package.expected +1 (seven): bad `ee62e6dc0582`, last good `154d1aa3fba6`, 76 commit(s) in range
-- **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (seven): bad `a6698ac28e8b`, last good `ee62e6dc0582`, 17 commit(s) in range
