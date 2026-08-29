@@ -198,7 +198,20 @@ def classify(results):
     # A program FPC cannot compile is a pasmith bug (its contract is to emit
     # only valid objfpc), and we cannot judge pxx against a broken oracle --
     # so report it as its own class, loudly, rather than as a "divergence".
-    if any(results.get(n) == COMPILE_FAIL for n in ("fpc-O0", "fpc-O2")):
+    #
+    # ALL, not ANY, and the difference is the whole of
+    # bug-t-pasmith-calls-an-fpc-o2-bug-a-generator-contract-violation. The
+    # contract this claims was violated is "emit valid objfpc" -- and if ONE FPC
+    # level compiles the program, that contract was KEPT: the program is valid,
+    # provably, by the oracle's own -O0. A single level rejecting it is FPC
+    # disagreeing with itself, which is an FPC bug and is what `fpc-self` below
+    # already exists to say. With `any` this returned first and stole the case,
+    # so compile-time FPC self-contradiction was labelled a generator bug while
+    # the identical contradiction at RUNTIME was labelled correctly. Both
+    # examples the signature ever recorded (seeds 362, 85029) were FPC -O2 bugs
+    # where pxx was right, filed as "our generator is broken".
+    fpc_arms = [n for n in ("fpc-O0", "fpc-O2") if n in results]
+    if fpc_arms and all(results[n] == COMPILE_FAIL for n in fpc_arms):
         return (True, groups,
                 "FPC REJECTED THE PROGRAM -- pasmith contract violation (see ticket triage)",
                 "fpc-reject")
@@ -208,7 +221,16 @@ def classify(results):
     # COMPILE_FAIL group was filtered out and the remaining oracles all agreed,
     # so the program was scored clean. A compiler that cannot build valid objfpc
     # is exactly what this tool exists to catch.
-    if any(v == COMPILE_FAIL for k, v in results.items() if k.startswith("pxx")):
+    #
+    # ALL here too, for the same reason and found by the same rule (fix one arm,
+    # grep for the sibling). "pxx cannot build valid objfpc" is a frontend gap
+    # only if EVERY pxx level fails. If -O0 builds it and -O2 does not, the
+    # frontend plainly accepted the program and the optimiser broke it -- an
+    # optimiser bug (Track A/O), which `pxx-self` below already says. Routing
+    # that to Track A/P as a frontend gap would send someone to the parser for a
+    # bug that is not there.
+    pxx_arms = [k for k in results if k.startswith("pxx")]
+    if pxx_arms and all(results[k] == COMPILE_FAIL for k in pxx_arms):
         return (True, groups,
                 "pxx REJECTED a program FPC accepts -- frontend gap or regression (Track A/P)",
                 "pxx-reject")
@@ -220,19 +242,38 @@ def classify(results):
                     "by construction, so this is never the program's fault" % v,
                     "pxx-" + ("timeout" if v == TIMEOUT else "crash"))
 
-    real = {k: v for k, v in groups.items() if k != COMPILE_FAIL}
-    if len(real) <= 1:
+    # A COMPILE_FAIL that got this far is a PARTIAL one -- some arm built the
+    # program and some did not -- so it is a disagreement like any other and the
+    # checks below read it correctly without knowing it is special (COMPILE_FAIL
+    # is just a value they compare unequal to). This used to drop the
+    # COMPILE_FAIL group first and then ask whether the survivors agreed, which
+    # answered "yes, clean" for exactly the case the guards above had stopped
+    # catching: one FPC level failing while everything else agreed collapsed to
+    # a single group and was scored as NO divergence at all. Silently losing the
+    # finding is worse than mislabelling it, so the two must change together.
+    if len(groups) <= 1:
         return False, groups, "", ""
 
     note, cls = "", "unknown"
     f0, f2 = results.get("fpc-O0"), results.get("fpc-O2")
     if f0 is not None and f2 is not None and f0 != f2:
-        note = "FPC CONTRADICTS ITSELF (-O0 vs -O2) -- an FPC bug, no judgement needed; pxx is not involved"
+        # COMPILE_FAIL reaches here now, so name which kind it is: "FPC will not
+        # BUILD at one level" and "FPC builds at both and prints different
+        # answers" are both FPC bugs and both belong in tstate/fuzz/fpc-bugs/,
+        # but a reader chasing one should not have to open the program to learn
+        # which they have.
+        how = ("REFUSES TO COMPILE at one level"
+               if COMPILE_FAIL in (f0, f2) else "produces different output")
+        note = ("FPC CONTRADICTS ITSELF (-O0 vs -O2) -- it %s; an FPC bug, no "
+                "judgement needed; pxx is not involved" % how)
         cls = "fpc-self"
     pxxv = {k: v for k, v in results.items() if k.startswith("pxx-O")}
     if len(set(pxxv.values())) > 1:
+        how = ("REFUSES TO COMPILE at some level"
+               if COMPILE_FAIL in pxxv.values() else "produces different output")
         note = (note + " | " if note else "") + \
-            "pxx CONTRADICTS ITSELF across -O levels -- an optimiser bug (Track A/O); FPC not involved"
+            ("pxx CONTRADICTS ITSELF across -O levels -- it %s; an optimiser bug "
+             "(Track A/O); FPC not involved" % how)
         cls = "pxx-self" if cls == "unknown" else cls + "+pxx-self"
     arch = {k: v for k, v in results.items()
             if k.startswith("pxx-") and not k.startswith("pxx-O")}
@@ -841,11 +882,21 @@ def main():
             if "REJECTED" in note and cls == "fpc-reject":
                 fpc_reject += 1
             loc = kind = None
-            if cls in ("fpc-reject", "pxx-reject"):
+            failed = sorted(groups.get(COMPILE_FAIL, []))
+            if failed:
                 # A rejection localises itself: the diagnostic IS the signature.
                 # Tracing it would be pointless -- the program never ran.
-                who = "fpc-O0" if cls == "fpc-reject" else "pxx-O0"
-                kind = LAST_ERR.get(who) or "compile-fail"
+                #
+                # Keyed on "did an arm fail to compile", not on the class name,
+                # and on the arm that ACTUALLY failed rather than a hardcoded
+                # -O0. Since partial compile failures now reach fpc-self and
+                # pxx-self, the old `cls in (...)` test would have sent them to
+                # localize(), which trace-diffs two RUNNING programs: the
+                # non-compiling arm's trace is the single line "<compile-fail>",
+                # so every one of them would have reported a confident, wrong
+                # "first divergence at checkpoint 0". And the hardcoded fpc-O0
+                # would have looked up the diagnostic of the arm that SUCCEEDED.
+                kind = LAST_ERR.get(failed[0]) or "compile-fail"
             elif not a.no_localize:
                 loc, kind = localize(src, workdir, oracles, groups)
             sig = signature(cls, kind)
