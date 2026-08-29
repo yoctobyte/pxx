@@ -48,7 +48,7 @@ Track D's usual: no compiler or `lib/**` changes, snippets compile against
 time of writing (verify by compiling, don't paraphrase this ticket).
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 7e0227741.
 
 ---
 
