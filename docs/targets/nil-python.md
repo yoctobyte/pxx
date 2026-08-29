@@ -252,7 +252,8 @@ supported. Triple-quoted f-strings are not.
 
 **A bare import name means Python.** `import mymod` looks for `mymod.py` or
 `mymod.npy` and nothing else — it will not quietly load a Pascal unit that
-happens to share the name. Where a name *does* collide with one of PXX's own
+happens to share the name (One thing that is *not* an ordinary Pascal
+unit does import bare: a [Python extension module](#python-extension-modules-import-bare).) Where a name *does* collide with one of PXX's own
 RTL units, the compiler says so and names the spelling that reaches it:
 
 ```
@@ -284,6 +285,53 @@ Two things that are **not** available, deliberately or not yet:
   defeat. Quote it instead.
 - `from 'sysutils.pas' import Trim` — not built; the error is *expected a
   module name after from*. Use the `as` form and qualify.
+
+### Python extension modules import bare
+
+An extension module is the one thing written in Pascal that a bare `import`
+reaches. That is not the rule bending — it is the rule not applying. The rule
+above governs how you reach a *Pascal unit*; a cpyext extension module is a
+**Python module whose body happens to be Pascal and C**, exactly what `_socket`
+or `_json` is to CPython, so bare import is its correct spelling:
+
+```python
+import fmt_ext                   # a Pascal unit, imported as the Python module it is
+print(fmt_ext.fmtUnicode())
+```
+
+The unit is found the same way any Python module is — on the search path, so a
+unit outside the current directory needs a `-Fu` root like any other (below).
+
+A unit becomes one by saying so, and the compiler checks the claim. Both must
+hold:
+
+```pascal
+unit fmt_ext;
+
+{$PYEXTENSION}                   { the DECLARATION — a line that is exactly this }
+
+interface
+
+uses pxxcio, '../../lib/cpyext/src/pyruntime.c',   { the CHECK — binds the cpyext runtime }
+     './fmt_ext_host.c';
+```
+
+The declaration is what makes it a Python module; binding the runtime only
+confirms the claim. A unit that binds the runtime without declaring itself is
+still refused by name, so the carve-out cannot widen into "any unit that
+touches CPython".
+
+**The module's name means nothing here.** `_ext` is not a convention — of 147
+real extension modules on a stock CPython 3.12 (stdlib `lib-dynload`,
+statically builtin, and third-party `.so` together), none end in `_ext`, while
+70 begin with a leading underscore. The `_ext` names in PXX's own test units are
+test-local naming. Nothing is keyed on the spelling of the name.
+
+Neither is `PyInit_<name>` a reliable tell, and PXX does not use it: a
+*vendored* extension's init symbol carries the **upstream** module's name, so a
+unit wrapping MarkupSafe's accelerator exports `PyInit__speedups`, not
+`PyInit_markupsafe_ext`. A unit that only *consumes* the C API exports no
+`PyInit_` at all and is still an extension module.
 
 ### Finding a third-party Python package: `-Fu`
 
