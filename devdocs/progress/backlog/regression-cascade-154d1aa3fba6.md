@@ -62,3 +62,62 @@ and blaming are different questions and this line answers the first.)
 *Cascade stub: one signal for one event. Track T agent (face 2) or the owning
 dev track triages the root; individual tickets only for whatever remains red
 after the root is fixed.*
+
+---
+
+## TRIAGE, 2026-08-29 — NOT A CODE REGRESSION. All 18 are host or pre-existing.
+
+**Do not bisect the Range section.** Every buildable commit in it is a Track R
+commit, which is the most incriminating possible framing and it is wrong. The
+lane it accuses measured it first (frank-rust) and the coordinator confirmed the
+load-bearing half from a source the claimant did not choose.
+
+**Cause: `seven` is missing the 32-bit and cross runtimes that plexus has.** Its
+baseline `e417731e9007` was the box's own first-ever sweep, so a capability the
+host never had reads as a capability that just broke.
+
+| # | jobs | verdict |
+| --- | --- | --- |
+| 9 | `test_extern_c`, `test_extern_c_float`, `test_cdecl_indirect` on i386 + arm32 + aarch64 | **host**: no target loader. All nine produce **empty** actual output — three unrelated backends emitting nothing at all in one sweep is the programs not running, not codegen. |
+| 1 | `lib-test#test_dynlib` | **host**, and it names the cause out loud: `qemu-i386: Could not open '/lib/ld-linux.so.2': No such file or directory`. |
+| 1 | `lib-test#lib_inttohex` | **host/tooling**: Python traceback inside `/home/seven/trackt-watch/tools/reportlab_diff.py`. |
+| 1 | `test-aarch64#test_parallel_reduction` | **host**: marked TIMED OUT. |
+| 2 | `test-nilpy#…tkinter_facade.npy`, `test-sqlite-threads-aarch64#…` | **host, pending packages** — `tcl-dev`/`tk-dev` and `libsqlite3-dev` are on the owner's install list for this box. Lower confidence than the rows above: the sqlite job's key is a fixedpoint target, so it may be a build failure rather than a missing library. Re-check after provisioning. |
+| 4 | `tools-devtest#00`, `test-emit-obj#cxtensa_obj.c`, `test_nilpy_parent_call_after_instantiation`, `test_nilpy_startswith_tuple` | **pre-existing**, each with its own earlier `bad=` sha. Folded into the cascade, not newly red. |
+
+**Counter-evidence run at HEAD** (frank-rust, `1625a25ba841`, self-hosted binary
+`5ee03822ce0b`, converged after 1 round) — all six of the reproducible cross jobs
+**PASS** on this box: i386, arm32 and aarch64 × `extern_c` and `cdecl_indirect`.
+
+**Coordinator's independent confirmation:** `/lib/ld-linux.so.2` exists on plexus
+(symlink to `i386-linux-gnu/ld-linux.so.2`, dated 22 Jul); `seven.json` carries
+the `Could not open` string for the dynlib job. The two arms do not share an
+upstream — one is this box's filesystem, one is seven's own report.
+
+**Also on seven, same provisioning gap from other angles:** `fpc is not on PATH`,
+no uforth tree, and the `opt` tier has never completed a run.
+
+### The filing defect this exposes — for Track T's tooling, not for this ticket
+
+**The stub carries the incriminating half of the evidence and omits the
+exculpating half.** The Range section — machine-derived, precise, authoritative
+in tone — lists twelve Rust commits. The *reasons* (`Could not open`, `TIMED
+OUT`, a Python traceback) live only in the tstate JSON and appear nowhere in the
+ticket a human opens. A reader who trusted the range and did not go fetch the
+report would have spent an afternoon bisecting Rust commits for a missing
+loader, and nothing in the ticket would have contradicted them.
+
+This is not a bad range computation; the range is correct and its own caveat
+("the named sha CANNOT be the cause") is correct too. The defect is that **two
+fields of one report disagree and the lower-status field is the one that is
+right** — and the layout gives no hint that the reasons outrank the range.
+
+**Remedy for the cascade filer: put each red job's failure REASON next to its
+name in the stub.** A cascade whose reasons are visible is triaged by reading;
+one whose reasons are a fetch away is triaged by bisection. New face of the
+generator family (index: `feature-a-a-refusal-is-a-claim-with-a-date-on-it`).
+
+**Status:** not a Track R item, not p70 code work. Blocked on provisioning
+`seven` (owner's box, owner's installs). Re-sweep after provisioning and re-file
+whatever is still red — expected: the four pre-existing regressions and nothing
+else.
