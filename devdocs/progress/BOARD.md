@@ -719,7 +719,7 @@ _none_
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application
 - [p 60] [A+O] feature-opt-emitasmx64-reparses-fixed-strings
 - [p 60] [A+B] feature-target-wasm [parked — re-claim, do not duplicate] [!! DO NOT CLAIM — the ticket says so; read it]
-- [p 60] [C] idea-c-realworld-test-targets
+- [p 60] [C] idea-c-realworld-test-targets [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
 - [p 60] [A] perf-a-cache-the-compiled-nilpy-runtime-unit-image
 - [p 60] [P] perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor
 - [p 60] [N] regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native
@@ -944,7 +944,7 @@ _none_
 - [p 25] [N] feature-nilpy-match-statement
 - [p 25] [A+O] feature-opt-arch-level-and-dispatch
 - [p 25] [T] feature-t-uforth-bench-on-the-watcher-idle-phase
-- [p 25] [D] idea-public-status-page
+- [p 25] [D] idea-public-status-page [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
 - [p 25] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [A] refactor-a-backend-machine-code-lives-in-six-shared-files
 - [p 22] [A+S] bug-a-xtensa-codegen-has-no-variant-support
@@ -986,7 +986,7 @@ _none_
 - [p 15] [P] feature-p-tobject-api-classparent-instancesize-tostring
 - [p 15] [W] feature-promo-launch-plan
 - [p 15] [T] feature-t-uforth-bench-restore-the-elfhash-outlier
-- [p 15] [A] idea-cross-namespace-ambiguity-warning
+- [p 15] [A] idea-cross-namespace-ambiguity-warning [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
 - [p 15] [D] task-d-document-own-language-first-in-the-language-reference
 - [p 15] [P] task-pascal-conformance-long-tail
 - [p 12] [A] bug-a-riscv32-sa-onstack-has-no-effect-under-qemu
@@ -1001,8 +1001,8 @@ _none_
 - [p 10] [A+O] feature-opt-alloc-intent-hint
 - [p  5] [P] compat-pascal-directive-in-comment-ignores-nested-comments-off
 - [p  5] [N] feature-nilpy-nested-def-as-value
-- [p  5] [A] idea-a-auto-enable-threadsafe-by-restarting-the-compile
-- [p  5] [A] idea-adaptive-heap-growth
+- [p  5] [A] idea-a-auto-enable-threadsafe-by-restarting-the-compile [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
+- [p  5] [A] idea-adaptive-heap-growth [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
 - [p  5] [A] meta-dialect-extensions-and-fpc-strict [!! DO NOT CLAIM — the ticket says so; read it]
 
 ## Leverage (tickets each one unblocks)
