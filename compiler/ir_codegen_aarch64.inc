@@ -2030,11 +2030,63 @@ begin
                 TypeKindSpelling(tk) + ' (op token ' + AIntToStr(op) + ', operands ' +
                 TypeKindSpelling(lhsTk) + ', ' + TypeKindSpelling(rhsTk) + ')' +
                 CurProcNoteForError);
-        IREmitNodeAarch64(left);
-        EmitI32($F81F0FE0); { str x0, [sp, #-16]! }
-        IREmitNodeAarch64(right);
-        EmitI32($AA0003E1); { mov x1, x0 }
-        EmitI32($F84107E0); { ldr x0, [sp], #16 }
+        { PXXDBG=a.a64binop -- REPORT ONLY, prices the -O1 leaf-operand port.
+          x86-64 collapses this push/eval/mov/pop dance for a constant or a
+          leaf-sym right operand; aarch64 has no such arm and pays all three
+          extra instructions on EVERY integer binop. Classify what the right
+          operands actually are before writing the arm. }
+        if PxxDbgEnabled('a.a64binop') then
+        begin
+          if IRKind[right] = IR_CONST_INT then
+            WriteLn('PXXDBG a.a64binop CONST')
+          else if IRKind[right] = IR_LOAD_SYM then
+            WriteLn('PXXDBG a.a64binop LEAFSYM')
+          else
+            WriteLn('PXXDBG a.a64binop OTHER');
+        end;
+        { -O3 leaf-operand direct load, aarch64 half of x86-64's -O1 arm.
+
+          Every integer binop on this target paid the same four-instruction
+          dance regardless of operand shape: push the left, evaluate the right
+          into x0, move it to x1, pop the left back. x86-64 has collapsed this
+          since -O1 for a constant or leaf-sym right operand; aarch64 had no
+          such arm at all, so it paid two stack memory ops and a register
+          shuffle on EVERY binop.
+
+          A constant right operand has no side effects and cannot observe the
+          left, so it can be materialised AFTER the left is in x0 — straight
+          into x1, which is where the op arms below already expect it. The
+          register contract downstream is IDENTICAL (x0 = left, x1 = right), so
+          every op arm, the {$Q+} checked forms included, works unchanged. That
+          is the whole reason this is a safe port rather than a rewrite: it
+          changes how x1 is populated and nothing else.
+
+          Measured before it was written (PXXDBG=a.a64binop): of the integer
+          binops reaching this path, 77.7-80.9% have a CONST_INT right operand
+          and a further 12.6-16.3% a leaf-sym one, across compiler.pas,
+          mandelbrot, chess and jsondemo — 93.4-93.9% collapsible in total.
+
+          The leaf-sym half is NOT done here, deliberately. It needs the right
+          operand loaded into x1 while the left sits in x0, and EmitLoadVarA64
+          hardcodes x0 — with residency, dyn-array-handle and sign-extension
+          special cases that must not be duplicated into a second path, since
+          the second path is the one that stays broken
+          (devdocs/dev/normalise-dont-special-case.md). The honest fix is to
+          give EmitLoadVarA64 a destination-register parameter, which is a
+          separate change with its own blast radius. }
+        if (OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) then
+        begin
+          IREmitNodeAarch64(left);              { x0 = left }
+          EmitLoadImmA64(1, IRIVal[right]);     { x1 = right, no stack round trip }
+        end
+        else
+        begin
+          IREmitNodeAarch64(left);
+          EmitI32($F81F0FE0); { str x0, [sp, #-16]! }
+          IREmitNodeAarch64(right);
+          EmitI32($AA0003E1); { mov x1, x0 }
+          EmitI32($F84107E0); { ldr x0, [sp], #16 }
+        end;
 
         if op = Ord(tkPlus) then
         begin
