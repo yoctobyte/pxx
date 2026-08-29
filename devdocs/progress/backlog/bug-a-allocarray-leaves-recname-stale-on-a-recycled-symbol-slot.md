@@ -158,3 +158,151 @@ whether the other frontends have latent instances rather than only re-running th
 Rust repro — a stale `RecName` is readable by anything that asks a record
 question about an array symbol, and it fails silently wherever the answer is not
 a parse decision.
+
+---
+
+## CROSS-FRONTEND AUDIT 2026-08-29 (claude-N) — read-only
+
+Answering the handoff's ask: *"whoever takes it should look for latent instances
+in the other frontends rather than only re-running the Rust repro."* No compiler
+source touched — `symtab.inc`, `ir.inc` and `pyparser.inc` were held by other
+agents throughout. Everything below is measured black-box, against gcc and FPC.
+
+### First: the allocator has a sibling, and the ticket names only one
+
+| allocator | writes `RecName`? |
+| --- | --- |
+| `AllocVar` (`symtab.inc:4046`) | yes |
+| `AllocParam` (`:4218`) | yes |
+| **`AllocArray` (`:4411`)** | **no** — writes `ElemRecName` only |
+| **`AllocDynArray` (`:4556`)** | **no** — writes `ElemRecName` only, same hole |
+| `AllocTemp` (`:4683`) | delegates to `AllocVar`, so yes |
+
+**`AllocDynArray` has the identical defect and the fix must land on both.**
+Fixing only `AllocArray` would leave `array of TRec` exposed — the exact
+"grep for the sibling before closing the ticket" case in
+`normalise-dont-special-case.md`.
+
+The discipline was already known at these sites: every allocator carries
+comments like *"slot recycling — every Alloc\* must reset EVERY parallel array"*.
+`RecName` is a field of the record rather than a parallel array, which is
+plausibly how it slipped past a rule written about parallel arrays.
+
+(`AllocTemp` sets `RecName` from the global `LastTypeRecId`, which is its own
+staleness with its own recorded bug at `ir.inc:12292` — *"arm's hidden temp got
+no RecName -> wrong RecSize -> garbage copy"*. Different mechanism, not this
+ticket.)
+
+### The reader census
+
+126 reads of `Syms[..].RecName` across the frontends and shared code. 86 have no
+`IsArray` or `ElemRecName` anywhere within ±12 lines. **20 are guarded by
+`TypeKind = tyRecord` and nothing else** — and that is the trap, because an
+array-of-record symbol *has* `TypeKind = tyRecord`: it holds the ELEMENT kind.
+A guard that looks like a type check is not one.
+
+### Per frontend
+
+| frontend | `AllocArray`/`AllocDynArray` calls | verdict |
+| --- | --- | --- |
+| **Rust** | 6 | **LIVE** — `RIsSliceSym`, this ticket's repro; confirmed still red at HEAD |
+| **C** | 6 | **LIVE — new repro below**, and it is the silent kind |
+| **Zig** | 2 | **latent** — two exact structural twins, not reachable today |
+| **Pascal** | 3 + 3 | mainline guarded; exposed readers are exotic |
+| **NilPy** | **0** | **not exposed** — `pyparser.inc` calls neither allocator |
+
+### C — a live, silent instance
+
+```c
+#include <stdio.h>
+struct A { long x; };
+struct B { long y; long z; };
+void t(struct B b, long i) { (void)b; (void)i; }   /* by VALUE; a pointer param does not trigger */
+int main(void) {
+    struct A a[4];
+    printf("%s\n", _Generic(a, struct A: "A", struct B: "B", default: "other"));
+    return 0;
+}
+```
+
+**gcc says `other`** (the array lvalue-converts to `struct A *`, matching no
+association). **pxx says `B`.** Delete `t`, or change its parameter to
+`struct B *`, and pxx says `other` again.
+
+The chain: `CExprCG`'s `AN_IDENT` arm types the symbol as `cgStruct` with
+`CGRecA[Result] := Syms[sym].RecName` (`cparser.inc:1110`), and `CGMatch`
+selects an association by `CGRecA[a] = CGRecA[c]` (`:1208`). The stale id is
+`struct B`'s, left in the recycled slot by `t`'s **by-value** struct parameter —
+a `struct B *` parameter has `TypeKind = tyPointer`, so its `RecName` is not the
+struct id, which is why the pointer variant is clean. That asymmetry is the
+mechanism confirming itself.
+
+No error, no warning, wrong branch. This is exactly the failure mode the handoff
+predicted: *"a parse-decision reader fails loudly and every other kind fails
+silently."* Rust's instance is a parse error you cannot miss; C's picks the wrong
+`_Generic` arm and compiles.
+
+**The one-line fix makes C *more* correct here, not merely different.** With
+`RecName := REC_NONE`, the array symbol's `cgStruct` matches neither
+association, so every variant answers `other` — agreeing with gcc in all five
+probe shapes. Note that today's no-`t` case answers `other` **by accident**: the
+recycled slot simply happened to hold no record id.
+
+### Zig — two structural twins, unreachable today
+
+```pascal
+function ZIsSliceSym(symIdx: Integer): Boolean;      { zparser.inc:307 }
+begin
+  Result := (Syms[symIdx].TypeKind = tyRecord) and
+            (Syms[symIdx].RecName >= REC_UCLASS_BASE) and
+            ZSliceCi[Syms[symIdx].RecName - REC_UCLASS_BASE];
+end;
+```
+
+That is `RIsSliceSym` character for character, and `ZIsOptSym`
+(`zparser.inc:272`) is a third copy of the same three lines over `ZOptCi`. Both
+would misfire identically.
+
+They cannot fire **today**, and the reason is worth recording because it is
+temporary: the Zig skeleton refuses `var a: [4]Move = undefined` with *"struct
+type Move is only allowed for local variables in the skeleton"*, so no Zig
+symbol can currently be both `IsArray` and `TypeKind = tyRecord`. **The day
+Track Z accepts an array of struct, both predicates become live**, in a frontend
+with no test that would notice. Measured, not assumed — the refusal above is the
+compiler's own message.
+
+### Pascal — mainline guarded, exposure is exotic
+
+Ten shapes probed against FPC (fixed and dynamic array of record; field write,
+whole-element copy, `SizeOf(a)`, `SizeOf(a[0])`, `Length`), each with and
+without a preceding by-value record parameter at arities 2 and 3, and with a
+`var` parameter and a global. **All twelve outputs identical to FPC.** Pascal's
+mainline array path goes through `ResolveNodeRec`, which reads `ElemRecName` by
+design and says so in its own comment.
+
+The unguarded Pascal readers are real but hard to reach: `pasparser_stmt.inc:494`
+and `:549` put `Syms[varIdx].RecName` on an `AN_DEREF` node for a `for..in` over
+a generator yielding records — a stale value there gives `ResolveNodeRec` the
+wrong size and produces a **garbage copy**, silent, but it needs an
+array-typed loop variable. `:6799`/`:6810` sit behind `DelphiMode and
+SymProcSig[idx] >= 0`. Not reproduced; not cleared either.
+
+### Recommendation
+
+1. Apply the one-line fix to **both** `AllocArray` and `AllocDynArray`.
+2. Pin it with **two** tests, because the two failure modes are different
+   evidence: the Rust parse error (loud) and the C `_Generic` selection
+   (silent, and diffable against gcc). A C test also covers the arm no current
+   test touches.
+3. When Track Z gains arrays of structs, `ZIsSliceSym`/`ZIsOptSym` need the
+   Rust repro transliterated — worth a line in the Zig ladder now, while the
+   connection is visible.
+
+### The shape
+
+Three frontends grew their own `Is<X>Sym` predicate over one shared symbol
+field, each with the same latent flaw, and the flaw is only reachable where that
+frontend's *other* features happen to line up. One concept, several
+implementations, and a fix on one arm is no evidence about the others — the same
+thing the `builtinheap` twin census found one level down, in
+[[audit-a-builtinheap-invariants-x86-64-inlines-past]].
