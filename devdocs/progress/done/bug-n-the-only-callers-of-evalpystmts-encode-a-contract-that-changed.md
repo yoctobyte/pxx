@@ -161,4 +161,4 @@ change and this checkout has not rebuilt" -- rather than presenting a
 fixedpoint mismatch for me to bisect. Fixedpoint `28a17f797b64`.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit bfba200a3.
