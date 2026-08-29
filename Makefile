@@ -9810,6 +9810,56 @@ test-core: $(COMPILER)
 	./$(COMPILER) -O3 test/test_o3_resident_exc.pas $(TESTTMP)/sweep_o3exc_O3 >/dev/null
 	tools/expect_same.sh sweep_o3exc_cross "$$($(TESTTMP)/sweep_o3exc_O0)" "$$($(TESTTMP)/sweep_o3exc_O3)"
 	tools/expect_same.sh sweep_o3exc_O3 "$$($(TESTTMP)/sweep_o3exc_O3)" "$$(printf 'OUT i=200 acc=20100 seen=9453\nIN  i=200 acc=20100 seen=9453\nMIX i=300 ins=900 out=600 a=633 b=422\nNEST i=120 x=1120 y=1077\nFIN i=90 x=10090 n=90\nPAR i=150 p=1150 seen=1099\nTHR i=60 acc=1830 seen=861')"
+	# The twelve pyeval drivers, wired after
+	# bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed made
+	# them pass again. They cover the host-call ABI, the reflection trampoline
+	# shapes and Variant marshalling -- material the .npy path cannot reach from
+	# Pascal, which is why they were repaired rather than deleted.
+	#
+	# Each one already refuses its own failure: a mismatched Check prints FAIL
+	# and Halt(1)s, so the run line alone asserts the exit code. What the
+	# assertion adds is the `ok` COUNT, and that is the half that matters here.
+	# `ALL PASS` is printed by `if fails = 0`, which is also what a driver that
+	# stopped running cases prints -- a corpus that silently shrinks to zero
+	# assertions passes every check these files make about themselves. The count
+	# is the only thing that can tell the two apart, and these twelve spent
+	# months in exactly the state where nobody would have noticed.
+	./$(COMPILER) test/test_pyeval_bignum.pas $(TESTTMP)/sweep_pyeval_bignum
+	$(TESTTMP)/sweep_pyeval_bignum > $(TESTTMP)/sweep_pyeval_bignum.log
+	tools/expect_same.sh sweep_pyeval_bignum "$$(tail -1 $(TESTTMP)/sweep_pyeval_bignum.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_bignum.log)" "ALL PASS 6"
+	./$(COMPILER) test/test_pyeval_compound.pas $(TESTTMP)/sweep_pyeval_compound
+	$(TESTTMP)/sweep_pyeval_compound > $(TESTTMP)/sweep_pyeval_compound.log
+	tools/expect_same.sh sweep_pyeval_compound "$$(tail -1 $(TESTTMP)/sweep_pyeval_compound.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_compound.log)" "ALL PASS 10"
+	./$(COMPILER) test/test_pyeval_def.pas $(TESTTMP)/sweep_pyeval_def
+	$(TESTTMP)/sweep_pyeval_def > $(TESTTMP)/sweep_pyeval_def.log
+	tools/expect_same.sh sweep_pyeval_def "$$(tail -1 $(TESTTMP)/sweep_pyeval_def.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_def.log)" "ALL PASS 7"
+	./$(COMPILER) test/test_pyeval_fstring.pas $(TESTTMP)/sweep_pyeval_fstring
+	$(TESTTMP)/sweep_pyeval_fstring > $(TESTTMP)/sweep_pyeval_fstring.log
+	tools/expect_same.sh sweep_pyeval_fstring "$$(tail -1 $(TESTTMP)/sweep_pyeval_fstring.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_fstring.log)" "ALL PASS 7"
+	./$(COMPILER) test/test_pyeval_is_in.pas $(TESTTMP)/sweep_pyeval_is_in
+	$(TESTTMP)/sweep_pyeval_is_in > $(TESTTMP)/sweep_pyeval_is_in.log
+	tools/expect_same.sh sweep_pyeval_is_in "$$(tail -1 $(TESTTMP)/sweep_pyeval_is_in.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_is_in.log)" "ALL PASS 7"
+	./$(COMPILER) test/test_pyeval_isinstance_del_dict.pas $(TESTTMP)/sweep_pyeval_isinstance_del_dict
+	$(TESTTMP)/sweep_pyeval_isinstance_del_dict > $(TESTTMP)/sweep_pyeval_isinstance_del_dict.log
+	tools/expect_same.sh sweep_pyeval_isinstance_del_dict "$$(tail -1 $(TESTTMP)/sweep_pyeval_isinstance_del_dict.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_isinstance_del_dict.log)" "ALL PASS 11"
+	./$(COMPILER) test/test_pyeval_m1.pas $(TESTTMP)/sweep_pyeval_m1
+	$(TESTTMP)/sweep_pyeval_m1 > $(TESTTMP)/sweep_pyeval_m1.log
+	tools/expect_same.sh sweep_pyeval_m1 "$$(tail -1 $(TESTTMP)/sweep_pyeval_m1.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_m1.log)" "ALL PASS 23"
+	./$(COMPILER) test/test_pyeval_m2.pas $(TESTTMP)/sweep_pyeval_m2
+	$(TESTTMP)/sweep_pyeval_m2 > $(TESTTMP)/sweep_pyeval_m2.log
+	tools/expect_same.sh sweep_pyeval_m2 "$$(tail -1 $(TESTTMP)/sweep_pyeval_m2.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_m2.log)" "ALL PASS 18"
+	./$(COMPILER) test/test_pyeval_m3.pas $(TESTTMP)/sweep_pyeval_m3
+	$(TESTTMP)/sweep_pyeval_m3 > $(TESTTMP)/sweep_pyeval_m3.log
+	tools/expect_same.sh sweep_pyeval_m3 "$$(tail -1 $(TESTTMP)/sweep_pyeval_m3.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_m3.log)" "ALL PASS 6"
+	./$(COMPILER) test/test_pyeval_memory_bytes.pas $(TESTTMP)/sweep_pyeval_memory_bytes
+	$(TESTTMP)/sweep_pyeval_memory_bytes > $(TESTTMP)/sweep_pyeval_memory_bytes.log
+	tools/expect_same.sh sweep_pyeval_memory_bytes "$$(tail -1 $(TESTTMP)/sweep_pyeval_memory_bytes.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_memory_bytes.log)" "ALL PASS 2"
+	./$(COMPILER) test/test_pyeval_slice.pas $(TESTTMP)/sweep_pyeval_slice
+	$(TESTTMP)/sweep_pyeval_slice > $(TESTTMP)/sweep_pyeval_slice.log
+	tools/expect_same.sh sweep_pyeval_slice "$$(tail -1 $(TESTTMP)/sweep_pyeval_slice.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_slice.log)" "ALL PASS 6"
+	./$(COMPILER) test/test_pyeval_trampoline_shapes.pas $(TESTTMP)/sweep_pyeval_trampoline_shapes
+	$(TESTTMP)/sweep_pyeval_trampoline_shapes > $(TESTTMP)/sweep_pyeval_trampoline_shapes.log
+	tools/expect_same.sh sweep_pyeval_trampoline_shapes "$$(tail -1 $(TESTTMP)/sweep_pyeval_trampoline_shapes.log) $$(grep -c '^ok  ' $(TESTTMP)/sweep_pyeval_trampoline_shapes.log)" "ALL PASS 5"
 	./$(COMPILER) test/test_pascal_directives.pas $(TESTTMP)/test_pascal_directives26
 	tools/expect_same.sh test_pascal_directives26 "$$($(TESTTMP)/test_pascal_directives26)" "$$(printf '1\n0\n1\n1\n1\n0\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_comment_directive.pas $(TESTTMP)/test_comment_directive26

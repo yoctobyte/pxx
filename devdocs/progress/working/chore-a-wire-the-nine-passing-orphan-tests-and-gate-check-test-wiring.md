@@ -8,6 +8,7 @@ status: working
 found: 2026-08-29
 found-by: pxx-a5 (Track T)
 owner: pxx-a5
+blocked-by: [chore-t-six-orphan-gui-tests-the-blanket-was-hiding]
 ---
 
 # Wire the nine that pass, then gate the checker
@@ -229,3 +230,50 @@ catch its bug; an unwired *app* stops building and no one is told.
 
 Ready to wire as-is, nothing needs writing first: `apps/ide/test.sh` is
 headless and fast, and `--smoke` under `xvfb-run` is the face's own gate.
+---
+
+## The twelve `test_pyeval_*` — wired 2026-08-29
+
+Taken on the coordinator's call rather than left to frankA, who had moved to
+`compiler/symtab.inc`; putting them back in the `Makefile` would have opened a
+second lane in a file already held here, for work that is mechanical.
+
+All twelve print `ALL PASS` and `Halt(1)` on a mismatch, so the run line alone
+asserts the exit code. **What the assertion adds is the `ok` count**, and that
+is the half that matters: `ALL PASS` is printed by `if fails = 0`, which is also
+exactly what a driver that stopped running cases prints. A corpus that silently
+shrinks to zero assertions passes every check these files make about themselves.
+The count is the only thing that can tell the two apart — and these twelve spent
+months in the one state where nobody would have noticed.
+
+Counts pinned: bignum 6, compound 10, def 7, fstring 7, is_in 7,
+isinstance_del_dict 11, m1 23, m2 18, m3 6, memory_bytes 2, slice 6,
+trampoline_shapes 5.
+
+Same verification as the eleven: run macro-expanded in a clean empty tmp dir
+(all 36 commands green), then every one of the twelve assertions corrupted with
+a sentinel and re-run — **12 of 12 went red.**
+
+## The gate is PARKED, not unfinished — and the reason is the better half of the parent's own rule
+
+`check_test_wiring` reads **6**, not 0. Wiring the twelve emptied the visible
+backlog; fixing the checker
+([[bug-t-check-test-wiring-credits-a-directory-that-a-truncated-token-named]])
+then revealed six files under `test/gui/` that nothing runs and that the old
+blanket had been certifying. They are filed as
+[[chore-t-six-orphan-gui-tests-the-blanket-was-hiding]] for Track B and are
+deliberately **not** wired here: making the instrument stop lying is bounded and
+pays immediately, wiring an unknown tail is open-ended work of unknown value.
+
+So the gate does not land, and the reason is not "we ran out of time". Gating
+`check_test_wiring.py` into `make test` today would promote a check with a known
+false all-clear to build-breaking authority: the report would read zero and six
+confirmed orphans would keep running nowhere **with a green check standing over
+them**. The parent ticket refused to gate something red on arrival because a
+check that is red the day it lands teaches people to skip a step. This is the
+same rule from the other side, and the other side is the worse one — a red is
+noisy and gets triaged within the hour, a wrong green is silent and waits years.
+
+**Unblocks when:** the six in `chore-t-six-orphan-gui-tests-the-blanket-was-hiding`
+are wired or exempted. Nothing else stands in the way; the checker itself is
+fixed and its devtest carries 17 guards.
