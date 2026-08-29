@@ -4113,7 +4113,7 @@ test-core: $(COMPILER)
 	$(TESTTMP)/test_nilpy_samenamepy26 | diff -u test/test_nilpy_class_named_after_its_py_module_base.expected -
 	# promotable int: arbitrary precision, exact against CPython (feature-a-promotable-int)
 	./$(COMPILER) test/test_promoint.pas $(TESTTMP)/test_promoint26
-	test "$$($(TESTTMP)/test_promoint26)" = "$$(printf '0\n12\n60\n7\n2\n2\n-5\n25\n7\nlt\ngt\neq\nsame\n265252859812191058636308480000000\n0\n265252859812191058636308480\n109361473\n-15511210043330985984000000\n15511210043330985984000000\n9223372036854775808\n18446744073709551614\n18446744073709551616\n-18446744073709551616\n18446744073709551616\n1\n42\n265252859812191058636308480000000\n265252859812191058636308480000000\n265252859812191058636308480000002\n530505719624382117272616960000000\nvgt\n10\n2\nogt\n1')"
+	tools/expect_same.sh test_promoint26 "$$($(TESTTMP)/test_promoint26)" "$$(printf '0\n12\n60\n7\n2\n2\n-5\n25\n7\nlt\ngt\neq\nsame\n265252859812191058636308480000000\n0\n265252859812191058636308480\n109361473\n-15511210043330985984000000\n15511210043330985984000000\n9223372036854775808\n18446744073709551614\n18446744073709551616\n-18446744073709551616\n18446744073709551616\n1\n42\n265252859812191058636308480000000\n265252859812191058636308480000000\n265252859812191058636308480000002\n530505719624382117272616960000000\nvgt\n10\n2\nogt\n1')"
 	# ...and it is ARBITRARY PRECISION: 25! is exact, not 25! mod 2^64
 	# PromoInt in PASCAL: `shr` (lexed as an IDENT, so PromoOpHelper missed it and
 	# the generic path shifted two slot ADDRESSES) and every T(n) value cast
@@ -4145,18 +4145,18 @@ test-core: $(COMPILER)
 	# the slot address, idempotent by construction, releasing a REFERENCE (keep
 	# survives) rather than the object.
 	./$(COMPILER) test/test_initialize_finalize.pas $(TESTTMP)/test_initfin26
-	test "$$($(TESTTMP)/test_initfin26)" = "$$(printf 'len=0 []\nagain len=0\ns len=0 keep=[world]\nrec [from-heap] n=3 nums0=7 len=3\nafter fin: namelen=0 numslen=0 n=3\nafter fin2: namelen=0\nplain 1 2 5\nvar []\nvar again []\nvar [] keep=[world]\nvar int []\nvar init []\ndone 0')"
+	tools/expect_same.sh test_initfin26 "$$($(TESTTMP)/test_initfin26)" "$$(printf 'len=0 []\nagain len=0\ns len=0 keep=[world]\nrec [from-heap] n=3 nums0=7 len=3\nafter fin: namelen=0 numslen=0 n=3\nafter fin2: namelen=0\nplain 1 2 5\nvar []\nvar again []\nvar [] keep=[world]\nvar int []\nvar init []\ndone 0')"
 	# An empty Variant renders as Pascal's empty string, not NilPy's `None`
 	# (bug-a-a-null-variant-renders-as-none-in-pascal). Byte-identical to fpc
 	# 3.2.2; the non-empty rows catch a delegation that stopped delegating.
 	./$(COMPILER) -Fulib/rtl test/test_variant_empty_renders_as_pascal_empty.pas $(TESTTMP)/test_variant_empty26
-	test "$$($(TESTTMP)/test_variant_empty26)" = "$$(printf 'write   []\ncast    []\nassign  [] 0\nconcat  [xy]\nint     [5] [5]\nnegint  [-7] [-7]\nstr     [ss] [ss]\nbool    [True] [True]\nboolf   [False] [False]\nchar    [c] [c]')"
+	tools/expect_same.sh test_variant_empty26 "$$($(TESTTMP)/test_variant_empty26)" "$$(printf 'write   []\ncast    []\nassign  [] 0\nconcat  [xy]\nint     [5] [5]\nnegint  [-7] [-7]\nstr     [ss] [ss]\nbool    [True] [True]\nboolf   [False] [False]\nchar    [c] [c]')"
 	# `absolute` over an UNTYPED var parameter — the idiom untyped params exist
 	# for, refused until the overlay learned to copy the target's ADDRESSING MODE
 	# and not just its offset. Byte-identical to fpc 3.2.2; `pinned` does not
 	# compile it. bug-a-absolute-cannot-overlay-an-untyped-var-parameter
 	./$(COMPILER) test/test_absolute_over_a_var_parameter.pas $(TESTTMP)/test_abs_varparam26
-	test "$$($(TESTTMP)/test_abs_varparam26)" = "$$(printf 'before   16909060\nzapped   0\nfilled   16843009\nsum      4\nrec      0 0 0\nrecsum   6\ntypedvar 9\nscalar   48879\naddr     TRUE\nrecover  11 22 33\nsizeof   8\nbyval    16909061\nbyvalsc  16909061')"
+	tools/expect_same.sh test_abs_varparam26 "$$($(TESTTMP)/test_abs_varparam26)" "$$(printf 'before   16909060\nzapped   0\nfilled   16843009\nsum      4\nrec      0 0 0\nrecsum   6\ntypedvar 9\nscalar   48879\naddr     TRUE\nrecover  11 22 33\nsizeof   8\nbyval    16909061\nbyvalsc  16909061')"
 	# An `absolute` overlay is the one alias in the language that takes no
 	# ADDRESS, so the IR_LEA/IR_SLOTADDR scan six residency and inlining guards
 	# each ran could not see it: -O2 cached a by-value param in r14 while a write
@@ -4193,7 +4193,7 @@ test-core: $(COMPILER)
 	    || { echo "empty program at -O3 does not COMPILE for $$arch"; exit 1; }; \
 	done; echo "empty -O3 compiles: native i386 aarch64 arm32 riscv32"
 	./$(COMPILER) -O3 test/test_o3_residency_six_hot_locals.pas $(TESTTMP)/test_o3_resid26
-	test "$$($(TESTTMP)/test_o3_resid26)" = "$$(printf 'sum   106050\ntails 101 202 303 404 505 606')"
+	tools/expect_same.sh test_o3_resid26 "$$($(TESTTMP)/test_o3_resid26)" "$$(printf 'sum   106050\ntails 101 202 303 404 505 606')"
 	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1; then \
 	  for arch in i386 aarch64 arm32; do \
 	    ./$(COMPILER) --target=$$arch -O3 test/test_o3_residency_six_hot_locals.pas $(TESTTMP)/test_o3_resid_$$arch >/dev/null; \
@@ -4208,40 +4208,40 @@ test-core: $(COMPILER)
 	  if [ "$$rc" = "124" ]; then echo "test_writeln_nonfinite: TIMEOUT after 20s (not a wrong value)"; exit 1; fi; \
 	  test "$$out" = "$$(printf ' Inf\n Inf\n[ Inf]\n Inf\n Inf\n-Inf\n[-Inf]\n-Inf\n Nan\n[ Nan]\n Nan\n 1.0000000000000000E+000\n-2.5000000000000000E+000\n 0.0000000000000000E+000\n 1.0000000000000001E+300\n3.50\n  -0.125')"
 	./$(COMPILER) test/test_promoint_minint64_div.pas $(TESTTMP)/test_promoint_minint26
-	test "$$($(TESTTMP)/test_promoint_minint26)" = "$$(printf '9223372036854775808\n9223372036854775808\n0\n-9223372036854775808\n0\n-9223372036854775808\n9223372036854775807\n9223372036854775807\n-1180591620717411303424')"
+	tools/expect_same.sh test_promoint_minint26 "$$($(TESTTMP)/test_promoint_minint26)" "$$(printf '9223372036854775808\n9223372036854775808\n0\n-9223372036854775808\n0\n-9223372036854775808\n9223372036854775807\n9223372036854775807\n-1180591620717411303424')"
 	./$(COMPILER) test/test_promoint_parameter.pas $(TESTTMP)/test_promoint_param26
-	test "$$($(TESTTMP)/test_promoint_param26)" = "$$(printf '12 12 24 13\n12\n70000000000 70000000000\n140000000000 140000000000 70000000001\n70000000000\nff\n400000000000000000 0x400000000000000000\n0')"
+	tools/expect_same.sh test_promoint_param26 "$$($(TESTTMP)/test_promoint_param26)" "$$(printf '12 12 24 13\n12\n70000000000 70000000000\n140000000000 140000000000 70000000001\n70000000000\nff\n400000000000000000 0x400000000000000000\n0')"
 	./$(COMPILER) test/test_promoint_shr_and_casts.pas $(TESTTMP)/test_promoint_shrcast26
-	test "$$($(TESTTMP)/test_promoint_shrcast26)" = "$$(printf '127 127\n15 15\n510\n1180591620717411303424\n1\n32\n12 12 12 12\n12 12 12 12\n12 12\nA\nFALSE\nTRUE\n70000000000\n70000000000')"
+	tools/expect_same.sh test_promoint_shrcast26 "$$($(TESTTMP)/test_promoint_shrcast26)" "$$(printf '127 127\n15 15\n510\n1180591620717411303424\n1\n32\n12 12 12 12\n12 12 12 12\n12 12\nA\nFALSE\nTRUE\n70000000000\n70000000000')"
 	./$(COMPILER) test/test_promoint_overflow.pas $(TESTTMP)/test_promoint_overflow26
-	test "$$($(TESTTMP)/test_promoint_overflow26)" = "15511210043330985984000000"
+	tools/expect_same.sh test_promoint_overflow26 "$$($(TESTTMP)/test_promoint_overflow26)" "15511210043330985984000000"
 	# nested variant part + tagged discriminant + const case labels (TVarSin, bug-pascal-nested-variant-record-tagged)
 	./$(COMPILER) test/test_nested_variant_record.pas $(TESTTMP)/test_nested_variant_record26
-	test "$$($(TESTTMP)/test_nested_variant_record26)" = "$$(printf '28\n2\n8080\nTRUE\n7')"
+	tools/expect_same.sh test_nested_variant_record26 "$$($(TESTTMP)/test_nested_variant_record26)" "$$(printf '28\n2\n8080\nTRUE\n7')"
 	# cast-deref (PChar(s)^) as by-ref method arg (bug-cast-deref-as-varparam-arg)
 	./$(COMPILER) test/test_cast_deref_varparam.pas $(TESTTMP)/test_cast_deref_varparam26
-	test "$$($(TESTTMP)/test_cast_deref_varparam26)" = "$$(printf 'abc 3')"
+	tools/expect_same.sh test_cast_deref_varparam26 "$$($(TESTTMP)/test_cast_deref_varparam26)" "$$(printf 'abc 3')"
 	# on-handler binder must not poison the next routine's params (stale SymBlockId)
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_on_handler_next_proc_params.pas $(TESTTMP)/test_on_handler_npp26
-	test "$$($(TESTTMP)/test_on_handler_npp26)" = "$$(printf 'purging\nTRUE 7')"
+	tools/expect_same.sh test_on_handler_npp26 "$$($(TESTTMP)/test_on_handler_npp26)" "$$(printf 'purging\nTRUE 7')"
 	# TObject params: full 64-bit value + plain-routine match (bug-tobject-param-truncated-32bit)
 	./$(COMPILER) test/test_tobject_param_b243.pas $(TESTTMP)/test_tobject_param_b24326
-	test "$$($(TESTTMP)/test_tobject_param_b24326)" = "$$(printf 'm-ident=TRUE\nm-cast=77\np-ident=TRUE\np-cast=77')"
+	tools/expect_same.sh test_tobject_param_b24326 "$$($(TESTTMP)/test_tobject_param_b24326)" "$$(printf 'm-ident=TRUE\nm-cast=77\np-ident=TRUE\np-cast=77')"
 	# `class var` section ends at a visibility marker; bare class var in a (static) method
 	./$(COMPILER) test/test_class_var_section_b244.pas $(TESTTMP)/test_class_var_section_b24426
-	test "$$($(TESTTMP)/test_class_var_section_b24426)" = "$$(printf 'hits=12\nviaobj=12\ntotal=19')"
+	tools/expect_same.sh test_class_var_section_b24426 "$$($(TESTTMP)/test_class_var_section_b24426)" "$$(printf 'hits=12\nviaobj=12\ntotal=19')"
 	# string-literal default parameter values (bug-pascal-string-default-param)
 	./$(COMPILER) test/test_string_default_param_b245.pas $(TESTTMP)/test_string_default_param_b24526
-	test "$$($(TESTTMP)/test_string_default_param_b24526)" = "$$(printf 'a=1 msg=default len=7 taillen=0\na=2 msg=abc len=3 taillen=0\na=3 msg=abc len=3 taillen=2\nhi bob 3 len=2\nyo ann 3 len=2\nhey cid 9 len=3')"
+	tools/expect_same.sh test_string_default_param_b24526 "$$($(TESTTMP)/test_string_default_param_b24526)" "$$(printf 'a=1 msg=default len=7 taillen=0\na=2 msg=abc len=3 taillen=0\na=3 msg=abc len=3 taillen=2\nhi bob 3 len=2\nyo ann 3 len=2\nhey cid 9 len=3')"
 	# char-index through a pointer-to-string deref (p^[k]) reads chars, not the handle (bug-pascal-ptr-deref-string-index)
 	./$(COMPILER) test/test_ptr_deref_string_index.pas $(TESTTMP)/test_ptr_deref_string_index26
-	test "$$($(TESTTMP)/test_ptr_deref_string_index26)" = "PTRSTRIDX OK"
+	tools/expect_same.sh test_ptr_deref_string_index26 "$$($(TESTTMP)/test_ptr_deref_string_index26)" "PTRSTRIDX OK"
 	# method defaults must not shift onto the previous slot (bug-pascal-method-default-param-self-shift)
 	./$(COMPILER) test/test_method_default_param_b246.pas $(TESTTMP)/test_method_default_param_b24626
-	test "$$($(TESTTMP)/test_method_default_param_b24626)" = "$$(printf 'a=1 b=2\na=9 b=2\na=9 b=8\nx=1 msg=hi n=3 len=2\nx=2 msg=yo n=3 len=2\nx=3 msg=hey n=7 len=3')"
+	tools/expect_same.sh test_method_default_param_b24626 "$$($(TESTTMP)/test_method_default_param_b24626)" "$$(printf 'a=1 b=2\na=9 b=2\na=9 b=8\nx=1 msg=hi n=3 len=2\nx=2 msg=yo n=3 len=2\nx=3 msg=hey n=7 len=3')"
 	# `overload` is a real token: class-body directive loop must consume it (bug-pascal-class-body-overload-directive)
 	./$(COMPILER) test/test_class_overload_directive_b247.pas $(TESTTMP)/test_class_overload_directive_b24726
-	test "$$($(TESTTMP)/test_class_overload_directive_b24726)" = "$$(printf 'name=<none>\nbase ping\ntag=base\nderived ping\ntag=derived')"
+	tools/expect_same.sh test_class_overload_directive_b24726 "$$($(TESTTMP)/test_class_overload_directive_b24726)" "$$(printf 'name=<none>\nbase ping\ntag=base\nderived ping\ntag=derived')"
 	# A SINGLE-candidate method call type-checks its arguments, like the identical
 	# free procedure already did. Negative half first: it must not compile, and
 	# fpc 3.2.2 refuses the same line. Then the positive half — the shapes the
@@ -4252,90 +4252,90 @@ test-core: $(COMPILER)
 	  | grep -q 'no overload of M matches these arguments' \
 	  || { echo 'test_method_arg_typecheck_fails: FAIL - expected a compile error naming the method'; exit 1; }
 	./$(COMPILER) test/test_method_arg_typecheck_ok.pas $(TESTTMP)/test_margok26
-	test "$$($(TESTTMP)/test_margok26)" = "$$(printf 'fmt %%s 1\nfmt %%d 2\nsetcmp TRUE\nsort FALSE\nraw\nraw\nany\nany\nstr z\nstr lit\nnum 7')"
+	tools/expect_same.sh test_margok26 "$$($(TESTTMP)/test_margok26)" "$$(printf 'fmt %%s 1\nfmt %%d 2\nsetcmp TRUE\nsort FALSE\nraw\nraw\nany\nany\nstr z\nstr lit\nnum 7')"
 	# method + ctor overloads resolve by ARGUMENT TYPE, not first-name-match (bug-pascal-method-overload-ignores-arg-types)
 	./$(COMPILER) test/test_method_overload_types_b248.pas $(TESTTMP)/test_method_overload_types_b24826
-	test "$$($(TESTTMP)/test_method_overload_types_b24826)" = "$$(printf 'ctor=none\nint 1\nstr xy\nstr x\ntwice-int=42\ntwice-str=abab\nctor=str:zed\nctor=int\nsub-ctor=str:sub\nstr hi\nint 7')"
+	tools/expect_same.sh test_method_overload_types_b24826 "$$($(TESTTMP)/test_method_overload_types_b24826)" "$$(printf 'ctor=none\nint 1\nstr xy\nstr x\ntwice-int=42\ntwice-str=abab\nctor=str:zed\nctor=int\nsub-ctor=str:sub\nstr hi\nint 7')"
 	# FREE-FUNCTION overloads resolve by CLASS IDENTITY too, not first-arity-match:
 	# an unrelated class bound to any class-typed parameter and the callee read one
 	# object through another's layout. Descendants must still widen, and a TObject
 	# param must still accept anything (bug-a-overload-resolution-ignores-class-identity)
 	./$(COMPILER) test/test_overload_class_identity.pas $(TESTTMP)/test_overload_class_identity26
-	test "$$($(TESTTMP)/test_overload_class_identity26)" = "$$(printf '1\n2\n1\n9\n9')"
+	tools/expect_same.sh test_overload_class_identity26 "$$($(TESTTMP)/test_overload_class_identity26)" "$$(printf '1\n2\n1\n9\n9')"
 	# constref + untyped `out` in an interface method + cdecl directive + RTL IInterface/HResult
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_interface_constref_cdecl_b249.pas $(TESTTMP)/test_interface_constref_cdecl_b24926
-	test "$$($(TESTTMP)/test_interface_constref_cdecl_b24926)" = "$$(printf 'ping\naddref=-1\nrelease=-1\nqi=-1\nn=7 s=hi')"
+	tools/expect_same.sh test_interface_constref_cdecl_b24926 "$$($(TESTTMP)/test_interface_constref_cdecl_b24926)" "$$(printf 'ping\naddref=-1\nrelease=-1\nqi=-1\nn=7 s=hi')"
 	# advanced records: methods in a record; Self is the RECORD, BY REFERENCE
 	./$(COMPILER) test/test_advanced_records_b268.pas $(TESTTMP)/test_advanced_records_b26826
-	test "$$($(TESTTMP)/test_advanced_records_b26826)" = "$$(printf 'sum=7\nhalf=3\noffset=4,5\nadd=14,25\nunchanged=4,5 10,20\nctor=3,4 sum=7\nctor-via-fn=5,10\nop-plus=11,22\nop-eq=TRUE\nop-neq=FALSE\nprop-read=7\nprop-write=70\nprop-method=78\ndef=140 141')"
+	tools/expect_same.sh test_advanced_records_b26826 "$$($(TESTTMP)/test_advanced_records_b26826)" "$$(printf 'sum=7\nhalf=3\noffset=4,5\nadd=14,25\nunchanged=4,5 10,20\nctor=3,4 sum=7\nctor-via-fn=5,10\nop-plus=11,22\nop-eq=TRUE\nop-neq=FALSE\nprop-read=7\nprop-write=70\nprop-method=78\ndef=140 141')"
 	# RTL types.pas: TPoint/TRect are ADVANCED RECORDS -- record methods reached
 	# through a UNIT, with overloads, by-ref Self, record results, props over fields
 	./$(COMPILER) -Fulib/rtl test/test_types_point_methods_b269.pas $(TESTTMP)/test_types_point_methods_b26926
-	test "$$($(TESTTMP)/test_types_point_methods_b26926)" = "$$(printf 'p=3,4\nq=3,4\noff=13,24\noffp=16,28\nzero=FALSE\nzero0=TRUE\nadd=14,26\nsub=10,20\nrect=20x10 w=20 h=10\nempty=FALSE\nin=TRUE out=FALSE\nsize=7x9\nsizew=11')"
+	tools/expect_same.sh test_types_point_methods_b26926 "$$($(TESTTMP)/test_types_point_methods_b26926)" "$$(printf 'p=3,4\nq=3,4\noff=13,24\noffp=16,28\nzero=FALSE\nzero0=TRUE\nadd=14,26\nsub=10,20\nrect=20x10 w=20 h=10\nempty=FALSE\nin=TRUE out=FALSE\nsize=7x9\nsizew=11')"
 	# TObject.ClassType / InheritsFrom, incl. the fpcunit chain E.ClassType.InheritsFrom(C)
 	./$(COMPILER) test/test_classtype_inheritsfrom_b274.pas $(TESTTMP)/test_classtype_inheritsfrom_b27426
-	test "$$($(TESTTMP)/test_classtype_inheritsfrom_b27426)" = "$$(printf 'classtype name: TLeaf\nchain leaf<-mid: TRUE\nchain leaf<-base: TRUE\nchain leaf<-other: FALSE\nchain leaf<-leaf: TRUE\ninst leaf<-base: TRUE\nvar name: TLeaf\nvar leaf<-mid: TRUE\nvar leaf<-other: FALSE\nlit mid<-base: TRUE\nlit base<-leaf: FALSE\nchain name: TLeaf')"
+	tools/expect_same.sh test_classtype_inheritsfrom_b27426 "$$($(TESTTMP)/test_classtype_inheritsfrom_b27426)" "$$(printf 'classtype name: TLeaf\nchain leaf<-mid: TRUE\nchain leaf<-base: TRUE\nchain leaf<-other: FALSE\nchain leaf<-leaf: TRUE\ninst leaf<-base: TRUE\nvar name: TLeaf\nvar leaf<-mid: TRUE\nvar leaf<-other: FALSE\nlit mid<-base: TRUE\nlit base<-leaf: FALSE\nchain name: TLeaf')"
 	# bare PARENLESS call of a proc-var / method-pointer as a statement (`AMethod;`),
 	# and the other half: a bare proc-var stays a VALUE in every other position
 	./$(COMPILER) test/test_bare_procvar_call_b273.pas $(TESTTMP)/test_bare_procvar_call_b27326
-	test "$$($(TESTTMP)/test_bare_procvar_call_b27326)" = "$$(printf 'assigned: TRUE\nsame: TRUE\ncalls so far: 0\nplain\nplain\nplain\nparam assigned: TRUE\nplain\nfunc via parens: 7\nmeth assigned: TRUE\nmeth n=5\nmeth n=5\ntotal calls: 8')"
+	tools/expect_same.sh test_bare_procvar_call_b27326 "$$($(TESTTMP)/test_bare_procvar_call_b27326)" "$$(printf 'assigned: TRUE\nsame: TRUE\ncalls so far: 0\nplain\nplain\nplain\nparam assigned: TRUE\nplain\nfunc via parens: 7\nmeth assigned: TRUE\nmeth n=5\nmeth n=5\ntotal calls: 8')"
 	# FreeAndNil must RUN THE DESTRUCTOR (it silently skipped it: Free through an untyped
 	# reference does not dispatch Destroy)
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_freeandnil_destructor_b300.pas $(TESTTMP)/test_freeandnil_destructor_b30026
-	test "$$($(TESTTMP)/test_freeandnil_destructor_b30026)" = "$$(printf 'freeing parent:\n  TParent.Destroy\n  TChild.Destroy\nparent nil : TRUE\ndestructors: 1 (1 = the child, via TParent.Destroy)\nfreeing child:\n  TChild.Destroy\nchild nil  : TRUE\ndestructors: 2 (2)')"
+	tools/expect_same.sh test_freeandnil_destructor_b30026 "$$($(TESTTMP)/test_freeandnil_destructor_b30026)" "$$(printf 'freeing parent:\n  TParent.Destroy\n  TChild.Destroy\nparent nil : TRUE\ndestructors: 1 (1 = the child, via TParent.Destroy)\nfreeing child:\n  TChild.Destroy\nchild nil  : TRUE\ndestructors: 2 (2)')"
 	# a CLASS PROPERTY through the class name: TD.Compressed := True
 	./$(COMPILER) test/test_class_property_b299.pas $(TESTTMP)/test_class_property_b29926
-	test "$$($(TESTTMP)/test_class_property_b29926)" = "$$(printf 'default : FALSE 0\nafter   : TRUE 7\nagain   : FALSE 7')"
+	tools/expect_same.sh test_class_property_b29926 "$$($(TESTTMP)/test_class_property_b29926)" "$$(printf 'default : FALSE 0\nafter   : TRUE 7\nagain   : FALSE 7')"
 	# an `array of const` LITERAL to an OVERLOADED constructor (fcl-json TJSONArray.Create)
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_ctor_arrayofconst_overload_b298.pas $(TESTTMP)/test_ctor_arrayofconst_overload_b29826
-	test "$$($(TESTTMP)/test_ctor_arrayofconst_overload_b29826)" = "$$(printf 'noarg n=-1\narr n=3')"
+	tools/expect_same.sh test_ctor_arrayofconst_overload_b29826 "$$($(TESTTMP)/test_ctor_arrayofconst_overload_b29826)" "$$(printf 'noarg n=-1\narr n=3')"
 	# a derived ctor SHADOWING an inherited one with a different signature: the
 	# ctor that runs and the signature the argument was marshalled for must be
 	# the same one, or the callee reads a Variant record as an AnsiString handle
 	./$(COMPILER) test/test_ctor_shadowing_signature.pas $(TESTTMP)/test_ctor_shadowing_signature26
-	test "$$($(TESTTMP)/test_ctor_shadowing_signature26)" = "ctor shadowing signature ok"
+	tools/expect_same.sh test_ctor_shadowing_signature26 "$$($(TESTTMP)/test_ctor_shadowing_signature26)" "ctor shadowing signature ok"
 	# a PARENTHESISED expression keeps its class id: (b as T)[i] / (b as T).ClassName
 	./$(COMPILER) test/test_paren_expr_class_b297.pas $(TESTTMP)/test_paren_expr_class_b29726
-	test "$$($(TESTTMP)/test_paren_expr_class_b29726)" = "$$(printf 'direct index   : 20\nas-cast index  : 20\nas-cast chained: TB\nas-cast member : TArr\nas-cast inherit: TRUE')"
+	tools/expect_same.sh test_paren_expr_class_b29726 "$$($(TESTTMP)/test_paren_expr_class_b29726)" "$$(printf 'direct index   : 20\nas-cast index  : 20\nas-cast chained: TB\nas-cast member : TArr\nas-cast inherit: TRUE')"
 	# a class-reference OP chained after a value: d.Self_.ClassName / .InheritsFrom
 	./$(COMPILER) test/test_classref_op_chained_b296.pas $(TESTTMP)/test_classref_op_chained_b29626
-	test "$$($(TESTTMP)/test_classref_op_chained_b29626)" = "$$(printf 'TD\nTRUE')"
+	tools/expect_same.sh test_classref_op_chained_b29626 "$$($(TESTTMP)/test_classref_op_chained_b29626)" "$$(printf 'TD\nTRUE')"
 	# `for F in <property>` -- a container EXPRESSION with GetEnumerator, not a bare variable
 	./$(COMPILER) test/test_forin_property_b295.pas $(TESTTMP)/test_forin_property_b29526
-	test "$$($(TESTTMP)/test_forin_property_b29526)" = "$$(printf '1 2 3 \n1 2 3 \n7 8 9 ')"
+	tools/expect_same.sh test_forin_property_b29526 "$$($(TESTTMP)/test_forin_property_b29526)" "$$(printf '1 2 3 \n1 2 3 \n7 8 9 ')"
 	# the property `index` specifier (several properties sharing one accessor)
 	./$(COMPILER) test/test_property_index_b293.pas $(TESTTMP)/test_property_index_b29326
-	test "$$($(TESTTMP)/test_property_index_b29326)" = "$$(printf '  [set idx=0 -> TRUE]\n  [set idx=2 -> TRUE]\nStrict   =   [get idx=0]\nTRUE\nUseUTF8  =   [get idx=1]\nFALSE\nComments =   [get idx=2]\nTRUE')"
+	tools/expect_same.sh test_property_index_b29326 "$$($(TESTTMP)/test_property_index_b29326)" "$$(printf '  [set idx=0 -> TRUE]\n  [set idx=2 -> TRUE]\nStrict   =   [get idx=0]\nTRUE\nUseUTF8  =   [get idx=1]\nFALSE\nComments =   [get idx=2]\nTRUE')"
 	# frozen inline strings (string[N]) on the cross backends: store, Length, and passing
 	# one to a MANAGED string parameter (aarch64/arm32/i386 all missed TypeIsFrozenString)
 	./$(COMPILER) test/test_frozen_string_cross_b305.pas $(TESTTMP)/test_frozen_string_cross_b30526
-	test "$$($(TESTTMP)/test_frozen_string_cross_b30526)" = "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
+	tools/expect_same.sh test_frozen_string_cross_b30526 "$$($(TESTTMP)/test_frozen_string_cross_b30526)" "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
 	# an interface VALUE is ONE pointer (the instance — FPC's ABI), so it fits a
 	# pointer-shaped container and casts back: the fcl-fpcunit listener-list shape
 	./$(COMPILER) test/test_interface_single_pointer_abi_b337.pas $(TESTTMP)/test_intf_1ptr_b33726
-	test "$$($(TESTTMP)/test_intf_1ptr_b33726)" = "$$(printf 'greet a 1\nsize-is-one-word: TRUE\ngreet a 2\nsame-object: TRUE\ngreet a 3\nfrom slot 0: a\nfrom slot 1: b\nnil-is-nil: TRUE')"
+	tools/expect_same.sh test_intf_1ptr_b33726 "$$($(TESTTMP)/test_intf_1ptr_b33726)" "$$(printf 'greet a 1\nsize-is-one-word: TRUE\ngreet a 2\nsame-object: TRUE\ngreet a 3\nfrom slot 0: a\nfrom slot 1: b\nnil-is-nil: TRUE')"
 	# libc-free signal HANDLERS with a Pascal callback: hook fires, program
 	# RESUMES (SA_RESTORER + rt_sigreturn); no-hook reverts to default and
 	# re-raises, so an unhandled SIGTERM still exits 143 killed-by-signal
 	./$(COMPILER) -Fulib/rtl test/test_signal_handler_callback_b336.pas $(TESTTMP)/test_sig_cb_b33626
-	test "$$($(TESTTMP)/test_sig_cb_b33626)" = "$$(printf 'hits=2\nresumed after handler')"
+	tools/expect_same.sh test_sig_cb_b33626 "$$($(TESTTMP)/test_sig_cb_b33626)" "$$(printf 'hits=2\nresumed after handler')"
 	./$(COMPILER) -Fulib/rtl test/test_signal_default_revert_b336.pas $(TESTTMP)/test_sig_dfl_b33626
 	$(TESTTMP)/test_sig_dfl_b33626 >/dev/null 2>&1; test "$$?" = "143"
 	# initialised STRING vars, global (kind-1 pending init) and local
 	./$(COMPILER) test/test_var_string_initializer_b335.pas $(TESTTMP)/test_var_strinit_b33526
-	test "$$($(TESTTMP)/test_var_strinit_b33526)" = "$$(printf 'global/local 42\nmut/local 42')"
+	tools/expect_same.sh test_var_strinit_b33526 "$$($(TESTTMP)/test_var_strinit_b33526)" "$$(printf 'global/local 42\nmut/local 42')"
 	# open-array params in RECORD methods (+ [..] open-array literals to any
 	# instance method — were parsed as SET literals)
 	./$(COMPILER) test/test_record_method_open_array_b334.pas $(TESTTMP)/test_rec_openarr_b33426
-	test "$$($(TESTTMP)/test_rec_openarr_b33426)" = "$$(printf 'sum=106\nlit=130\nspan=14')"
+	tools/expect_same.sh test_rec_openarr_b33426 "$$($(TESTTMP)/test_rec_openarr_b33426)" "$$(printf 'sum=106\nlit=130\nspan=14')"
 	# record-ctor results as full expressions: operator dispatch sees the lifted
 	# temp's record; postfix selectors chain on the factory result
 	./$(COMPILER) test/test_record_ctor_expr_tails_b333.pas $(TESTTMP)/test_rec_ctor_tails_b33326
-	test "$$($(TESTTMP)/test_rec_ctor_tails_b33326)" = "$$(printf 'sum-op: 11,22\nchain:  15\nboth:   6')"
+	tools/expect_same.sh test_rec_ctor_tails_b33326 "$$($(TESTTMP)/test_rec_ctor_tails_b33326)" "$$(printf 'sum-op: 11,22\nchain:  15\nboth:   6')"
 	# &keyword escaped identifiers, methods NAMED after type keywords
 	# (class function Integer(...)), class-of forward references
 	./$(COMPILER) test/test_escaped_ident_keyword_methods_b332.pas $(TESTTMP)/test_esc_kw_b33226
-	test "$$($(TESTTMP)/test_esc_kw_b33226)" = "$$(printf 'tag=late\nesc=42\nkw=5\nvar=9\noct=511')"
+	tools/expect_same.sh test_esc_kw_b33226 "$$($(TESTTMP)/test_esc_kw_b33226)" "$$(printf 'tag=late\nesc=42\nkw=5\nvar=9\noct=511')"
 	# record helper for <type> v1: instance methods on plain-typed values,
 	# Self = target by reference (generics' ALeft.ToLower shape)
 	@# A helper's const is not a global. The bare read below must be REFUSED —
@@ -4347,16 +4347,16 @@ test-core: $(COMPILER)
 	  | grep -q 'undefined variable (BITS)' \
 	  || { echo 'test_helper_const_not_global_fail: FAIL - a helper const must not be visible as a bare global'; exit 1; }
 	./$(COMPILER) test/test_record_helper_for_string_b331.pas $(TESTTMP)/test_rec_helper_b33126
-	test "$$($(TESTTMP)/test_rec_helper_b33126)" = "$$(printf 'lower:  hello\ndouble: HeLLoHeLLo\nbang:   HeLLo!\nparam: mixed\nsq:     49\nmask:   2147483648\nbits:   32')"
+	tools/expect_same.sh test_rec_helper_b33126 "$$($(TESTTMP)/test_rec_helper_b33126)" "$$(printf 'lower:  hello\ndouble: HeLLoHeLLo\nbang:   HeLLo!\nparam: mixed\nsq:     49\nmask:   2147483648\nbits:   32')"
 	./$(COMPILER) test/test_type_helper_for_spelling.pas $(TESTTMP)/test_type_helper_spelling26
-	test "$$($(TESTTMP)/test_type_helper_spelling26)" = "42 0"
+	tools/expect_same.sh test_type_helper_spelling26 "$$($(TESTTMP)/test_type_helper_spelling26)" "42 0"
 	# ...and the CLASS flavour: `class helper for <class>`. The helper binds
 	# BEFORE the extended class's own members and NON-virtually, the search
 	# interleaves helper-then-members up the ancestor chain, and inside a helper
 	# body an unqualified name asks the helper first and the extended type
 	# second. Every row is oracled against FPC 3.2.2 -Mobjfpc.
 	./$(COMPILER) test/test_class_helper_for_a_class.pas $(TESTTMP)/test_class_helper26
-	test "$$($(TESTTMP)/test_class_helper26)" = "$$(printf 'a 42\ne 63\nd 42\ni  22\ni2 7\nb helper\nf helper\nf2 helper\nh  derived\ng  shout:helper\nc T2')"
+	tools/expect_same.sh test_class_helper26 "$$($(TESTTMP)/test_class_helper26)" "$$(printf 'a 42\ne 63\nd 42\ni  22\ni2 7\nb helper\nf helper\nf2 helper\nh  derived\ng  shout:helper\nc T2')"
 	# v3: the TARGET TYPE'S OWN NAME as receiver — UInt32.GetSignMask, how
 	# generics.helpers spells its UInt32/UInt64 sections. Not a second dispatch
 	# path: the name resolves to the HELPER's ci, so the spelling that already
@@ -4371,68 +4371,68 @@ test-core: $(COMPILER)
 	# were the same bug with no owner passed at all. Untyped consts (K) are here
 	# because they already worked and must not be disturbed. Diffed against FPC.
 	./$(COMPILER) test/test_typed_class_const_scoping.pas $(TESTTMP)/test_typed_cc26
-	test "$$($(TESTTMP)/test_typed_cc26)" = "$$(printf 'rec  A bare : 11 (want 11)\nrec  B bare : 22 (want 22)\nrec  A qual : 11 1 (want 11 1)\nrec  B qual : 21 2 (want 21 2)\ncls  A      : 100 100 (want 100 100)\ncls  B      : 200 200 (want 200 200)')"
+	tools/expect_same.sh test_typed_cc26 "$$($(TESTTMP)/test_typed_cc26)" "$$(printf 'rec  A bare : 11 (want 11)\nrec  B bare : 22 (want 22)\nrec  A qual : 11 1 (want 11 1)\nrec  B qual : 21 2 (want 21 2)\ncls  A      : 100 100 (want 100 100)\ncls  B      : 200 200 (want 200 200)')"
 	# …and the helper case that fell out of it: a helper's typed const ARRAY
 	# through the helper name, the TARGET TYPE name, and a helper body. This was
 	# type-helpers v3's last open item and was never a helper gap — a helper is a
 	# record, and a record's consts had no owner.
 	./$(COMPILER) test/test_type_helper_const_array.pas $(TESTTMP)/test_th_constarr26
-	test "$$($(TESTTMP)/test_th_constarr26)" = "$$(printf 'helper-name : 32768\nTYPE-name   : 2147483648\nfrom body   : 8388608\n128 32768 8388608 2147483648 ')"
+	tools/expect_same.sh test_th_constarr26 "$$($(TESTTMP)/test_th_constarr26)" "$$(printf 'helper-name : 32768\nTYPE-name   : 2147483648\nfrom body   : 8388608\n128 32768 8388608 2147483648 ')"
 	./$(COMPILER) test/test_type_helper_typename_receiver.pas $(TESTTMP)/test_th_typename26
-	test "$$($(TESTTMP)/test_th_typename26)" = "$$(printf 'a typename static  : 2147483648\nb alias  static    : 2147483648\nc cardinal spelling: 2147483648\nd string typename  : str\ne typename const   : 2147483648 u32\nf bare type is type: 4 5')"
+	tools/expect_same.sh test_th_typename26 "$$($(TESTTMP)/test_th_typename26)" "$$(printf 'a typename static  : 2147483648\nb alias  static    : 2147483648\nc cardinal spelling: 2147483648\nd string typename  : str\ne typename const   : 2147483648 u32\nf bare type is type: 4 5')"
 	# FPC {$MACRO ON} text macros ({$define name := body}), RolDWord-family
 	# System rotates (builtin soft-alias), Int8/16/32 value-cast names
 	./$(COMPILER) test/test_text_macros_rotates_b330.pas $(TESTTMP)/test_macros_rot_b33026
-	test "$$($(TESTTMP)/test_macros_rot_b33026)" = "$$(printf 'a=2 b=3\nrol=3\nror=3221225472\nrolq=24\ni8=-1\ni16=-1\ni32=-1')"
+	tools/expect_same.sh test_macros_rot_b33026 "$$($(TESTTMP)/test_macros_rot_b33026)" "$$(printf 'a=2 b=3\nrol=3\nror=3221225472\nrolq=24\ni8=-1\ni16=-1\ni32=-1')"
 	# rtl-generics dialect prereqs: array[Byte], PUInt8-family names, local
 	# var-section ordinal initializers, compound-assign statements (+= -= *= /=)
 	./$(COMPILER) test/test_dialect_generics_prereqs_b329.pas $(TESTTMP)/test_generics_prereq_b32926
-	test "$$($(TESTTMP)/test_generics_prereq_b32926)" = "$$(printf 'span=256\nadler=1572875\ncompound=48\nsecond-call a resets: 1')"
+	tools/expect_same.sh test_generics_prereq_b32926 "$$($(TESTTMP)/test_generics_prereq_b32926)" "$$(printf 'span=256\nadler=1572875\ncompound=48\nsecond-call a resets: 1')"
 	# a metaclass ARRAY ELEMENT as receiver: Map[0].Tag (virtual class method),
 	# Map[0].Create (virtual ctor) — fell to plain-pointer paths, silent garbage
 	./$(COMPILER) test/test_metaclass_array_element_b328.pas $(TESTTMP)/test_mc_elem_b32826
-	test "$$($(TESTTMP)/test_mc_elem_b32826)" = "$$(printf 'via var:   A\nvia elem0: A\nvia elem1: base\nname:      TA\nmade:      A inst=TA')"
+	tools/expect_same.sh test_mc_elem_b32826 "$$($(TESTTMP)/test_mc_elem_b32826)" "$$(printf 'via var:   A\nvia elem0: A\nvia elem1: base\nname:      TA\nmade:      A inst=TA')"
 	# an untyped BOOLEAN const keeps tyBoolean (was collapsed to integer; fpjson's
 	# Create([S]) with const S=True built a NUMBER element)
 	./$(COMPILER) test/test_bool_const_varrec_b326.pas $(TESTTMP)/test_bool_const_b32626
-	test "$$($(TESTTMP)/test_bool_const_b32626)" = "$$(printf 'vt=1 b=TRUE\nvt=1 b=FALSE\nvt=0 i=3\nvt=1 b=TRUE\npick=bool')"
+	tools/expect_same.sh test_bool_const_b32626 "$$($(TESTTMP)/test_bool_const_b32626)" "$$(printf 'vt=1 b=TRUE\nvt=1 b=FALSE\nvt=0 i=3\nvt=1 b=TRUE\npick=bool')"
 	# Str(F,S) no-width = FPC's scientific default ` d.dddE+eee`; explicit widths
 	# and writeln floats unchanged (fcl-json compares Str output on both sides)
 	./$(COMPILER) test/test_str_float_fpc_default_b327.pas $(TESTTMP)/test_str_float_b32726
-	test "$$($(TESTTMP)/test_str_float_b32726)" = "$$(printf '[ 1.2000000000000000E+000]\n[ 0.0000000000000000E+000]\n[-1.5000000000000000E+000]\n[   1.200]\n1.20')"
+	tools/expect_same.sh test_str_float_b32726 "$$($(TESTTMP)/test_str_float_b32726)" "$$(printf '[ 1.2000000000000000E+000]\n[ 0.0000000000000000E+000]\n[-1.5000000000000000E+000]\n[   1.200]\n1.20')"
 	# System.X(...) must beat a same-named METHOD of the enclosing class (qUnit=-2
 	# is explicit) — fpjson's System.Delete dispatched to TJSONArray.Delete, crash
 	./$(COMPILER) test/test_system_qualified_vs_method_b323.pas $(TESTTMP)/test_sysqual_b32326
-	test "$$($(TESTTMP)/test_sysqual_b32326)" = "$$(printf 'got=def\nmethod Delete(7)')"
+	tools/expect_same.sh test_sysqual_b32326 "$$($(TESTTMP)/test_sysqual_b32326)" "$$(printf 'got=def\nmethod Delete(7)')"
 	# an INTEGER argument must not overload-match a Boolean parameter —
 	# TJSONArray.Create([1,2,3]) built [true,true,true]
 	./$(COMPILER) test/test_overload_no_int_to_boolean_b324.pas $(TESTTMP)/test_ovl_bool_b32426
-	test "$$($(TESTTMP)/test_ovl_bool_b32426)" = "$$(printf 'n=int\nw=int\nb=bool\ni=int')"
+	tools/expect_same.sh test_ovl_bool_b32426 "$$($(TESTTMP)/test_ovl_bool_b32426)" "$$(printf 'n=int\nw=int\nb=bool\ni=int')"
 	# is/as open-world: recognise subclasses from LATER units (runtime RTTI-blob
 	# parent walk); bare TObject instances carry a real VMT so `is` cannot walk garbage
 	./$(COMPILER) test/test_isas_open_world_b325.pas $(TESTTMP)/test_isas_ow_b32526
-	test "$$($(TESTTMP)/test_isas_ow_b32526)" = "$$(printf 'is=TRUE\nas=later\nplain is=FALSE')"
+	tools/expect_same.sh test_isas_ow_b32526 "$$($(TESTTMP)/test_isas_ow_b32526)" "$$(printf 'is=TRUE\nas=later\nplain is=FALSE')"
 	# array-of-const boxing: PChar(S) = vtPChar(6) not vtPointer; class instance =
 	# vtObject(7) not vtInteger (fpjson's TJSONArray.Create([PChar(S)]) raised)
 	./$(COMPILER) test/test_varrec_pchar_object_b320.pas $(TESTTMP)/test_varrec_pchar_b32026
-	test "$$($(TESTTMP)/test_varrec_pchar_b32026)" = "$$(printf '  [0] vtype=0 int=42\n  [1] vtype=6 pchar-first=A\n  [2] vtype=7 obj.tag=77\n  [3] vtype=11 str=managed')"
+	tools/expect_same.sh test_varrec_pchar_b32026 "$$($(TESTTMP)/test_varrec_pchar_b32026)" "$$(printf '  [0] vtype=0 int=42\n  [1] vtype=6 pchar-first=A\n  [2] vtype=7 obj.tag=77\n  [3] vtype=11 str=managed')"
 	# method overloads distinguished only by CLASS IDENTITY: rec-aware decl
 	# registration + exact-class-beats-ancestor ranking; the TJSONData(x) cast in
 	# fpjson's Add(TJSONObject) recursed into ITSELF to stack overflow
 	./$(COMPILER) test/test_overload_class_identity_b321.pas $(TESTTMP)/test_ovl_classid_b32126
-	test "$$($(TESTTMP)/test_ovl_classid_b32126)" = "$$(printf 'Add(TDer)\nAdd(TBase)\nAdd(TBase)\nAdd(Integer)')"
+	tools/expect_same.sh test_ovl_classid_b32126 "$$($(TESTTMP)/test_ovl_classid_b32126)" "$$(printf 'Add(TDer)\nAdd(TBase)\nAdd(TBase)\nAdd(Integer)')"
 	# `on E: Exception` must catch exception classes from LATER-compiled units —
 	# the descendant enumeration is per-unit; root Exception now matches all
 	./$(COMPILER) test/test_except_cross_unit_class_b322.pas $(TESTTMP)/test_exc_openworld_b32226
-	test "$$($(TESTTMP)/test_exc_openworld_b32226)" = "$$(printf 'caught ELate: late class\nafter')"
+	tools/expect_same.sh test_exc_openworld_b32226 "$$($(TESTTMP)/test_exc_openworld_b32226)" "$$(printf 'caught ELate: late class\nafter')"
 	# ...and the general case: a NON-root target whose descendants live in a later
 	# unit. Matched by a runtime RTTI parent-chain walk, not an enumeration (b339)
 	./$(COMPILER) test/test_except_open_world_descendant_b339.pas $(TESTTMP)/test_exc_openworld_b33926
-	test "$$($(TESTTMP)/test_exc_openworld_b33926 | tail -1)" = "PASS"
+	tools/expect_same.sh test_exc_openworld_b33926 "$$($(TESTTMP)/test_exc_openworld_b33926 | tail -1)" "PASS"
 	# ExceptAddr = the RAISE SITE (the return address the call to the raise stub
 	# pushed), not the nil stub it used to be (b340)
 	./$(COMPILER) test/test_exceptaddr_b340.pas $(TESTTMP)/test_exceptaddr_b34026
-	test "$$($(TESTTMP)/test_exceptaddr_b34026 | tail -1)" = "PASS"
+	tools/expect_same.sh test_exceptaddr_b34026 "$$($(TESTTMP)/test_exceptaddr_b34026 | tail -1)" "PASS"
 	# A NESTED inline `specialize` -- `specialize TBox<specialize TBox<Integer>>`
 	# -- was refused everywhere except a type section: var, local, record field,
 	# parameter and function result all reported `unknown type: specialize`,
@@ -4493,73 +4493,73 @@ test-core: $(COMPILER)
 	# UTF-8 via builtin helpers; surrogate PAIR -> one 4-byte code point (fpjson \uXXXX);
 	# was silently retained as a string POINTER -> memory corruption + crash
 	./$(COMPILER) test/test_widechar_to_utf8_b319.pas $(TESTTMP)/test_widechar_utf8_b31926
-	test "$$($(TESTTMP)/test_widechar_utf8_b31926)" = "$$(printf '1=\303\270 len=2\n2=\360\237\214\237 len=4\n3=x\303\251\n4=Abc\n5=\303\270\n6=AB\n7=\n8=TRUE')"
+	tools/expect_same.sh test_widechar_utf8_b31926 "$$($(TESTTMP)/test_widechar_utf8_b31926)" "$$(printf '1=\303\270 len=2\n2=\360\237\214\237 len=4\n3=x\303\251\n4=Abc\n5=\303\270\n6=AB\n7=\n8=TRUE')"
 	# the `^`/`[` arm of the same double case: `Slot(0)^ := 111;` emitted the call and
 	# skipped `^ := 111` to the ';' with NO diagnostic, so the store never happened
 	# (crtl's atexit stored every handler as 0). Read position was always correct.
 	./$(COMPILER) test/test_stmt_call_result_deref_b387.pas $(TESTTMP)/test_stmt_call_deref_b38726
-	test "$$($(TESTTMP)/test_stmt_call_deref_b38726)" = "$$(printf 'a=111\nb=222\nc=333\nd=44\ne=55\nf=112')"
+	tools/expect_same.sh test_stmt_call_deref_b38726 "$$($(TESTTMP)/test_stmt_call_deref_b38726)" "$$(printf 'a=111\nb=222\nc=333\nd=44\ne=55\nf=112')"
 	# a SELECTOR after a function call used as a STATEMENT was silently dropped —
 	# GetBox.Poke; / GetBox.SetVal(42); / GetBox.Val := 5; / GetBoxAt(0).M(..) all
 	# vanished with no diagnostic (fpjson's RegisterTest registered 0 of 203 tests)
 	./$(COMPILER) test/test_stmt_call_result_selector_b318.pas $(TESTTMP)/test_stmt_call_selector_b31826
-	test "$$($(TESTTMP)/test_stmt_call_selector_b31826)" = "$$(printf 'poke val=0\na=42\nb=5\nc=7\nd=7')"
+	tools/expect_same.sh test_stmt_call_selector_b31826 "$$($(TESTTMP)/test_stmt_call_selector_b31826)" "$$(printf 'poke val=0\na=42\nb=5\nc=7\nd=7')"
 	# a ROUTINE-LOCAL const array of CLASS REFERENCES registered a PENDING GLOBAL init
 	# holding the routine-local symbol index — rolled back with the scope, so main lowered
 	# a dangling IR_LEA ("invalid symbol in lea"). Verified against FPC.
 	./$(COMPILER) test/test_local_const_classref_array_b317.pas $(TESTTMP)/test_local_const_classref_b31726
-	test "$$($(TESTTMP)/test_local_const_classref_b31726)" = "$$(printf '0=TA\n1=TB\n0=TA\n1=TB\ng0=TB\ng1=TA')"
+	tools/expect_same.sh test_local_const_classref_b31726 "$$($(TESTTMP)/test_local_const_classref_b31726)" "$$(printf '0=TA\n1=TB\n0=TA\n1=TB\ng0=TB\ng1=TA')"
 	# `obj.F()` — EMPTY parens on a method whose params ALL have defaults (fcl-json writes
 	# `J.FormatJSON()`); the arg loop had no ZERO-argument case (verified vs FPC)
 	./$(COMPILER) test/test_empty_paren_default_args_b316.pas $(TESTTMP)/test_empty_paren_b31626
-	test "$$($(TESTTMP)/test_empty_paren_b31626)" = "$$(printf 'fmt2\nfmt2\nfmt1\nplain')"
+	tools/expect_same.sh test_empty_paren_b31626 "$$($(TESTTMP)/test_empty_paren_b31626)" "$$(printf 'fmt2\nfmt2\nfmt1\nplain')"
 	# an overloaded method's BODY must not clobber a DIFFERENT overload's table entry
 	# (fpjson: ten Insert(Index,...) bodies clobbered the one-arg Insert; verified vs FPC)
 	./$(COMPILER) test/test_method_overload_arity_rebind_b315.pas $(TESTTMP)/test_method_overload_b31526
-	test "$$($(TESTTMP)/test_method_overload_b31526)" = "oneintstr(x)bool(T)dbl"
+	tools/expect_same.sh test_method_overload_b31526 "$$($(TESTTMP)/test_method_overload_b31526)" "oneintstr(x)bool(T)dbl"
 	# a VARIANT argument binds a VARIANT parameter, not the first merely-compatible
 	# overload (a Variant is compatible with every scalar; verified against FPC)
 	./$(COMPILER) test/test_variant_arg_prefers_variant_overload.pas $(TESTTMP)/test_variant_overload26
-	test "$$($(TESTTMP)/test_variant_overload26)" = "$$(printf 'variant\nvariant\nvariant\nvariant\nint\nstr\nfloat\nvariant\nint\nint')"
+	tools/expect_same.sh test_variant_overload26 "$$($(TESTTMP)/test_variant_overload26)" "$$(printf 'variant\nvariant\nvariant\nvariant\nint\nstr\nfloat\nvariant\nint\nint')"
 	# untyped string constants must be SCOPED: a routine's const must not leak into the
 	# next routine and beat ITS const of the same name (verified against FPC)
 	./$(COMPILER) test/test_string_const_scoping_b314.pas $(TESTTMP)/test_string_const_scoping_b31426
-	test "$$($(TESTTMP)/test_string_const_scoping_b31426)" = "$$(printf 'A=A-local\nB=B-local\nUsesOuter=outer-G\nShadowsOuter=inner-G\nOuterAgain=outer-G\nCombine=unit-level/outer-G')"
+	tools/expect_same.sh test_string_const_scoping_b31426 "$$($(TESTTMP)/test_string_const_scoping_b31426)" "$$(printf 'A=A-local\nB=B-local\nUsesOuter=outer-G\nShadowsOuter=inner-G\nOuterAgain=outer-G\nCombine=unit-level/outer-G')"
 	# a VARIABLE in scope beats an untyped string CONSTANT of the same name: the const
 	# table is not scoped, so a `const S` in one method silently replaced a later
 	# method's `var S : TClass` with the constant's TEXT (verified against FPC)
 	./$(COMPILER) test/test_local_var_beats_string_const_b313.pas $(TESTTMP)/test_local_var_const_b31326
-	test "$$($(TESTTMP)/test_local_var_const_b31326)" = "$$(printf 'from the const\n[from the var] / from the var\n[arg]|arg\n[global]')"
+	tools/expect_same.sh test_local_var_const_b31326 "$$($(TESTTMP)/test_local_var_const_b31326)" "$$(printf 'from the const\n[from the var] / from the var\n[arg]|arg\n[global]')"
 	# a source type ALIAS must beat the built-in type NAME of the same name (the chain ran
 	# before the alias table, so a builtin silently won -- fatal for the compiler's own PWord)
 	./$(COMPILER) test/test_typename_alias_wins_b304.pas $(TESTTMP)/test_typename_alias_wins_b30426
-	test "$$($(TESTTMP)/test_typename_alias_wins_b30426)" = "$$(printf 'TDateTime=8 (8, as Int64)\nCurrency =4 (4)\nValReal  =4 (4)\nComp     =4 (4)\nWideChar =1 (1)\nSizeInt  =2 (2)')"
+	tools/expect_same.sh test_typename_alias_wins_b30426 "$$($(TESTTMP)/test_typename_alias_wins_b30426)" "$$(printf 'TDateTime=8 (8, as Int64)\nCurrency =4 (4)\nValReal  =4 (4)\nComp     =4 (4)\nWideChar =1 (1)\nSizeInt  =2 (2)')"
 	# built-in POINTER type names (PInteger/PByte/PDouble) in a type position AND a cast --
 	# and a SOURCE declaration of the same name must still WIN (the compiler's own PWord)
 	./$(COMPILER) test/test_builtin_pointer_types_b303.pas $(TESTTMP)/test_builtin_pointer_types_b30326
-	test "$$($(TESTTMP)/test_builtin_pointer_types_b30326)" = "$$(printf 'source PWord is ^NativeInt : TRUE\ncast via source PWord      : TRUE\nsource PInteger is ^Int64  : -5\nPByte      : 200\nPCardinal  : 4000000000\nPDouble    : 2.5\ndone')"
+	tools/expect_same.sh test_builtin_pointer_types_b30326 "$$($(TESTTMP)/test_builtin_pointer_types_b30326)" "$$(printf 'source PWord is ^NativeInt : TRUE\ncast via source PWord      : TRUE\nsource PInteger is ^Int64  : -5\nPByte      : 200\nPCardinal  : 4000000000\nPDouble    : 2.5\ndone')"
 	# `^string` — a pointer to a MANAGED string: reading p^ segfaulted (@s gave the HANDLE,
 	# not the variable's address)
 	./$(COMPILER) test/test_deref_managed_string_b302.pas $(TESTTMP)/test_deref_managed_string_b30226
-	test "$$($(TESTTMP)/test_deref_managed_string_b30226)" = "$$(printf 'read      : orig\nafter write: changed\nvia proc  : via proc\ncopied    : via proc len=8\nlen via ^ : 8')"
+	tools/expect_same.sh test_deref_managed_string_b30226 "$$($(TESTTMP)/test_deref_managed_string_b30226)" "$$(printf 'read      : orig\nafter write: changed\nvia proc  : via proc\ncopied    : via proc len=8\nlen via ^ : 8')"
 	# `x in [constants]` is a BOOLEAN (it carried no type: printed 1/0, and `and` went bitwise)
 	./$(COMPILER) test/test_in_is_boolean_b301.pas $(TESTTMP)/test_in_is_boolean_b30126
-	test "$$($(TESTTMP)/test_in_is_boolean_b30126)" = "$$(printf 'const enum : TRUE\nconst char : TRUE\nruntime    : TRUE\nvia bool   : TRUE\ncombined   : TRUE')"
+	tools/expect_same.sh test_in_is_boolean_b30126 "$$($(TESTTMP)/test_in_is_boolean_b30126)" "$$(printf 'const enum : TRUE\nconst char : TRUE\nruntime    : TRUE\nvia bool   : TRUE\ncombined   : TRUE')"
 	# a set constructor with a RUNTIME element, used with `in`
 	./$(COMPILER) test/test_runtime_set_member_b294.pas $(TESTTMP)/test_runtime_set_member_b29426
-	test "$$($(TESTTMP)/test_runtime_set_member_b29426)" = "$$(printf '1: a\n2: b\n3: quote\n4: c\n5: d\nconst set: TRUE FALSE')"
+	tools/expect_same.sh test_runtime_set_member_b29426 "$$($(TESTTMP)/test_runtime_set_member_b29426)" "$$(printf '1: a\n2: b\n3: quote\n4: c\n5: d\nconst set: TRUE FALSE')"
 	# VIRTUAL CLASS METHODS dispatch on the RUNTIME class (fpjson JSONType)
 	./$(COMPILER) test/test_virtual_class_method_b290.pas $(TESTTMP)/test_virtual_class_method_b29026
-	test "$$($(TESTTMP)/test_virtual_class_method_b29026)" = "$$(printf 'base inst : 0 base\nmid  inst : 1 mid\nleaf inst : 2 mid  (Name inherited from TMid)\nnamed     : 0 1 2')"
+	tools/expect_same.sh test_virtual_class_method_b29026 "$$($(TESTTMP)/test_virtual_class_method_b29026)" "$$(printf 'base inst : 0 base\nmid  inst : 1 mid\nleaf inst : 2 mid  (Name inherited from TMid)\nnamed     : 0 1 2')"
 	# a method's RETURN-TYPE class id must be recorded at its DECLARATION
 	./$(COMPILER) test/test_decl_order_ret_recid_b291.pas $(TESTTMP)/test_decl_order_ret_recid_b29126
-	test "$$($(TESTTMP)/test_decl_order_ret_recid_b29126)" = "$$(printf '#1 #2 #3 ')"
+	tools/expect_same.sh test_decl_order_ret_recid_b29126 "$$($(TESTTMP)/test_decl_order_ret_recid_b29126)" "$$(printf '#1 #2 #3 ')"
 	# CONSTANT initializers run BEFORE any unit initialization section
 	./$(COMPILER) -Futest test/test_const_before_unit_init_b292.pas $(TESTTMP)/test_const_before_unit_init_b29226
-	test "$$($(TESTTMP)/test_const_before_unit_init_b29226)" = "$$(printf 'captured by init: [, ]\nunit const      : [, ]')"
+	tools/expect_same.sh test_const_before_unit_init_b29226 "$$($(TESTTMP)/test_const_before_unit_init_b29226)" "$$(printf 'captured by init: [, ]\nunit const      : [, ]')"
 	# a SELECTOR after an indexed-property read: obj.Items[i].Method, incl. as a call ARG
 	./$(COMPILER) test/test_selector_after_property_b289.pas $(TESTTMP)/test_selector_after_property_b28926
-	test "$$($(TESTTMP)/test_selector_after_property_b28926)" = "$$(printf 'took 100\ntook 200\ntook 300\ntook 400\nchained: 200')"
+	tools/expect_same.sh test_selector_after_property_b28926 "$$($(TESTTMP)/test_selector_after_property_b28926)" "$$(printf 'took 100\ntook 200\ntook 300\ntook 400\nchained: 200')"
 	# TypeInfo(TEnum) + TypInfo enum reflection (GetEnumName / GetEnumValue)
 	# TypeInfo(T) WIDENED beyond enums -- scalars, strings, classes, records, and a
 	# generic parameter at specialization time (EmitTypeInfoHeaders in
@@ -4569,7 +4569,7 @@ test-core: $(COMPILER)
 	# nothing ran it for two weeks -- a test file in test/ is not gated until a
 	# line here runs it. feature-pascal-corpus-generics
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_typeinfo_widen.pas $(TESTTMP)/test_typeinfo_widen26
-	test "$$($(TESTTMP)/test_typeinfo_widen26)" = "test_typeinfo_widen: OK"
+	tools/expect_same.sh test_typeinfo_widen26 "$$($(TESTTMP)/test_typeinfo_widen26)" "test_typeinfo_widen: OK"
 	# An ordinal TYPE as a whole array index (`array[Byte]`, `array[TKind]`,
 	# `array[Char]`, `array[Boolean]`) in a RECORD field, a CLASS field, and as
 	# dim 1 of an N-D field. The var section took these via ParseArrayDimBounds;
@@ -4577,121 +4577,121 @@ test-core: $(COMPILER)
 	# copy and answered `not a constant`. Self-checking (Halt 1 / prints OK);
 	# FPC 3.2.2 is the oracle. feature-pascal-corpus-generics
 	./$(COMPILER) test/test_field_array_ordinal_index_b388.pas $(TESTTMP)/test_field_array_ordinal_index_b38826
-	test "$$($(TESTTMP)/test_field_array_ordinal_index_b38826)" = "test_field_array_ordinal_index_b388: OK"
+	tools/expect_same.sh test_field_array_ordinal_index_b38826 "$$($(TESTTMP)/test_field_array_ordinal_index_b38826)" "test_field_array_ordinal_index_b388: OK"
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_typeinfo_enum_b288.pas $(TESTTMP)/test_typeinfo_enum_b28826
-	test "$$($(TESTTMP)/test_typeinfo_enum_b28826)" = "$$(printf 'count: 3\n  0 = Red\n  1 = Green\n  2 = Blue\nvalue of Green: 1\nvalue of green (ci): 1\nvalue of nope: -1\nout of range: []\n--- a second enum type:\njtUnknown jtNumber jtString jtBoolean jtNull jtArray jtObject ')"
+	tools/expect_same.sh test_typeinfo_enum_b28826 "$$($(TESTTMP)/test_typeinfo_enum_b28826)" "$$(printf 'count: 3\n  0 = Red\n  1 = Green\n  2 = Blue\nvalue of Green: 1\nvalue of green (ci): 1\nvalue of nope: -1\nout of range: []\n--- a second enum type:\njtUnknown jtNumber jtString jtBoolean jtNull jtArray jtObject ')"
 	# bug-pascal-array-of-pointer-deref-loses-the-record-type: `arr[i]^.Field`
 	# through a NAMED array-type alias whose element is a pointer-to-record
 	# (typinfo's TPropList = array[..] of PPropInfo shape) must resolve every
 	# field, not just the first.
 	./$(COMPILER) test/test_arr_of_ptr_elemrec_b354.pas $(TESTTMP)/test_arr_of_ptr_elemrec_b35426
-	test "$$($(TESTTMP)/test_arr_of_ptr_elemrec_b35426)" = "10 20 30"
+	tools/expect_same.sh test_arr_of_ptr_elemrec_b35426 "$$($(TESTTMP)/test_arr_of_ptr_elemrec_b35426)" "10 20 30"
 	# a value cast to an ordinal type NAMED BY AN IDENTIFIER: WideChar(x) / QWord(x)
 	./$(COMPILER) test/test_ident_ordinal_cast_b286.pas $(TESTTMP)/test_ident_ordinal_cast_b28626
-	test "$$($(TESTTMP)/test_ident_ordinal_cast_b28626)" = "$$(printf 'Byte(300)     = 44 (44)\nWord(300)     = 300 (300)\nWideChar(65)  = 65 (65)\nWideChar(300) = 300 (300)\nCardinal(...) = 4294967295 (4294967295)\nQWord(-1)     = 18446744073709551615\nNativeInt(5)  = 5 (5)')"
+	tools/expect_same.sh test_ident_ordinal_cast_b28626 "$$($(TESTTMP)/test_ident_ordinal_cast_b28626)" "$$(printf 'Byte(300)     = 44 (44)\nWord(300)     = 300 (300)\nWideChar(65)  = 65 (65)\nWideChar(300) = 300 (300)\nCardinal(...) = 4294967295 (4294967295)\nQWord(-1)     = 18446744073709551615\nNativeInt(5)  = 5 (5)')"
 	# an `array of const` LITERAL passed to a METHOD (fpjson TJSONData.DoError)
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_arrayofconst_to_method_b287.pas $(TESTTMP)/test_arrayofconst_to_method_b28726
-	test "$$($(TESTTMP)/test_arrayofconst_to_method_b28726)" = "$$(printf 'direct: answer = 42\n  n=2 -> class: answer = 42')"
+	tools/expect_same.sh test_arrayofconst_to_method_b28726 "$$($(TESTTMP)/test_arrayofconst_to_method_b28726)" "$$(printf 'direct: answer = 42\n  n=2 -> class: answer = 42')"
 	# an initialised array of CLASS REFERENCES (elements are class names) -- const AND var
 	./$(COMPILER) test/test_classref_array_const_b285.pas $(TESTTMP)/test_classref_array_const_b28526
-	test "$$($(TESTTMP)/test_classref_array_const_b28526)" = "$$(printf 'TBase TMid TLeaf \nTLeaf TBase TMid \nleaf<-base: TRUE\nbase<-leaf: FALSE')"
+	tools/expect_same.sh test_classref_array_const_b28526 "$$($(TESTTMP)/test_classref_array_const_b28526)" "$$(printf 'TBase TMid TLeaf \nTLeaf TBase TMid \nleaf<-base: TRUE\nbase<-leaf: FALSE')"
 	# SET-typed default parameters (fpjson FormatJSON(Options: TFormatOptions = DefaultFormat))
 	./$(COMPILER) test/test_set_default_param_b282.pas $(TESTTMP)/test_set_default_param_b28226
-	test "$$($(TESTTMP)/test_set_default_param_b28226)" = "$$(printf 'P1: (empty)\nP2: (empty)\nP3: AC\nP4: B\nP5 n=1 : C\nP3: B\nP5 n=2 : AB')"
+	tools/expect_same.sh test_set_default_param_b28226 "$$($(TESTTMP)/test_set_default_param_b28226)" "$$(printf 'P1: (empty)\nP2: (empty)\nP3: AC\nP4: B\nP5 n=1 : C\nP3: B\nP5 n=2 : AB')"
 	# property REDECLARATION `property Items;default;` (fpjson TJSONArray)
 	./$(COMPILER) test/test_property_redecl_b283.pas $(TESTTMP)/test_property_redecl_b28326
-	test "$$($(TESTTMP)/test_property_redecl_b28326)" = "$$(printf 'base explicit: 7\nchild explicit: 9\nchild default: 11\nchild default read of 3: 9')"
+	tools/expect_same.sh test_property_redecl_b28326 "$$($(TESTTMP)/test_property_redecl_b28326)" "$$(printf 'base explicit: 7\nchild explicit: 9\nchild default: 11\nchild default read of 3: 9')"
 	# array indexed by an ordinal TYPE: array[Boolean] / array[TEnum] / array[Char]
 	./$(COMPILER) test/test_array_index_type_b284.pas $(TESTTMP)/test_array_index_type_b28426
-	test "$$($(TESTTMP)/test_array_index_type_b28426)" = "$$(printf 'sep[false]=[, ] sep[true]=[,]\nred green blue \ncounts[Green]=7\nflags[True]=42\ntab[A]=9\nok')"
+	tools/expect_same.sh test_array_index_type_b28426 "$$($(TESTTMP)/test_array_index_type_b28426)" "$$(printf 'sep[false]=[, ] sep[true]=[,]\nred green blue \ncounts[Green]=7\nflags[True]=42\ntab[A]=9\nok')"
 	# unary `not` on an ARRAY ELEMENT / FIELD / DEREF must be BITWISE, not boolean
 	./$(COMPILER) test/test_bitwise_not_lvalue_b280.pas $(TESTTMP)/test_bitwise_not_lvalue_b28026
-	test "$$($(TESTTMP)/test_bitwise_not_lvalue_b28026)" = "$$(printf 'byte elem : 5 (5)\nint elem  : 5 (5)\nint64 elem: 5 (5)\nrec byte  : 5 (5)\nrec int   : 5 (5)\nderef     : 5 (5)\nplain var : 5 (5)\nnot elem  : -3\nnot var   : -3\nbool elem : TRUE (TRUE)\nbool elem2: FALSE (FALSE)')"
+	tools/expect_same.sh test_bitwise_not_lvalue_b28026 "$$($(TESTTMP)/test_bitwise_not_lvalue_b28026)" "$$(printf 'byte elem : 5 (5)\nint elem  : 5 (5)\nint64 elem: 5 (5)\nrec byte  : 5 (5)\nrec int   : 5 (5)\nderef     : 5 (5)\nplain var : 5 (5)\nnot elem  : -3\nnot var   : -3\nbool elem : TRUE (TRUE)\nbool elem2: FALSE (FALSE)')"
 	# constant SET EXPRESSIONS: one set const defined from another (+ - *)
 	./$(COMPILER) test/test_set_const_expr_b281.pas $(TESTTMP)/test_set_const_expr_b28126
-	test "$$($(TESTTMP)/test_set_const_expr_b28126)" = "$$(printf 'S1: abc\nSA: bc\nSB: ac\nSC: ac\nSD: abc\nSE: acd\nSF: bc\nSG: bcd')"
+	tools/expect_same.sh test_set_const_expr_b28126 "$$($(TESTTMP)/test_set_const_expr_b28126)" "$$(printf 'S1: abc\nSA: bc\nSB: ac\nSC: ac\nSD: abc\nSE: acd\nSF: bc\nSG: bcd')"
 	# managed-string store through an ADDRESS (class field / record field / array elem):
 	# a frozen LITERAL is not a handle, and riscv32's IR_STORE_MEM stored the raw word
 	./$(COMPILER) test/test_managed_store_via_addr_b279.pas $(TESTTMP)/test_managed_store_via_addr_b27926
-	test "$$($(TESTTMP)/test_managed_store_via_addr_b27926)" = "$$(printf 'field-lit=[field-lit]\nmethod-lit=[in-method-lit]\nmethod-cat=[cat:x]\nfield-var=[via-var]\nfield-self-cat=[via-var!]\nrec-lit=[rec-lit]\nrec-cat=[rec:via-var]\narr-lit=[arr-lit]\narr-cat=[arr:via-var]\narr-copy=[arr-lit]\nchar-lit=[z]')"
+	tools/expect_same.sh test_managed_store_via_addr_b27926 "$$($(TESTTMP)/test_managed_store_via_addr_b27926)" "$$(printf 'field-lit=[field-lit]\nmethod-lit=[in-method-lit]\nmethod-cat=[cat:x]\nfield-var=[via-var]\nfield-self-cat=[via-var!]\nrec-lit=[rec-lit]\nrec-cat=[rec:via-var]\narr-lit=[arr-lit]\narr-cat=[arr:via-var]\narr-copy=[arr-lit]\nchar-lit=[z]')"
 	# a callable METHOD POINTER built by hand from a TMethod record: the cast is a
 	# reinterpret of the same {Code,Data} words (fpcunit's RunBare)
 	./$(COMPILER) test/test_method_ptr_cast_b277.pas $(TESTTMP)/test_method_ptr_cast_b27726
-	test "$$($(TESTTMP)/test_method_ptr_cast_b27726)" = "$$(printf 'found Hello: TRUE\nhello n=7\nhello n=100\ntwice: 14\ntwice b: 200')"
+	tools/expect_same.sh test_method_ptr_cast_b27726 "$$($(TESTTMP)/test_method_ptr_cast_b27726)" "$$(printf 'found Hello: TRUE\nhello n=7\nhello n=100\ntwice: 14\ntwice b: 200')"
 	# TYPED metaclasses: any constructor name + class methods through `class of T`
 	./$(COMPILER) test/test_typed_metaclass_b278.pas $(TESTTMP)/test_typed_metaclass_b27826
-	test "$$($(TESTTMP)/test_typed_metaclass_b27826)" = "$$(printf '1: base:x | tag of TBase\n2: derived:y | tag of TDerived\n3: TDerived')"
+	tools/expect_same.sh test_typed_metaclass_b27826 "$$($(TESTTMP)/test_typed_metaclass_b27826)" "$$(printf '1: base:x | tag of TBase\n2: derived:y | tag of TDerived\n3: TDerived')"
 	# `E is <class-reference VALUE>` -- a TClass field/var, not a class name
 	./$(COMPILER) test/test_is_classref_b276.pas $(TESTTMP)/test_is_classref_b27626
-	test "$$($(TESTTMP)/test_is_classref_b27626)" = "$$(printf 'leaf is mid (field): TRUE\nleaf is other (field): FALSE\nleaf is base (var): TRUE\nleaf is other (var): FALSE\nleaf is EMid (name): TRUE\nleaf is EOther (name): FALSE')"
+	tools/expect_same.sh test_is_classref_b27626 "$$($(TESTTMP)/test_is_classref_b27626)" "$$(printf 'leaf is mid (field): TRUE\nleaf is other (field): FALSE\nleaf is base (var): TRUE\nleaf is other (var): FALSE\nleaf is EMid (name): TRUE\nleaf is EOther (name): FALSE')"
 	# `Self` in a CLASS method is the METACLASS, and the RUNTIME class: TDerived.M must
 	# see Self=TDerived inside TBase.M, and a bare sibling call must propagate it
 	./$(COMPILER) test/test_metaclass_self_b275.pas $(TESTTMP)/test_metaclass_self_b27526
-	test "$$($(TESTTMP)/test_metaclass_self_b27526)" = "$$(printf 'named: TBase TDerived TOther\nsuite: suite of TBase | suite of TDerived\ntagged: >> TDerived\nvia instance: TDerived\nvia instance suite: suite of TDerived\nvia classref: TOther\ninherits: TRUE FALSE')"
+	tools/expect_same.sh test_metaclass_self_b27526 "$$($(TESTTMP)/test_metaclass_self_b27526)" "$$(printf 'named: TBase TDerived TOther\nsuite: suite of TBase | suite of TDerived\ntagged: >> TDerived\nvia instance: TDerived\nvia instance suite: suite of TDerived\nvia classref: TOther\ninherits: TRUE FALSE')"
 	# bare call to a sibling CLASS (static) method from inside a class method
 	# (fpcunit's TAssert.FailEquals calling Fail) -- incl. overloads
 	./$(COMPILER) test/test_class_method_bare_call_b272.pas $(TESTTMP)/test_class_method_bare_call_b27226
-	test "$$($(TESTTMP)/test_class_method_bare_call_b27226)" = "$$(printf 'helper: from class method\ntwice: 42\nover int: 7\nover str: seven\nv=42\nhelper: from instance method')"
+	tools/expect_same.sh test_class_method_bare_call_b27226 "$$($(TESTTMP)/test_class_method_bare_call_b27226)" "$$(printf 'helper: from class method\ntwice: 42\nover int: 7\nover str: seven\nv=42\nhelper: from instance method')"
 	# TObject.ClassName / TClass.ClassName -- every class carries an RTTI header now,
 	# so it answers for classes that publish nothing (fpcunit's GetN(C: TClass))
 	./$(COMPILER) test/test_classname_b271.pas $(TESTTMP)/test_classname_b27126
-	test "$$($(TESTTMP)/test_classname_b27126)" = "$$(printf 'inst: TBase TDerived TPub\nparens: TBase\nclassref: TBase TDerived TPub\nnil: <NIL>\nvar: TDerived\nvar2: TBase\ndynamic: TDerived')"
+	tools/expect_same.sh test_classname_b27126 "$$($(TESTTMP)/test_classname_b27126)" "$$(printf 'inst: TBase TDerived TPub\nparens: TBase\nclassref: TBase TDerived TPub\nnil: <NIL>\nvar: TDerived\nvar2: TBase\ndynamic: TDerived')"
 	# System stack-frame intrinsics: get_frame / get_pc_addr / get_caller_stackinfo
 	# (fpcunit's CallerAddr walks the saved-fp chain with them)
 	./$(COMPILER) test/test_stack_frame_intrinsics_b270.pas $(TESTTMP)/test_stack_frame_intrinsics_b27026
-	test "$$($(TESTTMP)/test_stack_frame_intrinsics_b27026)" = "$$(printf 'frame nonnil: TRUE\npc nonnil: TRUE\nempty parens: TRUE\nwalk: TRUE\nper-site distinct: TRUE\nascending: TRUE')"
+	tools/expect_same.sh test_stack_frame_intrinsics_b27026 "$$($(TESTTMP)/test_stack_frame_intrinsics_b27026)" "$$(printf 'frame nonnil: TRUE\npc nonnil: TRUE\nempty parens: TRUE\nwalk: TRUE\nper-site distinct: TRUE\nascending: TRUE')"
 	# System type names that never existed (TDateTime was a 4-byte INT, not a Double)
 	./$(COMPILER) test/test_system_type_names_b267.pas $(TESTTMP)/test_system_type_names_b26726
-	test "$$($(TESTTMP)/test_system_type_names_b26726)" = "$$(printf 'WideChar=2\nComp=8\nTDateTime=8\nCurrency=8\nSizeInt=8 SizeUInt=8\nPWideChar=8\nbools=4 2 1\ndt=1.75\nstr=hi hi')"
+	tools/expect_same.sh test_system_type_names_b26726 "$$($(TESTTMP)/test_system_type_names_b26726)" "$$(printf 'WideChar=2\nComp=8\nTDateTime=8\nCurrency=8\nSizeInt=8 SizeUInt=8\nPWideChar=8\nbools=4 2 1\ndt=1.75\nstr=hi hi')"
 	# an UNKNOWN type name is an ERROR (it used to become a silent 4-byte Integer).
 	# Positive half: forward `^` refs, named dyn-array types, AnsiChar/Int16 widths.
 	./$(COMPILER) test/test_unknown_type_rejected_b266.pas $(TESTTMP)/test_unknown_type_rejected_b26626
-	test "$$($(TESTTMP)/test_unknown_type_rejected_b26626)" = "$$(printf 'fwd-ptr=1 2\nnamed-dynarray=3 7\nansichar=x size=1\nint16=30000 size=2')"
+	tools/expect_same.sh test_unknown_type_rejected_b26626 "$$($(TESTTMP)/test_unknown_type_rejected_b26626)" "$$(printf 'fwd-ptr=1 2\nnamed-dynarray=3 7\nansichar=x size=1\nint16=30000 size=2')"
 	# Negative half: a typo'd type name must FAIL to compile, not quietly become an Integer
 	printf 'program t;\nvar x: Integr;\nbegin x := 1; end.\n' > $(TESTTMP)/unknown_type_typo_b266.pas
 	! ./$(COMPILER) $(TESTTMP)/unknown_type_typo_b266.pas $(TESTTMP)/unknown_type_typo_b26626 > $(TESTTMP)/unknown_type_typo_b266.log 2>&1
 	grep -q "unknown type: Integr" $(TESTTMP)/unknown_type_typo_b266.log
 	# `absolute` overlays SHARE storage (it was silently ignored -> independent variable)
 	./$(COMPILER) test/test_absolute_overlay_b265.pas $(TESTTMP)/test_absolute_overlay_b26526
-	test "$$($(TESTTMP)/test_absolute_overlay_b26526)" = "$$(printf 'global=4 4\nglobal=9 9\nlocal=7 7\nlocal=11 11\nreinterp=4294967295')"
+	tools/expect_same.sh test_absolute_overlay_b26526 "$$($(TESTTMP)/test_absolute_overlay_b26526)" "$$(printf 'global=4 4\nglobal=9 9\nlocal=7 7\nlocal=11 11\nreinterp=4294967295')"
 	# class sealed/abstract, method `final`, and System.Assert (a user's own Assert wins)
 	./$(COMPILER) test/test_assert_sealed_final_b264.pas $(TESTTMP)/test_assert_sealed_final_b26426
-	test "$$($(TESTTMP)/test_assert_sealed_final_b26426)" = "$$(printf 'B\nS\nasserts-passed')"
+	tools/expect_same.sh test_assert_sealed_final_b26426 "$$($(TESTTMP)/test_assert_sealed_final_b26426)" "$$(printf 'B\nS\nasserts-passed')"
 	# a FAILING assert reports and halts with 227 (FPC's assertion runtime error)
 	printf 'program a; begin Assert(1=2, "boom"); end.\n' | tr '"' "'" > $(TESTTMP)/assert_fail_b264.pas
 	./$(COMPILER) $(TESTTMP)/assert_fail_b264.pas $(TESTTMP)/assert_fail_b26426
 	! $(TESTTMP)/assert_fail_b26426 > $(TESTTMP)/assert_fail_b264.out 2>&1; test "$$?" = "0"
-	test "$$(cat $(TESTTMP)/assert_fail_b264.out)" = "Assertion failed: boom"
+	tools/expect_same.sh assert_fail_b264.out "$$(cat $(TESTTMP)/assert_fail_b264.out)" "Assertion failed: boom"
 	# `const` / `class const` sections inside a class body; qualified TFoo.K access
 	./$(COMPILER) test/test_class_const_b263.pas $(TESTTMP)/test_class_const_b26326
-	test "$$($(TESTTMP)/test_class_const_b26326)" = "$$(printf 'rec-x=8 rec-name=rec\nn=19\ngreeting=hi\nqualified=16 3')"
+	tools/expect_same.sh test_class_const_b26326 "$$($(TESTTMP)/test_class_const_b26326)" "$$(printf 'rec-x=8 rec-name=rec\nn=19\ngreeting=hi\nqualified=16 3')"
 	# `strict private` / `strict protected`; a published section after them still reflects
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_strict_visibility_b262.pas $(TESTTMP)/test_strict_visibility_b26226
-	test "$$($(TESTTMP)/test_strict_visibility_b26226)" = "$$(printf 'x=2\npublished-count=1\npublished=TestVisible\nbump-hidden=TRUE')"
+	tools/expect_same.sh test_strict_visibility_b26226 "$$($(TESTTMP)/test_strict_visibility_b26226)" "$$(printf 'x=2\npublished-count=1\npublished=TestVisible\nbump-hidden=TRUE')"
 	# Int8/Int16/Int32 and TClass are real type names (they silently became 4-byte Integers)
 	./$(COMPILER) test/test_int_sized_names_b261.pas $(TESTTMP)/test_int_sized_names_b26126
-	test "$$($(TESTTMP)/test_int_sized_names_b26126)" = "$$(printf 'Int8=1\nInt16=2\nInt32=4\nInt64=8\nTClass=8\nTObject=8\nint16-val=30000\nint8-val=-128\nclassref-nonnil=TRUE')"
+	tools/expect_same.sh test_int_sized_names_b26126 "$$($(TESTTMP)/test_int_sized_names_b26126)" "$$(printf 'Int8=1\nInt16=2\nInt32=4\nInt64=8\nTClass=8\nTObject=8\nint16-val=30000\nint8-val=-128\nclassref-nonnil=TRUE')"
 	# System.LineEnding with no `uses`; a source's own LineEnding still wins
 	./$(COMPILER) test/test_lineending_b260.pas $(TESTTMP)/test_lineending_b26026
-	test "$$($(TESTTMP)/test_lineending_b26026)" = "$$(printf 'const-concat-len=3\nis-lf=TRUE\nexpr-len=2\nle-len=1')"
+	tools/expect_same.sh test_lineending_b26026 "$$($(TESTTMP)/test_lineending_b26026)" "$$(printf 'const-concat-len=3\nis-lf=TRUE\nexpr-len=2\nle-len=1')"
 	# TFPList — FPC's plain pointer list, the name its sources actually write
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_tfplist_b259.pas $(TESTTMP)/test_tfplist_b25926
-	test "$$($(TESTTMP)/test_tfplist_b25926)" = "$$(printf 'count=3\nidx-b=1\nitem0=10\nafter-delete=2 item0=20\nafter-remove=1 item0=20\nis-tlist=TRUE\nafter-clear=0')"
+	tools/expect_same.sh test_tfplist_b25926 "$$($(TESTTMP)/test_tfplist_b25926)" "$$(printf 'count=3\nidx-b=1\nitem0=10\nafter-delete=2 item0=20\nafter-remove=1 item0=20\nis-tlist=TRUE\nafter-clear=0')"
 	# published-method RTTI: discover by name, bind, and RUN (feature-rtti-method-reflection)
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_rtti_method_reflection_b254.pas $(TESTTMP)/test_rtti_method_reflection_b25426
-	test "$$($(TESTTMP)/test_rtti_method_reflection_b25426)" = "$$(printf 'class=TMyCase\ncount=3\nmethod=TestAlpha\nmethod=TestBeta\nmethod=TestInherited\nfind-helper=FALSE\nfind-missing=FALSE\nfind-lowercase=TRUE\nlog=AB\nhelper-assigned=FALSE\ncls-name=TMyCase\ncls-count=3\ncls-method=TestAlpha addr=TRUE\ncls-method=TestBeta addr=TRUE\ncls-method=TestInherited addr=TRUE')"
+	tools/expect_same.sh test_rtti_method_reflection_b25426 "$$($(TESTTMP)/test_rtti_method_reflection_b25426)" "$$(printf 'class=TMyCase\ncount=3\nmethod=TestAlpha\nmethod=TestBeta\nmethod=TestInherited\nfind-helper=FALSE\nfind-missing=FALSE\nfind-lowercase=TRUE\nlog=AB\nhelper-assigned=FALSE\ncls-name=TMyCase\ncls-count=3\ncls-method=TestAlpha addr=TRUE\ncls-method=TestBeta addr=TRUE\ncls-method=TestInherited addr=TRUE')"
 	# `packed array` is legal on a FIELD/var, not just `packed record`
 	./$(COMPILER) test/test_packed_array_field_b258.pas $(TESTTMP)/test_packed_array_field_b25826
-	test "$$($(TESTTMP)/test_packed_array_field_b25826)" = "$$(printf 'sum=22\nelems=7 9')"
+	tools/expect_same.sh test_packed_array_field_b25826 "$$($(TESTTMP)/test_packed_array_field_b25826)" "$$(printf 'sum=22\nelems=7 9')"
 	# TObject.GetInterface: GUID lookup over the class interface table (feature-tobject-getinterface-guid-table)
 	./$(COMPILER) test/test_getinterface_guid_b257.pas $(TESTTMP)/test_getinterface_guid_b25726
-	test "$$($(TESTTMP)/test_getinterface_guid_b25726)" = "$$(printf 'qualified=TRUE\ncall=42\nmiss=FALSE\nbare=TRUE\ncall2=42')"
+	tools/expect_same.sh test_getinterface_guid_b25726 "$$($(TESTTMP)/test_getinterface_guid_b25726)" "$$(printf 'qualified=TRUE\ncall=42\nmiss=FALSE\nbare=TRUE\ncall2=42')"
 	# FPC spelling: TObject.MethodAddress/MethodName with NO uses; a user method shadows
 	./$(COMPILER) test/test_tobject_methodaddress_b256.pas $(TESTTMP)/test_tobject_methodaddress_b25626
-	test "$$($(TESTTMP)/test_tobject_methodaddress_b25626)" = "$$(printf 'found-alpha=TRUE\nname-of-it=TestAlpha\ncase-insensitive=TRUE\nfound-inherited=TRUE\nfound-private=FALSE\nfound-missing=FALSE\nname-of-nil=[]\nran TestAlpha\nshadowed=zzz\nshadow-nil=TRUE')"
+	tools/expect_same.sh test_tobject_methodaddress_b25626 "$$($(TESTTMP)/test_tobject_methodaddress_b25626)" "$$(printf 'found-alpha=TRUE\nname-of-it=TestAlpha\ncase-insensitive=TRUE\nfound-inherited=TRUE\nfound-private=FALSE\nfound-missing=FALSE\nname-of-nil=[]\nran TestAlpha\nshadowed=zzz\nshadow-nil=TRUE')"
 	# High/Low of ordinal types in const expressions (bug-pascal-high-low-in-const-expr)
 	./$(COMPILER) test/test_high_low_const_expr.pas $(TESTTMP)/test_high_low_const_expr26
-	test "$$($(TESTTMP)/test_high_low_const_expr26)" = "$$(printf '256\n256\n255 -32768 2\n2147483646\n7\n1\n0 9\n0 9 -5 5\na e\n10\n5')"
+	tools/expect_same.sh test_high_low_const_expr26 "$$($(TESTTMP)/test_high_low_const_expr26)" "$$(printf '256\n256\n255 -32768 2\n2147483646\n7\n1\n0 9\n0 9 -5 5\na e\n10\n5')"
 	# TypeInfo(T) must report the type the CALLER NAMED. `byte` and `integer`
 	# lex as one token (tkInteger_T, two spellings), and this path switched on
 	# the token kind — so TypeInfo(Byte) said "Integer" while TypeInfo(UInt8),
@@ -4701,7 +4701,7 @@ test-core: $(COMPILER)
 	# -Mobjfpc makes `string` a ShortString and answers 7, so an oracle run
 	# without {$H+} will disagree with this row and is the wrong oracle.
 	./$(COMPILER) -Fulib/rtl test/test_typeinfo_scalar_names.pas $(TESTTMP)/test_typeinfo_names26
-	test "$$($(TESTTMP)/test_typeinfo_names26)" = "$$(printf 'Byte 1 Byte\nUInt8 1 Byte\nInteger 1 Integer\nWord 1 Word\nLongWord 1 LongWord\nInt64 19 Int64\nChar 2 Char\nBoolean 18 Boolean\nDouble 4 Double\nSingle 4 Single\nReal 4 Double\nstring 9 AnsiString')"
+	tools/expect_same.sh test_typeinfo_names26 "$$($(TESTTMP)/test_typeinfo_names26)" "$$(printf 'Byte 1 Byte\nUInt8 1 Byte\nInteger 1 Integer\nWord 1 Word\nLongWord 1 LongWord\nInt64 19 Int64\nChar 2 Char\nBoolean 18 Boolean\nDouble 4 Double\nSingle 4 Single\nReal 4 Double\nstring 9 AnsiString')"
 	# TypeInfo(T) over the NAMED types the alias table carries — subrange, set,
 	# procedural type, method pointer, string[N], plain rename. All six were a
 	# hard "TypeInfo is not supported for type:" before this. Kinds are FPC's
@@ -4709,14 +4709,14 @@ test-core: $(COMPILER)
 	# is the interesting one: FPC gives a plain rename the BASE type's name, not
 	# its own, so `TMyInt = Integer` must NOT report "TMyInt".
 	./$(COMPILER) -Fulib/rtl test/test_typeinfo_named_types.pas $(TESTTMP)/test_typeinfo_named26
-	test "$$($(TESTTMP)/test_typeinfo_named26)" = "$$(printf 'TSub 1\nTSet 5\nTProc 23\nTMeth 6\nTStr20 7\nInteger 1')"
+	tools/expect_same.sh test_typeinfo_named26 "$$($(TESTTMP)/test_typeinfo_named26)" "$$(printf 'TSub 1\nTSet 5\nTProc 23\nTMeth 6\nTStr20 7\nInteger 1')"
 	# …and over named ARRAY types (their own name table, so their own category)
 	# plus the builtin non-ordinals this path used to keep a private subset of:
 	# TypeInfo(Pointer)/TypeInfo(Variant) were refused while SizeOf of the same
 	# names worked. All five diffed against FPC 3.2.2. TArr2 is here because a
 	# multi-dimension array is still ONE tkArray, not a nested one.
 	./$(COMPILER) -Fulib/rtl test/test_typeinfo_array_pointer.pas $(TESTTMP)/test_typeinfo_arrptr26
-	test "$$($(TESTTMP)/test_typeinfo_arrptr26)" = "$$(printf 'TArr 12\nTDyn 21\nTArr2 12\nPointer 29\nVariant 11')"
+	tools/expect_same.sh test_typeinfo_arrptr26 "$$($(TESTTMP)/test_typeinfo_arrptr26)" "$$(printf 'TArr 12\nTDyn 21\nTArr2 12\nPointer 29\nVariant 11')"
 	# …and the TTypeData payloads those headers' DataPtr now carries — OrdType,
 	# MinValue/MaxValue, a set's element enum, an array's element type and its
 	# per-dimension bounds. Diffed against an FPC 3.2.2 oracle; the LAYOUT is
@@ -4726,7 +4726,7 @@ test-core: $(COMPILER)
 	# narrows to 1 — its bounds still match), and LongWord's max is honest at
 	# 4294967295 where FPC's 32-bit MaxValue slot truncates it to -1.
 	./$(COMPILER) -Fulib/rtl test/test_typeinfo_typedata.pas $(TESTTMP)/test_typeinfo_typedata26
-	test "$$($(TESTTMP)/test_typeinfo_typedata26)" = "$$(printf 'ShortInt kind=1 name=ShortInt ord=0 min=-128 max=127\nByte kind=1 name=Byte ord=1 min=0 max=255\nSmallInt kind=1 name=SmallInt ord=2 min=-32768 max=32767\nWord kind=1 name=Word ord=3 min=0 max=65535\nInteger kind=1 name=Integer ord=4 min=-2147483648 max=2147483647\nLongWord kind=1 name=LongWord ord=5 min=0 max=4294967295\nInt64 kind=19 name=Int64 ord=6 min=-9223372036854775808 max=9223372036854775807\nBoolean kind=18 name=Boolean ord=1 min=0 max=1\nChar kind=2 name=Char ord=1 min=0 max=255\nSingle kind=4 name=Single float=0\nDouble kind=4 name=Double float=1\nTSub kind=1 name=TSub ord=4 min=1 max=10\nTSubB kind=1 name=TSubB ord=4 min=-5 max=5\nTMyInt kind=1 name=Integer ord=4 min=-2147483648 max=2147483647\nTStr20 kind=7 name=TStr20 ord=0 min=0 max=20\nTS kind=5 name=TS ord=5 elemkind=3 elemsize=4 min=0 max=2 comp=TEn compcount=3\nTArr kind=12 name=TArr elemkind=1 elemsize=4 elemcount=4 dims=1 [0..3]\nTArr2 kind=12 name=TArr2 elemkind=1 elemsize=1 elemcount=6 dims=2 [1..2] [1..3]\nTDyn kind=21 name=TDyn elemkind=1 elemsize=4 elemcount=0 dims=1\nPointer kind=29 name=Pointer <no typedata>\nVariant kind=11 name=Variant <no typedata>')"
+	tools/expect_same.sh test_typeinfo_typedata26 "$$($(TESTTMP)/test_typeinfo_typedata26)" "$$(printf 'ShortInt kind=1 name=ShortInt ord=0 min=-128 max=127\nByte kind=1 name=Byte ord=1 min=0 max=255\nSmallInt kind=1 name=SmallInt ord=2 min=-32768 max=32767\nWord kind=1 name=Word ord=3 min=0 max=65535\nInteger kind=1 name=Integer ord=4 min=-2147483648 max=2147483647\nLongWord kind=1 name=LongWord ord=5 min=0 max=4294967295\nInt64 kind=19 name=Int64 ord=6 min=-9223372036854775808 max=9223372036854775807\nBoolean kind=18 name=Boolean ord=1 min=0 max=1\nChar kind=2 name=Char ord=1 min=0 max=255\nSingle kind=4 name=Single float=0\nDouble kind=4 name=Double float=1\nTSub kind=1 name=TSub ord=4 min=1 max=10\nTSubB kind=1 name=TSubB ord=4 min=-5 max=5\nTMyInt kind=1 name=Integer ord=4 min=-2147483648 max=2147483647\nTStr20 kind=7 name=TStr20 ord=0 min=0 max=20\nTS kind=5 name=TS ord=5 elemkind=3 elemsize=4 min=0 max=2 comp=TEn compcount=3\nTArr kind=12 name=TArr elemkind=1 elemsize=4 elemcount=4 dims=1 [0..3]\nTArr2 kind=12 name=TArr2 elemkind=1 elemsize=1 elemcount=6 dims=2 [1..2] [1..3]\nTDyn kind=21 name=TDyn elemkind=1 elemsize=4 elemcount=0 dims=1\nPointer kind=29 name=Pointer <no typedata>\nVariant kind=11 name=Variant <no typedata>')"
 	# TypeInfo(T) where T is a GENERIC PARAMETER — the case the ticket was opened
 	# for. Needs no separate path (pxx substitutes the parameter's token
 	# textually before the parser sees the body), and this proves it instead of
@@ -4734,7 +4734,7 @@ test-core: $(COMPILER)
 	# kind, and answering "Integer" for both is how this path was broken. TSub
 	# proves the substitution reaches the named-type tables too.
 	./$(COMPILER) -Fulib/rtl test/test_typeinfo_generic_param.pas $(TESTTMP)/test_typeinfo_gen26
-	test "$$($(TESTTMP)/test_typeinfo_gen26)" = "$$(printf 'Integer 1\nByte 1\nAnsiString 9\nTSub 1')"
+	tools/expect_same.sh test_typeinfo_gen26 "$$($(TESTTMP)/test_typeinfo_gen26)" "$$(printf 'Integer 1\nByte 1\nAnsiString 9\nTSub 1')"
 	# An INLINE typed-pointer cast must not lose a pointer FIELD's pointee type.
 	# PRec(raw)^.n^ typed the second ^ from the CAST's alias instead of from the
 	# field the ^ applies to, so the bytes were right and only the tag was
@@ -4742,85 +4742,85 @@ test-core: $(COMPILER)
 	# hid it (a variable spelling that worked, a ^Int64 field whose wrong tag
 	# happened to match, and one level always being fine).
 	./$(COMPILER) test/test_cast_deref_pointer_field.pas $(TESTTMP)/test_cast_deref26
-	test "$$($(TESTTMP)/test_cast_deref26)" = "$$(printf '2 var  n^     : hello\n3 cast n^     : hello\n4 cast m^     : 99\n5 cast k      : 42\n6 field  n^   : hello\n7 nocast p^n^ : hello')"
+	tools/expect_same.sh test_cast_deref26 "$$($(TESTTMP)/test_cast_deref26)" "$$(printf '2 var  n^     : hello\n3 cast n^     : hello\n4 cast m^     : 99\n5 cast k      : 42\n6 field  n^   : hello\n7 nocast p^n^ : hello')"
 	# …and its siblings, checked before closing rather than after the next
 	# report: a doubly-nested ^.^.^, and a deref of an ELEMENT of a pointer
 	# array field (INDEX arm into the new FIELD arm). Length/concat put the
 	# derefed value in contexts Writeln does not.
 	./$(COMPILER) test/test_cast_deref_chain_siblings.pas $(TESTTMP)/test_cast_sib26
-	test "$$($(TESTTMP)/test_cast_sib26)" = "$$(printf 'a nested ^.^.^  : world\nb field arr[i]^ : world\nc len of deref  : 5\nd concat        : hello!\ne nested field  : world?')"
+	tools/expect_same.sh test_cast_sib26 "$$($(TESTTMP)/test_cast_sib26)" "$$(printf 'a nested ^.^.^  : world\nb field arr[i]^ : world\nc len of deref  : 5\nd concat        : hello!\ne nested field  : world?')"
 	# A program naming `puint8` must compile QUIETLY: FindTypeAlias carried a
 	# leftover debug dump keyed on that exact name, printing the whole alias
 	# table to STDOUT before the pointer-alias fallback resolved it. The
 	# assertion is on the COMPILER's output — one line, the ok: banner.
 	./$(COMPILER) test/test_puint8_no_compiler_spew.pas $(TESTTMP)/test_puint8_spew26 > $(TESTTMP)/test_puint8_spew.log 2>&1
-	test "$$(grep -c 'FindTypeAlias\|Alias 0:' $(TESTTMP)/test_puint8_spew.log)" = "0"
-	test "$$(wc -l < $(TESTTMP)/test_puint8_spew.log)" = "1"
-	test "$$($(TESTTMP)/test_puint8_spew26)" = "puint8 ok=7"
+	tools/expect_same.sh test_puint8_spew.log.1 "$$(grep -c 'FindTypeAlias\|Alias 0:' $(TESTTMP)/test_puint8_spew.log)" "0"
+	tools/expect_same.sh test_puint8_spew.log.2 "$$(wc -l < $(TESTTMP)/test_puint8_spew.log)" "1"
+	tools/expect_same.sh test_puint8_spew26 "$$($(TESTTMP)/test_puint8_spew26)" "puint8 ok=7"
 	# {$I} -Fi search + hard error on miss (bug-pascal-include-search-silent-miss)
 	./$(COMPILER) -Fitest/incdir_fi test/test_include_fi_search.pas $(TESTTMP)/test_include_fi26
-	test "$$($(TESTTMP)/test_include_fi26)" = "fi-ok"
+	tools/expect_same.sh test_include_fi26 "$$($(TESTTMP)/test_include_fi26)" "fi-ok"
 	! ./$(COMPILER) test/test_include_miss_fails.pas $(TESTTMP)/test_include_miss26 2>/dev/null
 	# An include INSIDE an include: expansion must recurse, each step resolving
 	# against its own file's dir, and a dead {$ifdef} must not open its include.
 	# Was silently dropped, so the nested declarations vanished and a different
 	# program compiled than FPC builds (bug-a-a-nested-include-is-silently-dropped).
 	./$(COMPILER) test/test_nested_include.pas $(TESTTMP)/test_nested_include26
-	test "$$($(TESTTMP)/test_nested_include26)" = "$$(printf 'l1\nl2\nl3\ndefine-crosses-nesting')"
+	tools/expect_same.sh test_nested_include26 "$$($(TESTTMP)/test_nested_include26)" "$$(printf 'l1\nl2\nl3\ndefine-crosses-nesting')"
 	# ...and the brake that recursion needs: mutually-including files must give a
 	# diagnostic, not exhaust the stack.
 	! ./$(COMPILER) test/test_include_cycle_fails.pas $(TESTTMP)/test_include_cycle26 2>/dev/null
 	# with TFoo.Create: single evaluation + with-scoped property/method/Free
 	./$(COMPILER) test/test_with_class_create.pas $(TESTTMP)/test_with_class_create26
-	test "$$($(TESTTMP)/test_with_class_create26)" = "$$(printf '21\n42\ncreates=1')"
+	tools/expect_same.sh test_with_class_create26 "$$($(TESTTMP)/test_with_class_create26)" "$$(printf '21\n42\ncreates=1')"
 	# open-array args from record fields + indirect-call writeback + High(rec.fieldarr)
 	./$(COMPILER) test/test_open_array_field_args.pas $(TESTTMP)/test_open_array_field26
-	test "$$($(TESTTMP)/test_open_array_field26)" = "$$(printf '15 3\nhb=3 hd=15\ndirect: 42\nhb=3 hd=15\nindirect: 74\nhb=3 hd=15\nwith: 106')"
+	tools/expect_same.sh test_open_array_field26 "$$($(TESTTMP)/test_open_array_field26)" "$$(printf '15 3\nhb=3 hd=15\ndirect: 42\nhb=3 hd=15\nindirect: 74\nhb=3 hd=15\nwith: 106')"
 	# {$SCOPEDENUMS}: scoped members + TEnum.member access (bug-pascal-scopedenums-ignored)
 	./$(COMPILER) test/test_scopedenums.pas $(TESTTMP)/test_scopedenums26
-	test "$$($(TESTTMP)/test_scopedenums26)" = "$$(printf '0\n2\n1\ncase-ok')"
+	tools/expect_same.sh test_scopedenums26 "$$($(TESTTMP)/test_scopedenums26)" "$$(printf '0\n2\n1\ncase-ok')"
 	# virtual/indirect calls: managed-string arg materialization + string->Pointer skip
 	./$(COMPILER) --mimic-fpc test/test_virtual_call_string_args.pas $(TESTTMP)/test_virtual_call_string26
-	test "$$($(TESTTMP)/test_virtual_call_string26)" = "$$(printf 'v-len=6 d1=112\nv-len=2 d1=120\ni-len=5 d1=97')"
+	tools/expect_same.sh test_virtual_call_string26 "$$($(TESTTMP)/test_virtual_call_string26)" "$$(printf 'v-len=6 d1=112\nv-len=2 d1=120\ni-len=5 d1=97')"
 	# generic record/array/procvar templates (feature-pascal-generic-nonclass-templates)
 	./$(COMPILER) test/test_generic_nonclass.pas $(TESTTMP)/test_generic_nonclass26
-	test "$$($(TESTTMP)/test_generic_nonclass26)" = "$$(printf '7\n20\n42')"
+	tools/expect_same.sh test_generic_nonclass26 "$$($(TESTTMP)/test_generic_nonclass26)" "$$(printf '7\n20\n42')"
 	# named operators :=/Explicit/Inc/Dec on records (feature-pascal-class-management-operators slice 1)
 	./$(COMPILER) test/test_named_operators.pas $(TESTTMP)/test_named_operators26
-	test "$$($(TESTTMP)/test_named_operators26)" = "ok"
+	tools/expect_same.sh test_named_operators26 "$$($(TESTTMP)/test_named_operators26)" "ok"
 	# operator enumerator drives for-in (feature-pascal-class-management-operators slice 2)
 	./$(COMPILER) test/test_operator_enumerator.pas $(TESTTMP)/test_operator_enum26
-	test "$$($(TESTTMP)/test_operator_enum26)" = "$$(printf '10\n20\n30')"
+	tools/expect_same.sh test_operator_enum26 "$$($(TESTTMP)/test_operator_enum26)" "$$(printf '10\n20\n30')"
 	# const array-of-record named-field initializers + string-alias cast passthrough
 	./$(COMPILER) --mimic-fpc test/test_const_array_of_record.pas $(TESTTMP)/test_const_arr_rec26
-	test "$$($(TESTTMP)/test_const_arr_rec26)" = "$$(printf 'AND=1\nOR=2\nXOR=3\n2')"
+	tools/expect_same.sh test_const_arr_rec26 "$$($(TESTTMP)/test_const_arr_rec26)" "$$(printf 'AND=1\nOR=2\nXOR=3\n2')"
 	# managed arg -> const ShortString param conversion temp
 	./$(COMPILER) --mimic-fpc test/test_shortstring_param_conv.pas $(TESTTMP)/test_ssparam26
-	test "$$($(TESTTMP)/test_ssparam26)" = "TRUE"
+	tools/expect_same.sh test_ssparam26 "$$($(TESTTMP)/test_ssparam26)" "TRUE"
 	# writeln of ShortString params (bug-pascal-writeln-shortstring-param)
 	./$(COMPILER) --mimic-fpc test/test_writeln_shortstring_param.pas $(TESTTMP)/test_wsp26
-	test "$$($(TESTTMP)/test_wsp26)" = "$$(printf 'got=HELLO len=5\nm=WORLD')"
+	tools/expect_same.sh test_wsp26 "$$($(TESTTMP)/test_wsp26)" "$$(printf 'got=HELLO len=5\nm=WORLD')"
 	# FPC variable typecast var args + type-keyword Dec targets
 	./$(COMPILER) --mimic-fpc test/test_varcast_and_dec.pas $(TESTTMP)/test_vcd26
-	test "$$($(TESTTMP)/test_vcd26)" = "$$(printf '42\n65')"
+	tools/expect_same.sh test_vcd26 "$$($(TESTTMP)/test_vcd26)" "$$(printf '42\n65')"
 	# TObject(expr).Free statement
 	./$(COMPILER) --mimic-fpc test/test_tobject_cast_free.pas $(TESTTMP)/test_tocf26
-	test "$$($(TESTTMP)/test_tocf26)" = "ok"
+	tools/expect_same.sh test_tocf26 "$$($(TESTTMP)/test_tocf26)" "ok"
 	# array-valued field in a typed record constant (TGuid D4 shape)
 	./$(COMPILER) --mimic-fpc test/test_record_const_array_field.pas $(TESTTMP)/test_rcaf26
-	test "$$($(TESTTMP)/test_rcaf26)" = "$$(printf '132096 192 70')"
+	tools/expect_same.sh test_rcaf26 "$$($(TESTTMP)/test_rcaf26)" "$$(printf '132096 192 70')"
 	# string / @var / @proc field values in a typed record constant (global + local)
 	./$(COMPILER) --mimic-fpc test/test_record_const_addr_field.pas $(TESTTMP)/test_rcaddr26
-	test "$$($(TESTTMP)/test_rcaddr26)" = "$$(printf 'hello 42 7\nchar Z str Z len 1\ncalled\nscalar 42 TRUE\narr TRUE 42 FALSE TRUE\nlocal 42 9')"
+	tools/expect_same.sh test_rcaddr26 "$$($(TESTTMP)/test_rcaddr26)" "$$(printf 'hello 42 7\nchar Z str Z len 1\ncalled\nscalar 42 TRUE\narr TRUE 42 FALSE TRUE\nlocal 42 9')"
 	# @TClass.Method — method code address via the type name (expression + record const)
 	./$(COMPILER) --mimic-fpc test/test_class_method_addr.pas $(TESTTMP)/test_cma26
-	test "$$($(TESTTMP)/test_cma26)" = "$$(printf 'inst 11\nvirt 22\ndvirt 33\nconst-inst 11\nconst-dvirt 33\nn 99')"
+	tools/expect_same.sh test_cma26 "$$($(TESTTMP)/test_cma26)" "$$(printf 'inst 11\nvirt 22\ndvirt 33\nconst-inst 11\nconst-dvirt 33\nn 99')"
 	# builtin TGuid (System type) resolves without a uses
 	./$(COMPILER) --mimic-fpc test/test_builtin_tguid.pas $(TESTTMP)/test_tguid26
-	test "$$($(TESTTMP)/test_tguid26)" = "$$(printf '132096 192 70 16')"
+	tools/expect_same.sh test_tguid26 "$$($(TESTTMP)/test_tguid26)" "$$(printf '132096 192 70 16')"
 	# builtin TObject class: var o: TObject; o := TObject.Create
 	./$(COMPILER) --mimic-fpc test/test_builtin_tobject.pas $(TESTTMP)/test_tobj26
-	test "$$($(TESTTMP)/test_tobj26)" = "$$(printf 'FALSE\n42\nFALSE')"
+	tools/expect_same.sh test_tobj26 "$$($(TESTTMP)/test_tobj26)" "$$(printf 'FALSE\n42\nFALSE')"
 	# ...and TObject.UnitName, the last member of that ticket that was PXX-REJECT:
 	# the DECLARING unit's name, out of a new word in the class RTTI blob (+96).
 	# Three sources of the string -- a unit, the PROGRAM (which is what FPC
@@ -4828,7 +4828,7 @@ test-core: $(COMPILER)
 	# asserted on an instance, on a class reference, and through a descendant
 	# that declares nothing. .expected IS fpc 3.2.2's own output.
 	./$(COMPILER) test/test_tobject_unitname.pas $(TESTTMP)/test_tobjun26
-	test "$$($(TESTTMP)/test_tobjun26)" = "$$(cat test/test_tobject_unitname.expected)"
+	tools/expect_same.sh test_tobjun26 "$$($(TESTTMP)/test_tobjun26)" "$$(cat test/test_tobject_unitname.expected)"
 	# A type helper's PROPERTY dispatches, not only its methods
 	# (bug-p-a-type-helper-cannot-declare-a-property). The record-property row in
 	# the same file is the CONTROL and must stay: properties on a record always
@@ -4839,13 +4839,13 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_type_helper_property.pas $(TESTTMP)/test_thelpprop26
 	$(TESTTMP)/test_thelpprop26 | diff -u test/test_type_helper_property.expected -
 	./$(COMPILER) test/test_bare_property.pas $(TESTTMP)/test_bare_property26
-	test "$$($(TESTTMP)/test_bare_property26)" = "$$(printf 'num=21\nnum2=25\ndbl=50\nflagzero=TRUE\nflagset=TRUE')"
+	tools/expect_same.sh test_bare_property26 "$$($(TESTTMP)/test_bare_property26)" "$$(printf 'num=21\nnum2=25\ndbl=50\nflagzero=TRUE\nflagset=TRUE')"
 	./$(COMPILER) test/test_ansistring.pas $(TESTTMP)/test_ansistring26
-	test "$$($(TESTTMP)/test_ansistring26)" = "$$(printf '0\nInitially empty ok\nHello\n5\nHello\nAssignment equal ok\nhello\nHello\nCOW index write ok\nLocalString\n11\nLocal equal ok\nX\nChar assign ok\nHello World!\nHello\nHello World!\n0\nClear empty ok')"
+	tools/expect_same.sh test_ansistring26 "$$($(TESTTMP)/test_ansistring26)" "$$(printf '0\nInitially empty ok\nHello\n5\nHello\nAssignment equal ok\nhello\nHello\nCOW index write ok\nLocalString\n11\nLocal equal ok\nX\nChar assign ok\nHello World!\nHello\nHello World!\n0\nClear empty ok')"
 	./$(COMPILER) test/test_string_ordering.pas $(TESTTMP)/test_string_ordering26
-	test "$$($(TESTTMP)/test_string_ordering26)" = "$$(printf '101001\n10\n011010\n101\n110')"
+	tools/expect_same.sh test_string_ordering26 "$$($(TESTTMP)/test_string_ordering26)" "$$(printf '101001\n10\n011010\n101\n110')"
 	./$(COMPILER) test/test_set_of_char_const.pas $(TESTTMP)/test_set_of_char_const26
-	test "$$($(TESTTMP)/test_set_of_char_const26)" = "$$(printf '65\n1\n0\n1\n0\n120')"
+	tools/expect_same.sh test_set_of_char_const26 "$$($(TESTTMP)/test_set_of_char_const26)" "$$(printf '65\n1\n0\n1\n0\n120')"
 	@# a ONE-CHARACTER untyped const is a CHAR, as FPC types it -- not a string of
 	@# length one. It landed in the STRING const table, so SIX char contexts read
 	@# the value's ADDRESS: Ord, assignment, Chr round-trip, `in` a set of Char,
@@ -4857,15 +4857,15 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_one_char_const_is_a_char.pas $(TESTTMP)/test_one_char_const26
 	$(TESTTMP)/test_one_char_const26 | diff -u test/test_one_char_const_is_a_char.expected -
 	./$(COMPILER) test/test_indexed_property.pas $(TESTTMP)/test_indexed_property26
-	test "$$($(TESTTMP)/test_indexed_property26)" = "$$(printf '99\n7\n42\n10\n30\n55\n88')"
+	tools/expect_same.sh test_indexed_property26 "$$($(TESTTMP)/test_indexed_property26)" "$$(printf '99\n7\n42\n10\n30\n55\n88')"
 	./$(COMPILER) test/test_many_properties.pas $(TESTTMP)/test_many_properties26
-	test "$$($(TESTTMP)/test_many_properties26)" = "$$(printf '11\nTRUE\n99')"
+	tools/expect_same.sh test_many_properties26 "$$($(TESTTMP)/test_many_properties26)" "$$(printf '11\nTRUE\n99')"
 	./$(COMPILER) test/test_overload_record_identity.pas $(TESTTMP)/test_overload_record_identity26
-	test "$$($(TESTTMP)/test_overload_record_identity26)" = "$$(printf '11.0\n37.0\nvec2\nthing')"
+	tools/expect_same.sh test_overload_record_identity26 "$$($(TESTTMP)/test_overload_record_identity26)" "$$(printf '11.0\n37.0\nvec2\nthing')"
 	./$(COMPILER) test/test_unicodestring_alias.pas $(TESTTMP)/test_unicodestring_alias26
-	test "$$($(TESTTMP)/test_unicodestring_alias26)" = "$$(printf 'abc\nhello\n5\ne\neq\nhello!\n2')"
+	tools/expect_same.sh test_unicodestring_alias26 "$$($(TESTTMP)/test_unicodestring_alias26)" "$$(printf 'abc\nhello\n5\ne\neq\nhello!\n2')"
 	./$(COMPILER) test/test_missing_diagnostics_fail.pas $(TESTTMP)/test_missing_diagnostics26
-	test "$$($(TESTTMP)/test_missing_diagnostics26)" = "$$(printf 'textfile=text\nTRUE')"
+	tools/expect_same.sh test_missing_diagnostics26 "$$($(TESTTMP)/test_missing_diagnostics26)" "$$(printf 'textfile=text\nTRUE')"
 	! ./$(COMPILER) test/test_default_textfile_fail.pas $(TESTTMP)/test_dtf26 > $(TESTTMP)/test_dtf.log 2>&1
 	grep -q "Default: file types are not allowed" $(TESTTMP)/test_dtf.log
 	! ./$(COMPILER) --target=riscv32 -O0 test/test_target_name_in_external_refusal.pas $(TESTTMP)/test_tner26 > $(TESTTMP)/test_tner_r.log 2>&1
@@ -4888,11 +4888,11 @@ test-core: $(COMPILER)
 	! ./$(COMPILER) test/test_interface_field_access_fail.pas $(TESTTMP)/test_ifaf26 > $(TESTTMP)/test_ifaf.log 2>&1
 	grep -q 'interface has no member "fi"' $(TESTTMP)/test_ifaf.log
 	./$(COMPILER) test/test_interface_ascast_temp_lifetime.pas $(TESTTMP)/test_iatl26
-	test "$$($(TESTTMP)/test_iatl26)" = "$$(printf 'in P w=107\nalive v=7\ndestroy 7\ndone')"
+	tools/expect_same.sh test_iatl26 "$$($(TESTTMP)/test_iatl26)" "$$(printf 'in P w=107\nalive v=7\ndestroy 7\ndone')"
 	./$(COMPILER) test/test_interface_ascast_dead_branch_temp.pas $(TESTTMP)/test_iadb26
-	test "$$($(TESTTMP)/test_iadb26)" = "120"
+	tools/expect_same.sh test_iadb26 "$$($(TESTTMP)/test_iadb26)" "120"
 	./$(COMPILER) test/test_interface_mainbody_ascast_temp.pas $(TESTTMP)/test_imbt26
-	test "$$($(TESTTMP)/test_imbt26)" = "$$(printf 'cast=107\nafter nil\ndestroy 7')"
+	tools/expect_same.sh test_imbt26 "$$($(TESTTMP)/test_imbt26)" "$$(printf 'cast=107\nafter nil\ndestroy 7')"
 	# Dynamic IR arrays: one function body that lowers to > 262144 IR nodes (the old
 	# fixed MAX_IR cap) must compile — bug-pascal-ir-node-hard-limit-max-ir. Generated
 	# at build time (a committed source would be ~300 KB); local array keeps it off the
@@ -4906,33 +4906,33 @@ test-core: $(COMPILER)
 	# into one ~6.8 GB job that flaked under load and serialized the tier. Embedded,
 	# each stress test is its own job with its own learned mem/duration.
 	./$(COMPILER) "$$(python3 -c "t='+'.join('a[%d]'%(k%10) for k in range(400)); L=['program p;','procedure big;','var s: int64; a: array[0..9] of int64; i: longint;','begin','  for i := 0 to 9 do a[i] := i + 1;','  s := 0;']+['  s := s + '+t+';']*180+['  writeln(s);','end;','begin big; end.']; p='$(TESTTMP)/test_ir_overflow_large.pas'; open(p,'w').write(chr(10).join(L)+chr(10)); print(p)")" $(TESTTMP)/test_ir_overflow_large26
-	test "$$($(TESTTMP)/test_ir_overflow_large26)" = "396000"
+	tools/expect_same.sh test_ir_overflow_large26 "$$($(TESTTMP)/test_ir_overflow_large26)" "396000"
 	# Dynamic AST arrays: a function body with > 516096 AST nodes (the old fixed
 	# INLINE_AST_BASE per-proc cap) must compile — feature-dynamic-compiler-tables.
 	# 350 statements x 400 terms ~= 560k AST nodes; sum = 350*2200. Local array +
 	# few-wide statements keep it off the global-fixup table and under seq-walk depth.
 	./$(COMPILER) "$$(python3 -c "t='+'.join('a[%d]'%(k%10) for k in range(400)); L=['program p;','procedure big;','var s: int64; a: array[0..9] of int64; i: longint;','begin','  for i := 0 to 9 do a[i] := i + 1;','  s := 0;']+['  s := s + '+t+';']*350+['  writeln(s);','end;','begin big; end.']; p='$(TESTTMP)/test_ast_overflow_large.pas'; open(p,'w').write(chr(10).join(L)+chr(10)); print(p)")" $(TESTTMP)/test_ast_overflow_large26
-	test "$$($(TESTTMP)/test_ast_overflow_large26)" = "770000"
+	tools/expect_same.sh test_ast_overflow_large26 "$$($(TESTTMP)/test_ast_overflow_large26)" "770000"
 	# Dynamic token arrays: a source with more tokens than the initial 65536 reserve
 	# must grow the token buffer (EnsureTokCapacity), not overflow — feature-dynamic-
 	# compiler-tables. 12000 tiny procs ~= 72k tokens (one doubling). The old 2M cap
 	# is exercised by the sqlite corpus (Track T), not a unit test (a >2M-token program
 	# trips MAX_PROCS/MAX_AST first). self-host already lexes ~1M tokens per build.
 	./$(COMPILER) "$$(python3 -c "L=['program p;']+['procedure q%d; begin end;'%i for i in range(12000)]+['begin','  writeln(42);','end.']; p='$(TESTTMP)/test_token_growth.pas'; open(p,'w').write(chr(10).join(L)+chr(10)); print(p)")" $(TESTTMP)/test_token_growth26
-	test "$$($(TESTTMP)/test_token_growth26)" = "42"
+	tools/expect_same.sh test_token_growth26 "$$($(TESTTMP)/test_token_growth26)" "42"
 	# Dynamic Syms arrays: >16384 symbols (the EnsureSymCapacity initial reserve) must
 	# grow the parallel Sym* arrays, not overflow — feature-dynamic-compiler-tables.
 	./$(COMPILER) "$$(python3 -c "L=['program p;','var']+['  v%d: longint;'%i for i in range(20000)]+['begin','  v0 := 7; writeln(v0);','end.']; p='$(TESTTMP)/test_sym_growth.pas'; open(p,'w').write(chr(10).join(L)+chr(10)); print(p)")" $(TESTTMP)/test_sym_growth26
-	test "$$($(TESTTMP)/test_sym_growth26)" = "7"
+	tools/expect_same.sh test_sym_growth26 "$$($(TESTTMP)/test_sym_growth26)" "7"
 	# Dynamic UField arrays: a struct with >16384 fields (the EnsureUFieldCapacity
 	# reserve) must grow the UFld* pool — feature-dynamic-compiler-tables. Access low
 	# fields (offset 0/4) to sidestep a separate pre-existing huge-struct high-offset bug.
 	./$(COMPILER) "$$(python3 -c "L=['struct s {']+['  int f%d;'%i for i in range(20000)]+['};','int main(void){ struct s b; b.f0=7; b.f1=35; return b.f0+b.f1; }']; p='$(TESTTMP)/test_ufield_growth.c'; open(p,'w').write(chr(10).join(L)+chr(10)); print(p)")" $(TESTTMP)/test_ufield_growth26
 	$(TESTTMP)/test_ufield_growth26; test $$? -eq 42
 	./$(COMPILER) test/test_dynarray_of_fixed_array.pas $(TESTTMP)/test_dynarray_of_fixed_array26
-	test "$$($(TESTTMP)/test_dynarray_of_fixed_array26 | tail -1)" = "total ok 13 / 13"
+	tools/expect_same.sh test_dynarray_of_fixed_array26 "$$($(TESTTMP)/test_dynarray_of_fixed_array26 | tail -1)" "total ok 13 / 13"
 	./$(COMPILER) test/test_class_managed_fields_finalize.pas $(TESTTMP)/test_class_managed_fields_finalize26
-	test "$$($(TESTTMP)/test_class_managed_fields_finalize26)" = "$$(printf 'basic freed=1 order=HT\nalias freed=1\nls=keep-me\nafter alias freed=2\nruntime freed=2')"
+	tools/expect_same.sh test_class_managed_fields_finalize26 "$$($(TESTTMP)/test_class_managed_fields_finalize26)" "$$(printf 'basic freed=1 order=HT\nalias freed=1\nls=keep-me\nafter alias freed=2\nruntime freed=2')"
 	# COM interface elements inside CONTAINERS. Five shapes that all leaked (or
 	# dangled) for ONE reason: the element-kind policy had no case for an
 	# interface, written out in nine places. Counts are FPC's, from a
@@ -4943,9 +4943,9 @@ test-core: $(COMPILER)
 	# older test_string_ordering.pas above covers the same operators for a
 	# different (native) defect.
 	./$(COMPILER) test/test_string_ordering_cross.pas $(TESTTMP)/test_string_ordering_cross26
-	test "$$($(TESTTMP)/test_string_ordering_cross26)" = "$$(printf 'aaa vs zzz : lt le .. .. .. \nzzz vs aaa : .. .. gt ge .. \nabc vs abc : .. le .. ge eq \nab  vs abc : lt le .. .. .. \nabc vs ab  : .. .. gt ge .. \nempty vs a : lt le .. .. .. \na vs empty : .. .. gt ge .. \nempty x2   : .. le .. ge eq \nhi200 vs a : .. .. gt ge .. \nA vs a     : lt le .. .. .. \nvar x vs y : lt le .. .. .. \nvar y vs x : .. .. gt ge .. ')"
+	tools/expect_same.sh test_string_ordering_cross26 "$$($(TESTTMP)/test_string_ordering_cross26)" "$$(printf 'aaa vs zzz : lt le .. .. .. \nzzz vs aaa : .. .. gt ge .. \nabc vs abc : .. le .. ge eq \nab  vs abc : lt le .. .. .. \nabc vs ab  : .. .. gt ge .. \nempty vs a : lt le .. .. .. \na vs empty : .. .. gt ge .. \nempty x2   : .. le .. ge eq \nhi200 vs a : .. .. gt ge .. \nA vs a     : lt le .. .. .. \nvar x vs y : lt le .. .. .. \nvar y vs x : .. .. gt ge .. ')"
 	./$(COMPILER) test/test_interface_containers.pas $(TESTTMP)/test_interface_containers26
-	test "$$($(TESTTMP)/test_interface_containers26)" = "$$(printf 'strarr:  ok\nstatic:  3\ndyn:     2\nafter shrink: 2\nshrink:  4\nafter whole-copy nil-a: 0\nb still alive: pq\ncopy:    2\nrstatic: 3\nrdyn:    3\nrec after shrink: 2\nrshrink: 4\nrec after copy nil-a: 0\nrec b alive: cc\nrcopy:   2')"
+	tools/expect_same.sh test_interface_containers26 "$$($(TESTTMP)/test_interface_containers26)" "$$(printf 'strarr:  ok\nstatic:  3\ndyn:     2\nafter shrink: 2\nshrink:  4\nafter whole-copy nil-a: 0\nb still alive: pq\ncopy:    2\nrstatic: 3\nrdyn:    3\nrec after shrink: 2\nrshrink: 4\nrec after copy nil-a: 0\nrec b alive: cc\nrcopy:   2')"
 	# ...and --threadsafe must still TERMINATE. Releasing an interface element
 	# under the non-reentrant heap lock would hang, so ManagedElemKindLocked
 	# refuses kind 4 there and the dyn-array counts fall back to the documented
@@ -4957,30 +4957,30 @@ test-core: $(COMPILER)
 	# hold that spinlock. Note rcopy drops to 0 while the scalar copy row stays 2 —
 	# the retain still runs (AddRef frees nothing), so it is a leak, never a dangle.
 	./$(COMPILER) --threadsafe test/test_interface_containers.pas $(TESTTMP)/test_interface_containers_ts26
-	test "$$($(TESTTMP)/test_interface_containers_ts26)" = "$$(printf 'strarr:  ok\nstatic:  3\ndyn:     0\nafter shrink: 0\nshrink:  0\nafter whole-copy nil-a: 0\nb still alive: pq\ncopy:    2\nrstatic: 0\nrdyn:    0\nrec after shrink: 0\nrshrink: 0\nrec after copy nil-a: 0\nrec b alive: cc\nrcopy:   0')"
+	tools/expect_same.sh test_interface_containers_ts26 "$$($(TESTTMP)/test_interface_containers_ts26)" "$$(printf 'strarr:  ok\nstatic:  3\ndyn:     0\nafter shrink: 0\nshrink:  0\nafter whole-copy nil-a: 0\nb still alive: pq\ncopy:    2\nrstatic: 0\nrdyn:    0\nrec after shrink: 0\nrshrink: 0\nrec after copy nil-a: 0\nrec b alive: cc\nrcopy:   0')"
 	./$(COMPILER) test/test_member_visibility.pas $(TESTTMP)/test_member_visibility26
-	test "$$($(TESTTMP)/test_member_visibility26)" = "$$(printf '7\n30\n3\n1')"
+	tools/expect_same.sh test_member_visibility26 "$$($(TESTTMP)/test_member_visibility26)" "$$(printf '7\n30\n3\n1')"
 	# class consts are class-SCOPED, not unscoped globals: two classes' same-named
 	# private consts must not clobber, and a class const must not clobber a unit
 	# global (bug-pascal-class-const-visibility). FPC-differential identical.
 	./$(COMPILER) test/test_class_const_scope.pas $(TESTTMP)/test_class_const_scope26
-	test "$$($(TESTTMP)/test_class_const_scope26 | tail -1)" = "CLASS CONST OK"
+	tools/expect_same.sh test_class_const_scope26 "$$($(TESTTMP)/test_class_const_scope26 | tail -1)" "CLASS CONST OK"
 	# a `class var` takes every type a plain `var` does: named/inline/N-D/dynamic
 	# arrays, read bare, class-qualified, through an instance and through a
 	# subclass. The class-var branch used to be ParseTypeKind+AllocVar, which
 	# reserved a SCALAR slot for an array — Length() then answered garbage with
 	# no diagnostic. FPC-differential identical, line for line.
 	./$(COMPILER) test/test_class_var_array.pas $(TESTTMP)/test_class_var_array26
-	test "$$($(TESTTMP)/test_class_var_array26 | tail -1)" = "CLASS VAR ARRAY OK"
-	test "$$($(TESTTMP)/test_class_var_array26 | head -1)" = "bare 11 4 16"
-	test "$$($(TESTTMP)/test_class_var_array26 | sed -n 4p)" = "dyn 3 8"
+	tools/expect_same.sh test_class_var_array26.1 "$$($(TESTTMP)/test_class_var_array26 | tail -1)" "CLASS VAR ARRAY OK"
+	tools/expect_same.sh test_class_var_array26.2 "$$($(TESTTMP)/test_class_var_array26 | head -1)" "bare 11 4 16"
+	tools/expect_same.sh test_class_var_array26.3 "$$($(TESTTMP)/test_class_var_array26 | sed -n 4p)" "dyn 3 8"
 	# the mirror rule for FIELDS: inside a method the class's own field beats a
 	# unit-level const of the same name, and reads and writes must agree
 	# (bug-unit-const-shadows-a-field). FPC-differential identical.
 	./$(COMPILER) test/test_unit_const_vs_field.pas $(TESTTMP)/test_unit_const_vs_field26
-	test "$$($(TESTTMP)/test_unit_const_vs_field26 | tail -1)" = "UNIT CONST VS FIELD OK"
+	tools/expect_same.sh test_unit_const_vs_field26 "$$($(TESTTMP)/test_unit_const_vs_field26 | tail -1)" "UNIT CONST VS FIELD OK"
 	./$(COMPILER) --strict-visibility test/test_member_visibility.pas $(TESTTMP)/test_member_visibility_strict26
-	test "$$($(TESTTMP)/test_member_visibility_strict26)" = "$$(printf '7\n30\n3\n1')"
+	tools/expect_same.sh test_member_visibility_strict26 "$$($(TESTTMP)/test_member_visibility_strict26)" "$$(printf '7\n30\n3\n1')"
 	! ./$(COMPILER) --strict-visibility test/test_member_visibility_strict_fail.pas $(TESTTMP)/test_mvsf26 > $(TESTTMP)/test_mvsf.log 2>&1
 	grep -q "cannot access strict private" $(TESTTMP)/test_mvsf.log
 	! ./$(COMPILER) --strict-visibility test/test_method_visibility_strict_fail.pas $(TESTTMP)/test_methvsf26 > $(TESTTMP)/test_methvsf.log 2>&1
@@ -4995,30 +4995,30 @@ test-core: $(COMPILER)
 	# rational scaler was 1 ULP low on 23 of 490 sampled literals, silently.
 	# bug-a-float-literal-lexer-is-not-correctly-rounded
 	./$(COMPILER) -Fulib/rtl test/lex_float_literal.pas $(TESTTMP)/lex_float_literal26
-	test "$$($(TESTTMP)/lex_float_literal26 | tail -1)" = "LEXFLOAT OK"
+	tools/expect_same.sh lex_float_literal26 "$$($(TESTTMP)/lex_float_literal26 | tail -1)" "LEXFLOAT OK"
 	# write(v:w:d) must not overflow Int64 into 2^63's own digits, and must round
 	# the way FPC does (half away from zero).
 	# bug-b-writeln-float-with-17-decimals-prints-garbage
 	./$(COMPILER) test/lib_writefloat_fixed.pas $(TESTTMP)/lib_writefloat_fixed26
-	test "$$($(TESTTMP)/lib_writefloat_fixed26 | tail -1)" = "WRITEFLOAT OK"
+	tools/expect_same.sh lib_writefloat_fixed26.1 "$$($(TESTTMP)/lib_writefloat_fixed26 | tail -1)" "WRITEFLOAT OK"
 	# ...and past 2^53 the digits it prints must be the VALUE's digits, not the
 	# binary granularity a divide-down loop recovers there. The WriteLn tail of
 	# the same program carries those; expectations are exact (decimal.Decimal),
 	# not FPC. bug-a-write-fixed-emits-false-digits-past-1e22
-	test "$$($(TESTTMP)/lib_writefloat_fixed26 | grep -c '^99999999999999991611392$$')" = "1"
-	test "$$($(TESTTMP)/lib_writefloat_fixed26 | grep -c '^10000000000000000905969664$$')" = "1"
-	test "$$($(TESTTMP)/lib_writefloat_fixed26 | grep -c '^1000000000000000019884624838656\.00$$')" = "1"
-	test "$$($(TESTTMP)/lib_writefloat_fixed26 | grep -c '^-99999999999999991611392\.00$$')" = "1"
-	test "$$($(TESTTMP)/lib_writefloat_fixed26 | grep -c '^       99999999999999991611392$$')" = "1"
+	tools/expect_same.sh lib_writefloat_fixed26.2 "$$($(TESTTMP)/lib_writefloat_fixed26 | grep -c '^99999999999999991611392$$')" "1"
+	tools/expect_same.sh lib_writefloat_fixed26.3 "$$($(TESTTMP)/lib_writefloat_fixed26 | grep -c '^10000000000000000905969664$$')" "1"
+	tools/expect_same.sh lib_writefloat_fixed26.4 "$$($(TESTTMP)/lib_writefloat_fixed26 | grep -c '^1000000000000000019884624838656\.00$$')" "1"
+	tools/expect_same.sh lib_writefloat_fixed26.5 "$$($(TESTTMP)/lib_writefloat_fixed26 | grep -c '^-99999999999999991611392\.00$$')" "1"
+	tools/expect_same.sh lib_writefloat_fixed26.6 "$$($(TESTTMP)/lib_writefloat_fixed26 | grep -c '^       99999999999999991611392$$')" "1"
 	# ...and the FRACTION is exact too, not ~16 digits then zeros. Expectations
 	# from decimal.Decimal(float(x)), half-away-from-zero.
 	# bug-a-write-fixed-fraction-digits-past-16-are-invented
-	test "$$($(TESTTMP)/lib_writefloat_fixed26 | grep -c '^0.333333333333333314829616256247$$')" = "1"
-	test "$$($(TESTTMP)/lib_writefloat_fixed26 | grep -c '^0.1000000000000000055511151$$')" = "1"
-	test "$$($(TESTTMP)/lib_writefloat_fixed26 | grep -c '^1 2 3$$')" = "1"
-	test "$$($(TESTTMP)/lib_writefloat_fixed26 | grep -c '^10.0$$')" = "1"
+	tools/expect_same.sh lib_writefloat_fixed26.7 "$$($(TESTTMP)/lib_writefloat_fixed26 | grep -c '^0.333333333333333314829616256247$$')" "1"
+	tools/expect_same.sh lib_writefloat_fixed26.8 "$$($(TESTTMP)/lib_writefloat_fixed26 | grep -c '^0.1000000000000000055511151$$')" "1"
+	tools/expect_same.sh lib_writefloat_fixed26.9 "$$($(TESTTMP)/lib_writefloat_fixed26 | grep -c '^1 2 3$$')" "1"
+	tools/expect_same.sh lib_writefloat_fixed26.10 "$$($(TESTTMP)/lib_writefloat_fixed26 | grep -c '^10.0$$')" "1"
 	./$(COMPILER) --strict-fpc -Fulib/rtl test/lib_strict_fpc.pas $(TESTTMP)/lib_strict_fpc26
-	test "$$($(TESTTMP)/lib_strict_fpc26)" = "42 OK"
+	tools/expect_same.sh lib_strict_fpc26 "$$($(TESTTMP)/lib_strict_fpc26)" "42 OK"
 	# ...and --strict-fpc reproduces FPC's SHIFT widths, asymmetry included: a
 	# variable operand wraps at its declared width and shl masks the count to 5
 	# bits, while FPC's own constant FOLDER does neither. The default dialect
@@ -5055,7 +5055,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) --esp-profile=bare --target=esp32s3 test/test_esp_bare_float.pas $(TESTTMP)/test_socf_s326
 	cmp $(TESTTMP)/test_socf_xt26 $(TESTTMP)/test_socf_s326
 	./$(COMPILER) test/test_esp_bare_float.pas $(TESTTMP)/test_socf_oracle26
-	test "$$($(TESTTMP)/test_socf_oracle26 | tr '\n' '|')" = "7|16|32|75|1234567|-32|65537|ESP BARE FLOAT OK|"
+	tools/expect_same.sh test_socf_oracle26 "$$($(TESTTMP)/test_socf_oracle26 | tr '\n' '|')" "7|16|32|75|1234567|-32|65537|ESP BARE FLOAT OK|"
 	# ...and a float-free bare program must still pay NOTHING for it: the pull is
 	# on demand precisely because softfloat is ~54-64KB of flash. If this ever
 	# starts linking the unit, the scan has become unconditional.
@@ -5068,16 +5068,16 @@ test-core: $(COMPILER)
 	./$(COMPILER) --esp-profile=bare --target=riscv32 test/test_esp_bare_float.c $(TESTTMP)/test_socf_c_rv26
 	cmp $(TESTTMP)/test_socf_c_c326 $(TESTTMP)/test_socf_c_rv26
 	./$(COMPILER) test/test_esp_float_depth_from_target.pas $(TESTTMP)/test_espdepth26
-	test "$$($(TESTTMP)/test_espdepth26 | tail -1)" = "ESP FLOAT DEPTH OK"
-	test "$$($(TESTTMP)/test_espdepth26 | head -2 | tr '\n' '|')" = "0.33333333333333331483|0.33333334326744079590|"
-	test "$$($(TESTTMP)/test_espdepth26 | head -6 | tail -2 | tr '\n' '|')" = "0.83333333333333325932|0.11111111111111110494|"
+	tools/expect_same.sh test_espdepth26.1 "$$($(TESTTMP)/test_espdepth26 | tail -1)" "ESP FLOAT DEPTH OK"
+	tools/expect_same.sh test_espdepth26.2 "$$($(TESTTMP)/test_espdepth26 | head -2 | tr '\n' '|')" "0.33333333333333331483|0.33333334326744079590|"
+	tools/expect_same.sh test_espdepth26.3 "$$($(TESTTMP)/test_espdepth26 | head -6 | tail -2 | tr '\n' '|')" "0.83333333333333325932|0.11111111111111110494|"
 	./$(COMPILER) --strict-fpc test/test_strict_fpc_shift_widths.pas $(TESTTMP)/test_strictshift26
-	test "$$($(TESTTMP)/test_strictshift26 | tail -1)" = "STRICT FPC SHIFT WIDTHS OK"
-	test "$$($(TESTTMP)/test_strictshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|2048|2048|"
+	tools/expect_same.sh test_strictshift26.1 "$$($(TESTTMP)/test_strictshift26 | tail -1)" "STRICT FPC SHIFT WIDTHS OK"
+	tools/expect_same.sh test_strictshift26.2 "$$($(TESTTMP)/test_strictshift26 | head -5 | tr '\n' '|')" "1099511627776|9223372036854775804|2147483648|2048|2048|"
 	# a NEGATED variable is 64-bit in FPC whatever the operand type, so the
 	# narrow-shift asymmetry must NOT apply to it -- strict used to be the one
 	# mode that got these wrong.
-	test "$$($(TESTTMP)/test_strictshift26 | tail -4 | head -3 | tr '\n' '|')" = "9223372036854775804|9223372036854775804|9223372036854775804|"
+	tools/expect_same.sh test_strictshift26.3 "$$($(TESTTMP)/test_strictshift26 | tail -4 | head -3 | tr '\n' '|')" "9223372036854775804|9223372036854775804|9223372036854775804|"
 	# ...and WITHOUT the flag the same file keeps the native-width answers
 	# ...and unary minus WIDENS TO Int64 for every integer operand, in the DEFAULT
 	# dialect. `-b shr 1` on a Byte answered 2147483644 ($7FFFFFFC -- a 32-bit
@@ -5086,7 +5086,7 @@ test-core: $(COMPILER)
 	# the shift ran. All 31 assertions are FPC 3.2.2 -O1's own answers, overload
 	# resolution and {$$Q+} included.
 	./$(COMPILER) test/test_unary_minus_widens_to_int64.pas $(TESTTMP)/test_unaryminus26
-	test "$$($(TESTTMP)/test_unaryminus26 | tail -1)" = "total ok 31 / 31"
+	tools/expect_same.sh test_unaryminus26 "$$($(TESTTMP)/test_unaryminus26 | tail -1)" "total ok 31 / 31"
 	# ...but a negated CONSTANT is folded and typed by its VALUE, not widened:
 	# FPC gives it the smallest signed type that holds it, so `-1` is a LongInt.
 	# Widening it too moved `IntToHex(-1, 8)` onto the Int64 overload (16 digits),
@@ -5094,7 +5094,7 @@ test-core: $(COMPILER)
 	# and moved the overload-width table's literal row. All 13 assertions are
 	# FPC 3.2.2 -O-'s own answers.
 	./$(COMPILER) test/test_unary_minus_constant_keeps_longint.pas $(TESTTMP)/test_unaryminusconst26
-	test "$$($(TESTTMP)/test_unaryminusconst26 | tail -1)" = "total ok 13 / 13"
+	tools/expect_same.sh test_unaryminusconst26 "$$($(TESTTMP)/test_unaryminusconst26 | tail -1)" "total ok 13 / 13"
 	# A typed const (or var) ARRAY with a NEGATIVE low bound put every
 	# negative-indexed element at the array's BASE: `array[-2..2] of Integer =
 	# (10,20,30,40,50)` stored 20 at slot 0, nothing at slot 1, the rest right. The
@@ -5102,7 +5102,7 @@ test-core: $(COMPILER)
 	# `>= 0`. A low bound of -1 is the benign case and is asserted here too. Values
 	# are read by index AND from the base through a pointer; all are FPC 3.2.2's.
 	./$(COMPILER) test/test_const_array_negative_low_bound.pas $(TESTTMP)/test_constarrneg26
-	test "$$($(TESTTMP)/test_constarrneg26 | tail -1)" = "total ok 38 / 38"
+	tools/expect_same.sh test_constarrneg26 "$$($(TESTTMP)/test_constarrneg26 | tail -1)" "total ok 38 / 38"
 	# ...and the same question one level in: a record/class FIELD that is a 1-D
 	# static array indexed from the RAW index, because a 1-D field's low bound was
 	# never recorded (only 2-D-and-up filled the dim table). `array[1..3]` wrote one
@@ -5111,7 +5111,7 @@ test-core: $(COMPILER)
 	# Reads shifted with the writes, so the field looked self-consistent -- the
 	# guards on either side are the assertion. All 58 values are FPC 3.2.2's.
 	./$(COMPILER) test/test_record_field_array_low_bound.pas $(TESTTMP)/test_fldarrlo26
-	test "$$($(TESTTMP)/test_fldarrlo26 | tail -1)" = "total ok 58 / 58"
+	tools/expect_same.sh test_fldarrlo26 "$$($(TESTTMP)/test_fldarrlo26 | tail -1)" "total ok 58 / 58"
 	# One level up again: the LOW/HIGH of an enum TYPE answered 0..count-1, the
 	# declaration-index range, not the range of the members' VALUES. `TGap =
 	# (gX = 3, gY = 4, gZ = 9)` gave Low=0 and High=2 -- two ordinals that are not
@@ -5121,7 +5121,7 @@ test-core: $(COMPILER)
 	# scan, the array-index-type bound), now one EnumTypeOrdRange helper.
 	# FPC 3.2.2's values, except array[TGap] which FPC refuses outright.
 	./$(COMPILER) test/test_enum_explicit_ordinal_low_high.pas $(TESTTMP)/test_enumord26
-	test "$$($(TESTTMP)/test_enumord26 | tail -1)" = "total ok 24 / 24"
+	tools/expect_same.sh test_enumord26 "$$($(TESTTMP)/test_enumord26 | tail -1)" "total ok 24 / 24"
 	# Explicit enum ordinals spelled FPC's objfpc way -- `(ms_on := 1, ...)` --
 	# were refused; only the Delphi `=` parsed, which is the wall FPC's own
 	# compiler/globtype.pas:800 hit. Both spellings are now accepted
@@ -5129,7 +5129,7 @@ test-core: $(COMPILER)
 	# Every row is `fpc -O- -Mobjfpc` 3.2.2's, including the MIXED list, which
 	# FPC also accepts. feature-p-fpc-assigned-enum-ordinals-with-colon-equals
 	./$(COMPILER) test/test_enum_assigned_ordinal_colon_equals.pas $(TESTTMP)/test_enumassign26
-	test "$$($(TESTTMP)/test_enumassign26)" = "$$(cat test/test_enum_assigned_ordinal_colon_equals.expected)"
+	tools/expect_same.sh test_enumassign26 "$$($(TESTTMP)/test_enumassign26)" "$$(cat test/test_enum_assigned_ordinal_colon_equals.expected)"
 	# High(QWord) and friends were REFUSED by the const evaluator, deliberately:
 	# 2^64-1 does not fit the Int64 it carries, and answering -1 would make
 	# `High(QWord) div 2` fold to 0. The fix was the TYPE travelling with the
@@ -5139,7 +5139,7 @@ test-core: $(COMPILER)
 	# the end defends. fpc -O- -Mobjfpc 3.2.2's values.
 	# feature-p-const-evaluator-carries-unsigned-64-bit
 	./$(COMPILER) test/test_const_unsigned_64bit_fold.pas $(TESTTMP)/test_cu64fold26
-	test "$$($(TESTTMP)/test_cu64fold26)" = "$$(cat test/test_const_unsigned_64bit_fold.expected)"
+	tools/expect_same.sh test_cu64fold26 "$$($(TESTTMP)/test_cu64fold26)" "$$(cat test/test_const_unsigned_64bit_fold.expected)"
 	@# ...and the hole that folding High(PtrUInt) at all opened up: FPC's own
 	@# tarray5.pp (%fail, "the number of elements doesn't fit in the address
 	@# range"). The bound is UNSIGNED, so it reaches the array parser as the bit
@@ -5199,7 +5199,7 @@ test-core: $(COMPILER)
 	# answers both, with a positive literal divisor normalised to unsigned so
 	# `q div 10` does not turn a QWord above 2^63 negative. All 35 are FPC 3.2.2's.
 	./$(COMPILER) test/test_div_mod_mixed_signedness.pas $(TESTTMP)/test_divsign26
-	test "$$($(TESTTMP)/test_divsign26 | tail -1)" = "total ok 35 / 35"
+	tools/expect_same.sh test_divsign26 "$$($(TESTTMP)/test_divsign26 | tail -1)" "total ok 35 / 35"
 	# The same rule one operator family over: a COMPARISON picked its domain from
 	# the WIDER operand (a C rank rule), so `LongWord(3000000000) > SmallInt(-1)`
 	# was FALSE where FPC says TRUE -- Pascal widens the pair to a type that HOLDS
@@ -5207,7 +5207,7 @@ test-core: $(COMPILER)
 	# right all along, which is what hid it. The QWord carve-out (`q > i` unsigned,
 	# `q > n` signed) is FPC's own inconsistency and is asserted, not smoothed.
 	./$(COMPILER) test/test_compare_mixed_signedness.pas $(TESTTMP)/test_cmpsign26
-	test "$$($(TESTTMP)/test_cmpsign26 | tail -1)" = "total ok 28 / 28"
+	tools/expect_same.sh test_cmpsign26 "$$($(TESTTMP)/test_cmpsign26 | tail -1)" "total ok 28 / 28"
 	# `Str(x, s)` had no unsigned dispatch at all -- `Str(q, s)` on a QWord >= 2^63
 	# gave '-1' while `writeln(q)` two lines away was right -- and write(Text) had
 	# one keyed on `tk = tyUInt64`, one of FOUR spellings of an 8-byte unsigned, so
@@ -5223,7 +5223,7 @@ test-core: $(COMPILER)
 	# the rule VariantToInt64 already had and the binop path never called. NilPy
 	# keeps Python's rules, excluded at emit time. The pinned binary scores 10/27.
 	./$(COMPILER) test/test_variant_string_arithmetic.pas $(TESTTMP)/test_varstrarith26
-	test "$$($(TESTTMP)/test_varstrarith26 | tail -1)" = "total ok 27 / 27"
+	tools/expect_same.sh test_varstrarith26 "$$($(TESTTMP)/test_varstrarith26 | tail -1)" "total ok 27 / 27"
 	# Every class descends from TObject, but nothing said so at RUN TIME: a root
 	# class's RTTI blob carried a nil parent, so the chain __pxxInheritsFrom walks
 	# stopped one link short. `b is TObject` and `TBase.InheritsFrom(TObject)` both
@@ -5232,7 +5232,7 @@ test-core: $(COMPILER)
 	# is RTTI, not layout, so TObject stays the IMPLICIT parent it has to be (no
 	# VMT relocates). The pinned binary aborts on the unhandled exception.
 	./$(COMPILER) test/test_class_inherits_from_tobject.pas $(TESTTMP)/test_inhtobj26
-	test "$$($(TESTTMP)/test_inhtobj26 | tail -1)" = "total ok 24 / 24"
+	tools/expect_same.sh test_inhtobj26 "$$($(TESTTMP)/test_inhtobj26 | tail -1)" "total ok 24 / 24"
 	# A COM interface passed BY VALUE leaked one reference per call. The caller's
 	# argument temp is ONE stack slot reused by every execution of the call site,
 	# and it was filled with a raw copy_rec + retain -- so each call overwrote the
@@ -5242,7 +5242,7 @@ test-core: $(COMPILER)
 	# what hid it. Now PXXIntfAssign does the retain/release/copy in the safe
 	# order. The pinned binary scores 12 / 16.
 	./$(COMPILER) test/test_interface_byval_param_no_leak.pas $(TESTTMP)/test_ifbyval26
-	test "$$($(TESTTMP)/test_ifbyval26 | tail -1)" = "total ok 25 / 25"
+	tools/expect_same.sh test_ifbyval26 "$$($(TESTTMP)/test_ifbyval26 | tail -1)" "total ok 25 / 25"
 	# `f := b as IFoo` moved the interface pointer with NO retain: the ARC assign
 	# path routes through PXXIntfAssign only for an ENUMERATED list of RHS node
 	# kinds and AN_AS_CAST was not in it, so it fell through to the generic record
@@ -5251,7 +5251,7 @@ test-core: $(COMPILER)
 	# memory -- a latent UAF that segfaulted as soon as a later statement
 	# allocated over the block. The pinned binary fails row 1 and then crashes.
 	./$(COMPILER) test/test_interface_as_cast_retains.pas $(TESTTMP)/test_ifascast26
-	test "$$($(TESTTMP)/test_ifascast26 | tail -1)" = "total ok 7 / 7"
+	tools/expect_same.sh test_ifascast26 "$$($(TESTTMP)/test_ifascast26 | tail -1)" "total ok 7 / 7"
 	# A LOCAL `array[0..N] of IFoo` was never zero-initialised, so the first
 	# element assignment ran the ARC release on stack garbage and dispatched
 	# _Release through a junk IMT. It fell between two arms: SymIsComInterface
@@ -5261,7 +5261,7 @@ test-core: $(COMPILER)
 	# test dirties the stack itself so the failure is deterministic rather than a
 	# lottery. The pinned binary SEGFAULTS on this file.
 	./$(COMPILER) test/test_interface_local_array_zero_init.pas $(TESTTMP)/test_ifarrzi26
-	test "$$($(TESTTMP)/test_ifarrzi26 | tail -1)" = "total ok 5 / 5"
+	tools/expect_same.sh test_ifarrzi26 "$$($(TESTTMP)/test_ifarrzi26 | tail -1)" "total ok 5 / 5"
 	# ...and the SAME arm-shaped hole one type over: a local `array[0..N] of
 	# Variant` was zero-initialised for ONE ELEMENT only, because
 	# ManagedLocalZeroBytes' variant arm returned TypeSize(tyVariant) without
@@ -5275,7 +5275,7 @@ test-core: $(COMPILER)
 	# so the test dirties its own. Counts are FPC 3.2.2's; the pinned binary
 	# scores 4 / 8 on this file.
 	./$(COMPILER) test/test_variant_local_array_zero_init.pas $(TESTTMP)/test_vararrzi26
-	test "$$($(TESTTMP)/test_vararrzi26 | tail -1)" = "total ok 8 / 8"
+	tools/expect_same.sh test_vararrzi26 "$$($(TESTTMP)/test_vararrzi26 | tail -1)" "total ok 8 / 8"
 	# A record holding an interface field, both halves of the same design fault:
 	# RecordHasManagedFields excluded a COM interface field because FINALIZING one
 	# under the non-reentrant record heap lock deadlocks -- and that single
@@ -5289,11 +5289,11 @@ test-core: $(COMPILER)
 	# return all follow from one predicate again. Counts are FPC 3.2.2's on this
 	# same source. The pinned binary SEGFAULTS on this file.
 	./$(COMPILER) test/test_record_interface_field_zero_init.pas $(TESTTMP)/test_recifzi26
-	test "$$($(TESTTMP)/test_recifzi26 | tail -1)" = "total ok 10 / 10"
+	tools/expect_same.sh test_recifzi26 "$$($(TESTTMP)/test_recifzi26 | tail -1)" "total ok 10 / 10"
 	# ...and under --threadsafe it must still TERMINATE: the interface pass runs
 	# ahead of the lock, so there is no re-entry into the spinlock to hang on.
 	./$(COMPILER) --threadsafe test/test_record_interface_field_zero_init.pas $(TESTTMP)/test_recifzi_ts26
-	test "$$($(TESTTMP)/test_recifzi_ts26 | tail -1)" = "total ok 10 / 10"
+	tools/expect_same.sh test_recifzi_ts26 "$$($(TESTTMP)/test_recifzi_ts26 | tail -1)" "total ok 10 / 10"
 	# `b := a` on a dynamic array of INTERFACES was lowered as an ARC interface
 	# assign over the array HANDLE: an array's TypeKind IS its element kind, so
 	# the assignment path saw tyRecord + ResolveNodeRec = IFoo and emitted
@@ -5302,7 +5302,7 @@ test-core: $(COMPILER)
 	# with every element nil -- the elements were never the point. Integer/string/
 	# plain-record element types were unaffected. The pinned binary SEGFAULTS.
 	./$(COMPILER) test/test_dynarray_of_interfaces_assign.pas $(TESTTMP)/test_dynifassign26
-	test "$$($(TESTTMP)/test_dynifassign26 | tail -1)" = "total ok 6 / 6"
+	tools/expect_same.sh test_dynifassign26 "$$($(TESTTMP)/test_dynifassign26 | tail -1)" "total ok 6 / 6"
 	# An interface-returning CALL assigned to an interface destination handed the
 	# same +1 to two owners: the callee's result lands in a hidden temp that the
 	# scope-exit cleanup releases, and the assignment copied the fat pointer out
@@ -5314,7 +5314,7 @@ test-core: $(COMPILER)
 	# Now the move is a move: hand over, then nil the temp. The pinned binary
 	# SEGFAULTS on this file.
 	./$(COMPILER) test/test_interface_call_result_move.pas $(TESTTMP)/test_ifcallmove26
-	test "$$($(TESTTMP)/test_ifcallmove26 | tail -1)" = "total ok 9 / 9"
+	tools/expect_same.sh test_ifcallmove26 "$$($(TESTTMP)/test_ifcallmove26 | tail -1)" "total ok 9 / 9"
 	# `type TIA2 = array of TIA` (TIA itself `array of Integer`) silently collapsed
 	# to `array of Integer`: the type-alias parser only composed the depth of a
 	# named FIXED-array element, so a named DYN alias fell through to
@@ -5324,7 +5324,7 @@ test-core: $(COMPILER)
 	# only the alias-of-alias spelling was wrong. The pinned binary prints garbage
 	# for m[0][0] and rejects SetLength(m[0], n) outright.
 	./$(COMPILER) test/test_dynarray_named_alias_element.pas $(TESTTMP)/test_dynalias26
-	test "$$($(TESTTMP)/test_dynalias26 | tail -1)" = "total ok 26 / 26"
+	tools/expect_same.sh test_dynalias26 "$$($(TESTTMP)/test_dynalias26 | tail -1)" "total ok 26 / 26"
 	# `Default(T)` yielded the integer 0 for EVERY T, so an aggregate had no zero
 	# value: `a := Default(TRec)` copied RecSize bytes from address 0 (SIGSEGV) and
 	# `ar := Default(TArr)` stored an integer into an array slot, leaving every
@@ -5334,7 +5334,7 @@ test-core: $(COMPILER)
 	# A class keeps the integer 0, its correct nil. The pinned binary rejects the
 	# test at `SumArr(Default(TArr))` -- it passes an Int64 where an array goes.
 	./$(COMPILER) test/test_default_of_aggregate.pas $(TESTTMP)/test_defaultagg26
-	test "$$($(TESTTMP)/test_defaultagg26 | tail -1)" = "total ok 29 / 29"
+	tools/expect_same.sh test_defaultagg26 "$$($(TESTTMP)/test_defaultagg26 | tail -1)" "total ok 29 / 29"
 	# Two specializations that require EACH OTHER (`TP<A,B>` with a member typed
 	# `TP<B,A>`) used to HANG the compiler: a specialization with an unregistered
 	# prerequisite re-emits itself behind it and re-parses, which terminates only
@@ -5351,17 +5351,17 @@ test-core: $(COMPILER)
 	# no type tag, so it read as tyUnknown and pointer arithmetic declined to scale
 	# it. Dec had the same one node and stepped one byte backwards. Pinned: 18/34.
 	./$(COMPILER) test/test_typed_pointer_inc_dec.pas $(TESTTMP)/test_ptrincdec26
-	test "$$($(TESTTMP)/test_ptrincdec26 | tail -1)" = "total ok 34 / 34"
+	tools/expect_same.sh test_ptrincdec26 "$$($(TESTTMP)/test_ptrincdec26 | tail -1)" "total ok 34 / 34"
 	# `String(p)` on a PChar was rejected while AnsiString(p), `t := p` and
 	# StrPas(p) -- the same conversion, three other spellings -- all worked. String
 	# is a KEYWORD token with its own parser branch, so it never reached the
 	# identifier-cast path that handles `ansistring`. The pinned binary refuses the
 	# test outright: `String(): operand must be Char or string`.
 	./$(COMPILER) test/test_string_of_pchar.pas $(TESTTMP)/test_strpchar26
-	test "$$($(TESTTMP)/test_strpchar26 | tail -1)" = "total ok 17 / 17"
+	tools/expect_same.sh test_strpchar26 "$$($(TESTTMP)/test_strpchar26 | tail -1)" "total ok 17 / 17"
 	./$(COMPILER) test/test_strict_fpc_shift_widths.pas $(TESTTMP)/test_nativeshift26
-	test "$$($(TESTTMP)/test_nativeshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|8796093022208|8796093022208|"
-	test "$$($(TESTTMP)/test_nativeshift26 | tail -4 | head -3 | tr '\n' '|')" = "9223372036854775804|9223372036854775804|9223372036854775804|"
+	tools/expect_same.sh test_nativeshift26.1 "$$($(TESTTMP)/test_nativeshift26 | head -5 | tr '\n' '|')" "1099511627776|9223372036854775804|2147483648|8796093022208|8796093022208|"
+	tools/expect_same.sh test_nativeshift26.2 "$$($(TESTTMP)/test_nativeshift26 | tail -4 | head -3 | tr '\n' '|')" "9223372036854775804|9223372036854775804|9223372036854775804|"
 	# ...and it activates its member flags (StrictCase rejects a duplicate label
 	# that the lax default accepts). feature-strict-fpc-umbrella.
 	./$(COMPILER) test/strict_fpc_case_fail.pas $(TESTTMP)/strict_fpc_case_lax26 > $(TESTTMP)/strict_fpc_case_lax.log 2>&1
@@ -5380,13 +5380,13 @@ test-core: $(COMPILER)
 	# first. The count is the assertion: a check that halted early would still
 	# satisfy a plain grep. bug-p-an-assignment-is-not-type-checked-at-all
 	! ./$(COMPILER) test/test_assign_incompatible_types_fail.pas $(TESTTMP)/test_asgbad26 > $(TESTTMP)/test_asgbad.log 2>&1
-	test "$$(grep -c 'incompatible types' $(TESTTMP)/test_asgbad.log)" = "13"
+	tools/expect_same.sh test_asgbad.log "$$(grep -c 'incompatible types' $(TESTTMP)/test_asgbad.log)" "13"
 	grep -q "cannot assign Integer to AnsiString" $(TESTTMP)/test_asgbad.log
 	grep -q "cannot assign UCS4Char to AnsiString" $(TESTTMP)/test_asgbad.log
 	# ...and the other half: everything the check must NOT start refusing. It
 	# RUNS, because "accepted" and "correct" are different claims.
 	./$(COMPILER) test/test_assign_compatible_types.pas $(TESTTMP)/test_asgok26
-	test "$$($(TESTTMP)/test_asgok26)" = "compat 7 abc 7 0 2"
+	tools/expect_same.sh test_asgok26 "$$($(TESTTMP)/test_asgok26)" "compat 7 abc 7 0 2"
 	# `not` over every operand shape the deleted node-kind whitelist ever named,
 	# plus the ones it deliberately distrusted. The list grew one entry per bug
 	# report -- array element, field, deref, Ord(x), value-cast, nested not,
@@ -5395,7 +5395,7 @@ test-core: $(COMPILER)
 	# this row is what stops the list growing back. .expected IS fpc 3.2.2's own
 	# output on this source. feature-a-trust-the-operand-type-for-not
 	./$(COMPILER) test/test_not_operand_type_matrix.pas $(TESTTMP)/test_not_matrix26
-	test "$$($(TESTTMP)/test_not_matrix26)" = "$$(cat test/test_not_operand_type_matrix.expected)"
+	tools/expect_same.sh test_not_matrix26 "$$($(TESTTMP)/test_not_matrix26)" "$$(cat test/test_not_operand_type_matrix.expected)"
 	# An INFERRED variable keeps the WHOLE pointer identity of what it was inferred
 	# from -- pointee, depth AND ultimate base -- not two fifths of it. `var q :=
 	# pp` over a `pp: ^PChar` used to lose the char-ness one level in, so `q^`
@@ -5405,20 +5405,20 @@ test-core: $(COMPILER)
 	# pinned against fpc by test_pchar_pointer_to_pchar.
 	# feature-a-typeref-migrate-consumers
 	./$(COMPILER) test/test_inferred_pointer_keeps_its_depth.pas $(TESTTMP)/test_infptr26
-	test "$$($(TESTTMP)/test_infptr26)" = "$$(cat test/test_inferred_pointer_keeps_its_depth.expected)"
+	tools/expect_same.sh test_infptr26 "$$($(TESTTMP)/test_infptr26)" "$$(cat test/test_inferred_pointer_keeps_its_depth.expected)"
 	# ...and the property behind it, asserted structurally rather than only as a
 	# recorded string: no line may have two different halves. A pair that drifted
 	# APART would still match .expected if someone regenerated the file, so the
 	# invariant is checked on its own.
 	$(TESTTMP)/test_infptr26 | awk -F' \\| ' '$$1 != $$2 { print "inferred/explicit mismatch: " $$0; bad=1 } END { exit bad }'
 	./$(COMPILER) test/test_delphi_generics.pas $(TESTTMP)/test_delphi_generics26
-	test "$$($(TESTTMP)/test_delphi_generics26)" = "$$(printf '42\nhi')"
+	tools/expect_same.sh test_delphi_generics26 "$$($(TESTTMP)/test_delphi_generics26)" "$$(printf '42\nhi')"
 	./$(COMPILER) test/test_inline_array_field_const_bound.pas $(TESTTMP)/test_inline_array_field_const_bound26
-	test "$$($(TESTTMP)/test_inline_array_field_const_bound26)" = "$$(printf '0\n70\n6\n103')"
+	tools/expect_same.sh test_inline_array_field_const_bound26 "$$($(TESTTMP)/test_inline_array_field_const_bound26)" "$$(printf '0\n70\n6\n103')"
 	./$(COMPILER) test/test_symslot_stale_ndims.pas $(TESTTMP)/test_symslot_stale_ndims26
-	test "$$($(TESTTMP)/test_symslot_stale_ndims26)" = "136"
+	tools/expect_same.sh test_symslot_stale_ndims26 "$$($(TESTTMP)/test_symslot_stale_ndims26)" "136"
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_set_literal_element_types.pas $(TESTTMP)/test_setlitelem26
-	test "$$($(TESTTMP)/test_setlitelem26)" = "$$(cat test/test_set_literal_element_types.expected)"
+	tools/expect_same.sh test_setlitelem26 "$$($(TESTTMP)/test_setlitelem26)" "$$(cat test/test_set_literal_element_types.expected)"
 	# ...and the two shapes the element check must REJECT. The .expected above is
 	# FPC's own output, so the positive half pins that tightening the check did
 	# not cost a single legal literal.
@@ -5454,7 +5454,7 @@ test-core: $(COMPILER)
 	# helper still writes through, which the first row pins.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_type_helper_on_a_value.pas $(TESTTMP)/test_thov26
-	test "$$($(TESTTMP)/test_thov26)" = "$$(cat test/test_type_helper_on_a_value.expected)"
+	tools/expect_same.sh test_thov26 "$$($(TESTTMP)/test_thov26)" "$$(cat test/test_type_helper_on_a_value.expected)"
 	# ParamCount as a for-loop LIMIT: the node must carry tyInteger, or the hidden
 	# limit temp is untyped and i386 refuses the whole unit. The i386 build is the
 	# half that actually regressed (`uses pylib` could not target i386 at all);
@@ -5473,13 +5473,13 @@ test-core: $(COMPILER)
 	! ./$(COMPILER) test/test_procedure_as_value_fail.pas $(TESTTMP)/test_pav26 > $(TESTTMP)/test_pav.log 2>&1
 	grep -q "is a procedure and has no result" $(TESTTMP)/test_pav.log
 	./$(COMPILER) test/test_procedure_as_value_ok.pas $(TESTTMP)/test_pav_ok26
-	test "$$($(TESTTMP)/test_pav_ok26 | tail -1)" = "PASS"
+	tools/expect_same.sh test_pav_ok26 "$$($(TESTTMP)/test_pav_ok26 | tail -1)" "PASS"
 	# A selector on a CONSTRUCTOR result -- the chain was dropped, so an Integer
 	# got the instance pointer and the program printed garbage silently
 	# (bug-p-member-off-a-constructor-result-yields-garbage). The Make() lines in
 	# there are the control: the same shape on a function result always worked.
 	./$(COMPILER) test/test_ctor_result_member.pas $(TESTTMP)/test_tcrm26
-	test "$$($(TESTTMP)/test_tcrm26 | tail -1)" = "PASS"
+	tools/expect_same.sh test_tcrm26 "$$($(TESTTMP)/test_tcrm26 | tail -1)" "PASS"
 	# `.Free` off anything but a bare variable -- a[0].Free, d[0].Free, r.f.Free,
 	# h.f.Free, (o as T).Free all died as "no such member", because Free is not a
 	# member of any class the frontend knows and only the literal `ident . Free ;`
@@ -5487,17 +5487,17 @@ test-core: $(COMPILER)
 	# variable). Asserts the SEMANTICS: destructor runs, a user Free wins, nil is
 	# a no-op.
 	./$(COMPILER) test/test_free_designator.pas $(TESTTMP)/test_tfd26
-	test "$$($(TESTTMP)/test_tfd26 | tail -1)" = "PASS"
+	tools/expect_same.sh test_tfd26 "$$($(TESTTMP)/test_tfd26 | tail -1)" "PASS"
 	# syncobjs.TCriticalSection must actually exclude -- it was a no-op stub with
 	# TryEnter always True (bug-b-criticalsection-was-a-no-op-stub).
 	./$(COMPILER) test/test_criticalsection.pas $(TESTTMP)/test_tcs26
-	test "$$($(TESTTMP)/test_tcs26 | tail -1)" = "PASS"
+	tools/expect_same.sh test_tcs26 "$$($(TESTTMP)/test_tcs26 | tail -1)" "PASS"
 	# a VIRTUAL method with a 64-bit param AND a 64-bit result: every 32-bit
 	# backend's virtual-call path pushed one word per arg, dropping the high half
 	# (bug-a-virtual-method-int64-in-and-out-32bit). x86-64 was never affected, so
 	# this line only guards the shape; the value is in the CROSS runs.
 	./$(COMPILER) test/test_virtual_int64_param_and_result.pas $(TESTTMP)/test_tvi26
-	test "$$($(TESTTMP)/test_tvi26 | tail -1)" = "PASS"
+	tools/expect_same.sh test_tvi26 "$$($(TESTTMP)/test_tvi26 | tail -1)" "PASS"
 	# the full 32-bit call-argument MATRIX: every by-value shape that is not one
 	# word (Int64, Double, Single, set) crossed with every call KIND (direct,
 	# indirect, virtual). Each 32-bit backend wrote that ladder out once per kind
@@ -5506,12 +5506,12 @@ test-core: $(COMPILER)
 	# had none of them (feature-a-unify-32bit-call-argument-marshalling). Like the
 	# line above, x86-64 only guards the SHAPE here; the values are in the CROSS runs.
 	./$(COMPILER) test/test_call_arg_marshalling_32bit.pas $(TESTTMP)/test_cam26
-	test "$$($(TESTTMP)/test_cam26 | tail -1)" = "PASS"
+	tools/expect_same.sh test_cam26 "$$($(TESTTMP)/test_cam26 | tail -1)" "PASS"
 	# what a RECORD may legally contain (b347): no published, no protected (records don't
 	# inherit), a class method must be static, a ctor needs a mandatory parameter, and a
 	# local/anonymous record type gets FIELDS ONLY. All were parse-and-dropped before.
 	./$(COMPILER) test/test_record_rules_ok.pas $(TESTTMP)/test_record_rules_ok26
-	test "$$($(TESTTMP)/test_record_rules_ok26 | tail -1)" = "PASS"
+	tools/expect_same.sh test_record_rules_ok26 "$$($(TESTTMP)/test_record_rules_ok26 | tail -1)" "PASS"
 	! ./$(COMPILER) test/test_record_published_fail.pas $(TESTTMP)/test_recpub26 > $(TESTTMP)/test_recpub.log 2>&1
 	grep -q "cannot have a published section" $(TESTTMP)/test_recpub.log
 	! ./$(COMPILER) test/test_record_protected_fail.pas $(TESTTMP)/test_recprot26 > $(TESTTMP)/test_recprot.log 2>&1
@@ -5523,24 +5523,24 @@ test-core: $(COMPILER)
 	# class-NESTED types by qualified name (TOuter.TInner) + SizeOf of one; TSysCharSet
 	# was missing from SysUtils entirely (b348; tdefault8 / tset4)
 	./$(COMPILER) test/test_nested_class_type_b348.pas $(TESTTMP)/test_nested_class_type26
-	test "$$($(TESTTMP)/test_nested_class_type26 | tail -1)" = "PASS"
+	tools/expect_same.sh test_nested_class_type26 "$$($(TESTTMP)/test_nested_class_type26 | tail -1)" "PASS"
 	# `case` evaluates its selector EXACTLY once — it used to re-evaluate per label
 	# element, so `case F(x) of` ran F up to N times (b346; ~510 pasmith divergences)
 	./$(COMPILER) test/test_case_selector_single_eval.pas $(TESTTMP)/test_case_single_eval26
-	test "$$($(TESTTMP)/test_case_single_eval26 | tail -1)" = "PASS"
+	tools/expect_same.sh test_case_single_eval26 "$$($(TESTTMP)/test_case_single_eval26 | tail -1)" "PASS"
 	# two enum TYPES are distinct: `c := banana` used to store TFruit's ordinal into a
 	# TColor (silently green). Rejected now — without breaking casts/Ord/call results
 	! ./$(COMPILER) test/test_enum_identity_fail.pas $(TESTTMP)/test_enumid26 > $(TESTTMP)/test_enumid.log 2>&1
 	grep -q "cannot assign a value of enum type" $(TESTTMP)/test_enumid.log
 	./$(COMPILER) test/test_enum_identity_ok.pas $(TESTTMP)/test_enumid_ok26
-	test "$$($(TESTTMP)/test_enumid_ok26 | tail -1)" = "PASS"
+	tools/expect_same.sh test_enumid_ok26 "$$($(TESTTMP)/test_enumid_ok26 | tail -1)" "PASS"
 	# an unspecialized generic template is not a type: it has no zero value (tdefault11/12)
 	! ./$(COMPILER) test/test_default_unspecialized_generic_fail.pas $(TESTTMP)/test_defgen26 > $(TESTTMP)/test_defgen.log 2>&1
 	grep -q "must be specialized" $(TESTTMP)/test_defgen.log
 	# --strict / {$STRICT ON}: FPC-parity routine visibility (require-forward, b363).
 	# Positive: forward + mutual recursion + unit/builtin calls bind under strict.
 	./$(COMPILER) -Fulib/rtl test/test_require_forward_strict.pas $(TESTTMP)/test_reqfwd26
-	test "$$($(TESTTMP)/test_reqfwd26)" = "$$(printf 'TRUE\nTRUE\nabove\n42\n2')"
+	tools/expect_same.sh test_reqfwd26 "$$($(TESTTMP)/test_reqfwd26)" "$$(printf 'TRUE\nTRUE\nabove\n42\n2')"
 	# Negative: call-before-define without forward compiles by DEFAULT, errors under --strict.
 	./$(COMPILER) test/test_require_forward_strict_fail.pas $(TESTTMP)/test_reqfwdneg26 > /dev/null
 	! ./$(COMPILER) --strict test/test_require_forward_strict_fail.pas $(TESTTMP)/test_reqfwdneg26 > $(TESTTMP)/test_reqfwd.log 2>&1
@@ -5554,74 +5554,74 @@ test-core: $(COMPILER)
 	! ./$(COMPILER) test/test_sealed_abstract_class_fail.pas $(TESTTMP)/test_sealedac26 > $(TESTTMP)/test_sealedac.log 2>&1
 	grep -q "cannot be both abstract and sealed" $(TESTTMP)/test_sealedac.log
 	./$(COMPILER) test/test_sealed_ok.pas $(TESTTMP)/test_sealed_ok26
-	test "$$($(TESTTMP)/test_sealed_ok26 | tail -1)" = "PASS"
+	tools/expect_same.sh test_sealed_ok26 "$$($(TESTTMP)/test_sealed_ok26 | tail -1)" "PASS"
 	./$(COMPILER) test/test_forward_ptr_record_field.pas $(TESTTMP)/test_fwd_ptr_rec26
-	test "$$($(TESTTMP)/test_fwd_ptr_rec26 | tail -1)" = "PASS"
+	tools/expect_same.sh test_fwd_ptr_rec26 "$$($(TESTTMP)/test_fwd_ptr_rec26 | tail -1)" "PASS"
 	! ./$(COMPILER) test/test_pointer_member_fail.pas $(TESTTMP)/test_ptr_member_fail26 > $(TESTTMP)/test_ptr_member_fail.log 2>&1
 	grep -q "a pointer has no members" $(TESTTMP)/test_ptr_member_fail.log
 	! ./$(COMPILER) test/test_overload_record_identity_fail.pas $(TESTTMP)/test_overload_record_identity_fail26 > $(TESTTMP)/test_overload_record_identity_fail.log 2>&1
 	grep -q "no overload of Dot matches" $(TESTTMP)/test_overload_record_identity_fail.log
 	./$(COMPILER) test/test_virtual_managed_arg.pas $(TESTTMP)/test_virtual_managed_arg26
-	test "$$($(TESTTMP)/test_virtual_managed_arg26)" = "$$(printf '2\ncherry\napple')"
+	tools/expect_same.sh test_virtual_managed_arg26 "$$($(TESTTMP)/test_virtual_managed_arg26)" "$$(printf '2\ncherry\napple')"
 	./$(COMPILER) test/test_stream_methods.pas $(TESTTMP)/test_stream_methods26
-	test "$$($(TESTTMP)/test_stream_methods26)" = "$$(printf '65 66 67\n3 3')"
+	tools/expect_same.sh test_stream_methods26 "$$($(TESTTMP)/test_stream_methods26)" "$$(printf '65 66 67\n3 3')"
 	./$(COMPILER) test/test_r_directive.pas $(TESTTMP)/test_r_directive26
-	test "$$($(TESTTMP)/test_r_directive26)" = "42"
+	tools/expect_same.sh test_r_directive26 "$$($(TESTTMP)/test_r_directive26)" "42"
 	./$(COMPILER) -Itest test/test_cond_comment_skip.pas $(TESTTMP)/test_cond_comment_skip26
-	test "$$($(TESTTMP)/test_cond_comment_skip26)" = "42"
+	tools/expect_same.sh test_cond_comment_skip26 "$$($(TESTTMP)/test_cond_comment_skip26)" "42"
 	./$(COMPILER) test/test_const_string_concat.pas $(TESTTMP)/test_const_string_concat26
-	test "$$($(TESTTMP)/test_const_string_concat26)" = "$$(printf 'AB\n2\nABC\n3\nfoobar\nx-y\n65 66')"
+	tools/expect_same.sh test_const_string_concat26 "$$($(TESTTMP)/test_const_string_concat26)" "$$(printf 'AB\n2\nABC\n3\nfoobar\nx-y\n65 66')"
 	./$(COMPILER) test/test_const_string_index.pas $(TESTTMP)/test_const_string_index26
-	test "$$($(TESTTMP)/test_const_string_index26)" = "$$(printf '58\n58\nX:\n:\n[:]\nab\n30 30')"
+	tools/expect_same.sh test_const_string_index26 "$$($(TESTTMP)/test_const_string_index26)" "$$(printf '58\n58\nX:\n:\n[:]\nab\n30 30')"
 	./$(COMPILER) test/test_typed_string_const.pas $(TESTTMP)/test_typed_string_const26
-	test "$$($(TESTTMP)/test_typed_string_const26)" = "$$(printf 'ABCDEF\nfoobar\nABC\nB\nABCDEF\n6\nlocal!')"
+	tools/expect_same.sh test_typed_string_const26 "$$($(TESTTMP)/test_typed_string_const26)" "$$(printf 'ABCDEF\nfoobar\nABC\nB\nABCDEF\n6\nlocal!')"
 	./$(COMPILER) test/test_byval_record_temp.pas $(TESTTMP)/test_byval_record_temp26
-	test "$$($(TESTTMP)/test_byval_record_temp26)" = "$$(printf '11 22 33\n15 15 15\n8 9 10')"
+	tools/expect_same.sh test_byval_record_temp26 "$$($(TESTTMP)/test_byval_record_temp26)" "$$(printf '11 22 33\n15 15 15\n8 9 10')"
 	./$(COMPILER) test/test_int_arg_to_float_param.pas $(TESTTMP)/test_int_arg_to_float_param26
-	test "$$($(TESTTMP)/test_int_arg_to_float_param26)" = "$$(printf '80.0\n50.0\n1.0 2.0 3.0\n2.500 2.500 2.500')"
+	tools/expect_same.sh test_int_arg_to_float_param26 "$$($(TESTTMP)/test_int_arg_to_float_param26)" "$$(printf '80.0\n50.0\n1.0 2.0 3.0\n2.500 2.500 2.500')"
 	./$(COMPILER) test/test_record_temp_byval_arg.pas $(TESTTMP)/test_record_temp_byval_arg26
-	test "$$($(TESTTMP)/test_record_temp_byval_arg26)" = "$$(printf '18\n46')"
+	tools/expect_same.sh test_record_temp_byval_arg26 "$$($(TESTTMP)/test_record_temp_byval_arg26)" "$$(printf '18\n46')"
 	./$(COMPILER) test/test_managed_record_return_reuse.pas $(TESTTMP)/test_managed_record_return_reuse26
-	test "$$($(TESTTMP)/test_managed_record_return_reuse26)" = "$$(printf '10 123\n10 123\n20 246\n10 123\n20 246')"
+	tools/expect_same.sh test_managed_record_return_reuse26 "$$($(TESTTMP)/test_managed_record_return_reuse26)" "$$(printf '10 123\n10 123\n20 246\n10 123\n20 246')"
 	./$(COMPILER) test/test_ctor_string_literal_arg.pas $(TESTTMP)/test_ctor_string_literal_arg26
-	test "$$($(TESTTMP)/test_ctor_string_literal_arg26)" = "$$(printf 'field:hello\nc1\nafter1\nc2\nafter2\nc3\nc4\nafter3\nmsg:hello\nafter4')"
+	tools/expect_same.sh test_ctor_string_literal_arg26 "$$($(TESTTMP)/test_ctor_string_literal_arg26)" "$$(printf 'field:hello\nc1\nafter1\nc2\nafter2\nc3\nc4\nafter3\nmsg:hello\nafter4')"
 	./$(COMPILER) test/test_single_in_aggregate.pas $(TESTTMP)/test_single_in_aggregate26
-	test "$$($(TESTTMP)/test_single_in_aggregate26)" = "$$(printf '1.5 2.5 3.5\n9.500 8.250 7.125\n2.0 4.0 6.0\n10.0')"
+	tools/expect_same.sh test_single_in_aggregate26 "$$($(TESTTMP)/test_single_in_aggregate26)" "$$(printf '1.5 2.5 3.5\n9.500 8.250 7.125\n2.0 4.0 6.0\n10.0')"
 	./$(COMPILER) test/test_dynarray_field.pas $(TESTTMP)/test_dynarray_field26
-	test "$$($(TESTTMP)/test_dynarray_field26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_dynarray_field26 "$$($(TESTTMP)/test_dynarray_field26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray_torture.pas $(TESTTMP)/test_dynarray_torture26
-	test "$$($(TESTTMP)/test_dynarray_torture26 | tail -1)" = "total ok 27 / 27"
+	tools/expect_same.sh test_dynarray_torture26 "$$($(TESTTMP)/test_dynarray_torture26 | tail -1)" "total ok 27 / 27"
 	# --threadsafe I/O statement lock: reentrant (write-arg writes), single-thread output unchanged
 	./$(COMPILER) --threadsafe test/test_threadsafe_io_lock.pas $(TESTTMP)/test_threadsafe_io_lock26
-	test "$$($(TESTTMP)/test_threadsafe_io_lock26)" = "$$(printf 'outer inner 21\n42\nline1 10\nline2 20\nline3 30\ndone')"
+	tools/expect_same.sh test_threadsafe_io_lock26 "$$($(TESTTMP)/test_threadsafe_io_lock26)" "$$(printf 'outer inner 21\n42\nline1 10\nline2 20\nline3 30\ndone')"
 	# Move/FillChar with no uses (builtin home, FPC System parity; overlap-safe Move pinned)
 	./$(COMPILER) test/test_move_fillchar_nouses.pas $(TESTTMP)/test_move_fillchar_nouses26
-	test "$$($(TESTTMP)/test_move_fillchar_nouses26 | tail -1)" = "total ok 4 / 4"
+	tools/expect_same.sh test_move_fillchar_nouses26 "$$($(TESTTMP)/test_move_fillchar_nouses26 | tail -1)" "total ok 4 / 4"
 	# Move/FillChar bulk paths: every alignment x size x overlap direction, against a byte-loop oracle
 	./$(COMPILER) test/test_move_fillchar_bulk.pas $(TESTTMP)/test_move_fillchar_bulk26
-	test "$$($(TESTTMP)/test_move_fillchar_bulk26 | tail -1)" = "total ok 8886 / 8886"
+	tools/expect_same.sh test_move_fillchar_bulk26 "$$($(TESTTMP)/test_move_fillchar_bulk26 | tail -1)" "total ok 8886 / 8886"
 	# __pxxblockmove/__pxxblockfill (IR_BLOCK_MEM, rep movsb/stosb): exact byte count, guards, negative counts, returns dest
 	./$(COMPILER) test/test_block_mem_intrinsic.pas $(TESTTMP)/test_block_mem_intrinsic26
-	test "$$($(TESTTMP)/test_block_mem_intrinsic26 | tail -1)" = "total ok 4252 / 4252"
+	tools/expect_same.sh test_block_mem_intrinsic26 "$$($(TESTTMP)/test_block_mem_intrinsic26 | tail -1)" "total ok 4252 / 4252"
 	# literal/char concat in a loop must not eat stack (managed typing; frozen carve documented)
 	./$(COMPILER) test/test_concat_loop_stack.pas $(TESTTMP)/test_concat_loop_stack26
-	test "$$($(TESTTMP)/test_concat_loop_stack26)" = "$$(printf 'pI\nab0z\nbad=0')"
+	tools/expect_same.sh test_concat_loop_stack26 "$$($(TESTTMP)/test_concat_loop_stack26)" "$$(printf 'pI\nab0z\nbad=0')"
 	# anonymous inline record types (var x: record ... end) incl nested/packed/variant/managed-field
 	./$(COMPILER) test/test_anonymous_record.pas $(TESTTMP)/test_anonymous_record26
-	test "$$($(TESTTMP)/test_anonymous_record26 | tail -1)" = "total ok 8 / 8"
+	tools/expect_same.sh test_anonymous_record26 "$$($(TESTTMP)/test_anonymous_record26 | tail -1)" "total ok 8 / 8"
 	# all 13 former hard-keyword intrinsics are soft keywords: declarable as identifiers, intrinsics/statements unaffected when unshadowed
 	./$(COMPILER) test/test_soft_keyword_length.pas $(TESTTMP)/test_soft_keyword_length26
-	test "$$($(TESTTMP)/test_soft_keyword_length26 | tail -1)" = "total ok 19 / 19"
+	tools/expect_same.sh test_soft_keyword_length26 "$$($(TESTTMP)/test_soft_keyword_length26 | tail -1)" "total ok 19 / 19"
 	# signal runtime: SetSignalHandler hooks fire + program survives; nil-revert dies killed-by-SIGTERM (143)
 	./$(COMPILER) test/test_signal_handlers.pas $(TESTTMP)/test_signal_handlers26
-	test "$$($(TESTTMP)/test_signal_handlers26; echo "exit=$$?")" = "$$(printf 'usr1=2 int=1 term=1\nreverted\nexit=143')"
+	tools/expect_same.sh test_signal_handlers26 "$$($(TESTTMP)/test_signal_handlers26; echo "exit=$$?")" "$$(printf 'usr1=2 int=1 term=1\nreverted\nexit=143')"
 	# SA_SIGINFO (x86-64): the dispatch stub parks si_code / si_addr / the
 	# ucontext* before calling the hook. si_addr is checked against the address
 	# the test deliberately faults on ($DEAD0000 = 3735879680), so a wrong union
 	# offset cannot pass; the SIGUSR1 half checks a NEGATIVE si_code
 	# (SI_TKILL = -6), which is what the stub's sign-extension exists for.
 	./$(COMPILER) test/test_signal_siginfo.pas $(TESTTMP)/test_signal_siginfo26
-	test "$$($(TESTTMP)/test_signal_siginfo26)" = "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
+	tools/expect_same.sh test_signal_siginfo26 "$$($(TESTTMP)/test_signal_siginfo26)" "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
 	# sigaltstack + SA_ONSTACK: a stack-overflow SIGSEGV must be HANDLEABLE. It
 	# is the one fault a handler cannot take on the faulting stack, so before
 	# this the program died with exit 139 and the hook never ran. The third line
@@ -5630,21 +5630,21 @@ test-core: $(COMPILER)
 	# overflow having left a usable slack page. Depth is not printed: it depends
 	# on RLIMIT_STACK. feature-signal-siginfo-ucontext item 3
 	./$(COMPILER) test/test_signal_altstack.pas $(TESTTMP)/test_signal_altstack26
-	test "$$($(TESTTMP)/test_signal_altstack26; echo "exit=$$?")" = "$$(printf 'recursing\ncode=1\nhandler-off-faulting-stack=TRUE\nexit=0')"
+	tools/expect_same.sh test_signal_altstack26 "$$($(TESTTMP)/test_signal_altstack26; echo "exit=$$?")" "$$(printf 'recursing\ncode=1\nhandler-off-faulting-stack=TRUE\nexit=0')"
 	# __pxxSigNum: which signal is being dispatched, read from inside the
 	# PARAMETERLESS hook. One hook registered for three signals, counted per
 	# number — usr1 twice is the row that matters (a hook that merely counted
 	# deliveries would pass with the slot stuck at one value), and zero=0
 	# catches the slot never being written at all.
 	./$(COMPILER) test/test_signal_num.pas $(TESTTMP)/test_signal_num26
-	test "$$($(TESTTMP)/test_signal_num26)" = "usr1=2 usr2=1 int=1 zero=0"
+	tools/expect_same.sh test_signal_num26 "$$($(TESTTMP)/test_signal_num26)" "usr1=2 usr2=1 int=1 zero=0"
 	# PC rewrite: the handler points the saved ucontext PC at a Pascal proc
 	# that raises, and the fault is caught by the try/except the faulting
 	# code was already inside. The pc-is-the-fault line is the exact check
 	# of the per-arch PC offset -- rewriting the wrong ucontext word would
 	# clobber an unrelated register instead.
 	./$(COMPILER) test/test_signal_pc_rewrite.pas $(TESTTMP)/test_signal_pcrw26
-	test "$$($(TESTTMP)/test_signal_pcrw26)" = "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
+	tools/expect_same.sh test_signal_pcrw26 "$$($(TESTTMP)/test_signal_pcrw26)" "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
 	# SP rewrite: __pxxSigPCPtr's sibling. Rewriting the PC alone resumes the
 	# redirect target on the FAULTING frame's stack pointer, which for a stack
 	# overflow is a stack with nothing left -- the raise stub re-faults on its
@@ -5680,9 +5680,9 @@ test-core: $(COMPILER)
 	# h[0][0] passes even with the wrong stride, which is why the original bug
 	# looked like it worked. feature-dynarray-copy-nested-element-type
 	./$(COMPILER) test/test_dynarray_copy_nested.pas $(TESTTMP)/test_dyncopy_nested
-	test "$$($(TESTTMP)/test_dyncopy_nested)" = "$$(printf 'lenh=2 h00=1 h11=4\none-level-detach g00=99\ninner=4\nafter-copy-scope g11=4 g22=6\nt3 len=2 u111=7 u010=2\nstr v00=row v11=end\nsource-survives s11=end')"
+	tools/expect_same.sh test_dyncopy_nested "$$($(TESTTMP)/test_dyncopy_nested)" "$$(printf 'lenh=2 h00=1 h11=4\none-level-detach g00=99\ninner=4\nafter-copy-scope g11=4 g22=6\nt3 len=2 u111=7 u010=2\nstr v00=row v11=end\nsource-survives s11=end')"
 	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_dynarray_copy_nested.pas $(TESTTMP)/test_dyncopy_nested_hd
-	test "$$($(TESTTMP)/test_dyncopy_nested_hd)" = "$$($(TESTTMP)/test_dyncopy_nested)"
+	tools/expect_same.sh test_dyncopy_nested_hd "$$($(TESTTMP)/test_dyncopy_nested_hd)" "$$($(TESTTMP)/test_dyncopy_nested)"
 	@# AIntToStr — the compiler's own IntToStr — returned the EMPTY STRING for
 	@# every n < 0, so a diagnostic carrying a negative had a HOLE in it rather
 	@# than a wrong number ('at most  arguments'), which reads as a formatting
@@ -5707,7 +5707,7 @@ test-core: $(COMPILER)
 	@# ...and the same program with no -Fu must build and run, so a failure above
 	@# is the impostor unit doing its job and not something about this program.
 	./$(COMPILER) test/test_aintostr_negative.pas $(TESTTMP)/test_aintostr_ok26
-	test "$$($(TESTTMP)/test_aintostr_ok26)" = "ok"
+	tools/expect_same.sh test_aintostr_ok26 "$$($(TESTTMP)/test_aintostr_ok26)" "ok"
 	@# Diagnostics have to say WHERE. Until 2026-08-21 a line number after a
 	@# {$$I} include was an offset into the include-EXPANDED text and named no
 	@# real line of any file — measured on FPC's own tree, an error at
@@ -5737,22 +5737,22 @@ test-core: $(COMPILER)
 	 echo "$$out" | grep -q '^  in: .*incdiag/badunit\.pas$$' \
 	  || { echo 'test_incdiag_unit_fail: FAIL - expected the diagnostic to name badunit.pas'; echo "$$out"; exit 1; }
 	./$(COMPILER) test/test_mimic_fpc_compiler_profile.pas $(TESTTMP)/test_mimicfpcc_none
-	test "$$($(TESTTMP)/test_mimicfpcc_none)" = "$$(printf 'fpc=NO\nunix=NO\nend')"
+	tools/expect_same.sh test_mimicfpcc_none "$$($(TESTTMP)/test_mimicfpcc_none)" "$$(printf 'fpc=NO\nunix=NO\nend')"
 	./$(COMPILER) --mimic-fpc test/test_mimic_fpc_compiler_profile.pas $(TESTTMP)/test_mimicfpcc_fpc
-	test "$$($(TESTTMP)/test_mimicfpcc_fpc)" = "$$(printf 'fpc=yes\nunix=yes\nend')"
+	tools/expect_same.sh test_mimicfpcc_fpc "$$($(TESTTMP)/test_mimicfpcc_fpc)" "$$(printf 'fpc=yes\nunix=yes\nend')"
 	./$(COMPILER) --mimic-fpc-compiler test/test_mimic_fpc_compiler_profile.pas $(TESTTMP)/test_mimicfpcc
-	test "$$($(TESTTMP)/test_mimicfpcc)" = "$$(printf 'fpc=yes\nunix=yes\ncpu=x86_64\nend')"
+	tools/expect_same.sh test_mimicfpcc "$$($(TESTTMP)/test_mimicfpcc)" "$$(printf 'fpc=yes\nunix=yes\ncpu=x86_64\nend')"
 	./$(COMPILER) test/test_halt_exit_code.pas $(TESTTMP)/test_halt_exit26
-	test "$$($(TESTTMP)/test_halt_exit26; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
+	tools/expect_same.sh test_halt_exit26 "$$($(TESTTMP)/test_halt_exit26; echo "exit=$$?")" "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) test/test_signal_sp_rewrite.pas $(TESTTMP)/test_signal_sprw26
-	test "$$($(TESTTMP)/test_signal_sprw26)" = "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
+	tools/expect_same.sh test_signal_sprw26 "$$($(TESTTMP)/test_signal_sprw26)" "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
 	# ... and the fault that needs BOTH rewrites: a real stack overflow caught
 	# by an ordinary try/except and survived. hits=1 is the whole point -- it
 	# is the difference between a redirect that took and the fault loop.
 	# x86-64 only: the other four hosted targets install without SA_ONSTACK, so
 	# their handler cannot run for THIS fault at all.
 	./$(COMPILER) test/test_stack_overflow_raise.pas $(TESTTMP)/test_stack_ovf_raise26
-	test "$$($(TESTTMP)/test_stack_ovf_raise26)" = "$$(printf 'recursing\ncaught a stack overflow, hits=1\nand execution continued, after=1000')"
+	tools/expect_same.sh test_stack_ovf_raise26 "$$($(TESTTMP)/test_stack_ovf_raise26)" "$$(printf 'recursing\ncaught a stack overflow, hits=1\nand execution continued, after=1000')"
 	# Float-exception mask control (feature-float-exception-mask-control):
 	# the default stays quiet IEEE (Inf/NaN propagate -- a deliberate decision,
 	# so this half is a PIN test), the mask round-trips, and with a cause
@@ -5764,9 +5764,9 @@ test-core: $(COMPILER)
 	# (tyAnsiString) -- so it boxed a static literal as a heap handle and the
 	# argument arrived EMPTY. Plain-Pascal reachable; found through NilPy.
 	./$(COMPILER) test/test_variant_literal_concat_arg.pas $(TESTTMP)/test_var_litcat26
-	test "$$($(TESTTMP)/test_var_litcat26)" = "$$(printf '[pq]\n[pq]\n[pq]\n[xy]\n[pqr]\n[ab]\ndirect: pq')"
+	tools/expect_same.sh test_var_litcat26 "$$($(TESTTMP)/test_var_litcat26)" "$$(printf '[pq]\n[pq]\n[pq]\n[xy]\n[pqr]\n[ab]\ndirect: pq')"
 	./$(COMPILER) test/test_float_exception_mask.pas $(TESTTMP)/test_float_exc_mask26
-	test "$$($(TESTTMP)/test_float_exc_mask26)" = "$$(printf 'default mask=63\nquiet 1/0= Inf\nquiet overflow= Inf\nquiet 0/0= Nan\nprev=63 now=59\nafter restore=63 (returned 59)\ntrapped si_code=3\ntrapped si_code=4\ntrapped si_code=7\ntrapped si_code=5\ntrapped si_code=6\nmask after=63\nquiet again= Inf\nFPE_FLTDIV=3 FLTOVF=4 FLTUND=5 FLTRES=6 FLTINV=7')"
+	tools/expect_same.sh test_float_exc_mask26 "$$($(TESTTMP)/test_float_exc_mask26)" "$$(printf 'default mask=63\nquiet 1/0= Inf\nquiet overflow= Inf\nquiet 0/0= Nan\nprev=63 now=59\nafter restore=63 (returned 59)\ntrapped si_code=3\ntrapped si_code=4\ntrapped si_code=7\ntrapped si_code=5\ntrapped si_code=6\nmask after=63\nquiet again= Inf\nFPE_FLTDIV=3 FLTOVF=4 FLTUND=5 FLTRES=6 FLTINV=7')"
 	# --fpc-float-errors: the opt-in FPC emulation on top of that mask. The
 	# entry unmasks what FPC unmasks and a SIGFPE hook decodes si_code into
 	# FPC's runtime error -- 208 float div-zero / 205 overflow / 207 invalid,
@@ -5778,9 +5778,9 @@ test-core: $(COMPILER)
 	$(TESTTMP)/test_fpc_ferr26 div; test "$$?" = "208"
 	$(TESTTMP)/test_fpc_ferr26 ovf; test "$$?" = "205"
 	$(TESTTMP)/test_fpc_ferr26 inv; test "$$?" = "207"
-	test "$$($(TESTTMP)/test_fpc_ferr26 div)" = "Runtime error 208 (division by zero)"
+	tools/expect_same.sh test_fpc_ferr26 "$$($(TESTTMP)/test_fpc_ferr26 div)" "Runtime error 208 (division by zero)"
 	./$(COMPILER) test/test_fpc_float_errors.pas $(TESTTMP)/test_fpc_ferr_off26
-	test "$$($(TESTTMP)/test_fpc_ferr_off26 div)" = "no trap, r= Inf"
+	tools/expect_same.sh test_fpc_ferr_off26 "$$($(TESTTMP)/test_fpc_ferr_off26 div)" "no trap, r= Inf"
 	# rust frontend else-if self-host miscompile regression (bug-selfhost-multifn-ifelse-miscompile):
 	# 3-fn program, one if/else-if/else-return chain + call; classify(1)=20 -> exit 20. Also under --strict-ir (0 IR_UNSUPPORTED).
 	./$(COMPILER) test/test_rust_else_if.rs $(TESTTMP)/test_rust_else_if26
@@ -5791,87 +5791,87 @@ test-core: $(COMPILER)
 	# arrays (repeat/list literals, indexing, .len()), borrowed slices &a[lo..hi]
 	# (s[i] rw, s.len()), for-in ranges (../..=) -- existing IR only.
 	./$(COMPILER) test/test_rust_advanced.rs $(TESTTMP)/test_rust_advanced26
-	test "$$($(TESTTMP)/test_rust_advanced26)" = "$$(printf 'total 610\na3 9 s0 1 s1 4 slen 2\np 3 4\ncircle 75')"
+	tools/expect_same.sh test_rust_advanced26 "$$($(TESTTMP)/test_rust_advanced26)" "$$(printf 'total 610\na3 9 s0 1 s1 4 slen 2\np 3 4\ncircle 75')"
 	# Rust chess-corpus milestone (feature-rust-corpus-chess): C-style port of the
 	# nextlevel engine's movegen core -- slices through fns, bitless mailbox, full
 	# legality filtering. Perft exact through depth 3 (no EP/castle before ply 4).
 	./$(COMPILER) test/test_rust_chess_perft.rs $(TESTTMP)/test_rust_chess_perft26
-	test "$$($(TESTTMP)/test_rust_chess_perft26)" = "$$(printf 'perft1 20\nperft2 400\nperft3 8902')"
+	tools/expect_same.sh test_rust_chess_perft26 "$$($(TESTTMP)/test_rust_chess_perft26)" "$$(printf 'perft1 20\nperft2 400\nperft3 8902')"
 	# Rust fixed array of structs (feature-rust-corpus-chess enabler): arr[i].field
 	# read/write + tuple arr[i].0 over the shared array-of-record codegen — the
 	# [Move; 256] move-list stand-in for the engine's ArrayVec<Move, 256>.
 	./$(COMPILER) test/test_rust_struct_array.rs $(TESTTMP)/test_rust_struct_array26
-	test "$$($(TESTTMP)/test_rust_struct_array26)" = "$$(printf 'checksum 1202\nsq 30')"
+	tools/expect_same.sh test_rust_struct_array26 "$$($(TESTTMP)/test_rust_struct_array26)" "$$(printf 'checksum 1202\nsq 30')"
 	# Rust chess FULL legality (feature-rust-corpus-chess): Move packed into one i64
 	# (from|to<<6|flags<<12) replaces the engine's Move struct + ArrayVec; EP, castling,
 	# promotion, underpromotion + check detection. Node counts match the reference perft
 	# through depth 5 from startpos and a promotion-heavy CPW position through depth 3.
 	# Also exercises 5-param internal calls (r8/r9 register spill, REmitParamRegSpill).
 	./$(COMPILER) test/test_rust_chess_perft_full.rs $(TESTTMP)/test_rust_chess_perft_full26
-	test "$$($(TESTTMP)/test_rust_chess_perft_full26)" = "$$(printf 'perft1 20\nperft2 400\nperft3 8902\nperft4 197281\nperft5 4865609\npromo1 24\npromo2 496\npromo3 9483\nkiwi1 48\nkiwi2 2039\nkiwi3 97862')"
+	tools/expect_same.sh test_rust_chess_perft_full26 "$$($(TESTTMP)/test_rust_chess_perft_full26)" "$$(printf 'perft1 20\nperft2 400\nperft3 8902\nperft4 197281\nperft5 4865609\npromo1 24\npromo2 496\npromo3 9483\nkiwi1 48\nkiwi2 2039\nkiwi3 97862')"
 	# Rust chess ENGINE (feature-rust-corpus-chess): faithful struct-based branch —
 	# real Move struct held in [Move; 256] passed as &[Move] (slice-of-record), make/
 	# unmake, negamax, and UCI best-move output via char casts. perft(4) exact +
 	# picks the mate-in-1 rook lift a1a8. Exercises fixed-array-of-structs and
 	# slice-of-struct (arr[i].field / slice[i].field) end to end.
 	./$(COMPILER) test/test_rust_chess_engine.rs $(TESTTMP)/test_rust_chess_engine26
-	test "$$($(TESTTMP)/test_rust_chess_engine26)" = "$$(printf 'perft4 197281\nbestmove a1a8')"
+	tools/expect_same.sh test_rust_chess_engine26 "$$($(TESTTMP)/test_rust_chess_engine26)" "$$(printf 'perft4 197281\nbestmove a1a8')"
 	# Rust chess SEARCH (feature-rust-corpus-chess, stage-6 gate "search finds a mate"):
 	# material-eval negamax with mate scoring on the same movegen. Finds a forced
 	# mate-in-1 (depth 2) and mate-in-2 (depth 4), and does NOT see them one ply
 	# shallower — proving real minimax depth, not a static-eval artifact.
 	./$(COMPILER) test/test_rust_chess_search.rs $(TESTTMP)/test_rust_chess_search26
-	test "$$($(TESTTMP)/test_rust_chess_search26)" = "$$(printf 'mate1 1 score 999999\nshallow 0 score 200\nmate2 1 score 999997\nmate2shallow 0 score 500\nstarteval 0')"
+	tools/expect_same.sh test_rust_chess_search26 "$$($(TESTTMP)/test_rust_chess_search26)" "$$(printf 'mate1 1 score 999999\nshallow 0 score 200\nmate2 1 score 999997\nmate2shallow 0 score 500\nstarteval 0')"
 	# Rust tuple structs — two field-bearing structs, smaller first
 	# (bug-uclass-field-window-stale-base fixed: second struct's field window re-bases)
 	./$(COMPILER) test/test_rust_tuple_struct.rs $(TESTTMP)/test_rust_tuple26
-	test "$$($(TESTTMP)/test_rust_tuple26)" = "$$(printf 'a 300 b 44 s 7')"
+	tools/expect_same.sh test_rust_tuple26 "$$($(TESTTMP)/test_rust_tuple26)" "$$(printf 'a 300 b 44 s 7')"
 	# Rust associated fns + Self (Type::fn / Self::fn call paths, mixed with methods)
 	./$(COMPILER) test/test_rust_assoc_fns.rs $(TESTTMP)/test_rust_assoc26
-	test "$$($(TESTTMP)/test_rust_assoc26)" = "$$(printf 'v 42 comb 75')"
+	tools/expect_same.sh test_rust_assoc26 "$$($(TESTTMP)/test_rust_assoc26)" "$$(printf 'v 42 comb 75')"
 	# Ada frontend skeleton (feature-esoteric-ada): for-range accumulate, if/elsif/else,
 	# while, bare loop + exit-when, Put_Line -- all lowering onto existing shared IR.
 	./$(COMPILER) test/test_ada_skeleton.adb $(TESTTMP)/test_ada_skeleton26
-	test "$$($(TESTTMP)/test_ada_skeleton26)" = "$$(printf 'sum correct\nwhile iter\nwhile iter\nwhile iter\nexit-when correct\nseven correct')"
+	tools/expect_same.sh test_ada_skeleton26 "$$($(TESTTMP)/test_ada_skeleton26)" "$$(printf 'sum correct\nwhile iter\nwhile iter\nwhile iter\nexit-when correct\nseven correct')"
 	# Zig frontend skeleton (feature-zig-frontend, esoteric probe): fns/calls/recursion,
 	# var/const inference, if/else-if, while + continue-expr, range for (exclusive hi),
 	# break/continue, integer / lowered as trunc div, std.debug.print {} placeholders.
 	./$(COMPILER) test/test_zig_skeleton.zig $(TESTTMP)/test_zig_skeleton26
-	test "$$($(TESTTMP)/test_zig_skeleton26)" = "$$(printf 'add gives 5\nscratch 50\nfor-sum 10\nevens 5\nodd-sum 25\nclassify ok\nfib(10) is 55\npair 2 and 4')"
+	tools/expect_same.sh test_zig_skeleton26 "$$($(TESTTMP)/test_zig_skeleton26)" "$$(printf 'add gives 5\nscratch 50\nfor-sum 10\nevens 5\nodd-sum 25\nclassify ok\nfib(10) is 55\npair 2 and 4')"
 	# Zig frontend sub-ticket 2 (zig-structs-and-pointers): struct decl/literal/fields,
 	# *T pointers (&x, p.*, pointer params), [N]T fixed arrays + .len -- existing IR only.
 	./$(COMPILER) test/test_zig_structs.zig $(TESTTMP)/test_zig_structs26
-	test "$$($(TESTTMP)/test_zig_structs26)" = "$$(printf 'dist2 25\nq 10 4\nsquares sum 30 len 5\nv 42\nsum 31')"
+	tools/expect_same.sh test_zig_structs26 "$$($(TESTTMP)/test_zig_structs26)" "$$(printf 'dist2 25\nq 10 4\nsquares sum 30 len 5\nv 42\nsum 31')"
 	# Zig frontend theoretic-completion pass: switch (if-chain), defer/errdefer
 	# (reverse replay at exits), optionals ?T (null/if-capture/orelse/.?), error
 	# unions !T (global-slot errno convention: return error.X/try/catch/catch |e|),
 	# minimal slices (a[lo..hi], s[i] rw, s.len) -- all parse-time desugar, no new IR.
 	./$(COMPILER) test/test_zig_advanced.zig $(TESTTMP)/test_zig_advanced26
-	test "$$($(TESTTMP)/test_zig_advanced26)" = "$$(printf 'c0 100 c1 200 c2 200 c9 300\nok 3 bad -1\nt1 7 t2 -2\nunderflow caught 2\nalways\nr1 10\nalways\ncleanup\nr2 -1\nnone\nsome 42\norelse 42 unwrap 42\norelse2 7\nslices 60999\ngen 9 7 100\nend\nmain done')"
+	tools/expect_same.sh test_zig_advanced26 "$$($(TESTTMP)/test_zig_advanced26)" "$$(printf 'c0 100 c1 200 c2 200 c9 300\nok 3 bad -1\nt1 7 t2 -2\nunderflow caught 2\nalways\nr1 10\nalways\ncleanup\nr2 -1\nnone\nsome 42\norelse 42 unwrap 42\norelse2 7\nslices 60999\ngen 9 7 100\nend\nmain done')"
 	# Zig 5/6-param internal calls (feature-zig-frontend): r8/r9 arg-register spill
 	# via the shared REmitParamRegSpill — the old case i of 0..3 SIGILL'd on param 5.
 	./$(COMPILER) test/test_zig_manyparams.zig $(TESTTMP)/test_zig_manyparams26
-	test "$$($(TESTTMP)/test_zig_manyparams26)" = "$$(printf 'a5 15 a6 21\nrec 103')"
+	tools/expect_same.sh test_zig_manyparams26 "$$($(TESTTMP)/test_zig_manyparams26)" "$$(printf 'a5 15 a6 21\nrec 103')"
 	# Zig slice parameters (feature-zig-frontend): `fn f(s: []T, ...)` — the 16-byte
 	# __ptr/__len record passed by address; s[i] rw + s.len through the pointer.
 	./$(COMPILER) test/test_zig_slice_params.zig $(TESTTMP)/test_zig_slice_params26
-	test "$$($(TESTTMP)/test_zig_slice_params26)" = "$$(printf 'sum 15\nscaled 13 53 n 5')"
+	tools/expect_same.sh test_zig_slice_params26 "$$($(TESTTMP)/test_zig_slice_params26)" "$$(printf 'sum 15\nscaled 13 53 n 5')"
 	# Zig chess perft (feature-zig-frontend, real-load bug-probe): full-legality
 	# movegen exercising []i64 slice params, array literals, 5-param recursion +
 	# deep control flow. Node counts match the reference (startpos d4, Kiwipete d3).
 	./$(COMPILER) test/test_zig_chess_perft.zig $(TESTTMP)/test_zig_chess_perft26
-	test "$$($(TESTTMP)/test_zig_chess_perft26)" = "$$(printf 'perft4 197281\nkiwi3 97862')"
+	tools/expect_same.sh test_zig_chess_perft26 "$$($(TESTTMP)/test_zig_chess_perft26)" "$$(printf 'perft4 197281\nkiwi3 97862')"
 	# LOLCODE frontend skeleton (feature-esoteric-lolcode, esoteric probe): HAI/KTHXBYE,
 	# I HAS A/ITZ, VISIBLE, R assign, prefix ops (SUM OF..), BOTH SAEM/DIFFRINT + O RLY?,
 	# IM IN YR loop + GTFO, SMOOSH string concat -- all on existing shared IR.
 	./$(COMPILER) test/test_lolcode_skeleton.lol $(TESTTMP)/test_lolcode_skeleton26
-	test "$$($(TESTTMP)/test_lolcode_skeleton26)" = "$$(printf 'HAI WORLD\ny is 42\nsaem correct\nacc is 15\nsmoosh works')"
+	tools/expect_same.sh test_lolcode_skeleton26 "$$($(TESTTMP)/test_lolcode_skeleton26)" "$$(printf 'HAI WORLD\ny is 42\nsaem correct\nacc is 15\nsmoosh works')"
 	# Whitespace frontend skeleton (feature-esoteric-whitespace, esoteric probe):
 	# tokenless char-level frontend, stack-machine instructions folded into AST
 	# expression trees at compile time (push/dup/discard, add/sub/mul/div/mod,
 	# out-char/out-number). Prints Hi\n40\n2\n36.
 	./$(COMPILER) test/test_ws_skeleton.ws $(TESTTMP)/test_ws_skeleton26
-	test "$$($(TESTTMP)/test_ws_skeleton26)" = "$$(printf 'Hi\n40\n2\n36')"
+	tools/expect_same.sh test_ws_skeleton26 "$$($(TESTTMP)/test_ws_skeleton26)" "$$(printf 'Hi\n40\n2\n36')"
 	# The six skeleton drivers now reach their parse through one shared prologue
 	# (EmitProgramPrologue) and their exit through one shared epilogue, instead of
 	# open-coding the checklist. Fortran, Algol and LOLCODE emitted the entry stub
@@ -5905,26 +5905,26 @@ test-core: $(COMPILER)
 	# multi-clause pattern dispatch (literals + variable binds + when guards),
 	# recursion, single-assignment, io:format ~p placeholders.
 	./$(COMPILER) test/test_erlang_skeleton.erl $(TESTTMP)/test_erlang_skeleton26
-	test "$$($(TESTTMP)/test_erlang_skeleton26)" = "$$(printf 'fact(5) is 120\nfib(10) is 55\nclassify: 1 2 3 4\ndiv gives 5 rem 1')"
+	tools/expect_same.sh test_erlang_skeleton26 "$$($(TESTTMP)/test_erlang_skeleton26)" "$$(printf 'fact(5) is 120\nfib(10) is 55\nclassify: 1 2 3 4\ndiv gives 5 rem 1')"
 	# Algol 60 frontend skeleton (feature-esoteric-algol, esoteric probe -- the
 	# kinship test: Pascal's direct ancestor): declarations, :=, if/then/else,
 	# while, for..step..until (incl. negative step), begin/end, out* I/O.
 	./$(COMPILER) test/test_algol_skeleton.alg $(TESTTMP)/test_algol_skeleton26
-	test "$$($(TESTTMP)/test_algol_skeleton26)" = "$$(printf '55\n30\n 1.0500000000000000E+001\nkinship holds\n40')"
+	tools/expect_same.sh test_algol_skeleton26 "$$($(TESTTMP)/test_algol_skeleton26)" "$$(printf '55\n30\n 1.0500000000000000E+001\nkinship holds\n40')"
 	# Fortran frontend skeleton (feature-esoteric-fortran, esoteric probe): implicit
 	# first-letter typing (I-N int / else REAL->double), DO with step (incl. negative),
 	# IF/ELSE, PRINT * with correct double formatting (ARG decimals sentinel -1).
 	./$(COMPILER) test/test_fortran_skeleton.f90 $(TESTTMP)/test_fortran_skeleton26
-	test "$$($(TESTTMP)/test_fortran_skeleton26)" = "$$(printf 'sum is55\ndownsum is30\ny is 1.0500000000000000E+001\nsum correct\nreal correct')"
+	tools/expect_same.sh test_fortran_skeleton26 "$$($(TESTTMP)/test_fortran_skeleton26)" "$$(printf 'sum is55\ndownsum is30\ny is 1.0500000000000000E+001\nsum correct\nreal correct')"
 	# BASIC GOTO/GOSUB (bug-basic-goto-gosub-halts-program): real jumps via shared
 	# AN_LABEL/AN_GOTO; nested GOSUB over the Int64 shift-register return stack;
 	# LET-less assignment off-by-one. Previously GOTO/GOSUB silently HALTED (exit 0).
 	./$(COMPILER) test/test_basic_goto_gosub.bas $(TESTTMP)/test_basic_goto_gosub26
-	test "$$($(TESTTMP)/test_basic_goto_gosub26)" = "$$(printf 'A\nB\nlooped 3\nsub1\nsub2\nsub1 back\nafter gosub\nsub2\ndone')"
+	tools/expect_same.sh test_basic_goto_gosub26 "$$($(TESTTMP)/test_basic_goto_gosub26)" "$$(printf 'A\nB\nlooped 3\nsub1\nsub2\nsub1 back\nafter gosub\nsub2\ndone')"
 	# the frontend's own comprehensive file: GOTO/GOSUB loop section + FOR/WHILE +
 	# cross-language imports; used to print 1 line of ~21 and exit 0 (silently wrong)
 	./$(COMPILER) test/test_basic_comprehensive.bas $(TESTTMP)/test_basic_comprehensive26
-	test "$$($(TESTTMP)/test_basic_comprehensive26 | wc -l)" = "21"
+	tools/expect_same.sh test_basic_comprehensive26 "$$($(TESTTMP)/test_basic_comprehensive26 | wc -l)" "21"
 	# ...and the same three .bas files CROSS. Every one of them was an illegal
 	# instruction on aarch64 and arm32 -- the driver open-coded an x86-64 entry
 	# stub for every target, so the ELF entry point of a .bas binary held x86-64
@@ -5947,7 +5947,7 @@ test-core: $(COMPILER)
 	# file into `unresolved forward: PXXStrFromLit`.
 	# bug-a-a-unit-free-basic-program-calls-a-helper-it-never-emits
 	./$(COMPILER) test/test_basic_unit_free_string_literal.bas $(TESTTMP)/test_basic_uf26
-	test "$$($(TESTTMP)/test_basic_uf26)" = "$$(printf 'unit-free\nline numbered too')"
+	tools/expect_same.sh test_basic_uf26 "$$($(TESTTMP)/test_basic_uf26)" "$$(printf 'unit-free\nline numbered too')"
 	# A BASIC variable initialised from a ONE-CHARACTER string literal. It printed
 	# 120 -- Ord('x') -- while a multi-char literal printed fine and the literal
 	# written directly into PRINT printed fine: the shared Pascal expression
@@ -5956,7 +5956,7 @@ test-core: $(COMPILER)
 	# LET-less `c = <expr>`) are covered, because the rule was in two copies.
 	# bug-a-basic-prints-a-string-variable-as-its-character-code
 	./$(COMPILER) test/test_basic_one_char_string_var.bas $(TESTTMP)/test_basic_ocs26
-	test "$$($(TESTTMP)/test_basic_ocs26)" = "$$(printf 'x\nhello\ny\n5')"
+	tools/expect_same.sh test_basic_ocs26 "$$($(TESTTMP)/test_basic_ocs26)" "$$(printf 'x\nhello\ny\n5')"
 	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1; then \
 	  for arch in i386 aarch64 arm32; do \
 	    ./$(COMPILER) --target=$$arch test/test_basic_goto_gosub.bas $(TESTTMP)/test_basic_gg_$$arch >/dev/null; \
@@ -5981,69 +5981,69 @@ test-core: $(COMPILER)
 	fi
 	# TObject virtual Destroy/Create override: FPC's universal `destructor Destroy; override;` compiles on a root class + dispatches; inherited Destroy/Create = root no-op
 	./$(COMPILER) test/test_tobject_destroy_override.pas $(TESTTMP)/test_tobject_destroy_override26
-	test "$$($(TESTTMP)/test_tobject_destroy_override26)" = "$$(printf 'F\nc\nD\nA\nOK')"
+	tools/expect_same.sh test_tobject_destroy_override26 "$$($(TESTTMP)/test_tobject_destroy_override26)" "$$(printf 'F\nc\nD\nA\nOK')"
 	# override of a non-existent, non-Destroy/Create method still errors (guard)
 	! ./$(COMPILER) test/test_override_bogus_rejected.pas $(TESTTMP)/test_override_bogus26 > $(TESTTMP)/test_override_bogus.log 2>&1
 	grep -q "no virtual method found in parent chain" $(TESTTMP)/test_override_bogus.log
 	# a var section before a constructor/destructor method impl must not eat the ctor/dtor token as a var name
 	./$(COMPILER) test/test_var_before_method_impl.pas $(TESTTMP)/test_var_before_method_impl26
-	test "$$($(TESTTMP)/test_var_before_method_impl26)" = "ctor=1 dtor=1"
+	tools/expect_same.sh test_var_before_method_impl26 "$$($(TESTTMP)/test_var_before_method_impl26)" "ctor=1 dtor=1"
 	# FPC-compat: hint directives (deprecated/platform/...) ignored, SizeOf in const/default-param position
 	./$(COMPILER) test/test_hint_sizeof.pas $(TESTTMP)/test_hint_sizeof26
-	test "$$($(TESTTMP)/test_hint_sizeof26)" = "total ok 8 / 8"
+	tools/expect_same.sh test_hint_sizeof26 "$$($(TESTTMP)/test_hint_sizeof26)" "total ok 8 / 8"
 	# FPC-compat: default parameter values on class/interface methods + constructors (fgl's TFPSList.Create shape)
 	./$(COMPILER) test/test_default_params_methods.pas $(TESTTMP)/test_default_params_methods26
-	test "$$($(TESTTMP)/test_default_params_methods26 | tail -1)" = "total ok 34 / 34"
+	tools/expect_same.sh test_default_params_methods26 "$$($(TESTTMP)/test_default_params_methods26 | tail -1)" "total ok 34 / 34"
 	# ...and the ARGUMENT-position half, under delphi mode where a bare name may
 	# also mean the address: an Integer sink got a POINTER (4247470), and a call
 	# nested one level deeper jumped to address 6 — the callee's own result,
 	# called as a function pointer. Both agree with FPC -Mdelphi now.
 	./$(COMPILER) test/test_delphi_bare_alldefaulted_arg.pas $(TESTTMP)/test_delphi_bda26
-	test "$$($(TESTTMP)/test_delphi_bda26 | tail -1)" = "total ok 8 / 8"
+	tools/expect_same.sh test_delphi_bda26 "$$($(TESTTMP)/test_delphi_bda26 | tail -1)" "total ok 8 / 8"
 	# FPC-compat: a tagged variant part starts at the BRANCHES' alignment, not always 8
 	./$(COMPILER) test/test_variant_record_tag_padding.pas $(TESTTMP)/test_variant_rec_pad26
-	test "$$($(TESTTMP)/test_variant_rec_pad26 | tail -1)" = "total ok 14 / 14"
+	tools/expect_same.sh test_variant_rec_pad26 "$$($(TESTTMP)/test_variant_rec_pad26 | tail -1)" "total ok 14 / 14"
 	# FPC-compat: a type declared in a class body is scoped to that class (tclass13b/tgeneric72)
 	./$(COMPILER) test/test_nested_class_type_scoping.pas $(TESTTMP)/test_nested_cls_type26
-	test "$$($(TESTTMP)/test_nested_cls_type26 | tail -1)" = "total ok 9 / 9"
+	tools/expect_same.sh test_nested_cls_type26 "$$($(TESTTMP)/test_nested_cls_type26 | tail -1)" "total ok 9 / 9"
 	# FPC-compat: High/Low of the 64-bit machine-word aliases (NativeInt/PtrInt/SizeInt)
 	./$(COMPILER) test/test_high_low_word_aliases.pas $(TESTTMP)/test_high_low_aliases26
-	test "$$($(TESTTMP)/test_high_low_aliases26 | tail -1)" = "total ok 12 / 12"
+	tools/expect_same.sh test_high_low_aliases26 "$$($(TESTTMP)/test_high_low_aliases26 | tail -1)" "total ok 12 / 12"
 	# FPC-compat: Val's radix prefixes ($ff/xFF/0xFF/&17/%1011) and its optional code arg
 	./$(COMPILER) test/test_val_radix_and_optional_code.pas $(TESTTMP)/test_val_radix26
-	test "$$($(TESTTMP)/test_val_radix26 | tail -1)" = "total ok 23 / 23"
+	tools/expect_same.sh test_val_radix26 "$$($(TESTTMP)/test_val_radix26 | tail -1)" "total ok 23 / 23"
 	# FPC-compat: class function/procedure members in a generic class (fgl's ItemIsManaged shape)
 	./$(COMPILER) test/test_generic_class_methods.pas $(TESTTMP)/test_generic_class_methods26
-	test "$$($(TESTTMP)/test_generic_class_methods26 | tail -1)" = "total ok 5 / 5"
+	tools/expect_same.sh test_generic_class_methods26 "$$($(TESTTMP)/test_generic_class_methods26 | tail -1)" "total ok 5 / 5"
 	# forward class decl + full decl adding a base keeps fields on the stub's entry (metaclass-before-decl idiom)
 	./$(COMPILER) test/test_forward_class_base.pas $(TESTTMP)/test_forward_class_base26
-	test "$$($(TESTTMP)/test_forward_class_base26 | tail -1)" = "total ok 6 / 6"
+	tools/expect_same.sh test_forward_class_base26 "$$($(TESTTMP)/test_forward_class_base26 | tail -1)" "total ok 6 / 6"
 	# property through a class typecast (TButton(Sender).Caption shape) — was a silent offset-0 (VMT ptr) read
 	./$(COMPILER) test/test_cast_property.pas $(TESTTMP)/test_cast_property26
-	test "$$($(TESTTMP)/test_cast_property26 | tail -1)" = "total ok 15 / 15"
+	tools/expect_same.sh test_cast_property26 "$$($(TESTTMP)/test_cast_property26 | tail -1)" "total ok 15 / 15"
 	# multi-param generics <TKey, TData> + constrained type params (fgl TFPGMap/TFPGObjectList shapes)
 	./$(COMPILER) test/test_generic_multiparam.pas $(TESTTMP)/test_generic_multiparam26
-	test "$$($(TESTTMP)/test_generic_multiparam26 | tail -1)" = "total ok 4 / 4"
+	tools/expect_same.sh test_generic_multiparam26 "$$($(TESTTMP)/test_generic_multiparam26 | tail -1)" "total ok 4 / 4"
 	# a generic inheriting a generic, parameters forwarded -- both surfaces
 	./$(COMPILER) test/test_generic_inherit.pas $(TESTTMP)/test_generic_inherit26
-	test "$$($(TESTTMP)/test_generic_inherit26)" = "$$(printf 'chain 5 5 10 1\nplain plain\npair 6 4\nwrap nil\nGENERIC INHERIT OK')"
+	tools/expect_same.sh test_generic_inherit26 "$$($(TESTTMP)/test_generic_inherit26)" "$$(printf 'chain 5 5 10 1\nplain plain\npair 6 4\nwrap nil\nGENERIC INHERIT OK')"
 	./$(COMPILER) test/test_generic_inherit_delphi.pas $(TESTTMP)/test_generic_inherit_delphi26
-	test "$$($(TESTTMP)/test_generic_inherit_delphi26)" = "$$(printf 'chain 5 5 10 1\nplain plain\npair 6 4\nwrap nil\nGENERIC INHERIT DELPHI OK')"
+	tools/expect_same.sh test_generic_inherit_delphi26 "$$($(TESTTMP)/test_generic_inherit_delphi26)" "$$(printf 'chain 5 5 10 1\nplain plain\npair 6 4\nwrap nil\nGENERIC INHERIT DELPHI OK')"
 	# a generic class with NO body (`= class(Parent);`) must not swallow what follows
 	./$(COMPILER) test/test_generic_bodyless.pas $(TESTTMP)/test_generic_bodyless26
-	test "$$($(TESTTMP)/test_generic_bodyless26)" = "$$(printf 'bodyless 7 hi 3\nGENERIC BODYLESS OK')"
+	tools/expect_same.sh test_generic_bodyless26 "$$($(TESTTMP)/test_generic_bodyless26)" "$$(printf 'bodyless 7 hi 3\nGENERIC BODYLESS OK')"
 	# a diamond of nested generic prerequisites: the same alias queued twice
 	./$(COMPILER) test/test_generic_nested_diamond.pas $(TESTTMP)/test_generic_nested_diamond26
-	test "$$($(TESTTMP)/test_generic_nested_diamond26)" = "$$(printf 'diamond 4 9 13\nGENERIC NESTED DIAMOND OK')"
+	tools/expect_same.sh test_generic_nested_diamond26 "$$($(TESTTMP)/test_generic_nested_diamond26)" "$$(printf 'diamond 4 9 13\nGENERIC NESTED DIAMOND OK')"
 	# directives on an interface method signature, and stdcall on a method impl
 	./$(COMPILER) test/test_interface_directives.pas $(TESTTMP)/test_interface_directives26
-	test "$$($(TESTTMP)/test_interface_directives26)" = "$$(printf 'cmp -1 1 6\ncls -1 1 6\npoke\nlegacy legacy\nINTERFACE DIRECTIVES OK')"
+	tools/expect_same.sh test_interface_directives26 "$$($(TESTTMP)/test_interface_directives26)" "$$(printf 'cmp -1 1 6\ncls -1 1 6\npoke\nlegacy legacy\nINTERFACE DIRECTIVES OK')"
 	# a record's static class function called on the TYPE name (not the ctor shape)
 	./$(COMPILER) test/test_record_static_method.pas $(TESTTMP)/test_record_static_method26
-	test "$$($(TESTTMP)/test_record_static_method26)" = "$$(printf 'ctor 15\nstatic-int 6\nstatic-rec 6 12\nRECORD STATIC OK')"
+	tools/expect_same.sh test_record_static_method26 "$$($(TESTTMP)/test_record_static_method26)" "$$(printf 'ctor 15\nstatic-int 6\nstatic-rec 6 12\nRECORD STATIC OK')"
 	# methods of a type nested in a class body, implemented as TOuter.TInner.M -- record AND class
 	./$(COMPILER) test/test_nested_type_methods.pas $(TESTTMP)/test_nested_type_methods26
-	test "$$($(TESTTMP)/test_nested_type_methods26)" = "$$(printf 'nested 42 12 10\nNESTED TYPE METHODS OK')"
+	tools/expect_same.sh test_nested_type_methods26 "$$($(TESTTMP)/test_nested_type_methods26)" "$$(printf 'nested 42 12 10\nNESTED TYPE METHODS OK')"
 	# RTL names FPC code calls: CompareMemRange, DynArraySize, Wide/UnicodeCompare*, CompareValue, HRESULTs
 	# A failed Variant conversion must RAISE, not kill the process. The whole
 	# reason `try i := v; except ... end` is written is that the text may not
@@ -6055,7 +6055,7 @@ test-core: $(COMPILER)
 	# is byte-identical to fpc 3.2.2; the last differs in WORDING only (FPC:
 	# "Invalid variant type cast", pxx names the conversion).
 	./$(COMPILER) -Fulib/rtl test/test_variant_conversion_failure_is_catchable.pas $(TESTTMP)/test_variant_catchable26
-	test "$$($(TESTTMP)/test_variant_catchable26)" = "$$(printf '42\n7\nEVariantError\nEVariantError\nexc EVariantError\nfloat raised\nbool raised\ncannot convert string to integer\nstill alive')"
+	tools/expect_same.sh test_variant_catchable26 "$$($(TESTTMP)/test_variant_catchable26)" "$$(printf '42\n7\nEVariantError\nEVariantError\nexc EVariantError\nfloat raised\nbool raised\ncannot convert string to integer\nstill alive')"
 	# ...and test/fpcv.pas, which sat unwired for exactly this reason: it was
 	# written as an FPC ORACLE probe (what does FPC do when a Variant holding
 	# '42' / 'abc' / '2.5' / '' is read as Integer/Double/Boolean?) and pxx
@@ -6069,9 +6069,9 @@ test-core: $(COMPILER)
 	# from the day it was wired and Track T reported it red against that very
 	# commit (test-core#src:test/fpcv.pas@2). The program's output was right all
 	# along; the expectation could not be.
-	test "$$($(TESTTMP)/fpcv26)" = "$$(printf 'int of \04742\047  = 42\nint of \047abc\047 EXC: EVariantError\ndbl of \0472.5\047 = 2.50\nbool of \047\047    EXC: EVariantError\nbool of 0.0   = FALSE')"
+	tools/expect_same.sh fpcv26 "$$($(TESTTMP)/fpcv26)" "$$(printf 'int of \04742\047  = 42\nint of \047abc\047 EXC: EVariantError\ndbl of \0472.5\047 = 2.50\nbool of \047\047    EXC: EVariantError\nbool of 0.0   = FALSE')"
 	./$(COMPILER) -Fulib/rtl test/test_rtl_fpc_compat_helpers.pas $(TESTTMP)/test_rtl_fpc_compat_helpers26
-	test "$$($(TESTTMP)/test_rtl_fpc_compat_helpers26 | tail -1)" = "total ok 23 / 23"
+	tools/expect_same.sh test_rtl_fpc_compat_helpers26 "$$($(TESTTMP)/test_rtl_fpc_compat_helpers26 | tail -1)" "total ok 23 / 23"
 	# WriteLn of a WideChar prints the CHARACTER, not its ordinal. WideChar used
 	# to collapse to tyUInt16, and every string context but writeln could work
 	# around that ("a Word here can only mean a widechar"); writeln cannot,
@@ -6082,7 +6082,7 @@ test-core: $(COMPILER)
 	# WideChar as UTF-8 where FPC uses the system codepage, an intended
 	# divergence that would make the oracle useless here.
 	./$(COMPILER) test/test_widechar_writeln_prints_the_character.pas $(TESTTMP)/test_widechar_writeln26
-	test "$$($(TESTTMP)/test_widechar_writeln26)" = "$$(printf 'A\nB\nC\nD\nE\nFF\n[G]\nH\n65\nTRUE TRUE\nTRUE\n66\n64\n65 63\nis-b\n66\n2 2\n65 66 67 \n1 A\nxA\nAx\nP\n80\nQ')"
+	tools/expect_same.sh test_widechar_writeln26 "$$($(TESTTMP)/test_widechar_writeln26)" "$$(printf 'A\nB\nC\nD\nE\nFF\n[G]\nH\n65\nTRUE TRUE\nTRUE\n66\n64\n65 63\nis-b\n66\n2 2\n65 66 67 \n1 A\nxA\nAx\nP\n80\nQ')"
 	# A whole-array assignment to a var/out DYNAMIC-ARRAY parameter must reach the
 	# caller. x86-64's IR_STORE_SYM dynarray arm read/wrote the frame slot
 	# directly, which for a by-ref param holds the ADDRESS of the caller's handle
@@ -6091,7 +6091,7 @@ test-core: $(COMPILER)
 	# The last row is the ARC check: without the retain, nilling d frees the block
 	# `e` still points at. Byte-identical to fpc 3.2.2.
 	./$(COMPILER) test/test_dynarray_assign_to_a_var_parameter.pas $(TESTTMP)/test_dynarray_var_param26
-	test "$$($(TESTTMP)/test_dynarray_var_param26)" = "$$(printf 'nil     0\nasg     2\ncopy    2\nout     2\nfnres   4\ndynstr  2\nsetlen  3\nelem    99\nrecfld  2\nsurvive 3 11 22 33')"
+	tools/expect_same.sh test_dynarray_var_param26 "$$($(TESTTMP)/test_dynarray_var_param26)" "$$(printf 'nil     0\nasg     2\ncopy    2\nout     2\nfnres   4\ndynstr  2\nsetlen  3\nelem    99\nrecfld  2\nsurvive 3 11 22 33')"
 	# FPC finalizes a MANAGED out parameter on entry, and only a managed one.
 	# pxx read `out` as a spelling of `var` everywhere, so it cleared neither —
 	# which made the ordinal rows accidentally right and left the managed ones
@@ -6100,7 +6100,7 @@ test-core: $(COMPILER)
 	# would be a divergence the other way. Last row is the ARC check — the clear
 	# releases the caller's reference, so a second owner must survive it.
 	./$(COMPILER) -Fulib/rtl test/test_out_parameter_of_a_managed_type_is_cleared.pas $(TESTTMP)/test_out_param_cleared26
-	test "$$($(TESTTMP)/test_out_param_cleared26)" = "$$(printf 'str      []\ndyn      0\nintf     TRUE\nvariant  []\nrec      [] 3\nassigned [set]\nvarassn  [set]\nrecassn  [set] 9\nint      42\nvarint   42\nchar     [z]\nshortstr [y]\nunmgdrec 1 2\nmethod   []\nclassm   []\ntwoout   [][B][C]\nmixed    []\nfuncout  [] 1\nnested   []\nuntyped  5\nsurvive  [payload-] 7 bad=0')"
+	tools/expect_same.sh test_out_param_cleared26 "$$($(TESTTMP)/test_out_param_cleared26)" "$$(printf 'str      []\ndyn      0\nintf     TRUE\nvariant  []\nrec      [] 3\nassigned [set]\nvarassn  [set]\nrecassn  [set] 9\nint      42\nvarint   42\nchar     [z]\nshortstr [y]\nunmgdrec 1 2\nmethod   []\nclassm   []\ntwoout   [][B][C]\nmixed    []\nfuncout  [] 1\nnested   []\nuntyped  5\nsurvive  [payload-] 7 bad=0')"
 
 	# A routine's `label` section in the canonical ISO position — first, ahead of
 	# const/type/var/nested routines. The label loop used to run only AFTER that
@@ -6108,7 +6108,7 @@ test-core: $(COMPILER)
 	# caller wanted `begin`. Rows: canonical order, label-last (the order that
 	# always worked), label before a nested routine, two labels in one section.
 	./$(COMPILER) test/test_label_section_precedes_the_other_declarations.pas $(TESTTMP)/test_label_section26
-	test "$$($(TESTTMP)/test_label_section26)" = "$$(printf '6\n200\n5\n10')"
+	tools/expect_same.sh test_label_section26 "$$($(TESTTMP)/test_label_section26)" "$$(printf '6\n200\n5\n10')"
 
 	# A typed procvar CONST is callable — `const K: TFn = @Sq;` then `K(7)`. The
 	# const path allocated the symbol without copying LastTypeProcSig into
@@ -6117,7 +6117,7 @@ test-core: $(COMPILER)
 	# parameterless with and without parens, routine-local (a different storage
 	# path), via-var, inside a larger expression, and passed as an argument.
 	./$(COMPILER) test/test_typed_procvar_const_is_callable.pas $(TESTTMP)/test_typed_procvar_const26
-	test "$$($(TESTTMP)/test_typed_procvar_const26)" = "$$(printf 'direct 49\nemit 4\nbare\nbare\nlocal -3\nviavar 25\nmixed 13\narg 36\nassigned TRUE')"
+	tools/expect_same.sh test_typed_procvar_const26 "$$($(TESTTMP)/test_typed_procvar_const26)" "$$(printf 'direct 49\nemit 4\nbare\nbare\nlocal -3\nviavar 25\nmixed 13\narg 36\nassigned TRUE')"
 
 	# ANONYMOUS procedural types — `cb: procedure(l: LongInt)` inline, no named
 	# alias — as record fields (incl. two per declaration and an `of object` one),
@@ -6129,7 +6129,7 @@ test-core: $(COMPILER)
 	# find the enclosing routine's, and eat the real body. Outer/Inner proves the
 	# recursion into a genuine nested routine still finds its own.
 	./$(COMPILER) -Fulib/rtl test/test_anonymous_procedural_type.pas $(TESTTMP)/test_anon_proctype26
-	test "$$($(TESTTMP)/test_anon_proctype26)" = "$$(printf 's1 10\nassigned TRUE\nassigned FALSE\ncdecl 108\ns1 12\ns2 13\nfield 25\nmeth 14\nafter 11\ns1 16\nnested 15\n4 9 \napply 49\ns1 1\ns2 2\nhi\nlocalfn 16\ns1 6\nsizes 48 56')"
+	tools/expect_same.sh test_anon_proctype26 "$$($(TESTTMP)/test_anon_proctype26)" "$$(printf 's1 10\nassigned TRUE\nassigned FALSE\ncdecl 108\ns1 12\ns2 13\nfield 25\nmeth 14\nafter 11\ns1 16\nnested 15\n4 9 \napply 49\ns1 1\ns2 2\nhi\nlocalfn 16\ns1 6\nsizes 48 56')"
 
 	# --strict-fpc reproduces FPC's shift widths, INCLUDING that a narrow `shr`
 	# keeps the operand's SIGNEDNESS: `Integer(-16) shr 0` is -16, not 4294967280.
@@ -6140,9 +6140,9 @@ test-core: $(COMPILER)
 	# decide-shift-operator-promotion-width; strict = FPC's declared width). The
 	# strict output is byte-identical to fpc 3.2.2.
 	./$(COMPILER) test/test_strict_fpc_shr_keeps_the_sign.pas $(TESTTMP)/test_shr_sign_native26
-	test "$$($(TESTTMP)/test_shr_sign_native26)" = "$$(printf 'c0 -16\nv0 -16\nl0 -16\ns0 -16\nb0 -16\nq0 -16\np0 16 4\nd1 9223372036854775800\nd4 1152921504606846975\nd31 2147483648\nd33 8589934592')"
+	tools/expect_same.sh test_shr_sign_native26 "$$($(TESTTMP)/test_shr_sign_native26)" "$$(printf 'c0 -16\nv0 -16\nl0 -16\ns0 -16\nb0 -16\nq0 -16\np0 16 4\nd1 9223372036854775800\nd4 1152921504606846975\nd31 2147483648\nd33 8589934592')"
 	./$(COMPILER) --strict-fpc test/test_strict_fpc_shr_keeps_the_sign.pas $(TESTTMP)/test_shr_sign_strict26
-	test "$$($(TESTTMP)/test_shr_sign_strict26)" = "$$(printf 'c0 -16\nv0 -16\nl0 -16\ns0 -16\nb0 -16\nq0 -16\np0 16 4\nd1 2147483640\nd4 268435455\nd31 -2147483648\nd33 2')"
+	tools/expect_same.sh test_shr_sign_strict26 "$$($(TESTTMP)/test_shr_sign_strict26)" "$$(printf 'c0 -16\nv0 -16\nl0 -16\ns0 -16\nb0 -16\nq0 -16\np0 16 4\nd1 2147483640\nd4 268435455\nd31 -2147483648\nd33 2')"
 
 	# TObject.InstanceSize / TObject.ClassNameIs — System-level, no `uses`.
 	# InstanceSize was pure omission: rtti_emit has always written the size into
@@ -6153,7 +6153,7 @@ test-core: $(COMPILER)
 	# compile time. `nis3` pins that ClassNameIs does NOT walk the parent chain
 	# while InheritsFrom on the same line does.
 	./$(COMPILER) test/test_tobject_instancesize_and_classnameis.pas $(TESTTMP)/test_tobj_instsize26
-	test "$$($(TESTTMP)/test_tobj_instsize26)" = "$$(printf 'cls  16 24\ninst 16 24\npoly 24\nref  24\ngrow TRUE\nnis1 TRUE TRUE FALSE\nnis2 TRUE FALSE\nnis3 TRUE FALSE TRUE\nparen 16 TBase')"
+	tools/expect_same.sh test_tobj_instsize26 "$$($(TESTTMP)/test_tobj_instsize26)" "$$(printf 'cls  16 24\ninst 16 24\npoly 24\nref  24\ngrow TRUE\nnis1 TRUE TRUE FALSE\nnis2 TRUE FALSE\nnis3 TRUE FALSE TRUE\nparen 16 TBase')"
 
 	# Indexing a string with no addressable base. `(s)[3]` COMPILED and then
 	# SEGFAULTED — the grouped-expression suffix loop built a raw AN_INDEX, so it
@@ -6169,7 +6169,7 @@ test-core: $(COMPILER)
 	# other two string flavours that fell to the array path: a parenthesised
 	# literal printed a chunk of the data segment, a ShortString printed nothing.
 	./$(COMPILER) -Fulib/rtl test/test_indexing_a_string_value.pas $(TESTTMP)/test_str_value_index26
-	test "$$($(TESTTMP)/test_str_value_index26)" = "$$(printf 'grp   b\ngrp2  c\nexpr  ef\ncall  A\nlit   ho\nhello\nlidx  l\nonce  y 1\nnamed ho\nfncall AB\ndirect ac\narr   4 6\nastr  zz z\nfld   yy b\nplit  e\nshort b')"
+	tools/expect_same.sh test_str_value_index26 "$$($(TESTTMP)/test_str_value_index26)" "$$(printf 'grp   b\ngrp2  c\nexpr  ef\ncall  A\nlit   ho\nhello\nlidx  l\nonce  y 1\nnamed ho\nfncall AB\ndirect ac\narr   4 6\nastr  zz z\nfld   yy b\nplit  e\nshort b')"
 
 	# `Continue` inside a for-in loop HUNG — an infinite loop, in every container
 	# kind. The desugar put the increment at the END of the body, and AN_WHILE's
@@ -6183,7 +6183,7 @@ test-core: $(COMPILER)
 	# too; the set one was missed on the first pass and found by re-reading the
 	# sibling builder. TIMEOUT-GUARDED.
 	./$(COMPILER) test/test_continue_in_a_for_in_loop.pas $(TESTTMP)/test_forin_continue26
-	test "$$(timeout 30 $(TESTTMP)/test_forin_continue26)" = "$$(printf '024 dyn\n024 fixed\n10 14 16 static\nacde str\n02 enum\n02 set\n13 sctor\n012 break\nall 5\nempty 0\none 1 9\nestr 0')"
+	tools/expect_same.sh test_forin_continue26 "$$(timeout 30 $(TESTTMP)/test_forin_continue26)" "$$(printf '024 dyn\n024 fixed\n10 14 16 static\nacde str\n02 enum\n02 set\n13 sctor\n012 break\nall 5\nempty 0\none 1 9\nestr 0')"
 
 	# `for x in <var of a NAMED set type>`. A named `TS = set of Char` recorded
 	# only the element ENUM id (there is none), so its element KIND was lost and
@@ -6192,14 +6192,14 @@ test-core: $(COMPILER)
 	# second, reduced copy of the element parse. Char / integer-subrange / enum /
 	# Byte element sets, plus Continue in two of them. TIMEOUT-GUARDED.
 	./$(COMPILER) test/test_for_in_over_a_named_set_type.pas $(TESTTMP)/test_forin_namedset26
-	test "$$(timeout 30 $(TESTTMP)/test_forin_namedset26)" = "$$(printf 'ace\n136\n02\n9 200 \nae\n16')"
+	tools/expect_same.sh test_forin_namedset26 "$$(timeout 30 $(TESTTMP)/test_forin_namedset26)" "$$(printf 'ace\n136\n02\n9 200 \nae\n16')"
 
 	# `absolute` over a FIXED array — the byte-view idiom. Arrays were excluded
 	# from the overlay SILENTLY: the array kept its own slot, so it read 0 and
 	# swallowed writes. Global and local, array-over-scalar and array-over-array,
 	# with a record overlay row as the control.
 	./$(COMPILER) test/test_absolute_array_overlay.pas $(TESTTMP)/test_absolute_array26
-	test "$$($(TESTTMP)/test_absolute_array26)" = "$$(printf 'glob 1 2 3 4 5 6 7 8\nrec 513 1027\nwrite 578437695752307299\nview 1 2 3 4 5 6 7 8\nlocal 1 2 3 4\nwords 513 1027\nback -16580095')"
+	tools/expect_same.sh test_absolute_array26 "$$($(TESTTMP)/test_absolute_array26)" "$$(printf 'glob 1 2 3 4 5 6 7 8\nrec 513 1027\nwrite 578437695752307299\nview 1 2 3 4 5 6 7 8\nlocal 1 2 3 4\nwords 513 1027\nback -16580095')"
 
 	# A whole-record hard cast `TQ(r)` with no trailing accessor. It stayed a
 	# POINTER cast, so `q := TQ(r)` copied a record from whatever address r's
@@ -6207,7 +6207,7 @@ test-core: $(COMPILER)
 	# path and worked, which is why the shape without the accessor survived.
 	# The `ptr` row pins that `PR(pp)^` still derefs the VALUE.
 	./$(COMPILER) test/test_whole_record_hard_cast.pas $(TESTTMP)/test_whole_rec_cast26
-	test "$$($(TESTTMP)/test_whole_rec_cast26 | tr -s ' ')" = "$$(printf 'assign 8589934593\nfield 8589934593\nlvalue 7 0\nptr 7\np->i 67305985\ni->p 4 3 2 1\nb->q 578437695752307201\nbyref 16909060\ncall 1')"
+	tools/expect_same.sh test_whole_rec_cast26 "$$($(TESTTMP)/test_whole_rec_cast26 | tr -s ' ')" "$$(printf 'assign 8589934593\nfield 8589934593\nlvalue 7 0\nptr 7\np->i 67305985\ni->p 4 3 2 1\nb->q 578437695752307201\nbyref 16909060\ncall 1')"
 
 	# A failed `as` downcast raises a catchable EInvalidCast. It used to be an
 	# inline Halt(1) — no message, and the ONE member of the checked-operation
@@ -6216,7 +6216,7 @@ test-core: $(COMPILER)
 	# `on E: Exception`, a raise crossing a frame with a finally, `nil as T`
 	# passing through, and the unchanged success path.
 	./$(COMPILER) -Fulib/rtl test/test_failed_as_downcast_is_catchable.pas $(TESTTMP)/test_failed_as26
-	test "$$($(TESTTMP)/test_failed_as26 | tail -1)" = "total ok 4 / 4"
+	tools/expect_same.sh test_failed_as26 "$$($(TESTTMP)/test_failed_as26 | tail -1)" "total ok 4 / 4"
 
 	# A TYPE declared in the program beats a same-named ROUTINE from a used unit
 	# in front of `(`, the position where a type name is a CAST. `type PI =
@@ -6225,7 +6225,7 @@ test-core: $(COMPILER)
 	# that has none. Row 3 pins that the routine stays reachable by its own name
 	# (pxx is lax here; FPC's shadowing is total and rejects that row).
 	./$(COMPILER) -Fulib/rtl test/test_source_type_beats_unit_function.pas $(TESTTMP)/test_type_beats_fn26
-	test "$$($(TESTTMP)/test_type_beats_fn26 | tail -1)" = "total ok 4 / 4"
+	tools/expect_same.sh test_type_beats_fn26 "$$($(TESTTMP)/test_type_beats_fn26 | tail -1)" "total ok 4 / 4"
 
 	# Indexing a by-ref dynamic-array parameter. IR_SLOTADDR is the address of
 	# the LOCAL slot; a var param's slot holds the ADDRESS of the caller's
@@ -6236,7 +6236,7 @@ test-core: $(COMPILER)
 	# depth-1 control, and an array-of-AnsiString row that must release exactly
 	# once.
 	./$(COMPILER) test/test_dynarray_var_param_nested_index.pas $(TESTTMP)/test_dynvarparam26
-	test "$$($(TESTTMP)/test_dynvarparam26 | tail -1)" = "total ok 7 / 7"
+	tools/expect_same.sh test_dynvarparam26 "$$($(TESTTMP)/test_dynvarparam26 | tail -1)" "total ok 7 / 7"
 
 	# Forwarding a by-ref dynarray param onward as another by-ref argument. The
 	# arg path EXCLUDED a forwarded by-ref param on the reasoning that its slot
@@ -6247,7 +6247,7 @@ test-core: $(COMPILER)
 	# var-param dynarray had it too. Includes the AnsiString capture row, whose
 	# arm excludes the same case CORRECTLY (its IR_LEA arm derefs once).
 	./$(COMPILER) test/test_dynarray_var_param_forwarded.pas $(TESTTMP)/test_dynfwd26
-	test "$$($(TESTTMP)/test_dynfwd26 | tail -1)" = "total ok 7 / 7"
+	tools/expect_same.sh test_dynfwd26 "$$($(TESTTMP)/test_dynfwd26 | tail -1)" "total ok 7 / 7"
 
 	# A by-VALUE record argument with managed fields: its hidden caller temp was
 	# released at the CALLER's epilogue, which in the main body is program exit,
@@ -6257,7 +6257,7 @@ test-core: $(COMPILER)
 	# per iteration; `nested 0` pins an rvalue argument (Ident(g)) still holding
 	# its own reference the same way FPC does.
 	./$(COMPILER) -Fulib/rtl test/test_byvalue_record_arg_lifetime.pas $(TESTTMP)/test_byval_rec_life26
-	test "$$($(TESTTMP)/test_byval_rec_life26)" = "$$(printf 'B bs\nmain   1\nXY\ntwo    2\nP ps\ninproc 1\nL bs\nL bs\nL bs\nloop   1\nN bs\nnested 0')"
+	tools/expect_same.sh test_byval_rec_life26 "$$($(TESTTMP)/test_byval_rec_life26)" "$$(printf 'B bs\nmain   1\nXY\ntwo    2\nP ps\ninproc 1\nL bs\nL bs\nL bs\nloop   1\nN bs\nnested 0')"
 
 	# A one-char string LITERAL boxes as VT_CHAR and a string VARIABLE as
 	# VT_STRING, so `v := '7'; i := v` gave 55 (the character code) where
@@ -6265,32 +6265,32 @@ test-core: $(COMPILER)
 	# varString) and answers 7 for both. Literal / variable / real Char, Int64
 	# and Double targets, the raise on a non-numeric character, and VarIsStr.
 	./$(COMPILER) -Fulib/rtl test/test_char_variant_converts_as_text.pas $(TESTTMP)/test_char_variant26
-	test "$$($(TESTTMP)/test_char_variant26 | tail -1)" = "total ok 10 / 10"
+	tools/expect_same.sh test_char_variant26 "$$($(TESTTMP)/test_char_variant26 | tail -1)" "total ok 10 / 10"
 	./$(COMPILER) -Fulib/rtl test/test_sizeof_of_an_expression.pas $(TESTTMP)/test_sizeofexpr26
-	test "$$($(TESTTMP)/test_sizeofexpr26 | grep -c ' ok$$')" = "32"
+	tools/expect_same.sh test_sizeofexpr26 "$$($(TESTTMP)/test_sizeofexpr26 | grep -c ' ok$$')" "32"
 	./$(COMPILER) -Fulib/rtl test/test_low_high_of_ordinal_and_array_type.pas $(TESTTMP)/test_lowhigh26
-	test "$$($(TESTTMP)/test_lowhigh26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_lowhigh26 "$$($(TESTTMP)/test_lowhigh26 | tail -1)" "ALL OK"
 	./$(COMPILER) -Fulib/rtl test/test_anonymous_enum_and_subrange_types.pas $(TESTTMP)/test_anontype26
-	test "$$($(TESTTMP)/test_anontype26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_anontype26 "$$($(TESTTMP)/test_anontype26 | tail -1)" "ALL OK"
 	./$(COMPILER) -Fulib/rtl test/test_cast_as_lvalue_over_a_variable.pas $(TESTTMP)/test_castlval26
-	test "$$($(TESTTMP)/test_castlval26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_castlval26 "$$($(TESTTMP)/test_castlval26 | tail -1)" "ALL OK"
 	./$(COMPILER) -Fulib/rtl test/test_goto_labels_numeric_and_scoped.pas $(TESTTMP)/test_gotolabel26
-	test "$$($(TESTTMP)/test_gotolabel26 | tail -1)" = "main.done"
-	test "$$($(TESTTMP)/test_gotolabel26 | wc -l)" = "8"
+	tools/expect_same.sh test_gotolabel26.1 "$$($(TESTTMP)/test_gotolabel26 | tail -1)" "main.done"
+	tools/expect_same.sh test_gotolabel26.2 "$$($(TESTTMP)/test_gotolabel26 | wc -l)" "8"
 	./$(COMPILER) -Fulib/rtl test/test_const_boolean_expression.pas $(TESTTMP)/test_constbool26
-	test "$$($(TESTTMP)/test_constbool26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_constbool26 "$$($(TESTTMP)/test_constbool26 | tail -1)" "ALL OK"
 	./$(COMPILER) -Fulib/rtl test/test_hint_directives_on_vars_and_fields.pas $(TESTTMP)/test_hintdir26
-	test "$$($(TESTTMP)/test_hintdir26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_hintdir26 "$$($(TESTTMP)/test_hintdir26 | tail -1)" "ALL OK"
 	./$(COMPILER) -Fulib/rtl test/test_open_array_of_a_named_dynamic_array.pas $(TESTTMP)/test_oadynelem26
-	test "$$($(TESTTMP)/test_oadynelem26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_oadynelem26 "$$($(TESTTMP)/test_oadynelem26 | tail -1)" "ALL OK"
 	./$(COMPILER) -Fulib/rtl test/test_named_fixed_array_of_a_dynamic_array.pas $(TESTTMP)/test_fixdynelem26
-	test "$$($(TESTTMP)/test_fixdynelem26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_fixdynelem26 "$$($(TESTTMP)/test_fixdynelem26 | tail -1)" "ALL OK"
 	./$(COMPILER) -Fulib/rtl test/test_pointer_difference_is_a_number.pas $(TESTTMP)/test_ptrdiff26
-	test "$$($(TESTTMP)/test_ptrdiff26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_ptrdiff26 "$$($(TESTTMP)/test_ptrdiff26 | tail -1)" "ALL OK"
 	./$(COMPILER) -Fulib/rtl test/test_a_record_field_named_like_a_class_operation.pas $(TESTTMP)/test_recfldop26
-	test "$$($(TESTTMP)/test_recfldop26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_recfldop26 "$$($(TESTTMP)/test_recfldop26 | tail -1)" "ALL OK"
 	./$(COMPILER) -Fulib/rtl test/test_class_var_of_a_managed_type.pas $(TESTTMP)/test_clsvarmgd26
-	test "$$($(TESTTMP)/test_clsvarmgd26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_clsvarmgd26 "$$($(TESTTMP)/test_clsvarmgd26 | tail -1)" "ALL OK"
 	# `v := v` must leave the variant ALONE. It EMPTIED it instead, on every
 	# target, and leaked the payload while doing so: the retain-before-clear in
 	# each backend's variant-to-variant arm guards the payload's REFCOUNT, and
@@ -6299,45 +6299,45 @@ test-core: $(COMPILER)
 	# 392kB here. Expectations are fpc -O1's own output.
 	# bug-a-a-variant-assigned-to-itself-becomes-empty
 	./$(COMPILER) -Fulib/rtl test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_varselfassign26
-	test "$$($(TESTTMP)/test_varselfassign26 | tail -1)" = "ALL OK"
-	test "$$($(TESTTMP)/test_varselfassign26 | tr '\n' '|')" = "ab|42|2.5|cd|ef|ef|xy|ALL OK|"
+	tools/expect_same.sh test_varselfassign26.1 "$$($(TESTTMP)/test_varselfassign26 | tail -1)" "ALL OK"
+	tools/expect_same.sh test_varselfassign26.2 "$$($(TESTTMP)/test_varselfassign26 | tr '\n' '|')" "ab|42|2.5|cd|ef|ef|xy|ALL OK|"
 	# A Variant comparison with exactly ONE stringy operand converts the text.
 	# Two implementations of one rule (EmitVarBinOp inline on x86-64,
 	# PXXVarBinOpPas for the other targets) -- this is what notices a drift.
 	./$(COMPILER) -Fulib/rtl test/test_variant_comparison_coerces_a_stringy_operand.pas $(TESTTMP)/test_varcmpcoerce26
-	test "$$($(TESTTMP)/test_varcmpcoerce26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_varcmpcoerce26 "$$($(TESTTMP)/test_varcmpcoerce26 | tail -1)" "ALL OK"
 	# Null propagates through Variant ARITHMETIC (and deliberately not through
 	# comparison). Same two implementations as the row above.
 	./$(COMPILER) -Fulib/rtl test/test_variant_null_propagates_through_arithmetic.pas $(TESTTMP)/test_varnullprop26
-	test "$$($(TESTTMP)/test_varnullprop26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_varnullprop26 "$$($(TESTTMP)/test_varnullprop26 | tail -1)" "ALL OK"
 	# A Double Variant converts to an integer by ROUNDING half-to-even, and a
 	# plain Trunc() is deliberately unaffected.
 	./$(COMPILER) -Fulib/rtl test/test_variant_double_to_integer_rounds.pas $(TESTTMP)/test_vardblround26
-	test "$$($(TESTTMP)/test_vardblround26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_vardblround26 "$$($(TESTTMP)/test_vardblround26 | tail -1)" "ALL OK"
 	# A stringy Variant converts to a Boolean by FPC's rule -- keywords, then
 	# numeric text, then raise. The raising rows are asserted as raises.
 	./$(COMPILER) -Fulib/rtl test/test_variant_string_to_boolean.pas $(TESTTMP)/test_varstrbool26
-	test "$$($(TESTTMP)/test_varstrbool26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_varstrbool26 "$$($(TESTTMP)/test_varstrbool26 | tail -1)" "ALL OK"
 	# div/mod by zero on Variants raises instead of trapping (x86-64 SIGFPE'd)
 	# or inventing an answer (-1 / 0 on the other targets). Three idiv sites.
 	./$(COMPILER) -Fulib/rtl test/test_variant_div_by_zero_raises.pas $(TESTTMP)/test_vardivzero26
-	test "$$($(TESTTMP)/test_vardivzero26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_vardivzero26 "$$($(TESTTMP)/test_vardivzero26 | tail -1)" "ALL OK"
 	# Integer div/mod by zero raises on EVERY backend, not just x86-64 -- both
 	# widths, both signednesses (64-bit is a software long division on the
 	# 32-bit targets and needed its own guard).
 	./$(COMPILER) -Fulib/rtl test/test_div_by_zero_raises_on_every_target.pas $(TESTTMP)/test_divzeroall26
-	test "$$($(TESTTMP)/test_divzeroall26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_divzeroall26 "$$($(TESTTMP)/test_divzeroall26 | tail -1)" "ALL OK"
 	# Bitwise ops and unary `not` on a Variant. `not v` used to answer Python
 	# truthiness for every tag (v=12 gave False), `v shr 1` was refused because
 	# Pascal spells shr as an identifier, and every bitwise op returned stack
 	# garbage off x86-64 because only the inline emitter implemented them.
 	./$(COMPILER) -Fulib/rtl test/test_variant_bitwise_and_not.pas $(TESTTMP)/test_varbitnot26
-	test "$$($(TESTTMP)/test_varbitnot26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_varbitnot26 "$$($(TESTTMP)/test_varbitnot26 | tail -1)" "ALL OK"
 	# How writeln RENDERS each Variant tag. Asserts the whole output stream, not
 	# an ALL OK line, because the rendering is what is under test: a Boolean
 	# Variant printed True/False on x86-64 and 1/0 everywhere else.
 	./$(COMPILER) -Fulib/rtl test/test_variant_writes_every_tag.pas $(TESTTMP)/test_varwrite26
-	test "$$($(TESTTMP)/test_varwrite26 | tr '\n' '|')" = "True|False|42|-7|1.25|q|hey|"
+	tools/expect_same.sh test_varwrite26 "$$($(TESTTMP)/test_varwrite26 | tr '\n' '|')" "True|False|42|-7|1.25|q|hey|"
 	# An Int64 assigned to a Variant keeps all 64 bits, in every shape that does
 	# the assigning. The two 32-bit backends moved four bytes into the 8-byte
 	# payload and filled the high word from the TAG, so `v := l` with
@@ -6345,14 +6345,14 @@ test-core: $(COMPILER)
 	# nothing failed, every operator downstream just answered correctly for the
 	# wrong operand. The high word now comes from the payload's TYPE.
 	./$(COMPILER) -Fulib/rtl test/test_wide_int_boxes_into_a_variant.pas $(TESTTMP)/test_wideboxv26
-	test "$$($(TESTTMP)/test_wideboxv26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_wideboxv26 "$$($(TESTTMP)/test_wideboxv26 | tail -1)" "ALL OK"
 	# `F := expr` and `Result := expr` are the same statement and must apply the
 	# same conversion. The function-NAME spelling hand-built an AN_IDENT with no
 	# ASTTk, so nothing downstream could read the target's type and the
 	# right-hand side was never converted: `F := v` with v a Variant stored the
 	# slot ADDRESS. Wrong for Int64, Double and AnsiString results alike.
 	./$(COMPILER) -Fulib/rtl test/test_result_by_function_name_converts.pas $(TESTTMP)/test_rbfn26
-	test "$$($(TESTTMP)/test_rbfn26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_rbfn26 "$$($(TESTTMP)/test_rbfn26 | tail -1)" "ALL OK"
 	# Object Pascal HIDING: a method declared in a descendant without `overload`
 	# hides every inherited method of that name. pxx kept the inherited ones as
 	# candidates, so `l.Add(TFoo.Create(3))` on fgl's TFPGList<IFoo> bound the
@@ -6360,18 +6360,18 @@ test-core: $(COMPILER)
 	# the object's VMT word. The rows that must NOT hide (override, overload,
 	# constructors) are half the test.
 	./$(COMPILER) -Fulib/rtl test/test_descendant_method_hides_inherited.pas $(TESTTMP)/test_dmhi26
-	test "$$($(TESTTMP)/test_dmhi26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_dmhi26 "$$($(TESTTMP)/test_dmhi26 | tail -1)" "ALL OK"
 	# A builtin type NAME means the same thing in a cast as in a declaration.
 	# The name->kind table used to exist twice; a dozen names that declared fine
 	# were "undefined variable" in a cast, and where the two overlapped they
 	# disagreed (nativeint cast as tyInt64 = 8 bytes on a 32-bit target).
 	./$(COMPILER) -Fulib/rtl test/test_builtin_type_names_cast_and_declare.pas $(TESTTMP)/test_typenames26
-	test "$$($(TESTTMP)/test_typenames26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_typenames26 "$$($(TESTTMP)/test_typenames26 | tail -1)" "ALL OK"
 	# `p := 'literal'` on a PChar stored the literal's HANDLE, so WriteLn(p)
 	# printed nothing; a one-char literal stored the ORDINAL and segfaulted on
 	# the next read; and `p = 'alpha'` compared pointers, not contents.
 	./$(COMPILER) -Fulib/rtl test/test_pchar_from_a_string_literal.pas $(TESTTMP)/test_pcharlit26
-	test "$$($(TESTTMP)/test_pcharlit26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_pcharlit26 "$$($(TESTTMP)/test_pcharlit26 | tail -1)" "ALL OK"
 	# ...and the ARGUMENT boundary of the same rule: `StrCat(buf, '-')` passed
 	# the ORDINAL 45 where the pointer goes and the callee dereferenced address
 	# 45, while `StrCat(buf, '--')` was fine. Covers the plain call, an
@@ -6379,52 +6379,52 @@ test-core: $(COMPILER)
 	# the comparison and the RTL PChar family -- and the two-character controls
 	# beside each, so a fix cannot repair one boundary and break the other.
 	./$(COMPILER) -Fulib/rtl test/test_char_literal_to_pchar_param.pas $(TESTTMP)/test_charlitpchar26
-	test "$$($(TESTTMP)/test_charlitpchar26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_charlitpchar26 "$$($(TESTTMP)/test_charlitpchar26 | tail -1)" "ALL OK"
 	# A value typecast to a narrower ordinal truncates in EVERY spelling: Char
 	# and Boolean are lexer tokens and AnsiChar an identifier, and the two
 	# spellings built different nodes, so Char(258) answered 258 and
 	# AnsiChar(258) answered 2. Boolean narrows to its byte and then tests it.
 	./$(COMPILER) -Fulib/rtl test/test_ordinal_value_cast_narrows.pas $(TESTTMP)/test_castnarrow26
-	test "$$($(TESTTMP)/test_castnarrow26 | tail -1)" = "ALL OK"
+	tools/expect_same.sh test_castnarrow26 "$$($(TESTTMP)/test_castnarrow26 | tail -1)" "ALL OK"
 	# Free through a BASE reference runs the descendant's Destroy (virtual, via
 	# root VMT slot 0). Byte-identical to fpc -Mobjfpc; --compact-classes has no
 	# root slots and keeps the parse-time behaviour by design, so it is asserted
 	# separately -- rows --1 and --2 lose their destructor output there.
 	./$(COMPILER) -Fulib/rtl test/test_pascal_free_through_base_destroy.pas $(TESTTMP)/test_freebase26
-	test "$$($(TESTTMP)/test_freebase26)" = "$$(printf 'der\nTDer.Destroy q\nTMid.Destroy\n--1\nTDer.Destroy r\nTMid.Destroy\n--2\nTDer.Destroy t\nTMid.Destroy\n--3\nTDer.Destroy u\nTMid.Destroy\n--4\n--5\nTMid.Destroy\n--6\n--7')"
+	tools/expect_same.sh test_freebase26 "$$($(TESTTMP)/test_freebase26)" "$$(printf 'der\nTDer.Destroy q\nTMid.Destroy\n--1\nTDer.Destroy r\nTMid.Destroy\n--2\nTDer.Destroy t\nTMid.Destroy\n--3\nTDer.Destroy u\nTMid.Destroy\n--4\n--5\nTMid.Destroy\n--6\n--7')"
 	./$(COMPILER) --compact-classes -Fulib/rtl test/test_pascal_free_through_base_destroy.pas $(TESTTMP)/test_freebase_compact26
-	test "$$($(TESTTMP)/test_freebase_compact26)" = "$$(printf 'der\n--1\n--2\nTDer.Destroy t\nTMid.Destroy\n--3\nTDer.Destroy u\nTMid.Destroy\n--4\n--5\nTMid.Destroy\n--6\n--7')"
+	tools/expect_same.sh test_freebase_compact26 "$$($(TESTTMP)/test_freebase_compact26)" "$$(printf 'der\n--1\n--2\nTDer.Destroy t\nTMid.Destroy\n--3\nTDer.Destroy u\nTMid.Destroy\n--4\n--5\nTMid.Destroy\n--6\n--7')"
 
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
-	test "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" = "total ok 14 / 14"
+	tools/expect_same.sh test_rtl_math_float_frexp26 "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" "total ok 14 / 14"
 	# SizeOf of an ARRAY field reports the array's size, not the element's
 	./$(COMPILER) test/test_sizeof_array_field.pas $(TESTTMP)/test_sizeof_array_field26
-	test "$$($(TESTTMP)/test_sizeof_array_field26 | tail -1)" = "total ok 22 / 22"
+	tools/expect_same.sh test_sizeof_array_field26 "$$($(TESTTMP)/test_sizeof_array_field26 | tail -1)" "total ok 22 / 22"
 	# a method at the end of a cast-deref chain: PRec(q)^.o.F(1), PRec(q)^.cr.NewN(3)
 	./$(COMPILER) test/test_pascal_cast_chain_method_call.pas $(TESTTMP)/test_pascal_cast_chain26
-	test "$$($(TESTTMP)/test_pascal_cast_chain26 | tail -1)" = "total ok 9 / 9"
+	tools/expect_same.sh test_pascal_cast_chain26 "$$($(TESTTMP)/test_pascal_cast_chain26 | tail -1)" "total ok 9 / 9"
 	# the macro pre-pass must follow $MODE's comment-nesting rule, not assume nesting
 	./$(COMPILER) -Futest test/test_pascal_macro_comment_nesting.pas $(TESTTMP)/test_pascal_macro_nest26
-	test "$$($(TESTTMP)/test_pascal_macro_nest26)" = "$$(printf 'delphi-mode\n42\nfpc-mode-nested\nnested-off\nMACRO COMMENT NESTING OK')"
+	tools/expect_same.sh test_pascal_macro_nest26 "$$($(TESTTMP)/test_pascal_macro_nest26)" "$$(printf 'delphi-mode\n42\nfpc-mode-nested\nnested-off\nMACRO COMMENT NESTING OK')"
 	# arity-overloaded class names: TD, TD<K>, TD<K,V> coexist; TD<K> inherits TD
 	./$(COMPILER) test/test_generic_name_overload.pas $(TESTTMP)/test_generic_name_overload26
-	test "$$($(TESTTMP)/test_generic_name_overload26)" = "$$(printf '0 1 2\n0')"
+	tools/expect_same.sh test_generic_name_overload26 "$$($(TESTTMP)/test_generic_name_overload26)" "$$(printf '0 1 2\n0')"
 	# two units, same specialization, same alias name, neither using the other
 	./$(COMPILER) -Futest/generic_spec_units test/test_generic_spec_per_unit.pas $(TESTTMP)/test_generic_spec_per_unit26
-	test "$$($(TESTTMP)/test_generic_spec_per_unit26 | tail -1)" = "total ok 4 / 4"
+	tools/expect_same.sh test_generic_spec_per_unit26 "$$($(TESTTMP)/test_generic_spec_per_unit26 | tail -1)" "total ok 4 / 4"
 	# parser gaps: impl-side `static;`/`reintroduce;` on a class function + PChar(expr)[i] indexing
 	./$(COMPILER) test/test_impl_static_and_pchar_index.pas $(TESTTMP)/test_impl_static_and_pchar_index26
-	test "$$($(TESTTMP)/test_impl_static_and_pchar_index26 | tail -1)" = "total ok 5 / 5"
+	tools/expect_same.sh test_impl_static_and_pchar_index26 "$$($(TESTTMP)/test_impl_static_and_pchar_index26 | tail -1)" "total ok 5 / 5"
 	# FPC-compat batch: System.-qualifier, Assigned, resourcestring, method directives, unqualified indexed properties
 	./$(COMPILER) test/test_fpc_compat_batch.pas $(TESTTMP)/test_fpc_compat_batch26
-	test "$$($(TESTTMP)/test_fpc_compat_batch26 | tail -1)" = "total ok 14 / 14"
+	tools/expect_same.sh test_fpc_compat_batch26 "$$($(TESTTMP)/test_fpc_compat_batch26 | tail -1)" "total ok 14 / 14"
 	# Ord/Chr/Length/Succ/Pred/Low/High fold in const decls, case labels, array bounds
 	./$(COMPILER) test/test_const_expr_builtins.pas $(TESTTMP)/test_const_expr_builtins26
-	test "$$($(TESTTMP)/test_const_expr_builtins26)" = "ok"
+	tools/expect_same.sh test_const_expr_builtins26 "$$($(TESTTMP)/test_const_expr_builtins26)" "ok"
 	# FPC-compat batch 2: method overloads, method pointers, setter-prop writes, nested class types, CreateFmt, mem builtins
 	./$(COMPILER) -Fulib/rtl test/test_fpc_compat_batch2.pas $(TESTTMP)/test_fpc_compat_batch226
-	test "$$($(TESTTMP)/test_fpc_compat_batch226 | tail -1)" = "total ok 13 / 13"
+	tools/expect_same.sh test_fpc_compat_batch226 "$$($(TESTTMP)/test_fpc_compat_batch226 | tail -1)" "total ok 13 / 13"
 	# flagship FPC-compat: compile+run REAL FPC 3.2.2 fgl.pp. Prefers the fetched
 	# corpus tree (tools/install_lib_candidates.sh fpc-rtl) and only then a system
 	# fpcsrc -- it used to check ONLY /usr/share/fpcsrc, which is absent on most
@@ -6439,60 +6439,60 @@ test-core: $(COMPILER)
 	else echo "fgl(real FPC source): SKIP (no FPC RTL source -- tools/install_lib_candidates.sh fpc-rtl)"; fi
 	# implicit (sloppy) locals: --auto-locals infers int/string/for-counter/for-in from first assignment; default OFF still errors
 	./$(COMPILER) --auto-locals test/test_auto_locals.pas $(TESTTMP)/test_auto_locals26
-	test "$$($(TESTTMP)/test_auto_locals26 2>/dev/null)" = "total ok 4 / 4"
+	tools/expect_same.sh test_auto_locals26 "$$($(TESTTMP)/test_auto_locals26 2>/dev/null)" "total ok 4 / 4"
 	! ./$(COMPILER) test/test_auto_locals.pas $(TESTTMP)/test_auto_locals_neg26 > $(TESTTMP)/test_auto_locals_neg.log 2>&1
 	grep -q "undefined variable" $(TESTTMP)/test_auto_locals_neg.log
 	# integer div/mod by zero = clean Runtime error 200 + exit 200 (not a raw SIGFPE core dump)
 	./$(COMPILER) test/test_div_zero_re200.pas $(TESTTMP)/test_div_zero_re20026
-	test "$$($(TESTTMP)/test_div_zero_re20026 || echo "exit=$$?")" = "$$(printf '14 2 -14\nbefore\nRuntime error 200 (division by zero)\nexit=200')"
-	test "$$($(TESTTMP)/test_div_zero_re20026 mod || echo "exit=$$?")" = "$$(printf '14 2 -14\nbefore\nRuntime error 200 (division by zero)\nexit=200')"
+	tools/expect_same.sh test_div_zero_re20026.1 "$$($(TESTTMP)/test_div_zero_re20026 || echo "exit=$$?")" "$$(printf '14 2 -14\nbefore\nRuntime error 200 (division by zero)\nexit=200')"
+	tools/expect_same.sh test_div_zero_re20026.2 "$$($(TESTTMP)/test_div_zero_re20026 mod || echo "exit=$$?")" "$$(printf '14 2 -14\nbefore\nRuntime error 200 (division by zero)\nexit=200')"
 	# dynamic-array Insert/Delete intrinsics (FPC clamp semantics, fresh-temp refcount balance)
 	./$(COMPILER) test/test_dynarray_insert_delete.pas $(TESTTMP)/test_dynarray_insert_delete26
-	test "$$($(TESTTMP)/test_dynarray_insert_delete26 | tail -1)" = "total ok 71 / 71"
+	tools/expect_same.sh test_dynarray_insert_delete26 "$$($(TESTTMP)/test_dynarray_insert_delete26 | tail -1)" "total ok 71 / 71"
 	# frozen-string Result is per-call (reentrant) on direct/virtual/indirect calls
 	./$(COMPILER) test/test_frozen_string_reentrant.pas $(TESTTMP)/test_frozen_string_reentrant26
-	test "$$($(TESTTMP)/test_frozen_string_reentrant26 | tail -1)" = "total ok 4 / 4"
+	tools/expect_same.sh test_frozen_string_reentrant26 "$$($(TESTTMP)/test_frozen_string_reentrant26 | tail -1)" "total ok 4 / 4"
 	# inline AnsiString SetLength grow must double the LENGTH, not a reused oversized block's capacity (else OOM)
 	./$(COMPILER) test/test_setlength_grow_capacity.pas $(TESTTMP)/test_setlength_grow_capacity26
-	test "$$($(TESTTMP)/test_setlength_grow_capacity26)" = "$$(printf 'len=101\nfirst=a\nlast=b\nSETLENGTH_CAP_OK')"
+	tools/expect_same.sh test_setlength_grow_capacity26 "$$($(TESTTMP)/test_setlength_grow_capacity26)" "$$(printf 'len=101\nfirst=a\nlast=b\nSETLENGTH_CAP_OK')"
 	# dynarray a+b is rejected at compile time (not a silent segfault)
 	! ./$(COMPILER) test/test_dynarray_concat_rejected.pas $(TESTTMP)/test_dynarray_concat_rejected26 > $(TESTTMP)/test_dynarray_concat_rejected.log 2>&1
 	grep -q "not supported for dynamic arrays" $(TESTTMP)/test_dynarray_concat_rejected.log
 	./$(COMPILER) test/test_method_implicit_field.pas $(TESTTMP)/test_method_implicit_field26
-	test "$$($(TESTTMP)/test_method_implicit_field26)" = "$$(printf '3\n2\n42\n0\n-1')"
+	tools/expect_same.sh test_method_implicit_field26 "$$($(TESTTMP)/test_method_implicit_field26)" "$$(printf '3\n2\n42\n0\n-1')"
 	./$(COMPILER) test/test_method_read_write_unqualified.pas $(TESTTMP)/test_method_rw_unqual26
-	test "$$($(TESTTMP)/test_method_rw_unqual26)" = "$$(printf 'data=42\nr=43')"
+	tools/expect_same.sh test_method_rw_unqual26 "$$($(TESTTMP)/test_method_rw_unqual26)" "$$(printf 'data=42\nr=43')"
 	# inside a method, the class's own method shadows a same-name plain proc (sysutils.Move vs TGame.Move)
 	./$(COMPILER) test/test_method_shadows_unit_proc.pas $(TESTTMP)/test_method_shadows_unit_proc26
-	test "$$($(TESTTMP)/test_method_shadows_unit_proc26)" = "$$(printf 'tick=50\npos=5\nsteps=3\nplainHits=0\nb0=7 b1=8\nplainHits2=2')"
+	tools/expect_same.sh test_method_shadows_unit_proc26 "$$($(TESTTMP)/test_method_shadows_unit_proc26)" "$$(printf 'tick=50\npos=5\nsteps=3\nplainHits=0\nb0=7 b1=8\nplainHits2=2')"
 	./$(COMPILER) test/test_forin_implicit_field.pas $(TESTTMP)/test_forin_implicit_field26
-	test "$$($(TESTTMP)/test_forin_implicit_field26)" = "$$(printf '10\n42\n3\n121')"
+	tools/expect_same.sh test_forin_implicit_field26 "$$($(TESTTMP)/test_forin_implicit_field26)" "$$(printf '10\n42\n3\n121')"
 	./$(COMPILER) test/test_dynarray_global_after_method.pas $(TESTTMP)/test_dynarray_global_after_method26
-	test "$$($(TESTTMP)/test_dynarray_global_after_method26)" = "$$(printf '7\n121')"
+	tools/expect_same.sh test_dynarray_global_after_method26 "$$($(TESTTMP)/test_dynarray_global_after_method26)" "$$(printf '7\n121')"
 	./$(COMPILER) test/test_forin_member_access.pas $(TESTTMP)/test_forin_member_access26
-	test "$$($(TESTTMP)/test_forin_member_access26)" = "$$(printf '42\n2\n42')"
+	tools/expect_same.sh test_forin_member_access26 "$$($(TESTTMP)/test_forin_member_access26)" "$$(printf '42\n2\n42')"
 	# ...and the same shape with the frame deliberately dirtied first, so the
 	# hidden for-in container temp's zero-init is checked on EVERY target rather
 	# than only where the frame layout happens to expose it. Pre-fix this printed
 	# 3102 on x86-64/aarch64 and 7692 on i386/arm32/riscv32; the aarch64-only red
 	# above (41 for 30+12) was the same bug wearing a layout accident.
 	./$(COMPILER) test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_forin_member_temp_zeroinit26
-	test "$$($(TESTTMP)/test_forin_member_temp_zeroinit26)" = "$$(printf '42\n42\n30 12')"
+	tools/expect_same.sh test_forin_member_temp_zeroinit26 "$$($(TESTTMP)/test_forin_member_temp_zeroinit26)" "$$(printf '42\n42\n30 12')"
 	# ...and its three siblings: the SAME hidden dyn-array temp reached through a
 	# call result, an indexed call result, and an array constructor. Pre-fix all
 	# three SIGSEGV on every target, so this one is a crash witness.
 	./$(COMPILER) test/test_hidden_dynarray_temp_zeroinit.pas $(TESTTMP)/test_hidden_dynarray_temp_zeroinit26
-	test "$$($(TESTTMP)/test_hidden_dynarray_temp_zeroinit26)" = "$$(printf '42\n42\n42\n30 12')"
+	tools/expect_same.sh test_hidden_dynarray_temp_zeroinit26 "$$($(TESTTMP)/test_hidden_dynarray_temp_zeroinit26)" "$$(printf '42\n42\n42\n30 12')"
 	./$(COMPILER) test/test_object_ref_array_identity.pas $(TESTTMP)/test_object_ref_array_identity26
-	test "$$($(TESTTMP)/test_object_ref_array_identity26)" = "B"
+	tools/expect_same.sh test_object_ref_array_identity26 "$$($(TESTTMP)/test_object_ref_array_identity26)" "B"
 	./$(COMPILER) test/test_call_result_member.pas $(TESTTMP)/test_call_result_member26
-	test "$$($(TESTTMP)/test_call_result_member26)" = "$$(printf 'rec\n7\nhello\n42\ntag:hello\nhello/tag:hello')"
+	tools/expect_same.sh test_call_result_member26 "$$($(TESTTMP)/test_call_result_member26)" "$$(printf 'rec\n7\nhello\n42\ntag:hello\nhello/tag:hello')"
 	./$(COMPILER) test/test_collections.pas $(TESTTMP)/test_collections26
-	test "$$($(TESTTMP)/test_collections26)" = "$$(printf '100\n0\n81\n9801\n7\n328276\n0\n3\nalpha\ngamma\nBETA')"
+	tools/expect_same.sh test_collections26 "$$($(TESTTMP)/test_collections26)" "$$(printf '100\n0\n81\n9801\n7\n328276\n0\n3\nalpha\ngamma\nBETA')"
 	./$(COMPILER) test/test_generic_class_in_program.pas $(TESTTMP)/test_generic_class_in_program26
-	test "$$($(TESTTMP)/test_generic_class_in_program26)" = "$$(printf '7\nhi')"
+	tools/expect_same.sh test_generic_class_in_program26 "$$($(TESTTMP)/test_generic_class_in_program26)" "$$(printf '7\nhi')"
 	./$(COMPILER) test/test_nested_proc_sibling_call.pas $(TESTTMP)/test_nested_proc_sibling_call26
-	test "$$($(TESTTMP)/test_nested_proc_sibling_call26)" = "$$(printf 'a\nb-before\na7\nb-after\na7\na42\n3\n2\n1\n0\n15\n10005\n10')"
+	tools/expect_same.sh test_nested_proc_sibling_call26 "$$($(TESTTMP)/test_nested_proc_sibling_call26)" "$$(printf 'a\nb-before\na7\nb-after\na7\na42\n3\n2\n1\n0\n15\n10005\n10')"
 	./$(COMPILER) test/test_nested_routine_depth2_capture.pas $(TESTTMP)/test_nested_routine_depth2_capture26
 	$(TESTTMP)/test_nested_routine_depth2_capture26 | diff -u test/test_nested_routine_depth2_capture.expected -
 	# Real-valued CONSTANT EXPRESSIONS — folded at compile time, so a wrong fold
@@ -6516,7 +6516,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_integer_longint_overload.pas $(TESTTMP)/test_int_longint_ovl26
 	$(TESTTMP)/test_int_longint_ovl26 | diff -u test/test_integer_longint_overload.expected -
 	./$(COMPILER) test/test_nested_routine_local_shadows_own_name.pas $(TESTTMP)/test_nested_routine_local_shadows26
-	test "$$($(TESTTMP)/test_nested_routine_local_shadows26 | tail -1)" = "total ok 11 / 11"
+	tools/expect_same.sh test_nested_routine_local_shadows26 "$$($(TESTTMP)/test_nested_routine_local_shadows26 | tail -1)" "total ok 11 / 11"
 	./$(COMPILER) test/test_system_qualified_intrinsic.pas $(TESTTMP)/test_system_qualified_intrinsic26
 	$(TESTTMP)/test_system_qualified_intrinsic26 | diff -u test/test_system_qualified_intrinsic.expected -
 	./$(COMPILER) test/test_method_shadows_builtin.pas $(TESTTMP)/test_method_shadows_builtin26
@@ -6524,38 +6524,38 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_index_a_call_result_directly.pas $(TESTTMP)/test_index_a_call_result26
 	$(TESTTMP)/test_index_a_call_result26 | diff -u test/test_index_a_call_result_directly.expected -
 	./$(COMPILER) test/test_asmmode_tolerance.pas $(TESTTMP)/test_asmmode_tolerance26
-	test "$$($(TESTTMP)/test_asmmode_tolerance26)" = "asmmode ok"
+	tools/expect_same.sh test_asmmode_tolerance26 "$$($(TESTTMP)/test_asmmode_tolerance26)" "asmmode ok"
 	./$(COMPILER) -Futest test/test_unit_hint_directive.pas $(TESTTMP)/test_unit_hint_directive26
-	test "$$($(TESTTMP)/test_unit_hint_directive26)" = "hint 2"
+	tools/expect_same.sh test_unit_hint_directive26 "$$($(TESTTMP)/test_unit_hint_directive26)" "hint 2"
 	./$(COMPILER) test/test_managed_var_param.pas $(TESTTMP)/test_managed_var_param26
-	test "$$($(TESTTMP)/test_managed_var_param26)" = "$$(printf '1\n1\n1\n1\n1\n6')"
+	tools/expect_same.sh test_managed_var_param26 "$$($(TESTTMP)/test_managed_var_param26)" "$$(printf '1\n1\n1\n1\n1\n6')"
 	./$(COMPILER) test/test_managed_setlength_var.pas $(TESTTMP)/test_managed_setlength_var26
-	test "$$($(TESTTMP)/test_managed_setlength_var26)" = "$$(printf '1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_managed_setlength_var26 "$$($(TESTTMP)/test_managed_setlength_var26)" "$$(printf '1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_managed_setlength_growth.pas $(TESTTMP)/test_managed_setlength_growth26
-	test "$$($(TESTTMP)/test_managed_setlength_growth26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_managed_setlength_growth26 "$$($(TESTTMP)/test_managed_setlength_growth26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_cross_setlen_varparam.pas $(TESTTMP)/test_setlen_varparam26
-	test "$$($(TESTTMP)/test_setlen_varparam26)" = "$$(printf 'grow len=5\n11\n22\n33\n0\n0\nshrink len=2\n11\n22\ns len=2\nhello\nworld')"
+	tools/expect_same.sh test_setlen_varparam26 "$$($(TESTTMP)/test_setlen_varparam26)" "$$(printf 'grow len=5\n11\n22\n33\n0\n0\nshrink len=2\n11\n22\ns len=2\nhello\nworld')"
 	./$(COMPILER) test/test_managed_exception_cleanup.pas $(TESTTMP)/test_managed_exception_cleanup26
 	ulimit -v 800000; test "$$($(TESTTMP)/test_managed_exception_cleanup26)" = "1"
 	./$(COMPILER) test/test_default_keyword.pas $(TESTTMP)/test_default_keyword26
-	test "$$($(TESTTMP)/test_default_keyword26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_default_keyword26 "$$($(TESTTMP)/test_default_keyword26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_op_record_result.pas $(TESTTMP)/test_op_record_result26
-	test "$$($(TESTTMP)/test_op_record_result26)" = "$$(printf '4 6\n4 6\n5 8\n4 6\n4 6\n4 6\n5 8\n110 220 330\n110 220 330')"
+	tools/expect_same.sh test_op_record_result26 "$$($(TESTTMP)/test_op_record_result26)" "$$(printf '4 6\n4 6\n5 8\n4 6\n4 6\n4 6\n5 8\n110 220 330\n110 220 330')"
 	./$(COMPILER) test/test_const_record_temp.pas $(TESTTMP)/test_const_record_temp26
-	test "$$($(TESTTMP)/test_const_record_temp26)" = "$$(printf '77\n42\n420\n42\n101')"
+	tools/expect_same.sh test_const_record_temp26 "$$($(TESTTMP)/test_const_record_temp26)" "$$(printf '77\n42\n420\n42\n101')"
 	./$(COMPILER) test/test_const_record_temp_managed.pas $(TESTTMP)/test_const_record_temp_managed26
-	test "$$($(TESTTMP)/test_const_record_temp_managed26)" = "$$(printf '7\n42\n42')"
+	tools/expect_same.sh test_const_record_temp_managed26 "$$($(TESTTMP)/test_const_record_temp_managed26)" "$$(printf '7\n42\n42')"
 	./$(COMPILER) test/test_set_runtime.pas $(TESTTMP)/test_set_runtime26
-	test "$$($(TESTTMP)/test_set_runtime26)" = "$$(printf 'TRUE TRUE FALSE\nTRUE\nFALSE TRUE\nFALSE TRUE TRUE FALSE\nTRUE TRUE TRUE FALSE\nTRUE FALSE TRUE')"
+	tools/expect_same.sh test_set_runtime26 "$$($(TESTTMP)/test_set_runtime26)" "$$(printf 'TRUE TRUE FALSE\nTRUE\nFALSE TRUE\nFALSE TRUE TRUE FALSE\nTRUE TRUE TRUE FALSE\nTRUE FALSE TRUE')"
 	./$(COMPILER) test/test_dynarray_copy.pas $(TESTTMP)/test_dynarray_copy26
-	test "$$($(TESTTMP)/test_dynarray_copy26)" = "$$(printf '3\n30\n40\n50\n2\n50\n60\n2\n30 60\n3\n1 10 100\n2 20 200\n3 30 300\n6 60\n6 10 60\n10 999\n5 400\n0 777\n0')"
+	tools/expect_same.sh test_dynarray_copy26 "$$($(TESTTMP)/test_dynarray_copy26)" "$$(printf '3\n30\n40\n50\n2\n50\n60\n2\n30 60\n3\n1 10 100\n2 20 200\n3 30 300\n6 60\n6 10 60\n10 999\n5 400\n0 777\n0')"
 	# ...and the SAME one-argument shorthand with a string `Copy` overload in
 	# scope, which takes an entirely different parse path (the no-overload-match
 	# fallback, not the bare intrinsic). Both arms implement dynarray Copy, and
 	# before the fix they failed with two different messages -- exactly how a
 	# double case stays half-broken.
 	./$(COMPILER) test/test_dynarray_copy_uses_sysutils.pas $(TESTTMP)/test_dyncopy_sysutils26
-	test "$$($(TESTTMP)/test_dyncopy_sysutils26)" = "$$(printf '3 1 3\n1 99\nell\n5 4')"
+	tools/expect_same.sh test_dyncopy_sysutils26 "$$($(TESTTMP)/test_dyncopy_sysutils26)" "$$(printf '3 1 3\n1 99\nell\n5 4')"
 	# Copy() over MANAGED elements must RETAIN what it copied. Run TWICE, the
 	# second time with -dPXX_HEAP_DEBUG: without the poison a plain run passes
 	# even when the retain is missing, because the freed bytes still hold the old
@@ -6570,31 +6570,31 @@ test-core: $(COMPILER)
 	# dyn-array temp an array-returning CALL uses (IndexDynArrayValue). Row e is
 	# 200k indexed copies in a loop — the temp must not leak.
 	./$(COMPILER) test/test_dynarray_copy_result_indexed.pas $(TESTTMP)/test_dyncopy_idx26
-	test "$$($(TESTTMP)/test_dyncopy_idx26)" = "$$(printf 'a 99|99|1\na2 2|2\nb 10\nc r\nd 3\ne 400000')"
+	tools/expect_same.sh test_dyncopy_idx26 "$$($(TESTTMP)/test_dyncopy_idx26)" "$$(printf 'a 99|99|1\na2 2|2\nb 10\nc r\nd 3\ne 400000')"
 	./$(COMPILER) test/test_dynarray_copy_expr_source.pas $(TESTTMP)/test_dyncopy_expr26
-	test "$$($(TESTTMP)/test_dyncopy_expr26)" = "$$(printf '3 10 30\n10 99\n2 20\n3 7 9\n9 77\n1 9\nkeep REPLACED also\nalso SECOND')"
+	tools/expect_same.sh test_dyncopy_expr26 "$$($(TESTTMP)/test_dyncopy_expr26)" "$$(printf '3 10 30\n10 99\n2 20\n3 7 9\n9 77\n1 9\nkeep REPLACED also\nalso SECOND')"
 	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_dynarray_copy_expr_source.pas $(TESTTMP)/test_dyncopy_expr_hd26
-	test "$$($(TESTTMP)/test_dyncopy_expr_hd26)" = "$$(printf '3 10 30\n10 99\n2 20\n3 7 9\n9 77\n1 9\nkeep REPLACED also\nalso SECOND')"
+	tools/expect_same.sh test_dyncopy_expr_hd26 "$$($(TESTTMP)/test_dyncopy_expr_hd26)" "$$(printf '3 10 30\n10 99\n2 20\n3 7 9\n9 77\n1 9\nkeep REPLACED also\nalso SECOND')"
 	./$(COMPILER) test/test_dynarray_copy_managed_elems.pas $(TESTTMP)/test_dyncopy_managed26
-	test "$$($(TESTTMP)/test_dyncopy_managed26)" = "checks 2211 fails 0"
+	tools/expect_same.sh test_dyncopy_managed26 "$$($(TESTTMP)/test_dyncopy_managed26)" "checks 2211 fails 0"
 	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_dynarray_copy_managed_elems.pas $(TESTTMP)/test_dyncopy_managed_hd26
-	test "$$($(TESTTMP)/test_dyncopy_managed_hd26)" = "checks 2211 fails 0"
+	tools/expect_same.sh test_dyncopy_managed_hd26 "$$($(TESTTMP)/test_dyncopy_managed_hd26)" "checks 2211 fails 0"
 	./$(COMPILER) test/test_val_builtin.pas $(TESTTMP)/test_val_builtin26
-	test "$$($(TESTTMP)/test_val_builtin26)" = "$$(printf '5 0\n55 0\n0 2\n-42 0\n88 0\n0 2\n1000000000000 0\n0')"
+	tools/expect_same.sh test_val_builtin26 "$$($(TESTTMP)/test_val_builtin26)" "$$(printf '5 0\n55 0\n0 2\n-42 0\n88 0\n0 2\n1000000000000 0\n0')"
 	./$(COMPILER) test/test_hilo_swap.pas $(TESTTMP)/test_hilo_swap26
-	test "$$($(TESTTMP)/test_hilo_swap26)" = "$$(printf '10 11 43776\n0 5 1280\n255 170 -21761\n0 86 22016\n18 52 13330\n237 204 -13075\n4660 22136 1450709556\n60875 43400 -1450644021\n39612 57072 3740310204\n287454020 1432778632 6153737367135073092\n4294967295 4294967295 -1\n2291772091 3437096703 14762217934866197179\n12 8 51200\n18 52 13330\n0 5 1280\n12 8 51200\n18 52 13330\n156 64 16540\n4660 22136 1450709556\n287454020 1432778632 6153737367135073092')"
+	tools/expect_same.sh test_hilo_swap26 "$$($(TESTTMP)/test_hilo_swap26)" "$$(printf '10 11 43776\n0 5 1280\n255 170 -21761\n0 86 22016\n18 52 13330\n237 204 -13075\n4660 22136 1450709556\n60875 43400 -1450644021\n39612 57072 3740310204\n287454020 1432778632 6153737367135073092\n4294967295 4294967295 -1\n2291772091 3437096703 14762217934866197179\n12 8 51200\n18 52 13330\n0 5 1280\n12 8 51200\n18 52 13330\n156 64 16540\n4660 22136 1450709556\n287454020 1432778632 6153737367135073092')"
 	./$(COMPILER) test/test_overload_no_narrowing.pas $(TESTTMP)/test_overload_no_narrowing26
-	test "$$($(TESTTMP)/test_overload_no_narrowing26)" = "$$(printf 'longint 5\nbyte 200\nword 40000\nlongint 100000\nint64 5000000000\nbyte 200\nword 40000\nbyte 7\n')"
+	tools/expect_same.sh test_overload_no_narrowing26 "$$($(TESTTMP)/test_overload_no_narrowing26)" "$$(printf 'longint 5\nbyte 200\nword 40000\nlongint 100000\nint64 5000000000\nbyte 200\nword 40000\nbyte 7\n')"
 	./$(COMPILER) --mimic-fpc test/test_procvar_value_context.pas $(TESTTMP)/test_procvar_value_context26
-	test "$$($(TESTTMP)/test_procvar_value_context26)" = "procvar-value-context OK"
+	tools/expect_same.sh test_procvar_value_context26 "$$($(TESTTMP)/test_procvar_value_context26)" "procvar-value-context OK"
 	./$(COMPILER) --mimic-fpc test/test_procvar_fpc_mode.pas $(TESTTMP)/test_procvar_fpc_mode26
-	test "$$($(TESTTMP)/test_procvar_fpc_mode26)" = "procvar-fpc-mode OK"
+	tools/expect_same.sh test_procvar_fpc_mode26 "$$($(TESTTMP)/test_procvar_fpc_mode26)" "procvar-fpc-mode OK"
 	./$(COMPILER) test/test_managed_record_temp_init.pas $(TESTTMP)/test_managed_record_temp_init26
-	test "$$($(TESTTMP)/test_managed_record_temp_init26)" = "$$(printf '5! = 120\n5! = 120\n6! = 720')"
+	tools/expect_same.sh test_managed_record_temp_init26 "$$($(TESTTMP)/test_managed_record_temp_init26)" "$$(printf '5! = 120\n5! = 120\n6! = 720')"
 	./$(COMPILER) test/hello.pas $(TESTTMP)/hello26
-	test "$$($(TESTTMP)/hello26)" = "Hello, World!"
+	tools/expect_same.sh hello26 "$$($(TESTTMP)/hello26)" "Hello, World!"
 	./$(COMPILER) test/hello.c $(TESTTMP)/hello_c26
-	test "$$($(TESTTMP)/hello_c26)" = "Hello, World!"
+	tools/expect_same.sh hello_c26 "$$($(TESTTMP)/hello_c26)" "Hello, World!"
 	# MAX_STRS: a C program with more distinct string literals than the table
 	# holds was refused with `string table overflow` naming line 2 of an injected
 	# unit — nothing wrong at line 2, the table was simply full of the user's
@@ -6609,7 +6609,7 @@ test-core: $(COMPILER)
 	@python3 tools/gen_manylit_c.py 9500 $(TESTTMP)/manylit.c
 	./$(COMPILER) $(TESTTMP)/manylit.c $(TESTTMP)/manylit26
 	gcc -O0 -o $(TESTTMP)/manylit_gcc $(TESTTMP)/manylit.c
-	test "$$($(TESTTMP)/manylit26)" = "$$($(TESTTMP)/manylit_gcc)"
+	tools/expect_same.sh manylit26 "$$($(TESTTMP)/manylit26)" "$$($(TESTTMP)/manylit_gcc)"
 	# Calling through a function-pointer TABLE failed to PARSE in two shapes while
 	# four neighbouring spellings worked: a LOCAL `binop tab[2]` declared through a
 	# typedef never got SymElemProcSig (the `tab[i](args)` channel) though the
@@ -6618,7 +6618,7 @@ test-core: $(COMPILER)
 	# vtable -- was missing from CalleeSig entirely, which handles AN_INDEX over an
 	# AN_IDENT but not over an AN_FIELD. gcc -O0 oracle; pinned cannot compile it.
 	./$(COMPILER) test/cfnptr_array_callable.c $(TESTTMP)/cfnptr_array26
-	test "$$($(TESTTMP)/cfnptr_array26)" = "$$(printf 'local  11 30 -1\nfield  11 30 -1\ngfield 11 30\narrow  11 30\nvaridx 30 30\n16 48 8 \nderef  11 30\nnolist 5 13\nglobal 11 30\nraw    11 30\ntemp   -1\ndirect 11\nplain  9 7')"
+	tools/expect_same.sh cfnptr_array26 "$$($(TESTTMP)/cfnptr_array26)" "$$(printf 'local  11 30 -1\nfield  11 30 -1\ngfield 11 30\narrow  11 30\nvaridx 30 30\n16 48 8 \nderef  11 30\nnolist 5 13\nglobal 11 30\nraw    11 30\ntemp   -1\ndirect 11\nplain  9 7')"
 	# GCC extended inline asm. Not recognised at all, so `asm` parsed as a call to
 	# an undeclared function and the operand sections died at the first ':'.
 	# busybox's libbb.h defines barrier() as `asm volatile ("":::"memory")`, which
@@ -6630,21 +6630,21 @@ test-core: $(COMPILER)
 	  | grep -q 'inline asm with a non-empty template' \
 	  || { echo 'casm_nonempty_template_fails: FAIL - real instructions were accepted and dropped'; exit 1; }
 	./$(COMPILER) test/casm_barrier.c $(TESTTMP)/casmbarrier26
-	test "$$($(TESTTMP)/casmbarrier26)" = "43 2"
+	tools/expect_same.sh casmbarrier26 "$$($(TESTTMP)/casmbarrier26)" "43 2"
 	# A ternary as the CALLEE of a call. (*fp)(a), (fp)(a), (name)(a), (a,fn)(x),
 	# arr[i](a) and s.f[i](a) were all recognised and `(c ? f : g)(a)` was not —
 	# busybox opens libbb/copy_file.c with `(FLAGS_DEREF ? stat : lstat)(...)`.
 	# Bare names and fn-pointer vars, both arms, nested, and the condition
 	# evaluated exactly once. gcc -O0 oracle.
 	./$(COMPILER) test/cternary_callee.c $(TESTTMP)/cterncallee26
-	test "$$($(TESTTMP)/cterncallee26)" = "$$(printf '10 4\n10 4\n10\n21\n4\n1')"
+	tools/expect_same.sh cterncallee26 "$$($(TESTTMP)/cterncallee26)" "$$(printf '10 4\n10 4\n10\n21\n4\n1')"
 	# GNU omitted-middle conditional `x ?: y`. The value is x when x is true and
 	# x is evaluated EXACTLY ONCE, so the then-arm cannot be a copy of the
 	# condition node: it binds to a hidden temp. busybox editors/vi.c spells
 	# `col - ((col % tabstop) ?: tabstop)`. int/pointer(->field)/char-promotion/
 	# float arms, nesting, and the else arm's side effect. gcc -O0 oracle.
 	./$(COMPILER) test/cternary_elvis.c $(TESTTMP)/cternelvis26
-	test "$$($(TESTTMP)/cternelvis26)" = "$$(printf '7 7\n5\n1\n3\n2\n11 22\n90 90\n2.5 2.5\n7\n42\n-8 0 8 8 \n4\n0\n1\n1')"
+	tools/expect_same.sh cternelvis26 "$$($(TESTTMP)/cternelvis26)" "$$(printf '7 7\n5\n1\n3\n2\n11 22\n90 90\n2.5 2.5\n7\n42\n-8 0 8 8 \n4\n0\n1\n1')"
 	# pxx's own <sys/ioctl.h> must supply the _IOC request-encoding family (glibc
 	# reaches it via <bits/ioctls.h> -> <asm/ioctl.h>). Real code spells its own
 	# ioctl numbers with it instead of including a linux/ uapi header: busybox
@@ -6652,17 +6652,17 @@ test-core: $(COMPILER)
 	# itself. Missing, the name survived preprocessing as a call with a TYPE for
 	# an argument and died as `expected C expression`. gcc -O0 oracle.
 	./$(COMPILER) test/ccrtl_ioctl_macros.c $(TESTTMP)/ccrtlioctl26
-	test "$$($(TESTTMP)/ccrtlioctl26)" = "$$(printf '1074041865\n2148532740\n513\n3221779459\n16 4\n1 148 9\n21505 21531')"
+	tools/expect_same.sh ccrtlioctl26 "$$($(TESTTMP)/ccrtlioctl26)" "$$(printf '1074041865\n2148532740\n513\n3221779459\n16 4\n1 148 9\n21505 21531')"
 	# <string.h> pulls in <strings.h> under __USE_MISC, as glibc's does, so a TU
 	# that includes only <string.h> still sees strcasecmp/strncasecmp/bzero/ffs
 	# — busybox's libbb.h never includes <strings.h>, and those two were the
 	# largest single cause of `call to undeclared function` in a busybox sweep.
 	./$(COMPILER) test/ccrtl_string_pulls_strings.c $(TESTTMP)/ccrtlstrings26
-	test "$$($(TESTTMP)/ccrtlstrings26)" = "$$(printf '0 1 1\n0 1\nbzero ok\n0 1 5\n2')"
+	tools/expect_same.sh ccrtlstrings26 "$$($(TESTTMP)/ccrtlstrings26)" "$$(printf '0 1 1\n0 1\nbzero ok\n0 1 5\n2')"
 	# ...and the gate holds the other way: with no feature-test macro, <strings.h>
 	# must NOT leak, or every strict-ISO TU with a local named `index` breaks.
 	./$(COMPILER) test/ccrtl_string_strict_iso.c $(TESTTMP)/ccrtlstrict26
-	test "$$($(TESTTMP)/ccrtlstrict26)" = "7 4"
+	tools/expect_same.sh ccrtlstrict26 "$$($(TESTTMP)/ccrtlstrict26)" "7 4"
 	# C99 7.17: <stddef.h> defines wchar_t, and that is the header code reaches
 	# the type through — crtl had the typedef only in <wchar.h>, so busybox's
 	# libbb/lineedit.c read `wchar_t` as a stray token at top level. C99 7.24.1
@@ -6672,7 +6672,7 @@ test-core: $(COMPILER)
 	# literal. The <wchar.h> include sits mid-file so the part above it proves
 	# the <stddef.h> claim. gcc -O0 oracle.
 	./$(COMPILER) test/ccrtl_wchar_types.c $(TESTTMP)/ccrtlwchar26
-	test "$$($(TESTTMP)/ccrtlwchar26)" = "$$(printf '65 4\n-1 1\n97 8364 0\n8461\n1 90\n2 195 169')"
+	tools/expect_same.sh ccrtlwchar26 "$$($(TESTTMP)/ccrtlwchar26)" "$$(printf '65 4\n-1 1\n97 8364 0\n8461\n1 90\n2 195 169')"
 	# Unary `!` in a C constant expression, and the negative array bound the idiom
 	# it appears in EXISTS to produce. CEvalConstPrimary's unary chain had -, +, ~
 	# and & and not !, so `char[1 - 2*!!(cond)]` — BUILD_BUG_ON, as busybox and the
@@ -6685,7 +6685,7 @@ test-core: $(COMPILER)
 	  | grep -q 'array dimension is negative' \
 	  || { echo 'cconst_negative_array_bound_fails: FAIL - a failing BUILD_BUG_ON was accepted'; exit 1; }
 	./$(COMPILER) test/cconst_logical_not_array_bound.c $(TESTTMP)/clognot26
-	test "$$($(TESTTMP)/clognot26)" = "$$(printf '0 1\n0 1\n1 1\n1\n2\n1 2\n2 4\n3 4 0')"
+	tools/expect_same.sh clognot26 "$$($(TESTTMP)/clognot26)" "$$(printf '0 1\n0 1\n1 1\n1\n2\n1 2\n2 4\n3 4 0')"
 	# `(char*)"abc"` pointed at the string's 8-byte LENGTH PREFIX, not its data:
 	# b - a was -8 and b[0] was 3. A literal's IR value is the frozen string's
 	# HANDLE, and the assign, return and call-argument paths each carry their own
@@ -6694,64 +6694,64 @@ test-core: $(COMPILER)
 	# IS a char*, so the cast is an identity and now yields the literal unchanged --
 	# removing a shape rather than adding a fourth copy of the skip. gcc -O0 oracle.
 	./$(COMPILER) test/cstring_literal_cast.c $(TESTTMP)/cstrlitcast26
-	test "$$($(TESTTMP)/cstrlitcast26)" = "$$(printf 'same 0 0 0 0\nbytes 97 98 99 0\nlen 3 3 3\nstr [abc] [abc] [abc]\nglobal 0 [glob]\nindex y z\ninline [inline] [uncast]\nconcat [ab]\nret [ret] 3\narg 127 127\ncmp 0 0\nempty 0 0')"
+	tools/expect_same.sh cstrlitcast26 "$$($(TESTTMP)/cstrlitcast26)" "$$(printf 'same 0 0 0 0\nbytes 97 98 99 0\nlen 3 3 3\nstr [abc] [abc] [abc]\nglobal 0 [glob]\nindex y z\ninline [inline] [uncast]\nconcat [ab]\nret [ret] 3\narg 127 127\ncmp 0 0\nempty 0 0')"
 	# 17..32-parameter C function definitions + calls (MAX_PROC_PARAMS=32; gcc oracle)
 	# a global pointer initialised to &multidim_array[i][j][k]: only ONE subscript was
 	# consumed, so the whole initializer was silently SKIPPED and the pointer stayed null
 	./$(COMPILER) test/cglobal_addr_multidim_elem_b312.c $(TESTTMP)/cglobal_addr_multidim_b31226
-	test "$$($(TESTTMP)/cglobal_addr_multidim_b31226)" = "$$(printf '3d=77 off=200 want=200\n2d=66 off=17 want=17\n1d=55 off=5 want=5\n0 =44 off=0 want=0\nstored=11 22')"
+	tools/expect_same.sh cglobal_addr_multidim_b31226 "$$($(TESTTMP)/cglobal_addr_multidim_b31226)" "$$(printf '3d=77 off=200 want=200\n2d=66 off=17 want=17\n1d=55 off=5 want=5\n0 =44 off=0 want=0\nstored=11 22')"
 	# a 1-D GLOBAL pointer array with an element the flat pre-scan can't fold (&g,
 	# (void*)0, &a[i][j], a cast) was zero-skipped WHOLE; now defers to the walker
 	# LOCAL multidim brace elision: short rows zero-fill, never bleed (b367)
 	./$(COMPILER) test/clocal_multidim_brace_elision_b367.c $(TESTTMP)/clocal_mdbe_b36726
-	test "$$($(TESTTMP)/clocal_mdbe_b36726)" = "$$(printf 'a=1 0 2 0\nb=3 4 6\nc=3 4 6\nd=9 0 8 7\ne=1 0 2 3 0\nf=1.5 0.0 2.5')"
+	tools/expect_same.sh clocal_mdbe_b36726 "$$($(TESTTMP)/clocal_mdbe_b36726)" "$$(printf 'a=1 0 2 0\nb=3 4 6\nc=3 4 6\nd=9 0 8 7\ne=1 0 2 3 0\nf=1.5 0.0 2.5')"
 	# pragma pack(N)/push/pop must cap member alignment (was parsed away; b366)
 	./$(COMPILER) test/cpragma_pack_b366.c $(TESTTMP)/cpragma_pack_b36626
-	test "$$($(TESTTMP)/cpragma_pack_b36626)" = "$$(printf 'A=5 offA=1\nB=8 offB=4\nC=6 offC=2\nD=8 offD=4')"
+	tools/expect_same.sh cpragma_pack_b36626 "$$($(TESTTMP)/cpragma_pack_b36626)" "$$(printf 'A=5 offA=1\nB=8 offB=4\nC=6 offC=2\nD=8 offD=4')"
 	./$(COMPILER) test/cglobal_1d_ptr_array_addr_init_b350.c $(TESTTMP)/cglobal_1d_ptr_array_b35026
-	test "$$($(TESTTMP)/cglobal_1d_ptr_array_b35026)" = "$$(printf 'g474=7 7\nholes=-1 7 -1 7\nmix=null hi zz\ndeep=6 2\nunsized=7 -1 7 n=3\ndblderef=7')"
+	tools/expect_same.sh cglobal_1d_ptr_array_b35026 "$$($(TESTTMP)/cglobal_1d_ptr_array_b35026)" "$$(printf 'g474=7 7\nholes=-1 7 -1 7\nmix=null hi zz\ndeep=6 2\nunsized=7 -1 7 n=3\ndblderef=7')"
 	# a SCALAR pointer global init the fast paths can't fold ((char*)&g, &st.f,
 	# arr+1) was silently skipped (null pointer); now defers to a replay at main
 	./$(COMPILER) test/cglobal_scalar_ptr_init_defer_b351.c $(TESTTMP)/cglobal_scalar_ptr_b35126
-	test "$$($(TESTTMP)/cglobal_scalar_ptr_b35126)" = "7 3 1 2 5 6 3 lit"
+	tools/expect_same.sh cglobal_scalar_ptr_b35126 "$$($(TESTTMP)/cglobal_scalar_ptr_b35126)" "7 3 1 2 5 6 3 lit"
 	# UNION bitfields must all start at bit 0 (they were packed sequentially like
 	# struct bitfields -- f2 read bits 14..27, silent wrong value vs the gcc oracle)
 	./$(COMPILER) test/cunion_bitfield_overlap_b352.c $(TESTTMP)/cunion_bitfield_b35226
-	test "$$($(TESTTMP)/cunion_bitfield_b35226)" = "$$(printf 'f0=fffffffb f1=3ffb f2=3ffb f3=fffffffb sz=4\nafter: f0=ffffc005 f1=5\nstruct: a=5 b=9\nstruct after: a=5 b=3')"
+	tools/expect_same.sh cunion_bitfield_b35226 "$$($(TESTTMP)/cunion_bitfield_b35226)" "$$(printf 'f0=fffffffb f1=3ffb f2=3ffb f3=fffffffb sz=4\nafter: f0=ffffc005 f1=5\nstruct: a=5 b=9\nstruct after: a=5 b=3')"
 	# >32-bit bitfield ARITHMETIC reduces to the field's exact bit-precision (gcc):
 	# +,-,*,<< wrap mod 2^width, signed sign-extends, pre-inc/dec yields the wrapped
 	# value (bug-c-long-long-bitfield-promotion arithmetic residual). gcc-differential.
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cbitfield_arith_precision.c $(TESTTMP)/cbitfield_arith26
-	test "$$($(TESTTMP)/cbitfield_arith26)" = "$$(printf 'mul33=0 mul40=0 mul41=1099511627776\ns.q=-549755813888 sadd=-6\npre=0 predec=1099511627774 post=0')"
+	tools/expect_same.sh cbitfield_arith26 "$$($(TESTTMP)/cbitfield_arith26)" "$$(printf 'mul33=0 mul40=0 mul41=1099511627776\ns.q=-549755813888 sadd=-6\npre=0 predec=1099511627774 post=0')"
 	# a multidim LOCAL array of STRUCTS: the walker got nDims=1, so only the first
 	# element was initialised and the rest stayed zero (silently)
 	./$(COMPILER) test/cmultidim_struct_array_init_b311.c $(TESTTMP)/cmultidim_struct_array_b31126
-	test "$$($(TESTTMP)/cmultidim_struct_array_b31126)" = "$$(printf '2d=1 4 6\n3d=1 6 8\n2f=1 4 5 8\n1d=1 6')"
+	tools/expect_same.sh cmultidim_struct_array_b31126 "$$($(TESTTMP)/cmultidim_struct_array_b31126)" "$$(printf '2d=1 4 6\n3d=1 6 8\n2f=1 4 5 8\n1d=1 6')"
 	# a multidim LOCAL array of POINTERS must honour its brace initializer (it was
 	# silently SKIPPED -- every element read back nil; 1-D and multidim-int were fine)
 	./$(COMPILER) test/cmultidim_ptr_array_init_b309.c $(TESTTMP)/cmultidim_ptr_array_b30926
-	test "$$($(TESTTMP)/cmultidim_ptr_array_b30926)" = "$$(printf 'braced=1 1\nflat=1 1\n3d=1 1\nderef3d=5\n1d=1\nints=1 6\nglobal2d=1 1\nglobal3d=1 1')"
+	tools/expect_same.sh cmultidim_ptr_array_b30926 "$$($(TESTTMP)/cmultidim_ptr_array_b30926)" "$$(printf 'braced=1 1\nflat=1 1\n3d=1 1\nderef3d=5\n1d=1\nints=1 6\nglobal2d=1 1\nglobal3d=1 1')"
 	# a discarded expression statement must still be EVALUATED: a non-call root was an
 	# IR orphan, so `f() ^ 3;` / `(void)(f()+1);` / `x = ((f()^K), 0);` never called f()
 	./$(COMPILER) test/cdiscarded_expr_side_effects_b308.c $(TESTTMP)/cdiscarded_expr_b30826
-	test "$$($(TESTTMP)/cdiscarded_expr_b30826)" = "$$(printf 'bare-call=1\nbinop=1\ncast=1\nternary=1\ntwo-calls=2\nunary=1\ncomma-assign=1 g=0\ncomma-chain=2 x=9\ncomma-in-if=1')"
+	tools/expect_same.sh cdiscarded_expr_b30826 "$$($(TESTTMP)/cdiscarded_expr_b30826)" "$$(printf 'bare-call=1\nbinop=1\ncast=1\nternary=1\ntwo-calls=2\nunary=1\ncomma-assign=1 g=0\ncomma-chain=2 x=9\ncomma-in-if=1')"
 	# a struct-valued comma expression passed BY VALUE (segfaulted: a comma is not an
 	# lvalue, so the record-by-value copy could not take its address); plus the left
 	# operand's side effects, which must still run
 	./$(COMPILER) test/ccomma_struct_arg_b307.c $(TESTTMP)/ccomma_struct_arg_b30726
-	test "$$($(TESTTMP)/ccomma_struct_arg_b30726)" = "$$(printf 'plain=10\ncomma=10\ncomma-big=10\nnested-comma=10\nside=2\nassign-comma=2 7 side=0\nassign-comma-big=10 side=1')"
+	tools/expect_same.sh ccomma_struct_arg_b30726 "$$($(TESTTMP)/ccomma_struct_arg_b30726)" "$$(printf 'plain=10\ncomma=10\ncomma-big=10\nnested-comma=10\nside=2\nassign-comma=2 7 side=0\nassign-comma-big=10 side=1')"
 	# anonymous bit-fields (`T : width` padding, `T : 0` alignment) -- the aggregate used
 	# to be REJECTED and fell back to opaque: sizeof 0, every field garbage, silently
 	./$(COMPILER) test/canon_bitfield_b310.c $(TESTTMP)/canon_bitfield_b31026
-	test "$$($(TESTTMP)/canon_bitfield_b31026)" = "$$(printf 'A size=4 a=5 b=6\nB size=16 x=11 y=22\nC size=4 a=5 b=6\nD size=8 a=5 b=6\nU size=8 f0=18446744073709551612\nA written a=7 b=1\nD written a=2 b=7')"
+	tools/expect_same.sh canon_bitfield_b31026 "$$($(TESTTMP)/canon_bitfield_b31026)" "$$(printf 'A size=4 a=5 b=6\nB size=16 x=11 y=22\nC size=4 a=5 b=6\nD size=8 a=5 b=6\nU size=8 f0=18446744073709551612\nA written a=7 b=1\nD written a=2 b=7')"
 	./$(COMPILER) test/test_alloca.c $(TESTTMP)/test_alloca26
-	test "$$($(TESTTMP)/test_alloca26)" = "7088718"
+	tools/expect_same.sh test_alloca26 "$$($(TESTTMP)/test_alloca26)" "7088718"
 	# signed bitfields must sign-extend on read (they came back zero-extended on EVERY
 	# backend; the C corpora all use unsigned bitfields, so csmith found it, not them)
 	./$(COMPILER) test/csigned_bitfield_b306.c $(TESTTMP)/csigned_bitfield_b30626
-	test "$$($(TESTTMP)/csigned_bitfield_b30626)" = "$$(printf 'A.a=-5\nB.a=-3 B.b=-9 B.c=7\nC.a=-1\nD.a=140 D.b=560 D.c=423 D.d=-5\nlocal A.a=-2\nlocal B.a=3 B.b=-16 B.c=15\nmin5=-16\nmax5=15\nzero=0\nu4=15\nfull8=-7\nfull8max=127\nfull16=-300')"
+	tools/expect_same.sh csigned_bitfield_b30626 "$$($(TESTTMP)/csigned_bitfield_b30626)" "$$(printf 'A.a=-5\nB.a=-3 B.b=-9 B.c=7\nC.a=-1\nD.a=140 D.b=560 D.c=423 D.d=-5\nlocal A.a=-2\nlocal B.a=3 B.b=-16 B.c=15\nmin5=-16\nmax5=15\nzero=0\nu4=15\nfull8=-7\nfull8max=127\nfull16=-300')"
 	./$(COMPILER) test/cparams_17_32_b150.c $(TESTTMP)/cparams_17_32_26
-	test "$$($(TESTTMP)/cparams_17_32_26)" = "$$(printf 's=153\nt=528')"
+	tools/expect_same.sh cparams_17_32_26 "$$($(TESTTMP)/cparams_17_32_26)" "$$(printf 's=153\nt=528')"
 	./$(COMPILER) test/cexpr_b.c $(TESTTMP)/cexpr_b26
 	$(TESTTMP)/cexpr_b26; test "$$?" = "89"
 	./$(COMPILER) test/cstmt_c.c $(TESTTMP)/cstmt_c26
@@ -6766,7 +6766,7 @@ test-core: $(COMPILER)
 	$(TESTTMP)/ccast_b426; test "$$?" = "102"
 	# cast expression as a call argument (vararg + plain) — bug-c-cast-as-call-arg-parse-error
 	./$(COMPILER) test/ccast_call_arg.c $(TESTTMP)/ccast_call_arg26
-	test "$$($(TESTTMP)/ccast_call_arg26)" = "v=20 s=22"
+	tools/expect_same.sh ccast_call_arg26 "$$($(TESTTMP)/ccast_call_arg26)" "v=20 s=22"
 	./$(COMPILER) test/cloop_b5.c $(TESTTMP)/cloop_b526
 	$(TESTTMP)/cloop_b526; test "$$?" = "28"
 	./$(COMPILER) test/cfnptr_b6.c $(TESTTMP)/cfnptr_b626
@@ -6901,12 +6901,12 @@ test-core: $(COMPILER)
 	# must run its RHS exactly once. It ran twice (1 + one per chained assign) --
 	# values right, side effects doubled, which is why only a csmith checksum saw it.
 	./$(COMPILER) test/cstruct_assign_value_side_effects.c $(TESTTMP)/cstruct_assign_value26
-	test "$$($(TESTTMP)/cstruct_assign_value26)" = "ok"
+	tools/expect_same.sh cstruct_assign_value26 "$$($(TESTTMP)/cstruct_assign_value26)" "ok"
 	# ...and its VALUE half: that same expression handed to a BY-VALUE parameter
 	# passed only the first eightbyte, because the argument resolved to REC_NONE
 	# and the record temp was sized by the 8-byte fallback (csmith seed 91110).
 	./$(COMPILER) test/cstruct_assign_value_byvalue_arg.c $(TESTTMP)/cstruct_assign_arg26
-	test "$$($(TESTTMP)/cstruct_assign_arg26)" = "ok"
+	tools/expect_same.sh cstruct_assign_arg26 "$$($(TESTTMP)/cstruct_assign_arg26)" "ok"
 	# ...and the DESTINATION half. Making the assignment yield the stored value was
 	# done by lowering the LHS a SECOND time, which re-emits its side effects: on a
 	# struct, `*p++ = v` advanced p by TWO and `buf[i++] = v` stepped i twice. The
@@ -6914,21 +6914,21 @@ test-core: $(COMPILER)
 	# store and the load-back. Found through quickjs, whose interpreter pushes with
 	# `*sp++ = <JSValue>` on every opcode -- `1+2` evaluated to 2.
 	./$(COMPILER) test/cstruct_assign_dest_side_effects.c $(TESTTMP)/cstruct_assign_dest26
-	test "$$($(TESTTMP)/cstruct_assign_dest26)" = "ok"
+	tools/expect_same.sh cstruct_assign_dest26 "$$($(TESTTMP)/cstruct_assign_dest26)" "ok"
 	# ...and the CALL destination, which survived both of those fixes: `*f() = v`
 	# ran f twice. Discarded, the statement-level discard marked the load-back's
 	# address operand -- the call -- as a statement the store already dragged in;
 	# consumed, two statement roots reached the one call node and the tree-walking
 	# emitter has no value cache. The index and field forms were always right.
 	./$(COMPILER) test/cassign_dest_call_once.c $(TESTTMP)/cassign_dest_call26
-	test "$$($(TESTTMP)/cassign_dest_call26)" = "ok"
+	tools/expect_same.sh cassign_dest_call26 "$$($(TESTTMP)/cassign_dest_call26)" "ok"
 	# ...and the COMPOUND half, a different mechanism: `x OP= y` desugars to
 	# `x = x OP y` REUSING the one lvalue AST node, so lowering walked it twice and
 	# `*f() += 1` called f twice, `a[i++] += 1` stepped i twice, `*p++ += 1` moved p
 	# by TWO. Values right, side effects doubled. A plain-char lvalue is in there
 	# because it arrives promoted three binops deep and outlived the first fix.
 	./$(COMPILER) test/cassign_compound_lvalue_once.c $(TESTTMP)/cassign_compound26
-	test "$$($(TESTTMP)/cassign_compound26)" = "ok"
+	tools/expect_same.sh cassign_compound26 "$$($(TESTTMP)/cassign_compound26)" "ok"
 	./$(COMPILER) test/cnested_union_b44.c $(TESTTMP)/cnested_union_b4426
 	$(TESTTMP)/cnested_union_b4426; test "$$?" = "42"
 	./$(COMPILER) test/canon_agg_global_b45.c $(TESTTMP)/canon_agg_global_b4526
@@ -7116,7 +7116,7 @@ test-core: $(COMPILER)
 	$(TESTTMP)/carch_predefines26; test "$$?" = "42"
 	# b195 (bug-c-printf-without-stdio-include-varargs): implicit printf binds crtl
 	./$(COMPILER) test/cimplicit_printf_varargs_b195.c $(TESTTMP)/cimplicit_printf_varargs_b19526
-	test "$$($(TESTTMP)/cimplicit_printf_varargs_b19526; test $$? = 42 && echo RC42)" = "$$(printf 'x=42 y=ok\nRC42')"
+	tools/expect_same.sh cimplicit_printf_varargs_b19526 "$$($(TESTTMP)/cimplicit_printf_varargs_b19526; test $$? = 42 && echo RC42)" "$$(printf 'x=42 y=ok\nRC42')"
 	# b196 (bug-crtl-strtod-precision-cjson-floats): exact strtod + %g round-trip
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ccrtl_strtod_g_roundtrip_b196.c $(TESTTMP)/ccrtl_strtod_g_roundtrip_b19626
 	$(TESTTMP)/ccrtl_strtod_g_roundtrip_b19626; test "$$?" = "42"
@@ -7144,7 +7144,7 @@ test-core: $(COMPILER)
 	# compared against into a huge unsigned and the comparison silently flipped.
 	# 1588 csmith lines reduced to that one line. Expectations are gcc's.
 	./$(COMPILER) test/chex_long_suffix_literal.c $(TESTTMP)/chex_long_suffix26
-	test "$$($(TESTTMP)/chex_long_suffix26)" = "$$(printf 'hexL   1\nhex    1\ndecL   1\nhexLL  1\nhexU   0\nplain  1')"
+	tools/expect_same.sh chex_long_suffix26 "$$($(TESTTMP)/chex_long_suffix26)" "$$(printf 'hexL   1\nhex    1\ndecL   1\nhexLL  1\nhexU   0\nplain  1')"
 	# b201 (bug-crtl-printf-g-double-roundtrip): va_arg(T*) pointee width (scanf float)
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cva_arg_pointer_pointee_b201.c $(TESTTMP)/cva_arg_pointer_pointee_b20126
 	$(TESTTMP)/cva_arg_pointer_pointee_b20126; test "$$?" = "42"
@@ -7256,11 +7256,11 @@ test-core: $(COMPILER)
 	# would trade the false positive for that lost true positive.
 	# bug-c-static-functions-in-different-crtl-modules-collide
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cstatic_two_modules.c $(TESTTMP)/cstatic_two_modules26 > $(TESTTMP)/cstatic_two_modules.log 2>&1
-	test "$$(grep -c 'duplicate definition' $(TESTTMP)/cstatic_two_modules.log)" = "0"
-	test "$$($(TESTTMP)/cstatic_two_modules26)" = "$$(printf 'va=42\nopen=1\ndup=1\nclose=1\nclose2=1')"
+	tools/expect_same.sh cstatic_two_modules.log "$$(grep -c 'duplicate definition' $(TESTTMP)/cstatic_two_modules.log)" "0"
+	tools/expect_same.sh cstatic_two_modules26 "$$($(TESTTMP)/cstatic_two_modules26)" "$$(printf 'va=42\nopen=1\ndup=1\nclose=1\nclose2=1')"
 	./$(COMPILER) test/cstatic_same_module_dup.c $(TESTTMP)/cstatic_same_module26 > $(TESTTMP)/cstatic_same_module.log 2>&1
-	test "$$(grep -c 'duplicate definition' $(TESTTMP)/cstatic_same_module.log)" = "1"
-	test "$$($(TESTTMP)/cstatic_same_module26)" = "2 11"
+	tools/expect_same.sh cstatic_same_module.log "$$(grep -c 'duplicate definition' $(TESTTMP)/cstatic_same_module.log)" "1"
+	tools/expect_same.sh cstatic_same_module26 "$$($(TESTTMP)/cstatic_same_module26)" "2 11"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cgeneric_selection_b209.c $(TESTTMP)/cgeneric_selection_b20926
 	$(TESTTMP)/cgeneric_selection_b20926; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/crange_designator_b210.c $(TESTTMP)/crange_designator_b21026
@@ -7542,79 +7542,79 @@ test-core: $(COMPILER)
 	$(TESTTMP)/cvararg_named_fp26; test "$$?" = "42"
 	# stack-spilled named params (7th+ GP / 9th+ FP) + overflow_arg_area anchor + capped va seeds (gcc-verified oracle)
 	./$(COMPILER) test/cvararg_stack_spill.c $(TESTTMP)/cvararg_stack_spill26
-	test "$$($(TESTTMP)/cvararg_stack_spill26)" = "$$(printf '7060\n950.25\n7807800.75')"
+	tools/expect_same.sh cvararg_stack_spill26 "$$($(TESTTMP)/cvararg_stack_spill26)" "$$(printf '7060\n950.25\n7807800.75')"
 	./$(COMPILER) -Ilib/crtl/include -Ilibrary_candidates/tiny-regex-c test/crtl_tiny_regex_match.c $(TESTTMP)/crtl_tiny_regex_match26
-	test "$$($(TESTTMP)/crtl_tiny_regex_match26)" = "tiny-regex: all cases pass"
+	tools/expect_same.sh crtl_tiny_regex_match26 "$$($(TESTTMP)/crtl_tiny_regex_match26)" "tiny-regex: all cases pass"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c $(TESTTMP)/cinc_main26
-	test "$$($(TESTTMP)/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
+	tools/expect_same.sh cinc_main26 "$$($(TESTTMP)/cinc_main26)" "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas $(TESTTMP)/test_declared_directive26
-	test "$$($(TESTTMP)/test_declared_directive26)" = "$$(printf '1\n2\n3\n4\n5')"
+	tools/expect_same.sh test_declared_directive26 "$$($(TESTTMP)/test_declared_directive26)" "$$(printf '1\n2\n3\n4\n5')"
 	./$(COMPILER) test/dotted/test_dotted_uses.pas $(TESTTMP)/test_dotted_uses26
-	test "$$($(TESTTMP)/test_dotted_uses26)" = "$$(printf '2\n42\n7')"
+	tools/expect_same.sh test_dotted_uses26 "$$($(TESTTMP)/test_dotted_uses26)" "$$(printf '2\n42\n7')"
 	./$(COMPILER) test/test_string_copy_intrinsic.pas $(TESTTMP)/test_string_copy_intrinsic26
-	test "$$($(TESTTMP)/test_string_copy_intrinsic26)" = "$$(printf 'Hello\nWorld\nWorld!\nWorld!\nHel\n0\nHello')"
+	tools/expect_same.sh test_string_copy_intrinsic26 "$$($(TESTTMP)/test_string_copy_intrinsic26)" "$$(printf 'Hello\nWorld\nWorld!\nWorld!\nHel\n0\nHello')"
 	./$(COMPILER) test/test_copy_char_promote.pas $(TESTTMP)/test_copy_char_promote26
-	test "$$($(TESTTMP)/test_copy_char_promote26)" = "$$(printf '[a]\n[z]\n[ell]')"
+	tools/expect_same.sh test_copy_char_promote26 "$$($(TESTTMP)/test_copy_char_promote26)" "$$(printf '[a]\n[z]\n[ell]')"
 	./$(COMPILER) test/test_forward_use.pas $(TESTTMP)/test_forward_use26
-	test "$$($(TESTTMP)/test_forward_use26)" = "$$(printf 'square(7) = 49\nGreeting  = hello\nsum 1..4  = 10\npoint     = 3,4')"
+	tools/expect_same.sh test_forward_use26 "$$($(TESTTMP)/test_forward_use26)" "$$(printf 'square(7) = 49\nGreeting  = hello\nsum 1..4  = 10\npoint     = 3,4')"
 	./$(COMPILER) test/test_unit_impl_fwd.pas $(TESTTMP)/test_unit_impl_fwd26
-	test "$$($(TESTTMP)/test_unit_impl_fwd26)" = "110"
+	tools/expect_same.sh test_unit_impl_fwd26 "$$($(TESTTMP)/test_unit_impl_fwd26)" "110"
 	./$(COMPILER) test/test_const_before_ctor.pas $(TESTTMP)/test_const_before_ctor26
-	test "$$($(TESTTMP)/test_const_before_ctor26)" = "$$(printf '12\n112')"
+	tools/expect_same.sh test_const_before_ctor26 "$$($(TESTTMP)/test_const_before_ctor26)" "$$(printf '12\n112')"
 	./$(COMPILER) test/test_platform_defines.pas $(TESTTMP)/test_platform_defines_posix26
-	test "$$($(TESTTMP)/test_platform_defines_posix26)" = "$$(printf 'platform=posix\nfiles\nsockets\nthreads\ndynlib\nend')"
+	tools/expect_same.sh test_platform_defines_posix26 "$$($(TESTTMP)/test_platform_defines_posix26)" "$$(printf 'platform=posix\nfiles\nsockets\nthreads\ndynlib\nend')"
 	./$(COMPILER) --platform=esp test/test_platform_defines.pas $(TESTTMP)/test_platform_defines_esp26
-	test "$$($(TESTTMP)/test_platform_defines_esp26)" = "$$(printf 'platform=esp\nend')"
+	tools/expect_same.sh test_platform_defines_esp26 "$$($(TESTTMP)/test_platform_defines_esp26)" "$$(printf 'platform=esp\nend')"
 	./$(COMPILER) -Itest/unitpath/posix test/test_unitpath.pas $(TESTTMP)/test_unitpath_posix26
-	test "$$($(TESTTMP)/test_unitpath_posix26)" = "posix"
+	tools/expect_same.sh test_unitpath_posix26 "$$($(TESTTMP)/test_unitpath_posix26)" "posix"
 	./$(COMPILER) -Futest/unitpath/esp test/test_unitpath.pas $(TESTTMP)/test_unitpath_esp26
-	test "$$($(TESTTMP)/test_unitpath_esp26)" = "esp"
+	tools/expect_same.sh test_unitpath_esp26 "$$($(TESTTMP)/test_unitpath_esp26)" "esp"
 	./$(COMPILER) test/test_asm.pas $(TESTTMP)/test_asm26
 	$(TESTTMP)/test_asm26; test "$$?" = "42"
 	./$(COMPILER) test/test_asm_func.pas $(TESTTMP)/test_asm_func26
-	test "$$($(TESTTMP)/test_asm_func26)" = "14"
+	tools/expect_same.sh test_asm_func26 "$$($(TESTTMP)/test_asm_func26)" "14"
 	./$(COMPILER) test/test_asm_swap.pas $(TESTTMP)/test_asm_swap26
-	test "$$($(TESTTMP)/test_asm_swap26)" = "$$(printf '42\n-7\n-7\n42')"
+	tools/expect_same.sh test_asm_swap26 "$$($(TESTTMP)/test_asm_swap26)" "$$(printf '42\n-7\n-7\n42')"
 	./$(COMPILER) test/test_asm_branch.pas $(TESTTMP)/test_asm_branch26
 	$(TESTTMP)/test_asm_branch26; test "$$?" = "45"
 	./$(COMPILER) test/test_asm_keywords.pas $(TESTTMP)/test_asm_keywords26
-	test "$$($(TESTTMP)/test_asm_keywords26)" = "4"
+	tools/expect_same.sh test_asm_keywords26 "$$($(TESTTMP)/test_asm_keywords26)" "4"
 	./$(COMPILER) test/test_asm_global.pas $(TESTTMP)/test_asm_global26
-	test "$$($(TESTTMP)/test_asm_global26)" = "$$(printf '11 12 23\nTRUE')"
+	tools/expect_same.sh test_asm_global26 "$$($(TESTTMP)/test_asm_global26)" "$$(printf '11 12 23\nTRUE')"
 	./$(COMPILER) test/test_asm_memr.pas $(TESTTMP)/test_asm_memr26
-	test "$$($(TESTTMP)/test_asm_memr26)" = "$$(printf '0\n20\n30\n40\n999\n1\n110\n1')"
+	tools/expect_same.sh test_asm_memr26 "$$($(TESTTMP)/test_asm_memr26)" "$$(printf '0\n20\n30\n40\n999\n1\n110\n1')"
 	./$(COMPILER) test/test_asm_sizekw.pas $(TESTTMP)/test_asm_sizekw26
-	test "$$($(TESTTMP)/test_asm_sizekw26)" = "$$(printf '6\n7\n232 3 0 0\n300')"
+	tools/expect_same.sh test_asm_sizekw26 "$$($(TESTTMP)/test_asm_sizekw26)" "$$(printf '6\n7\n232 3 0 0\n300')"
 	# one source, per-target asm blocks behind {$$ifdef CPU...} guards (x64 leg; rv32/a64 legs in the cross suites)
 	./$(COMPILER) test/test_asm_ifdef_multiarch.pas $(TESTTMP)/test_asm_ifdef_ma26
-	test "$$($(TESTTMP)/test_asm_ifdef_ma26)" = "42"
+	tools/expect_same.sh test_asm_ifdef_ma26 "$$($(TESTTMP)/test_asm_ifdef_ma26)" "42"
 	! ./$(COMPILER) test/test_asm_att_reject.pas $(TESTTMP)/test_asm_att_reject26 > $(TESTTMP)/test_asm_att_reject.log 2>&1
 	grep -q "asm block cannot be read" $(TESTTMP)/test_asm_att_reject.log
 	./$(COMPILER) test/test_coswitch.pas $(TESTTMP)/test_coswitch26
-	test "$$($(TESTTMP)/test_coswitch26)" = "$$(printf 'main: 1\ngen: 1\nmain: 2\ngen: 2\nmain: 3\ngen: 3\nmain: 4\ngen: 4\nmain: 5\ngen: 5\ndone')"
+	tools/expect_same.sh test_coswitch26 "$$($(TESTTMP)/test_coswitch26)" "$$(printf 'main: 1\ngen: 1\nmain: 2\ngen: 2\nmain: 3\ngen: 3\nmain: 4\ngen: 4\nmain: 5\ngen: 5\ndone')"
 	./$(COMPILER) test/test_not.pas $(TESTTMP)/test_not26
-	test "$$($(TESTTMP)/test_not26)" = "$$(printf -- '-1\n-16\n-256\n4\nok')"
+	tools/expect_same.sh test_not26 "$$($(TESTTMP)/test_not26)" "$$(printf -- '-1\n-16\n-256\n4\nok')"
 	./$(COMPILER) test/test_generator.pas $(TESTTMP)/test_generator26
-	test "$$($(TESTTMP)/test_generator26)" = "$$(printf '1 4 9 16 25 \n25\n0 1 1 2 3 5 8 13 \n1 2 3 ')"
+	tools/expect_same.sh test_generator26 "$$($(TESTTMP)/test_generator26)" "$$(printf '1 4 9 16 25 \n25\n0 1 1 2 3 5 8 13 \n1 2 3 ')"
 	./$(COMPILER) test/test_generator_record.pas $(TESTTMP)/test_generator_record26
-	test "$$($(TESTTMP)/test_generator_record26)" = "$$(printf '1 10 1\n2 20 4\n3 30 9\n30')"
+	tools/expect_same.sh test_generator_record26 "$$($(TESTTMP)/test_generator_record26)" "$$(printf '1 10 1\n2 20 4\n3 30 9\n30')"
 	./$(COMPILER) test/test_generator_yield_call.pas $(TESTTMP)/test_generator_yield_call26
-	test "$$($(TESTTMP)/test_generator_yield_call26)" = "$$(printf '1 2 10\n3 4 20\n5 6 30\n60')"
+	tools/expect_same.sh test_generator_yield_call26 "$$($(TESTTMP)/test_generator_yield_call26)" "$$(printf '1 2 10\n3 4 20\n5 6 30\n60')"
 	./$(COMPILER) test/test_forin_set_member.pas $(TESTTMP)/test_forin_set_member26
-	test "$$($(TESTTMP)/test_forin_set_member26)" = "$$(printf 'spell=0\nspell=2\nspell=4\ndone')"
+	tools/expect_same.sh test_forin_set_member26 "$$($(TESTTMP)/test_forin_set_member26)" "$$(printf 'spell=0\nspell=2\nspell=4\ndone')"
 	./$(COMPILER) -Fulib/rtl/platform/posix test/test_textfile.pas $(TESTTMP)/test_textfile26
-	test "$$($(TESTTMP)/test_textfile26)" = "$$(printf 'line0: room=hall\nline1: count=42\nio=0')"
+	tools/expect_same.sh test_textfile26 "$$($(TESTTMP)/test_textfile26)" "$$(printf 'line0: room=hall\nline1: count=42\nio=0')"
 	./$(COMPILER) -Futest -Fulib/rtl/platform/posix test/test_textfile_in_unit.pas $(TESTTMP)/test_textfile_in_unit26
-	test "$$($(TESTTMP)/test_textfile_in_unit26)" = "hello from unit"
+	tools/expect_same.sh test_textfile_in_unit26 "$$($(TESTTMP)/test_textfile_in_unit26)" "hello from unit"
 	./$(COMPILER) test/test_forin_native.pas $(TESTTMP)/test_forin_native26
-	test "$$($(TESTTMP)/test_forin_native26)" = "$$(printf 'static sum=150\ndyn sum=600\nchar=a\nchar=b\nchar=c\nday=0\nday=1\nday=2\nday=3\nday=4\nwd=0\nwd=2\nwd=4\ncs=a\ncs=m\ncs=x')"
+	tools/expect_same.sh test_forin_native26 "$$($(TESTTMP)/test_forin_native26)" "$$(printf 'static sum=150\ndyn sum=600\nchar=a\nchar=b\nchar=c\nday=0\nday=1\nday=2\nday=3\nday=4\nwd=0\nwd=2\nwd=4\ncs=a\ncs=m\ncs=x')"
 	# for-in over a SET CONSTRUCTOR (members in ORDINAL order, not source order)
 	# and over a string LITERAL (source order) -- both were refused outright
 	./$(COMPILER) test/test_forin_literal_sources.pas $(TESTTMP)/test_forin_lit26
-	test "$$($(TESTTMP)/test_forin_lit26 | tail -1)" = "FORIN LITERAL SOURCES OK"
-	test "$$($(TESTTMP)/test_forin_lit26 | head -1)" = "ints  1 2 3 5 "
-	test "$$($(TESTTMP)/test_forin_lit26 | head -5 | tail -1)" = "mixed 1 2 3 7 9 "
-	test "$$($(TESTTMP)/test_forin_lit26 | head -8 | tail -1)" = "lit   h.e.l.l.o."
+	tools/expect_same.sh test_forin_lit26.1 "$$($(TESTTMP)/test_forin_lit26 | tail -1)" "FORIN LITERAL SOURCES OK"
+	tools/expect_same.sh test_forin_lit26.2 "$$($(TESTTMP)/test_forin_lit26 | head -1)" "ints  1 2 3 5 "
+	tools/expect_same.sh test_forin_lit26.3 "$$($(TESTTMP)/test_forin_lit26 | head -5 | tail -1)" "mixed 1 2 3 7 9 "
+	tools/expect_same.sh test_forin_lit26.4 "$$($(TESTTMP)/test_forin_lit26 | head -8 | tail -1)" "lit   h.e.l.l.o."
 	@# ...and the OTHER half of the same rule: with a NON-ordinal loop variable
 	@# `[...]` is an ARRAY CONSTRUCTOR in SOURCE order, not a set. A float
 	@# constructor used to be built as a set of float bits -- one iteration,
@@ -7625,100 +7625,100 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_forin_nonordinal_array_ctor.pas $(TESTTMP)/test_forin_nonord26
 	$(TESTTMP)/test_forin_nonord26 | diff -u test/test_forin_nonordinal_array_ctor.expected -
 	./$(COMPILER) test/test_forin_enumerator.pas $(TESTTMP)/test_forin_enumerator26
-	test "$$($(TESTTMP)/test_forin_enumerator26)" = "$$(printf 'x=11\nx=22\nx=33\nsum=66')"
+	tools/expect_same.sh test_forin_enumerator26 "$$($(TESTTMP)/test_forin_enumerator26)" "$$(printf 'x=11\nx=22\nx=33\nsum=66')"
 	./$(COMPILER) test/test_forin_record_enumerator_b355.pas $(TESTTMP)/test_forin_record_enumerator_b35526
-	test "$$($(TESTTMP)/test_forin_record_enumerator_b35526)" = "$$(printf 'i=10\ni=20\ni=30\ni=40\nsum=100')"
+	tools/expect_same.sh test_forin_record_enumerator_b35526 "$$($(TESTTMP)/test_forin_record_enumerator_b35526)" "$$(printf 'i=10\ni=20\ni=30\ni=40\nsum=100')"
 	./$(COMPILER) test/test_operator_implicit_shortstring_b356.pas $(TESTTMP)/test_operator_implicit_shortstring_b35626
-	test "$$($(TESTTMP)/test_operator_implicit_shortstring_b35626)" = "$$(printf 'seven\nconverted: len=10')"
+	tools/expect_same.sh test_operator_implicit_shortstring_b35626 "$$($(TESTTMP)/test_operator_implicit_shortstring_b35626)" "$$(printf 'seven\nconverted: len=10')"
 	./$(COMPILER) test/test_method_pointer_virtual_b357.pas $(TESTTMP)/test_method_pointer_virtual_b35726
-	test "$$($(TESTTMP)/test_method_pointer_virtual_b35726)" = "$$(printf 'nonvirt=15\nvirt-base=6\nvirt-deriv=1005\ndirect=1005')"
+	tools/expect_same.sh test_method_pointer_virtual_b35726 "$$($(TESTTMP)/test_method_pointer_virtual_b35726)" "$$(printf 'nonvirt=15\nvirt-base=6\nvirt-deriv=1005\ndirect=1005')"
 	./$(COMPILER) test/test_method_pointer_arg_b361.pas $(TESTTMP)/test_method_pointer_arg_b36126
-	test "$$($(TESTTMP)/test_method_pointer_arg_b36126)" = "$$(printf 'cb=15\ncb=6\ncb=1005')"
+	tools/expect_same.sh test_method_pointer_arg_b36126 "$$($(TESTTMP)/test_method_pointer_arg_b36126)" "$$(printf 'cb=15\ncb=6\ncb=1005')"
 	./$(COMPILER) test/test_forin_aggr_elems.pas $(TESTTMP)/test_forin_aggr_elems26
-	test "$$($(TESTTMP)/test_forin_aggr_elems26)" = "$$(printf 'rec=33\ncls=30\nstr=aabbcc')"
+	tools/expect_same.sh test_forin_aggr_elems26 "$$($(TESTTMP)/test_forin_aggr_elems26)" "$$(printf 'rec=33\ncls=30\nstr=aabbcc')"
 	./$(COMPILER) test/test_enum_cast.pas $(TESTTMP)/test_enum_cast26
-	test "$$($(TESTTMP)/test_enum_cast26)" = "$$(printf '1\n5\n3\n0\n3')"
+	tools/expect_same.sh test_enum_cast26 "$$($(TESTTMP)/test_enum_cast26)" "$$(printf '1\n5\n3\n0\n3')"
 	./$(COMPILER) test/test_cast_char_bool.pas $(TESTTMP)/test_cast_char_bool26
-	test "$$($(TESTTMP)/test_cast_char_bool26)" = "$$(printf 'A\ncharcmp\n67\nbtrue\nbfalse\nHIJ')"
+	tools/expect_same.sh test_cast_char_bool26 "$$($(TESTTMP)/test_cast_char_bool26)" "$$(printf 'A\ncharcmp\n67\nbtrue\nbfalse\nHIJ')"
 	./$(COMPILER) test/test_cast_string.pas $(TESTTMP)/test_cast_string26
-	test "$$($(TESTTMP)/test_cast_string26)" = "$$(printf '[Q]\nA\neq\nhello\nhello\nXYZ')"
+	tools/expect_same.sh test_cast_string26 "$$($(TESTTMP)/test_cast_string26)" "$$(printf '[Q]\nA\neq\nhello\nhello\nXYZ')"
 	./$(COMPILER) test/test_class_is_as.pas $(TESTTMP)/test_class_is_as26
-	test "$$($(TESTTMP)/test_class_is_as26)" = "$$(printf 'is TDog\nis TAnimal\nnot TCat\nnot TPuppy\nnil not\nv=42\ncast read=42\npuppy is TDog\npuppy is TAnimal\npuppy not TCat')"
+	tools/expect_same.sh test_class_is_as26 "$$($(TESTTMP)/test_class_is_as26)" "$$(printf 'is TDog\nis TAnimal\nnot TCat\nnot TPuppy\nnil not\nv=42\ncast read=42\npuppy is TDog\npuppy is TAnimal\npuppy not TCat')"
 	./$(COMPILER) test/test_class_cast_field.pas $(TESTTMP)/test_class_cast_field26
-	test "$$($(TESTTMP)/test_class_cast_field26)" = "$$(printf '166408768\n7\n42\n99\n555\n555\n2')"
+	tools/expect_same.sh test_class_cast_field26 "$$($(TESTTMP)/test_class_cast_field26)" "$$(printf '166408768\n7\n42\n99\n555\n555\n2')"
 	./$(COMPILER) test/test_inline_concat_arg.pas $(TESTTMP)/test_inline_concat_arg26
-	test "$$($(TESTTMP)/test_inline_concat_arg26)" = "$$(printf '[aabb] len=4\n[Line 1\nLine 2] len=13\n[xyz] len=3')"
+	tools/expect_same.sh test_inline_concat_arg26 "$$($(TESTTMP)/test_inline_concat_arg26)" "$$(printf '[aabb] len=4\n[Line 1\nLine 2] len=13\n[xyz] len=3')"
 	./$(COMPILER) test/test_array_of_string.pas $(TESTTMP)/test_array_of_string26
-	test "$$($(TESTTMP)/test_array_of_string26)" = "$$(printf 'Apple\nBanana\nCherry\nx|yy|2\nscalar')"
+	tools/expect_same.sh test_array_of_string26 "$$($(TESTTMP)/test_array_of_string26)" "$$(printf 'Apple\nBanana\nCherry\nx|yy|2\nscalar')"
 	./$(COMPILER) test/test_string_sized.pas $(TESTTMP)/test_string_sized26
-	test "$$($(TESTTMP)/test_string_sized26)" = "$$(printf 'Apple\nBanana\nCherry-and-then-some\n5\n6\n20\na-ok\nb-ok\nApple')"
+	tools/expect_same.sh test_string_sized26 "$$($(TESTTMP)/test_string_sized26)" "$$(printf 'Apple\nBanana\nCherry-and-then-some\n5\n6\n20\na-ok\nb-ok\nApple')"
 	./$(COMPILER) test/test_shortstring.pas $(TESTTMP)/test_shortstring26
-	test "$$($(TESTTMP)/test_shortstring26)" = "$$(printf 'hello world\n11\nApple\nBanana\nCherry\narr0-ok\narr1-ok')"
+	tools/expect_same.sh test_shortstring26 "$$($(TESTTMP)/test_shortstring26)" "$$(printf 'hello world\n11\nApple\nBanana\nCherry\narr0-ok\narr1-ok')"
 	./$(COMPILER) test/test_shortstring_trunc.pas $(TESTTMP)/test_shortstring_trunc26
-	test "$$($(TESTTMP)/test_shortstring_trunc26)" = "$$(printf 'aaaa 4\nb-ok\nabcdefgh 8\nabcdefgh 8\nxxxx 4\nguard-ok\nyyyy 4\npguard-ok\nzzzz 4\nmguard-ok\naaaa 4\nbbbb 4\naguard-ok\nabcd 4')"
+	tools/expect_same.sh test_shortstring_trunc26 "$$($(TESTTMP)/test_shortstring_trunc26)" "$$(printf 'aaaa 4\nb-ok\nabcdefgh 8\nabcdefgh 8\nxxxx 4\nguard-ok\nyyyy 4\npguard-ok\nzzzz 4\nmguard-ok\naaaa 4\nbbbb 4\naguard-ok\nabcd 4')"
 	./$(COMPILER) test/test_not_ord_bitwise.pas $(TESTTMP)/test_not_ord_bitwise26
-	test "$$($(TESTTMP)/test_not_ord_bitwise26)" = "$$(printf '%s\n' -2 -2 158 254 254 254 -2)"
+	tools/expect_same.sh test_not_ord_bitwise26 "$$($(TESTTMP)/test_not_ord_bitwise26)" "$$(printf '%s\n' -2 -2 158 254 254 254 -2)"
 	./$(COMPILER) test/test_record_cast_field_offset.pas $(TESTTMP)/test_record_cast_fo26
-	test "$$($(TESTTMP)/test_record_cast_fo26)" = "$$(printf '%s\n' 305419896 2596069104 1311768467463790320 5 5 not-ok notor-ok)"
+	tools/expect_same.sh test_record_cast_fo26 "$$($(TESTTMP)/test_record_cast_fo26)" "$$(printf '%s\n' 305419896 2596069104 1311768467463790320 5 5 not-ok notor-ok)"
 	# ...and the INDEXED field of a cast, read and written, which was broken two
 	# ways at once: unparseable as an assignment target, and silently read at the
 	# RECORD's width as an rvalue. Row e is FPC's own reverse_longword verbatim.
 	./$(COMPILER) test/test_record_cast_indexed_field.pas $(TESTTMP)/test_record_cast_idx26
-	test "$$($(TESTTMP)/test_record_cast_idx26)" = "$$(printf 'a 4 3 2 1 \nb 4 3 2 1 4 3 2 1 \nc 16 32 48 64 | 1076895760\nd 258|772|50594050\ne 549470336|255|2147483648')"
+	tools/expect_same.sh test_record_cast_idx26 "$$($(TESTTMP)/test_record_cast_idx26)" "$$(printf 'a 4 3 2 1 \nb 4 3 2 1 4 3 2 1 \nc 16 32 48 64 | 1076895760\nd 258|772|50594050\ne 549470336|255|2147483648')"
 	./$(COMPILER) test/test_u64_to_double.pas $(TESTTMP)/test_u64_to_double26
-	test "$$($(TESTTMP)/test_u64_to_double26)" = "$$(printf '%s\n' assign-ok field-ok cmp-ok round-ok small-ok signed-ok)"
+	tools/expect_same.sh test_u64_to_double26 "$$($(TESTTMP)/test_u64_to_double26)" "$$(printf '%s\n' assign-ok field-ok cmp-ok round-ok small-ok signed-ok)"
 	./$(COMPILER) test/test_qword_literal_binop.pas $(TESTTMP)/test_qword_lit26
-	test "$$($(TESTTMP)/test_qword_lit26)" = "$$(printf '%s\n' 18085043209385476867 4210752250 50529028 18085043209385476867 cmp-ok neg-ok)"
+	tools/expect_same.sh test_qword_lit26 "$$($(TESTTMP)/test_qword_lit26)" "$$(printf '%s\n' 18085043209385476867 4210752250 50529028 18085043209385476867 cmp-ok neg-ok)"
 	./$(COMPILER) test/test_shift_operand_width.pas $(TESTTMP)/test_shift_ow26
-	test "$$($(TESTTMP)/test_shift_ow26)" = "$$(printf '%s\n' 2147483648 2147483648 36028797014769664 -4294967296)"
+	tools/expect_same.sh test_shift_ow26 "$$($(TESTTMP)/test_shift_ow26)" "$$(printf '%s\n' 2147483648 2147483648 36028797014769664 -4294967296)"
 	./$(COMPILER) test/test_overflow_checks_qplus.pas $(TESTTMP)/test_qplus26
-	test "$$($(TESTTMP)/test_qplus26)" = "$$(printf 'wrapped 0\ncaught=4')"
+	tools/expect_same.sh test_qplus26 "$$($(TESTTMP)/test_qplus26)" "$$(printf 'wrapped 0\ncaught=4')"
 	./$(COMPILER) test/test_overflow_qplus_narrow.pas $(TESTTMP)/test_qplus_narrow26
-	test "$$($(TESTTMP)/test_qplus_narrow26)" = "caught=5 clean=4 wrap=-294967296"
+	tools/expect_same.sh test_qplus_narrow26 "$$($(TESTTMP)/test_qplus_narrow26)" "caught=5 clean=4 wrap=-294967296"
 	./$(COMPILER) test/test_variant_fn_return_forward.pas $(TESTTMP)/test_variant_fn_return_forward26
-	test "$$($(TESTTMP)/test_variant_fn_return_forward26)" = "$$(printf '2 77\n2 77\n2 77\nforwarded')"
+	tools/expect_same.sh test_variant_fn_return_forward26 "$$($(TESTTMP)/test_variant_fn_return_forward26)" "$$(printf '2 77\n2 77\n2 77\nforwarded')"
 	./$(COMPILER) test/test_open_array_of_variant.pas $(TESTTMP)/test_open_array_of_variant26
-	test "$$($(TESTTMP)/test_open_array_of_variant26)" = "$$(printf '35\n7\n9')"
+	tools/expect_same.sh test_open_array_of_variant26 "$$($(TESTTMP)/test_open_array_of_variant26)" "$$(printf '35\n7\n9')"
 	./$(COMPILER) test/test_overflow_succ_pred.pas $(TESTTMP)/test_qplus_sp26
-	test "$$($(TESTTMP)/test_qplus_sp26)" = "$$(printf 'wrapped-hi 4294967295\ncaught=3')"
+	tools/expect_same.sh test_qplus_sp26 "$$($(TESTTMP)/test_qplus_sp26)" "$$(printf 'wrapped-hi 4294967295\ncaught=3')"
 	./$(COMPILER) test/test_range_checks_rplus.pas $(TESTTMP)/test_rplus26
-	test "$$($(TESTTMP)/test_rplus26)" = "$$(printf 'lax-b 44\ncaught=3')"
+	tools/expect_same.sh test_rplus26 "$$($(TESTTMP)/test_rplus26)" "$$(printf 'lax-b 44\ncaught=3')"
 	./$(COMPILER) test/test_range_checks_reads.pas $(TESTTMP)/test_rplus_r26
-	test "$$($(TESTTMP)/test_rplus_r26)" = "caught=4"
+	tools/expect_same.sh test_rplus_r26 "$$($(TESTTMP)/test_rplus_r26)" "caught=4"
 	./$(COMPILER) test/test_range_checks_dynfield.pas $(TESTTMP)/test_rplus_df26
-	test "$$($(TESTTMP)/test_rplus_df26)" = "caught=2"
+	tools/expect_same.sh test_rplus_df26 "$$($(TESTTMP)/test_rplus_df26)" "caught=2"
 	./$(COMPILER) test/test_range_checks_nd.pas $(TESTTMP)/test_rplus_nd26
-	test "$$($(TESTTMP)/test_rplus_nd26)" = "ok 42 7 caught=2"
+	tools/expect_same.sh test_rplus_nd26 "$$($(TESTTMP)/test_rplus_nd26)" "ok 42 7 caught=2"
 	./$(COMPILER) test/test_io_checks_iplus.pas $(TESTTMP)/test_iplus26
-	test "$$($(TESTTMP)/test_iplus26)" = "ioresult=TRUE caught=1"
+	tools/expect_same.sh test_iplus26 "$$($(TESTTMP)/test_iplus26)" "ioresult=TRUE caught=1"
 	./$(COMPILER) test/test_io_checks_mimic.pas $(TESTTMP)/test_iplus_lax26
-	test "$$($(TESTTMP)/test_iplus_lax26)" = "caught=1"
+	tools/expect_same.sh test_iplus_lax26 "$$($(TESTTMP)/test_iplus_lax26)" "caught=1"
 	./$(COMPILER) --mimic-fpc test/test_io_checks_mimic.pas $(TESTTMP)/test_iplus_mim26
-	test "$$($(TESTTMP)/test_iplus_mim26)" = "caught=1"
+	tools/expect_same.sh test_iplus_mim26 "$$($(TESTTMP)/test_iplus_mim26)" "caught=1"
 	./$(COMPILER) test/test_param_array_lowbound.pas $(TESTTMP)/test_palb26
-	test "$$($(TESTTMP)/test_palb26)" = "7 8 caught=2"
+	tools/expect_same.sh test_palb26 "$$($(TESTTMP)/test_palb26)" "7 8 caught=2"
 	./$(COMPILER) test/test_range_checks_enum_field.pas $(TESTTMP)/test_rplus_ef26
-	test "$$($(TESTTMP)/test_rplus_ef26)" = "$$(printf 'e 9\nok 7 5 4 caught=4')"
+	tools/expect_same.sh test_rplus_ef26 "$$($(TESTTMP)/test_rplus_ef26)" "$$(printf 'e 9\nok 7 5 4 caught=4')"
 	./$(COMPILER) test/test_forin_bounds_nd.pas $(TESTTMP)/test_forin_bnd26
-	test "$$($(TESTTMP)/test_forin_bnd26)" = "$$(printf '%s \n%s \n%s \n%s \n' '10 20 30' '50 60 70' '1 2 9' '3 4 5')"
+	tools/expect_same.sh test_forin_bnd26 "$$($(TESTTMP)/test_forin_bnd26)" "$$(printf '%s \n%s \n%s \n%s \n' '10 20 30' '50 60 70' '1 2 9' '3 4 5')"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_str_val_managed.pas $(TESTTMP)/test_str_val_managed26
-	test "$$($(TESTTMP)/test_str_val_managed26)" = "$$(printf '[42]\n42 code=0\n3.5 code=0\n0 code=2')"
+	tools/expect_same.sh test_str_val_managed26 "$$($(TESTTMP)/test_str_val_managed26)" "$$(printf '[42]\n42 code=0\n3.5 code=0\n0 code=2')"
 	./$(COMPILER) test/test_managed_string_flip.pas $(TESTTMP)/test_managed_string_flip26
-	test "$$($(TESTTMP)/test_managed_string_flip26)" = "$$(printf 'hello world long enough\nhello world long enough!\nhello world long enough!\nhello world long enough!\nhello world long enough!')"
+	tools/expect_same.sh test_managed_string_flip26 "$$($(TESTTMP)/test_managed_string_flip26)" "$$(printf 'hello world long enough\nhello world long enough!\nhello world long enough!\nhello world long enough!\nhello world long enough!')"
 	./$(COMPILER) test/test_interfaces.pas $(TESTTMP)/test_interfaces26
-	test "$$($(TESTTMP)/test_interfaces26)" = "$$(printf 'area=20\nscaled=60\narea2=42\ndirect=42')"
+	tools/expect_same.sh test_interfaces26 "$$($(TESTTMP)/test_interfaces26)" "$$(printf 'area=20\nscaled=60\narea2=42\ndirect=42')"
 	./$(COMPILER) test/test_interfaces_is.pas $(TESTTMP)/test_interfaces_is26
-	test "$$($(TESTTMP)/test_interfaces_is26)" = "$$(printf 'a IFoo\na noBar\nc IFoo\nz no\nnil no\ncall=7\nsup IFoo\nz sup no')"
+	tools/expect_same.sh test_interfaces_is26 "$$($(TESTTMP)/test_interfaces_is26)" "$$(printf 'a IFoo\na noBar\nc IFoo\nz no\nnil no\ncall=7\nsup IFoo\nz sup no')"
 	./$(COMPILER) test/test_interfaces_as.pas $(TESTTMP)/test_interfaces_as26
-	test "$$($(TESTTMP)/test_interfaces_as26)" = "$$(printf 'a.F=7\nc.F=7\ndirect=7\ndone')"
+	tools/expect_same.sh test_interfaces_as26 "$$($(TESTTMP)/test_interfaces_as26)" "$$(printf 'a.F=7\nc.F=7\ndirect=7\ndone')"
 	./$(COMPILER) test/test_interfaces_param.pas $(TESTTMP)/test_interfaces_param26
-	test "$$($(TESTTMP)/test_interfaces_param26)" = "$$(printf 'viaparam=7\nresult=7\nfg same\nfh diff\nfh ne\nf set\nnow nil')"
+	tools/expect_same.sh test_interfaces_param26 "$$($(TESTTMP)/test_interfaces_param26)" "$$(printf 'viaparam=7\nresult=7\nfg same\nfh diff\nfh ne\nf set\nnow nil')"
 	./$(COMPILER) test/test_interfaces_inherit.pas $(TESTTMP)/test_interfaces_inherit26
-	test "$$($(TESTTMP)/test_interfaces_inherit26)" = "$$(printf 'bar.B=9\nbar.F=7\nfoo.F=7\nwiden=7\nwf=7\na is IFoo\na is IBar\nsup IFoo')"
+	tools/expect_same.sh test_interfaces_inherit26 "$$($(TESTTMP)/test_interfaces_inherit26)" "$$(printf 'bar.B=9\nbar.F=7\nfoo.F=7\nwiden=7\nwf=7\na is IFoo\na is IBar\nsup IFoo')"
 	./$(COMPILER) test/test_interfaces_multi_secondary.pas $(TESTTMP)/test_interfaces_multi_secondary26
-	test "$$($(TESTTMP)/test_interfaces_multi_secondary26)" = "$$(printf 'direct\nTitle\nSome content\nSome content\nTitle\nSome content')"
+	tools/expect_same.sh test_interfaces_multi_secondary26 "$$($(TESTTMP)/test_interfaces_multi_secondary26)" "$$(printf 'direct\nTitle\nSome content\nSome content\nTitle\nSome content')"
 	./$(COMPILER) test/test_interface_arc.pas $(TESTTMP)/test_interface_arc26
-	test "$$($(TESTTMP)/test_interface_arc26)" = "$$(printf 'hello\nhello\nhello\nfreed=3')"
+	tools/expect_same.sh test_interface_arc26 "$$($(TESTTMP)/test_interface_arc26)" "$$(printf 'hello\nhello\nhello\nfreed=3')"
 	# The by-ref argument rule: only an explicit `var`/`out` needs a true lvalue.
 	# The guard used to answer with a list of TYPE KINDS, grown once per aggregate;
 	# a constructor-call node carries the CLASS kind and an `IFoo(o)` cast carries
@@ -7734,94 +7734,94 @@ test-core: $(COMPILER)
 	$(TESTTMP)/test_hwrandom26 > $(TESTTMP)/test_hwrandom.out
 	! grep -q FAIL $(TESTTMP)/test_hwrandom.out
 	./$(COMPILER) test/test_byref_arg_lvalue_rule.pas $(TESTTMP)/test_byref_lvalue26
-	test "$$($(TESTTMP)/test_byref_lvalue26 | tail -1)" = "total ok 12 / 12"
+	tools/expect_same.sh test_byref_lvalue26 "$$($(TESTTMP)/test_byref_lvalue26 | tail -1)" "total ok 12 / 12"
 	! ./$(COMPILER) test/test_byref_arg_lvalue_refused.pas $(TESTTMP)/test_byref_refused26 \
 	    > $(TESTTMP)/test_byref_refused.log 2>&1
 	grep -q "by-reference argument must be a variable" $(TESTTMP)/test_byref_refused.log
 	./$(COMPILER) test/test_managed_local_release_reuse.pas $(TESTTMP)/test_mlrr26
-	test "$$($(TESTTMP)/test_mlrr26)" = "$$(printf 'ok   ansistring local\nok   record with managed field\nok   variant local\nok   static array of string\nok   dynamic array of string\ntotal ok 5 / 5')"
+	tools/expect_same.sh test_mlrr26 "$$($(TESTTMP)/test_mlrr26)" "$$(printf 'ok   ansistring local\nok   record with managed field\nok   variant local\nok   static array of string\nok   dynamic array of string\ntotal ok 5 / 5')"
 	./$(COMPILER) test/test_interface_arc_exc.pas $(TESTTMP)/test_interface_arc_exc26
-	test "$$($(TESTTMP)/test_interface_arc_exc26)" = "$$(printf 'reassign created=2 freed=2\ncaught\nunwind freed=3')"
+	tools/expect_same.sh test_interface_arc_exc26 "$$($(TESTTMP)/test_interface_arc_exc26)" "$$(printf 'reassign created=2 freed=2\ncaught\nunwind freed=3')"
 	./$(COMPILER) test/test_interface_com_value_param.pas $(TESTTMP)/test_interface_com_value_param26
-	test "$$($(TESTTMP)/test_interface_com_value_param26)" = "$$(printf 'go\nafter DoStash freed=0\ngo\nafter nil freed=1')"
+	tools/expect_same.sh test_interface_com_value_param26 "$$($(TESTTMP)/test_interface_com_value_param26)" "$$(printf 'go\nafter DoStash freed=0\ngo\nafter nil freed=1')"
 	./$(COMPILER) test/test_interface_com_default.pas $(TESTTMP)/test_interface_com_default26
-	test "$$($(TESTTMP)/test_interface_com_default26)" = "$$(printf 'before nil\nDTOR ran\nafter nil')"
+	tools/expect_same.sh test_interface_com_default26 "$$($(TESTTMP)/test_interface_com_default26)" "$$(printf 'before nil\nDTOR ran\nafter nil')"
 	./$(COMPILER) test/test_tinterfacedobject_builtin.pas $(TESTTMP)/test_tio_builtin26
-	test "$$($(TESTTMP)/test_tio_builtin26)" = "$$(printf 'go\ndestroyed=1\ndestroyed=2\nsurvived scope exit')"
+	tools/expect_same.sh test_tio_builtin26 "$$($(TESTTMP)/test_tio_builtin26)" "$$(printf 'go\ndestroyed=1\ndestroyed=2\nsurvived scope exit')"
 	./$(COMPILER) test/test_uint64_ops.pas $(TESTTMP)/test_uint64_ops26
-	test "$$($(TESTTMP)/test_uint64_ops26)" = "$$(printf '9600629759793949339\n0\n8846114313915602276\n4344256703880665856\n8\n1099511627776\nTRUE\nFALSE\n6')"
+	tools/expect_same.sh test_uint64_ops26 "$$($(TESTTMP)/test_uint64_ops26)" "$$(printf '9600629759793949339\n0\n8846114313915602276\n4344256703880665856\n8\n1099511627776\nTRUE\nFALSE\n6')"
 	./$(COMPILER) test/test_case_io.pas $(TESTTMP)/test_case_io26
-	test "$$($(TESTTMP)/test_case_io26)" = "$$(printf 'one\nab\ntwo\nthree\n42')"
+	tools/expect_same.sh test_case_io26 "$$($(TESTTMP)/test_case_io26)" "$$(printf 'one\nab\ntwo\nthree\n42')"
 	./$(COMPILER) test/test_case_io_casesensitive_intrinsics.pas $(TESTTMP)/test_case_io_casesensitive_intrinsics26
-	test "$$(printf '10 32\n' | $(TESTTMP)/test_case_io_casesensitive_intrinsics26)" = "$$(printf 'AB\n42')"
+	tools/expect_same.sh test_case_io_casesensitive_intrinsics26 "$$(printf '10 32\n' | $(TESTTMP)/test_case_io_casesensitive_intrinsics26)" "$$(printf 'AB\n42')"
 	./$(COMPILER) test/test_uses_sysutils.pas $(TESTTMP)/test_uses_sysutils26
-	test "$$($(TESTTMP)/test_uses_sysutils26)" = "sysutils noop ok"
+	tools/expect_same.sh test_uses_sysutils26 "$$($(TESTTMP)/test_uses_sysutils26)" "sysutils noop ok"
 	./$(COMPILER) test/test_sysutils_datetime.pas $(TESTTMP)/test_sysutils_datetime26
-	test "$$($(TESTTMP)/test_sysutils_datetime26)" = "$$(printf '2026-7-2\n2000-2-29\n1900-2-28\n1899-12-30 0.0\n1899-12-29 -1.0\n1969-12-31\n1800-1-1\n2026-7-2 14:30:15.500\n1899-12-30 18:0:0.0')"
+	tools/expect_same.sh test_sysutils_datetime26 "$$($(TESTTMP)/test_sysutils_datetime26)" "$$(printf '2026-7-2\n2000-2-29\n1900-2-28\n1899-12-30 0.0\n1899-12-29 -1.0\n1969-12-31\n1800-1-1\n2026-7-2 14:30:15.500\n1899-12-30 18:0:0.0')"
 	./$(COMPILER) -Futest/case_units test/test_case_unit_lookup.pas $(TESTTMP)/test_case_unit_lookup26
 	$(TESTTMP)/test_case_unit_lookup26; test "$$?" = "42"
 	./$(COMPILER) -Futest/units_defscope test/test_pascal_define_unit_scope_order1.pas $(TESTTMP)/test_pascal_define_unit_scope_order126
-	test "$$($(TESTTMP)/test_pascal_define_unit_scope_order126)" = "$$(printf 'ua\nub does not see it')"
+	tools/expect_same.sh test_pascal_define_unit_scope_order126 "$$($(TESTTMP)/test_pascal_define_unit_scope_order126)" "$$(printf 'ua\nub does not see it')"
 	./$(COMPILER) -Futest/units_defscope test/test_pascal_define_unit_scope_order2.pas $(TESTTMP)/test_pascal_define_unit_scope_order226
-	test "$$($(TESTTMP)/test_pascal_define_unit_scope_order226)" = "$$(printf 'ub does not see it\nua')"
+	tools/expect_same.sh test_pascal_define_unit_scope_order226 "$$($(TESTTMP)/test_pascal_define_unit_scope_order226)" "$$(printf 'ub does not see it\nua')"
 	./$(COMPILER) test/test_float_str_val.pas $(TESTTMP)/test_float_str_val26
-	test "$$($(TESTTMP)/test_float_str_val26)" = "$$(printf '[3.14]\n[    3.1416]\n[-2.750]\n[1000.5]\n42.7500 code=0\n-1.5000 code=0\n100.00 code=0\n350.00 code=0\n0.1250 code=0\ncode=1\n[   42]\n-99 code=0')"
+	tools/expect_same.sh test_float_str_val26 "$$($(TESTTMP)/test_float_str_val26)" "$$(printf '[3.14]\n[    3.1416]\n[-2.750]\n[1000.5]\n42.7500 code=0\n-1.5000 code=0\n100.00 code=0\n350.00 code=0\n0.1250 code=0\ncode=1\n[   42]\n-99 code=0')"
 	./$(COMPILER) test/test_float_result_loop.pas $(TESTTMP)/test_float_result_loop26
-	test "$$($(TESTTMP)/test_float_result_loop26)" = "$$(printf '8.0000\n6.0000\n2.0000')"
+	tools/expect_same.sh test_float_result_loop26 "$$($(TESTTMP)/test_float_result_loop26)" "$$(printf '8.0000\n6.0000\n2.0000')"
 	./$(COMPILER) test/test_single_first_class.pas $(TESTTMP)/test_single_first_class26
-	test "$$($(TESTTMP)/test_single_first_class26)" = "$$(printf '4.5000\n9.0000\n3.7500\n4.0000\n7.0000\n13.0000\n0.7500')"
+	tools/expect_same.sh test_single_first_class26 "$$($(TESTTMP)/test_single_first_class26)" "$$(printf '4.5000\n9.0000\n3.7500\n4.0000\n7.0000\n13.0000\n0.7500')"
 	./$(COMPILER) test/test_int_to_float.pas $(TESTTMP)/test_int_to_float26
-	test "$$($(TESTTMP)/test_int_to_float26)" = "$$(printf '1.0000\n7.0000\n7.0000\n3.0000\n5.0000\n0.0000\n1.0000\n2.0000\n5.0000')"
+	tools/expect_same.sh test_int_to_float26 "$$($(TESTTMP)/test_int_to_float26)" "$$(printf '1.0000\n7.0000\n7.0000\n3.0000\n5.0000\n0.0000\n1.0000\n2.0000\n5.0000')"
 	./$(COMPILER) test/test_math.pas $(TESTTMP)/test_math26
-	test "$$($(TESTTMP)/test_math26)" = "$$(printf '3.14159265\n1.41421356\n4.00000000\n1.50000000\n2.71828183\n1.00000000\n12.18249396\n0.69314718\n2.30258509\n1.00000000\n0.00000000\n0.84147098\n0.00000000\n1.00000000\n0.54030231\n0.78539816\n0.46364761\n1024.00000000\n1.41421356\n3.50000000\n1.00000000')"
+	tools/expect_same.sh test_math26 "$$($(TESTTMP)/test_math26)" "$$(printf '3.14159265\n1.41421356\n4.00000000\n1.50000000\n2.71828183\n1.00000000\n12.18249396\n0.69314718\n2.30258509\n1.00000000\n0.00000000\n0.84147098\n0.00000000\n1.00000000\n0.54030231\n0.78539816\n0.46364761\n1024.00000000\n1.41421356\n3.50000000\n1.00000000')"
 	./$(COMPILER) examples/sudoku/sudoku.pas $(TESTTMP)/test_sudoku26
-	test "$$($(TESTTMP)/test_sudoku26)" = "$$(printf '534678912672195348198342567859761423426853791713924856961537284287419635345286179\n987654321246173985351928746128537694634892157795461832519286473472319568863745219\n812753649943682175675491283154237896369845721287169534521974368438526917796318452')"
+	tools/expect_same.sh test_sudoku26 "$$($(TESTTMP)/test_sudoku26)" "$$(printf '534678912672195348198342567859761423426853791713924856961537284287419635345286179\n987654321246173985351928746128537694634892157795461832519286473472319568863745219\n812753649943682175675491283154237896369845721287169534521974368438526917796318452')"
 	./$(COMPILER) test/test_stackless_gen.pas $(TESTTMP)/test_stackless_gen26
-	test "$$($(TESTTMP)/test_stackless_gen26)" = "$$(printf '1 4 9 16 25 \n25\n5 4 3 2 1 \n0 2 4 6 8 \n10 20 30 \n1 2 3 \n99 100 10 101 20 21 102 30 103 30 104 30 105 99 106 \n1 20 300 4 50 600 \n0:10:300 0:10:301 2:30:302 2:30:303 53:40:7 ')"
+	tools/expect_same.sh test_stackless_gen26 "$$($(TESTTMP)/test_stackless_gen26)" "$$(printf '1 4 9 16 25 \n25\n5 4 3 2 1 \n0 2 4 6 8 \n10 20 30 \n1 2 3 \n99 100 10 101 20 21 102 30 103 30 104 30 105 99 106 \n1 20 300 4 50 600 \n0:10:300 0:10:301 2:30:302 2:30:303 53:40:7 ')"
 	./$(COMPILER) test/test_scheduler.pas $(TESTTMP)/test_scheduler26
-	test "$$($(TESTTMP)/test_scheduler26)" = "$$(printf 'c2:1\nc3:1\nonce 7\nc2:2\nc3:2\nc3:3\nall done')"
+	tools/expect_same.sh test_scheduler26 "$$($(TESTTMP)/test_scheduler26)" "$$(printf 'c2:1\nc3:1\nonce 7\nc2:2\nc3:2\nc3:3\nall done')"
 	./$(COMPILER) test/test_scheduler_exc.pas $(TESTTMP)/test_scheduler_exc26
-	test "$$($(TESTTMP)/test_scheduler_exc26)" = "$$(printf 'w1 try\nw2 try\nw1 caught\nw2 caught\ndone')"
+	tools/expect_same.sh test_scheduler_exc26 "$$($(TESTTMP)/test_scheduler_exc26)" "$$(printf 'w1 try\nw2 try\nw1 caught\nw2 caught\ndone')"
 	./$(COMPILER) test/test_costack.pas $(TESTTMP)/test_costack26
-	test "$$($(TESTTMP)/test_costack26)" = "$$(printf 'w1:55\nw2:210\nw3:465\nw1:55\nw2:210\nw3:465\nall done')"
+	tools/expect_same.sh test_costack26 "$$($(TESTTMP)/test_costack26)" "$$(printf 'w1:55\nw2:210\nw3:465\nw1:55\nw2:210\nw3:465\nall done')"
 	./$(COMPILER) test/test_async.pas $(TESTTMP)/test_async26
-	test "$$($(TESTTMP)/test_async26)" = "$$(printf 'a1:1\na2:1\na1:2\na2:2\ndone1=102\ndone2=202\nall done')"
+	tools/expect_same.sh test_async26 "$$($(TESTTMP)/test_async26)" "$$(printf 'a1:1\na2:1\na1:2\na2:2\ndone1=102\ndone2=202\nall done')"
 	./$(COMPILER) test/test_async_sl.pas $(TESTTMP)/test_async_sl26
-	test "$$($(TESTTMP)/test_async_sl26)" = "$$(printf 'A0\nB0\nA1\nB1\nA2\ndone')"
+	tools/expect_same.sh test_async_sl26 "$$($(TESTTMP)/test_async_sl26)" "$$(printf 'A0\nB0\nA1\nB1\nA2\ndone')"
 	./$(COMPILER) test/test_reactor.pas $(TESTTMP)/test_reactor26
-	test "$$($(TESTTMP)/test_reactor26)" = "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
+	tools/expect_same.sh test_reactor26 "$$($(TESTTMP)/test_reactor26)" "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
 	./$(COMPILER) -Fulib/rtl/platform/posix test/test_asyncecho.pas $(TESTTMP)/test_asyncecho26
-	test "$$($(TESTTMP)/test_asyncecho26)" = "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
+	tools/expect_same.sh test_asyncecho26 "$$($(TESTTMP)/test_asyncecho26)" "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
 	./$(COMPILER) test/test_timer.pas $(TESTTMP)/test_timer26
-	test "$$($(TESTTMP)/test_timer26)" = "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
+	tools/expect_same.sh test_timer26 "$$($(TESTTMP)/test_timer26)" "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
 	./$(COMPILER) test/test_channel.pas $(TESTTMP)/test_channel26
-	test "$$($(TESTTMP)/test_channel26)" = "$$(printf 'recv 1\nrecv 2\nrecv 3\nrecv 4\nrecv 5\nrecv 6\ndone')"
+	tools/expect_same.sh test_channel26 "$$($(TESTTMP)/test_channel26)" "$$(printf 'recv 1\nrecv 2\nrecv 3\nrecv 4\nrecv 5\nrecv 6\ndone')"
 	./$(COMPILER) test/test_many_params.pas $(TESTTMP)/test_many_params26
-	test "$$($(TESTTMP)/test_many_params26)" = "$$(printf '1 2 3 4 5 6 7\n3 4 5 6 7 12 89\n8912\n7654326\n12100806\n7654321\n96\n196')"
+	tools/expect_same.sh test_many_params26 "$$($(TESTTMP)/test_many_params26)" "$$(printf '1 2 3 4 5 6 7\n3 4 5 6 7 12 89\n8912\n7654326\n12100806\n7654321\n96\n196')"
 	./$(COMPILER) test/test_procaddr.pas $(TESTTMP)/test_procaddr26
-	test "$$($(TESTTMP)/test_procaddr26)" = "1 2 3 4 5 "
+	tools/expect_same.sh test_procaddr26 "$$($(TESTTMP)/test_procaddr26)" "1 2 3 4 5 "
 	./$(COMPILER) test/test_proctype.pas $(TESTTMP)/test_proctype26
-	test "$$($(TESTTMP)/test_proctype26)" = "$$(printf 'hello 1\nadd 7\nmul 30\nexpr ok\nhello 7\ngreet 99')"
+	tools/expect_same.sh test_proctype26 "$$($(TESTTMP)/test_proctype26)" "$$(printf 'hello 1\nadd 7\nmul 30\nexpr ok\nhello 7\ngreet 99')"
 	./$(COMPILER) test/test_proc_const_record.pas $(TESTTMP)/test_proc_const_record26
-	test "$$($(TESTTMP)/test_proc_const_record26)" = "$$(printf '42\n42')"
+	tools/expect_same.sh test_proc_const_record26 "$$($(TESTTMP)/test_proc_const_record26)" "$$(printf '42\n42')"
 	./$(COMPILER) test/test_indexed_proc_call.pas $(TESTTMP)/test_indexed_proc_call26
-	test "$$($(TESTTMP)/test_indexed_proc_call26)" = "$$(printf '42\n42\n20\n11\n42')"
+	tools/expect_same.sh test_indexed_proc_call26 "$$($(TESTTMP)/test_indexed_proc_call26)" "$$(printf '42\n42\n20\n11\n42')"
 	./$(COMPILER) test/test_methodptr.pas $(TESTTMP)/test_methodptr26
-	test "$$($(TESTTMP)/test_methodptr26)" = "$$(printf 'code set\ndata ok')"
+	tools/expect_same.sh test_methodptr26 "$$($(TESTTMP)/test_methodptr26)" "$$(printf 'code set\ndata ok')"
 	./$(COMPILER) test/test_methcall.pas $(TESTTMP)/test_methcall26
-	test "$$($(TESTTMP)/test_methcall26)" = "$$(printf 'show 42 base=100\nadd 105\nexpr ok\nping base=100')"
+	tools/expect_same.sh test_methcall26 "$$($(TESTTMP)/test_methcall26)" "$$(printf 'show 42 base=100\nadd 105\nexpr ok\nping base=100')"
 	./$(COMPILER) test/test_const_record_param.pas $(TESTTMP)/test_const_record_param26
-	test "$$($(TESTTMP)/test_const_record_param26)" = "111 222"
+	tools/expect_same.sh test_const_record_param26 "$$($(TESTTMP)/test_const_record_param26)" "111 222"
 	./$(COMPILER) test/test_array_of_const.pas $(TESTTMP)/test_array_of_const26
-	test "$$($(TESTTMP)/test_array_of_const26)" = "$$(printf 'int 10\nint 20\nint 30\ncount 3\nstr hi\nint 7\nstr world\ncount 3')"
+	tools/expect_same.sh test_array_of_const26 "$$($(TESTTMP)/test_array_of_const26)" "$$(printf 'int 10\nint 20\nint 30\ncount 3\nstr hi\nint 7\nstr world\ncount 3')"
 	./$(COMPILER) test/test_varrec_branch.pas $(TESTTMP)/test_varrec_branch26
-	test "$$($(TESTTMP)/test_varrec_branch26)" = "$$(printf 'none\na1\na2\na3\nb1\nb2\nc1\nd1\nd2\nd3\nd4\ne1\ne2\nnone')"
+	tools/expect_same.sh test_varrec_branch26 "$$($(TESTTMP)/test_varrec_branch26)" "$$(printf 'none\na1\na2\na3\nb1\nb2\nc1\nd1\nd2\nd3\nd4\ne1\ne2\nnone')"
 	./$(COMPILER) test/test_varrec_string.pas $(TESTTMP)/test_varrec_string26
-	test "$$($(TESTTMP)/test_varrec_string26)" = "$$(printf 'S=lit\nI=42\nS=hello\nS=world\nS=param\nS=tail')"
+	tools/expect_same.sh test_varrec_string26 "$$($(TESTTMP)/test_varrec_string26)" "$$(printf 'S=lit\nI=42\nS=hello\nS=world\nS=param\nS=tail')"
 	./$(COMPILER) test/test_varrec_alloc_after.pas $(TESTTMP)/test_varrec_alloc_after26
-	test "$$($(TESTTMP)/test_varrec_alloc_after26)" = "$$(printf 'n=2: S 42\nn=4: 10 20 30 40\nn=3: 115 11 22')"
+	tools/expect_same.sh test_varrec_alloc_after26 "$$($(TESTTMP)/test_varrec_alloc_after26)" "$$(printf 'n=2: S 42\nn=4: 10 20 30 40\nn=3: 115 11 22')"
 	./$(COMPILER) test/test_format_single_arg.pas $(TESTTMP)/test_fmt_single26
-	test "$$($(TESTTMP)/test_fmt_single26)" = "$$(printf '0.10000000149011612\n0.1000\n1.0000000149011612E-001\n2.5000\n3.7500 -0.5000\n0.2000\n0.1000 42 7.5000 x\n0.1000 2.5000\n1.2500')"
+	tools/expect_same.sh test_fmt_single26 "$$($(TESTTMP)/test_fmt_single26)" "$$(printf '0.10000000149011612\n0.1000\n1.0000000149011612E-001\n2.5000\n3.7500 -0.5000\n0.2000\n0.1000 42 7.5000 x\n0.1000 2.5000\n1.2500')"
 	# --strict-overload-width: FPC's narrowest-that-FITS integer overload choice,
 	# and the DEFAULT dialect's widening beside it. Both asserted from one source:
 	# the flag exists precisely because the two answers differ, and the unflagged
@@ -7837,46 +7837,46 @@ test-core: $(COMPILER)
 	# declines to do -- SmallInt, Byte and Cardinal still widen to Int64 here.
 	# bug-p-integer-and-longint-are-not-the-same-type-in-overload-matching
 	./$(COMPILER) test/test_strict_overload_width.pas $(TESTTMP)/test_sow_default26
-	test "$$($(TESTTMP)/test_sow_default26)" = "$$(printf 'Integer  longint\nLongInt  longint\nSmallInt int64\nCardinal int64\nByte     int64\nliteral  longint\nMyInt    longint\nuByte    qword\nuWord    word\nuCard    longword\nuQWord   qword\nfSingle  single\nfDouble  double\nnarrow   smallint\nhex      FFFFFFFF')"
+	tools/expect_same.sh test_sow_default26 "$$($(TESTTMP)/test_sow_default26)" "$$(printf 'Integer  longint\nLongInt  longint\nSmallInt int64\nCardinal int64\nByte     int64\nliteral  longint\nMyInt    longint\nuByte    qword\nuWord    word\nuCard    longword\nuQWord   qword\nfSingle  single\nfDouble  double\nnarrow   smallint\nhex      FFFFFFFF')"
 	./$(COMPILER) --strict-overload-width test/test_strict_overload_width.pas $(TESTTMP)/test_sow_strict26
-	test "$$($(TESTTMP)/test_sow_strict26)" = "$$(printf 'Integer  longint\nLongInt  longint\nSmallInt longint\nCardinal int64\nByte     longint\nliteral  longint\nMyInt    longint\nuByte    word\nuWord    word\nuCard    longword\nuQWord   qword\nfSingle  single\nfDouble  double\nnarrow   smallint\nhex      FFFFFFFF')"
+	tools/expect_same.sh test_sow_strict26 "$$($(TESTTMP)/test_sow_strict26)" "$$(printf 'Integer  longint\nLongInt  longint\nSmallInt longint\nCardinal int64\nByte     longint\nliteral  longint\nMyInt    longint\nuByte    word\nuWord    word\nuCard    longword\nuQWord   qword\nfSingle  single\nfDouble  double\nnarrow   smallint\nhex      FFFFFFFF')"
 	./$(COMPILER) test/test_cross_trunc_round_saturate.pas $(TESTTMP)/test_trsat26
-	test "$$($(TESTTMP)/test_trsat26 | head -5)" = "$$(printf 't+1e30=9223372036854775807 r=9223372036854775807\nt-1e30=-9223372036854775808 r=-9223372036854775808\nt+inf =9223372036854775807 r=9223372036854775807\nt-inf =-9223372036854775808 r=-9223372036854775808\ntnan  =0 r=0')"
+	tools/expect_same.sh test_trsat26 "$$($(TESTTMP)/test_trsat26 | head -5)" "$$(printf 't+1e30=9223372036854775807 r=9223372036854775807\nt-1e30=-9223372036854775808 r=-9223372036854775808\nt+inf =9223372036854775807 r=9223372036854775807\nt-inf =-9223372036854775808 r=-9223372036854775808\ntnan  =0 r=0')"
 	# scope hiding -- the LAST unit a `uses` clause names wins -- in EVERY name
 	# table, not only for routines. Two twin units declare the same six names;
 	# both orders are asserted, and every expected value is what FPC 3.2.2
 	# prints for the same source. The routine row alone used to be right.
 	# bug-p-scope-hiding-covers-routines-but-not-types-and-classes
 	./$(COMPILER) -Futest test/test_scope_hiding_types.pas $(TESTTMP)/test_shd_types26
-	test "$$($(TESTTMP)/test_shd_types26)" = "$$(printf 'routine ROUTINE-B\nclass CLASS-B\nconst CONST-B\nalias 1\nrec 12\narr 8\nenum 2')"
+	tools/expect_same.sh test_shd_types26 "$$($(TESTTMP)/test_shd_types26)" "$$(printf 'routine ROUTINE-B\nclass CLASS-B\nconst CONST-B\nalias 1\nrec 12\narr 8\nenum 2')"
 	./$(COMPILER) -Futest test/test_scope_hiding_types_rev.pas $(TESTTMP)/test_shd_types_rev26
-	test "$$($(TESTTMP)/test_shd_types_rev26)" = "$$(printf 'routine ROUTINE-A\nclass CLASS-A\nconst CONST-A\nalias 4\nrec 8\narr 4\nenum 1')"
+	tools/expect_same.sh test_shd_types_rev26 "$$($(TESTTMP)/test_shd_types_rev26)" "$$(printf 'routine ROUTINE-A\nclass CLASS-A\nconst CONST-A\nalias 4\nrec 8\narr 4\nenum 1')"
 	./$(COMPILER) -Futest test/test_array_of_const_cross_unit_overload.pas $(TESTTMP)/test_aoc_xunit26
-	test "$$($(TESTTMP)/test_aoc_xunit26)" = "$$(printf 'g-aoc:one n=1\ng-aoc:two n=2\ng-aoc:none n=0\ng-var:x\nk-set: dTue')"
+	tools/expect_same.sh test_aoc_xunit26 "$$($(TESTTMP)/test_aoc_xunit26)" "$$(printf 'g-aoc:one n=1\ng-aoc:two n=2\ng-aoc:none n=0\ng-var:x\nk-set: dTue')"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_array_of_const_types.pas $(TESTTMP)/test_aoc_types26
-	test "$$($(TESTTMP)/test_aoc_types26)" = "$$(printf 'vt0: 42\nvt1: TRUE\nvt2: Q\nvt16: 5000000000\nvt3: 3.50\nvt3: 0.25\nvt11: hi')"
+	tools/expect_same.sh test_aoc_types26 "$$($(TESTTMP)/test_aoc_types26)" "$$(printf 'vt0: 42\nvt1: TRUE\nvt2: Q\nvt16: 5000000000\nvt3: 3.50\nvt3: 0.25\nvt11: hi')"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_write_pchar.pas $(TESTTMP)/test_write_pchar26
-	test "$$($(TESTTMP)/test_write_pchar26)" = "$$(printf 'hello\nhello\nhello world')"
+	tools/expect_same.sh test_write_pchar26 "$$($(TESTTMP)/test_write_pchar26)" "$$(printf 'hello\nhello\nhello world')"
 	./$(COMPILER) test/test_cross_static_open_array.pas $(TESTTMP)/test_static_open26
-	test "$$($(TESTTMP)/test_static_open26)" = "$$(printf 'len=4 high=3 sum=100 a0=10\nlen=2 high=1 sum=15 a0=7')"
+	tools/expect_same.sh test_static_open26 "$$($(TESTTMP)/test_static_open26)" "$$(printf 'len=4 high=3 sum=100 a0=10\nlen=2 high=1 sum=15 a0=7')"
 	./$(COMPILER) test/test_conformance_1.pas $(TESTTMP)/test_conformance_1_26
-	test "$$($(TESTTMP)/test_conformance_1_26)" = "$$(printf 'shape 0 square area=9.00 tag=5000000004\nshape 1 circle area=12.00 tag=1000000000\nshape 2 generic area=0.00 tag=1000000007\ntotal area=21.00\npts len=3 high=2\n  pt p 0,0\n  pt p 2,1\n  pt p 4,4\n  i 42\n  q 9000000000\n  b TRUE\n  s mixed\nv int=123\ncaught: boom\ncaught=1\nconcat=abcdef len=6\nV...V.')"
+	tools/expect_same.sh test_conformance_1_26 "$$($(TESTTMP)/test_conformance_1_26)" "$$(printf 'shape 0 square area=9.00 tag=5000000004\nshape 1 circle area=12.00 tag=1000000000\nshape 2 generic area=0.00 tag=1000000007\ntotal area=21.00\npts len=3 high=2\n  pt p 0,0\n  pt p 2,1\n  pt p 4,4\n  i 42\n  q 9000000000\n  b TRUE\n  s mixed\nv int=123\ncaught: boom\ncaught=1\nconcat=abcdef len=6\nV...V.')"
 	./$(COMPILER) test/test_conformance_2.pas $(TESTTMP)/test_conformance_2_26
-	test "$$($(TESTTMP)/test_conformance_2_26)" = "$$(printf 'q=7000000005 mix=111000000083\nfact20=2432902008176640000\neven10=TRUE odd7=TRUE\nsum9=45 big=97864\n  rec r A=1000000000 B=0 sum=1000000000\n  rec r A=2000000000 B=1 sum=2000000001\n  rec r A=3000000000 B=4 sum=3000000004\ncopy A=3000000000 B=99 orig B=4\nopensum=100\n  i 42\n  q 9000000000\n  b TRUE\n  s mixed\nconcat=abcdef len=6\nV.--V.\ncaught=11 gdiv=5 gzero=-1')"
+	tools/expect_same.sh test_conformance_2_26 "$$($(TESTTMP)/test_conformance_2_26)" "$$(printf 'q=7000000005 mix=111000000083\nfact20=2432902008176640000\neven10=TRUE odd7=TRUE\nsum9=45 big=97864\n  rec r A=1000000000 B=0 sum=1000000000\n  rec r A=2000000000 B=1 sum=2000000001\n  rec r A=3000000000 B=4 sum=3000000004\ncopy A=3000000000 B=99 orig B=4\nopensum=100\n  i 42\n  q 9000000000\n  b TRUE\n  s mixed\nconcat=abcdef len=6\nV.--V.\ncaught=11 gdiv=5 gzero=-1')"
 	./$(COMPILER) test/test_cross_shortcircuit.pas $(TESTTMP)/test_shortcircuit26
-	test "$$($(TESTTMP)/test_shortcircuit26)" = "$$(printf 'and-false calls=0\nor-true\nor-true calls=0\nand-true\nand-true calls=1\nor-false\nor-false calls=2\nguard1 ok\nchain calls=2\nbits 2 7 8')"
+	tools/expect_same.sh test_shortcircuit26 "$$($(TESTTMP)/test_shortcircuit26)" "$$(printf 'and-false calls=0\nor-true\nor-true calls=0\nand-true\nand-true calls=1\nor-false\nor-false calls=2\nguard1 ok\nchain calls=2\nbits 2 7 8')"
 	./$(COMPILER) test/test_many_local_names.pas $(TESTTMP)/test_many_local_names26
-	test "$$($(TESTTMP)/test_many_local_names26)" = "s=104"
+	tools/expect_same.sh test_many_local_names26 "$$($(TESTTMP)/test_many_local_names26)" "s=104"
 	./$(COMPILER) test/test_cross_ptr_arith.pas $(TESTTMP)/test_ptr_arith26
-	test "$$($(TESTTMP)/test_ptr_arith26)" = "$$(printf 'deref=44\nparen=44\nplus1=55\nminus1=33\nplus0=44\nminus2=22\nvarneg=11\nfn+2=66\nfn-4=0\nsweep=308')"
+	tools/expect_same.sh test_ptr_arith26 "$$($(TESTTMP)/test_ptr_arith26)" "$$(printf 'deref=44\nparen=44\nplus1=55\nminus1=33\nplus0=44\nminus2=22\nvarneg=11\nfn+2=66\nfn-4=0\nsweep=308')"
 	./$(COMPILER) test/test_cross_case_range.pas $(TESTTMP)/test_case_range26
-	test "$$($(TESTTMP)/test_case_range26)" = "$$(printf 'ints=8436\nchars=206\nbucket=LLLMMMMHHH')"
+	tools/expect_same.sh test_case_range26 "$$($(TESTTMP)/test_case_range26)" "$$(printf 'ints=8436\nchars=206\nbucket=LLLMMMMHHH')"
 	./$(COMPILER) test/test_case_of_string.pas $(TESTTMP)/test_case_of_string26
-	test "$$($(TESTTMP)/test_case_of_string26)" = "$$(printf '1\n2\n3\n0\n0\n4\n0\n2\n1\n2')"
+	tools/expect_same.sh test_case_of_string26 "$$($(TESTTMP)/test_case_of_string26)" "$$(printf '1\n2\n3\n0\n0\n4\n0\n2\n1\n2')"
 	./$(COMPILER) test/test_case_otherwise.pas $(TESTTMP)/test_case_otherwise26
-	test "$$($(TESTTMP)/test_case_otherwise26)" = "$$(printf 'one\nother 7\nstill-other')"
+	tools/expect_same.sh test_case_otherwise26 "$$($(TESTTMP)/test_case_otherwise26)" "$$(printf 'one\nother 7\nstill-other')"
 	./$(COMPILER) test/test_str_variable_width.pas $(TESTTMP)/test_str_varwidth26
-	test "$$($(TESTTMP)/test_str_varwidth26)" = "$$(printf '[    42]\nint-eq\n[      42]\n[    3.142]\nfloat-eq\n       42\n    3.142\n       42\n    3.142')"
+	tools/expect_same.sh test_str_varwidth26 "$$($(TESTTMP)/test_str_varwidth26)" "$$(printf '[    42]\nint-eq\n[      42]\n[    3.142]\nfloat-eq\n       42\n    3.142\n       42\n    3.142')"
 	! ./$(COMPILER) --strict-case test/test_case_label_dup_error.pas $(TESTTMP)/test_case_label_dup26 > $(TESTTMP)/test_case_label_dup.log 2>&1
 	./$(COMPILER) test/test_case_label_dup_error.pas $(TESTTMP)/test_case_label_dup_lax26 > /dev/null 2>&1   # lax default: first-match, must COMPILE
 	grep -q "duplicate or overlapping case label" $(TESTTMP)/test_case_label_dup.log
@@ -7884,29 +7884,29 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_case_range_inverted_error.pas $(TESTTMP)/test_case_range_inv_lax26 > /dev/null 2>&1   # lax default: never-matching range, must COMPILE
 	grep -q "case range: lower bound is greater than upper bound" $(TESTTMP)/test_case_range_inv.log
 	./$(COMPILER) test/test_cross_global_init.pas $(TESTTMP)/test_global_init26
-	test "$$($(TESTTMP)/test_global_init26)" = "$$(printf 'k=42 q=5000000000 flag=TRUE\ntabsum=150\nlutsum=6000000000')"
+	tools/expect_same.sh test_global_init26 "$$($(TESTTMP)/test_global_init26)" "$$(printf 'k=42 q=5000000000 flag=TRUE\ntabsum=150\nlutsum=6000000000')"
 	./$(COMPILER) test/test_cross_typed_const.pas $(TESTTMP)/test_typed_const26
-	test "$$($(TESTTMP)/test_typed_const26)" = "$$(printf 'limit=100 big=9000000000\ntabsum=14\nlutsum=6000000000\ntab2=40')"
+	tools/expect_same.sh test_typed_const26 "$$($(TESTTMP)/test_typed_const26)" "$$(printf 'limit=100 big=9000000000\ntabsum=14\nlutsum=6000000000\ntab2=40')"
 	./$(COMPILER) test/test_local_typed_const.pas $(TESTTMP)/test_local_tc26
-	test "$$($(TESTTMP)/test_local_tc26)" = "$$(printf '100\na\nb\nc\n42\n100')"
+	tools/expect_same.sh test_local_tc26 "$$($(TESTTMP)/test_local_tc26)" "$$(printf '100\na\nb\nc\n42\n100')"
 	./$(COMPILER) test/test_typed_const_record.pas $(TESTTMP)/test_tc_record26
-	test "$$($(TESTTMP)/test_tc_record26)" = "$$(printf '7\n10 Z 20\n300\n300')"
+	tools/expect_same.sh test_tc_record26 "$$($(TESTTMP)/test_tc_record26)" "$$(printf '7\n10 Z 20\n300\n300')"
 	./$(COMPILER) test/test_multidim_const_array.pas $(TESTTMP)/test_md_const26
-	test "$$($(TESTTMP)/test_md_const26)" = "$$(printf '1 2 3 4\n10 30 40 60\n1 4 5 8\n7 8 9 10\n7 8 9 10')"
+	tools/expect_same.sh test_md_const26 "$$($(TESTTMP)/test_md_const26)" "$$(printf '1 2 3 4\n10 30 40 60\n1 4 5 8\n7 8 9 10\n7 8 9 10')"
 	./$(COMPILER) test/test_const_set.pas $(TESTTMP)/test_const_set26
-	test "$$($(TESTTMP)/test_const_set26)" = "$$(printf 'digits=5\ngreen=out\nblue=in\nrange=4\nunion=ok\ninter=ok')"
+	tools/expect_same.sh test_const_set26 "$$($(TESTTMP)/test_const_set26)" "$$(printf 'digits=5\ngreen=out\nblue=in\nrange=4\nunion=ok\ninter=ok')"
 	./$(COMPILER) test/test_func_name_result_read.pas $(TESTTMP)/test_fnresult26
-	test "$$($(TESTTMP)/test_fnresult26)" = "$$(printf '33\n0\nhi!\n120')"
+	tools/expect_same.sh test_fnresult26 "$$($(TESTTMP)/test_fnresult26)" "$$(printf '33\n0\nhi!\n120')"
 	./$(COMPILER) test/test_func_name_paramless_result.pas $(TESTTMP)/test_fnresult_pl26
-	test "$$($(TESTTMP)/test_fnresult_pl26)" = "$$(printf '0 1\n8\n55')"
+	tools/expect_same.sh test_fnresult_pl26 "$$($(TESTTMP)/test_fnresult_pl26)" "$$(printf '0 1\n8\n55')"
 	./$(COMPILER) test/test_local_shadows_func.pas $(TESTTMP)/test_local_shadows26
-	test "$$($(TESTTMP)/test_local_shadows26)" = "$$(printf 'count=7 viaFunc=7\ntally=20')"
+	tools/expect_same.sh test_local_shadows26 "$$($(TESTTMP)/test_local_shadows26)" "$$(printf 'count=7 viaFunc=7\ntally=20')"
 	./$(COMPILER) test/test_mode_delphi.pas $(TESTTMP)/test_mode_delphi26
-	test "$$($(TESTTMP)/test_mode_delphi26)" = "$$(printf 'p5=10\nGate=42 calls=3\nTally=105')"
+	tools/expect_same.sh test_mode_delphi26 "$$($(TESTTMP)/test_mode_delphi26)" "$$(printf 'p5=10\nGate=42 calls=3\nTally=105')"
 	./$(COMPILER) test/test_mode_delphi_callarg.pas $(TESTTMP)/test_mode_delphi_callarg26
-	test "$$($(TESTTMP)/test_mode_delphi_callarg26)" = "$$(printf 'ApplyFn=42\nlog=20\nCallNul=14')"
+	tools/expect_same.sh test_mode_delphi_callarg26 "$$($(TESTTMP)/test_mode_delphi_callarg26)" "$$(printf 'ApplyFn=42\nlog=20\nCallNul=14')"
 	./$(COMPILER) test/test_mode_delphi_methptr.pas $(TESTTMP)/test_mode_delphi_methptr26
-	test "$$($(TESTTMP)/test_mode_delphi_methptr26)" = "$$(printf 'total=12\nkicked=1')"
+	tools/expect_same.sh test_mode_delphi_methptr26 "$$($(TESTTMP)/test_mode_delphi_methptr26)" "$$(printf 'total=12\nkicked=1')"
 	@# A unit's {$$mode} directive stops at the unit boundary — BOTH directions.
 	@# ParseUsesUnitBody saved NestedComments across a unit load and not
 	@# DelphiMode, and one line in lexer.inc's {$$mode} handler sets both, so half
@@ -7918,41 +7918,41 @@ test-core: $(COMPILER)
 	@# delphidial's own {$$mode delphi} leaks ON and hides the bug.
 	@# bug-a-a-units-mode-directive-turns-delphi-mode-off-for-the-program
 	./$(COMPILER) -Futest/modeunits test/test_mode_delphi_unit_leak.pas $(TESTTMP)/test_mode_leak26
-	test "$$($(TESTTMP)/test_mode_leak26)" = "$$(printf 'p7=14\npxx=42 delphi=7')"
+	tools/expect_same.sh test_mode_leak26 "$$($(TESTTMP)/test_mode_leak26)" "$$(printf 'p7=14\npxx=42 delphi=7')"
 	@./$(COMPILER) -Futest/modeunits test/test_mode_delphi_unit_leak_off_fail.pas $(TESTTMP)/test_mode_leakoff26 2>&1 \
 	  | grep -q 'undefined variable (Dbl)' \
 	  || { echo 'test_mode_delphi_unit_leak_off_fail: FAIL - a {$$mode delphi} UNIT must not turn delphi mode on for the program'; exit 1; }
 	./$(COMPILER) test/test_mimic_fpc.pas $(TESTTMP)/test_mimic_fpc_off26
-	test "$$($(TESTTMP)/test_mimic_fpc_off26)" = "fpc=no"
+	tools/expect_same.sh test_mimic_fpc_off26 "$$($(TESTTMP)/test_mimic_fpc_off26)" "fpc=no"
 	./$(COMPILER) --mimic-fpc test/test_mimic_fpc.pas $(TESTTMP)/test_mimic_fpc_on26
-	test "$$($(TESTTMP)/test_mimic_fpc_on26)" = "$$(printf 'fpc=yes\nver>=20400\nmajor>=3\nversion=3.2.2\nunix')"
+	tools/expect_same.sh test_mimic_fpc_on26 "$$($(TESTTMP)/test_mimic_fpc_on26)" "$$(printf 'fpc=yes\nver>=20400\nmajor>=3\nversion=3.2.2\nunix')"
 	./$(COMPILER) test/test_mimic_directive.pas $(TESTTMP)/test_mimic_directive26
-	test "$$($(TESTTMP)/test_mimic_directive26)" = "$$(printf 'fpc 3.x\nversion=3.2.2')"
+	tools/expect_same.sh test_mimic_directive26 "$$($(TESTTMP)/test_mimic_directive26)" "$$(printf 'fpc 3.x\nversion=3.2.2')"
 	./$(COMPILER) test/test_keyword_array_case.pas $(TESTTMP)/test_keyword_array_case26
-	test "$$($(TESTTMP)/test_keyword_array_case26)" = "$$(printf '36\n5')"
+	tools/expect_same.sh test_keyword_array_case26 "$$($(TESTTMP)/test_keyword_array_case26)" "$$(printf '36\n5')"
 	./$(COMPILER) test/test_succ_pred_odd.pas $(TESTTMP)/test_succ_pred_odd26
-	test "$$($(TESTTMP)/test_succ_pred_odd26)" = "$$(printf '6 4\nb\ny\nodd7\neven8\n1')"
+	tools/expect_same.sh test_succ_pred_odd26 "$$($(TESTTMP)/test_succ_pred_odd26)" "$$(printf '6 4\nb\ny\nodd7\neven8\n1')"
 	./$(COMPILER) test/test_shr_width.pas $(TESTTMP)/test_shr_width26
-	test "$$($(TESTTMP)/test_shr_width26)" = "$$(printf '9223372036854775804\n2147483644\n9223372036854775804\n1099511627776\n256\n2147483648\n-16\n2147483648\n1099511627776\n4503599627370496')"
+	tools/expect_same.sh test_shr_width26 "$$($(TESTTMP)/test_shr_width26)" "$$(printf '9223372036854775804\n2147483644\n9223372036854775804\n1099511627776\n256\n2147483648\n-16\n2147483648\n1099511627776\n4503599627370496')"
 	./$(COMPILER) test/test_stderr_fd.pas $(TESTTMP)/test_stderr_fd26
-	test "$$($(TESTTMP)/test_stderr_fd26 2>/dev/null)" = "$$(printf 'out1\nout2')"
-	test "$$($(TESTTMP)/test_stderr_fd26 2>&1 1>/dev/null)" = "$$(printf 'e1 n=42 i=  7 b=TRUE')"
+	tools/expect_same.sh test_stderr_fd26.1 "$$($(TESTTMP)/test_stderr_fd26 2>/dev/null)" "$$(printf 'out1\nout2')"
+	tools/expect_same.sh test_stderr_fd26.2 "$$($(TESTTMP)/test_stderr_fd26 2>&1 1>/dev/null)" "$$(printf 'e1 n=42 i=  7 b=TRUE')"
 	./$(COMPILER) test/test_concat_arg_bss.pas $(TESTTMP)/test_concat_arg_bss26 > $(TESTTMP)/test_concat_arg_bss.log
-	test "$$($(TESTTMP)/test_concat_arg_bss26)" = "24"
+	tools/expect_same.sh test_concat_arg_bss26 "$$($(TESTTMP)/test_concat_arg_bss26)" "24"
 	@if grep -qE 'bss=[0-9]{7,}B' $(TESTTMP)/test_concat_arg_bss.log; then echo "concat-arg BSS bloat regressed:"; grep -oE 'bss=[0-9]+B' $(TESTTMP)/test_concat_arg_bss.log; exit 1; else echo "concat-arg-bss: OK ($$(grep -oE 'bss=[0-9]+B' $(TESTTMP)/test_concat_arg_bss.log))"; fi
 	./$(COMPILER) test/test_const_open_array_managed.pas $(TESTTMP)/test_const_open_array_managed26
-	test "$$($(TESTTMP)/test_const_open_array_managed26)" = "$$(printf 'high=2 sel=1\n aa\n>bb\n cc\naabbcc')"
+	tools/expect_same.sh test_const_open_array_managed26 "$$($(TESTTMP)/test_const_open_array_managed26)" "$$(printf 'high=2 sel=1\n aa\n>bb\n cc\naabbcc')"
 	./$(COMPILER) test/test_open_array_ctor_stmt.pas $(TESTTMP)/test_open_array_ctor_stmt26
-	test "$$($(TESTTMP)/test_open_array_ctor_stmt26)" = "$$(printf '3\n1 2 3 \n\nhi 5')"
+	tools/expect_same.sh test_open_array_ctor_stmt26 "$$($(TESTTMP)/test_open_array_ctor_stmt26)" "$$(printf '3\n1 2 3 \n\nhi 5')"
 	./$(COMPILER) test/test_open_array_no_leak.pas $(TESTTMP)/test_open_array_no_leak26
-	test "$$($(TESTTMP)/test_open_array_no_leak26)" = "ok 1000000"
+	tools/expect_same.sh test_open_array_no_leak26 "$$($(TESTTMP)/test_open_array_no_leak26)" "ok 1000000"
 	@if [ -x /usr/bin/time ]; then \
 	  /usr/bin/time -v $(TESTTMP)/test_open_array_no_leak26 2>$(TESTTMP)/oanl.time >/dev/null; \
 	  rss=$$(grep -oE 'Maximum resident set size .kbytes.: [0-9]+' $(TESTTMP)/oanl.time | grep -oE '[0-9]+$$'); \
 	  if [ -n "$$rss" ] && [ "$$rss" -gt 10000 ]; then echo "open-array temp leak regressed: RSS $${rss}KB (>10MB over 2M calls)"; exit 1; else echo "open-array-no-leak: OK (RSS $${rss}KB)"; fi; \
 	else echo "/usr/bin/time absent; open-array RSS leak guard skipped"; fi
 	./$(COMPILER) test/test_big_static_array_open_param.pas $(TESTTMP)/test_big_static_array_open_param26
-	test "$$($(TESTTMP)/test_big_static_array_open_param26)" = "$$(printf 'small const sum: 6\nsmall var: 0 1 2\nbig const sum (zeros): 0\nbig var writeback correct: TRUE\nbig const sum (filled): 267386880\nleak-loop total: 13369344000')"
+	tools/expect_same.sh test_big_static_array_open_param26 "$$($(TESTTMP)/test_big_static_array_open_param26)" "$$(printf 'small const sum: 6\nsmall var: 0 1 2\nbig const sum (zeros): 0\nbig var writeback correct: TRUE\nbig const sum (filled): 267386880\nleak-loop total: 13369344000')"
 	./$(COMPILER) --debug test/test_big_static_array_open_param.pas $(TESTTMP)/test_big_static_array_open_param_dbg26 > $(TESTTMP)/big_static_open_array.log 2>&1
 	@if grep -qi "stack frame" $(TESTTMP)/big_static_open_array.log; then echo "bug-const-open-array-param-stack-copies-caller-frame REGRESSED: oversized-stack-frame warning fired"; grep -i "stack frame" $(TESTTMP)/big_static_open_array.log; exit 1; else echo "big-static-array-open-param: no oversized frame, OK"; fi
 	@if [ -x /usr/bin/time ]; then \
@@ -7961,32 +7961,32 @@ test-core: $(COMPILER)
 	  if [ -n "$$rss" ] && [ "$$rss" -gt 50000 ]; then echo "big-array open-array temp leak regressed: RSS $${rss}KB (>50MB over 51 calls of a 2MB array)"; exit 1; else echo "big-static-array-open-param-no-leak: OK (RSS $${rss}KB)"; fi; \
 	else echo "/usr/bin/time absent; big-array open-array RSS leak guard skipped"; fi
 	./$(COMPILER) test/test_abs_sqr.pas $(TESTTMP)/test_abs_sqr26
-	test "$$($(TESTTMP)/test_abs_sqr26)" = "$$(printf '5 7\n49\n3.50\n6.25\n43')"
+	tools/expect_same.sh test_abs_sqr26 "$$($(TESTTMP)/test_abs_sqr26)" "$$(printf '5 7\n49\n3.50\n6.25\n43')"
 	./$(COMPILER) test/test_upcase_pos.pas $(TESTTMP)/test_upcase_pos26
-	test "$$($(TESTTMP)/test_upcase_pos26)" = "$$(printf 'AZ5\n3\n0\n1\nHI3')"
+	tools/expect_same.sh test_upcase_pos26 "$$($(TESTTMP)/test_upcase_pos26)" "$$(printf 'AZ5\n3\n0\n1\nHI3')"
 	./$(COMPILER) test/test_keyword_case.pas $(TESTTMP)/test_keyword_case26
-	test "$$($(TESTTMP)/test_keyword_case26)" = "$$(printf '9\n22')"
+	tools/expect_same.sh test_keyword_case26 "$$($(TESTTMP)/test_keyword_case26)" "$$(printf '9\n22')"
 	./$(COMPILER) test/test_builtin_name_params.pas $(TESTTMP)/test_builtin_name_params26
-	test "$$($(TESTTMP)/test_builtin_name_params26)" = "$$(printf '1\n41\n7\nB\n67')"
+	tools/expect_same.sh test_builtin_name_params26 "$$($(TESTTMP)/test_builtin_name_params26)" "$$(printf '1\n41\n7\nB\n67')"
 	./$(COMPILER) test/test_var_open_array.pas $(TESTTMP)/test_var_open_array26
-	test "$$($(TESTTMP)/test_var_open_array26)" = "$$(printf '6\n0 10 20 30 ')"
+	tools/expect_same.sh test_var_open_array26 "$$($(TESTTMP)/test_var_open_array26)" "$$(printf '6\n0 10 20 30 ')"
 	./$(COMPILER) test/test_var_open_array_field.pas $(TESTTMP)/test_var_open_array_field26
-	test "$$($(TESTTMP)/test_var_open_array_field26)" = "$$(printf '256\n1284')"
+	tools/expect_same.sh test_var_open_array_field26 "$$($(TESTTMP)/test_var_open_array_field26)" "$$(printf '256\n1284')"
 	./$(COMPILER) test/test_open_array_managed_length.pas $(TESTTMP)/test_open_array_managed_length26
-	test "$$($(TESTTMP)/test_open_array_managed_length26)" = "$$(printf 'varstr 4 3 0\nw0 w1 w2 w3 \nconststr 4 3\nvalstr 4 3\nvarint 5 4\n42\nvarstr 2 1 0\nw0 w1\nconststr 2 1\nvarint 3 2\n42')"
+	tools/expect_same.sh test_open_array_managed_length26 "$$($(TESTTMP)/test_open_array_managed_length26)" "$$(printf 'varstr 4 3 0\nw0 w1 w2 w3 \nconststr 4 3\nvalstr 4 3\nvarint 5 4\n42\nvarstr 2 1 0\nw0 w1\nconststr 2 1\nvarint 3 2\n42')"
 	./$(COMPILER) -Itest/unitinit test/test_unit_init_begin_form.pas $(TESTTMP)/test_unit_init_begin_form26
-	test "$$($(TESTTMP)/test_unit_init_begin_form26)" = "$$(printf '7\n8\n222')"
+	tools/expect_same.sh test_unit_init_begin_form26 "$$($(TESTTMP)/test_unit_init_begin_form26)" "$$(printf '7\n8\n222')"
 	./$(COMPILER) -Itest/unitinit test/test_unit_finalization.pas $(TESTTMP)/test_unit_finalization26
-	test "$$($(TESTTMP)/test_unit_finalization26)" = "$$(printf 'init runs\ninit2 runs\nmain done\nfinalization2 runs\nfinalization runs')"
+	tools/expect_same.sh test_unit_finalization26 "$$($(TESTTMP)/test_unit_finalization26)" "$$(printf 'init runs\ninit2 runs\nmain done\nfinalization2 runs\nfinalization runs')"
 	./$(COMPILER) -Itest/unitinit test/test_unit_finalization_halt.pas $(TESTTMP)/test_unit_finalization_halt26
 	out="$$($(TESTTMP)/test_unit_finalization_halt26; echo "rc=$$?")"; \
 	test "$$out" = "$$(printf 'init runs\ninit2 runs\nbefore halt\nfinalization2 runs\nfinalization runs\nrc=3')"
 	./$(COMPILER) test/test_static_array_length.pas $(TESTTMP)/test_static_array_length26
-	test "$$($(TESTTMP)/test_static_array_length26)" = "$$(printf '3\n2\n64\n60\n3\n2\n0\n5\n9\n5')"
+	tools/expect_same.sh test_static_array_length26 "$$($(TESTTMP)/test_static_array_length26)" "$$(printf '3\n2\n64\n60\n3\n2\n0\n5\n9\n5')"
 	./$(COMPILER) -Itest/builtin_shadow test/test_builtin_name_demote.pas $(TESTTMP)/test_builtin_name_demote26
-	test "$$($(TESTTMP)/test_builtin_name_demote26)" = "$$(printf '10000\n60\nsys-ok')"
+	tools/expect_same.sh test_builtin_name_demote26 "$$($(TESTTMP)/test_builtin_name_demote26)" "$$(printf '10000\n60\nsys-ok')"
 	./$(COMPILER) test/test_narrowing_typecast_rvalue.pas $(TESTTMP)/test_narrowing_typecast_rvalue26
-	test "$$($(TESTTMP)/test_narrowing_typecast_rvalue26)" = "$$(printf '44\ncmp-ok\n44\n44\n4464\n4294967295\n4294967295\n-1\n-56\n5\n5')"
+	tools/expect_same.sh test_narrowing_typecast_rvalue26 "$$($(TESTTMP)/test_narrowing_typecast_rvalue26)" "$$(printf '44\ncmp-ok\n44\n44\n4464\n4294967295\n4294967295\n-1\n-56\n5\n5')"
 	# ...and the arm that fix deliberately left alone: `Integer(x)` as an RVALUE
 	# handed the bit pattern through untruncated, so Integer(LongWord(4000000000))
 	# was 4000000000 where FPC says -294967296 -- while `LongInt(x)`, the same
@@ -7994,7 +7994,7 @@ test-core: $(COMPILER)
 	# and took the identifier path into a real AN_PTR_CAST. An operand that cannot
 	# change value under the cast still keeps the pun (no masking emitted).
 	./$(COMPILER) test/test_integer_cast_truncates_rvalue.pas $(TESTTMP)/test_intcast26
-	test "$$($(TESTTMP)/test_intcast26 | tail -1)" = "total ok 28 / 28"
+	tools/expect_same.sh test_intcast26 "$$($(TESTTMP)/test_intcast26 | tail -1)" "total ok 28 / 28"
 	# A static `array[lo..hi] of Char` IS a string in FPC, both ways, and pxx
 	# treated it as a bare Char everywhere: `a := 'abcdefgh'` stored the low byte
 	# of the literal's HANDLE into a[0], `s := a` answered '', `a = 'abcdefgh'`
@@ -8003,44 +8003,44 @@ test-core: $(COMPILER)
 	# writing pads with zeros. 86 assertions, all FPC 3.2.2's, including a `string`
 	# parameter, Length/Pos, and the `var` parameter that must NOT convert.
 	./$(COMPILER) test/test_char_array_is_a_string.pas $(TESTTMP)/test_chararrstr26
-	test "$$($(TESTTMP)/test_chararrstr26 | head -1)" = "total ok 86 / 86"
-	test "$$($(TESTTMP)/test_chararrstr26 | tail -1)" = "write [hi]"
+	tools/expect_same.sh test_chararrstr26.1 "$$($(TESTTMP)/test_chararrstr26 | head -1)" "total ok 86 / 86"
+	tools/expect_same.sh test_chararrstr26.2 "$$($(TESTTMP)/test_chararrstr26 | tail -1)" "write [hi]"
 	# `(p + k)^` resolved its pointee only for a bare ident or `arr[i]`; a BINOP
 	# defaulted to Integer, which is right for a ^Integer and a wrong SPAN for
 	# every other pointer. `(pc + 2)^` read four bytes (1717920867 = 'dcef') where
 	# `pc^` and `pc[2]` both answered 'c'; a ^Int64 read short. 17 FPC 3.2.2 values.
 	./$(COMPILER) test/test_pointer_arith_deref_keeps_pointee.pas $(TESTTMP)/test_ptrarith26
-	test "$$($(TESTTMP)/test_ptrarith26 | tail -1)" = "total ok 17 / 17"
+	tools/expect_same.sh test_ptrarith26 "$$($(TESTTMP)/test_ptrarith26 | tail -1)" "total ok 17 / 17"
 	./$(COMPILER) test/test_var_nd_array_string_init.pas $(TESTTMP)/test_var_nd_array_string_init26
-	test "$$($(TESTTMP)/test_var_nd_array_string_init26)" = "$$(printf '1 3 4 6\nJan Mar Apr Jun\nx yy zzz')"
+	tools/expect_same.sh test_var_nd_array_string_init26 "$$($(TESTTMP)/test_var_nd_array_string_init26)" "$$(printf '1 3 4 6\nJan Mar Apr Jun\nx yy zzz')"
 	./$(COMPILER) test/test_sizeof_array_typename.pas $(TESTTMP)/test_sizeof_array_typename26
-	test "$$($(TESTTMP)/test_sizeof_array_typename26)" = "$$(printf '40\n12\n16\n60\n36\n12\n4\n40\n60\n8\n8\n4\n8\n12\n4\n10\n1\n12\n5\n4\n12\n4\n120\n60\n4\n36\n12')"
+	tools/expect_same.sh test_sizeof_array_typename26 "$$($(TESTTMP)/test_sizeof_array_typename26)" "$$(printf '40\n12\n16\n60\n36\n12\n4\n40\n60\n8\n8\n4\n8\n12\n4\n10\n1\n12\n5\n4\n12\n4\n120\n60\n4\n36\n12')"
 	./$(COMPILER) test/test_byvalue_record_managed_copy.pas $(TESTTMP)/test_byvalue_record_managed_copy26
-	test "$$($(TESTTMP)/test_byvalue_record_managed_copy26)" = "$$(printf '1,2\n1,2,3\n1,orig\n5,view\n5,view\n111,viavar\n2,orig2\nshared?')"
+	tools/expect_same.sh test_byvalue_record_managed_copy26 "$$($(TESTTMP)/test_byvalue_record_managed_copy26)" "$$(printf '1,2\n1,2,3\n1,orig\n5,view\n5,view\n111,viavar\n2,orig2\nshared?')"
 	./$(COMPILER) test/test_untyped_params.pas $(TESTTMP)/test_untyped_params26
-	test "$$($(TESTTMP)/test_untyped_params26)" = "$$(printf '7 7 7 7 \n7 7 7 7 ')"
+	tools/expect_same.sh test_untyped_params26 "$$($(TESTTMP)/test_untyped_params26)" "$$(printf '7 7 7 7 \n7 7 7 7 ')"
 	./$(COMPILER) test/test_string_delete_insert.pas $(TESTTMP)/test_string_delete_insert26
-	test "$$($(TESTTMP)/test_string_delete_insert26)" = "$$(printf 'ho\nhellxo\nabc\nworld!\nabc')"
+	tools/expect_same.sh test_string_delete_insert26 "$$($(TESTTMP)/test_string_delete_insert26)" "$$(printf 'ho\nhellxo\nabc\nworld!\nabc')"
 	./$(COMPILER) test/test_concat_intrinsic.pas $(TESTTMP)/test_concat_intrinsic26
-	test "$$($(TESTTMP)/test_concat_intrinsic26)" = "$$(printf 'abc\nx\nhello world')"
+	tools/expect_same.sh test_concat_intrinsic26 "$$($(TESTTMP)/test_concat_intrinsic26)" "$$(printf 'abc\nx\nhello world')"
 	./$(COMPILER) test/test_str_literal_concat_compare.pas $(TESTTMP)/test_str_lit_concat_cmp26
-	test "$$($(TESTTMP)/test_str_lit_concat_cmp26)" = "$$(printf 'eq1\nneq2\neq3\npqr\nhello world')"
+	tools/expect_same.sh test_str_lit_concat_cmp26 "$$($(TESTTMP)/test_str_lit_concat_cmp26)" "$$(printf 'eq1\nneq2\neq3\npqr\nhello world')"
 	./$(COMPILER) test/test_user_type_shadows_builtin.pas $(TESTTMP)/test_usershadow26
-	test "$$($(TESTTMP)/test_usershadow26)" = "$$(printf 'show 7\ndbl=10')"
+	tools/expect_same.sh test_usershadow26 "$$($(TESTTMP)/test_usershadow26)" "$$(printf 'show 7\ndbl=10')"
 	./$(COMPILER) test/test_eof_stdin.pas $(TESTTMP)/test_eof26
-	test "$$(printf 'x\ny' | $(TESTTMP)/test_eof26)" = "$$(printf '1: x\n2: y\ntotal 2')"
-	test "$$(printf '' | $(TESTTMP)/test_eof26)" = "total 0"
+	tools/expect_same.sh test_eof26.1 "$$(printf 'x\ny' | $(TESTTMP)/test_eof26)" "$$(printf '1: x\n2: y\ntotal 2')"
+	tools/expect_same.sh test_eof26.2 "$$(printf '' | $(TESTTMP)/test_eof26)" "total 0"
 	./$(COMPILER) test/test_const_bitwise_shift.pas $(TESTTMP)/test_const_bitshift26
-	test "$$($(TESTTMP)/test_const_bitshift26)" = "$$(printf '65536\n128\n2\n8\n15\n511\n65536')"
+	tools/expect_same.sh test_const_bitshift26 "$$($(TESTTMP)/test_const_bitshift26)" "$$(printf '65536\n128\n2\n8\n15\n511\n65536')"
 	./$(COMPILER) test/test_const_precedence.pas $(TESTTMP)/test_const_precedence26
-	test "$$($(TESTTMP)/test_const_precedence26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_const_precedence26 "$$($(TESTTMP)/test_const_precedence26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_const_typecast.pas $(TESTTMP)/test_const_typecast26
-	test "$$($(TESTTMP)/test_const_typecast26)" = "$$(printf '4503599627370496\n4503599627370495\n300\n1\n65535\n-56\n4294967295\n-1\n1\n65535')"
+	tools/expect_same.sh test_const_typecast26 "$$($(TESTTMP)/test_const_typecast26)" "$$(printf '4503599627370496\n4503599627370495\n300\n1\n65535\n-56\n4294967295\n-1\n1\n65535')"
 	# NativeUInt/NativeInt(field) widens the FIELD's width, not the cast's
 	./$(COMPILER) test/test_nativeint_cast_field.pas $(TESTTMP)/test_nativeint_cast_field26
-	test "$$($(TESTTMP)/test_nativeint_cast_field26)" = "$$(printf '16\n16\n16\n16\n16\n15\n0')"
+	tools/expect_same.sh test_nativeint_cast_field26 "$$($(TESTTMP)/test_nativeint_cast_field26)" "$$(printf '16\n16\n16\n16\n16\n15\n0')"
 	./$(COMPILER) test/test_const_array_of_string.pas $(TESTTMP)/test_const_array_of_string26
-	test "$$($(TESTTMP)/test_const_array_of_string26)" = "$$(printf 'aa bb cc dd \na b c d \nxx yy zz \nzzz bb')"
+	tools/expect_same.sh test_const_array_of_string26 "$$($(TESTTMP)/test_const_array_of_string26)" "$$(printf 'aa bb cc dd \na b c d \nxx yy zz \nzzz bb')"
 	# a const/var array of string[N] copies CHARS into the frozen slot (it stored
 	# the source handle), and an element store clamps to the element's capacity
 	# a fixed-array PARAMETER must not swallow a scalar argument: its
@@ -8049,79 +8049,79 @@ test-core: $(COMPILER)
 	# FPC's rule: an integer argument prefers an integer parameter over a float
 	# one even when it NARROWS -- and losslessness still ranks among the ints
 	./$(COMPILER) test/test_overload_int_prefers_int.pas $(TESTTMP)/test_ovl_int26
-	test "$$($(TESTTMP)/test_ovl_int26 | tail -1)" = "OVERLOAD INT PREFERS INT OK"
-	test "$$($(TESTTMP)/test_ovl_int26 | head -4 | tr '\n' '|')" = "Fa int int int int int dbl|Fb byte byte byte byte|Fc i64 i64 i64 i64|Fd int i64 i64 int int|"
+	tools/expect_same.sh test_ovl_int26.1 "$$($(TESTTMP)/test_ovl_int26 | tail -1)" "OVERLOAD INT PREFERS INT OK"
+	tools/expect_same.sh test_ovl_int26.2 "$$($(TESTTMP)/test_ovl_int26 | head -4 | tr '\n' '|')" "Fa int int int int int dbl|Fb byte byte byte byte|Fc i64 i64 i64 i64|Fd int i64 i64 int int|"
 	./$(COMPILER) test/test_overload_array_vs_scalar.pas $(TESTTMP)/test_ovl_arr_scalar26
-	test "$$($(TESTTMP)/test_ovl_arr_scalar26 | tail -1)" = "OVERLOAD ARRAY VS SCALAR OK"
-	test "$$($(TESTTMP)/test_ovl_arr_scalar26 | head -4 | tr '\n' '|')" = "arr    6|call   6|var    50|lit    70|"
+	tools/expect_same.sh test_ovl_arr_scalar26.1 "$$($(TESTTMP)/test_ovl_arr_scalar26 | tail -1)" "OVERLOAD ARRAY VS SCALAR OK"
+	tools/expect_same.sh test_ovl_arr_scalar26.2 "$$($(TESTTMP)/test_ovl_arr_scalar26 | head -4 | tr '\n' '|')" "arr    6|call   6|var    50|lit    70|"
 	./$(COMPILER) test/test_const_array_of_string_n.pas $(TESTTMP)/test_const_array_of_string_n26
-	test "$$($(TESTTMP)/test_const_array_of_string_n26)" = "$$(printf '[dd][ff]\n[gg][ii]\n[jj][ll]\n[abc][xy]\n[p][s]\n[v0][v2]\n2 2 3\n[m1][m2]\n[abc][zz] 3')"
+	tools/expect_same.sh test_const_array_of_string_n26 "$$($(TESTTMP)/test_const_array_of_string_n26)" "$$(printf '[dd][ff]\n[gg][ii]\n[jj][ll]\n[abc][xy]\n[p][s]\n[v0][v2]\n2 2 3\n[m1][m2]\n[abc][zz] 3')"
 	./$(COMPILER) test/test_case_else_multistmt.pas $(TESTTMP)/test_case_else_multistmt26
-	test "$$($(TESTTMP)/test_case_else_multistmt26)" = "$$(printf '5 a\n1 b\n4 c')"
+	tools/expect_same.sh test_case_else_multistmt26 "$$($(TESTTMP)/test_case_else_multistmt26)" "$$(printf '5 a\n1 b\n4 c')"
 	./$(COMPILER) test/test_var_array_of_string.pas $(TESTTMP)/test_var_array_of_string26
-	test "$$($(TESTTMP)/test_var_array_of_string26)" = "$$(printf 'hello0 unset1 unset2 hello3\nhello0 open1 open2 hello3\nafter\nhello0 hello3\nloop total=330000 final=padding-value-to-exercise-realloc-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')"
+	tools/expect_same.sh test_var_array_of_string26 "$$($(TESTTMP)/test_var_array_of_string26)" "$$(printf 'hello0 unset1 unset2 hello3\nhello0 open1 open2 hello3\nafter\nhello0 hello3\nloop total=330000 final=padding-value-to-exercise-realloc-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')"
 	./$(COMPILER) test/test_record_typecast.pas $(TESTTMP)/test_record_typecast26
-	test "$$($(TESTTMP)/test_record_typecast26)" = "$$(printf '77\n88\n77\n88\n165')"
+	tools/expect_same.sh test_record_typecast26 "$$($(TESTTMP)/test_record_typecast26)" "$$(printf '77\n88\n77\n88\n165')"
 	./$(COMPILER) test/test_funcname_field.pas $(TESTTMP)/test_funcname_field26
-	test "$$($(TESTTMP)/test_funcname_field26)" = "$$(printf 'a=1000000000 b=2000000000 n=7\na=3 b=6 n=9')"
+	tools/expect_same.sh test_funcname_field26 "$$($(TESTTMP)/test_funcname_field26)" "$$(printf 'a=1000000000 b=2000000000 n=7\na=3 b=6 n=9')"
 	./$(COMPILER) test/test_cross_multidim.pas $(TESTTMP)/test_multidim26
-	test "$$($(TESTTMP)/test_multidim26)" = "$$(printf 'sum=138 m12=12 m12b=12\nm23=99\ngsum=12000000009 g32=3000000002')"
+	tools/expect_same.sh test_multidim26 "$$($(TESTTMP)/test_multidim26)" "$$(printf 'sum=138 m12=12 m12b=12\nm23=99\ngsum=12000000009 g32=3000000002')"
 	./$(COMPILER) test/test_cross_named_array.pas $(TESTTMP)/test_named_array26
-	test "$$($(TESTTMP)/test_named_array26)" = "$$(printf 'vsum=30\ngsum=138 g23=23\nbsum=6000000000')"
+	tools/expect_same.sh test_named_array26 "$$($(TESTTMP)/test_named_array26)" "$$(printf 'vsum=30\ngsum=138 g23=23\nbsum=6000000000')"
 	./$(COMPILER) test/test_cross_record_2darray.pas $(TESTTMP)/test_record_2darray26
-	test "$$($(TESTTMP)/test_record_2darray26)" = "$$(printf 'msum=138 m23=23 tag=7\nm11=99\ngsum=6000000006 g22=2000000002')"
+	tools/expect_same.sh test_record_2darray26 "$$($(TESTTMP)/test_record_2darray26)" "$$(printf 'msum=138 m23=23 tag=7\nm11=99\ngsum=6000000006 g22=2000000002')"
 	./$(COMPILER) test/test_cross_param_2darray.pas $(TESTTMP)/test_param_2darray26
-	test "$$($(TESTTMP)/test_param_2darray26)" = "$$(printf 'vsum=14\ngsum=30\nafter=1338 m23=123')"
+	tools/expect_same.sh test_param_2darray26 "$$($(TESTTMP)/test_param_2darray26)" "$$(printf 'vsum=14\ngsum=30\nafter=1338 m23=123')"
 	./$(COMPILER) test/test_cross_multidim3d.pas $(TESTTMP)/test_multidim3d26
-	test "$$($(TESTTMP)/test_multidim3d26)" = "$$(printf 'var3d=1476000000 c123=123000000\nparam3d=1476 n123=123\nfield3d=28 rc=7 tag=9')"
+	tools/expect_same.sh test_multidim3d26 "$$($(TESTTMP)/test_multidim3d26)" "$$(printf 'var3d=1476000000 c123=123000000\nparam3d=1476 n123=123\nfield3d=28 rc=7 tag=9')"
 	./$(COMPILER) test/test_cross_const_alias.pas $(TESTTMP)/test_const_alias26
-	test "$$($(TESTTMP)/test_const_alias26)" = "$$(printf 'Hello, World! len=13\nalist=55 len=6\nrlist=46 len=4')"
+	tools/expect_same.sh test_const_alias26 "$$($(TESTTMP)/test_const_alias26)" "$$(printf 'Hello, World! len=13\nalist=55 len=6\nrlist=46 len=4')"
 	./$(COMPILER) test/test_dyn_comma.pas $(TESTTMP)/test_dyn_comma26
-	test "$$($(TESTTMP)/test_dyn_comma26)" = "$$(printf 'm=138 m12=12 brk=12\nalias=9 t11=2')"
+	tools/expect_same.sh test_dyn_comma26 "$$($(TESTTMP)/test_dyn_comma26)" "$$(printf 'm=138 m12=12 brk=12\nalias=9 t11=2')"
 	./$(COMPILER) test/test_set_subrange.pas $(TESTTMP)/test_set_subrange26
-	test "$$($(TESTTMP)/test_set_subrange26)" = "$$(printf 'union: 1 2 3 4 5 6 10 15 20\ninter: 3 4 15\ndiff: 1 2 10\n15in')"
+	tools/expect_same.sh test_set_subrange26 "$$($(TESTTMP)/test_set_subrange26)" "$$(printf 'union: 1 2 3 4 5 6 10 15 20\ninter: 3 4 15\ndiff: 1 2 10\n15in')"
 	./$(COMPILER) test/test_cross_float_const.pas $(TESTTMP)/test_float_const26
-	test "$$($(TESTTMP)/test_float_const26)" = "$$(printf 'pi=3.14159 scale=2.00\ncoef=8.25\ntab=35.75 c2=0.25')"
+	tools/expect_same.sh test_float_const26 "$$($(TESTTMP)/test_float_const26)" "$$(printf 'pi=3.14159 scale=2.00\ncoef=8.25\ntab=35.75 c2=0.25')"
 	./$(COMPILER) test/test_asm_emit.pas $(TESTTMP)/test_asm_emit26
-	test "$$($(TESTTMP)/test_asm_emit26)" = "$$(printf 'S=\nS=ab\nS=abc\nS=a longer string here\nI=0\nI=123\nI=-7\n---\nS=ww\nI=1\nS=yy\nI=2\nS=zzz\nI=3')"
+	tools/expect_same.sh test_asm_emit26 "$$($(TESTTMP)/test_asm_emit26)" "$$(printf 'S=\nS=ab\nS=abc\nS=a longer string here\nI=0\nI=123\nI=-7\n---\nS=ww\nI=1\nS=yy\nI=2\nS=zzz\nI=3')"
 	./$(COMPILER) test/test_virtual_proc.pas $(TESTTMP)/test_virtual_proc26
-	test "$$($(TESTTMP)/test_virtual_proc26)" = "$$(printf 'B\nB')"
+	tools/expect_same.sh test_virtual_proc26 "$$($(TESTTMP)/test_virtual_proc26)" "$$(printf 'B\nB')"
 	./$(COMPILER) test/test_ir_virtual_call.pas $(TESTTMP)/test_ir_virtual_call26
-	test "$$($(TESTTMP)/test_ir_virtual_call26)" = "$$(printf '1\n2\n1\n2')"
+	tools/expect_same.sh test_ir_virtual_call26 "$$($(TESTTMP)/test_ir_virtual_call26)" "$$(printf '1\n2\n1\n2')"
 	./$(COMPILER) test/test_metaclass_construct.pas $(TESTTMP)/test_metaclass_construct26
-	test "$$($(TESTTMP)/test_metaclass_construct26)" = "$$(printf '50\n70\n3')"
+	tools/expect_same.sh test_metaclass_construct26 "$$($(TESTTMP)/test_metaclass_construct26)" "$$(printf '50\n70\n3')"
 	./$(COMPILER) test/test_metaclass_getclass.pas $(TESTTMP)/test_metaclass_getclass26
-	test "$$($(TESTTMP)/test_metaclass_getclass26)" = "$$(printf '3 base TRUE\n40 der TRUE')"
+	tools/expect_same.sh test_metaclass_getclass26 "$$($(TESTTMP)/test_metaclass_getclass26)" "$$(printf '3 base TRUE\n40 der TRUE')"
 	./$(COMPILER) test/test_inheritance_dispatch.pas $(TESTTMP)/test_inheritance_dispatch26
-	test "$$($(TESTTMP)/test_inheritance_dispatch26)" = "$$(printf '50\n507\n50\n507\n5\n12\n7\n99\n5\n88')"
+	tools/expect_same.sh test_inheritance_dispatch26 "$$($(TESTTMP)/test_inheritance_dispatch26)" "$$(printf '50\n507\n50\n507\n5\n12\n7\n99\n5\n88')"
 	./$(COMPILER) test/test_inherited.pas $(TESTTMP)/test_inherited26
-	test "$$($(TESTTMP)/test_inherited26)" = "$$(printf '42\nbase\nchild\n85\ntouch\nchild touch')"
+	tools/expect_same.sh test_inherited26 "$$($(TESTTMP)/test_inherited26)" "$$(printf '42\nbase\nchild\n85\ntouch\nchild touch')"
 	./$(COMPILER) test/test_abstract_out.pas $(TESTTMP)/test_abstract_out26
-	test "$$($(TESTTMP)/test_abstract_out26)" = "$$(printf '16\n9\n16\n32\n18\n42\n99\n100\n7')"
+	tools/expect_same.sh test_abstract_out26 "$$($(TESTTMP)/test_abstract_out26)" "$$(printf '16\n9\n16\n32\n18\n42\n99\n100\n7')"
 	./$(COMPILER) --debug test/hello.pas $(TESTTMP)/hello_debug26 > $(TESTTMP)/hello_debug26.log
 	grep -q "Loaded file length:" $(TESTTMP)/hello_debug26.log
-	test "$$($(TESTTMP)/hello_debug26)" = "Hello, World!"
+	tools/expect_same.sh hello_debug26 "$$($(TESTTMP)/hello_debug26)" "Hello, World!"
 	./$(COMPILER) --dump-ir test/hello.pas $(TESTTMP)/hello_ir26 > $(TESTTMP)/hello_ir26.log
 	grep -q "IR count=" $(TESTTMP)/hello_ir26.log
 	grep -q "writeln" $(TESTTMP)/hello_ir26.log
-	test "$$($(TESTTMP)/hello_ir26)" = "Hello, World!"
+	tools/expect_same.sh hello_ir26 "$$($(TESTTMP)/hello_ir26)" "Hello, World!"
 	./$(COMPILER) --dump-ir test/test_ir_if.pas $(TESTTMP)/test_ir_if26 > $(TESTTMP)/test_ir_if26.log
 	grep -q "label" $(TESTTMP)/test_ir_if26.log
 	grep -q "jump " $(TESTTMP)/test_ir_if26.log
 	grep -q "jump_if_false" $(TESTTMP)/test_ir_if26.log
 	grep -q "binop" $(TESTTMP)/test_ir_if26.log
-	test "$$($(TESTTMP)/test_ir_if26)" = "then"
+	tools/expect_same.sh test_ir_if26 "$$($(TESTTMP)/test_ir_if26)" "then"
 	./$(COMPILER) --dump-ir test/test_ir_while.pas $(TESTTMP)/test_ir_while26 > $(TESTTMP)/test_ir_while26.log
 	grep -q "label" $(TESTTMP)/test_ir_while26.log
 	grep -q "jump " $(TESTTMP)/test_ir_while26.log
 	grep -q "jump_if_false" $(TESTTMP)/test_ir_while26.log
 	grep -q "binop" $(TESTTMP)/test_ir_while26.log
-	test "$$($(TESTTMP)/test_ir_while26)" = "3"
+	tools/expect_same.sh test_ir_while26 "$$($(TESTTMP)/test_ir_while26)" "3"
 	./$(COMPILER) --dump-ir test/test_ir_repeat.pas $(TESTTMP)/test_ir_repeat26 > $(TESTTMP)/test_ir_repeat26.log
 	grep -q "label" $(TESTTMP)/test_ir_repeat26.log
 	grep -q "jump_if_false" $(TESTTMP)/test_ir_repeat26.log
 	grep -q "binop" $(TESTTMP)/test_ir_repeat26.log
-	test "$$($(TESTTMP)/test_ir_repeat26)" = "3"
+	tools/expect_same.sh test_ir_repeat26 "$$($(TESTTMP)/test_ir_repeat26)" "3"
 	./$(COMPILER) --dump-ir test/test_ir_for.pas $(TESTTMP)/test_ir_for26 > $(TESTTMP)/test_ir_for26.log
 	grep -q "label" $(TESTTMP)/test_ir_for26.log
 	grep -q "jump " $(TESTTMP)/test_ir_for26.log
@@ -8130,58 +8130,58 @@ test-core: $(COMPILER)
 	grep -q "const_int" $(TESTTMP)/test_ir_for26.log
 	grep -q "store_sym" $(TESTTMP)/test_ir_for26.log
 	grep -q "load_sym" $(TESTTMP)/test_ir_for26.log
-	test "$$($(TESTTMP)/test_ir_for26)" = "$$(printf '15\n15')"
+	tools/expect_same.sh test_ir_for26 "$$($(TESTTMP)/test_ir_for26)" "$$(printf '15\n15')"
 	./$(COMPILER) --dump-ir test/test_ir_loop_control.pas $(TESTTMP)/test_ir_loop_control26 > $(TESTTMP)/test_ir_loop_control26.log
 	grep -q "label" $(TESTTMP)/test_ir_loop_control26.log
 	grep -q "jump " $(TESTTMP)/test_ir_loop_control26.log
 	grep -q "jump_if_false" $(TESTTMP)/test_ir_loop_control26.log
 	grep -q "binop" $(TESTTMP)/test_ir_loop_control26.log
-	test "$$($(TESTTMP)/test_ir_loop_control26)" = "$$(printf '10\n12\n15\n12\n6\n12')"
+	tools/expect_same.sh test_ir_loop_control26 "$$($(TESTTMP)/test_ir_loop_control26)" "$$(printf '10\n12\n15\n12\n6\n12')"
 	./$(COMPILER) --dump-ir test/test_ir_case.pas $(TESTTMP)/test_ir_case26 > $(TESTTMP)/test_ir_case26.log
 	grep -q "label" $(TESTTMP)/test_ir_case26.log
 	grep -q "jump " $(TESTTMP)/test_ir_case26.log
 	grep -q "jump_if_false" $(TESTTMP)/test_ir_case26.log
 	grep -q "binop" $(TESTTMP)/test_ir_case26.log
-	test "$$($(TESTTMP)/test_ir_case26)" = "$$(printf '12\n12\n3\n99\n99')"
+	tools/expect_same.sh test_ir_case26 "$$($(TESTTMP)/test_ir_case26)" "$$(printf '12\n12\n3\n99\n99')"
 	./$(COMPILER) test/test_ir_codegen.pas $(TESTTMP)/test_ir_codegen26
-	test "$$($(TESTTMP)/test_ir_codegen26)" = "$$(printf '15\nOK')"
+	tools/expect_same.sh test_ir_codegen26 "$$($(TESTTMP)/test_ir_codegen26)" "$$(printf '15\nOK')"
 	./$(COMPILER) test/test_fixed_array_copy.pas $(TESTTMP)/test_fixed_array_copy26
-	test "$$($(TESTTMP)/test_fixed_array_copy26)" = "$$(printf '1 4\n10 20 30\n5000000000 7000000000\nOK')"
+	tools/expect_same.sh test_fixed_array_copy26 "$$($(TESTTMP)/test_fixed_array_copy26)" "$$(printf '1 4\n10 20 30\n5000000000 7000000000\nOK')"
 	./$(COMPILER) test/test_fixed_array_copy_managed.pas $(TESTTMP)/test_fixed_array_copy_managed26
-	test "$$($(TESTTMP)/test_fixed_array_copy_managed26)" = "$$(printf 'pqr\npqr\npqr\nxyzw\ngs0gs12\nabcd\nf0f1f2\nOK')"
+	tools/expect_same.sh test_fixed_array_copy_managed26 "$$($(TESTTMP)/test_fixed_array_copy_managed26)" "$$(printf 'pqr\npqr\npqr\nxyzw\ngs0gs12\nabcd\nf0f1f2\nOK')"
 	./$(COMPILER) test/test_record_byvalue_managed_small.pas $(TESTTMP)/test_record_byvalue_managed_small26
-	test "$$($(TESTTMP)/test_record_byvalue_managed_small26)" = "$$(printf '104 7 14\n204 9 18\n2 7\n104 7 14\n204 9 18\n2 7\n104 7 14\n204 9 18\n2 7\nOK')"
+	tools/expect_same.sh test_record_byvalue_managed_small26 "$$($(TESTTMP)/test_record_byvalue_managed_small26)" "$$(printf '104 7 14\n204 9 18\n2 7\n104 7 14\n204 9 18\n2 7\n104 7 14\n204 9 18\n2 7\nOK')"
 	./$(COMPILER) test/test_dynarray_whole_assign.pas $(TESTTMP)/test_dynarray_whole_assign26
-	test "$$($(TESTTMP)/test_dynarray_whole_assign26)" = "$$(printf '8 42 7\n3 pqr\n3 pqr\n8 42 42\n77 77 88 88\n77 77 88 88\nzz zz b b\n1 9 2 3\n1 9\nOK')"
+	tools/expect_same.sh test_dynarray_whole_assign26 "$$($(TESTTMP)/test_dynarray_whole_assign26)" "$$(printf '8 42 7\n3 pqr\n3 pqr\n8 42 42\n77 77 88 88\n77 77 88 88\nzz zz b b\n1 9 2 3\n1 9\nOK')"
 	./$(COMPILER) test/test_i386_int64_high_half.pas $(TESTTMP)/test_i386_int64_high_half26
-	test "$$($(TESTTMP)/test_i386_int64_high_half26)" = "$$(printf '1\n-1\n1\n-1\n1\n1\n0\n3\nOK')"
+	tools/expect_same.sh test_i386_int64_high_half26 "$$($(TESTTMP)/test_i386_int64_high_half26)" "$$(printf '1\n-1\n1\n-1\n1\n1\n0\n3\nOK')"
 	./$(COMPILER) test/test_int64_cast_of_nativeint.pas $(TESTTMP)/test_int64_cast_of_nativeint26
-	test "$$($(TESTTMP)/test_int64_cast_of_nativeint26)" = "$$(printf '5\n-3\n-3\n7\n7000000\n1234567890\n1\nOK')"
+	tools/expect_same.sh test_int64_cast_of_nativeint26 "$$($(TESTTMP)/test_int64_cast_of_nativeint26)" "$$(printf '5\n-3\n-3\n7\n7000000\n1234567890\n1\nOK')"
 	./$(COMPILER) test/test_writeln_float_exact.pas $(TESTTMP)/test_writeln_float_exact26
-	test "$$($(TESTTMP)/test_writeln_float_exact26)" = "$$(printf ' 1.0000000000000000E+030\n 1.0000000000000000E+100\n 9.9999999999999997E+199\n 9.9999999999999995E-021\n 1.2345678901234500E+014\n 2.4999999999999999E+100\n 1.0000000000000000E+100\n 0.0000000000000000E+000\n 1.0000000000000000E+000\n-2.5000000000000000E+000\n 4.9406564584124654E-324\n 9.9998886718268301E-321\n 1.7976931348623157E+308\n 1.0000000000000001E-001\n 9.9999999999999982E+099\nOK')"
+	tools/expect_same.sh test_writeln_float_exact26 "$$($(TESTTMP)/test_writeln_float_exact26)" "$$(printf ' 1.0000000000000000E+030\n 1.0000000000000000E+100\n 9.9999999999999997E+199\n 9.9999999999999995E-021\n 1.2345678901234500E+014\n 2.4999999999999999E+100\n 1.0000000000000000E+100\n 0.0000000000000000E+000\n 1.0000000000000000E+000\n-2.5000000000000000E+000\n 4.9406564584124654E-324\n 9.9998886718268301E-321\n 1.7976931348623157E+308\n 1.0000000000000001E-001\n 9.9999999999999982E+099\nOK')"
 	./$(COMPILER) test/test_writeln_float_width.pas $(TESTTMP)/test_writeln_float_width26
-	test "$$($(TESTTMP)/test_writeln_float_width26)" = "$$(printf '[      3.1416]\n[     -3.1416]\n[  10.0]\n[    1]\n[   -1]\n[123456.0]\n[    0.00]\n[      100000000000000000000.00]\n[     -100000000000000000000.00]\n[3.14]\nOK')"
+	tools/expect_same.sh test_writeln_float_width26 "$$($(TESTTMP)/test_writeln_float_width26)" "$$(printf '[      3.1416]\n[     -3.1416]\n[  10.0]\n[    1]\n[   -1]\n[123456.0]\n[    0.00]\n[      100000000000000000000.00]\n[     -100000000000000000000.00]\n[3.14]\nOK')"
 	./$(COMPILER) -O2 test/test_warn_ignored_directives.pas $(TESTTMP)/test_warn_ignored_directives26 2>/dev/null | grep -c warning | grep -qx 0
-	test "$$(./$(COMPILER) -O2 --warn-ignored-directives test/test_warn_ignored_directives.pas $(TESTTMP)/test_warn_ignored_directives26 2>&1 | grep -c warning)" = "6"
-	test "$$($(TESTTMP)/test_warn_ignored_directives26)" = "$$(printf '1\n1')"
+	tools/expect_same.sh test_warn_ignored_directives26.1 "$$(./$(COMPILER) -O2 --warn-ignored-directives test/test_warn_ignored_directives.pas $(TESTTMP)/test_warn_ignored_directives26 2>&1 | grep -c warning)" "6"
+	tools/expect_same.sh test_warn_ignored_directives26.2 "$$($(TESTTMP)/test_warn_ignored_directives26)" "$$(printf '1\n1')"
 	./$(COMPILER) test/test_shadow_program_over_unit.pas $(TESTTMP)/test_shadow_program_over_unit26
-	test "$$($(TESTTMP)/test_shadow_program_over_unit26)" = "$$(printf 'mine\nmine-trim\nX\n7')"
+	tools/expect_same.sh test_shadow_program_over_unit26 "$$($(TESTTMP)/test_shadow_program_over_unit26)" "$$(printf 'mine\nmine-trim\nX\n7')"
 	# `uses a, b` binds the LAST unit's routine, as FPC does — both orders, and
 	# both call shapes (parameterless binds via FindProcBound, with-args via
 	# MatchProcCall/MatchElig; fixing one left the other wrong)
 	./$(COMPILER) -Futest test/test_shadow_last_uses_wins.pas $(TESTTMP)/test_shadow_last_uses26
-	test "$$($(TESTTMP)/test_shadow_last_uses26)" = "$$(printf 'B\nB')"
+	tools/expect_same.sh test_shadow_last_uses26 "$$($(TESTTMP)/test_shadow_last_uses26)" "$$(printf 'B\nB')"
 	./$(COMPILER) -Futest test/test_shadow_first_uses_hidden.pas $(TESTTMP)/test_shadow_first_uses26
-	test "$$($(TESTTMP)/test_shadow_first_uses26)" = "$$(printf 'A\nA')"
+	tools/expect_same.sh test_shadow_first_uses26 "$$($(TESTTMP)/test_shadow_first_uses26)" "$$(printf 'A\nA')"
 	./$(COMPILER) test/test_math_intrinsics_no_uses.pas $(TESTTMP)/test_math_intrinsics_no_uses26
-	test "$$($(TESTTMP)/test_math_intrinsics_no_uses26)" = "$$(printf '4.0\n0.0\n1.0\n1.0\n0.0\n3.14159\n7')"
+	tools/expect_same.sh test_math_intrinsics_no_uses26 "$$($(TESTTMP)/test_math_intrinsics_no_uses26)" "$$(printf '4.0\n0.0\n1.0\n1.0\n0.0\n3.14159\n7')"
 	./$(COMPILER) test/test_writeln_text_char.pas $(TESTTMP)/test_writeln_text_char26
-	test "$$($(TESTTMP)/test_writeln_text_char26)" = "$$(printf 'ax   x  Z|\nab42 3.5|\nABCD\nOK')"
+	tools/expect_same.sh test_writeln_text_char26 "$$($(TESTTMP)/test_writeln_text_char26)" "$$(printf 'ax   x  Z|\nab42 3.5|\nABCD\nOK')"
 	# the read side of the same coin: read(f, c) takes ONE character (the newline
 	# is one), readln(f, c) takes one and skips to the next line, and past end of
 	# file yields #26 — all 25 assertions are FPC 3.2.2's own output.
 	./$(COMPILER) test/test_read_text_char.pas $(TESTTMP)/test_read_text_char26
-	test "$$($(TESTTMP)/test_read_text_char26 | tail -1)" = "total ok 25 / 25"
+	tools/expect_same.sh test_read_text_char26 "$$($(TESTTMP)/test_read_text_char26 | tail -1)" "total ok 25 / 25"
 	# ...and the other two arms, which used to take a whole LINE: a numeric
 	# destination now takes one whitespace-delimited token and a string one stops
 	# BEFORE the terminator, so `readln(t, n, m)` on '42 3' is 42 3 and not 0 0.
@@ -8190,7 +8190,7 @@ test-core: $(COMPILER)
 	# bug where the value is right and the cursor is a line too far. All 55
 	# expectations are FPC 3.2.2's own output for this same program.
 	./$(COMPILER) test/test_read_text_value_cursor.pas $(TESTTMP)/test_read_text_value_cursor26
-	test "$$($(TESTTMP)/test_read_text_value_cursor26 | tail -1)" = "total ok 55 / 55"
+	tools/expect_same.sh test_read_text_value_cursor26 "$$($(TESTTMP)/test_read_text_value_cursor26 | tail -1)" "total ok 55 / 55"
 	# `class operator Initialize/Finalize` -- FPC's MANAGEMENT operators, invoked
 	# at a variable's LIFETIME events. Desugared into Initialize + try..finally
 	# Finalize around the declaring routine's body (and the main body, for
@@ -8220,93 +8220,93 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_mgmt_operators_copy_refused.pas $(TESTTMP)/test_mgmt_op_cpy26 2>&1 \
 	  | grep -q "feature-pascal-management-operators-copy-and-addref"
 	./$(COMPILER) test/test_promoint_function_result.pas $(TESTTMP)/test_promoint_function_result26
-	test "$$($(TESTTMP)/test_promoint_function_result26)" = "$$(printf '12\n10000000000000000000000000000000000000000\n12\n24\n10000000000000000000000000000000000000000\n13\n1\nOK')"
+	tools/expect_same.sh test_promoint_function_result26 "$$($(TESTTMP)/test_promoint_function_result26)" "$$(printf '12\n10000000000000000000000000000000000000000\n12\n24\n10000000000000000000000000000000000000000\n13\n1\nOK')"
 	./$(COMPILER) test/test_promoint_parameter_32bit.pas $(TESTTMP)/test_promoint_parameter_32bit26
-	test "$$($(TESTTMP)/test_promoint_parameter_32bit26)" = "$$(printf '16\n0\n36\n4\n263\n768\n257\n256\n62500000000000000000000000000\n142857142857142857142857142857\nOK')"
+	tools/expect_same.sh test_promoint_parameter_32bit26 "$$($(TESTTMP)/test_promoint_parameter_32bit26)" "$$(printf '16\n0\n36\n4\n263\n768\n257\n256\n62500000000000000000000000000\n142857142857142857142857142857\nOK')"
 	./$(COMPILER) test/test_promoint_arg_literal_and_result.pas $(TESTTMP)/test_promoint_arg_literal26
-	test "$$($(TESTTMP)/test_promoint_arg_literal26)" = "$$(printf '24\n-10\n4865804016353280000\n14\n2000000\n14\n12\nintstr\n15511210043330985984000000\nOK')"
+	tools/expect_same.sh test_promoint_arg_literal26 "$$($(TESTTMP)/test_promoint_arg_literal26)" "$$(printf '24\n-10\n4865804016353280000\n14\n2000000\n14\n12\nintstr\n15511210043330985984000000\nOK')"
 	./$(COMPILER) test/test_index_getter_string_property.pas $(TESTTMP)/test_index_getter_string26
-	test "$$($(TESTTMP)/test_index_getter_string26)" = "$$(printf 'h\nh\no\ne\na\nb\ny\nhello\n5 hello\nOK')"
+	tools/expect_same.sh test_index_getter_string26 "$$($(TESTTMP)/test_index_getter_string26)" "$$(printf 'h\nh\no\ne\na\nb\ny\nhello\n5 hello\nOK')"
 	./$(COMPILER) test/test_interlocked_no_uses.pas $(TESTTMP)/test_interlocked_no_uses26
-	test "$$($(TESTTMP)/test_interlocked_no_uses26)" = "$$(printf '6 6\n5 5\n5 42\n42 50\n50 99\n99 99\n101 101\n101 1001\nOK')"
+	tools/expect_same.sh test_interlocked_no_uses26 "$$($(TESTTMP)/test_interlocked_no_uses26)" "$$(printf '6 6\n5 5\n5 42\n42 50\n50 99\n99 99\n101 101\n101 1001\nOK')"
 	# ...and the same wart for the LOW-LEVEL THREAD API, which FPC also declares
 	# in System: BeginThread / WaitForThreadTerminate / CloseThread / TThreadID
 	# with no uses line. palthreadobj is pulled on demand from a token scan (the
 	# `math` mechanism), gated on threadsafe. Matches FPC 3.2.2 row for row.
 	./$(COMPILER) test/test_thread_api_no_uses.pas $(TESTTMP)/test_thread_api_no_uses26
-	test "$$($(TESTTMP)/test_thread_api_no_uses26)" = "$$(printf 'a 42\nb 15\nc ok\nd 8')"
+	tools/expect_same.sh test_thread_api_no_uses26 "$$($(TESTTMP)/test_thread_api_no_uses26)" "$$(printf 'a 42\nb 15\nc ok\nd 8')"
 	./$(COMPILER) test/test_numeric_goto_labels.pas $(TESTTMP)/test_numeric_goto26
-	test "$$($(TESTTMP)/test_numeric_goto26)" = "$$(printf 'a 1\nb case-one\nc 10\nd 5\ne done\nOK')"
+	tools/expect_same.sh test_numeric_goto26 "$$($(TESTTMP)/test_numeric_goto26)" "$$(printf 'a 1\nb case-one\nc 10\nd 5\ne done\nOK')"
 	./$(COMPILER) test/test_sizeof_real_matches_storage.pas $(TESTTMP)/test_sizeof_real26
-	test "$$($(TESTTMP)/test_sizeof_real26)" = "$$(printf 'a 8|8\nb 8|8\nc 4|4\nd TRUE\ne TRUE\nf TRUE|TRUE\nOK')"
+	tools/expect_same.sh test_sizeof_real26 "$$($(TESTTMP)/test_sizeof_real26)" "$$(printf 'a 8|8\nb 8|8\nc 4|4\nd TRUE\ne TRUE\nf TRUE|TRUE\nOK')"
 	./$(COMPILER) test/test_set_low_high_element_bounds.pas $(TESTTMP)/test_set_low_high26
-	test "$$($(TESTTMP)/test_set_low_high26)" = "$$(printf 'a 0|255\nb 1|10\nc 0|2\nd 0|255\ne 1|10\nf 0|2\ng 10\nh 3\ni TRUE|FALSE\nj TRUE|FALSE\nOK')"
+	tools/expect_same.sh test_set_low_high26 "$$($(TESTTMP)/test_set_low_high26)" "$$(printf 'a 0|255\nb 1|10\nc 0|2\nd 0|255\ne 1|10\nf 0|2\ng 10\nh 3\ni TRUE|FALSE\nj TRUE|FALSE\nOK')"
 	./$(COMPILER) test/test_bitscan_and_radix_str.pas $(TESTTMP)/test_bitscan_radix26
-	test "$$($(TESTTMP)/test_bitscan_radix26)" = "$$(printf 'a 255|0|2|63\nb 255|0|3|63\nc 255|2|3|31\nd 255|2|3|15\ne 255|2|3|7\nf 010|0377|77|0\ng 0101|1111|\nh TRUE|6\ni FALSE|-1\nj FALSE|-1\nOK')"
+	tools/expect_same.sh test_bitscan_radix26 "$$($(TESTTMP)/test_bitscan_radix26)" "$$(printf 'a 255|0|2|63\nb 255|0|3|63\nc 255|2|3|31\nd 255|2|3|15\ne 255|2|3|7\nf 010|0377|77|0\ng 0101|1111|\nh TRUE|6\ni FALSE|-1\nj FALSE|-1\nOK')"
 	./$(COMPILER) test/test_inc_dec_on_own_name.pas $(TESTTMP)/test_inc_dec_own_name26
-	test "$$($(TESTTMP)/test_inc_dec_own_name26)" = "$$(printf 'a 14\nb xy|2\nc 42\nd 102\ne 11\nOK')"
+	tools/expect_same.sh test_inc_dec_own_name26 "$$($(TESTTMP)/test_inc_dec_own_name26)" "$$(printf 'a 14\nb xy|2\nc 42\nd 102\ne 11\nOK')"
 	./$(COMPILER) test/test_frozen_string_length_byte.pas $(TESTTMP)/test_frozen_len_byte26
-	test "$$($(TESTTMP)/test_frozen_len_byte26)" = "$$(printf 'a 2|2\nb abc|3\nc a|1\nd <>|0\ne xyz|3\nf 4\ng pq|2\nh 5\ni hel\nj abc\nOK')"
+	tools/expect_same.sh test_frozen_len_byte26 "$$($(TESTTMP)/test_frozen_len_byte26)" "$$(printf 'a 2|2\nb abc|3\nc a|1\nd <>|0\ne xyz|3\nf 4\ng pq|2\nh 5\ni hel\nj abc\nOK')"
 	./$(COMPILER) test/test_frozen_string_concat_operand.pas $(TESTTMP)/test_frozen_concat_operand26
-	test "$$($(TESTTMP)/test_frozen_concat_operand26)" = "$$(printf 'a ab!\nb ab!\nc <ab>\nd abcd\ne abab\nf ab!|3\ng box!\nh 400\nOK')"
+	tools/expect_same.sh test_frozen_concat_operand26 "$$($(TESTTMP)/test_frozen_concat_operand26)" "$$(printf 'a ab!\nb ab!\nc <ab>\nd abcd\ne abab\nf ab!|3\ng box!\nh 400\nOK')"
 	./$(COMPILER) test/test_shortstring_function_result.pas $(TESTTMP)/test_ss_func_result26
-	test "$$($(TESTTMP)/test_ss_func_result26)" = "$$(printf 'a ab\nb sized\nc q|qq\nd Xd\ne ab|2|2\nf TRUE|FALSE\ng boxed\nh |   ab|\nOK')"
+	tools/expect_same.sh test_ss_func_result26 "$$($(TESTTMP)/test_ss_func_result26)" "$$(printf 'a ab\nb sized\nc q|qq\nd Xd\ne ab|2|2\nf TRUE|FALSE\ng boxed\nh |   ab|\nOK')"
 	./$(COMPILER) -Futest/units test/test_unit_ambient_system_surface.pas $(TESTTMP)/test_unit_ambient_sys26
-	test "$$($(TESTTMP)/test_unit_ambient_sys26)" = "$$(printf 'a 5.0000\nb 2.0000\nc 12.5664\nOK')"
+	tools/expect_same.sh test_unit_ambient_sys26 "$$($(TESTTMP)/test_unit_ambient_sys26)" "$$(printf 'a 5.0000\nb 2.0000\nc 12.5664\nOK')"
 	./$(COMPILER) -Fulib/rtl test/test_assert_raises_with_sysutils.pas $(TESTTMP)/test_assert_raises26
-	test "$$($(TESTTMP)/test_assert_raises26)" = "$$(printf 'passed\ncaught: EAssertionFailed: boom\nnomsg: EAssertionFailed: Assertion failed\nstill running\nOK')"
+	tools/expect_same.sh test_assert_raises26 "$$($(TESTTMP)/test_assert_raises26)" "$$(printf 'passed\ncaught: EAssertionFailed: boom\nnomsg: EAssertionFailed: Assertion failed\nstill running\nOK')"
 	./$(COMPILER) test/test_static_array_managed_scope_exit.pas $(TESTTMP)/test_static_array_managed_scope_exit26
-	test "$$($(TESTTMP)/test_static_array_managed_scope_exit26)" = "$$(printf '0\nOK')"
+	tools/expect_same.sh test_static_array_managed_scope_exit26 "$$($(TESTTMP)/test_static_array_managed_scope_exit26)" "$$(printf '0\nOK')"
 	./$(COMPILER) test/test_string_array_element_charwrite.pas $(TESTTMP)/test_string_array_element_charwrite26
-	test "$$($(TESTTMP)/test_string_array_element_charwrite26)" = "$$(printf '4x\n5x\n6x\n4y\n6z\nxyz\nOK')"
+	tools/expect_same.sh test_string_array_element_charwrite26 "$$($(TESTTMP)/test_string_array_element_charwrite26)" "$$(printf '4x\n5x\n6x\n4y\n6z\nxyz\nOK')"
 	./$(COMPILER) test/test_ir_codegen_fail.pas $(TESTTMP)/test_ir_codegen_fail26
-	test "$$($(TESTTMP)/test_ir_codegen_fail26)" = "$$(printf '15\nFAIL')"
+	tools/expect_same.sh test_ir_codegen_fail26 "$$($(TESTTMP)/test_ir_codegen_fail26)" "$$(printf '15\nFAIL')"
 	./$(COMPILER) test/test_ir_unary.pas $(TESTTMP)/test_ir_unary26
-	test "$$($(TESTTMP)/test_ir_unary26)" = "$$(printf '%s\nOK' '-5')"
+	tools/expect_same.sh test_ir_unary26 "$$($(TESTTMP)/test_ir_unary26)" "$$(printf '%s\nOK' '-5')"
 	./$(COMPILER) test/test_not_int64_expr.pas $(TESTTMP)/test_not_int64_expr26
-	test "$$($(TESTTMP)/test_not_int64_expr26)" = "$$(printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\nok-lw0\nok-lw1\nok-bool' '-6' '-6' '-5' '-3' '-7' '-11' '-11' '-6' '-1')"
+	tools/expect_same.sh test_not_int64_expr26 "$$($(TESTTMP)/test_not_int64_expr26)" "$$(printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\nok-lw0\nok-lw1\nok-bool' '-6' '-6' '-5' '-3' '-7' '-11' '-11' '-6' '-1')"
 	./$(COMPILER) test/test_virtual_keyword_result.pas $(TESTTMP)/test_vkr26
-	test "$$($(TESTTMP)/test_vkr26)" = "$$(printf '5\n6\n10\n10')"
+	tools/expect_same.sh test_vkr26 "$$($(TESTTMP)/test_vkr26)" "$$(printf '5\n6\n10\n10')"
 	./$(COMPILER) test/test_ir_deref.pas $(TESTTMP)/test_ir_deref26
-	test "$$($(TESTTMP)/test_ir_deref26)" = "$$(printf '10\n20\n100\n200')"
+	tools/expect_same.sh test_ir_deref26 "$$($(TESTTMP)/test_ir_deref26)" "$$(printf '10\n20\n100\n200')"
 	./$(COMPILER) test/test_ir_call.pas $(TESTTMP)/test_ir_call26
-	test "$$($(TESTTMP)/test_ir_call26)" = "$$(printf '30\n30\n42')"
+	tools/expect_same.sh test_ir_call26 "$$($(TESTTMP)/test_ir_call26)" "$$(printf '30\n30\n42')"
 	./$(COMPILER) test/test_ir_binops.pas $(TESTTMP)/test_ir_binops26
-	test "$$($(TESTTMP)/test_ir_binops26)" = "$$(printf -- '-3\n-2\n3\n2\n8\n14\n0\n1\n25')"
+	tools/expect_same.sh test_ir_binops26 "$$($(TESTTMP)/test_ir_binops26)" "$$(printf -- '-3\n-2\n3\n2\n8\n14\n0\n1\n25')"
 	./$(COMPILER) test/test_shl.pas $(TESTTMP)/test_shl26
-	test "$$($(TESTTMP)/test_shl26)" = "$$(printf '16\n12\n9')"
+	tools/expect_same.sh test_shl26 "$$($(TESTTMP)/test_shl26)" "$$(printf '16\n12\n9')"
 	./$(COMPILER) test/test_hex_char_code.pas $(TESTTMP)/test_hex_char_code26
-	test "$$($(TESTTMP)/test_hex_char_code26)" = "$$(printf '65\n65\n65\n65\n255\nlo\nhi\nex')"
+	tools/expect_same.sh test_hex_char_code26 "$$($(TESTTMP)/test_hex_char_code26)" "$$(printf '65\n65\n65\n65\n255\nlo\nhi\nex')"
 	./$(COMPILER) test/test_op_overload.pas $(TESTTMP)/test_op_overload_ir26
-	test "$$($(TESTTMP)/test_op_overload_ir26)" = "$$(printf '1\n0\n1\n0\n1\n0\n10\n6')"
+	tools/expect_same.sh test_op_overload_ir26 "$$($(TESTTMP)/test_op_overload_ir26)" "$$(printf '1\n0\n1\n0\n1\n0\n10\n6')"
 	./$(COMPILER) test/test_op_fpc_named_result.pas $(TESTTMP)/test_op_fpc_named_result_ir26
-	test "$$($(TESTTMP)/test_op_fpc_named_result_ir26)" = "$$(printf '5/6\n1/6\n3/2\n1/6\n1/6\n4/12')"
+	tools/expect_same.sh test_op_fpc_named_result_ir26 "$$($(TESTTMP)/test_op_fpc_named_result_ir26)" "$$(printf '5/6\n1/6\n3/2\n1/6\n1/6\n4/12')"
 	./$(COMPILER) test/test_op_unit_scope.pas $(TESTTMP)/test_op_unit_scope_ir26
-	test "$$($(TESTTMP)/test_op_unit_scope_ir26)" = "$$(printf 'in:5/6\n5/6\n3/2\n1/6')"
+	tools/expect_same.sh test_op_unit_scope_ir26 "$$($(TESTTMP)/test_op_unit_scope_ir26)" "$$(printf 'in:5/6\n5/6\n3/2\n1/6')"
 	./$(COMPILER) test/test_overloading.pas $(TESTTMP)/test_overloading_ir26
-	test "$$($(TESTTMP)/test_overloading_ir26)" = "$$(printf 'Integer: 42\nChar: A\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
+	tools/expect_same.sh test_overloading_ir26 "$$($(TESTTMP)/test_overloading_ir26)" "$$(printf 'Integer: 42\nChar: A\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
 	./$(COMPILER) test/test_float_write.pas $(TESTTMP)/test_float_write_ir26
-	test "$$($(TESTTMP)/test_float_write_ir26)" = "$$(printf '3.50\n4\n-2.750\n1.0\n0.00\n10.5\n 1.0000000000000000E+000\n-2.0000000000000000E+000\n 0.0000000000000000E+000\n 3.5000000000000000E+000\n 1.2345000000000000E+003')"
+	tools/expect_same.sh test_float_write_ir26 "$$($(TESTTMP)/test_float_write_ir26)" "$$(printf '3.50\n4\n-2.750\n1.0\n0.00\n10.5\n 1.0000000000000000E+000\n-2.0000000000000000E+000\n 0.0000000000000000E+000\n 3.5000000000000000E+000\n 1.2345000000000000E+003')"
 	./$(COMPILER) test/test_shared_object.pas $(TESTTMP)/shared_object26
-	test "$$($(TESTTMP)/shared_object26)" = "97"
+	tools/expect_same.sh shared_object26 "$$($(TESTTMP)/shared_object26)" "97"
 	./$(COMPILER) test/test_c_import.pas $(TESTTMP)/c_import26
-	test "$$($(TESTTMP)/c_import26)" = "42"
+	tools/expect_same.sh c_import26 "$$($(TESTTMP)/c_import26)" "42"
 	# a .c pulled as a UNIT: globals reserved AND initialized, forward-declared
 	# static resolved, crtl's own <stdarg.h> found (gcc-differential)
 	./$(COMPILER) -Futest test/test_c_unit_globals.pas $(TESTTMP)/c_unit_globals26
-	test "$$($(TESTTMP)/c_unit_globals26)" = "$$(printf '31\n8')"
+	tools/expect_same.sh c_unit_globals26 "$$($(TESTTMP)/c_unit_globals26)" "$$(printf '31\n8')"
 	# bug-cfront-c-name-binds-to-pascal-routine-at-wrong-arity: in a mixed
 	# Pascal+C build a C DECLARATION wins over a same-named Pascal routine of
 	# another arity (was: bound to the Pascal one, out-param never written), and
 	# an UNDECLARED call to such a name is refused rather than mis-bound.
 	./$(COMPILER) -Futest test/test_c_cross_ns_arity.pas $(TESTTMP)/c_cross_ns_arity26
-	test "$$($(TESTTMP)/c_cross_ns_arity26)" = "time=1"
+	tools/expect_same.sh c_cross_ns_arity26 "$$($(TESTTMP)/c_cross_ns_arity26)" "time=1"
 	# a C DEFINITION must not seize a differently-cased Pascal routine's entry:
 	# `double sqrt(double){...}` used to overwrite the RTL's Sqrt for the whole
 	# program, unreachably (bare, qualified and aliased spellings all followed it).
 	# The tanh/cube rows are the controls that were always correct.
 	./$(COMPILER) -Futest test/test_c_def_hijack.pas $(TESTTMP)/c_def_hijack26
-	test "$$($(TESTTMP)/c_def_hijack26)" = "$$(printf 'sqrt=4.0000\nqsqrt=4.0000\nexp=1.0000\ncxsqrt=42.0000\ntanh=0.7616\ncxtanh=55.0000\ncxcube=999\nsoft=4.0000')"
+	tools/expect_same.sh c_def_hijack26 "$$($(TESTTMP)/c_def_hijack26)" "$$(printf 'sqrt=4.0000\nqsqrt=4.0000\nexp=1.0000\ncxsqrt=42.0000\ntanh=0.7616\ncxtanh=55.0000\ncxcube=999\nsoft=4.0000')"
 	# feature-a-own-language-first-symbol-resolution: a Pascal call site binds
 	# PASCAL's routine when a C import defines the same name case-insensitively,
 	# and the C one stays reachable by alias. These LOCK a decided rule rather
@@ -8314,23 +8314,23 @@ test-core: $(COMPILER)
 	# Worth locking anyway: resolution changes have twice passed gate.sh quick
 	# while broken (bug-p-uses-order-does-not-decide-which-unit-wins).
 	./$(COMPILER) -Futest test/test_own_lang_first_alias.pas $(TESTTMP)/olf_alias26
-	test "$$($(TESTTMP)/olf_alias26)" = "$$(printf 'Exp=2.7183\nSqrt=4.0000\nqSqrt=4.0000\ncmExp=42.0000\ncmCube=999')"
+	tools/expect_same.sh olf_alias26 "$$($(TESTTMP)/olf_alias26)" "$$(printf 'Exp=2.7183\nSqrt=4.0000\nqSqrt=4.0000\ncmExp=42.0000\ncmCube=999')"
 	# ...and with BOTH variables flipped: C named first, no alias. A resolver
 	# that merely stopped the proc-entry seizure could still let import ORDER
 	# decide, passing the row above and failing this one.
 	./$(COMPILER) -Futest test/test_own_lang_first_c_first.pas $(TESTTMP)/olf_cfirst26
-	test "$$($(TESTTMP)/olf_cfirst26)" = "$$(printf 'Exp=2.7183\nSqrt=4.0000')"
+	tools/expect_same.sh olf_cfirst26 "$$($(TESTTMP)/olf_cfirst26)" "$$(printf 'Exp=2.7183\nSqrt=4.0000')"
 	# The boundary on the other side: a PASCAL unit redefining an intrinsic must
 	# STILL shadow it — the rule is cross-language only. FPC prints 77.0000 too,
 	# so this is the control that stops "make the intrinsic always win".
 	./$(COMPILER) -Futest test/test_own_lang_first_pascal_shadow.pas $(TESTTMP)/olf_shadow26
-	test "$$($(TESTTMP)/olf_shadow26)" = "Exp=77.0000"
+	tools/expect_same.sh olf_shadow26 "$$($(TESTTMP)/olf_shadow26)" "Exp=77.0000"
 	# feature-c-vla-via-alloca: `int arr[n]` with a runtime n, lowered through
 	# alloca. Every number is gcc's own answer on the same source. The sizeof
 	# rows are the ones that used to print the POINTER size (8) - C evaluates
 	# sizeof on a VLA at RUN TIME, so a silent 8 was a wrong value, not a gap.
 	./$(COMPILER) test/c_vla.c $(TESTTMP)/c_vla26
-	test "$$($(TESTTMP)/c_vla26)" = "$$(printf '30 108\n6 11\n20 40\n36\n36\n10\n24')"
+	tools/expect_same.sh c_vla26 "$$($(TESTTMP)/c_vla26)" "$$(printf '30 108\n6 11\n20 40\n36\n36\n10\n24')"
 	@./$(COMPILER) test/c_vla_const_fail.c $(TESTTMP)/c_vla_const_fail26 2>&1 \
 	  | grep -q "sizeof of a variable-length array is not a constant expression" \
 	  || { echo 'c_vla_const_fail: FAIL - sizeof on a VLA must be refused in a constant expression, not answer a symbol index'; exit 1; }
@@ -8348,36 +8348,36 @@ test-core: $(COMPILER)
 	$(TESTTMP)/c_main_no_return26 > $(TESTTMP)/c_main_no_return26.out; \
 	  rc=$$?; test "$$rc" = "0" \
 	  || { echo "c_main_no_return: FAIL - fell off the end of main and exited $$rc, want 0"; exit 1; }
-	test "$$(cat $(TESTTMP)/c_main_no_return26.out)" = "$$(printf '1\n1\n1\ntail')"
+	tools/expect_same.sh c_main_no_return26.out "$$(cat $(TESTTMP)/c_main_no_return26.out)" "$$(printf '1\n1\n1\ntail')"
 	./$(COMPILER) test/c_builtin_bits.c $(TESTTMP)/c_builtin_bits26
-	test "$$($(TESTTMP)/c_builtin_bits26)" = "$$(printf '8 20 4\n16 44 4\n56 7 1\n64 63\n0 1 9 0\n33 8\n0 1 0 1\n3412 44332211 8877665544332211')"
+	tools/expect_same.sh c_builtin_bits26 "$$($(TESTTMP)/c_builtin_bits26)" "$$(printf '8 20 4\n16 44 4\n56 7 1\n64 63\n0 1 9 0\n33 8\n0 1 0 1\n3412 44332211 8877665544332211')"
 	@./$(COMPILER) -Futest test/test_c_cross_ns_arity_fail.pas $(TESTTMP)/c_cross_ns_arity_fail26 2>&1 \
 	  | grep -q "call to undeclared function 'time' would bind to the Pascal routine 'Time'" \
 	  || { echo 'c_cross_ns_arity_fail: FAIL - an undeclared C call must not bind to a Pascal routine of another arity'; exit 1; }
 	./$(COMPILER) test/test_c_widths.pas $(TESTTMP)/c_widths26
-	test "$$($(TESTTMP)/c_widths26)" = "5000000000"
+	tools/expect_same.sh c_widths26 "$$($(TESTTMP)/c_widths26)" "5000000000"
 	./$(COMPILER) test/test_c_typedef.pas $(TESTTMP)/c_typedef26
-	test "$$($(TESTTMP)/c_typedef26)" = "5000000000"
+	tools/expect_same.sh c_typedef26 "$$($(TESTTMP)/c_typedef26)" "5000000000"
 	./$(COMPILER) test/test_c_enum.pas $(TESTTMP)/c_enum26
-	test "$$($(TESTTMP)/c_enum26)" = "$$(printf '0 1 2\n0 1 2 4 5\n1000 1001')"
+	tools/expect_same.sh c_enum26 "$$($(TESTTMP)/c_enum26)" "$$(printf '0 1 2\n0 1 2 4 5\n1000 1001')"
 	./$(COMPILER) test/test_c_slicea.pas $(TESTTMP)/c_slicea26
-	test "$$($(TESTTMP)/c_slicea26)" = "16 32 6 60 21 275 1"
+	tools/expect_same.sh c_slicea26 "$$($(TESTTMP)/c_slicea26)" "16 32 6 60 21 275 1"
 	./$(COMPILER) test/test_c_float.pas $(TESTTMP)/c_float26
-	test "$$($(TESTTMP)/c_float26)" = "$$(printf '1024.0\n16.0\n12.0')"
+	tools/expect_same.sh c_float26 "$$($(TESTTMP)/c_float26)" "$$(printf '1024.0\n16.0\n12.0')"
 	cc -shared -fPIC -o $(TESTTMP)/libspill.so test/spill_lib.c
 	./$(COMPILER) test/test_c_argspill.pas $(TESTTMP)/c_argspill26
-	test "$$(LD_LIBRARY_PATH=$(TESTTMP) $(TESTTMP)/c_argspill26)" = "$$(printf '28\n55.0\n45')"
+	tools/expect_same.sh c_argspill26 "$$(LD_LIBRARY_PATH=$(TESTTMP) $(TESTTMP)/c_argspill26)" "$$(printf '28\n55.0\n45')"
 	cc -shared -fPIC -o $(TESTTMP)/liblazycasing.so test/lazycasing_lib.c
 	./$(COMPILER) test/test_c_lazycasing.pas $(TESTTMP)/c_lazycasing26
-	test "$$(LD_LIBRARY_PATH=$(TESTTMP) $(TESTTMP)/c_lazycasing26)" = "$$(printf '7\n30\n101')"
+	tools/expect_same.sh c_lazycasing26 "$$(LD_LIBRARY_PATH=$(TESTTMP) $(TESTTMP)/c_lazycasing26)" "$$(printf '7\n30\n101')"
 	rm -f $(TESTTMP)/sqlite_crud26.db
 	./$(COMPILER) test/test_sqlite_crud.pas $(TESTTMP)/sqlite_crud26
-	test "$$($(TESTTMP)/sqlite_crud26)" = "$$(printf 'open=0\nprepare=0\n1 alice\n2 bob\nfinalize=0\nclose=0')"
+	tools/expect_same.sh sqlite_crud26 "$$($(TESTTMP)/sqlite_crud26)" "$$(printf 'open=0\nprepare=0\n1 alice\n2 bob\nfinalize=0\nclose=0')"
 	rm -f $(TESTTMP)/test_string_to_pchar_auto26.db
 	./$(COMPILER) test/test_string_to_pchar_auto.pas $(TESTTMP)/string_to_pchar_auto26
-	test "$$($(TESTTMP)/string_to_pchar_auto26)" = "$$(printf 'open=0\nprepare=0\n1 alice\n2 bob\nfinalize=0\nclose=0')"
+	tools/expect_same.sh string_to_pchar_auto26 "$$($(TESTTMP)/string_to_pchar_auto26)" "$$(printf 'open=0\nprepare=0\n1 alice\n2 bob\nfinalize=0\nclose=0')"
 	./$(COMPILER) test/test_pchar_to_string.pas $(TESTTMP)/test_pchar_to_string26
-	test "$$($(TESTTMP)/test_pchar_to_string26)" = "$$(printf '3\n3\nabc\n3')"
+	tools/expect_same.sh test_pchar_to_string26 "$$($(TESTTMP)/test_pchar_to_string26)" "$$(printf '3\n3\nabc\n3')"
 	# A method whose call resolves to a DECLARATION and never to an implementation
 	# -- an ABSTRACT method through the base, an INTERFACE method through the
 	# interface -- returning a typed pointer. Two halves, both needed: the three
@@ -8390,7 +8390,7 @@ test-core: $(COMPILER)
 	# difference over a 24-byte record answered 6 instead of 2 (plain functions
 	# too, not only virtual ones). Counts are FPC 3.2.2's; pinned scores 1 / 9.
 	./$(COMPILER) test/test_pchar_result_decl_only_method.pas $(TESTTMP)/test_pchar_decl_only26
-	test "$$($(TESTTMP)/test_pchar_decl_only26 | tail -1)" = "total ok 9 / 9"
+	tools/expect_same.sh test_pchar_decl_only26 "$$($(TESTTMP)/test_pchar_decl_only26 | tail -1)" "total ok 9 / 9"
 	# The same class one layer out: the two CONTEXTS that had no PChar
 	# conversion at all. `+` was wrong in two unrelated ways at once --
 	# 'xy' + p read the POINTER as string data and appended one garbage byte,
@@ -8413,9 +8413,9 @@ test-core: $(COMPILER)
 	# UTF-8, FPC uses the system codepage) and would make this a test of the
 	# encoding policy instead of the unit pull.
 	./$(COMPILER) test/test_widechar_no_cast_in_program.pas $(TESTTMP)/test_widechar_nocast26
-	test "$$($(TESTTMP)/test_widechar_nocast26)" = "$$(printf '1 A\n2 xA\n2 Ax\n1 B\n2 yC\n1 A')"
+	tools/expect_same.sh test_widechar_nocast26 "$$($(TESTTMP)/test_widechar_nocast26)" "$$(printf '1 A\n2 xA\n2 Ax\n1 B\n2 yC\n1 A')"
 	./$(COMPILER) test/test_pchar_concat_and_array_element.pas $(TESTTMP)/test_pchar_concat26
-	test "$$($(TESTTMP)/test_pchar_concat26)" = "$$(printf 'xyabcde\nxabcde\nabcdetail\nQabcde\nabcdeQ\nzabcde\nbcde\ncde\nabcde\ncde\npabcde\n5\neq\nabcde\ncde\nbcde\nqe\nbcde')"
+	tools/expect_same.sh test_pchar_concat26 "$$($(TESTTMP)/test_pchar_concat26)" "$$(printf 'xyabcde\nxabcde\nabcdetail\nQabcde\nabcdeQ\nzabcde\nbcde\ncde\nabcde\ncde\npabcde\n5\neq\nabcde\ncde\nbcde\nqe\nbcde')"
 	# a POINTER TO PChar (`^PChar`, and PPChar which is FPC's name for the same
 	# `char**`) in every context that has to recognise a C string, plus Length
 	# over a plain PChar. Half of these looked right before only because
@@ -8423,7 +8423,7 @@ test-core: $(COMPILER)
 	# Length and comparison all answered with the pointer. Stream matched
 	# against fpc 3.2.2 on the same source.
 	./$(COMPILER) test/test_pchar_pointer_to_pchar.pas $(TESTTMP)/test_pchar_ppchar26
-	test "$$($(TESTTMP)/test_pchar_ppchar26)" = "$$(printf 'abcde\nxabcde\nabcdey\nabcde\nabcde\n5\nTRUE\nFALSE\nabcde\nyabcde\nabcde\nzabcde\nTRUE\n5\n5\n4')"
+	tools/expect_same.sh test_pchar_ppchar26 "$$($(TESTTMP)/test_pchar_ppchar26)" "$$(printf 'abcde\nxabcde\nabcdey\nabcde\nabcde\n5\nTRUE\nFALSE\nabcde\nyabcde\nabcde\nzabcde\nTRUE\n5\n5\n4')"
 	# ...and an ELEMENT of an `array of ^PChar`, dereferenced, over both a static
 	# and a dynamic array. The last open shape of that ticket, and it was
 	# recorded there as genuinely missing metadata needing a new SymElemPtrDepth
@@ -8432,7 +8432,7 @@ test-core: $(COMPILER)
 	# the deref chain's AN_INDEX arm read the immediate pointee and never the
 	# pair beside it. .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_pchar_array_of_pointer_to_pchar.pas $(TESTTMP)/test_pchar_arr_ppc26
-	test "$$($(TESTTMP)/test_pchar_arr_ppc26)" = "$$(cat test/test_pchar_array_of_pointer_to_pchar.expected)"
+	tools/expect_same.sh test_pchar_arr_ppc26 "$$($(TESTTMP)/test_pchar_arr_ppc26)" "$$(cat test/test_pchar_array_of_pointer_to_pchar.expected)"
 	# ...and the same shape reached through a PARAMETER, a nested-routine CAPTURE
 	# and `p^[i]`. Pascal's parameter table carried the pointee alone (C's has
 	# carried depth+base all along), the capture table lost it one level further
@@ -8441,7 +8441,7 @@ test-core: $(COMPILER)
 	# Seven of these eight rows print an address on the pinned compiler.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_pointer_param_keeps_its_depth.pas $(TESTTMP)/test_ptrparam26
-	test "$$($(TESTTMP)/test_ptrparam26)" = "$$(cat test/test_pointer_param_keeps_its_depth.expected)"
+	tools/expect_same.sh test_ptrparam26 "$$($(TESTTMP)/test_ptrparam26)" "$$(cat test/test_pointer_param_keeps_its_depth.expected)"
 	# ...and through a function RESULT, the last shape of that family: the proc
 	# table now records the returned pointer's depth and ultimate base beside its
 	# pointee, and the call-result suffix walk stamps the same node tags the main
@@ -8449,26 +8449,26 @@ test-core: $(COMPILER)
 	# of these eight rows print an address on the pinned compiler.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_pointer_function_result_keeps_its_depth.pas $(TESTTMP)/test_ptrfnres26
-	test "$$($(TESTTMP)/test_ptrfnres26)" = "$$(cat test/test_pointer_function_result_keeps_its_depth.expected)"
+	tools/expect_same.sh test_ptrfnres26 "$$($(TESTTMP)/test_ptrfnres26)" "$$(cat test/test_pointer_function_result_keeps_its_depth.expected)"
 	# ...and through a record or class FIELD, which closes the family: a 72-program
 	# cross product (10 pointer-to-PChar source shapes x 8 contexts, each its own
 	# program, each diffed against fpc 3.2.2) agrees on all 72 with this in.
 	# .expected IS fpc's own output; seven of these nine rows are wrong on pinned.
 	./$(COMPILER) test/test_pointer_field_keeps_its_depth.pas $(TESTTMP)/test_ptrfld26
-	test "$$($(TESTTMP)/test_ptrfld26)" = "$$(cat test/test_pointer_field_keeps_its_depth.expected)"
+	tools/expect_same.sh test_ptrfld26 "$$($(TESTTMP)/test_ptrfld26)" "$$(cat test/test_pointer_field_keeps_its_depth.expected)"
 	# `not` over a CONSTANT ordinal widens to signed 64-bit; `not` over a VARIABLE
 	# complements at the variable's own width. Both halves in one file because
 	# they disagree on purpose. Eight rows are wrong on the pinned compiler
 	# (positive where fpc gives negative, plus the builtin calls that were
 	# LOGICAL). .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_not_of_a_constant_widens.pas $(TESTTMP)/test_notconst26
-	test "$$($(TESTTMP)/test_notconst26)" = "$$(cat test/test_not_of_a_constant_widens.expected)"
+	tools/expect_same.sh test_notconst26 "$$($(TESTTMP)/test_notconst26)" "$$(cat test/test_not_of_a_constant_widens.expected)"
 	# A builtin pointer-name cast as an assignment TARGET -- `PInteger(p)^ := 42`
 	# was "undefined variable (PInteger)" as a statement while the same cast as an
 	# EXPRESSION compiled. Refused outright on the pinned compiler (first line).
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_builtin_pointer_cast_as_target.pas $(TESTTMP)/test_bptrtgt26
-	test "$$($(TESTTMP)/test_bptrtgt26)" = "$$(cat test/test_builtin_pointer_cast_as_target.expected)"
+	tools/expect_same.sh test_bptrtgt26 "$$($(TESTTMP)/test_bptrtgt26)" "$$(cat test/test_builtin_pointer_cast_as_target.expected)"
 	# A dyn-array-valued EXPRESSION (function result, Copy(), both nested) as an
 	# `array of T` argument. Overload resolution used to describe it as its
 	# handle -- "no overload matches: (Pointer)" -- and the float rows went
@@ -8476,21 +8476,21 @@ test-core: $(COMPILER)
 	# argument coercion fired on the handle and SEGFAULTED.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_call_result_as_open_array_argument.pas $(TESTTMP)/test_calloa26
-	test "$$($(TESTTMP)/test_calloa26)" = "$$(cat test/test_call_result_as_open_array_argument.expected)"
+	tools/expect_same.sh test_calloa26 "$$($(TESTTMP)/test_calloa26)" "$$(cat test/test_call_result_as_open_array_argument.expected)"
 	# An open-array parameter is ONE pointer-sized slot whatever its element
 	# type. Three i386 sites re-derived that instead of asking the ABI oracle
 	# and widened a 64-bit element to 8 bytes -- fault, or a clobbered
 	# neighbour. Mixed rows put the open array in the middle on purpose.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_open_array_param_slot_is_a_handle.pas $(TESTTMP)/test_oaslot26
-	test "$$($(TESTTMP)/test_oaslot26)" = "$$(cat test/test_open_array_param_slot_is_a_handle.expected)"
+	tools/expect_same.sh test_oaslot26 "$$($(TESTTMP)/test_oaslot26)" "$$(cat test/test_open_array_param_slot_is_a_handle.expected)"
 	# `(qa[0])^` -- a PARENTHESISED index-then-deref -- lost the pointer shape
 	# the identical `qa[0]^` keeps (a second, smaller copy of the deref walk
 	# that stamped nothing), and `Copy(p, 2, 3)` over a PChar was refused for
 	# EVERY PChar spelling at once.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_pchar_paren_deref_and_copy.pas $(TESTTMP)/test_pdc26
-	test "$$($(TESTTMP)/test_pdc26)" = "$$(cat test/test_pchar_paren_deref_and_copy.expected)"
+	tools/expect_same.sh test_pdc26 "$$($(TESTTMP)/test_pdc26)" "$$(cat test/test_pchar_paren_deref_and_copy.expected)"
 	# A record was the only structured type that could not open a nested `type`
 	# section -- the class body had the arm and the record body did not, so
 	# `TRec = record type TSub = ... end` was a syntax error and the record body
@@ -8499,7 +8499,7 @@ test-core: $(COMPILER)
 	# distinct types; SizeOf(TB.TSub) used to answer TA's width.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_record_nested_type_section.pas $(TESTTMP)/test_rnts26
-	test "$$($(TESTTMP)/test_rnts26)" = "$$(cat test/test_record_nested_type_section.expected)"
+	tools/expect_same.sh test_rnts26 "$$($(TESTTMP)/test_rnts26)" "$$(cat test/test_record_nested_type_section.expected)"
 	# A FLOAT may be a generic type argument. Three copies of the "which tokens
 	# may stand as a concrete type argument" list named exactly
 	# Integer/Boolean/Char/String, so `specialize TBox<Double>` was "expected
@@ -8507,9 +8507,9 @@ test-core: $(COMPILER)
 	# Both spellings, because the delphi rewriter carried its own copy.
 	# .expected IS fpc 3.2.2's own output on these sources.
 	./$(COMPILER) test/test_generic_float_type_argument.pas $(TESTTMP)/test_gfta26
-	test "$$($(TESTTMP)/test_gfta26)" = "$$(cat test/test_generic_float_type_argument.expected)"
+	tools/expect_same.sh test_gfta26 "$$($(TESTTMP)/test_gfta26)" "$$(cat test/test_generic_float_type_argument.expected)"
 	./$(COMPILER) test/test_generic_float_type_argument_delphi.pas $(TESTTMP)/test_gftad26
-	test "$$($(TESTTMP)/test_gftad26)" = "$$(cat test/test_generic_float_type_argument_delphi.expected)"
+	tools/expect_same.sh test_gftad26 "$$($(TESTTMP)/test_gftad26)" "$$(cat test/test_generic_float_type_argument_delphi.expected)"
 	# WriteLn(e) over an enum prints the member NAME, as FPC does -- it printed
 	# the ordinal. A Boolean is an enum with two members and already printed
 	# TRUE/FALSE; the enum lowering is that one's twin with N arms. The width
@@ -8517,7 +8517,7 @@ test-core: $(COMPILER)
 	# right-aligns a string and a boolean.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_writeln_of_an_enum_prints_its_name.pas $(TESTTMP)/test_wenum26
-	test "$$($(TESTTMP)/test_wenum26)" = "$$(cat test/test_writeln_of_an_enum_prints_its_name.expected)"
+	tools/expect_same.sh test_wenum26 "$$($(TESTTMP)/test_wenum26)" "$$(cat test/test_writeln_of_an_enum_prints_its_name.expected)"
 	# ...and the other half: the SAME enum reached through an array element, a
 	# record or class field, a field array, a dynamic array, a call result, a
 	# param, a typed const, Succ/Pred or a cast. Every one of those printed the
@@ -8528,7 +8528,7 @@ test-core: $(COMPILER)
 	# The ord/width rows are load-bearing: an ordinal context must stay numeric.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_enum_name_through_field_index_and_call.pas $(TESTTMP)/test_enumid26
-	test "$$($(TESTTMP)/test_enumid26)" = "$$(cat test/test_enum_name_through_field_index_and_call.expected)"
+	tools/expect_same.sh test_enumid26 "$$($(TESTTMP)/test_enumid26)" "$$(cat test/test_enum_name_through_field_index_and_call.expected)"
 	# `PFixed = ^TFixed` over a named FIXED-array type. An array alias is not in
 	# the scalar alias table, so the pointee was recorded as tyInteger: p^[i]
 	# over an Int64 array read halves of the wrong elements, p^[i].b resolved
@@ -8538,7 +8538,7 @@ test-core: $(COMPILER)
 	# load-bearing (the subscript is normalised where the bound is known).
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_pointer_to_a_named_fixed_array.pas $(TESTTMP)/test_pfixarr26
-	test "$$($(TESTTMP)/test_pfixarr26)" = "$$(cat test/test_pointer_to_a_named_fixed_array.expected)"
+	tools/expect_same.sh test_pfixarr26 "$$($(TESTTMP)/test_pfixarr26)" "$$(cat test/test_pointer_to_a_named_fixed_array.expected)"
 	# A parameterless function called BY NAME as an argument to a `const Variant`
 	# parameter. The free-function call compiled and the METHOD call reported
 	# `undefined variable (zero)` -- pointing at the argument, for a name that is
@@ -8548,7 +8548,7 @@ test-core: $(COMPILER)
 	# this fix from letting a temporary bind to a genuine var parameter.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_paramless_fn_as_const_variant_arg.pas $(TESTTMP)/test_plessarg26
-	test "$$($(TESTTMP)/test_plessarg26)" = "$$(cat test/test_paramless_fn_as_const_variant_arg.expected)"
+	tools/expect_same.sh test_plessarg26 "$$($(TESTTMP)/test_plessarg26)" "$$(cat test/test_paramless_fn_as_const_variant_arg.expected)"
 	# Two DEFAULTS bugs, found together: `inherited Create;` against a defaulted
 	# parent ctor was an arity mismatch (the check ran before defaults were
 	# filled), and a PARENLESS call to an all-defaulted method sent the call out
@@ -8557,7 +8557,7 @@ test-core: $(COMPILER)
 	# the NON-virtual spelling are all fine, so the rows are deliberately
 	# redundant. .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_inherited_and_parenless_defaults.pas $(TESTTMP)/test_inhdef26
-	test "$$($(TESTTMP)/test_inhdef26)" = "$$(cat test/test_inherited_and_parenless_defaults.expected)"
+	tools/expect_same.sh test_inhdef26 "$$($(TESTTMP)/test_inhdef26)" "$$(cat test/test_inherited_and_parenless_defaults.expected)"
 	# Typed constants in a POINTER slot, plus the named-array alias that has to
 	# carry the pointee KIND for them to work. `const GP: PChar = '-'` used to
 	# compile and SEGFAULT (a one-char literal is an ordinal, and an ordinal
@@ -8568,7 +8568,7 @@ test-core: $(COMPILER)
 	# declaration in the test exists to BE that leak, so do not delete it.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_typed_const_pointer_values.pas $(TESTTMP)/test_tcpv26
-	test "$$($(TESTTMP)/test_tcpv26)" = "$$(cat test/test_typed_const_pointer_values.expected)"
+	tools/expect_same.sh test_tcpv26 "$$($(TESTTMP)/test_tcpv26)" "$$(cat test/test_typed_const_pointer_values.expected)"
 	# Record constants whose value is itself an aggregate: a record-typed field, an
 	# array-of-record field, three levels of nesting, and the routine-LOCAL
 	# spellings that were refused by name while the identical global compiled. All
@@ -8578,7 +8578,7 @@ test-core: $(COMPILER)
 	# elements from 0 and write one element BEFORE itself.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_nested_record_constant.pas $(TESTTMP)/test_nrc26
-	test "$$($(TESTTMP)/test_nrc26)" = "$$(cat test/test_nested_record_constant.expected)"
+	tools/expect_same.sh test_nrc26 "$$($(TESTTMP)/test_nrc26)" "$$(cat test/test_nested_record_constant.expected)"
 	# A TYPED string constant is STORAGE, not a literal alias. `S := 'b'` used to
 	# answer `undefined variable (S)` -- a name-resolution error, which is the
 	# tell: there was no storage to be read-only. Integer/Char/array typed consts
@@ -8588,7 +8588,7 @@ test-core: $(COMPILER)
 	# UNTYPED form is still a literal alias, as it is in fpc.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_writeable_typed_string_const.pas $(TESTTMP)/test_wtsc26
-	test "$$($(TESTTMP)/test_wtsc26)" = "$$(cat test/test_writeable_typed_string_const.expected)"
+	tools/expect_same.sh test_wtsc26 "$$($(TESTTMP)/test_wtsc26)" "$$(cat test/test_writeable_typed_string_const.expected)"
 	# When does a character-ish thing become a PChar? Three mechanisms used to
 	# answer that and two of them segfaulted: Show(Chr(45)) passed the ORDINAL
 	# (Chr of a constant was an un-folded call, so the conversion never saw a
@@ -8598,7 +8598,7 @@ test-core: $(COMPILER)
 	# because a fix touching one of them passes the obvious repro.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_char_to_pchar_conversion.pas $(TESTTMP)/test_ctp26
-	test "$$($(TESTTMP)/test_ctp26)" = "$$(cat test/test_char_to_pchar_conversion.expected)"
+	tools/expect_same.sh test_ctp26 "$$($(TESTTMP)/test_ctp26)" "$$(cat test/test_char_to_pchar_conversion.expected)"
 	# ...and the two shapes fpc REFUSES must still be refused: a Char VARIABLE and
 	# Chr(i) for a variable i. Both used to compile and dereference address 45.
 	# The second is what keeps the Chr fold honest. Asserted as "does not compile"
@@ -8614,7 +8614,7 @@ test-core: $(COMPILER)
 	# the fix only moves nothing onto a new path by accident if both are.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_sizeof_through_a_deref.pas $(TESTTMP)/test_sod26
-	test "$$($(TESTTMP)/test_sod26)" = "$$(cat test/test_sizeof_through_a_deref.expected)"
+	tools/expect_same.sh test_sod26 "$$($(TESTTMP)/test_sod26)" "$$(cat test/test_sizeof_through_a_deref.expected)"
 	# What High/Low accept, and in which base. Both arms opened with
 	# `if CurTok.Kind <> tkIdent then Error(...)`, so a literal, a parenthesised
 	# expression, and a name with an OPERATOR after it were all refused; a proc
@@ -8626,7 +8626,7 @@ test-core: $(COMPILER)
 	# and devdocs/dev/pascal-dialect-divergences.md.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_high_low_operand_shapes.pas $(TESTTMP)/test_hlo26
-	test "$$($(TESTTMP)/test_hlo26)" = "$$(cat test/test_high_low_operand_shapes.expected)"
+	tools/expect_same.sh test_hlo26 "$$($(TESTTMP)/test_hlo26)" "$$(cat test/test_high_low_operand_shapes.expected)"
 	# SizeOf of a BARE literal, which fpc types by VALUE and not by inference.
 	# Every one of these was `SizeOf: expected type name` -- the arm only ever
 	# accepted a type NAME or an lvalue. The rows that make this worth pinning:
@@ -8637,7 +8637,7 @@ test-core: $(COMPILER)
 	# literal stays refused on purpose (see the parser comment).
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_sizeof_of_a_literal.pas $(TESTTMP)/test_sol26
-	test "$$($(TESTTMP)/test_sol26)" = "$$(cat test/test_sizeof_of_a_literal.expected)"
+	tools/expect_same.sh test_sol26 "$$($(TESTTMP)/test_sol26)" "$$(cat test/test_sizeof_of_a_literal.expected)"
 	# Low/High of an array report the bound in the INDEX's type. array['a'..'e']
 	# answered 97/101 and array[TE] answered 0/2 -- the values were right and
 	# only the type was missing, because an array's index type was never stored
@@ -8648,7 +8648,7 @@ test-core: $(COMPILER)
 	# because the bound must still behave as an ordinal where one is wanted.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_low_high_index_type.pas $(TESTTMP)/test_lhit26
-	test "$$($(TESTTMP)/test_lhit26)" = "$$(cat test/test_low_high_index_type.expected)"
+	tools/expect_same.sh test_lhit26 "$$($(TESTTMP)/test_lhit26)" "$$(cat test/test_low_high_index_type.expected)"
 	# The constant evaluator must not erase an ordinal's TYPE. ConstEval carries
 	# every ordinal as a bare Int64 — the simplification that makes Ord/Succ/Pred
 	# free — so the declaration site used to guess the kind from the FIRST TOKEN:
@@ -8657,7 +8657,7 @@ test-core: $(COMPILER)
 	# side: Ord DISCARDS the type and must not inherit its operand's. fpc 3.2.2
 	# (-Mobjfpc -O1) oracle.
 	./$(COMPILER) test/test_const_eval_ordinal_type.pas $(TESTTMP)/test_ceord26
-	test "$$($(TESTTMP)/test_ceord26)" = "$$(cat test/test_const_eval_ordinal_type.expected)"
+	tools/expect_same.sh test_ceord26 "$$($(TESTTMP)/test_ceord26)" "$$(cat test/test_const_eval_ordinal_type.expected)"
 	# A WideChar/UCS4Char stored into a Variant. Both were refused outright while
 	# every neighbouring kind was accepted. The obvious route is wrong: VT_CHAR's
 	# payload is ONE BYTE, so tagging them VT_CHAR would truncate everything
@@ -8666,7 +8666,7 @@ test-core: $(COMPILER)
 	# the euro/emoji rows are the ones that matter. The Word rows guard the other
 	# side: `v := someWord` must stay a NUMBER.
 	./$(COMPILER) test/test_variant_widechar_store.pas $(TESTTMP)/test_vws26
-	test "$$($(TESTTMP)/test_vws26)" = "$$(cat test/test_variant_widechar_store.expected)"
+	tools/expect_same.sh test_vws26 "$$($(TESTTMP)/test_vws26)" "$$(cat test/test_variant_widechar_store.expected)"
 	# An array argument and a scalar argument must each reach their own overload,
 	# whichever order the two are declared in. pxx presents an array's ELEMENT
 	# kind as its type kind, so `array of AnsiString` and `AnsiString` (and
@@ -8680,7 +8680,7 @@ test-core: $(COMPILER)
 	# like it was not happening.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_array_and_scalar_overload_binding.pas $(TESTTMP)/test_asob26
-	test "$$($(TESTTMP)/test_asob26)" = "$$(cat test/test_array_and_scalar_overload_binding.expected)"
+	tools/expect_same.sh test_asob26 "$$($(TESTTMP)/test_asob26)" "$$(cat test/test_array_and_scalar_overload_binding.expected)"
 	# `@dy` on a dynamic array is the address of the VARIABLE, not its handle.
 	# It used to be the handle, so `@dy`, `Pointer(dy)` and `@dy[0]` were one
 	# address and `p := @dy` captured a buffer SetLength could later free --
@@ -8691,7 +8691,7 @@ test-core: $(COMPILER)
 	# lockstep the fix required: the deref path had to move with `@`.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_pointer_to_a_dynamic_array.pas $(TESTTMP)/test_ptda26
-	test "$$($(TESTTMP)/test_ptda26)" = "$$(cat test/test_pointer_to_a_dynamic_array.expected)"
+	tools/expect_same.sh test_ptda26 "$$($(TESTTMP)/test_ptda26)" "$$(cat test/test_pointer_to_a_dynamic_array.expected)"
 	# `String(x)` in cast position is a TYPECAST, not the char->string conversion.
 	# `String` is a KEYWORD token with its own branch, so it never reached the
 	# identifier-cast path that serves `ansistring` -- and that branch ENDED in
@@ -8705,7 +8705,7 @@ test-core: $(COMPILER)
 	# says the generic machinery was never the problem.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_string_typecast_is_a_cast.pas $(TESTTMP)/test_stc26
-	test "$$($(TESTTMP)/test_stc26)" = "$$(cat test/test_string_typecast_is_a_cast.expected)"
+	tools/expect_same.sh test_stc26 "$$($(TESTTMP)/test_stc26)" "$$(cat test/test_string_typecast_is_a_cast.expected)"
 	# `<BuiltinType>(target) := value` as a statement, for every spelling of the
 	# type name. Only the four that lex as KEYWORD tokens reached the
 	# cast-as-lvalue arm; Pointer/PtrUInt/Int64/AnsiString lex as identifiers,
@@ -8716,7 +8716,7 @@ test-core: $(COMPILER)
 	# them into the shared ParseCastAsLValueStore.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_cast_as_lvalue_builtin_names.pas $(TESTTMP)/test_calb26
-	test "$$($(TESTTMP)/test_calb26)" = "$$(cat test/test_cast_as_lvalue_builtin_names.expected)"
+	tools/expect_same.sh test_calb26 "$$($(TESTTMP)/test_calb26)" "$$(cat test/test_cast_as_lvalue_builtin_names.expected)"
 	# A stray token in a UNIT section is an ERROR, as it already was in a
 	# PROGRAM's declaration section. It used to be skipped silently, so a
 	# mistyped section header (`cosnt K = 5;`) discarded the declaration behind
@@ -8749,7 +8749,7 @@ test-core: $(COMPILER)
 	# spelling working and its neighbour broken.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_virtual_class_method_called_as_a_statement.pas $(TESTTMP)/test_vclsmeth26
-	test "$$($(TESTTMP)/test_vclsmeth26)" = "$$(cat test/test_virtual_class_method_called_as_a_statement.expected)"
+	tools/expect_same.sh test_vclsmeth26 "$$($(TESTTMP)/test_vclsmeth26)" "$$(cat test/test_virtual_class_method_called_as_a_statement.expected)"
 	# TObject's root methods reached from inside a UNIT. Their default bodies live
 	# in `builtin`, pulled by a pre-scan for a dot-preceded .Equals/.GetHashCode/
 	# .ToString -- over the PROGRAM's tokens only, so the identical call compiled
@@ -8757,7 +8757,7 @@ test-core: $(COMPILER)
 	# three names: the unit's use is what must pull them in.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) -Futest/tobject_units test/test_tobject_root_methods_inside_a_unit.pas $(TESTTMP)/test_torootu26
-	test "$$($(TESTTMP)/test_torootu26)" = "$$(cat test/test_tobject_root_methods_inside_a_unit.expected)"
+	tools/expect_same.sh test_torootu26 "$$($(TESTTMP)/test_torootu26)" "$$(cat test/test_tobject_root_methods_inside_a_unit.expected)"
 	# A DOUBLE pointer, three spellings and both declaration orders. The CAST
 	# spelling ran its own suffix walk on NodePtrElem (immediate pointee only),
 	# so `PPOut(pp)^^.inner.y` lost the record and answered the field at OFFSET 0
@@ -8766,7 +8766,7 @@ test-core: $(COMPILER)
 	# compiled or not depending on the order of two type declarations.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_pointer_to_a_pointer_through_a_cast_and_a_forward.pas $(TESTTMP)/test_pptr26
-	test "$$($(TESTTMP)/test_pptr26)" = "$$(cat test/test_pointer_to_a_pointer_through_a_cast_and_a_forward.expected)"
+	tools/expect_same.sh test_pptr26 "$$($(TESTTMP)/test_pptr26)" "$$(cat test/test_pointer_to_a_pointer_through_a_cast_and_a_forward.expected)"
 	# `New` has two spellings in FPC -- the statement `New(p)` and the expression
 	# `p := New(PRec)` -- and pxx had only the first, because the intrinsic lived
 	# solely in the statement parser. The expression form was `undefined variable
@@ -8774,7 +8774,7 @@ test-core: $(COMPILER)
 	# record and a scalar pointee, so the two arms cannot drift on the size rule.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_new_as_a_function_over_a_pointer_type.pas $(TESTTMP)/test_newfn26
-	test "$$($(TESTTMP)/test_newfn26)" = "$$(cat test/test_new_as_a_function_over_a_pointer_type.expected)"
+	tools/expect_same.sh test_newfn26 "$$($(TESTTMP)/test_newfn26)" "$$(cat test/test_new_as_a_function_over_a_pointer_type.expected)"
 	# `f(...)[i]` where f returns a DYNAMIC array. The fixed-array half landed
 	# long ago; the dynamic half was refused because two attempts to make
 	# IRLowerAddress answer an address for the CALL node both failed -- the wrong
@@ -8785,7 +8785,7 @@ test-core: $(COMPILER)
 	# `TBag.Create.Arr[0]` printed 0x600000005).
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_index_a_dynamic_array_call_result.pas $(TESTTMP)/test_idxdyncall26
-	test "$$($(TESTTMP)/test_idxdyncall26)" = "$$(cat test/test_index_a_dynamic_array_call_result.expected)"
+	tools/expect_same.sh test_idxdyncall26 "$$($(TESTTMP)/test_idxdyncall26)" "$$(cat test/test_index_a_dynamic_array_call_result.expected)"
 	# Dynamic-array concatenation, BOTH spellings -- `Concat(a, b, ...)` and
 	# `a + b` under {$modeswitch arrayoperators}. They build the same
 	# array-splice node with the insertion index pinned past the end, so this
@@ -8794,7 +8794,7 @@ test-core: $(COMPILER)
 	# result as an operand, and a concat nested inside another.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_dynamic_array_concatenation.pas $(TESTTMP)/test_dynconcat26
-	test "$$($(TESTTMP)/test_dynconcat26)" = "$$(cat test/test_dynamic_array_concatenation.expected)"
+	tools/expect_same.sh test_dynconcat26 "$$($(TESTTMP)/test_dynconcat26)" "$$(cat test/test_dynamic_array_concatenation.expected)"
 	# `function F: array of array of T` -- Result got a HARDCODED dyn depth of 1
 	# while the proc row already carried the real one, so an outer element was
 	# read as a 4-byte Integer instead of an 8-byte handle: inside the callee
@@ -8805,7 +8805,7 @@ test-core: $(COMPILER)
 	# depth 3, a managed base element, direct call-result index, High, for-in.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_a_nested_dynamic_array_result.pas $(TESTTMP)/test_nestdynres26
-	test "$$($(TESTTMP)/test_nestdynres26)" = "$$(cat test/test_a_nested_dynamic_array_result.expected)"
+	tools/expect_same.sh test_nestdynres26 "$$($(TESTTMP)/test_nestdynres26)" "$$(cat test/test_a_nested_dynamic_array_result.expected)"
 	# `Length('ab' + s)` was a PARSE ERROR while `Length(s + 'ab')` compiled: the
 	# literal fold asked whether the argument STARTS with a literal and then
 	# demanded `)`. One expression, three spellings, only the one leading with the
@@ -8814,7 +8814,7 @@ test-core: $(COMPILER)
 	# keep its compile-time fold (the `const` row proves it is still constant).
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_length_of_a_string_literal_expression.pas $(TESTTMP)/test_lenlitexpr26
-	test "$$($(TESTTMP)/test_lenlitexpr26)" = "$$(cat test/test_length_of_a_string_literal_expression.expected)"
+	tools/expect_same.sh test_lenlitexpr26 "$$($(TESTTMP)/test_lenlitexpr26)" "$$(cat test/test_length_of_a_string_literal_expression.expected)"
 	# High/Low over a string had the array tail's bounds: `Low(s)`/`High(s)` for a
 	# 3-char AnsiString answered 0 and 2 where fpc says 1 and 3 -- while `s[1]` is
 	# its first character in BOTH, so `for i := Low(s) to High(s) do Write(s[i])`
@@ -8825,7 +8825,7 @@ test-core: $(COMPILER)
 	# without the array guard.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_high_and_low_of_a_string.pas $(TESTTMP)/test_hilostr26
-	test "$$($(TESTTMP)/test_hilostr26)" = "$$(cat test/test_high_and_low_of_a_string.expected)"
+	tools/expect_same.sh test_hilostr26 "$$($(TESTTMP)/test_hilostr26)" "$$(cat test/test_high_and_low_of_a_string.expected)"
 	# `var R: TRec = (n: 7)` was refused with "parenthesised initializer requires
 	# an array variable" while the identical CONST declaration worked: the var
 	# path had learned parenthesised initialisers for arrays only. Fixing it
@@ -8836,7 +8836,7 @@ test-core: $(COMPILER)
 	# initialised var different from a const.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_a_record_typed_var_initialiser.pas $(TESTTMP)/test_recvarinit26
-	test "$$($(TESTTMP)/test_recvarinit26)" = "$$(cat test/test_a_record_typed_var_initialiser.expected)"
+	tools/expect_same.sh test_recvarinit26 "$$($(TESTTMP)/test_recvarinit26)" "$$(cat test/test_a_record_typed_var_initialiser.expected)"
 	# The `in: <path>` line under a diagnostic must name the unit the error is
 	# actually IN. The token->file map is keyed on absolute token indices, and the
 	# generic-specialization splice inserts tens of thousands of tokens into the
@@ -8859,7 +8859,7 @@ test-core: $(COMPILER)
 	# elements, plus var and out parameters.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_nil_to_a_whole_dynamic_array.pas $(TESTTMP)/test_nilda26
-	test "$$($(TESTTMP)/test_nilda26)" = "$$(cat test/test_nil_to_a_whole_dynamic_array.expected)"
+	tools/expect_same.sh test_nilda26 "$$($(TESTTMP)/test_nilda26)" "$$(cat test/test_nil_to_a_whole_dynamic_array.expected)"
 	# Delete/Copy/SetLength over an `array of IFoo` must RETAIN the elements that
 	# land in the fresh buffer. Three lowerings each carried their own copy of
 	# "which element types need a retain walk" and all three named exactly
@@ -8868,7 +8868,7 @@ test-core: $(COMPILER)
 	# so .expected asserts which objects die and when.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_dynarray_delete_insert_copy_of_interfaces.pas $(TESTTMP)/test_ddici26
-	test "$$($(TESTTMP)/test_ddici26)" = "$$(cat test/test_dynarray_delete_insert_copy_of_interfaces.expected)"
+	tools/expect_same.sh test_ddici26 "$$($(TESTTMP)/test_ddici26)" "$$(cat test/test_dynarray_delete_insert_copy_of_interfaces.expected)"
 	# Eight constructs FPC rejects used to compile clean -- five of them doing
 	# something silently wrong (a segfault, an out-of-bounds read, a scalar
 	# overwritten with a heap pointer, a destroyed string, a plausible wrong
@@ -8877,7 +8877,7 @@ test-core: $(COMPILER)
 	# spelling of the same eight, so the new guards cannot be one shape too wide.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_indexing_length_for_new_inc_positive.pas $(TESTTMP)/test_ilfni26
-	test "$$($(TESTTMP)/test_ilfni26)" = "$$(cat test/test_indexing_length_for_new_inc_positive.expected)"
+	tools/expect_same.sh test_ilfni26 "$$($(TESTTMP)/test_ilfni26)" "$$(cat test/test_indexing_length_for_new_inc_positive.expected)"
 	@# ...and the refusals themselves: all eight reported in ONE compile
 	@# (they recover), exit 1, and no binary written.
 	@out=$$(./$(COMPILER) test/test_scalar_misuse_is_refused_fail.pas $(TESTTMP)/test_scalarmisuse26 2>&1); \
@@ -8896,15 +8896,15 @@ test-core: $(COMPILER)
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; test "$$?" = "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26
-	test "$$($(TESTTMP)/test_ptr_untyped_deref26)" = "$$(printf 'move=TRUE\nfill=TRUE')"
+	tools/expect_same.sh test_ptr_untyped_deref26 "$$($(TESTTMP)/test_ptr_untyped_deref26)" "$$(printf 'move=TRUE\nfill=TRUE')"
 	./$(COMPILER) -Fulib/rtl test/test_on_binderless.pas $(TESTTMP)/test_on_binderless26
-	test "$$($(TESTTMP)/test_on_binderless26)" = "hits=11"
+	tools/expect_same.sh test_on_binderless26 "$$($(TESTTMP)/test_on_binderless26)" "hits=11"
 	./$(COMPILER) -Fulib/rtl test/test_dynlib.pas $(TESTTMP)/test_dynlib_stub26
-	test "$$($(TESTTMP)/test_dynlib_stub26)" = "no loader"
+	tools/expect_same.sh test_dynlib_stub26 "$$($(TESTTMP)/test_dynlib_stub26)" "no loader"
 	./$(COMPILER) -dPXX_DYNLIB_LIBC -Fulib/rtl test/test_dynlib.pas $(TESTTMP)/test_dynlib_libc26
-	test "$$($(TESTTMP)/test_dynlib_libc26)" = "$$(printf 'strlen: 5\nunloaded: TRUE')"
+	tools/expect_same.sh test_dynlib_libc26 "$$($(TESTTMP)/test_dynlib_libc26)" "$$(printf 'strlen: 5\nunloaded: TRUE')"
 	./$(COMPILER) test/test_cdecl_indirect.pas $(TESTTMP)/test_cdecl_indirect26
-	test "$$($(TESTTMP)/test_cdecl_indirect26)" = "$$(printf '4.0\n1024.0\n12.0')"
+	tools/expect_same.sh test_cdecl_indirect26 "$$($(TESTTMP)/test_cdecl_indirect26)" "$$(printf '4.0\n1024.0\n12.0')"
 	# Every convention spelling in every position that can carry one -- routine
 	# body, external, procedural type, method decl + impl. Four independent lists
 	# once disagreed (stdcall was fine on a method and a parse ERROR on the other
@@ -8962,103 +8962,103 @@ test-core: $(COMPILER)
 	   && test ! -e $(TESTTMP)/test_lenset26 \
 	  || { echo "test_length_of_a_set_fail: FAIL - rc=$$rc (want rc=1, both set rows refused, no binary)"; printf '%s\n' "$$out"; exit 1; }
 	./$(COMPILER) test/test_ansistring_cast_extern_pchar.pas $(TESTTMP)/test_ansistring_cast_extern_pchar26
-	test "$$($(TESTTMP)/test_ansistring_cast_extern_pchar26)" = "$$(printf 'direct=hello len=5\nviavar=hello len=5')"
+	tools/expect_same.sh test_ansistring_cast_extern_pchar26 "$$($(TESTTMP)/test_ansistring_cast_extern_pchar26)" "$$(printf 'direct=hello len=5\nviavar=hello len=5')"
 	./$(COMPILER) test/test_ansistring_cast_fnptr.pas $(TESTTMP)/test_ansistring_cast_fnptr26
-	test "$$($(TESTTMP)/test_ansistring_cast_fnptr26)" = "fnptr=world len=5"
+	tools/expect_same.sh test_ansistring_cast_fnptr26 "$$($(TESTTMP)/test_ansistring_cast_fnptr26)" "fnptr=world len=5"
 	./$(COMPILER) test/test_widechar_var_to_string.pas $(TESTTMP)/test_widechar_var_to_string26
-	test "$$($(TESTTMP)/test_widechar_var_to_string26)" = "$$(printf 'direct=A\nviavar=B')"
+	tools/expect_same.sh test_widechar_var_to_string26 "$$($(TESTTMP)/test_widechar_var_to_string26)" "$$(printf 'direct=A\nviavar=B')"
 	./$(COMPILER) test/test_widechar_var_concat.pas $(TESTTMP)/test_widechar_var_concat26
-	test "$$($(TESTTMP)/test_widechar_var_concat26)" = "$$(printf 'concat=xA\nlconcat=Ay\nwordadd=3000')"
+	tools/expect_same.sh test_widechar_var_concat26 "$$($(TESTTMP)/test_widechar_var_concat26)" "$$(printf 'concat=xA\nlconcat=Ay\nwordadd=3000')"
 	./$(COMPILER) test/test_widechar_var_to_string_arg.pas $(TESTTMP)/test_widechar_var_to_string_arg26
-	test "$$($(TESTTMP)/test_widechar_var_to_string_arg26)" = "$$(printf 'assign=A\nconcat=xA\narg=A')"
+	tools/expect_same.sh test_widechar_var_to_string_arg26 "$$($(TESTTMP)/test_widechar_var_to_string_arg26)" "$$(printf 'assign=A\nconcat=xA\narg=A')"
 	./$(COMPILER) test/test_nested_interface_as_cast.pas $(TESTTMP)/test_nested_interface_as_cast26
-	test "$$($(TESTTMP)/test_nested_interface_as_cast26)" = "inline=101"
+	tools/expect_same.sh test_nested_interface_as_cast26 "$$($(TESTTMP)/test_nested_interface_as_cast26)" "inline=101"
 	./$(COMPILER) test/test_auto_var.pas $(TESTTMP)/test_auto_var26
-	test "$$($(TESTTMP)/test_auto_var26)" = "$$(printf 'Global tests:\ng_int = 456\ng_str = hello global\ng_bool is False\ng_dbl = 3.14\nLocal tests:\nl_int = 123\nl_str = hello local\nl_bool is True\nl_rec = 10, 20\np_rec^ = 10, 20\nall auto variable tests done!')"
+	tools/expect_same.sh test_auto_var26 "$$($(TESTTMP)/test_auto_var26)" "$$(printf 'Global tests:\ng_int = 456\ng_str = hello global\ng_bool is False\ng_dbl = 3.14\nLocal tests:\nl_int = 123\nl_str = hello local\nl_bool is True\nl_rec = 10, 20\np_rec^ = 10, 20\nall auto variable tests done!')"
 	./$(COMPILER) test/test_sqlite_crud_autotyped.pas $(TESTTMP)/test_sqlite_crud_autotyped26
-	test "$$($(TESTTMP)/test_sqlite_crud_autotyped26)" = "$$(printf 'open=0\nprepare=0\n1 alice\n2 bob\nfinalize=0\nclose=0')"
+	tools/expect_same.sh test_sqlite_crud_autotyped26 "$$($(TESTTMP)/test_sqlite_crud_autotyped26)" "$$(printf 'open=0\nprepare=0\n1 alice\n2 bob\nfinalize=0\nclose=0')"
 	! ./$(COMPILER) test/test_auto_var_fail.pas $(TESTTMP)/test_auto_var_fail26 > $(TESTTMP)/test_auto_var_fail.log 2>&1
 	grep -q "use of auto variable before type is inferred" $(TESTTMP)/test_auto_var_fail.log
 	./$(COMPILER) test/test_lazy_var.pas $(TESTTMP)/test_lazy_var26
-	test "$$($(TESTTMP)/test_lazy_var26)" = "$$(printf 'Basic tests:\na = 123\nb = hello inline\nc = 3.14\nd is True\nScoping tests:\nouter x = 10\ninner x = 20\ninner y = 30\nouter x after block = 10\nMultiple declarations:\nx = 42, y = 24\nall lazy variable tests done!')"
+	tools/expect_same.sh test_lazy_var26 "$$($(TESTTMP)/test_lazy_var26)" "$$(printf 'Basic tests:\na = 123\nb = hello inline\nc = 3.14\nd is True\nScoping tests:\nouter x = 10\ninner x = 20\ninner y = 30\nouter x after block = 10\nMultiple declarations:\nx = 42, y = 24\nall lazy variable tests done!')"
 	rm -f $(TESTTMP)/test_sqlite_crud_lazy26.db
 	./$(COMPILER) test/test_sqlite_crud_lazy.pas $(TESTTMP)/test_sqlite_crud_lazy26
-	test "$$($(TESTTMP)/test_sqlite_crud_lazy26)" = "$$(printf -- '--- File Database ---\nopen=0\nprepare=0\n1 alice alice\n2 bob bob\nfinalize=0\nclose=0\n--- In-Memory Database ---\nopen=0\nprepare=0\n1 alice alice\n2 bob bob\nfinalize=0\nclose=0')"
+	tools/expect_same.sh test_sqlite_crud_lazy26 "$$($(TESTTMP)/test_sqlite_crud_lazy26)" "$$(printf -- '--- File Database ---\nopen=0\nprepare=0\n1 alice alice\n2 bob bob\nfinalize=0\nclose=0\n--- In-Memory Database ---\nopen=0\nprepare=0\n1 alice alice\n2 bob bob\nfinalize=0\nclose=0')"
 	! ./$(COMPILER) test/test_lazy_var_scope_fail.pas $(TESTTMP)/test_lazy_var_scope_fail26 > $(TESTTMP)/test_lazy_var_scope_fail.log 2>&1
 	grep -q "undefined variable (a)" $(TESTTMP)/test_lazy_var_scope_fail.log
 	./$(COMPILER) test/test_c_define_const.pas $(TESTTMP)/c_define_const26
-	test "$$($(TESTTMP)/c_define_const26)" = "$$(printf '0\n100\n101\n101')"
+	tools/expect_same.sh c_define_const26 "$$($(TESTTMP)/c_define_const26)" "$$(printf '0\n100\n101\n101')"
 	./$(COMPILER) test/test_c_struct_fields.pas $(TESTTMP)/c_struct_fields26
-	test "$$($(TESTTMP)/c_struct_fields26)" = "$$(printf '7\n9\n11\nh\ni\n3\n4')"
+	tools/expect_same.sh c_struct_fields26 "$$($(TESTTMP)/c_struct_fields26)" "$$(printf '7\n9\n11\nh\ni\n3\n4')"
 	./$(COMPILER) test/test_c_struct_many.pas $(TESTTMP)/c_struct_many26
-	test "$$($(TESTTMP)/c_struct_many26)" = "$$(printf '30\n4300')"
+	tools/expect_same.sh c_struct_many26 "$$($(TESTTMP)/c_struct_many26)" "$$(printf '30\n4300')"
 	./$(COMPILER) test/test_func_ptr_return.pas $(TESTTMP)/func_ptr_return26
-	test "$$($(TESTTMP)/func_ptr_return26)" = "$$(printf '7\n8\n9')"
+	tools/expect_same.sh func_ptr_return26 "$$($(TESTTMP)/func_ptr_return26)" "$$(printf '7\n8\n9')"
 	./$(COMPILER) test/test_c_struct_tags.pas $(TESTTMP)/c_struct_tags26
-	test "$$($(TESTTMP)/c_struct_tags26)" = "$$(printf '12\n10\n20')"
+	tools/expect_same.sh c_struct_tags26 "$$($(TESTTMP)/c_struct_tags26)" "$$(printf '12\n10\n20')"
 	./$(COMPILER) test/test_c_packed_aligned.pas $(TESTTMP)/test_c_packed_aligned26
-	test "$$($(TESTTMP)/test_c_packed_aligned26)" = "$$(printf 'X\n42\n8\n4\nP\n7\n5\n1\nA\n8\n16\n8\nT\n16\n16\n4')"
+	tools/expect_same.sh test_c_packed_aligned26 "$$($(TESTTMP)/test_c_packed_aligned26)" "$$(printf 'X\n42\n8\n4\nP\n7\n5\n1\nA\n8\n16\n8\nT\n16\n16\n4')"
 	./$(COMPILER) test/test_c_preprocess.pas $(TESTTMP)/c_preprocess26
-	test "$$($(TESTTMP)/c_preprocess26)" = "42"
+	tools/expect_same.sh c_preprocess26 "$$($(TESTTMP)/c_preprocess26)" "42"
 	./$(COMPILER) --debug test/test_c_preprocess.pas $(TESTTMP)/c_preprocess_debug26 > $(TESTTMP)/c_preprocess_debug26.log
 	grep -q "C preprocessor: expand function" $(TESTTMP)/c_preprocess_debug26.log
-	test "$$($(TESTTMP)/c_preprocess_debug26)" = "42"
+	tools/expect_same.sh c_preprocess_debug26 "$$($(TESTTMP)/c_preprocess_debug26)" "42"
 	./$(COMPILER) test/test_c_macro_soup.pas $(TESTTMP)/c_macro_soup26
-	test "$$($(TESTTMP)/c_macro_soup26)" = "42"
+	tools/expect_same.sh c_macro_soup26 "$$($(TESTTMP)/c_macro_soup26)" "42"
 	./$(COMPILER) test/bootstrap_features.pas $(TESTTMP)/bootstrap_features26
-	test "$$($(TESTTMP)/bootstrap_features26)" = "$$(printf '120\n98\ncase-ok\n0')"
+	tools/expect_same.sh bootstrap_features26 "$$($(TESTTMP)/bootstrap_features26)" "$$(printf '120\n98\ncase-ok\n0')"
 	./$(COMPILER) test/paramcount_if.pas $(TESTTMP)/paramcount_if26
-	test "$$($(TESTTMP)/paramcount_if26 dummy)" = "argc-ok"
+	tools/expect_same.sh paramcount_if26 "$$($(TESTTMP)/paramcount_if26 dummy)" "argc-ok"
 	./$(COMPILER) test/records.pas $(TESTTMP)/records26
-	test "$$($(TESTTMP)/records26)" = "$$(printf '42\n7\n11\n22')"
+	tools/expect_same.sh records26 "$$($(TESTTMP)/records26)" "$$(printf '42\n7\n11\n22')"
 	./$(COMPILER) test/fileio.pas $(TESTTMP)/fileio26
-	test "$$($(TESTTMP)/fileio26 test/hello.pas | sed -n '1,3p')" = "$$(printf 'test/hello.pas\n14\n54')"
+	tools/expect_same.sh fileio26 "$$($(TESTTMP)/fileio26 test/hello.pas | sed -n '1,3p')" "$$(printf 'test/hello.pas\n14\n54')"
 	./$(COMPILER) test/fileio.pas $(TESTTMP)/fileio_ir26
-	test "$$($(TESTTMP)/fileio_ir26 test/hello.pas | sed -n '1,3p')" = "$$(printf 'test/hello.pas\n14\n54')"
+	tools/expect_same.sh fileio_ir26 "$$($(TESTTMP)/fileio_ir26 test/hello.pas | sed -n '1,3p')" "$$(printf 'test/hello.pas\n14\n54')"
 	./$(COMPILER) test/string_compare.pas $(TESTTMP)/string_compare26
-	test "$$($(TESTTMP)/string_compare26)" = "$$(printf '1\n1\n1')"
+	tools/expect_same.sh string_compare26 "$$($(TESTTMP)/string_compare26)" "$$(printf '1\n1\n1')"
 	./$(COMPILER) test/test_string_concat.pas $(TESTTMP)/test_string_concat26
-	test "$$($(TESTTMP)/test_string_concat26)" = "$$(printf 'Hello, World!\nHello there!\nHi World')"
+	tools/expect_same.sh test_string_concat26 "$$($(TESTTMP)/test_string_concat26)" "$$(printf 'Hello, World!\nHello there!\nHi World')"
 	./$(COMPILER) test/record_string_field.pas $(TESTTMP)/record_string_field26
-	test "$$($(TESTTMP)/record_string_field26)" = "$$(printf '1\n4')"
+	tools/expect_same.sh record_string_field26 "$$($(TESTTMP)/record_string_field26)" "$$(printf '1\n4')"
 	./$(COMPILER) test/test_class_str.pas $(TESTTMP)/test_class_str26
-	test "$$($(TESTTMP)/test_class_str26)" = "FStr: hello"
+	tools/expect_same.sh test_class_str26 "$$($(TESTTMP)/test_class_str26)" "FStr: hello"
 	./$(COMPILER) test/vars.pas $(TESTTMP)/vars26
-	test "$$($(TESTTMP)/vars26)" = "$$(printf 'Sum: 42\nCountdown:\n5\n4\n3\n2\n1\nSquares:\n1\n4\n9\n16\n25\nbig\nloop 0\nloop 1\nloop 2')"
+	tools/expect_same.sh vars26 "$$($(TESTTMP)/vars26)" "$$(printf 'Sum: 42\nCountdown:\n5\n4\n3\n2\n1\nSquares:\n1\n4\n9\n16\n25\nbig\nloop 0\nloop 1\nloop 2')"
 	./$(COMPILER) test/arrays.pas $(TESTTMP)/arrays26
-	test "$$($(TESTTMP)/arrays26)" = "$$(printf 'Squares:\n0\n1\n4\n9\n16\n25\n36\n49\n64\n81\nH\ni\n!')"
+	tools/expect_same.sh arrays26 "$$($(TESTTMP)/arrays26)" "$$(printf 'Squares:\n0\n1\n4\n9\n16\n25\n36\n49\n64\n81\nH\ni\n!')"
 	./$(COMPILER) test/strings.pas $(TESTTMP)/strings26
-	test "$$($(TESTTMP)/strings26)" = "$$(printf 'Hello, World!\nPascal26\n13\nPascal26\n8')"
+	tools/expect_same.sh strings26 "$$($(TESTTMP)/strings26)" "$$(printf 'Hello, World!\nPascal26\n13\nPascal26\n8')"
 	./$(COMPILER) test/test_heap.pas $(TESTTMP)/test_heap26
-	test "$$($(TESTTMP)/test_heap26)" = "$$(printf '1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_heap26 "$$($(TESTTMP)/test_heap26)" "$$(printf '1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_class.pas $(TESTTMP)/test_class26
-	test "$$($(TESTTMP)/test_class26)" = "$$(printf '1\n1\n1\n42\n100\n999\n888')"
+	tools/expect_same.sh test_class26 "$$($(TESTTMP)/test_class26)" "$$(printf '1\n1\n1\n42\n100\n999\n888')"
 	./$(COMPILER) test/test_tmyclass_name.pas $(TESTTMP)/test_tmyclass_name26
-	test "$$($(TESTTMP)/test_tmyclass_name26)" = "78"
+	tools/expect_same.sh test_tmyclass_name26 "$$($(TESTTMP)/test_tmyclass_name26)" "78"
 	./$(COMPILER) test/test_setlength_dynarray_result.pas $(TESTTMP)/test_setlength_dynarray_result26
-	test "$$($(TESTTMP)/test_setlength_dynarray_result26)" = "$$(printf '42\n99\n2\n7\n3')"
+	tools/expect_same.sh test_setlength_dynarray_result26 "$$($(TESTTMP)/test_setlength_dynarray_result26)" "$$(printf '42\n99\n2\n7\n3')"
 	./$(COMPILER) test/test_class_methods.pas $(TESTTMP)/test_class_methods26
-	test "$$($(TESTTMP)/test_class_methods26)" = "3"
+	tools/expect_same.sh test_class_methods26 "$$($(TESTTMP)/test_class_methods26)" "3"
 	./$(COMPILER) test/test_visibility.pas $(TESTTMP)/test_visibility26
-	test "$$($(TESTTMP)/test_visibility26)" = "$$(printf '7\n3\n42\n99\n123')"
+	tools/expect_same.sh test_visibility26 "$$($(TESTTMP)/test_visibility26)" "$$(printf '7\n3\n42\n99\n123')"
 	./$(COMPILER) test/test_ptr_alias.pas $(TESTTMP)/test_ptr_alias26
-	test "$$($(TESTTMP)/test_ptr_alias26)" = "$$(printf '777\n888\n12\n34\n20\n30\n99\n55')"
+	tools/expect_same.sh test_ptr_alias26 "$$($(TESTTMP)/test_ptr_alias26)" "$$(printf '777\n888\n12\n34\n20\n30\n99\n55')"
 	./$(COMPILER) test/test_ptr_deref_field.pas $(TESTTMP)/test_ptr_deref_field26
-	test "$$($(TESTTMP)/test_ptr_deref_field26)" = "$$(printf '10\n20\n42\n99\n1234\n5\n9999\n100\n300\n777')"
+	tools/expect_same.sh test_ptr_deref_field26 "$$($(TESTTMP)/test_ptr_deref_field26)" "$$(printf '10\n20\n42\n99\n1234\n5\n9999\n100\n300\n777')"
 	./$(COMPILER) test/test_ptr_deref_vararg.pas $(TESTTMP)/test_ptr_deref_vararg26
-	test "$$($(TESTTMP)/test_ptr_deref_vararg26)" = "$$(printf '5\n7\n7')"
+	tools/expect_same.sh test_ptr_deref_vararg26 "$$($(TESTTMP)/test_ptr_deref_vararg26)" "$$(printf '5\n7\n7')"
 	./$(COMPILER) test/test_pointer_deref_depth.pas $(TESTTMP)/test_pointer_deref_depth26
 	$(TESTTMP)/test_pointer_deref_depth26; test "$$?" = "42"
 	./$(COMPILER) test/test_ptr_cast.pas $(TESTTMP)/test_ptr_cast26
-	test "$$($(TESTTMP)/test_ptr_cast26)" = "$$(printf '12345\n99999\n77\n88\n42\n1111\n7\n99\n100\n200\nbuiltin_cast: int64 ok\n100')"
+	tools/expect_same.sh test_ptr_cast26 "$$($(TESTTMP)/test_ptr_cast26)" "$$(printf '12345\n99999\n77\n88\n42\n1111\n7\n99\n100\n200\nbuiltin_cast: int64 ok\n100')"
 	./$(COMPILER) test/test_ptr_arithmetic.pas $(TESTTMP)/test_ptr_arithmetic26
-	test "$$($(TESTTMP)/test_ptr_arithmetic26)" = "$$(printf '30\n20\n40\n40\n77\n99\n20')"
+	tools/expect_same.sh test_ptr_arithmetic26 "$$($(TESTTMP)/test_ptr_arithmetic26)" "$$(printf '30\n20\n40\n40\n77\n99\n20')"
 	./$(COMPILER) test/test_pointers.pas $(TESTTMP)/test_pointers26
-	test "$$($(TESTTMP)/test_pointers26 | tail -1)" = "all pointer tests done!"
+	tools/expect_same.sh test_pointers26 "$$($(TESTTMP)/test_pointers26 | tail -1)" "all pointer tests done!"
 	./$(COMPILER) test/test_ref.pas $(TESTTMP)/test_ref26
-	test "$$($(TESTTMP)/test_ref26)" = "hello"
+	tools/expect_same.sh test_ref26 "$$($(TESTTMP)/test_ref26)" "hello"
 	./$(COMPILER) test/test_rtti_emit.pas $(TESTTMP)/test_rtti_emit26
-	test "$$($(TESTTMP)/test_rtti_emit26)" = "$$(printf '42\n3\nhello')"
+	tools/expect_same.sh test_rtti_emit26 "$$($(TESTTMP)/test_rtti_emit26)" "$$(printf '42\n3\nhello')"
 	./$(COMPILER) --dump-rtti test/test_rtti_emit.pas $(TESTTMP)/test_rtti_emit_dump26 > $(TESTTMP)/test_rtti_emit_dump26.log
 	grep -q "enum TAlign count=4 rttiOff=.* alNone alLeft alRight alClient" $(TESTTMP)/test_rtti_emit_dump26.log
 	grep -q "class TBase" $(TESTTMP)/test_rtti_emit_dump26.log
@@ -9069,67 +9069,67 @@ test-core: $(COMPILER)
 	grep -q "prop Owner tk=6" $(TESTTMP)/test_rtti_emit_dump26.log
 	grep -q "prop Align tk=1 enum=TAlign" $(TESTTMP)/test_rtti_emit_dump26.log
 	./$(COMPILER) test/test_rtti_reg.pas $(TESTTMP)/test_rtti_reg26
-	test "$$($(TESTTMP)/test_rtti_reg26)" = "$$(printf 'Count: 3\nClass 0: TInterfacedObject\nClass 1: TBase\nClass 2: TChild')"
+	tools/expect_same.sh test_rtti_reg26 "$$($(TESTTMP)/test_rtti_reg26)" "$$(printf 'Count: 3\nClass 0: TInterfacedObject\nClass 1: TBase\nClass 2: TChild')"
 	./$(COMPILER) test/test_rtti.pas $(TESTTMP)/test_rtti26
 	$(TESTTMP)/test_rtti26 > $(TESTTMP)/test_rtti26.log
 	grep -q "c.Caption: Antigravity" $(TESTTMP)/test_rtti26.log
 	grep -q "c.Align: 3" $(TESTTMP)/test_rtti26.log
 	grep -q "OnClick event thunk matches DummyHandler" $(TESTTMP)/test_rtti26.log
 	./$(COMPILER) test/test_classref.pas $(TESTTMP)/test_classref26
-	test "$$($(TESTTMP)/test_classref26)" = "$$(printf 'same: yes\nname=TFoo\nTag=99')"
+	tools/expect_same.sh test_classref26 "$$($(TESTTMP)/test_classref26)" "$$(printf 'same: yes\nname=TFoo\nTag=99')"
 	./$(COMPILER) test/test_class_of.pas $(TESTTMP)/test_class_of26
-	test "$$($(TESTTMP)/test_class_of26)" = "TChild"
+	tools/expect_same.sh test_class_of26 "$$($(TESTTMP)/test_class_of26)" "TChild"
 	./$(COMPILER) test/test_initsec.pas $(TESTTMP)/test_initsec26
-	test "$$($(TESTTMP)/test_initsec26)" = "AB"
+	tools/expect_same.sh test_initsec26 "$$($(TESTTMP)/test_initsec26)" "AB"
 	./$(COMPILER) test/test_wildcard_lfm.pas $(TESTTMP)/test_wildcard_lfm26
-	test "$$($(TESTTMP)/test_wildcard_lfm26)" = "$$(printf 'Caption=Wildcard\nWidth=200')"
+	tools/expect_same.sh test_wildcard_lfm26 "$$($(TESTTMP)/test_wildcard_lfm26)" "$$(printf 'Caption=Wildcard\nWidth=200')"
 	./$(COMPILER) test/test_field_chain.pas $(TESTTMP)/test_field_chain26
-	test "$$($(TESTTMP)/test_field_chain26)" = "$$(printf 'deep=9\nbasevar=9\nfield=9')"
+	tools/expect_same.sh test_field_chain26 "$$($(TESTTMP)/test_field_chain26)" "$$(printf 'deep=9\nbasevar=9\nfield=9')"
 	./$(COMPILER) test/test_with.pas $(TESTTMP)/test_with26
-	test "$$($(TESTTMP)/test_with26 | tail -1)" = "all with tests completed!"
+	tools/expect_same.sh test_with26 "$$($(TESTTMP)/test_with26 | tail -1)" "all with tests completed!"
 	./$(COMPILER) test/test_streaming.pas $(TESTTMP)/test_streaming26
-	test "$$($(TESTTMP)/test_streaming26)" = "$$(printf 'root.Name=Root1\nroot.Count=42\nroot.Title=Hi\nOnGo bound: yes\nchildCount=1\nkid.Name=Kid1\nkid.Value=7')"
+	tools/expect_same.sh test_streaming26 "$$($(TESTTMP)/test_streaming26)" "$$(printf 'root.Name=Root1\nroot.Count=42\nroot.Title=Hi\nOnGo bound: yes\nchildCount=1\nkid.Name=Kid1\nkid.Value=7')"
 	./$(COMPILER) test/test_streaming_enumset.pas $(TESTTMP)/test_streaming_enumset26
-	test "$$($(TESTTMP)/test_streaming_enumset26)" = "$$(printf 'Color=1\nColors=5\nCaption=Hello, long world!')"
+	tools/expect_same.sh test_streaming_enumset26 "$$($(TESTTMP)/test_streaming_enumset26)" "$$(printf 'Color=1\nColors=5\nCaption=Hello, long world!')"
 	./$(COMPILER) test/test_resource.pas $(TESTTMP)/test_resource26
-	test "$$($(TESTTMP)/test_resource26)" = "$$(printf 'len=16\ndata=Hello, resource!\nmissing: ok')"
+	tools/expect_same.sh test_resource26 "$$($(TESTTMP)/test_resource26)" "$$(printf 'len=16\ndata=Hello, resource!\nmissing: ok')"
 	./$(COMPILER) test/test_lfm.pas $(TESTTMP)/test_lfm26
-	test "$$($(TESTTMP)/test_lfm26)" = "$$(printf 'Caption=Hello LFM\nWidth=320\nAlign=2\nAnchors=10\nchildCount=1\nbtn.Name=Btn\nbtn.Caption=OK\nbtn.Tag=7')"
+	tools/expect_same.sh test_lfm26 "$$($(TESTTMP)/test_lfm26)" "$$(printf 'Caption=Hello LFM\nWidth=320\nAlign=2\nAnchors=10\nchildCount=1\nbtn.Name=Btn\nbtn.Caption=OK\nbtn.Tag=7')"
 	./$(COMPILER) test/gui/repro_multiunit_rtti_segfault.pas $(TESTTMP)/repro_multiunit_rtti26
-	test "$$($(TESTTMP)/repro_multiunit_rtti26)" = "$$(printf 'propcount=2\nName found')"
+	tools/expect_same.sh repro_multiunit_rtti26 "$$($(TESTTMP)/repro_multiunit_rtti26)" "$$(printf 'propcount=2\nName found')"
 	./$(COMPILER) test/test_char_to_string.pas $(TESTTMP)/test_char_to_string26
-	test "$$($(TESTTMP)/test_char_to_string26)" = "$$(printf 'x\ny\nab\nZZy\nyZZ\nyy\nA\nqqq\nz\ndone')"
+	tools/expect_same.sh test_char_to_string26 "$$($(TESTTMP)/test_char_to_string26)" "$$(printf 'x\ny\nab\nZZy\nyZZ\nyy\nA\nqqq\nz\ndone')"
 	./$(COMPILER) test/test_comments.pas $(TESTTMP)/test_comments26
-	test "$$($(TESTTMP)/test_comments26)" = "$$(printf '3\ndone')"
+	tools/expect_same.sh test_comments26 "$$($(TESTTMP)/test_comments26)" "$$(printf '3\ndone')"
 	# flexcolumn directive: call args carry write-style :w:d modifiers
 	./$(COMPILER) test/test_flexcolumn.pas $(TESTTMP)/test_flexcolumn26
-	test "$$($(TESTTMP)/test_flexcolumn26 | tail -1)" = "OK"
+	tools/expect_same.sh test_flexcolumn26 "$$($(TESTTMP)/test_flexcolumn26 | tail -1)" "OK"
 	# const small-record method arg: pre-body call uses the by-ref convention
 	./$(COMPILER) test/test_const_record_method_prebody.pas $(TESTTMP)/test_const_record_method_prebody26
-	test "$$($(TESTTMP)/test_const_record_method_prebody26 | tail -1)" = "OK"
+	tools/expect_same.sh test_const_record_method_prebody26 "$$($(TESTTMP)/test_const_record_method_prebody26 | tail -1)" "OK"
 	./$(COMPILER) --target=i386 test/test_const_record_method_prebody.pas $(TESTTMP)/test_i386_crmp
 	tools/expect_same.sh i386/test_i386_crmp "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_crmp | tail -1)" "OK"
 	# metaclass descendant enforcement: class-of assignment is descendant-checked
 	./$(COMPILER) test/test_metaclass_descendant.pas $(TESTTMP)/test_metaclass_descendant26
-	test "$$($(TESTTMP)/test_metaclass_descendant26 | tail -1)" = "OK"
+	tools/expect_same.sh test_metaclass_descendant26 "$$($(TESTTMP)/test_metaclass_descendant26 | tail -1)" "OK"
 	! ./$(COMPILER) test/test_metaclass_descendant_error.pas $(TESTTMP)/test_metaclass_descendant_error26 > $(TESTTMP)/test_metaclass_descendant_error.log 2>&1
 	grep -q "metaclass type mismatch: TOther is not TBase" $(TESTTMP)/test_metaclass_descendant_error.log
 	! ./$(COMPILER) test/test_metaclass_narrowing_error.pas $(TESTTMP)/test_metaclass_narrowing_error26 > $(TESTTMP)/test_metaclass_narrowing_error.log 2>&1
 	grep -q "metaclass type mismatch: TBase is not TChild" $(TESTTMP)/test_metaclass_narrowing_error.log
 	# object: rooted object-reference type (any instance; cast to touch members)
 	./$(COMPILER) test/test_object_reference.pas $(TESTTMP)/test_object_reference26
-	test "$$($(TESTTMP)/test_object_reference26 | tail -1)" = "OK"
+	tools/expect_same.sh test_object_reference26 "$$($(TESTTMP)/test_object_reference26 | tail -1)" "OK"
 	! ./$(COMPILER) test/test_object_reference_error.pas $(TESTTMP)/test_object_reference_error26 > $(TESTTMP)/test_object_reference_error.log 2>&1
 	grep -q "member access on a bare object reference" $(TESTTMP)/test_object_reference_error.log
 	./$(COMPILER) test/test_case_insensitive.pas $(TESTTMP)/test_case_insensitive26
-	test "$$($(TESTTMP)/test_case_insensitive26)" = "42"
+	tools/expect_same.sh test_case_insensitive26 "$$($(TESTTMP)/test_case_insensitive26)" "42"
 	./$(COMPILER) test/test_case_sensitive.pas $(TESTTMP)/test_case_sensitive26
-	test "$$($(TESTTMP)/test_case_sensitive26)" = "$$(printf '10\n20\nupper\nlower')"
+	tools/expect_same.sh test_case_sensitive26 "$$($(TESTTMP)/test_case_sensitive26)" "$$(printf '10\n20\nupper\nlower')"
 	! ./$(COMPILER) test/test_case_sensitive_error.pas $(TESTTMP)/test_case_sensitive_error26 > $(TESTTMP)/test_case_sensitive_error.log 2>&1
 	grep -q "undefined variable (VALUE)" $(TESTTMP)/test_case_sensitive_error.log
 	# FPC-parity nested {} comments by default (delphi mode / NESTEDCOMMENTS OFF stay flat)
 	./$(COMPILER) test/test_nested_comments.pas $(TESTTMP)/test_nested_comments26
-	test "$$($(TESTTMP)/test_nested_comments26)" = "$$(printf '3\nNESTED COMMENTS OK')"
+	tools/expect_same.sh test_nested_comments26 "$$($(TESTTMP)/test_nested_comments26)" "$$(printf '3\nNESTED COMMENTS OK')"
 	# constructor arity is compile-checked (missing required arg used to desync the caller stack)
 	! ./$(COMPILER) test/test_ctor_arity_error.pas $(TESTTMP)/test_ctor_arity_error26 > $(TESTTMP)/test_ctor_arity_error.log 2>&1
 	grep -q "not enough arguments to constructor" $(TESTTMP)/test_ctor_arity_error.log
@@ -9138,75 +9138,75 @@ test-core: $(COMPILER)
 	grep -q "(gLate)" $(TESTTMP)/test_decl_order_global_error.log
 	# {$DECLORDER OFF} opt-out: the lenient program compiles + runs
 	./$(COMPILER) test/test_decl_order_lax.pas $(TESTTMP)/test_decl_order_lax26
-	test "$$($(TESTTMP)/test_decl_order_lax26)" = "42"
+	tools/expect_same.sh test_decl_order_lax26 "$$($(TESTTMP)/test_decl_order_lax26)" "42"
 	# --lax-decl-order flag: the strict error case compiles cleanly under the opt-out
 	./$(COMPILER) --lax-decl-order test/test_decl_order_global_error.pas $(TESTTMP)/test_decl_order_global_lax26
 	# Rio inline loop var: for var i := a to b (counted) + for var x in c (for-in)
 	./$(COMPILER) test/test_for_var_inline.pas $(TESTTMP)/test_for_var_inline26
-	test "$$($(TESTTMP)/test_for_var_inline26)" = "$$(printf '10\n6\nx=0\nx=10\nx=20\nx=30\nc=a\nc=b\nc=c\nr=1,2\nr=3,4\nm=0\nm=2')"
+	tools/expect_same.sh test_for_var_inline26 "$$($(TESTTMP)/test_for_var_inline26)" "$$(printf '10\n6\nx=0\nx=10\nx=20\nx=30\nc=a\nc=b\nc=c\nr=1,2\nr=3,4\nm=0\nm=2')"
 	./$(COMPILER) test/test_case_sensitive_unit.pas $(TESTTMP)/test_case_sensitive_unit26
-	test "$$($(TESTTMP)/test_case_sensitive_unit26)" = "$$(printf 'unit\n7')"
+	tools/expect_same.sh test_case_sensitive_unit26 "$$($(TESTTMP)/test_case_sensitive_unit26)" "$$(printf 'unit\n7')"
 	# `System.X` reaches the BUILTIN even when a local is spelled like it. The
 	# exemption is written per intrinsic, so Ord/Chr and Length had it while
 	# High/Low/GetMem/QWord did not — each a live divergence from FPC 3.2.2,
 	# which is what this pins. Expectation verified against FPC directly.
 	# meta-a-second-paths-reimplement-the-first-paths-decisions
 	./$(COMPILER) test/test_pascal_system_qualified_intrinsic.pas $(TESTTMP)/test_pascal_sysqual26
-	test "$$($(TESTTMP)/test_pascal_sysqual26)" = "$$(printf '4\n0\nalloc\n300\n0\n2\n99 98 97 96\n1 2')"
+	tools/expect_same.sh test_pascal_sysqual26 "$$($(TESTTMP)/test_pascal_sysqual26)" "$$(printf '4\n0\nalloc\n300\n0\n2\n99 98 97 96\n1 2')"
 	./$(COMPILER) test/test_qualified_units.pas $(TESTTMP)/test_qualified_units26
-	test "$$($(TESTTMP)/test_qualified_units26)" = "$$(printf 'from-program\nfrom-unit\n1074030207\n1074030207\n3\n7\n11\n22\n101\n201')"
+	tools/expect_same.sh test_qualified_units26 "$$($(TESTTMP)/test_qualified_units26)" "$$(printf 'from-program\nfrom-unit\n1074030207\n1074030207\n3\n7\n11\n22\n101\n201')"
 	./$(COMPILER) test/test_uses_alias.pas $(TESTTMP)/test_uses_alias26
-	test "$$($(TESTTMP)/test_uses_alias26)" = "$$(printf '42\n7\n2')"
+	tools/expect_same.sh test_uses_alias26 "$$($(TESTTMP)/test_uses_alias26)" "$$(printf '42\n7\n2')"
 	./$(COMPILER) test/test_relpath_uses.pas $(TESTTMP)/test_relpath_uses26
-	test "$$($(TESTTMP)/test_relpath_uses26)" = "$$(printf '13\n15\n100')"
+	tools/expect_same.sh test_relpath_uses26 "$$($(TESTTMP)/test_relpath_uses26)" "$$(printf '13\n15\n100')"
 	./$(COMPILER) test/test_syncobjs.pas $(TESTTMP)/test_syncobjs26
-	test "$$($(TESTTMP)/test_syncobjs26)" = "$$(printf '1\n2\n3\n4')"
+	tools/expect_same.sh test_syncobjs26 "$$($(TESTTMP)/test_syncobjs26)" "$$(printf '1\n2\n3\n4')"
 	./$(COMPILER) test/test_getmem_proc.pas $(TESTTMP)/test_getmem_proc26
-	test "$$($(TESTTMP)/test_getmem_proc26)" = "$$(printf '1\n65\n66\n90\n1')"
+	tools/expect_same.sh test_getmem_proc26 "$$($(TESTTMP)/test_getmem_proc26)" "$$(printf '1\n65\n66\n90\n1')"
 	./$(COMPILER) test/test_freemem.pas $(TESTTMP)/test_freemem26
-	test "$$($(TESTTMP)/test_freemem26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_freemem26 "$$($(TESTTMP)/test_freemem26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_new_dispose.pas $(TESTTMP)/test_new_dispose26
-	test "$$($(TESTTMP)/test_new_dispose26)" = "$$(printf '1234\n16\n1')"
+	tools/expect_same.sh test_new_dispose26 "$$($(TESTTMP)/test_new_dispose26)" "$$(printf '1234\n16\n1')"
 	./$(COMPILER) test/test_reallocmem.pas $(TESTTMP)/test_reallocmem26
-	test "$$($(TESTTMP)/test_reallocmem26)" = "$$(printf '1\n50\n1\n1\n1\n77')"
+	tools/expect_same.sh test_reallocmem26 "$$($(TESTTMP)/test_reallocmem26)" "$$(printf '1\n50\n1\n1\n1\n77')"
 	./$(COMPILER) test/test_str_val.pas $(TESTTMP)/test_str_val26
-	test "$$($(TESTTMP)/test_str_val26)" = "$$(printf '42\n-7\n0\n[  1234]\n100\n0\n-25\n0\n2\n1\nabc\n3')"
+	tools/expect_same.sh test_str_val26 "$$($(TESTTMP)/test_str_val26)" "$$(printf '42\n-7\n0\n[  1234]\n100\n0\n-25\n0\n2\n1\nabc\n3')"
 	./$(COMPILER) test/test_intrinsic_name_var_no_collision.pas $(TESTTMP)/test_intrinsic_name_var_no_collision26
-	test "$$($(TESTTMP)/test_intrinsic_name_var_no_collision26)" = "$$(printf '1\n2\n3\n4\n5\n6\n7')"
+	tools/expect_same.sh test_intrinsic_name_var_no_collision26 "$$($(TESTTMP)/test_intrinsic_name_var_no_collision26)" "$$(printf '1\n2\n3\n4\n5\n6\n7')"
 	./$(COMPILER) test/test_assign_types.pas $(TESTTMP)/test_assign_types26
-	test "$$($(TESTTMP)/test_assign_types26)" = "$$(printf 'foobarbaz\nHi world!\nx\nQ\nhello\nY\n65')"
+	tools/expect_same.sh test_assign_types26 "$$($(TESTTMP)/test_assign_types26)" "$$(printf 'foobarbaz\nHi world!\nx\nQ\nhello\nY\n65')"
 	./$(COMPILER) test/test_method_named_result.pas $(TESTTMP)/test_method_named_result26
-	test "$$($(TESTTMP)/test_method_named_result26)" = "$$(printf '120\nHi Bob')"
+	tools/expect_same.sh test_method_named_result26 "$$($(TESTTMP)/test_method_named_result26)" "$$(printf '120\nHi Bob')"
 	./$(COMPILER) test/test_ptr_field_index.pas $(TESTTMP)/test_ptr_field_index26
-	test "$$($(TESTTMP)/test_ptr_field_index26)" = "$$(printf '10\n30\n50')"
+	tools/expect_same.sh test_ptr_field_index26 "$$($(TESTTMP)/test_ptr_field_index26)" "$$(printf '10\n30\n50')"
 	./$(COMPILER) test/test_record_multifield.pas $(TESTTMP)/test_record_multifield26
-	test "$$($(TESTTMP)/test_record_multifield26)" = "$$(printf '11 22\n0 1 2\n0 10 20')"
+	tools/expect_same.sh test_record_multifield26 "$$($(TESTTMP)/test_record_multifield26)" "$$(printf '11 22\n0 1 2\n0 10 20')"
 	./$(COMPILER) test/test_readln.pas $(TESTTMP)/test_readln26
-	test "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_readln26)" = "$$(printf -- '100\n200\n300\n-5\n30\nhello world\nQ')"
+	tools/expect_same.sh test_readln26 "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_readln26)" "$$(printf -- '100\n200\n300\n-5\n30\nhello world\nQ')"
 	./$(COMPILER) test/test_record_copy.pas $(TESTTMP)/test_record_copy26
-	test "$$($(TESTTMP)/test_record_copy26)" = "$$(printf '1 2 3 4\n20 21 22 23')"
+	tools/expect_same.sh test_record_copy26 "$$($(TESTTMP)/test_record_copy26)" "$$(printf '1 2 3 4\n20 21 22 23')"
 	./$(COMPILER) test/test_static_methods.pas $(TESTTMP)/test_static_methods26
-	test "$$($(TESTTMP)/test_static_methods26)" = "$$(printf '7\n11\n25')"
+	tools/expect_same.sh test_static_methods26 "$$($(TESTTMP)/test_static_methods26)" "$$(printf '7\n11\n25')"
 	./$(COMPILER) test/test_write_fmt.pas $(TESTTMP)/test_write_fmt26
-	test "$$($(TESTTMP)/test_write_fmt26)" = "$$(printf '    42\n    -7\n1000\n  0\n    hi\n   ab\n99\nx')"
+	tools/expect_same.sh test_write_fmt26 "$$($(TESTTMP)/test_write_fmt26)" "$$(printf '    42\n    -7\n1000\n  0\n    hi\n   ab\n99\nx')"
 	./$(COMPILER) test/test_math_unit.pas $(TESTTMP)/test_math_unit26
-	test "$$($(TESTTMP)/test_math_unit26)" = "$$(printf '42\n999\n10\n20\n256\n6\n144')"
+	tools/expect_same.sh test_math_unit26 "$$($(TESTTMP)/test_math_unit26)" "$$(printf '42\n999\n10\n20\n256\n6\n144')"
 	./$(COMPILER) test/test_generic_func.pas $(TESTTMP)/test_generic_func26
-	test "$$($(TESTTMP)/test_generic_func26)" = "$$(printf '7\n10\n3\n4\n5\n1\n10\n99\n42')"
+	tools/expect_same.sh test_generic_func26 "$$($(TESTTMP)/test_generic_func26)" "$$(printf '7\n10\n3\n4\n5\n1\n10\n99\n42')"
 	# ...and the INLINE spelling of the same thing: `specialize F<C>(args)` at
 	# the call site, in expression and statement position, two concrete types
 	# per template, coexisting with the declaration form. Rows a-d and f are
 	# oracled against FPC 3.2.2 -Mobjfpc.
 	./$(COMPILER) test/test_inline_generic_specialization.pas $(TESTTMP)/test_inline_genspec26
-	test "$$($(TESTTMP)/test_inline_genspec26)" = "$$(printf 'a 9|9\nb abd\nc 2|1\nd q|p\ne z\nf 22')"
+	tools/expect_same.sh test_inline_genspec26 "$$($(TESTTMP)/test_inline_genspec26)" "$$(printf 'a 9|9\nb abd\nc 2|1\nd q|p\ne z\nf 22')"
 	./$(COMPILER) test/test_overloading.pas $(TESTTMP)/test_overloading26
-	test "$$($(TESTTMP)/test_overloading26)" = "$$(printf 'Integer: 42\nChar: A\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
+	tools/expect_same.sh test_overloading26 "$$($(TESTTMP)/test_overloading26)" "$$(printf 'Integer: 42\nChar: A\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
 	./$(COMPILER) test/test_op_overload.pas $(TESTTMP)/test_op_overload26
-	test "$$($(TESTTMP)/test_op_overload26)" = "$$(printf '1\n0\n1\n0\n1\n0\n10\n6')"
+	tools/expect_same.sh test_op_overload26 "$$($(TESTTMP)/test_op_overload26)" "$$(printf '1\n0\n1\n0\n1\n0\n10\n6')"
 	./$(COMPILER) test/test_op_fpc_named_result.pas $(TESTTMP)/test_op_fpc_named_result26
-	test "$$($(TESTTMP)/test_op_fpc_named_result26)" = "$$(printf '5/6\n1/6\n3/2\n1/6\n1/6\n4/12')"
+	tools/expect_same.sh test_op_fpc_named_result26 "$$($(TESTTMP)/test_op_fpc_named_result26)" "$$(printf '5/6\n1/6\n3/2\n1/6\n1/6\n4/12')"
 	./$(COMPILER) test/test_op_unit_scope.pas $(TESTTMP)/test_op_unit_scope26
-	test "$$($(TESTTMP)/test_op_unit_scope26)" = "$$(printf 'in:5/6\n5/6\n3/2\n1/6')"
+	tools/expect_same.sh test_op_unit_scope26 "$$($(TESTTMP)/test_op_unit_scope26)" "$$(printf 'in:5/6\n5/6\n3/2\n1/6')"
 	# `TFn(p)(args)` -- calling straight through a procedural-type cast -- was
 	# `unexpected token`, while `f := TFn(p); f(args)` worked, so only the
 	# spelling was refused. ONE site, not a fifth per-flavour postfix handler: a
@@ -9216,7 +9216,7 @@ test-core: $(COMPILER)
 	# (BuildIndirectCallAST). fpc -O1 -Mobjfpc 3.2.2's values.
 	# bug-p-cannot-call-directly-through-a-procedural-type-cast
 	./$(COMPILER) test/test_call_through_a_procedural_cast.pas $(TESTTMP)/test_proccast26
-	test "$$($(TESTTMP)/test_proccast26)" = "$$(cat test/test_call_through_a_procedural_cast.expected)"
+	tools/expect_same.sh test_proccast26 "$$($(TESTTMP)/test_proccast26)" "$$(cat test/test_call_through_a_procedural_cast.expected)"
 	# Three gaps in unit-scope operator overloading, all visible in FPC's own
 	# compiler/constexp.pas, which declares 22 operators on one record:
 	# a UNARY overload was routed to the binary arity check and refused; the
@@ -9228,15 +9228,15 @@ test-core: $(COMPILER)
 	# now excludes. fpc -O- -Mobjfpc 3.2.2's values.
 	# feature-p-fpc-global-operator-overload-declarations
 	./$(COMPILER) test/test_operator_unary_and_keyword_forms.pas $(TESTTMP)/test_opunary26
-	test "$$($(TESTTMP)/test_opunary26)" = "$$(cat test/test_operator_unary_and_keyword_forms.expected)"
+	tools/expect_same.sh test_opunary26 "$$($(TESTTMP)/test_opunary26)" "$$(cat test/test_operator_unary_and_keyword_forms.expected)"
 	./$(COMPILER) test/test_loop_control.pas $(TESTTMP)/test_loop_control26
-	test "$$($(TESTTMP)/test_loop_control26)" = "$$(printf '8\n5\n8\n7\n3')"
+	tools/expect_same.sh test_loop_control26 "$$($(TESTTMP)/test_loop_control26)" "$$(printf '8\n5\n8\n7\n3')"
 	./$(COMPILER) test/test_goto.pas $(TESTTMP)/test_goto26
-	test "$$($(TESTTMP)/test_goto26)" = "$$(printf '15\nskipped\n3')"
+	tools/expect_same.sh test_goto26 "$$($(TESTTMP)/test_goto26)" "$$(printf '15\nskipped\n3')"
 	./$(COMPILER) test/test_math_parens.pas $(TESTTMP)/test_math_parens26
-	test "$$($(TESTTMP)/test_math_parens26)" = "14"
+	tools/expect_same.sh test_math_parens26 "$$($(TESTTMP)/test_math_parens26)" "14"
 	./$(COMPILER) test/test_inline_register.pas $(TESTTMP)/test_inline_register26
-	test "$$($(TESTTMP)/test_inline_register26 | tail -1)" = "all inline/register tests completed!"
+	tools/expect_same.sh test_inline_register26 "$$($(TESTTMP)/test_inline_register26 | tail -1)" "all inline/register tests completed!"
 	# --- chore-a-sweep-the-unwired-tests-into-the-suite, batch 2 -------------
 	# Six -O3 inline/residency/regcall repro tests that shipped WITH their fix
 	# commits and were never wired: nothing has run them since the day they were
@@ -9251,27 +9251,27 @@ test-core: $(COMPILER)
 	# residency). That is what makes them expectations rather than snapshots.
 	./$(COMPILER) test/test_inline_nonleaf.pas $(TESTTMP)/sweep_inl_nonleaf_O0 >/dev/null
 	./$(COMPILER) -O3 test/test_inline_nonleaf.pas $(TESTTMP)/sweep_inl_nonleaf_O3 >/dev/null
-	test "$$($(TESTTMP)/sweep_inl_nonleaf_O0)" = "$$($(TESTTMP)/sweep_inl_nonleaf_O3)"
-	test "$$($(TESTTMP)/sweep_inl_nonleaf_O3)" = "$$(printf 's=14548398\nt=50016000000\nu=7693850\ng=100000')"
+	tools/expect_same.sh sweep_inl_nonleaf_O0 "$$($(TESTTMP)/sweep_inl_nonleaf_O0)" "$$($(TESTTMP)/sweep_inl_nonleaf_O3)"
+	tools/expect_same.sh sweep_inl_nonleaf_O3 "$$($(TESTTMP)/sweep_inl_nonleaf_O3)" "$$(printf 's=14548398\nt=50016000000\nu=7693850\ng=100000')"
 	./$(COMPILER) test/test_inline_branch_locals.pas $(TESTTMP)/sweep_inl_branch_O0 >/dev/null
 	./$(COMPILER) -O3 test/test_inline_branch_locals.pas $(TESTTMP)/sweep_inl_branch_O3 >/dev/null
-	test "$$($(TESTTMP)/sweep_inl_branch_O0)" = "$$($(TESTTMP)/sweep_inl_branch_O3)"
-	test "$$($(TESTTMP)/sweep_inl_branch_O3)" = "$$(printf 's=24745149\nt=32001520\nu=71428\nw=15285127\nq=12700000')"
+	tools/expect_same.sh sweep_inl_branch_O0 "$$($(TESTTMP)/sweep_inl_branch_O0)" "$$($(TESTTMP)/sweep_inl_branch_O3)"
+	tools/expect_same.sh sweep_inl_branch_O3 "$$($(TESTTMP)/sweep_inl_branch_O3)" "$$(printf 's=24745149\nt=32001520\nu=71428\nw=15285127\nq=12700000')"
 	# The reentrancy repro: 21 fuzz-found miscompiles reduced to one file, and
 	# the shape it guards (a splice re-entering the expander from an argument)
 	# is invisible at -O0, so the -O3 row is the whole point.
 	./$(COMPILER) test/test_inline_depth_reentry.pas $(TESTTMP)/sweep_inl_reentry_O0 >/dev/null
 	./$(COMPILER) -O3 test/test_inline_depth_reentry.pas $(TESTTMP)/sweep_inl_reentry_O3 >/dev/null
-	test "$$($(TESTTMP)/sweep_inl_reentry_O0)" = "$$($(TESTTMP)/sweep_inl_reentry_O3)"
-	test "$$($(TESTTMP)/sweep_inl_reentry_O3)" = "$$(printf 'cs=13127050266571306376\ns=6650214\ng=50000')"
+	tools/expect_same.sh sweep_inl_reentry_O0 "$$($(TESTTMP)/sweep_inl_reentry_O0)" "$$($(TESTTMP)/sweep_inl_reentry_O3)"
+	tools/expect_same.sh sweep_inl_reentry_O3 "$$($(TESTTMP)/sweep_inl_reentry_O3)" "$$(printf 'cs=13127050266571306376\ns=6650214\ng=50000')"
 	./$(COMPILER) test/test_residency_unified.pas $(TESTTMP)/sweep_resid_uni_O0 >/dev/null
 	./$(COMPILER) -O3 test/test_residency_unified.pas $(TESTTMP)/sweep_resid_uni_O3 >/dev/null
-	test "$$($(TESTTMP)/sweep_resid_uni_O0)" = "$$($(TESTTMP)/sweep_resid_uni_O3)"
-	test "$$($(TESTTMP)/sweep_resid_uni_O3)" = "$$(printf 'a=20000100001\nb=19109247906\nc=94447603\nd=1333342075511077\nx=2500000\ny=1736843\nz=6388173')"
+	tools/expect_same.sh sweep_resid_uni_O0 "$$($(TESTTMP)/sweep_resid_uni_O0)" "$$($(TESTTMP)/sweep_resid_uni_O3)"
+	tools/expect_same.sh sweep_resid_uni_O3 "$$($(TESTTMP)/sweep_resid_uni_O3)" "$$(printf 'a=20000100001\nb=19109247906\nc=94447603\nd=1333342075511077\nx=2500000\ny=1736843\nz=6388173')"
 	./$(COMPILER) test/test_residency_boundaries.pas $(TESTTMP)/sweep_resid_bnd_O0 >/dev/null
 	./$(COMPILER) -O3 test/test_residency_boundaries.pas $(TESTTMP)/sweep_resid_bnd_O3 >/dev/null
-	test "$$($(TESTTMP)/sweep_resid_bnd_O0)" = "$$($(TESTTMP)/sweep_resid_bnd_O3)"
-	test "$$($(TESTTMP)/sweep_resid_bnd_O3)" = "$$(printf 'x=2500000\ny=2214536\ncap=10000\ns=2001001\nt=1685819\nhits=500\nglob=6020')"
+	tools/expect_same.sh sweep_resid_bnd_O0 "$$($(TESTTMP)/sweep_resid_bnd_O0)" "$$($(TESTTMP)/sweep_resid_bnd_O3)"
+	tools/expect_same.sh sweep_resid_bnd_O3 "$$($(TESTTMP)/sweep_resid_bnd_O3)" "$$(printf 'x=2500000\ny=2214536\ncap=10000\ns=2001001\nt=1685819\nhits=500\nglob=6020')"
 	# regcall arg order is the ONE of the six where FPC is NOT the oracle, and
 	# the difference is a decided dialect rule rather than a defect: pxx
 	# evaluates arguments strictly LEFT TO RIGHT, FPC does not (it prints
@@ -9282,8 +9282,8 @@ test-core: $(COMPILER)
 	# + BumpG(1)(=10)*1000 + loc(=3) = 5010003.
 	./$(COMPILER) test/test_regcall_arg_order.pas $(TESTTMP)/sweep_regcall_O0 >/dev/null
 	./$(COMPILER) -O3 test/test_regcall_arg_order.pas $(TESTTMP)/sweep_regcall_O3 >/dev/null
-	test "$$($(TESTTMP)/sweep_regcall_O0)" = "$$($(TESTTMP)/sweep_regcall_O3)"
-	test "$$($(TESTTMP)/sweep_regcall_O3)" = "$$(printf 't1=5010003 g=6\nt2=10007007 g=7\nt3=945031 g=9\nt4=107030107 aliased=107\nt5=10100011 g=11')"
+	tools/expect_same.sh sweep_regcall_O0 "$$($(TESTTMP)/sweep_regcall_O0)" "$$($(TESTTMP)/sweep_regcall_O3)"
+	tools/expect_same.sh sweep_regcall_O3 "$$($(TESTTMP)/sweep_regcall_O3)" "$$(printf 't1=5010003 g=6\nt2=10007007 g=7\nt3=945031 g=9\nt4=107030107 aliased=107\nt5=10100011 g=11')"
 	# PromoInt bitwise, the uforth DO/LOOP unsigned-mask idiom. FPC cannot be
 	# the oracle here — PromoInt is ours, and FPC refuses to write one — but the
 	# file states every expected value in a trailing comment on its own line, so
@@ -9291,11 +9291,11 @@ test-core: $(COMPILER)
 	# recorded. Both halves of the 2^64 boundary are in it: masking a negative
 	# to 18446744073709551615 and shifting past 64 bits to 18446744073709551616.
 	./$(COMPILER) test/test_promoint_bitwise.pas $(TESTTMP)/sweep_promoint26
-	test "$$($(TESTTMP)/sweep_promoint26)" = "$$(printf '18446744073709551615\n0\ncrossed\n18446744073709551616\n255\n255\n15')"
+	tools/expect_same.sh sweep_promoint26 "$$($(TESTTMP)/sweep_promoint26)" "$$(printf '18446744073709551615\n0\ncrossed\n18446744073709551616\n255\n255\n15')"
 	# Writeln with literals and a global interleaved — the shape a preproc-era
 	# AnsiString-temp flattening broke. FPC 3.2.2 prints the same line.
 	./$(COMPILER) test/test_writeln_mix.pas $(TESTTMP)/sweep_writeln_mix26
-	test "$$($(TESTTMP)/sweep_writeln_mix26)" = "literal1 global literal2 42"
+	tools/expect_same.sh sweep_writeln_mix26 "$$($(TESTTMP)/sweep_writeln_mix26)" "literal1 global literal2 42"
 	# RTTI field/method reflection by name (feature-rtti-field-reflection and the
 	# method side of the feature-lib-pyexec bridge). Both files already refuse
 	# their own failures — a missing member halts(1) rather than printing — so
@@ -9311,9 +9311,9 @@ test-core: $(COMPILER)
 	# kinds cannot express; typinfo now names it (`pxxTk*`) and bridges it
 	# (PxxKindToTypeKind). test_rtti_kind_numbering below pins both directions.
 	./$(COMPILER) -Fulib/rtl test/test_rtti_field_get_by_name.pas $(TESTTMP)/sweep_rtti_field26
-	test "$$($(TESTTMP)/sweep_rtti_field26)" = "$$(printf 'class=TThing\nCount=42 kind=1\nTag=99 kind=13\nTag(after set)=123\nBuddy=self kind=6\nInner.a=7 kind=5\nabsent=ok\nDONE')"
+	tools/expect_same.sh sweep_rtti_field26 "$$($(TESTTMP)/sweep_rtti_field26)" "$$(printf 'class=TThing\nCount=42 kind=1\nTag=99 kind=13\nTag(after set)=123\nBuddy=self kind=6\nInner.a=7 kind=5\nabsent=ok\nDONE')"
 	./$(COMPILER) -Fulib/rtl test/test_rtti_method_call_by_name.pas $(TESTTMP)/sweep_rtti_method26
-	test "$$($(TESTTMP)/sweep_rtti_method26)" = "$$(printf 'Add arity=2 retKind=13\nAdd param0kind=6 param1kind=13\nAdd(42)=142\nBump arity=1 retKind=0\nBase(after Bump)=101\nabsent=ok\nDONE')"
+	tools/expect_same.sh sweep_rtti_method26 "$$($(TESTTMP)/sweep_rtti_method26)" "$$(printf 'Add arity=2 retKind=13\nAdd param0kind=6 param1kind=13\nAdd(42)=142\nBump arity=1 retKind=0\nBase(after Bump)=101\nabsent=ok\nDONE')"
 	# The two numberings, pinned in both directions. Every row is derived from
 	# compiler/defs.inc's TTypeKind and lib/rtl/typinfo.pas's TTypeKind, not
 	# recorded: Int64 is 13 there and 19 here, Double 19 vs tkFloat 4, Byte 8 vs
@@ -9323,7 +9323,7 @@ test-core: $(COMPILER)
 	# TRUE. If this ever diverges, read decide-rtti-kind-numbering before
 	# "fixing" either side.
 	./$(COMPILER) -Fulib/rtl test/test_rtti_kind_numbering.pas $(TESTTMP)/sweep_rtti_kindnum
-	test "$$($(TESTTMP)/sweep_rtti_kindnum)" = "$$(cat test/test_rtti_kind_numbering.expected)"
+	tools/expect_same.sh sweep_rtti_kindnum "$$($(TESTTMP)/sweep_rtti_kindnum)" "$$(cat test/test_rtti_kind_numbering.expected)"
 	# -O3 residency across a COROUTINE switch: CoSwitch saves only the GPR
 	# callee-saved set, so the float pool has to be spilled around IR_COSWITCH
 	# or the generator's own float code corrupts the consumer's residents.
@@ -9336,27 +9336,27 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_residency_coswitch.pas $(TESTTMP)/sweep_coswitch_O0 >/dev/null
 	./$(COMPILER) -O2 test/test_residency_coswitch.pas $(TESTTMP)/sweep_coswitch_O2 >/dev/null
 	./$(COMPILER) -O3 test/test_residency_coswitch.pas $(TESTTMP)/sweep_coswitch_O3 >/dev/null
-	test "$$($(TESTTMP)/sweep_coswitch_O0)" = "$$($(TESTTMP)/sweep_coswitch_O3)"
-	test "$$($(TESTTMP)/sweep_coswitch_O2)" = "$$($(TESTTMP)/sweep_coswitch_O3)"
-	test "$$($(TESTTMP)/sweep_coswitch_O3 | wc -l)" = "4"
+	tools/expect_same.sh sweep_coswitch_O0 "$$($(TESTTMP)/sweep_coswitch_O0)" "$$($(TESTTMP)/sweep_coswitch_O3)"
+	tools/expect_same.sh sweep_coswitch_O2 "$$($(TESTTMP)/sweep_coswitch_O2)" "$$($(TESTTMP)/sweep_coswitch_O3)"
+	tools/expect_same.sh sweep_coswitch_O3 "$$($(TESTTMP)/sweep_coswitch_O3 | wc -l)" "4"
 	# ECDSA sign/verify over the RTL's own bignum path. Self-asserting: it
 	# prints a 1 per property (keygen, sign+verify, and three REJECT cases --
 	# wrong message, wrong signature, wrong key) and the OK line last. The
 	# reject rows are the half that matters: a verifier that returns true for
 	# everything passes a sign+verify test and fails these.
 	./$(COMPILER) -Fulib/rtl test/test_ecdsa_sign.pas $(TESTTMP)/sweep_ecdsa26
-	test "$$($(TESTTMP)/sweep_ecdsa26)" = "$$(printf 'keygen=1 sign+verify=1 reject: msg=1 sig=1 key=1\nECDSA SIGN OK')"
+	tools/expect_same.sh sweep_ecdsa26 "$$($(TESTTMP)/sweep_ecdsa26)" "$$(printf 'keygen=1 sign+verify=1 reject: msg=1 sig=1 key=1\nECDSA SIGN OK')"
 	./$(COMPILER) test/test_pascal_directives.pas $(TESTTMP)/test_pascal_directives26
-	test "$$($(TESTTMP)/test_pascal_directives26)" = "$$(printf '1\n0\n1\n1\n1\n0\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_pascal_directives26 "$$($(TESTTMP)/test_pascal_directives26)" "$$(printf '1\n0\n1\n1\n1\n0\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_comment_directive.pas $(TESTTMP)/test_comment_directive26
-	test "$$($(TESTTMP)/test_comment_directive26)" = "42"
+	tools/expect_same.sh test_comment_directive26 "$$($(TESTTMP)/test_comment_directive26)" "42"
 	./$(COMPILER) -dCLI_FLAG test/test_pascal_directives.pas $(TESTTMP)/test_pascal_directives_defined26
-	test "$$($(TESTTMP)/test_pascal_directives_defined26)" = "$$(printf '1\n0\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_pascal_directives_defined26 "$$($(TESTTMP)/test_pascal_directives_defined26)" "$$(printf '1\n0\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_pascal_directive_messages.pas $(TESTTMP)/test_pascal_directive_messages26 > $(TESTTMP)/test_pascal_directive_messages.log
 	grep -q "warning: warning text" $(TESTTMP)/test_pascal_directive_messages.log
 	grep -q "message: message text" $(TESTTMP)/test_pascal_directive_messages.log
 	./$(COMPILER) test/test_warn_self_result.pas $(TESTTMP)/test_warn_self_result26
-	test "$$($(TESTTMP)/test_warn_self_result26)" = "2"
+	tools/expect_same.sh test_warn_self_result26 "$$($(TESTTMP)/test_warn_self_result26)" "2"
 	./$(COMPILER) --warn-self-result test/test_warn_self_result.pas $(TESTTMP)/test_warn_self_result_warn26 > $(TESTTMP)/test_warn_self_result.log
 	grep -q "warning: bare own name 'Count' reads the result of parameterless function Count" $(TESTTMP)/test_warn_self_result.log
 	! ./$(COMPILER) --warn-self-result -Werror test/test_warn_self_result.pas $(TESTTMP)/test_warn_self_result_werror26 > $(TESTTMP)/test_warn_self_result_werror.log 2>&1
@@ -9365,7 +9365,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_warn_stack_frame.pas $(TESTTMP)/test_warn_stack_frame26 > $(TESTTMP)/test_warn_stack_frame.log
 	grep -q "routine 'BigLocal' uses 2097152 bytes of stack frame" $(TESTTMP)/test_warn_stack_frame.log
 	! grep -q "routine 'SmallLocal'" $(TESTTMP)/test_warn_stack_frame.log
-	test "$$($(TESTTMP)/test_warn_stack_frame26)" = "$$(printf '1\n42')"
+	tools/expect_same.sh test_warn_stack_frame26 "$$($(TESTTMP)/test_warn_stack_frame26)" "$$(printf '1\n42')"
 	# --max-stack-frame=0 disables the warning entirely
 	./$(COMPILER) --max-stack-frame=0 test/test_warn_stack_frame.pas $(TESTTMP)/test_warn_stack_frame_off26 > $(TESTTMP)/test_warn_stack_frame_off.log
 	! grep -q "stack frame" $(TESTTMP)/test_warn_stack_frame_off.log
@@ -9375,19 +9375,19 @@ test-core: $(COMPILER)
 	! ./$(COMPILER) test/test_pascal_directive_error.pas $(TESTTMP)/test_pascal_directive_error26 > $(TESTTMP)/test_pascal_directive_error.log 2>&1
 	grep -q "requested failure" $(TESTTMP)/test_pascal_directive_error.log
 	./$(COMPILER) test/test_pascal_conditional_include.pas $(TESTTMP)/test_pascal_conditional_include26
-	test "$$($(TESTTMP)/test_pascal_conditional_include26)" = "$$(printf '42\n7')"
+	tools/expect_same.sh test_pascal_conditional_include26 "$$($(TESTTMP)/test_pascal_conditional_include26)" "$$(printf '42\n7')"
 	./$(COMPILER) test/test_directive_if_numeric.pas $(TESTTMP)/test_directive_if_numeric26
-	test "$$($(TESTTMP)/test_directive_if_numeric26)" = "$$(printf '1\n0\n1\n0\n0\n1\n0\n1\n1')"
+	tools/expect_same.sh test_directive_if_numeric26 "$$($(TESTTMP)/test_directive_if_numeric26)" "$$(printf '1\n0\n1\n0\n0\n1\n0\n1\n1')"
 	! ./$(COMPILER) test/test_directive_if_typemix.pas $(TESTTMP)/test_directive_if_typemix26 > $(TESTTMP)/test_directive_if_typemix.log 2>&1
 	grep -q "boolean operands" $(TESTTMP)/test_directive_if_typemix.log
 	! ./$(COMPILER) test/test_directive_if_float.pas $(TESTTMP)/test_directive_if_float26 > $(TESTTMP)/test_directive_if_float.log 2>&1
 	grep -q "float literals not supported" $(TESTTMP)/test_directive_if_float.log
 	./$(COMPILER) test/test_strict_overload.pas $(TESTTMP)/test_strict_overload26
-	test "$$($(TESTTMP)/test_strict_overload26)" = "$$(printf '5\n65')"
+	tools/expect_same.sh test_strict_overload26 "$$($(TESTTMP)/test_strict_overload26)" "$$(printf '5\n65')"
 	! ./$(COMPILER) test/test_strict_overload_error.pas $(TESTTMP)/test_strict_overload_error26 > $(TESTTMP)/test_strict_overload_error.log 2>&1
 	grep -q "overloaded routine requires overload directive" $(TESTTMP)/test_strict_overload_error.log
 	./$(COMPILER) --strict-overload test/test_overloading.pas $(TESTTMP)/test_overloading_strict26
-	test "$$($(TESTTMP)/test_overloading_strict26)" = "$$(printf 'Integer: 42\nChar: A\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
+	tools/expect_same.sh test_overloading_strict26 "$$($(TESTTMP)/test_overloading_strict26)" "$$(printf 'Integer: 42\nChar: A\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
 	# --strict-overload scopes by DIALECT OWNERSHIP, not program-vs-unit. The old
 	# rule was `CurrentUnitIdx < 0` -- "the main program" -- which exempted EVERY
 	# unit, ours and Synapse's alike, and policed only the one file that is not
@@ -9402,28 +9402,28 @@ test-core: $(COMPILER)
 	# Arms 1 and 2 share one compilation, so the two answers demonstrably come
 	# from the same run rather than from two runs with different flags.
 	./$(COMPILER) --strict-overload -Futest test/test_strict_dialect_ownership.pas $(TESTTMP)/test_strict_dialect26
-	test "$$($(TESTTMP)/test_strict_dialect26)" = "$$(printf '42 abab\n42 ccc')"
+	tools/expect_same.sh test_strict_dialect26 "$$($(TESTTMP)/test_strict_dialect26)" "$$(printf '42 abab\n42 ccc')"
 	! ./$(COMPILER) --strict-overload -Futest test/test_strict_dialect_reject.pas $(TESTTMP)/test_strict_dialect_rej26 > $(TESTTMP)/test_strict_dialect_rej.log 2>&1
 	grep -q "overloaded routine requires overload directive" $(TESTTMP)/test_strict_dialect_rej.log
 	# ...and the dialect stays LAX by default: the same program with no flag builds.
 	./$(COMPILER) -Futest test/test_strict_dialect_reject.pas $(TESTTMP)/test_strict_dialect_lax26
-	test "$$($(TESTTMP)/test_strict_dialect_lax26)" = "8"
+	tools/expect_same.sh test_strict_dialect_lax26 "$$($(TESTTMP)/test_strict_dialect_lax26)" "8"
 	./$(COMPILER) test/test_sizeof.pas $(TESTTMP)/test_sizeof26
-	test "$$($(TESTTMP)/test_sizeof26)" = "$$(printf '1\n1\n2\n2\n4\n4\n4\n4\n8\n8\n8\n8\n8\n8\n8\n1\n1\n4\n8\n8\n10\n16\n2\n4\n1\n8\n8')"
+	tools/expect_same.sh test_sizeof26 "$$($(TESTTMP)/test_sizeof26)" "$$(printf '1\n1\n2\n2\n4\n4\n4\n4\n8\n8\n8\n8\n8\n8\n8\n1\n1\n4\n8\n8\n10\n16\n2\n4\n1\n8\n8')"
 	! ./$(COMPILER) test/test_sizeof_error.pas $(TESTTMP)/test_sizeof_error26 > $(TESTTMP)/test_sizeof_error.log 2>&1
 	grep -q "SizeOf: unknown type" $(TESTTMP)/test_sizeof_error.log
 	./$(COMPILER) test/test_record_alignment.pas $(TESTTMP)/test_record_alignment26
-	test "$$($(TESTTMP)/test_record_alignment26)" = "$$(printf '8\n4\n5\n1\n6\n2\n5\n1\n12\n2\n8\n12\n1\n8')"
+	tools/expect_same.sh test_record_alignment26 "$$($(TESTTMP)/test_record_alignment26)" "$$(printf '8\n4\n5\n1\n6\n2\n5\n1\n12\n2\n8\n12\n1\n8')"
 	./$(COMPILER) test/test_record_layout_stress.pas $(TESTTMP)/test_record_layout_stress26
-	test "$$($(TESTTMP)/test_record_layout_stress26)" = "$$(printf '1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35')"
+	tools/expect_same.sh test_record_layout_stress26 "$$($(TESTTMP)/test_record_layout_stress26)" "$$(printf '1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35')"
 	./$(COMPILER) test/test_pthread_header.pas $(TESTTMP)/test_pthread_header26
-	test "$$($(TESTTMP)/test_pthread_header26)" = "pthread loaded successfully"
+	tools/expect_same.sh test_pthread_header26 "$$($(TESTTMP)/test_pthread_header26)" "pthread loaded successfully"
 	./$(COMPILER) test/test_c_crypt.pas $(TESTTMP)/test_c_crypt26
 	$(TESTTMP)/test_c_crypt26 | grep -q "All crypt tests passed successfully!"
 	./$(COMPILER) test/test_c_dlopen.pas $(TESTTMP)/test_c_dlopen26
 	$(TESTTMP)/test_c_dlopen26 | grep -q "All dynamic loading and dlsym tests passed successfully!"
 	./$(COMPILER) test/test_c_gtk.pas $(TESTTMP)/test_c_gtk26
-	test "$$($(TESTTMP)/test_c_gtk26)" = "my_gtk header parsed and imported successfully"
+	tools/expect_same.sh test_c_gtk26 "$$($(TESTTMP)/test_c_gtk26)" "my_gtk header parsed and imported successfully"
 	./$(COMPILER) test/test_c_gtk_call.pas $(TESTTMP)/test_c_gtk_call26
 	xvfb-run -a $(TESTTMP)/test_c_gtk_call26
 	./$(COMPILER) test/test_c_gtk_types.pas $(TESTTMP)/test_c_gtk_types26
@@ -9431,26 +9431,26 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_c_gtk_window.pas $(TESTTMP)/test_c_gtk_window26
 	xvfb-run -a $(TESTTMP)/test_c_gtk_window26
 	./$(COMPILER) test/test_c_header_case_sensitive_import.pas $(TESTTMP)/test_c_header_case_sensitive_import26
-	test "$$($(TESTTMP)/test_c_header_case_sensitive_import26)" = "77"
+	tools/expect_same.sh test_c_header_case_sensitive_import26 "$$($(TESTTMP)/test_c_header_case_sensitive_import26)" "77"
 	# A C translation unit reached ONLY through a Pascal unit's uses clause: the
 	# malloc bridge has to be pulled in on this path too (the C-PROGRAM path was
 	# the only one that did), and the C source has to survive that pull -- the
 	# first cut clobbered the global holding it, so every declaration in the .c
 	# vanished and read as an undefined variable in the Pascal caller.
 	./$(COMPILER) -Futest test/test_c_unit_pulled_via_pascal_unit.pas $(TESTTMP)/test_c_unit_pulled_via_pascal_unit26
-	test "$$($(TESTTMP)/test_c_unit_pulled_via_pascal_unit26)" = "42"
+	tools/expect_same.sh test_c_unit_pulled_via_pascal_unit26 "$$($(TESTTMP)/test_c_unit_pulled_via_pascal_unit26)" "42"
 	# feature-c-import-a-pascal-unit-under-a-mangled-name: `#include "x.pas"` is
 	# an IMPORT SITE, not textual inclusion -- the unit's routines arrive as
 	# `<unit>_pas_<Identifier>`, case-exact, and a C prototype selects the
 	# overload. 42 is Twice(21); 7 is the Integer Max, 9.25 the Double one, and
 	# the two come from ONE Pascal name.
 	./$(COMPILER) test/c_pasunit.c $(TESTTMP)/c_pasunit26
-	test "$$($(TESTTMP)/c_pasunit26)" = "$$(printf '42\n7')"
+	tools/expect_same.sh c_pasunit26 "$$($(TESTTMP)/c_pasunit26)" "$$(printf '42\n7')"
 	./$(COMPILER) test/c_pasunit_ovl.c $(TESTTMP)/c_pasunit_ovl26
-	test "$$($(TESTTMP)/c_pasunit_ovl26)" = "9.25"
+	tools/expect_same.sh c_pasunit_ovl26 "$$($(TESTTMP)/c_pasunit_ovl26)" "9.25"
 	# the same unit included twice, once spelled with a './': one file, allowed
 	./$(COMPILER) test/c_pasunit_twice.c $(TESTTMP)/c_pasunit_twice26
-	test "$$($(TESTTMP)/c_pasunit_twice26)" = "42"
+	tools/expect_same.sh c_pasunit_twice26 "$$($(TESTTMP)/c_pasunit_twice26)" "42"
 	# TWO different files both declaring `unit mymod`. A unit's identity is its
 	# NAME, so the loader silently ignored the second include and mymod_pas_Twice
 	# answered 42 where the author asked for 63 -- a wrong VALUE, not a refusal.
@@ -9497,112 +9497,112 @@ test-core: $(COMPILER)
 	$(TESTTMP)/test_cpasunit_strings_p26 > $(TESTTMP)/test_cpasunit_strings.oracle
 	$(TESTTMP)/test_cpasunit_strings_c26 | diff -u $(TESTTMP)/test_cpasunit_strings.oracle -
 	./$(COMPILER) test/test_type_runtime.pas $(TESTTMP)/test_type_runtime26
-	test "$$($(TESTTMP)/test_type_runtime26)" = "$$(printf '1\n1\n1\n0\n1\n18446744065119617025\n18446744073709551615\n9223372036854775807\n1\n-1\n-1\n-1\n18446744073709551615\n-1\n0\n2\n7\n123456\n9\n20')"
+	tools/expect_same.sh test_type_runtime26 "$$($(TESTTMP)/test_type_runtime26)" "$$(printf '1\n1\n1\n0\n1\n18446744065119617025\n18446744073709551615\n9223372036854775807\n1\n-1\n-1\n-1\n18446744073709551615\n-1\n0\n2\n7\n123456\n9\n20')"
 	./$(COMPILER) test/test_float.pas $(TESTTMP)/test_float26
-	test "$$($(TESTTMP)/test_float26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_float26 "$$($(TESTTMP)/test_float26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_extended_is_double.pas $(TESTTMP)/test_ext_dbl26
-	test "$$($(TESTTMP)/test_ext_dbl26)" = "$$(printf 'eq-div\n16.0\n6.00')"
+	tools/expect_same.sh test_ext_dbl26 "$$($(TESTTMP)/test_ext_dbl26)" "$$(printf 'eq-div\n16.0\n6.00')"
 	./$(COMPILER) test/test_named_dynarray_field.pas $(TESTTMP)/test_named_dynfield26
-	test "$$($(TESTTMP)/test_named_dynfield26)" = "$$(printf 'nums len=3 sum=60\nnames len=2 abb\nrec len=4 v3=99')"
+	tools/expect_same.sh test_named_dynfield26 "$$($(TESTTMP)/test_named_dynfield26)" "$$(printf 'nums len=3 sum=60\nnames len=2 abb\nrec len=4 v3=99')"
 	./$(COMPILER) test/test_float_const_and_cast.pas $(TESTTMP)/test_fconst_cast26
-	test "$$($(TESTTMP)/test_fconst_cast26)" = "$$(printf '0.0010\n3.14159\n-2.50\n0.0010\n-7.25\n42\n6.28318\n2.50\n3.00\n7.00\n3.0000')"
+	tools/expect_same.sh test_fconst_cast26 "$$($(TESTTMP)/test_fconst_cast26)" "$$(printf '0.0010\n3.14159\n-2.50\n0.0010\n-7.25\n42\n6.28318\n2.50\n3.00\n7.00\n3.0000')"
 	./$(COMPILER) test/test_dynarray_record_field.pas $(TESTTMP)/test_dynrecfield26
-	test "$$($(TESTTMP)/test_dynrecfield26)" = "$$(printf 'len=3 a0=10 a2=30 sum=60\nret len=4 first=1 last=4')"
+	tools/expect_same.sh test_dynrecfield26 "$$($(TESTTMP)/test_dynrecfield26)" "$$(printf 'len=3 a0=10 a2=30 sum=60\nret len=4 first=1 last=4')"
 	./$(COMPILER) test/test_nested_dynarray_field.pas $(TESTTMP)/test_nesteddynfield26
-	test "$$($(TESTTMP)/test_nesteddynfield26)" = "m00=0 m12=12 m22=22 sum=99"
+	tools/expect_same.sh test_nesteddynfield26 "$$($(TESTTMP)/test_nesteddynfield26)" "m00=0 m12=12 m22=22 sum=99"
 	./$(COMPILER) test/test_dynarray.pas $(TESTTMP)/test_dynarray26
-	test "$$($(TESTTMP)/test_dynarray26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_dynarray26 "$$($(TESTTMP)/test_dynarray26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray_ansistring.pas $(TESTTMP)/test_dynarray_ansistring26
-	test "$$($(TESTTMP)/test_dynarray_ansistring26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_dynarray_ansistring26 "$$($(TESTTMP)/test_dynarray_ansistring26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) --threadsafe test/test_dynarray_ansistring.pas $(TESTTMP)/test_dynarray_ansistring_threadsafe26
-	test "$$($(TESTTMP)/test_dynarray_ansistring_threadsafe26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_dynarray_ansistring_threadsafe26 "$$($(TESTTMP)/test_dynarray_ansistring_threadsafe26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray_managed_record.pas $(TESTTMP)/test_dynarray_managed_record26
-	test "$$($(TESTTMP)/test_dynarray_managed_record26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_dynarray_managed_record26 "$$($(TESTTMP)/test_dynarray_managed_record26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) --threadsafe test/test_dynarray_managed_record.pas $(TESTTMP)/test_dynarray_managed_record_threadsafe26
-	test "$$($(TESTTMP)/test_dynarray_managed_record_threadsafe26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_dynarray_managed_record_threadsafe26 "$$($(TESTTMP)/test_dynarray_managed_record_threadsafe26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray_params.pas $(TESTTMP)/test_dynarray_params26
-	test "$$($(TESTTMP)/test_dynarray_params26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_dynarray_params26 "$$($(TESTTMP)/test_dynarray_params26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	# the shared managed-block header: strings, dynarrays and objects
 	./$(COMPILER) test/test_managed_block_header.pas $(TESTTMP)/test_managed_block_header26
-	test "$$($(TESTTMP)/test_managed_block_header26)" = "managed block header ok"
+	tools/expect_same.sh test_managed_block_header26 "$$($(TESTTMP)/test_managed_block_header26)" "managed block header ok"
 	# the META word: the ASCII flag, and the reserved low-32 budget
 	./$(COMPILER) test/test_managed_block_meta.pas $(TESTTMP)/test_managed_block_meta26
-	test "$$($(TESTTMP)/test_managed_block_meta26)" = "managed block meta ok"
+	tools/expect_same.sh test_managed_block_meta26 "$$($(TESTTMP)/test_managed_block_meta26)" "managed block meta ok"
 	# UCS4Char: FPC-parity type surface, plus the UTF-8 conversion (a pxx extension)
 	./$(COMPILER) test/test_ucs4char.pas $(TESTTMP)/test_ucs4char26
-	test "$$($(TESTTMP)/test_ucs4char26)" = "ucs4char ok"
+	tools/expect_same.sh test_ucs4char26 "$$($(TESTTMP)/test_ucs4char26)" "ucs4char ok"
 	./$(COMPILER) test/test_dynarray_result.pas $(TESTTMP)/test_dynarray_result26
-	test "$$($(TESTTMP)/test_dynarray_result26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_dynarray_result26 "$$($(TESTTMP)/test_dynarray_result26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) -Fulib/rtl test/test_length_dynarray_call.pas $(TESTTMP)/test_length_dynarray_call26
-	test "$$($(TESTTMP)/test_length_dynarray_call26)" = "$$(printf '3\n3\n0\n0\n4\n0')"
+	tools/expect_same.sh test_length_dynarray_call26 "$$($(TESTTMP)/test_length_dynarray_call26)" "$$(printf '3\n3\n0\n0\n4\n0')"
 	./$(COMPILER) test/test_local_shadows_method_assign.pas $(TESTTMP)/test_local_shadows_method_assign26
-	test "$$($(TESTTMP)/test_local_shadows_method_assign26)" = "$$(printf '10\n20\n30\n40\n-1')"
+	tools/expect_same.sh test_local_shadows_method_assign26 "$$($(TESTTMP)/test_local_shadows_method_assign26)" "$$(printf '10\n20\n30\n40\n-1')"
 	./$(COMPILER) test/test_static_array_ansistring_field.pas $(TESTTMP)/test_static_array_ansistring_field26
-	test "$$($(TESTTMP)/test_static_array_ansistring_field26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_static_array_ansistring_field26 "$$($(TESTTMP)/test_static_array_ansistring_field26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_ansistring_record_char_read.pas $(TESTTMP)/test_ansistring_record_char_read26
-	test "$$($(TESTTMP)/test_ansistring_record_char_read26)" = "$$(printf '1\n1\n1')"
+	tools/expect_same.sh test_ansistring_record_char_read26 "$$($(TESTTMP)/test_ansistring_record_char_read26)" "$$(printf '1\n1\n1')"
 	./$(COMPILER) test/test_nested_dynarray.pas $(TESTTMP)/test_nested_dynarray26
-	test "$$($(TESTTMP)/test_nested_dynarray26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_nested_dynarray26 "$$($(TESTTMP)/test_nested_dynarray26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_nested_dynarray_alias.pas $(TESTTMP)/test_nested_dynarray_alias26
-	test "$$($(TESTTMP)/test_nested_dynarray_alias26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_nested_dynarray_alias26 "$$($(TESTTMP)/test_nested_dynarray_alias26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray_managed_field_reassign.pas $(TESTTMP)/test_dynarray_managed_field_reassign26
-	test "$$($(TESTTMP)/test_dynarray_managed_field_reassign26)" = "$$(printf '1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_dynarray_managed_field_reassign26 "$$($(TESTTMP)/test_dynarray_managed_field_reassign26)" "$$(printf '1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_fixed_array_of_dynarray.pas $(TESTTMP)/test_fixed_array_of_dynarray26
-	test "$$($(TESTTMP)/test_fixed_array_of_dynarray26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_fixed_array_of_dynarray26 "$$($(TESTTMP)/test_fixed_array_of_dynarray26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_nested_dynarray_managed.pas $(TESTTMP)/test_nested_dynarray_managed26
-	test "$$($(TESTTMP)/test_nested_dynarray_managed26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_nested_dynarray_managed26 "$$($(TESTTMP)/test_nested_dynarray_managed26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) --threadsafe test/test_nested_dynarray_managed.pas $(TESTTMP)/test_nested_dynarray_managed_threadsafe26
-	test "$$($(TESTTMP)/test_nested_dynarray_managed_threadsafe26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_nested_dynarray_managed_threadsafe26 "$$($(TESTTMP)/test_nested_dynarray_managed_threadsafe26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_setlength_managed_field.pas $(TESTTMP)/test_setlength_managed_field26
-	test "$$($(TESTTMP)/test_setlength_managed_field26)" = "$$(printf 'ABxxx\nAB\nA\nQzz')"
+	tools/expect_same.sh test_setlength_managed_field26 "$$($(TESTTMP)/test_setlength_managed_field26)" "$$(printf 'ABxxx\nAB\nA\nQzz')"
 	./$(COMPILER) test/test_managed_record_assign.pas $(TESTTMP)/test_managed_record_assign26
-	test "$$($(TESTTMP)/test_managed_record_assign26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_managed_record_assign26 "$$($(TESTTMP)/test_managed_record_assign26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_managed_record_exit.pas $(TESTTMP)/test_managed_record_exit26
-	test "$$($(TESTTMP)/test_managed_record_exit26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\nOK')"
+	tools/expect_same.sh test_managed_record_exit26 "$$($(TESTTMP)/test_managed_record_exit26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\nOK')"
 	./$(COMPILER) test/test_managed_record_funcname_return.pas $(TESTTMP)/test_managed_record_funcname_return26
-	test "$$($(TESTTMP)/test_managed_record_funcname_return26)" = "$$(printf '1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_managed_record_funcname_return26 "$$($(TESTTMP)/test_managed_record_funcname_return26)" "$$(printf '1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_managed_record_field_string_ops.pas $(TESTTMP)/test_managed_record_field_string_ops26
-	test "$$($(TESTTMP)/test_managed_record_field_string_ops26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_managed_record_field_string_ops26 "$$($(TESTTMP)/test_managed_record_field_string_ops26)" "$$(printf '1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_char_arg_ansistring.pas $(TESTTMP)/test_char_arg_ansistring26
-	test "$$($(TESTTMP)/test_char_arg_ansistring26)" = "$$(printf 'x\nyy\nz\n[q]')"
+	tools/expect_same.sh test_char_arg_ansistring26 "$$($(TESTTMP)/test_char_arg_ansistring26)" "$$(printf 'x\nyy\nz\n[q]')"
 	./$(COMPILER) test/test_managed_result_move.pas $(TESTTMP)/test_managed_result_move26
-	test "$$($(TESTTMP)/test_managed_result_move26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_managed_result_move26 "$$($(TESTTMP)/test_managed_result_move26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_managed_arg_temp.pas $(TESTTMP)/test_managed_arg_temp26
-	test "$$($(TESTTMP)/test_managed_arg_temp26)" = "$$(printf 'literal\nab\nk\n<x>\n<m>\nkeep\n1\n1')"
+	tools/expect_same.sh test_managed_arg_temp26 "$$($(TESTTMP)/test_managed_arg_temp26)" "$$(printf 'literal\nab\nk\n<x>\n<m>\nkeep\n1\n1')"
 	# Nested dyn-array ALIASING (replaces test_nested_cow.pas — nested
 	# copy-on-write was x86-64's alone and is gone; see
 	# bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing). All 19
 	# values diffed against an FPC build of the same file.
 	./$(COMPILER) test/test_nested_alias.pas $(TESTTMP)/test_nested_alias26
-	test "$$($(TESTTMP)/test_nested_alias26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_nested_alias26 "$$($(TESTTMP)/test_nested_alias26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_variant.pas $(TESTTMP)/test_variant26
-	test "$$($(TESTTMP)/test_variant26)" = "$$(printf '42\n-7\nQ\n3.14\nTrue\n100')"
+	tools/expect_same.sh test_variant26 "$$($(TESTTMP)/test_variant26)" "$$(printf '42\n-7\nQ\n3.14\nTrue\n100')"
 	./$(COMPILER) test/test_variant_ops.pas $(TESTTMP)/test_variant_ops26
-	test "$$($(TESTTMP)/test_variant_ops26)" = "$$(printf '8\n2\n15\n7.5\n12.5\nTRUE\nFALSE\nFALSE\nTRUE\nTRUE\n11\nTRUE')"
+	tools/expect_same.sh test_variant_ops26 "$$($(TESTTMP)/test_variant_ops26)" "$$(printf '8\n2\n15\n7.5\n12.5\nTRUE\nFALSE\nFALSE\nTRUE\nTRUE\n11\nTRUE')"
 	./$(COMPILER) test/test_variant_byvalue_param.pas $(TESTTMP)/test_variant_byvalue_param26
-	test "$$($(TESTTMP)/test_variant_byvalue_param26)" = "$$(printf 'byval: 2\nafter write: clobbered\nconst: 2\nbyval: 42\nafter write: clobbered\nconst: 42\nbyval: hi\nafter write: clobbered\nconst: hi\ncaller intact: hi\nafter byref: written\nthree: 1 str 7\nthree: 5 lit 8\nroundtrip: rt\nbyval: 3.5\nafter write: clobbered\nfloat intact: 3.5')"
+	tools/expect_same.sh test_variant_byvalue_param26 "$$($(TESTTMP)/test_variant_byvalue_param26)" "$$(printf 'byval: 2\nafter write: clobbered\nconst: 2\nbyval: 42\nafter write: clobbered\nconst: 42\nbyval: hi\nafter write: clobbered\nconst: hi\ncaller intact: hi\nafter byref: written\nthree: 1 str 7\nthree: 5 lit 8\nroundtrip: rt\nbyval: 3.5\nafter write: clobbered\nfloat intact: 3.5')"
 	./$(COMPILER) test/test_variant_div.pas $(TESTTMP)/test_variant_div26
-	test "$$($(TESTTMP)/test_variant_div26)" = "$$(printf '3\n2\n3.4\n2.5')"
+	tools/expect_same.sh test_variant_div26 "$$($(TESTTMP)/test_variant_div26)" "$$(printf '3\n2\n3.4\n2.5')"
 	# A typecast of a Variant CONVERTS (FPC/Delphi semantics); it used to
 	# reinterpret the 16-byte record and answer the tag word, and the float
 	# kinds segfaulted. Diffed against an FPC build of the same file except
 	# the two lines its own comments flag as conversion-level divergences.
 	./$(COMPILER) test/test_variant_typecast.pas $(TESTTMP)/test_variant_typecast26
-	test "$$($(TESTTMP)/test_variant_typecast26)" = "$$(printf '9\n9\n9\n9\n9\n9\n9\n9.00\n9.00\nTRUE\n2.50\n2.50\n2\n2\nTRUE\n-1\n255\n-1.0\nTrue\nA\ntext\ntext\nA\n21\n2.500')"
+	tools/expect_same.sh test_variant_typecast26 "$$($(TESTTMP)/test_variant_typecast26)" "$$(printf '9\n9\n9\n9\n9\n9\n9\n9.00\n9.00\nTRUE\n2.50\n2.50\n2\n2\nTRUE\n-1\n255\n-1.0\nTrue\nA\ntext\ntext\nA\n21\n2.500')"
 	# ...and FPC's Variant->Char rule under --strict-fpc: render the variant,
 	# take character 1 (Char(65) = '6'). The DEFAULT dialect answers Chr(n) —
 	# the one row that deliberately does not track FPC. Diffed against an FPC
 	# build of the same file.
 	./$(COMPILER) --strict-fpc test/test_variant_typecast_strict.pas $(TESTTMP)/test_variant_typecast_strict26
-	test "$$($(TESTTMP)/test_variant_typecast_strict26)" = "$$(printf '6\n7\n1\n2\nT\nh\n0\n9\n-1\n255')"
+	tools/expect_same.sh test_variant_typecast_strict26 "$$($(TESTTMP)/test_variant_typecast_strict26)" "$$(printf '6\n7\n1\n2\nT\nh\n0\n9\n-1\n255')"
 	./$(COMPILER) test/test_variant_string.pas $(TESTTMP)/test_variant_string26
-	test "$$($(TESTTMP)/test_variant_string26)" = "$$(printf 'hello\n42\nhello\nmanaged\nworld\nlocal\n7')"
+	tools/expect_same.sh test_variant_string26 "$$($(TESTTMP)/test_variant_string26)" "$$(printf 'hello\n42\nhello\nmanaged\nworld\nlocal\n7')"
 	./$(COMPILER) test/test_variant_string_ops.pas $(TESTTMP)/test_variant_string_ops26
-	test "$$($(TESTTMP)/test_variant_string_ops26)" = "$$(printf 'TRUE\nFALSE\nFALSE\nTRUE\nTRUE\nTRUE\nFALSE\nFALSE\nTRUE\nTRUE\nTRUE\nTRUE\nTRUE\nFALSE\nTRUE\nTRUE\nFALSE\nhello world\nab\nsweet potato\ngreen tomato\nTRUE\nFALSE\nTRUE\nFALSE')"
+	tools/expect_same.sh test_variant_string_ops26 "$$($(TESTTMP)/test_variant_string_ops26)" "$$(printf 'TRUE\nFALSE\nFALSE\nTRUE\nTRUE\nTRUE\nFALSE\nFALSE\nTRUE\nTRUE\nTRUE\nTRUE\nTRUE\nFALSE\nTRUE\nTRUE\nFALSE\nhello world\nab\nsweet potato\ngreen tomato\nTRUE\nFALSE\nTRUE\nFALSE')"
 	./$(COMPILER) test/test_float_intrinsics.pas $(TESTTMP)/test_float_intrinsics26
-	test "$$($(TESTTMP)/test_float_intrinsics26)" = "$$(printf '3\n-3\n4\n2\n4\n0.7500\n3.0')"
+	tools/expect_same.sh test_float_intrinsics26 "$$($(TESTTMP)/test_float_intrinsics26)" "$$(printf '3\n-3\n4\n2\n4\n0.7500\n3.0')"
 	./$(COMPILER) test/test_nil_python_core.npy $(TESTTMP)/test_nil_python_core26
-	test "$$($(TESTTMP)/test_nil_python_core26)" = "$$(printf '0\n1\n1\n2\n3\n5\n10')"
+	tools/expect_same.sh test_nil_python_core26.2 "$$($(TESTTMP)/test_nil_python_core26)" "$$(printf '0\n1\n1\n2\n3\n5\n10')"
 	# re module over lib/rtl/regex.pas; expectation is CPython's own output
 	# collections.Counter (dict in Counter mode); expectation is CPython's output
 	# field(default_factory=dict); expectation is CPython's output
@@ -9616,10 +9616,10 @@ test-core: $(COMPILER)
 	# keyword arguments bind by name, any subset (an omitted optional keeps its default)
 	# a method parameter that is unannotated AND defaulted, explicit and omitted
 	./$(COMPILER) test/test_nilpy_method_param_default.npy $(TESTTMP)/test_nilpy_mpdef26
-	test "$$($(TESTTMP)/test_nilpy_mpdef26)" = "$$(printf 'all three: p f z\ndefaulted: p f\ndefault is None: True')"
+	tools/expect_same.sh test_nilpy_mpdef26.2 "$$($(TESTTMP)/test_nilpy_mpdef26)" "$$(printf 'all three: p f z\ndefaulted: p f\ndefault is None: True')"
 	# a field assigned from an unannotated ctor parameter becomes a variant
 	./$(COMPILER) test/test_nilpy_field_from_unannotated_param.npy $(TESTTMP)/test_nilpy_fldparam26
-	test "$$($(TESTTMP)/test_nilpy_fldparam26)" = "$$(printf 'p f 0\nreassigned: q\nNone field: True\nafter store: set')"
+	tools/expect_same.sh test_nilpy_fldparam26.2 "$$($(TESTTMP)/test_nilpy_fldparam26)" "$$(printf 'p f 0\nreassigned: q\nNone field: True\nafter store: set')"
 	# A def reached as a callable VALUE (`key=q`, `map`, `filter`, `min`, `max`)
 	# enters its body at its OWN arity and reads its OWN def-time defaults in
 	# every parameter position. It used to lower to a bare code address, so the
@@ -9650,25 +9650,25 @@ test-core: $(COMPILER)
 	# callable options: bound method / plain def / lambda, and a variable trace
 	./$(COMPILER) examples/tk/callbacks.npy $(TESTTMP)/test_nilpy_tkcb26
 	./$(COMPILER) test/test_nilpy_kwargs_by_name.npy $(TESTTMP)/test_nilpy_kwname26
-	test "$$($(TESTTMP)/test_nilpy_kwname26)" = "$$(printf '%b' 'contiguous: root 7 hi z\ninterior hole: 0 skipped-width z\nonly the last: 0  last-only\nnone given: 0  z')"
+	tools/expect_same.sh test_nilpy_kwname26.2 "$$($(TESTTMP)/test_nilpy_kwname26)" "$$(printf '%b' 'contiguous: root 7 hi z\ninterior hole: 0 skipped-width z\nonly the last: 0  last-only\nnone given: 0  z')"
 	# a unit-qualified class construction (mod.Class(args))
 	./$(COMPILER) test/test_nilpy_qualified_ctor.npy $(TESTTMP)/test_nilpy_qualctor26
-	test "$$($(TESTTMP)/test_nilpy_qualctor26)" = "$$(printf '1280x800\nTrue False')"
+	tools/expect_same.sh test_nilpy_qualctor26.2 "$$($(TESTTMP)/test_nilpy_qualctor26)" "$$(printf '1280x800\nTrue False')"
 	# the Python root (PyException) and sysutils' Exception are DIFFERENT classes;
 	# a bare `except Exception:` in NilPy bridges to both (pyparser's except arm)
 	./$(COMPILER) test/test_nilpy_rtl_exception_surface.npy $(TESTTMP)/test_nilpy_rtlexc26
-	test "$$($(TESTTMP)/test_nilpy_rtlexc26)" = "$$(printf '%b' 'mine\ncaught: \042abc\042 is an invalid integer\nend')"
+	tools/expect_same.sh test_nilpy_rtlexc26.2 "$$($(TESTTMP)/test_nilpy_rtlexc26)" "$$(printf '%b' 'mine\ncaught: \042abc\042 is an invalid integer\nend')"
 	# the ASCII answer is cached in the block header, so s[i] and len() stop
 	# rescanning; a stale cache would give wrong CHARACTER offsets, silently
 	./$(COMPILER) test/test_nilpy_str_ascii_cache.npy $(TESTTMP)/test_nilpy_asciicache26
-	test "$$($(TESTTMP)/test_nilpy_asciicache26)" = "$$(cat test/test_nilpy_str_ascii_cache.expected)"
+	tools/expect_same.sh test_nilpy_asciicache26.2 "$$($(TESTTMP)/test_nilpy_asciicache26)" "$$(cat test/test_nilpy_str_ascii_cache.expected)"
 	# bare `Exception` is the PYTHON root, `su.Exception` is sysutils' and only
 	# it, a string literal is untouched, and a class base reference needs no
 	# special case. The MECHANISM changed (variant C sibling classes replaced
 	# the pylexer rename) while these assertions deliberately did not -- which
 	# is what makes this the regression test for swapping it underneath.
 	./$(COMPILER) test/test_nilpy_pyexception_bare_vs_qualified.npy $(TESTTMP)/test_nilpy_pyexcbq26
-	test "$$($(TESTTMP)/test_nilpy_pyexcbq26)" = "$$(printf '%b' 'bare caught: mine\nbridge caught: \042abc\042 is an invalid integer\nqualified caught: \042nope\042 is an invalid integer\nliteral: Exception\nend')"
+	tools/expect_same.sh test_nilpy_pyexcbq26.2 "$$($(TESTTMP)/test_nilpy_pyexcbq26)" "$$(printf '%b' 'bare caught: mine\nbridge caught: \042abc\042 is an invalid integer\nqualified caught: \042nope\042 is an invalid integer\nliteral: Exception\nend')"
 	# uses order must not change what a QUALIFIED name means: each unit's surface
 	# stays reachable in either order -- sysutils named first, then reversed,
 	# IDENTICAL output both ways. Under variant C BOTH units export a class named
@@ -9682,44 +9682,44 @@ test-core: $(COMPILER)
 	# the collision is only reachable from a program importing both pylib and
 	# sysutils, which no real Python program does).
 	./$(COMPILER) test/test_uses_order_pylib_exception_a.pas $(TESTTMP)/test_uses_order_pylib_exc_a26
-	test "$$($(TESTTMP)/test_uses_order_pylib_exc_a26)" = "$$(printf '%b' 'su hi\ncaught: \042abc\042 is an invalid integer\n[    3]\npy hi\nException Exception\nend')"
+	tools/expect_same.sh test_uses_order_pylib_exc_a26.2 "$$($(TESTTMP)/test_uses_order_pylib_exc_a26)" "$$(printf '%b' 'su hi\ncaught: \042abc\042 is an invalid integer\n[    3]\npy hi\nException Exception\nend')"
 	./$(COMPILER) test/test_uses_order_pylib_exception_b.pas $(TESTTMP)/test_uses_order_pylib_exc_b26
-	test "$$($(TESTTMP)/test_uses_order_pylib_exc_b26)" = "$$(printf '%b' 'su hi\ncaught: \042abc\042 is an invalid integer\n[    3]\npy hi\nException Exception\nend')"
+	tools/expect_same.sh test_uses_order_pylib_exc_b26.2 "$$($(TESTTMP)/test_uses_order_pylib_exc_b26)" "$$(printf '%b' 'su hi\ncaught: \042abc\042 is an invalid integer\n[    3]\npy hi\nException Exception\nend')"
 	# a method on a fresh construction: class return, and omitted defaults filled
 	./$(COMPILER) test/test_nilpy_ctor_suffix_defaults.npy $(TESTTMP)/test_nilpy_ctorsfx26
-	test "$$($(TESTTMP)/test_nilpy_ctorsfx26)" = "$$(printf 'a\nba\na 1\nba 1')"
+	tools/expect_same.sh test_nilpy_ctorsfx26.2 "$$($(TESTTMP)/test_nilpy_ctorsfx26)" "$$(printf 'a\nba\na 1\nba 1')"
 	# return-type inference agrees between the shell pre-pass and the body parse
 	./$(COMPILER) test/test_nilpy_infer_return.npy $(TESTTMP)/test_nilpy_inferret26
-	test "$$($(TESTTMP)/test_nilpy_inferret26)" = "$$(printf '5\n6\nv7\n5\n[1, 2, 3]')"
+	tools/expect_same.sh test_nilpy_inferret26.2 "$$($(TESTTMP)/test_nilpy_inferret26)" "$$(printf '5\n6\nv7\n5\n[1, 2, 3]')"
 	# sorted(key=lambda), d.items() as a value, for-target unpacking, Cls().m()
 	# the function-object ABI, dict views, len(variant), a local named `result`
 	# a lambda's DEFAULT-parameter captures (key=key) reach invoke time
 	./$(COMPILER) test/test_nilpy_lambda_capture.npy $(TESTTMP)/test_nilpy_lamcap26
-	test "$$($(TESTTMP)/test_nilpy_lamcap26)" = "$$(printf '%b' '[4, 3, 2, 1]\n[1, 2, 3, 4]\n[4, 3, 2, 1]\n[1, 2, 3, 4]')"
+	tools/expect_same.sh test_nilpy_lamcap26.2 "$$($(TESTTMP)/test_nilpy_lamcap26)" "$$(printf '%b' '[4, 3, 2, 1]\n[1, 2, 3, 4]\n[4, 3, 2, 1]\n[1, 2, 3, 4]')"
 	# a defaulted lambda parameter the CALLER supplies overrides the default, on
 	# BOTH lowerings — they are reached by body shape, not by signature
 	./$(COMPILER) test/test_nilpy_lambda_default_override.npy $(TESTTMP)/test_nilpy_lamdef26
-	test "$$($(TESTTMP)/test_nilpy_lamdef26)" = "$$(printf '%b' '6 12\n6 12\n6 6\n11020 10220 10203\n[0, 1, 2]\n9 1')"
+	tools/expect_same.sh test_nilpy_lamdef26.2 "$$($(TESTTMP)/test_nilpy_lamdef26)" "$$(printf '%b' '6 12\n6 12\n6 6\n11020 10220 10203\n[0, 1, 2]\n9 1')"
 	# a container literal is RETURNED by a lambda, and keeps its tuple/list
 	# identity, on both lowerings — and the aliased-capture shape still works
 	# an int accumulator widens when a CONTAINER hands it a float, in both
 	# scopes — and the range-loop promoted accumulator is untouched
 	./$(COMPILER) test/test_nilpy_accumulate_float_from_container.npy $(TESTTMP)/test_nilpy_accfloat26
-	test "$$($(TESTTMP)/test_nilpy_accfloat26)" = "$$(printf '%b' '3.5\n3.5 3 3.5\n51090942171709440000\n20000000000000000000\n20000000000000000000\n4000000000\n[1, 2, 3]\n3.5')"
+	tools/expect_same.sh test_nilpy_accfloat26.2 "$$($(TESTTMP)/test_nilpy_accfloat26)" "$$(printf '%b' '3.5\n3.5 3 3.5\n51090942171709440000\n20000000000000000000\n20000000000000000000\n4000000000\n[1, 2, 3]\n3.5')"
 	./$(COMPILER) test/test_nilpy_lambda_container_result.npy $(TESTTMP)/test_nilpy_lamctr26
-	test "$$($(TESTTMP)/test_nilpy_lamctr26)" = "$$(printf '%b' '(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\na-b-c\n[2, 3, 1] 3\nc-a-b 3\nx-y 2\n6\n2 7')"
+	tools/expect_same.sh test_nilpy_lamctr26.2 "$$($(TESTTMP)/test_nilpy_lamctr26)" "$$(printf '%b' '(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\na-b-c\n[2, 3, 1] 3\nc-a-b 3\nx-y 2\n6\n2 7')"
 	# a KEYWORD argument through a callable VALUE whose callee is a lifted
 	# lambda or nested def (tag 10) -- matched against the SAME signature
 	# record a bound-method pair carries, so a hole keeps its own default and
 	# a per-instance captured default still wins over the record's names
 	./$(COMPILER) test/test_nilpy_kwarg_through_lifted_value.npy $(TESTTMP)/test_nilpy_kwlifted26
-	test "$$($(TESTTMP)/test_nilpy_kwlifted26)" = "$$(printf '%b' '65\n12009\n109\n501 507 509\n14 18 27')"
+	tools/expect_same.sh test_nilpy_kwlifted26.2 "$$($(TESTTMP)/test_nilpy_kwlifted26)" "$$(printf '%b' '65\n12009\n109\n501 507 509\n14 18 27')"
 	./$(COMPILER) test/test_nilpy_fnvalue_abi.npy $(TESTTMP)/test_nilpy_fnvalue26
-	test "$$($(TESTTMP)/test_nilpy_fnvalue26)" = "$$(printf '%b' '3\n5\n2\n2 3.0 2\n3.0\n1.0\nC\nG\n2\n4.0\n3.14 3    3.142 3.1     | 2.0')"
+	tools/expect_same.sh test_nilpy_fnvalue26.2 "$$($(TESTTMP)/test_nilpy_fnvalue26)" "$$(printf '%b' '3\n5\n2\n2 3.0 2\n3.0\n1.0\nC\nG\n2\n4.0\n3.14 3    3.142 3.1     | 2.0')"
 	# range is a VALUE — a lazy SEQUENCE: re-iterable, indexable, len-able,
 	# sliceable, with constant-time membership. NOT a cursor (see the test).
 	./$(COMPILER) test/test_nilpy_range_as_a_value.npy $(TESTTMP)/test_nilpy_rangeval26
-	test "$$($(TESTTMP)/test_nilpy_rangeval26)" = "$$(printf '%b' 'range(0, 3)\nrange(0, 10, 2)\nrange(5, 0)\n[0, 1, 2]\n[0, 1, 2]\n3 0 1 2\nTrue False False\n4 [0, 3, 6, 9]\n0 []\n[3, 2, 1]\nTrue True\nTrue False\nrange(2, 5)\n[2, 3, 4]\nrange(0, 10, 2) [0, 2, 4, 6, 8]\nrange(7, 10)\n1000000000 999999999 True False\n10 2 8\n[1, 2, 3] (0, 1, 2)\nFalse True\n[3, 2, 1, 0]\n[0, 2, 4, 6]\n[(0, \0047a\0047), (1, \0047b\0047), (2, \0047c\0047)]\n[(1, 0), (2, 1)]\n[\00470\0047, \00471\0047, \00472\0047]\n[0, 2, 4]\n[0, 1, 2]\n[0, 1, 2, 0, 1, 2]\n[0, 1, 2, 3]\n[0, 1, 2]\n[0, 1]\n7')"
+	tools/expect_same.sh test_nilpy_rangeval26.2 "$$($(TESTTMP)/test_nilpy_rangeval26)" "$$(printf '%b' 'range(0, 3)\nrange(0, 10, 2)\nrange(5, 0)\n[0, 1, 2]\n[0, 1, 2]\n3 0 1 2\nTrue False False\n4 [0, 3, 6, 9]\n0 []\n[3, 2, 1]\nTrue True\nTrue False\nrange(2, 5)\n[2, 3, 4]\nrange(0, 10, 2) [0, 2, 4, 6, 8]\nrange(7, 10)\n1000000000 999999999 True False\n10 2 8\n[1, 2, 3] (0, 1, 2)\nFalse True\n[3, 2, 1, 0]\n[0, 2, 4, 6]\n[(0, \0047a\0047), (1, \0047b\0047), (2, \0047c\0047)]\n[(1, 0), (2, 1)]\n[\00470\0047, \00471\0047, \00472\0047]\n[0, 2, 4]\n[0, 1, 2]\n[0, 1, 2, 0, 1, 2]\n[0, 1, 2, 3]\n[0, 1, 2]\n[0, 1]\n7')"
 	# map/filter/enumerate/zip/reversed are LAZY: an early break never reaches a
 	# raise past it, a bound cursor resumes where it parked, len(map(...)) is a
 	# TypeError, and each one reports CPython's own type name.
@@ -9728,55 +9728,55 @@ test-core: $(COMPILER)
 	# digit and prints garbage. (In a printf FORMAT string it is \ddd instead,
 	# which is why the older entries around here are spelled the other way.)
 	./$(COMPILER) test/test_nilpy_lazy_map_filter.npy $(TESTTMP)/test_nilpy_lazymap26
-	test "$$($(TESTTMP)/test_nilpy_lazymap26)" = "$$(printf '%b' 'survived [0, 1, 2]\ncalls 3\nafter binding: 0\nafter breaking at 3: 3\nrest: [40, 50]\n[2, 4]\n[2, 3]\n[3, 6]\n[\00471\0047, \00472\0047]\n[1, 3]\n[1, \0047a\0047]\nfilter saw [1, 2]\nmap\nfilter\nenumerate\nzip\nlist_reverseiterator\n<map\nenum rest [(2, 3)]\nzip rest [(2, \0047b\0047), (3, \0047c\0047)]\nrev rest [2, 1]\n[(1, \0047a\0047), (2, \0047b\0047)]\n[(1, \0047a\0047), (2, \0047b\0047)]\n[3, 2, 1]\n[2, 4, 6]\n12\n1-2-3\n[2, 4]\n200 100')"
+	tools/expect_same.sh test_nilpy_lazymap26.2 "$$($(TESTTMP)/test_nilpy_lazymap26)" "$$(printf '%b' 'survived [0, 1, 2]\ncalls 3\nafter binding: 0\nafter breaking at 3: 3\nrest: [40, 50]\n[2, 4]\n[2, 3]\n[3, 6]\n[\00471\0047, \00472\0047]\n[1, 3]\n[1, \0047a\0047]\nfilter saw [1, 2]\nmap\nfilter\nenumerate\nzip\nlist_reverseiterator\n<map\nenum rest [(2, 3)]\nzip rest [(2, \0047b\0047), (3, \0047c\0047)]\nrev rest [2, 1]\n[(1, \0047a\0047), (2, \0047b\0047)]\n[(1, \0047a\0047), (2, \0047b\0047)]\n[3, 2, 1]\n[2, 4, 6]\n12\n1-2-3\n[2, 4]\n200 100')"
 	# iter()/next() and the cursor object they return: partial consumption
 	# leaves the REST, exhaustion is permanent, iter(iter(x)) is idempotent
 	./$(COMPILER) test/test_nilpy_iter_next_cursor.npy $(TESTTMP)/test_nilpy_itercur26
-	test "$$($(TESTTMP)/test_nilpy_itercur26)" = "$$(printf '%b' '1\n2\n[3]\n[]\ndone\na b c\nstopped\n[\047a\047, \047b\047]\nTrue\nlist_iterator\n<list_iterator\nNone\n[1, 2, 3, 4]\nparked at 2\nresumed 3\nresumed 4\n[1, 3]\n1 a\n2 b\n0 x\n1 y')"
+	tools/expect_same.sh test_nilpy_itercur26.2 "$$($(TESTTMP)/test_nilpy_itercur26)" "$$(printf '%b' '1\n2\n[3]\n[]\ndone\na b c\nstopped\n[\047a\047, \047b\047]\nTrue\nlist_iterator\n<list_iterator\nNone\n[1, 2, 3, 4]\nparked at 2\nresumed 3\nresumed 4\n[1, 3]\n1 a\n2 b\n0 x\n1 y')"
 	./$(COMPILER) test/test_nilpy_sorted_pairs.npy $(TESTTMP)/test_nilpy_sortpairs26
-	test "$$($(TESTTMP)/test_nilpy_sortpairs26)" = "$$(printf '%b' '3\nb 1\nc 2\na 3\na 3\nc 2\nb 1\n[1, 2, 3]\nx 1\ny 2\n2 0 3\nbb\nnone\n11\n3')"
+	tools/expect_same.sh test_nilpy_sortpairs26.2 "$$($(TESTTMP)/test_nilpy_sortpairs26)" "$$(printf '%b' '3\nb 1\nc 2\na 3\na 3\nc 2\nb 1\n[1, 2, 3]\nx 1\ny 2\n2 0 3\nbb\nnone\n11\n3')"
 	# a comprehension nested in another's element, dict spread, aggregate builtins
 	./$(COMPILER) test/test_nilpy_nested_comp.npy $(TESTTMP)/test_nilpy_nestcomp26
-	test "$$($(TESTTMP)/test_nilpy_nestcomp26)" = "$$(printf '%b' '2\nab 2\ncd 2\n2 2 2\nx 1\ny 9\nz 3\n3\n3\n14\n5 1\nTrue True False True\n4.0\n28\npear apple')"
+	tools/expect_same.sh test_nilpy_nestcomp26.2 "$$($(TESTTMP)/test_nilpy_nestcomp26)" "$$(printf '%b' '2\nab 2\ncd 2\n2 2 2\nx 1\ny 9\nz 3\n3\n3\n14\n5 1\nTrue True False True\n4.0\n28\npear apple')"
 	# a Callable parameter on a METHOD is callable in the body
 	./$(COMPILER) test/test_nilpy_method_callable_param.npy $(TESTTMP)/test_nilpy_mcallable26
-	test "$$($(TESTTMP)/test_nilpy_mcallable26)" = "$$(printf '%b' '2\n[\047p\047, \047p!\047, \047q\047, \047q!\047]\n[\047P\047, \047Q\047]')"
+	tools/expect_same.sh test_nilpy_mcallable26.2 "$$($(TESTTMP)/test_nilpy_mcallable26)" "$$(printf '%b' '2\n[\047p\047, \047p!\047, \047q\047, \047q!\047]\n[\047P\047, \047Q\047]')"
 	# the pathlib shim, its `/` operator, and __str__ honoured by str()/print()/f-string
 	./$(COMPILER) test/test_nilpy_pathlib.npy $(TESTTMP)/test_nilpy_pathlib26
-	test "$$($(TESTTMP)/test_nilpy_pathlib26)" = "$$(printf 'file.txt\nfile\n.txt\ndir/sub\ndir/sub\ndir/sub\nFalse\ndir/sub')"
+	tools/expect_same.sh test_nilpy_pathlib26.2 "$$($(TESTTMP)/test_nilpy_pathlib26)" "$$(printf 'file.txt\nfile\n.txt\ndir/sub\ndir/sub\ndir/sub\nFalse\ndir/sub')"
 	# the html and tempfile shims, and an import that is not at the top of the file
 	./$(COMPILER) test/test_nilpy_html_tempfile.npy $(TESTTMP)/test_nilpy_htmltmp26
-	test "$$($(TESTTMP)/test_nilpy_htmltmp26)" = "$$(printf '%b' '&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;\nit\047s\n<b>&\042AB&nope;\nTrue\n.pdf\nTrue\nFalse')"
+	tools/expect_same.sh test_nilpy_htmltmp26.2 "$$($(TESTTMP)/test_nilpy_htmltmp26)" "$$(printf '%b' '&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;\nit\047s\n<b>&\042AB&nope;\nTrue\n.pdf\nTrue\nFalse')"
 	# a `*`/`**` argument ELEMENT anywhere in the list, not only first
 	./$(COMPILER) test/test_nilpy_star_element_anywhere.npy $(TESTTMP)/test_nilpy_starelem26
-	test "$$($(TESTTMP)/test_nilpy_starelem26)" = "$$(printf '25\n23\n73\n21\n71\n73\n75\n75\n71\n43\n73\n120\n129\n129\n129\n123\n3\n3\n123\n[1, 2, 3]')"
+	tools/expect_same.sh test_nilpy_starelem26.2 "$$($(TESTTMP)/test_nilpy_starelem26)" "$$(printf '25\n23\n73\n21\n71\n73\n75\n75\n71\n43\n73\n120\n129\n129\n129\n123\n3\n3\n123\n[1, 2, 3]')"
 	# forwarding a collected *args into a callee with ordinary parameters
 	./$(COMPILER) test/test_nilpy_star_forward.npy $(TESTTMP)/test_nilpy_starfwd26
-	test "$$($(TESTTMP)/test_nilpy_starfwd26)" = "$$(printf 'UI/size\n1/2\na/b/c\n3\n[1, 2, 3]\n3\n4.0\na-b\n11\n13\nTypeError')"
+	tools/expect_same.sh test_nilpy_starfwd26.2 "$$($(TESTTMP)/test_nilpy_starfwd26)" "$$(printf 'UI/size\n1/2\na/b/c\n3\n[1, 2, 3]\n3\n4.0\na-b\n11\n13\nTypeError')"
 	# a method on a dynamically-typed receiver, dispatched across unrelated classes
 	./$(COMPILER) test/test_nilpy_dynamic_dispatch.npy $(TESTTMP)/test_nilpy_dyndisp26
-	test "$$($(TESTTMP)/test_nilpy_dyndisp26)" = "$$(printf '%b' 'cand3\nx\nsum1.5\ncand3, x, sum1.5\nDET:x')"
+	tools/expect_same.sh test_nilpy_dyndisp26.2 "$$($(TESTTMP)/test_nilpy_dyndisp26)" "$$(printf '%b' 'cand3\nx\nsum1.5\ncand3, x, sum1.5\nDET:x')"
 	# Python or/and yield an OPERAND; an empty string is falsy
 	./$(COMPILER) test/test_nilpy_truthy_value_ops.npy $(TESTTMP)/test_nilpy_truthy26
-	test "$$($(TESTTMP)/test_nilpy_truthy26)" = "$$(printf '%b' 'ab\nfallback\n7\n3\nb\n0\nx\nNone\nempty\ncond ok\nempty is falsy\nloop 0\n5')"
+	tools/expect_same.sh test_nilpy_truthy26.2 "$$($(TESTTMP)/test_nilpy_truthy26)" "$$(printf '%b' 'ab\nfallback\n7\n3\nb\n0\nx\nNone\nempty\ncond ok\nempty is falsy\nloop 0\n5')"
 	# a class-level `name = <literal>` attribute, and `del <local>`
 	./$(COMPILER) test/test_nilpy_class_attr.npy $(TESTTMP)/test_nilpy_clsattr26
-	test "$$($(TESTTMP)/test_nilpy_clsattr26)" = "$$(printf '%b' 'note_counting 3 0.5 True\ncadence\nnote_counting 3')"
+	tools/expect_same.sh test_nilpy_clsattr26.3 "$$($(TESTTMP)/test_nilpy_clsattr26)" "$$(printf '%b' 'note_counting 3 0.5 True\ncadence\nnote_counting 3')"
 	# r-prefixed raw strings, and set(iterable)
 	./$(COMPILER) test/test_nilpy_raw_string_set.npy $(TESTTMP)/test_nilpy_rawset26
-	test "$$($(TESTTMP)/test_nilpy_rawset26)" = "$$(printf '%b' 'C#\n4\nFalse\nd\\d+\n3\n0\n2\n4\n1')"
+	tools/expect_same.sh test_nilpy_rawset26.2 "$$($(TESTTMP)/test_nilpy_rawset26)" "$$(printf '%b' 'C#\n4\nFalse\nd\\d+\n3\n0\n2\n4\n1')"
 	# import X as Y (the alias wins over a same-named compiled unit)
 	./$(COMPILER) test/test_nilpy_import_alias.npy $(TESTTMP)/test_nilpy_import_alias26
-	test "$$($(TESTTMP)/test_nilpy_import_alias26)" = "$$(printf '4\n7\n2')"
+	tools/expect_same.sh test_nilpy_import_alias26.2 "$$($(TESTTMP)/test_nilpy_import_alias26)" "$$(printf '4\n7\n2')"
 	# *args / **kwargs collected on the callee side, and print(*args)
 	./$(COMPILER) test/test_nilpy_star_args.npy $(TESTTMP)/test_nilpy_star_args26
-	test "$$($(TESTTMP)/test_nilpy_star_args26)" = "$$(printf '%b' '0\n\n4\na 1 2.5 True\n2\n[1, 2] {\047k\047: 1}\np:\np: x 9\n7 0\n7 2\nalpha a\nbeta 2\n1 0 0\n\n1 2 1\n2 3\n[2, 3]\n[]')"
+	tools/expect_same.sh test_nilpy_star_args26.2 "$$($(TESTTMP)/test_nilpy_star_args26)" "$$(printf '%b' '0\n\n4\na 1 2.5 True\n2\n[1, 2] {\047k\047: 1}\np:\np: x 9\n7 0\n7 2\nalpha a\nbeta 2\n1 0 0\n\n1 2 1\n2 3\n[2, 3]\n[]')"
 	./$(COMPILER) test/test_nilpy_configparser.npy $(TESTTMP)/test_nilpy_cfgparse26
-	test "$$($(TESTTMP)/test_nilpy_cfgparse26)" = "$$(printf 'sections: 2\nhas UI: True has nope: False\nget: 1280x800\ndefault lowercases: True\noption: fontsize = 13\nsubclass keeps case: True\nand rejects folded: False')"
+	tools/expect_same.sh test_nilpy_cfgparse26.2 "$$($(TESTTMP)/test_nilpy_cfgparse26)" "$$(printf 'sections: 2\nhas UI: True has nope: False\nget: 1280x800\ndefault lowercases: True\noption: fontsize = 13\nsubclass keeps case: True\nand rejects folded: False')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_subclass_unit_base.npy $(TESTTMP)/test_nilpy_subbase26
-	test "$$($(TESTTMP)/test_nilpy_subbase26)" = "$$(printf 'override: KeepCase\ninherited: keepcase')"
+	tools/expect_same.sh test_nilpy_subbase26.2 "$$($(TESTTMP)/test_nilpy_subbase26)" "$$(printf 'override: KeepCase\ninherited: keepcase')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy $(TESTTMP)/test_nilpy_aoc26
-	test "$$($(TESTTMP)/test_nilpy_aoc26)" = "x:2"
+	tools/expect_same.sh test_nilpy_aoc26.2 "$$($(TESTTMP)/test_nilpy_aoc26)" "x:2"
 	# float's own methods: is_integer/hex/as_integer_ratio/conjugate. A float used
 	# to carry NONE of them, and the call COMPILED and raised "object is not
 	# callable" at run time. Expected output is CPython 3's on the same source.
@@ -9800,7 +9800,7 @@ test-core: $(COMPILER)
 	# a mixin BEFORE the parent beats it, one AFTER it loses to the whole parent chain.
 	# Every value below is CPython 3's on the equivalent pure-Python hierarchy.
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_multiple_inheritance_imported_base.npy $(TESTTMP)/test_nilpy_miimp26
-	test "$$($(TESTTMP)/test_nilpy_miimp26)" = "$$(printf 'before: mixin-wins local 10 plain\nafter:  proto local 12\nplain:  mixin-wins mixin-plain 14\nsolo:   solo plain 16')"
+	tools/expect_same.sh test_nilpy_miimp26.2 "$$($(TESTTMP)/test_nilpy_miimp26)" "$$(printf 'before: mixin-wins local 10 plain\nafter:  proto local 12\nplain:  mixin-wins mixin-plain 14\nsolo:   solo plain 16')"
 	# both import spellings must resolve the SAME roots. One concept had three
 	# hardcoded copies -- a helper for `from X import a` and two inline lists in
 	# the plain `import X` path -- and they drifted apart in BOTH directions:
@@ -9846,7 +9846,7 @@ test-core: $(COMPILER)
 	# dict subclass, the plain containers unchanged, and a non-container class
 	# still raising. feature-nilpy-subclass-a-builtin-type
 	./$(COMPILER) test/test_nilpy_subclass_a_builtin_type.npy $(TESTTMP)/test_nilpy_subbuiltin26
-	test "$$($(TESTTMP)/test_nilpy_subbuiltin26)" = "$$(printf '3 1 [2, 3] True False 6\n1\n2\n3\n2 1 True False 2\n['\''a'\'', '\''b'\'']\na\nb\n3 [5, 6] True ['\''x'\''] 1 True\nTypeError')"
+	tools/expect_same.sh test_nilpy_subbuiltin26.2 "$$($(TESTTMP)/test_nilpy_subbuiltin26)" "$$(printf '3 1 [2, 3] True False 6\n1\n2\n3\n2 1 True False 2\n['\''a'\'', '\''b'\'']\na\nb\n3 [5, 6] True ['\''x'\''] 1 True\nTypeError')"
 	# `list.append(self, x)` -- a builtin type's method called UNBOUND with an
 	# explicit self -- was `undefined variable (list)`, so the very first thing a
 	# builtin subclass does (override a method, delegate to the base) did not
@@ -9858,7 +9858,7 @@ test-core: $(COMPILER)
 	# `dict()`) keep their own path. Output is byte-identical to CPython's.
 	# bug-n-a-builtin-types-method-cannot-be-called-unbound
 	./$(COMPILER) test/test_nilpy_unbound_builtin_method.npy $(TESTTMP)/test_nilpy_unbndbuiltin26
-	test "$$($(TESTTMP)/test_nilpy_unbndbuiltin26)" = "$$(printf '2 7 7 7\n2 1 2\n2\n1\n2\n[1, 2, 3] ['\''k'\''] 2')"
+	tools/expect_same.sh test_nilpy_unbndbuiltin26.2 "$$($(TESTTMP)/test_nilpy_unbndbuiltin26)" "$$(printf '2 7 7 7\n2 1 2\n2\n1\n2\n[1, 2, 3] ['\''k'\''] 2')"
 	# A builtin subclass's OVERRIDE of a protocol member ran ZERO times: the
 	# identity->kind widening that made len/in/slice work on a subclass also
 	# handed those instances to the CONTAINER lowering, which goes straight to
@@ -9871,15 +9871,15 @@ test-core: $(COMPILER)
 	# byte-identical to CPython's.
 	# bug-n-a-builtin-subclass-subscript-operator-skips-the-override
 	./$(COMPILER) test/test_nilpy_builtin_subclass_dunder_dispatch.npy $(TESTTMP)/test_nilpy_subdunder26
-	test "$$($(TESTTMP)/test_nilpy_subdunder26)" = "$$(printf 'D.set\nD.get\n1\nD.len\n1\nD.contains\nTrue\nD.del\n0\nL.get\n10\nL.set\n99\nL.len\n2\nL.contains\nTrue\nL.del\n1 99\nRO.get\n1 1\n[9, 3] 2 True 9\n['\''y'\''] 1 True 2')"
+	tools/expect_same.sh test_nilpy_subdunder26.2 "$$($(TESTTMP)/test_nilpy_subdunder26)" "$$(printf 'D.set\nD.get\n1\nD.len\n1\nD.contains\nTrue\nD.del\n0\nL.get\n10\nL.set\n99\nL.len\n2\nL.contains\nTrue\nL.del\n1 99\nRO.get\n1 1\n[9, 3] 2 True 9\n['\''y'\''] 1 True 2')"
 	./$(COMPILER) test/test_nilpy_from_import_binds_provided_names.npy $(TESTTMP)/test_nilpy_fromimpbind26
-	test "$$($(TESTTMP)/test_nilpy_fromimpbind26)" = "$$(printf '1 1\na/b y.txt c/d\nplain\n5\nshadowed')"
+	tools/expect_same.sh test_nilpy_fromimpbind26.2 "$$($(TESTTMP)/test_nilpy_fromimpbind26)" "$$(printf '1 1\na/b y.txt c/d\nplain\n5\nshadowed')"
 	./$(COMPILER) test/test_nilpy_two_argument_super.npy $(TESTTMP)/test_nilpy_super2arg26
-	test "$$($(TESTTMP)/test_nilpy_super2arg26)" = "$$(printf '3\n4 8\nTwo+Base\nstream')"
+	tools/expect_same.sh test_nilpy_super2arg26.2 "$$($(TESTTMP)/test_nilpy_super2arg26)" "$$(printf '3\n4 8\nTwo+Base\nstream')"
 	./$(COMPILER) test/test_nilpy_subscript_container_literal.npy $(TESTTMP)/test_nilpy_sublit26
-	test "$$($(TESTTMP)/test_nilpy_sublit26)" = "$$(printf '1\n8\n20\n2\n2\n3\nno yes\nx y\n[1, 2]\n(1, 2)\n[1, 2, 3]')"
+	tools/expect_same.sh test_nilpy_sublit26.2 "$$($(TESTTMP)/test_nilpy_sublit26)" "$$(printf '1\n8\n20\n2\n2\n3\nno yes\nx y\n[1, 2]\n(1, 2)\n[1, 2, 3]')"
 	./$(COMPILER) test/test_nilpy_import_spellings.npy $(TESTTMP)/test_nilpy_impspell26
-	test "$$($(TESTTMP)/test_nilpy_impspell26)" = "$$(printf 'both spellings resolve\nunits still resolve')"
+	tools/expect_same.sh test_nilpy_impspell26.2 "$$($(TESTTMP)/test_nilpy_impspell26)" "$$(printf 'both spellings resolve\nunits still resolve')"
 	# `from <shim> import Class` then `Class.ATTR` was `undefined variable`, while
 	# the qualified form, the literal mimic_ filename and the plain-module form all
 	# worked. A from-import registers the imported NAME as a unit alias (so
@@ -9890,7 +9890,7 @@ test-core: $(COMPILER)
 	# guard's reason to exist, so suppressing the alias outright fails HERE.
 	# bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_shim_from_import_class_attrs.npy $(TESTTMP)/test_nilpy_shimattr26
-	test "$$($(TESTTMP)/test_nilpy_shimattr26)" = "$$(printf '1\n3\n9\n7\n9\n1\n49\nok')"
+	tools/expect_same.sh test_nilpy_shimattr26.2 "$$($(TESTTMP)/test_nilpy_shimattr26)" "$$(printf '1\n3\n9\n7\n9\n1\n49\nok')"
 	# `from M import X as alias` lost what X was, two independent ways: a renamed
 	# MODULE resolved against the module the import was written against rather than
 	# what the name names (the un-renamed form worked only by accident, via a chase
@@ -9901,7 +9901,7 @@ test-core: $(COMPILER)
 	# "2+ characters crashes" reading was a confound for the RETURN TYPE.
 	# bug-n-from-import-with-an-as-rename-loses-what-it-renames
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_from_import_as_rename.npy $(TESTTMP)/test_nilpy_asrename26
-	test "$$($(TESTTMP)/test_nilpy_asrename26)" = "$$(printf 'parsed:x\nparsed:y\n7\n7\nQ\n7\nR')"
+	tools/expect_same.sh test_nilpy_asrename26.2 "$$($(TESTTMP)/test_nilpy_asrename26)" "$$(printf 'parsed:x\nparsed:y\n7\n7\nQ\n7\nR')"
 	# a RENAMED class must not become a MODULE alias. The guard that skips the
 	# submodule-alias registration for a class asked whether the unit declares a
 	# class named the ALIAS, when the class is named the SOURCE name -- so with a
@@ -9924,7 +9924,7 @@ test-core: $(COMPILER)
 	# case-sensitivity guarantee that same predicate exists for.
 	# bug-n-a-renamed-class-loses-its-class-level-attributes
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_renamed_class_attrs.npy $(TESTTMP)/test_nilpy_rencattr26
-	test "$$($(TESTTMP)/test_nilpy_rencattr26)" = "$$(printf '1\n3\nconstructed\n1\n99\n3')"
+	tools/expect_same.sh test_nilpy_rencattr26.2 "$$($(TESTTMP)/test_nilpy_rencattr26)" "$$(printf '1\n3\nconstructed\n1\n99\n3')"
 	# TWO imported bases have no answer and are REFUSED, not half-taken
 	! ./$(COMPILER) -Futest/nilpy_units test/test_nilpy_two_imported_bases_fail.npy $(TESTTMP)/test_nilpy_twoimp26 > $(TESTTMP)/test_nilpy_twoimp.log 2>&1
 	grep -q 'names TWO base classes whose bodies are not in this file' $(TESTTMP)/test_nilpy_twoimp.log
@@ -9933,8 +9933,8 @@ test-core: $(COMPILER)
 	# that passes because the pass never ran asserts nothing.
 	./$(COMPILER) test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O0 >/dev/null
 	./$(COMPILER) -O3 test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O3 >/dev/null
-	test "$$($(TESTTMP)/test_opt_sr_O0)" = "$$($(TESTTMP)/test_opt_sr_O3)"
-	test "$$($(TESTTMP)/test_opt_sr_O0)" = "$$(printf 'int   5 10\nshort -56 -112\nword  4464 8928\nulong 5 10\nint64 8589934602\nptr   0\nconstl 25\nbetween\nafter  12\nbr shortint neg\nbr word small\nbr ulong small\nbr bool true\nbr constl GT\nbr between\nbr after neg\nmem   -112 -112 -110')"
+	tools/expect_same.sh test_opt_sr_O0.3 "$$($(TESTTMP)/test_opt_sr_O0)" "$$($(TESTTMP)/test_opt_sr_O3)"
+	tools/expect_same.sh test_opt_sr_O0.4 "$$($(TESTTMP)/test_opt_sr_O0)" "$$(printf 'int   5 10\nshort -56 -112\nword  4464 8928\nulong 5 10\nint64 8589934602\nptr   0\nconstl 25\nbetween\nafter  12\nbr shortint neg\nbr word small\nbr ulong small\nbr bool true\nbr constl GT\nbr between\nbr after neg\nmem   -112 -112 -110')"
 	PXXDBG='a.reload:*' ./$(COMPILER) -O3 test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O3b 2>&1 | grep 'a.reload marked' > $(TESTTMP)/test_opt_sr_marks.log
 	test "$$(grep -c 'a.reload marked' $(TESTTMP)/test_opt_sr_marks.log)" -ge 6
 	# ...and the two WIDENED statement kinds each fired: `bo` is only ever
@@ -9947,10 +9947,10 @@ test-core: $(COMPILER)
 	# registered for the program's own class -- one row for two classes, so the
 	# class became its own parent and the ancestor walk hung with no diagnostic.
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_class_named_after_its_imported_base.npy $(TESTTMP)/test_nilpy_samename26
-	test "$$($(TESTTMP)/test_nilpy_samename26)" = "$$(printf 'override: derived\ninherited: pascal-side\nbase: base pascal-side')"
+	tools/expect_same.sh test_nilpy_samename26.2 "$$($(TESTTMP)/test_nilpy_samename26)" "$$(printf 'override: derived\ninherited: pascal-side\nbase: base pascal-side')"
 	# the same shape with a .py MODULE — see the note on this pair in test-nilpy
 	./$(COMPILER) test/test_nilpy_qualified_base_same_name.npy $(TESTTMP)/test_nilpy_qbasename26
-	test "$$($(TESTTMP)/test_nilpy_qbasename26)" = "$$(printf 'derived\nmodule\nmodule')"
+	tools/expect_same.sh test_nilpy_qbasename26.2 "$$($(TESTTMP)/test_nilpy_qbasename26)" "$$(printf 'derived\nmodule\nmodule')"
 	# A long statement chain in an IMPORTED module, compiled under a DELIBERATELY
 	# SMALL stack. Lowering a statement list used to recurse once per statement
 	# (~6 KB a frame), so html5lib reached 1728 frames / ~10 MB and the compiler
@@ -9960,47 +9960,47 @@ test-core: $(COMPILER)
 	# not the main program — top-level statements are lowered one at a time.
 	# bug-n-the-module-locals-cap-hides-a-compiler-stack-overflow
 	bash -c 'ulimit -s 1024; ./$(COMPILER) test/test_nilpy_deep_statement_chain.npy $(TESTTMP)/test_nilpy_deepseq26'
-	test "$$($(TESTTMP)/test_nilpy_deepseq26)" = "$$(printf '0\n399')"
+	tools/expect_same.sh test_nilpy_deepseq26.2 "$$($(TESTTMP)/test_nilpy_deepseq26)" "$$(printf '0\n399')"
 	# and the cycle itself REPORTS rather than spinning, whatever caused it
 	! ./$(COMPILER) test/test_nilpy_class_inherits_itself_fail.npy $(TESTTMP)/test_nilpy_selfbase26 > $(TESTTMP)/test_nilpy_selfbase.log 2>&1
 	grep -q 'cannot inherit from itself' $(TESTTMP)/test_nilpy_selfbase.log
 	./$(COMPILER) test/test_nilpy_dict_fromkeys.npy $(TESTTMP)/test_nilpy_fromkeys26
-	test "$$($(TESTTMP)/test_nilpy_fromkeys26)" = "$$(printf 'deduped: 3 b a c\nvalue is None: True\nempty: 0')"
+	tools/expect_same.sh test_nilpy_fromkeys26.2 "$$($(TESTTMP)/test_nilpy_fromkeys26)" "$$(printf 'deduped: 3 b a c\nvalue is None: True\nempty: 0')"
 	./$(COMPILER) test/test_nilpy_tuple_return.npy $(TESTTMP)/test_nilpy_tupret26
-	test "$$($(TESTTMP)/test_nilpy_tupret26)" = "$$(printf 'index: a 2 len: 2\nunpack: a 2\nthree: 3 6 x\none-tuple: 5 1\nsubscript call: 2\niter a\niter 2\nkwonly: 7 z')"
+	tools/expect_same.sh test_nilpy_tupret26.2 "$$($(TESTTMP)/test_nilpy_tupret26)" "$$(printf 'index: a 2 len: 2\nunpack: a 2\nthree: 3 6 x\none-tuple: 5 1\nsubscript call: 2\niter a\niter 2\nkwonly: 7 z')"
 	./$(COMPILER) test/test_nilpy_union_annotation.npy $(TESTTMP)/test_nilpy_union26
-	test "$$($(TESTTMP)/test_nilpy_union26)" = "$$(printf 'value: 3\nnone: True\nzero is not None: True 0\nnone is None: True\nunion of two real types keeps the first: 42')"
+	tools/expect_same.sh test_nilpy_union26.2 "$$($(TESTTMP)/test_nilpy_union26)" "$$(printf 'value: 3\nnone: True\nzero is not None: True 0\nnone is None: True\nunion of two real types keeps the first: 42')"
 	./$(COMPILER) test/test_nilpy_dataclass_dict_factory.npy $(TESTTMP)/test_nilpy_dcdict26
-	test "$$($(TESTTMP)/test_nilpy_dcdict26)" = "$$(printf 'F 1.5 1 because 7\nfresh per construction: 0 0')"
+	tools/expect_same.sh test_nilpy_dcdict26.2 "$$($(TESTTMP)/test_nilpy_dcdict26)" "$$(printf 'F 1.5 1 because 7\nfresh per construction: 0 0')"
 	./$(COMPILER) test/test_nilpy_counter.npy $(TESTTMP)/test_nilpy_counter26
-	test "$$($(TESTTMP)/test_nilpy_counter26)" = "$$(printf 'missing reads zero: 0\nstored: 2 len: 1\nfrom list: 2 1\nafter update: 2 3 1\nmc y 3\nmc x 2\nmc z 1\ntop: y\nkey x 2\nkey y 3\nkey z 1\nas dict: 2')"
+	tools/expect_same.sh test_nilpy_counter26.2 "$$($(TESTTMP)/test_nilpy_counter26)" "$$(printf 'missing reads zero: 0\nstored: 2 len: 1\nfrom list: 2 1\nafter update: 2 3 1\nmc y 3\nmc x 2\nmc z 1\ntop: y\nkey x 2\nkey y 3\nkey z 1\nas dict: 2')"
 	./$(COMPILER) test/test_nilpy_re.npy $(TESTTMP)/test_nilpy_re26
-	test "$$($(TESTTMP)/test_nilpy_re26)" = "$$(printf 'match ok: C# C #\nno-match is None ok\nsearch: 123\nfullmatch none: True\nsub: a b c\nsub groupref: Csharp D\nfindall n: 3 C# Db E\nfindall groups n: 3\ncompiled match: True True\ncompiled via module fn: True\nescape ok: True\nstart/stop: 0 2')"
+	tools/expect_same.sh test_nilpy_re26.2 "$$($(TESTTMP)/test_nilpy_re26)" "$$(printf 'match ok: C# C #\nno-match is None ok\nsearch: 123\nfullmatch none: True\nsub: a b c\nsub groupref: Csharp D\nfindall n: 3 C# Db E\nfindall groups n: 3\ncompiled match: True True\ncompiled via module fn: True\nescape ok: True\nstart/stop: 0 2')"
 	./$(COMPILER) test/test_nilpy_variant.npy $(TESTTMP)/test_nilpy_variant26
-	test "$$($(TESTTMP)/test_nilpy_variant26)" = "$$(printf '5\n3.14\nTrue')"
+	tools/expect_same.sh test_nilpy_variant26.2 "$$($(TESTTMP)/test_nilpy_variant26)" "$$(printf '5\n3.14\nTrue')"
 	./$(COMPILER) test/test_nilpy_class.npy $(TESTTMP)/test_nilpy_class26
-	test "$$($(TESTTMP)/test_nilpy_class26)" = "25"
+	tools/expect_same.sh test_nilpy_class26 "$$($(TESTTMP)/test_nilpy_class26)" "25"
 	./$(COMPILER) test/test_nilpy_widen_fix.npy $(TESTTMP)/test_nilpy_widen_fix26
 	# CPython's answer, not pxx's. This expectation used to record 5.0/7.0 —
 	# the bug itself, kept green by the test
 	# (bug-nilpy-int-prints-as-float-when-the-name-is-widened-later).
-	test "$$($(TESTTMP)/test_nilpy_widen_fix26)" = "$$(printf '5\n3.14\n7\n2.5')"
+	tools/expect_same.sh test_nilpy_widen_fix26 "$$($(TESTTMP)/test_nilpy_widen_fix26)" "$$(printf '5\n3.14\n7\n2.5')"
 	./$(COMPILER) test/test_nilpy_call_return_infer.npy $(TESTTMP)/test_nilpy_call_return_infer26
-	test "$$($(TESTTMP)/test_nilpy_call_return_infer26)" = "42"
+	tools/expect_same.sh test_nilpy_call_return_infer26 "$$($(TESTTMP)/test_nilpy_call_return_infer26)" "42"
 	./$(COMPILER) test/test_nilpy_c_define_const.npy $(TESTTMP)/test_nilpy_c_define_const26
-	test "$$($(TESTTMP)/test_nilpy_c_define_const26)" = "$$(printf '0\n100\n101')"
+	tools/expect_same.sh test_nilpy_c_define_const26 "$$($(TESTTMP)/test_nilpy_c_define_const26)" "$$(printf '0\n100\n101')"
 	./$(COMPILER) test/test_nilpy_c_pointer.npy $(TESTTMP)/test_nilpy_c_pointer26
-	test "$$($(TESTTMP)/test_nilpy_c_pointer26)" = "1"
+	tools/expect_same.sh test_nilpy_c_pointer26 "$$($(TESTTMP)/test_nilpy_c_pointer26)" "1"
 	./$(COMPILER) test/test_nilpy_convert.npy $(TESTTMP)/test_nilpy_convert26
-	test "$$($(TESTTMP)/test_nilpy_convert26)" = "$$(printf '3\n42')"
+	tools/expect_same.sh test_nilpy_convert26.2 "$$($(TESTTMP)/test_nilpy_convert26)" "$$(printf '3\n42')"
 	./$(COMPILER) test/test_nilpy_bool.npy $(TESTTMP)/test_nilpy_bool26
-	test "$$($(TESTTMP)/test_nilpy_bool26)" = "$$(printf 'True\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nFalse\nFalse\nzero is falsy\nfive is truthy')"
+	tools/expect_same.sh test_nilpy_bool26.2 "$$($(TESTTMP)/test_nilpy_bool26)" "$$(printf 'True\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\nFalse\nTrue\nFalse\nFalse\nFalse\nzero is falsy\nfive is truthy')"
 	# bool is an int subclass: &/|/^/<</>> on booleans compute, and a
 	# PARENTHESIZED comparison next to a bitwise op is accepted (it is what
 	# PyBitGuard's own message asks for). Unparenthesized `x & 1 == 1` must
 	# still be refused -- that is the precedence typo the guard exists for.
 	./$(COMPILER) test/test_nilpy_bitwise_on_booleans.npy $(TESTTMP)/test_nilpy_bitwise_on_booleans26
-	test "$$($(TESTTMP)/test_nilpy_bitwise_on_booleans26)" = "$$(printf 'False\nTrue\nTrue\nTrue\nFalse\nTrue\nFalse\n1\n1\n5\n8\n2\n2')"
+	tools/expect_same.sh test_nilpy_bitwise_on_booleans26.2 "$$($(TESTTMP)/test_nilpy_bitwise_on_booleans26)" "$$(printf 'False\nTrue\nTrue\nTrue\nFalse\nTrue\nFalse\n1\n1\n5\n8\n2\n2')"
 	# ...and the OTHER half of "bool is an int": True counts as +1, never as
 	# OLE's VARIANT_TRUE = -1. The guard for the Pascal side adopting FPC's -1
 	# (bug-p-variant-to-int-and-char-conversion-diverges-from-fpc): NilPy must
@@ -10008,11 +10008,11 @@ test-core: $(COMPILER)
 	# in four places, walking around the lowering seam that keeps NilPy on
 	# pylib's helpers. Counter arithmetic was among them. Diffed against CPython.
 	./$(COMPILER) test/test_nilpy_bool_is_an_int_not_ole_minus_one.npy $(TESTTMP)/test_nilpy_bool_int26
-	test "$$($(TESTTMP)/test_nilpy_bool_int26)" = "$$(printf '2\n2\n2 1\n3\n2\nTrue 2\n2 1')"
+	tools/expect_same.sh test_nilpy_bool_int26.2 "$$($(TESTTMP)/test_nilpy_bool_int26)" "$$(printf '2\n2\n2 1\n3\n2\nTrue 2\n2 1')"
 	# Python's dot-edge float spellings `.5` and `5.` (and `.5e3` / `5.e-3`),
 	# which the shared Pascal scanner cannot lex -- NilPy has its own lexer.
 	./$(COMPILER) test/test_nilpy_dot_edge_float_literals.npy $(TESTTMP)/test_nilpy_dot_edge_float26
-	test "$$($(TESTTMP)/test_nilpy_dot_edge_float26)" = "$$(printf '0.5\n5.0\n1.25\n10.0\n500.0\n5000.0\n0.005\n-0.5\n[0.5, 1.5, 2.0]\n4.0\nhalf\n1.5\n0.5\n5.0\n1000.0')"
+	tools/expect_same.sh test_nilpy_dot_edge_float26.2 "$$($(TESTTMP)/test_nilpy_dot_edge_float26)" "$$(printf '0.5\n5.0\n1.25\n10.0\n500.0\n5000.0\n0.005\n-0.5\n[0.5, 1.5, 2.0]\n4.0\nhalf\n1.5\n0.5\n5.0\n1000.0')"
 	# min/max at 3+ positional args fold through the 2-argument overload; the
 	# 1-/2-arg forms and a user shadow at the folded arity are untouched.
 	# `is` is IDENTITY in Python, never Pascal's `E is TClass` type test -- the
@@ -10023,44 +10023,44 @@ test-core: $(COMPILER)
 	# Pins two tickets that were fixed by unrelated exact-decimal work with
 	# nothing guarding the behaviour; second half asserts float(str(v)) == v.
 	./$(COMPILER) test/test_nilpy_float_repr_roundtrip.npy $(TESTTMP)/test_nilpy_float_repr26
-	test "$$($(TESTTMP)/test_nilpy_float_repr26)" = "$$(printf '3.3333333333333335\n0.3333333333333333\n0.30000000000000004\n1e-20\n1e-300\n1.23e+18\n-0.0\n0.0\n1e+16\n1e+17\n5e-324\n1.7976931348623157e+308\n2.2250738585072014e-308\n0.1\n0.2\n0.14285714285714285\n0.2857142857142857\n1e+100\n-1e-100\n123456789.12345679\n1.5\n100.0\n0.5\n3.14159265358979\n1e-05\n0.0001\n1000000000000000.0\n1e+21\n1e+22\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue')"
+	tools/expect_same.sh test_nilpy_float_repr26.2 "$$($(TESTTMP)/test_nilpy_float_repr26)" "$$(printf '3.3333333333333335\n0.3333333333333333\n0.30000000000000004\n1e-20\n1e-300\n1.23e+18\n-0.0\n0.0\n1e+16\n1e+17\n5e-324\n1.7976931348623157e+308\n2.2250738585072014e-308\n0.1\n0.2\n0.14285714285714285\n0.2857142857142857\n1e+100\n-1e-100\n123456789.12345679\n1.5\n100.0\n0.5\n3.14159265358979\n1e-05\n0.0001\n1000000000000000.0\n1e+21\n1e+22\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue\nTrue')"
 	# `obj += n` on a class instance: __iadd__, else __add__ + rebind, else a
 	# real TypeError -- all three used to silently leave the name holding 0.
 	./$(COMPILER) test/test_nilpy_augmented_assign_class_dunder.npy $(TESTTMP)/test_nilpy_aug_class26
-	test "$$($(TESTTMP)/test_nilpy_aug_class26)" = "$$(printf '15\n12\n48\n9\n2\n7\n21\n10\ncaught TypeError\n6\n[1, 2, 3] [1, 2, 3]')"
+	tools/expect_same.sh test_nilpy_aug_class26.2 "$$($(TESTTMP)/test_nilpy_aug_class26)" "$$(printf '15\n12\n48\n9\n2\n7\n21\n10\ncaught TypeError\n6\n[1, 2, 3] [1, 2, 3]')"
 	# ...and the same on a class-typed FIELD (`h.acc += 5`, `self.acc += k`),
 	# which takes a DIFFERENT path: a dotted target is claimed by the shared
 	# expression tail before NilPy's own augmented site can see it.
 	./$(COMPILER) test/test_nilpy_augmented_assign_class_field.npy $(TESTTMP)/test_nilpy_aug_field26
-	test "$$($(TESTTMP)/test_nilpy_aug_field26)" = "$$(printf '105\n103\n309\n44\n4\n12\n15\n14\n56\n28\n38\n11\n[1, 2, 3]\n42\nTypeError')"
+	tools/expect_same.sh test_nilpy_aug_field26.2 "$$($(TESTTMP)/test_nilpy_aug_field26)" "$$(printf '105\n103\n309\n44\n4\n12\n15\n14\n56\n28\n38\n11\n[1, 2, 3]\n42\nTypeError')"
 	# a NilPy def named like a Pascal intrinsic wins over the intrinsic:
 	# sizeof was claimed by ParseFactorCore while high/low/length declined.
 	./$(COMPILER) test/test_nilpy_def_shadows_pascal_intrinsic.npy $(TESTTMP)/test_nilpy_intrinsic26
-	test "$$($(TESTTMP)/test_nilpy_intrinsic26)" = "$$(printf '10\n4\n2\n6\n105')"
+	tools/expect_same.sh test_nilpy_intrinsic26.2 "$$($(TESTTMP)/test_nilpy_intrinsic26)" "$$(printf '10\n4\n2\n6\n105')"
 	./$(COMPILER) test/test_nilpy_dataclass_eq.npy $(TESTTMP)/test_nilpy_dataclass_eq26
-	test "$$($(TESTTMP)/test_nilpy_dataclass_eq26)" = "$$(printf 'True\nFalse\nFalse\nTrue\nTrue\nFalse\nFalse\nFalse\nFalse\nTrue\nFalse\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue')"
+	tools/expect_same.sh test_nilpy_dataclass_eq26.2 "$$($(TESTTMP)/test_nilpy_dataclass_eq26)" "$$(printf 'True\nFalse\nFalse\nTrue\nTrue\nFalse\nFalse\nFalse\nFalse\nTrue\nFalse\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue')"
 	./$(COMPILER) test/test_nilpy_is_identity_vs_class_test.npy $(TESTTMP)/test_nilpy_is_identity26
-	test "$$($(TESTTMP)/test_nilpy_is_identity26)" = "$$(printf 'ctor 1\n--- is with a construction on the right\nctor 2\nFalse\n--- is not\nctor 3\nTrue\n--- both sides constructed\nctor 4\nctor 5\nFalse\n--- nested in a call, a paren, a list\nctor 6\nFalse\nctor 7\n[False]\nctor 8\nFalse\n--- identity that is actually True\nTrue\nFalse\n--- a different class on the right is still identity, not a type test\nFalse\n--- == still constructs and compares\nctor 9\nFalse')"
+	tools/expect_same.sh test_nilpy_is_identity26.3 "$$($(TESTTMP)/test_nilpy_is_identity26)" "$$(printf 'ctor 1\n--- is with a construction on the right\nctor 2\nFalse\n--- is not\nctor 3\nTrue\n--- both sides constructed\nctor 4\nctor 5\nFalse\n--- nested in a call, a paren, a list\nctor 6\nFalse\nctor 7\n[False]\nctor 8\nFalse\n--- identity that is actually True\nTrue\nFalse\n--- a different class on the right is still identity, not a type test\nFalse\n--- == still constructs and compares\nctor 9\nFalse')"
 	./$(COMPILER) test/test_nilpy_min_max_variadic.npy $(TESTTMP)/test_nilpy_min_max_variadic26
-	test "$$($(TESTTMP)/test_nilpy_min_max_variadic26)" = "$$(printf '1\n3\n0\n5\n3\n3.5\n0.5\nc\na\n4 11\n14\n1\n3\n2\n9\no\n100')"
+	tools/expect_same.sh test_nilpy_min_max_variadic26.2 "$$($(TESTTMP)/test_nilpy_min_max_variadic26)" "$$(printf '1\n3\n0\n5\n3\n3.5\n0.5\nc\na\n4 11\n14\n1\n3\n2\n9\no\n100')"
 	@# ...and the positional half of the same rule for builtins with NO pylib
 	@# proc (ord/chr/abs, name-dispatched intrinsics) and for one whose arity a
 	@# def happens to match (set): a call ABOVE the def reaches the builtin.
 	./$(COMPILER) test/test_nilpy_def_shadows_builtin_positionally.npy $(TESTTMP)/test_nilpy_defshadowpos26
-	test "$$($(TESTTMP)/test_nilpy_defshadowpos26)" = "$$(printf '65\nlate-ord\nB\nlate-chr\n3\nlate-abs\n{1}\nlate-set\n1.5\nlate-float\nFalse\nlate-bool\n1\n100\n11\n7')"
+	tools/expect_same.sh test_nilpy_defshadowpos26.2 "$$($(TESTTMP)/test_nilpy_defshadowpos26)" "$$(printf '65\nlate-ord\nB\nlate-chr\n3\nlate-abs\n{1}\nlate-set\n1.5\nlate-float\nFalse\nlate-bool\n1\n100\n11\n7')"
 	# for/while `else` (runs when the loop finished WITHOUT a break -- an empty
 	# iterable still runs it; a break in a NESTED loop must not skip the outer
 	# one's else) and `try ... else` (runs when the body did not raise, before
 	# finally, and its own raise escapes this statement's except).
 	./$(COMPILER) test/test_nilpy_loop_else.npy $(TESTTMP)/test_nilpy_loop_else26
-	test "$$($(TESTTMP)/test_nilpy_loop_else26)" = "$$(printf 'for-else ran\nwhile-else ran\nafter break loop\nm = 2\nempty loop else ran\nouter 1\nouter 2\nouter else ran\nouter else ran, inner skipped\nplain break i = 2\nrange else ran\nrange break i = 1\nfound\nexhausted')"
+	tools/expect_same.sh test_nilpy_loop_else26.2 "$$($(TESTTMP)/test_nilpy_loop_else26)" "$$(printf 'for-else ran\nwhile-else ran\nafter break loop\nm = 2\nempty loop else ran\nouter 1\nouter 2\nouter else ran\nouter else ran, inner skipped\nplain break i = 2\nrange else ran\nrange break i = 1\nfound\nexhausted')"
 	./$(COMPILER) test/test_nilpy_try_else.npy $(TESTTMP)/test_nilpy_try_else26
 	test "$$($(TESTTMP)/test_nilpy_try_else26)" = "$$(printf 'else ran, x = 1\nhandler ran\nbody\nelse\nfinally\nhandler2\nfinally2\ninner body\nouter handler caught the else'"'"'s raise\nearly\nelse\nplain except still works')"
 	./$(COMPILER) test/test_nilpy_membership_bool_return.npy $(TESTTMP)/test_nilpy_membership_bool_return26
-	test "$$($(TESTTMP)/test_nilpy_membership_bool_return26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\n3\n3\n3')"
+	tools/expect_same.sh test_nilpy_membership_bool_return26.2 "$$($(TESTTMP)/test_nilpy_membership_bool_return26)" "$$(printf 'True\nFalse\nTrue\nTrue\nFalse\nTrue\nTrue\nFalse\nTrue\n3\n3\n3')"
 	# a sibling .py MODULE: unit scoping, its own initialisation, both import forms
 	./$(COMPILER) test/test_nilpy_py_module_import.npy $(TESTTMP)/test_nilpy_py_module_import26
-	test "$$($(TESTTMP)/test_nilpy_py_module_import26)" = "$$(printf 'module init ran\nprogram body\n8\n8\n3 3 b\n9\n7')"
+	tools/expect_same.sh test_nilpy_py_module_import26.2 "$$($(TESTTMP)/test_nilpy_py_module_import26)" "$$(printf 'module init ran\nprogram body\n8\n8\n3 3 b\n9\n7')"
 	# ...and that same module's members used as VALUES rather than called —
 	# `h = mod.f`, `map(mod.f, xs)`, `key=mod.f`, `{"k": mod.f}`, `[mod.f]`, and
 	# passed as an argument. Every one was a COMPILE ERROR, `undefined variable
@@ -10265,77 +10265,77 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_setitem_through_a_variant_receiver.npy $(TESTTMP)/test_nilpy_varsetitem26
 	$(TESTTMP)/test_nilpy_varsetitem26 | diff -u test/test_nilpy_setitem_through_a_variant_receiver.expected -
 	./$(COMPILER) test/test_nilpy_ast_literal_eval.npy $(TESTTMP)/test_nilpy_ast_literal26
-	test "$$($(TESTTMP)/test_nilpy_ast_literal26)" = "$$(printf '0.7 0.7 0.5 3\n42 -3 hi\n2\nTrue None\n1 3')"
+	tools/expect_same.sh test_nilpy_ast_literal26.2 "$$($(TESTTMP)/test_nilpy_ast_literal26)" "$$(printf '0.7 0.7 0.5 3\n42 -3 hi\n2\nTrue None\n1 3')"
 	# atexit handlers run at exit (LIFO), io's in-memory buffers behave
 	./$(COMPILER) test/test_nilpy_atexit_io.npy $(TESTTMP)/test_nilpy_atexit_io26
-	test "$$($(TESTTMP)/test_nilpy_atexit_io26)" = "$$(printf '5 6\nhello world\nhello 5\n world\nseed\nmain done\nsecond ran\nbye ran')"
+	tools/expect_same.sh test_nilpy_atexit_io26.2 "$$($(TESTTMP)/test_nilpy_atexit_io26)" "$$(printf '5 6\nhello world\nhello 5\n world\nseed\nmain done\nsecond ran\nbye ran')"
 	# a module whose FIRST line is an import: the pre-scan must not skip it
 	./$(COMPILER) test/test_nilpy_module_first_import.npy $(TESTTMP)/test_nilpy_module_first_import26
-	test "$$($(TESTTMP)/test_nilpy_module_first_import26)" = "$$(printf 'D\n2')"
+	tools/expect_same.sh test_nilpy_module_first_import26.2 "$$($(TESTTMP)/test_nilpy_module_first_import26)" "$$(printf 'D\n2')"
 	# a dotted package import: dots mangle to underscores, and an unresolved
 	# module falls back to the mimic_<module> shim (both import forms)
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_dotted_import.npy $(TESTTMP)/test_nilpy_dotted_import26
-	test "$$($(TESTTMP)/test_nilpy_dotted_import26)" = "$$(printf 'hello world\nhello dotted')"
+	tools/expect_same.sh test_nilpy_dotted_import26.2 "$$($(TESTTMP)/test_nilpy_dotted_import26)" "$$(printf 'hello world\nhello dotted')"
 	# --no-shims refuses that substitution, so "no shims" is a checked property
 	! ./$(COMPILER) --no-shims -Futest/nilpy_units test/test_nilpy_dotted_import.npy $(TESTTMP)/test_nilpy_noshims26 > $(TESTTMP)/test_nilpy_noshims.log 2>&1
 	grep -q "no-shims" $(TESTTMP)/test_nilpy_noshims.log
 	# try/except ImportError picks a branch at COMPILE time, both directions
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import.npy $(TESTTMP)/test_nilpy_fallback26
-	test "$$($(TESTTMP)/test_nilpy_fallback26)" = "hello fallback"
+	tools/expect_same.sh test_nilpy_fallback26.2 "$$($(TESTTMP)/test_nilpy_fallback26)" "hello fallback"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_try_wins.npy $(TESTTMP)/test_nilpy_fallback_try26
-	test "$$($(TESTTMP)/test_nilpy_fallback_try26)" = "hello try branch"
+	tools/expect_same.sh test_nilpy_fallback_try26.2 "$$($(TESTTMP)/test_nilpy_fallback_try26)" "hello try branch"
 	# an import inside a function body / indented suite (pulled by the
 	# pre-scan, so the body's measured extent stays valid)
 	./$(COMPILER) examples/tk/import_in_body.npy $(TESTTMP)/test_nilpy_impbody26
-	test "$$($(TESTTMP)/test_nilpy_impbody26)" = "$$(printf 'in a suite left\nbefore\nafter both')"
+	tools/expect_same.sh test_nilpy_impbody26.2 "$$($(TESTTMP)/test_nilpy_impbody26)" "$$(printf 'in a suite left\nbefore\nafter both')"
 	# star/kwargs METHODS, a nested class, attribute + parenthesised unpack
 	# targets, and a dynamic return from a def with defaulted parameters
 	./$(COMPILER) test/test_nilpy_star_methods_and_targets.npy $(TESTTMP)/test_nilpy_starm26
-	test "$$($(TESTTMP)/test_nilpy_starm26)" = "$$(python3 test/test_nilpy_star_methods_and_targets.npy)"
+	tools/expect_same.sh test_nilpy_starm26.2 "$$($(TESTTMP)/test_nilpy_starm26)" "$$(python3 test/test_nilpy_star_methods_and_targets.npy)"
 	# a declared DEFAULT is what the callee runs with — int, str and None,
 	# defs and methods, every arity, plus a written None
 	./$(COMPILER) test/test_nilpy_default_arguments.npy $(TESTTMP)/test_nilpy_dfl26
-	test "$$($(TESTTMP)/test_nilpy_dfl26)" = "$$(python3 test/test_nilpy_default_arguments.npy)"
+	tools/expect_same.sh test_nilpy_dfl26.2 "$$($(TESTTMP)/test_nilpy_dfl26)" "$$(python3 test/test_nilpy_default_arguments.npy)"
 	# a def reading a module global assigned further down the file
 	./$(COMPILER) test/test_nilpy_forward_module_global.npy $(TESTTMP)/test_nilpy_fwdglob26
-	test "$$($(TESTTMP)/test_nilpy_fwdglob26)" = "$$(python3 test/test_nilpy_forward_module_global.npy)"
+	tools/expect_same.sh test_nilpy_fwdglob26.2 "$$($(TESTTMP)/test_nilpy_fwdglob26)" "$$(python3 test/test_nilpy_forward_module_global.npy)"
 	# the Python json module surface: dumps/loads and dump/load through pathlib
 	./$(COMPILER) test/test_nilpy_json_module.npy $(TESTTMP)/test_nilpy_jsonmod26
-	test "$$($(TESTTMP)/test_nilpy_jsonmod26)" = "$$(python3 test/test_nilpy_json_module.npy)"
+	tools/expect_same.sh test_nilpy_jsonmod26.2 "$$($(TESTTMP)/test_nilpy_jsonmod26)" "$$(python3 test/test_nilpy_json_module.npy)"
 	# .field off a variant when several classes declare it at different offsets
 	./$(COMPILER) test/test_nilpy_ambiguous_variant_field.npy $(TESTTMP)/test_nilpy_ambfld26
-	test "$$($(TESTTMP)/test_nilpy_ambfld26)" = "$$(python3 test/test_nilpy_ambiguous_variant_field.npy)"
+	tools/expect_same.sh test_nilpy_ambfld26.2 "$$($(TESTTMP)/test_nilpy_ambfld26)" "$$(python3 test/test_nilpy_ambiguous_variant_field.npy)"
 	# class attributes BESIDE an __init__ (applied first, overwritable), and a
 	# keyword argument that is not a module assignment
 	./$(COMPILER) test/test_nilpy_class_attrs_with_ctor.npy $(TESTTMP)/test_nilpy_clsattr26
-	test "$$($(TESTTMP)/test_nilpy_clsattr26)" = "$$(python3 test/test_nilpy_class_attrs_with_ctor.npy)"
+	tools/expect_same.sh test_nilpy_clsattr26.4 "$$($(TESTTMP)/test_nilpy_clsattr26)" "$$(python3 test/test_nilpy_class_attrs_with_ctor.npy)"
 	# a dispatched method whose candidates return DIFFERENT classes: the result
 	# stays dynamic, so the next call on it dispatches too
 	./$(COMPILER) test/test_nilpy_dispatch_result_class.npy $(TESTTMP)/test_nilpy_dispres26
-	test "$$($(TESTTMP)/test_nilpy_dispres26)" = "$$(python3 test/test_nilpy_dispatch_result_class.npy)"
+	tools/expect_same.sh test_nilpy_dispres26.2 "$$($(TESTTMP)/test_nilpy_dispres26)" "$$(python3 test/test_nilpy_dispatch_result_class.npy)"
 	# a comprehension whose target is also its source, float defaults, round()
 	# of a dynamic expression, and a nonlocal write reaching the enclosing frame
 	./$(COMPILER) test/test_nilpy_selfassigned_comprehension.npy $(TESTTMP)/test_nilpy_selfcomp26
-	test "$$($(TESTTMP)/test_nilpy_selfcomp26)" = "$$(python3 test/test_nilpy_selfassigned_comprehension.npy)"
+	tools/expect_same.sh test_nilpy_selfcomp26.2 "$$($(TESTTMP)/test_nilpy_selfcomp26)" "$$(python3 test/test_nilpy_selfassigned_comprehension.npy)"
 	# a Pascal unit's .Free must finalize managed fields ONCE, not twice
 	./$(COMPILER) test/test_nilpy_json_reparse_heap.npy $(TESTTMP)/test_nilpy_jsonrep26
-	test "$$($(TESTTMP)/test_nilpy_jsonrep26)" = "$$(python3 test/test_nilpy_json_reparse_heap.npy)"
+	tools/expect_same.sh test_nilpy_jsonrep26.2 "$$($(TESTTMP)/test_nilpy_jsonrep26)" "$$(python3 test/test_nilpy_json_reparse_heap.npy)"
 	# a TUPLE as a dict key must hash by CONTENT, not by the list handle
 	./$(COMPILER) test/test_nilpy_tuple_dict_key.npy $(TESTTMP)/test_nilpy_tupkey26
-	test "$$($(TESTTMP)/test_nilpy_tupkey26)" = "$$(python3 test/test_nilpy_tuple_dict_key.npy)"
+	tools/expect_same.sh test_nilpy_tupkey26.2 "$$($(TESTTMP)/test_nilpy_tupkey26)" "$$(python3 test/test_nilpy_tuple_dict_key.npy)"
 	# a bound method captured inside an imported .py MODULE, not just in main
 	./$(COMPILER) -Futest test/test_nilpy_bound_method_in_module.npy $(TESTTMP)/test_nilpy_boundmod26
-	test "$$($(TESTTMP)/test_nilpy_boundmod26)" = "$$(printf 'built\nw:3\ncaptured in main\npanel')"
+	tools/expect_same.sh test_nilpy_boundmod26.2 "$$($(TESTTMP)/test_nilpy_boundmod26)" "$$(printf 'built\nw:3\ncaptured in main\npanel')"
 	# a bare name is never a method; str.format with a spec; qualified except
 	./$(COMPILER) examples/tk/shadow_format_except.npy $(TESTTMP)/test_nilpy_sfe26
-	test "$$($(TESTTMP)/test_nilpy_sfe26)" = "$$(printf 'module function\nTap BPM: 92.5\ncaught: clipboard')"
+	tools/expect_same.sh test_nilpy_sfe26.2 "$$($(TESTTMP)/test_nilpy_sfe26)" "$$(printf 'module function\nTap BPM: 92.5\ncaught: clipboard')"
 	# a reserved-word constant (tk.END), a class named like an RTL record
 	# (Text), and a property read on a fresh construction (Path(x).name)
 	./$(COMPILER) examples/tk/facade_and_paths.npy $(TESTTMP)/test_nilpy_facade_paths26
-	test "$$($(TESTTMP)/test_nilpy_facade_paths26)" = "$$(printf 'end\nboth left center\nsong.txt\nsong\n/songs/a/song.pdf\n/songs/a/other.md')"
+	tools/expect_same.sh test_nilpy_facade_paths26.2 "$$($(TESTTMP)/test_nilpy_facade_paths26)" "$$(printf 'end\nboth left center\nsong.txt\nsong\n/songs/a/song.pdf\n/songs/a/other.md')"
 	# a nested def's result type, and a capture assigned after the nested def
 	./$(COMPILER) test/test_nilpy_nested_def_result.npy $(TESTTMP)/test_nilpy_nestdef26
-	test "$$($(TESTTMP)/test_nilpy_nestdef26)" = "$$(printf 'big\nbig\n7\nyes\nno')"
+	tools/expect_same.sh test_nilpy_nestdef26.2 "$$($(TESTTMP)/test_nilpy_nestdef26)" "$$(printf 'big\nbig\n7\nyes\nno')"
 	# tuple-vs-variant equality, round(x, n), enumerate() as a value,
 	# and the standard exception names
 	./$(COMPILER) test/test_nilpy_tuple_eq_round_enum.npy $(TESTTMP)/test_nilpy_treq26
@@ -10352,34 +10352,34 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_nilpy_ternary_comp26)" = "$$(printf "[0, 'x', 2]\n[0, 'x', 2]\n['a', 'b']")"
 	# isinstance last in a genexpr filter; f(*[a,b,c]) argument unpacking
 	./$(COMPILER) test/test_nilpy_genexp_isinstance_star.npy $(TESTTMP)/test_nilpy_genexp_star26
-	test "$$($(TESTTMP)/test_nilpy_genexp_star26)" = "$$(printf '5\n[1, 5, 3]\nTrue\n6\n6')"
+	tools/expect_same.sh test_nilpy_genexp_star26.2 "$$($(TESTTMP)/test_nilpy_genexp_star26)" "$$(printf '5\n[1, 5, 3]\nTrue\n6\n6')"
 	# a C library's names must not shadow a Python module qualifier
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_qualifier_vs_cproc.npy $(TESTTMP)/test_nilpy_qual_cproc26
-	test "$$($(TESTTMP)/test_nilpy_qual_cproc26)" = "$$(printf 'main\nbye')"
+	tools/expect_same.sh test_nilpy_qual_cproc26.2 "$$($(TESTTMP)/test_nilpy_qual_cproc26)" "$$(printf 'main\nbye')"
 	# builtin shadowed by a parameter, [::-1] on list and str, the is* predicates
 	./$(COMPILER) test/test_nilpy_builtin_shadow_slice.npy $(TESTTMP)/test_nilpy_bshadow26
-	test "$$($(TESTTMP)/test_nilpy_bshadow26)" = "$$(printf 'int:7\nother\n[3, 2, 1]\ncba\nTrue False False\nTrue True False\nTrue False\nTrue False')"
+	tools/expect_same.sh test_nilpy_bshadow26.2 "$$($(TESTTMP)/test_nilpy_bshadow26)" "$$(printf 'int:7\nother\n[3, 2, 1]\ncba\nTrue False False\nTrue True False\nTrue False\nTrue False')"
 	# the process environment, both surfaces (CPython-diffed)
 	PXX_ENV_PROBE=hello ./$(COMPILER) test/test_env_pascal.pas $(TESTTMP)/test_env_pascal26
-	test "$$(PXX_ENV_PROBE=hello $(TESTTMP)/test_env_pascal26)" = "$$(printf 'hello\n[]\ncount ok')"
+	tools/expect_same.sh test_env_pascal26.2 "$$(PXX_ENV_PROBE=hello $(TESTTMP)/test_env_pascal26)" "$$(printf 'hello\n[]\ncount ok')"
 	./$(COMPILER) test/test_nilpy_environ.npy $(TESTTMP)/test_nilpy_environ26
-	test "$$(PXX_ENV_PROBE=hello $(TESTTMP)/test_nilpy_environ26)" = "$$(printf 'hello\nNone\nfallback\nhello\ntruthy\nunset is falsey')"
+	tools/expect_same.sh test_nilpy_environ26.2 "$$(PXX_ENV_PROBE=hello $(TESTTMP)/test_nilpy_environ26)" "$$(printf 'hello\nNone\nfallback\nhello\ntruthy\nunset is falsey')"
 	# the shape real code uses: the try block imports AND sets a flag
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_fallback_import_mixed.npy $(TESTTMP)/test_nilpy_fallback_mixed26
-	test "$$($(TESTTMP)/test_nilpy_fallback_mixed26)" = "$$(printf 'False\nTrue\npresent')"
+	tools/expect_same.sh test_nilpy_fallback_mixed26.2 "$$($(TESTTMP)/test_nilpy_fallback_mixed26)" "$$(printf 'False\nTrue\npresent')"
 	# an imported name shadows a builtin only in the module that imported it
 	./$(COMPILER) test/test_nilpy_import_scope.npy $(TESTTMP)/test_nilpy_import_scope26
-	test "$$($(TESTTMP)/test_nilpy_import_scope26)" = "$$(printf '3\npage.size=A4\n8')"
+	tools/expect_same.sh test_nilpy_import_scope26.2 "$$($(TESTTMP)/test_nilpy_import_scope26)" "$$(printf '3\npage.size=A4\n8')"
 	# rebinding a name across types widens to a variant, as Python allows
 	./$(COMPILER) test/test_nilpy_rebind_type.npy $(TESTTMP)/test_nilpy_rebind_type26
-	test "$$($(TESTTMP)/test_nilpy_rebind_type26)" = "$$(printf 'plain string\nholder:one\n43\nback to a string')"
+	tools/expect_same.sh test_nilpy_rebind_type26.2 "$$($(TESTTMP)/test_nilpy_rebind_type26)" "$$(printf 'plain string\nholder:one\n43\nback to a string')"
 	# ...and rebinding across two UNRELATED CLASSES widens too: keeping one
 	# static class read the other's fields at the wrong offset (SIGSEGV).
 	# Includes the subclass-refinement control that must NOT widen.
 	./$(COMPILER) test/test_nilpy_rebind_across_unrelated_classes.npy $(TESTTMP)/test_nilpy_rebind_cls26
 	$(TESTTMP)/test_nilpy_rebind_cls26 | diff -u test/test_nilpy_rebind_across_unrelated_classes.expected -
 	./$(COMPILER) test/test_nilpy_str_float.npy $(TESTTMP)/test_nilpy_str_float26
-	test "$$($(TESTTMP)/test_nilpy_str_float26)" = "$$(printf '3.14\n2.5\n-1.25\npi=3.14159\n3\n2')"
+	tools/expect_same.sh test_nilpy_str_float26.2 "$$($(TESTTMP)/test_nilpy_str_float26)" "$$(printf '3.14\n2.5\n-1.25\npi=3.14159\n3\n2')"
 	# `/` is TRUE division: an unannotated `return x / 2` must register a FLOAT
 	# result, not an Int64 the double's bit pattern is then read through. Carries
 	# the `//` / `%` controls that must stay integer, and the redundant-paren
@@ -10387,31 +10387,31 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_true_division_return_type.npy $(TESTTMP)/test_nilpy_truediv26
 	$(TESTTMP)/test_nilpy_truediv26 | diff -u test/test_nilpy_true_division_return_type.expected -
 	./$(COMPILER) test/test_sets.pas $(TESTTMP)/test_sets26
-	test "$$($(TESTTMP)/test_sets26 | tail -1)" = "all set tests completed!"
+	tools/expect_same.sh test_sets26 "$$($(TESTTMP)/test_sets26 | tail -1)" "all set tests completed!"
 	./$(COMPILER) test/test_set_shapes.pas $(TESTTMP)/test_set_shapes26
-	test "$$($(TESTTMP)/test_set_shapes26)" = "$$(printf '1\n1\n1')"
+	tools/expect_same.sh test_set_shapes26 "$$($(TESTTMP)/test_set_shapes26)" "$$(printf '1\n1\n1')"
 	./$(COMPILER) test/test_aggregate_results.pas $(TESTTMP)/test_aggregate_results26
-	test "$$($(TESTTMP)/test_aggregate_results26)" = "$$(printf '1\n1\n1\n1\n1\n1\n2\n5\n16\n20')"
+	tools/expect_same.sh test_aggregate_results26 "$$($(TESTTMP)/test_aggregate_results26)" "$$(printf '1\n1\n1\n1\n1\n1\n2\n5\n16\n20')"
 	./$(COMPILER) test/test_float_literals.pas $(TESTTMP)/test_float_literals26
-	test "$$($(TESTTMP)/test_float_literals26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh test_float_literals26 "$$($(TESTTMP)/test_float_literals26)" "$$(printf '1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_float_write.pas $(TESTTMP)/test_float_write26
-	test "$$($(TESTTMP)/test_float_write26)" = "$$(printf '3.50\n4\n-2.750\n1.0\n0.00\n10.5\n 1.0000000000000000E+000\n-2.0000000000000000E+000\n 0.0000000000000000E+000\n 3.5000000000000000E+000\n 1.2345000000000000E+003')"
+	tools/expect_same.sh test_float_write26 "$$($(TESTTMP)/test_float_write26)" "$$(printf '3.50\n4\n-2.750\n1.0\n0.00\n10.5\n 1.0000000000000000E+000\n-2.0000000000000000E+000\n 0.0000000000000000E+000\n 3.5000000000000000E+000\n 1.2345000000000000E+003')"
 	./$(COMPILER) test/test_float_width.pas $(TESTTMP)/test_float_width26
-	test "$$($(TESTTMP)/test_float_width26)" = "$$(printf '[   3.142]\n[      1.50]\n[  -2.5]\n[   123.46]\n[  10.00]\n[3.1]\n[ 0.00]\n[1000]')"
+	tools/expect_same.sh test_float_width26 "$$($(TESTTMP)/test_float_width26)" "$$(printf '[   3.142]\n[      1.50]\n[  -2.5]\n[   123.46]\n[  10.00]\n[3.1]\n[ 0.00]\n[1000]')"
 	./$(COMPILER) test/test_exceptions.pas $(TESTTMP)/test_exceptions26
-	test "$$($(TESTTMP)/test_exceptions26)" = "$$(printf '1\n2\n4\n5')"
+	tools/expect_same.sh test_exceptions26 "$$($(TESTTMP)/test_exceptions26)" "$$(printf '1\n2\n4\n5')"
 	./$(COMPILER) test/test_exception_unit.pas $(TESTTMP)/test_exception_unit26
-	test "$$($(TESTTMP)/test_exception_unit26)" = "6"
+	tools/expect_same.sh test_exception_unit26 "$$($(TESTTMP)/test_exception_unit26)" "6"
 	./$(COMPILER) test/test_exception_control_error.pas $(TESTTMP)/test_exception_control_flow26
-	test "$$($(TESTTMP)/test_exception_control_flow26)" = "$$(printf '1\n2\n3\n4\n5\n6\n7')"
+	tools/expect_same.sh test_exception_control_flow26 "$$($(TESTTMP)/test_exception_control_flow26)" "$$(printf '1\n2\n3\n4\n5\n6\n7')"
 	./$(COMPILER) test/test_exception_finally.pas $(TESTTMP)/test_exception_finally26
-	test "$$($(TESTTMP)/test_exception_finally26)" = "$$(printf '1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n12')"
+	tools/expect_same.sh test_exception_finally26 "$$($(TESTTMP)/test_exception_finally26)" "$$(printf '1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n12')"
 	./$(COMPILER) test/test_exception_typed.pas $(TESTTMP)/test_exception_typed26
-	test "$$($(TESTTMP)/test_exception_typed26)" = "$$(printf '41\n42\n43\n44\n45')"
+	tools/expect_same.sh test_exception_typed26 "$$($(TESTTMP)/test_exception_typed26)" "$$(printf '41\n42\n43\n44\n45')"
 	./$(COMPILER) test/test_except_derived_caught_by_base.pas $(TESTTMP)/test_except_derived_caught_by_base26
-	test "$$($(TESTTMP)/test_except_derived_caught_by_base26)" = "$$(printf 'caught1:derived\ncaught2:grandchild\ncaught3:exact\ncaught4-specific:specific\ncaught5:sibling\ndone')"
+	tools/expect_same.sh test_except_derived_caught_by_base26 "$$($(TESTTMP)/test_except_derived_caught_by_base26)" "$$(printf 'caught1:derived\ncaught2:grandchild\ncaught3:exact\ncaught4-specific:specific\ncaught5:sibling\ndone')"
 	./$(COMPILER) test/test_empty_class_shorthand.pas $(TESTTMP)/test_empty_class_shorthand26
-	test "$$($(TESTTMP)/test_empty_class_shorthand26)" = "$$(printf 'EBase ok: base error\nEDerived ok: derived error')"
+	tools/expect_same.sh test_empty_class_shorthand26 "$$($(TESTTMP)/test_empty_class_shorthand26)" "$$(printf 'EBase ok: base error\nEDerived ok: derived error')"
 	! ./$(COMPILER) test/test_reraise_error.pas $(TESTTMP)/test_reraise_error26 > $(TESTTMP)/test_reraise_error.log 2>&1
 	grep -q "raise without expression requires an exception handler" $(TESTTMP)/test_reraise_error.log
 	./$(COMPILER) test/test_exception_unit_unhandled.pas $(TESTTMP)/test_exception_unit_unhandled26
@@ -10433,7 +10433,7 @@ test-core: $(COMPILER)
 	@# real value rather than always-false.
 	@# bug-a-assigning-nil-to-a-method-pointer-segfaults
 	./$(COMPILER) test/test_methodptr_nil_assign.pas $(TESTTMP)/test_methodptr_nil26
-	test "$$($(TESTTMP)/test_methodptr_nil26)" = "$$(printf 'hit 1\nvar    assigned=FALSE\nhit 2\nfield  assigned=FALSE\nhit 3\nelem   assigned=FALSE\nvarpar assigned=FALSE\nloop ok')"
+	tools/expect_same.sh test_methodptr_nil26 "$$($(TESTTMP)/test_methodptr_nil26)" "$$(printf 'hit 1\nvar    assigned=FALSE\nhit 2\nfield  assigned=FALSE\nhit 3\nelem   assigned=FALSE\nvarpar assigned=FALSE\nloop ok')"
 	@# The emitted nil check, all three directions, because any two of them pass
 	@# with a broken flag. A call through a nil procvar jumps to address 0 — no
 	@# faulting instruction in the program, no frame, no backtrace — so the check
@@ -10452,7 +10452,7 @@ test-core: $(COMPILER)
 	@$(TESTTMP)/test_nil_check_procvar_off26 >/dev/null 2>&1; rc=$$?; \
 	 test "$$rc" = "139" || { echo "test_nil_check_procvar --no-nil-check: FAIL - exit $$rc, want 139"; exit 1; }
 	./$(COMPILER) test/test_nil_check_catchable.pas $(TESTTMP)/test_nil_check_catchable26
-	test "$$($(TESTTMP)/test_nil_check_catchable26)" = "$$(printf 'before\ncaught: Access violation (nil reference)\nstill running')"
+	tools/expect_same.sh test_nil_check_catchable26 "$$($(TESTTMP)/test_nil_check_catchable26)" "$$(printf 'before\ncaught: Access violation (nil reference)\nstill running')"
 	@# Site class 2: the RECEIVER. The `plain` line is the point — a method that
 	@# touches no field RAN TO COMPLETION on a nil instance and returned
 	@# normally, so nothing faulted and the program misbehaved later somewhere
@@ -10462,20 +10462,20 @@ test-core: $(COMPILER)
 	@# never an instance, and a check keyed on the param NAME alone would have
 	@# wrapped it too.
 	./$(COMPILER) test/test_nil_check_receiver.pas $(TESTTMP)/test_nil_check_receiver26
-	test "$$($(TESTTMP)/test_nil_check_receiver26)" = "$$(printf 'virt v=7\nplain\ncaught virtual: Access violation (nil reference)\ncaught plain: Access violation (nil reference)\nstill running')"
+	tools/expect_same.sh test_nil_check_receiver26 "$$($(TESTTMP)/test_nil_check_receiver26)" "$$(printf 'virt v=7\nplain\ncaught virtual: Access violation (nil reference)\ncaught plain: Access violation (nil reference)\nstill running')"
 	@# Site class 3: a nil INTERFACE, both flavours (COM and CORBA share the
 	@# AN_INTF_CALL path). The check is on the instance pointer, not the IMT --
 	@# PXXIntfIMTOf(nil, ci) walks the instance's RTTI, so this used to fault
 	@# inside a runtime helper, frames away from the call the programmer wrote.
 	./$(COMPILER) test/test_nil_check_interface.pas $(TESTTMP)/test_nil_check_interface26
-	test "$$($(TESTTMP)/test_nil_check_interface26)" = "$$(printf 'go\nval=7\ncaught proc: Access violation (nil reference)\ncaught func: Access violation (nil reference)\ncorba=9\ncaught corba: Access violation (nil reference)\nstill running')"
+	tools/expect_same.sh test_nil_check_interface26 "$$($(TESTTMP)/test_nil_check_interface26)" "$$(printf 'go\nval=7\ncaught proc: Access violation (nil reference)\ncaught func: Access violation (nil reference)\ncorba=9\ncaught corba: Access violation (nil reference)\nstill running')"
 	@# Site class 4 + the {$NILCHECKS} directive. Four corners in one program:
 	@# deref default (unchecked), deref under {$nilchecks on} (read AND write
 	@# raise), call default (checked, class 2), call under {$nilchecks off}
 	@# (NOT checked -- the escape hatch a hot loop needs). The directive is
 	@# tri-state precisely because those two defaults disagree.
 	./$(COMPILER) test/test_nil_check_directive.pas $(TESTTMP)/test_nil_check_directive26
-	test "$$($(TESTTMP)/test_nil_check_directive26)" = "$$(printf '3\n3\ncaught read: Access violation (nil reference)\ncaught write: Access violation (nil reference)\ngo\ndone')"
+	tools/expect_same.sh test_nil_check_directive26 "$$($(TESTTMP)/test_nil_check_directive26)" "$$(printf '3\n3\ncaught read: Access violation (nil reference)\ncaught write: Access violation (nil reference)\ngo\ndone')"
 	@# `nil` in every position a reference-shaped type is expected. Three
 	@# mechanisms, each broken in its own way: overload matching (class,
 	@# interface and method-pointer params all refused nil), the trailing
@@ -10484,7 +10484,7 @@ test-core: $(COMPILER)
 	@# the record's other fields never initialised either).
 	@# Output verified identical to FPC 3.2.2.
 	./$(COMPILER) test/test_nil_argument_positions.pas $(TESTTMP)/test_nil_argument_positions26
-	test "$$($(TESTTMP)/test_nil_argument_positions26)" = "$$(printf 'class\nintf\nplain\nptr\npchar\ndyn\ntake nil\nH 1\ntake set\ndef nil\ndef nil\ndef set\nconst n=4\nconst ev nil')"
+	tools/expect_same.sh test_nil_argument_positions26 "$$($(TESTTMP)/test_nil_argument_positions26)" "$$(printf 'class\nintf\nplain\nptr\npchar\ndyn\ntake nil\nH 1\ntake set\ndef nil\ndef nil\ndef set\nconst n=4\nconst ev nil')"
 	@# A typed const array is stored as initialised .data, not built by ~29
 	@# bytes of startup code PER ELEMENT. Values, not sizes -- a wrong byte is
 	@# the failure that matters, and every baked width is its own chance to be
@@ -10494,7 +10494,7 @@ test-core: $(COMPILER)
 	@# must still work; WR is written to, which a read-only placement would
 	@# fault on. Verified identical to FPC 3.2.2 and on all four cross targets.
 	./$(COMPILER) test/test_const_array_in_data.pas $(TESTTMP)/test_const_array_in_data26
-	test "$$($(TESTTMP)/test_const_array_in_data26)" = "$$(printf '1234605616436508552 0 18446744073709551615 7 \n-1 9223372036854775807 -9223372036854775808 0 \n3735928559 0 1 4294967295 \n0 65535 258 7 \n0 255 128 1 \n-128 127 0 -1 \nTRUE TRUE TRUE TRUE TRUE\nTRUE TRUE TRUE TRUE\n-2147483648 2147483647 0 -1 \nTRUE FALSE TRUE TRUE \n97 90 0 126 \n2 0 1 \n1 2 3 4 5 6 \none two three \n1/2 3/4 \n10 20 30 \n10 99 30 ')"
+	tools/expect_same.sh test_const_array_in_data26 "$$($(TESTTMP)/test_const_array_in_data26)" "$$(printf '1234605616436508552 0 18446744073709551615 7 \n-1 9223372036854775807 -9223372036854775808 0 \n3735928559 0 1 4294967295 \n0 65535 258 7 \n0 255 128 1 \n-128 127 0 -1 \nTRUE TRUE TRUE TRUE TRUE\nTRUE TRUE TRUE TRUE\n-2147483648 2147483647 0 -1 \nTRUE FALSE TRUE TRUE \n97 90 0 126 \n2 0 1 \n1 2 3 4 5 6 \none two three \n1/2 3/4 \n10 20 30 \n10 99 30 ')"
 	@# System.ExitCode + finalization + Halt, all four corners, every exit STATUS
 	@# verified identical to FPC 3.2.2. The status is the contract here, not the
 	@# printed line: FPC does not flush stdout after its unit finalizations, so
@@ -10567,9 +10567,9 @@ test-core: $(COMPILER)
 	# to touch the clobbered fields. gs is unused by userspace on x86-64, which is
 	# why the two can coexist at all. Not --threadsafe: this is about every build.
 	./$(COMPILER) test/test_glibc_tls_coexist.pas $(TESTTMP)/test_glibc_tls_coexist26
-	test "$$($(TESTTMP)/test_glibc_tls_coexist26)" = "GLIBC TLS COEXIST OK"
+	tools/expect_same.sh test_glibc_tls_coexist26 "$$($(TESTTMP)/test_glibc_tls_coexist26)" "GLIBC TLS COEXIST OK"
 	./$(COMPILER) --threadsafe test/test_threadsafe_layout_rtti.pas $(TESTTMP)/test_threadsafe_layout_rtti26
-	test "$$($(TESTTMP)/test_threadsafe_layout_rtti26)" = "threadsafe layout ok"
+	tools/expect_same.sh test_threadsafe_layout_rtti26 "$$($(TESTTMP)/test_threadsafe_layout_rtti26)" "threadsafe layout ok"
 	test ! -s $(TESTTMP)/test_exception_unhandled.out
 	./$(COMPILER) --no-unhandled-handler test/test_exception_unhandled.pas $(TESTTMP)/test_exception_silent26
 	! $(TESTTMP)/test_exception_silent26 > $(TESTTMP)/test_exception_silent.out 2> $(TESTTMP)/test_exception_silent.log
@@ -10591,46 +10591,46 @@ test-core: $(COMPILER)
 	# exactly the window this closes.
 	./$(COMPILER) $(PXXFLAGS) $(COMPILER_SRC) $(TESTTMP)/pascal26-self.$$$$.tmp && mv -f $(TESTTMP)/pascal26-self.$$$$.tmp $(TESTTMP)/pascal26-self
 	$(TESTTMP)/pascal26-self test/hello.pas $(TESTTMP)/self-hello26
-	test "$$($(TESTTMP)/self-hello26)" = "Hello, World!"
+	tools/expect_same.sh self-hello26 "$$($(TESTTMP)/self-hello26)" "Hello, World!"
 	$(TESTTMP)/pascal26-self test/bootstrap_features.pas $(TESTTMP)/self-bootstrap_features26
-	test "$$($(TESTTMP)/self-bootstrap_features26)" = "$$(printf '120\n98\ncase-ok\n0')"
+	tools/expect_same.sh self-bootstrap_features26 "$$($(TESTTMP)/self-bootstrap_features26)" "$$(printf '120\n98\ncase-ok\n0')"
 	$(TESTTMP)/pascal26-self test/records.pas $(TESTTMP)/self-records26
-	test "$$($(TESTTMP)/self-records26)" = "$$(printf '42\n7\n11\n22')"
+	tools/expect_same.sh self-records26 "$$($(TESTTMP)/self-records26)" "$$(printf '42\n7\n11\n22')"
 	$(TESTTMP)/pascal26-self test/procs.pas $(TESTTMP)/self-procs26
-	test "$$($(TESTTMP)/self-procs26 | tail -9)" = "$$(printf '0\n1\n1\n2\n3\n5\n8\n13\n21')"
+	tools/expect_same.sh self-procs26 "$$($(TESTTMP)/self-procs26 | tail -9)" "$$(printf '0\n1\n1\n2\n3\n5\n8\n13\n21')"
 	$(TESTTMP)/pascal26-self test/string_compare.pas $(TESTTMP)/self-string_compare26
-	test "$$($(TESTTMP)/self-string_compare26)" = "$$(printf '1\n1\n1')"
+	tools/expect_same.sh self-string_compare26 "$$($(TESTTMP)/self-string_compare26)" "$$(printf '1\n1\n1')"
 	$(TESTTMP)/pascal26-self test/record_string_field.pas $(TESTTMP)/self_record_string_field26
-	test "$$($(TESTTMP)/self_record_string_field26)" = "$$(printf '1\n4')"
+	tools/expect_same.sh self_record_string_field26 "$$($(TESTTMP)/self_record_string_field26)" "$$(printf '1\n4')"
 	$(TESTTMP)/pascal26-self test/test_heap.pas $(TESTTMP)/self-test_heap26
-	test "$$($(TESTTMP)/self-test_heap26)" = "$$(printf '1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh self-test_heap26 "$$($(TESTTMP)/self-test_heap26)" "$$(printf '1\n1\n1\n1\n1\n1')"
 	$(TESTTMP)/pascal26-self --threadsafe test/test_multithreading.pas $(TESTTMP)/self-test_multithreading26
 	$(TESTTMP)/self-test_multithreading26 | grep -q "multithreading test completed successfully"
 	$(TESTTMP)/pascal26-self test/test_math_unit.pas $(TESTTMP)/self-test_math_unit26
-	test "$$($(TESTTMP)/self-test_math_unit26)" = "$$(printf '42\n999\n10\n20\n256\n6\n144')"
+	tools/expect_same.sh self-test_math_unit26 "$$($(TESTTMP)/self-test_math_unit26)" "$$(printf '42\n999\n10\n20\n256\n6\n144')"
 	$(TESTTMP)/pascal26-self test/fileio.pas $(TESTTMP)/self-fileio26
-	test "$$($(TESTTMP)/self-fileio26 test/hello.pas | sed -n '1,3p')" = "$$(printf 'test/hello.pas\n14\n54')"
+	tools/expect_same.sh self-fileio26 "$$($(TESTTMP)/self-fileio26 test/hello.pas | sed -n '1,3p')" "$$(printf 'test/hello.pas\n14\n54')"
 	$(TESTTMP)/pascal26-self $(PXXFLAGS) $(COMPILER_SRC) $(TESTTMP)/pascal26-next.$$$$.tmp && mv -f $(TESTTMP)/pascal26-next.$$$$.tmp $(TESTTMP)/pascal26-next
 	$(TESTTMP)/pascal26-next test/hello.pas $(TESTTMP)/next-hello26
-	test "$$($(TESTTMP)/next-hello26)" = "Hello, World!"
+	tools/expect_same.sh next-hello26 "$$($(TESTTMP)/next-hello26)" "Hello, World!"
 	$(TESTTMP)/pascal26-next test/bootstrap_features.pas $(TESTTMP)/next-bootstrap_features26
-	test "$$($(TESTTMP)/next-bootstrap_features26)" = "$$(printf '120\n98\ncase-ok\n0')"
+	tools/expect_same.sh next-bootstrap_features26 "$$($(TESTTMP)/next-bootstrap_features26)" "$$(printf '120\n98\ncase-ok\n0')"
 	$(TESTTMP)/pascal26-next test/records.pas $(TESTTMP)/next-records26
-	test "$$($(TESTTMP)/next-records26)" = "$$(printf '42\n7\n11\n22')"
+	tools/expect_same.sh next-records26 "$$($(TESTTMP)/next-records26)" "$$(printf '42\n7\n11\n22')"
 	$(TESTTMP)/pascal26-next test/procs.pas $(TESTTMP)/next-procs26
-	test "$$($(TESTTMP)/next-procs26 | tail -9)" = "$$(printf '0\n1\n1\n2\n3\n5\n8\n13\n21')"
+	tools/expect_same.sh next-procs26 "$$($(TESTTMP)/next-procs26 | tail -9)" "$$(printf '0\n1\n1\n2\n3\n5\n8\n13\n21')"
 	$(TESTTMP)/pascal26-next test/string_compare.pas $(TESTTMP)/next-string_compare26
-	test "$$($(TESTTMP)/next-string_compare26)" = "$$(printf '1\n1\n1')"
+	tools/expect_same.sh next-string_compare26 "$$($(TESTTMP)/next-string_compare26)" "$$(printf '1\n1\n1')"
 	$(TESTTMP)/pascal26-next test/record_string_field.pas $(TESTTMP)/next_record_string_field26
-	test "$$($(TESTTMP)/next_record_string_field26)" = "$$(printf '1\n4')"
+	tools/expect_same.sh next_record_string_field26 "$$($(TESTTMP)/next_record_string_field26)" "$$(printf '1\n4')"
 	$(TESTTMP)/pascal26-next test/test_heap.pas $(TESTTMP)/next-test_heap26
-	test "$$($(TESTTMP)/next-test_heap26)" = "$$(printf '1\n1\n1\n1\n1\n1')"
+	tools/expect_same.sh next-test_heap26 "$$($(TESTTMP)/next-test_heap26)" "$$(printf '1\n1\n1\n1\n1\n1')"
 	$(TESTTMP)/pascal26-next --threadsafe test/test_multithreading.pas $(TESTTMP)/next-test_multithreading26
 	$(TESTTMP)/next-test_multithreading26 | grep -q "multithreading test completed successfully"
 	$(TESTTMP)/pascal26-next test/test_math_unit.pas $(TESTTMP)/next-test_math_unit26
-	test "$$($(TESTTMP)/next-test_math_unit26)" = "$$(printf '42\n999\n10\n20\n256\n6\n144')"
+	tools/expect_same.sh next-test_math_unit26 "$$($(TESTTMP)/next-test_math_unit26)" "$$(printf '42\n999\n10\n20\n256\n6\n144')"
 	$(TESTTMP)/pascal26-next test/fileio.pas $(TESTTMP)/next-fileio26
-	test "$$($(TESTTMP)/next-fileio26 test/hello.pas | sed -n '1,3p')" = "$$(printf 'test/hello.pas\n14\n54')"
+	tools/expect_same.sh next-fileio26 "$$($(TESTTMP)/next-fileio26 test/hello.pas | sed -n '1,3p')" "$$(printf 'test/hello.pas\n14\n54')"
 	$(TESTTMP)/pascal26-next $(PXXFLAGS) $(COMPILER_SRC) $(TESTTMP)/pascal26-fixedpoint.$$$$.tmp && mv -f $(TESTTMP)/pascal26-fixedpoint.$$$$.tmp $(TESTTMP)/pascal26-fixedpoint
 	cmp $(TESTTMP)/pascal26-next $(TESTTMP)/pascal26-fixedpoint
 	./$(COMPILER) $(PXXFLAGS) --threadsafe $(COMPILER_SRC) $(TESTTMP)/pascal26-threadsafe-self.$$$$.tmp && mv -f $(TESTTMP)/pascal26-threadsafe-self.$$$$.tmp $(TESTTMP)/pascal26-threadsafe-self
