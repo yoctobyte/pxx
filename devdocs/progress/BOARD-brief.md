@@ -5,12 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:22 blocked:6 backlog:306 backlog_new:11 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2647 rejected:51`
+`working:3 unfinished:22 blocked:7 backlog:306 backlog_new:11 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2647 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-the-fpc-seed-canary-skips-a-break-already-on-master` [A] — owner: unrecorded
-- `chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring` [A] — owner: pxx-a5
 - `feature-a-error-does-not-halt-so-a-parse-can-be-speculative` [A] — owner: frankA
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
@@ -39,12 +38,13 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-threadsafe-heap-optimize` [A]
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
-## blocked (6) — has an unmet blocker; do not claim
+## blocked (7) — has an unmet blocker; do not claim
 
 - `bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file` [B+S] — blocked-by: feature-pal-esp-posix-fd-semantics
 - `bug-b-nilpy-random-is-never-seeded-and-its-first-draw-is-the-low-bound` [N] — blocked-by: decide-does-nilpy-random-seed-itself-at-import
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
 - `bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio` [T] — blocked-by: decide-t-per-assertion-subjects-or-accept-the-file-level-label
+- `chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring` [A] — blocked-by: chore-t-six-orphan-gui-tests-the-blanket-was-hiding
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 

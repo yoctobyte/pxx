@@ -4,7 +4,7 @@ title: "Wire the nine orphan tests that already pass at HEAD, then gate tools/ch
 track: A
 type: chore
 prio: 40
-status: working
+status: blocked
 found: 2026-08-29
 found-by: pxx-a5 (Track T)
 owner: pxx-a5
