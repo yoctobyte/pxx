@@ -15485,7 +15485,11 @@ read**, and N now has three.
 
 ## 2026-08-29 16:40 — an 18.5h offline gap, and what it cost
 
-**The coordinator session was logged out from ~22:09 on 08-28 to 16:39 on 08-29.**
+**The coordinator session was OUT OF TOKENS from ~22:09 on 08-28 to 16:39 on 08-29.**
+(Corrected by the owner the same afternoon: I recorded this as "logged out", inferring
+the cause from the login prompts I could see. The login was the *recovery*, not the
+cause. **I diagnosed an outage from its remedy** — the last thing that happened before
+service resumed, which is the most available evidence and not the same as the reason.)
 Everything on master in that window is tstate. Not a fleet failure and not a
 worker's: nothing was dispatched because nobody was here to dispatch. Recording the
 duration because *"why is all work halted"* has been asked once before, and the
@@ -15588,3 +15592,53 @@ instance; still not a defect to fix.**
 U queue **counted, not carried: 15.** Track T **UP** — but breadth is 17h old and
 flagged STALE, so there is **no cross-target verdict on this tree**; native green
 does not cover i386/arm32/riscv32/aarch64.
+
+## 2026-08-29 — the plan was upgraded, and it lifts ONE of the two ceilings
+
+Owner, this afternoon: *"we were out of tokens. but, i upgraded our plan. so good
+luck using all weekly tokens now :)"*
+
+That is an explicit invitation to scale up, and it also **re-tests the constraint I
+have been told not to re-ask about** — by changing it. But the two numbers I
+separated on 08-28 have **different mechanisms**, and only one of them is
+plan-shaped in the way that matters:
+
+| the number | what it rests on | does an upgrade move it? |
+| --- | --- | --- |
+| **1-2 workers** (owner's target, 2026-08-17) | *"tokens are shared across sessions and are the binding constraint"* | **Yes — directly.** This is the constraint that was just lifted, and the 18.5h outage is the proof it was real. |
+| **4 died at once** (measured, 2026-08-25) | an **account session limit** — a count, indifferent to how many tokens each session spends | **Unknown.** Plausibly tier-linked and plausibly not. Nothing about token headroom implies a higher concurrent-session cap. |
+
+So the honest position: **three workers is now clearly safe** — it is below the only
+observed break, and the reason to stay under it was the token constraint that no
+longer binds. **Four is the untested edge**, and it is untested in the one direction
+an upgrade might not help.
+
+**Scaling to four deliberately, as a measurement**, because the owner has both
+invited the usage and changed the variable, and because the cost of being wrong is
+now bounded rather than unknown:
+
+> **A session death costs exactly the uncommitted work it was holding.** With
+> push-per-logical-unit in force, hitting the limit again costs a restart and
+> nothing else — and it converts *"four died once, seven weeks ago, on the old
+> plan"* into a current fact. Refusing to test it forever is how a stale
+> measurement becomes a permanent rule.
+
+**If sessions die, that IS the result** — record the count, treat that number as the
+new break, drop back one, and do not retry it. Do not read a death as a worker's
+failure.
+
+### The correction underneath the correction
+
+I wrote *"logged out"* into the roster an hour ago because login prompts were the
+only evidence I had. **The login was the recovery, not the cause.** I diagnosed the
+outage from its remedy — which is the most *available* evidence and not the same as
+the reason — and the story was plausible enough that nothing in it invited a check.
+
+> **The last thing that happened before service resumed is not the thing that
+> stopped it.** Same family as tonight's other entries: a true observation
+> (*"there were login prompts"*) carrying a false causal story, and the story is
+> what gets built on. It would have left the roster claiming the coordinator had
+> been *absent* — a fleet-management failure — when the real cause was a resource
+> limit that says nothing about anyone's judgement.
+
+Only the owner could correct this one; no instrument I have could see it.
