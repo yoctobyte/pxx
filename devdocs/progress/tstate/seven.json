@@ -165,6 +165,11 @@
   }
  ],
  "host": "seven",
+ "idle_yield": {
+  "aborts": 1,
+  "phase": "pin-verify",
+  "target": "4d1613c173cd8f58852cfd92333aeb623bb5f593"
+ },
  "job_last_pass": {
   "demos#00": "154d1aa3fba6c0500271d12a8578158dc04975a7",
   "lib-fpc-clean#00": "3ad067ed395d10bcd4df418b78ff2031206c4d94",
