@@ -1411,3 +1411,104 @@ class sat entirely outside the convertible one. **A subset relation asserted
 between two numbers produced by two different filters is a guess about the
 filters.** Neither the worker nor the coordinator derived it before planning
 against it.
+
+---
+
+## Faces 30-33, all measured 2026-08-29. The family is still open.
+
+### 30. Two fields of one report disagree, and the authoritative-looking one is wrong
+
+`regression-cascade-154d1aa3fba6` listed 18 newly-red jobs and a **Range**
+section naming twelve commits — every one of them Track R's, the most
+incriminating framing available. The *reasons* — `Could not open
+'/lib/ld-linux.so.2'`, `TIMED OUT`, a Python traceback in the harness — decided
+the question and **were not in the ticket at all**, only in the tstate JSON.
+
+The range was correct. Its own caveat ("the named sha CANNOT be the cause") was
+correct. And a reader who trusted it and did not go fetch the report would have
+spent an afternoon bisecting Rust commits for a **missing loader on the test
+host**. Machine-derived precision reads as authority; the field that actually
+settled it looked like prose.
+
+**Remedy: put each failing job's REASON next to its name.** A cascade whose
+reasons are visible is triaged by reading; one whose reasons are a fetch away is
+triaged by bisection. Generally: **when a report has a precise field and a
+narrative field, check the narrative one first** — precision is a property of
+the derivation, not of the relevance.
+
+### 31. A gate that uses the artefact as its own oracle cannot see defects in what PRODUCES the artefact
+
+frankwasm's, and it sits under the one loop CLAUDE.md makes mandatory.
+
+`make compiler/pascal26` compiles `compiler.pas` **with pxx**. So the per-fix
+loop — and the byte-identical self-host fixedpoint with it, our strongest
+signal — is blind **by construction** to breakage only FPC can see, because the
+only compiler it ever consults is the one under test. pxx resolves names across
+the whole unit; FPC resolves in source order. A call above its declaration with
+no `forward;` self-hosts green and makes `compiler.pas` **uncompilable by FPC** —
+the path a fresh checkout with no trusted binary must take to exist at all.
+
+Twice in two days, two unrelated frontends, every gate green both times:
+`WasmDataAddr` (wasm, 08-28), `RExprRecId` (rust, 08-29).
+
+Distinct from its neighbours, and the distinction is the useful part: face 18 is
+input and compiler varying **together**; face 19 is targets agreeing because they
+**share a property**; this is **a second witness that was never called at all.**
+
+### 32. A DERIVED number standing in for a MEASURED one — and it reads as more rigorous
+
+frank-optimize-b4's, self-caught: *"I reported 261 poison sites from dividing
+2876 bytes by 11, and the actual count was 76."* The instrument could have been
+asked for the count directly and was not.
+
+Arithmetic **looks like work**. A number that shows its working carries an air of
+derivation a raw count does not, so it draws less scrutiny, not more — which is
+exactly backwards, because every input to the division is an assumption. More
+common than the blank-output cases in this index, and quieter: the failure is
+invisible rather than empty.
+
+**Ask the instrument for the number. If you divided to get it, say so beside it.**
+
+### 33. A capability that exists but nothing invokes — quieter than no check at all
+
+`tools/forwardlint.py` had existed since 08-28, exited 1 correctly, and named
+both seed breaks precisely. **It had zero callers** — not `gate.sh`, not the
+Makefile, not testmgr. It caught them both and told nobody.
+
+This is strictly worse than not having written it. A missing check is a known
+gap; **an unwired one is a gap everybody believes is covered**, because the tool
+is in the tree with a sensible name and a correct implementation. The defect was
+never the check — *a trigger nobody is assigned to watch is not a trigger.*
+
+Wired into `gate.sh` before the mode `case`, falsified in both directions
+(unmodified copy exits 1; copy with the forward added exits 0) in a scratch tree.
+
+**When you write a checker, the same push wires it to something that runs.**
+
+### Instance of face 29, coordinator's own, same evening
+
+Reading a lint's exit status out of a shell pipeline — `cmd | tail; echo $?` —
+returns the exit status of **`tail`**. It printed `EXIT=0` beside output reading
+`FAIL`, and the coordinator was one sentence from filing *"this checker reports
+failures and exits 0"* against a tool that exits 1 correctly.
+
+The broken instrument produced **exactly the artefact a full day of cataloguing
+had primed the observer to expect** — and the prior was itself correct, which is
+what made the false positive persuasive. Caught by re-running without the pipe.
+**A result that confirms the thing you have been hunting all day is the one to
+re-measure.**
+
+### Correction to a coordinator inference rule (frankB, same evening)
+
+Dispatch said: *"if it is still red, it is a genuine second cause."* **Wrong
+under the pin boundary**, and wrong in a way that looks right — the job builds
+with `$(PXX_STABLE)`, pin v390 landed 75 minutes **before** the fix, so the job
+stays red at every sha until a pin includes it. Measured both ways, same source,
+same flags: pinned RED, HEAD GREEN.
+
+A `compiler/` fix is invisible to a `$(PXX_STABLE)`-gated job until the pin
+moves. **"Still red" is not evidence of anything until you know which binary
+ran.** And its sibling, from the same session: *"the fix is in HEAD" and "the fix
+is in the binary I just ran" are different claims, and only the second is
+evidence* — `merge-base --is-ancestor` was true of the sources and false of the
+stale binary being executed.
