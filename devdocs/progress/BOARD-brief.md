@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:23 blocked:8 backlog:310 backlog_new:11 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2648 rejected:51`
+`working:3 unfinished:24 blocked:8 backlog:310 backlog_new:10 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2648 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
@@ -13,11 +13,12 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-a-error-does-not-halt-so-a-parse-can-be-speculative` [A] — owner: frankA
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
-## unfinished (23) — parked mid-flight; re-claim, do not duplicate
+## unfinished (24) — parked mid-flight; re-claim, do not duplicate
 
 - `audit-a-a-comment-asserting-an-invariant-is-a-claim-about-a-sibling-arm-nobody-checked` [A]
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
+- `bug-nilpy-import-order-leaks-a-class-name-into-a-later-compiled-rtl-unit` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `docs-devnotes-ai-assisted-build` [D]
