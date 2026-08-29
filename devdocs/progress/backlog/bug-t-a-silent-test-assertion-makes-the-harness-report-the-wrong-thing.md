@@ -481,3 +481,83 @@ One native assertion was executed end to end, both arms, to match the
 cross-target proof: `test_wcw26.5` (a `head|tail|tr` pipeline with a `.N` label)
 passes silently and on mismatch prints `expect_same: MISMATCH [test_wcw26.5]`
 with the diff.
+
+---
+
+## CORRECTION 2026-08-29 — "not convertible" is WRONG, and it is the dangerous kind of wrong
+
+**Raised by frank-rust, measured by frank-coordinator.** Every passage above
+saying the 376 exit-status checks (and the 37 cross-target ones) are **not
+convertible** is incorrect. They are convertible **verbatim**. The passages are
+left as written — this correction is appended where a reader meets the claim
+rather than editing a session record, but the conclusion is superseded.
+
+### The argument that was made, and why it does not hold
+
+> *"`expect_same.sh` compares two strings, and `test "$$?" = "143"` is asserting
+> a signal, not an output. Converting those would be a semantic change wearing a
+> mechanical diff's clothes."*
+
+The premise is a category claim and it is false. **`test "X" = "Y"` with `=` IS
+a string comparison in POSIX sh** — it is the same operator the 2476 converted
+lines used. That the string happens to denote an exit status is a fact about
+what the value *means*, not about how it is compared. `expect_same.sh` compares
+two strings; so does the line being replaced.
+
+### Measured, not argued
+
+```
+$ sh -c 'exit 42'; tools/expect_same.sh probe_match "$?" "42"
+  → rc=0, silent
+
+$ sh -c 'exit 7';  tools/expect_same.sh probe_mismatch "$?" "42"
+  expect_same: MISMATCH [probe_mismatch]
+  --- expected
+  +++ actual
+  @@ -1 +1 @@
+  -42
+  +7
+  → rc=1
+
+$ sh -c 'kill -TERM $$' >/dev/null 2>&1; tools/expect_same.sh test_sig_dfl "$?" "143"
+  → rc=0        (the Makefile:4323 shape)
+
+$ sh -c 'exit 7'; test "$?" = "42"
+  → rc=1, PRINTED NOTHING
+```
+
+`$?` is expanded by the shell before the helper is exec'd, so it still carries
+the preceding command's status. Same exit codes, same pass/fail semantics, one
+extra behaviour: it says what it saw.
+
+### These are the lines that need it MOST, not least
+
+Look at what they do:
+
+```make
+$(TESTTMP)/test_sig_dfl_b33626 >/dev/null 2>&1; test "$$?" = "143"
+```
+
+**The subject's own output is discarded.** So when this fails, `job_reason()`'s
+log tail cannot even reach the program under test — it records whatever the
+*previous* recipe line printed. That is the parent defect in its purest form,
+and the 376 are its worst instances, not its exempt ones.
+
+### Why this correction is filed loudly
+
+A **false limit is quieter than a false fix and survives longer.** A wrong
+conversion gets re-tested by the next run; a documented "not convertible,
+by decision" is *believed* — it reads as considered, it names a reason, and it
+answers the question a reader would otherwise have asked. It was recorded four
+times in this ticket, in three tables, as a decision rather than an oversight,
+which is exactly what would have made it permanent.
+
+The **scoping** decision was still right: leaving them out of a mechanical batch
+of 2476 was correct, because they are a different shape and mixing shapes is how
+a mechanical change stops being mechanical. **They are tranche three, not an
+exclusion.** Re-file them that way.
+
+### Still genuinely not convertible
+
+The **6 numeric comparisons** (`-ge`, `-lt`). Those are orderings, not equality,
+and no string compare expresses them. That exclusion stands.
