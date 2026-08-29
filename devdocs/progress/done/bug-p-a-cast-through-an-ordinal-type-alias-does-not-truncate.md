@@ -174,4 +174,4 @@ rather than half-done: [[refactor-p-five-dispatch-sites-for-one-named-type-cast]
 - `tools/gate.sh quick`.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 6cc4afc17.
