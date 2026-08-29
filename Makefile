@@ -6073,6 +6073,16 @@ test-core: $(COMPILER)
 	# `len` still hold the constructor's fill value.
 	./$(COMPILER) test/test_rust_movelist.rs $(TESTTMP)/test_rust_movelist26
 	tools/expect_same.sh test_rust_movelist26 "$$($(TESTTMP)/test_rust_movelist26)" "$$(printf 'a 7 8 1 7\nb 2 3\nfresh 0 -1 -1\npush 2 12 6 4\nswap 6 12\nfill 5 10 18 70\ntail -1 0\ntwo 5 1 10 1')"
+	# Borrowing an array as a &[T] slice in ARGUMENT position -- `f(&arr)` and
+	# `f(&arr[lo..hi])`, which previously fell through to the no-op `&` and
+	# handed the ARRAY's address to a callee expecting a __ptr/__len header
+	# (compiled clean, segfaulted). `bump 101 132` is the load-bearing line:
+	# the second call mutates through a RANGE borrow, so the view has to alias
+	# the caller's storage rather than copy it. `aref 9` pins the other half --
+	# `&v` for a `&[T; N]` param stays a bare address, which only the callee's
+	# own parameter can decide.
+	./$(COMPILER) test/test_rust_slice_borrow.rs $(TESTTMP)/test_rust_slice_borrow26
+	tools/expect_same.sh test_rust_slice_borrow26 "$$($(TESTTMP)/test_rust_slice_borrow26)" "$$(printf 'whole 63 1 6\nrange 7 56 3\nslot 16 1\nbound 14 14\nbump 101 132\naref 9\nrec 18 13')"
 	# Ada frontend skeleton (feature-esoteric-ada): for-range accumulate, if/elsif/else,
 	# while, bare loop + exit-when, Put_Line -- all lowering onto existing shared IR.
 	./$(COMPILER) test/test_ada_skeleton.adb $(TESTTMP)/test_ada_skeleton26

@@ -1519,8 +1519,127 @@ begin
   Result := RMakeIdent(tempSym);
 end;
 
+{ The `__ptr` / `__len` stores that make `sliceSym` a borrowed view of the
+  fixed array `arrSym`. `loNode` < 0 means 0 and `hiNode` < 0 means the array's
+  declared length, i.e. the whole-array borrow `&arr`.
+
+  ONE implementation, called from both places a slice can be created: the
+  `let s = &arr[lo..hi];` arm in RParseLet and the argument position in
+  RParseCallArg. Argument position had no arm at all until 2026-08-29, so
+  `f(&arr)` handed the ARRAY's address to a callee expecting a two-word header
+  and the callee read `arr[0]` and `arr[1]` as __ptr and __len -- a clean
+  compile and a segfault
+  (bug-rust-whole-array-borrow-as-a-slice-argument-segfaults). The textbook
+  double case of devdocs/dev/normalise-dont-special-case.md: the second path is
+  the one that stays broken, so there is no second path. }
+function RSliceHeaderStores(sliceSym, arrSym, loNode, hiNode: Integer): Integer;
+var elemNode, addrNode, identNode, fieldNode, assignNode, lenNode, seq: Integer;
+begin
+  if loNode < 0 then
+  begin
+    loNode := AllocNode(AN_INT_LIT); ASTIVal[loNode] := 0; ASTTk[loNode] := Ord(tyInt64);
+  end;
+  if hiNode < 0 then
+  begin
+    hiNode := AllocNode(AN_INT_LIT);
+    ASTIVal[hiNode] := Syms[arrSym].ArrLen;
+    ASTTk[hiNode] := Ord(tyInt64);
+  end;
+  elemNode := AllocNode(AN_INDEX);
+  ASTLeft[elemNode] := RMakeIdent(arrSym);
+  ASTRight[elemNode] := loNode;
+  ASTTk[elemNode] := Ord(Syms[arrSym].ElemType);
+  addrNode := AllocNode(AN_ADDR);
+  ASTLeft[addrNode] := elemNode;
+  ASTTk[addrNode] := Ord(tyPointer);
+  identNode := RMakeIdent(sliceSym);
+  fieldNode := AllocNode(AN_FIELD);
+  ASTLeft[fieldNode] := identNode;
+  ASTSOffset[fieldNode] := RStoredName('__ptr'); ASTSLen[fieldNode] := 5;
+  ASTTk[fieldNode] := Ord(tyInt64);
+  assignNode := AllocNode(AN_ASSIGN);
+  ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := addrNode;
+  seq := RSeqAppend(-1, assignNode);
+  lenNode := RBinOp(tkMinus, hiNode, loNode, tyInt64);
+  fieldNode := AllocNode(AN_FIELD);
+  ASTLeft[fieldNode] := identNode;
+  ASTSOffset[fieldNode] := RStoredName('__len'); ASTSLen[fieldNode] := 5;
+  ASTTk[fieldNode] := Ord(tyInt64);
+  assignNode := AllocNode(AN_ASSIGN);
+  ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := lenNode;
+  Result := RSeqAppend(seq, assignNode);
+end;
+
+{ A borrowed slice over `arrSym` as a VALUE: a hidden local carrying the
+  header, its two stores hoisted into RPendingPreSeq (flushed by
+  RParseStatement, exactly as the `?` desugar and the aggregate materializer
+  do), and the local's ident as the expression. }
+function RMaterializeSliceOf(arrSym, loNode, hiNode: Integer): Integer;
+var tempSym, ci: Integer; tempName: AnsiString;
+begin
+  ci := RSliceClassForRec(Syms[arrSym].ElemType, Syms[arrSym].ElemRecName);
+  LastTypeRecId := REC_UCLASS_BASE + ci;
+  tempName := '__slice' + RIntToStr(RTempSerial); Inc(RTempSerial);
+  tempSym := AllocVar(tempName, tyRecord);
+  RPendingPreSeq := RSeqAppend(RPendingPreSeq,
+    RSliceHeaderStores(tempSym, arrSym, loNode, hiNode));
+  Result := RMakeIdent(tempSym);
+end;
+
+{ One call argument, at parameter slot `slot` of `procIdx` (-1 when the callee
+  is not known yet -- the generic-fn path infers T from its first argument).
+
+  Every argument but one goes straight to RParseExpr. The exception is a borrow
+  of a fixed ARRAY, because Rust spells two different things the same way:
+  `&arr` for a `&[T]` SLICE param is a two-word __ptr/__len view, and `&arr` for
+  a `&[T; N]` ARRAY-REFERENCE param is a bare address. The operand alone cannot
+  tell them apart, which is why argument parsing is a function that knows the
+  callee at all rather than a bare RParseExpr at five call sites --
+  Params[slot].IsArray is the bit that separates them, and it is only reachable
+  here. A RANGE borrow `&arr[lo..hi]` is unambiguous and never an array ref. }
+function RParseCallArg(procIdx, slot: Integer): Integer;
+var save, arrSym, loNode, hiNode: Integer; wantsArrayRef: Boolean;
+begin
+  if (CurTok.Kind = tkAmp) and
+     ((Tokens[TokPos].Kind = tkIdent) or
+      ((Tokens[TokPos].Kind = tkMut) and (Tokens[TokPos + 1].Kind = tkIdent))) then
+  begin
+    save := TokPos - 1;   { the `&` itself, for the rewind below }
+    Next; { & }
+    if CurTok.Kind = tkMut then Next;
+    arrSym := FindSym(CurTok.SVal);
+    if (arrSym >= 0) and Syms[arrSym].IsArray then
+    begin
+      wantsArrayRef := False;
+      if (procIdx >= 0) and (slot >= 0) and (slot < Procs[procIdx].ParamCount) then
+        wantsArrayRef := Procs[procIdx].Params[slot].IsArray;
+      if not wantsArrayRef then
+      begin
+        Next; { the array name }
+        loNode := -1; hiNode := -1;
+        if (CurTok.Kind = tkLBrack) and RBrackHasDotDotAt(TokPos - 1) then
+        begin
+          Next;
+          loNode := RParseExpr;
+          Expect(tkDotDot, '..');
+          hiNode := RParseExpr;
+          Expect(tkRBrack, ']');
+        end;
+        Result := RMaterializeSliceOf(arrSym, loNode, hiNode);
+        Exit;
+      end;
+    end;
+    { not an array borrow after all -- rewind and let the ordinary expression
+      grammar have it (RParseUnary drops a `&` on a record, which is right:
+      records already travel by address). }
+    TokPos := save; Next;
+  end;
+  Result := RParseExpr;
+end;
+
 function RParsePrimary: Integer;
-var node, fieldNode, symIdx, procIdx, argNode, lastArg, fTokIdx, gfi, ci: Integer;
+var node, fieldNode, symIdx, procIdx, argNode, lastArg, fTokIdx, gfi, ci,
+    argSlot: Integer;
     name, methodName, fullName: AnsiString;
 begin
   case CurTok.Kind of
@@ -1632,11 +1751,11 @@ begin
         node := AllocNode(AN_CALL);
         ASTIVal[node] := procIdx;
         ASTTk[node] := Ord(Procs[procIdx].RetType);
-        lastArg := -1;
+        lastArg := -1; argSlot := 0;
         if CurTok.Kind <> tkRParen then
           repeat
             argNode := AllocNode(AN_ARG);
-            ASTLeft[argNode] := RParseExpr;
+            ASTLeft[argNode] := RParseCallArg(procIdx, argSlot); Inc(argSlot);
             ASTRight[argNode] := -1;
             if lastArg < 0 then ASTLeft[node] := argNode else ASTRight[lastArg] := argNode;
             lastArg := argNode;
@@ -1663,10 +1782,12 @@ begin
           lastArg := AllocNode(AN_ARG);
           ASTLeft[lastArg] := argNode; ASTRight[lastArg] := -1;
           ASTLeft[node] := lastArg;
+          argSlot := 1;
           while Eat(tkComma) do
           begin
             argNode := AllocNode(AN_ARG);
-            ASTLeft[argNode] := RParseExpr; ASTRight[argNode] := -1;
+            ASTLeft[argNode] := RParseCallArg(procIdx, argSlot); Inc(argSlot);
+            ASTRight[argNode] := -1;
             ASTRight[lastArg] := argNode; lastArg := argNode;
           end;
           Expect(tkRParen, ')');
@@ -1677,11 +1798,11 @@ begin
         node := AllocNode(AN_CALL);
         ASTIVal[node] := procIdx;
         ASTTk[node] := Ord(Procs[procIdx].RetType);
-        lastArg := -1;
+        lastArg := -1; argSlot := 0;
         if CurTok.Kind <> tkRParen then
           repeat
             argNode := AllocNode(AN_ARG);
-            ASTLeft[argNode] := RParseExpr;
+            ASTLeft[argNode] := RParseCallArg(procIdx, argSlot); Inc(argSlot);
             ASTRight[argNode] := -1;
             if lastArg < 0 then ASTLeft[node] := argNode else ASTRight[lastArg] := argNode;
             lastArg := argNode;
@@ -1883,10 +2004,12 @@ begin
           lastArg := AllocNode(AN_ARG);
           ASTLeft[lastArg] := node; ASTRight[lastArg] := -1;
           ASTLeft[fieldNode] := lastArg;
+          argSlot := 1;   { slot 0 is the receiver }
           if CurTok.Kind <> tkRParen then
             repeat
               argNode := AllocNode(AN_ARG);
-              ASTLeft[argNode] := RParseExpr; ASTRight[argNode] := -1;
+              ASTLeft[argNode] := RParseCallArg(procIdx, argSlot); Inc(argSlot);
+              ASTRight[argNode] := -1;
               ASTRight[lastArg] := argNode; lastArg := argNode;
             until not Eat(tkComma);
           Expect(tkRParen, ')');
@@ -1933,10 +2056,12 @@ begin
           lastArg := AllocNode(AN_ARG);
           ASTLeft[lastArg] := node; ASTRight[lastArg] := -1;
           ASTLeft[fieldNode] := lastArg;
+          argSlot := 1;   { slot 0 is the receiver }
           if CurTok.Kind <> tkRParen then
             repeat
               argNode := AllocNode(AN_ARG);
-              ASTLeft[argNode] := RParseExpr; ASTRight[argNode] := -1;
+              ASTLeft[argNode] := RParseCallArg(procIdx, argSlot); Inc(argSlot);
+              ASTRight[argNode] := -1;
               ASTRight[lastArg] := argNode; lastArg := argNode;
             until not Eat(tkComma);
           Expect(tkRParen, ')');
@@ -3138,7 +3263,7 @@ var name, typeName, variantName, fname, mangled: AnsiString;
     symIdx, ci, structCi, fTokIdx, ci2, vi, k, tagOff, tagNode, tagAssign: Integer;
     annotTk, arrElemTk: TTypeKind; hasType, qualified, isArr: Boolean;
     identNode, fieldNode, valNode, assignNode, seq, arrLen, loNode, hiNode: Integer;
-    arrElemRecId, optCi: Integer;
+    arrElemRecId, optCi, arrSym: Integer;
     payTk: TTypeKind; isSome: Boolean;
 begin
   Next; { let }
@@ -3252,31 +3377,10 @@ begin
     hiNode := RParseExpr;
     Expect(tkRBrack, ']');
     ci := RSliceClassForRec(arrElemTk, Syms[symIdx].ElemRecName);
-    fieldNode := AllocNode(AN_INDEX);
-    ASTLeft[fieldNode] := RMakeIdent(symIdx);
-    ASTRight[fieldNode] := loNode;
-    ASTTk[fieldNode] := Ord(arrElemTk);
-    valNode := AllocNode(AN_ADDR);
-    ASTLeft[valNode] := fieldNode;
-    ASTTk[valNode] := Ord(tyPointer);
     LastTypeRecId := REC_UCLASS_BASE + ci;
+    arrSym := symIdx;
     symIdx := AllocVar(name, tyRecord);
-    identNode := RMakeIdent(symIdx);
-    fieldNode := AllocNode(AN_FIELD);
-    ASTLeft[fieldNode] := identNode;
-    ASTSOffset[fieldNode] := RStoredName('__ptr'); ASTSLen[fieldNode] := 5;
-    ASTTk[fieldNode] := Ord(tyInt64);
-    assignNode := AllocNode(AN_ASSIGN);
-    ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := valNode;
-    seq := RSeqAppend(-1, assignNode);
-    fieldNode := AllocNode(AN_FIELD);
-    ASTLeft[fieldNode] := identNode;
-    ASTSOffset[fieldNode] := RStoredName('__len'); ASTSLen[fieldNode] := 5;
-    ASTTk[fieldNode] := Ord(tyInt64);
-    assignNode := AllocNode(AN_ASSIGN);
-    ASTLeft[assignNode] := fieldNode;
-    ASTRight[assignNode] := RBinOp(tkMinus, hiNode, loNode, tyInt64);
-    Result := RSeqAppend(seq, assignNode);
+    Result := RSliceHeaderStores(symIdx, arrSym, loNode, hiNode);
     Exit;
   end;
   { Option<T> literal RHS: `Some(expr)` / `None`. Resolved against the
