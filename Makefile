@@ -2873,6 +2873,11 @@ test-nilpy: $(COMPILER)
 	@# different arity, methods, and rebind-to-value already worked)
 	./$(COMPILER) test/test_nilpy_redefine_def.npy $(TESTTMP)/test_nilpy_redefdef26
 	tools/expect_same.sh test_nilpy_redefdef26 "$$($(TESTTMP)/test_nilpy_redefdef26)" "$$(printf '2\n3\n2\n5')"
+	@# an import alias binds to the ORIGINAL name, never to a same-named member
+	@# of the source module; and a module-level assignment rebinds an IMPORTED
+	@# name (row 3 is the ordering control: the rebinding has not run yet)
+	./$(COMPILER) test/test_nilpy_import_alias_collides.npy $(TESTTMP)/test_nilpy_aliascoll26
+	tools/expect_same.sh test_nilpy_aliascoll26 "$$($(TESTTMP)/test_nilpy_aliascoll26)" "$$(printf '7\n5\n2\n99\n7')"
 	@# %e/%E/%g/%G no longer collapse onto %f
 	./$(COMPILER) test/test_nilpy_percent_e_g_format.npy $(TESTTMP)/test_nilpy_pctformat26
 	tools/expect_same.sh test_nilpy_pctformat26 "$$($(TESTTMP)/test_nilpy_pctformat26)" "$$(printf '1.500000e+03\n1.500000E+03\n1.23e+03\n1.5e+06\n0.0001\n100\n0\n0.000000e+00\n-1.500000e+03\n1.23457e+08\n3.141592654\n1\n1.500000\n1.50')"
@@ -5956,6 +5961,16 @@ test-core: $(COMPILER)
 	# still carry the newline, and adjacent bools must not swallow each other.
 	./$(COMPILER) test/test_rust_bool_print.rs $(TESTTMP)/test_rust_bool26
 	tools/expect_same.sh test_rust_bool26 "$$($(TESTTMP)/test_rust_bool26)" "$$(printf 'pair true false\ntrue\nfalse\nlead false mid 7 tail\ntruefalse\nend true\nfalse start\nm true false\ncmp false true\nnot false\np false q true\nplain 42 unchanged')"
+	@echo '--- rust: String / &str / format! over the managed AnsiString ---'
+	# Both Rust string types map to ONE managed representation; the difference
+	# is only observable through aliasing rustc refuses to compile. That buys
+	# concat, compare, len and refcounting from the shared lowering for free.
+	# Gated: a program that never says String/&str/format!/to_string pulls
+	# neither builtinheap nor builtin and stays ~3KB (every earlier rust test).
+	# The oracle is hand-computed -- `sq`/`uci`/`big` are independently
+	# checkable, which is the whole point after two plausible-wrong-value bugs.
+	./$(COMPILER) test/test_rust_string.rs $(TESTTMP)/test_rust_string26
+	tools/expect_same.sh test_rust_string26 "$$($(TESTTMP)/test_rust_string26)" "$$(printf 'empty [] len 0 isempty true\ncat abcde len 5 isempty false\neq true ne false lit 3\nacc [uci: go] len 7\nsq a1 h8 d4\nuci e2e4\nhello, world!\nfmt i=42 n=-7 b=true s=mid c=x\ndegen [] [just text]\nchain 3 1234\nbig a1-h899 len 7')"
 	# Ada frontend skeleton (feature-esoteric-ada): for-range accumulate, if/elsif/else,
 	# while, bare loop + exit-when, Put_Line -- all lowering onto existing shared IR.
 	./$(COMPILER) test/test_ada_skeleton.adb $(TESTTMP)/test_ada_skeleton26

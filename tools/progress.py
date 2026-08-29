@@ -201,6 +201,29 @@ def normalize_track(value: str) -> str:
     return t
 
 
+def _tag_onto(lane: str, tag: str) -> str:
+    """Surface a WORK-TAG (O, E, M, S) WITHOUT discarding the FILE-LANE the
+    ticket declared.
+
+    These tags are not places code lives. An O ticket edits Track A's shared
+    files and obeys A's gate; an E ticket edits Track B's; M is file-owned by
+    A/B/T per ticket. CLAUDE.md says so for each of them. Returning the bare
+    tag threw the declared lane away, so the ticket vanished from
+    `ready --track A` -- the queue the agent that actually owns those files
+    reads. Measured 2026-08-29: 14 O tickets invisible to A, 4 E invisible to
+    B (whose whole ready queue was 6), 1 M.
+
+    Track F has appended rather than replaced since it was added, and the
+    comment on `track` gives the reason in full. This is that same rule for
+    the tags that were written earlier and missed it.
+    """
+    if not lane:
+        return tag
+    if tag in lane.split("+"):
+        return lane
+    return f"{lane}+{tag}"
+
+
 def first_bullet_value(text: str, marker: str) -> str:
     pat = re.compile(
         rf"^\s*-?\s*\*\*{re.escape(marker)}:\*\*\s*(.*)$",
@@ -367,10 +390,15 @@ class Ticket:
         # NOTE the separator is MANDATORY here, unlike the O/E/R/T rules: with
         # `[ -]?` the pattern also matches the plural "Tracks", which appears in
         # ordinary prose ("Tracks A and B") and mis-tagged two unrelated tickets.
+        explicit = normalize_track(self.fm.get("track", ""))
+        if not explicit:
+            _tl = first_bullet_value(self.text, "Track")
+            if _tl:
+                explicit = normalize_track(_tl.split()[0])
         if re.search(r"\bTrack[ -]S\b", decl, re.I) or \
                 re.match(r"^(feature|bug|regression|idea|compat)-esp-", self.slug) or \
                 re.search(r"-(esp|esp32|xtensa)-", self.slug):
-            return "S"
+            return _tag_onto(explicit, "S")
         # Track M (MSWindows) — the Windows campaign, a work-tag with exactly
         # S's shape: every M ticket ALSO carries its Track A (PE/COFF writer, MS
         # x64 ABI), Track B (lib/pcl win32 widgetset) or Track T (wine harness)
@@ -387,15 +415,10 @@ class Ticket:
         # meta-track-w-collision-windows-vs-website — a board-hygiene ticket
         # about the Windows lane, declaring Track A — was auto-tagged M by its
         # own slug. A ticket ABOUT the campaign is not a ticket IN it.
-        explicit = normalize_track(self.fm.get("track", ""))
-        if not explicit:
-            _tl = first_bullet_value(self.text, "Track")
-            if _tl:
-                explicit = normalize_track(_tl.split()[0])
         if re.search(r"\bTrack[ -]M\b", decl, re.I) or \
                 (re.search(r"-(windows|win32|wine)-", self.slug)
                  and explicit in ("", "M")):
-            return "M"
+            return _tag_onto(explicit, "M")
         # Track O (Optimization: register allocation, opt passes, codegen/heap
         # perf) — a cross-cutting lane surfaced on its own, same decl-line rule as
         # R/T. Each ticket ALSO carries a Track A (compiler internals) or Track B
@@ -405,7 +428,7 @@ class Ticket:
         # umbrella, whose next char is 'i' not '-').
         if re.search(r"\bTrack[ -]?O\b", decl, re.I) or \
                 self.slug.startswith("feature-opt-"):
-            return "O"
+            return _tag_onto(explicit, "O")
         # Track E (Examples/apps: demos, games, GUIs, IDEs, the portable-userland
         # showcase) — apps BUILT WITH pxx, not pxx itself. Work-tag file-owned by
         # Track B (examples/**, lib/**, app dirs); same decl-line rule as O/R/T,
@@ -413,7 +436,7 @@ class Ticket:
         if re.search(r"\bTrack[ -]?E\b", decl, re.I) or \
                 self.slug.startswith("feature-demo-") or \
                 self.slug.startswith("idea-demo-"):
-            return "E"
+            return _tag_onto(explicit, "E")
         # The whole Rust-frontend effort surfaces as Track R on the board, even
         # though individual sub-tickets carry a Track A (compiler internals) or
         # Track B (rust RTL shims) file-ownership tag for collision-avoidance —

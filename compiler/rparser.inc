@@ -712,6 +712,7 @@ begin
   if name = 'f64' then begin Result := tyDouble; Exit; end;
   if name = 'bool' then begin Result := tyBoolean; Exit; end;
   if name = 'char' then begin Result := tyChar; Exit; end;
+  if (name = 'String') or (name = 'str') then begin Result := tyAnsiString; Exit; end;
   ci := FindUClass(name);
   if ci >= 0 then
   begin
@@ -884,9 +885,22 @@ begin
   if (Result >= 0) and (RProcRetArrLen[Result] = 0) then Result := -1;
 end;
 
+function RIsStrTk(tk: TTypeKind): Boolean;
+begin
+  Result := (tk = tyAnsiString) or (tk = tyString);
+end;
+
 function RWiden(a, b: TTypeKind): TTypeKind;
 begin
-  if (a = tyDouble) or (b = tyDouble) or (a = tySingle) or (b = tySingle) then Result := tyDouble
+  { A string operand makes the result a MANAGED string. `+` is the only
+    arithmetic operator Rust defines over strings, but the arm lives here
+    rather than at the `+` site because RWiden is the one place every binary
+    operator asks for its result type -- a second place is the one that stays
+    wrong. The literal kind is tyString and the variable kind is tyAnsiString;
+    the result is always the managed one, which is exactly what Pascal's own
+    lowering does (`const_str tk=4` feeding a `store_sym tk=23`). }
+  if RIsStrTk(a) or RIsStrTk(b) then Result := tyAnsiString
+  else if (a = tyDouble) or (b = tyDouble) or (a = tySingle) or (b = tySingle) then Result := tyDouble
   else if (a = tyInt64) or (b = tyInt64) then Result := tyInt64
   else Result := tyInteger;
 end;
@@ -998,6 +1012,265 @@ begin
   Result := RBinOp(tkEq, REnumField(baseNode, optRec, '__tag'), argNode, tyBoolean);
 end;
 
+{ ===== Strings =====
+
+  `String` and `&str` BOTH map to pxx's managed AnsiString. That is a real
+  divergence from Rust, where one owns its buffer and the other borrows, and it
+  is invisible for the same reason the const-array one is: the observation
+  requires aliasing a string and mutating through one of the aliases, which is
+  exactly what rustc's borrow checker refuses. A program rustc accepts cannot
+  tell them apart, so carrying two representations would buy nothing and cost
+  the whole borrow-tracking machinery this frontend does not have.
+
+  The managed representation is what makes concatenation, comparison, length
+  and refcounting free: they are the shared lowering's, already written and
+  already gated by every Pascal and NilPy test in the tree. What the frontend
+  supplies is spelling.
+
+  Note the two kinds. A literal is tyString (the const_str node kind) and a
+  variable is tyAnsiString; `RWiden` answers tyAnsiString for any mix, which is
+  precisely the shape Pascal's own lowering emits. `RIsStrTk` is the test that
+  must be used wherever "is this a string" is asked -- checking tyAnsiString
+  alone silently drops every literal. }
+
+function RIsStrMethodName(const m: AnsiString): Boolean;
+begin
+  Result := (m = 'len') or (m = 'is_empty') or (m = 'push_str') or
+            (m = 'push') or (m = 'as_str') or (m = 'to_string') or
+            (m = 'to_owned') or (m = 'clone') or (m = 'into');
+end;
+
+{ Does `recvTk.m()` belong to RParseStrMethod rather than to the ordinary
+  record-method path? Two ways in, and the second is the reason this is a
+  function and not an inline conjunction at both call sites: `to_string()` is
+  also how a NUMBER becomes a string, so it must fire on a non-string receiver
+  too. Not on a record or a class, though -- `impl Piece { fn to_string(&self) }`
+  is ordinary Rust and stealing it would replace a user's own rendering with a
+  number, silently. }
+function RStrMethodApplies(recvTk: TTypeKind; const m: AnsiString): Boolean;
+begin
+  Result := (RIsStrTk(recvTk) and RIsStrMethodName(m)) or
+            ((m = 'to_string') and (recvTk <> tyRecord) and (recvTk <> tyClass));
+end;
+
+{ `s.method(...)` on a string. Two callers -- the identifier arm below (a
+  string VARIABLE) and the postfix loop in RParseUnary (any string-valued
+  EXPRESSION, e.g. a call result or a `format!`) -- and one implementation,
+  the same split RParseOptionAccessor already has for Option. The cursor sits
+  on the method NAME.
+
+  `dstSym` is the receiver's symbol when there is one and -1 otherwise. Only
+  the mutators need it, and they need it for a specific reason: an assignment
+  wants a fresh lvalue node for its destination rather than the receiver node
+  reused in two places, because a shared node makes the AST a DAG and every
+  pass downstream assumes a tree. }
+{ RStrOf is defined just below and used in this routine's tail; forward so the
+  FPC seed build resolves it (pxx resolves across the unit, FPC in source
+  order). bug-r-rexprrecid-breaks-the-fpc-bootstrap-seed }
+function RStrOf(node: Integer): Integer; forward;
+
+function RParseStrMethod(recv, dstSym: Integer): Integer;
+var mname: AnsiString; argN, lenNode, argNode, zeroNode, node: Integer;
+begin
+  mname := CurTok.SVal;
+  Next; Next; { method name, ( }
+
+  if (mname = 'len') or (mname = 'is_empty') then
+  begin
+    Expect(tkRParen, ')');
+    lenNode := AllocNode(AN_CALL);
+    ASTIVal[lenNode] := -Ord(tkLength);
+    ASTTk[lenNode] := Ord(tyInt64);
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := recv; ASTRight[argNode] := -1;
+    ASTLeft[lenNode] := argNode;
+    if mname = 'len' then begin Result := lenNode; Exit; end;
+    zeroNode := AllocNode(AN_INT_LIT);
+    ASTIVal[zeroNode] := 0; ASTTk[zeroNode] := Ord(tyInt64);
+    Result := RBinOp(tkEq, lenNode, zeroNode, tyBoolean);
+    Exit;
+  end;
+
+  { push_str(&str) and push(char) are the same operation on a managed string:
+    append. Rust gives them different names because they differ in what they
+    borrow, which is a distinction the representation above has already
+    dissolved. Both are `()`-valued in Rust, so they only ever appear in
+    statement position and an AN_ASSIGN is the right shape to return. }
+  if (mname = 'push_str') or (mname = 'push') then
+  begin
+    if dstSym < 0 then
+      Error('Rust: ' + mname + ' needs a variable receiver (this frontend cannot mutate a temporary)');
+    argN := RParseExpr;
+    Expect(tkRParen, ')');
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := RMakeIdent(dstSym);
+    ASTRight[node] := RBinOp(tkPlus, recv, argN, tyAnsiString);
+    Result := node;
+    Exit;
+  end;
+
+  { as_str / to_owned / clone / into on something already a string are all
+    identity once String and &str are one type -- they exist in Rust to move
+    between representations, and there is only one. Kept rather than rejected
+    because real source is full of them. `to_string()` on a NUMBER lands here
+    too, and RStrOf is identity for a string and a conversion otherwise, so
+    one tail serves both without a second test. }
+  Expect(tkRParen, ')');
+  Result := RStrOf(recv);
+end;
+
+{ An expression rendered as a string, for `format!` and `to_string()` on a
+  non-string. The integer path calls StrInt, which lives in the `builtin` unit
+  the driver pulls alongside builtinheap -- the same routine Pascal's own
+  `Str(x, s)` intrinsic rewrites to, rather than a second int->text formatter
+  that would be the one that drifts. }
+function RStrOf(node: Integer): Integer;
+var tk: TTypeKind; callNode, argNode, widthNode, pairNode, tNode, fNode: Integer;
+    procIdx: Integer;
+
+  { named RStrOfLit, not `Lit`: tools/forwardlint.py flattens nested
+    functions into one namespace, so a short generic name here reads as a
+    use-before-declaration against an unrelated `lit` in pylexer.inc. }
+  function RStrOfLit(const t: AnsiString): Integer;
+  begin
+    RStrOfLit := AllocNode(AN_STR_LIT);
+    ASTSOffset[RStrOfLit] := RStoredName(t); ASTSLen[RStrOfLit] := Length(t);
+    ASTTk[RStrOfLit] := Ord(tyString);
+  end;
+
+begin
+  tk := IntToTypeKind(ASTTk[node]);
+  if RIsStrTk(tk) then begin Result := node; Exit; end;
+
+  { A bool is two literals and a branch. Unlike println!'s bool -- which must
+    avoid the string runtime because println! does not otherwise need it --
+    format! has the runtime by definition, so the ternary is available here
+    and is the smaller lowering. }
+  if tk = tyBoolean then
+  begin
+    tNode := RStrOfLit('true');
+    fNode := RStrOfLit('false');
+    pairNode := AllocNode(AN_PAIR);
+    ASTLeft[pairNode] := tNode; ASTRight[pairNode] := fNode;
+    Result := AllocNode(AN_TERNARY);
+    ASTLeft[Result] := node;
+    ASTRight[Result] := pairNode;
+    ASTTk[Result] := Ord(tyAnsiString);
+    Exit;
+  end;
+
+  { A char becomes a string by concatenating it onto an empty one. The shared
+    lowering already handles `string + char` -- it is what `s.push(c)` compiles
+    to -- so this reuses a path the tests already cover rather than building
+    the AN_STR_FROM_CHAR temp-and-yield desugar a second time. }
+  if tk = tyChar then
+  begin
+    Result := RBinOp(tkPlus, RStrOfLit(''), node, tyAnsiString);
+    Exit;
+  end;
+
+  if (tk = tyDouble) or (tk = tySingle) then
+    Error('Rust: format!/to_string of a float is not supported yet (println! renders one)');
+
+  procIdx := FindProc('StrInt');
+  if procIdx < 0 then
+    Error('Rust: the string runtime is not loaded (internal: builtin unit was not pulled)');
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := procIdx;
+  ASTTk[callNode] := Ord(tyAnsiString);
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := node;
+  widthNode := AllocNode(AN_INT_LIT);
+  ASTIVal[widthNode] := 0; ASTTk[widthNode] := Ord(tyInteger);
+  ASTRight[argNode] := AllocNode(AN_ARG);
+  ASTLeft[ASTRight[argNode]] := widthNode;
+  ASTRight[ASTRight[argNode]] := -1;
+  ASTLeft[callNode] := argNode;
+  Result := callNode;
+end;
+
+{ `format!("a{}b", x)` -> 'a' + StrOf(x) + 'b'. Deliberately NOT sharing
+  RParsePrintln's splitter: that one emits WRITES and this one builds a VALUE,
+  so the only thing they have in common is scanning `{}` out of a literal, and
+  a shared scanner would have to hand back an ordered item list neither caller
+  wants in that form. Duplicating ~20 lines of brace scanning is cheaper than
+  the abstraction that couples an output path to an expression path. }
+function RParseFormat: Integer;
+var fmtOff, fmtLen, i, segStart, argCount, argUsed: Integer;
+    argExprs: array[0..7] of Integer;
+    acc, piece: Integer;
+
+  procedure Append(part: Integer);
+  begin
+    if acc < 0 then acc := part
+    else acc := RBinOp(tkPlus, acc, part, tyAnsiString);
+  end;
+
+  procedure AddSegment(off, len: Integer);
+  var litNode: Integer;
+  begin
+    if len <= 0 then Exit;
+    litNode := AllocNode(AN_STR_LIT);
+    ASTSOffset[litNode] := off;
+    ASTSLen[litNode] := len;
+    ASTTk[litNode] := Ord(tyString);
+    Append(litNode);
+  end;
+
+begin
+  Next; { format }
+  Next; { ! }
+  Expect(tkLParen, '(');
+  if CurTok.Kind <> tkString then Error('Rust: format! needs a string literal format');
+  fmtOff := Tokens[TokPos - 1].SOffset;
+  fmtLen := Tokens[TokPos - 1].SLen;
+  Next;
+
+  argCount := 0;
+  while Eat(tkComma) do
+  begin
+    if argCount > 7 then Error('Rust: format! supports at most 8 arguments (skeleton)');
+    argExprs[argCount] := RParseExpr;
+    Inc(argCount);
+  end;
+  Expect(tkRParen, ')');
+
+  acc := -1;
+  argUsed := 0;
+  segStart := 0;
+  i := 0;
+  while i < fmtLen do
+  begin
+    if TokChars[fmtOff + i] = '{' then
+    begin
+      AddSegment(fmtOff + segStart, i - segStart);
+      while (i < fmtLen) and (TokChars[fmtOff + i] <> '}') do Inc(i);
+      if i >= fmtLen then Error('Rust: unterminated {} placeholder in format string');
+      Inc(i);
+      segStart := i;
+      if argUsed >= argCount then Error('Rust: more {} placeholders than arguments');
+      piece := RStrOf(argExprs[argUsed]);
+      Append(piece);
+      Inc(argUsed);
+    end
+    else
+      Inc(i);
+  end;
+  AddSegment(fmtOff + segStart, fmtLen - segStart);
+  if argUsed < argCount then Error('Rust: more arguments than {} placeholders');
+
+  { `format!("")` is a legal empty string, and an all-literal format is a
+    single tyString node -- both must come back as a MANAGED string so the
+    caller's `let s: String` assignment and any later `+` see the right kind. }
+  if acc < 0 then
+  begin
+    acc := AllocNode(AN_STR_LIT);
+    ASTSOffset[acc] := RStoredName(''); ASTSLen[acc] := 0;
+    ASTTk[acc] := Ord(tyString);
+  end;
+  Result := acc;
+end;
+
 function RParsePrimary: Integer;
 var node, fieldNode, symIdx, procIdx, argNode, lastArg, fTokIdx, gfi, ci: Integer;
     name, methodName, fullName: AnsiString;
@@ -1028,6 +1301,14 @@ begin
       node := AllocNode(AN_FLOAT_LIT); ASTIVal[node] := CurTok.IVal; ASTTk[node] := Ord(tyDouble);
       Next; Result := node;
     end;
+    tkString:
+    begin
+      node := AllocNode(AN_STR_LIT);
+      ASTSOffset[node] := Tokens[TokPos - 1].SOffset;
+      ASTSLen[node] := Tokens[TokPos - 1].SLen;
+      ASTTk[node] := Ord(tyString);
+      Next; Result := node;
+    end;
     tkTrue:
     begin
       node := AllocNode(AN_BOOL_LIT); ASTIVal[node] := 1; ASTTk[node] := Ord(tyBoolean);
@@ -1044,6 +1325,14 @@ begin
     end;
     tkIdent:
     begin
+      { format!(..) is an EXPRESSION -- unlike println!, which is dispatched
+        from RParseStatement because it is only ever a statement. }
+      if (CurTok.SVal = 'format') and (Tokens[TokPos].Kind = tkLogNot) and
+         (Tokens[TokPos + 1].Kind = tkLParen) then
+      begin
+        Result := RParseFormat;
+        Exit;
+      end;
       name := CurTok.SVal; Next;
       { `Type::fn(args)` / `Self::fn(args)` — associated-fn call on the
         mangled proc name (enum paths stay let-initializer-only) }
@@ -1053,6 +1342,30 @@ begin
         if (name = 'Self') and (RCurImplType <> '') then name := RCurImplType;
         Next; { :: }
         name := name + '::' + CurTok.SVal;
+        { String::new() is the empty string and String::from(e) is e -- both
+          are constructors for a representation that is already whatever the
+          argument is, so neither needs a proc. Intercepted BEFORE FindProc so
+          a user `impl String` cannot shadow them into something that silently
+          differs. }
+        if (name = 'String::new') or (name = 'String::from') then
+        begin
+          Next; { fn name }
+          Next; { ( }
+          if name = 'String::new' then
+          begin
+            Expect(tkRParen, ')');
+            node := AllocNode(AN_STR_LIT);
+            ASTSOffset[node] := RStoredName(''); ASTSLen[node] := 0;
+            ASTTk[node] := Ord(tyString);
+          end
+          else
+          begin
+            node := RStrOf(RParseExpr);
+            Expect(tkRParen, ')');
+          end;
+          Result := node;
+          Exit;
+        end;
         procIdx := FindProc(name);
         if procIdx < 0 then Error('Rust: no associated fn ' + name);
         Next; { fn name }
@@ -1261,6 +1574,20 @@ begin
         Result := node;
         Exit;
       end;
+      { s.len() / s.push_str(x) / s.to_string() on a string VARIABLE. The
+        expression twin is the postfix loop in RParseUnary; both call the one
+        RParseStrMethod. This arm exists at all because the generic `.method`
+        path below resolves through the receiver's RECORD class, which a
+        string does not have -- without the intercept `s.len()` reports that a
+        record type nobody wrote has no method. }
+      if (CurTok.Kind = tkDot) and
+         (Tokens[TokPos].Kind = tkIdent) and (Tokens[TokPos + 1].Kind = tkLParen) and
+         RStrMethodApplies(Syms[symIdx].TypeKind, GetTokenStr(TokPos)) then
+      begin
+        Next; { . }
+        Result := RParseStrMethod(node, symIdx);
+        Exit;
+      end;
       if CurTok.Kind = tkDot then
       begin
         Next;
@@ -1434,6 +1761,18 @@ begin
   begin
     Next;
     Result := RParseTryOp(Result);
+  end;
+  { `format!(..).len()`, `f().to_string()` -- a string method on a string-valued
+    expression that is not a plain variable. Same routine as the identifier
+    arm's; only the receiver differs, and a temporary has no symbol, which is
+    what makes the mutators refuse here rather than append to a value nobody
+    can read back. }
+  while (CurTok.Kind = tkDot) and
+        (Tokens[TokPos].Kind = tkIdent) and (Tokens[TokPos + 1].Kind = tkLParen) and
+        RStrMethodApplies(IntToTypeKind(ASTTk[Result]), GetTokenStr(TokPos)) do
+  begin
+    Next; { . }
+    Result := RParseStrMethod(Result, -1);
   end;
 end;
 
@@ -4293,6 +4632,11 @@ begin
     bodyNode := RParseFnBody;
     Expect(tkEnd, '}');
 
+    { Zero every managed local before the body -- see the twin in
+      RParseTopLevelFn for why this sits after the parse rather than after the
+      prologue. }
+    EmitManagedLocalsZeroInit(savedSC);
+
     CompileAST(bodyNode);
     EmitProcEpilog(Procs[procIdx].RetSymIdx);
     PatchProcPrologue(patchPos, FrameSize);
@@ -4439,6 +4783,21 @@ begin
     RConstInitSeq := -1;
   end;
 
+  { Zero every managed local before the body runs. The SAME defect NilPy had
+    (bug-nilpy-string-local-truncates-at-255): a managed local's slot starts as
+    stale stack bytes, and the FIRST assignment to it releases whatever those
+    bytes point at. It stayed invisible here for as long as this frontend had
+    no managed type at all; `String` gave it one, and the symptom was the
+    classic plausible one -- a two-`push` function returned the right answer in
+    isolation and segfaulted once a caller had a string local of its own.
+
+    Emitted HERE, between the param spills and the body, because Rust allocates
+    its locals during the body PARSE (`let`), so SymCount is only complete once
+    RParseFnBody has returned -- while the parse itself emits no code, so the
+    zeroing still lands ahead of the first statement. Params are skParam and
+    are skipped, so the spills above survive. }
+  EmitManagedLocalsZeroInit(savedSC);
+
   CompileAST(bodyNode);
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
@@ -4579,8 +4938,52 @@ begin
   if TokPos > 0 then begin Dec(TokPos); Next; end else Next;
 end;
 
+{ Does this program need the managed-string runtime?
+
+  It is a token scan and not a parse because the answer is owed BEFORE the
+  parse: EmitAnsiStringRuntime's shims are reached by a direct relative call,
+  so every caller has to be compiled after them, which puts the decision in
+  the prologue. Same shape as the Pascal driver's DetectPascalRuntimeNeeds and
+  the C driver's reuse of it.
+
+  It is a GATE rather than an always-on because the cost is not small: pulling
+  builtinheap and builtin takes a Rust hello-world from 2KB of code to ~62KB.
+  Every program that says `String`, `&str`, `format!` or `to_string` pays it
+  and every program that does not, does not.
+
+  The subtle half is the STRING LITERAL. A literal inside `println!("...")` is
+  a const_str the write path consumes directly and needs no runtime -- which is
+  every Rust test written before this rung, and the reason they must not
+  regress into pulling 60KB. A literal ANYWHERE else becomes a value, so it
+  does. The scan tells them apart by position: a format literal is preceded by
+  exactly `println` `!` `(` or `print` `!` `(`. }
+function RNeedsStringRuntime: Boolean;
+var i: Integer; nm: AnsiString;
+begin
+  Result := False;
+  for i := 0 to MainProgramTokCount - 1 do
+  begin
+    if Tokens[i].Kind = tkIdent then
+    begin
+      nm := GetTokenStr(i);
+      if (nm = 'String') or (nm = 'str') or (nm = 'format') or
+         (nm = 'to_string') or (nm = 'to_owned') or (nm = 'push_str') then
+      begin Result := True; Exit; end;
+    end
+    else if Tokens[i].Kind = tkString then
+    begin
+      if (i >= 3) and (Tokens[i - 1].Kind = tkLParen) and
+         (Tokens[i - 2].Kind = tkLogNot) and (Tokens[i - 3].Kind = tkIdent) and
+         ((GetTokenStr(i - 3) = 'println') or (GetTokenStr(i - 3) = 'print')) then
+        { a println!/print! format literal -- consumed by the write path }
+      else
+      begin Result := True; Exit; end;
+    end;
+  end;
+end;
+
 procedure ParseRustProgram;
-var callPatch, mainIdx, jmpPatch: Integer;
+var callPatch, mainIdx, jmpPatch: Integer; wantStr: Boolean;
 begin
   if TargetArch <> TARGET_X86_64 then
     Error('Rust frontend: only the x86-64 target is supported by the skeleton (feature-rust-frontend-skeleton)');
@@ -4597,7 +5000,8 @@ begin
     Rust strings are `&str` slices here, not managed AnsiStrings, so the runtime
     is dead weight for this frontend rather than a step it is missing.
     refactor-a-one-program-driver-prologue-for-every-frontend }
-  EmitProgramPrologue(False, False, True, jmpPatch);
+  wantStr := RNeedsStringRuntime;
+  EmitProgramPrologue(False, wantStr, True, jmpPatch);
 
   { Rust's "body" is three instructions, and this driver writes them itself
     rather than getting them from a parse: call main(), then
@@ -4611,6 +5015,24 @@ begin
   EmitB($89); EmitB($C7);            { mov edi, eax }
   EmitB($B8); EmitI32(231);          { mov eax, 231 (exit_group) }
   EmitB($0F); EmitB($05);            { syscall }
+
+  { The string runtime's SHIMS are emitted machine code (above, inside the
+    prologue); their BODIES ship in builtinheap, and StrInt -- the int->text
+    routine format! and to_string() lower onto, the same one Pascal's `Str`
+    intrinsic rewrites to -- ships in builtin. A .rs compile never parsed
+    either, which is why wantAnsiRuntime was False here for the frontend's
+    whole life: turning it on alone produced `unresolved forward:
+    PXXStrFromLit`. Both halves, or neither.
+
+    Position: after the four instructions above, whose last is exit_group, so
+    the unit bodies are reached only by call and never fallen into. Order:
+    builtinheap first, mirroring every other driver -- builtin's own bodies
+    use the allocator. }
+  if wantStr then
+  begin
+    ParseUsesUnitAmbient('builtinheap');
+    ParseUsesUnitAmbient('builtin');
+  end;
 
   REnumVariantCount := 0;
   RTraitCount := 0; RImplCount := 0; RGenericFuncCount := 0;

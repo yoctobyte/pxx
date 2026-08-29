@@ -16722,3 +16722,106 @@ needed to be told.** b4's own framing: *staying out costs a visible gap in your
 own work and buys something invisible; nobody thanks you for the collision that
 did not happen* — which is why it asked that pxx-a5 be told, since the file will
 never say it.
+
+## 2026-08-29 — I DOUBLE-DISPATCHED N p85. The lock did not fail; I did.
+
+Two agents fixed `bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module`
+simultaneously. frankA reported it as a `working/` lock weakness and proposed no
+fix, which was gracious and is **the wrong attribution.** The record:
+
+1. Dispatched the p85 to **frankA**. It refused, correctly, citing the ticket's
+   Track N reservation — a paragraph on master outranking a message from me.
+2. I lifted the reservation on master, then dispatched the p85 to **pxx-a5**.
+3. I then told **frankA** the reservation was lifted and the p85 *"is the global
+   head and it is yours if you want it — HeapMmap first if you are choosing."*
+
+**Step 3 re-offered a ticket I had given away in step 2**, without withdrawing it
+and without telling frankA that pxx-a5 held it. Both agents were correctly
+following my instructions. `working/` behaved exactly as designed: frankA claimed
+it and pxx-a5 was already in it, because **I put them both there.**
+
+> **A dispatch that was REFUSED is not a dispatch that was WITHDRAWN.** When a
+> worker declines a ticket for a reason I then remove, the ticket does not
+> revert to unassigned — it reverts to *whatever I did with it in between*. I
+> tracked the refusal and lost the re-assignment, because a refusal feels like
+> the end of a transaction and it is the middle of one.
+
+**Cost, and why it was small by luck rather than design:** the two fixes composed
+along file ownership — pxx-a5 took the call site, import parser and constructor
+path; frankA took the `PyDefRebindTok` row in `symtab.inc`. Nine rows now match
+CPython where the ticket opened with four diverging. **pxx-a5 left the exact row
+frankA was fixing, writing that it needed a file "held by another agent" — and
+that agent was frankA.** frankA meanwhile split out a follow-on ticket for rows
+pxx-a5 had already fixed; withdrawn to `rejected/` with its analysis kept.
+
+The near-miss is that the disjointness was luck. Two agents in one ticket with
+overlapping files is a lost afternoon, not a merge.
+
+**The fix is mine and it is a habit, not tooling:** *before re-offering any
+ticket, re-read what I did with it since the refusal.* `working/` cannot help —
+it records who claimed, not who was told. And a lock that both agents were
+instructed past is not advisory, it is **correct and overruled**.
+
+### frankA's second finding — a baseline is not an expectation
+
+The Track T agent left a note asking whoever finished the ticket to run the two
+fallback-import tests with `-Futest/nilpy_units`. frankA ran them **without** the
+flag, saw six build failures, and read them as regressions from its own change.
+**The pinned baseline showed the same six.** The flag was the entire difference.
+
+> Six failures after a change look like six regressions. They are only
+> regressions if the baseline was green, and **the baseline has to be RUN, not
+> remembered.** frankA ran it, which is why this is a note and not a ticket.
+
+Also landed by frankA: `regression-test-emit-obj-cxtensa-obj` [A+S p70] — the C
+driver asked the profile when it meant the platform, **16 hours of standing
+red** — and the HeapMmap wasm32 arena, since verified on the wasm branch.
+
+## OVERNIGHT CHARTER — owner, 2026-08-29 evening
+
+> *"Goal set: monitor all pxx tracks overnight. make sure we progress and fix
+> bugs features and issues efficient. you have all privileges."*
+
+Coordinator runs unattended until morning. **Cadence: 15 minutes**, also the
+owner's explicit ask. Most ticks should be `noop` — a quiet hold is not a
+failure, and inventing work to justify a tick is worse than a quiet one.
+
+**What absence changes:**
+
+- **Track U cannot be resolved overnight.** `decide-*` will pile up; that is
+  expected. **Route around them.** Never let a lane idle on a decision nobody
+  can make until morning: park the blocked slice, dispatch the lane to its next
+  ranked item, file the U ticket so the morning queue is ready. Count U per
+  tick, do not carry it. Head is currently
+  `decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal`
+  [p60, unblocks 1]; 18 open at 17:51Z.
+- **A dead session stays dead unless I relaunch it** — `~/frank.sh <name>` into
+  the `roost` tmux session. Four concurrent died on an account limit on
+  2026-08-25; six ran fine tonight. A cluster of deaths is the limit, not a bug:
+  relaunch fewer, not more.
+- **Report faithfully in the morning** — what landed, what broke, what waits on
+  the owner. Do not smooth an overnight red into "mostly fine".
+
+**Privileges.** The grant is the owner's and it is real. It does not make a bad
+idea good: `.claude/**`, hooks, settings and CLAUDE.md get touched only for a
+measured, specific need, declared plainly — an unattended edit to permission
+machinery is the hardest thing to review at 8am. The rule that a *peer* cannot
+authorise those is unchanged.
+
+### Provisioning closed out — and my pending-item was stale
+
+Owner asked me to install seven's four packages. **All four were already
+installed**; Track T had provisioned them and I had re-reported the list four
+times without re-deriving it. Verified on `seven@seven` (Ubuntu 24.04, 24 cores,
+passwordless sudo): `libsqlite3-dev` 3.45.1, `tcl-dev`/`tk-dev` 8.6.14, `csmith`
+2.3.0, i386 loader present, qemu-user + qemu-user-static in.
+
+**The one real gap was `fpc`, and I installed it — 3.2.2.** That matters more
+than the four: `seven` previously *could not run the FPC bootstrap check at all*,
+which is precisely the check the mandatory per-fix loop is blind to by
+construction (face 31, two breaks in two days). `forwardlint` runs clean there.
+
+> **A stale pending-item is indistinguishable from a live one, and I am the only
+> one positioned to tell them apart.** Re-derive every owner-blocked item before
+> surfacing it again — this is rule 2's second half and I broke it four times on
+> one list.

@@ -607,16 +607,25 @@ function PyParseVariadicMinMax(const nm: AnsiString): Integer;
   feature-nilpy-min-max-variadic-more-than-two-args }
 var acc, rhs, a0, a1, node, pi: Integer;
     at: array[0..1] of TTypeKind;
+    mm: AnsiString;
 begin
+  { The caller passes CurTok.SVal, and `const` binds an AnsiString BY REFERENCE
+    — so `nm` is not a copy, it is the live token text. `Next` does
+    SetLength(CurTok.SVal, ...) IN PLACE (see PyEvalParamDefault), so by the
+    time the loop asks MatchProcCall for an overload, `nm` reads '(' and no
+    2-argument routine of that name exists — at EVERY operand type, which is
+    what made this look like a type-dispatch failure. Copy the characters
+    first, the same way every other arm here does (`nm := CurTok.SVal`). }
+  mm := nm;
   Next; Expect(tkLParen, '(');
   ParseArgExpr; acc := CurASTNode;
   while Eat(tkComma) do
   begin
     ParseArgExpr; rhs := CurASTNode;
     at[0] := IntToTypeKind(ASTTk[acc]); at[1] := IntToTypeKind(ASTTk[rhs]);
-    pi := MatchProcCall(nm, 2, at, False);
+    pi := MatchProcCall(mm, 2, at, False);
     if pi < 0 then
-      Error('Nil Python: no 2-argument ' + nm + ' for these operand types');
+      Error('Nil Python: no 2-argument ' + mm + ' for these operand types');
     a0 := AllocNode(AN_ARG); ASTLeft[a0] := acc;
     a1 := AllocNode(AN_ARG); ASTLeft[a1] := rhs; ASTRight[a1] := -1;
     ASTRight[a0] := a1;
@@ -36084,7 +36093,7 @@ var impName, impAlias, impRoot, impReal: AnsiString; isCount: Boolean;
       unit arm read it after the pull and bound nothing. }
     impDotted: AnsiString;
     aStrIdx, realStrIdx, optSym, impLevel: Integer;
-    aliasSym, aliasCi, aliasRealSym, aliasRealProc: Integer;
+    aliasSym, aliasCi, aliasRealSym, aliasRealProc, aliasPi: Integer;
     aliasUnitTarget: Integer;   { the unit a from-imported SUBMODULE name really names }
     aliasSelfIdx: Integer;      { scans the pending alias queue, so a source
                                   name is not captured by an alias this same
@@ -36310,6 +36319,35 @@ begin
                 else
                   PyImpAliasSrc[PyImpAliasCount] := -(aliasRealProc + 1);
                 Inc(PyImpAliasCount);
+                { The ALIAS NAME may itself be a proc — `from M import f as g`
+                  where M also has its own `g`. Flat unit scope makes that `g`
+                  visible by bare name, so a later call resolved to it and the
+                  alias silently did nothing:
+
+                      from mmod import f as g
+                      print(g(1))        # CPython 7, pxx 16 = mmod.g(1)
+
+                  The binding above is real (PyFlushImportAliases emits `g = f`),
+                  but it is SYNTHESISED and so has no `g =` tokens for the
+                  rebinding scan to find. Stamp it instead, at the import's own
+                  token, which is before every statement of the module — so the
+                  ordering test in PyDefRebound still holds and a call written
+                  ABOVE the import is unaffected.
+
+                  Only for a genuine rename: `from M import g` (impAlias =
+                  impReal) binds the name to the very proc it already meant, and
+                  stamping that would unbind a name nothing rebound.
+                  bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module }
+                if impAlias <> impReal then
+                begin
+                  aliasPi := ProcChainHead(impAlias);
+                  while aliasPi >= 0 do
+                  begin
+                    if Procs[aliasPi].Name = impAlias then
+                      ProcPyAliasRebindTok[aliasPi] := TokPos;
+                    aliasPi := ProcHashNext[aliasPi];
+                  end;
+                end;
               end;
               { Neither a symbol nor a proc: the real name is something this
                 frontend does not know. Left alone — the alias stays undefined

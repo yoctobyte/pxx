@@ -359,3 +359,31 @@ pure swallowing/trivia, cheap and high-leverage.
   Remaining on the original gap list: `String`/`format!`, derives/traits, and
   the ArrayVec replacement (corpus work, not frontend work).
 
+- 2026-08-29 - rung 14: **`String`, `&str`, `format!`.** The last value-flow
+  item. Both Rust string types map to one managed AnsiString; the divergence is
+  unobservable because telling them apart needs aliasing rustc's borrow checker
+  refuses to compile, so the frontend supplies spelling and the shared ARC
+  lowering supplies everything else.
+
+  **The real work was the DRIVER, and the previous rung had already pointed at
+  it.** `wantAnsiRuntime` was False here forever, with a comment calling the
+  runtime "dead weight rather than a step it is missing" -- half right: turning
+  it on alone fails with `unresolved forward: PXXStrFromLit`, because the shims
+  are emitted machine code and their bodies live in builtinheap, with StrInt in
+  builtin. Both units, or neither. Gated on a token scan, since the pair takes
+  a hello-world from 2KB to ~62KB; the tell that separates a `println!` format
+  literal (no runtime) from a literal used as a value (runtime) is its POSITION.
+
+  **Third latent bug this window, third time the tell was a plausible value.**
+  Rust procs never called EmitManagedLocalsZeroInit, so a managed local's first
+  assignment released stale stack bytes. A two-`push` function returned the
+  right answer alone and segfaulted once its caller held a string local of its
+  own. Identical to bug-nilpy-string-local-truncates-at-255; the shared helper
+  existed and this frontend had never called it.
+
+  Also fixed: a char literal was a bare tkInteger, so `println!("{}", 'x')`
+  printed 120. It now carries `char` in the same SVal channel an integer suffix
+  uses -- no new token kind, so no Track A change.
+
+  Remaining: derives/traits, and the ArrayVec replacement (corpus work).
+

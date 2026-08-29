@@ -147,7 +147,16 @@ begin
       Inc(SrcPos);
     end;
     if (SrcPos <= Length(Source)) and (Source[SrcPos] = '''') then Inc(SrcPos);
-    CurTok.Kind := tkInteger; CurTok.IVal := n; Exit;
+    { A char literal is a tkInteger carrying the code point -- and it must also
+      carry its TYPE, or `println!("{}", 'x')` prints 120. There is already a
+      channel for exactly that: an integer literal's suffix (`1u64`) rides in
+      SVal and RParsePrimary maps it through RTypeKindFromName, and `char` is
+      spelled the same way there as it is in a suffix. So the type travels on
+      the mechanism that already exists rather than on a new token kind, which
+      would be a shared-enum change and therefore Track A's.
+      SVal is assigned explicitly because this branch exits early and would
+      otherwise inherit the previous token's text. }
+    CurTok.Kind := tkInteger; CurTok.IVal := n; CurTok.SVal := 'char'; Exit;
   end;
 
   { Raw string r"..." — no escape processing. Cheap to add, not exercised by

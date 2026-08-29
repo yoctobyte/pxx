@@ -1,0 +1,17 @@
+# An import alias must bind in the IMPORTER's namespace, to whatever the
+# ORIGINAL name means in the source module — never to a same-named member of
+# that module. And a module-level assignment rebinds an IMPORTED name, exactly
+# as it rebinds a name this module defined itself.
+# bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
+from nilpy_aliasmod import f as g
+from nilpy_aliasmod import h
+
+def loc(x, lo=99): return lo
+
+print(g(1))        # 7  — f's default, NOT aliasmod.g (which answers 16)
+print(g(1, 5))     # 5  — every argument supplied, so no default is involved
+
+print(h(4))        # 2  — ORDERING control: the rebinding below has not run yet
+h = loc
+print(h(4))        # 99 — the module-level rebinding of an imported name
+print(h(4, 7))     # 7

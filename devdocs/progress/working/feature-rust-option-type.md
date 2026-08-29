@@ -410,3 +410,15 @@ signatures, not from the ladder's list — and both are ahead of it now:
   a branch between two literal writes, because the obvious ternary over two
   strings needs a managed-string runtime this frontend deliberately does not
   emit. `test_rust_bool_print.rs`.
+- 2026-08-29 - rung 14 landed: `String`, `&str`, `format!`. Both Rust string
+  types map to ONE managed AnsiString, which is unobservable because the only
+  experiment that could tell them apart is the one rustc's borrow checker
+  refuses to compile. The load-bearing half was the DRIVER: `wantAnsiRuntime`
+  needs builtinheap AND builtin pulled with it, which is why last rung's
+  ternary failed, and it is gated on a token scan so the 18 earlier rust tests
+  keep their exact code size. Surfaced a third latent
+  plausible-wrong-value bug: Rust procs never called EmitManagedLocalsZeroInit,
+  so a managed local's first assignment released stale stack bytes -- the same
+  defect NilPy had, fixed by calling the same shared helper. Char literals now
+  carry `char` in the integer-suffix channel, so `println!("{}", 'x')` stops
+  printing 120. `test_rust_string.rs`.
