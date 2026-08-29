@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:22 blocked:8 backlog:306 backlog_new:11 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2647 rejected:51`
+`working:3 unfinished:23 blocked:8 backlog:307 backlog_new:11 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2647 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
@@ -13,8 +13,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-a-error-does-not-halt-so-a-parse-can-be-speculative` [A] — owner: frankA
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
-## unfinished (22) — parked mid-flight; re-claim, do not duplicate
+## unfinished (23) — parked mid-flight; re-claim, do not duplicate
 
+- `audit-a-a-comment-asserting-an-invariant-is-a-claim-about-a-sibling-arm-nobody-checked` [A]
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
@@ -49,7 +50,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 323, ranked
+## Ready — top 30 of 325, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -82,4 +83,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [A]` feature-unicodestring-model
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 
-_293 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_295 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
