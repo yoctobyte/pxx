@@ -5,13 +5,14 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:20 blocked:5 backlog:316 backlog_new:7 experimental:22 rainy-day:45 float:21 done-followup:3 decided:116 done:2613 rejected:51`
+`working:2 unfinished:21 blocked:5 backlog:314 backlog_new:7 experimental:21 rainy-day:45 float:21 done-followup:3 decided:116 done:2619 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
+- `bug-a-the-fpc-seed-canary-skips-a-break-already-on-master` [A] — owner: unrecorded
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
-## unfinished (20) — parked mid-flight; re-claim, do not duplicate
+## unfinished (21) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -19,6 +20,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A]
+- `feature-c-gtk3-header-final-wiring` [C] — blocked-by: decide-which-gtk-a-bare-gtk-gtk-h-means
 - `feature-c-import-a-pascal-unit-under-a-mangled-name` [C]
 - `feature-dynamic-compiler-tables` [A]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
@@ -42,10 +44,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 327, ranked
+## Ready — top 30 of 326, ranked
 
 - `[p 85] [R]` bug-r-a-duplicate-forward-in-rparser-breaks-the-fpc-seed-build
-- `[p 80] [A]` bug-a-the-fpc-seed-canary-skips-a-break-already-on-master
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [A]` bug-a-for-loop-limit-is-evaluated-after-the-control-variable-is-assigned
@@ -59,7 +60,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-parent-call-after-instantiation
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-relative-import-in-package
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-startswith-tuple
-- `[p 70] [P]` regression-test-threads-test-sched-reactor-exhaustion-3
 - `[p 70] [N]` regression-tools-devtest-00-2
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
@@ -74,5 +74,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
+- `[p 62] [N]` feature-nilpy-enum-class
+- `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
 
-_297 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_296 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
