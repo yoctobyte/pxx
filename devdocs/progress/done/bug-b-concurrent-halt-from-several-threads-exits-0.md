@@ -294,4 +294,4 @@ compiler-emitted codegen throughout, and the only `lib/**` edit is the removal o
 a workaround the ticket itself scheduled for removal.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 7a594d11c.
