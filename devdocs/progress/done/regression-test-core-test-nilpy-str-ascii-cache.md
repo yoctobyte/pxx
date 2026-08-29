@@ -133,4 +133,4 @@ not by the topic, is the cheap version of breadth.
   `test_nilpy_none_str_field` and `test_forward_decl_case_insensitive` pass;
   Pascal's empty string still collapses to nil.
 - `make compiler/pascal26` converged; `tools/gate.sh quick`.
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 6b6190d2c.
