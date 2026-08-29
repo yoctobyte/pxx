@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:23 blocked:8 backlog:309 backlog_new:11 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2647 rejected:51`
+`working:3 unfinished:23 blocked:8 backlog:310 backlog_new:11 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2648 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
@@ -50,7 +50,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 327, ranked
+## Ready — top 30 of 328, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -69,7 +69,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` bug-nilpy-import-order-leaks-a-class-name-into-a-later-compiled-rtl-unit
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 65] [P]` bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
-- `[p 65] [P]` bug-p-a-generic-argument-that-is-another-templates-parameter-is-minted-as-a-concrete-type
+- `[p 65] [P]` bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument
 - `[p 65] [P]` bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets
 - `[p 65] [P]` bug-p-two-different-nested-specializations-of-one-template-collide
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
@@ -83,4 +83,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
 - `[p 62] [A]` feature-unicodestring-model
 
-_297 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_298 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -6796,6 +6796,13 @@ test-core: $(COMPILER)
 	# read as Delphi-only.
 	./$(COMPILER) -Futest/delphi_generic_units test/test_generic_cross_unit_inline_specialize.pas $(TESTTMP)/test_generic_xunit_inline26
 	tools/expect_same.sh test_generic_xunit_inline26 "$$($(TESTTMP)/test_generic_xunit_inline26 | tail -1)" "total ok 1 / 1"
+	# a generic argument that is the ENCLOSING template's parameter must not be
+	# minted as a concrete alias -- and a genuinely concrete one still must be
+	./$(COMPILER) test/test_generic_arg_is_enclosing_template_param.pas $(TESTTMP)/test_generic_encl_param26
+	tools/expect_same.sh test_generic_encl_param26 "$$($(TESTTMP)/test_generic_encl_param26 | tail -1)" "total ok 5 / 5"
+	# ...and the objfpc spelling of it, which goes through the same isParamForm test
+	./$(COMPILER) test/test_generic_arg_is_enclosing_template_param_objfpc.pas $(TESTTMP)/test_generic_encl_param_objfpc26
+	tools/expect_same.sh test_generic_encl_param_objfpc26 "$$($(TESTTMP)/test_generic_encl_param_objfpc26 | tail -1)" "total ok 1 / 1"
 	# parser gaps: impl-side `static;`/`reintroduce;` on a class function + PChar(expr)[i] indexing
 	./$(COMPILER) test/test_impl_static_and_pchar_index.pas $(TESTTMP)/test_impl_static_and_pchar_index26
 	tools/expect_same.sh test_impl_static_and_pchar_index26 "$$($(TESTTMP)/test_impl_static_and_pchar_index26 | tail -1)" "total ok 5 / 5"

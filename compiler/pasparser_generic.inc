@@ -429,6 +429,96 @@ procedure ParseGenericTemplateNamed(const templateNameIn: AnsiString; delphiForm
 function OrdinalNameToTk(const nm: AnsiString): TTypeKind; forward;
 function BuiltinTypeNameTk(const nm: AnsiString): TTypeKind; forward;   { body in pasparser_lval.inc, which also CALLS it above the body (the type-helper type-name receiver). pxx pre-scans and does not need this; FPC does. }
 
+{ Every TEMPLATE PARAMETER NAME the token stream declares, read straight out of
+  Tokens[] rather than out of Templates[].
+
+  Why it cannot come from Templates[]: the sweep for template ti runs the moment
+  ti is DECLARED, and a use of ti inside a LATER template's body carries that
+  later template's parameters. `TCmp<TKey>` written in `TDict<TKey, TValue>`'s
+  body is swept while TDict does not exist yet, so TKey is nobody's registered
+  parameter, the group reads as concrete, and `TCmp$TKey` is minted -- a class
+  whose streamed body says `Val: TKey` and reports `unknown type: TKey` from
+  TCmp's own line, which the user did not ask to be specialized.
+  bug-p-a-generic-argument-that-is-another-templates-parameter-is-minted-as-a-concrete-type
+
+  The enabling fact is the one wall 6 used: LexAll fills Tokens[] COMPLETELY
+  before the parser starts, so the later template's header is already there as
+  tokens. It is unparsed, not unavailable.
+
+  A header is `Name < ... > =` -- the `=` is what separates it from a USE, which
+  is followed by `;`, `)`, `.` or a type opener, never by `=`. (`a < b >= c`
+  lexes `>=` as tkGe, so a comparison cannot spell this shape.) Constraints are
+  skipped: in `<T: TObject; U>` only T and U are parameter names.
+
+  Deliberately UNSCOPED -- it is every parameter name in the file, not just the
+  ones in scope at the use. That over-approximates toward "defer to the nested
+  path", which yields an honest error rather than a wrong class, and is the
+  opposite of the direction wall 6's ticket warns about
+  (`do not weaken the prerequisite scan`). The cost is a real type that happens
+  to share a name with somebody's type parameter; the benefit is that the check
+  does not depend on parse order, which is the whole defect. }
+const MAX_TPL_PARAM_NAMES = 512;
+var
+  TplParamNameOff : array[0..MAX_TPL_PARAM_NAMES-1] of Integer;
+  TplParamNameLen : array[0..MAX_TPL_PARAM_NAMES-1] of Integer;
+  TplParamNameCount : Integer;
+
+procedure CollectTemplateParamNamesFromTokens;
+var i, j, savedCount: Integer;
+    ok, wantName: Boolean;
+begin
+  TplParamNameCount := 0;
+  i := 0;
+  while i + 2 < TokCount do
+  begin
+    if (Tokens[i].Kind = tkIdent) and (Tokens[i + 1].Kind = tkLt) then
+    begin
+      { walk the group, collecting the names that start each entry. Collected
+        speculatively and rolled back below if the group turns out to be a USE
+        -- which is why savedCount exists rather than a two-pass scan. }
+      savedCount := TplParamNameCount;
+      j := i + 2;
+      ok := True;
+      wantName := True;
+      while ok and (j < TokCount) and (Tokens[j].Kind <> tkGt) do
+      begin
+        if Tokens[j].Kind = tkIdent then
+        begin
+          if wantName then
+          begin
+            if TplParamNameCount < MAX_TPL_PARAM_NAMES then
+            begin
+              TplParamNameOff[TplParamNameCount] := Tokens[j].SOffset;
+              TplParamNameLen[TplParamNameCount] := Tokens[j].SLen;
+              Inc(TplParamNameCount);
+            end;
+            wantName := False;
+          end;
+          Inc(j);
+        end
+        else if Tokens[j].Kind = tkComma then begin wantName := True; Inc(j); end
+        else if Tokens[j].Kind = tkSemicolon then begin wantName := True; Inc(j); end
+        else if Tokens[j].Kind = tkColon then
+        begin
+          { a constraint list runs to the next `;` or `>` and names no parameter }
+          Inc(j);
+          while (j < TokCount) and (Tokens[j].Kind <> tkSemicolon) and
+                (Tokens[j].Kind <> tkGt) do Inc(j);
+        end
+        else ok := False;
+      end;
+      { a HEADER is followed by `=`; a use never is. Roll the collection back
+        when this turned out to be a use or a malformed group. }
+      if ok and (j + 1 < TokCount) and (Tokens[j].Kind = tkGt) and
+         (Tokens[j + 1].Kind = tkEq) then
+        i := j            { a header -- keep the names and resume past the group }
+      else
+        TplParamNameCount := savedCount;   { a use, or malformed -- forget them }
+    end;
+    Inc(i);
+  end;
+end;
+
 { mode-Delphi generics desugar. After template ti (`TFoo<T> = class...`) is
   captured, rewrite every later use of the Delphi surface into the objfpc
   surface the existing template/specialization machinery parses:
@@ -532,6 +622,16 @@ begin
             if (argTok[k].Kind = tkIdent) and
                CaseEqual(GetTokenStrFromRaw(argTok[k].SOffset, argTok[k].SLen),
                          TemplateParamNames[ti * MAX_TEMPLATE_PARAMS + kk]) then
+              isParamForm := True;
+        { ...and any OTHER template's parameter name, read from the token stream
+          rather than from Templates[] -- the enclosing template that gives the
+          name its meaning is usually not parsed yet when this runs. See
+          CollectTemplateParamNamesFromTokens. }
+        for k := 0 to na - 1 do
+          for kk := 0 to TplParamNameCount - 1 do
+            if (argTok[k].Kind = tkIdent) and
+               CaseEqual(GetTokenStrFromRaw(argTok[k].SOffset, argTok[k].SLen),
+                         GetTokenStrFromRaw(TplParamNameOff[kk], TplParamNameLen[kk])) then
               isParamForm := True;
         if DebugTrace then writeln('DGEN match at ', i, ' na=', na, ' paramform=', isParamForm);
         if isParamForm then
@@ -700,6 +800,7 @@ begin
   repeat
     before := TokCount;
     atBefore := at;
+    CollectTemplateParamNamesFromTokens;
     for t := 0 to TemplateCount - 1 do
       DelphiRewriteGenericUses(t, at, TemplateIsDelphi[t]);
     Inc(rounds);
@@ -970,6 +1071,7 @@ begin
       inner group then. Re-sweeping the earlier templates once TPair's round has
       turned the inner group into a plain ident is what finishes the outer one. }
     dgenAtBefore := dgenAt;
+    CollectTemplateParamNamesFromTokens;
     for dgenT := 0 to TemplateCount - 1 do
       DelphiRewriteGenericUses(dgenT, dgenAt, TemplateIsDelphi[dgenT]);
     Inc(dgenRounds);
