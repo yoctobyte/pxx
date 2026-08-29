@@ -903,6 +903,46 @@ three copies to one. A shared hook reaches outside the allocated file, so it is
 recorded as the sixteenth-copy problem rather than closed with six copies and no
 note.
 
+## Face twenty-eight — a guard whose message conflates NONE with MANY, and the arithmetic that caught it
+
+frankB, 2026-08-29, closing the assertion campaign. Its ambiguity guard existed
+to refuse any line where the separator ` = ` occurs more than once, since the
+split would be ambiguous. It flagged `Makefile:14309` as **an ambiguous
+separator**.
+
+It was not ambiguous. That line spells the separator `"   = "` with extra
+spaces, so the guard counted **zero** occurrences — and its "not exactly one"
+test fired with a message that says *many*.
+
+**The skip was correct. The reason given for it was false.** And that is worse
+than no message at all, because **a named cause stops the next reader
+looking.** "Ambiguous separator" is a complete, plausible explanation that
+closes the question; "skipped, reason unknown" leaves it open. The same
+asymmetry as the false-limit rule, inside a single diagnostic.
+
+| condition | message emitted |
+| --- | --- |
+| separator occurs 0 times (unrecognised spelling) | "ambiguous separator" |
+| separator occurs 2+ times (genuinely ambiguous) | "ambiguous separator" |
+
+**What caught it was arithmetic, not reading.** 24 convertible, 21 converted, 2
+skipped — and 24 − 21 − 2 ≠ 0. The reconciliation failed, so the message had to
+be wrong about something. **A count that must balance is an instrument that
+cannot be talked out of its answer**, which is exactly what a plausible message
+does to a human reader.
+
+**The guard:** any predicate of the form *"not exactly one"* has two failure
+sides and must say which one it saw. Report the count, not the verdict — the
+same rule as face twenty-three, arriving from the diagnostic side rather than
+the harness side. And **make the tallies reconcile**, because a residual is the
+one check no explanation can satisfy.
+
+**Footnote from the same run, worth knowing before someone re-greps:** the
+campaign's final count of 7 remaining bare assertions is really 6. The seventh
+is a line of **prose inside a comment** that contains `test "$$(prog | tail -1)"`
+as an example. The classifier counted a comment as code — the same category
+error as reading ModRM bytes as `push rax`, one layer up.
+
 ## Face eighteen — when the compiler is its own test input, a diff cannot tell a CODEGEN change from a SOURCE change
 
 Found by frankwasm, 2026-08-29, and it nearly cost twenty lines of inert code.
@@ -1268,6 +1308,19 @@ Zero ambiguous splits.
 
 > **A check that shares an author's model with the thing it checks is a
 > repetition. A check over the inputs is a measurement.**
+
+**THE REMEDY, found by the same worker two hours later: check by INVERSE, not by
+re-derivation.** For the straggler conversions frankB stopped re-parsing the
+rewritten line with the same regex that wrote it, and instead **reconstructed the
+original** from the rewrite — drop the label, restore ` = ` — then compared
+against what had actually been there.
+
+> A checker that re-parses with the model that produced the line **cannot fail**,
+> because it shares the model. One that **reconstructs the input** can, because
+> the input is external to the model and disagrees when the model is wrong.
+
+That is the general escape from this face, and it is cheap wherever the
+transformation is reversible.
 
 Corollary already recorded elsewhere and confirmed here: the checking layer is
 written with less suspicion than the layer checked, because it is "just the
