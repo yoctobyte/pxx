@@ -2371,6 +2371,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-cascade-aba953cae031 | T | 70 | regression | regression CASCADE: 15 jobs newly red at aba953cae031 (auto-filed by twatch) | — |
 | regression-cascade-b45c759f9e65 | T | 70 | regression | regression CASCADE: 15 jobs newly red at b45c759f9e65 (auto-filed by twatch) | — |
 | regression-cfront-stmt-expr-25c1dded | C | 75 | regression | regression: 25c1dded (GNU statement expressions) — 150x cfront slowdown on GTK headers + cJSON/lua corpus breakage | — |
+| regression-demos-00-2 | T | 40 | regression | advisory: demos#00 red at b26e7ed366f3 (auto-filed by twatch) | — |
 | regression-demos-00 | T | 40 | regression | advisory: demos#00 red at 98ed38202254 (auto-filed by twatch) | — |
 | regression-fpc-bootstrap-canary-forwards-b310 | A | 40 | regression | advisory: fpc-bootstrap canary red at 603cf2bd — forwards drift + enum-arg from b310 | — |
 | regression-fpc-bootstrap-compiler-2 | P | 40 | regression | advisory: fpc-bootstrap#src:compiler/compiler.pas red at a6698ac28e8b (auto-filed by twatch) | — |
