@@ -4197,7 +4197,7 @@ test-core: $(COMPILER)
 	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1; then \
 	  for arch in i386 aarch64 arm32; do \
 	    ./$(COMPILER) --target=$$arch -O3 test/test_o3_residency_six_hot_locals.pas $(TESTTMP)/test_o3_resid_$$arch >/dev/null; \
-	    test "$$(tools/run_target.sh $$arch $(TESTTMP)/test_o3_resid_$$arch)" = "$$(printf 'sum   106050\ntails 101 202 303 404 505 606')" \
+	    tools/expect_same.sh $$arch/test_o3_resid_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/test_o3_resid_$$arch)" "$$(printf 'sum   106050\ntails 101 202 303 404 505 606')" \
 	      || { echo "cross -O3 residency FAIL on $$arch"; exit 1; }; \
 	  done; echo "cross -O3 residency ok: i386 aarch64 arm32"; \
 	else \
@@ -5960,19 +5960,19 @@ test-core: $(COMPILER)
 	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1; then \
 	  for arch in i386 aarch64 arm32; do \
 	    ./$(COMPILER) --target=$$arch test/test_basic_goto_gosub.bas $(TESTTMP)/test_basic_gg_$$arch >/dev/null; \
-	    test "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_gg_$$arch)" = "$$(printf 'A\nB\nlooped 3\nsub1\nsub2\nsub1 back\nafter gosub\nsub2\ndone')" \
+	    tools/expect_same.sh $$arch/test_basic_gg_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_gg_$$arch)" "$$(printf 'A\nB\nlooped 3\nsub1\nsub2\nsub1 back\nafter gosub\nsub2\ndone')" \
 	      || { echo "cross .bas goto_gosub FAIL on $$arch"; exit 1; }; \
 	    ./$(COMPILER) --target=$$arch test/test_basic_comprehensive.bas $(TESTTMP)/test_basic_cmp_$$arch >/dev/null; \
-	    test "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_cmp_$$arch | wc -l)" = "21" \
+	    tools/expect_same.sh $$arch/test_basic_cmp_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_cmp_$$arch | wc -l)" "21" \
 	      || { echo "cross .bas comprehensive FAIL on $$arch"; exit 1; }; \
 	    ./$(COMPILER) --target=$$arch test/test_basic_lexer.bas $(TESTTMP)/test_basic_lex_$$arch >/dev/null; \
-	    test "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_lex_$$arch)" = "$$(printf 'Hello, Traditional BASIC!\nHello, Modern BASIC!')" \
+	    tools/expect_same.sh $$arch/test_basic_lex_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_lex_$$arch)" "$$(printf 'Hello, Traditional BASIC!\nHello, Modern BASIC!')" \
 	      || { echo "cross .bas lexer FAIL on $$arch"; exit 1; }; \
 	    ./$(COMPILER) --target=$$arch test/test_basic_unit_free_string_literal.bas $(TESTTMP)/test_basic_uf_$$arch >/dev/null; \
-	    test "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_uf_$$arch)" = "$$(printf 'unit-free\nline numbered too')" \
+	    tools/expect_same.sh $$arch/test_basic_uf_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_uf_$$arch)" "$$(printf 'unit-free\nline numbered too')" \
 	      || { echo "cross .bas unit-free FAIL on $$arch"; exit 1; }; \
 	    ./$(COMPILER) --target=$$arch test/test_basic_one_char_string_var.bas $(TESTTMP)/test_basic_ocs_$$arch >/dev/null; \
-	    test "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_ocs_$$arch)" = "$$(printf 'x\nhello\ny\n5')" \
+	    tools/expect_same.sh $$arch/test_basic_ocs_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_ocs_$$arch)" "$$(printf 'x\nhello\ny\n5')" \
 	      || { echo "cross .bas one-char string var FAIL on $$arch"; exit 1; }; \
 	    echo "cross .bas ok: $$arch"; \
 	  done; \
@@ -11029,7 +11029,7 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_dynarray_copy_nested.pas $(TESTTMP)/test_i386_dyncopyn
 	tools/expect_same.sh i386/test_i386_dyncopyn "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_dyncopyn)" "$$(printf 'lenh=2 h00=1 h11=4\none-level-detach g00=99\ninner=4\nafter-copy-scope g11=4 g22=6\nt3 len=2 u111=7 u010=2\nstr v00=row v11=end\nsource-survives s11=end')"
 	./$(COMPILER) --target=i386 test/test_halt_exit_code.pas $(TESTTMP)/test_i386_halt
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_halt; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
+	tools/expect_same.sh i386/test_i386_halt "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_halt; echo "exit=$$?")" "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) --target=i386 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_i386_sprw
 	tools/expect_same.sh i386/test_i386_sprw "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sprw)" "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
 	./$(COMPILER) --target=i386 test/test_cdecl_indirect.pas $(TESTTMP)/test_i386_cdeclind
@@ -11048,10 +11048,10 @@ test-i386: $(COMPILER)
 	tools/run_target.sh i386 $(TESTTMP)/test_i386_cd2i; test "$$?" = "42"
 	./$(COMPILER) --target=i386 test/test_readln.pas $(TESTTMP)/test_i386_readln
 	./$(COMPILER) test/test_readln.pas $(TESTTMP)/test_i386_readln_x64
-	test "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh i386 $(TESTTMP)/test_i386_readln)" = "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_i386_readln_x64)"
+	tools/expect_same.sh i386/test_i386_readln "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh i386 $(TESTTMP)/test_i386_readln)" "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_i386_readln_x64)"
 	./$(COMPILER) --target=i386 test/test_eof_stdin.pas $(TESTTMP)/test_i386_eof
 	./$(COMPILER) test/test_eof_stdin.pas $(TESTTMP)/test_i386_eof_x64
-	test "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh i386 $(TESTTMP)/test_i386_eof)" = "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_i386_eof_x64)"
+	tools/expect_same.sh i386/test_i386_eof "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh i386 $(TESTTMP)/test_i386_eof)" "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_i386_eof_x64)"
 	./$(COMPILER) --target=i386 test/cunsigned_int_arith_b121.c $(TESTTMP)/test_i386_cuarith
 	tools/run_target.sh i386 $(TESTTMP)/test_i386_cuarith; test "$$?" = "42"
 	./$(COMPILER) --target=i386 test/cunsigned_semantics_sweep_b138.c $(TESTTMP)/test_i386_cusweep
@@ -11436,7 +11436,7 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_dynarray_copy_nested.pas $(TESTTMP)/test_aarch64_dyncopyn
 	tools/expect_same.sh aarch64/test_aarch64_dyncopyn "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_dyncopyn)" "$$(printf 'lenh=2 h00=1 h11=4\none-level-detach g00=99\ninner=4\nafter-copy-scope g11=4 g22=6\nt3 len=2 u111=7 u010=2\nstr v00=row v11=end\nsource-survives s11=end')"
 	./$(COMPILER) --target=aarch64 test/test_halt_exit_code.pas $(TESTTMP)/test_aarch64_halt
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_halt; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
+	tools/expect_same.sh aarch64/test_aarch64_halt "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_halt; echo "exit=$$?")" "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) --target=aarch64 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_aarch64_sprw
 	tools/expect_same.sh aarch64/test_aarch64_sprw "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sprw)" "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
 	# cdecl indirect call (dlsym'd C fn through a cdecl proc-type value) — b362
@@ -11456,10 +11456,10 @@ test-aarch64: $(COMPILER)
 	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cd2i; test "$$?" = "42"
 	./$(COMPILER) --target=aarch64 test/test_readln.pas $(TESTTMP)/test_aarch64_readln
 	./$(COMPILER) test/test_readln.pas $(TESTTMP)/test_aarch64_readln_x64
-	test "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_readln)" = "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_aarch64_readln_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_readln "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_readln)" "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_aarch64_readln_x64)"
 	./$(COMPILER) --target=aarch64 test/test_eof_stdin.pas $(TESTTMP)/test_aarch64_eof
 	./$(COMPILER) test/test_eof_stdin.pas $(TESTTMP)/test_aarch64_eof_x64
-	test "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_eof)" = "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_aarch64_eof_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_eof "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_eof)" "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_aarch64_eof_x64)"
 	./$(COMPILER) --target=aarch64 test/cunsigned_int_arith_b121.c $(TESTTMP)/test_aarch64_cuarith
 	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cuarith; test "$$?" = "42"
 	./$(COMPILER) --target=aarch64 test/cunsigned_semantics_sweep_b138.c $(TESTTMP)/test_aarch64_cusweep
@@ -11548,10 +11548,10 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/test_riscv32_slg "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_slg)" "$$($(TESTTMP)/test_riscv32_slg_x64)"
 	./$(COMPILER) --target=riscv32 test/test_readln.pas $(TESTTMP)/test_riscv32_readln
 	./$(COMPILER) test/test_readln.pas $(TESTTMP)/test_riscv32_readln_x64
-	test "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_readln)" = "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_riscv32_readln_x64)"
+	tools/expect_same.sh riscv32/test_riscv32_readln "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_readln)" "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_riscv32_readln_x64)"
 	./$(COMPILER) --target=riscv32 test/test_eof_stdin.pas $(TESTTMP)/test_riscv32_eof
 	./$(COMPILER) test/test_eof_stdin.pas $(TESTTMP)/test_riscv32_eof_x64
-	test "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_eof)" = "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_riscv32_eof_x64)"
+	tools/expect_same.sh riscv32/test_riscv32_eof "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_eof)" "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_riscv32_eof_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_exception.pas $(TESTTMP)/test_riscv32_exc
 	./$(COMPILER) test/test_cross_exception.pas $(TESTTMP)/test_riscv32_exc_x64
 	tools/expect_same.sh riscv32/test_riscv32_exc "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_exc)" "$$($(TESTTMP)/test_riscv32_exc_x64)"
@@ -11606,7 +11606,7 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_dynarray_copy_nested.pas $(TESTTMP)/test_riscv32_dyncopyn
 	tools/expect_same.sh riscv32/test_riscv32_dyncopyn "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_dyncopyn)" "$$(printf 'lenh=2 h00=1 h11=4\none-level-detach g00=99\ninner=4\nafter-copy-scope g11=4 g22=6\nt3 len=2 u111=7 u010=2\nstr v00=row v11=end\nsource-survives s11=end')"
 	./$(COMPILER) --target=riscv32 test/test_halt_exit_code.pas $(TESTTMP)/test_riscv32_halt
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_halt; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
+	tools/expect_same.sh riscv32/test_riscv32_halt "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_halt; echo "exit=$$?")" "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) --target=riscv32 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_riscv32_sprw
 	tools/expect_same.sh riscv32/test_riscv32_sprw "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_sprw)" "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
 	# by-value record params over 4 bytes (up to 8): both words must cross
@@ -11916,10 +11916,10 @@ test-riscv32: $(COMPILER)
 	tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_cd2i; test "$$?" = "42"
 	./$(COMPILER) --target=riscv32 test/test_readln.pas $(TESTTMP)/test_rv32x_readln
 	./$(COMPILER) test/test_readln.pas $(TESTTMP)/test_rv32x_readln_x64
-	test "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_readln)" = "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_rv32x_readln_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_readln "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_readln)" "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_rv32x_readln_x64)"
 	./$(COMPILER) --target=riscv32 test/test_eof_stdin.pas $(TESTTMP)/test_rv32x_eof
 	./$(COMPILER) test/test_eof_stdin.pas $(TESTTMP)/test_rv32x_eof_x64
-	test "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_eof)" = "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_rv32x_eof_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_eof "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_eof)" "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_rv32x_eof_x64)"
 	./$(COMPILER) --target=riscv32 test/cunsigned_int_arith_b121.c $(TESTTMP)/test_rv32x_cuarith
 	tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_cuarith; test "$$?" = "42"
 	./$(COMPILER) --target=riscv32 test/cunsigned_semantics_sweep_b138.c $(TESTTMP)/test_rv32x_cusweep
@@ -12303,7 +12303,7 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_dynarray_copy_nested.pas $(TESTTMP)/test_arm32_dyncopyn
 	tools/expect_same.sh arm32/test_arm32_dyncopyn "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_dyncopyn)" "$$(printf 'lenh=2 h00=1 h11=4\none-level-detach g00=99\ninner=4\nafter-copy-scope g11=4 g22=6\nt3 len=2 u111=7 u010=2\nstr v00=row v11=end\nsource-survives s11=end')"
 	./$(COMPILER) --target=arm32 test/test_halt_exit_code.pas $(TESTTMP)/test_arm32_halt
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_halt; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
+	tools/expect_same.sh arm32/test_arm32_halt "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_halt; echo "exit=$$?")" "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) --target=arm32 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_arm32_sprw
 	tools/expect_same.sh arm32/test_arm32_sprw "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sprw)" "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
 	./$(COMPILER) --target=arm32 test/test_cdecl_indirect.pas $(TESTTMP)/test_arm32_cdeclind
@@ -12322,10 +12322,10 @@ test-arm32: $(COMPILER)
 	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cd2i; test "$$?" = "42"
 	./$(COMPILER) --target=arm32 test/test_readln.pas $(TESTTMP)/test_arm32_readln
 	./$(COMPILER) test/test_readln.pas $(TESTTMP)/test_arm32_readln_x64
-	test "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh arm32 $(TESTTMP)/test_arm32_readln)" = "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_arm32_readln_x64)"
+	tools/expect_same.sh arm32/test_arm32_readln "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh arm32 $(TESTTMP)/test_arm32_readln)" "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_arm32_readln_x64)"
 	./$(COMPILER) --target=arm32 test/test_eof_stdin.pas $(TESTTMP)/test_arm32_eof
 	./$(COMPILER) test/test_eof_stdin.pas $(TESTTMP)/test_arm32_eof_x64
-	test "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh arm32 $(TESTTMP)/test_arm32_eof)" = "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_arm32_eof_x64)"
+	tools/expect_same.sh arm32/test_arm32_eof "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh arm32 $(TESTTMP)/test_arm32_eof)" "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_arm32_eof_x64)"
 	./$(COMPILER) --target=arm32 test/cunsigned_int_arith_b121.c $(TESTTMP)/test_arm32_cuarith
 	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cuarith; test "$$?" = "42"
 	./$(COMPILER) --target=arm32 test/cunsigned_semantics_sweep_b138.c $(TESTTMP)/test_arm32_cusweep
@@ -14458,13 +14458,13 @@ endif
 	  echo "=== lib-test cross: PAL net primitives under qemu-user (i386/aarch64/arm32) ==="; \
 	  for arch in i386 aarch64 arm32; do \
 	    $(PXX_STABLE) --target=$$arch -Fulib/rtl/platform/posix test/lib_net.pas $(TESTTMP)/lib_net_$$arch >/dev/null; \
-	    test "$$(tools/run_target.sh $$arch $(TESTTMP)/lib_net_$$arch)" = "$$(printf 'bound=ok\npeer=ok\ntcp=ok\nudp=ok')" || { echo "cross lib_net FAIL on $$arch"; exit 1; }; \
+	    tools/expect_same.sh $$arch/lib_net_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/lib_net_$$arch)" "$$(printf 'bound=ok\npeer=ok\ntcp=ok\nudp=ok')" || { echo "cross lib_net FAIL on $$arch"; exit 1; }; \
 	    $(PXX_STABLE) --target=$$arch -Fulib/rtl/platform/posix test/lib_net_timeout.pas $(TESTTMP)/lib_nt_$$arch >/dev/null; \
-	    test "$$(tools/run_target.sh $$arch $(TESTTMP)/lib_nt_$$arch)" = "$$(printf 'connect=ok\nrefused=ok\nrecv=ok\nrecv-timeout=ok')" || { echo "cross net_timeout FAIL on $$arch"; exit 1; }; \
+	    tools/expect_same.sh $$arch/lib_nt_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/lib_nt_$$arch)" "$$(printf 'connect=ok\nrefused=ok\nrecv=ok\nrecv-timeout=ok')" || { echo "cross net_timeout FAIL on $$arch"; exit 1; }; \
 	    $(PXX_STABLE) --target=$$arch -Fulib/rtl/platform/posix test/lib_platform_net_udp.pas $(TESTTMP)/lib_udp_$$arch >/dev/null; \
-	    test "$$(tools/run_target.sh $$arch $(TESTTMP)/lib_udp_$$arch)" = "$$(printf 'poll=ok\nrecv=ok\npeer=ok\necho=ok\nunsupported=-38')" || { echo "cross udp FAIL on $$arch"; exit 1; }; \
+	    tools/expect_same.sh $$arch/lib_udp_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/lib_udp_$$arch)" "$$(printf 'poll=ok\nrecv=ok\npeer=ok\necho=ok\nunsupported=-38')" || { echo "cross udp FAIL on $$arch"; exit 1; }; \
 	    $(PXX_STABLE) --target=$$arch -Fulib/rtl/platform/posix test/lib_platform_net_sockopt.pas $(TESTTMP)/lib_so_$$arch >/dev/null; \
-	    test "$$(tools/run_target.sh $$arch $(TESTTMP)/lib_so_$$arch)" = "$$(printf 'name=ok\naccept-peer=ok\nsockerr=ok\nunsupported=-38')" || { echo "cross sockopt FAIL on $$arch"; exit 1; }; \
+	    tools/expect_same.sh $$arch/lib_so_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/lib_so_$$arch)" "$$(printf 'name=ok\naccept-peer=ok\nsockerr=ok\nunsupported=-38')" || { echo "cross sockopt FAIL on $$arch"; exit 1; }; \
 	    echo "cross net ok: $$arch"; \
 	  done; \
 	else \
