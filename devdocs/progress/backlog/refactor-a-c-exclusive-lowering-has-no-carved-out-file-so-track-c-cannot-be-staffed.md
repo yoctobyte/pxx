@@ -154,3 +154,47 @@ had disjoint work in it.
 about the FILE and not the topic."* That ruling should not need re-deriving a
 sixth time, which is itself an argument for this refactor rather than for
 another routing note.
+
+## GRANT — `compiler/ir.inc` to frankC (Track C) for this carve-out, 2026-08-29
+
+**Granted by the coordinator.** Filed rather than left in message traffic: an
+authorisation is a finding about what is permitted, and an unfiled grant reads
+as *covered* rather than as missing.
+
+**Why the holder is a C agent and not an A agent.** This is Track A work by file
+and Track C work by motive. frankC diagnosed the need, produced the five-of-seven
+measurement, and hit instance five itself; it is also the only session that will
+know immediately whether a given `CProgramMode` site is genuinely C-exclusive or
+shared lowering with a guard bolted on — which is the distinction the whole
+refactor turns on, and the one an A agent would have to rediscover.
+
+**Precondition verified at grant time, not assumed.** `compiler/ir.inc` is clean
+in **all twelve clones**. Adjacent-but-disjoint holders: frankA
+(`pasparser_decl.inc`, `symtab.inc`), frankS (`ir_codegen_xtensa.inc`, plus the
+granted `defs.inc` line), frank-optimize-b4 (`ir_codegen.inc`), frank-rust
+(`pasparser_generic.inc`), the T tree (`pasparser_proc.inc`). **`ir.inc` itself
+is held by nobody**, and the coordinator holds the slot for frankC until frankC
+releases it.
+
+**Conditions, and the second one is the load-bearing one:**
+
+1. **`compiler/ir.inc` and the new `compiler/cir.inc` only.** Anything else —
+   `symtab.inc`, `defs.inc`, a new AST node or IR op — is a separate ask.
+2. **Report the inventory BEFORE moving anything.** The 40 `CProgramMode` sites
+   are the starting inventory, **not the scope**. The `parser.inc` split's actual
+   lesson was that machinery which was never Pascal went to its *real* owner
+   (`ast_arena`, `inline_expand`, `ast_syminfer` to A; NilPy's forwards to N),
+   and the same is expected here: some sites are C-shaped and belong to C, and
+   some are **shared lowering with a `CProgramMode` guard bolted on, which is a
+   different defect** and must not be moved as if it were the first kind.
+   Classifying them is the deliverable that survives even if the move stalls.
+3. **Land in committed slices, not one move.** Slices 1-6 of the speculative-parse
+   work are the model. A single large `ir.inc` rewrite is unmergeable against five
+   live lanes; a sequence of small ones is not.
+4. **Gate is A's:** `make compiler/pascal26` to fixedpoint per slice, `gate.sh
+   quick` before any pin. Land only green.
+5. Tell the coordinator before touching `ir.inc` for anything outside this
+   refactor, and on release.
+
+**Expiry:** when this ticket resolves, or when frankC reports the slot released —
+whichever is first. A later `ir.inc` change is a later ask.
