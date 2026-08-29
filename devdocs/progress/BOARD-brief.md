@@ -5,12 +5,16 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:21 blocked:6 backlog:301 backlog_new:4 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2582 rejected:46`
+`urgent:1 working:2 unfinished:21 blocked:6 backlog:302 backlog_new:5 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2582 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-opt-o3-register-pressure` [O] — owner: frank-optimize-b4
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
+
+## urgent (1) — jump the queue
+
+- `bug-r-rexprrecid-breaks-the-fpc-bootstrap-seed` [R]
 
 ## unfinished (21) — parked mid-flight; re-claim, do not duplicate
 
@@ -45,8 +49,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `regression-lib-test-lib-synapse` [B] — blocked-by: bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream
 
-## Ready — top 30 of 311, ranked
+## Ready — top 30 of 314, ranked
 
+- `[p 80] [R]` bug-r-rexprrecid-breaks-the-fpc-bootstrap-seed
 - `[p 85] [N]` bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
 - `[p 75] [P]` feature-pascal-corpus-expansion
@@ -59,6 +64,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 70] [T]` regression-cascade-154d1aa3fba6
 - `[p 70] [P]` regression-cascade-4e27dc2be114
+- `[p 70] [N]` regression-test-core-test-nilpy-min-max-variadic-2
 - `[p 70] [A+S]` regression-test-emit-obj-cxtensa-obj
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-parent-call-after-instantiation
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-startswith-tuple
@@ -67,6 +73,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [P]` bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
 - `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
+- `[p 65] [P]` bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets
 - `[p 65] [P]` bug-p-two-different-nested-specializations-of-one-template-collide
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [N]` feature-nilpy-iter-and-next-over-a-container
@@ -74,8 +81,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [O]` feature-opt-bulk-copy-is-byte-at-a-time
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
-- `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
-- `[p 62] [A]` feature-a-typeref-migrate-consumers
-- `[p 62] [N]` feature-nilpy-enum-class
 
-_281 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_284 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
