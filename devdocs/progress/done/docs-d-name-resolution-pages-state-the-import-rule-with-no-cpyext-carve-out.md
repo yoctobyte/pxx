@@ -56,7 +56,7 @@ boundary:** the carve-out is at HEAD and not yet pinned, so a snippet exercising
 compile until the next pin. Either wait for the pin or mark the example as requiring it.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 7ad493fbd.
 
 ---
 
