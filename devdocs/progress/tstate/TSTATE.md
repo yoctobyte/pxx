@@ -4,7 +4,7 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `1bffdc06510a` | 2026-08-29T16:14:10Z | GREEN (native) | 322.2s | `49bd043061c1` RED |
-| seven | `e417731e9007` | 2026-08-29T16:30:49Z | RED (native) | 100.7s | ``  |
+| seven | `154d1aa3fba6` | 2026-08-29T16:51:31Z | RED (full) | 959.2s | `154d1aa3fba6` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -13,3 +13,25 @@
 - **test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy** — test/test_nilpy_parent_call_after_instantiation.npy test/test_nilpy_parent_call_after_instantiation.expected (plexus): bad `19dc5586e384`, last good `8b2cc332791e`, 1 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_startswith_tuple.npy** — test/test_nilpy_startswith_tuple.npy test/test_nilpy_startswith_tuple.expected (plexus): bad `19dc5586e384`, last good `8b2cc332791e`, 1 commit(s) in range
 - **lib-test#src:test/lib_synapse.pas** — test/lib_synapse.pas (plexus): bad `c52fc389fd97`, last good `aca7f699288e`, 9 commit(s) in range
+- **CASCADE 18 jobs** (seven): bad `154d1aa3fba6`, last good `e417731e9007`, 12 commit(s) in range
+  <details><summary>jobs</summary>
+
+  - `lib-test#src:test/lib_inttohex.pas@2`
+  - `lib-test#src:test/test_dynlib.pas`
+  - `test-aarch64#src:test/test_cdecl_indirect.pas`
+  - `test-aarch64#src:test/test_extern_c.pas`
+  - `test-aarch64#src:test/test_extern_c_float.pas`
+  - `test-aarch64#src:test/test_parallel_reduction.pas`
+  - `test-arm32#src:test/test_cdecl_indirect.pas`
+  - `test-arm32#src:test/test_extern_c.pas`
+  - `test-arm32#src:test/test_extern_c_float.pas`
+  - `test-emit-obj#src:test/cxtensa_obj.c@1`
+  - `test-i386#src:test/test_cdecl_indirect.pas`
+  - `test-i386#src:test/test_extern_c.pas`
+  - `test-i386#src:test/test_extern_c_float.pas`
+  - `test-nilpy#src:examples/tk/tkinter_facade.npy`
+  - `test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy`
+  - `test-nilpy#src:test/test_nilpy_startswith_tuple.npy`
+  - `test-sqlite-threads-aarch64#src:compiler/.pascal26.fixedpoint`
+  - `tools-devtest#00`
+  </details>
