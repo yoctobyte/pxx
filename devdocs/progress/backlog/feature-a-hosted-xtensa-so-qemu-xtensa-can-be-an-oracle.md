@@ -173,3 +173,41 @@ Reaching for an oracle while scoping
 [[bug-a-xtensa-cannot-lower-an-int64-to-float-conversion]] and
 [[bug-a-the-div-by-zero-check-is-still-missing-on-xtensa]], both of which say
 in prose that no xtensa emulator is available here. One of them is.
+
+## Update 2026-08-29 (frankS) — the IR_SYSCALL arm now EXISTS, but is bare-only
+
+This ticket's summary says "xtensa has no IR_SYSCALL arm". That half is now
+stale: `cf72dd641` added one, resolving
+[[bug-a-xtensa-refuses-to-lower-an-unreachable-syscall]]. **Read the shape of
+it before building on it**, because it is deliberately not the arm this ticket
+will eventually want.
+
+The arm evaluates its args and returns **`-38` (`-ENOSYS` /
+`PAL_ERR_UNSUPPORTED`)**. That is correct for every xtensa role that exists
+*today* — bare metal and IDF/FreeRTOS-linked, neither of which has a Linux
+kernel under it — and it was chosen precisely because `util.inc:88` records
+riscv32 as dual-role (bare **or hosted Linux**) while xtensa is not.
+
+**A hosted xtensa profile falsifies that premise, and this is the trap:** under
+`qemu-xtensa` user mode there *is* a Linux kernel, and the current arm would
+answer `-ENOSYS` to every syscall instead of performing it. Nothing would
+crash — the RTL's syscall callers all check for a negative result and would
+take their "not available" path — so a hosted xtensa build would come up
+looking plausible and quietly do nothing. That is the exact failure mode
+`devdocs/dev/debugging-playbook.md` opens with: a plausible wrong value far
+from the cause.
+
+So when this ticket lands a hosted profile, the arm must gate on it and emit a
+real Xtensa `SYSCALL` instruction in the hosted role, mirroring what
+`ir_codegen_riscv32.inc` already does for its own dual role (`ecall`, then
+sign-extend into the high word). Two concrete notes for whoever does it:
+
+- There is **no `xtensa_syscall` encoder yet** — the encoder set in
+  `ir_codegen_xtensa.inc` has no SYSCALL opcode, so one has to be added
+  alongside the hosted arm.
+- The result is `Int64` in `a2:a3`, so the hosted arm needs the same
+  sign-extension of the 32-bit return into `a3` that the `-38` path gets from
+  `EmitLoadConst64Xtensa`.
+
+The other obstacle this ticket names — `TargetIsEspClass` hardcoding xtensa as
+bare-metal always — is untouched and remains the substantive work here.
