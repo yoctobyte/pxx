@@ -1234,6 +1234,43 @@ CORPUS_RE = re.compile(r"library_candidates/([A-Za-z0-9_.+-]+)")
 # table existed, enrolling lib-test made the full tier permanently RED on any
 # box that had not fetched it, which is the opposite of a useful signal.
 # Each entry is (regex over a recipe line, directory root, how to fetch it).
+# ---- host CPU capability requirements ---------------------------------------
+# A job that needs an instruction this silicon does not implement can never pass
+# here, and a RED for that reason is strictly worse than a SKIP: it masks a
+# future real regression in the same job permanently, and every later run reads
+# it as STILL-RED rather than as coverage loss. Same argument as the corpus
+# guard below, moved from the filesystem to the CPU.
+#
+# Measured case: seven is a Xeon E5645 (Westmere, 2010). RDRAND arrived with Ivy
+# Bridge in 2012, so `test_hw_random_intrinsics` SIGILLs there on every run and
+# always will. Nothing in the report could distinguish that from a regression.
+HOST_CAPS = [
+    (re.compile(r"test_hw_random_intrinsics"), "rdrand",
+     "RDRAND/RDSEED (Intel Ivy Bridge 2012 and later)"),
+]
+
+
+def host_cpu_flags():
+    """The host CPU's feature flags, lowercased. Empty set when unknown.
+
+    Unknown must mean "do not skip", NOT "skip": absence of evidence about the
+    CPU is not evidence the CPU lacks the instruction. A wrong SKIP removes
+    coverage silently on a capable box, which is the failure this whole guard
+    exists to prevent -- a wrong RED merely costs one triage. So the two error
+    directions are deliberately NOT symmetric, and this one fails toward running
+    the job. (x86 spells it `flags`; aarch64 spells it `Features`.)
+    """
+    try:
+        with open("/proc/cpuinfo") as fh:
+            for line in fh:
+                k, _, v = line.partition(":")
+                if k.strip().lower() in ("flags", "features"):
+                    return set(v.lower().split())
+    except OSError:
+        pass
+    return set()
+
+
 CORPUS_ROOTS = [
     (CORPUS_RE, "library_candidates",
      "tools/install_lib_candidates.sh %s"),
@@ -1723,7 +1760,8 @@ def job_subject(job):
 # counted separately and the second is never silently folded into the first,
 # which is what the single hardcoded "(corpus absent)" label did to the FPC
 # canary skips for seven weeks.
-SKIP_HOLE_PREFIXES = ("corpus absent:", "tool absent:")
+SKIP_HOLE_PREFIXES = ("corpus absent:", "tool absent:",
+                      "host capability absent:")
 
 
 def skip_summary(jobs):
@@ -4941,6 +4979,23 @@ def main():
     # up front, with the one command that fixes it.
     if absent:
         print(corpus_warning(absent, nabsent), flush=True)
+    # ...and the same for instructions the host does not implement. Only jobs
+    # still standing: a corpus-absent job is already skipped for a reason that
+    # names the one command that fixes it, and this one never can be.
+    hostflags = host_cpu_flags()
+    for j in jobs:
+        if j.status == "skip":
+            continue
+        for rx, cap, human in HOST_CAPS:
+            if cap in hostflags or not hostflags:
+                continue
+            if any(rx.search(ln) for ln in j.lines):
+                j.status = "skip"
+                j.skip_reason = ("host capability absent: %s — this CPU does "
+                                 "not implement %s, so the job cannot pass on "
+                                 "this box and a red would be permanent"
+                                 % (cap, human))
+                break
     for j in jobs:
         j.deps = [d for d in j.deps if d.status != "skip"]
     if args.inject_hang:
