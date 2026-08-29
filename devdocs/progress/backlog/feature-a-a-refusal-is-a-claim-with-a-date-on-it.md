@@ -3577,3 +3577,56 @@ both arms against the reverted build, and **found they were refused there too**
 — so the new global arm is breadth across two code paths, **not** the witness it
 was predicted to be. Recorded that way, *"because the reverse would have been
 the better story and is not what the measurement showed."*
+
+### 86. A control naming a TYPE FAMILY must name the BINDING FORM too — literal, local and parameter take different paths
+
+frankwasm, 2026-08-30, and it is the third instance of face 72 in one night,
+this time found in someone else's work rather than its own.
+
+`19dc5586e` shipped **13 probes**, one of which was *"a str method on a
+**literal**"*. That is a reasonable-looking control for the arm it was
+changing — and it is **the single str-receiver shape that still works**, because
+a literal never reaches the arm that is broken. The control was present,
+plausible, and **could not have failed for this bug.**
+
+The defect it missed: a str method whose return type is *not* a string, on a
+receiver that is a **variable**, returned from a `def`.
+
+```python
+def f():
+    y = "abc"
+    return y.find("b")
+print(f())          # SEGV
+```
+
+`.upper()`/`.lower()`/`.replace()` survive only because **the wrong answer
+equals the right one**; `.find`/`.count`/`.startswith`/`.endswith` die. So even
+the surviving cases are not evidence of correctness.
+
+**The rule, and it generalises past NilPy:** when a control names a type family
+("a str method", "an integer argument", "a managed record"), it must also name
+the **binding form** — literal, local, parameter, field, temporary — because
+those take different paths through the compiler and a control that picks the
+easy one tests the path that was never in doubt. Three of tonight's findings
+share this shape.
+
+**Measured, not reasoned:** `PXXDBG=a.ir` shows both builds emitting the same
+call, the crashing one opening with `zero_sym` on `$pyresult` where the working
+one has `const_int` — the `def`'s result symbol typed `tyAnsiString` while the
+call returns Integer/Boolean, so the caller reads a small integer as a string
+handle. And the suspect commit was confirmed **by building both sides**
+(`9c8e20c58` fixedpoint `100300ef2b3a` prints 1; `19dc5586e` fixedpoint
+`ecf52e008b11` segfaults), not by reading the diff.
+
+**The cause is a comment that already warned about this, one type-family over.**
+`PyRetMethodType` resolves user-class methods only; for a string receiver it
+returns `tyUnknown` *and* leaves `recvCi2 = -1`, so neither branch fires and the
+expression chase claims the receiver's own type — **exactly what that function's
+own header describes as "the defect"**. `PyStrMethodInfo` already tabulates the
+right answers and is simply never asked.
+
+**And the ticket's name is actively misleading:** neither `startswith` nor the
+tuple is involved. A fix validated against `test_nilpy_startswith_tuple.npy`
+alone passes while `.find` and `.count` stay broken — so the regression test
+needs a str→int row, a str→bool row, a str→str control **and** a
+literal-receiver control.
