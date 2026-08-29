@@ -93,4 +93,4 @@ same layout.
 Comment-only. `make compiler/pascal26` byte-identical.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 45a655ed4.

@@ -93,4 +93,4 @@ Comment-only. `make compiler/pascal26` must stay byte-identical; if it does not,
 something in the change was not a comment.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 45a655ed4.
