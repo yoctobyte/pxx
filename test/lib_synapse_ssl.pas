@@ -30,13 +30,14 @@ program lib_synapse_ssl;
   `connect=0 ssl=0`, five runs out of five, and the FPC oracle built from the
   same source gives the identical `connect=0 ssl=0`. The handshake works.
 
-  It is absent from this program for a purely mechanical reason: a TLS handshake
+  It is absent from THIS program for a purely mechanical reason: a TLS handshake
   is a CONVERSATION, so a hermetic loopback needs both sides live at once, and
-  this suite is single-process with no fork primitive. Doing it properly means a
-  self-exec harness (the test re-runs its own binary as the server, cert via
-  TSSLOpenSSL.CreateSelfSignedCert), which is real test infrastructure and is
-  filed as feature-b-a-hermetic-tls-loopback-for-the-ssl-suite rather than
-  bolted in here as a flaky openssl-CLI dependency inside Track B's gate.
+  this suite is single-process with no fork primitive. That is now covered by a
+  sibling rather than by a manual probe: test/lib_synapse_tls_loopback.pas
+  re-runs its own binary as the server (feature-b-a-hermetic-tls-loopback-for-the-ssl-suite,
+  landed 2026-08-30) and asserts both a completing handshake and a REJECTED one.
+  This file keeps its narrower job -- the loader resolving real symbols -- and
+  the two are separate because they fail for different reasons.
   The 30-second manual repro is recorded in feature-real-dynlib-loader.
 
   Needs -dPXX_DYNLIB_LIBC (the opt-in libc-linked loader) and external/synapse. }

@@ -54,11 +54,21 @@ EXTRA_UNIT_DIRS = ["lib/rtl/platform/esp"]
 # than tidiness: a `-I` in reach of a Pascal `uses` can capture the uses and
 # turn it into a dynamic import
 # (bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import),
-# and the RTL units that collide with shipped header names -- math, netdb,
-# strings -- all live in lib/rtl. Keeping the flag off them means this script
-# cannot trip that bug even after it is fixed or while it is not. No gtk-3.0
-# root currently contains math.h, netdb.h or strings.h, checked; scoping means
-# we do not have to keep re-checking.
+# and the RTL units at risk all live in lib/rtl. Keeping the flag off them means
+# this script cannot trip that bug whether or not it is fixed.
+#
+# The trigger, measured on pinned v393 (which predates the compiler-side fix in
+# 4576ad4d1, so the bug was live to test against): a `uses X` is captured only
+# when BOTH the name is one we ship a header for -- lib/crtl/include holds
+# math.h, netdb.h, strings.h -- AND an -I root supplies that header. `uses math`
+# with no -I resolves correctly; with a dir holding any math.h ahead of -Fu it
+# loses Floor. `uses png` cannot be captured at all, not even with the real
+# /usr/include/libpng16 on -I, because png.h is not one we ship -- which is why
+# a name-collision survey against the include roots is the wrong instrument:
+# lib/rtl/png.pas collides with libpng16/png.h and is harmless, while the three
+# that matter collide with headers in OUR tree, not GTK's.
+#
+# GTK3_INC carries none of those three, so the scoping is belt and braces.
 GTK3_INC = [
     f for f in subprocess.run(
         ["pkg-config", "--cflags-only-I", "gtk+-3.0"],

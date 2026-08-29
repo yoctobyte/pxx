@@ -15070,6 +15070,29 @@ else
 	$(PXX_STABLE) --mimic-fpc -dPXX_DYNLIB_LIBC -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posix test/lib_synapse_ssl.pas $(TESTTMP)/lib_synapse_ssl
 	tools/expect_same.sh lib_synapse_ssl.1 "$$($(TESTTMP)/lib_synapse_ssl | grep -c '=ok')" "3"
 	tools/expect_same.sh lib_synapse_ssl.2 "$$($(TESTTMP)/lib_synapse_ssl | tail -1)" "SYNAPSE-SSL OK"
+	# ...and a real HANDSHAKE, which the line above does not cover: it proves the
+	# loader resolves symbols, not that a conversation completes. Self-exec, so
+	# both ends are ours -- no openssl CLI, no cert file, no fixed port, and no
+	# extra wiring here because the server is this same binary re-run with an
+	# argument. feature-b-a-hermetic-tls-loopback-for-the-ssl-suite
+	#
+	# The arm with teeth is the SECOND handshake, which turns verification ON and
+	# requires the self-signed cert to be REJECTED. A permissive handshake can
+	# complete without X509_verify_cert ever reaching a decision -- and that
+	# function is where the compiler bug this guards actually lived
+	# (bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert),
+	# so without the rejecting arm this test could be green while never entering
+	# the code it exists to protect.
+	#
+	# Measured 80/80 green (40 serial + 40 as eight concurrent) at ~1.2s, on a box
+	# loaded at 13 on 12 cores. Exit 77 = prerequisite absent (no usable libssl at
+	# RUN time, which the compile cannot tell us), reported as a skip rather than
+	# a silent pass.
+	$(PXX_STABLE) --mimic-fpc -dPXX_DYNLIB_LIBC -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posix test/lib_synapse_tls_loopback.pas $(TESTTMP)/lib_synapse_tls_loopback
+	@rc=0; out=$$($(TESTTMP)/lib_synapse_tls_loopback 2>&1) || rc=$$?; \
+	 if [ $$rc = 77 ]; then echo "SKIP lib_synapse_tls_loopback -- $$out"; echo tls-loopback >> $(TESTTMP)/lib-test.skipped; \
+	 elif [ $$rc != 0 ]; then echo "lib_synapse_tls_loopback: FAIL"; echo "$$out"; exit 1; \
+	 else tools/expect_same.sh lib_synapse_tls_loopback "$$out" "$$(printf 'harness=ok\nssl=ok\ndata=ok\nharness2=ok\nverify-rejects=ok\nverify-reason=ok\nTLS-LOOPBACK OK')"; fi
 endif
 	$(PXX_STABLE) test/lib_dns_cache.pas $(TESTTMP)/lib_dns_cache
 	tools/expect_same.sh lib_dns_cache "$$($(TESTTMP)/lib_dns_cache)" "$$(printf 'hit=ok\nmiss-other=ok\nexpired=ok\nneg-hit=ok\nneg-expired=ok\nqtype-a=ok\nqtype-aaaa=ok\nreplace-val=ok\nreplace-count=ok\nttl-zero-noop=ok\nfull-live=ok\nevict-cap=ok\nevict-oldest=ok\nevict-newkept=ok\nv6-hit=ok\nv6-coexist=ok\nv6-expired=ok\nv6-neg=ok\ncn-hit=ok\ncn-coexist=ok\ncn-expired=ok\ncn-ttl-noop=ok')"
@@ -15933,7 +15956,7 @@ endif
 	# not cover them". awk dedupes rather than `sort -u`, which merges
 	# distinct identifiers under some locales.
 	@sk="$$(awk '!a[$$0]++' $(TESTTMP)/lib-test.skipped 2>/dev/null | tr '\n' ' ' | sed 's/ *$$//')"; \
-	 echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + strtofloat-roundtrip + strtofloat-lemire + mimic-six + mimic-warnings + mimic-xml-etree + mimic-collections-abc + pyexec + format-ge + namevalue + markdown + inttohex + reportlab-diff + synapse-ssl) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')$${sk:+ -- SKIPPED: $$sk (green here does NOT cover them)}"
+	 echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + strtofloat-roundtrip + strtofloat-lemire + mimic-six + mimic-warnings + mimic-xml-etree + mimic-collections-abc + pyexec + format-ge + namevalue + markdown + inttohex + reportlab-diff + synapse-ssl + tls-loopback) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')$${sk:+ -- SKIPPED: $$sk (green here does NOT cover them)}"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check
