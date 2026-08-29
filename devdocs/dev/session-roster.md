@@ -16467,3 +16467,60 @@ the measurement back.
 
 All 15 reds are host coupling — see face twenty-six, which is seven's refusal to
 accept them as a baseline.
+
+## Track T left plexus entirely, and the residue was a dashboard nobody was updating
+
+Owner, 2026-08-29, in two steps. First *"since seven is up doing track T stuff,
+we can kill the watcher daemon on localhost"*; then, after asking why Track T on
+localhost still looked active, *"i launched an agent on seven. it's installing
+stuff. but it's about time to stop running trackT on plexus."*
+
+**Three different things wear the "Track T on localhost" label, and only one of
+them was the daemon.** Worth writing down because I stopped one and reported the
+job done:
+
+1. **`trackt-watcher.service`** — stopped 18:20, `inactive`, unit left `enabled`
+   so a reboot restores a watcher rather than none. Last `tstate(plexus)` row is
+   18:14; the newest rows on master are `tstate(seven)`.
+2. **`twatch_web.py --clone ~/trackt-watch --port 8377`** — **still running, and
+   this is the one the owner caught.** It sweeps nothing and publishes nothing;
+   it serves a page reading `~/trackt-watch`. But **the daemon was the only thing
+   pulling that clone**, so the clone froze at `e7d2dcb8f / 18:14` — the exact
+   moment the daemon stopped — four commits behind origin. It was serving a
+   frozen snapshot that looks live. Stopped; port released.
+3. **pxx-a5**, the T *agent* face, working T's ticket queue. Not a daemon at all,
+   and it survived both of the first two being stopped.
+
+**The generalisable bit is #2.** *A display with no updater is indistinguishable
+from a display with nothing new to show.* Killing the producer left the consumer
+running and confident. I reported "the daemon is stopped" as though that settled
+the question, and it settled one third of it — the owner asked the question that
+found the rest.
+
+**Now: `seven` owns Track T, both faces.** The provenance split agreed two hours
+earlier — pxx-a5 keeps the standing queue, seven triages what its own runs
+produce — is **superseded**. It was a good boundary and it lasted two hours; the
+topology moved under it. `bug-t-the-two-watcher-health-checks-disagree...` [T
+p40] hands over with seven's own handover-window evidence attached.
+
+pxx-a5 re-laned to `compiler/builtin/builtinheap.pas` — the fail-open family,
+which is **two tickets and one fix**: the per-CPU `{$ifdef}` chains and
+frankwasm's three `PXXSys*` primitives are the same defect counted twice, and
+the systemic answer is a terminal `else` that fails loud on every chain rather
+than four more arms.
+
+### File allocation with four sessions in Track A — stated, because a boundary is what makes being wrong survivable
+
+| session | files | note |
+| --- | --- | --- |
+| frankA | unit-graph / PreScanPass machinery | spliced-token-stream, diagnosis banked |
+| frankB | `Makefile` (tranche three) | **vacating `ir_codegen.inc`** — confirmation requested, not inferred |
+| frank-optimize-b4 | residency pass, float store path | `ir_codegen.inc` held until frankB confirms |
+| pxx-a5 | `compiler/builtin/builtinheap.pas` | HeapMmap stays **ungranted** |
+
+`symtab.inc` is free. The one live collision is `ir_codegen.inc`, and
+**frank-optimize-b4 flagged it before I saw it** — *"nine of my nine deleted
+stores are emitted from it, so I think a collision is likely rather than
+possible"* — and proposed doing the probe extension first, which is the part
+least likely to touch frankB's ground. That is the worker seeing the data and
+the coordinator seeing the plan, working the way it is supposed to.
