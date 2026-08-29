@@ -7479,8 +7479,32 @@ def main():
                 # gets would otherwise hold this slot forever and make every
                 # branch below it unreachable, which is exactly what happened
                 # for 5h13m on 2026-08-19.
+                #
+                # A COMMITMENT POINT, for the same reason the requested-verdict
+                # branch above has one, and this is the sibling arm that was
+                # missed when that one was fixed. `make_preempted()` with no
+                # `commit_after` is abortable at every moment, and pushes do not
+                # stop; so the phase is entered fine and can never FINISH.
+                # Measured on seven 2026-08-29: **7 pin-verify attempts, 7
+                # preemptions, 0 completions**, while the one breadth run that
+                # reached its commit point that day finished in 959s. Reaching
+                # the slot was never the problem.
+                #
+                # That is precisely the hole verify_pin exists to close — "18 of
+                # the last 25 pins never received a full run" — reproduced one
+                # level down, in the mechanism written to fix it. IDLE_YIELD_AFTER
+                # bounds the damage to other phases but does nothing for the pin:
+                # yielding the slot is not the same as ever verifying.
+                #
+                # Same value and reasoning as the requested branch, NOT breadth's
+                # commit_after=0: a push in the first `full_commit_secs` still
+                # preempts, so a genuinely fresh sha is never starved by a run
+                # that just started; after that the run is allowed to finish.
                 r = verify_pin(clone, host, st, *pin_mid,
-                               abort_check=make_preempted(clone, tested))
+                               abort_check=make_preempted(
+                                   clone, tested,
+                                   commit_after=(CONF.get("full_commit_secs")
+                                                 or None)))
                 if r == "aborted":
                     n = note_idle_abort(clone, host, "pin-verify", pin_mid[1])
                     if n >= IDLE_YIELD_AFTER:
@@ -7535,8 +7559,13 @@ def main():
                 # full run — one verification instead of limited-then-full. It
                 # comes back the moment a clone configures a distinct mid_tier,
                 # which is why it stays.
+                # Same commitment point as pin_mid above -- the two arms of
+                # one phase must not disagree about whether they can finish.
                 verify_pin(clone, host, st, *pin_deep,
-                           abort_check=make_preempted(clone, tested))
+                           abort_check=make_preempted(
+                               clone, tested,
+                               commit_after=(CONF.get("full_commit_secs")
+                                             or None)))
                 did_work = True
             elif tested and CONF.get("idle_slow") and \
                     (st.get("last_full") or {}).get("sha") == tested and \
