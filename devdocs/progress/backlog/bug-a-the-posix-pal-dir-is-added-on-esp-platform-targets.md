@@ -101,3 +101,43 @@ backend becomes a default, the esp32 example builds and
 `test/lib_platform_esp.pas` are the real check, and their now-redundant `-Fu`
 lines should stay (an explicit override that agrees with the default is not a
 bug).
+
+## Repro correction 2026-08-29 (frankS) — the command as written cannot show the bug
+
+The `## Repro` line above is:
+
+```
+./stable_linux_amd64/default/pinned --where --target=xtensa --platform=esp
+```
+
+**`--where` before the target flags silently ignores them.** Run exactly as
+written it prints `lib/rtl/platform/posix/` for *every* target — including
+`--esp-profile=bare`, which this ticket correctly says should add none. So
+following the repro literally shows a uniform result, hides the very axis the
+ticket is about, and makes the bare row look broken too.
+
+Put `--where` **last**:
+
+```
+./compiler/pascal26 --target=xtensa --platform=esp --where
+```
+
+Re-measured that way on `cf72dd641`, and the ticket's table is **confirmed
+exactly as written** — the diagnosis was right, only the repro line was wrong:
+
+| invocation | PAL dir added |
+| --- | --- |
+| `--target=xtensa --where` | posix — wrong |
+| `--target=xtensa --platform=esp --where` | posix — wrong |
+| `--target=riscv32 --platform=esp --where` | posix — wrong |
+| `--target=xtensa --esp-profile=bare --where` | **none** (correct) |
+| `--target=riscv32 --where` | posix (correct) |
+| `--target=x86_64 --where` | posix (correct) |
+
+So `--platform=esp` genuinely does not change which PAL dir is added, and no
+esp root is added on any invocation — both halves of the defect stand.
+
+Not claimed: the fix edits `AddDefaultPasUnitDirs` in `compiler/compiler.pas`,
+which is Track A's shared ground and outside the file grant frankS is holding
+(`ir_codegen_xtensa.inc`, `lib/rtl/platform/esp/**`, `examples/esp32/**`).
+Left for A, or for S once the grant is widened.
