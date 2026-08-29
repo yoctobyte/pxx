@@ -31,6 +31,25 @@ Five instances, one day, five different subsystems:
 | 3 | `range()` stop re-evaluation | 3-arg **runtime** step | 3-arg **literal** step | **hung forever** |
 | 4 | string COW / meta word | `PXXStrUnique` (5 targets) | x86-64's inline `AnsiStrUniqueAddr` | silent stale ASCII flag |
 | 5 | ordered string compare | x86-64 inline | `PXXStrCmp3` (4 targets) | `'zzz' < 'aaa'` by **allocation order** |
+| 6 | `SomeName(expr)` named-type cast | 4 of 5 `ParseFactorCore` dispatch sites | `FindTypeAlias` arm | alias cast **did not narrow** — silent wrong value |
+
+**Instance 6 is the loudest and was found the same day, by pxx-a5 (`6cc4afc17`).**
+It is worth stating separately because it removes the last charitable reading of
+this shape. There are **five** dispatch sites in `ParseFactorCore` deciding what
+`SomeName(expr)` casts to; four build an identical node and differ only in which
+names they recognise (the type KEYWORD token at `:1478`, `Integer` at `:1571`,
+`OrdinalNameToTk` at `:4074`, `BuiltinScalarTypeKind` at `:6725`,
+`FindTypeAlias` at `:6434`). It was the **fourth** round of fixing one construct.
+And `:1564`'s comment, written during the *previous* round, says:
+
+> *"the fix for the other spellings deliberately left this one alone — which is
+> precisely how the second path stays broken."*
+
+That comment does not merely imply a broken sibling whose invariant went
+unchecked. **It names the surviving broken arm outright, in advance, and it
+still took another round.** So the population is not just findable in principle
+— in at least one case it was already found, written down, and left. The gap
+this audit closes is not detection, it is follow-through.
 
 **In every one, the fixed arm's comment names the property the unfixed arm
 lacks.** Instance 3's runtime-step arm says outright: *"the previous lowering
