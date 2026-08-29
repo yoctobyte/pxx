@@ -158,3 +158,67 @@ in every full tier that box has run.
 - `rejected/regression-cascade-154d1aa3fba6` — the cascade this fell out of.
 - `backlog/bug-t-a-test-targets-timeout-class-is-decided-by-a-substring-and-is-right-by-accident` — the *other* half of "which budget does this job get", and independent of this one: that ticket is about picking the wrong class, this one is about the class figure never being scaled to the box.
 - `done/task-t-suppress-autoticket-until-host-baselined` — the guard that was supposed to stop a fresh box's first sweep from filing a cascade. It shipped, and `seven` filed one anyway.
+
+---
+
+## PARTIALLY FIXED 2026-08-30 — the probe now has range; the n-gate is untouched
+
+The "preferred" recommendation above landed. `calibrate()` now runs **two**
+probes and combines them with `max()`:
+
+- the existing `hello.pas` compile (also the compiler-health check), and
+- a generated fixed compute loop, cross-compiled to aarch64 and **run under
+  qemu-user** — 8,000,000 iterations, ~0.36s on the reference box.
+
+The emulated axis is where the fleet's boxes actually differ, and it is where
+the false timeouts landed. Measured on plexus after the change:
+
+```
+testmgr: budgets x1.00 (native probe 0.58, emulated probe 0.89) — at the floor,
+         so neither probe raised it
+```
+
+Three things that line does that nothing did before: it reports the scale on
+**every** run, it shows the two components separately, and it **says out loud
+when the floor is the answer**. "The floor is the answer" is precisely what went
+unnoticed for the life of this function; a line that appeared only when the
+probe found something could never have reported finding nothing.
+
+Cost: ~0.65s added to every testmgr invocation (a cross-compile plus the
+emulated run) — ~2% of a `quick` tier, ~0.6% of `native`. Every failure path in
+`calibrate_emulated()` returns **None = no opinion**, never a small number: no
+emulator on PATH, a cross-compile that does not build, a run that exits nonzero.
+A box with no qemu at all now skips those jobs anyway (see below).
+
+Guards: `tools/testmgr_calibrate_range_devtest.py`, 15 checks — and its docstring
+says which of them are on new behaviour rather than letting the count speak.
+
+**Expected effect on `seven`, stated as expectation and not as measurement:** if
+it is ~1.5x slower under emulation than plexus, its qemu budget goes 240s ->
+~360s and `test-aarch64#test_parallel_reduction` (240.4s) passes. That is a
+prediction; the box's next full tier is what settles it, and the `scale:` field
+in its report header is where to read the answer.
+
+### What is still open, and it is why this ticket stays in backlog
+
+**The n-gate is untouched, deliberately.** `learn_timeout()` still leaves `n=0`
+and its consumer still requires `n >= METRICS_MIN_RUNS`, so a job that has never
+passed on a box still cannot earn a budget from its own observed duration. The
+probe fix routes *around* that for the case where the box is uniformly slow; it
+does not fix a single job that is slow for its own reasons on one host.
+
+**And one limitation the fix introduces, stated because the scale is a single
+global number:** a box slow only under emulation now gets generous *native*
+budgets too. A budget is a ceiling, so that costs hang-detection latency — one
+class-length run before the kill — not a wrong verdict. The converse case, a box
+slow only natively, is still served by a probe with ~1.3x of range, and no
+second probe helps it. Per-class scales would; that is a larger change than this
+one and is not attempted here.
+
+### Related, landed the same day
+
+`apply_host_tool_skips()` — a job whose qemu emulator is not on PATH is now
+**skipped with a reason naming `tools/install_qemu.sh`**, rather than red. Same
+family as this ticket (a host fact reported as a defect in the tree), and it is
+what makes enrolling `test-xtensa` into the full tier safe on a box that never
+installed qemu-xtensa.

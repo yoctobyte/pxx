@@ -3676,9 +3676,96 @@ class Manager:
 
 
 # ------------------------------------------------------------ calibration --
+# THE SECOND PROBE, and why one was not enough.
+#
+# The hello.pas compile above cannot tell this fleet's boxes apart. Measured
+# 2026-08-30 on plexus (Xeon E5-2620 v2, 2013): 0.25 / 0.27 / 0.26s against a
+# 0.35 reference, so max(1.0, 0.74) = 1.0 — the FLOOR, not a measurement. And
+# `seven` (dual Xeon E5645, Westmere, 2010, no AVX) publishes `scale: 1.0` in
+# its own reports too. The two boxes therefore received byte-identical budgets,
+# and the mechanism that exists so weak hardware never gets false timeouts was
+# inert on every host it ran on.
+#
+# It is a resolution problem, not a floor problem. The floor is right (never
+# shrink a budget below the reference box). A 0.26s single-threaded compile is
+# dominated by process startup and page cache and has perhaps 1.3x of range
+# across a decade of hardware — while the budgets it scales govern qemu-user
+# EMULATION, where a Westmere and an Ivy Bridge are much further apart, and
+# where the false timeouts actually landed (`test-aarch64#test_parallel_reduction`,
+# 240.4s against a 240s budget, on a job that had never once passed there).
+#
+# So: a fixed compute loop, cross-compiled and run under qemu, timed. It is
+# generated rather than kept in test/ because a probe is not a test — nothing
+# should sweep it, enrol it, or wire it into a tier.
+#
+# bug-t-a-job-that-never-passed-on-this-box-can-never-earn-a-bigger-budget
+PROBE_EMU_ARCH = "aarch64"      # the emulator every cross-capable box has
+PROBE_EMU_ITERS = 8000000       # ~0.36s emulated on the reference box
+PROBE_EMU_REF = 0.36            # seconds: that loop under qemu-aarch64, plexus
+
+PROBE_EMU_SRC = """program probe_loop;
+var i, s: LongInt;
+begin
+  s := 0;
+  for i := 1 to %d do
+    s := (s + i * 3) and $FFFFFF;
+  writeln(s);
+end.
+""" % PROBE_EMU_ITERS
+
+
+def calibrate_emulated():
+    """Time a fixed compute loop under qemu-user. -> ratio, or None.
+
+    None means "NO OPINION", never "fast". Every failure path returns it — no
+    emulator, a cross-compile that does not build, a run that exits nonzero —
+    because the alternative is a probe that reports a small number when it
+    measured nothing, and a small number here SHRINKS nobody's budget but does
+    silently withhold the only evidence that would have raised one. A box with
+    no qemu at all skips every job this would have covered anyway.
+    """
+    exe = dict(HOST_TOOLS).get(PROBE_EMU_ARCH)
+    if not exe or shutil.which(exe) is None:
+        return None
+    src = os.path.join(RUN_TMP, "testmgr_probe_emu.pas")
+    binp = os.path.join(RUN_TMP, "testmgr_probe_emu")
+    try:
+        with open(src, "w") as fh:
+            fh.write(PROBE_EMU_SRC)
+        r = subprocess.run([os.path.join(REPO, COMPILER),
+                            "--target=" + PROBE_EMU_ARCH, src, binp],
+                           cwd=REPO, capture_output=True)
+        if r.returncode != 0:
+            return None
+        t0 = time.monotonic()
+        r = subprocess.run([os.path.join(REPO, "tools/run_target.sh"),
+                            PROBE_EMU_ARCH, binp], cwd=REPO,
+                           capture_output=True)
+        dt = time.monotonic() - t0
+        if r.returncode != 0:
+            return None
+    except OSError:
+        return None
+    return dt / PROBE_EMU_REF
+
+
 def calibrate():
-    """Time one known-cost compile; scale all timeouts from it so weak
-    hardware never gets false timeouts."""
+    """Time known-cost work; scale all timeouts from it so weak hardware never
+    gets false timeouts. -> float >= 1.0
+
+    Two probes, combined with max(): a box slow on EITHER axis gets the bigger
+    budget. The asymmetry is deliberate and it is the same one host_cpu_flags()
+    argues for. A budget is a CEILING, so being generous costs hang-detection
+    latency — one class-length run before the kill — while being stingy costs a
+    false RED, which is indistinguishable from a regression and is the failure
+    this function exists to prevent.
+
+    WHAT THIS STILL DOES NOT FIX, stated because the scale is a single global
+    number: a box slow only under emulation now gets generous NATIVE budgets
+    too. That is the ceiling above, so it is cheap. The converse — a box slow
+    only natively — is still served by a probe with ~1.3x of range, and no
+    second probe here helps it. Per-class scales would, and are not this change.
+    """
     t0 = time.monotonic()
     r = subprocess.run([os.path.join(REPO, COMPILER), "test/hello.pas",
                         os.path.join(RUN_TMP, "testmgr_probe26")], cwd=REPO,
@@ -3686,7 +3773,18 @@ def calibrate():
     dt = time.monotonic() - t0
     if r.returncode != 0:
         sys.exit("testmgr: probe compile failed — is %s healthy?" % COMPILER)
-    return max(1.0, dt / PROBE_REF)
+    native = dt / PROBE_REF
+    emulated = calibrate_emulated()
+    scale = max(1.0, native, emulated or 0.0)
+    # ALWAYS printed, including the x1.00 case. "The floor is the answer" is
+    # what went unnoticed for the life of this function, and a line that appears
+    # only when the probe found something cannot say that it found nothing.
+    print("testmgr: budgets x%.2f (native probe %.2f, emulated probe %s)%s"
+          % (scale, native,
+             "%.2f" % emulated if emulated is not None else "no opinion",
+             "" if scale > 1.0 else " — at the floor, so neither probe raised it"),
+          flush=True)
+    return scale
 
 
 PINNED_REL = "stable_linux_amd64/default/pinned"
