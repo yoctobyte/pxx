@@ -167,3 +167,9 @@ workstation, six sessions are live, and load 4.30 is not idle. But the reason
 this ticket has been deferred twice is materially weaker than it was this
 morning, and it is the first time that has been true. Whoever picks it up
 should re-read the load rather than inherit "blocked on a busy box" from here.
+
+- 2026-08-29 — the count in the title is now stale: `verify_assertions_devtest.py`
+  added 9, so the single job runs 95. Noted rather than retitled, because the
+  number is the symptom and the shape is the ticket — and it will be stale again
+  by the time anyone reads this, which is itself part of the argument for
+  splitting the job rather than counting it.
