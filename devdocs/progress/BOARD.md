@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -16,7 +16,6 @@ _none_
 | bug-n-a-later-wall-in-key-analysis-blocks-convertrawtext-and-songformatter | N | 55 | bug | convertrawtext.py and SongFormatter.py fail at key_analysis.py:82 (`tonic, mode = label.split(\" \", 1)`) with `unexpected token`. Pre-existing, was hidden behind the grid keyword-call refusal. Does NOT reproduce standalone or through a plain from-import — needs more of convertrawtext.py's context, not yet minimised. | — |
 | feature-esp-peripheral-callback-api | B+S | 30 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
-| refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs | C | 75 | refactor | Four C readers ask what a decayed array steps by, and all four are written as an AN_IDENT branch beside an AN_FIELD branch. Three field branches were never finished: five ordinary expressions SEGFAULT (`**a.s`, `*(*(a.m+1)+2)`, `strcmp(*(a.s+1),\"cd\")`), one loads four bytes of a char row. Three of the pairs were repaired one at a time on 2026-08-29; this replaces the shape with one reader so there is no fifth pass. | — |
 
 ## unfinished (22)
 
@@ -57,7 +56,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (315)
+## backlog (319)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -69,6 +68,7 @@ _none_
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
 | bug-a-function-result-assignment-does-not-narrow-to-the-result-type | A | 40 | bug | `function F(a: Int64): Integer; begin F := a; end` returns the full 64-bit value: F(4294967299) prints 4294967299 where FPC prints 3. The same assignment to a variable, to a var parameter, or through a cast all narrow correctly. One arm of a double case, and the broken arm is the one with no diagnostic — the caller reads a value the declared result type cannot hold. | — |
 | bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs | A+S | 40 | bug | Hosted xtensa diverges from the x86-64 oracle on 21 of 142 cross programs | — |
+| bug-a-irarrayelemstride-has-no-field-arm-so-it-answers-the-row-stride | A | 70 | bug | `&a.m[1][0] - &a.m[0][0]` on a struct field `int m[3][4]` answers 1 where gcc says 4. IRArrayElemStride exists precisely so a FULLY indexed base gets the ELEMENT stride instead of the row stride, and its own comment names 1 as the wrong answer — but it has only an AN_IDENT arm, so an AN_FIELD base falls through to IRPointerStride and gets exactly the row stride the split was made to avoid. | — |
 | bug-a-irtoplevelstmt-parameter-is-a-node-index-named-k | A | 20 | bug | ir_codegen.inc:8813 declares IRTopLevelStmt(k: Integer) and its body is `case IRKind[k] of`, so the parameter is a node index. The name reads as a kind, and passing IRKind[i] compiles cleanly and indexes the IR array with an opcode number — a silently-wrong-value trap with no diagnostic, in a function every backend author will call. Rename plus a one-line comment closes the class. | — |
 | bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa | A | 25 | bug | A proc's managed locals (AnsiString, interfaces, dynamic arrays) are released by a proc CLEANUP FRAME that five targets have and two do not. wasm32 and xtensa both fall outside TargetHasProcCleanupFrame, so an exception unwinding THROUGH a frame leaks everything that frame owned. Silent by construction: an unwind leak prints nothing. | — |
 | bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice | A | 55 | bug | ManagedLocalZeroBytes is a chain of per-kind arms, each of which has to remember to ask IsArray. Two arms have already shipped without it — interfaces (2026) and Variants (2026-08-27, a5 memory-corruption fix). Two more arms explicitly say `not IsArray` and nothing says whether that is a decision or the same omission a third time. | — |
@@ -355,6 +355,7 @@ _none_
 | refactor-a-backend-machine-code-lives-in-six-shared-files | A | 25 | refactor | A backend is not ir_codegen_<arch>.inc + asmtext_<arch>.inc. Six shared files emit or name per-arch machine code: symtab.inc (three full function epilogues), asmenc.inc (inline-asm text for all five targets), ir_codegen.inc (the shared -O pipeline calls two aarch64 passes by name), asmfront.inc, exception_emit.inc, and -- the one that crosses a lane -- cparser.inc, the C FRONTEND, which writes the C _start entry stub as raw rv32_/a64_/arm32_ emission. Measured by the omission defines, which turn every one of these into a compile error. | — |
 | refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed | A | 60 | refactor | C owns its lexer/parser/preproc but NOT its lowering: ir.inc carries 40 CProgramMode references. So most Track C work needs Track A's files, and a C agent cannot be staffed independently -- measured 2026-08-29, four of six ranked C tickets need an A file. | — |
 | refactor-a-nilpy-calling-convention-logic-lives-in-the-pascal-parser-files | A | 25 | refactor | 78 `isNilPy` branches sit inside the pasparser_*.inc set — NilPy language rules living in files named for the Pascal parser. It is why a Track N ticket routes its holder into files Track N does not own, and it is `the-substrate-is-ast-and-ir-not-the-parser` violated by filename rather than by design. | — |
+| refactor-a-nodearrndinfo-is-a-symtab-query-living-in-a-pascal-parser-file | A | 30 | refactor | NodeArrNDInfo contains no Pascal syntax and no Pascal semantics — it is a pure symbol-table query (SymArrNDims / UFldArrNDims / SymArrDimSpan) that happens to live in pasparser_call.inc. Track C now calls it across the frontend boundary, which the-substrate-is-ast-and-ir-not-the-parser.md warns against. The doctrine violation is the FILE, not the call: move it to symtab.inc. | — |
 | refactor-a-one-program-driver-prologue-for-every-frontend | A | 45 | refactor | Five frontend drivers each open-code the same program prologue (entry stub, div0 stub, signal runtime, I/O lock stubs, System intrinsics, the emitted AnsiString runtime). The copies drift in one direction — whatever the Pascal driver gained last — and the BASIC one has now been caught missing four of them, one at a time. | — |
 | refactor-a-search-path-helpers-live-in-the-c-preprocessor | A | 18 | refactor | AddPasUnitDir / AddPasIncDir / AddCIncludeDir are generic search-path functions that live in cpreproc.inc, so compiler.pas's own -Fu/-I handling depends on the C frontend. Six of the eleven errors from omitting the C frontend are this misplacement, not coupling: moving them drops omit-c from 11 sites to about 4. | — |
 | refactor-a-seven-frontends-borrow-rust-parser-helpers | A | 22 | refactor | Zig, ALGOL, Erlang, Fortran, LOLCODE and Whitespace all call five helpers whose bodies live in rparser.inc, so PXX_NO_RUST alone fails with 198 errors and Rust can only be omitted together with all six. Three different layers are marooned under one R prefix: AST constructors (share, wrong file), RWiden (numeric widening — SEMANTICS, should not be shared at all), and REmitParamRegSpill (raw x86-64 emission in a frontend). | — |
@@ -367,6 +368,8 @@ _none_
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
 | refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too | P | 55 | refactor | The parser carve-out is done, but Pascal still shares lexer.inc with Track A — so the A/P no-concurrent-edit rule still binds, now over 2,566 lines instead of 37,249. Carve the Pascal-specific lexing into paslexer.inc the way C, NilPy, Rust and Zig already have their own, and the A/P slot stops existing. | — |
 | refactor-p-five-dispatch-sites-for-one-named-type-cast | P | 35 | refactor | Five dispatch sites decide what `SomeName(expr)` casts to | — |
+| refactor-p-nodearrndinfo-answers-nothing-for-a-rank-1-array | P | 25 | refactor | NodeArrNDInfo returns False for a rank-1 array — every arm tests `>= 2`. Correct for its original caller (multi-subscript lowering, where rank 1 has no comma chain), but it makes the function unusable as the general 'what shape is this array' reader that three frontends now want. Not a Pascal defect: no Pascal program behaves wrong today. | — |
+| refactor-p-nodearrndinfo-yields-spans-but-not-the-element | P | 25 | refactor | NodeArrNDInfo fills NDInfoNDims/Lo/Span but not the element triple — size, record id, type kind — so every caller that needs to know what an element IS re-derives it from Syms[] or RecField*, with its own AN_IDENT/AN_FIELD pair. That re-derivation is where three C bugs lived. | — |
 | refactor-p-one-lvalue-path-for-statements-and-expressions | P | 55 | refactor | An assignment TARGET is parsed by a second, smaller copy of the lvalue walk in pasparser_stmt.inc, which resolves every `.name` as a field and ends on Expect(':='). Every capability the expression path gains has to be re-added there by hand, and three bugs so far are exactly that omission: the builtin pointer-name fallback, the PChar adapter, and the deref-then-index shape. The statement path should delegate, as its own cast-headed-CALL arm already does. | — |
 | refactor-p-the-field-declaration-parser-exists-twice | P | 45 | refactor | `ParseRecordFields` (pasparser_decl.inc ~3199) and the class-body field arm inside `ParseTypeSection` (~4824) parse the same grammar — comma-separated names, inline fixed/dynamic array, named array alias, scalar — with the same locals under different names and the same AddUField tail. Every field-level feature has to be written twice, and the second copy is the one that stays broken. | — |
 | refactor-p-the-overload-probe-cannot-see-the-argument-match-channels | P | 45 | refactor | The speculative overload probe in FindUMethOverloadAhead has only argument KINDS, while the free-call path has five side channels (MatchArgArray/ArrayElemTk/Nil/Rec/Scalar) filled in pasparser_lval.inc. So the probe cannot run the free path's own compatibility check — measured, a gate built on kinds alone refuses four classes of legal call. Lift the population into a helper both callers share. | — |
@@ -624,9 +627,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2675)
+## done (2676)
 
-2675 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2676 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (55)
 
@@ -693,6 +696,7 @@ _none_
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [P] feature-pascal-corpus-oop
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
+- [p 70] [A] bug-a-irarrayelemstride-has-no-field-arm-so-it-answers-the-row-stride
 - [p 70] [A+O] feature-opt-o3-register-pressure
 - [p 70] [P] regression-cascade-4e27dc2be114
 - [p 70] [T] regression-test-pascal-conformance-shard0-6-2
@@ -940,6 +944,7 @@ _none_
 - [p 30] [A] feature-toolchain-cli-ux
 - [p 30] [W] feature-web-syndication-feeds
 - [p 30] [T] meta-t-dev-throughput-and-track-a-t-integration
+- [p 30] [A] refactor-a-nodearrndinfo-is-a-symtab-query-living-in-a-pascal-parser-file
 - [p 30] [A] refactor-a-two-dyn-array-depth-functions-that-drift [parked — re-claim, do not duplicate]
 - [p 25] [A] bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted
 - [p 25] [A] bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa
@@ -971,6 +976,8 @@ _none_
 - [p 25] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [A] refactor-a-backend-machine-code-lives-in-six-shared-files
 - [p 25] [A] refactor-a-nilpy-calling-convention-logic-lives-in-the-pascal-parser-files
+- [p 25] [P] refactor-p-nodearrndinfo-answers-nothing-for-a-rank-1-array
+- [p 25] [P] refactor-p-nodearrndinfo-yields-spans-but-not-the-element
 - [p 22] [A] refactor-a-seven-frontends-borrow-rust-parser-helpers
 - [p 20] [A] bug-a-irtoplevelstmt-parameter-is-a-node-index-named-k
 - [p 20] [A] bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets

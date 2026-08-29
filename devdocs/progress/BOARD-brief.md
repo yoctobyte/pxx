@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:22 blocked:7 backlog:315 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2675 rejected:55`
+`working:4 unfinished:22 blocked:7 backlog:319 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2676 rejected:55`
 
 ## Held now (working/ — do not touch these files)
 
@@ -13,7 +13,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-n-a-later-wall-in-key-analysis-blocks-convertrawtext-and-songformatter` [N] — owner: frankwasm
 - `feature-esp-peripheral-callback-api` [B+S] — owner: pxx-b
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
-- `refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs` [C] — owner: frankC
 
 ## unfinished (22) — parked mid-flight; re-claim, do not duplicate
 
@@ -50,11 +49,12 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 332, ranked
+## Ready — top 30 of 336, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
+- `[p 70] [A]` bug-a-irarrayelemstride-has-no-field-arm-so-it-answers-the-row-stride
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [P]` regression-cascade-4e27dc2be114
 - `[p 70] [T]` regression-test-pascal-conformance-shard0-6-2
@@ -81,6 +81,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 1)
 - `[p 60] [N]` bug-n-a-local-named-after-its-own-def-aliases-the-function-result
 - `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
-- `[p 60] [N]` bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 
-_302 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_306 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

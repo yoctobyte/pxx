@@ -4,7 +4,7 @@ prio: 75
 type: refactor
 blocked-by: []
 summary: "Four C readers ask what a decayed array steps by, and all four are written as an AN_IDENT branch beside an AN_FIELD branch. Three field branches were never finished: five ordinary expressions SEGFAULT (`**a.s`, `*(*(a.m+1)+2)`, `strcmp(*(a.s+1),\"cd\")`), one loads four bytes of a char row. Three of the pairs were repaired one at a time on 2026-08-29; this replaces the shape with one reader so there is no fifth pass."
-status: working
+status: done
 owner: frankC
 ---
 
@@ -236,8 +236,133 @@ is plausibly the same family; check it before scoping.
   three-quarters could land alone, but landing half a normalisation leaves two
   readers keyed on the old shape, so land it as one piece.
 
+## RESOLVED — 2026-08-30 (frankC)
+
+**Census: 33 wrong cells -> 4.** The four survivors are one row, `ptrdiff`, and
+they are the single site of this shape that lives in Track A's file. Every
+segfault is gone; every silently-wrong load is gone.
+
+```
+construct       global-ident  local-ident  struct-field  ptr-arrow  nested-field  elem-of-array
+noop-deref      ok            ok           ok            ok         ok            ok
+deref-plus      ok            ok           ok            ok         ok            ok
+char-load       ok            ok           ok            ok         ok            ok
+char-noop-deref ok            ok           ok            ok         ok            ok
+char-strcmp     ok            ok           ok            ok         ok            ok
+3d-partial      ok            ok           ok            ok         -             -
+3d-all-star     ok            ok           ok            ok         -             -
+sizeof-row      ok            ok           ok            ok         ok            ok
+ptrdiff         ok            ok           4!=1          4!=1       4!=1          4!=1
+```
+
+### THE ENUMERATION — every reader, including the ones that were already right
+
+The ticket said four. **There are six**, and the two the ticket did not name
+are the two most useful entries in the table: one was already correct and must
+NOT be unified, and one is a sixth instance nobody had found.
+
+| # | reader | file | state found | disposition |
+| --- | --- | --- | --- | --- |
+| 1 | `ParseCPostfixTail` partial index | `cparser.inc` | field arm used the outer row stride | fixed `10676bcc2` |
+| 2 | `IRPointerStride` AN_FIELD arm | `ir.inc` **A** | element stride, not row | fixed under the `ir.inc` grant |
+| 3 | `CSizeofDescriptorWalk` | `cparser.inc` | reachable only unparenthesised; a second impl served the rest | fixed `8172e6c8e` — deleted the second impl, -107 lines |
+| 4 | `CDerefDecayStride` | `cparser.inc` | `ASTKind[base] <> AN_IDENT -> Exit` | **routed through `CNodeArrayShape`** |
+| 5 | `CNodePointeeTk` decayed-row arm | `cparser.inc` | AN_IDENT-only, fell to `tyInteger` | **routed through `CNodeArrayShape`** |
+| 6 | `IRArrayElemStride` | `ir.inc` **A** | AN_IDENT-only, falls back to `IRPointerStride` | **filed, not fixed** — [[bug-a-irarrayelemstride-has-no-field-arm-so-it-answers-the-row-stride]] |
+
+And the one that was already correct, which is why it is in this table at all:
+
+| reader | file | state | disposition |
+| --- | --- | --- | --- |
+| `CNodeDecaysToPointer` | `cparser.inc` | **both arms present and correct** | **left alone, deliberately** |
+
+**Routing #7 through `CNodeArrayShape` would have been a regression.** It
+answers a broader question — "does this decay at all" — and is correct for
+**rank 1**, which `CNodeArrayShape` cannot be, because `NodeArrNDInfo` fires
+only at rank >= 2. Unifying it would have broken every 1-D field decay in the
+frontend, and nothing in the census would have caught it, because the census
+only measures multi-dim shapes.
+
+That is the whole value of the instruction to enumerate the correct ones. A
+sweep that treats "make them all call one function" as the goal damages this
+reader; a sweep that treats "make them all correct" as the goal records it and
+moves on. **The count of readers was never the target.**
+
+### #6 — the sixth instance, and why the census found it and the greps did not
+
+`IRArrayElemStride` was split out of `IRPointerStride` *specifically* so a
+fully-indexed base gets the ELEMENT stride rather than the row stride. Its
+caller's comment states the failure mode in advance:
+
+> *asking the plain stride would answer the ROW stride the multi-dim decay arm
+> above returns — 8 — **making that difference 1**.*
+
+`IRArrayElemStride` tests `AN_IDENT` and falls back to `IRPointerStride` for
+everything else. A field base therefore takes the fallback, gets
+`RecFieldRowStride` = 16, and `&a.m[1][0] - &a.m[0][0]` answers **1** — the
+exact number its own caller's comment names as the symptom.
+
+This is the third time in this ticket family that **the code documenting a bug
+sat in the arm that did not have it** (see the `sizeof` walk's comment above).
+It is not a coincidence and it is worth stating as a rule: *a comment explaining
+why a mistake would be wrong is written by someone thinking about one arm, and
+is therefore weak evidence that the sibling arm is right.* Greps for the symptom
+land on such comments and read as handled.
+
+### What actually landed in C's lane
+
+`CNodeArrayShape(node; var elemSz, elemRec; var elemTk): Boolean` in
+`cparser.inc` — a thin wrapper over `NodeArrNDInfo` (rank + spans, all three
+spellings) that adds the element triple with **one** ident/field switch. No
+`pasparser_call.inc` edit, as scoped. Readers #4 and #5 now call it; #1 and #3
+already had correct field arms after their own fixes and were left as they are
+rather than churned.
+
+**Evidence, not assertion:**
+
+- `test/cderef_decay_through_a_field.c` — 20 assertions, every field spelling
+  paired with its already-correct global one. **gcc returns 42; `pinned`
+  SIGSEGVs; the fixed compiler returns 42.** The instrument was shown capable
+  of disagreeing before its agreement was used.
+- Differential over **36 named C tests**: 35 binaries byte-identical
+  pre/post. The one that moved is `cll_array_pointer_base` — itself a
+  field-shape test written yesterday. Three consecutive fixes in this family
+  have now each changed either zero or one existing binary, which is a
+  measurement of how little of the field shape the corpus covers, not a
+  reassurance.
+- Self-host fixedpoint `3f9f0ab7d2e3`.
+
+### Filed, not fixed
+
+- [[bug-a-irarrayelemstride-has-no-field-arm-so-it-answers-the-row-stride]] —
+  A's file; `ir.inc` is released to frankA. Carries the diagnosis and an
+  untested patch sketch, labelled as untested.
+- [[refactor-p-nodearrndinfo-answers-nothing-for-a-rank-1-array]] and
+  [[refactor-p-nodearrndinfo-yields-spans-but-not-the-element]] — the two
+  incumbent gaps, filed as **refactors, not bugs**: no Pascal program observes
+  either.
+- [[refactor-a-nodearrndinfo-is-a-symtab-query-living-in-a-pascal-parser-file]]
+  — raised on my own change. `CNodeArrayShape` calls a helper that lives in
+  Pascal's parser file, and
+  `devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md` says not to share
+  parser helpers across frontends. My reading is that the doctrine's subject is
+  *specs* and this function encodes none — it is a pure symtab query, misfiled —
+  so the fix is to move it to `symtab.inc`, not to duplicate it. That is A's
+  call, not mine, so it is a ticket with a recommendation rather than a commit.
+
+### Not checked
+
+`refactor-c-string-literal-decay-belongs-at-the-producer` was named in the
+scope as "plausibly the same family". It is **not** examined here. The census
+covers arrays reached through six spellings; a string literal is a seventh
+spelling this grid never measured, so I have no evidence either way and am not
+going to imply that a clean census speaks for it.
+
 ## Related
 - [[bug-c-a-multidim-array-field-decays-with-the-element-stride]] (the stride pair, fixed)
 - [[bug-c-a-struct-field-partial-index-uses-the-outer-row-stride]] (the parser pair, fixed)
 - [[refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag]] (how all of it surfaced)
 - [[normalise-dont-special-case]] — three landed instances, no longer a prediction
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

@@ -80,6 +80,20 @@ to them unaided rather than assumed to.
 - **It localises nothing.** A cell names a construct and a spelling, never a
   routine. That is the price of asking about behaviour, and the reason it pairs
   with a grep rather than replacing one.
+- **Every cell is a MULTI-dimensional array.** Rank 1 is not measured at all,
+  so a change that is correct for rows and wrong for `int v[8]` reads clean.
+  This is not hypothetical: during
+  `refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs` the
+  obvious tidy-up — routing `CNodeDecaysToPointer` through the same shape
+  reader as its four siblings — would have broken every 1-D field decay in the
+  C frontend, and the grid would have stayed green through it. The reader was
+  spared by reading it, not by measuring it.
+- **A string literal is a seventh spelling, and there isn't a column for it.**
+  The six spellings are all ways of naming an array *object*; `"abc"` decays
+  too. So a clean grid says nothing about
+  `refactor-c-string-literal-decay-belongs-at-the-producer`, however much it
+  looks like it should. This is the previous bullet's abstract warning arriving
+  as a specific one — which is the only form it is useful in.
 - **Native x86-64 at the default `-O` only**, and gcc is the judge, so anything
   C leaves implementation-defined or undefined is not adjudicated.
 
