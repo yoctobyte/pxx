@@ -9716,6 +9716,75 @@ test-core: $(COMPILER)
 	# everything passes a sign+verify test and fails these.
 	./$(COMPILER) -Fulib/rtl test/test_ecdsa_sign.pas $(TESTTMP)/sweep_ecdsa26
 	tools/expect_same.sh sweep_ecdsa26 "$$($(TESTTMP)/sweep_ecdsa26)" "$$(printf 'keygen=1 sign+verify=1 reject: msg=1 sig=1 key=1\nECDSA SIGN OK')"
+	# --- chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring
+	# Eleven subjects that no build rule referenced. Nine are the ticket's list;
+	# the two extra o3_* probes landed the DAY AFTER that list was taken, which
+	# is the ticket's own argument in miniature -- the orphan population grows
+	# faster than it drains, so twenty-one was a snapshot and never a census.
+	# The check_test_wiring gate below is what turns it into one.
+	#
+	# EVERY expectation here is an oracle, not a recording. Eight of the eleven
+	# were compiled and run under FPC 3.2.2 (-Mobjfpc) and match byte for byte;
+	# the two softfloat files check themselves against the HARDWARE IEEE unit;
+	# the one file with no oracle says so on its own row. That distinction is
+	# load-bearing here rather than pedantic: none of the eleven had ever run in
+	# a rule, so "it passes today" was never evidence of anything, and two of
+	# them SHIPPED AS THE REGRESSION TEST FOR THEIR OWN FIX (042bcbb32,
+	# 7ee75329e) -- transcribing today's output would have pinned whatever the
+	# fix happened to leave behind, including a bug.
+	./$(COMPILER) test/test_class_arg_to_pointer_param_boundary.pas $(TESTTMP)/sweep_clsptr26
+	tools/expect_same.sh sweep_clsptr26 "$$($(TESTTMP)/sweep_clsptr26)" "$$(printf '11\n22\n11\n22\n-1\n-1\n-2\n-1')"
+	# Was SIGSEGV at the v389 pin and passes at HEAD. A wired rule would have
+	# caught that segfault; nothing ran it, so nothing did.
+	./$(COMPILER) test/test_class_method_to_method_pointer.pas $(TESTTMP)/sweep_clsmeth26
+	tools/expect_same.sh sweep_clsmeth26 "$$($(TESTTMP)/sweep_clsmeth26)" "$$(printf '15\nTRUE\n35\nTRUE\n10\n500\nTRUE')"
+	./$(COMPILER) test/test_generic_delphi_method_header_binds_to_the_generic.pas $(TESTTMP)/sweep_gendelphi26
+	tools/expect_same.sh sweep_gendelphi26 "$$($(TESTTMP)/sweep_gendelphi26)" "$$(printf '100\n100\n10\n10\n7\n2\n4')"
+	./$(COMPILER) test/test_generic_nested_type_field_name.pas $(TESTTMP)/sweep_gennestfld26
+	tools/expect_same.sh sweep_gennestfld26 "$$($(TESTTMP)/sweep_gennestfld26)" "$$(printf '2 one 2\n1 x')"
+	./$(COMPILER) test/test_generic_nested_type_identity.pas $(TESTTMP)/sweep_gennestid26
+	tools/expect_same.sh sweep_gennestid26 "$$($(TESTTMP)/sweep_gennestid26)" "$$(printf '2 one\n1 7\n1 10')"
+	# The ONE row here with no external oracle: the trampoline ABI proof reaches
+	# pxx's own RTTI (GetInstanceRTTI / GetMethInfoByName), which FPC has no
+	# equivalent of, so it cannot be compiled there at all. The values below are
+	# the AUTHOR's, transcribed from the trailing comments on the file's own
+	# writeln lines ({ 32 } { 10 } { 4.00 } { 2.50 }) -- not our output recorded.
+	./$(COMPILER) test/test_pyexec_trampoline_abi.pas $(TESTTMP)/sweep_pyexectr26
+	tools/expect_same.sh sweep_pyexectr26 "$$($(TESTTMP)/sweep_pyexectr26)" "$$(printf 'pop1=32\npop2=10\nfpop1=4.00\nfpop2=2.50\nDONE')"
+	# The soft-float kernels are checked against x86-64's HARDWARE binary64/32,
+	# which is an exact oracle, by the files themselves over a 21x21 encoding
+	# grid plus 200k randomized normals. Asserting the whole counter block and
+	# not just `RESULT: PASS` is deliberate: the single-precision file TOLERATES
+	# 1-ulp division and subnormal flushes, so PASS can coexist with a nonzero
+	# tolerated count and would hide a drift into it.
+	./$(COMPILER) test/test_softfloat_double.pas $(TESTTMP)/sweep_sfdouble26
+	tools/expect_same.sh sweep_sfdouble26 "$$($(TESTTMP)/sweep_sfdouble26 | tail -6)" "$$(printf 'add fails : 0\nsub fails : 0\nmul fails : 0\ndiv fails : 0\ncmp fails : 0\nRESULT: PASS')"
+	./$(COMPILER) test/test_softfloat_single.pas $(TESTTMP)/sweep_sfsingle26
+	tools/expect_same.sh sweep_sfsingle26 "$$($(TESTTMP)/sweep_sfsingle26 | tail -7)" "$$(printf 'add fails : 0\nsub fails : 0\nmul fails : 0\ndiv fails : 0   (1-ulp tolerated: 0)\ncmp fails : 0\nsubnormal flushes (tolerated): 0\nRESULT: PASS')"
+	# The three -O3 residency probes. Each header states the same contract --
+	# "run at -O0/-O1/-O2/-O3, all four must agree" -- so the cross-O rows are
+	# the files' own assertion, and the value row is what stops a differential
+	# from comparing a wrong answer to the same wrong answer.
+	./$(COMPILER) test/test_o3_resident_inplace.pas $(TESTTMP)/sweep_o3inplace_O0 >/dev/null
+	./$(COMPILER) -O3 test/test_o3_resident_inplace.pas $(TESTTMP)/sweep_o3inplace_O3 >/dev/null
+	tools/expect_same.sh sweep_o3inplace_cross "$$($(TESTTMP)/sweep_o3inplace_O0)" "$$($(TESTTMP)/sweep_o3inplace_O3)"
+	# Ten of these eleven rows are FPC 3.2.2's byte for byte. The eleventh is
+	# `Q ovf=`, and the difference is a decided dialect rule, not a defect: the
+	# procedure is wrapped in {$Q+} and adds 100000000 to a LongInt forty times.
+	# pxx evaluates LongInt+LongInt in 32 bits, so {$Q+} sees the overflow and
+	# raises. FPC widens the operands to Int64 first, so no overflow OCCURS and
+	# neither {$Q+} nor -Co fires -- only -Cr does, on the narrowing store back.
+	# Both STORE the same -294967296; only the check differs. (Verified against
+	# a reduced probe under both compilers, 2026-08-29.)
+	tools/expect_same.sh sweep_o3inplace_O3 "$$($(TESTTMP)/sweep_o3inplace_O3)" "$$(printf 'W b=14 sb=-116 w=1464 sw=-31536\nW c=1704 l=-2147482296 q=60 i=-140\nA a=5479449\nS s=1073741824 u=30\nQ ovf=TRUE n<>0=TRUE\nT t=50268\nB g=5055\nP p=2607 r=103\nR sum=285\nU a=20100 b=16077\nO q=1282')"
+	./$(COMPILER) test/test_o3_float_resident.pas $(TESTTMP)/sweep_o3float_O0 >/dev/null
+	./$(COMPILER) -O3 test/test_o3_float_resident.pas $(TESTTMP)/sweep_o3float_O3 >/dev/null
+	tools/expect_same.sh sweep_o3float_cross "$$($(TESTTMP)/sweep_o3float_O0)" "$$($(TESTTMP)/sweep_o3float_O3)"
+	tools/expect_same.sh sweep_o3float_O3 "$$($(TESTTMP)/sweep_o3float_O3)" "$$(printf 'REC zr=0.000000 zi=0.000000 acc=1164.365466\nVAL p=1.964708 q=1.051681\nINT a=1.221281 b=0.443004\nIND a=1.221281 b=0.443004\nMTH a=3.000000 b=280.109344\nEXC a=2.596289\nREF d=2.698505\nNAR s=1.2213 e=1.221281\nGLB g=1.349555')"
+	./$(COMPILER) test/test_o3_resident_exc.pas $(TESTTMP)/sweep_o3exc_O0 >/dev/null
+	./$(COMPILER) -O3 test/test_o3_resident_exc.pas $(TESTTMP)/sweep_o3exc_O3 >/dev/null
+	tools/expect_same.sh sweep_o3exc_cross "$$($(TESTTMP)/sweep_o3exc_O0)" "$$($(TESTTMP)/sweep_o3exc_O3)"
+	tools/expect_same.sh sweep_o3exc_O3 "$$($(TESTTMP)/sweep_o3exc_O3)" "$$(printf 'OUT i=200 acc=20100 seen=9453\nIN  i=200 acc=20100 seen=9453\nMIX i=300 ins=900 out=600 a=633 b=422\nNEST i=120 x=1120 y=1077\nFIN i=90 x=10090 n=90\nPAR i=150 p=1150 seen=1099\nTHR i=60 acc=1830 seen=861')"
 	./$(COMPILER) test/test_pascal_directives.pas $(TESTTMP)/test_pascal_directives26
 	tools/expect_same.sh test_pascal_directives26 "$$($(TESTTMP)/test_pascal_directives26)" "$$(printf '1\n0\n1\n1\n1\n0\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_comment_directive.pas $(TESTTMP)/test_comment_directive26

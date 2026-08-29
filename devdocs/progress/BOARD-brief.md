@@ -5,11 +5,12 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:22 blocked:6 backlog:308 backlog_new:11 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2641 rejected:51`
+`working:3 unfinished:22 blocked:6 backlog:307 backlog_new:11 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2641 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-the-fpc-seed-canary-skips-a-break-already-on-master` [A] — owner: unrecorded
+- `chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring` [A] — owner: pxx-a5
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
 ## unfinished (22) — parked mid-flight; re-claim, do not duplicate
@@ -46,7 +47,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 325, ranked
+## Ready — top 30 of 324, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -79,4 +80,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [A]` feature-unicodestring-model
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 
-_295 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_294 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
