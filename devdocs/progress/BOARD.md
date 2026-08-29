@@ -50,7 +50,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
 
-## backlog (293)
+## backlog (294)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -66,6 +66,7 @@ _none_
 | bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice | A | 55 | bug | ManagedLocalZeroBytes is a chain of per-kind arms, each of which has to remember to ask IsArray. Two arms have already shipped without it — interfaces (2026) and Variants (2026-08-27, a5 memory-corruption fix). Two more arms explicitly say `not IsArray` and nothing says whether that is a decision or the same omission a third time. | — |
 | bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets | A | 20 | bug |  | — |
 | bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse | A | 40 | bug | `C(**d)` and `C(*lst)` on a class with an ordinary `__init__` fail with `expected expression` — on the PINNED compiler too, so this is not a regression. The ctor path in pyparser.inc:45097 builds its own AN_ARG chain and never consults the star-forwarding branch that plain calls use. Routing it there needs the receiver prepended, which PyStarForwardCall's signature does not take. | — |
+| bug-a-open-array-of-string-arg-spilled-through-a-managed-string-temp | A | 30 | bug | `JoinOpen(['x','yy','zzz'])` for `procedure JoinOpen(const a: array of string)` spills the argument through a hidden temp that ir.inc declares tyAnsiString. An open-array parameter records its ELEMENT kind in TypeKind, and the spill guard at ir.inc:11207 reads that field without also testing IsArray -- the same file already guards correctly at :11329. The temp then holds an array data pointer while claiming to be a managed string. On the register backends the mistyped retain and the scope-exit release cancel, so nothing is observable and it has been latent; wasm32 type-checks the store and refuses the body. One-clause fix, confirmed by measurement. | — |
 | bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open | A | 50→60 | bug |  | — |
 | bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body | A | 30 | bug |  | — |
 | bug-a-riscv32-sa-onstack-has-no-effect-under-qemu | A | 12 | bug | riscv32 registers a signal alt stack correctly — the sigaltstack syscall succeeds and the flags word assembles to $18000004 — but the handler still runs on the FAULTING stack under qemu-riscv32, so a stack-overflow SIGSEGV kills the process. The identical construction works under qemu-i386/arm/aarch64 of the same build, which points at qemu-user rather than at us. Unverifiable without hardware. | — |
@@ -839,6 +840,7 @@ _none_
 - [p 32] [O] feature-opt-rtti-emit-on-use
 - [p 30] [N] bug-b-reportlab-mimic-multi-font-heap-corruption (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 30] [A] bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce
+- [p 30] [A] bug-a-open-array-of-string-arg-spilled-through-a-managed-string-temp
 - [p 30] [A] bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body
 - [p 30] [S] bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file
 - [p 30] [N] bug-n-nilpy-carries-its-own-copies-of-the-float-type-table
