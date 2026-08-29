@@ -51,6 +51,22 @@ it silently converts every C dispatch into a request for the A slot. Compare:
 
 C is the frontend that got its parser carved out and its lowering left behind.
 
+## It is a half-finished migration, not a design choice
+
+frankC's framing, added 2026-08-29 and sharper than the original: **C is the only
+mainline frontend whose parser was carved out and whose lowering was not.** That
+makes the asymmetry a migration nobody finished rather than a deliberate split —
+which is what turns this into a refactor with a **known-good precedent** (the
+`pasparser_*` split of 2026-08-20) instead of an open design question. Nobody has
+to decide whether C *should* own its lowering; every other frontend already does.
+
+It also predicts the payoff, which the table above does not. A `cir.inc` would move
+`refactor-c-string-literal-decay`, `refactor-c-the-partial-index-sentinel` and
+probably `feature-c-diagnostics-name-the-module` from "needs the A slot" to
+"ordinary C work" — **three of the four tickets that made the lane unstaffable.**
+The value is not tidiness; it is that Track C becomes dispatchable in parallel with
+Track A, which it is not today.
+
 ## What to do
 
 Carve C-exclusive lowering out of `ir.inc` into `cir.inc`, the way
