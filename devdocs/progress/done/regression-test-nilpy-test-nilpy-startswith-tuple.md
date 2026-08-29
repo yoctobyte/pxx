@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: N
+status: done
 ---
 
 > **Track guessed as N** from the test source. The ranker reads frontmatter, so an unset track parks a stub in Track T's queue regardless of what the body says -- correct the `track:` line if this is wrong.
@@ -216,3 +217,58 @@ covers the tuple form: the tuple is not part of this defect, and a fix validated
 against `test_nilpy_startswith_tuple.npy` alone would leave `.find` and
 `.count` broken. Any regression test should carry a str→int row, a str→bool
 row, a str→str control, and a literal-receiver control.
+
+---
+
+## Resolution, 2026-08-30 (frankwasm)
+
+`pyparser.inc` was released by frankA, so the diagnosis above was carried
+through to a fix in the same lane rather than handed over.
+
+### The fix
+
+In `PyInferDefRetTypeScanInner`'s `recv.mth(...)` arm, a third branch after the
+user-class ones: when `PyRetMethodType` declined **and** the receiver is not a
+user-class local (`recvCi2 < 0`), ask `PyStrMethodInfo` for the method's return
+kind instead of falling through to the expression chase.
+
+`PyStrMethodInfo` is what the **lowering** consults to pick the pylib entry, so
+asking it here makes the declared result type agree with the call actually
+emitted — which is precisely the property that was violated.
+
+Two gates, both load-bearing:
+
+- `PyStrMethodInfo` answers False for a name it does not know, so only real str
+  methods qualify;
+- the receiver must be **bound in this def** (`PyNameBoundInDef`, the same
+  local-vs-module discriminator `PyDottedRootIsLocal` already uses), or
+  `math.sqrt(2.0)` and every other module-qualified call would be claimed by any
+  module function sharing a name with a str method.
+
+A local holding a user class that defines its own `find` never reaches the new
+branch — that case exits above with `recvCi2 >= 0`.
+
+### Verification
+
+New gated test `test_nilpy_str_method_return_type_on_a_variable.npy`, built to
+the four-row design in the diagnosis above and **verified to fail on the
+baseline** (segfault) as well as pass on the fix. It spells each row on a local
+*and* on a parameter, keeps the literal receiver only as a control, and marks
+the str→str rows as weak controls — they passed throughout, but only because
+the wrong answer equalled the right one.
+
+Controls `19dc5586e` had to keep, all green and all matching CPython:
+`math.sqrt`, `json.dumps`, and a user class whose method spells a str method.
+Its own test `test_nilpy_method_call_result_assigned_to_a_local` still passes.
+
+Attribution was measured against **HEAD-without-this-patch** (fixedpoint
+`11fec06517fa`) rather than against an older sha. That distinction mattered: an
+earlier comparison against `19dc5586e` — three days stale — showed four other
+tests apparently changing, and every one of them passes on both sides of the
+honest control. They were artifacts of the baseline, not of this fix. Against
+the correct control this patch changes exactly two results, both CRASH → PASS:
+this ticket's test and the new one.
+
+Gate: `make compiler/pascal26` fixedpoint `9ad99b56e769`; `tools/gate.sh quick`
+GREEN.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

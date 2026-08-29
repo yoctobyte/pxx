@@ -31096,6 +31096,9 @@ function PyInferDefRetTypeScanInner(methodStart: Integer; var retRec: Integer;
 var j, pdepth, bdepth, e, k, e2, rec2, bodyScanStart, curRec: Integer;
     tupDepth, chainRec: Integer;
     recvCi2: Integer;   { the method arm's receiver class, or -1 if not a local here }
+    smPname: AnsiString;      { the str-method arm: pylib entry, its return kind }
+    smRetTk: TTypeKind;       { and its arity code, all three unused except as }
+    smWant: Integer;          { PyStrMethodInfo's out-parameters }
     t2, cur, chainCur: TTypeKind;
     seenAny, tupComma: Boolean;
     tupLamHdr: Boolean;   { inside a lambda's PARAMETER list — its commas are not tuple commas }
@@ -31483,6 +31486,41 @@ begin
         else if recvCi2 >= 0 then
         begin
           cur := tyVariant;
+          PyInferLastCi := -1;
+        end
+        { A BUILTIN-STRING method on a receiver that is a local or parameter.
+          PyRetMethodType resolves USER-CLASS methods only, so for a string
+          receiver it answers tyUnknown AND leaves recvCi2 = -1 -- neither arm
+          above fires, and the expression chase below then types the return as
+          the RECEIVER's own tyAnsiString. That is the very failure this
+          function's header warns about, one type-family over, and it is not
+          hypothetical: `def f(): y = "abc"; return y.find("b")` declared an
+          AnsiString result for a call returning an Integer, so $pyresult got a
+          managed zero-init and the caller read a small integer as a string
+          handle. SEGV, no diagnostic.
+          regression-test-nilpy-test-nilpy-startswith-tuple
+
+          The right answer is already tabulated: PyStrMethodInfo is what the
+          LOWERING consults to pick the pylib entry, so asking it here makes the
+          declared result type agree with the call actually emitted, which is
+          the property that was violated.
+
+          Two gates, and both are load-bearing. PyStrMethodInfo answers False
+          for a name it does not know, so only real str methods qualify. And the
+          receiver must be BOUND IN THIS DEF -- the local-vs-module distinction
+          PyDottedRootIsLocal already draws -- or `math.sqrt(2.0)` and every
+          other module-qualified call would be claimed by any module function
+          that happens to share a name with a str method.
+
+          Reached only when the user-class arm declined, so a local holding a
+          class that defines its own `find` still resolves as a method: that
+          case exits above with recvCi2 >= 0 and never arrives here. }
+        else if PyStrMethodInfo(GetTokenStr(j + 3), smPname, smRetTk, smWant)
+                and PyNameBoundInDef(PyInferHdrLo, PyInferHdrHi,
+                                     PyInferBodyLo, PyInferBodyHi,
+                                     GetTokenStr(j + 1)) then
+        begin
+          cur := smRetTk;
           PyInferLastCi := -1;
         end;
       end;

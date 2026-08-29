@@ -2595,6 +2595,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-nilpy-test-nilpy-sqlite-crud | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_sqlite_crud.npy red at 67015a8cf7d8 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-star-operand-in-a-variant | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_star_operand_in_a_variant.npy red at 39d4afb022ce (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-star-unpack-into-a-collecting-callee | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_star_unpack_into_a_collecting_callee.npy red at b4d62b3dcfde (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-startswith-tuple | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_startswith_tuple.npy red at b898d0543fc8 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-str-isnumeric-istitle | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_str_isnumeric_istitle.npy red at 0d6de0cbeae1 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-type-name-of-a-big-int | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_type_name_of_a_big_int.npy red at 44193e547f6d (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-variant-operand-arith-dunders | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_variant_operand_arith_dunders.npy red at 39d4afb022ce (auto-filed by twatch) | — |
