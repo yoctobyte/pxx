@@ -208,4 +208,4 @@ box and is his call — it is in the morning report, not in this ticket.
 
 Gate: `make lib-test` green at **v392**, exit 0, no `SKIPPED:` clause on this
 box; both scratch roots re-run against the patched script.
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit cf7be54dd.

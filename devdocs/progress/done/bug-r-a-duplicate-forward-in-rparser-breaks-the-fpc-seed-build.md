@@ -113,4 +113,4 @@ one. Track T or A, whoever holds `tools/forwardlint.py`.
 Rust tests still passing and the self-host fixedpoint unchanged.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 85e88c3a3.
