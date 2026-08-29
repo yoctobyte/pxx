@@ -10308,6 +10308,16 @@ end;
 procedure EmitManagedLocalCleanupForTarget(retSymIdx: Integer);
 var i, procIdx, mek: Integer;
 begin
+  { The release-side twin of EmitZeroFrameSlot's arm, and named here for the
+    same reason: this chain's final `end` is an unnamed fall-through, and an
+    unnamed fall-through is indistinguishable from an unconsidered one. It is
+    already a no-op for wasm32 — unlike the zero-init chain, which fell into a
+    real x86-64 arm — so this changes nothing and says something.
+
+    wasm32 releases its own managed locals in WasmEmitManagedLocals(release),
+    emitted into its own epilogue, because this target writes no Code[] and
+    never calls EmitProcEpilog. bug-a-emitzeroframeslot-has-no-wasm32-arm }
+  if TargetArch = TARGET_WASM32 then Exit;
   if TargetArch = TARGET_X86_64 then
   begin
     EmitManagedLocalCleanup(retSymIdx);

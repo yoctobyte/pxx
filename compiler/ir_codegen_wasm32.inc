@@ -4641,11 +4641,11 @@ end;
   them is still refused by name elsewhere on this target — so the honest scope
   is what can actually be stored. }
 procedure WasmEmitManagedLocals(release: Boolean; retSym: Integer);
-var i, hp, hpDyn: Integer;
+var i, hp, hpDyn, mz, nz: Integer;
 begin
   if CurProc < 0 then Exit;    { a program-body chunk: its variables are BSS,
                                  which the module's own memory image zeroes }
-  hp := -1; hpDyn := -1;
+  hp := -1; hpDyn := -1; mz := -1;
   if release then
   begin
     hp := WasmWriteHelper('PXXStrDecRef');
@@ -4653,19 +4653,23 @@ begin
     hpDyn := WasmWriteHelper('PXXDynArrayRelease');
     if hpDyn < 0 then Exit;
   end;
-  { A DYNAMIC ARRAY local joins the same two loops, and the release takes a
-    descriptor where a string's does not. Zeroing it matters for the same
-    reason it matters for a string and for one more: the FIRST assignment to
-    the slot reads the old handle to release it, so an unzeroed slot hands
-    PXXDynArrayRelease whatever the previous call left on the shadow stack.
-    A string local was already zeroed here; a dyn-array local was not, and it
-    was the store arm's arrival that made that reachable. }
-  for i := Procs[CurProc].ScopeBase to SymCount - 1 do
-    if (Syms[i].Kind = skLocal) and not Syms[i].IsRef
-       and (((Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray)
-            or (Syms[i].IsArray and (Syms[i].ArrLen = -1))) then
-    begin
-      if release then
+  { A DYNAMIC ARRAY local joins the release loop, and the release takes a
+    descriptor where a string's does not. Zeroing matters for the same reason
+    and one more: the FIRST assignment to the slot reads the old handle to
+    release it, so an unzeroed slot hands PXXDynArrayRelease whatever the
+    previous call left on the shadow stack.
+
+    THE TWO HALVES ANSWER DIFFERENT QUESTIONS AND NOW HAVE DIFFERENT
+    PREDICATES, which is the point rather than an inconsistency. They shared
+    one for as long as the only managed locals this target could declare were
+    strings and dynamic arrays; conflating "what must start nil" with "what
+    this backend knows how to release" is precisely what hid the gap below. }
+  if release then
+  begin
+    for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+      if (Syms[i].Kind = skLocal) and not Syms[i].IsRef
+         and (((Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray)
+              or (Syms[i].IsArray and (Syms[i].ArrLen = -1))) then
       begin
         if i = retSym then Continue;
         WasmSlotAddr(i);
@@ -4677,12 +4681,52 @@ begin
         end
         else
           WasmCall(WasmSlotForProc(hp), 'PXXStrDecRef');
-      end
-      else
+      end;
+    Exit;
+  end;
+
+  { THE ZERO HALF ASKS ManagedLocalZeroBytes, the SHARED table, rather than
+    its own list of kinds. This target's guarantee has had three mechanisms —
+    this pass, the x86-64 fall-through in EmitZeroFrameSlot emitting into an
+    unread buffer, and that routine's loud Error for wide extents — where the
+    routine's own header says it must have one. Two of those are now explicit
+    no-op arms and this is the owner, so the count is one mechanism and one
+    table (bug-a-emitzeroframeslot-has-no-wasm32-arm).
+
+    Asking the table rather than restating it is what closes the gap, not
+    tidiness: the old predicate covered scalar AnsiStrings and dynamic arrays
+    and NOTHING else, so a local RECORD with managed fields, a static array of
+    string, a Variant, a COM interface local and a promotable int were all
+    unzeroed on this target. Every one of those was unreachable only because
+    the wide chain refused them upstream at compile time — the moment that
+    refusal became a no-op arm, they became reachable and would have released
+    stale shadow-stack bytes on first assignment. The gap and its guard were
+    removed in the same change, which is exactly the shape that ships a
+    use-after-free, so the table is the answer and not a hand-written list.
+
+    Four bytes get the inline store; anything else goes to PXXMemZero. The
+    split is width, not kind — a pointer-sized extent is one i32.store and
+    calling a helper for it would cost a call per managed local. }
+  for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+    if Syms[i].Kind = skLocal then
+    begin
+      nz := ManagedLocalZeroBytes(i);
+      if nz = TARGET_PTR_SIZE then
       begin
         WasmSlotAddr(i);
         WasmI32Const(0);
         WasmMemOp($36, 'i32.store', 2, 0);
+      end
+      else if nz > 0 then
+      begin
+        if mz < 0 then
+        begin
+          mz := WasmWriteHelper('PXXMemZero');
+          if mz < 0 then Exit;
+        end;
+        WasmSlotAddr(i);
+        WasmI32Const(nz);
+        WasmCall(WasmSlotForProc(mz), 'PXXMemZero');
       end;
     end;
 end;

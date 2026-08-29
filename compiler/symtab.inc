@@ -10509,6 +10509,29 @@ end;
 procedure EmitZeroFrameSlot(frameOff, nBytes: Integer);
 var helperPi: Integer;
 begin
+  { wasm32 owns this guarantee elsewhere, and the arm is a NO-OP rather than
+    an omission — which is the whole reason it is spelled out. Two facts make
+    it the only possible answer here rather than a preference:
+
+      * this routine writes MACHINE CODE into Code[] at the current emission
+        point, and the wasm32 backend never reads Code[] — it builds its own
+        module model. Until this arm existed, TARGET_WASM32 fell through the
+        chain below into the UNNAMED final arm, which is not a default: it is
+        x86-64, emitting `mov qword [rbp+off], 0` into a buffer nothing on
+        this target consumes. Inert, and inert only for as long as nothing
+        reads that buffer or its length;
+      * both callers run from CompileAST, which calls IREmitMachineCode
+        AFTERWARDS. So at the moment this routine is invoked there is no wasm
+        function body being emitted and no cursor to emit into. The routine
+        could not do the job on this target even if Code[] were read.
+
+    The owner is WasmEmitManagedLocals in ir_codegen_wasm32.inc, which runs in
+    the wasm prologue over the same ScopeBase..SymCount-1 range and zeroes the
+    same extents — it calls ManagedLocalZeroBytes, the table this routine's
+    callers use, so there is one table and not two lists.
+
+    bug-a-emitzeroframeslot-has-no-wasm32-arm }
+  if TargetArch = TARGET_WASM32 then Exit;
   if nBytes <= 0 then Exit;
 
   if nBytes <= TARGET_PTR_SIZE then
@@ -10542,6 +10565,12 @@ begin
       rv32_sw(reg_zero, reg_t0, 0);
     end
     else
+      { x86-64 — NOT a default. Named in a comment because it is the last arm
+        of a six-target chain and therefore READS as one, which is how a
+        seventh target (wasm32) fell into it and emitted x86-64 bytes for an
+        entire phase without anyone noticing. The bytes below say which target
+        this is; the shape of the chain says the opposite.
+        refactor-a-target-dispatch-chains-fail-open }
       begin EmitB($48); EmitB($C7); EmitB($85); EmitI32(frameOff); EmitI32(0); end; { mov qword [rbp+off], 0 }
     Exit;
   end;
