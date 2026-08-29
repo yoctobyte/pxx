@@ -3,17 +3,15 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `b7752b0d9474` | 2026-08-29T21:43:02Z | RED (native) | 451.4s | `49bd043061c1` RED |
+| plexus | `e46dbffaa80d` | 2026-08-29T22:36:46Z | RED (full) | 1424.8s | `e46dbffaa80d` RED |
 | seven | `084ee09ef0ae` | 2026-08-29T22:26:35Z | GREEN (native) | 115.1s | `f2706f45eabe` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **test-emit-obj#src:test/cxtensa_obj.c@1** — test/cxtensa_obj.c (plexus): bad `32fba2082684`, last good `457bda75412e`, 1 commit(s) in range
-- **tools-devtest#00** (plexus): bad `f3422cd14b99`, last good `62a4242203a3`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy** — test/test_nilpy_parent_call_after_instantiation.npy test/test_nilpy_parent_call_after_instantiation.expected (plexus): bad `19dc5586e384`, last good `8b2cc332791e`, 1 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_startswith_tuple.npy** — test/test_nilpy_startswith_tuple.npy test/test_nilpy_startswith_tuple.expected (plexus): bad `19dc5586e384`, last good `8b2cc332791e`, 1 commit(s) in range
-- **lib-test#src:test/lib_synapse.pas** — test/lib_synapse.pas (plexus): bad `c52fc389fd97`, last good `aca7f699288e`, 9 commit(s) in range
 - **test-core#src:test/test_mgmt_operators.pas** — test/test_mgmt_operators.pas test/test_mgmt_operators.expected +5 (plexus): bad `47277dd0e52b`, last good `0c8459022373`, 5 commit(s) in range
+- **demos#00** (plexus): bad `e46dbffaa80d`, last good `49bd043061c1`, 135 commit(s) in range
+- **test-pascal-conformance#shard0/6** — tools/run_pascal_conformance.sh (plexus): bad `e46dbffaa80d`, last good `49bd043061c1`, 217 commit(s) in range
 - **CASCADE 18 jobs** (seven): bad `154d1aa3fba6`, last good `e417731e9007`, 12 commit(s) in range
   <details><summary>jobs</summary>
 
