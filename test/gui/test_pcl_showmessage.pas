@@ -6,7 +6,14 @@ program test_pcl_showmessage;
   DismissCB after 400ms to tear the dialog down (the synthetic equivalent of
   clicking OK). Prints before/after to prove the call returned cleanly. }
 
-uses gtk3, dialogs, gtk3_c;
+{ `interfaces` is REQUIRED and is not decoration: ShowMessage is
+  WidgetSet.MessageBox, and WidgetSet is assigned in gtk3widgets'
+  `initialization` -- which never runs unless something links that unit in.
+  `interfaces` is the unit that selects it. Without it WidgetSet is nil and
+  this dies with runtime error 216 on the ShowMessage line, which is exactly
+  what it did for as long as nothing ran it
+  (chore-t-six-orphan-gui-tests-the-blanket-was-hiding). }
+uses interfaces, gtk3, dialogs, gtk3_c;
 
 function DismissCB(data: Pointer): Integer; cdecl;
 begin

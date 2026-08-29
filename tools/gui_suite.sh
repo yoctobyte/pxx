@@ -61,6 +61,46 @@ run_gui_test() {
 # (feature-pcl-widgetset-select): the default must be byte-identical to an
 # explicit gtk3, and every unsupported cell must be a COMPILE error naming the
 # reason rather than a silent build.
+# Compile + run + assert the FULL OUTPUT. run_gui_test above checks only the
+# exit status, which cannot tell a working subject from one whose callbacks
+# never fired: test_gtk_signals exits 0 whether or not "clicked" was ever
+# delivered, and test_pcl_helloworld exits 0 with clicks=0 when the streamer
+# fails to wire Button1. For a subject whose whole point IS what it printed,
+# rc is not the assertion -- the text is.
+#
+# Also timeout-bounded, which run_gui_test is not. These subjects drive real
+# gtk main loops and self-quit from a g_timeout; a subject that loses its
+# quit would hang the suite rather than fail it.
+#
+# NOTE what this tier does and does not witness. It runs with whatever display
+# happens to exist, and these subjects print their success lines even with
+# DISPLAY and WAYLAND_DISPLAY both unset -- gtk_init_check still returns 1 and
+# gtk_window_new still returns non-nil. So a green row here asserts widget
+# construction, callback delivery and clean exit. It does NOT assert that a
+# window ever mapped; that is gui_realwindow's tier, and it needs xdotool.
+run_gui_expect() {
+  local name="$1" expect="$2"
+  local src="$ROOT/test/gui/$name.pas"
+  local out="/tmp/gui_test_$name"
+  local log="/tmp/gui_test_$name.log"
+  local got
+
+  rm -f "$out"
+  if ! "$PXX_STABLE" -Fulib/pcl $GTK3_INC "$src" "$out" >"$log" 2>&1; then
+    say "FAIL  $name -- compile: $(tail -1 "$log")"; fail=1; return
+  fi
+  if ! got="$(timeout 60 "$out" 2>"$log")"; then
+    say "FAIL  $name -- runtime: $(tail -1 "$log")"; fail=1; return
+  fi
+  if [ "$got" != "$expect" ]; then
+    say "FAIL  $name -- output mismatch"
+    say "      want: $(printf '%s' "$expect" | tr '\n' '/')"
+    say "      got:  $(printf '%s' "$got"    | tr '\n' '/')"
+    fail=1; return
+  fi
+  say "OK    $name"
+}
+
 widgetset_matrix() {
   local src="$ROOT/test/gui/test_pcl_widgets.pas"
   local a="/tmp/gui_ws_default" b="/tmp/gui_ws_gtk3"
@@ -136,6 +176,37 @@ run_gui_test test_pcl_input
 run_gui_test test_pcl_paned
 run_gui_test test_pcl_stream_paned
 run_gui_test test_pcl_tabbar
+
+# The six that nothing ran until 2026-08-30. check_test_wiring surfaced them
+# once it stopped blanket-crediting test/gui
+# (chore-t-six-orphan-gui-tests-the-blanket-was-hiding). They are NOT redundant
+# leftovers -- between them they are the only executable description of
+# SignalConnect, raw gtk_window_new/show_all/gtk_main, ShowMessage +
+# DismissActiveDialog, Application.CreateForm's metaclass path, and the
+# WILDCARD {$R *.lfm} that real Lazarus code writes (test_pcl_lfm exercises
+# only the explicit `{$R TMainForm ...}` form). None of that was covered by the
+# eleven rows above.
+#
+# They use run_gui_expect rather than run_gui_test on purpose: each was written
+# to be WATCHED by a human, so its result is prose on stdout, and an rc-only
+# row would pass on a dead callback. The expected text is the assertion.
+run_gui_expect test_gtk_window    'window shown, exiting'
+run_gui_expect test_gtk_signals   'button clicked
+timeout -> quit
+exited cleanly'
+run_gui_expect test_pcl_window    'starting
+created app
+initialized app
+created form
+created button
+added timeout
+auto-quit
+done'
+run_gui_expect test_pcl_showmessage 'before ShowMessage
+dismiss dialog
+after ShowMessage'
+run_gui_expect test_pcl_helloworld 'Button1Click -> ShowMessage
+clicks=1'
 
 # Solitaire GUI demo (engine in examples/solitaire_gui): compile + headless
 # --smoke run (renders the board + a few engine moves, prints SMOKE OK).

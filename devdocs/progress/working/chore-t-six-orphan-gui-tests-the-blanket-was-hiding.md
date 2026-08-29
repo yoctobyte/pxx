@@ -4,9 +4,10 @@ title: "Six GUI test files that nothing runs, revealed once check_test_wiring st
 track: B
 type: chore
 prio: 30
-status: backlog
+status: working
 found: 2026-08-29
 found-by: pxx-a5 (Track T)
+owner: pxx-b
 ---
 
 # The six the blanket was hiding

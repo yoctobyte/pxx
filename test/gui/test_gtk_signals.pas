@@ -29,6 +29,17 @@ begin
   writeln('button clicked');
 end;
 
+{ Synthesise the click. Without this nothing ever presses the button, so
+  OnClick never runs and `clicked` -- the whole point of the file -- is
+  asserted by nothing. The test predates being wired and was written to be
+  WATCHED: a human clicked the button. An automated row has to press it
+  itself or it is green on a dead callback. }
+function ClickCB(data: Pointer): Integer; cdecl;
+begin
+  gtk_button_clicked(btn);
+  ClickCB := 0;
+end;
+
 function AutoQuit(data: Pointer): Integer; cdecl;
 begin
   writeln('timeout -> quit');
@@ -48,7 +59,8 @@ begin
 
   SignalConnect(win, 'destroy', @OnDestroy);
   SignalConnect(btn, 'clicked', @OnClick);
-  g_timeout_add(2000, @AutoQuit, nil);
+  g_timeout_add(300, @ClickCB, nil);
+  g_timeout_add(1000, @AutoQuit, nil);
 
   gtk_widget_show_all(win);
   gtk_main;

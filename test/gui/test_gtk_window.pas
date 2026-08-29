@@ -29,8 +29,14 @@ begin
 
   gtk_widget_show_all(win);
 
-  { pump ~3s: 300 frames * 10ms }
-  for i := 1 to 300 do
+  { Pump the loop briefly. This was 300 frames (~3s) because the file was an
+    EYEBALL demo -- long enough for a human to see the window. A suite row
+    watches nothing, so the duration buys only wall-clock; what is being
+    asserted is that the pump idiom (gtk_events_pending/gtk_main_iteration_do,
+    as opposed to gtk_main) runs and exits cleanly.
+    NOTE the line below is NOT witnessed: with no display this still prints
+    "window shown, exiting". Mapping is gui_realwindow's tier, not this one. }
+  for i := 1 to 30 do
   begin
     while gtk_events_pending <> 0 do
       gtk_main_iteration_do(0);
