@@ -5,12 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:23 blocked:8 backlog:317 backlog_new:15 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2651 rejected:51`
+`working:4 unfinished:23 blocked:8 backlog:316 backlog_new:15 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2651 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
 - `audit-a-a-comment-asserting-an-invariant-is-a-claim-about-a-sibling-arm-nobody-checked` [A] — owner: frankD
 - `bug-a-the-fpc-seed-canary-skips-a-break-already-on-master` [A] — owner: unrecorded
+- `feature-a-error-does-not-halt-so-a-parse-can-be-speculative` [A] — owner: frankA
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
 ## unfinished (23) — parked mid-flight; re-claim, do not duplicate
@@ -50,12 +51,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 338, ranked
+## Ready — top 30 of 337, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
-- `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [T]` regression-cascade-154d1aa3fba6
 - `[p 70] [P]` regression-cascade-4e27dc2be114
@@ -82,5 +82,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
 - `[p 62] [A]` feature-unicodestring-model
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
+- `[p 60] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 1)
 
-_308 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_307 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
