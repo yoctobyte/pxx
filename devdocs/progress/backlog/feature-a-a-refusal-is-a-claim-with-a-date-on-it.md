@@ -3699,3 +3699,53 @@ three are not fallout from this work and are not claimed as such.
 Sharpened by the stakes: **windowed is the ESP-IDF ABI**, so on real hardware
 those three would have been unexplained crashes with nothing to compare
 against — which is the oracle argument again, from the third direction tonight.
+
+### 83b. The DEFAULT search path cannot be ordered ahead of a flag, because it is not one
+
+frankB, 2026-08-30, and it strictly strengthens 73/83a — which the coordinator's
+own adjudication could not have found, because **both arms of that test passed an
+explicit `-Fu`.**
+
+Measured on pinned v393, witness `PngLastError` (a symbol only `lib/rtl/png.pas`
+provides):
+
+```
+$ pinned n.pas                                   -> ok, procs=293
+$ pinned -I/usr/include/libpng16 n.pas           -> undefined variable (PngLastError)
+$ pinned -Fulib/rtl -I/usr/include/libpng16 n.pas-> ok, procs=293
+```
+
+**The middle row has no `-Fu` in sight and still captures.** So the rule is not
+*"whichever of `-I` and `-Fu` comes first"* — it is:
+
+> **Any `-I` root beats the default RTL path. Only an explicit, EARLIER `-Fu`
+> can win.**
+
+Which means **every build script that passes `-I` and relies on the default path
+for the RTL is exposed**, and "we don't pass `-Fu`, so ordering is not our
+problem" is exactly backwards.
+
+**The coordinator's adjudication was correct and under-scoped for a structural
+reason worth naming: a test that varies one factor across two arms cannot see a
+third arm where the factor is ABSENT.** Present-early and present-late were
+compared; *absent* was never run, and absent is the common case in real build
+scripts.
+
+**Consequence that closes the loop on the earlier disagreement:** frankC had
+recommended passing the GTK3 include root *"to every probe, inert where
+unneeded"*. It is **not inert — it is the capture mechanism.** Passing it to
+every probe would have captured `png`, silently. Directory-scoping is right for a
+second reason nobody in that thread could have given at the time.
+
+**And the corrected split on the original exchange, per frankB's own narrowing:**
+its filesystem check was genuinely not invalidated by flag order — that part
+survives. **Everything built on top of it did not**, including its conclusion
+that `apps/ide/build.sh` was safe. The reorder it had labelled belt-and-braces
+was the actual fix. Recorded because a partial vindication is the easiest thing
+to over-claim, and frankB narrowed it against itself.
+
+**Two failed witnesses before the working one**, both saying "undefined" in
+*every* arm including the control — `PngSignatureValid` needs an argument, and
+`TByteArray` is not from `png.pas` at all. **A witness that fails identically in
+every arm is 74 again**, and the tell had been sitting in its own output the
+whole time: `procs=1046` versus `293`, printed and not read.
