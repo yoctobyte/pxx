@@ -168,4 +168,4 @@ overlap only, and it is exactly the scope of that ticket. Deliberately not
 folded in — a change to where every test writes does not belong in this diff.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 7e11ab09e.
