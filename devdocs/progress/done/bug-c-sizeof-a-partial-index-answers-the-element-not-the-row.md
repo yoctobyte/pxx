@@ -162,4 +162,4 @@ lighter. The overhaul was the smaller job, as
 - [[refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs]] — the census that found it
 - [[bug-c-a-multidim-array-field-decays-with-the-element-stride]]
 - [[bug-c-a-struct-field-partial-index-uses-the-outer-row-stride]]
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 8172e6c8e.
