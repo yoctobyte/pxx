@@ -41731,8 +41731,19 @@ begin
     parsed with one argument and failed with two. Confined to this NilPy
     intercept: Pascal code still gets the record, which is what `var f: Text`
     means there. }
+  { ...unless the name was bound by `from M import <non-class> as NAME`. The
+    alias is a module-level binding to a FUNCTION, and it must not be read as
+    a construction just because M also happens to declare a class by that
+    spelling: `from M import f as C` then `C(1,5)` CONSTRUCTED M's class C and
+    printed an object where CPython prints 5 — silently, and with the argument
+    list quietly reinterpreted as constructor args.
+    A genuine class alias (`from M import Box as BoxAlias`) is NOT affected:
+    it takes the RegisterUClassAlias branch at the import site, which does not
+    record a name here, so BoxAlias stays an exact ctor name.
+    bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module }
   if (CurTok.Kind = tkIdent) and
      PyIsExactCtorName(CurTok.SVal) and
+     (not PyNameIsImportAlias(CurTok.SVal)) and
      (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
   begin
     CurASTNode := PyClassCreateExpr;

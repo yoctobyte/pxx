@@ -171,3 +171,73 @@ was durable prose on master and its lifting has to be too, or the next agent
 re-reads the ticket and re-refuses. frankA declined this dispatch on the strength
 of the old paragraph and was right to — the paragraph was the only thing on master
 that spoke to it.
+
+## MEASURED AT HEAD 2026-08-29 — the 2026-08-18 re-scoping is STALE, the TITLE was right
+
+Re-measured against CPython before touching anything. Two premises above no
+longer hold, and both would have sent the next reader the wrong way.
+
+**1. The re-scoping is stale.** The section above says the failure "appears with
+no import anywhere" and gives `def a…; def b…; b = a; b(1,5)`. That case
+**passes at HEAD** — pxx 5, CPython 5. Locally-`def`'d names now rebind
+correctly. So the defect really is the import one the TITLE names, and the
+generalisation to "a name that names a `def` is resolved at every call site"
+is no longer the rule.
+
+**2. `blocked-by` is satisfied and its stated reason is gone.** The block was
+that the dynamic call path "cannot yet carry defaults", evidenced by
+`from M import f as zz; zz(1)` printing empty. At HEAD that prints **7**, which
+is CPython's answer. The decision ticket is in `decided/` and the measurement
+that motivated the block no longer reproduces.
+
+### The table, re-measured, before -> after
+
+| shape | before | after | CPython |
+| --- | --- | --- | --- |
+| `from M import f as g; g(1,5)` | 18 | **5** | 5 |
+| `from M import f as g; g(1)` | 16 | **7** | 7 |
+| `from M import f as g, g as f` | `5 5` | **`5 18`** | `5 18` |
+| `from M import f as C; C(1,5)` | a C instance | **5** | 5 |
+| `from M import f as zz; zz(1,5)` | 5 | 5 | 5 |
+| `from M import f, g` (plain) | 5, 18 | 5, 18 | 5, 18 |
+| **`from M import f, g; g = f; g(1,5)`** | 18 | **18** | 5 |
+
+Three defects, not one — which is why the first fix could not close it:
+
+- **the call site** preferred an imported proc over a module-level binding;
+- **the import parser** resolved an alias's SOURCE name with a flat lookup, so
+  `g as f` found the `g` that `f as g` had allocated an instant earlier
+  (CPython binds every name of one from-import from the source module
+  simultaneously);
+- **the constructor path** is a SECOND mechanism for one concept —
+  `PyIsExactCtorName` decides `Name(` is a construction without consulting any
+  binding, so `f as C` constructed M's class. Fixing the call site alone leaves
+  this one live, and it looks fixed from the ticket's first row.
+
+### STILL OPEN — one row, and it is not dropped
+
+`from M import f, g` then `g = f` still answers 18. Catching it needs a
+module-level assignment scan keyed by NAME, which is `PyDefRebindTok`'s job in
+`compiler/symtab.inc` — **Track A's file, held by another agent**, so it was not
+taken. Filed here rather than silently omitted: the table is the only record
+anyone rereads, and a row removed from it reads as passing.
+
+### A regression I caused, and the reason it is recorded here
+
+The first fix (`15335c82c`) broke `test_nilpy_fallback_import_try_wins` and was
+repaired in `46b2439c4`. The rule was "a module-level var declared in this unit
+beats a proc from another unit" — true for a **rebinding**, false for a **plain
+import**, because an optional (`try:`) import allocates a module-level var for
+the plain spelling too, so a real import binding was shadowed by None.
+
+**Every one of this ticket's seven rows still passed. The eighth shape, the one
+not in the table, is what broke.** That is a scope error, not a reasoning error,
+and the table looked complete — which is the same failure as reading a sample as
+a census. An enumeration treated as exhaustive and a sample treated as a census
+are one defect wearing two hats: *the instrument's scope is invisible in its own
+output, and the scope is exactly where the next defect lives.*
+
+The practical consequence for whoever takes the remaining row: **the table above
+is not the specification.** Before landing a change to name binding, check at
+least one shape that is not in it — an optional import, a conditional import, a
+name bound by both a def and an import.
