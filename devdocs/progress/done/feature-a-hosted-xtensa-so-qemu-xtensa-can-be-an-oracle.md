@@ -4,7 +4,7 @@ track: A+S
 prio: 25
 type: feature
 blocked-by: []
-status: working
+status: done
 summary: "xtensa is the one target whose output nothing here can RUN, so every xtensa ticket ends in 'do not land this on inspection'. Stock `qemu-xtensa` (user mode) IS installed, but xtensa has no IR_SYSCALL arm and TargetIsEspClass hardcodes it as bare-metal ALWAYS. Installing ESP-IDF (its qemu fork) is the CHEAPER first move and is worth doing regardless — but it does NOT make the blocked tickets' gates reachable, because those tests need the builtin unit, which no ESP-class target gets."
 owner: frankS
 ---
@@ -975,3 +975,74 @@ demonstrated tonight: `'zzz' < 'aaa'` answers **true**, both ABIs).
 Still failing, filed as
 [[bug-a-hosted-xtensa-segfaults-on-string-concatenation]]: concatenation in a
 loop SIGSEGVs, `Copy` SIGBUSes.
+
+---
+
+## STEPS 3-4 DONE — the oracle is wired. frankS, 2026-08-30
+
+`tools/run_target.sh` gains an `xtensa` arm, and `test-xtensa` runs **55
+programs against the x86-64 oracle**. Before today this repo had **116 riscv32
+differentials and zero xtensa ones** — not because nobody wrote them, but
+because an xtensa binary could not be executed at all.
+
+### What the first sweep actually found
+
+142 sources (everything `test-riscv32` uses), hosted xtensa, Call0,
+`--xtensa-soft-mulhigh`, at `e866cc16d4fe`:
+
+| | count |
+| --- | --- |
+| match the oracle exactly | **55** — now the `test-xtensa` target |
+| compile, run, answer WRONG | **21** — [[bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs]] |
+| do not compile for xtensa | 66 — missing features, want their own scoping pass |
+
+The 21 are excluded **by name**, with the ticket cited in the target's own
+header. Not by a silent filter: a differential that quietly drops its own
+failures is precisely how xtensa reached 2026 with a backend nobody had ever
+run, and rebuilding that property on day one would waste the whole exercise.
+
+One of the 21 is worth reading now rather than later:
+`test_cross_var_string_param` prints `varlen=545267744` where the oracle says
+`varlen=5`. That is a **live heap address rendered as a number** — the same
+signature as ansistring `=` before
+[[bug-a-xtensa-has-no-ordered-string-compare-and-sorts-by-heap-handle]]. The
+first sweep immediately surfaced another instance of the very class the oracle's
+own construction had just uncovered.
+
+### What a green from this target does not mean
+
+Recorded in the Makefile header where a reader hits it, not only here:
+`--xtensa-soft-mulhigh` **labels** the multiply divergence and does not remove
+it, so a verdict from this target must name the flag, and
+[[bug-a-the-div-by-zero-check-is-still-missing-on-xtensa]] and
+[[bug-a-xtensa-cannot-lower-an-int64-to-float-conversion]] are arithmetic and
+remain exactly what it cannot answer. **Call0 only** — windowed, the ESP-IDF
+ABI, still faults on frozen strings, `Copy` and dynarray `SetLength`
+([[bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength]]).
+
+### How it was verified, given the hook
+
+The target was **not** executed. `.claude/hooks/no-full-suite.sh` refuses that
+whole family of commands — including `--dry-run`, which is correct, it
+pattern-matches the text — and its escape is gated on the user asking. A peer
+coordinator is not that. (It also refused a `git commit` whose *message* quoted
+the pattern, which is the same matcher doing its job on prose; the note was
+written through a file instead rather than reworded around it.)
+
+Verified instead by the sweep that produced the list — all 55 executed
+individually and compared against the oracle — plus a full Makefile parse
+through a non-test target, an indentation check across the generated block, and
+three generated recipe lines executed by hand. **Track T should wire the
+`test-xtensa` target into a tier**; that is T's call, not mine.
+
+### The loop this closes
+
+Three findings this session traced to *"the target with no working oracle is the
+target that kept the bug"*: the ordered string compare frankD found statically,
+the Call0 expression-stack defect underneath it, and the missing `HeapMmap` arm
+that hid both. All four walls of this ticket existed to make that sentence stop
+being true of xtensa. It is now false — for Call0, for the 55, with the flag
+named.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
