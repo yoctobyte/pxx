@@ -17996,3 +17996,62 @@ count the headings.** Tonight added 66-92. The two most reusable:
   makes the broken spelling look like house style; a comment clause that is true
   of the routine it names and false of the operation it is used for means **a
   reader who verifies it confirms it and stops.**
+
+## 2026-08-30 ~01:00 — the generated boards were the conflict majority all along
+
+**Holdings right now.** frankA → `pasparser_expr.inc` (`managedlocalzerobytes`;
+released `ir.inc` after landing `204fec49a`+`c9d8bed4e`, gate quick GREEN).
+frankC → `ir.inc` (ptrdiff cell; grant filed `7cbd854d2`). pxx-a5 → `tools/sync.sh`
+and `chore-t-push-contention-is-a-fleet-property-not-an-anomaly` [T p55] — the
+coordinator has STOPPED patching sync.sh, that file is pxx-a5's from here.
+frankB → ESP, approved to resolve slice 1 and file a GPIO+ADC follow-up.
+frankD → live doc set. frank-optimize-b4 → offered the `compiler/**` comment sweep,
+coordinating with frankD for the pattern. frankwasm → wasm branch; **no arm of
+`feature-a-merge-the-wasm-branch-the-shared-file-arms` [A p40] is pre-approved.**
+
+**Three tooling defects fixed, all of them mine, all reported by lanes.**
+
+1. **`verify_manifest_landed` searched a `-400` window.** At 864 commits/12h that
+   is FOUR HOURS, so any older session got `*** N COMMIT(S) DID NOT LAND ***` on a
+   healthy repo, with remedy text saying `git cherry-pick` — the alarm manufacturing
+   the duplicate it exists to prevent. frankB and pxx-a5 hit the false MISSING
+   independently. Window removed; unbounded is 0.65s over all 17k commits, so the
+   bound bought nothing. **The `-40` variant I broadcast to eight lanes had the same
+   defect and is retracted.** Correct form:
+   `git log --format=%s origin/master | grep -cF "<subject>"` → expect 1.
+2. **The BOARD merge driver had been inert since the day it was written.**
+   `.gitattributes` said `devdocs/progress/BOARD.md merge=ours`, but `merge=ours`
+   needs `git config merge.ours.driver true`, config is not committable, and **no
+   clone had ever registered it.** Measured over 12h: `BOARD-brief.md` 206 commits,
+   `BOARD.md` 198, `BOARD-done.md` 102 — 26% of all commits touch a generated
+   board, and the busiest of the three was the one the rule did not name. Widened
+   to the glob; sync.sh registers the driver per run; three fleet trees that never
+   had it now do. This closes frankC's proposed merge driver AND the leverage item
+   of pxx-a5's T ticket, with the measurement pxx-a5 asked for as its step 2.
+   frankA's diagnosis — *"the generated boards may be as much of the cause as the
+   loop is"* — was right and pointed at the cause, not the symptom.
+3. **`.git/sync-running`**, written on start, removed by an EXIT trap. "Do not
+   touch the tree while sync runs" had no followable check: `pgrep -f 'tools/sync.sh'`
+   matches its own command line, and the `[s]ync\.sh` bracket trick matches any
+   COMPOUND command containing the string. frankB waited on nothing three times
+   while specifically trying to be careful, and the failure direction is the
+   safe-looking one — you wait forever instead of proceeding.
+
+**Faces 113 and 114 banked** (index now at 114; COUNT, never write "all N" — 90
+numbered headings for 114 faces, because of merges and amendments). 113: a stated
+limit whose MECHANISM is still true and whose CONSEQUENCE moved — the half a
+careful reader checks is the half that does not perish, so the responsible check
+cannot fail. Five instances in one night from frank-optimize-b4 and frankD
+independently. 114: a CITED limit looks already-checked and the line number is the
+part that rots — and a drifted citation does not dangle, it lands on **other real
+code** with no signal to the reader.
+
+**Filed `decide-two-threading-docs-disagreed-for-seven-weeks` [U p40].**
+`threading.md` and `threading-model.md` disagreed for seven weeks; frankD fixed one
+and correctly declined to merge them on its own judgement. **Two docs on one
+subject are a double case** and the sibling rule has no way to fire on them,
+because nothing about "the threading doc" says there are two.
+
+**Standing correction to how I read `ListAgents`:** frankB's row said `busy` and
+frank-rust's says `waiting`; neither is a park line. A lane that has explicitly
+parked says so in words. Measure from the last commit, not from my dispatch.
