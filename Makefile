@@ -3913,6 +3913,25 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_cmprip326 "$$($(TESTTMP)/test_cmprip326)" "$$(printf 'acc=393213\none=131071\nbyref=10\ndone')"
 	./$(COMPILER) -O0 test/test_cmp_right_in_place.pas $(TESTTMP)/test_cmprip026
 	tools/expect_same.sh test_cmprip026 "$$($(TESTTMP)/test_cmprip026)" "$$(printf 'acc=393213\none=131071\nbyref=10\ndone')"
+	# BOTH operands 4-byte and same type -> the fused compare reads the right one
+	# in place with a 32-BIT compare (opcode 3B, no REX.W), instead of sign-
+	# extending it into rcx first. Slice 7 folded 8-byte only and declined exactly
+	# this, which is why its own benchmark loop came out unchanged.
+	# Dropping REX.W is what makes it safe: a 32-bit compare reads four bytes of
+	# the slot and the low half of the register, so nothing depends on the upper
+	# half being extended. Sign- and zero-extension are both monotonic under
+	# signed AND unsigned order, so with identical TypeKind the narrow compare
+	# agrees with the wide one under every predicate.
+	# Every row is a band (standing rule 4) -- adjacent values, not distinct ones.
+	# The unsigned rows sit above 2^31 where a signed reading differs, and the
+	# 8-vs-4-byte row is the control that must NOT fold. Verified against FPC
+	# 3.2.2; four deliberate breaks (REX.R, REX.W, displacement, reg field) each
+	# move -O3 while -O0 stays correct.
+	# feature-opt-o3-register-pressure W1 slice 8
+	./$(COMPILER) -O3 test/test_cmp_32bit_fold.pas $(TESTTMP)/test_cmp32f326
+	tools/expect_same.sh test_cmp32f326 "$$($(TESTTMP)/test_cmp32f326)" "$$(printf 'acc=189\none=63\ndone')"
+	./$(COMPILER) -O0 test/test_cmp_32bit_fold.pas $(TESTTMP)/test_cmp32f026
+	tools/expect_same.sh test_cmp32f026 "$$($(TESTTMP)/test_cmp32f026)" "$$(printf 'acc=189\none=63\ndone')"
 	# the AN_FOR hidden INIT temp is elided at -O3 when both bounds are re-emittable
 	# (literal / plain scalar var / pure arithmetic over those). The temp enforces
 	# "evaluate both bounds before assigning the control variable"; eliding it

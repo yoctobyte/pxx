@@ -2278,6 +2278,7 @@ const
   W1CMP_NONE = 0;
   W1CMP_REG  = 1;
   W1CMP_MEM  = 2;
+  W1CMP_M32  = 3;   { -O3 W1 slice 8: 4-byte both sides -> 32-bit cmp, no REX.W }
 
 { -O3 W1 slice 7: can a fused compare read its RIGHT operand IN PLACE instead of
   loading it into rcx first?
@@ -2311,8 +2312,44 @@ const
   arrays, floats, strings, frozen strings and by-ref params are all out there,
   and a by-ref param matters here specifically because its slot holds a POINTER,
   so folding its address would compare the wrong thing. }
-function W1CmpRightInPlace(node: Integer; var reg: Integer; var memOff: Integer): Integer;
-var idx: Integer;
+{ PXXDBG=a.w1cmp32 -- slice 8's decline reasons, not just its firings.
+
+  A pass that prints only when it fires cannot report finding nothing, so a
+  slice that never runs and a slice that runs everywhere read identically from
+  the outside. Slice 8 was written, self-hosted clean, and changed the target
+  loop by zero bytes; without this probe the next step would have been a guess
+  about which guard rejected it. Every exit prints, FIRE32 included. }
+procedure W1CmpDecline(const reason: AnsiString; idx, lt, rt: Integer);
+begin
+  if not PxxDbgEnabled('a.w1cmp32') then Exit;
+  Write('PXXDBG a.w1cmp32 ', reason, ' lt=', lt, ' rt=', rt);
+  if CurProc >= 0 then Write(' proc=', Procs[CurProc].Name);
+  WriteLn(' sym=', Syms[idx].Name, ' kind=', Ord(Syms[idx].Kind),
+          ' tk=', Ord(Syms[idx].TypeKind));
+end;
+
+{ -O3 W1 slice 8: the 4-byte arm, and why it needs NO sign-extension invariant.
+
+  Slice 7 folded 8-byte operands only. The obvious widening -- fold a 4-byte slot
+  with the same 64-bit `cmp` -- is wrong twice over: it reads eight bytes from a
+  four-byte slot, and it assumes the left register is properly sign-extended.
+  That second assumption is the dangerous one, because its failure mode is a
+  silently wrong comparison (a wrong loop bound), not a crash.
+
+  A 32-BIT compare removes the assumption instead of proving it. `cmp r12d,
+  DWORD PTR [rbp+off]` reads exactly four bytes of the slot and exactly the low
+  half of the register, so whatever is in the upper half is irrelevant BY
+  CONSTRUCTION. For two operands of the same 4-byte type, the 32-bit comparison
+  is equivalent to the 64-bit comparison of their extended forms under every
+  predicate, signed and unsigned alike -- and the jcc/setcc predicate is chosen
+  from the IR types further down, unchanged by the operand width.
+
+  Both sides must be leaf symbols of the SAME TypeKind, and the same IR type.
+  Identical types is stronger than necessary and deliberately so: it makes the
+  predicate's signedness match by construction rather than by a case analysis of
+  mixed-width promotion, which is where this would otherwise get subtle. }
+function W1CmpRightInPlace(node, leftNode: Integer; var reg: Integer; var memOff: Integer): Integer;
+var idx, lidx: Integer;
 begin
   W1CmpRightInPlace := W1CMP_NONE;
   reg := 0; memOff := 0;
@@ -2322,9 +2359,41 @@ begin
   reg := ResidentRegOf(idx);
   if reg <> 0 then begin W1CmpRightInPlace := W1CMP_REG; Exit; end;
   if not ((Syms[idx].Kind = skLocal) or (Syms[idx].Kind = skParam)) then Exit;
-  if TypeSize(Syms[idx].TypeKind) <> 8 then Exit;
+  if TypeSize(Syms[idx].TypeKind) = 8 then
+  begin
+    memOff := Syms[idx].Offset;
+    W1CmpRightInPlace := W1CMP_MEM;
+    Exit;
+  end;
+  if TypeSize(Syms[idx].TypeKind) <> 4 then
+    begin W1CmpDecline('size', idx, -1, -1); Exit; end;
+  if leftNode < 0 then begin W1CmpDecline('noleft', idx, -1, -1); Exit; end;
+  if IRKind[leftNode] <> IR_LOAD_SYM then
+    begin W1CmpDecline('leftnotsym', idx, -1, -1); Exit; end;
+  lidx := IRA[leftNode];
+  if not LeafSymRcxLoadable(leftNode) then
+    begin W1CmpDecline('leftnotleaf', idx, -1, -1); Exit; end;
+  if Syms[lidx].TypeKind <> Syms[idx].TypeKind then
+    begin W1CmpDecline('typekind', idx, -1, -1); Exit; end;
+  { NOT also gated on IRTk equality, and the reason is worth stating because the
+    guard was there first and looked prudent. Measured with a.w1cmp32: the left
+    node's IRTk is frequently 0 -- unset, not different -- so the guard rejected
+    on missing metadata rather than on a mismatch, and it rejected exactly the
+    for-loop limit compare this arm exists for.
+
+    It is also not load-bearing. The predicate below is computed from IRTk and
+    is UNCHANGED by this fold; only the operand width changes. Sign- and
+    zero-extension from 32 to 64 bits are both strictly monotonic maps, under
+    signed AND unsigned ordering alike (sign-extension sends everything >= 2^31
+    above everything < 2^31, preserving unsigned order). Both operands here have
+    the same TypeKind, so both are extended by the same map -- therefore the
+    32-bit comparison of the low halves agrees with the 64-bit comparison of the
+    extended values under EVERY predicate. The fold preserves whatever semantics
+    the existing code had, correct or not; it cannot introduce a disagreement.
+    That is why identical TypeKind is the real guard and IRTk was noise. }
   memOff := Syms[idx].Offset;
-  W1CmpRightInPlace := W1CMP_MEM;
+  W1CmpDecline('FIRE32', idx, IRTk[leftNode], IRTk[node]);
+  W1CmpRightInPlace := W1CMP_M32;
 end;
 
 { `cmp <left>, <right>` with both operands in registers. Opcode 3B puts the LEFT
@@ -2344,6 +2413,19 @@ end;
 procedure EmitCmpLeftMemRbp(lreg, off: Integer);
 begin
   if lreg = 0 then EmitB($48) else EmitB($4C);
+  EmitB($3B);
+  if lreg = 0 then EmitB($85) else EmitB($85 or ((lreg - 8) shl 3));
+  EmitI32(off);
+end;
+
+{ `cmp <left32>, DWORD PTR [rbp+off]` -- opcode 3B with NO REX.W, so the compare
+  is 32-bit and reads only the low half of the left register. REX.R appears only
+  to reach r8d..r15d. Sibling of EmitCmpLeftMemRbp; the ModRM byte is identical
+  (mod=10 rm=101 is rbp+disp32) and only the REX differs, which is the entire
+  point -- dropping W is what makes the operand width 32. }
+procedure EmitCmpLeftMemRbp32(lreg, off: Integer);
+begin
+  if lreg <> 0 then EmitB($44);
   EmitB($3B);
   if lreg = 0 then EmitB($85) else EmitB($85 or ((lreg - 8) shl 3));
   EmitI32(off);
@@ -6244,7 +6326,7 @@ begin
               broken -- normalise-dont-special-case. CmpFusible is required
               because only that set reaches the bare `cmp` below; everything
               else keeps the rcx contract. }
-            w1CmpRightKind := W1CmpRightInPlace(right, w1CmpRightReg, w1CmpRightOff);
+            w1CmpRightKind := W1CmpRightInPlace(right, left, w1CmpRightReg, w1CmpRightOff);
             if (w1CmpRightKind = W1CMP_NONE) or not CmpFusible(node) then
             begin
               w1CmpRightKind := W1CMP_NONE;
@@ -6873,6 +6955,8 @@ begin
                   EmitCmpLeftReg(w1LeftReg, w1CmpRightReg)      { cmp rax|rN, rM }
                 else if w1CmpRightKind = W1CMP_MEM then
                   EmitCmpLeftMemRbp(w1LeftReg, w1CmpRightOff)   { cmp rax|rN, [rbp+off] }
+                else if w1CmpRightKind = W1CMP_M32 then
+                  EmitCmpLeftMemRbp32(w1LeftReg, w1CmpRightOff) { cmp eax|rNd, [rbp+off] }
                 else
                   EmitCmpLeftRcx(w1LeftReg);                    { cmp rax|rN, rcx }
                 if cmpUnsigned then
@@ -9588,7 +9672,7 @@ begin
               if w1JccLeftReg = 0 then IREmitNode(cLeft);
               { -O3 W1 slice 7: read the right operand in place where the cmp can
                 address it, instead of staging it through rcx. }
-              w1JccRightKind := W1CmpRightInPlace(cRight, w1JccRightReg, w1JccRightOff);
+              w1JccRightKind := W1CmpRightInPlace(cRight, cLeft, w1JccRightReg, w1JccRightOff);
               if w1JccRightKind = W1CMP_NONE then EmitLoadVarRcx(IRA[cRight]);
             end
             else if (OptLevel >= 2) and (not InLValueWrite) and
@@ -9652,6 +9736,8 @@ begin
               EmitCmpLeftReg(w1JccLeftReg, w1JccRightReg)              { cmp rax|rN, rM }
             else if w1JccRightKind = W1CMP_MEM then
               EmitCmpLeftMemRbp(w1JccLeftReg, w1JccRightOff)           { cmp rax|rN, [rbp+off] }
+            else if w1JccRightKind = W1CMP_M32 then
+              EmitCmpLeftMemRbp32(w1JccLeftReg, w1JccRightOff)         { cmp eax|rNd, [rbp+off] }
             else
               EmitCmpLeftRcx(w1JccLeftReg);                            { cmp rax|rN, rcx }
             cmpUns := TypeCompareUnsigned(IntToTypeKind(IRTk[cLeft]), IntToTypeKind(IRTk[cRight]));

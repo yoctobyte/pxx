@@ -3043,3 +3043,77 @@ transferable part. Read rule 4 before writing the next slice's test.
 **Banked, not filed:** the ALU bucket (2649 sites) needs flags-liveness before
 `lea` is safe; widening the fold to 4-byte operands needs the sign-extension
 invariant proved rather than assumed.
+
+### 2026-08-30 — W1 slice 8 LANDED behind -O3: the 4-byte compare, folded as a 32-BIT compare
+
+Slice 7's honest failure was that `three.pas`'s loop — the shape this campaign
+exists for — came out **unchanged**, because its for-limit temp is 4-byte and the
+fold was 8-byte-only. This is the completion.
+
+**The argument is better than the one banked, and that is why it was worth
+taking now.** It was banked as *"needs the sign-extension invariant proved rather
+than assumed"*, which was a correct reason not to act on a hunch. But the
+invariant is not needed at all if the compare is **32-bit**: `cmp r12d, DWORD PTR
+[rbp+off]` (opcode 3B, **no REX.W**) reads exactly four bytes of the slot and
+exactly the low half of the register, so what is in the upper half is irrelevant
+*by construction rather than by proof*. **"Do not depend on an invariant" beats
+"prove an invariant"** — the second decays the moment someone changes how
+residents are normalised; the first does not.
+
+Equivalence, stated once: sign- and zero-extension from 32 to 64 bits are both
+strictly monotonic maps under **signed and unsigned** order alike (sign-extension
+sends everything >= 2^31 above everything < 2^31, which preserves unsigned
+order). Both operands are gated to the same TypeKind, so both are extended by the
+same map — therefore the narrow compare agrees with the wide compare of the
+extended values under *every* predicate. The fold cannot introduce a
+disagreement with the existing semantics, whatever those semantics are.
+
+**Result on the motivating loop: 19 -> 18 instructions**, the `movsxd rcx,[rbp-0x24]`
+replaced by a fused `cmp r12d,DWORD PTR [rbp-0x24]`. Cumulative for the campaign
+on that loop: **22 -> 18**.
+
+Controlled A/B at HEAD, baseline = HEAD with only this hunk reverted
+(new `bf1c35821b23`, baseline `e6a8e8d87798`, both 1 round):
+
+| program | -O0 | -O1 | -O2 | -O3 base -> new |
+| --- | --- | --- | --- | --- |
+| `perf/three.pas` | same | same | same | 18614 -> 18590 (**-24**) |
+| `bench/portable/mandelbrot.pas` | same | same | same | 25158 -> 25137 (**-21**) |
+| `examples/mandelbrot/mandelbrot.pas` | same | same | same | 122642 -> 122534 (**-108**) |
+| `examples/lisp/lispdemo.pas` | same | same | same | 105677 -> 105587 (**-90**) |
+| `examples/json/jsondemo.pas` | same | same | same | 447017 -> 446761 (**-256**) |
+| `examples/primes/sieve.pas` | same | same | same | 86597 -> 86511 (**-86**) |
+
+#### The probe is the transferable part, not the encoding
+
+Slice 8 was written, self-hosted clean at `f0c3e2b8bf39`, and changed its target
+loop by **zero bytes**. There was no way to tell a pass that never ran from a
+pass that ran and declined — the exact shape the campaign had already been
+warned about. So the first thing built after that was `PXXDBG=a.w1cmp32`, which
+prints on **every** exit including `FIRE32`, not only on success.
+
+It answered immediately, and the answer was not on the list of things worth
+guessing: the guard `IRTk[left] <> IRTk[right]` was rejecting because the left
+node's IR type is frequently **0 — unset, not different**. A guard that looked
+prudent was rejecting on *missing metadata*, and it rejected precisely the
+for-loop limit compare the arm exists for. The guard was also not load-bearing
+(the monotonicity argument above is the real one), so it went.
+
+Two things follow. **A pass that says why it did not fire is the difference
+between an optimisation you can reason about and one you have to disassemble** —
+and a disassembly is what slice 7 needed instead. And **a guard that has never
+been observed rejecting is not known to be selective**: this one was silently
+rejecting everything interesting, and passing every test, because declining is
+always semantically safe. Correctness tests cannot see an over-strict guard;
+only a decline log can. The probe now also proves the mixed-width control in the
+test is a control — it shows exactly one `typekind` decline, the 8-vs-4-byte row.
+
+**Non-vacuity:** four deliberate breaks — REX.R dropped, REX.W restored (a
+64-bit read of a 4-byte slot), displacement +4 (the adjacent slot), and a wrong
+reg field — each move `-O3` while `-O0` stays correct. Band rows from the start
+this time, per standing rule 4, rather than retrofitted.
+
+**Still banked:** (B) the redundant `cdqe` on a resident already re-normalised
+by the emitter, worth -1; (C) the r8 round-trip from evaluating a non-commutative
+binop's operands in the wrong order, worth -2 and literally W1's charter. 18 -> 15
+remains available on this loop.
