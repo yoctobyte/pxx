@@ -927,8 +927,11 @@ test-nilpy: $(COMPILER)
 	# existing UMthIsStatic dispatch already fills. Both parser passes must agree.
 	./$(COMPILER) test/test_nilpy_staticmethod.npy $(TESTTMP)/test_nilpy_staticm26
 	$(TESTTMP)/test_nilpy_staticm26 | diff -u test/test_nilpy_staticmethod.expected -
-	# ...and @classmethod must keep REFUSING itself by name, not parse as a static.
-	! ./$(COMPILER) test/test_nilpy_classmethod_fail.npy $(TESTTMP)/test_nilpy_cmfail26 2>&1 | grep -q 'ok:'
+	# ...and @classmethod, whose refusal test this replaces: `cls` must be the
+	# class the call was made ON (Derived.make() builds a Derived), through all
+	# four receiver forms, since they take different frontend paths.
+	./$(COMPILER) test/test_nilpy_classmethod.npy $(TESTTMP)/test_nilpy_classm26
+	$(TESTTMP)/test_nilpy_classm26 | diff -u test/test_nilpy_classmethod.expected -
 	# every iterable-taking builtin agrees about a bare genexpr arg; set() did not.
 	./$(COMPILER) test/test_nilpy_genexpr_arg_callees.npy $(TESTTMP)/test_nilpy_gexarg26
 	$(TESTTMP)/test_nilpy_gexarg26 | diff -u test/test_nilpy_genexpr_arg_callees.expected -
@@ -3769,6 +3772,19 @@ test-threads: $(COMPILER)
 	set +e; $(TESTTMP)/test_sched_exhaust26 > $(TESTTMP)/sched_exhaust.log 2>&1; rc=$$?; set -e; \
 	  tools/expect_same.sh test_sched_exhaust26-rc "$$rc" "216"; \
 	  tools/expect_same.sh test_sched_exhaust26-msg "$$(head -n 1 $(TESTTMP)/sched_exhaust.log)" "fatal: scheduler out of reactor slots (MAX_REACTORS)"
+	# Halt(n) from a NON-MAIN thread must end the PROCESS. x86-64 and arm32 emitted
+	# `exit` (thread exit) rather than `exit_group`, so the fatal killed only the
+	# worker and the status fell to whichever thread exited last — 0, for a thread
+	# finishing normally. The exhaustion arm above cannot cover this: it is a whole
+	# subsystem away from the defect, and it passed for a day while scheduler.pas
+	# worked around the bug by calling exit_group directly. This one asks the
+	# question directly, and asks whether the process DIES rather than what status
+	# it reports — which makes it deterministic instead of a race.
+	# bug-b-concurrent-halt-from-several-threads-exits-0
+	./$(COMPILER) --threadsafe test/test_halt_from_worker_thread.pas $(TESTTMP)/test_halt_worker26
+	set +e; $(TESTTMP)/test_halt_worker26 > $(TESTTMP)/halt_worker.log 2>&1; rc=$$?; set -e; \
+	  tools/expect_same.sh test_halt_worker26-rc "$$rc" "216"; \
+	  tools/expect_same.sh test_halt_worker26-msg "$$(head -n 1 $(TESTTMP)/halt_worker.log)" "worker: calling Halt(216)"
 	# __pxxmulhi_u64: unsigned 64x64->128 high half (x86-64 mul / aarch64 umulh)
 	./$(COMPILER) test/test_mulhi.pas $(TESTTMP)/test_mulhi26
 	tools/expect_same.sh test_mulhi26 "$$($(TESTTMP)/test_mulhi26 | tail -1)" "MULHI OK"

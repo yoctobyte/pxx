@@ -301,6 +301,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-as-cast-inline-method-call | A | 50 | bug | bug: method call on an inline `(expr as T)` is silently dropped | — |
 | bug-asmcore-fpc-bootstrap | A | 50 | bug | FPC bootstrap can't compile the asmcore units the compiler now `uses` | — |
 | bug-b-arcsin-arccos-lose-2-ulps-vs-libm | B | 20 | bug | ArcSin/ArcCos in lib/rtl/math.pas are 1-2 ulps off libm for mid-range arguments (asin(0.5) answers ...982991 where libm and CPython say ...982989); ArcTan agrees exactly | — |
+| bug-b-concurrent-halt-from-several-threads-exits-0 | A | 60 | bug | DIAGNOSED, handed to A. Halt(n) on x86-64 and arm32 emits `exit` (thread exit), not `exit_group` — so in a multithreaded program it kills only the calling thread and the process status is decided by whichever thread exits LAST. A fatal then reports SUCCESS at random. i386, aarch64 and riscv32 already emit exit_group and three of them say so in a comment; x86-64 is the odd one out and is the primary target. Two-line fix in compiler/ir_codegen.inc and ir_codegen_arm32.inc. | — |
 | bug-b-criticalsection-was-a-no-op-stub | B | 70 | bug | syncobjs.TCriticalSection had empty method bodies and a TryEnter that always returned True, so threaded code locked with nothing and lost updates silently — 4 threads x 2000 guarded increments summed to 7403, not 8000 | — |
 | bug-b-crtl-basic-posix-io-not-implemented | B | 60 | bug | read/write/close/lseek — plus atof, bsearch, rand/srand — were declared by crtl's headers and implemented nowhere; found by probing all 361 declarations for an implementation, not by reading them | — |
 | bug-b-crtl-host-header-and-arity-mismatches-building-pdfgen | B | 45 | bug | Building pdfgen: `strings.h` comes from the host, and `time`/`bcmp` bind at the wrong arity | — |
@@ -2334,6 +2335,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-lib-test-lib-classes-tthread | T | 70 | regression | regression: lib-test#src:test/lib_classes_tthread.pas red at 459e96f985d1 (auto-filed by twatch) | — |
 | regression-lib-test-lib-mimic-xml-etree-elementtree-2 | N | 45 | regression | regression: lib-test#src:test/lib_mimic_xml_etree_elementtree.npy red at fd93e4a71c37 (auto-filed by twatch) | — |
 | regression-lib-test-lib-mimic-xml-etree-elementtree | N | 70 | regression | regression: lib-test#src:test/lib_mimic_xml_etree_elementtree.npy red at 1b9b43e5b511 (auto-filed by twatch) | — |
+| regression-lib-test-lib-synapse-2 | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at ee62e6dc0582 (auto-filed by twatch) | — |
 | regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | — |
 | regression-lib-test-lib-tls | T | 70 | regression | regression: lib-test#src:test/lib_tls.pas red at 459e96f985d1 (auto-filed by twatch) | — |
 | regression-nilpy-dataclass-dict-factory-test-core-red | N | 70 | regression | test-core RED: `test_nilpy_dataclass_dict_factory.npy` | — |
@@ -2571,6 +2573,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-sqlite-threads-x86-64-00 | T | 70 | regression | regression: test-sqlite-threads-x86_64#00 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-test-threads-test-parallel-for-capture-aggr-2 | P | 70 | regression | regression: test-threads#src:test/test_parallel_for_capture_aggr.pas red at 70f6a360f475 (auto-filed by twatch) | — |
 | regression-test-threads-test-parallel-for-capture-aggr | P | 70 | regression | regression: test-threads#src:test/test_parallel_for_capture_aggr.pas red at b936d125601e (auto-filed by twatch) | — |
+| regression-test-threads-test-sched-reactor-exhaustion | P | 70 | regression | regression: test-threads#src:test/test_sched_reactor_exhaustion.pas red at a6698ac28e8b (auto-filed by twatch) | — |
 | regression-test-uforth-00 | T | 70 | regression | regression: test-uforth#00 red at 378295f7c218 (auto-filed by twatch) | — |
 | regression-test-uforth-core | T | 70 | regression | regression: test-uforth#core red at 44193e547f6d (auto-filed by twatch) | — |
 | regression-test-zlib-00 | T | 70 | regression | regression: test-zlib#00 red at 83006e927e35 (auto-filed by twatch) | — |

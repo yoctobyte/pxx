@@ -648,6 +648,7 @@ function PyUserNameShadowsHere(const nm: AnsiString): Boolean; forward; { does t
 function PyMakeTupleFromArgs(firstArg: Integer): Integer; forward; { a PYSEQ_TUPLE from an already-parsed AN_ARG chain — the multi-arg exception fold asks, and is defined above it }
 function PyEnsureExceptionClass: Integer; forward; { pylib's Exception, shelled lazily — the bare-class `raise` resolver asks, ~12000 lines above the definition }
 function PyIsStaticMethodAt(defIdx: Integer): Boolean; forward; { ditto }
+function PyIsClassMethodAt(defIdx: Integer): Boolean; forward; { ditto }
 { PyMakeIdent and PyHiddenName are likewise forward-declared in pasparser_*.inc
   now (same duplicate-forward issue as PyCallMeth1 below). }
 { PyCallMeth1 is forward-declared in pasparser_*.inc (included before this file),
@@ -15523,7 +15524,21 @@ begin
   end;
   mmi := PyPromoteOverloadByKw(ci, mmi, mn);
   selfArg := AllocNode(AN_ARG);
-  ASTLeft[selfArg] := baseNode;
+  { A static-marked method (@staticmethod or @classmethod) takes the CLASS at
+    slot 0, never an instance — so a receiver that is an object must be reduced
+    to its RTTI blob, exactly as `self.__class__` does. This path is the FRESH
+    construction `Cls().m()`; the named-receiver paths in pasparser_lval already
+    do their own reduction, which is why `b.probe()` answered the right class
+    (Derived included) while `Base().probe()` answered a blank one — the class
+    name printed empty because the blob was an instance pointer.
+
+    Reading the blob from the object is also what makes the RUNTIME class
+    arrive: `Derived().probe()` must say Derived, not the declaring Base. }
+  if (mmi >= 0) and UMthIsStatic[mmi] and
+     (IntToTypeKind(ASTTk[baseNode]) = tyClass) then
+    ASTLeft[selfArg] := GenMakeRttiOfCall(baseNode)
+  else
+    ASTLeft[selfArg] := baseNode;
   ASTRight[selfArg] := -1;
   lastArg := selfArg;
   mpi := UMthProc_[mmi];
@@ -30604,6 +30619,27 @@ begin
             (LowerCase(GetTokenStr(i)) = 'staticmethod');
 end;
 
+{ Is the `def` at defIdx decorated `@classmethod`? The same backward scan, asked
+  from the same two places, for the same reason: the member pre-pass and the
+  real method parse must agree or the registered signature and the frame differ
+  silently.
+
+  The DIFFERENCE from @staticmethod is that a classmethod DECLARES its receiver
+  — the author writes `def make(cls)` — so there is nothing to inject. The
+  declared parameter already occupies slot 0, which is the slot the dispatch
+  fills with the class. What this flag changes is the parameter's TYPE and the
+  UMthIsStatic marking, not the parameter list's shape. }
+function PyIsClassMethodAt(defIdx: Integer): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  i := defIdx - 1;
+  while (i >= 0) and (Tokens[i].Kind in [tkNewline, tkIndent, tkDedent]) do Dec(i);
+  if i < 1 then Exit;
+  Result := (Tokens[i - 1].Kind = tkAt) and
+            (LowerCase(GetTokenStr(i)) = 'classmethod');
+end;
+
 function PyMethodName(const name: AnsiString): AnsiString;
 begin
   if name = '__init__' then Result := 'create' else Result := name;
@@ -33251,6 +33287,16 @@ begin
         Inc(nparams);
         if Tokens[j].Kind = tkComma then Inc(j);
       end;
+      { @classmethod: the DECLARED receiver at slot 0 is the class, not an
+        instance, so it is typed as the pointer the dispatch actually passes —
+        the same tyPointer @staticmethod's injected `$clsrecv` uses, and for the
+        same reason (tyClass reaches IRLowerAddress and produces IR_UNSUPPORTED).
+        The body does not see this pointer: PyParseMethod rebinds the author's
+        name to a boxed classref local. Both passes must agree on this or the
+        registered signature and the frame differ silently — the warning
+        PyIsStaticMethodAt's comment already carries. }
+      if (not isCtor) and (nparams >= 1) and PyIsClassMethodAt(i) then
+        ptypes[0] := tyPointer;
       fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]);
       AppendChar(fullName, '.');
       for k := 1 to Length(name) do AppendChar(fullName, name[k]);
@@ -33534,7 +33580,12 @@ begin
         instance. Nothing needs to suppress a `self` parameter, because a
         static method simply does not declare one and the self handling is
         keyed on the literal NAME at position 0. }
-      if (not fieldsOnly) and (not isCtor) and PyIsStaticMethodAt(methodStart) then
+      if (not fieldsOnly) and (not isCtor) and
+         (PyIsStaticMethodAt(methodStart) or PyIsClassMethodAt(methodStart)) then
+        { @classmethod rides the SAME flag: both want the class at slot 0 and
+          neither is dispatched through the VMT. They differ only in where slot
+          0's parameter comes from — injected for a static, declared for a
+          classmethod. }
         UMthIsStatic[UMthCount - 1] := True;
       if not fieldsOnly then
       begin
@@ -33853,6 +33904,7 @@ var isGenDef: Boolean;
     pbInit, pbAsgn: Integer;
     pbRedo: Boolean; pbTk: TTypeKind;
     pbLocal: array[0..MAX_PROC_PARAMS - 1] of Integer;
+    isClsMeth: Boolean; clsLocal, clsAsgn, clsBox, clsArg, clsPi: Integer;
 begin
   { REPLAY of a flattened base's body: a definition the derived class or an
     earlier base already supplied was skipped by the registration pass, so
@@ -33919,6 +33971,11 @@ begin
     psigs[0] := -1;
     nparams := 1;
   end;
+  { @classmethod, read from the SAME token index for the same off-by-one
+    reason. Nothing is injected: the author declared the receiver, so slot 0 is
+    already theirs. What changes is its TYPE — see the pre-pass note, which must
+    agree with this one. }
+  isClsMeth := PyIsClassMethodAt(TokPos - 4) and (not isCtor);
   while CurTok.Kind <> tkRParen do
   begin
     { `*` / `*args` / `**kwargs` — mirrors the member pre-pass above; the two
@@ -34074,6 +34131,11 @@ begin
       if (i < Procs[procIdx].ParamCount) and
          ((not isGenDef) or (i > 1)) then   { 0 = __genself, 1 = self }
         ptypes[i] := Procs[procIdx].Params[i].TypeKind;
+  { Slot 0 is refreshed from the registered signature for i >= 1 only, so the
+    classmethod receiver's type is set here to the same tyPointer the pre-pass
+    registered. Stated rather than inherited: the two passes agreeing is the
+    whole safety property of this pairing. }
+  if isClsMeth and (nparams >= 1) then ptypes[0] := tyPointer;
   savedSC := SymCount; savedFS := FrameSize; savedSelf := CurSelfClass;
   FrameSize := 0; CurProc := procIdx; CurSelfClass := REC_UCLASS_BASE + ci;
   Procs[procIdx].ScopeBase := SymCount;
@@ -34094,6 +34156,24 @@ begin
     CALLER's slot). A method needs it for the same reason a def does: the two
     parameter paths are separate code, and a fix in one leaves the other wrong.
     bug-nilpy-rebinding-a-list-parameter-aliases-the-callers-list }
+  { @classmethod: the parameter carries a raw RTTI blob POINTER, but the body
+    must see a class VALUE — `cls()` constructs and `cls.__name__` answers only
+    for a VT_CLASSREF variant, which is what `type(self)` already produces and
+    what every classref consumer downstream expects. So the parameter symbol is
+    renamed out of the way and the author's own name becomes a variant LOCAL,
+    seeded below from PyBoxClassRef.
+
+    Exactly the rename-and-realias shape the rebound-variant block beneath this
+    one uses; borrowed rather than invented so there is one idiom here, not two.
+    Without it `cls` was the pointer read as an integer and `cls.__name__` said
+    "'int' object has no attribute '__name__'" -- a wrong VALUE reaching the
+    runtime, not a compile error. }
+  clsLocal := -1;
+  if isClsMeth and (nparams >= 1) and (Procs[procIdx].Params[0].SymIdx >= 0) then
+  begin
+    Syms[Procs[procIdx].Params[0].SymIdx].Name := '$clsptr';
+    clsLocal := AllocVar(pnames[0], tyVariant);
+  end;
   for i := 0 to nparams - 1 do
   begin
     pbLocal[i] := -1;
@@ -34204,6 +34284,36 @@ begin
       pbInit := PySeqAppend(pbInit, pbAsgn);
     end;
   if pbInit >= 0 then bodyNode := PySeqAppend(pbInit, bodyNode);
+  { `cls = PyBoxClassRef($clsptr)`, ahead of everything the body does — the very
+    first statement may already be `return cls()`. The blob arrives ready: the
+    dispatch fills slot 0 from __pxxRttiOf(receiver) for an instance and from
+    Self for a class, which is why this boxes the parameter directly instead of
+    deriving the RTTI here the way PyMakeClassRefOf does for `self.__class__`.
+    That is also what makes the RUNTIME class arrive rather than the declaring
+    one — the property this whole feature turns on. }
+  if (clsLocal >= 0) and (Procs[procIdx].Params[0].SymIdx >= 0) then
+  begin
+    clsPi := FindProc('PyBoxClassRef');
+    if clsPi < 0 then Error('Nil Python: pyeval (PyBoxClassRef) not loaded');
+    clsArg := AllocNode(AN_ARG);
+    ASTLeft[clsArg] := PyMakeIdent(Procs[procIdx].Params[0].SymIdx);
+    ASTRight[clsArg] := -1;
+    clsBox := AllocNode(AN_CALL);
+    ASTIVal[clsBox] := clsPi;
+    ASTLeft[clsBox] := clsArg;
+    ASTTk[clsBox] := Ord(tyVariant);
+    ASTRight[clsBox] := -1;
+    clsAsgn := AllocNode(AN_ASSIGN);
+    ASTLeft[clsAsgn] := PyMakeIdent(clsLocal);
+    ASTRight[clsAsgn] := clsBox;
+    { PySeqAppend(head, stmt) walks ASTRight[head] as a SEQUENCE chain, so the
+      head must already be one. Passing the bare AN_ASSIGN wrote through its own
+      ASTRight — the slot holding the assigned VALUE — which silently discarded
+      the whole method body: `return x * 10 + y` became the default `$pyresult
+      := 0` and the two-argument call answered 0. Built from -1 first, exactly
+      as the pbInit chain above does. }
+    bodyNode := PySeqAppend(PySeqAppend(-1, clsAsgn), bodyNode);
+  end;
   if cellInit >= 0 then bodyNode := PySeqAppend(cellInit, bodyNode);
   if isGenDef then
   begin
@@ -35673,17 +35783,15 @@ begin
         generic message, because "unsupported decorator" reads like a parser
         limitation when the real answer is that its `cls` receiver is not
         modelled yet. }
-      else if LowerCase(propName) = 'classmethod' then
-        Error('Nil Python: @classmethod is not supported yet — its `cls` '
-              + 'receiver is not modelled, and binding it to the declaring '
-              + 'class would be silently wrong in a subclass. @staticmethod works.')
       else if (LowerCase(propName) <> 'property') and
-              (LowerCase(propName) <> 'staticmethod') then
+              (LowerCase(propName) <> 'staticmethod') and
+              (LowerCase(propName) <> 'classmethod') then
         Error('Nil Python: unsupported decorator inside class (only @property, '
-              + '@<name>.setter and @staticmethod)');
+              + '@<name>.setter, @staticmethod and @classmethod)');
       PySkipNewlines;
       if CurTok.Kind <> tkFunction then
-        Error('Nil Python: @property/@staticmethod must be followed by a def');
+        Error('Nil Python: @property/@staticmethod/@classmethod must be '
+              + 'followed by a def');
       PyParseMethod(ci);
       PySkipNewlines;
     end

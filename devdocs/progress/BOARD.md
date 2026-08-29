@@ -8,14 +8,13 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| feature-pascal-corpus-expansion | P | 75 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
 
-## unfinished (20)
+## unfinished (21)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -30,6 +29,7 @@ _none_
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 65 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
+| feature-pascal-corpus-expansion | P | 75 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 | feature-pascal-corpus-fpc-testsuite | P | 65 | feature | Pascal corpus rung 1 — FPC test-suite subset (conformance) | — |
 | feature-pascal-corpus-generics | P | 65 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 | feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
@@ -77,9 +77,9 @@ _none_
 | bug-a-the-posix-pal-dir-is-added-on-esp-platform-targets | A+S | 45 | bug | AddDefaultPasUnitDirs (compiler.pas) guards the posix PAL search dir on TargetIsEspClass — bare-ness — when the question is which PAL the platform wants. So an ESP-PLATFORM target that is not bare (xtensa under IDF, riscv32 under --platform=esp) gets lib/rtl/platform/posix/ on its unit path, and the esp PAL dir is never added by the compiler at all: every ESP build passes -Fulib/rtl/platform/esp by hand. Latent as of regression-test-emit-obj-cxtensa-obj — nothing on that path pulls the PAL any more — but the guard is still wrong and the next thing to pull platform_backend on an ESP target resolves the posix one. | — |
 | bug-a-xtensa-codegen-has-no-variant-support | A+S | 22 | bug | `var v: Variant; v := 1;` does not compile for --target=xtensa: `unsupported node in IR codegen: var_store`. The exact sibling of bug-a-riscv32-codegen-has-no-variant-support, which was fixed 2026-08-27 -- xtensa is the last backend with no IR_VAR_STORE / IR_VAR_BOX / IR_VAR_BINOP arm at all. | — |
 | bug-a-xtensa-refuses-to-lower-an-unreachable-syscall | A+S | 45 | bug | xtensa codegen errors with 'unsupported node in IR codegen: syscall' on a __pxxrawsyscall call that is statically unreachable on that target, which makes an otherwise-portable RTL unit uncompilable. Inconsistent with the ESP PAL's own pattern of refusing unsupported operations at RUNTIME rather than failing the build. | — |
-| bug-b-concurrent-halt-from-several-threads-exits-0 | A | 60 | bug | DIAGNOSED, handed to A. Halt(n) on x86-64 and arm32 emits `exit` (thread exit), not `exit_group` — so in a multithreaded program it kills only the calling thread and the process status is decided by whichever thread exits LAST. A fatal then reports SUCCESS at random. i386, aarch64 and riscv32 already emit exit_group and three of them say so in a comment; x86-64 is the odd one out and is the primary target. Two-line fix in compiler/ir_codegen.inc and ir_codegen_arm32.inc. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | B+S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict | N | 40 | bug | pylib treats VT_CHAR and VT_STRING as ONE string type in ordering, repr, concat and text extraction — but `PyVarEq` bails on `p^.VType <> q^.VType` before it ever gets there, and `PyVarHashKey` has no VT_CHAR arm either. So a char-tagged key stores fine and then misses every lookup. No NilPy-reachable repro today (the pystr_ofchar boundary converts at every crossing), but this is the mechanism that turned Counter(str) into a SILENT 0 instead of a loud KeyError. | — |
+| bug-n-a-classmethod-cannot-call-another-through-cls | N | 55 | bug | A classmethod cannot reach another one through its own receiver | — |
 | bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name | N | 45 | bug | `def g(): return 1` followed by `if True: def g(): return 2` still calls the FIRST g. Split out of bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name when that one was fixed: it is a different mechanism — the def side, not the assignment side. A nested def has a position, but PyRegisterDefShells only walks module-level defs at DEPTH 0, so a def inside a branch never gets one. | — |
 | bug-n-a-field-assigned-from-a-module-global-expression-is-refused | N | 55 | bug | `G = 7 / 2` then `self.v = G` REFUSES to compile — \"cannot infer the type of field self.v - annotate it\". `G = 3.5` is accepted. PyModuleGlobalLiteralType reads a global's type off its initialiser token and can only see a bare LITERAL, so any global initialised by an expression is untypeable to the field pre-pass. | — |
 | bug-n-a-keyword-argument-through-a-class-value-is-refused-at-runtime | N | 55 | bug | `cls(x, b=99)` — a keyword argument to a class reached as a VALUE — raises TypeError at run time saying such a callable 'still carries no parameter names'. It does: RTTI_METH_FLAG's paramKinds block has carried param NAMES since the reflection work, and PyClassRefNew does not read them. The static spelling `P(x, b=99)` is correct, so this is one construction path disagreeing with the other. | — |
@@ -121,7 +121,7 @@ _none_
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 55 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 12 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
-| bug-p-a-generic-type-parameter-is-unknown-when-a-specialization-is-materialised-cross-unit | P | 65 | bug | Compiling a program that uses Generics.Collections dies with `unknown type: TKey` at generics.defaults.pas:790 — a line that declares `function Equals(constref ALeft, ARight: T): Boolean; override;` inside `TDelegatedEqualityComparerEvents<T>`, whose only type parameter is T. `TKey` is the OUTER argument name from the collections side, so an outer specialization's parameter name is leaking into a generic class materialised in another unit instead of being substituted. NOT MINIMISED — one observation from the corpus, no reduced repro yet. | — |
+| bug-p-a-delphi-mode-generic-from-a-used-unit-cannot-be-specialized | P | 70 | bug | In {$MODE DELPHI}, `TOne<Integer>` where `TOne<T>` is declared in a USED UNIT is rejected with `unknown type: TOne`. Same-unit works; the objfpc `specialize TOne<Integer>` spelling works cross-unit; only the Delphi angle-bracket surface fails, and parameter count is irrelevant (a one-param generic fails). Cause is ordering, measured: DelphiRewriteGenericUses sweeps the SHARED Tokens[] array starting at `insertAt` — just after the template's own declaration — so a use that sits EARLIER in the array (the main program, lexed before the unit) is never rewritten. Blocks generics.collections.pas. Renamed from bug-p-a-generic-type-parameter-is-unknown-when-a-specialization-is-materialised-cross-unit: the original TKey framing was wrong. | — |
 | bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching | P | 65 | bug | A parameter's pointer element type is lost between registration and overload matching | — |
 | bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
 | bug-p-an-unknown-compiler-directive-is-silently-ignored | P | 35 | bug | compiler/lexer.inc's {$...} handler is an if/else chain of 34 CaseEqual(command, ...) arms with no terminal else, so ANY directive outside those 34 is silently ignored — no warning, no note, exit 0. {$FATAL} is one confirmed instance (bug-p-fatal-directive-is-silently-ignored) and the mechanism guarantees there are others. Filed separately from the {$FATAL} ticket on purpose: fixing {$FATAL} closes that ticket and leaves this generator intact. | — |
@@ -147,6 +147,7 @@ _none_
 | chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring | A | 40 | chore | Wire the nine that pass, then gate the checker | bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed |
 | chore-doc-pascal-dialect-divergences-pointer-difference | D | 25 | chore | Re-filed from decide-pointer-difference-unit and decide-should-a-null-variant-raise-like-fpc, both decided 2026-08-25. Two divergences from FPC are now CHOSEN rather than merely inherited, and a chosen divergence that is not written down is indistinguishable from a bug to the next reader. Both entries land in devdocs/dev/pascal-dialect-divergences.md. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
+| chore-t-a-stable-gated-red-should-name-pin-lag-before-flakiness | T | 35 | chore | twatch's auto-filed note tells the reader 'this commit CANNOT be the cause ... look at flakiness or box load' whenever a $(PXX_STABLE)-gated job goes red. The deduction is right and the conclusion is wrong: unchanged stable bytes rule out the COMMIT, not the PINNED BINARY, which is stale relative to any compiler fix landed since the last pin. That third branch is missing and it is the common case — the watcher re-files the same already-fixed finding every sweep until the pin moves. | — |
 | chore-t-a-standing-collector-cannot-say-so-to-the-ranker | T | 30 | chore | A ticket that is a DESTINATION for findings rather than a task — a standing collector — has no way to say so, so it ranks like work forever. feature-crtl-implement-libc-assumptions said in prose since 2026-07-20 that it has no done state and should not sit in the ready queue; it sat at the head of Track B's queue at p45 for five weeks and was dispatched to an agent as work on 2026-08-28. progress.py reads status and prio, not prose. | — |
 | chore-t-a-wikilink-to-a-ticket-that-does-not-exist-is-never-detected | T | 30 | chore | 52 distinct ticket-convention [[wikilinks]] across devdocs/progress resolve to no ticket (71 references; 13 cited by live, non-done tickets). Some are renames leaving a dead trail; some appear never to have been filed, which is work hidden behind a link that looks like a citation. Nothing checks. | — |
 | chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile | T | 20 | chore | The second, weaker half of the split_jobs lint: flag any job that RUNS a /tmp binary no line in that job produces. Prototyped and deliberately NOT shipped — it yields 5-7 candidates depending on how recipe lines are segmented, and every one needs individual adjudication. Shipping it half-tuned would produce exactly the noisy guard that gets muted. | — |
@@ -355,13 +356,12 @@ _none_
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 | regression-fpc-bootstrap-compiler-2 | P | 40 | regression | advisory: fpc-bootstrap#src:compiler/compiler.pas red at a6698ac28e8b (auto-filed by twatch) | — |
 | regression-lib-test-crtl-reachability-3 | C | 70 | regression | regression: lib-test#src:tools/crtl_reachability.py red at ee62e6dc0582 (auto-filed by twatch) | — |
-| regression-lib-test-lib-synapse-2 | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at ee62e6dc0582 (auto-filed by twatch) | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 | regression-test-core-test-nilpy-str-ascii-cache | N | 70 | regression | regression: test-core#src:test/test_nilpy_str_ascii_cache.npy red at a6698ac28e8b (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-parent-call-after-instantiation | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy red at b898d0543fc8 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-relative-import-in-package | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_relative_import_in_package.npy red at ee62e6dc0582 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-startswith-tuple | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_startswith_tuple.npy red at b898d0543fc8 (auto-filed by twatch) | — |
-| regression-test-threads-test-sched-reactor-exhaustion | P | 70 | regression | regression: test-threads#src:test/test_sched_reactor_exhaustion.pas red at a6698ac28e8b (auto-filed by twatch) | — |
+| regression-test-threads-test-sched-reactor-exhaustion-2 | P | 70 | regression | regression: test-threads#src:test/test_sched_reactor_exhaustion.pas red at dd9450b0ce75 (auto-filed by twatch) | — |
 | regression-tools-devtest-00-2 | N | 70 | regression | regression: tools-devtest#00 red at 8787cfe4235a — a new hardcoded /tmp path in a NilPy test | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-d-document-own-language-first-in-the-language-reference | D | 15 | task | The user-facing half of the name-resolution rules: 'a name from your own language wins, and an explicit foreign import overrides it'. Internal map is devdocs/dev/name-resolution.md; the language reference says nothing. Blocked until the symbol rule is actually built — documenting behaviour the compiler does not have is worse than documenting nothing. | feature-a-own-language-first-symbol-resolution |
@@ -611,9 +611,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2603)
+## done (2606)
 
-2603 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2606 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (51)
 
@@ -673,7 +673,9 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [P] feature-pascal-corpus-oop
+- [p 70] [P] bug-p-a-delphi-mode-generic-from-a-used-unit-cannot-be-specialized
 - [p 70] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - [p 70] [N] feature-nilpy-staticmethod-and-classmethod
 - [p 70] [A+O] feature-opt-o3-register-pressure
@@ -681,18 +683,16 @@ _none_
 - [p 70] [T] regression-cascade-154d1aa3fba6
 - [p 70] [P] regression-cascade-4e27dc2be114
 - [p 70] [C] regression-lib-test-crtl-reachability-3
-- [p 70] [B] regression-lib-test-lib-synapse-2
 - [p 70] [N] regression-test-core-test-nilpy-str-ascii-cache
 - [p 70] [N] regression-test-nilpy-test-nilpy-parent-call-after-instantiation
 - [p 70] [N] regression-test-nilpy-test-nilpy-relative-import-in-package
 - [p 70] [N] regression-test-nilpy-test-nilpy-startswith-tuple
-- [p 70] [P] regression-test-threads-test-sched-reactor-exhaustion
+- [p 70] [P] regression-test-threads-test-sched-reactor-exhaustion-2
 - [p 70] [N] regression-tools-devtest-00-2
 - [p 68] [E] feature-demo-songformatter-pxx-target
 - [p 68] [N] feature-nilpy-user-defined-decorators
 - [p 65] [P] bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython [parked — re-claim, do not duplicate]
-- [p 65] [P] bug-p-a-generic-type-parameter-is-unknown-when-a-specialization-is-materialised-cross-unit
 - [p 65] [P] bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets
 - [p 65] [P] bug-p-two-different-nested-specializations-of-one-template-collide
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source [parked — re-claim, do not duplicate]
@@ -709,7 +709,6 @@ _none_
 - [p 60] [U] decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - [p 60] [U] decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 1)
 - [p 60] [A] bug-a-an-array-constructor-in-argument-position-leaks-its-dynamic-array
-- [p 60] [A] bug-b-concurrent-halt-from-several-threads-exits-0
 - [p 60] [N] bug-n-os-environ-and-os-sep-are-not-values
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - [p 60] [P] bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
@@ -732,6 +731,7 @@ _none_
 - [p 55] [A] bug-a-emitzeroframeslot-has-no-wasm32-arm
 - [p 55] [A] bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice
 - [p 55] [A+T] bug-a-testtmp-defaults-to-a-path-every-checkout-shares
+- [p 55] [N] bug-n-a-classmethod-cannot-call-another-through-cls
 - [p 55] [N] bug-n-a-field-assigned-from-a-module-global-expression-is-refused
 - [p 55] [N] bug-n-a-keyword-argument-through-a-class-value-is-refused-at-runtime
 - [p 55] [N] bug-n-a-keyword-argument-through-a-procedural-field-needs-a-plain-receiver
@@ -868,6 +868,7 @@ _none_
 - [p 35] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
 - [p 35] [P] bug-p-an-unknown-compiler-directive-is-silently-ignored
 - [p 35] [P] bug-p-fatal-directive-is-silently-ignored
+- [p 35] [T] chore-t-a-stable-gated-red-should-name-pin-lag-before-flakiness
 - [p 35] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
 - [p 35] [D] docs-d-document-exec-eval-and-the-builtins-incompatibility
 - [p 35] [D] docs-toolchain-cli-flags

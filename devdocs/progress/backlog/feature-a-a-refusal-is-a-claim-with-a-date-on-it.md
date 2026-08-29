@@ -2387,3 +2387,176 @@ calls `exit_group` via `__pxxrawsyscall` to work around this, so
 Reverting that to a plain `Halt(216)` is part of the fix — otherwise the repair
 ships beside a green test guarding nothing. A workaround installed while a bug is
 open becomes a blindfold the moment it is closed.
+
+### 56. AN OPEN TICKET WHOSE TITLE MATCHES YOUR SYMPTOM IS A MAGNET FOR FALSE ATTRIBUTION
+
+frankB, 2026-08-29, and it is a face about a *non*-finding, which is why it is worth
+keeping.
+
+Three `lib-test` background runs were killed mid-flight, at 386 and 665 lines, at
+unrelated points, with no test failure in any of them. There is an open ticket
+called `chore-t-unit-class-est-mem-is-below-what-lib-test-00-actually-peaks-at` —
+*"lib-test admitted on a memory promise the box cannot keep."*
+
+**"lib-test got SIGTERMed" plus a ticket titled "lib-test peaks above its memory
+estimate" is a very inviting pair.** It explains the symptom, it names a known
+defect, it is already filed so it needs no new ticket, and joining them costs one
+sentence.
+
+It is wrong. frankB checked instead: the box had **38 GB available**, `lib-test`
+peaks around **600 MB**, and `dmesg` shows **no OOM kill**. The three runs also
+stopped at three unrelated places, which independently rules out a specific test.
+The actual cause was its own session's background-task handling stopping a long
+command — **nothing in the repo, and specifically no new data point for that
+ticket.**
+
+**The hazard is structural and grows with the backlog.** With 336 open tickets,
+almost any symptom has a plausible-sounding match by title, and attributing to an
+existing ticket feels like *diligence* — you searched, you found the known issue,
+you avoided filing a duplicate. It produces a confident wrong cause with no new
+artefact to review, and it also **corrupts the ticket it attaches to**, which now
+carries a fabricated data point that will be cited by the next person.
+
+frankB's own statement of the rule: **an explanation that fits is not an
+explanation that was tested.** Same family as the reproduction-condition error
+(face 49) and the one-sample table (face 50), all three found by the same lane in
+one evening — a fitting story, adopted before anything falsified it.
+
+**The disposal here is the model:** it is written down as a negative result *so
+nobody chases the wrong lead*, and explicitly says the memory ticket gains nothing
+from it. A negative result nobody records gets rediscovered; a wrong attribution
+nobody corrects gets inherited.
+
+### 57. IDENTICAL CODE, OPPOSITE VERDICTS — when the contract lives in another file, a pattern is safe in one frontend and dead in the next
+
+frank-rust, 2026-08-29, closing the face-53 audit. **17 candidates, 1 defect, 16
+correct** — and the count is not the finding.
+
+Whether `GetTokenStr(i) = 'word'` works at all turns on **one line per frontend**:
+which token kinds get their source text copied into `TokChars`.
+
+| lexer | stores token text for | text-vs-keyword compare |
+| --- | --- | --- |
+| `lexer.inc` (Pascal) | **every word token** — `CurTok.SVal := s`, unconditional after `Keyword(s)` | **SAFE** |
+| `rlexer` / `pylexer` / `zlexer` / `clexer` | `tkIdent` + `tkString` (+ one or two each) | **DEAD** |
+
+**Pascal is the outlier, and it is the outlier in the SAFE direction.** That is the
+entire explanation for the bug's existence: the idiom is genuinely correct where
+most of this codebase's Pascal was written, and it was carried into a frontend
+where it silently cannot work. **A habit imported from the majority dialect of the
+repo, into a file with a different contract.** It also predicts the next instance —
+a new frontend written by someone fluent in the Pascal side. The reviewer's
+question is therefore never "is this line right?" but "which lexer is this parser
+paired with?", and the answer is not visible at the call site.
+
+**The audit's own method is the second half.** The first grep covered one spelling
+in three frontends. Widened to **all eleven**, across `GetTokenStr` /
+`CurTok.SVal` / `Tokens[..].SVal` **and the `CaseEqual(text, 'word')` spelling the
+first pass could not see** — each parser checked against **its own** lexer's table.
+**561 comparisons scanned, one dead guard: a base rate of 1-in-561.**
+
+**And the widening produced four phantom bugs that were caught only by running
+them.** Four Pascal sites — `Byte(x)`, `LongWord(x)`, `Byte(p^) := v`,
+`Integer(x)` — compare `CurTok.SVal` against words the Pascal lexer turns into
+`tkInteger_T`/`tkLongWord_T`, and look **exactly** like the Rust defect. All four
+are live. Verified by execution, not reading: **`Byte(321)` prints `65`, which
+happens only if the `CaseEqual` branch was taken.**
+
+> Had I stopped at the grep I would have filed four phantom bugs into Track A.
+
+That is face 52's discipline paying out prospectively: the ticket was filed as
+*candidates, not findings*, with `self`-in-`pyparser` named as probably correct —
+and the warning caught four cases nobody had anticipated. **A list produced by a
+grep is a list of places to look, and it stops being that the moment it is written
+in a ticket's table format.**
+
+**The expensive-half question (face 53's corollary) was answered, in both
+directions.** `RImpls` was empty forever and is read *only* by the generic-bounds
+machinery, which had no other way to be satisfied — so no third behaviour was
+silently wrong and the damage stops at "`impl Trait for Type` did not compile".
+The inverse was also checked: every one of `RKeyword`'s 14 tokens is matched
+somewhere in `rparser.inc`, so there is no keyword the lexer emits that the parser
+can never consume. **Asking the inverse is what turns "I found no more" into a
+bounded claim.**
+
+**Filed rather than built** — `feature-t-lint-token-text-compared-against-a-keyword`
+[T p35], since `tools/**` is Track T's lane. The ticket carries the one design note
+that decides whether it is worth having: **a lint that skips the text-storage half
+turns those four live Pascal sites into false positives**, and a linter that cries
+wolf gets scrolled past, which is worse than no lint. Priced at p35 against a
+measured 1-in-561 base rate — a never-again lint, not a backlog of hits. **Pricing
+a proposed check against its measured base rate is the right way to file one.**
+
+**Face 55, sharpened by frank-optimize-b4 (2026-08-29) — and this is the better
+form.** "When the defect IS the disorder, minimisation fails; trace the messy
+case" is right as far as it goes, **and tracing the messy case still leaves you
+sampling a race**, which is exactly how the original 3-sample table became a rule
+that was not there (face 50). The stronger move was available all along:
+
+> **Find the question whose answer is not a race.** Not *"what exit status do we
+> get"* — that genuinely depends on which thread exits last — but *"does the
+> process die at all"*, which has one answer.
+
+That converted a flaky three-sample table into **10/10 deterministic in both
+directions**, on x86-64 and arm32 alike:
+
+| | exit status, 10 runs |
+| --- | --- |
+| reverted source + **fixed** compiler | **216**, 10/10 |
+| reverted source + **pre-fix** compiler | **0**, 10/10 |
+
+So the full rule is three steps, not two: minimisation can destroy the defect;
+tracing the messy case finds the mechanism; **but the test you leave behind must
+ask a question the race cannot answer differently.** `test_halt_from_worker_thread`
+carries that reasoning in its header specifically so the next reader does not tidy
+it into a joined repro and quietly disarm it — the same hazard as the workaround
+that becomes a blindfold.
+
+### 58. A COMMENT NAMING THE GAP, INSIDE THE FIFTH COPY OF THE THING THE GAP CAUSED
+
+frank-optimize-b4, 2026-08-29, fixing `Halt(n)`'s five hand-rolled backend arms.
+
+The riscv32 arm was **correct**. Its comment reads: *"EmitExit's own encodings only
+cover a constant."*
+
+> That sentence is what a missing abstraction looks like from inside the fifth copy
+> of itself. **Someone saw the shape, wrote it down, and added a copy anyway.**
+
+The author diagnosed the design flaw precisely — the shared helper handles only the
+constant case — and responded by hand-rolling a fifth arm and *documenting why they
+had to*. The comment is evidence the gap was understood at the moment it was
+widened.
+
+**This is the mechanism by which `normalise-dont-special-case` violations become
+permanent.** A silent copy might be an oversight someone later notices. **A
+documented copy reads as considered**, and the note that would have justified
+fixing the abstraction instead becomes the artefact that makes the copy look
+deliberate. Three of the five `Halt` arms carried a comment saying `exit_group` —
+**a comment is what you write when the rule has nowhere to live** — and the two that
+drifted were the two nobody re-derived, including the primary target.
+
+**The repair shape:** b4 did not edit two constants. It added `EmitExitReg` beside
+`EmitExit`, sharing its reasoning, and reduced every backend's `AN_HALT` arm to
+"evaluate the code, then call it". The verification is the part to copy — a refactor
+folding five arms into one routine, isolated against a compiler carrying the
+evening's other work:
+
+| target | change |
+| --- | --- |
+| x86-64 | 8 bytes, every one `0x3C` → `0xE7` (eight `Halt` sites) |
+| arm32 | 8 bytes, every one `0x01` → `0xF8` |
+| i386, aarch64, riscv32 | **byte-identical** |
+
+**Changing the output of exactly the two arms that were wrong, while leaving the
+three that were right byte-identical, is the strongest available evidence that a
+five-into-one refactor preserved what it touched** — and it is the same
+counter-property discipline as face 51, used here to prove a change did *not* do
+something.
+
+**And the revert was tested rather than assumed, against a real hazard.** The
+scheduler workaround's comment recorded a second measured fact: `Halt`'s exit path
+**joins** the worker threads, and two attempts to serialise the fatal HUNG (exit
+124 at 4, 8 and 20 workers). So removing the workaround could plausibly have traded
+a wrong status for a hang. It did not — the hang came from *serialising* the fatal,
+which this arm does not do — but that was established by running it, and the still-
+true half of the comment was kept.

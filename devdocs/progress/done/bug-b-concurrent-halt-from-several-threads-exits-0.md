@@ -3,8 +3,8 @@ summary: "DIAGNOSED, handed to A. Halt(n) on x86-64 and arm32 emits `exit` (thre
 track: A
 prio: 60
 type: bug
-status: backlog
-owner: unassigned
+status: done
+owner: frank-optimize
 blocked-by: []
 ---
 
@@ -184,3 +184,114 @@ arm32, `mov r7, #248` instead of `#1`.
 around this by calling `exit_group` through `__pxxrawsyscall` directly, so it
 would pass with the bug present. **When this is fixed, that workaround should be
 reverted to a plain `Halt(216)`** and the test will then cover both.
+
+---
+
+## FIXED 2026-08-29 by `frank-optimize` (Track A) — as one arm, not two constants
+
+frankB's diagnosis was exactly right and is not restated here. What follows is
+what the fix did differently from what the ticket proposed, and why.
+
+### The ticket proposed two edited constants. That would have left the sixth copy free to drift.
+
+The ticket's own table is the argument against its own fix shape: **five
+hand-written arms for one concept, two of them drifted, and three of the correct
+ones carry a comment saying `exit_group` — a comment is what you write when the
+rule has nowhere to live.** Editing 60 to 231 and 1 to 248 repairs today's two
+and leaves the next backend author to re-derive the rule from scratch. The
+riscv32 arm shows what that costs: it had *already noticed* the gap, writing
+*"EmitExit's own encodings only cover a constant"*, and hand-rolled around it
+instead of closing it. **That sentence is what a missing abstraction looks like
+from inside the fifth copy of it.**
+
+So the fix is `EmitExitReg` in `emit.inc`, placed beside `EmitExit` and sharing
+its reasoning, with every backend's `AN_HALT` arm reduced to *evaluate the code,
+then call it*. The rule now has one home.
+
+Kept adjacent to `EmitExit` rather than folded into it, deliberately: the
+constant form materialises the code itself, this one must not touch the register
+the caller has just filled. Two behaviours, one rule, and the rule stated once.
+
+### The emitted diff is exactly the prediction and nothing else
+
+Isolated against a compiler carrying all of the session's other work, so the
+aarch64 changes from an unrelated ticket do not contaminate it:
+
+| target | change |
+| --- | --- |
+| x86-64 | 8 bytes, every one `0x3C` → `0xE7` (60 → 231), i.e. eight `Halt` sites |
+| arm32 | 8 bytes, every one `0x01` → `0xF8` (1 → 248) |
+| i386, aarch64, riscv32 | **byte-identical** |
+
+A refactor that moves five arms into one routine and changes the output of
+exactly the two that were wrong is the strongest evidence available that the
+normalisation preserved the four it touched.
+
+### The workaround revert is half the fix, and it was TESTED, not assumed
+
+`lib/rtl/scheduler.pas` is a plain `Halt(216)` again. This mattered more than
+tidiness: while the workaround stood, `test_sched_reactor_exhaustion` passed
+**whether or not the compiler was correct.**
+
+| | exit status, 10 runs |
+| --- | --- |
+| reverted source + **fixed** compiler | **216**, 10/10 |
+| reverted source + **pre-fix** compiler | **0**, 10/10 |
+
+The test now guards the bug it was written for. A workaround installed while a
+bug is open becomes a blindfold the moment the bug closes.
+
+**It was not assumed safe.** The scheduler comment recorded a second measured
+fact — *Halt's exit path JOINS the worker threads*, and two attempts to
+serialise the fatal HUNG. A revert could plausibly have reintroduced a hang
+rather than a wrong status, so it was run before it was believed: 10/10 clean,
+no hang. The hang came from *serialising* the fatal (holding `regLock`, parking
+the losers), which this arm does not do; that half of the comment is preserved
+because it is still true and still load-bearing.
+
+### The regression test is deliberately NOT minimal — this is the transferable part
+
+`test_halt_from_worker_thread`. The tidy repro **cannot fail**: N threads each
+calling `Halt(n)` with main joining them all makes main last *by construction*,
+so the recorded status survives whichever syscall `Halt` used. Six such threads
+exited 216 **6/6 with the bug fully present**, and that green is what stalled the
+first pass at "reproduced, not diagnosed". The 6/6 was not weak evidence — it was
+strong evidence for the wrong proposition.
+
+**When the defect IS the disorder, minimisation is the one technique guaranteed
+to fail.** So the test does the opposite: nobody joins the worker, and it asks
+whether the process **dies** rather than what status it reports. That second
+change is what makes it deterministic — 10/10 exit 216 with the fix, 10/10 print
+the marker and exit 3 without, on x86-64 and arm32 alike — where the original
+investigation had a three-samples-per-cell table of a race that read as a rule.
+
+The ticket's own method note said *"repeat every cell of a race's table before
+drawing a conclusion from its shape."* The stronger move is available here:
+**find the question whose answer is not a race.**
+
+### Verification
+
+| check | result |
+| --- | --- |
+| self-host fixedpoint | converged, `bded6edfa55e` |
+| `Halt(7)` on x86_64 / i386 / aarch64 / arm32 / riscv32 | exits 7 — the refactor's own guard |
+| threaded repro, x86-64, fixed / pre-fix | 216 3/3 · marker + exit 3, 3/3 |
+| threaded repro, arm32 under qemu-arm, fixed / pre-fix | 216 3/3 · marker + exit 3, 3/3 |
+| `test_sched_reactor_exhaustion` with the revert, fixed / pre-fix | 216 10/10 · **0 10/10** |
+| emitted-byte diff | only the syscall numbers, only on the two broken targets |
+
+### Left alone
+
+`SpawnSized`'s `MAX_CO` guard, which the ticket flagged as the natural second
+instance, needed no change — it already called `Halt(216)`, and that call is now
+correct for the same reason every other one is. It was never separately broken;
+it was the same bug seen from a place that happened not to race.
+
+### Retracked
+
+Filed **B**, fixed under **A** as the ticket instructed — the defect was
+compiler-emitted codegen throughout, and the only `lib/**` edit is the removal of
+a workaround the ticket itself scheduled for removal.
+
+## Log
+- 2026-08-29 — resolved, commit 7a594d11c.
