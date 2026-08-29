@@ -16524,3 +16524,40 @@ stores are emitted from it, so I think a collision is likely rather than
 possible"* — and proposed doing the probe extension first, which is the part
 least likely to touch frankB's ground. That is the worker seeing the data and
 the coordinator seeing the plan, working the way it is supposed to.
+
+## `via` rebooted; D and W are unstaffed, and its aarch64 capability is still unused
+
+Owner, 2026-08-29: *"host via got a reboot. but it's responsible for track D+W
+work, but i didn't set up an interactive tmux session yet."*
+
+Consistent with the standing fact that **infra restarts itself and agents do
+not** — nothing launches a session at boot on any box. So D and W have been
+unstaffed since the reboot, and neither queue is empty:
+
+- **W** heads with `feature-web-track-w-bootstrap` [p45, **unblocks 2**] — the
+  lane's own bootstrap, which is the correct first thing for a lane returning
+  from nothing. Then machine-readable project metadata [40], blog bootstrap [35],
+  syndication feeds [30].
+- **D** heads with `docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out`
+  [45] (above it, `docs-devnotes-ai-assisted-build` [50] is parked — re-claim,
+  do not duplicate). Then exec/eval and builtins incompatibility [35], CLI
+  flags [35].
+
+**And the capability nobody is using.** `via` is the only place in the fleet
+where a **native aarch64 execution** result can be observed — plexus is x86-64,
+and ianweb runs the pinned stable under `qemu-x86_64`. The O campaign's entire
+aarch64 case is currently recorded as **directional and a lower bound**
+(`feature-opt-o3-register-pressure.md:1850`, `:1978`): *qemu times translated
+instruction throughput and does not model store-to-load forwarding* — which is
+the exact stall W2 removes. Hardware x86-64 measured 1.9-2.1x for the same
+change; qemu-aarch64 reported 1.07-1.13x.
+
+So one native run of an existing benchmark would convert a qualified claim into
+a real one, and nothing else in the fleet can produce it.
+
+**The constraint that must travel with that idea:** `via` is a **production
+host** running four gunicorn apps behind a public tunnel. Route aarch64
+*verification* there — small, bounded, one measurement — keep bulk building on
+plexus, and **ask about capacity rather than assuming it.** A benchmark that
+needs a quiet box is not obviously compatible with a box serving live traffic,
+and "it has spare cores" is the assumption most likely to be wrong.
