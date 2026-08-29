@@ -50,7 +50,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (313)
+## backlog (314)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -79,6 +79,7 @@ _none_
 | bug-a-xtensa-refuses-to-lower-an-unreachable-syscall | A+S | 45 | bug | xtensa codegen errors with 'unsupported node in IR codegen: syscall' on a __pxxrawsyscall call that is statically unreachable on that target, which makes an otherwise-portable RTL unit uncompilable. Inconsistent with the ESP PAL's own pattern of refusing unsupported operations at RUNTIME rather than failing the build. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | B+S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict | N | 40 | bug | pylib treats VT_CHAR and VT_STRING as ONE string type in ordering, repr, concat and text extraction — but `PyVarEq` bails on `p^.VType <> q^.VType` before it ever gets there, and `PyVarHashKey` has no VT_CHAR arm either. So a char-tagged key stores fine and then misses every lookup. No NilPy-reachable repro today (the pystr_ofchar boundary converts at every crossing), but this is the mechanism that turned Counter(str) into a SILENT 0 instead of a loud KeyError. | — |
+| bug-n-a-classmethod-cannot-call-another-through-cls | N | 55 | bug | A classmethod cannot reach another one through its own receiver | — |
 | bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name | N | 45 | bug | `def g(): return 1` followed by `if True: def g(): return 2` still calls the FIRST g. Split out of bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name when that one was fixed: it is a different mechanism — the def side, not the assignment side. A nested def has a position, but PyRegisterDefShells only walks module-level defs at DEPTH 0, so a def inside a branch never gets one. | — |
 | bug-n-a-field-assigned-from-a-module-global-expression-is-refused | N | 55 | bug | `G = 7 / 2` then `self.v = G` REFUSES to compile — \"cannot infer the type of field self.v - annotate it\". `G = 3.5` is accepted. PyModuleGlobalLiteralType reads a global's type off its initialiser token and can only see a bare LITERAL, so any global initialised by an expression is untypeable to the field pre-pass. | — |
 | bug-n-a-keyword-argument-through-a-class-value-is-refused-at-runtime | N | 55 | bug | `cls(x, b=99)` — a keyword argument to a class reached as a VALUE — raises TypeError at run time saying such a callable 'still carries no parameter names'. It does: RTTI_METH_FLAG's paramKinds block has carried param NAMES since the reflection work, and PyClassRefNew does not read them. The static spelling `P(x, b=99)` is correct, so this is one construction path disagreeing with the other. | — |
@@ -730,6 +731,7 @@ _none_
 - [p 55] [A] bug-a-emitzeroframeslot-has-no-wasm32-arm
 - [p 55] [A] bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice
 - [p 55] [A+T] bug-a-testtmp-defaults-to-a-path-every-checkout-shares
+- [p 55] [N] bug-n-a-classmethod-cannot-call-another-through-cls
 - [p 55] [N] bug-n-a-field-assigned-from-a-module-global-expression-is-refused
 - [p 55] [N] bug-n-a-keyword-argument-through-a-class-value-is-refused-at-runtime
 - [p 55] [N] bug-n-a-keyword-argument-through-a-procedural-field-needs-a-plain-receiver
