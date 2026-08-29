@@ -81,6 +81,16 @@ const
 {$ifdef CPU_AARCH64} const SYS_gettid = 178; {$endif}
 {$ifdef CPU_ARM32} const SYS_gettid = 224; {$endif}
 
+{ exit_group — the reactor-exhaustion fatal below terminates the PROCESS itself
+  rather than going through Halt. Same inline-rather-than-uses reason as gettid.
+  Numbers per target, copied from pxxcio.pas's SysExitGroupNr and per-target for
+  the reason recorded there: 231 is x86-64's, and hardcoding it made i386 call
+  fgetxattr and exit 0 instead of failing. }
+{$ifdef CPUX86_64} const SYS_exit_group = 231; {$endif}
+{$ifdef CPU_I386}  const SYS_exit_group = 252; {$endif}
+{$ifdef CPU_AARCH64} const SYS_exit_group = 94; {$endif}
+{$ifdef CPU_ARM32} const SYS_exit_group = 248; {$endif}
+
 { Reactor flags are identical across all Linux targets; only the syscall
   numbers and the epoll_event layout vary per arch. }
 const
@@ -163,7 +173,26 @@ type
   PW = ^NativeInt;  { pointer-sized machine-word access at an address }
 
 const
-  MAX_REACTORS = 16;   { independent reactors — one per OS thread / core }
+{ Independent reactors, one per OS thread that ever calls into the scheduler.
+  Sized to PAR_MAX_WORKERS (palparallel), the hard ceiling on workers a single
+  parallel-for can fan to — so a `parallel for` containing async work can never
+  exhaust the table however wide it runs or however large the host. Not `uses`d
+  from here: scheduler must not depend on palparallel, so the number is repeated
+  and this comment is the link. Both other tables in this file (MAX_CO, and
+  sockets.pas's ErrnoSlot) are 64 for the same reason.
+
+  This was 16, with the comment "one per OS thread / core" — a statement about
+  the host that nothing enforced. Threads above the ceiling then took the
+  fallthrough in CurR and silently adopted a LIVE thread's reactor.
+  Note the dial is the WORKER count, not the core count: PXXSetParForWorkers
+  makes it reachable on any host, so 12-core hardware reproduces it fine and
+  the "needs a 24-core box" reading was a property of the DEFAULT worker count.
+  bug-a-the-17th-thread-silently-aliases-reactor-slot-0 }
+{$ifdef PXX_SCHED_TINY_REACTORS}
+  MAX_REACTORS = 2;    { test-only: makes the exhaustion arm reachable with 3 threads }
+{$else}
+  MAX_REACTORS = 64;
+{$endif}
 
 type
   TReactor = record
@@ -186,6 +215,7 @@ type
 var
   reactors : array[0..MAX_REACTORS-1] of TReactor;
   regLock  : Integer;   { atomic spinlock guarding slot attachment (0=free 1=held) }
+  fatalOnce: Integer;   { 0 until a thread claims the reactor-exhaustion fatal }
 
 function SelfTid: Int64;
 begin
@@ -204,9 +234,51 @@ begin
     if (reactors[i].used = 1) and (reactors[i].tid = me) then
     begin CurR := @reactors[i]; Exit; end;
   while __pxxatomic_cas(@regLock, 0, 1) <> 0 do ;   { acquire }
-  slot := 0;
+  { -1 is the sentinel, NOT a valid slot: exhaustion has to be a decision here.
+    This read `slot := 0`, so when every reactor was already `used` the loop
+    matched nothing, the initializer survived, and the caller took over slot 0
+    from the thread that owned it -- two OS threads driving one coroutine table,
+    surfacing later as a clobbered stack canary that points at the coroutine
+    rather than at the aliasing. Refuse loudly instead, mirroring the MAX_CO arm
+    in SpawnSized below; a shared reactor is not survivable the way sockets.pas's
+    deliberately-shared errno slot is.
+    bug-a-the-17th-thread-silently-aliases-reactor-slot-0 }
+  slot := -1;
   for i := 0 to MAX_REACTORS - 1 do
     if reactors[i].used = 0 then begin slot := i; Break; end;
+  if slot < 0 then
+  begin
+    { EXACTLY ONE thread may report and Halt, and it must not hold regLock while
+      it does. Both halves are measured, not defensive:
+
+      - With Halt here the exit status is UNRELIABLE -- it races. Same binary,
+        same width, repeated: 4 workers gave 0, 216, 0; 8 workers gave 0, 0, 0;
+        20 gave 216, 216, 216. So a fatal sometimes reports SUCCESS, and a
+        harness reading the status sees a pass. exit_group is 216 in 30/30 runs
+        across 3, 4, 8, 20 and 64 workers.
+        The cause is NOT simply "concurrent Halt": six plain palthread threads
+        all calling Halt(216) at once exited 216 in 6/6 runs, so something about
+        halting from inside a parallel-for worker during reactor attachment is
+        involved and is NOT isolated here. Recorded, not diagnosed:
+        bug-b-concurrent-halt-from-several-threads-exits-0.
+        (Related in shape to the i386 exit_group number in pxxcio.pas, which
+        made every failing C program exit 0 -- there too, what got lost was the
+        report of the failure rather than the failure.)
+      - And Halt cannot be serialised into safety here, because Halt's exit path
+        JOINS the worker threads. Keeping regLock hung the process (exit 124 by
+        `timeout` at 4, 8 and 20 workers); releasing it and parking the losers
+        hung it too, for the real reason -- a parked thread is one the join
+        waits on forever. A hang is not an improvement on a lie.
+
+      So this arm does not use Halt at all: exit_group takes the process down
+      immediately, with the right status, joining nothing and racing nothing.
+      Finalizers are skipped, which is the correct trade when the alternative
+      state is two OS threads sharing one coroutine table. }
+    ignore := __pxxatomic_xchg(@regLock, 0);
+    if __pxxatomic_cas(@fatalOnce, 0, 1) = 0 then
+      writeln('fatal: scheduler out of reactor slots (MAX_REACTORS)');
+    ignore := __pxxrawsyscall(SYS_exit_group, 216, 0, 0, 0, 0, 0);
+  end;
   reactors[slot].coCount := 0;
   reactors[slot].curCo   := -1;
   reactors[slot].epfd    := 0;

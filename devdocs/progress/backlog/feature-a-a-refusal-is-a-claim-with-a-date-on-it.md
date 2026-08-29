@@ -1796,3 +1796,265 @@ check it against a second source.*
 **Cheap guard:** a ticket asserting that a sibling site is already correct should
 cite it by content, not by line number. Line numbers move; a quoted clause that no
 longer exists is visible, and `ir.inc:11329` is not.
+
+### 43. A LEAK IS AN ACCIDENTAL LIFETIME EXTENSION — fixing it does not create bugs, it removes the padding that was hiding them
+
+frankA, 2026-08-29, analysing `0d91dc88f` against pxx-a5's min/max alias.
+
+`if F(x) = 'lit'` never released F's result: 40 bytes per evaluation, unbounded.
+The fix emits the release. Within a 4-commit window a years-old aliasing bug in
+an unrelated frontend became observable, and the fix was the obvious suspect.
+
+**It was the cause, and it is correct, and it must not be reverted.** The
+mechanism is not aliasing:
+
+> For as long as that string was leaked, any stale reference to it kept reading
+> **valid, correct bytes**, and the block was never recycled under anyone.
+> Freeing it puts the block back in the allocator, so a pre-existing
+> use-after-free — or an in-place mutation through an alias — stops being benign
+> and starts reading a neighbour.
+
+The alias did not become wrong on 2026-08-29. **It became observable.** A leak is
+an accidental lifetime extension, and every latent reference into leaked memory is
+being silently protected by the defect.
+
+The ruling-out matters as much as the finding: the one way the commit could
+genuinely introduce a dangling reference is an owned operand feeding a **second**
+consumer, which cannot happen — there is no CSE or node-sharing pass, so the IR is
+a tree and each node has exactly one consumer. The predicate also predates the
+commit (`2f78eb737`). So the change adds no aliasing.
+
+**Three consequences, and the third is the actionable one.**
+
+1. **Do not revert to restore quiet.** The leak was unbounded with every answer
+   correct — the shape that silently kills a long-running process. Restoring it to
+   keep latent aliases benign trades a real defect for the *concealment* of real
+   defects. "My fix exposed a bug" is an easy thing to over-correct on.
+2. **Expect more, and expect them to look unrelated to strings.** Any latent alias
+   whose target happened to be a leaked comparison temp. The population is defined
+   by what the leak was covering, not by what the fix touched.
+3. **Sweep the mechanism, not the shape.** A shape sweep — 52 const-param callees
+   invoked with `CurTok.SVal`, 3 advancing the cursor — closes one family.
+   `-dPXX_HEAP_DEBUG` stamps freed bytes `$DD` instead of leaving them readable,
+   which converts the whole class from *"reads a plausible recycled value"* into
+   *"reads `$DD` at the first touch"* regardless of shape. Face 36 says the bug
+   that survives is the one whose wrong value is plausible; this is the
+   instrument that removes the plausibility. Routed to Track T.
+
+General form: **every memory fix is also a change to which latent bugs are
+observable.** A defect that extends a lifetime is protective by accident, and its
+removal is a reachability change — the same reasoning as face 40, one layer down
+in the runtime rather than in the compiler's own refusals.
+
+### 44. A NEW FRONTEND'S BUGS ARE MOSTLY UNCALLED SUBSTRATE — nine rungs in a row, and the streak is the finding
+
+frank-rust, 2026-08-29, rung 14 of the Rust ladder.
+
+Rust procs never called `EmitManagedLocalsZeroInit`, so a managed local's slot
+started as **stale stack bytes** and its first assignment released whatever those
+bytes happened to point at. Invisible for the frontend's whole life, because until
+this rung it had no managed type.
+
+The symptom is face 36 for the third time and deserves restating: a two-`push`
+function returned the right answer in isolation and **segfaulted only once its
+caller happened to hold a string local of its own.** The failing program was the
+one that did nothing wrong. Byte-identical in mechanism to
+`bug-nilpy-string-local-truncates-at-255`, and fixed identically — **the shared
+helper already existed; this frontend had simply never called it.**
+
+**That was the ninth consecutive rung whose fix was calling something already in
+the substrate.** Nine is no longer a run of luck; it is a measurement of where a
+new frontend's defects actually live, and it converts `ir-as-substrate.md` from a
+design preference into an empirical claim: **when a young frontend misbehaves, the
+prior should be "it is not calling the shared machinery", not "the shared
+machinery lacks this".** The corollary is the standing rule, now with a number
+behind it — *grep for the incumbent before building.*
+
+Note what the streak does NOT license. The same rung produced a genuine
+duplication call in the opposite direction: `format!` deliberately does **not**
+share `println!`'s `{}` splitter, and that was written into the divergences doc
+specifically so a later reader would not "fix" it. One emits WRITES, the other
+builds a VALUE; all they share is scanning `{}` out of a literal, and sharing it
+would hand back an ordered item list neither caller wants in order to couple an
+output path to an expression path. **Share the AST and the IR; duplicate the
+parser and its helpers** — the streak is about the substrate layer, and reading it
+as "always share" inverts
+`the-substrate-is-ast-and-ir-not-the-parser.md`.
+
+Two more from the same rung, both worth their own line:
+
+- **`String` and `&str` map to ONE managed AnsiString, and the argument is
+  unusually strong.** They differ in exactly one observable — mutating a buffer
+  while another name views it — and that is precisely what rustc's borrow checker
+  makes unrepresentable. So this is not "unlikely to matter": **the reference
+  implementation statically forbids the only experiment that could distinguish
+  them.** That is a much better warrant for collapsing two types than "we have not
+  seen a case", and it is the shape to look for whenever a frontend asks whether
+  two source types need two representations.
+- **Position, not content, separated the cases the gate had to split.** A string
+  literal inside `println!("...")` is a const_str the write path consumes directly
+  and needs no runtime; the same literal anywhere else becomes a value and does.
+  A content-based scan would have pulled 60KB of runtime into all 18 existing
+  tests; the position-based one kept every one of them byte-for-byte identical in
+  code size, which is how the gate was verified rather than asserted.
+
+### 45. A PHASE THAT CAN BE ENTERED BUT NEVER FINISH CONSUMES THE RESOURCE IT EXISTS TO PROTECT — and reads from outside as slowness
+
+Track T, 2026-08-29, `twatch`'s `verify_pin`.
+
+`twatch` has three long-run phases and three different treatments of preemption:
+
+| phase | commitment point |
+| --- | --- |
+| reserved breadth | `commit_after=0` — commits at once |
+| requested verdict | `commit_after=full_commit_secs` |
+| **`verify_pin`** | **none — abortable at every moment** |
+
+Measured on `seven`: **7 pin-verify attempts, 7 preemptions, 0 completions**, all
+on the same pin. Every attempt consumed an idle slot and produced nothing — and
+the slot it consumed is the one breadth needed. So the pin stayed unjudged **and**
+the ladder kept paying for it.
+
+**From outside, this is indistinguishable from a slow box.** The coordinator read
+"full tier 104 testable commits behind" and diagnosed throughput, which would have
+led to tuning tier composition against a cause that was not there. The arithmetic
+refutes it: 115 commits/hour of which 36 buildable, a full tier at ~959s ≈ 16 min,
+≈10 buildable commits per run — back-to-back that is a verdict every ~16 minutes
+running ~10 behind. **A 71-commit debt is not what that cadence produces, so the
+number was evidence of something other than speed.** When a queue is further behind
+than the throughput arithmetic allows, the gap is the finding — do not tune the
+throughput.
+
+**And the defect is inside the mechanism built to prevent it.** `verify_pin`
+exists because *"18 of the last 25 pins never received a full run"*. It reproduced
+that failure one level down, in itself. The requested-verdict branch already
+carries the fix **and documents this precise failure in its own comment** —
+`verify_pin` is the sibling arm missed when that one was repaired. Textbook
+`normalise-dont-special-case`: three phases serving one concept, each restating
+its own preemption policy. Fixed in `5a5c7bc92`.
+
+**Corollary — yielding a slot is not the same as ever completing.** `IDLE_YIELD_AFTER`
+bounded the damage to phases *behind* the starving one, so the guard worked
+exactly as designed and the starvation continued. A backpressure mechanism that
+limits blast radius can make an unfinishable phase survivable, and therefore
+permanent.
+
+### 46. A FIX IS INERT UNTIL BOTH HALVES HAPPEN — and the restart alone looks like it worked
+
+Same incident. `5a5c7bc92` landed and the watcher kept running the old code.
+
+`trackt status` showed `code : STALE`, and the first restart **did not clear it**.
+The watcher clone is **detached at the sha under test**, so `git pull` there fails
+*by construction* — that is not a misconfiguration, it is what a bisecting clone
+is — and a restart reloads `twatch.py` from the clone, not from origin. Correct
+sequence is stop → fetch → `checkout master` → start.
+
+**The failure mode is that the restart succeeds.** The daemon comes up, reports
+healthy, publishes tstate, and serves the old binary's behaviour. Nothing in the
+success path is false; the only tell is a `code : STALE` line that a healthy-looking
+restart invites you to read as leftover.
+
+Direct sibling of face 31 (a fresh tree's `make compiler/pascal26` is a silent
+no-op when the seed was copied in) and of the pin-boundary rule *"the fix is in
+HEAD" ≠ "the fix is in the binary I ran"*. Same shape in a third place: **an
+artefact whose provenance is assumed rather than checked, where the assuming step
+emits a success message.** For a lane whose whole output is verdicts, shipping a
+fix and not restarting onto it means every subsequent verdict carries the old
+code's bugs under the new commit's name.
+
+### 47. THE SUMMARY SENTENCE A FIX INVITES YOU TO WRITE CAN BE FALSE WHILE THE FIX IS RIGHT
+
+frank-optimize-b4, 2026-08-29, the `LowerCase` forward (`7aba316be`).
+
+The natural write-up — *"the seed and self-hosted builds now agree"* — **is false.**
+Measured by stash/rebuild isolation:
+
+    seed-built, WITHOUT the forward:  9396c6dbb646f90d
+    seed-built, WITH the forward:     9396c6dbb646f90d
+    self-hosted:                      9396c6dbb646f90d
+
+**They agreed before.** The forward did not cause the convergence, it **recorded**
+it. What changed is that the agreement is now *stated* rather than coincidental —
+which is precisely the defect the ticket described, so the fix is right and the
+obvious summary of it is wrong.
+
+**This is how a correct fix acquires a false rationale.** The title implies a
+behaviour change; the value is entirely in removing a coincidence. Anyone reading
+the summary later concludes the builds used to diverge, and will "know" a
+divergence that never happened — the durable kind of wrong, because nothing
+downstream ever contradicts it. Same family as face 32 (a derived number standing
+in for a measured one) with the direction reversed: here the *measurement* was
+taken and the *prose* was still going to be wrong.
+
+Two more from the same fix:
+
+- **Two methods that fail differently, agreeing.** Track T swept the input domain
+  (0 differing over 256 bytes, 65 536 ordered pairs, 256 contextual cases) proving
+  the two *routines* agree; b4's stash/rebuild proves the whole *artefact* is
+  unchanged whichever routine bound. Neither shares an upstream with the other,
+  which is what makes the pair a control rather than a repetition — see the
+  standing rule about agreement between arms with a common upstream.
+- **`forwardlint` reports only the EARLIEST site.** The ticket named one; there
+  are **eight** (`pasparser_expr.inc:1927, :2881, :8383, :8386, :8389` and
+  `cparser.inc:337, :395, :510`), all covered by one forward in
+  `frontend_forwards.inc`. Exactly face 41's shape in a linter rather than a build:
+  **the instrument names whichever instance it reached first, and the ticket
+  inherits that as if it were the population.**
+
+### 48. A CAPABILITY SWEEP THAT REPORTS "PRESENT" WITHOUT RECORDING THE SPELLING IT TRIED IS NOT A MEASUREMENT
+
+pxx-a5, 2026-08-29, re-measuring `feature-nilpy-stdlib-coverage-gaps-measured`.
+
+The ticket carried its own sweep from 2026-08-15 concluding *"os, time and
+math.fabs are all present and exact now."* Re-measured at HEAD, it was **wrong on
+two of three rows**:
+
+| row | 08-15 sweep said | actually |
+| --- | --- | --- |
+| `math.fabs` | present | present |
+| `os` | present | `os.path.*` worked; **`os.sep` / `linesep` / `listdir` did not** |
+| `time` | present | **`time.time()` absent** |
+
+Plus drift the sweep could not have known: `copy.copy` works now, `copy.deepcopy`
+does not.
+
+**The failure is not carelessness, it is granularity.** "`os` is present" is a
+claim about a *module*; every probe is necessarily a claim about a *name*. The
+sweep tried `os.path.basename`, concluded the module was reachable, and wrote
+down the module. Nothing in the record said which spelling was executed, so
+nobody could tell the claim was narrower than its wording — and a later reader
+(including the same author) inherits a module-level "present" backed by one
+name's worth of evidence.
+
+**The structural cause here made it worse, and is worth knowing on its own:** the
+dotted table only intercepts **call** forms. So every `os.path.*()` call worked
+while `os.sep` failed as *"undefined variable (os)"* — an error that reads like
+the module is unbound when in fact only the non-call spelling has no route. The
+diagnostic pointed at the module; the defect was in the attribute path. Face 34's
+shape (a correct diagnostic pointing away from the fix), and it is exactly what
+turned one probe into a module-wide conclusion.
+
+**Same family as face 41 and the `forwardlint` finding, one level up:** there the
+instrument reported whichever instance it reached first and the ticket inherited
+it as the population; here the instrument reported whichever *spelling* it reached
+first and the ticket inherited it as the module. **Record the probe, not the
+verdict** — a coverage claim should be readable as the list of names actually
+executed, so its scope is visible without rerunning it.
+
+Two silent wrong-value bugs surfaced in the same pass, both worth their shape:
+
+- **`re.sub`'s count convention disagreed with CPython on exactly one input.**
+  CPython reads `0` as "no limit" and **negative as "do nothing"**; the engine
+  reads `-1` as "no limit" and treats every negative alike. `sub()` mapped 0→-1
+  and passed negatives through, so a count meaning *replace nothing* replaced
+  everything: `re.sub("a","X","banana",-1)` → `bXnXnX` where CPython gives
+  `banana`. **Two conventions that agree everywhere except one value is the
+  hardest kind to spot**, because every ordinary test passes. Normalised in one
+  place (`ReLimit`) rather than at three call sites.
+- **`PyParseSysStream` built the value without checking WHICH module was asked.**
+  `PyIsStdlibMemberValue` gated on the base; the builder did not. So
+  `sys.SEEK_SET` answered `0` where CPython raises `AttributeError` — **and that
+  is not the harmless direction.** The `sys._MEIPASS` comment directly below it
+  exists precisely *because* applications guard an absent `sys` attribute with
+  `try/except AttributeError`; an arm that answers a value walks them down the
+  wrong branch silently. A gate applied on one of two paths is not a gate.

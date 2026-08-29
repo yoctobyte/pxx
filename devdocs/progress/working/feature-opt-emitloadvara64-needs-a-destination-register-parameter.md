@@ -4,8 +4,8 @@ prio: 55
 type: feature
 blocked-by: []
 summary: "EmitLoadVarA64 hardcodes x0 behind residency, dyn-array-handle and sign-extension special cases, so the aarch64 leaf-operand collapse could only be done for the CONST half. The LEAFSYM half needs the right operand in x1 while the left sits in x0; a load-to-x1 twin would duplicate every one of those special cases. Honest fix is a destination-register parameter. Unlocks a further 12-16% of all binops on aarch64."
-status: backlog
-owner: ""
+status: working
+owner: frank-optimize
 ---
 
 # `EmitLoadVarA64` needs a destination-register parameter

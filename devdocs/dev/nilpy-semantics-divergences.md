@@ -588,6 +588,55 @@ one predicate, because the byte set had been written out six times in four
 spellings and teaching only the scan would have left the other five disagreeing.
 [[bug-n-a-unicode-identifier-is-rejected-by-the-lexer]]
 
+## `re.finditer` answers a LIST, not a lazy iterator (2026-08-29)
+
+CPython's `re.finditer` returns a `callable_iterator`: lazy, single-pass, no
+`len()`. NilPy returns a `TPyList` of match objects.
+
+```python
+import re
+for m in re.finditer(r"\d+", s):   # identical on both
+    ...
+list(re.finditer(r"\d+", s))       # identical on both
+len(re.finditer(r"\d+", s))        # NilPy: an int.  CPython: TypeError
+next(re.finditer(r"\d+", s))       # CPython: the first match. NilPy: no.
+```
+
+**Not a defect, in the direction that matters.** The rule is one-way: code that
+works on CPython must work here. Every shape a working program uses — the `for`
+loop, `list()`, a comprehension over it — behaves identically, because a list is
+iterable exactly where an iterator is. `len()` is the reverse direction: NilPy
+accepts what CPython rejects, which is the same call the dialect makes for a
+mutable tuple.
+
+`next()` is the one case that is a genuine gap rather than a laxity, and it is
+not specific to `re` — it is the general "NilPy has no lazy-iterator protocol"
+question. A program that calls `next()` on a finditer result is rare enough
+that it did not justify inventing one here; if the iterator protocol ever lands,
+this entry becomes obsolete rather than wrong.
+
+Laziness itself is not observable to a correct program except through cost: the
+whole subject is scanned up front, so a finditer over a huge string does work
+CPython would have deferred. No output differs.
+
+## `m.end()` and `m.stop()` are the SAME method (2026-08-29)
+
+`end` is a Pascal reserved word, so `TMatch`'s native accessor is `stop()`.
+CPython code says `m.end()`, so that spelling exists too, declared as the
+escaped identifier `&end`.
+
+Both work; they are one method with two names. `m.stop()` is the extra one and
+is the harmless direction — a CPython program never calls it, and a NilPy
+program that does is simply not portable back, which is true of every dialect
+extension here.
+
+The alternative considered and rejected was mapping `end` -> `stop` in
+`PyMethodName` (where `__init__` -> `create` already lives). That is a GLOBAL
+rename: every user class with an ordinary method named `end` would have been
+renamed too, and a class defining both `end` and `stop` would have collapsed
+into one. An escaped identifier in the one class that needs it costs nothing
+and reaches nothing else.
+
 ## `sys.path` cannot work, and that is PERMANENT — the answer is `-Fu` (2026-08-17)
 
 **Not a bug, and not fixable.** `sys.path.insert(0, "/path/to/pkg")` before an

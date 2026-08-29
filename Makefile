@@ -2124,6 +2124,16 @@ test-nilpy: $(COMPILER)
 	# the surplus args were emitted anyway). CPython renders them as a tuple.
 	./$(COMPILER) test/test_nilpy_exception_multi_arg.npy $(TESTTMP)/test_nilpy_excmulti26
 	$(TESTTMP)/test_nilpy_excmulti26 | diff -u test/test_nilpy_exception_multi_arg.expected -
+	# os.sep / os.linesep are ATTRIBUTES, not calls -- and the value builder
+	# behind them now checks WHICH module was asked, so sys.SEEK_SET raises
+	# AttributeError instead of answering 0.
+	./$(COMPILER) test/test_nilpy_os_sep_and_sys_attr_gate.npy $(TESTTMP)/test_nilpy_ossep26
+	$(TESTTMP)/test_nilpy_ossep26 | diff -u test/test_nilpy_os_sep_and_sys_attr_gate.expected -
+	# re.split / re.subn / re.finditer, m.end(), and the count convention: a
+	# NEGATIVE count means "do nothing" where 0 means "no limit" -- the inverse
+	# of the engine's own, which is how re.sub(p,r,s,-1) replaced everything.
+	./$(COMPILER) test/test_nilpy_re_split_subn_finditer.npy $(TESTTMP)/test_nilpy_resplit26
+	$(TESTTMP)/test_nilpy_resplit26 | diff -u test/test_nilpy_re_split_subn_finditer.expected -
 	# os.path.split / normpath / getsize / expanduser
 	./$(COMPILER) test/test_nilpy_os_path_more.npy $(TESTTMP)/test_nilpy_ospathmore26
 	$(TESTTMP)/test_nilpy_ospathmore26 | diff -u test/test_nilpy_os_path_more.expected -
@@ -3737,6 +3747,23 @@ test-threads: $(COMPILER)
 	# async (per-thread coroutine scheduler) composes with parallel (OS threads): each worker runs its own reactor
 	./$(COMPILER) --threadsafe test/test_async_parallel_compat.pas $(TESTTMP)/test_async_parallel_compat26
 	tools/expect_same.sh test_async_parallel_compat26 "$$($(TESTTMP)/test_async_parallel_compat26 | tail -n 1)" "ASYNC x PARALLEL OK"
+	# ...and with MORE workers than the OLD reactor ceiling of 16. CurR treated its
+	# `slot := 0` initializer as an answer when every reactor was in use, so the 17th
+	# thread adopted a LIVE thread's reactor and the two shared a coroutine table.
+	# The worker count is SET, not inherited from the CPU count: cores were only ever
+	# a proxy for the default worker count, so this is deterministic on a 4-core box.
+	# bug-a-the-17th-thread-silently-aliases-reactor-slot-0
+	./$(COMPILER) --threadsafe test/test_sched_reactors_wide.pas $(TESTTMP)/test_sched_wide26
+	tools/expect_same.sh test_sched_wide26 "$$($(TESTTMP)/test_sched_wide26 | tail -n 1)" "SCHED WIDE OK"
+	# and the exhaustion arm itself, reachable only with MAX_REACTORS lowered to 2 by
+	# the define that exists for this test (at the shipping 64 no parallel-for can
+	# overrun it, and an unreachable guard is an untested one). One named fatal and
+	# exit 216 — never a silent 0, which is what Halt raced to when several threads
+	# were refused at once, and never a hang, which is what serialising Halt produced.
+	./$(COMPILER) --threadsafe -dPXX_SCHED_TINY_REACTORS test/test_sched_reactor_exhaustion.pas $(TESTTMP)/test_sched_exhaust26
+	set +e; $(TESTTMP)/test_sched_exhaust26 > $(TESTTMP)/sched_exhaust.log 2>&1; rc=$$?; set -e; \
+	  tools/expect_same.sh test_sched_exhaust26-rc "$$rc" "216"; \
+	  tools/expect_same.sh test_sched_exhaust26-msg "$$(head -n 1 $(TESTTMP)/sched_exhaust.log)" "fatal: scheduler out of reactor slots (MAX_REACTORS)"
 	# __pxxmulhi_u64: unsigned 64x64->128 high half (x86-64 mul / aarch64 umulh)
 	./$(COMPILER) test/test_mulhi.pas $(TESTTMP)/test_mulhi26
 	tools/expect_same.sh test_mulhi26 "$$($(TESTTMP)/test_mulhi26 | tail -1)" "MULHI OK"
@@ -5971,6 +5998,29 @@ test-core: $(COMPILER)
 	# checkable, which is the whole point after two plausible-wrong-value bugs.
 	./$(COMPILER) test/test_rust_string.rs $(TESTTMP)/test_rust_string26
 	tools/expect_same.sh test_rust_string26 "$$($(TESTTMP)/test_rust_string26)" "$$(printf 'empty [] len 0 isempty true\ncat abcde len 5 isempty false\neq true ne false lit 3\nacc [uci: go] len 7\nsq a1 h8 d4\nuci e2e4\nhello, world!\nfmt i=42 n=-7 b=true s=mid c=x\ndegen [] [just text]\nchain 3 1234\nbig a1-h899 len 7')"
+	@echo '--- rust: derives, and enum values in expression position ---'
+	# derive(Copy)/derive(PartialEq) needed NOTHING -- assignment already
+	# copies a record and the shared compare already answers field-wise.
+	# What was missing was older: an enum variant could not appear in an
+	# expression at all, so `c == Color::White` was a parse error while
+	# `let c: Color = Color::White` worked. Aggregates have no expression
+	# form here, so a variant now materializes into a hoisted temp -- the
+	# same channel `?` uses. `arr`/`knights`/`nest` pin the places that
+	# hoist has to survive: an array literal, a loop body, a nested call.
+	# The `dbg`/`deep` lines are derive(Debug): before it, `{:?}` on a struct
+	# printed its FIRST FIELD -- a plausible wrong value in real output.
+	./$(COMPILER) test/test_rust_derive.rs $(TESTTMP)/test_rust_derive26
+	tools/expect_same.sh test_rust_derive26 "$$($(TESTTMP)/test_rust_derive26)" "$$(printf 'val 1 3 0\ntag 0 7\nflip 3 1\nclone 1 2 eq true ne false\narr 1 3 0\nknights 1\nnest 1\ndbg Pos { f: 1, r: 2 }\ndeep Line { a: Pos { f: 1, r: 2 }, b: Pos { f: 3, r: 4 }, w: 9 }\nscal 5 "hi" true '"'"'q'"'"'\nvia Pos { f: 1, r: 2 }')"
+	@echo '--- rust: impl Trait for Type, and fmt::Display rerouted ---'
+	# The trait-impl path had NEVER RUN: both parsers compared a tkFor token
+	# against the string 'for' via GetTokenStr, which is empty for a keyword,
+	# so `impl Trait for Type` was always read as `impl <Trait>`. Dead code
+	# that looked live; found by trying to extend it.
+	# Display is REROUTED, not dispatched: `fn fmt(&self, f) -> Result`
+	# registers as `fn fmt(&self) -> String` and write! appends to it. `tag`
+	# pins that several write!s accumulate rather than overwrite.
+	./$(COMPILER) test/test_rust_traits.rs $(TESTTMP)/test_rust_traits26
+	tools/expect_same.sh test_rust_traits26 "$$($(TESTTMP)/test_rust_traits26)" "$$(printf 'area 16 15\nmv 12-28\nts 12-28\nvia <12-28>\ntag [w=7]\ndbg Move { from: 12, to: 28 }')"
 	# Ada frontend skeleton (feature-esoteric-ada): for-range accumulate, if/elsif/else,
 	# while, bare loop + exit-when, Put_Line -- all lowering onto existing shared IR.
 	./$(COMPILER) test/test_ada_skeleton.adb $(TESTTMP)/test_ada_skeleton26

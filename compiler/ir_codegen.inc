@@ -4439,6 +4439,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     pAnsiAlloc, pAnsiShared, pAnsiTooSmall, pAnsiNoZeroGrow, pAnsiFastDone: Integer;
     pAnsiUseNeededNil, pAnsiUseNeededSmall, pAnsiMinDone, pAnsiCapDone: Integer;
     pDynZero, pDynNoOld, pDynKeepCopy, pDynNoRetain, pDynNoRetainCount: Integer;
+    slNoStrZero: Boolean;  { NilPy managed string: SetLength(s,0) keeps a real block }
     slDepth, slElemSize, slRetainTop, pSlRetainDone, slBaseRec, slMek, slProcIdx: Integer;
     slBaseTk: TTypeKind;
     wid, decs: Integer;
@@ -7737,9 +7738,25 @@ begin
             else
               begin EmitB($48); EmitB($8B); EmitB($B5); EmitI32(Syms[symIdx].Offset); end;
             EmitB($56);                     { push old data pointer }
-            EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] = n }
-            EmitB($48); EmitB($85); EmitB($C0); { test rax, rax }
-            EmitB($0F); EmitB($84); pDynZero := CodeLen; EmitI32(0);
+            { NilPy managed string: SetLength(s, 0) must publish a REAL
+              zero-length block, not nil, so `is None` can tell None from ""
+              (bug-nilpy-empty-str-and-none-are-the-same-value). This is the
+              THIRD collapse site and the only one that is not in builtinheap:
+              x86-64 alone inlines the symbol-target resize instead of calling
+              PXXStrSetLen (every other backend routes IR_SETLEN_STR through
+              the helper), so the two {$ifdef PXX_NILPY_STR} arms there do not
+              reach it. pylib's `SetLength(Result, outLen)` in pystr_replace_n
+              and pystr_join is exactly this shape, which is why those two were
+              the last rows still answering `is None` True.
+              Dynamic arrays are NOT affected: an empty dynarray stays nil. }
+            slNoStrZero := isNilPy and (Syms[symIdx].TypeKind = tyAnsiString)
+                           and not Syms[symIdx].IsArray;
+            if not slNoStrZero then
+            begin
+              EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] = n }
+              EmitB($48); EmitB($85); EmitB($C0); { test rax, rax }
+              EmitB($0F); EmitB($84); pDynZero := CodeLen; EmitI32(0);
+            end;
 
             if (Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray then
             begin
@@ -7929,25 +7946,31 @@ begin
               EmitDynArrayReleaseLockedForSym(symIdx);
             EmitB($E9); pJmpDone := CodeLen; EmitI32(0);
 
-            { SetLength(a, 0): publish nil and release the old allocation. }
-            Patch32(pDynZero, CodeLen - (pDynZero + 4));
-            EmitB($5E);                     { pop rsi = old data pointer }
-            EmitB($59);                     { pop rcx = n }
-            EmitB($31); EmitB($C0);          { xor eax, eax }
-            if Syms[symIdx].Kind = skGlobal then
-              begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
-            else if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
-              begin
-                EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[symIdx].Offset); { mov rcx, [rbp+off] = caller slot addr }
-                EmitB($48); EmitB($89); EmitB($01);                               { mov [rcx], rax (nil -> caller slot) }
-              end
-            else
-              begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
-            EmitB($48); EmitB($89); EmitB($F0);                       { mov rax, rsi }
-            if (Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray then
-              EmitAnsiStrReleaseLocked
-            else
-              EmitDynArrayReleaseLockedForSym(symIdx);
+            { SetLength(a, 0): publish nil and release the old allocation.
+              Skipped entirely when the zero branch above was not emitted --
+              nothing jumps here then, and the preceding `jmp done` already
+              carries the fall-through. }
+            if not slNoStrZero then
+            begin
+              Patch32(pDynZero, CodeLen - (pDynZero + 4));
+              EmitB($5E);                     { pop rsi = old data pointer }
+              EmitB($59);                     { pop rcx = n }
+              EmitB($31); EmitB($C0);          { xor eax, eax }
+              if Syms[symIdx].Kind = skGlobal then
+                begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+              else if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
+                begin
+                  EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[symIdx].Offset); { mov rcx, [rbp+off] = caller slot addr }
+                  EmitB($48); EmitB($89); EmitB($01);                               { mov [rcx], rax (nil -> caller slot) }
+                end
+              else
+                begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
+              EmitB($48); EmitB($89); EmitB($F0);                       { mov rax, rsi }
+              if (Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray then
+                EmitAnsiStrReleaseLocked
+              else
+                EmitDynArrayReleaseLockedForSym(symIdx);
+            end;   { of `if not slNoStrZero` }
 
             Patch32(pJmpDone, CodeLen - (pJmpDone + 4));
             if (Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray then

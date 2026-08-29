@@ -12704,15 +12704,32 @@ end;
 
 { `s is None` for a str-typed value: a NilPy str that is None has a nil handle,
   a real string (including "") does not. Compares the managed handle, not the
-  content — content compare against None read the wrong bytes and crashed. }
+  content — content compare against None read the wrong bytes and crashed.
+
+  That first sentence was FALSE for as long as it stood, and this routine was
+  correct only for None: an empty AnsiString WAS nil, so every `is None` test
+  fired for "" too. It became true with PXX_NILPY_STR
+  (bug-nilpy-empty-str-and-none-are-the-same-value) — the fix is entirely in
+  the string PRODUCERS, and this consumer is unchanged. }
 function pystr_is_none(const s: AnsiString): Boolean;
 begin
   Result := Pointer(s) = nil;
 end;
 
+{ None in a plain-`str` slot. Result is deliberately LEFT UNASSIGNED: an
+  AnsiString result is zero-initialised, so this returns the nil handle, and
+  nil is now the one and only thing that means None.
+
+  It must NOT say `Result := ''`. Under PXX_NILPY_STR an empty NilPy string
+  literal is a real zero-length block (that is the whole fix for
+  bug-nilpy-empty-str-and-none-are-the-same-value), so `''` here would hand
+  back a non-nil handle and `retnone() is None` would answer False for
+  `def retnone() -> str: return None` -- which CPython answers True, and which
+  this compiler answered correctly BY ACCIDENT before, via the same collapse
+  that made "" wrong. Fixing the empty string without fixing this line trades
+  one wrong answer for another. }
 function pystr_none: AnsiString;
 begin
-  Result := '';
 end;
 
 { Identity that BOXES its argument into a variant: passing a scalar to a Variant

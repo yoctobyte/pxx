@@ -16825,3 +16825,160 @@ construction (face 31, two breaks in two days). `forwardlint` runs clean there.
 > one positioned to tell them apart.** Re-derive every owner-blocked item before
 > surfacing it again — this is rule 2's second half and I broke it four times on
 > one list.
+
+## 2026-08-29 ~20:30 — tooling fix, four dispatches, three self-corrections from lanes
+
+**Fleet.** frankA busy (`builtinheap.pas`, aarch64 stage-2 under qemu). frankwasm
+on `ir.inc` (granted). pxx-a5 on N p72. frankB on the reactor slot-0 bug.
+frank-optimize-b4 on the LowerCase one-liner, then its O queue. frank-rust holds
+the only `working/` lock (`feature-rust-option-type`, live log, leave alone).
+`neo-76` / `vibestorm-38` / `neuzelaar2-a7` are the owner's ad-hoc sessions, not
+mine to dispatch.
+
+**TOOLING — a work-tag was ERASING the declared file-lane** (`5a183936a`).
+`track_letter`'s O/E/S/M arms returned the bare tag and discarded the ticket's own
+`track:` frontmatter, so **14 O tickets were invisible to `ready --track A`** and
+**4 E tickets invisible to Track B, whose entire visible queue was 6.** Track F has
+appended rather than replaced since it was added, with the reasoning written on the
+`track` property — the other four were written earlier and missed it. Fixed by
+`_tag_onto`; the S and M arms sit above where `explicit` is computed, so that block
+is hoisted (it only reads frontmatter, no side effects). Measured: A 90→104
+(exactly the O count), B 6→10 (exactly the E count), unfiltered ready **315 before
+and after**, tag counts unchanged.
+
+**I nearly filed this as the wrong bug.** I released b4's `-O3` umbrella from a
+stale lock, gave it the frontmatter it lacked, could not find it in `--track A`,
+and wrote `NOT RANKED — investigate`. It ranked fine. **I was reading the wrong
+queue** — the ticket was under `[O]`. The instrument was fine and my query was
+wrong, which is the same shape as every "correct answer to the wrong question"
+in these notes.
+
+**Remaining half is DATA, not code:** 39 of 336 ranked tickets have no `track:`
+field at all. The S tickets that gained nothing from the fix are among them — the
+tag is all anyone sees and nothing states which gate applies. Candidate `progress
+check` line: warn when a work-tag ticket declares no file-lane. **Calibrate before
+landing** (NEAR-DUP's threshold was measured over 341 tickets).
+
+**Grant filed and then WIDENED — `ir.inc` to the wasm32 lane**
+(`chore-a-grant-wasm32-lane-holds-ir-inc-for-the-11207-mistyping`, `5d75a8f05`,
+widened `50bf88683`). frankwasm blocked correctly on it not being on
+origin/master — it had checked at `b93fab100`, one below my commit. **Blocking was
+right even though the file was there**: it could not distinguish a race from a lost
+commit, and being wrong the other way is the failure the ticket exists to prevent.
+frankA declined to take the file back: *"the 11207 mistyping is precisely the kind
+of thing that should be fixed by whoever can actually observe it."* Scope is now
+the managed-string arg-temp decision **across all its sites**, not the line number
+— frankwasm re-derived its own ticket and found the claimed correct sibling at
+`:11329` does not exist, and **zero of seven** sites carry the guard.
+
+**Faces 40-43 landed** (index now 43, still OPEN, never write "all N"):
+40 a ticket certifying a gap as inert describes the REFUSAL standing in front of
+it, so the fix removes both (frankwasm, wasm32 `EmitZeroFrameSlot`);
+41 a build aborts at its FIRST overflowing consumer, so the ticket names the
+earliest not the largest — the recommended 21 MB floor would have fixed aarch64
+and left arm32 broken, **looking complete** (frankA, MAX_CODE);
+42 *"the fix already exists one site over"* is the most dispatch-accelerating
+sentence a ticket can contain and therefore the one most needing re-derivation —
+it converts a design question into a copy-paste (frankwasm, self-caught);
+43 **a leak is an accidental lifetime extension** — `0d91dc88f` did not create
+pxx-a5's years-old alias, it removed the padding hiding it; do NOT revert; expect
+more that look unrelated to strings; sweep the MECHANISM with `-dPXX_HEAP_DEBUG`
+(`$DD` on free) rather than the shape (frankA).
+
+**Routed to Track T:** heap-debug sweep of NilPy + C at HEAD, sha to be named in
+the report. frankA could not run it (hook refuses suites, correctly) and routed
+rather than reaching around it.
+
+**Recorded on `decide-does-the-legacy-gtk-alias-still-point-at-gtk-2`:** Track T
+installed `libgtk2.0-dev` on `seven` while the ticket was open, so **seven's green
+on `test_c_gtk*` is no longer evidence** — a constant-pass shape manufactured
+mid-decision, disclosed unprompted by the lane that made it. Package stays
+(re-redding four jobs while a decision is pending is a worse default). The
+decision is cheaper than it looks: those four tests compile against `test/my_gtk.h`,
+a local stub, and never touch GTK at runtime — so retiring the alias costs them
+nothing.
+
+**frankB cannot verify its own dispatch and was told so.** The reactor slot-0
+aliasing needs 17 threads; frankB's box has 12. Dispatched with two halves, the
+second mattering more: make the defect reachable **without** 24 cores, or bank why
+it cannot be. A test needing a 24-core host rots exactly the way this one did.
+
+**Standing corrections to me tonight, all accepted:** the rdrand exclusion was
+already shipped when I listed it open; my `NOT RANKED` was a wrong query.
+
+## 2026-08-29 ~21:00 — T's debt was a defect not throughput; a near-collision I caused
+
+**Two corrections to me in one hour, both accepted.**
+
+**1. I diagnosed Track T's breadth debt as throughput. It was a defect in
+`twatch`.** T's arithmetic refutes my reading: 115 commits/hour, 36 buildable,
+full tier ~959s ≈ 16 min, ≈10 buildable commits per run — back-to-back that is a
+verdict every ~16 min running ~10 behind, inside what CLAUDE.md's async model
+assumes. **A 71-commit debt is not what that cadence produces**, so the gap
+between the debt and the arithmetic *was* the finding. Cause: `verify_pin` had no
+commitment point (`make_preempted()` with no `commit_after`), so it could be
+entered and never finish — **7 attempts, 7 preemptions, 0 completions**, each
+eating the idle slot breadth needed. Fixed `5a5c7bc92`. Had T accepted my framing
+it would have tuned tier composition against a cause that was not there.
+
+**2. THE HANDLE I ASKED T TO BUILD ALREADY EXISTED.** I asked for a way to read
+T's queue depth. `devdocs/progress/tstate/<host>.json` has carried it all along —
+verified on master, not taken on trust: `seven.json` has
+`idle_yield: {"aborts": 2, "phase": "pin-verify", "target": "4d1613c1…"}`, and
+`last_breadth_try` vs `last_full` (attempted vs completed) are on seven and
+plexus. **`idle_yield` names the phase T is starving on.** I was reading
+`--status` staleness and inferring. *Grep for the incumbent before building* is a
+rule I enforce on other lanes and did not apply to my own request.
+**ADD TO THE TICK: read `idle_yield` before dispatching to T** — the failure it
+catches is not "T is busy", it is "T is burning slots on a phase that cannot
+complete", which reads as staleness from outside.
+
+**A NEAR-COLLISION I CAUSED, and the honest diagnosis is NOT a tooling gap.**
+I recommended `feature-opt-bulk-copy-is-byte-at-a-time` [O p65] to b4 on rank and
+reachability **without checking which file it touches** — its only file is
+`builtinheap.pas`, which frankA is in. b4 asked instead of inferring; I confirmed
+from frankA's own message and told it to park and take `EmitLoadVarA64`. Nothing
+was edited concurrently.
+
+My first instinct was to file "a `working/` lock names the TICKET, not the FILE"
+as a tooling defect. **That is not what happened.** frankA's lock was the MAX_CODE
+ticket; the ticket that put it in `builtinheap.pas` — `bug-nilpy-empty-str-and-none-are-the-same-value`
+— **was never moved to `working/` at all.** The lock mechanism was not
+insufficient, it was not used. Before building a `whoholds <path>` tool, note that
+**every agent commits as `yoctobyte`**, so git authorship cannot attribute a file
+to an agent — the only sources are the lock and message traffic. Any tool here
+depends on tickets being claimed, which is the thing that actually failed. **Fix
+the discipline before building the instrument.**
+
+**Faces 45-47 landed** (index now 47): 45 a phase that can be entered but never
+finish consumes the resource it protects and reads as slowness — with the
+corollary that `IDLE_YIELD_AFTER` worked as designed and thereby made the
+starvation *survivable and permanent*; 46 a fix is inert until both halves happen
+— T's clone is detached at the sha under test so `git pull` fails by construction
+and **the restart succeeds while serving old code**; 47 the summary sentence a
+fix invites you to write can be false while the fix is right — b4's LowerCase
+forward **recorded** a convergence rather than causing it (seed-without,
+seed-with, and self-hosted are all `9396c6dbb646f90d`).
+
+**LowerCase closed** (`7aba316be`): eight sites, not one — `forwardlint` reports
+only the earliest, same shape as frankA's arm32 finding. One forward in
+`frontend_forwards.inc` covers all. **`forwardlint` is now silent on a clean
+tree**, which was the precondition for it joining the mandatory loop → filed
+`decide-should-forwardlint-join-the-mandatory-per-fix-loop` [U p50]. **The answer
+edits CLAUDE.md, so it is the owner's** — I recommended yes-narrowly and wrote the
+argument against my own recommendation into the ticket.
+
+**Cross-frontend `LowerCase`** (now spans `pasparser_expr.inc` and `cparser.inc`)
+noted as a live instance on `devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md`
+rather than filed — a prio-10 ticket nobody will do clogs the ranker forever, which
+CLAUDE.md names explicitly as the backlog leak.
+
+**Benchmark permission granted to b4** (~1 min of one core, twice) with two
+conditions: name the binary's sha, and note that this box is contended — if
+before and after straddle a contention change, the ratio measures the box.
+
+**Live:** frankA `builtinheap.pas` + aarch64 stage-2. frankwasm `ir.inc` (widened
+grant). pxx-a5 N p72. frankB reactor slot-0 (12-core box, cannot reproduce).
+b4 `EmitLoadVarA64`. T: breadth first, heap-debug queued at named sha
+`a38e76336aad368e` (fixedpoint converged 2 rounds, sha256 `43be165be817…` ≠
+pinned `867207f2b418…`). U queue **19**.

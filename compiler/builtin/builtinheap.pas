@@ -1345,7 +1345,17 @@ function PXXStrFromLit(len: NativeInt; src: Pointer): Pointer;
 var
   base, s, d, i, orAll, b: Int64;
 begin
+{$ifdef PXX_NILPY_STR}
+  { NilPy string model (decide-nilpy-none-str-representation): a zero-length
+    NilPy string is a REAL block, so nil goes back to meaning only None and
+    `"" is None` stops answering True. The define is set only for a NilPy
+    compilation, so a Pascal program -- the self-host binary included --
+    compiles the `len <= 0` arm below and keeps FPC's collapse untouched BY
+    CONSTRUCTION rather than by audit. }
+  if len < 0 then
+{$else}
   if len <= 0 then
+{$endif}
   begin
     Result := nil;
     Exit;
@@ -3384,7 +3394,12 @@ begin
   if strSlot = nil then Exit;
   oldData := Pointer(PWord(strSlot)^);
 
+{$ifdef PXX_NILPY_STR}
+  { see PXXStrFromLit: NilPy zero-length strings do not collapse to nil. }
+  if newLen < 0 then
+{$else}
   if newLen <= 0 then
+{$endif}
   begin
     PWord(strSlot)^ := 0;
     PXXStrDecRef(oldData);

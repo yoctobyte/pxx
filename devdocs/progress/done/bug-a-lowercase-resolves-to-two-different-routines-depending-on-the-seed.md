@@ -4,9 +4,10 @@ title: LowerCase resolves to two different routines depending on which compiler 
 track: A
 type: bug
 prio: 35
-status: backlog
+status: done
 found: 2026-08-28
 found-by: frankwasm (via tools/forwardlint.py), verified by frank-coordinator
+owner: frank-optimize
 ---
 
 ## The fact
@@ -168,3 +169,76 @@ Measured by the Track T agent on `seven` (provenance: my box's gate produced the
 note). The `forward;` itself is `compiler/**`, a file-lane this session does not
 hold, so it stays unwritten here — as does the open A-vs-P track question, which
 the ticket rightly says belongs to whoever takes it.
+
+---
+
+## FIXED 2026-08-29 — `frontend_forwards.inc`, and the seed build was ALREADY identical
+
+`function LowerCase(const s: AnsiString): AnsiString; forward;` added to
+`compiler/frontend_forwards.inc`, which enters the include stream at
+`compiler.pas:120` — ahead of `pasparser_expr.inc` (139), `pasparser_proc.inc`
+(142) and `cparser.inc` (168), so it covers every use, not just the one the lint
+named. There are more than the ticket lists: `pasparser_expr.inc:1927`, `:2881`,
+`:8383`, `:8386`, `:8389` and `cparser.inc:337`, `:395`, `:510`. `forwardlint`
+reports only the earliest.
+
+**Track: P.** `pasparser_*.inc` was carved out of A on 2026-08-20 and P owns it;
+the fix itself lands in a shared frontend forwards file, and the gate is the
+ordinary loop, which proves the fixedpoint anyway. Settled deliberately rather
+than left open, as the ticket asked.
+
+### The ticket's precondition, answered twice by two different methods
+
+Track T's sweep on `seven` compared the two *implementations* over their input
+domain: 0 differing over 256 single bytes, 65536 ordered pairs, and 256
+call-site-shaped strings.
+
+This session added an independent **end-to-end** check, because the two methods
+can fail differently: an input-domain sweep proves the routines agree on inputs
+someone chose to try, while a binary comparison proves the whole seed-built
+compiler is unchanged whichever routine it bound.
+
+```
+  seed-built compiler WITHOUT the forward:  9396c6dbb646f90d
+  seed-built compiler WITH the forward:     9396c6dbb646f90d
+  self-hosted compiler:                     9396c6dbb646f90d
+```
+
+All three byte-identical. `make bootstrap` green both ways (FPC -> pxx -> pxx,
+`cmp` passing).
+
+**So the seed build was ALREADY producing the identical compiler, and this fix
+did not cause that convergence — it recorded it.** Worth stating plainly,
+because "the seed and self-hosted builds now agree" is the tempting sentence and
+it would be false: they agreed before. What changed is that the agreement is now
+*stated* rather than *coincidental*, which is the defect this ticket actually
+described.
+
+This also closes the larger finding the ticket held open — *the seed-built
+compiler has been behaving differently from the self-hosted one* — from a second
+direction. Track T ruled it out over the input domain; this rules it out over
+the artefact.
+
+### Why it was worth doing with no behaviour change
+
+`forwardlint` is now **silent on a clean tree** — that was the whole argument at
+prio 35, and it is the state the ticket asked for before the lint joins the
+mandatory loop. A canary with one permanent known exception is a canary people
+learn to scroll past.
+
+### Not done, deliberately
+
+The `Do NOT` in this ticket is observed: nothing was allowlisted, and our
+`LowerCase` was not deleted in favour of the system unit.
+
+One observation for someone else, filed nowhere because it is not this ticket's
+business: `LowerCase` is now shared between the Pascal parser and the **C**
+parser (`cparser.inc`). `devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md`
+says to share the AST and the IR and to duplicate parser support functions per
+language. A case-folding helper shared across two frontends is exactly the shape
+that document argues against. It is not a defect today and the forward does not
+make it worse; it is the kind of thing that is invisible until someone changes
+one language's needs.
+
+## Log
+- 2026-08-29 — resolved, commit 7aba316be.

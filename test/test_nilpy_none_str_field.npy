@@ -69,8 +69,54 @@ while True:
     got.append(tok)
 print(got, n)
 
-# NOT asserted here: `return ""` currently reads as None too, because Pascal's
-# empty AnsiString IS a nil handle — so "" and None are the SAME value for a
-# NilPy str, contrary to what pylib's pystr_none comment claims. Pre-existing
-# (identical under `pinned`), orthogonal to the return-path rule above, and
-# filed as bug-nilpy-empty-str-and-none-are-the-same-value.
+# The case the block above used to say was NOT asserted, now asserted:
+# `""` and None were the SAME value for a NilPy str, because Pascal's empty
+# AnsiString IS a nil handle. Fixed by PXX_NILPY_STR, which stops a NilPy
+# zero-length string collapsing to nil, so nil means only None again
+# (bug-nilpy-empty-str-and-none-are-the-same-value).
+#
+# The rule the rows below pin is TAGGED vs UNTAGGED, not literal vs computed:
+# a value that reaches `is None` as a runtime VARIANT (a list element, a dict
+# value, an Optional) always carried its own tag and was already right; a value
+# whose static type is plain `str` is a bare AnsiString handle and was wrong.
+# So the plain-`str` rows are the regression surface and the variant rows are
+# the control that must not move.
+
+
+class E:
+    def opt(self) -> Optional[str]:
+        return ""
+
+    def plain(self) -> str:
+        return ""
+
+
+def retnone() -> str:
+    return None
+
+
+# untagged: bare literal, annotated local, plain-`str` return
+e = ""
+print("" is None, e is None, E().plain() is None, E().opt() is None)
+
+# untagged AND computed — every one of these is a pylib `: AnsiString` result,
+# which is the half an earlier down-scoping of this ticket wrongly recorded as
+# already correct. They reach `is None` with no tag, exactly like a literal.
+print("abc".replace("abc", "") is None, "abc"[0:0] is None,
+      "".join([]) is None, "  ".strip() is None, "x" * 0 is None)
+
+# the OTHER direction, and the reason a constant-fold of `x is None` to False
+# on a plain-`str` slot is not available: CPython does not enforce the
+# annotation, so a `-> str` def may genuinely return None. This answered True
+# by ACCIDENT before the fix — via the same nil that made "" wrong — so it is
+# the row that catches a fix which only stops the collapse and forgets that
+# pystr_none must still hand back nil.
+print(retnone() is None)
+
+# tagged: the control. Container-derived and Optional values were always right
+# and must stay right.
+print(["", "x"][0] is None, {"k": ""}["k"] is None)
+
+# "" must still behave as an ordinary empty string in every other respect --
+# a non-nil zero-length handle must not change length, truthiness or compares.
+print(len(""), len(E().plain()), "" == "", E().plain() == "", bool(""))
