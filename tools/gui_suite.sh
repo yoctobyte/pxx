@@ -80,10 +80,23 @@ widgetset_matrix() {
 
 # lib/pcl/gtk3_c.h is `#include <gtk/gtk.h>` against the installed headers, and
 # a bare <gtk/gtk.h> resolves to GTK **2** on this box unless $GTK3_INC puts the
-# gtk-3.0 root first. Asserting the VERSION rather than only that a build links
-# and runs: gtk_main, gtk_main_quit, gtk_window_new and most of the surface PCL
-# uses exist in BOTH GTK2 and GTK3, so a green suite would pass just as happily
-# against the wrong library. This is the check that has bounds on it.
+# gtk-3.0 root first.
+#
+# This function checks the LINK. It was commented as asserting the VERSION, and
+# the two readelf lines below cannot do that -- measured, not argued: built with
+# $GTK3_INC removed, so against GTK2 headers, test_gtk_ffi still has
+# libgtk-3.so.0 in DT_NEEDED and still has no libgtk-x11-2.0.so.0, so BOTH
+# conditions pass on exactly the state they exist to reject. The reason is
+# structural: CHeaderStem maps the gtk3_c stem to gtk-3, so the link never
+# follows -I, only the headers do. Nothing here could have caught a
+# wrong-version build.
+#
+# The version is now asserted at the include, in lib/pcl/gtk3_c.h, where the
+# information actually is (#if GTK_MAJOR_VERSION < 3 -> #error). These lines are
+# kept because a correct link is still worth checking -- it is just a narrower
+# claim than the old comment made, and the comment was the load-bearing part of
+# the mistake: it told the next reader this ground was already covered.
+# feature-b-pcl-should-assert-its-gtk-version-rather-than-rely-on-an-accident
 gtk_version_check() {
   local src="$ROOT/test/gui/test_gtk_ffi.pas"
   local out="/tmp/gui_gtk_version" log="/tmp/gui_gtk_version.log"

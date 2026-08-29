@@ -86,3 +86,26 @@ would have caught a real segfault at v389.** It did not, because nothing ran it.
 
 Track A's: `make compiler/pascal26` (the self-host fixedpoint) plus the newly
 wired targets. Do not land concurrently with other A edits to `Makefile`.
+
+## Two more, from the GTK side (frank-b, 2026-08-29)
+
+`test/gui/test_gtk_window.pas` and `test/gui/test_gtk_signals.pas` are orphans
+of the same kind: grepping `Makefile` and `tools/gui_suite.sh` for either name
+returns nothing, so neither is run by anything. Confirmed here, not inherited —
+frank-rust reported it during the PCL header migration and I re-ran the grep.
+
+Adding them to this ticket rather than opening another, per its own premise.
+
+They are worth a line beyond "two more of the nine", because they show the cost
+side rather than the risk side: both were *converted* during the PCL migration
+off the curated GTK3 header. Someone read them, edited them, and kept them
+consistent with a binding change — maintenance paid in full on files that
+cannot report anything. The existing framing here is "an unwired test does not
+catch its bug"; these are the other half, "an unwired test still bills you for
+upkeep", and the second half is the one that keeps being paid without anyone
+deciding to.
+
+Both reference `lib/pcl/gtk3_c.h`, so whoever wires them should pass `$(GTK3_INC)`
+— that header now hard-asserts `GTK_MAJOR_VERSION >= 3` and will `#error`
+without it, by design
+([[feature-b-pcl-should-assert-its-gtk-version-rather-than-rely-on-an-accident]]).

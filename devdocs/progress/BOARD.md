@@ -52,7 +52,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (311)
+## backlog (310)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -214,7 +214,6 @@ _none_
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 20 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
 | feature-b-a-hermetic-tls-loopback-for-the-ssl-suite | B | 30 | feature | lib_synapse_ssl proves the dlopen'd libssl resolves real symbols, but not that a handshake completes — the handshake is verified only by a manual probe against `openssl s_server`. A TLS handshake needs both sides live at once and the suite is single-process with no fork, so automating it means a self-exec harness: the test re-runs its own binary as the server, cert from TSSLOpenSSL.CreateSelfSignedCert, port over the pipe. | — |
 | feature-b-a-real-minidom-is-an-implementation-not-a-shim | B | 20 | feature | Question 2 of the xml.dom row, re-filed on its own as that ticket said it should be. html5lib/treebuilders/dom.py wants a document you can build and mutate — ~25 DOM methods, getDOMImplementation().createDocument(), weakref.proxy(), and a reach into minidom's PRIVATE _child_node_types. That is a DOM implementation, not a compatibility alias. It unblocks exactly one corpus file and should be ranked as an implementation project, not alongside shims. | — |
-| feature-b-pcl-should-assert-its-gtk-version-rather-than-rely-on-an-accident | B | 30 | feature | lib/pcl now includes the stock <gtk/gtk.h>, which resolves to GTK2 unless GTK3_INC puts the gtk-3.0 root first. Forgetting the flag fails loudly today only because PCL happens to call a GTK3-only function -- an accident, not a guard. The binding should assert its version. | — |
 | feature-b-posix-and-fpc-named-socket-facades | B | 25 | feature | The Posix.* / FPC-named (BaseUnix, Sockets, UnixType) socket compat facades over the PAL substrate, with a selectable syscall-or-libc backend. Fully designed inside feature-networking and never built; split out when that umbrella closed so the design survives its container. | — |
 | feature-c-csmith-differential-fuzzing | C | 40 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-diagnostics-name-the-module-they-are-in | C | 40 | feature | A Pascal diagnostic now prints `in: <path>` when the error is in an include or a `uses`d unit. The C frontend has the same information already — CModRange* is populated in every build, not just under -g — and prints nothing, so an error in a crtl module or an included header still reports a bare line number. | — |
@@ -611,9 +610,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2637)
+## done (2638)
 
-2637 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2638 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (51)
 
@@ -901,7 +900,6 @@ _none_
 - [p 30] [A] feature-a-finalize-for-bare-dynarray-and-variant
 - [p 30] [A] feature-a-unreferenced-class-rtti-keeps-every-method-alive
 - [p 30] [B] feature-b-a-hermetic-tls-loopback-for-the-ssl-suite
-- [p 30] [B] feature-b-pcl-should-assert-its-gtk-version-rather-than-rely-on-an-accident
 - [p 30] [E] feature-demo-nilpy-ide
 - [p 30] [B+S] feature-esp-peripheral-callback-api
 - [p 30] [N] feature-nilpy-a-genexpr-is-lazy-not-materialised

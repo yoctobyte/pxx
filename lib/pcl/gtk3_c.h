@@ -25,3 +25,37 @@
    binding deliberately does not depend on the answer, and the -I goes away on
    its own if gtk-3.0 ever becomes the default root. */
 #include <gtk/gtk.h>
+
+/* ASSERT the version rather than inherit it from whoever set -I.
+
+   Before this check, forgetting the include root still failed -- but only
+   because PCL happens to call gdk_event_get_button, which is GTK3-only. That
+   is a property of today's PCL surface, not a guard, and a guard that works by
+   accident reads exactly like one that works by design. A consumer whose own
+   surface is GTK2-compatible (gtk_init, gtk_main, gtk_window_new,
+   gtk_container_add ... all exist in both) got no diagnostic at all.
+
+   What it got instead is worse than the "wrong library" this was first filed
+   as, because the LIBRARY is never wrong: the link stem comes from the unit
+   name gtk3_c via CHeaderStem, so it is libgtk-3.so.0 either way. Only the
+   HEADERS follow -I. So the silent outcome is GTK2 headers against the GTK3
+   library -- an ABI mismatch, measured here with gcc as the oracle:
+
+       sizeof(GtkWidget)   96 (gtk2 headers)  vs  32 (gtk3)
+       sizeof(GtkWindow)  240               vs  56
+
+   ...which no amount of link-time checking would catch, because the link is
+   correct. Hence a check in the preprocessor, at the include, rather than at
+   some consumer's call site.
+
+   Both halves of this were measured against the pinned compiler before being
+   relied on: pxx's C preprocessor honours #error (and correctly skips it in a
+   false branch), and it really evaluates GTK_MAJOR_VERSION from the included
+   header -- `#if GTK_MAJOR_VERSION == 2` fires without the flag and `== 3`
+   fires with it, so the macro is being read, not defaulted.
+   feature-b-pcl-should-assert-its-gtk-version-rather-than-rely-on-an-accident */
+#if !defined(GTK_MAJOR_VERSION)
+#error "lib/pcl: <gtk/gtk.h> did not define GTK_MAJOR_VERSION -- no GTK headers found. Pass the GTK3 include root (make: $(GTK3_INC); shell: $GTK3_INC, e.g. `pkg-config --cflags-only-I gtk+-3.0`)."
+#elif GTK_MAJOR_VERSION < 3
+#error "lib/pcl needs the GTK3 headers, but <gtk/gtk.h> resolved to GTK2. The link is libgtk-3.so.0 regardless (the stem comes from the unit name), so this would be a silent header/library ABI mismatch. Pass the GTK3 include root first: make $(GTK3_INC) / shell $GTK3_INC, e.g. `pkg-config --cflags-only-I gtk+-3.0`."
+#endif

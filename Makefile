@@ -9761,8 +9761,14 @@ test-core: $(COMPILER)
 	# decides the GTK version for everyone. Which one that should be is
 	# decide-which-gtk-a-bare-gtk-gtk-h-means.
 	./$(COMPILER) -Futest/gtk3stock -I/usr/include/gtk-3.0/ test/test_c_gtk3_stock.pas $(TESTTMP)/test_c_gtk3_stock26
-	# Asserts the VERSION, not just that it links: gtk_main/gtk_main_quit exist in
-	# both GTK2 and GTK3, so a run alone would pass against the wrong library.
+	# Asserts the LINK, and only the link. This line was commented as asserting
+	# the VERSION; it does not and structurally cannot -- CHeaderStem maps the
+	# gtk3_c stem to gtk-3, so libgtk-3.so.0 is in DT_NEEDED whatever -I was in
+	# effect, and building this test with the -I removed (GTK2 headers) still
+	# satisfies the grep. Measured, not reasoned. The version is now asserted
+	# where it is visible, in test/gtk3stock/gtk3_c.h itself, which is why the
+	# -I above is load-bearing rather than merely conventional. Keep this line:
+	# a correct link is still worth checking, it is just a different claim.
 	readelf -d $(TESTTMP)/test_c_gtk3_stock26 | grep -q 'libgtk-3.so.0'
 	tools/expect_same.sh test_c_gtk3_stock26 "$$(xvfb-run -a $(TESTTMP)/test_c_gtk3_stock26)" "$$(printf 'Successfully created window\nStarting gtk_main loop...\nAutoQuit called from GTK main loop!\nMain loop exited cleanly')"
 	./$(COMPILER) test/test_c_header_case_sensitive_import.pas $(TESTTMP)/test_c_header_case_sensitive_import26
