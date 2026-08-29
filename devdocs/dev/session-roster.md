@@ -17248,3 +17248,74 @@ instruction and ANNOUNCED it** — the norm working again, second time tonight.
 (`builtinheap.pas` free; benchmark approved with the sha + contention conditions).
 Told it the umbrella at p70 sits behind its own fresh-session rule and that it is
 the one who can judge whether that binds. All six lanes working. U queue **20**.
+
+## 2026-08-29 ~21:30 — TWO NEW LANES (C, D), a fleet watchdog, and Track T's daemon was STOPPED
+
+**Owner raised the budget** (max-pro, ~4x tokens, plus last week's reset usable
+within 2 days) and asked to use it — **explicitly twice: do not game the system.**
+The line held: capacity goes onto lanes with real queued work, never onto extra
+sessions doing thin work, and never onto padded output.
+
+**TRACK T'S WATCHER DAEMON WAS STOPPED and nothing said so.** Found incidentally in
+`frank.sh`'s startup banner: `daemon : STOPPED — trackt start`, while `tstate: UP`
+because the last verdicts were recent. **A stale-but-recent tstate reads exactly
+like a live one** — the same shape as everything in
+`a-success-message-is-not-a-verdict.md`. Restarted (`pid 940345`, unit
+`trackt-watcher.service`, web on :8377). Every lane's breadth had no producer for
+an unknown interval. **ADD TO THE TICK: `trackt status` daemon line, not just
+tstate freshness.**
+
+**NEW LANES: frankC (Track C) and frankD (Track D).** Chosen by measurement, not
+taste: `ready` per track showed **C=9 and D=10 with ZERO agents**, against A=104 /
+N=87 / P=46 with one each. **C and D were the only two safe additions** — C owns
+`clexer`/`cparser`/`cpreproc`/`lib/crtl`, D owns `docs/**` and touches no code, so
+neither can collide with a running worker. A and N have the deepest queues and are
+exactly the lanes that **cannot** absorb a second agent (shared files) — which is
+the owner's own "A+C+P+N is the hardest to parallelize".
+Trees: fresh clones `~/frankC`, `~/frankD` at `c513c0190`. Both added to
+`~/frank.sh`'s FLEET with the reasoning in a comment there.
+
+**NEW: `~/frank-watchdog.sh`**, running as tmux window `frank-watchdog`, log
+`~/frank-watchdog.log`. Owner: *"you will notice usage when we get blocked from
+accessing api. set up an interrupt to recover from such."*
+- **Detection is NOT "is the window there".** When a session is cut off, `claude`
+  exits and `frank.sh`'s `exec bash` keeps the window alive — **a dead agent looks
+  identical to a live one in the window list.** So it walks the pane's process
+  subtree for a `claude` process.
+- **Per-agent exponential backoff, 60s → 32min**, reset after a healthy cycle.
+  Deliberate: if the fleet is rate-limited every agent dies at once, and
+  relaunching immediately just spends the retry.
+- **`check_stuck` — ALIVE IS NOT WORKING.** Scans pane text for usage/rate-limit
+  markers and prompts. **Logged, never auto-relaunched**: relaunching a
+  rate-limited session spends a retry to learn what we already know. The point is
+  to make the block visible instead of silent.
+- Reads its fleet list FROM `frank.sh`, so the two cannot drift apart.
+
+**FALSIFIED BOTH DIRECTIONS BEFORE TRUSTING IT** — a false negative would kill and
+relaunch healthy sessions. All 10 fleet roles → ALIVE; a plain `bash` window and a
+nonexistent name → DEAD. Stuck-regex: 5 positive controls match, 5 negative
+controls (`converged after N round(s)`, `gate: GREEN`, `29/29 pass`, …) clean, live
+fleet all clear.
+
+**Two traps caught while building it, both mine:**
+- **`pkill -f frank-watchdog.sh` matched its OWN command line and killed my shell**
+  (exit 144), twice — the same self-match trap CLAUDE.md documents for
+  `pgrep -f "make test"`. Fixed by running the watchdog as a tmux window and never
+  grepping for it.
+- **`frank-optimize`'s window was named `claude`**, so the watchdog would have
+  declared it down and launched a DUPLICATE. Renamed window 8 → `frank-optimize`.
+  The other two `claude` windows (`/home/neo`, `/home/neo/vibestorm`) are the
+  owner's ad-hoc sessions and were left alone.
+- **A brand-new tree parks Claude Code on the trust-this-folder prompt.** Both new
+  agents were ALIVE and doing nothing. That is what `check_stuck` exists for.
+
+**Dispatched:** frankC → `regression-lib-test-crtl-reachability-3` [C p70].
+frankD → `docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out`
+[D p45] (head is parked). Both onboarded with lane rules, the narrow gate, the
+do-not-widen rule, and **Track D got the claims-discipline section verbatim** — the
+two different "byte-identical" claims are the one thing public copy must not
+conflate. pxx-a5 → `regression-test-core-test-nilpy-str-ascii-cache` [N p70].
+
+**Fleet is now 10 roles + the watchdog.** Recorded ceiling was "4 died at once on an
+account limit, 2026-08-25"; six ran fine two nights, ten is new territory — the
+watchdog is what makes it recoverable rather than a gamble.
