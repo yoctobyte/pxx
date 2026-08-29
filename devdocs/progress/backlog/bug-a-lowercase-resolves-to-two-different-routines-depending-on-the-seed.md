@@ -82,3 +82,42 @@ which is the only state in which anyone reads its output.
 
 Do not allowlist the note. Suppressing the one finding a new check produces, in order to
 adopt the check, discards the check's only demonstrated result.
+
+---
+
+## MERGED 2026-08-29 — a duplicate of this ticket, and what it adds
+
+`bug-p-lowercase-resolves-to-a-different-implementation-in-the-seed-build` was
+filed today by the coordinator from a fresh `forwardlint` run, **not knowing this
+ticket existed** — although this ticket's own frontmatter records
+`found-by: frankwasm (via tools/forwardlint.py), verified by frank-coordinator`
+on **2026-08-28**. A previous session of the same role had already verified it.
+The duplicate is in `rejected/` as a tombstone, not deleted, so citations resolve.
+
+**What the duplicate adds, kept because it is not in this ticket:**
+
+- **Current line numbers.** `pasparser_expr.inc:1927` uses `LowerCase`;
+  declaration at `pasparser_proc.inc:2384`.
+- **The specific hazard for a Pascal parser.** `LowerCase` on non-ASCII bytes is
+  exactly where a system-unit implementation and a hand-rolled one are most
+  likely to diverge — locale handling, bytes ≥ 128 — and identifier case-folding
+  is on the path for **every source file compiled**.
+- **Fix ordering.** Before adding the `forward;`, **diff the two implementations
+  over the byte range this call site can see.** If they already agree, it is a
+  one-liner and this closes. If they do **not** agree, the seed-built compiler
+  has been behaving differently from the self-hosted one, and that is a much
+  larger finding than this ticket.
+- **The anti-fix.** Do *not* resolve it by deleting our `LowerCase` and relying
+  on the system unit without asking the same question — that changes which
+  implementation the **self-hosted** build uses, silently, in the other
+  direction.
+
+**Track question, left open rather than silently changed:** this ticket says `A`,
+the duplicate said `P`. Both call sites are in P's carved-out `pasparser_*.inc`,
+which argues P; the shared `LowerCase` and the seed-build property argue A.
+Whoever takes it should set the letter deliberately. Prio here is 35; the
+duplicate argued 45 on the grounds that a silent behavioural fork between two
+builds of the same compiler is worse than a cosmetic divergence. **Not
+re-prioritised by the duplicate's author** — that call belongs to whoever owns
+the lane, and re-ranking someone else's ticket to match your own filing is how a
+board loses its ordering.
