@@ -12,9 +12,9 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| feature-opt-o3-register-pressure | O | 70 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
+| feature-opt-o3-register-pressure | O | 70→50 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 
-## unfinished (21)
+## unfinished (22)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -29,6 +29,7 @@ _none_
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 65 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
+| feature-opt-o3-register-pressure | O | 50 | feature |  | — |
 | feature-pascal-corpus-expansion | P | 75 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 | feature-pascal-corpus-fpc-testsuite | P | 65 | feature | Pascal corpus rung 1 — FPC test-suite subset (conformance) | — |
 | feature-pascal-corpus-generics | P | 65 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
@@ -752,6 +753,7 @@ _none_
 - [p 50] [D] docs-devnotes-ai-assisted-build [parked — re-claim, do not duplicate]
 - [p 50] [C] feature-c-import-a-pascal-unit-under-a-mangled-name [parked — re-claim, do not duplicate]
 - [p 50] [A] feature-nested-routine-fixed-array-capture
+- [p 50] [O] feature-opt-o3-register-pressure [parked — re-claim, do not duplicate]
 - [p 50] [A] feature-release-checksums-repro
 - [p 50] [A] refactor-a-target-dispatch-chains-fail-open
 - [p 50] [C] refactor-c-string-literal-decay-belongs-at-the-producer
