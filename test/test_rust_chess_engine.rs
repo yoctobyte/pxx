@@ -9,11 +9,14 @@
 // (vs u8), Square as a plain i64 (vs Square(u8)), no Option/Result/String (best
 // move printed with println! + `as char`).
 //
-// This file compiles as written under rustc: the earlier revision opened each
-// search node with an UNINITIALISED `let mut mv: [Move; 256];`, which pxx
-// accepts (it does not enforce definite-init) and rustc rejects. MoveList::new()
-// replaces it with `[Move { .. }; 256]`, the evaluate-once/copy-the-rest repeat
-// form, which is what the real ArrayVec-backed source does too.
+// The move list is the ArrayVec shape the real source uses. The earlier revision
+// opened each search node with an UNINITIALISED `let mut mv: [Move; 256];`,
+// which pxx accepts (it does not enforce definite-init) and rustc rejects
+// outright; MoveList::new() replaces it with `[Move { .. }; 256]`, the
+// evaluate-once/copy-the-rest repeat form. That does NOT make the file
+// rustc-clean -- it still indexes slices with i64 rather than usize, and still
+// mutates the board through `&[i64]` rather than `&mut [i64]` -- but the move
+// list no longer has a form with no Rust meaning at all.
 //
 // Verifies two things end to end:
 //   perft(4) = 197281   (movegen correctness with the struct move list)

@@ -506,3 +506,43 @@ rather than the array being left as zeroed bss.
 result — is a parse error (`unexpected token near: ml get >>> from`). The test
 binds `let m: Move = ml.get(0);` first. That is a real Rust shape and worth a
 rung of its own; it is not on the path to the corpus rewrite.
+
+### Stage 4 — the corpus rewrite (the ladder's last item), DONE
+
+`test/test_rust_chess_engine.rs` now carries the ArrayVec shape end to end:
+`MoveList { data: [Move; 256], len: i64 }` with `new`/`push`/`get`/`len`,
+`gen_moves(.., ml: &mut MoveList)` returning nothing, and the three search loops
+reading slots back through `ml.get(i)`. `fn add(ms, n, ..) -> i64` and the
+hand-threaded count are gone. Output unchanged: `perft4 197281` /
+`bestmove a1a8`.
+
+Rung 16 was the only frontend work it needed. Everything else was measured
+working *first* — which is the point worth carrying forward: the ticket's
+standing note that record-value array copies were "not yet wired" was stale, and
+the fastest way to find that out was to write the six-line probe rather than
+believe the note.
+
+Cost: 0.252s vs 0.192s, the 255 constructor copies plus the ~6 KB by-value
+return, once per search node. Recorded in the corpus ticket so it is not
+re-measured later as a regression.
+
+Two pre-existing Track R bugs found while probing, filed under
+`devdocs/progress/experimental/` and deliberately NOT fixed here — both are
+worth a rung each and neither is on this ladder:
+
+- `bug-rust-slice-param-fn-erases-mains-record-array-element-type` — a fn with a
+  slice param and arity >= 2, declared before `main`, makes a `[Struct; N]`
+  local in `main` lose its element record type. Loud (parse error on `.field`)
+  for a struct element; **silent — a segfault —** when the slice's element type
+  is that same struct. Ticket carries the full 12-row probe matrix. The
+  mechanism is NOT diagnosed: two measured facts (it is specific to `main`, and
+  the fn must precede `main` in token order even though the prescan registers
+  every signature first) kill the obvious "the slice UClass shifts an index"
+  story, so the ticket says so instead of recording a plausible guess.
+- `bug-rust-whole-array-borrow-as-a-slice-argument-segfaults` — `f(&arr)`
+  compiles clean and crashes; only `let s = &arr[lo..hi]; f(s)` is wired. The
+  `let`-level lowering exists and the argument-position one does not, which is
+  the textbook double case `normalise-dont-special-case.md` describes.
+
+Also parked, found in the same session and noted in rung 16: `ml.get(0).from` —
+a field access on a *call* result — is a parse error.
