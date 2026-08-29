@@ -2058,3 +2058,126 @@ Two silent wrong-value bugs surfaced in the same pass, both worth their shape:
   exists precisely *because* applications guard an absent `sys` attribute with
   `try/except AttributeError`; an arm that answers a value walks them down the
   wrong branch silently. A gate applied on one of two paths is not a gate.
+
+### 49. A RED IS BOUNDED BY THE MACHINE THAT RAN IT TOO — the reproduction condition is a claim, and it is rarely measured
+
+frankB, 2026-08-29, the reactor slot-0 aliasing.
+
+The ticket said — and the coordinator repeated it in the dispatch — *"invisible on
+every 12-core box, deterministic above 19 threads, found on `seven` (24 cores)."*
+The coordinator went further and told frankB it **could not verify its own fix**
+on a 12-core host, and to bank an honest "this still needs a big box".
+
+**It reproduces on 12 cores.** `MAX_REACTORS` is exhausted by **worker threads**,
+and the worker count only *defaults* to the core count. `palparallel` has exported
+the override for as long as the bug has existed:
+
+```pascal
+PXXSetParForWorkers(20);   { PAR_MAX_WORKERS = 64 is the only ceiling }
+```
+
+One line, and the ticket's own program is **0/8 clean unfixed** on the 12-core box
+— canary fatal, `err=37`, `err=50`, `err=59`, hard crashes with no output — and
+10/10 after.
+
+**The ticket's evidence was a correct measurement with a wrong inference bolted
+on.** Its `taskset` table is real: vary the affinity mask, watch the failure
+appear and disappear. But `taskset` changes the affinity mask, `QueryCpuCount`
+*reads* the affinity mask, and the worker count follows from it. **The experiment
+was dialling the worker count and reading the result as a property of the
+hardware.** Every number in the table is right; the variable was misnamed.
+
+This is the standing rule *a green job is a claim bounded by the machine that ran
+it* — turned around. **"Only reachable above 16 hardware threads" was equally
+bounded: true of every run anyone had made, and not a property of the code.** A
+reproduction condition feels like a finding because it came from observation, but
+it is an inference about *why* the observations differed, and that half is usually
+untested. `seven` is what made this **noticed**, not what made it reproducible.
+
+**Cost of believing it:** a fix nobody could verify without scarce hardware, a
+regression test that would run almost nowhere, and — worst — a coordinator
+instructing a worker not to trust its own machine. The check that dissolved it was
+reading what the count actually depends on.
+
+**Corollary on the fix, because the guard alone was not shippable.** `slot := -1`
+plus an explicit refusal is right, but with `MAX_REACTORS` still 16 every ordinary
+`parallel for` with async work on a 17+ thread host would then **halt** —
+converting silent corruption into a guaranteed hard failure for exactly the users
+on the hardware where it was found. Raising the ceiling to 64 (= `PAR_MAX_WORKERS`,
+matching the other two tables in `lib/rtl`) is what makes the guard safe to ship;
+the guard is what makes the raise honest. **A correctness fix that turns a silent
+wrong answer into a crash for the affected population is not finished.**
+
+And: **raising the ceiling made the guard unreachable from Pascal, and an
+unreachable guard is an untested one** — hence `-dPXX_SCHED_TINY_REACTORS`
+lowering it to 2 so three threads overrun it. Sibling of face 33.
+
+### 50. ONE SAMPLE PER CELL READS EXACTLY LIKE A MEASUREMENT AND IS A COIN FLIP WITH A TABLE DRAWN AROUND IT
+
+Same work, and the author caught it on itself.
+
+Chasing a racing exit status, frankB sampled each width **once** — 216 / 0 / 0 —
+and derived a clean deterministic rule: *"one refusal reports correctly, two or
+more exit 0."* **That rule had already reached a source comment before it was
+re-run.** Repeating the runs destroyed it, and the obvious minimal repro (six
+plain `palthread` threads all calling `Halt`) does not reproduce at all — 6/6 at
+216.
+
+**A one-sample-per-cell table is formally identical in appearance to a measured
+one**: same axes, same cells, same air of rigour, and it renders a coin flip as a
+law. Nothing downstream can distinguish them, because the sample count is exactly
+what a results table omits.
+
+The honest resting state — **reproduced, bounded, NOT diagnosed** — went into
+`bug-b-concurrent-halt-from-several-threads-exits-0` *with the negative result in
+it*, and the source comment now says what was measured rather than what was
+inferred. That is the correct disposal: the pattern was not confirmed, so the
+claim shrank instead of the ticket closing.
+
+What shipped instead is properly bounded: `Halt`'s exit path *joins* the workers,
+so serialising the refusal hung the process (124 under `timeout`); calling
+`exit_group` directly gives **216 in 30/30 runs at widths 3/4/8/20/64.** Note the
+sample count is stated.
+
+### 51. A BEHAVIOUR-PRESERVING CHANGE VERIFIES IDENTICALLY TO A NO-OP — prove the change happened, separately
+
+frank-optimize-b4, 2026-08-29, the `EmitLoadVarA64` scratch collapse.
+
+The verification was strong: 30 aarch64 differential pairs with 0 behaviour and 0
+size differences, byte-identical output on x86-64 / i386 / arm32 / riscv32 at all
+three levels, self-host fixedpoint converged. Every row is what a correct
+refactor produces.
+
+**Every row is also exactly what an edit that did nothing produces.** So b4 ran one
+more: **332 bytes differ** in the aarch64 binaries at each level. *"Identical size
+plus identical behaviour is also exactly what a no-op edit produces, and I have
+already published a vacuous diff once in this repo."*
+
+When the intended effect is *no observable difference*, the entire test suite
+becomes a control with no treatment arm, and a change that silently failed to
+apply — a stale build, a patch to a dead branch, an edit under a define nothing
+sets — passes every check with full marks. **The instrument must be able to tell
+"correct" from "absent", and a behaviour-preserving change requires a
+counter-property that proves the code moved.** Face 38's counter-property idea
+applied to a refactor rather than a counter.
+
+Two more from the same verification, both about instruments hiding their own gaps:
+
+- **The harness swallowed failed compiles** — `|| continue` meant a program that
+  no longer built dropped out of the comparison, so a change breaking compilation
+  outright would surface as a *smaller comparison count*, never as a failure. It
+  was found only because b4 hardened the harness to report skips: 3 of 6 pairs
+  were being silently dropped on the first run. **A count is not a result unless
+  the denominator is stated** — the same defect as a census whose skips are
+  invisible.
+- **The aarch64 corpus is thinner than the census implies.** `jsondemo` does not
+  build for aarch64 (`aggregate result with more than 8 params not supported` in
+  `builtin/pylib.pas`, pre-existing), and `life` and chess are absent too — 3 of
+  11 programs skipped. The census counted target-independent IR shapes and remains
+  valid *as a census*; what does not follow is that the same list is available for
+  **behavioural** verification. One table, two uses, and only one of them was
+  checked.
+- **b4 undercounted its own note, one day later.** It had written "skGlobal and
+  tySingle" as the x1 users; the real count was four code paths across three arms,
+  the by-ref-param deref being the missed one. Same inherit-the-population shape as
+  faces 41 and 48 — this time the stale population was the author's own note.
