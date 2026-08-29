@@ -61,7 +61,7 @@ Docs stay internally consistent; the table above matches what
 every row. Do not rebuild the compiler.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 84bfd0374.
 
 ---
 

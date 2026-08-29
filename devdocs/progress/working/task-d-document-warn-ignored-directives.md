@@ -3,6 +3,8 @@ summary: "New --warn-ignored-directives flag needs a row in docs/reference/cli.m
 type: task
 track: D
 prio: 20
+status: working
+owner: frankD
 ---
 
 # Document `--warn-ignored-directives`
