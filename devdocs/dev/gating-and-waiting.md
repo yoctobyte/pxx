@@ -21,8 +21,24 @@ Track T's limited/full tiers, so the coverage is not lost — it is offloaded.
 
 **Which mode to run, and why you must not widen it, is CLAUDE.md's call** — see
 "THE PER-FIX LOOP" there; it is the authority and this file does not restate it.
-The one-liner: `gate.sh quick` per fix, then push; breadth is Track T's, run
-against your exact SHA. `full` is for when T is *proven* down.
+Two things that are safe to say without restating it: breadth belongs to Track T
+and runs against your exact SHA, and `full` is for when T is *proven* down
+(`twatch.py --status` exit 1, or `trackt.py health` reporting DOWN — slow or
+stale is not proven).
+
+> **Corrected 2026-08-30 (frankD).** This paragraph used to end *"The one-liner:
+> `gate.sh quick` per fix, then push"*, which contradicted CLAUDE.md — where
+> `gate.sh quick` is **optional** per fix (run it when you touched something you
+> are nervous about) and **required before a pin**, the one place the proof is
+> mandatory. The line predated the 2026-08-25 change that moved the proof off
+> the critical path; it did not disappear, it moved.
+>
+> Note the shape, because it is the one to watch for in any doc that defers to
+> another: **the sentence declaring "this file does not restate it" was
+> immediately followed by a restatement.** A deferral is not a safeguard — it
+> reads as one, which is why the stale summary underneath it went unread for
+> weeks. The reliable version of this pattern points at the authority and then
+> *stops*.
 
 It prints one line per step with its duration, `GREEN`/`RED` at the end, and exits
 with the gate's status. Logs land in one directory, named per step, and a failing

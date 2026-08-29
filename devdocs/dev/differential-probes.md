@@ -1,7 +1,7 @@
 # Differential probes — the bug generator
 
-Four standing harnesses that run small programs under pxx **and** under a
-reference implementation, diff the output, and report divergences. They are the
+Standing harnesses that run small programs under pxx **and** under a reference
+implementation, diff the output, and report divergences. They are the
 most productive bug-finding method in this repo: the night of 2026-08-05, five
 of seven fixed bugs came from adding case batches to two of them, including two
 silent-wrong-value bugs in the backends.
@@ -10,7 +10,13 @@ This page is the **index and the shared rules**. Each script's own header is the
 authority on its specifics and is worth reading before you add to it — they
 record traps that cost real sessions.
 
-## The four
+## The parity probes — ours against somebody else's
+
+**This index is not self-maintaining; enumerate before you trust it.**
+`ls tools/ | grep -iE 'diff|probe|oracle|sweep'` is the population, minus the
+`*_devtest.py` files (those test the tools, not the compiler). Run it before
+concluding no probe exists for your question — see the audit note at the bottom
+of this page for what happened the last time nobody did.
 
 | tool | oracle | answers | lane that owns the TOOL |
 | --- | --- | --- | --- |
@@ -30,9 +36,52 @@ that script automates it.
 output, which `lib-test` already proves green. Anything a cross target prints
 differently is a target-dependent bug.
 
-**Fuzzers** (`tools/fuzz.sh`, `tools/pasmith*.py`, Csmith) are the same idea with
-a generated corpus instead of a curated one, and they belong to Track T — see
-`devdocs/dev/track-t.md`.
+## Self-differential probes — pxx against pxx under a changed condition
+
+These have no external oracle. Their reference is **our own output under a
+different setting**, which makes them the right instrument for a class the
+parity probes are slow to reach: an optimisation that changes behaviour has no
+FPC or gcc to disagree with, because the reference implementation was never
+asked the same question.
+
+**They also inherit the blind spot in full, and harder** — see *AGREEMENT IS NOT
+EVIDENCE* below. Both arms here are not merely pxx, they are pxx built from the
+*same source*, differing only in a flag. A defect that does not depend on that
+flag makes both sides wrong identically and the probe is green. `-O0` and `-O3`
+agreeing tells you the `-O` axis is sound; it tells you nothing whatever about
+whether the answer is right.
+
+| tool | the two sides | answers | run it |
+| --- | --- | --- | --- |
+| `tools/selfcompile_odiff.sh` | the compiler built at `-O0` / `-O1` / `-O2` / `-O3` | do the resulting compilers **emit identical bytes**? | `make test-selfcompile-odiff` (~200s), or the script directly |
+| `tools/optdiff.sh` | every standalone-runnable test program, at each `-O` level | same stdout+stderr and exit code at every level? A DIFF is the **silent-miscompile class**, the highest severity Track T can detect | `testmgr --tier opt`; `--shard i/N` to split |
+
+**`selfcompile_odiff.sh` closes the hole CLAUDE.md names in its own claims
+section**, and its header quotes that section verbatim as its reason for
+existing: the self-host fixedpoint proves byte-identity **at one optimisation
+level**, and *"a `-O0`-only self-compile failure passed the entire gate on
+2026-08-19 and was found by a benchmark."* If you are about to lean on "it passes
+the self-host gate", this is the probe that says how far that claim reaches.
+
+## Library-specific probes
+
+| tool | oracle | answers | lane |
+| --- | --- | --- | --- |
+| `tools/libm_diff_sweep.c` | glibc's libm | do crtl's `exp`/`log`/`pow`/`cbrt` agree with glibc? | B |
+| `tools/reportlab_diff.py` | **real** reportlab | does `lib/pcl`'s reportlab mimic put glyphs in the same place? Compares extracted text + per-word bounding boxes via `pdftotext -bbox`, deliberately **not** byte-identical PDFs | B |
+| `tools/gen_arch_probe.py` | — (environment check) | does the QEMU user-mode environment actually **execute** foreign code? An emulator can be installed yet broken by binfmt; `--version` proves nothing | T |
+
+**Read `libm_diff_sweep.c`'s header before filing anything from it.** crtl's
+`exp`/`log`/`pow`/`cbrt` are correctly rounded and **glibc is not** — its
+documented >0.5-ulp bounds misround roughly 6e-4 of random args for `exp`, 1e-4
+for `log`, 9e-4 for `pow` and **~55% for `cbrt`**. A nonzero diff count is the
+expected result, not a bug report: judge each diff against a high-precision
+reference (Python `decimal`, 80+ digits) first. In the 2026-07 sweeps every diff
+was glibc's.
+
+**Fuzzers** (`tools/fuzz.sh`, `tools/pasmith*.py`, Csmith via
+`tools/csmith_fuzz.py`) are the same idea with a generated corpus instead of a
+curated one, and they belong to Track T — see `devdocs/dev/track-t.md`.
 
 **`PXXDBG=a.poisonslot` is a fifth shape and is documented in the playbook, not
 here**, because it has no external oracle at all: it compares a program against
@@ -274,3 +323,30 @@ feel.
 treat everything above that line as untested by it.** For anything at or above
 the frontend the oracle has to be foreign — FPC, gcc, CPython — which is
 precisely what the four probes at the top of this file are for.
+
+
+---
+
+## Audit note, 2026-08-30 (frankD), measured at `9899bf1ab`
+
+This page opened *"Four standing harnesses"* over a table of **five**, and
+listed **six** of the ten probe-shaped tools in `tools/`. The four it omitted are
+now above. What makes the omission worth recording rather than just fixing:
+
+- **`selfcompile_odiff.sh` was built specifically to close a hole CLAUDE.md
+  documents, quotes that hole in its own header, is wired into the Makefile and
+  scheduled by testmgr — and was not in the index the fleet reads to find
+  probes.** A tool being in CI does not answer *"is there already a probe for
+  this?"*, which is the question this page exists to answer.
+- **`libm_diff_sweep.c`'s absence had a sharper edge than the others.** Its
+  header carries the warning that a nonzero diff against glibc is *expected*
+  because crtl is correctly rounded and glibc is not. An index that omits the
+  tool also omits the warning, and the failure mode is not a missing check — it
+  is a **confidently filed bug against correct code**.
+
+The generalisable part: **a count in a prose header is a claim that goes stale in
+silence, because nothing re-derives it.** *"Four standing harnesses"* was true
+when written and the table under it had already grown to five without anyone
+noticing the sentence above it. That is why the enumeration command now sits at
+the top of this page instead of a number — the same substitution CLAUDE.md's
+claims section makes for the two byte-identicals, applied to an index.

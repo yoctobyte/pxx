@@ -166,12 +166,39 @@ routes through it — `GetMem`/`New`/`ReallocMem`, class `Create`, AnsiString,
 dynamic arrays, managed-record helpers. So the per-mode contract is about how
 that single allocator is *entered*:
 
+**The authority is `compiler/compiler.pas:1604-1606`** — the CLI gate that
+accepts or refuses `--threadsafe`. Read it rather than this table if they
+disagree; `grep -n 'ThreadSafeMode and (TargetArch' compiler/compiler.pas` is the
+whole check, and `{$threadsafe on}` enforces the same set at `lexer.inc:1844`.
+
 | Mode | Allocator backing | Threads + concurrent alloc |
 |---|---|---|
-| hosted x86-64, `--threadsafe` | mmap arenas, **spinlock** (`BSS_HEAP_LOCK`, `EmitAcquireHeapLock` wraps every alloc/free/realloc codegen site) + lock-prefixed ARC refcounts + statement-atomic console I/O | **supported** — the only supported combination |
+| hosted x86-64, `--threadsafe` | mmap arenas, **spinlock** (`BSS_HEAP_LOCK`, `EmitAcquireHeapLock` wraps every alloc/free/realloc codegen site) + lock-prefixed ARC refcounts + statement-atomic console I/O | **supported** — the hard-lock model |
 | hosted x86-64, default | same allocator, **no locking anywhere** | **rejected at compile time**: `__pxxclone` (under all of `PalThreadCreate`/`TThread`) errors without `--threadsafe` |
-| hosted 32-bit (i386/arm32) & aarch64 cross | same allocator, no lock implementation | `--threadsafe` / `{$threadsafe on}` **rejected at compile time** (was silently accepted, emitting an unlocked binary); the clone stub is x86-64-only anyway |
-| ESP static arena (xtensa / riscv32, bare) | single 64 KiB static arena, bump-only | single-threaded by contract; no `clone`/`futex` syscalls exist there, and `--threadsafe` is rejected like other cross targets. FreeRTOS tasks are outside the PXX runtime — allocating from more than one task is undefined |
+| hosted i386 / aarch64 / arm32, `--threadsafe` | same allocator, locks taken **in Pascal** under `PXX_TS_SOFTLOCK` (`lexer.inc:1012-1023`) — `builtinheap` spinlocks in `PXXAlloc`/`PXXFree`, refcounts through `__pxxatomic_*` | **supported** — the softlock model. `__pxxclone` is emitted by all four backends (`ir_codegen.inc`, `ir_codegen386.inc`, `ir_codegen_aarch64.inc`, `ir_codegen_arm32.inc`) |
+| ESP static arena (xtensa / riscv32, bare) | single static arena, bump-only — `HEAP_ARENA` at `builtinheap.pas:581`, 64 KiB today | single-threaded by contract, and **the only target family `--threadsafe` refuses**: no `clone`/`futex` syscalls exist there. FreeRTOS tasks are outside the PXX runtime — allocating from more than one task is undefined |
+
+> **Corrected 2026-08-30 (frankD), measured at `9899bf1ab`.** The third row said
+> `--threadsafe` was *"rejected at compile time"* on i386/arm32/aarch64, with *"no
+> lock implementation"* and *"the clone stub is x86-64-only anyway"*. **All three
+> clauses were false, and had been since `07fee0844` (2026-07-06)** — *"feat(arm32):
+> libc-free threading — atomics, clone, futex mutex, IO lock"* — which widened the
+> gate to four targets. The fourth row's *"rejected like other cross targets"*
+> inherited the same error: ESP is still refused, but it is now the **only** family
+> that is, so the reason given for it was wrong even though the verdict was right.
+>
+> Worth keeping as a worked example, because this is the shape the repo keeps
+> paying for: **a scope WIDENING invalidates every sentence that stated the old
+> scope, and unlike a fixed bug there is no sibling arm to grep for.** The same
+> widening left five stale comments in `compiler/**`, tracked separately as
+> `bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july`
+> (Track A — not fixed here; this is the doc, not the code).
+>
+> And note *which* direction the error ran. A doc that under-promises reads as
+> conservative and safe, so nobody checks it: a reader targeting aarch64 would
+> have concluded a thread-safe build was impossible and designed around it. **A
+> false limit is quieter than a false capability**, which is exactly why it
+> survived seven weeks.
 
 Refcounting vs heap safety stay SEPARATE layers: the lock-prefixed ARC
 refcount updates are necessary but not sufficient — concurrent
