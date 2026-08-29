@@ -15864,3 +15864,68 @@ rolls. **What makes that cheap rather than expensive is already in force:**
    dispatch, and treat "I'll push when it's done" as the failure mode.
 4. The cost of *over*-running the cap is a wait. The cost of *under*-using a
    two-day window that expires is permanent. **Bias to running hot.**
+
+### A STALE DIRECTIVE — a new shape, and the first one that would have done damage
+
+frankB landed `TStringHelper` in `lib/rtl/sysutils.pas` with FPC's signatures,
+gated by a differential whose `.expected` is **fpc 3.2.2's own stdout for the same
+source, both compilers building it unmodified: 34 rows byte-identical**, and
+negative-controlled by setting one row to Pascal's 1-based `5` instead of `4` —
+**the exact silent wrong answer the ticket exists to retire.** A control that has
+failed once.
+
+**But the finding is the ticket's own landmine warning, which is FALSE**, and I
+verified it rather than relaying it: `test/test_scalar_member_fail.pas` is 24
+lines, `program test_scalar_member_fail;` at `:19`, `writeln(s.Length)` at `:23`,
+**no `uses` clause.** FPC refuses that exact program too. A **sysutils-scoped**
+helper leaves it correctly refused *for the same reason FPC refuses it*.
+Re-pointing it — which the ticket instructs, **"in the same commit"**, citing a
+precedent where the same move had been right — would have retired a test that is
+right as written and is now *more* precisely right: it pins that the helpers are
+**unit-scoped rather than ambient**. Marked in place, `a49bb42b2`.
+
+> **Every prior instance of this repo's stale-prose family was a CLAIM** — a
+> `blocked-by` outliving its blocker, a stall note, a withdrawn limit. **This is
+> the first stale DIRECTIVE, and directives are the expensive half: a stale claim
+> invites CHECKING, a stale instruction invites COMPLIANCE.**
+>
+> And it got **more persuasive as it got more specific** — it named the file, the
+> line range, the grep string, the failure mode, and a precedent commit. Every one
+> of those reads as evidence someone verified it. **Re-reading it more carefully
+> would have made it more convincing, not less.** Only reading the *test* instead
+> of the text *about* the test could catch it.
+
+The tell that was visible and unread: the line reference had **drifted** —
+`Makefile:5419`, not `:4170-4171`. **A directive citing a line number that has
+moved is a directive nobody has executed since it was written.**
+
+**frankB's own near-miss, self-caught:** its first draft made `GetLength` public so
+the differential could exercise the accessor behind the blocked property. FPC
+declares it private. That would have been **a member we expose and the reference
+does not, invented to work around our own gap** — the shape of a
+compiler-appeasement workaround, in a library rather than a compiler. Kept private;
+`Length` stays declared as a property, does not resolve, and is **honestly
+ungated** with the header saying so. *An honestly ungated capability beats a gated
+adjacent one that looks complete.*
+
+It filed `bug-p-a-type-helper-cannot-declare-a-property` [P p60] and left the
+library **platonic** — so the library half starts working when the P fix lands,
+with no change to it.
+
+**Dispatched frankB to its own P-side follow-up** (the property gap + the receiver
+generalisation, same dispatch block in `pasparser_lval.inc`). **File allocation
+now:**
+
+| file | held by |
+| --- | --- |
+| `compiler/symtab.inc` | frankA |
+| `compiler/pasparser_lval.inc` | frankB |
+| `compiler/ir_codegen_aarch64.inc` + backends | O campaign |
+
+Verified disjoint rather than assumed — frankA's fix is `NodeMetaclassCi` in
+`symtab.inc`, which is not the lval dispatch block.
+
+Its judgement on `feature-pascal-typed-and-untyped-files` also stands unoverridden:
+it gates on the `string[N]` record-layout question, and shipping without that bakes
+a **silent format incompatibility** the ticket itself calls worse than not having
+the feature. A real blocker, not a scoping preference.
