@@ -4363,3 +4363,99 @@ Generalisation: before concluding a capability is absent, **grep the repo for
 something that already uses it.** A tool that ships with a finder is a tool
 somebody already found.
 
+
+### 109. A stated limit WITH A MECHANISM attached is the highest-yield grep in any doc audit
+
+frankD, 2026-08-30, on hitting the third one in a night.
+
+- `threading.md`: *"rejected at compile time"* on i386/arm32/aarch64, because
+  *"the clone stub is x86-64-only anyway."* False for seven weeks —
+  `compiler.pas:1604` accepts four targets and `__pxxclone` is emitted by four
+  backends.
+- `python-compat-tiers.md`: *"T1 shims only work for modules imported by a single
+  bare name"*, because **a unit name cannot contain a dot**. The blocker was
+  resolved weeks ago, the mangling shipped *exactly as that page proposed it*
+  (`reportlab.pdfgen` → `mimic_reportlab_pdfgen`), and the corpus uses dotted
+  imports routinely.
+
+> **"It does not assert the limit, it EXPLAINS it. The mechanism is still true;
+> only the consequence moved. The reader checks the mechanism, finds it sound,
+> and never tests the conclusion."**
+
+That is what makes this class durable, and it is why it is worse than a plain
+false statement: a bare wrong claim invites a check, **an explained wrong claim
+supplies its own defence.** A unit name still cannot contain a dot. Someone just
+mangled it.
+
+Compounding it, from face 2's corollary: **a doc that under-promises reads as
+conservative, so nobody checks it** — and the cost is invisible, because a reader
+who designs around a capability they believe absent never files a bug about it.
+
+The near-miss the same sweep sets, also frankD's: `lib/py/reportlab/pdfgen.pas`
+is absent **because that page successfully argued against building it.** *A path
+that is missing because the doc won its argument looks identical to a stale
+citation.* Labelled the road not taken rather than "fixed".
+
+### 110. Embedding a ticket's DIRECTORY in a citation breaks it exactly when the work SUCCEEDS
+
+frankD, mechanically sweeping every `path:line` citation in the 41 live docs.
+**6 of 9 directory-qualified ticket citations were stale, and every one rotted in
+the same direction: `backlog/` or `working/` → `done/`.**
+
+Systematic, not six mistakes. **A ticket's directory IS its state**, so a
+citation that names the directory is guaranteed to break at the moment the work
+finishes — and it breaks toward the wrong conclusion: the reader gets *not found*
+and infers the work was **abandoned**, when it was completed. Fixed by using
+`[[slug]]` links, which the corpus already uses and which survive a move.
+
+**Third distinct mechanism that night that hides COMPLETED work**, which nobody
+predicted was a pattern: this one, `wasm-target-findings.md` citing four paths
+that live only on `origin/wasm` (an agent greps master, finds nothing, concludes
+the page is stale or the work was lost), and face 96's converted-sweep blind
+spot. All three **mislead in the direction nobody double-checks, because "it's
+gone" is the conservative-sounding conclusion.**
+
+### 111. An A/B that rebuilds under a `git stash` leaves the wrong binary installed
+
+frankA, self-caught. Eleven probes read 392 KB; the next reading said 367 MB and
+looked like a refutation. **Neither number was wrong.** `compiler/pascal26` had
+been rebuilt *under the stash* as the A/B baseline and never rebuilt after the
+pop, so the second measurement used the unfixed compiler.
+
+**The tell was timestamps, not either number.** Both readings were internally
+consistent, and the artefact carried no marker of which tree produced it — the
+same *path* held two different binaries at two different times, so there was not
+even a second sha to notice. Nastier than a stale control for exactly that
+reason.
+
+Companion, from the same investigation: **a program that fails to run reports a
+beautifully flat memory number.** Grepping RSS without confirming each program
+still printed its output makes an early death look like the fix working
+perfectly.
+
+### 112. Filing a banked item is the first time anyone writes the ARGUMENT down — and that is when the better design appears
+
+frank-optimize-b4, 2026-08-30, splitting two banked wins out of an umbrella.
+
+Item (B) was banked as *"the `cdqe` is provably a no-op, delete it."* True today —
+and **exactly the invariant-dependent elision the same lane had refused three
+hours earlier**, depending on every resident write site re-normalising forever,
+maintained in another file, with a silently-wrong-value failure mode.
+
+> *"I did not notice that while it was a sentence in a log; I noticed it the
+> moment I had to write down why it was safe."*
+
+The filed version needs no invariant — `movsxd rax, r12d`, 3 bytes and one
+instruction against `mov rax,r12` + `cdqe`'s 5 and two, correct whatever the
+upper half holds. **The item got better by being filed.**
+
+So the argument for splitting a banked item out is not only that it becomes
+dispatchable: **a bank entry records a conclusion, a ticket forces the
+justification, and the justification is where the design is actually decided.**
+Same reason a park with the diagnosis banked beats a microfix, one step earlier.
+
+Corollary from the same message, on a distinction most likely to make someone
+think the work is done: the existing `-O2` mirror **swaps operands** and needs
+commutativity; the filed item swaps **evaluation order** with operand roles
+fixed. Different transformation, different legality condition, and only the
+second covers `-`, `shr`, `div`, `mod`.

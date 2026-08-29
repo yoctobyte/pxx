@@ -1707,11 +1707,11 @@ valuable review.
   Told frank3 to stop: B's queue genuinely tops out at a p30 float-ULP bug, and confirming
   that beats filling its capacity. **Loose end flagged, not resolved:**
   `feature-b-mimic-urllib-request-over-the-rtl-http-stack` sits at p30 while
-  `lib/rtl/mimic_urllib_request.py` exists — stale ticket or means more than the file;
+  `lib/rtl/mimic_urllib_request.pas` exists — stale ticket or means more than the file;
   checked, not assumed.
 
   **Loose end closed (verified, one read):** `feature-b-mimic-urllib-request-over-the-rtl-http-stack`
-  is NOT stale. `lib/rtl/mimic_urllib_request.py` is a **present-and-refusing stub** —
+  is NOT stale. `lib/rtl/mimic_urllib_request.pas` is a **present-and-refusing stub** —
   it exists so importing code compiles; `urlopen`/`urlretrieve` raise `NotImplementedError`
   (confirmed at lines 44-51); `Request` is real only because holding what it was handed is
   side-effect free. The ticket is for the real `urlopen` over `lib/rtl/http.pas`. **The
