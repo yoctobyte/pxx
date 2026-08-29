@@ -2486,3 +2486,77 @@ turns those four live Pascal sites into false positives**, and a linter that cri
 wolf gets scrolled past, which is worse than no lint. Priced at p35 against a
 measured 1-in-561 base rate — a never-again lint, not a backlog of hits. **Pricing
 a proposed check against its measured base rate is the right way to file one.**
+
+**Face 55, sharpened by frank-optimize-b4 (2026-08-29) — and this is the better
+form.** "When the defect IS the disorder, minimisation fails; trace the messy
+case" is right as far as it goes, **and tracing the messy case still leaves you
+sampling a race**, which is exactly how the original 3-sample table became a rule
+that was not there (face 50). The stronger move was available all along:
+
+> **Find the question whose answer is not a race.** Not *"what exit status do we
+> get"* — that genuinely depends on which thread exits last — but *"does the
+> process die at all"*, which has one answer.
+
+That converted a flaky three-sample table into **10/10 deterministic in both
+directions**, on x86-64 and arm32 alike:
+
+| | exit status, 10 runs |
+| --- | --- |
+| reverted source + **fixed** compiler | **216**, 10/10 |
+| reverted source + **pre-fix** compiler | **0**, 10/10 |
+
+So the full rule is three steps, not two: minimisation can destroy the defect;
+tracing the messy case finds the mechanism; **but the test you leave behind must
+ask a question the race cannot answer differently.** `test_halt_from_worker_thread`
+carries that reasoning in its header specifically so the next reader does not tidy
+it into a joined repro and quietly disarm it — the same hazard as the workaround
+that becomes a blindfold.
+
+### 58. A COMMENT NAMING THE GAP, INSIDE THE FIFTH COPY OF THE THING THE GAP CAUSED
+
+frank-optimize-b4, 2026-08-29, fixing `Halt(n)`'s five hand-rolled backend arms.
+
+The riscv32 arm was **correct**. Its comment reads: *"EmitExit's own encodings only
+cover a constant."*
+
+> That sentence is what a missing abstraction looks like from inside the fifth copy
+> of itself. **Someone saw the shape, wrote it down, and added a copy anyway.**
+
+The author diagnosed the design flaw precisely — the shared helper handles only the
+constant case — and responded by hand-rolling a fifth arm and *documenting why they
+had to*. The comment is evidence the gap was understood at the moment it was
+widened.
+
+**This is the mechanism by which `normalise-dont-special-case` violations become
+permanent.** A silent copy might be an oversight someone later notices. **A
+documented copy reads as considered**, and the note that would have justified
+fixing the abstraction instead becomes the artefact that makes the copy look
+deliberate. Three of the five `Halt` arms carried a comment saying `exit_group` —
+**a comment is what you write when the rule has nowhere to live** — and the two that
+drifted were the two nobody re-derived, including the primary target.
+
+**The repair shape:** b4 did not edit two constants. It added `EmitExitReg` beside
+`EmitExit`, sharing its reasoning, and reduced every backend's `AN_HALT` arm to
+"evaluate the code, then call it". The verification is the part to copy — a refactor
+folding five arms into one routine, isolated against a compiler carrying the
+evening's other work:
+
+| target | change |
+| --- | --- |
+| x86-64 | 8 bytes, every one `0x3C` → `0xE7` (eight `Halt` sites) |
+| arm32 | 8 bytes, every one `0x01` → `0xF8` |
+| i386, aarch64, riscv32 | **byte-identical** |
+
+**Changing the output of exactly the two arms that were wrong, while leaving the
+three that were right byte-identical, is the strongest available evidence that a
+five-into-one refactor preserved what it touched** — and it is the same
+counter-property discipline as face 51, used here to prove a change did *not* do
+something.
+
+**And the revert was tested rather than assumed, against a real hazard.** The
+scheduler workaround's comment recorded a second measured fact: `Halt`'s exit path
+**joins** the worker threads, and two attempts to serialise the fatal HUNG (exit
+124 at 4, 8 and 20 workers). So removing the workaround could plausibly have traded
+a wrong status for a hang. It did not — the hang came from *serialising* the fatal,
+which this arm does not do — but that was established by running it, and the still-
+true half of the comment was kept.
