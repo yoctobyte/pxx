@@ -125,3 +125,67 @@ it. Also a candidate cause for the two interface tests here.
 `test_cross_var_string_param` still diverges, on `firstchar` alone: indexing a
 managed string through a by-ref parameter (`d[1]`) is still one deref short,
 while `Length(d)`, the tail loop and `taillen` are now correct.
+
+---
+
+## WHY XTENSA WAS THE HOLDOUT — and it was not forgetfulness. frankS, 2026-08-30
+
+The coordinator asked for the line that stops a sixth instance, so: traced, not
+guessed.
+
+`ABIParamSlotHoldsValueAddr` was created on **2026-08-09** in `d68ff8d16`
+("the ABI oracle, slice 1 — the parameter-slot rules"), which converted **five**
+backends to it in a single commit: `ir_codegen.inc`, `ir_codegen386.inc`,
+`ir_codegen_aarch64.inc`, `ir_codegen_arm32.inc`, `ir_codegen_riscv32.inc`.
+`ir_codegen_xtensa.inc` is **not in that commit's file list at all** — and it was
+not too new to be: xtensa codegen has existed since `bd49a5953`, 2026-06-12, two
+months earlier.
+
+### The sweep's own safety check is what hid it
+
+From `d68ff8d16`'s message:
+
+> *The enforceable invariant is greppable: an `IsRef or` chain inside
+> `ir_codegen*.inc` now means someone grew a ninth copy. `grep` finds none.*
+
+That check is sound and it was honestly run. Measured against the parent commit:
+
+| backend | `IsRef or` chains before the sweep |
+| --- | --- |
+| `ir_codegen.inc`, `386`, `aarch64`, `arm32`, `riscv32` | 1 each |
+| **`ir_codegen_xtensa.inc`** | **0** |
+
+Xtensa had zero **not because it was correct, but because it had never
+implemented the rule at all.** It open-coded a single row — the by-value
+Variant case — spelled `(Syms[si].Kind = skParam) and (Syms[si].TypeKind =
+tyVariant)`, which contains no `IsRef` and no `or` chain. So the search found
+every backend holding a *wrong duplicate* and could not see the one backend
+holding *no copy*, and the file that most needed converting is precisely the one
+that satisfied the invariant.
+
+**A search for duplicated logic cannot find the place where the logic is
+missing.** That is the exact inverse of this repo's "if you fix a bug on one arm
+of a double case, grep for the sibling" rule
+([[devdocs/dev/normalise-dont-special-case]]) — grep-for-the-sibling finds
+divergent copies, and is blind to absent ones. The generalisation for a sweep
+that converts N call sites onto a shared helper: **enumerate the backends that
+should call the helper and check each one calls it, rather than searching for
+the pattern being replaced.** The first list is closed and countable; the second
+is defined by what already exists.
+
+### The second half: the verification list had the same hole
+
+The same commit records: *"verified against FPC on x86-64, aarch64 and arm32
+(qemu) plus riscv32."* Four targets, xtensa absent — **because xtensa could not
+be executed**, and would not be until the hosted profile landed 2026-08-29/30.
+
+So both of the sweep's safety nets — the static grep and the differential —
+excluded xtensa for two unrelated reasons that happened to point the same way.
+This is the same sentence as `PXXStrCmp3`'s "four cross backends" and
+`HeapMmap`'s seven arms, arriving from a third direction: **the target with no
+working oracle is the target that keeps the bug**, and it also keeps the bug
+that a conscientious sweep was specifically designed not to leave behind.
+
+Xtensa now runs, and the differential
+([[bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs]]) is what
+found this one.
