@@ -1502,6 +1502,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-rtl-floattostr-caps-at-six-decimals-and-zeroes-small-values | B | 35 | bug | `FloatToStr` keeps SIX decimal places, so it loses 9 digits FPC keeps — and returns `0` below 5e-7 | — |
 | bug-rtl-log10-is-inexact-for-powers-of-ten | B | 55 | bug | `Log10` is inexact for powers of ten — `int(log10(n))` is off by one | — |
 | bug-rtti-offset-static-array | A | 50 | bug | RTTI offset corruption when class/record definitions contain large static arrays | — |
+| bug-rust-whole-array-borrow-as-a-slice-argument-segfaults | R | 35 | bug | `f(&arr)` — borrowing a whole array as a `&[T]` argument — compiles and segfaults | — |
 | bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3 | A+S | 45 | bug | xtensa atomics: the encoders are right and `S32C1I` still faults on esp32s3 | — |
 | bug-selfhost-multifn-ifelse-miscompile | R | 50 | bug | Self-host miscompilation: 3-function program with `if`/`else if` gives wrong result | — |
 | bug-set-of-char-const-corrupts-char-codegen | A | 50 | bug | A `set of char` typed constant corrupts `Ord(char-var)` codegen | — |
@@ -1700,6 +1701,7 @@ should not read it to find out what to do. Grep it freely._
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | docs-cli-fpc-float-errors-flag | D | 40 | docs | One row in docs/reference/cli.md for --fpc-float-errors (landed 2026-08-13): opt-in FPC float-error emulation. The default — quiet IEEE, inf/NaN propagate — is worth a sentence there too, since it is a deliberate divergence from FPC that a Pascal reader will not expect. | — |
 | docs-cross-language-qualifier-note-is-wrong | D | 50 | docs | NOT A COMPILER BUG — re-aimed at docs 2026-08-16. The cross-language qualifier exists and always did: `uses './mymath.c' as cmath;` then `cmath.cube(3)`. This ticket only ever measured the UNALIASED form. What is left is the docs fix: docs/language/name-resolution.md ships a Current-status note saying the escape does not exist. | — |
+| docs-d-document-exec-eval-and-the-builtins-incompatibility | D | 35 | docs | docs/targets/nil-python.md tells the public `eval`/`exec` do not exist (\"No eval of runtime-constructed code\") — but the explicit-dict form has worked since 2026-07-31 via pyeval's tree-walker. Document what exec/eval DO support, the refused ambient form, and the decided __builtins__ incompatibility (decided 2026-08-19, permanent for now). | — |
 | docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out | D | 45 | docs | docs/language/name-resolution.md:47 and docs/targets/nil-python.md:260 quote the bare-import refusal message and state the rule with no carve-out. As of 2026-08-20 a unit declaring {$PYEXTENSION} and binding the cpyext runtime IS bare-importable, so both pages are now wrong in the direction that makes a working program look unsupported. | — |
 | docs-fpc-compatibility-overstates-subset | D | 30 | docs | Track D: fpc-compatibility.md understates the language aim ("useful subset") | — |
 | docs-name-collisions-and-the-as-escape | D | 45 | docs | The user-facing 'how do I deal with a name collision' page. Two languages in one program will both declare `cube`, and the answer — `uses './mymath.c' as cmath;` then `cmath.cube(...)`, or `import mymath as cmath` from NilPy — is true TODAY and documented nowhere. Not blocked, unlike the own-language-first doc ticket: this describes behaviour that already ships. | — |
@@ -2331,6 +2333,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-cfront-stmt-expr-25c1dded | C | 75 | regression | regression: 25c1dded (GNU statement expressions) — 150x cfront slowdown on GTK headers + cJSON/lua corpus breakage | — |
 | regression-demos-00 | T | 40 | regression | advisory: demos#00 red at 98ed38202254 (auto-filed by twatch) | — |
 | regression-fpc-bootstrap-canary-forwards-b310 | A | 40 | regression | advisory: fpc-bootstrap canary red at 603cf2bd — forwards drift + enum-arg from b310 | — |
+| regression-fpc-bootstrap-compiler-2 | P | 40 | regression | advisory: fpc-bootstrap#src:compiler/compiler.pas red at a6698ac28e8b (auto-filed by twatch) | — |
 | regression-fpc-bootstrap-compiler | T | 40 | regression | advisory: fpc-bootstrap#src:compiler/compiler.pas red at 96b6bac331d9 (auto-filed by twatch) | — |
 | regression-fpc-seed-drift-b1976-stale | A | 55 | regression | FPC can no longer compile compiler.pas — 8 errors of accumulated seed drift | — |
 | regression-lib-test-crtl-exp2 | T | 70 | regression | regression: lib-test#src:test/crtl_exp2.c red at 096da361dd93 (auto-filed by twatch) | — |
