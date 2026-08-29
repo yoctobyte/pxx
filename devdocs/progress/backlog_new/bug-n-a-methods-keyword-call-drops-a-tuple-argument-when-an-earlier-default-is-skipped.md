@@ -106,3 +106,39 @@ for an application that cannot wait: name every option before the pad.
 Track N's: `make test-nilpy` green + self-host byte-identical. The repro above
 must bind through the method path, and the `TC(...)` / unit-level rows must
 stay green (they are the control, not the target).
+
+---
+
+## A same-widget, same-method pair in real code (frankwasm, 2026-08-30)
+
+Found while re-running songformatter against HEAD. `settings.py` calls
+`tk.Label(...).grid(...)` twice, nine lines apart, on the **same widget class**
+and the **same method** — and one compiles while the other does not:
+
+```python
+sect_label = tk.Label(self.content, text=section, anchor="w", font=(...))
+sect_label.grid(row=row, column=0, columnspan=2, sticky="we", padx=8, pady=(10, 2))   # line 178 — COMPILES
+...
+label = tk.Label(self.content, text=key, anchor="e")
+label.grid(row=row, column=0, sticky="e", padx=(8, 6), pady=2)                        # line 183 — FAILS
+```
+
+`pascal26:183: error: no overload of grid matches these arguments`. Line 178 is
+before it and produced no error, so it bound.
+
+The tuple is present in **both**. What differs is only **which keyword carries
+it** — `pady` at 178, `padx` at 183 — plus the presence of `columnspan` at 178,
+which changes how many earlier defaults are skipped. That is a controlled pair
+the synthetic repro cannot express: same receiver type, same method, same
+signature, tuple in both, opposite outcomes.
+
+So the defect is **not** "a tuple argument is rejected". It is positional: a
+tuple is rejected at some argument slots and accepted at others, as a function
+of which earlier defaulted parameters were left unbound — which is what this
+ticket's title already says, now with real-code evidence for the *accepted*
+half. Any fix should assert both lines, since a fix that makes tuples work
+everywhere would pass a test built only from line 183.
+
+**This is the wall songformatter is standing at.** It blocks `settings.py`,
+`convertrawtext.py` and `SongFormatter.py`, all three at a `grid(padx=(...))`
+call. `key_analysis.py` compiles clean.
