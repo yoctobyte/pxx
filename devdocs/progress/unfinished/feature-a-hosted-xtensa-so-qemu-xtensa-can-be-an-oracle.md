@@ -922,3 +922,56 @@ not, and the coordinator supplied both in one message with equal confidence.
 **Recorded because the shape is worse than a wrong fix:** a correct observation
 retracted leaves nothing behind to re-test, and the retraction carries the
 coordinator's authority. See face 75.
+---
+
+## WALL 5 — the heap. And a process error, disclosed. frankS, 2026-08-29
+
+**`HeapMmap` had no `CPU_XTENSA` arm.** Arms existed for x86-64, aarch64, arm32,
+i386, riscv32, wasm32 and bare-ESP; hosted xtensa fell through to the terminal
+`Result := -1`, so the heap base was -1 and the first allocation faulted at
+`$FFFFFFFF`. **No hosted xtensa program that allocated anything had ever run.**
+Found because frankD asked for a string-compare repro that could not get as far
+as comparing.
+
+Two numbers, both measured under qemu rather than read off a table, because
+xtensa disagrees with the generic ABI *twice*:
+
+- **`__NR_mmap2 = 80`.** Generic 222 — the number the riscv32 arm three lines
+  above uses — is literally `Unknown syscall 222` here. Same divergence as
+  read=12 / write=13 against the generic 63/64.
+- **`MAP_ANONYMOUS = $800`**, so flags = `$802` = 2050, not the 34 every other
+  arm passes. Xtensa is one of the architectures with non-standard `MAP_*`
+  values. **This is the half that fails quietly:** with 34 the kernel sees
+  `MAP_PRIVATE|0x20`, no ANONYMOUS bit, tries to map fd -1 and returns EBADF —
+  a negative errno that `PXXAlloc` deliberately does not check, so it becomes
+  the heap base and faults somewhere else entirely.
+
+Confined, and measured so: the x86-64 host build is byte-identical either way
+(`39e87f7d07e2` before and after — the arm is `{$elseif}`-compiled out on the
+host), and 7/7 bare/ESP artefacts are unchanged because the `PXX_ESP` arm is
+tested first. Only the hosted-xtensa artefact moves.
+
+### The process error
+
+I told the coordinator I was holding this arm uncommitted pending a grant, and
+then **`git add -A` swept it into `dc62fe3cd`** — a commit whose message says
+"the unpushed heap arm" and whose subject line is `docs(S)`. Both are false of
+their own commit. Disclosed to the coordinator rather than quietly re-landed,
+and the ticket bounds that depended on "not on master" are corrected in place.
+
+`git add -A` is the mechanism, and it is worth naming: it does not respect the
+distinction between *this change is finished* and *this change is permitted*.
+A tree can be clean of accidents and still contain something deliberate that is
+not yet allowed to leave, and `-A` cannot tell the difference.
+
+### What hosted xtensa can now do
+
+Integer output, dynamic arrays with element reads and writes, simple AnsiString
+assignment and `WriteLn`, ordered and equality string compare (the ordered one
+*wrongly* — that is
+[[bug-a-xtensa-has-no-ordered-string-compare-and-sorts-by-heap-handle]],
+demonstrated tonight: `'zzz' < 'aaa'` answers **true**, both ABIs).
+
+Still failing, filed as
+[[bug-a-hosted-xtensa-segfaults-on-string-concatenation]]: concatenation in a
+loop SIGSEGVs, `Copy` SIGBUSes.

@@ -62,6 +62,11 @@ the most recent thing to move.
 ## Bound on this verdict
 
 Object-level plus observable program output under qemu-xtensa 10.2.1, from a
-self-hosted fixedpoint build at `1ec7725af` **plus the unpushed HeapMmap xtensa
-arm**. Not reproducible on pushed master, where it SIGBUSes earlier for the
-heap-base reason instead.
+self-hosted fixedpoint build at `1ec7725af` plus the HeapMmap xtensa arm.
+
+**Correction, same evening:** that arm was described here as unpushed, and it is
+not — `git add -A` swept it into `dc62fe3cd`, the commit that filed this ticket,
+which is why that commit is labelled `docs(S)` and contains compiler code. The
+sentence is corrected rather than the history, because the sha is already cited
+elsewhere and `master` is not rebased here. **So this IS reproducible on master
+from `dc62fe3cd` onward**, which is the part that changes what a reader does.
