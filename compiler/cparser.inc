@@ -67,6 +67,12 @@ procedure ParseCStructDecl; forward;
 function IsBareStructDecl: Boolean; forward;
 function IsBareEnumDecl: Boolean; forward;
 function IsCTypeTok: Boolean; forward;
+{ Called from CNodePointeeTk, ~1000 lines above its body. pxx prescans the
+  whole unit; FPC resolves in source order, so without this the bootstrap
+  seed fails to compile while the self-host fixedpoint stays green — the
+  hole CLAUDE.md names, caught by gate.sh quick's forward lint. }
+function CNodeArrayShape(node: Integer; var elemSz, elemRec: Integer;
+                         var elemTk: TTypeKind): Boolean; forward;
 { FindCTypedef's forward lives in forwards.inc (it is called from an include
   earlier in compiler.pas than this one). }
 function CTypedefNameAt(idx: Integer): AnsiString; forward;
