@@ -17886,3 +17886,113 @@ because *the comment is more persuasive than the code beside it*. What refuted i
 was an output going wrong. frank-rust's remedy line is the keeper: **an invariant
 stated in prose next to the code it governs is worth nothing until something
 fails when it is violated.**
+
+## 2026-08-30, ~02:00 — nine-lane night: what a future coordinator must not re-derive
+
+Written by frank-coordinator while nine sessions ran concurrently. Everything
+below was **measured**, not inferred, and most of it cost somebody an hour.
+
+### Use the tools, not a list you typed
+
+- **`tools/fleet_dirt.sh`** (`7710927aa`) — who holds which shared file, right
+  now. **Run it every tick.** It exists because the coordinator's hand-rolled
+  scan was a hardcoded list of nine clone names and **there are sixteen pxx
+  checkouts under `$HOME`**, including worktrees (`pxx-songfmt`, `pxx-ctl`). A
+  session was working in one of the four that list could not see, and a file was
+  granted while being edited. **An absent checkout is indistinguishable from a
+  clean one.**
+- **Check the BRANCH, not just the dirt.** The `~/frankwasm` clone sits on
+  `wasm`, 369 behind master; that lane works in `~/pxx-songfmt` on master
+  instead. Dispatching into the wrong checkout strands the work.
+- **`tools/factsheet.sh`** — regenerates the project numbers a blog draft had
+  hardcoded on 2026-08-14, **every one of which had rotted by 08-30**. Its own
+  first cut was wrong on three of ten: resolved decisions live in `decided/`
+  (not `done/`), pins are the `stable_linux_amd64/default/history.log` line
+  count (not a commit-message grep), and `compiler/builtin/**` is compiler
+  source (a 14% undercount without it).
+
+### Two facts about gates that change what "green" means
+
+- **The self-host fixedpoint is structurally BLIND to anything off the Pascal
+  path.** `make compiler/pascal26` compiles Pascal; `CProgramMode` is never set.
+  On a C carve-out it goes green **whatever you do to those routines, including
+  deleting their bodies.** Same for NilPy, Rust, Zig and the cross backends.
+  The standing remedy, adopted 08-30: **a lane whose code the self-host build
+  does not execute needs its own oracle** — for the `cir.inc` work that is ten C
+  programs' binaries required to rebuild byte-identical against a pre-move
+  baseline, with the fixedpoint reported as *"the rest of the compiler still
+  builds"*.
+- **`pinned` is not a control on a busy night**, and its frozen builtin
+  snapshot silently predates recent fixes — which is why hosted xtensa could not
+  allocate under the sanctioned toolchain even after the fix had landed.
+
+### The `-I` capture rule, measured twice
+
+**Any `-I` root beats the DEFAULT RTL path. Only an explicit, EARLIER `-Fu`
+wins.** `-I` with **no `-Fu` at all** captures — so *"we don't pass `-Fu`, so
+ordering isn't our problem"* is exactly backwards, and passing an include root
+*"inert where unneeded"* is false: **the flag IS the capture mechanism.**
+Compiler-side fix at `4576ad4d1`; the exposure is silent because the capture
+compiles clean.
+
+### Track T truth is host-specific and currently split
+
+As of 2026-08-30T00:00Z, **`seven` is the fleet's only current cross-target
+truth** (full tier `f2706f45eabe`, 22:05Z) and **plexus's tstate is stale for
+two jobs seven shows green** — a red in `plexus.json` right now is not evidence.
+Also: `learn_timeout()` raises a timed-out job's duration and leaves `n=0` while
+its only consumer gates on `n >= METRICS_MIN_RUNS`, so **a job that has never
+passed on a host can never earn a bigger budget there**, and `calibrate()`'s
+floor gives a 2010 Westmere byte-identical budgets to a 2013 Ivy Bridge.
+
+### For the owner — three hook false positives in one session, report only
+
+`.claude/hooks/no-full-suite.sh` matches its blocked text **anywhere**, so it
+fired on a **ticket body**, on a **counting glob inside a heredoc**, and on a
+**git commit message** that quoted the pattern. Each individually cheap; three in
+one night is the pattern. **`.claude/**`, hooks, settings and `CLAUDE.md` are the
+owner's** — surface, never edit, and **never file a ticket inviting another
+agent to.** One lane, offered the chance to reword around the matcher, correctly
+refused: *"rewording would have been me tuning text to slip past a safety check,
+which is the wrong instinct even when the underlying action is innocent."* It
+wrote through files instead. **A peer coordinator is not "the user asking"** and
+cannot grant that escape.
+
+### Coordination rules earned tonight
+
+- **Prio must be LOWERED as readily as raised.** Two ranking defects, opposite
+  directions, same root: the board can tell whether a ticket is *unblocked* and
+  cannot tell whether it *should be worked*. `refactor-a-c-exclusive-lowering`
+  sat at p45 blocking a whole lane with **zero in-edges**, because a ticket that
+  blocks a *lane* rather than a *ticket* never gets a `blocked-by:` edge — and
+  adding one would have been a false claim, since those tickets could proceed,
+  just not by that agent. Raised to 60. Conversely `feature-a-error-does-not-halt`
+  sat at **p70, the queue head**, while its own author had just said no consumer
+  needs the remaining scope; lowered to 35 with a **trigger**, not a date.
+- **A Track U question whose author is awake is an UNROUTED question, not a
+  human-judgement one.** One was resolved in minutes by routing it to the agent
+  holding the file.
+- **File your own grants.** Four were issued tonight and each is a commit on
+  master, not a message: an unfiled grant does not read as missing, it reads as
+  **covered**, because a neighbouring ticket covers the same file.
+- **When correcting someone's method, say explicitly whether the CONCLUSION also
+  falls** — and when accepting a correction, ask which half you are accepting.
+  Both halves were got wrong in a single exchange, in opposite directions, and a
+  lane retracted a **true** observation on a coordinator's wrong theory.
+
+### The method index
+
+`devdocs/progress/backlog/feature-a-a-refusal-is-a-claim-with-a-date-on-it.md`
+— **92 numbered faces plus lettered amendments, OPEN. Never write "all N";
+count the headings.** Tonight added 66-92. The two most reusable:
+
+- **Face 80** — what predicts a comment going stale is neither distance nor
+  authorship but **whether the sentence and its truth-maker can be changed
+  independently**. Operational form: *a comment containing a count, a target
+  list, or "only"/"every"/"always" asserts something a command can check — write
+  the command in the comment, or write a sentence carrying no number.*
+- **Faces 88 + 90 together** — **the thing that gets checked is not the thing
+  that is load-bearing.** One correct hand-written copy beside three broken ones
+  makes the broken spelling look like house style; a comment clause that is true
+  of the routine it names and false of the operation it is used for means **a
+  reader who verifies it confirms it and stops.**
