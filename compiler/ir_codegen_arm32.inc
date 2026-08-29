@@ -4047,9 +4047,8 @@ begin
         begin
           if IRA[node] <> -1 then
           begin
-            IREmitNodeArm32(IRA[node]);
-            EmitI32($E3A07001); { mov r7, #1 }
-            EmitI32($EF000000); { svc #0 }
+            IREmitNodeArm32(IRA[node]);   { r0 = the exit code }
+            EmitExitReg;
           end
           else
             EmitExit(0);

@@ -4712,10 +4712,8 @@ begin
         begin
           if IRA[node] <> -1 then
           begin
-            IREmitNode386(IRA[node]);                { code -> eax }
-            EmitB($89); EmitB($C3);                  { mov ebx, eax }
-            EmitB($B8); EmitI32(252);                { mov eax, 252 (exit_group) }
-            EmitB($CD); EmitB($80);                  { int 0x80 }
+            IREmitNode386(IRA[node]);                { eax = the exit code }
+            EmitExitReg;
           end
           else
             EmitExit(0);

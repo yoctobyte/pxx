@@ -3769,6 +3769,19 @@ test-threads: $(COMPILER)
 	set +e; $(TESTTMP)/test_sched_exhaust26 > $(TESTTMP)/sched_exhaust.log 2>&1; rc=$$?; set -e; \
 	  tools/expect_same.sh test_sched_exhaust26-rc "$$rc" "216"; \
 	  tools/expect_same.sh test_sched_exhaust26-msg "$$(head -n 1 $(TESTTMP)/sched_exhaust.log)" "fatal: scheduler out of reactor slots (MAX_REACTORS)"
+	# Halt(n) from a NON-MAIN thread must end the PROCESS. x86-64 and arm32 emitted
+	# `exit` (thread exit) rather than `exit_group`, so the fatal killed only the
+	# worker and the status fell to whichever thread exited last — 0, for a thread
+	# finishing normally. The exhaustion arm above cannot cover this: it is a whole
+	# subsystem away from the defect, and it passed for a day while scheduler.pas
+	# worked around the bug by calling exit_group directly. This one asks the
+	# question directly, and asks whether the process DIES rather than what status
+	# it reports — which makes it deterministic instead of a race.
+	# bug-b-concurrent-halt-from-several-threads-exits-0
+	./$(COMPILER) --threadsafe test/test_halt_from_worker_thread.pas $(TESTTMP)/test_halt_worker26
+	set +e; $(TESTTMP)/test_halt_worker26 > $(TESTTMP)/halt_worker.log 2>&1; rc=$$?; set -e; \
+	  tools/expect_same.sh test_halt_worker26-rc "$$rc" "216"; \
+	  tools/expect_same.sh test_halt_worker26-msg "$$(head -n 1 $(TESTTMP)/halt_worker.log)" "worker: calling Halt(216)"
 	# __pxxmulhi_u64: unsigned 64x64->128 high half (x86-64 mul / aarch64 umulh)
 	./$(COMPILER) test/test_mulhi.pas $(TESTTMP)/test_mulhi26
 	tools/expect_same.sh test_mulhi26 "$$($(TESTTMP)/test_mulhi26 | tail -1)" "MULHI OK"

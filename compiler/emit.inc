@@ -410,6 +410,76 @@ begin
   MovRaxImm(SYS_EXIT_GROUP); MovRdiImm(code); EmitSyscall;
 end;
 
+procedure EmitExitReg;
+{ EmitExit for a RUNTIME code — `Halt(n)` where n is an expression. The caller
+  has already evaluated it into the target's natural result register (rax / eax /
+  x0 / r0 / a0); this moves it into place if the ABI needs that and issues the
+  same exit_group EmitExit issues, for the same reason: a bare exit ends only the
+  CALLING THREAD, so in a threaded program the process status is decided by
+  whichever thread exits last — and threads finishing normally exit 0. A fatal
+  then reports SUCCESS at random.
+
+  This routine exists because that rule was previously restated by hand in each
+  backend's AN_HALT arm, six copies of one concept, and TWO of them drifted:
+  x86-64 emitted SYS_EXIT (60) and arm32 `mov r7,#1`, both thread-exit, while
+  i386/aarch64/riscv32 were right and three of those even named exit_group in a
+  comment. The correct answer was sitting one line below the x86-64 bug, in the
+  no-argument branch's call to EmitExit, whose comment above says exactly this.
+  bug-b-concurrent-halt-from-several-threads-exits-0
+
+  The riscv32 arm had already noticed the gap — "EmitExit's own encodings only
+  cover a constant" — and hand-rolled around it rather than closing it. That note
+  is what a missing abstraction looks like from inside the fifth copy.
+
+  Kept deliberately adjacent to EmitExit and NOT merged into it: the constant
+  form can materialise the code itself, this one must not touch the register the
+  caller just filled. Two behaviours, one rule, and the rule is now written once. }
+begin
+  if TargetArch = TARGET_XTENSA then
+  begin
+    { Bare metal: no exit syscall, and no status to report it with. }
+    xtensa_j(0);
+    Exit;
+  end;
+  if TargetArch = TARGET_RISCV32 then
+  begin
+    if EspBareBoot then
+      EmitI32($0000006F)                             { jal zero, 0 — park }
+    else
+    begin
+      { a0 already holds the code. Load a7 AFTER it, so computing the code
+        cannot clobber the syscall number. }
+      EmitI32($05E00893);                            { addi a7, x0, 94 }
+      EmitI32($00000073);                            { ecall }
+    end;
+    Exit;
+  end;
+  if TargetArch = TARGET_I386 then
+  begin
+    EmitB($89); EmitB($C3);                          { mov ebx, eax }
+    EmitB($B8); EmitI32(252);                        { mov eax, 252 (exit_group) }
+    EmitB($CD); EmitB($80);                          { int 0x80 }
+    Exit;
+  end;
+  if TargetArch = TARGET_ARM32 then
+  begin
+    { r0 already holds the code. }
+    EmitI32($E3A070F8);                              { mov r7, #248 (exit_group) }
+    EmitI32($EF000000);                              { svc #0 }
+    Exit;
+  end;
+  if TargetArch = TARGET_AARCH64 then
+  begin
+    { x0 already holds the code. }
+    EmitI32($D2800BC8);                              { movz x8, #94 (exit_group) }
+    EmitI32($D4000001);                              { svc #0 }
+    Exit;
+  end;
+  EmitB($48); EmitB($89); EmitB($C7);                { mov rdi, rax }
+  MovRaxImm(SYS_EXIT_GROUP);
+  EmitSyscall;
+end;
+
 { ===== String table ===== }
 
 function InternKey(const s: AnsiString): Integer;

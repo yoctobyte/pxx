@@ -2962,12 +2962,17 @@ begin
 
             Mirrors the aarch64 arm: evaluate the code into the first argument
             register, THEN load the syscall number, so computing it cannot
-            clobber a0. EmitExit's own encodings only cover a constant. }
+            clobber a0. That ordering now lives in EmitExitReg (emit.inc)
+            together with every other target's, which is where this comment's
+            last sentence used to say the gap was: "EmitExit's own encodings
+            only cover a constant" was a note describing a missing abstraction
+            from inside the fifth hand-rolled copy of it. Two of the six had
+            drifted to a thread-only exit by then —
+            bug-b-concurrent-halt-from-several-threads-exits-0. }
           if (IRA[node] <> -1) and (not EspBareBoot) then
           begin
             IREmitNodeRISCV32(IRA[node]);        { a0 = the exit code }
-            EmitI32($05E00893);                  { addi a7, x0, 94  (exit_group) }
-            EmitI32($00000073);                  { ecall }
+            EmitExitReg;
           end
           else
             EmitExit(0);                         { no argument, or ESP bare: park }
