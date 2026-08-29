@@ -193,4 +193,4 @@ instrument stop lying is bounded and pays immediately; wiring an unknown tail is
 open-ended work of unknown value.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit b76d7461e.
