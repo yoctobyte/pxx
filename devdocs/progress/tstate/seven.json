@@ -27,6 +27,11 @@
   }
  ],
  "host": "seven",
+ "idle_yield": {
+  "aborts": 1,
+  "phase": "pin-verify",
+  "target": "4d1613c173cd8f58852cfd92333aeb623bb5f593"
+ },
  "job_last_pass": {
   "lib-fpc-clean#00": "e417731e90075f589bdc925cbcbe69f368827de6",
   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "e417731e90075f589bdc925cbcbe69f368827de6",
