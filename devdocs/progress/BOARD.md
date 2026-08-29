@@ -57,7 +57,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (309)
+## backlog (311)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -86,6 +86,8 @@ _none_
 | bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire | A | 45 | bug |  | — |
 | bug-a-the-div-by-zero-check-is-still-missing-on-xtensa | A+S | 25 | bug | The last target without a pre-divide zero check. The other five landed 2026-08-23; xtensa was left out because it cannot be RUN on this box (bare profile emits an ESP image, not a Linux ELF), its branches carry only an 8-bit displacement, its windowed ABI rotates the register window on a call, and its divide is two shapes depending on XtensaSoftDivide. | — |
 | bug-a-the-ir-frame-op-doc-asserts-a-frame-layout-riscv32-does-not-use | A | 25 | bug | defs.inc:816 documents IR_FRAME with 'the saved-fp chain IS walkable: [fp] = the caller's fp, [fp + PtrSize] = the return address' — stated as universal. It is false on riscv32, where s0 points at the BOTTOM of the frame and the links sit at +8/+12. ir.inc:4977 knows this and says assuming the common layout 'would have silently walked into the locals'. The lowering is correct (it asks FramePrevFpOffset/FrameRetAddrOffset); the DOC a backend implementer reads is not. | — |
+| bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july | A | 25 | bug | --threadsafe has accepted x86-64/i386/aarch64/arm32 since 07fee0844 (2026-07-06), but five comments across four files still say it is x86-64-only. One of them sits ONE LINE above the four-target condition the same commit edited. No live defect; the code is right everywhere. A new audit sub-shape: a SCOPE WIDENING invalidates every comment that stated the old scope, and there is no sibling arm to grep. | — |
+| bug-a-xtensa-has-no-ordered-string-compare-and-sorts-by-heap-handle | A+S | 45 | bug | `'zzz' < 'aaa'` on xtensa compares the two heap HANDLES as signed ints and answers by allocation order. This is the exact defect PXXStrCmp3 was added to fix — it was applied to i386/aarch64/arm32/riscv32 and xtensa was not visited, and the helper's own comment says 'the four cross backends' when there are five. | — |
 | bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict | N | 40 | bug | pylib treats VT_CHAR and VT_STRING as ONE string type in ordering, repr, concat and text extraction — but `PyVarEq` bails on `p^.VType <> q^.VType` before it ever gets there, and `PyVarHashKey` has no VT_CHAR arm either. So a char-tagged key stores fine and then misses every lookup. No NilPy-reachable repro today (the pystr_ofchar boundary converts at every crossing), but this is the mechanism that turned Counter(str) into a SILENT 0 instead of a loud KeyError. | — |
 | bug-n-a-classmethod-cannot-call-another-through-cls | N | 55 | bug | A classmethod cannot reach another one through its own receiver | — |
 | bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name | N | 45 | bug | `def g(): return 1` followed by `if True: def g(): return 2` still calls the FIRST g. Split out of bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name when that one was fixed: it is a different mechanism — the def side, not the assignment side. A nested def has a position, but PyRegisterDefShells only walks module-level defs at DEPTH 0, so a def inside a branch never gets one. | — |
@@ -799,6 +801,7 @@ _none_
 - [p 45] [A] audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol
 - [p 45] [A] bug-a-a-c-headers-variadic-tail-is-dropped-on-import
 - [p 45] [A] bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire
+- [p 45] [A+S] bug-a-xtensa-has-no-ordered-string-compare-and-sorts-by-heap-handle
 - [p 45] [N] bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name
 - [p 45] [N] bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart
 - [p 45] [N] bug-n-a-nilpy-test-writes-a-fixed-tmp-path-so-concurrent-runs-race
@@ -935,6 +938,7 @@ _none_
 - [p 25] [A] bug-a-set-membership-truncates-the-test-value-on-32-bit-backends
 - [p 25] [A+S] bug-a-the-div-by-zero-check-is-still-missing-on-xtensa
 - [p 25] [A] bug-a-the-ir-frame-op-doc-asserts-a-frame-layout-riscv32-does-not-use
+- [p 25] [A] bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july
 - [p 25] [N] bug-n-a-staticmethod-read-through-an-instance-binds-a-receiver
 - [p 25] [N] bug-n-an-import-inside-exec-is-silently-skipped-and-execution-continues
 - [p 25] [N] bug-nilpy-classmethod-constructors-on-builtin-types-are-absent

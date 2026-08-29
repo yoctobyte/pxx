@@ -356,3 +356,105 @@ least reachable by reading — which means **proximity does not predict
 catchability**, and "read what you already have open" is not the remedy even
 where the comment is on the same screen. The three columns want three things: a
 habit, an oracle, and a sweep. Only the first is free.
+
+---
+
+## 2026-08-29 — sweep pass 2 (frankD): the `builtinheap` seam. **One LIVE bug.**
+
+Prior #1, worked from [[audit-a-builtinheap-invariants-x86-64-inlines-past]]
+rather than rebuilt — claude-N's census was reproduced first (45 reached by
+x86-64, **30** called by a cross backend and never by x86-64: identical numbers,
+so the seam is measured, not assumed) and then read for invariant claims, which
+is what that census explicitly left to a reader.
+
+Two findings, and unlike pass 1 **one of them is a real wrong-answer defect**:
+
+### 1. `bug-a-xtensa-has-no-ordered-string-compare-and-sorts-by-heap-handle` — LIVE
+
+`'zzz' < 'aaa'` on xtensa compares the two heap **handles** as signed ints and
+answers by allocation order. That is verbatim the defect `PXXStrCmp3` exists to
+fix. The helper's own header says:
+
+> *"**the four cross backends** had NO ordered-string arm at all"*
+
+**There are five.** The fix went to i386/aarch64/arm32/riscv32; xtensa was never
+visited. The word "four" is the entire finding — it reads as a complete
+enumeration, so nobody counted the arms. This is the audit's thesis in its purest
+observed form: *a comment asserting an invariant is a claim about a sibling arm,
+and the count in the sentence is itself an unchecked claim.*
+
+Evidence is measured, and the limits are stated in the ticket: hosted xtensa
+**hangs on hello-world**, so I could not produce the wrong output and did not
+claim to. What stands instead is the guard read directly, the `FindProc` grep,
+and a size delta that cannot be innocent — the ordered compare is **52 bytes
+SMALLER** than the equality compare on xtensa, and **4 bytes larger** on riscv32.
+Note the second-order point: the target with no working oracle is the target that
+kept the bug. Pass 1 concluded one shape wants an oracle; here the *absence* of
+one is the proximate cause.
+
+### 2. `bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july` — a NEW shape
+
+`--threadsafe` has accepted **x86-64/i386/aarch64/arm32** since `07fee0844`
+(2026-07-06). Five comments in four files still say x86-64-only. The code is
+correct at every site; nothing misbehaves.
+
+The reason it is worth a ticket is that it is **not this audit's shape at all**,
+and it is the first sub-shape that argues for something cheap and mechanical.
+There is one concept, one correct implementation, and **a scope that widened
+once** — silently invalidating every sentence in the tree that stated the old
+scope. No sibling arm exists to grep for.
+
+Distance runs the entire range within this single finding, which is why it is
+the most informative item in either pass:
+
+| site | asserts | refuted by | distance |
+| --- | --- | --- | --- |
+| `ir.inc:12730-12733` | "x86-64 only" | `ir.inc:12734` — the condition it introduces, testing all four | **ONE LINE** |
+| `builtinheap.pas:2039` | `PXXStrIncRef` "NON-atomic" | its own `{$ifdef PXX_TS_SOFTLOCK}` atomic arm, 8 lines below | **8 lines** |
+| `defs.inc:809` | `IR_IO_LOCK` "x86-64 + ThreadSafeMode only" | real lock calls in three cross backends | **cross-file** |
+| `ir_codegen386.inc:4099`, `:4242` | "i386 runs single-threaded" | `compiler.pas:1586` | **cross-file** |
+
+`git blame` on the first: **the comment is 2026-07-02 and the condition directly
+below it is 2026-07-06.** The commit that widened the scope edited the line under
+the sentence asserting the opposite and did not touch it. 54 days.
+
+### Claims checked and HOLDING (pass 2)
+
+- **`PXXStrCmp3`'s claim about its x86-64 twin** — *"x86-64's inline sequence
+  uses `repe cmpsb` + the unsigned setcc family"*. Holds: `ir_codegen.inc:3876`
+  is `repe cmpsb`, and `EmitSetcc(opTk, False)` four lines later selects
+  `setb`/`setbe`/`seta`/`setae` (`ir_codegen.inc:3531-3534`). A cross-file claim
+  about a sibling arm that is simply **correct** — worth recording precisely
+  because the audit otherwise only ever writes down the failures.
+- **`EmitAcquireHeapLock386` (`ir_codegen386.inc:106-111`)** — states that i386's
+  lock lives in the Pascal helpers so the codegen-side acquire is a deliberate
+  no-op. Correct, and it is the sentence the two wrong ones 4000 lines below it
+  in the same file should have copied.
+
+### Distance, updated across both passes
+
+| shape | instances | distance | remedy |
+| --- | --- | --- | --- |
+| close sibling | frankA 1-7 | same file / routine | a review habit |
+| self-false | instance 8; `ir.inc:12732`; `builtinheap.pas:2039` | 1-11 lines | an oracle — nothing readable helps |
+| distant reference | frankD pass 1 ×2; `defs.inc:809`; `ir_codegen386.inc` ×2 | cross-file | a periodic sweep |
+| **miscounted enumeration** | **xtensa/`PXXStrCmp3`** | the claim IS the count | **count the arms mechanically** |
+| **stale scope after a widening** | `--threadsafe` ×5 | 1 line to cross-file | **grep the old scope string when you widen a gate** |
+
+The two new rows are the useful ones, because both have a cheap mechanical
+remedy and neither is reachable by careful reading. "Four cross backends" is
+falsified by `ls compiler/ir_codegen_*.inc`. "x86-64-only" is falsified by
+`grep -rn "x86-64.only" compiler/` in under a second. **Pass 1 said the shapes
+want a habit, an oracle and a sweep, only the first free; pass 2 finds two shapes
+whose remedy is a one-line grep — and they are the two that produced the live
+bug and the oldest lie respectively.**
+
+### Still left
+
+45 of 53 first-tier phrase hits; the remaining unaudited `builtinheap` twins
+(`PXXStrEq`, `PXXVarClear`, the console-read family — the float→text family is
+**Track F** by charter and stays out); prior #2 (frontend lowering arms); row 7
+(needs its own grep). And one **new** cheap sweep this pass suggests: every
+comment containing a target enumeration ("the four cross backends", "x86-64 and
+i386", "i386/ARM32/AArch64") checked against the actual backend list — that is
+where both of pass 2's findings live.
