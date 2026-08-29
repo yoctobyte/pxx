@@ -187,3 +187,49 @@ The four mutations run against that ticket, and what each caught:
 
 The one that caught nothing is the one where the fix is still in the file and
 merely unreachable — the variant least likely to be noticed in review.
+
+---
+
+## 2026-08-29 — STEP 1 IS DONE AND NAMED. What remains is a Track A dispatch.
+
+`tools/expect_same.sh` exists, with 11 guards in `tools/expect_same_devtest.py`
+and four mutations proving they fire. Filed and closed as its own ticket —
+[[feature-t-expect-same-a-recipe-assertion-that-prints-its-mismatch]] — rather
+than as step 1 of this one, so this ticket does not read as half-built work.
+The reasoning is worth keeping: **a parent with step 1 landed and 480
+conversions outstanding is worse than an untouched one for whoever inherits
+it**, because "in progress" hides that nobody is on it.
+
+```
+tools/expect_same.sh <label> <actual> <expected>
+```
+
+Exit 0 in silence on equality; on mismatch a labelled unified diff of both
+operands, exit 1. So a converted recipe line reads:
+
+```make
+	tools/expect_same.sh aarch64-fima "$$(tools/run_target.sh aarch64 $(TESTTMP)/x)" "$$($(TESTTMP)/x_x64)"
+```
+
+Four properties beyond "it diffs", each guarded, because the reason field is the
+deliverable and not the diff: the **label** is in the output (the tail must say
+which assertion spoke); `-` is **expected** and `+` is **actual** (pinned, since
+transposition is its own wasted hour); **no absolute `/tmp` path** (testmgr
+rewrites those, so a leaked one varies by construction); and the text is
+**byte-stable across runs** (`diff -u` stamps mtimes on its header lines, and a
+reason that changes every run reads as a *new* failure to anything comparing
+this run's reds against the last).
+
+One deliberate non-change: two empty operands still **pass**, because 480 call
+sites is the wrong place to alter pass/fail semantics — but a warning naming the
+label now goes to stderr, so a vacuous pass is at least visible.
+
+### What is left: exactly the mechanical conversion this ticket describes
+
+Unchanged in shape from the plan above — convert the **480 cross-target**
+assertions first (highest damage, one shape, mechanical), leave the other ~1,981
+until one or two have proven themselves. That work edits `Makefile`, so it
+carries **Track A's file ownership and gate**, and per this ticket's own Gate
+section must not land concurrently with other A edits to `Makefile`.
+
+Nothing here is blocked any more. The helper is a dependency that now exists.
