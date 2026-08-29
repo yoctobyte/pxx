@@ -1803,6 +1803,91 @@ holding the inner handle, where the root case's `IR_LEA` yields the handle
 itself — one deref apart, and `WasmNodeIsDynArray` cannot separate them by node
 kind alone. Everything else about a nested row (write, read, resize) is covered.
 
+### Phase 9h — the slot arms: `Length` of a field, ARC record copy, arrays of records — **DONE, 2026-08-29**
+
+Three separate ops, landed as one phase because the same misreading produced
+all three refusals: **the node's type kind was read as the node's own type when
+it describes what the node points AT.**
+
+**Result on `compiler.pas`: 3698 of 3734, refusals 41 → 36.** And the shape of
+the remainder matters more than the count: **every one of the 36 is now
+blocked, not open.** 35 are the builtins block — `writeELF*`, `writeU8/16/32/64`,
+`LoadFile` — waiting on
+`decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal`
+[U p40], and the 36th is `IR_SYSCALL` (value op 54), which is the same
+question wearing a different hat. **There is no refusal left that this lane can
+act on unilaterally.** The denominator moved 3662 → 3734 across a 370-commit
+merge, so the count is not comparable to 9g's without saying so.
+
+| refusal | shape | closed by |
+| --- | --- | --- |
+| `Length of Pointer` (2) | `Length(b.Bytes)`, `Length(g[1])` — a dyn-array handle in a SLOT | one arm on `IR_FIELD`/`IR_INDEX` at `tyPointer` |
+| `statement IR op 46` (1) | `IR_COPY_REC_MANAGED` — copying a record that owns managed fields | the ARC walk, through a new descriptor-cell indirection |
+| `value of type record in array base` (3) | `list.Items[i].Off := o` on an `array of TRec` | one exemption for `IR_DYNUNIQUE` in `WasmEmitValueAs` |
+
+**The diagnostics were naming their own answers.** `Length of Pointer` printed
+`tyPointer` — which is *precisely the discriminator* x86-64 dispatches this arm
+on. `value of type record in array base` printed `record` — which is the
+ELEMENT kind of an `IR_DYNUNIQUE` whose value is a pointer. Both messages were
+accurate about the fact and pointed away from the fix, and the first one read as
+"pointers are not supported yet" for weeks. Recorded as its own face: *when a
+diagnostic names a cause, ask whether it is naming the discriminator* — and
+prefer refusals that say what SHAPE was seen over what TYPE was found.
+
+**The descriptor cell is the one new mechanism, and it is deliberately not a new
+mechanism.** A record's ARC walk is `PXXRecordRetain(recAddr, desc)`, and every
+register backend reaches `desc` with a code→data relocation resolved after
+`EmitRTTI`. This backend has no code→data fixups at all — it emits addresses
+inline — and the blob's offset does not exist while bodies are emitted. So the
+descriptor goes through one indirection instead: an 8-byte cell in `Data[]`,
+loaded at the use site, filled by `AddDataPtrFix` and resolved by
+`WasmFillData`. That is a second CUSTOMER of the existing relocation scheme, not
+a second scheme. Registered in `WasmFinishMemory`, the only point that is both
+after `EmitRTTI` and before `WasmFillData`.
+
+**The leak probe was decoration until it was falsified, and that negative result
+is the most useful thing in this phase.** ARC correctness is invisible in
+output: a record copy with the retain/release removed prints exactly what a
+correct one prints. The first probe repeated `b := a` in a loop and measured
+FLAT at 1032 bytes against a build with the release *deliberately removed* —
+because repeating one assignment leaks a REFCOUNT, and a bump pointer cannot see
+a refcount. The destination has to own something NEW each iteration for failing
+to release it to cost memory. Rewritten that way it reports 18392/2712 against
+the broken build and 1032 flat at 1000, 9000 and 50000 against the correct one.
+
+**Two arms are named-and-absent rather than silently dropped.** A record passed
+BY VALUE and a FUNCTION returning a managed record both refuse upstream with
+`EmitZeroFrameSlot: unhandled target` — the loud arm of
+`bug-a-emitzeroframeslot-has-no-wasm32-arm` [A p55], which is Track A's. They
+are named in the slice and again in the check's "does NOT catch" section,
+because a slice that fails for something that is not its subject stops being a
+slice.
+
+**Found on the way, filed and not fixed here:** `rs[1] := s` — a string
+assigned to a record ARRAY ELEMENT — compiles clean and segfaults, while the
+plain-variable form `r := s` is correctly rejected. FPC rejects both.
+`bug-p-a-string-assigned-to-a-record-array-element-is-not-type-checked` [P p60].
+It surfaced through a botched line in this lane's own test that the compiler
+agreed with; **a test whose bad line the compiler catches teaches nothing.**
+
+### Three defect-shaped checks expired on the same day
+
+`check_strop.sh` carried the x86-64 string leak's magnitude (401032) as the
+number it compared against. `check_managed.sh` asserted the heap base was still
+below 1024. `check_calls.sh` asserted the heap had no arena. All three were
+written to keep a known defect from being silently encoded, and **all three
+encoded it anyway — as the number or the inequality they compared against.**
+Each went red the day its defect was fixed, in the direction that reads as a new
+regression.
+
+The `exit 1` is what saves the pattern: each one named, in its own failure text,
+the paragraph to rewrite. What replaces them is a different KIND of claim, not a
+smaller one — the heap checks now assert that the base clears the null guard,
+that the arena really holds ~1 MiB and every byte is writable, and that filling
+it leaves the module's globals intact. None of them names the arena's address,
+which is a BSS-layout accident that would make an unrelated change look like the
+bug returning.
+
 - **Milestone:** the wasm-hosted compiler's **emitted output bytes are identical
   to the native compiler's** for the same input.
 - **State this claim precisely.** It is output parity across two hosts of the
