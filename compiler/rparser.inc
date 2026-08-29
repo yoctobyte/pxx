@@ -146,6 +146,21 @@ var
   RAliasName: array[0..R_MAX_ALIASES-1] of AnsiString;
   RAliasTarget: array[0..R_MAX_ALIASES-1] of AnsiString;
   RAliasCount: Integer;
+  { Module names declared by `mod x;` / `pub mod x;`. In a UNITY BUILD (the
+    ladder's stage 3, the same trick test/zlib/runner.c uses) several modules
+    are concatenated into one file, and everything then lives in ONE flat
+    namespace -- but the source still says `attacks::knight(sq)` and
+    `crate::board::Board::new()`. Concatenation does not fix that; the
+    qualifiers have to go.
+
+    Stripping needs to know which `Ident ::` prefixes are MODULES, because
+    `Color::White` and `Board::new` are type paths and must survive. The crate
+    root declares its modules, so `mod x;` is the answer and it is exact --
+    no heuristic about capitalisation, and an unknown `foo::bar` still errors
+    the way it should. `crate` / `self` / `super` are keywords and always go. }
+  RModName: array[0..R_MAX_ALIASES-1] of AnsiString;
+  RModCount: Integer;
+
   { Top-level `const NAME: [T; N] = [...]` — the corpus's attack tables, and
     the reason stage 3 is about data modules at all. Registered as a GLOBAL
     array by RRegisterTopConsts (CurProc < 0 at prescan time, so AllocArray
@@ -178,6 +193,15 @@ begin
       end;
     if not found then Exit;
   end;
+end;
+
+function RIsModuleQualifier(const name: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := (name = 'crate') or (name = 'self') or (name = 'super');
+  if Result then Exit;
+  for i := 0 to RModCount - 1 do
+    if RModName[i] = name then begin Result := True; Exit; end;
 end;
 
 function RStoredName(const s: AnsiString): Integer;
@@ -2534,6 +2558,25 @@ end;
 procedure RStripTopItems;
 var src, dst, depth: Integer;
 begin
+  { Pass one collects `mod x;` names. Separate from the compaction below
+    because a `mod` item may sit BELOW a use of its qualifier, and a
+    single forward pass would then strip nothing. }
+  RModCount := 0;
+  src := 0; depth := 0;
+  while Tokens[src].Kind <> tkEOF do
+  begin
+    if Tokens[src].Kind = tkBegin then Inc(depth)
+    else if Tokens[src].Kind = tkEnd then Dec(depth)
+    else if (depth = 0) and (Tokens[src].Kind = tkIdent) and (GetTokenStr(src) = 'mod') and
+            (Tokens[src + 1].Kind = tkIdent) and (Tokens[src + 2].Kind = tkSemicolon) and
+            (RModCount < R_MAX_ALIASES) then
+    begin
+      RModName[RModCount] := GetTokenStr(src + 1);
+      Inc(RModCount);
+    end;
+    Inc(src);
+  end;
+
   src := 0; dst := 0; depth := 0;
   while Tokens[src].Kind <> tkEOF do
   begin
@@ -2564,6 +2607,20 @@ begin
       end;
       while (Tokens[src].Kind <> tkSemicolon) and (Tokens[src].Kind <> tkEOF) do Inc(src);
       if Tokens[src].Kind = tkSemicolon then Inc(src);
+      Continue;
+    end;
+    { MODULE QUALIFIER dropped at any depth: `attacks::knight(sq)` and
+      `crate::board::Board::new()` become `knight(sq)` and `Board::new()`,
+      which is what they mean once the modules are one file. Only names a
+      `mod` item declared, plus the `crate`/`self`/`super` keywords -- a TYPE
+      path (`Color::White`, `Board::new`, `Self::EMPTY`) is left alone, which
+      is the whole reason this is a table lookup and not a rule about
+      capitalisation. Chains fall out for free: after dropping `crate ::` the
+      loop re-examines `board ::` at the same position. }
+    if (Tokens[src].Kind = tkIdent) and (Tokens[src + 1].Kind = tkPathSep) and
+       RIsModuleQualifier(GetTokenStr(src)) then
+    begin
+      Inc(src, 2);
       Continue;
     end;
     { `pub` dropped at ANY depth — item visibility at depth 0, field
