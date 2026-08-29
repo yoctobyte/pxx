@@ -607,16 +607,25 @@ function PyParseVariadicMinMax(const nm: AnsiString): Integer;
   feature-nilpy-min-max-variadic-more-than-two-args }
 var acc, rhs, a0, a1, node, pi: Integer;
     at: array[0..1] of TTypeKind;
+    mm: AnsiString;
 begin
+  { The caller passes CurTok.SVal, and `const` binds an AnsiString BY REFERENCE
+    — so `nm` is not a copy, it is the live token text. `Next` does
+    SetLength(CurTok.SVal, ...) IN PLACE (see PyEvalParamDefault), so by the
+    time the loop asks MatchProcCall for an overload, `nm` reads '(' and no
+    2-argument routine of that name exists — at EVERY operand type, which is
+    what made this look like a type-dispatch failure. Copy the characters
+    first, the same way every other arm here does (`nm := CurTok.SVal`). }
+  mm := nm;
   Next; Expect(tkLParen, '(');
   ParseArgExpr; acc := CurASTNode;
   while Eat(tkComma) do
   begin
     ParseArgExpr; rhs := CurASTNode;
     at[0] := IntToTypeKind(ASTTk[acc]); at[1] := IntToTypeKind(ASTTk[rhs]);
-    pi := MatchProcCall(nm, 2, at, False);
+    pi := MatchProcCall(mm, 2, at, False);
     if pi < 0 then
-      Error('Nil Python: no 2-argument ' + nm + ' for these operand types');
+      Error('Nil Python: no 2-argument ' + mm + ' for these operand types');
     a0 := AllocNode(AN_ARG); ASTLeft[a0] := acc;
     a1 := AllocNode(AN_ARG); ASTLeft[a1] := rhs; ASTRight[a1] := -1;
     ASTRight[a0] := a1;
