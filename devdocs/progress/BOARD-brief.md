@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:23 blocked:8 backlog:311 backlog_new:11 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2648 rejected:51`
+`working:3 unfinished:23 blocked:8 backlog:310 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2648 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
@@ -59,7 +59,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [T]` regression-cascade-154d1aa3fba6
 - `[p 70] [P]` regression-cascade-4e27dc2be114
-- `[p 70] [C]` regression-lib-test-crtl-reachability-4
+- `[p 70] [B]` regression-lib-test-crtl-reachability-4
 - `[p 70] [P]` regression-test-core-test-mgmt-operators
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-relative-import-in-package
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-startswith-tuple
