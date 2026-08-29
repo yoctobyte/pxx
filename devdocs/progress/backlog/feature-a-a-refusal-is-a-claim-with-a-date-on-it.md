@@ -4325,3 +4325,41 @@ void. Read naively that silence says *"the pass is never called"* and sends you
 hunting in the wrong file. **When the instrument reports nothing, the instrument
 is a suspect before the subject is** — face 79 one level out, and the same lane
 had the break-was-the-bug and the probe-was-the-bug in one session.
+
+### 103a. AMENDMENT — the docs were RIGHT and the probe contradicted the repo's own tooling
+
+Face 103 above says an ESP ticket family sat five weeks *"on a fact that was
+never true"*, and implies the knowledge was missing. **It was not.** The S lane
+corrected this and the correction is sharper than the original:
+
+- **`tools/esp_run.sh:42`** finds the emulator by
+  `ls ~/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa`, and
+  defaults to `--chip esp32s3`. That is *exactly* the "look where the installer
+  puts it" generalisation face 103 draws — **already implemented, and committed
+   2026-08-02** (`01c8cf7c1`), four weeks before the sweeps that concluded the
+  toolchain was absent.
+- `examples/esp32/hello-s2/README.md` already recorded that there is no
+  `esp32s2` machine and that the S2 is therefore verified by building headlessly
+  and running on a board.
+- `make test-esp-idf` already loops `esp32c3 esp32s3`; `test-esp-softfloat`
+  already runs an S3 probe under `qemu-system-xtensa`.
+
+So *"nobody has tried the esp32s3 machine"* was true of one lane and **false of
+the repo**, and the coordinator relayed it as a property of the machine — the
+same error as face 103 itself, one level up.
+
+**The corrected lesson, and it is cheaper than the original:**
+
+> **A probe that disagrees with the repo's own checked-in tooling is the cheapest
+> possible signal, and it was available for free.**
+
+The `command -v` sweep did not merely fail to find a binary. **It contradicted a
+harness in the same tree that had been finding that binary by glob the whole
+time, and nobody diffed the two.** Five weeks were not lost for want of
+documentation; the documentation was correct and unread, and one `grep -r
+espressif tools/` would have settled it.
+
+Generalisation: before concluding a capability is absent, **grep the repo for
+something that already uses it.** A tool that ships with a finder is a tool
+somebody already found.
+
