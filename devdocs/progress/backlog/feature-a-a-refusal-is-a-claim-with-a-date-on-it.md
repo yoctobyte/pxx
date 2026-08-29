@@ -4131,3 +4131,52 @@ the ticket cited, 66 not compiling — and says explicitly that enrolment must n
 be read as *"xtensa is covered"*. Face 8's remedy applied at filing time: a
 survey that names its own scope, written by the person who knows the scope,
 rather than by the person who later needs it.
+
+### 103. A probe that tests the SHELL and reports the result as a property of the MACHINE
+
+frankB, 2026-08-30. Two separate sweeps ran `command -v qemu-system-riscv32`,
+got nothing, and wrote *"re-checked rather than assumed"*. **The command really
+was run and honestly reported.** But ESP-IDF installs its tools **off `PATH` by
+design**, under `~/.espressif/tools/`, reaching `PATH` only when you source
+`$IDF_PATH/export.sh` — and `IDF_PATH` is unset in a fresh shell. **The probe was
+structurally incapable of returning positive.**
+
+An ESP ticket family sat blocked for about five weeks on a fact that was never
+true. What was actually installed the whole time: Espressif QEMU 9.2.2 with
+machines `esp32`, `esp32s3` and `esp32c3`, both toolchains, both gdbs,
+`openocd-esp32`, and ESP-IDF v6.0.1.
+
+**Operational form:** *to probe for a tool, look where its installer puts it, not
+at whether the current shell happens to expose it.*
+
+It caught the coordinator inside one minute of reading the report: verifying the
+claim with `find ~/.espressif/tools -maxdepth 4` also found nothing, because the
+binaries sit five levels down. **Same failure mode, different tool, while
+checking that exact failure mode.** A negative from a search is a claim about the
+search first and the world second.
+
+Sibling of face 96 (a search for duplicated logic cannot find the place where
+the logic is missing) and of face 8: **a check with no true arm reads exactly
+like diligence from the inside** — a real command, really run, honestly
+reported. Nothing about the output distinguishes *"absent"* from *"unfindable by
+this query"*, and only one of those is a fact about the machine.
+
+**The counterweight, from the same message, and it is what makes this a good
+night rather than an embarrassing one:** the coordinator had told frankB that a
+peripheral callback was not observable on this box and asked for that limit to be
+**written into the code**. frankB checked it instead of recording it. Had it been
+recorded it would have been a *false limit installed in source with the
+coordinator's authority behind it* — believed, conscientious-looking, and
+precisely the thing that stops the next person re-checking. **The rule you are
+enforcing is the one you will not apply to yourself**, third instance in one
+night.
+
+What replaced it is a limit that survived measurement: a pass witnesses a genuine
+`esp_timer` callback dispatched by FreeRTOS through the library's event surface
+**on emulated silicon** — not real silicon, timing, analog, or xtensa. Flashing
+stays blocked; there is no `/dev/ttyUSB*` or `ttyACM*`.
+
+And the acceptance witness is the right shape: `status=0` where `status` is a
+bitmask the app builds itself (1 start failed, 2 fewer than five ticks, 4 stop
+failed). **A dead timer prints `status=2`** — the pass is a value only a live
+callback path can produce, not merely a zero exit.
