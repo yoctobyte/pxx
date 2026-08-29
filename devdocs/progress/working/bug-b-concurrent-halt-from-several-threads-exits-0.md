@@ -3,8 +3,8 @@ summary: "DIAGNOSED, handed to A. Halt(n) on x86-64 and arm32 emits `exit` (thre
 track: A
 prio: 60
 type: bug
-status: backlog
-owner: unassigned
+status: working
+owner: frank-optimize
 blocked-by: []
 ---
 

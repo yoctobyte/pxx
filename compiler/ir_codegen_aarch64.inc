@@ -3843,9 +3843,8 @@ begin
         begin
           if IRA[node] <> -1 then
           begin
-            IREmitNodeAarch64(IRA[node]);
-            EmitI32($D2800BC8); { movz x8, #94 }
-            EmitI32($D4000001); { svc #0 }
+            IREmitNodeAarch64(IRA[node]);   { x0 = the exit code }
+            EmitExitReg;
           end
           else
             EmitExit(0);

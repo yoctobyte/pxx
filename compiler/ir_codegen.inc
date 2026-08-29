@@ -8797,10 +8797,8 @@ begin
         begin
           if IRA[node] <> -1 then
           begin
-            IREmitNode(IRA[node]);
-            EmitB($48); EmitB($89); EmitB($C7);
-            MovRaxImm(SYS_EXIT);
-            EmitSyscall;
+            IREmitNode(IRA[node]);   { rax = the exit code }
+            EmitExitReg;
           end
           else
             EmitExit(0);
