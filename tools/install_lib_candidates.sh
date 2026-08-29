@@ -9,7 +9,7 @@
 # and gets a PROVENANCE.md recording it.
 #
 # Usage:
-#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|fpc-rtl|zlib|tcc|cjson|stb|cglm|enet|zengl|quickjs|duktape|fcl-json|webencodings|tinycss2|html5lib|nilpy-stack|reportlab] ...
+#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|fpc-rtl|zlib|tcc|cjson|stb|cglm|enet|zengl|quickjs|duktape|fcl-json|rtl-generics|webencodings|tinycss2|html5lib|nilpy-stack|reportlab] ...
 #   FORCE=1 tools/install_lib_candidates.sh lua      # re-fetch even if present
 #
 # Default target is `all`.
@@ -364,6 +364,33 @@ EOF
   say "fcl-json -> $DEST/fcl-json"
 }
 
+fetch_rtl_generics() {
+  # rtl-generics (Generics.Collections/Defaults/Hashes/Helpers/MemoryExpanders)
+  # from the SAME pinned FPC commit as the testsuite, fgl and fcl-json fetches
+  # — corpus rung 6 of the Pascal ladder (feature-pascal-corpus-generics).
+  # ~9.5k LOC and the only corpus we have for generics x classes x interfaces:
+  # generic classes across units, IComparer<T>/IEqualityComparer<T> interface
+  # constraints, class constraints, nested types per specialization.
+  #
+  # NOT covered by fetch_fpc_rtl despite the name: that one takes rtl/objpas
+  # (fgl.pp lives there), which is a different unit for a different rung. The
+  # near-miss is worth stating because grepping this file for "generic" hits
+  # fetch_fpc_rtl's fgl comment and reads as coverage.
+  if present rtl-generics; then say "rtl-generics present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  fetch_commit "$FPC_URL" rtl-generics "$FPC_COMMIT" \
+    packages/rtl-generics/src packages/rtl-generics/tests LICENSE
+  cat > "$DEST/rtl-generics/PROVENANCE.md" <<EOF
+# rtl-generics Candidate (Pascal corpus rung 6 — Generics.Collections)
+Upstream: ${FPC_URL}
+Commit: ${FPC_COMMIT} (release_3_2_2 tag)
+Paths: packages/rtl-generics/{src,tests}, LICENSE
+Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
+License: FPC packages are LGPL with static-linking exception (see LICENSE + unit headers).
+Used as a COMPILE TARGET for feature-pascal-corpus-generics; never shipped.
+EOF
+  say "rtl-generics -> $DEST/rtl-generics"
+}
+
 fetch_zlib() {
   if present zlib; then say "zlib present (FORCE=1 to re-fetch) — skip"; return 0; fi
   fetch_commit "$ZLIB_URL" zlib "$ZLIB_COMMIT"
@@ -625,7 +652,7 @@ EOF
 }
 
   case "$t" in
-    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_fpc_rtl; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice; fetch_zengl; fetch_quickjs; fetch_js_sha256; fetch_duktape; fetch_fcl_json; fetch_csmith; fetch_webencodings; fetch_tinycss2; fetch_html5lib; fetch_reportlab ;;
+    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_fpc_rtl; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice; fetch_zengl; fetch_quickjs; fetch_js_sha256; fetch_duktape; fetch_fcl_json; fetch_rtl_generics; fetch_csmith; fetch_webencodings; fetch_tinycss2; fetch_html5lib; fetch_reportlab ;;
     lua)           fetch_lua ;;
     cjson)         fetch_cjson ;;
     stb)           fetch_stb ;;
@@ -646,6 +673,7 @@ EOF
     optimized-routines) fetch_optimized_routines ;;
     duktape)       fetch_duktape ;;
     fcl-json)      fetch_fcl_json ;;
+    rtl-generics)  fetch_rtl_generics ;;
     csmith)        fetch_csmith ;;
     reportlab)     fetch_reportlab ;;
     webencodings)  fetch_webencodings ;;

@@ -302,6 +302,11 @@ def code_fingerprint(path=None):
 
 
 CODE_FP = ""            # set once at daemon start; "" for short-lived readers
+# Set by a READER that was told (or could find) the watcher clone, so
+# report_running_code() can compare the resident image against disk. Empty
+# means "we do not know where the daemon lives" -> the check stays silent
+# rather than guessing, because an unreadable watch.json is not evidence.
+CLONE_HINT = ""
 
 
 def set_phase(clone, host, phase, **kw):
@@ -1203,6 +1208,25 @@ def save_state(clone, host, st):
 # self-skips and reports success.
 # fpc-rtl (test-fgl) and fcl-json (test-fpjson) added 2026-08-26 with the
 # enrolment of those two rungs; see the note in testmgr.TIERS["limited"].
+# GATE WHAT CAN BE GREEN; DIAGNOSE WHAT CANNOT. A name added here makes the
+# watcher fetch the corpus and warn when it is absent — it does NOT make
+# anything compile it. So a name whose job is blocked buys a recurring download
+# and a startup banner people learn to ignore, in exchange for restating a block
+# we already know about. The one-shot diagnostic belongs in a dev tree instead.
+#
+# PENDING (2026-08-27, with frank-coordinator): `rtl-generics` is deliberately
+# ABSENT. Its ladder rung is blocked-by the typinfo gap, so "it does not compile"
+# is the reason the edge exists rather than a finding. Add it here when
+# `feature-typinfo-facade-unit` lands and the rung can plausibly go green — from
+# that point a recurring job catches regressions instead of restating a block,
+# which is when it earns the box's cycles. `tools/install_lib_candidates.sh
+# rtl-generics` already fetches it for a dev tree today.
+#
+# The contract every name here relies on: install_lib_candidates.sh takes the
+# name as a POSITIONAL ARG and leaves a directory at
+# `library_candidates/<that exact name>`, exit 0. missing_corpus() re-checks by
+# that path, and the fetch below WARNS rather than fails — so a violation of
+# this contract is silent on an unattended watcher.
 CORPUS_EXPECTED = ("lua", "sqlite", "zlib", "c-testsuite", "tcc", "cjson",
                    "tiny-regex-c", "fpc-testsuite", "fpc-rtl", "fcl-json")
 
@@ -1272,6 +1296,34 @@ def covered_tiers(tier):
     return {tier}                     # opt (and any future disjoint tier)
 
 
+def last_run_at_tier(st, tier):
+    """Newest COMPLETE run at EXACTLY `tier`, or {}.
+
+    `last_full` cannot answer this. It is the last REPLACING run (full=True),
+    which excludes the disjoint tiers entirely -- `opt` and `slow` run
+    full=False and so never touch it -- and under a configured `mid_tier` it
+    names a tier that is not `full` at all. So "this tree was swept at -O3" and
+    "opt has never visited this sha" were indistinguishable to every consumer,
+    which is the same absent-signal-read-as-a-negative-result defect as a
+    skipped job scoring as a pass, one level up in tier composition.
+
+    EXACT match, never `covered_tiers`: coverage is not execution, and a
+    `native` run cannot vouch for a `full` tier's jobs.
+
+    Falls back to scanning `history` for state written before `last_by_tier`
+    existed, so the answer self-heals instead of reporting "never" for a host
+    with months of runs. History is capped, so the fallback can OVERSTATE the
+    age of the last run; it can never invent coverage that did not happen.
+    """
+    hit = (st.get("last_by_tier") or {}).get(tier)
+    if hit:
+        return hit
+    for h in reversed(st.get("history") or []):
+        if (h.get("tier") or "") == tier:
+            return h
+    return {}
+
+
 def job_bounding_tier(st, name, report_tier):
     """The tier whose last run bounds this job's blame range.
 
@@ -1326,6 +1378,52 @@ def last_covering_sha(st, tier, exclude_sha):
         if tier in covered_tiers(h.get("tier") or ""):
             return h.get("sha")
     return None
+
+
+def job_anchor(st, name):
+    """The sha where this job last RAN AND PASSED, or why there is no such sha.
+
+    The last-good end of a regression range. It exists because
+    `last_covering_sha()` answers a DIFFERENT question -- "which earlier run's
+    tier CONTAINED this job" -- and tier coverage is not execution. A job whose
+    corpus is absent SKIPs, which is correct on its own terms and is recorded
+    as PASSLIKE, so the containing run looked like a clean anchor.
+
+    Measured 2026-08-27 (bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-
+    last-good, filed by frankB out of the synapse triage): `external/synapse`
+    was absent on plexus, three synapse jobs SKIPped for their whole life, and
+    the moment the corpus landed the first real execution failed. That was
+    published as a regression over NINE commits, five of them touching `lib/`
+    or the pin, every one of them innocent -- the defect predated the entire
+    range, which frankB proved by rebuilding the declared last-good's own tree
+    under the pin actually in force there and watching it fail too.
+
+        A first-ever run is not a regression, and a sha where a job did not
+        execute is not a last-good.
+
+    Returns `(sha, "")` when an execution-backed anchor exists, and
+    `(None, reason)` when the job is KNOWN never to have passed. The third
+    case -- `(None, "")` -- means "no opinion": state written before
+    `job_last_pass` existed, where the caller must keep its old fallback rather
+    than blank a range it has no evidence against. That distinction is the
+    whole migration story; without it, upgrading would suppress every range on
+    the box for a cycle.
+
+    Deliberately does NOT reclassify `skip`. It stays PASSLIKE for the run
+    verdict and for reg_open, because a run whose corpus is absent must still
+    be able to come back GREEN and a box that legitimately cannot run a job
+    must not hold a regression open forever. `skip` is correct as a verdict and
+    catastrophic as an anchor; this splits the two readings instead of moving
+    `skip` from one bucket to the other, which would fix the anchor by breaking
+    the verdict.
+    """
+    lp = (st.get("job_last_pass") or {}).get(name)
+    if lp:
+        return lp, ""
+    if (st.get("jobs") or {}).get(name) == "skip":
+        return None, ("its last recorded status was SKIP — it did not run at "
+                      "that sha, so that sha is not a last-good")
+    return None, ""
 
 
 def job_key(j):
@@ -1487,6 +1585,43 @@ def cascade_still_red(r, st):
 # than by treating a third state as non-gating. Green must mean "ran and
 # passed". Now made worse by test-uforth, which self-skips on any box without
 # ~/projects/uforth (feature-t-enroll-uforth-in-the-tiers).
+def closure_status(r, authoritative, gone=frozenset()):
+    """WHY an open regression closed: "pass", "skip", "gone", or "mixed".
+
+    `reg_open()` asks one question — is the merged status still red — and both
+    `pass` and `skip` answer no. So an entry closes identically whether the job
+    started PASSING or merely stopped RUNNING, and until now the record could
+    not tell them apart. That is the same information gap as
+    bug-t-a-skipped-job-is-passlike-so-it-becomes-a-false-last-good, one level
+    up in the data model: a skip and a pass are both simply "not red".
+
+    It is not academic. The auto-close writes "`<job>` passes at <sha>" into the
+    ticket it retires, and a `done/` ticket is where a finding stops being
+    looked at. A job whose corpus went missing got a permanent written claim
+    that it passed.
+
+    Deliberately does NOT change what closes. Whether a skip SHOULD close an
+    open regression is a live question with real costs on both sides
+    (decide-t-should-a-skip-close-an-open-regression, Track U) and this is the
+    instrument that would let it be answered with a count instead of a
+    principle. Recording the reason loses nothing either way, which is exactly
+    why it is not one of that decision's options.
+
+    "gone" outranks the rest: an entry closed because its job no longer exists
+    did not pass and did not skip, it stopped being a job.
+    """
+    jobs = r["cascade"] if r.get("cascade") else [r.get("job")]
+    live = [j for j in jobs if j and j not in gone]
+    if not live:
+        return "gone"
+    seen = {authoritative.get(j, "red") for j in live}
+    if seen == {"pass"}:
+        return "pass"
+    if seen == {"skip"}:
+        return "skip"
+    return "mixed"          # a cascade closing on a mixture of both
+
+
 PASSLIKE = ("pass", "skip")
 
 
@@ -1620,6 +1755,12 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
              # later, and "verify against a KNOWN sha" is unusable if the report
              # does not name the binary (task-t-seed-from-stable-defeats-rebuild).
              "compiler_sha256: %s" % (report.get("compiler_sha256") or "unknown"),
+             # How much of the suite this verdict actually SPEAKS for. A skip
+             # is passlike, so without these two numbers a GREEN here is
+             # indistinguishable from a GREEN that ran everything.
+             "skips: %s" % ((report.get("skips") or {}).get("count", "unknown")),
+             "skip_holes: %s" % ((report.get("skips")
+                                  or {}).get("coverage_holes", "unknown")),
              "---", ""]
     if report.get("timed_out") or report.get("verdict") == "TIMEOUT":
         lines += ["> **THIS RUN HAS NO VERDICT.** It hit its %s-second deadline "
@@ -1648,6 +1789,55 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
                       "tree. A `%s` verdict covers x86-64 only — do not read it "
                       "as matrix coverage."
                       % (fmt_age(age), fmt_age(age), report["tier"]), ""]
+
+    # What this verdict does NOT speak for. The breadth and -O3 notes below ask
+    # it of a whole tier; this asks it of the jobs inside THIS run, which is
+    # the version that bites without warning: the tier was right, the run
+    # completed, and a chunk of it quietly did not execute.
+    skips = report.get("skips") or {}
+    holes = skips.get("coverage_holes") or 0
+    if holes:
+        lines += ["> **COVERAGE: %d job(s) DID NOT RUN on this box** (of %d "
+                  "skipped). They are scored passlike, so they are invisible "
+                  "in the verdict above — a `%s` here speaks for the jobs that "
+                  "ran, not for the suite."
+                  % (holes, skips.get("count") or holes, report["verdict"]), ""]
+    if skips.get("by_reason"):
+        lines += ["<details><summary>skipped jobs, by reason (%d)</summary>"
+                  % (skips.get("count") or 0), ""]
+        for why, names in sorted(skips["by_reason"].items()):
+            shown = " ".join(names[:12])
+            more = "" if len(names) <= 12 else " …+%d more" % (len(names) - 12)
+            lines += ["- **%s** — %s%s" % (why, shown, more)]
+        lines += ["", "</details>", ""]
+
+    # -O3 coverage: the breadth note's question, one tier over. `opt` is
+    # DISJOINT from the quick<native<limited<full chain and runs only as idle
+    # watcher work, so a GREEN verdict here is silent about every optimisation
+    # level above the default -- and silence read as absence is how "no -O3
+    # failures" and "nobody swept -O3" came to produce identical evidence.
+    # Measured 2026-08-28 across the archive: 690 of 2296 shas with a gate-tier
+    # verdict had ever been swept by `opt` (30%), with nothing in any report
+    # saying which 30%.
+    if st is not None and report["tier"] != "opt":
+        lo = last_run_at_tier(st, "opt")
+        if not lo.get("sha"):
+            lines += ["> **-O3: this host has never completed an `opt` tier.** "
+                      "Nothing here compiled above the default `-O`.", ""]
+        elif lo.get("sha") != sha:
+            age = secs_since(lo.get("date") or "")
+            lines += ["> **-O3 IS UNTESTED ON THIS TREE.** The newest `opt` "
+                      "sweep is %s old and ran at `%s` (%s). `opt` is disjoint "
+                      "from `%s`, so no optimisation level above the default "
+                      "has seen this sha."
+                      % (fmt_age(age) if age is not None else "of unknown age",
+                         (lo.get("sha") or "?")[:12], lo.get("verdict") or "?",
+                         report["tier"]), ""]
+        else:
+            # The citable positive. An -O3 -> -O2 promotion needs to point at a
+            # verdict and say "this sha's -O3 was swept"; this line is that.
+            lines += ["> `-O3`: swept on THIS sha by the `opt` tier (%s)."
+                      % (lo.get("verdict") or "?"), ""]
 
     # stable key -> source file(s), so a reader sees WHICH test without
     # mapping job numbers back to Makefile lines (numbers shift with edits)
@@ -2470,6 +2660,12 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # one rule, not a second invented one that could disagree with it.
     closed_regs = [r for r in st["open_regressions"]
                    if not reg_open(r, authoritative, gone)]
+    # Stamped here, where `authoritative` and `gone` are both in hand, rather
+    # than re-derived by the consumer -- the stub closer would otherwise have to
+    # reconstruct the merged map and could disagree with the predicate that
+    # actually closed the entry.
+    for r in closed_regs:
+        r["closed_by"] = closure_status(r, authoritative, gone)
     srcmap = {job_key(j): j.get("src", "") for j in report["jobs"]}
     namemap = {job_key(j): j["name"] for j in report["jobs"]}
     # The FAILURE KIND, carried onto the ledger entry. A `timeout` is a DURATION
@@ -2537,6 +2733,26 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # updated for this run yet, so it names the tier the job's PREVIOUS status
     # came from — which is exactly the tier whose last run bounds the range.
     def range_for(name):
+        # EXECUTION FIRST. Everything below this block reasons about tier
+        # COVERAGE -- which earlier run would have contained this job -- and
+        # that is a strictly weaker fact than "the job ran there and passed".
+        # A skipped job is contained by every run that could have run it, so
+        # the coverage answer is confidently wrong exactly when the job never
+        # executed. See job_anchor().
+        #
+        # Note this is a NO-OP for the common case: when the previous status
+        # was a real `pass`, job_last_pass names the parent sha and the range
+        # comes out identical to what the coverage path produced. It differs
+        # only where the old answer had no execution behind it, which is the
+        # whole point and is why the blast radius is small.
+        aname, why = job_anchor(st, name)
+        if aname and aname != sha:
+            try:
+                return testable_only(clone.commits_between(aname, sha)), aname
+            except (RuntimeError, subprocess.SubprocessError, OSError):
+                pass          # unreachable sha (rewritten history): fall through
+        elif why:
+            return [], ""     # known never to have passed: no interval can hold it
         prev_tier = job_bounding_tier(st, name, report["tier"])
         if parent_ran_job(st, name, report["tier"]):
             return rng, good        # the parent's run DID contain it
@@ -2636,6 +2852,17 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                           "the cause is in the box or the job's own inputs, not "
                           "in the commits"
                           % (name, (jgood or "?")[:12], sha[:12]), flush=True)
+            never_passed = bool(job_anchor(st, name)[1])
+            if never_passed and not jrng:
+                # Same epistemic position as first_seen, reached differently:
+                # first_seen never appeared in the map at all, this one appeared
+                # carrying `skip`. Both mean "no earlier passing sha", and an
+                # empty range is the honest answer to both.
+                print("twatch: %s is red at %s and has NEVER been observed to "
+                      "pass on this host — %s. No range opened; a first real "
+                      "execution failing is a finding, not a regression from "
+                      "the commits around it"
+                      % (name, sha[:12], job_anchor(st, name)[1]), flush=True)
             if name in first_seen:
                 # No earlier passing sha exists, so no interval can contain the
                 # cause. An EMPTY range is the honest answer and the machinery
@@ -2691,6 +2918,12 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                          "good": jgood, "range": jrng, "opened": utcnow(),
                          "status": statmap.get(name, "fail"),
                          "first_seen": name in first_seen,
+                         # Sixth field of the "this range cannot mean what it
+                         # appears to mean" family, and the fifth face of
+                         # bug-t-a-blame-range-is-computed-from-what-changed-
+                         # not-from-what-the-job-can-see, whose closure
+                         # enumerated four.
+                         "never_passed": never_passed,
                          "pin_axis": pin_axis,
                          "bad_untestable": bad_untestable,
                          "no_testable_change": no_testable_change,
@@ -2736,6 +2969,18 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                   "timed_out": bool(report.get("timed_out")),
                   "deadline": report.get("deadline"),
                   "unreached": report.get("unreached")}
+    # Newest COMPLETE run at each tier, so a consumer can ask "did tier X see
+    # this tree?" without a cross-file join into runs-<host>.ndjson. Written
+    # for EVERY tier including the disjoint ones, which is the whole point:
+    # `last_full` is the last REPLACING run and the disjoint tiers run
+    # full=False, so before this key nothing in the state could say whether a
+    # sha had been swept above the default -O.
+    #
+    # Incomplete (torn-down) runs are excluded on the same ground the report
+    # banner states: what a run did not reach is UNKNOWN, not covered.
+    if not incomplete:
+        st["last_by_tier"] = dict(st.get("last_by_tier", {}),
+                                  **{report["tier"]: dict(st["last"])})
     if full and not incomplete:
         # Evict by COVERAGE, not wholesale.
         #
@@ -2765,6 +3010,13 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # "this run could have run it and didn't -> gone" from "not my tier".
     st["job_tier"] = dict(st.get("job_tier", {}),
                           **{k: report["tier"] for k in now})
+    # ...and the sha each job last RAN AND PASSED at, which is the only honest
+    # anchor for a regression range (job_anchor). Literally "pass": `skip` is
+    # deliberately excluded, because a job that did not run cannot vouch for a
+    # sha. Written from `now`, so it advances only for jobs THIS run actually
+    # reported -- a quick tier does not silently vouch for a full tier's jobs.
+    st["job_last_pass"] = dict(st.get("job_last_pass", {}),
+                               **{k: sha for k, v in now.items() if v == "pass"})
     st["history"] = (st["history"] +
                      [{"sha": sha, "date": st["last"]["date"],
                        "verdict": report["verdict"], "tier": report["tier"],
@@ -2794,6 +3046,9 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
         st["jobs"] = {k: v for k, v in st["jobs"].items() if k not in dead}
         st["job_tier"] = {k: v for k, v in (st.get("job_tier") or {}).items()
                           if k not in dead}
+        st["job_last_pass"] = {k: v for k, v
+                               in (st.get("job_last_pass") or {}).items()
+                               if k not in dead}
         authoritative = {k: v for k, v in authoritative.items() if k not in dead}
     update_job_reasons(st, report, st["jobs"])
     # Shadow only — records the pin it WOULD have made, moves nothing.
@@ -2811,6 +3066,19 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                             # lacks it; absent means "not known", not "false".
                             "timed_out": bool(report.get("timed_out")),
                             "unreached": report.get("unreached"),
+                            # Jobs that RAN NOTHING but scored passlike. Its
+                            # sibling `unreached` has been archived since the
+                            # teardown work; skips had no key at all, so no
+                            # consumer of this archive could tell a sweep that
+                            # covered 3031 of 3081 jobs from one that covered
+                            # 3081. Count and coverage-hole count only -- the
+                            # per-reason grouping lives in the report md, which
+                            # is where a human reads it; this is the field a
+                            # query filters on. Absent on rows before
+                            # 2026-08-28: "not known", never zero.
+                            "skips": (report.get("skips") or {}).get("count"),
+                            "skip_holes": (report.get("skips")
+                                           or {}).get("coverage_holes"),
                             "deadline": report.get("deadline"),
                             "wall": report["wall"], "new_red": new_red,
                             "fixed": fixed,
@@ -3621,8 +3889,7 @@ def file_stub_tickets(clone, host, st, sha, new_red, report, parent=None):
         # bug-t-a-timeout-bisects-to-an-innocent-commit was filed to stop. A
         # timeout is Track T's until someone shows otherwise, and leaving the
         # track unset does exactly that.
-        guessed = (None if j.get("status") == "timeout"
-                   else guess_track(j.get("src")))
+        track, track_note = stub_track(j)
         refusals = refusal_markers(clone, j.get("src"))
         immune = pin_immune(clone, dict(reg or {}, pin_built=j.get("pin_built")))
         body = ("""---
@@ -3650,12 +3917,8 @@ prio: %d
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
 """ % (40 if job in advisory else 70,
-                "track: %s\n" % guessed if guessed else "",
-                (("> **Track guessed as %s** from the test source. The "
-                  "ranker reads frontmatter, so an unset track parks a stub in "
-                  "Track T's queue regardless of what the body says -- correct "
-                  "the `track:` line if this is wrong.\n\n" % guessed)
-                 if guessed else "")
+                "track: %s\n" % track,
+                track_note
                 + (("> **This commit CANNOT be the cause.** The job builds "
                     "only with `$(PXX_STABLE)`, and this commit moved no "
                     "`stable_linux_amd64/**` — so the bytes that compiled it "
@@ -3757,6 +4020,47 @@ def refusal_markers(clone, src):
     return out
 
 
+def stub_track(j):
+    """(track letter, hedge note) for an auto-filed stub. Pure; devtested.
+
+    T is the DEFAULT OWNER of a stub nobody else can be shown to own, and that
+    is now WRITTEN DOWN rather than left blank. The routing is unchanged; only
+    the silence is gone. An absent `track:` and a deliberate `track: T` are the
+    same thing to the ranker and opposite things to a reader: the first arrives
+    in T's queue looking like every other T ticket, with nothing on its face to
+    say the lane was a fallback rather than a finding. That is how a mislaneled
+    auto-file gets worked by the wrong agent — `regression-tools-devtest-00-2`
+    carried no track line and no explanation, and happened to be T's for real.
+    The next one will not be.
+    """
+    if j.get("status") == "timeout":
+        # The source path says what a job COMPILES, not what went wrong, and a
+        # timed-out job did not fail in any of its sources — it ran out of
+        # budget. Guessing a lane from the path is the wrong turn
+        # bug-t-a-timeout-bisects-to-an-innocent-commit was filed to stop.
+        return "T", (
+            "> **Track T by default, because this job TIMED OUT.** The source "
+            "path says what a job compiles, not what went wrong, and a timeout "
+            "did not fail in any of its sources — it ran out of budget. "
+            "Guessing a lane from the path is the wrong turn "
+            "`bug-t-a-timeout-bisects-to-an-innocent-commit` was filed to stop, "
+            "so a timeout stays T's until someone shows otherwise. Re-lane it "
+            "if the budget was not the problem.\n\n")
+    guessed = guess_track(j.get("src"))
+    if guessed:
+        return guessed, (
+            "> **Track guessed as %s** from the test source. The ranker reads "
+            "frontmatter, so this line — not the body — decides who works it; "
+            "correct it if the guess is wrong.\n\n" % guessed)
+    where = (" (the job reported no test source)" if not j.get("src")
+             else " from `%s`" % str(j.get("src")).split()[0])
+    return "T", (
+        "> **Track T by default: no lane could be inferred**%s. This is a "
+        "FALLBACK, not a finding — nothing here says the defect is Track T's, "
+        "only that the test source did not name an owner. Re-lane it before "
+        "working it.\n\n" % where)
+
+
 def guess_track(src):
     """A track letter from a test source path, or None when unsure."""
     if not src:
@@ -3840,13 +4144,40 @@ def close_stub_tickets(clone, host, closed, sha, report):
         # Name the sha the job PASSED at and the tier that judged it: a close
         # with no evidence is indistinguishable from a lost ticket, and
         # progress.sh check requires done/ tickets to log something citable.
+        # WHAT the close is evidence of, in the ticket's own words. This line
+        # used to say "`<job>` passes at <sha>" unconditionally, and a
+        # regression closed because its job stopped RUNNING got a permanent
+        # written claim that it passed -- in `done/`, which is where a finding
+        # stops being read. The status that closed it is now carried on the
+        # entry (closure_status); absent means an entry stamped by an older
+        # watcher, and reads as the old wording rather than guessing.
+        why = r.get("closed_by")
+        if why == "skip":
+            what = ("`%s` is no longer red at %s (tier %s) — but it SKIPPED "
+                    "rather than passed, so this is evidence that the job "
+                    "stopped running here, NOT that the bug is fixed. It was "
+                    "red at %s. Re-check before trusting the close"
+                    % (r.get("job") or slug, sha[:12], report["tier"],
+                       (r.get("bad") or "?")[:12]))
+        elif why == "gone":
+            what = ("`%s` no longer exists as a job at %s (renamed, removed, "
+                    "or a selector shift), so nothing can report it. It was "
+                    "red at %s; the close records disappearance, not a fix"
+                    % (r.get("job") or slug, sha[:12],
+                       (r.get("bad") or "?")[:12]))
+        elif why == "mixed":
+            what = ("the jobs this cascade swept are no longer red at %s "
+                    "(tier %s), but not all of them PASSED — some only "
+                    "skipped. It was red at %s; treat the close as partial"
+                    % (sha[:12], report["tier"], (r.get("bad") or "?")[:12]))
+        else:
+            what = ("`%s` passes at %s (tier %s); it was red at %s"
+                    % (r.get("job") or slug, sha[:12], report["tier"],
+                       (r.get("bad") or "?")[:12]))
         body = (body.rstrip("\n") + "\n- %s — auto-closed by the %s watcher: "
-                "`%s` passes at %s (tier %s); it was red at %s. Reopening is "
-                "by a fresh NEW-RED stub, since a second red is a second "
-                "finding with its own range.\n"
-                % (utcnow()[:10], host,
-                   r.get("job") or slug, sha[:12], report["tier"],
-                   (r.get("bad") or "?")[:12]))
+                "%s. Reopening is by a fresh NEW-RED stub, since a second red "
+                "is a second finding with its own range.\n"
+                % (utcnow()[:10], host, what))
         dst = os.path.join(pdir, "done", slug + ".md")
         with open(dst, "w") as f:
             f.write(body)
@@ -4124,11 +4455,32 @@ def publish_ledger(clone, host, ledger_loc, ledger_pub, findings, sha,
             shutil.copy(os.path.join(findings, f), os.path.join(dst, f))
             kept += 1
     if new:
-        msg = ("tstate(%s): fuzz %s — NEW: %s (%d divergence(s) in %d programs)"
-               % (host, sha[:12], ", ".join(new), ndiv, nprog))
-        print("twatch: fuzz — NEW signature(s) %s; published to tstate/fuzz (NOT "
-              "ticketed: needs triage, the generator is the first suspect). Fuzzing "
-              "throttles until it is fixed." % ", ".join(new), flush=True)
+        # NEW and REOPENED are different news and must not share a word.
+        # `NEW` is what people grep for and act on, and a reopen was announced
+        # in its vocabulary -- ec2f50d8c said "NEW: fpc-self_if" for a
+        # signature first seen 2026-07-14 and marked fixed 2026-08-16. A
+        # reopen is arguably the MORE interesting of the two: something that
+        # was fixed came back, which is a regression with a bracket around it.
+        #
+        # Read back from the ledger rather than threaded through the caller:
+        # `reopened_from_fixed` is set by the writer at the moment it knows,
+        # and a signature only re-enters `new` by being newly opened or newly
+        # reopened, so the flag partitions this list exactly.
+        try:
+            with open(ledger_pub) as f:
+                _fnd = ((json.load(f) or {}).get("findings") or {})
+        except (OSError, ValueError):
+            _fnd = {}          # unreadable ledger: say NEW, never say nothing
+        reopened = [s for s in new
+                    if (_fnd.get(s) or {}).get("reopened_from_fixed")]
+        firsts = [s for s in new if s not in reopened]
+        parts = ([("NEW: %s" % ", ".join(firsts))] if firsts else []) + \
+                ([("REOPENED: %s" % ", ".join(reopened))] if reopened else [])
+        msg = ("tstate(%s): fuzz %s — %s (%d divergence(s) in %d programs)"
+               % (host, sha[:12], "; ".join(parts), ndiv, nprog))
+        print("twatch: fuzz — %s; published to tstate/fuzz (NOT ticketed: needs "
+              "triage, the generator is the first suspect). Fuzzing throttles "
+              "until it is fixed." % "; ".join(parts), flush=True)
     else:
         msg = "tstate(%s): fuzz %s — ledger update" % (host, sha[:12])
         print("twatch: fuzz — ledger status changed; published", flush=True)
@@ -4516,15 +4868,16 @@ def pin_epoch(clone, version):
     return None
 
 
-def judged_tiers(clone, host, sha):
-    """Tiers in which THIS host has already published a verdict for `sha`.
+def archive_rows(repo, host):
+    """Every row of the uncapped run archive for `host`, oldest first.
 
-    Reads the uncapped run archive, not `st["history"]`, which is capped and
-    would forget a pin older than the cap — the exact case that matters here,
-    since a pin is usually days behind HEAD.
+    THE single reader for `runs-<host>.ndjson`. Both the tier lookup below and
+    the covering-verdict query go through here deliberately: two readers of one
+    archive that drift apart is a worse outcome than no query at all, and these
+    rows have already changed shape once (`timed_out` is absent before
+    2026-08-25, where absent means "not known", not False).
     """
-    got = set()
-    path = os.path.join(clone.path, TSTATE_REL, "runs-%s.ndjson" % host)
+    path = os.path.join(repo, TSTATE_REL, "runs-%s.ndjson" % host)
     try:
         with open(path) as f:
             for ln in f:
@@ -4532,14 +4885,308 @@ def judged_tiers(clone, host, sha):
                 if not ln:
                     continue
                 try:
-                    r = json.loads(ln)
+                    yield json.loads(ln)
                 except ValueError:
                     continue
-                if r.get("sha") == sha and r.get("tier"):
-                    got.add(r["tier"])
     except OSError:
+        return
+
+
+def archive_hosts(repo):
+    """Hosts with a run archive in this checkout, retired ones included.
+
+    Retired hosts are kept on purpose: their verdicts are historical fact, and
+    a covering run from borg in July is still evidence about a commit from
+    July. The caller labels the host so a reader can discount it.
+    """
+    try:
+        names = os.listdir(os.path.join(repo, TSTATE_REL))
+    except OSError:
+        return []
+    return sorted(n[len("runs-"):-len(".ndjson")] for n in names
+                  if n.startswith("runs-") and n.endswith(".ndjson"))
+
+
+def judged_tiers(clone, host, sha):
+    """Tiers in which THIS host has already published a verdict for `sha`.
+
+    Reads the uncapped run archive, not `st["history"]`, which is capped and
+    would forget a pin older than the cap — the exact case that matters here,
+    since a pin is usually days behind HEAD.
+    """
+    return {r["tier"] for r in archive_rows(clone.path, host)
+            if r.get("sha") == sha and r.get("tier")}
+
+
+def covering_runs(repo, sha, branch, host=None):
+    """Runs whose tested tree CONTAINED `sha` — the exact sha, or a descendant.
+
+    This is the question tstate can actually answer about an arbitrary commit,
+    and it is not the question people ask. An EXACT-sha verdict exists only for
+    shas that happened to be HEAD when the watcher woke: it climbs to the
+    newest testable commit rather than sweeping every one, so most commits have
+    no verdict of their own and never will. Measured 2026-08-27: of the 79
+    commits touching `compiler/` or `lib/` since 08-26, **zero** were swept
+    individually. So "what did T say about sha X" comes back empty for most X,
+    and empty reads as UNTESTED when the truth is nearly always "tested as part
+    of a later tree".
+
+    Returns (exact, covering), both oldest-first, each row tagged with `host`
+    and `distance` (commits from `sha` up to the run's sha).
+    """
+    hosts = [host] if host else archive_hosts(repo)
+    # ONE rev-list, not a merge-base per row: --ancestry-path restricts the
+    # range to genuine descendants of `sha`, so a run on a parallel branch
+    # cannot be miscounted as one that contained the change. 1110 unique run
+    # shas would otherwise be 1110 git invocations.
+    desc = {}
+    try:
+        out = sh(["git", "rev-list", "--ancestry-path", "--reverse",
+                  "%s..%s" % (sha, branch)], cwd=repo)
+        for i, s in enumerate(out.split()):
+            desc[s] = i + 1
+    except (RuntimeError, subprocess.SubprocessError, OSError):
         pass
-    return got
+    exact, covering = [], []
+    for h in hosts:
+        for r in archive_rows(repo, h):
+            s = r.get("sha") or ""
+            if s == sha:
+                exact.append(dict(r, host=h, distance=0))
+            elif s in desc:
+                covering.append(dict(r, host=h, distance=desc[s]))
+    exact.sort(key=lambda r: r.get("date") or "")
+    covering.sort(key=lambda r: r.get("date") or "")
+    return exact, covering
+
+
+def job_selectors(repo, host=None):
+    """Every job selector the archive has ever recorded, with its run count."""
+    seen = {}
+    for h in ([host] if host else archive_hosts(repo)):
+        for r in archive_rows(repo, h):
+            for key in ("new_red", "still_red", "fixed"):
+                for sel in (r.get(key) or []):
+                    seen[sel] = seen.get(sel, 0) + 1
+    return seen
+
+
+def job_history(repo, sel, host=None):
+    """Every run that recorded job `sel`, oldest first, with what it recorded.
+
+    THE reason this exists, measured 2026-08-28. Asking "has this job been red
+    before?" by hand is a one-line scan of the archive, and I wrote that line
+    and got **0 hits in 1697 runs** for a job that was in its 13th consecutive
+    red run. The query was against the positional name `test-emit-obj#02`; the
+    archive stores the STABLE selector `test-emit-obj#src:test/cxtensa_obj.c@1`.
+    The two strings share no substring, so the scan was correct, exhaustive,
+    and false.
+
+    That is the worst shape a query can have: a confident zero. It reads as
+    "this is new" — the single most consequential thing a triage can get wrong,
+    because a first-seen red is a revert candidate and a 16-hour-old one is a
+    queue item. Nothing warned, because nothing was wrong; the question was
+    asked in a vocabulary the data does not use.
+
+    So the helper does two things a hand-rolled scan does not:
+      * accepts EITHER form and resolves the positional one via `red_src` /
+        the open-regression ledger, which carry both;
+      * when it finds nothing, says whether the selector is unknown to the
+        archive ENTIRELY or merely absent from this host — an empty result
+        that explains itself is not the same object as a zero.
+    """
+    hosts = [host] if host else archive_hosts(repo)
+    out = []
+    for h in hosts:
+        for r in archive_rows(repo, h):
+            for key in ("new_red", "still_red", "fixed"):
+                if sel in (r.get(key) or []):
+                    out.append((r.get("date") or "", h, r.get("sha") or "",
+                                r.get("tier") or "", key))
+    out.sort()
+    return out
+
+
+def positional(name):
+    """True for a recipe-index job name like `test-emit-obj#02`."""
+    return bool(re.search(r"#\d+$", name or ""))
+
+
+def resolve_selector(repo, name, host=None):
+    """(selectors to report, notes) for a job named either way.
+
+    Returns a LIST, and that is the whole point. A positional name is an index
+    into a Makefile recipe, so it names a different file as soon as a step is
+    inserted above it — and the archive spans months. `test-emit-obj#02` is
+    literally present twice over: as a July key from `borg`, back when the
+    positional form was what got recorded, AND as today's `#02`, which is a
+    different test entirely.
+
+    A first cut of this returned the literal match as soon as it found one, and
+    answered the July history: "2 runs, FIXED, a red now is a REOPEN". That is
+    strictly worse than the confident zero it was written to fix, because a
+    zero at least looks like an absence, while a wrong history looks like
+    research. Same failure family as everything else measured tonight — it
+    fails affirmatively.
+
+    So: for a positional name, report the literal matches AND the stable
+    selectors under the same target, always, and label which is which. The
+    caller can tell them apart; a silent choice between them cannot be
+    unmade.
+    """
+    known = job_selectors(repo, host)
+    notes, sels = [], []
+    if name in known:
+        sels.append(name)
+    stem = name.split("#")[0] + "#"
+    stable = sorted(k for k in known
+                    if k.startswith(stem) and k != name and not positional(k))
+    if positional(name):
+        # The ledger carries the name/job pair for anything currently open, so
+        # prefer its answer and say so; fall back to the target's stable set.
+        ledger = None
+        for h in ([host] if host else archive_hosts(repo)):
+            try:
+                with open(os.path.join(repo, TSTATE_REL, h + ".json")) as f:
+                    st = json.load(f)
+            except (OSError, ValueError):
+                continue
+            for reg in (st.get("open_regressions") or []):
+                if reg.get("name") == name and reg.get("job"):
+                    ledger = reg["job"]
+                    break
+            if ledger:
+                break
+        if ledger and ledger not in sels:
+            sels.append(ledger)
+            notes.append("`%s` is a POSITIONAL name; the open-regression "
+                         "ledger maps it to `%s`" % (name, ledger))
+        for k in stable:
+            if k not in sels:
+                sels.append(k)
+        if sels and name in sels and len(sels) > 1:
+            notes.append("`%s` matches BOTH a literal archive key and %d "
+                         "stable selector(s) under the same target. A "
+                         "positional name is a recipe INDEX and means "
+                         "different tests at different times — read the dates, "
+                         "do not assume one history." % (name, len(sels) - 1))
+        elif not sels:
+            notes.append("no job matching `%s` has ever been recorded, and no "
+                         "stable selector under `%s` exists either. That is a "
+                         "real absence, not a vocabulary mismatch."
+                         % (name, stem[:-1]))
+    elif not sels:
+        notes.append("`%s` is not a key the archive uses. %s"
+                     % (name,
+                        ("Stable selectors under `%s`:\n  %s"
+                         % (stem[:-1], "\n  ".join(stable))) if stable
+                        else "No selector under `%s` exists either." % stem[:-1]))
+    return sels, notes
+
+
+def show_job_history(repo, name, host=None):
+    """`--job-history NAME`: has this job been red before, and since when?"""
+    sels, notes = resolve_selector(repo, name, host)
+    for n in notes:
+        print("tstate: " + n)
+    if not sels:
+        return 1
+    rc = 1
+    for sel in sels:
+        rows = job_history(repo, sel, host)
+        if not rows:
+            print("tstate: `%s` — known selector, no run recorded it." % sel)
+            continue
+        rc = 0
+        print("tstate: `%s` — %d run(s) recorded it" % (sel, len(rows)))
+        for date, h, sha, tier, key in rows:
+            print("  %-20s %-8s %-7s %-9s %s"
+                  % (date or "?", h, sha[:12], tier, key))
+        firsts = [r for r in rows if r[4] == "new_red"]
+        if firsts:
+            print("  first recorded RED %s at %s — NOT new."
+                  % (firsts[0][0], firsts[0][2][:12]))
+        if rows[-1][4] == "fixed":
+            print("  last transition was FIXED; a red now is a REOPEN.")
+        else:
+            print("  last transition was %s — still open as of %s."
+                  % (rows[-1][4], rows[-1][0]))
+    return rc
+
+
+def covering(repo, sha, branch=None, host=None, fetch=True):
+    """Report what tstate can and cannot say about one commit. Exit 0/1/2/3."""
+    branch = branch or BRANCH or "master"
+    if fetch:
+        try:
+            sh(["git", "fetch", "-q", "origin"], cwd=repo, check=False)
+        except OSError:
+            pass
+    try:
+        full = sh(["git", "rev-parse", "--verify", "%s^{commit}" % sha], cwd=repo)
+    except (RuntimeError, subprocess.SubprocessError, OSError):
+        print("twatch: %s is not a commit in this checkout" % sha)
+        return 3
+    subj = sh(["git", "log", "-1", "--format=%h %ad %s", "--date=short", full],
+              cwd=repo, check=False)
+    ref = "origin/%s" % branch
+    if sh(["git", "rev-parse", "--verify", "--quiet", ref], cwd=repo,
+          check=False) == "":
+        ref = branch
+    print("twatch: covering verdicts for %s" % subj)
+    print("twatch:   asking against %s" % ref)
+    exact, cov = covering_runs(repo, full, ref, host)
+
+    nested = ["quick", "native", "limited", "full"]
+    if exact:
+        for r in exact:
+            print("twatch:   EXACT  %-7s %-5s %s  %s" %
+                  (r.get("tier"), r.get("verdict"), r.get("date"), r["host"]))
+    else:
+        print("twatch:   EXACT: none — this commit was never swept on its own.")
+        print("twatch:          The watcher tests the newest testable commit, "
+              "not every one,")
+        print("twatch:          so most commits have no verdict of their own. "
+              "That is the")
+        print("twatch:          design working, NOT a gap in retention.")
+
+    # First covering run per tier: the earliest is the tightest evidence, since
+    # every later one carries more unrelated change alongside the commit.
+    first = {}
+    for r in cov:
+        t = r.get("tier")
+        if t and t not in first:
+            first[t] = r
+    if first:
+        print("twatch:   first covering run per tier (its tree contained this "
+              "commit):")
+        for t in nested:
+            r = first.get(t)
+            if r:
+                print("twatch:     %-7s %-5s %s  %s  +%d commit(s)  %s" %
+                      (t, r.get("verdict"), r.get("sha", "")[:12],
+                       r.get("date"), r["distance"], r["host"]))
+    else:
+        print("twatch:   no covering run: nothing has been tested at or after "
+              "this commit.")
+
+    print("twatch:   CAVEAT — a covering GREEN says the change was in the tree "
+          "of a green")
+    print("twatch:            run, NOT that this commit alone was green: a "
+          "later commit may")
+    print("twatch:            have fixed what it broke. Only an EXACT row "
+          "supports that")
+    print("twatch:            stronger claim. Cite the tier too — a green "
+          "`native` is silent")
+    print("twatch:            about everything `full` adds.")
+
+    best = exact or cov
+    if not best:
+        return 2
+    if any(r.get("verdict") == "RED" for r in (first.values() if not exact
+                                               else exact)):
+        return 1
+    return 0
 
 
 # How many times one idle phase may be preempted on the SAME target before the
@@ -4694,6 +5341,176 @@ def verify_pin(clone, host, st, ver, sha, tier, abort_check=None):
               flush=True)
     clone.publish("tstate(%s): pin %s %s %s (%s)"
                   % (host, ver, sha[:12], verdict, tier))
+    return True
+
+
+# --- targeted verdicts on request ------------------------------------------
+#
+# The watcher climbs to the newest testable commit rather than sweeping each
+# one, so most commits never get a verdict of their own (measured 2026-08-27:
+# 0 of the 79 commits touching compiler/ or lib/ since 08-26). That is the
+# right default -- sweeping every commit would cost +4.3 h/day at `native` and
+# is arithmetically impossible at `full`, on a box already at ~47% duty. What
+# it leaves missing is a way to ask for ONE.
+#
+# The queue is a committed file, so a request travels the same way everything
+# else does: an agent appends a line, commits, pushes; the daemon fetches it
+# with the next cycle. No socket, no shared filesystem, no daemon-writable
+# inbox -- and the watcher's write scope stays exactly `tstate/`.
+#
+# Completion needs no deletion and no acknowledgement: a request is satisfied
+# when judged_tiers() reports that tier for that sha, which is the same
+# primitive pin_verify_due() already uses to decide whether the pin needs
+# judging. So the queue is idempotent by construction, two hosts can drain the
+# same file without coordinating, and a re-request of something already judged
+# is a no-op rather than a duplicate run.
+VERIFY_REQ_REL = os.path.join(TSTATE_REL, "verify-requests.tsv")
+
+
+def request_verdict(repo, sha, tier, who, why):
+    """Append a request to the queue. The CALLER commits and pushes it.
+
+    Deliberately not a push: this runs in a dev checkout that may hold
+    unrelated staged work, and a tool that commits on your behalf is how an
+    unrelated change rides along. Print what to run instead.
+    """
+    try:
+        full = sh(["git", "rev-parse", "--verify", "%s^{commit}" % sha],
+                  cwd=repo)
+    except (RuntimeError, subprocess.SubprocessError, OSError):
+        print("twatch: %s is not a commit in this checkout" % sha)
+        return 3
+    for s2, t2, _who, _why in read_verify_requests(repo):
+        if s2 == full and t2 == tier:
+            print("twatch: already queued — %s at %s" % (full[:12], tier))
+            return 0
+    path = os.path.join(repo, VERIFY_REQ_REL)
+    new = not os.path.exists(path)
+    with open(path, "a") as f:
+        if new:
+            f.write("# Targeted verdict queue — one request per line:\n"
+                    "#   <40-char sha>\t<tier>\t<who>\t<why>\n"
+                    "# The watcher drains these FIRST among its idle phases. A "
+                    "request is satisfied\n"
+                    "# when that sha has a verdict at that tier, so lines need "
+                    "no deletion and a\n"
+                    "# repeat is a no-op. Stale lines cost one archive lookup "
+                    "per cycle; tidy at\n"
+                    "# will, but nothing breaks if you never do.\n")
+        f.write("%s\t%s\t%s\t%s\n" % (full, tier, who, why.replace("\t", " ")))
+    print("twatch: queued %s at tier %s (%s)" % (full[:12], tier, who))
+    print("twatch: now commit and push it — the daemon reads the file from "
+          "origin, not from your tree:")
+    print("        git add %s && git commit -m 'tstate: request %s at %s' "
+          "&& git push" % (VERIFY_REQ_REL, full[:12], tier))
+    return 0
+
+
+def read_verify_requests(repo):
+    """Parse the request queue -> [(sha, tier, who, why)], oldest first.
+
+    Tolerant on purpose: a malformed line is skipped rather than killing the
+    daemon's cycle. The file is hand-editable and agent-appended, so a bad row
+    is a likely event and must not be able to stop the watcher.
+    """
+    out = []
+    try:
+        with open(os.path.join(repo, VERIFY_REQ_REL)) as f:
+            for ln in f:
+                ln = ln.strip()
+                if not ln or ln.startswith("#"):
+                    continue
+                p = ln.split("\t")
+                if len(p) < 2:
+                    continue
+                sha, tier = p[0].strip(), p[1].strip()
+                if len(sha) != 40 or tier not in ("quick", "native",
+                                                  "limited", "full", "opt"):
+                    continue
+                out.append((sha, tier, (p[2].strip() if len(p) > 2 else "?"),
+                            (p[3].strip() if len(p) > 3 else "")))
+    except OSError:
+        pass
+    return out
+
+
+def verify_request_due(clone, host, st):
+    """First requested (sha, tier, who, why) this host has not yet judged.
+
+    Skips anything already judged at that tier -- that is the completion
+    signal -- and anything this clone cannot reach, for the same reason
+    pin_verify_due does: another box may have pushed a request naming a sha
+    newer than anything we have fetched, and checking out an unknown sha would
+    just fail the cycle.
+    """
+    head = None
+    for sha, tier, who, why in read_verify_requests(clone.path):
+        if tier in judged_tiers(clone, host, sha):
+            continue
+        if head is None:
+            head = clone.remote_head()
+        if not is_ancestor(clone.path, sha, head):
+            continue
+        return (sha, tier, who, why)
+    return None
+
+
+def verify_requested(clone, host, sha, tier, who, why, abort_check=None):
+    """Judge a REQUESTED sha out of band. verify_pin's shape, different subject.
+
+    Same reason it does not go through test_sha(): that function maintains the
+    HEAD progression -- st["last"], the per-job map, the open-regression ledger
+    -- all defined relative to the sha sequence this host is walking. Feeding
+    it an arbitrary older sha would set "last tested" backwards and manufacture
+    NEW-RED/FIXED pairs out of nothing but the time travel. This publishes
+    exactly one run record and touches no state another phase reads.
+    """
+    print("twatch: verifying REQUESTED %s (%s) — asked by %s%s"
+          % (sha[:12], tier, who, ": %s" % why if why else ""), flush=True)
+    set_phase(clone, host, "verify-request", sha=sha[:12], tier=tier)
+    clone.checkout(sha)
+    report, rc = run_gate(clone, tier, abort_check=abort_check,
+                          resume_key=(sha, tier))
+    clone_head_back(clone)
+    if rc == "aborted":
+        print("twatch: requested verdict preempted by a push — will resume",
+              flush=True)
+        return "aborted"
+    if rc == "busy":
+        print("twatch: requested verdict skipped — the repo lock is held "
+              "elsewhere", flush=True)
+        return False
+    if report is None or report.get("verdict") in ("INFRA", "INVALID") \
+            or no_measurement(report):
+        # A box that could not measure publishes NOTHING. An unanswered
+        # request is a known unknown; a fabricated verdict is worse, and worse
+        # still here because somebody asked for this one and will act on it.
+        print("twatch: requested verdict produced no usable measurement — "
+              "publishing nothing, the request stays open", flush=True)
+        return False
+    verdict = report["verdict"]
+    # job_key, never j["name"]: a positional index names a different file as
+    # soon as a test is inserted above it, and a requested sha is usually
+    # behind HEAD -- exactly the span in which the recipe moves. Same defect
+    # bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label
+    # records for the pin path.
+    reds = [job_key(j) for j in report["jobs"]
+            if j["status"] not in ("pass", "skip")]
+    with open(os.path.join(clone.path, TSTATE_REL,
+                           "runs-%s.ndjson" % host), "a") as f:
+        f.write(json.dumps({"sha": sha, "date": utcnow(), "tier": tier,
+                            "full": tier == "full", "verdict": verdict,
+                            "wall": report["wall"], "new_red": [], "fixed": [],
+                            # provenance: this row is an ANSWER, not a rung of
+                            # the ladder, so a reader counting ladder coverage
+                            # can exclude it.
+                            "requested_by": who}, sort_keys=True) + "\n")
+    regen_index(clone)
+    print("twatch: requested verdict %s at %s (%s)%s"
+          % (verdict, sha[:12], tier,
+             " — %s" % ", ".join(reds[:5]) if reds else ""), flush=True)
+    clone.publish("tstate(%s): requested %s %s (%s)"
+                  % (host, sha[:12], verdict, tier))
     return True
 
 
@@ -5469,6 +6286,75 @@ def pin_verify_corroboration(pv, st, now):
             "gap": (pv_age - lf_age) if fresher else None}
 
 
+def report_running_code(clone_path):
+    """Warn when the RESIDENT daemon is not running the code on its own disk.
+
+    A pushed fix is not a live fix. Between `git push` and observable behaviour
+    sits a long-running process that loaded its source at start time, and
+    "landed on origin, pulled into the clone, passed its guards" is
+    indistinguishable from live unless something compares the running image.
+
+    That is not hypothetical: it hid three fixes on 2026-08-26 and was noticed
+    only because one of them happened to add a FIELD whose absence showed up in
+    a report. It recurred on 2026-08-27 — a scheduler fix was pushed, announced
+    as live, and the daemon had been running older code for hours.
+
+    `code_fp` is already published in watch.json for exactly this question. The
+    only thing missing was that somebody had to remember to ask it, which is a
+    poor place to put a silent failure mode. So --status asks.
+
+    Deliberately advisory: it never changes the exit code. UP/DOWN is about
+    whether the matrix is being covered; running-stale-but-covering is a real
+    state and not the same as down. Says nothing at all when it cannot tell,
+    rather than guessing — an unreadable watch.json is not evidence of drift.
+
+    THE SHAPE, stated once because it generalises past this daemon: staleness
+    here has TWO hops — origin -> the clone's disk (closed by a `git pull`) and
+    the clone's disk -> the resident process (closed only by a RESTART). This
+    check answers the second, and it is the one no amount of pulling can fix.
+    Measured again 2026-08-28: the clone's `twatch.py` was byte-identical to
+    the fix on master while the daemon had been running the previous code for
+    hours. **A deploy that is correct on disk and stale in memory reports the
+    disk version if anyone asks it** — every filesystem-level check, including
+    a sha256 of the source, confirms the wrong hop.
+    """
+    if not clone_path:
+        return
+    try:
+        with open(os.path.join(clone_path, WATCH_REL)) as f:
+            w = json.load(f) or {}
+    except (OSError, ValueError):
+        return
+    running = w.get("code_fp") or ""
+    # watch.json is a RECORD, not live state, and the difference bites exactly
+    # once per restart -- which is the moment this check is most likely to be
+    # run, because someone just restarted to make a fix live and wants to know
+    # it worked. The stopping daemon's last write survives it; a fresh daemon
+    # has not called set_phase yet. Measured 2026-08-28, 16 seconds after a
+    # restart: this printed the OLD fingerprint and told the operator to
+    # restart the daemon they had just restarted.
+    #
+    # So the record must be shown to belong to a process that still exists.
+    # Two ways it can fail to:
+    if (w.get("phase") or "") == "stopped":
+        return                  # a farewell note says nothing about a successor
+    pid = w.get("pid")
+    if isinstance(pid, int):
+        try:
+            os.kill(pid, 0)     # signal 0: existence check, no signal delivered
+        except OSError:
+            return              # the writer is gone; the record outlived it
+    on_disk = code_fingerprint(os.path.join(clone_path, "tools", "twatch.py"))
+    if not running or not on_disk or running == on_disk:
+        return
+    print("tstate: !! the DAEMON is running twatch.py %s, but %s is on disk "
+          "(%s). A fix that landed, was pulled, and passed its guards is NOT "
+          "live until the daemon restarts — `trackt restart`. This does not "
+          "affect the UP/DOWN verdict above; coverage is real, it is the CODE "
+          "producing it that is behind."
+          % (running, on_disk, os.path.join(clone_path, "tools", "twatch.py")))
+
+
 def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
     """Is Track T covering this repo?  No ping, no network: a watcher is
     considered UP iff every commit older than the grace window is tested by
@@ -5917,6 +6803,7 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
     else:
         print("tstate: UP — only fresh commits pending (within %d min grace)%s"
               % (grace_min, stale))
+    report_running_code(CLONE_HINT)
     return STATUS_UP
 
 
@@ -6061,6 +6948,29 @@ def main():
                          "exit 0 all green, 1 a red, 2 still unjudged")
     ap.add_argument("--poll", type=float, default=30,
                     help="--follow: seconds between polls (default 30)")
+    ap.add_argument("--covering", metavar="SHA",
+                    help="what tstate can say about ONE commit: its exact-sha "
+                         "verdict if it has one (most commits never do — the "
+                         "watcher tests the newest testable commit, not every "
+                         "one), then the first run per tier whose tree "
+                         "CONTAINED it. exit 0 covered green, 1 red, 2 nothing "
+                         "covers it, 3 not a commit here")
+    ap.add_argument("--request", metavar="SHA",
+                    help="queue a TARGETED verdict for one commit, drained "
+                         "first among the watcher's idle phases. Use --tier to "
+                         "pick the tier (default native). Appends to the "
+                         "queue file; you commit and push it")
+    ap.add_argument("--why", default="",
+                    help="--request: one line on why, recorded in the queue")
+    # SEPARATE from --tier on purpose. --tier is the DAEMON's nesting chain
+    # (quick<native<limited<full); `opt` and `slow` are disjoint idle phases
+    # and are not valid there. A request can name any of them, so widening
+    # --tier would make an invalid daemon configuration expressible.
+    ap.add_argument("--request-tier", dest="request_tier", default="native",
+                    choices=["quick", "native", "limited", "full", "opt"],
+                    help="--request: which tier to run (default native). "
+                         "`opt` is the -O-level differential and is disjoint "
+                         "from the nesting chain")
     ap.add_argument("--remote", help="clone URL if the clone dir doesn't exist yet")
     ap.add_argument("--branch", default=None,
                     help="branch to watch (daemon) or read verdicts for "
@@ -6101,6 +7011,14 @@ def main():
                     help="--retire-host --into: the two names are the SAME box "
                          "(xeon → plexus), not work moving between boxes. "
                          "Records renamed_from instead of migrated_from")
+    ap.add_argument("--job-history", dest="job_history", metavar="JOB",
+                    help="has this job been red before, and since when? Takes "
+                         "either the stable selector "
+                         "(test-emit-obj#src:test/cxtensa_obj.c@1) or the "
+                         "positional name (test-emit-obj#02) and resolves "
+                         "between them — the archive keys on the former, and "
+                         "a hand-rolled grep for the latter returns a "
+                         "confident, wrong zero")
     ap.add_argument("--fetch-corpus", action="store_true",
                     help="install any missing corpus trees at startup instead "
                          "of just warning (jobs whose corpus is absent SKIP, "
@@ -6108,7 +7026,8 @@ def main():
     args = ap.parse_args()
 
     global BRANCH
-    if args.status or args.follow is not None or args.retire_host:
+    if (args.status or args.follow is not None or args.retire_host
+            or args.covering or args.request or args.job_history):
         repo = os.path.abspath(os.path.expanduser(args.clone)) if args.clone \
             else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         # A READER is about the branch it is standing on. A dev worker asking
@@ -6116,6 +7035,15 @@ def main():
         # about master's frozen snapshot. --branch overrides for the rare case
         # of asking about somebody else's.
         BRANCH = args.branch or repo_branch(repo)
+        # Where the resident daemon lives, for the running-code check. --clone
+        # when we were told; otherwise the repo we are standing in, which is
+        # right when --status is run INSIDE the watcher clone and simply finds
+        # no watch.json anywhere else. Deliberately no guessing at a
+        # conventional path: a wrong clone would compare the wrong image, and a
+        # confident wrong answer is worse here than no answer.
+        global CLONE_HINT
+        CLONE_HINT = os.path.abspath(os.path.expanduser(args.clone)) \
+            if args.clone else repo
         if args.retire_host:
             if args.renamed and not args.into:
                 sys.exit("twatch: --renamed needs --into (renamed into WHAT?)")
@@ -6123,9 +7051,27 @@ def main():
                                renamed=args.renamed)
         if args.follow is not None:
             return follow(repo, args.follow, args.poll, args.branch, args.once)
+        if args.request:
+            return request_verdict(repo, args.request, args.request_tier,
+                                   args.host, args.why)
+        if args.job_history:
+            named = ("--host" in sys.argv)
+            return show_job_history(repo, args.job_history,
+                                    args.host if named else None)
+        if args.covering:
+            # ALL hosts unless one was named. --host defaults to this box's
+            # name, which is right for a daemon writing its own state and
+            # wrong for a reader: silently answering "plexus only" would
+            # report a commit as uncovered because the box that swept it was
+            # borg, and the caller would never see the word plexus to doubt.
+            named = ("--host" in sys.argv)
+            return covering(repo, args.covering, args.branch,
+                            args.host if named else None,
+                            fetch=not args.no_fetch)
         return status(repo, args.grace, fetch=not args.no_fetch)
     if not args.clone:
-        ap.error("--clone is required (except with --status/--follow)")
+        ap.error("--clone is required (except with --status/--follow/"
+                 "--covering/--request/--job-history)")
 
     def stop(*_):
         global STOP
@@ -6228,8 +7174,9 @@ def main():
             # condition. Requires `tested`: the abort-check below is defined
             # relative to it, and on a host that has tested nothing yet HEAD is
             # the more urgent work anyway.
-            pin_mid = pin_deep = None
+            pin_mid = pin_deep = req_due = None
             if tested and not do_test:
+                req_due = verify_request_due(clone, host, st)
                 pin_mid = pin_verify_due(clone, host, st, (args.mid_tier,))
                 pin_deep = pin_verify_due(clone, host, st, (args.tier,))
             if do_test:
@@ -6278,6 +7225,64 @@ def main():
                     # branch escalates to the full tier, which is the worst
                     # possible answer to "something else is already running".
                     did_work = r != "busy"
+            elif req_due and idle_aborts(st, "verify-request",
+                                         req_due[0]) < IDLE_YIELD_AFTER:
+                # FIRST among the idle phases, above even pin verify. Every
+                # other phase here is the watcher deciding what is worth
+                # testing; this is the only one where a human or an agent
+                # asked. Explicit beats inferred, and the queue is finite and
+                # self-clearing -- a request stops being due the moment
+                # judged_tiers() reports its tier, so it cannot hold the slot
+                # the way an unfinishable phase can.
+                #
+                # It is also the escape hatch for the starvation the phases
+                # below suffer: at a high push rate pin verify never gets its
+                # ~21 contiguous minutes (see IDLE_YIELD_AFTER), and a request
+                # naming the pinned sha jumps that queue. Measured 2026-08-27:
+                # v389 sat unverified for 4h while three lanes built on it.
+                #
+                # Same IDLE_YIELD_AFTER guard as the rest, for the same reason:
+                # "ahead of" must not become "instead of".
+                # A COMMITMENT POINT, and it is the difference between this
+                # phase working and not working. Measured 2026-08-27, 90
+                # minutes after this queue shipped: a `full` request sat
+                # undrained while the log showed the phase being ENTERED and
+                # then "preempted by a push — will resume", 15 times. The
+                # queue's position was never the problem — it is reached fine
+                # and cannot FINISH, because make_preempted() with no
+                # commit_after is abortable at every moment and pushes never
+                # stop at four workers.
+                #
+                # Same value and same reasoning as the idle full backfill
+                # below: a push in the first `full_commit_secs` still
+                # preempts, so a genuinely fresh sha is not starved by a run
+                # that just started; after that the run is allowed to finish.
+                # NOT breadth's commit_after=0 — that is for a RESERVED slot
+                # taken deliberately, and a request should still yield to a
+                # brand-new push in its first minute.
+                r = verify_requested(clone, host, *req_due,
+                                     abort_check=make_preempted(
+                                         clone, tested,
+                                         commit_after=(
+                                             CONF.get("full_commit_secs")
+                                             or None)))
+                if r == "aborted":
+                    n = note_idle_abort(clone, host, "verify-request",
+                                        req_due[0])
+                    if n >= IDLE_YIELD_AFTER:
+                        print("twatch: requested verdict preempted %d times "
+                              "running on %s — yielding the next idle slot to "
+                              "the phases below it"
+                              % (n, req_due[0][:12]), flush=True)
+                else:
+                    # Any outcome that is not a preemption means the phase used
+                    # its slot — including "no usable verdict". The counter is
+                    # about monopolising idle, not about succeeding.
+                    clear_idle_yield(clone, host)
+                # "busy" leaves did_work False on purpose, as everywhere else:
+                # did_work skips the poll sleep, so treating contention as work
+                # would spin the cycle against the lock holder.
+                did_work = r != "busy"
             elif pin_mid and idle_aborts(st, "pin-verify",
                                           pin_mid[1]) < IDLE_YIELD_AFTER:
                 # AHEAD of idle depth on HEAD, and deliberately so: this is the

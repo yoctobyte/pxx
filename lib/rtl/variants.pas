@@ -8,14 +8,21 @@ unit variants;
   FPC's TVarData, and it is deliberately a closed scalar set -- so this unit exposes the
   parts of Variants that are meaningful over it, and does not pretend to the rest.
 
-  Tag values (VT_*, from the compiler):
+  Internal tag values (VT_*, from the compiler) -- PRIVATE to this unit:
     0 empty   1 int   2 int64   3 double   4 boolean   5 char   6 string
 
-  Note 0 = EMPTY, matching FPC's varEmpty, which is what `VarType(v) = 0` tests. FPC
-  additionally distinguishes varNull (1) from varEmpty; pxx has no separate NULL tag, so
-  VarIsNull and VarIsEmpty are the same question here and both answer "is it unassigned".
-  Code that needs a real three-way empty/null/value distinction wants a ticket, not a
-  silent approximation -- say so rather than guessing.
+  THE PUBLIC NUMBERING IS FPC'S, NOT OURS. VarType translates on the way out and the
+  varXxx constants below are FPC's own, measured from fpc 3.2.2 rather than transcribed.
+  This is the facade seam: the RTL facade speaks FPC's public numbering while the
+  compiler's internal tags stay ours and stay private, the same standing policy as
+  decide-rtti-kind-numbering and decide-classinfo-returns-our-blob-or-nothing. Nothing
+  inside this unit may compare VarType's RESULT against a VT_ constant -- use RawTag.
+
+  Note 0 = EMPTY, matching FPC's varEmpty. FPC additionally distinguishes varNull (1)
+  from varEmpty; pxx has no separate NULL tag, so VarIsNull and VarIsEmpty are the same
+  question here and both answer "is it unassigned", and VarType reports varEmpty for it
+  (decide-should-a-null-variant-raise-like-fpc). Code that needs a real three-way
+  empty/null/value distinction wants a ticket, not a silent approximation.
 
   Exists because fcl-json's fpjson.pp does `uses variants`. }
 
@@ -71,7 +78,49 @@ var
   Null: Variant;
   Unassigned: Variant;
 
-{ The tag of V (VT_EMPTY..VT_STRING above). }
+{ FPC's variant type codes. MEASURED from fpc 3.2.2 by printing each constant,
+  not transcribed from documentation -- the set is irregular (varBoolean jumps to
+  11, the sized integers start at 16, and the string codes are up at 256) and a
+  guessed number here would be worse than a missing one. }
+const
+  varEmpty     = 0;
+  varNull      = 1;
+  varSmallint  = 2;
+  varInteger   = 3;
+  varSingle    = 4;
+  varDouble    = 5;
+  varCurrency  = 6;
+  varDate      = 7;
+  varOleStr    = 8;
+  varDispatch  = 9;
+  varError     = 10;
+  varBoolean   = 11;
+  varVariant   = 12;
+  varUnknown   = 13;
+  varShortInt  = 16;
+  varByte      = 17;
+  varWord      = 18;
+  varLongWord  = 19;
+  varInt64     = 20;
+  varQWord     = 21;
+  varString    = 256;
+  varUString   = 258;
+  varTypeMask  = 4095;
+  varArray     = 8192;
+  varByRef     = 16384;
+
+{ V's type, as one of the varXxx codes above -- FPC's numbering, not our tag.
+
+  Two places this deliberately differs from fpc 3.2.2, both measured:
+
+    * `v := 1` reports varInteger where FPC reports varShortInt (16). FPC narrows
+      an integer LITERAL to the smallest type that holds it; pxx does not narrow,
+      so it has one integer tag and reports it as varInteger. The case real code
+      writes -- `v := someInteger` -- agrees with FPC exactly (both varInteger).
+    * a Char and a one-character string both report varString, because FPC has no
+      char variant at all: `v := c` with `c: Char` reports 256 there too. Ours
+      matches for the wrong-looking reason (we have a VT_CHAR tag and fold it)
+      and the right observable one. }
 function VarType(const V: Variant): TVarType;
 
 { True when V holds no value. pxx has one "no value" tag, so these agree -- see the note
@@ -149,20 +198,46 @@ const
 type
   PTagWord = ^Int64;
 
-function VarType(const V: Variant): TVarType;
+{ The raw internal tag (VT_*). PRIVATE, and the only thing inside this unit that
+  may be compared against a VT_ constant -- VarType's result is FPC's numbering
+  now, so `VarType(V) = VT_STRING` would be comparing 256 against 6. Every
+  internal predicate below reads this instead. }
+function RawTag(const V: Variant): TVarType;
 begin
   { the tag is the first machine word of the slot }
   Result := TVarType(PTagWord(@V)^);
 end;
 
+function VarType(const V: Variant): TVarType;
+begin
+  { The facade seam: internal tag in, FPC code out. Both text tags fold onto
+    varString, which is what makes `VarType(v) = varString` true for a
+    one-character string -- FPC has no char variant, so folding is parity rather
+    than a compromise, and it removes the class of bug where a caller has to know
+    that 'x' and 'xy' are tagged differently. }
+  case RawTag(V) of
+    VT_EMPTY:  Result := varEmpty;
+    VT_INT:    Result := varInteger;
+    VT_INT64:  Result := varInt64;
+    VT_DOUBLE: Result := varDouble;
+    VT_BOOL:   Result := varBoolean;
+    VT_CHAR:   Result := varString;
+    VT_STRING: Result := varString;
+  else
+    { A tag this unit does not know. Reporting varEmpty would be a lie that reads
+      as "no value"; varError is FPC's own "something is wrong here". }
+    Result := varError;
+  end;
+end;
+
 function VarIsEmpty(const V: Variant): Boolean;
 begin
-  Result := VarType(V) = 0;
+  Result := RawTag(V) = VT_EMPTY;
 end;
 
 function VarIsNull(const V: Variant): Boolean;
 begin
-  Result := VarType(V) = 0;
+  Result := RawTag(V) = VT_EMPTY;
 end;
 
 procedure VarClear(var V: Variant);
@@ -182,14 +257,14 @@ end;
 
 function VarIsClear(const V: Variant): Boolean;
 begin
-  Result := VarType(V) = VT_EMPTY;
+  Result := RawTag(V) = VT_EMPTY;
 end;
 
 function VarIsNumeric(const V: Variant): Boolean;
 var t: TVarType;
 begin
-  t := VarType(V);
-  Result := (t = 1) or (t = 2) or (t = 3);
+  t := RawTag(V);
+  Result := (t = VT_INT) or (t = VT_INT64) or (t = VT_DOUBLE);
 end;
 
 function VarIsStr(const V: Variant): Boolean;
@@ -200,7 +275,7 @@ begin
     FPC has no char variant at all (`v := c` with c: Char gives VarType 256,
     varString), so True is also its answer.
     bug-a-a-char-variant-converts-to-its-ordinal-not-its-text }
-  Result := (VarType(V) = VT_STRING) or (VarType(V) = VT_CHAR);
+  Result := IsTextTag(RawTag(V));
 end;
 
 { text tag: a char and a string are one kind here -- this RTL's Variant holds
@@ -252,14 +327,14 @@ begin
   { The empty arm is the whole point of the routine -- see the interface note.
     Everything else is the rendering AsText already did for the comparator,
     which is why this is an export rather than an implementation. }
-  if VarType(V) = VT_EMPTY then Result := ''
-  else Result := AsText(V, VarType(V));
+  if RawTag(V) = VT_EMPTY then Result := ''
+  else Result := AsText(V, RawTag(V));
 end;
 
 function VarToStrDef(const V: Variant; const ADefault: AnsiString): AnsiString;
 begin
-  if VarType(V) = VT_EMPTY then Result := ADefault
-  else Result := AsText(V, VarType(V));
+  if RawTag(V) = VT_EMPTY then Result := ADefault
+  else Result := AsText(V, RawTag(V));
 end;
 
 { V as a number: i when isFloat is False, d when it is True. False means V is
@@ -305,8 +380,8 @@ var
   da, db: Double;
   fa, fb, oka, okb: Boolean;
 begin
-  ta := VarType(A);
-  tb := VarType(B);
+  ta := RawTag(A);
+  tb := RawTag(B);
 
   if (ta = VT_EMPTY) or (tb = VT_EMPTY) then
   begin

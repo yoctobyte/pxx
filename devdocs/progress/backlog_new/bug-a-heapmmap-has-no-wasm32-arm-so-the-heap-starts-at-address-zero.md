@@ -1,0 +1,184 @@
+---
+track: A
+prio: 70
+type: bug
+blocked-by: []
+summary: "HeapMmap in compiler/builtin/builtinheap.pas is a chain of per-target {$ifdef}s with no wasm32 arm, so on wasm32 it assigns Result nothing and returns 0. PXXAlloc does not check the result (on Linux a failed mmap returns a negative errno that faults on access), so the heap bump pointer starts at 0 and hands out addresses 8, 32, 56... Measured: two objects at 8 and 32, both readable and correct. It works until roughly 1 KB has been allocated and then silently overwrites BSS, because address 0 is a legal wasm address with no page protection. Fix is one additive arm, exactly the shape the PXX_ESP static arena already has."
+status: new
+owner: ""
+---
+
+# `HeapMmap` has no wasm32 arm, so the heap starts at address zero
+
+- **Type:** bug (RTL / builtin heap) — **Track A** (`compiler/builtin/**`).
+- **Filed:** 2026-08-28 by the wasm32 lane (branch `wasm`), which cannot fix it
+  under its own standing rule: a phase needing a shared-file edit files a
+  Track A ticket rather than making the edit.
+- **Blocks:** the wasm32 target having a usable heap at all. Everything
+  downstream of allocation — classes, managed strings, dynamic arrays,
+  variants — currently runs on a heap that overlaps low memory.
+
+## The bug
+
+`HeapMmap(len)` (`compiler/builtin/builtinheap.pas:672`) is a chain of
+per-target `{$ifdef}`s:
+
+```pascal
+{$ifdef CPUX86_64}  Result := __pxxrawsyscall(9,   0, len, 3, 34, -1, 0); {$endif}
+{$ifdef CPUAARCH64} Result := __pxxrawsyscall(222, 0, len, 3, 34, -1, 0); {$endif}
+{$ifdef CPU_ARM32}  Result := __pxxrawsyscall(192, 0, len, 3, 34, -1, 0); {$endif}
+{$ifdef CPU_I386}   Result := __pxxrawsyscall(192, 0, len, 3, 34, -1, 0); {$endif}
+{$ifdef CPU_RISCV32}{$ifndef PXX_ESP}
+                    Result := __pxxrawsyscall(222, 0, len, 3, 34, -1, 0); {$endif}{$endif}
+{$ifdef PXX_ESP}    { static arena, handed out once } {$endif}
+```
+
+`CPU_WASM32` matches none of them (the define exists — `lexer.inc:987`), so
+**`Result` is never assigned and the function returns 0.**
+
+`PXXAlloc` does not check it (`builtinheap.pas:911`):
+
+```pascal
+HeapPtr := HeapMmap(arena);
+HeapEnd := HeapPtr + arena;
+```
+
+That is deliberate on a hosted target: a failed `mmap` returns a **negative**
+errno and the next access faults. **On wasm32 there is nothing to fault on.**
+Address 0 is a legal linear-memory address, a load from it returns zero, and
+linear memory has no page protection — so the allocator bumps happily from 0.
+
+## Measurement
+
+A two-object program compiled `--target=wasm32` and run under node:
+
+```
+addr1 = 8    addr2 = 32    delta = 24
+code1 = 11   code2 = 22          <- both objects read back correctly
+memory bytes = 131072   sp = 110544
+```
+
+The objects work. That is the problem: the wasm32 lane's virtual-dispatch
+differential passes 7 of 7 against the native build on this heap. **It stays
+correct until about 1 KB has been allocated, and then writes into BSS** — the
+module's globals start at 1024.
+
+## The fix, and why it is small
+
+**One additive arm, the shape `PXX_ESP` already has.** A static arena in BSS,
+handed out once, with `Result := 0` on a second request (which is what every
+other target's failure looks like):
+
+```pascal
+{$ifdef CPU_WASM32}
+  { Linear memory has no page protection and address 0 is legal, so there is
+    nothing for a failed allocation to fault on -- the arena must be real
+    storage, not a syscall result. Same shape as PXX_ESP: BSS, 8-aligned,
+    handed out once. The module's declared page count follows BSSSize, so
+    reserving it here is what makes the memory exist. }
+  if WasmArenaUsed <> 0 then Result := 0
+  else begin WasmArenaUsed := 1; Result := Int64(@WasmArena[0]); end;
+{$endif}
+```
+
+BSS is zero at instantiation in wasm (linear memory starts zeroed), so unlike
+the ESP arm this one does **not** need to zero the arena on hand-out — the
+zero-init contract `PXXAlloc` documents is satisfied for free. Say so in the
+comment; it is the one line of that block that differs from ESP's and it would
+otherwise read as an omission.
+
+Arena size: `HEAP_ARENA` is already 65536 under `PXX_ESP` and 256 MiB
+otherwise. wasm32 wants its own — large enough to be useful, small enough that
+every module does not declare a huge minimum memory. A few MiB is a reasonable
+first number; it is a `{$ifdef}` on the constant at `builtinheap.pas:581`.
+
+**`memory.grow` is the eventual answer and is NOT this ticket.** It needs a new
+intrinsic (`__pxxmemorygrow`) and therefore a new token in `defs.inc`, a parser
+arm, an AST/IR node and a backend arm — the hottest shared files in the tree,
+for a target that does not yet need to grow. A fixed arena is what ESP shipped
+and it is enough until the compiler itself runs under wasm.
+
+## Why the wasm lane cannot do this itself
+
+Standing rule for the `wasm` branch (`devdocs/dev/wasm/PLAN.md`): *if a phase
+needs a shared-file edit, that is a signal to file a Track A ticket and wait —
+never to make the edit here.* `compiler/builtin/builtinheap.pas` is compiled
+into every program on every target. The change is additive and target-guarded
+and cannot alter another target's output, but that judgement is the ticket's to
+record, not the branch's to act on.
+
+## What the wasm lane has done in the meantime
+
+The backend's `GetMem` lowering is correct and is staying: it calls `PXXAlloc`
+like every other backend, stores the VMT pointer, runs the constructor and
+returns the instance. The defect is one function below it. Virtual dispatch,
+interfaces and construction all work today — **on a heap that starts at zero**,
+which is recorded as a known limitation in `PLAN.md` and in
+`test/wasm/check_calls.sh` rather than being allowed to read as a passing
+milestone.
+
+## Gate
+
+Per `CLAUDE.md`: `make compiler/pascal26` (the byte-identical self-host
+fixedpoint) plus the repro. The repro is the two-object program above; assert
+the returned addresses are above the module's BSS top, not merely non-zero.
+Other targets are untouched by construction, but `gate.sh quick` is cheap and
+this file is compiled by all of them.
+
+## 2026-08-28 — re-measured, and one fact the original report did not have
+
+The managed-string phase is the first thing on this target that allocates in
+anger, so the arena was measured again rather than inferred:
+
+```
+$ cat probe.pas
+program AllocProbe;
+var i: Integer; p: Pointer;
+begin
+  for i := 1 to 12 do begin p := PXXAlloc(1000, 8); writeln(i, ' ', NativeInt(p)); end;
+end.
+
+$ pascal26 --target=wasm32 probe.pas probe.wasm && node run.js probe.wasm
+1 8
+2 1016
+3 2024
+...
+12 11096
+```
+
+Address 8, then a straight bump. BSS starts at `WASM_BSS_BASE = 1024`, so the
+third allocation is already inside it.
+
+**The new fact: it does not merely corrupt, it eventually traps.** The module
+declares `(memory 2)` — 128 KB — and never calls `memory.grow`, so a program
+whose live heap passes about 128 KB dies with `RuntimeError: memory access out
+of bounds`. Demonstrated by filling each block:
+
+```
+addr sentinel 43300
+alloc 8
+alloc 1016
+alloc 2024
+TRAP: memory access out of bounds
+```
+
+So the wasm32 failure ladder is: silent corruption of the null guard, then of
+BSS, then of the data blob and the shadow stack, and finally a trap — the
+*correct* diagnosis arriving only after everything it could have reported is
+already gone.
+
+**Any fix therefore has two halves, not one.** The `PXX_ESP` static-arena shape
+named in the original report gives a correct BASE but a fixed CEILING, which on
+this target means a program that dies at a size the host could trivially have
+granted. wasm's native `sbrk` is `memory.grow`, which returns the previous size
+in pages — but there is no way to reach it from Pascal today: the wasm32
+backend has no lowering for it and no intrinsic is declared. So the arm needs
+an RTL change (Track A, this ticket) **and** a backend intrinsic (the wasm32
+lane), and the two should be designed together.
+
+**What now depends on it:** managed strings publish correctly as of the phase
+landed today, and `test/wasm/check_managed.sh` passes — but only because its
+live set is a handful of short strings the free list recycles inside the first
+kilobyte. That script asserts `PXXAlloc` still returns an address below 1024,
+so **it will FAIL by design the day this ticket lands**, which is the signal to
+rewrite its scope note and re-measure the slice at a realistic size.

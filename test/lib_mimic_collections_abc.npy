@@ -39,11 +39,12 @@ of the shim wrong, and each would pass on a shim that had quietly given up:
 
 import collections.abc as cabc
 
-# Bound to plain names, for two reasons. It is what the corpus's classes look
-# like (`class Trie(Mapping)`), and `isinstance(x, cabc.Mapping)` — the
-# qualified spelling — does not compile: `unknown type in isinstance: cabc`
-# (bug-n-isinstance-does-not-accept-a-qualified-class-name). CPython accepts
-# both spellings, so this file runs unmodified there either way.
+# Bound to plain names because that is what the corpus's classes look like
+# (`class Trie(Mapping)`). It used to be forced as well: the QUALIFIED spelling
+# `isinstance(x, cabc.Mapping)` did not compile
+# (bug-n-isinstance-does-not-accept-a-qualified-class-name, now fixed and
+# asserted directly below). CPython accepts both spellings, so this file runs
+# unmodified there either way.
 Mapping = cabc.Mapping
 MutableMapping = cabc.MutableMapping
 
@@ -191,6 +192,10 @@ check("clear_keys", sorted(c.keys()), [])
 
 # --- inheritance is real, not duck typing ---
 check("ro_isinstance_mapping", isinstance(m, Mapping), True)
+# the qualified spelling, on its own line because it is the one that used to be
+# a compile error rather than a wrong answer
+check("ro_isinstance_qualified", isinstance(m, cabc.Mapping), True)
+check("ro_isinstance_qualified_no", isinstance([1], cabc.Mapping), False)
 check("rw_isinstance_mutable", isinstance(w, MutableMapping), True)
 check("rw_isinstance_mapping", isinstance(w, Mapping), True)
 

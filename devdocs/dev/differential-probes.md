@@ -34,6 +34,16 @@ differently is a target-dependent bug.
 a generated corpus instead of a curated one, and they belong to Track T — see
 `devdocs/dev/track-t.md`.
 
+**`PXXDBG=a.poisonslot` is a fifth shape and is documented in the playbook, not
+here**, because it has no external oracle at all: it compares a program against
+*itself* under a deliberate perturbation. Where the four above ask "does our
+answer match theirs", it asks **"does anything still READ this storage"** — the
+question you hit when an optimisation wants to stop maintaining something and
+the blocker is an audit with no completion criterion rather than a wrong value.
+It poisons the storage so a surviving reader returns garbage instead of a
+plausible value. Full note, including the rule that the probe must call the same
+predicate as the change it is testing, in `devdocs/dev/debugging-playbook.md`.
+
 ## The rules every one of these shares
 
 These are not style preferences. Each was learned by chasing a phantom.
@@ -215,3 +225,52 @@ masquerade as a value.
 
 Related: `grep -h` suppresses filenames, which silently defeats a downstream
 `grep -v /tests/` filter — same lane, same night, different pipe.
+
+## The blind spot every pxx-vs-pxx arm shares: AGREEMENT IS NOT EVIDENCE
+
+`lib_cross_sweep` and `fuzz.sh` differ from the other probes in one structural
+way: **both arms are pxx.** The section above states the sound half —
+*"anything a cross target prints differently is a target-dependent bug"* — and
+the converse is the half that misleads, because it is the one a reader supplies
+themselves:
+
+> **When two arms share an upstream, their AGREEMENT carries no information
+> about that upstream.** A defect in the shared frontend, the shared AST or the
+> shared IR makes both sides wrong *identically*, and a differential whose two
+> arms are wrong in the same way is green.
+
+Measured instance, 2026-08-28: a set-membership item constant is funnelled
+`Int64 → Integer → Int64` through one `var` line in the Pascal parser, so
+`1 in [4294967297]` evaluates TRUE **on every target** — x86-64, i386, arm32,
+aarch64 and wasm32 alike (`bug-p-set-membership-item-constant-truncated-to-32-bits`).
+No cross-target diff can see it. The sibling bug found in the same session —
+i386 and arm32 truncating the *test value* — **is** a cross-target divergence and
+a diff finds it immediately
+(`bug-a-set-membership-truncates-the-test-value-on-32-bit-backends`). Same
+feature, same hour, one visible to the method and one invisible to it.
+
+The tools are not mis-named: `fuzz.sh` calls itself an **IR** correctness fuzzer
+and that scope is honest. The failure mode is in the reading — taking a green
+cross-target sweep as coverage of *the compiler* rather than of *the part below
+the frontend*.
+
+**And the same test applies to how you VERIFY, not just to what you run.** Two checking
+methods can share an upstream as easily as two test arms:
+
+> **GREP AND READ ARE NOT INDEPENDENT — they share the FILE as their population.**
+
+Measured 2026-08-28: four `test/wasm/` checks were recorded as having "exactly one assertion
+each", confirmed by grepping the check file and by reading it. Both were wrong the same way —
+each check *also* prints a line emitted by the shared `wat_oracle.sh` helper, which is not in
+the check file at all. A grep of the file misses it, and reading the file agrees with the grep,
+so two methods corroborated each other into a confident wrong count. It surfaced only when the
+annotated check printed both lines together, i.e. from the **output**, which was the one
+population that contained the answer.
+
+Before calling something double-checked, ask what the two checks READ, not how different they
+feel.
+
+**So: before trusting a green pxx-vs-pxx run, name what the two arms share, and
+treat everything above that line as untested by it.** For anything at or above
+the frontend the oracle has to be foreign — FPC, gcc, CPython — which is
+precisely what the four probes at the top of this file are for.

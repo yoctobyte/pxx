@@ -2530,6 +2530,92 @@ test-nilpy: $(COMPILER)
 	   && printf '%s\n' "$$out" | grep -q '^pascal26:43: error: no overload of P1' \
 	   && test ! -e $(TESTTMP)/test_bad_arity26 \
 	  || { echo "test_bad_arity_and_noncallable_all_report_fail: FAIL - rc=$$rc (want rc=1, four diagnostics on lines 40-43, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	@# A METHOD mentioned WITHOUT its arguments -- the deficit direction of the
+	@# arity check. The surplus direction is pinned just above; too few args
+	@# INSIDE parens was always caught by Expect(tkComma), so the hole was the
+	@# no-paren shape, on all four call paths (instance fn/proc, virtual, class).
+	@# bug-p-a-method-call-with-missing-arguments-is-accepted-and-reads-garbage
+	@out=$$(./$(COMPILER) test/test_method_missing_args_report_fail.pas $(TESTTMP)/test_method_missing_args26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:42: error: wrong number of parameters in call to TSvc.IPick' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:43: error: wrong number of parameters in call to TSvc.IDo' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:44: error: wrong number of parameters in call to TSvc.VDo' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:45: error: wrong number of parameters in call to TSvc.CDo' \
+	   && test ! -e $(TESTTMP)/test_method_missing_args26 \
+	  || { echo "test_method_missing_args_report_fail: FAIL - rc=$$rc (want rc=1, four diagnostics on lines 42-45, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	@# ...and the other direction: the parenless mentions that must STAY legal.
+	@# A rejection test alone would pass just as well if the check were far too
+	@# strict, and the method-POINTER shape here is the one with real regression
+	@# risk -- it is the basis of the method-pointer cast ticket.
+	@./$(COMPILER) test/test_method_parenless_still_valid.pas $(TESTTMP)/test_method_parenless26
+	@$(TESTTMP)/test_method_parenless26 | diff -u test/test_method_parenless_still_valid.expected - \
+	  || { echo 'test_method_parenless_still_valid: FAIL - a legitimate parenless method mention was broken'; exit 1; }
+	@# A cast to a METHOD-POINTER type reads `obj.M` as a REFERENCE, not a call.
+	@# Segfaults on the pre-fix compiler (compiles clean, then jumps to an
+	@# integer), so this is not a no-op test. Expectations came from FPC.
+	@# bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults
+	@./$(COMPILER) test/test_method_pointer_cast.pas $(TESTTMP)/test_method_ptr_cast26
+	@$(TESTTMP)/test_method_ptr_cast26 | diff -u test/test_method_pointer_cast.expected - \
+	  || { echo 'test_method_pointer_cast: FAIL - a method-pointer cast lost its reference reading'; exit 1; }
+	@# A method may be NAMED `Default` -- rtl-generics' central idiom, and a
+	@# collision with nothing to do with generics. Exercises the property
+	@# `default` MODIFIER alongside it, since that is what a too-eager fix breaks.
+	@# bug-p-a-method-cannot-be-named-Default
+	@./$(COMPILER) test/test_method_named_default.pas $(TESTTMP)/test_method_default26
+	@$(TESTTMP)/test_method_default26 | diff -u test/test_method_named_default.expected - \
+	  || { echo 'test_method_named_default: FAIL - a method named Default, or the property default modifier, broke'; exit 1; }
+	@# A nested `specialize X<T>` living ONLY in a generic's METHOD body. The
+	@# prerequisite scan swept the class body and nothing else, so the literal
+	@# word `specialize` survived into the stream.
+	@# bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body
+	@./$(COMPILER) test/test_generic_nested_specialize_in_method_body.pas $(TESTTMP)/test_gen_nested_spec26
+	@$(TESTTMP)/test_gen_nested_spec26 | diff -u test/test_generic_nested_specialize_in_method_body.expected - \
+	  || { echo 'test_generic_nested_specialize_in_method_body: FAIL'; exit 1; }
+	@# `resourcestring` is a runtime-replaceable VARIABLE in FPC, so `@S` is legal.
+	@# We parsed the section as plain consts, and a const has no address, so the
+	@# Delphi/FPC `Exception.CreateRes(@SArgumentOutOfRange)` idiom -- 28 sites in
+	@# rtl-generics -- was `error: undefined variable`. Both directions are pinned
+	@# here: the address must work, AND a one-character resourcestring must stay a
+	@# STRING (it used to collapse to a Char const, which took an address happily
+	@# and read garbage through it -- worse than the error).
+	@# bug-p-a-resourcestring-is-not-addressable
+	@./$(COMPILER) test/test_resourcestring_addressable.pas $(TESTTMP)/test_resstr26
+	@$(TESTTMP)/test_resstr26 | diff -u test/test_resourcestring_addressable.expected - \
+	  || { echo 'test_resourcestring_addressable: FAIL - @resourcestring broke'; exit 1; }
+	@# Two generics referencing each other where only ONE direction is a
+	@# declaration-time dependency (inheritance); the other is a method-body
+	@# reference FPC resolves when the method is compiled. Treating both as
+	@# blocking manufactured a cycle out of a program that has none.
+	@# Pairs with test_generic_cycle_fail below, which asserts a GENUINE cycle is
+	@# still refused -- turning this test green by disabling the detector turns
+	@# that one red, which is the point of keeping both.
+	@# bug-p-mutually-referencing-generics-are-rejected-as-circular
+	@./$(COMPILER) test/test_generic_mutual_reference.pas $(TESTTMP)/test_gen_mutual26
+	@$(TESTTMP)/test_gen_mutual26 | diff -u test/test_generic_mutual_reference.expected - \
+	  || { echo 'test_generic_mutual_reference: FAIL - mutual generic refs rejected as circular again'; exit 1; }
+	@# A template method body naming a template declared LATER in the same type
+	@# section. FPC accepts both orderings; we accepted only one. Both arms are in
+	@# the file on purpose -- the backward one is the arm that always worked, and a
+	@# fix that trades one ordering for the other would pass with only the forward.
+	@# bug-p-a-generic-specialized-before-its-declaration-is-unresolvable
+	@./$(COMPILER) test/test_generic_forward_template_reference.pas $(TESTTMP)/test_gen_fwd26
+	@$(TESTTMP)/test_gen_fwd26 | diff -u test/test_generic_forward_template_reference.expected - \
+	  || { echo 'test_generic_forward_template_reference: FAIL - declaration order matters again'; exit 1; }
+	@# a call whose RESULT is a metaclass must work in ALL FOUR node kinds a call
+	@# can be spelled as -- AN_CALL plus the two virtual rewrites and AN_INTF_CALL.
+	@# The non-virtual rows are controls: they always worked.
+	@# bug-a-nodemetaclassci-does-not-know-a-virtual-class-method-call
+	@./$(COMPILER) test/test_metaclass_call_spellings.pas $(TESTTMP)/test_metacall26
+	@$(TESTTMP)/test_metacall26 | diff -u test/test_metaclass_call_spellings.expected - \
+	  || { echo 'test_metaclass_call_spellings: FAIL - a metaclass-returning call lost its class'; exit 1; }
+	@# a CLASS method's result must carry the RETURN type's record, not the
+	@# receiver's: f.MakeC.Tag looked Tag up on f's class. Where both classes had
+	@# a member of that name it silently called the WRONG one on the wrong object.
+	@# bug-p-a-class-method-call-keeps-the-receivers-class
+	@./$(COMPILER) test/test_class_method_result_type.pas $(TESTTMP)/test_clsmeth_ret26
+	@$(TESTTMP)/test_clsmeth_ret26 | diff -u test/test_class_method_result_type.expected - \
+	  || { echo 'test_class_method_result_type: FAIL - a class method result lost its type'; exit 1; }
 	@# a SECOND class of the same name in one unit must be refused, naming it
 	@./$(COMPILER) test/test_pascal_duplicate_class_fail.pas $(TESTTMP)/test_pascal_dup_class26 2>&1 \
 	  | grep -q 'duplicate class name TFoo' \
@@ -13939,6 +14025,23 @@ lib-test: pxx-stable-check
 	# (bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line).
 	$(PXX_STABLE) -Fulib/rtl test/lib_textreadnumtok.pas $(TESTTMP)/lib_textreadnumtok
 	test "$$($(TESTTMP)/lib_textreadnumtok | tail -n 1)" = "TEXTNUMTOK OK"
+	# SeekEof/SeekEoln (the whitespace-tolerant loop conditions the tokeniser
+	# above needs) and Rename. The skip set is the subject and it is NOT
+	# `c <= 32`: measured against FPC 3.2.2 byte by byte, exactly #9, #26 and
+	# #32 are stepped over, plus #10/#13 for SeekEof. The test pins #1, #31 and
+	# #33 so that simplification fails here rather than silently eating control
+	# bytes out of a data file
+	# (feature-b-text-file-surface-seekeof-rename-settextbuf).
+	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_text_seek_rename.pas $(TESTTMP)/lib_text_seek_rename
+	test "$$($(TESTTMP)/lib_text_seek_rename | tail -n 1)" = "TEXTSEEK OK"
+	# IOResult reports FPC's codes, never a raw negative errno. Measured against
+	# fpc 3.2.2, and FPC is NOT a clean translation: it maps a known set and
+	# passes the rest through as the positive errno (ELOOP comes back as 40).
+	# The ELOOP row is load-bearing — it proves the else-arm is FPC's behaviour
+	# and not a fallback we invented. `path not found` is 2, not the 3 DOS
+	# heritage predicts. compat-pascal-ioresult-returns-a-negative-errno.
+	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_ioresult_fpc_codes.pas $(TESTTMP)/lib_ioresult_fpc_codes
+	test "$$($(TESTTMP)/lib_ioresult_fpc_codes | tail -n 1)" = "IORESULTCODES OK"
 	# The PChar family (StrPCopy/StrNew/StrAlloc/StrECopy/StrMove/StrUpper...).
 	# Half of it existed and half did not, which is the worst shape: code
 	# compiles up to its second call. Expectations measured against FPC by
@@ -13978,6 +14081,17 @@ lib-test: pxx-stable-check
 	# implementation gets wrong ("a"b is TWO items; a"b" is one literal item).
 	$(PXX_STABLE) -Fulib/rtl test/lib_commatext.pas $(TESTTMP)/lib_commatext
 	test "$$($(TESTTMP)/lib_commatext | tail -n 1)" = "COMMATEXT OK"
+	# VarType speaks FPC's varXxx codes, and the constants exist at all. Numbers
+	# MEASURED from fpc 3.2.2, not transcribed — the set is irregular (varBoolean
+	# = 11, sized ints from 16, strings at 256) so a guessed one would look right
+	# and be wrong. 11 of 12 rows are FPC's answer exactly; the documented
+	# divergence is `v := 1` (FPC narrows the LITERAL to varShortInt, we do not).
+	# Both text tags fold onto varString, which is what makes VarType(v) =
+	# varString true for a one-char string — FPC has no char variant either.
+	# The predicates are asserted to AGREE with VarType on every row: that is the
+	# real regression risk, since they read the private tag.
+	$(PXX_STABLE) -Fulib/rtl test/lib_variants_vartype_codes.pas $(TESTTMP)/lib_variants_vartype_codes
+	test "$$($(TESTTMP)/lib_variants_vartype_codes | tail -n 1)" = "VARTYPECODES OK"
 	# The Python math surface (NilPy's `import math` resolves against lib/rtl's
 	# math unit): e/tau/inf/nan, isnan/isinf, pow, log(x,base), atan2,
 	# degrees/radians, copysign's sign-bit rule, isclose, factorial, comb.
@@ -14042,6 +14156,24 @@ lib-test: pxx-stable-check
 	# per-stream PRNG state: reproducibility + independent split streams (no lock)
 	$(PXX_STABLE) test/lib_randomstate.pas $(TESTTMP)/lib_randomstate
 	test "$$($(TESTTMP)/lib_randomstate | tail -n 1)" = "RANDOMSTATE OK"
+	# Tier 1 (hardware entropy) wiring: random.pas consuming __pxxCpuHasHwRandom
+	# and __pxxHwRandom64. Asserts CONTRACTS, not values -- RDRAND is present on
+	# this box but not on every box the suite runs on -- so both branches of the
+	# availability probe print the same lines and the expected output is
+	# machine-independent. The line with teeth is seeded-reproducible: tier 1 must
+	# not leak into the deterministic path, where a change would look random and
+	# be catastrophic. Compared whole rather than by tail: the sentinel is
+	# unreachable on failure and the program exits 1, but the FAIL lines are the
+	# diagnostic and a tail would discard them.
+	$(PXX_STABLE) test/lib_random_hw_tier1.pas $(TESTTMP)/lib_random_hw_tier1
+	test "$$($(TESTTMP)/lib_random_hw_tier1)" = "$$(printf 'probe-stable=ok\ncontract=ok\nseeded-reproducible=ok\nrandomize-varies=ok\nHWTIER1 OK')"
+	# FPC-compatible Signal(sig, handler) over pxx's PARAMETERLESS hook. The row
+	# with teeth is per-signal-number: ONE handler registered for TWO signals,
+	# each asserting its own number. A single-signal test passes even with the
+	# trampoline hard-wired to a constant, which is the bug this unit could have
+	# had -- the control produced usr1=3 usr2=0.
+	$(PXX_STABLE) test/lib_signals_fpc.pas $(TESTTMP)/lib_signals_fpc
+	test "$$($(TESTTMP)/lib_signals_fpc)" = "$$(printf 'prev-initial=ok\nper-signal-number=ok\nprev-returned=ok\nrange=ok\nignore=ok\nSIGNALS OK')"
 	# IPv6 over the PAL: sockaddr_in6 layout + loopback round trip (skips if the
 	# host has no AF_INET6 — a broken layout is the target, not the CI netstack)
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_ipv6.pas $(TESTTMP)/lib_ipv6
@@ -14125,6 +14257,12 @@ lib-test: pxx-stable-check
 	  test "$$n" = "0" || (echo "FAIL: crtl_atexit has $$n DT_NEEDED — atexit bound to libc"; exit 1); \
 	  echo "  lib-test: crtl_atexit is self-contained (no DT_NEEDED)"; \
 	else echo "  lib-test: readelf absent, skipping the atexit linkage check"; fi
+	# Whole-surface generalisation of the two DT_NEEDED spot-checks above: every
+	# function crtl DECLARES must also be DEFINED, or a C program that calls it
+	# silently binds to the system libc and cannot run off this box. The name list
+	# is generated from the headers on every run rather than checked in, because a
+	# frozen list goes stale exactly where the next such gap appears.
+	sh test/crtl_declaration_census.sh $(PXX_STABLE) $(TESTTMP)
 	# Payne-Hanek huge-argument trig: sin/cos/tan past 1e8, expected values are
 	# the correctly-rounded doubles judged against 400-digit references.
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_trig_huge.c $(TESTTMP)/crtl_trig_huge
@@ -14565,6 +14703,38 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_strutil.pas $(TESTTMP)/lib_strutil
 	test "$$($(TESTTMP)/lib_strutil | grep -c '=ok')" = "59"
 	test "$$($(TESTTMP)/lib_strutil | grep -c 'FAIL')" = "0"
+	# the four gaps a 22-program string differential against fpc 3.2.2 found:
+	# variadic Concat under `uses sysutils`, AnsiQuotedStr, SameStr, and a
+	# failed TryStr* leaving the caller's stale value in place. Expected output
+	# is fpc 3.2.2's, byte for byte.
+	$(PXX_STABLE) -Fulib/rtl test/lib_sysutils_string_gaps.pas $(TESTTMP)/lib_sysutils_string_gaps
+	$(TESTTMP)/lib_sysutils_string_gaps | diff -u test/lib_sysutils_string_gaps.expected -
+	# unsigned 64-bit RENDERING: sysutils parsed unsigned and printed signed, so
+	# every QWord >= 2^63 came back negative from IntToStr and '%u' was a plain
+	# synonym for '%d'. Controls (WriteLn, Str, IntToHex, '%x') are in the same
+	# file on purpose -- the value was never wrong, only its rendering. Expected
+	# output is fpc 3.2.2's, byte for byte.
+	$(PXX_STABLE) -Fulib/rtl test/lib_qword_render.pas $(TESTTMP)/lib_qword_render
+	$(TESTTMP)/lib_qword_render | diff -u test/lib_qword_render.expected -
+	# the typinfo FACADE (feature-typinfo-facade-unit): FPC's RTTI API shapes over
+	# our blobs. Every property KIND crossed with both ACCESS SHAPES -- `read
+	# FField` and `read GetIt` -- because the method arm was missing entirely and
+	# answered 0. Plus TTypeData's OrdType/FloatType, which a vendored
+	# Generics.Defaults uses as comparer case-selectors; those twelve values are
+	# fpc 3.2.2's, run for run.
+	$(PXX_STABLE) -Fulib/rtl test/lib_typinfo_props.pas $(TESTTMP)/lib_typinfo_props
+	test "$$($(TESTTMP)/lib_typinfo_props | grep -c '=ok')" = "63"
+	test "$$($(TESTTMP)/lib_typinfo_props | tail -1)" = "TYPINFO-PROPS OK"
+	# the three Delphi/FPC exception-API gaps a vendored rtl-generics hits:
+	# EArgumentOutOfRangeException (a DESCENDANT of EArgumentException, so
+	# `on E: EArgumentException` catches it), Exception.CreateRes/CreateResFmt,
+	# and System.Error over TRuntimeError -- whose tail is FPC's, not Delphi's.
+	# The first 18 rows run identically under fpc 3.2.2; the file then diverges
+	# deliberately at Error(), which halts there and raises here (our domain by
+	# the error-handling ruling; see devdocs/dev/pascal-dialect-divergences.md).
+	$(PXX_STABLE) -Fulib/rtl test/lib_sysutils_delphi_exceptions.pas $(TESTTMP)/lib_sysutils_delphi_exc
+	test "$$($(TESTTMP)/lib_sysutils_delphi_exc | grep -c '=ok')" = "21"
+	test "$$($(TESTTMP)/lib_sysutils_delphi_exc | tail -1)" = "SYSUTILS-DELPHI-EXC OK"
 	# the date PARSE direction (StrToDate/StrToDateTime/TryStrTo*). Rows are
 	# read off FPC 3.2.2, including the ones nobody guesses: ISO input raises
 	# under the d/m/y default, and a two-digit year uses a SLIDING window.
@@ -14647,7 +14817,7 @@ endif
 	test "$$($(TESTTMP)/lib_mimic_saxutils | grep -c '=ok')" = "18"
 	test "$$($(TESTTMP)/lib_mimic_saxutils | tail -1)" = "MIMIC-SAXUTILS OK"
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_sax_xmlreader.npy $(TESTTMP)/lib_mimic_xmlreader
-	test "$$($(TESTTMP)/lib_mimic_xmlreader | grep -c '=ok')" = "21"
+	test "$$($(TESTTMP)/lib_mimic_xmlreader | grep -c '=ok')" = "25"
 	test "$$($(TESTTMP)/lib_mimic_xmlreader | tail -1)" = "MIMIC-XMLREADER OK"
 	# xml.dom.Node's twelve nodeType constants
 	# (feature-nilpy-xml-dom-is-two-questions-not-one). Every assertion is on a
@@ -14689,7 +14859,7 @@ endif
 	# writes `from collections.abc import Mapping`, which is swallowed before it
 	# reaches here (bug-n-from-collections-abc-import-is-swallowed-by-the-collections-root-rule).
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_collections_abc.npy $(TESTTMP)/lib_mimic_collections_abc
-	test "$$($(TESTTMP)/lib_mimic_collections_abc | grep -c '=ok')" = "47"
+	test "$$($(TESTTMP)/lib_mimic_collections_abc | grep -c '=ok')" = "49"
 	test "$$($(TESTTMP)/lib_mimic_collections_abc | tail -1)" = "MIMIC-COLLECTIONS-ABC OK"
 	# urllib.parse, reached the way the corpus reaches it: `from six.moves
 	# import urllib_parse as urlparse`, a RENAMED re-export through two shims
@@ -14718,10 +14888,29 @@ endif
 	# wrong address rather than a failure. -dPXX_DYNLIB_LIBC is required with
 	# -dPXX_DNS_LIBC and the build refuses without it; running the libc variant
 	# unconditionally follows the existing test_dynlib precedent in `make test`.
+	# Capture the output instead of asserting through a bare pipe. These two rows
+	# went red exactly once and left NO record of what the last line actually said,
+	# because `test "$$(prog | tail -1)"` discards stdout on mismatch. On a
+	# reproducible failure that costs nothing; on an intermittent it costs the one
+	# run you needed. The assertion is unchanged -- only the diagnostic survives now.
 	$(PXX_STABLE) -Fulib/rtl test/lib_dns_libc.pas $(TESTTMP)/lib_dns_libc_default
-	test "$$($(TESTTMP)/lib_dns_libc_default | tail -1)" = "DNSLIBC OK"
+	@out=$$($(TESTTMP)/lib_dns_libc_default 2>&1); \
+	  test "$$(printf '%s\n' "$$out" | tail -1)" = "DNSLIBC OK" \
+	  || { echo "FAIL: lib_dns_libc_default output was:"; printf '%s\n' "$$out"; exit 1; }
 	$(PXX_STABLE) -dPXX_DNS_LIBC -dPXX_DYNLIB_LIBC -Fulib/rtl -Fulib/rtl/platform/posix test/lib_dns_libc.pas $(TESTTMP)/lib_dns_libc
-	test "$$($(TESTTMP)/lib_dns_libc | tail -1)" = "DNSLIBC OK"
+	@out=$$($(TESTTMP)/lib_dns_libc 2>&1); \
+	  test "$$(printf '%s\n' "$$out" | tail -1)" = "DNSLIBC OK" \
+	  || { echo "FAIL: lib_dns_libc output was:"; printf '%s\n' "$$out"; exit 1; }
+	# RFC 6761 6.3: localhost always means loopback and must never reach a
+	# nameserver. The PREDICATE rows are the gate, not the resolution rows --
+	# this box's stub resolver is itself compliant and synthesises the whole
+	# localhost subtree, so reverting the fix still returned the right answer
+	# and differed only in emitting 20 DNS queries to get it. A value assertion
+	# would therefore be testing systemd-resolved rather than us.
+	$(PXX_STABLE) -Fulib/rtl test/lib_dns_localhost_rfc6761.pas $(TESTTMP)/lib_dns_localhost
+	@out=$$($(TESTTMP)/lib_dns_localhost 2>&1); \
+	  test "$$(printf '%s\n' "$$out" | tail -1)" = "DNSLOCALHOST OK" \
+	  || { echo "FAIL: lib_dns_localhost output was:"; printf '%s\n' "$$out"; exit 1; }
 	# A spawned child inherits the parent's environment (every spawn site used
 	# to hard-code an empty envp, i.e. handed each child `env -i`).
 	$(PXX_STABLE) -Fulib/rtl test/lib_child_env.pas $(TESTTMP)/lib_child_env

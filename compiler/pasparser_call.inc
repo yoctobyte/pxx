@@ -692,6 +692,115 @@ begin
             ProcParamHasDefault[mpi * MAX_PROC_PARAMS + nextIdx];
 end;
 
+{ `obj.M` / `TClass.M` with no `@` and no argument list, read as a method
+  REFERENCE rather than a call.
+
+  Delphi lets the `@` be omitted where a method POINTER is wanted, so the same
+  three tokens mean two different things and only the CONTEXT separates them.
+  Two contexts supply that context today -- an assignment whose LHS is a
+  method-pointer variable, and a CAST whose target is a method-pointer type --
+  and they were answering the question separately: the assignment arms had the
+  reading, the cast arm did not, so `TSel(s.IPick)` fell through to the ordinary
+  expression path, was parsed as a zero-argument CALL, and the returned integer
+  was reinterpreted as a {Code, Data} pair. That crashed
+  (bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults) until the
+  arity check turned it into a diagnostic, which made it honest but no more
+  correct: the call reading is not too strict, it is the WRONG READING.
+
+  So the decision lives here, once, and the callers differ only in how they
+  establish that a method pointer is wanted -- exactly the split
+  BuildIndirectCallAST states for the callee node. Writing a fifth
+  AN_METHODREF construction site instead is what root-cause-over-microfix.md
+  says to stop and count rather than do.
+
+  Both receiver flavours are handled because they are one concept: a VARIABLE
+  (Self is the instance, AN_IDENT) and a CLASS NAME (Self is the metaclass, the
+  RTTI blob, AN_CLASSREF -- whose VMT lives at +24, not [Self+0], which is
+  IRMethodRefCode's business).
+
+  Returns -1 without consuming anything when the tokens are not this shape, so
+  a caller can simply fall through to ParseExpr. A following `(` means an
+  argument list, i.e. a real call, and is left alone. }
+function TryParseParenlessMethodRef: Integer;
+var rsym, rci, rmmi, opNode, refNode: Integer;
+begin
+  Result := -1;
+  if not DelphiMode then Exit;
+  if CurTok.Kind <> tkIdent then Exit;
+  if TokPos + 2 >= TokCount then Exit;
+  if Tokens[TokPos].Kind <> tkDot then Exit;
+  if Tokens[TokPos + 1].Kind <> tkIdent then Exit;
+  if Tokens[TokPos + 2].Kind = tkLParen then Exit;   { an argument list: a CALL }
+
+  rci := -1;
+  rmmi := -1;
+  rsym := FindSym(CurTok.SVal);
+  if (rsym >= 0) and (Syms[rsym].RecName >= REC_UCLASS_BASE) and
+     (not UClsIsRecord[Syms[rsym].RecName - REC_UCLASS_BASE]) then
+    rci := Syms[rsym].RecName - REC_UCLASS_BASE
+  else if (rsym < 0) and (FindUClass(CurTok.SVal) >= 0) and
+          (not UClsIsRecord[FindUClass(CurTok.SVal)]) then
+    rci := FindUClass(CurTok.SVal)
+  else
+    Exit;
+
+  rmmi := FindUMeth(rci, GetTokenStr(TokPos + 1));
+  if rmmi < 0 then Exit;
+
+  { committed: nothing below can fail, so no tokens are consumed speculatively }
+  if rsym >= 0 then
+  begin
+    opNode := AllocNode(AN_IDENT);
+    ASTIVal[opNode] := rsym;
+    ASTTk[opNode] := Ord(tyClass);
+  end
+  else
+  begin
+    opNode := AllocNode(AN_CLASSREF);
+    ASTIVal[opNode] := rci;
+    ASTTk[opNode] := Ord(tyPointer);
+  end;
+
+  Next; Next;   { receiver name and '.'; CurTok = method name }
+  refNode := AllocNode(AN_METHODREF);
+  ASTIVal[refNode] := UMthProc_[rmmi];
+  ASTLeft[refNode] := opNode;
+  ASTRight[refNode] := UMthVirSlot[rmmi];   { VMT slot (>=0 virtual) }
+  ASTTk[refNode] := Ord(tyRecord);
+  Next;         { consume method name }
+  Result := refNode;
+end;
+
+{ A method mentioned with NO argument list at all, where the method REQUIRES
+  arguments: `s.IPick;` on `IPick(A: LongInt)`. Every method-call site shares the
+  shape `if CurTok.Kind = tkLParen then begin ...parse args... end;` with no
+  else, so the call node was returned holding only Self and the callee read
+  whatever the argument register happened to contain. FPC rejects it; a FREE
+  routine in the same position was already rejected here. One concept, two
+  paths, and the second path is the one that stayed broken
+  (normalise-dont-special-case.md).
+
+  Too-few arguments INSIDE parens was never the hole -- Expect(tkComma) and
+  ExpectCallRParen already catch that -- so this fires only on the no-paren
+  shape, and shares ExpectCallRParen's wording because it is the same defect
+  reported from the other side.
+
+  What it must NOT reject: `p := s.Act` (a method POINTER, which is legitimately
+  not a call) and `n := s.NoArgs` (parameterless). The first never reaches a call
+  site at all -- it is resolved to AN_METHODREF earlier -- and the second is
+  excluded by the ParamCount test. A trailing default is likewise not missing:
+  Pascal defaults are trailing, so the flag on the FIRST unsupplied parameter
+  settles the whole tail.
+  bug-p-a-method-call-with-missing-arguments-is-accepted-and-reads-garbage }
+procedure CheckMethodCallArity(mpi: Integer);
+begin
+  if (mpi < 0) or (mpi >= ProcCount) then Exit;
+  if Procs[mpi].ParamCount <= 1 then Exit;          { Self only: nothing required }
+  if (1 < MAX_PROC_PARAMS) and
+     ProcParamHasDefault[mpi * MAX_PROC_PARAMS + 1] then Exit;
+  ErrorRecover('wrong number of parameters in call to ' + Procs[mpi].Name);
+end;
+
 { A call written with FEWER arguments than any overload declares, where the
   missing ones all carry defaults — `filedialog.askopenfilename()` against
   `askopenfilename(title=''; filetypes=...; ...)`. The method paths have filled
@@ -1357,7 +1466,9 @@ begin
     ASTLeft[callNode] := kwHead;
   end
   else if CanFillDefaultsFrom(mpi, 1) then
-    FillDefaultArgs(mpi, 1, callNode, lastArg);
+    FillDefaultArgs(mpi, 1, callNode, lastArg)
+  else
+    CheckMethodCallArity(mpi);
 
   Result := callNode;
 end;

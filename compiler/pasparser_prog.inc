@@ -1328,7 +1328,7 @@ begin
         Eat(tkSemicolon);
       end;
       tkVar:      ParseVarSection;
-      tkConst:    ParseConstSection(-1, 0);
+      tkConst:    ParseConstSection(-1, 0, False);
       tkType:     ParseTypeSection;
       tkClass,
       tkProcedure,
@@ -1378,7 +1378,7 @@ begin
           end;
         end
         else if CaseEqual(CurTok.SVal, 'resourcestring') then
-          ParseConstSection(-1, 0)      { registers as plain string constants }
+          ParseConstSection(-1, 0, True)   { real storage: see the section parser }
         else if CaseEqual(CurTok.SVal, 'label') then
           ParseLabelSection
         else

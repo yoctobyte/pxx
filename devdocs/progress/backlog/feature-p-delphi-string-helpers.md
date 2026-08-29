@@ -75,6 +75,31 @@ commit**, the way `test_asm_att_reject.pas` had to be re-pointed on
 this type has no members` — is unaffected, since integer helpers are out of
 scope here.
 
+> **SUPERSEDED 2026-08-29 (coordinator), and this one was an INSTRUCTION rather
+> than a claim — following it would have DONE DAMAGE.** The landmine above does
+> not exist. `test/test_scalar_member_fail.pas` has **no `uses` clause** (verified:
+> `program test_scalar_member_fail;` at `:19`, `writeln(s.Length)` at `:23`, 24
+> lines, no `uses`). FPC refuses that exact program too — `s.Length` without
+> `uses sysutils` is `Illegal qualifier` even under the modeswitch. A
+> **sysutils-scoped** `TStringHelper` therefore leaves it **correctly refused,
+> for the same reason FPC refuses it.**
+>
+> Re-pointing it would have retired a test that is right as written — and which
+> is now *more* precisely right than when it was written, because it pins that
+> the helpers are **unit-scoped rather than ambient.** Found by frankB, which
+> read the test before obeying the instruction about it. The line reference had
+> drifted as well: `Makefile:5419`, not `:4170-4171`.
+>
+> **Left in place rather than deleted**, per the record-keeping rule — it is an
+> accurate account of what a past session believed. But note the asymmetry it
+> exposes: **a stale CLAIM invites checking; a stale INSTRUCTION invites
+> compliance.** Everything in this repo's stale-prose family so far has been a
+> claim — a `blocked-by` outliving its blocker, a stall note, a withdrawn limit.
+> This is the first *directive*, and directives are the expensive half: it named
+> a file, a line, a reason, and a precedent, and the more specific it got the
+> more it read as verified.
+
+
 ## Measured state, 2026-08-25 (probing before starting)
 
 Rather more of this already works than the ticket assumed, and one part of the

@@ -53,6 +53,58 @@ Do not pipe it (`tools/gate.sh quick | tail`) when you care about the exit
 status — the pipe reports `tail`'s. The summary is already short; read it whole,
 or use `${PIPESTATUS[0]}`.
 
+**This is not a `gate.sh` rule — it is a rule about every command whose exit
+status you intend to believe**, `make lib-test` and `make demos` included. It bit
+again on 2026-08-28 in exactly that shape: `make lib-test 2>&1 | tail -25` reported
+success while make had aborted with `Error 1`, and the run had stopped before
+reaching the test the session had just added, so the "pass" covered a suite that
+never ran the thing being gated. Redirect to a file and read it
+(`make lib-test > log 2>&1; echo $?`); the log is there either way. The general
+form is worth keeping in mind whenever a check is piped: **a check is only safe if
+it prints a sentinel that failure cannot reach — if green looks like the ABSENCE
+of output, a pipe or a `tail` can manufacture it.** That is also why every
+`lib-test` entry ends in a positive `... OK` line rather than simply not failing.
+
+**And the third member of the family, which is the worst of the three: a pipe can
+destroy the DIAGNOSTIC.** The gate's own assertion shape,
+
+```make
+test "$$($(TESTTMP)/some_test | tail -n 1)" = "SENTINEL OK"
+```
+
+discards the program's output entirely when it does not match — `test` compares
+and says nothing. On a reproducible failure that costs nothing, because you rerun
+it. **On an INTERMITTENT it costs everything**, since the one run whose stdout you
+needed is the one that will not happen again: on 2026-08-28 `lib_dns_libc` went
+red once, passed a full gate re-run and fifteen direct runs of the same binary,
+and left no record of what its last line actually said
+(`bug-b-lib-dns-libc-failed-once-in-the-gate-and-claims-a-hermeticity-it-lacks`).
+A line that captured stdout on mismatch would have made that a diagnosis instead
+of a ticket. The first two members swallow a *status* and invert a
+*verification*; this one deletes the *evidence*, and precisely where evidence is
+irreplaceable.
+
+**Fourth member, and it strikes one stage earlier than the others: `sort -u`
+under a UTF-8 locale silently MERGES distinct identifiers.** Glibc's `en_US.UTF-8`
+collation ignores punctuation, so
+
+```sh
+printf '_longjmp\nlongjmp\n' | sort -u     # prints ONE line
+printf '_longjmp\nlongjmp\n' | LC_ALL=C sort -u   # prints two
+```
+
+Both names are declared in `lib/crtl/include/setjmp.h`, and on 2026-08-28 a crtl
+declaration census dropped `_longjmp` exactly this way — no error, no warning,
+a shorter list. The first three members corrupt the VERDICT of a check; this one
+corrupts its INPUT, so the check then runs perfectly on a set that quietly lost a
+member and reports an honest all-clear about the wrong thing. **Put `LC_ALL=C` on
+any `sort` whose elements are identifiers, paths, or shas**, and when a tool
+enumerates something, give it a floor it must clear (`test "$n" -ge 300`) so a
+collapsed search fails loudly instead of passing trivially. The same census,
+written a second time in Python, dropped `atexit` instead — for an unrelated
+reason — which is the argument for diffing two independent enumerations against
+each other rather than trusting either.
+
 ### `pgrep` matches your own watcher
 
 ```bash

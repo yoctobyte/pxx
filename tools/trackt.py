@@ -656,12 +656,72 @@ def cmd_start(clone, remote=None, web=True, local_code=False):
     return 0
 
 
+def describe_running(clone):
+    """One line on what a stop would DESTROY, or "" when nothing is at risk.
+
+    `trackt stop` sends SIGTERM and then says "aborting any running gate" —
+    after the signal, and without saying WHAT. That is fine when the daemon is
+    idle and expensive when it is not: a `full` pin verify is ~20 minutes on
+    the artifact every other track is building against, and it is exactly the
+    run that is hardest to get, because it needs a contiguous block the push
+    rate rarely leaves.
+
+    Written after nearly doing it (2026-08-28). A scratch waiter of mine tested
+    `phase != "testing"` and reported `pin-verify` as "safe to restart, nothing
+    discarded" — a deny-list of the one busy state I happened to think of, so
+    every state I had not thought of defaulted to safe. GATE_PHASES is the
+    allow-list that was already correct, sitting in this file; the fix is to
+    USE it here rather than re-derive it, and to say what is at stake before
+    the signal rather than after.
+
+    Information only. It does not block, because `trackt stop` is called from
+    scripts and a prompt that hangs a teardown is worse than a loud line.
+    """
+    try:
+        w = json.load(open(os.path.join(clone, twatch.WATCH_REL)))
+    except (OSError, ValueError):
+        return ""
+    if (w.get("phase") or "") not in GATE_PHASES:
+        return ""
+    what = w.get("phase")
+    if w.get("pin"):
+        what += " of PIN %s" % w["pin"]
+    head = "%s%s at %s" % (what, (" (%s)" % w["tier"]) if w.get("tier") else "",
+                           (w.get("sha") or "?")[:12])
+    # Progress comes from live.json, NOT from watch.json's `ts`. That field
+    # looks like a phase-start stamp and is not: run_gate refreshes it every
+    # 30s for the whole run (twatch.py, "keep the heartbeat fresh mid-run"), so
+    # `now - ts` is at most 30 seconds no matter how long the gate has run.
+    # A first cut of this function printed exactly that, and a 90-minute pin
+    # verify came out as "running 0 min" -- an error in the one direction that
+    # matters here, since the whole point of the line is to say how much is
+    # about to be thrown away. Measured before shipping: `stat` twice, 12s
+    # apart, saw no drift and looked like confirmation. The interval was 30.
+    live = read_json(os.path.join(clone, ".testmgr", "live.json"))
+    try:
+        done, total = int(live["done"]), int(live["total"])
+        mins = float(live["elapsed"]) / 60.0
+        eta = float(live.get("eta") or 0) / 60.0
+        return ("%s -- %d/%d jobs, %.0f min in%s" %
+                (head, done, total, mins,
+                 (", ~%.0f min left" % eta) if eta > 0 else ""))
+    except (KeyError, TypeError, ValueError):
+        return head
+
+
 def cmd_stop(clone):
     rc = 0
     pid, _ = daemon_pid(clone)
     if not pid:
         print("daemon not running")
     else:
+        # BEFORE the signal, and naming what is at stake. See describe_running.
+        busy = describe_running(clone)
+        if busy:
+            print("%strackt: this stop DISCARDS work in flight: %s%s"
+                  % (RED, busy, OFF))
+            print("trackt: it will be re-run, but a long gate may wait a long "
+                  "time for another contiguous block — pin verify especially.")
         os.kill(pid, signal.SIGTERM)
         print("SIGTERM sent (pid %d) — aborting any running gate" % pid)
         for _ in range(60):
@@ -1432,6 +1492,137 @@ def cmd_pinstatus(repo):
     return 0
 
 
+# ------------------------------------------------------- -O3 coverage query ---
+# `opt` is disjoint from the quick<native<limited<full chain and runs only as
+# idle watcher work, so no gate verdict speaks for it: measured 2026-08-28, 690
+# of the 2296 shas carrying a gate-tier verdict had ever been swept by `opt`.
+# The report banner says whether a sha was one of them; this answers the
+# question a PROMOTION asks, which is the other way round -- "is there any opt
+# run whose tree already contained this commit?"
+#
+# It exists because the -O3 -> -O2 promotion rule replaced a hard gate with a
+# citation (coordinator, 2026-08-28), and a citation nobody can produce
+# mechanically is a gate by another name.
+#
+# BOUNDARY, and it belongs in the output rather than only here: optdiff is a
+# CORRECTNESS instrument. A GREEN opt run proves the pass is not WRONG at -O3.
+# It cannot prove the pass FIRES -- a pass that silently stops firing passes
+# every level identically -- so this answers "not wrong", never "works".
+# Benches are Track O's.
+
+def opt_runs(repo):
+    """Every recorded `opt` run, newest first, from the uncapped archive."""
+    out = []
+    d = os.path.join(repo, "devdocs", "progress", "tstate")
+    try:
+        names = sorted(os.listdir(d))
+    except OSError:
+        return out
+    for fn in names:
+        if not (fn.startswith("runs-") and fn.endswith(".ndjson")):
+            continue
+        host = fn[len("runs-"):-len(".ndjson")]
+        try:
+            fh = open(os.path.join(d, fn))
+        except OSError:
+            continue
+        with fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue          # a torn last line is not a reason to fail
+                if r.get("tier") == "opt" and r.get("sha"):
+                    out.append({"sha": r["sha"], "date": r.get("date") or "",
+                                "verdict": r.get("verdict") or "?",
+                                "host": host})
+    # Sort explicitly. The archive is APPEND-ordered PER HOST and concatenated
+    # across hosts, so a tail of the concatenation is not a chronological tail
+    # -- reading one cost a wrong "last ran 2026-07-31" on 2026-08-28.
+    out.sort(key=lambda r: r["date"], reverse=True)
+    return out
+
+
+def optcov_pick(runs, contains):
+    """Newest run whose tree contained the commit, plus what stayed unknown.
+
+    `contains(sha)` returns True/False, or None when the answer cannot be had
+    (the run's sha is not in this checkout). Unknowns are COUNTED and reported,
+    never silently treated as misses: "no opt run covers this" and "I could not
+    check 40 of them" are different answers, and only one of them blocks a
+    promotion.
+    """
+    unknown = 0
+    for r in runs:
+        c = contains(r["sha"])
+        if c is None:
+            unknown += 1
+            continue
+        if c:
+            return r, unknown
+    return None, unknown
+
+
+def cmd_optcov(repo, args):
+    """Which opt run swept a tree containing this commit?"""
+    if not args:
+        print("usage: trackt optcov <commit-ish>")
+        return 2
+    rev = args[0]
+    try:
+        commit = subprocess.check_output(
+            ["git", "-C", repo, "rev-parse", "--verify", "%s^{commit}" % rev],
+            stderr=subprocess.DEVNULL).decode().strip()
+    except (subprocess.SubprocessError, OSError):
+        print("optcov: %s is not a commit in this checkout" % rev)
+        return 2
+
+    def contains(sha):
+        try:
+            if subprocess.call(["git", "-C", repo, "cat-file", "-e",
+                                "%s^{commit}" % sha],
+                               stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL) != 0:
+                return None           # run sha not in this checkout
+            return subprocess.call(["git", "-C", repo, "merge-base",
+                                    "--is-ancestor", commit, sha],
+                                   stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL) == 0
+        except (subprocess.SubprocessError, OSError):
+            return None
+
+    runs = opt_runs(repo)
+    if not runs:
+        print("optcov: no `opt` run recorded in the archive at all")
+        return 1
+    hit, unknown = optcov_pick(runs, contains)
+    print("optcov %s (%d opt run(s) on record)" % (commit[:12], len(runs)))
+    if hit:
+        print("  SWEPT by the opt run at %s (%s, %s, %s)"
+              % (hit["sha"][:12], hit["date"], hit["verdict"], hit["host"]))
+        if hit["verdict"] != "GREEN":
+            print("  NOTE that run was %s -- cite a GREEN one, or say why"
+                  % hit["verdict"])
+        print("  This means -O3 was not WRONG on a tree containing the commit."
+              "\n  It does NOT mean the pass fires; optdiff is a correctness"
+              " instrument.")
+        rc = 0
+    else:
+        newest = runs[0]
+        print("  NOT swept: no opt run's tree contained this commit.")
+        print("  Newest opt run is %s (%s, %s) -- older than the commit, or on"
+              " a divergent line." % (newest["sha"][:12], newest["date"],
+                                      newest["verdict"]))
+        rc = 1
+    if unknown:
+        print("  %d run(s) UNCHECKABLE: their sha is not in this checkout"
+              " (fetch, or they were rebased away)." % unknown)
+    return rc
+
+
 def main():
     ap = argparse.ArgumentParser(
         prog="trackt", description=__doc__.splitlines()[0],
@@ -1440,7 +1631,7 @@ def main():
                     choices=["up", "status", "start", "stop", "restart",
                              "watch", "run", "setup", "config", "log", "web",
                              "dashboard", "health", "install", "uninstall",
-                             "pinstatus"])
+                             "pinstatus", "optcov"])
     ap.add_argument("arg", nargs="*")
     ap.add_argument("--clone", help="watcher clone dir")
     ap.add_argument("--remote", help="start: clone URL if dir missing")
@@ -1467,6 +1658,8 @@ def main():
         return cmd_up(clone, a)
     if a.cmd in ("install", "uninstall"):
         return cmd_install(clone, uninstall=(a.cmd == "uninstall"))
+    if a.cmd == "optcov":
+        return cmd_optcov(os.path.dirname(HERE), a.arg)
     if a.cmd == "pinstatus":
         return cmd_pinstatus(repo_root(a.clone if a.clone else None))
     if a.cmd == "health":

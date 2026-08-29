@@ -1274,6 +1274,11 @@ const
   TARGET_ARM32   = 3;
   TARGET_XTENSA  = 4;
   TARGET_RISCV32 = 5;
+  { wasm32 is REGISTERED but has no backend: every dispatch chain it reaches
+    errors explicitly (feature-a-wasm32-target-registration-skeleton). The
+    registration lands ahead of the codegen so the wasm branch adds only new
+    files and never merges a shared one until it emits. }
+  TARGET_WASM32  = 6;
   XTENSA_ABI_CALL0    = 0;
   XTENSA_ABI_WINDOWED = 1;
   { Platform / OS axis — independent of the CPU axis above. posix = hosted
@@ -1690,6 +1695,7 @@ const
 
   MAX_TEMPLATES = 128;
   MAX_TEMPLATE_PARAMS = 4;   { type parameters per generic template (<TKey, TData>) }
+  MAX_GEN_METH_IMPL = 8192;  { mode-Delphi `procedure TFoo<T>.M` headers per compilation. See GenMethImplSOff. }
   MAX_TEMPLATE_TOKENS = 65536;  { FPC fgl alone buffers ~14k tokens of generic method bodies }
   MAX_NESTED_TOKENS = 8192;
   MAX_LIFTS = 512;
@@ -1765,6 +1771,27 @@ var
   { Active substitution set for SpecializeStream (param name -> concrete token),
     filled by each caller right before streaming. Multi-param generics
     substitute all entries in one pass. }
+  SpecSubShadowed : array[0..MAX_TEMPLATE_PARAMS-1] of Boolean;  { a type parameter whose name the TEMPLATE also declares (field/param/local/method). Accumulated across every SpecializeStream call for one template -- the class body and each method body are separate calls, and a field declared in the body is used in the methods. Keyed on the template, NOT the specialization: SetSpecSubs runs once per stream, so resetting per specialization cleared it between the class body and the methods. See SpecSubNamePosition. }
+  SpecSubShadowTi : Integer;  { the template SpecSubShadowed was accumulated for }
+  SpecSubShadowValid : Boolean;  { has SpecSubShadowTi been set at all? A Boolean rather than a -1 sentinel so BSS zero-init already means "not computed" -- template index 0 is a real index and would alias a sentinel. }
+  { mode-Delphi ONLY. DelphiRewriteGenericUses rewrites a generic method impl
+    header `procedure TFoo<T>.M;` into the objfpc spelling `procedure TFoo.M;`
+    by DELETING the `<T>` group -- which also deletes the only thing that told
+    the header apart from the impl of a same-named NON-generic class's method.
+    ParseSubroutine then resolves ownership by name and, when both classes
+    declare a method of that name, hands the template's body to the ordinary
+    class, where the template's class vars do not exist
+    (bug-p-a-generic-methods-out-of-line-header-binds-to-a-same-named-non-generic-class).
+    So record what the deletion throws away. Keyed on the class-name token's
+    SOffset -- a source character offset, unique per occurrence and unaffected
+    by the token-array shifting that RemoveTokens/InsertTokens do, which token
+    INDICES are not (DelphiRewriteGenericUses runs to a fixed point, per
+    template, and every round can move them).
+    Delphi-only by construction: objfpc source spells this header `TFoo.M`
+    itself, nothing rewrites it, no entry is ever recorded, and that genuinely
+    ambiguous case keeps resolving exactly as before. }
+  GenMethImplSOff : array[0..MAX_GEN_METH_IMPL-1] of Integer;
+  GenMethImplCount : Integer;
   SpecSubNames  : array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
   SpecSubValues : array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
   SpecSubKinds  : array[0..MAX_TEMPLATE_PARAMS-1] of TTokenKind;
@@ -2014,6 +2041,7 @@ var
     where r14/r15 still hold the caller's pristine values. See
     bug-a-o2-miscompiles-disassembler. }
   RcSuppressAssign  : Boolean;
+  RcProcHasExc      : Boolean;  { this body contains an IR_EXC_ENTER. The exception landing pad re-syncs every resident FROM its frame slot (RegcallRefreshResident), so it is the one reader of a resident's slot that is NOT residency-aware -- which makes it the gate on any pass that stops keeping that slot current. Measured, not assumed: with PXXDBG=a.poisonslot the only two programs of 19 that changed behaviour were the two with try/except in a loop, and both read back $5EEDADAD. Set per body at the top of UnifiedResidencyAssign, before its early exits. }
   { --measure-inline: phase-0 opportunity probe for feature-inline-routines /
     auto-inline. Per compiled body records size + leaf/early-exit/addr-taken-param
     facts; per direct call target counts the call sites. Summary printed at end of
@@ -4621,6 +4649,7 @@ begin
     TARGET_ARM32:   TargetArchName := 'arm32';
     TARGET_XTENSA:  TargetArchName := 'xtensa';
     TARGET_RISCV32: TargetArchName := 'riscv32';
+    TARGET_WASM32:  TargetArchName := 'wasm32';
   else
     TargetArchName := '<unknown target>';
   end;

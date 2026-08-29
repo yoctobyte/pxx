@@ -126,8 +126,14 @@ begin
     EmitI32($E5823000);   { str r3, [r2]   (BSS_EXC_TOP = value) }
     EmitI32($E8BD4FF0);   { pop {r4-r11, lr} }
     EmitI32($E12FFF1E);   { bx lr }
-  end;
-  { Other targets land in later phases (riscv32/xtensa). }
+  end
+  else if TargetArch = TARGET_WASM32 then
+    Error('wasm32: coroutine context switch not implemented (a wasm module has '
+          + 'no addressable stack pointer to swap)');
+  { Other targets land in later phases (riscv32/xtensa) — they fall through
+    silently ON PURPOSE and are left alone here; making THEM loud belongs to
+    refactor-a-target-dispatch-chains-fail-open, not to a registration ticket
+    that must leave every existing target byte-identical. }
 end;
 { EnableCoroutineRuntime lives in pasparser_name.inc (it must call EnableExceptionRuntime,
   defined there) — see near EnableExceptionRuntime. }

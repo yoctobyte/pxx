@@ -41,26 +41,18 @@ That is the one omission on this page that could be quietly wrong, which is why
 it is named here rather than merely left out. Add them the day something
 compares mappings, with a differential.
 
-THREE COMPILER WORKAROUNDS, all in the downward dispatch, all registered in
-devdocs/dev/track-b-workarounds.md with a revert-when-fixed lifecycle:
+TWO of the three compiler workarounds this file carried are GONE (reverted
+2026-08-27 against pin v389): the dead `return` after each abstract `raise`, and
+the explicit `self.__getitem__(k)` / `self.__setitem__(k, v)` call spellings --
+a subscript written in a base class now dispatches to the subclass override, so
+every mixin below reads as CPython's own. The abstract `__iter__`,
+`__getitem__` and `__len__` stay DECLARED, which is not a residue: CPython
+declares them too (`@abstractmethod`), and a mixin that iterates `self` needs
+them in scope.
 
-  1. `__iter__`, `__getitem__` and `__len__` are DECLARED here even though they
-     are abstract, because `for k in self` inside a mixin is refused at compile
-     time when the class itself declares neither `__iter__` nor
-     `__getitem__`+`__len__`
-     ([[bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides]]).
-  2. Each of the three RAISES and then, unreachably, RETURNS. The bare `raise`
-     spelling -- the natural one, and CPython's -- makes every subclass's
-     `__iter__` override fail at run time with `iter() returned non-iterator of
-     type 'Sub'`. Same ticket. The dead `return` is load-bearing; do not tidy it
-     away.
-  3. The mixins call `self.__getitem__(key)` where `self[key]` is the natural
-     spelling, because a subscript written inside a BASE class binds to that
-     class's own `__getitem__` instead of dispatching to the subclass override
-     ([[bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override]]).
-     This one is the dangerous shape: it produced no error, just the base's
-     `raise KeyError`, and a base whose stub returned a plausible value instead
-     would have answered wrongly in silence.
+THE THIRD REMAINS, in `update()`, and its blocking bug CHANGED underneath it --
+see that method's docstring. Short version: the `hasattr` half is fixed, the
+`other.keys()` call the fixed test would enable is not.
 
 Nothing in the corpus can reach this file yet. `from collections.abc import
 Mapping` never gets here: `PyImportRootIsConsumedOnly` in
@@ -78,25 +70,22 @@ class Mapping:
     `__iter__`, inherit `get`, `__contains__`, `keys`, `items` and `values`."""
 
     def __iter__(self):
-        # Declared-and-raising rather than absent, and the dead `return` after
-        # the raise is required. See workarounds 1 and 2 in the module docstring.
+        # Declared-and-raising rather than absent, exactly as CPython declares it
+        # abstract -- a mixin that iterates `self` needs it in scope.
         raise NotImplementedError('Mapping.__iter__ is abstract')
-        return iter([])
 
     def __getitem__(self, key):
         raise KeyError(key)
-        return None
 
     def __len__(self):
         raise NotImplementedError('Mapping.__len__ is abstract')
-        return 0
 
     def get(self, key, default=None):
         """The value for `key`, or `default` -- never a KeyError. This is the
         method that makes a Mapping usable without a try/except, and it is the
         one html5lib's BoundMethodDispatcher overrides."""
         if key in self:
-            return self.__getitem__(key)
+            return self[key]
         return default
 
     def __contains__(self, key):
@@ -124,13 +113,13 @@ class Mapping:
     def items(self):
         out = []
         for k in self:
-            out.append((k, self.__getitem__(k)))
+            out.append((k, self[k]))
         return out
 
     def values(self):
         out = []
         for k in self:
-            out.append(self.__getitem__(k))
+            out.append(self[k])
         return out
 
 
@@ -141,11 +130,9 @@ class MutableMapping(Mapping):
 
     def __setitem__(self, key, value):
         raise NotImplementedError('MutableMapping.__setitem__ is abstract')
-        return None
 
     def __delitem__(self, key):
         raise NotImplementedError('MutableMapping.__delitem__ is abstract')
-        return None
 
     def pop(self, key, *args):
         """Remove and return `key`'s value; with a second argument, return that
@@ -154,7 +141,7 @@ class MutableMapping(Mapping):
         raises, `pop(k, None)` returns None -- so the two cannot be collapsed
         into `default=None`."""
         if key in self:
-            value = self.__getitem__(key)
+            value = self[key]
             self.__delitem__(key)
             return value
         if len(args) > 0:
@@ -165,7 +152,7 @@ class MutableMapping(Mapping):
         """Remove and return SOME (key, value) pair. Upstream makes no ordering
         promise for the ABC, and neither does this."""
         for k in self:
-            value = self.__getitem__(k)
+            value = self[k]
             self.__delitem__(k)
             return (k, value)
         raise KeyError('popitem(): mapping is empty')
@@ -182,35 +169,40 @@ class MutableMapping(Mapping):
 
     def update(self, other=None, **kwargs):
         """Accepts a mapping, an iterable of pairs, or keyword arguments, in
-        that order of preference -- the same three shapes `dict.update` takes.
+        that order of preference -- the same three shapes `dict.update` takes,
+        discriminated the way CPython discriminates them: `isinstance(other,
+        Mapping)` first, then `hasattr(other, "keys")`, then pairs.
 
-        The key-or-pairs test is `isinstance(other, dict) or isinstance(other,
-        Mapping)`, where CPython leads with `isinstance(other, Mapping)` (a dict
-        is a registered Mapping there) and falls back to `hasattr(other,
-        "keys")`. Both halves of that are unavailable: NilPy has no ABC
-        registration, so a plain dict is not an instance of this class, and
-        `hasattr(a_dict, "keys")` answers **False**
-        ([[bug-n-hasattr-through-an-untyped-parameter-is-always-false]], where
-        `other` has no static type and so every hasattr answers False) --
-        which is not a graceful miss but a crash, because a dict then takes the
-        pairs branch, iteration yields its KEYS, and `pair[0]` indexes a
-        one-character string. The two isinstance checks cover every shape the
-        corpora pass. An arbitrary duck-typed object with a `keys()` method and
-        no relation to either type still lands in the pairs branch; that is the
-        residue of the hasattr bug and it is named here rather than papered
-        over."""
+        STILL A WORKAROUND, but no longer the one it was. CPython's middle
+        branch -- `elif hasattr(other, "keys"): for k in other.keys()` -- cannot
+        be written here, and the reason moved on 2026-08-27. The `hasattr` half
+        is FIXED: through an untyped `other` it now answers True for a dict and
+        False for a list, exactly as CPython does. What still fails is the
+        branch body. `other.keys()` on an untyped receiver is not dispatched on
+        the receiver from inside THIS module, because the module declares a
+        `keys()` of its own that iterates `self`; the foreign object reaches it
+        and `for k in self` faults
+        ([[bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view]],
+        reopened -- it was closed on the single-module case).
+
+        So the discrimination stays `isinstance`, which is SAFE precisely
+        because it never calls `keys()`: both its branches iterate `other`
+        directly. A duck-typed object with `keys()` and no dict/Mapping relation
+        still lands in the pairs branch. That residue is unchanged, and it is
+        named here rather than papered over. Registered in
+        devdocs/dev/track-b-workarounds.md."""
         if other is not None:
             if isinstance(other, dict) or isinstance(other, Mapping):
                 for k in other:
-                    self.__setitem__(k, other[k])
+                    self[k] = other[k]
             else:
                 for pair in other:
-                    self.__setitem__(pair[0], pair[1])
+                    self[pair[0]] = pair[1]
         for k in kwargs:
-            self.__setitem__(k, kwargs[k])
+            self[k] = kwargs[k]
 
     def setdefault(self, key, default=None):
         if key in self:
-            return self.__getitem__(key)
-        self.__setitem__(key, default)
+            return self[key]
+        self[key] = default
         return default

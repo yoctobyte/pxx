@@ -120,9 +120,45 @@ type
     So `msg`, `FHelpContext`, `HelpContext`, `FMessage` and `Message` are NOT
     redeclared here — they are inherited, and redeclaring any of them would
     reintroduce the two-layouts-one-name bug this replaced. }
+  { Delphi's PResStringRec. FPC spells the same parameter `PString`; this unit
+    does NOT, because `lib/rtl/typinfo.pas` already exports a `PString` that is
+    `^string[255]` — a FROZEN string pointer for reading RTTI name blobs — and a
+    program doing `uses typinfo, sysutils` would silently get whichever came
+    last. Two incompatible meanings for one name in one RTL is the kind of thing
+    that produces a wrong answer rather than an error, so the Delphi spelling is
+    used here and the FPC one is left alone. Callers write `@SSomeString` and
+    never name the type. }
+  PResStringRec = ^string;
+
   Exception = class(ExceptionBase)
     constructor Create(const msg: string);
     constructor CreateFmt(const msg: string; const args: array of const);
+    { The resource-string constructors. `CreateRes(@SArgumentOutOfRange)` is the
+      Delphi/FPC idiom and the shape vendored code uses.
+
+      WHAT THIS ACTUALLY DOES, since the name promises more than it delivers:
+      it DEREFERENCES the pointer and constructs. There is no resource-string
+      mechanism behind it — no translation table, no runtime replacement. That
+      is a deliberate choice rather than a stub: the observable behaviour is
+      identical to FPC's for a program that never re-translates, which is every
+      program in the corpora, and a real mechanism can be slid underneath
+      without changing this signature.
+
+      NO LONGER BLOCKED (2026-08-28). This paragraph used to say `@SFoo` was
+      `error: undefined variable` because a resourcestring section was parsed as
+      a plain const section and a const has no address. It is now parsed as
+      initialised string STORAGE — which is what FPC's runtime-replaceable
+      resourcestring actually is — so `CreateRes(@SArgumentOutOfRange)` compiles
+      and runs. [[bug-p-a-resourcestring-is-not-addressable]], resolved.
+      These constructors still work with any `^string`.
+
+      One deliberate divergence, in FPC's favour: FPC REFUSES a direct
+      `SFoo := 'x'` (*Variable identifier expected*) while pxx accepts it, since
+      ours is an ordinary initialised variable. That is the "we accept a form FPC
+      rejects" row of CLAUDE.md's compat table — not a defect, and writing
+      THROUGH the pointer works in both. }
+    constructor CreateRes(ResString: PResStringRec);
+    constructor CreateResFmt(ResString: PResStringRec; const args: array of const);
   end;
 
   { FPC System.TMethod: the two words a method pointer is made of. A `procedure of
@@ -155,6 +191,10 @@ type
   EAssertionFailed  = class(Exception) end;
   ENotImplemented   = class(Exception) end;
   EArgumentException = class(Exception) end;
+  { Delphi/FPC make this a DESCENDANT of EArgumentException, not a sibling, so
+    `on E: EArgumentException` catches it. Generics.Defaults raises it 3 times;
+    Generics.Collections many more. }
+  EArgumentOutOfRangeException = class(EArgumentException) end;
   EListError        = class(Exception) end;
   { Raised when a Variant cannot be brought to the requested type — text that
     is not numeric read as a number, a Null read as a string. Declared HERE and
@@ -164,6 +204,21 @@ type
     optional in pxx — variant support is in the compiler — while sysutils is
     what every program that catches anything already has. }
   EVariantError     = class(Exception) end;
+
+  { FPC's System.TRuntimeError, in FPC 3.2.2's own declared order — read off a
+    running FPC program rather than recalled, because the tail is NOT Delphi's
+    (FPC ends reQuit / reCodesetConversion / reNoDynLibsSupport / reThreadError
+    where Delphi has the monitor errors). 29 members; `reRangeError` is 4.
+    Ordinals are faithful so a vendored `case` or a raw Ord() comparison means
+    the same thing unmodified. }
+  TRuntimeError = (
+    reNone, reOutOfMemory, reInvalidPtr, reDivByZero, reRangeError,
+    reIntOverflow, reInvalidOp, reZeroDivide, reOverflow, reUnderflow,
+    reInvalidCast, reAccessViolation, rePrivInstruction, reControlBreak,
+    reStackOverflow, reVarTypeCast, reVarInvalidOp, reVarDispatch,
+    reVarArrayCreate, reVarNotArray, reVarArrayBounds, reAssertionFailed,
+    reExternalException, reIntfCastError, reSafeCallError, reQuit,
+    reCodesetConversion, reNoDynLibsSupport, reThreadError);
 
   { The metaclass of Exception. FPC declares it in System, but our Exception lives
     here, so here is where `class of` it can be formed. Code that catches by class
@@ -199,12 +254,45 @@ var
 function ExceptAddr: Pointer;
 function ExceptObject: TObject;
 
+{ FPC's System.Error: signal a runtime error. Declared here rather than in System
+  because our Exception hierarchy is here and this raises through it.
+
+  IT RAISES, IT DOES NOT HALT SILENTLY, AND THE ERROR NUMBERS ARE NOT FPC'S.
+  Both halves are deliberate. Raising is the faithful behaviour in effect: an
+  FPC program that has `uses sysutils` gets its runtime errors converted to
+  exceptions by the RTL's error hook, so `Error(reRangeError)` there surfaces as
+  a catchable ERangeError, which is exactly what this does directly. Not matching
+  FPC's numbering is CLAUDE.md's standing ruling — a strict flag governs how
+  source is COMPILED, not how a program DIES; "we seek LANGUAGE compliance, not
+  error-handling compliance". So the mapping below is to OUR exception classes.
+
+  Every one of the 7 call sites in `generics.defaults.pas` is the `else` arm of
+  a case over a type kind — "this cannot happen" — so none of them depends on a
+  code, only on the program stopping and saying something. A kind with no closer
+  class raises a plain Exception naming the TRuntimeError member, which is more
+  than a bare halt would say. }
+procedure Error(RuntimeError: TRuntimeError);
+
 { The default BackTraceStrFunc: '  $00000000004012AB'. A nil address renders as
   $0, which is what the callers' "no address known" path already expects. }
 function SysBackTraceStr(Addr: Pointer): string;
 
 { Int64 -> decimal string (covers Integer via widening). Handles negatives. }
-function IntToStr(value: Int64): AnsiString;
+function IntToStr(value: Int64): AnsiString; overload;
+
+{ QWord -> UNSIGNED decimal string. A family and not one Int64 routine for the
+  same reason IntToHex is one: without this arm a QWord argument widens into
+  the signed spelling and every value at or above 2^63 comes back negative --
+  IntToStr(High(QWord)) answered -1 while WriteLn of the same variable printed
+  18446744073709551615, so one program rendered one value two ways.
+  ([[bug-b-inttostr-of-a-qword-prints-it-signed]]) }
+function IntToStr(value: QWord): AnsiString; overload;
+
+{ FPC SysUtils.UIntToStr: the explicit unsigned spelling, and the one place the
+  unsigned digit loop lives -- IntToStr(QWord) and Format's '%u' both route
+  here, so signedness is decided once rather than per caller. }
+function UIntToStr(value: QWord): AnsiString; overload;
+function UIntToStr(value: Cardinal): AnsiString; overload;
 
 { Uppercase hexadecimal of value, left-zero-padded to at least Digits chars
   (FPC SysUtils.IntToHex). Negative values use their two's-complement bits —
@@ -578,6 +666,9 @@ function TryStrToInt(const s: AnsiString; var value: Integer): Boolean;
 function StringReplace(const S, OldPattern, NewPattern: AnsiString; Flags: TReplaceFlags): AnsiString;
 
 { Wrap s in single quotes, doubling any embedded quote. }
+{ the general form QuotedStr is a special case of: quote with any character,
+  doubling that character where it occurs in the text }
+function AnsiQuotedStr(const s: AnsiString; quote: Char): AnsiString;
 function QuotedStr(const s: AnsiString): AnsiString;
 
 { printf-style formatting over an `array of const`. Specifiers: %d %u %x %s %f
@@ -888,9 +979,19 @@ end;
   yields whichever default was asked for, so the two runs disagree; a well-formed input parses
   to the same value both times. That is cheaper and more honest than duplicating each
   parser's validation, and it cannot be fooled -- no single input can equal both sentinels. }
+{ ZERO on failure. FPC's documentation calls the value undefined after a failed
+  Val, so leaving it alone was not strictly wrong — but FPC in practice zeroes
+  it, and a stale value surviving a failed conversion is the shape that bites:
+  `if not TryStrToInt(s, n) then` is usually followed by code that uses `n`
+  with a default in mind, and it silently got the caller's own previous value.
+  Switching the declarations to `out` would NOT do it — pxx does not model
+  `out` (bug-a-an-out-parameter-of-a-managed-type-is-not-cleared) and FPC's
+  `out` does not clear ordinals either. One explicit assignment each.
+  bug-b-sysutils-string-gaps-found-by-differential }
 function TryStrToInt64(const s: AnsiString; var value: Int64): Boolean;
 begin
   Result := ParseIntPrefixed(s, value);
+  if not Result then value := 0;
 end;
 
 function TryStrToQWord(const s: AnsiString; var value: QWord): Boolean;
@@ -899,7 +1000,7 @@ begin
   a := StrToQWordDef(s, 0);
   b := StrToQWordDef(s, 1);
   Result := (a = b);
-  if Result then value := a;
+  if Result then value := a else value := 0;   { see TryStrToInt64 }
 end;
 
 { The single float parser; body far below, next to the exact-decimal
@@ -917,6 +1018,7 @@ begin
     subnormal ([[bug-b-strtofloat-is-3600x-slower-than-cpython-for-small-exponents]]).
     ParseFloatCore returns the flag directly, so the trick is not needed. }
   Result := ParseFloatCore(s, value);
+  if not Result then value := 0.0;             { see TryStrToInt64 }
 end;
 
 constructor Exception.Create(const msg: string);
@@ -973,6 +1075,93 @@ begin
   FMessage := Format(msg, args);
   FHelpContext := 0;
 end;
+
+{ Dereference and construct — see the declaration for why that is the whole
+  implementation and why the name promises more. A nil pointer yields an empty
+  message rather than a fault: these are raised on an error path, and a crash
+  inside the reporting of an error destroys the information the error carried. }
+constructor Exception.CreateRes(ResString: PResStringRec);
+begin
+  if ResString = nil then FMessage := ''
+  else FMessage := ResString^;
+  FHelpContext := 0;
+end;
+
+constructor Exception.CreateResFmt(ResString: PResStringRec; const args: array of const);
+begin
+  if ResString = nil then FMessage := ''
+  else FMessage := Format(ResString^, args);
+  FHelpContext := 0;
+end;
+
+{ The TRuntimeError -> our-exception mapping. See the declaration: raising is
+  faithful in effect, the numbers are deliberately ours. }
+procedure Error(RuntimeError: TRuntimeError);
+begin
+  case RuntimeError of
+    reNone:              Exit;
+    reOutOfMemory:       raise EOutOfMemory.Create('Out of memory');
+    reInvalidPtr:        raise EInvalidPointer.Create('Invalid pointer operation');
+    reDivByZero:         raise EDivByZero.Create('Division by zero');
+    reRangeError:        raise ERangeError.Create('Range check error');
+    reIntOverflow:       raise EIntOverflow.Create('Arithmetic overflow');
+    reInvalidOp:         raise EInvalidOp.Create('Invalid floating point operation');
+    reZeroDivide:        raise EDivByZero.Create('Floating point division by zero');
+    reOverflow:          raise EIntOverflow.Create('Floating point overflow');
+    reUnderflow:         raise EMathError.Create('Floating point underflow');
+    reInvalidCast:       raise EInvalidCast.Create('Invalid type cast');
+    reAccessViolation:   raise EAccessViolation.Create('Access violation');
+    reStackOverflow:     raise EOutOfMemory.Create('Stack overflow');
+    reVarTypeCast:       raise EVariantError.Create('Invalid variant type cast');
+    reVarInvalidOp:      raise EVariantError.Create('Invalid variant operation');
+    reVarDispatch:       raise EVariantError.Create('Variant dispatch error');
+    reVarArrayCreate:    raise EVariantError.Create('Variant array creation error');
+    reVarNotArray:       raise EVariantError.Create('Variant is not an array');
+    reVarArrayBounds:    raise EVariantError.Create('Variant array bounds error');
+    reAssertionFailed:   raise EAssertionFailed.Create('Assertion failed');
+    reIntfCastError:     raise EInvalidCast.Create('Interface cast error');
+  else
+    { rePrivInstruction, reControlBreak, reExternalException, reSafeCallError,
+      reQuit, reCodesetConversion, reNoDynLibsSupport, reThreadError — no closer
+      class here. Naming the member beats a bare halt, and beats mapping it to a
+      class that would then be caught by a handler that did not mean it. }
+    raise Exception.Create('Runtime error ' +
+      IntToStr(Ord(RuntimeError)) + ' (TRuntimeError)');
+  end;
+end;
+{ The unsigned digit loop, and the only one in this unit. `div`/`mod` by 10
+  are UNSIGNED here because the operand type is QWord, which is exactly what the
+  signed body could not do for a value with the top bit set. }
+function UIntToStr(value: QWord): AnsiString;
+var s: AnsiString; d: QWord;
+begin
+  if value = 0 then
+  begin
+    Result := '0';
+    Exit;
+  end;
+  s := '';
+  while value > 0 do
+  begin
+    d := value mod 10;
+    s := Chr(Ord('0') + Integer(d)) + s;
+    value := value div 10;
+  end;
+  Result := s;
+end;
+
+{ Cardinal widens into the QWord loop losslessly; declared so FPC source that
+  spells the 32-bit call explicitly compiles unchanged. }
+function UIntToStr(value: Cardinal): AnsiString;
+begin
+  Result := UIntToStr(QWord(value));
+end;
+
+function IntToStr(value: QWord): AnsiString;
+begin
+  Result := UIntToStr(value);
+end;
+
 function IntToStr(value: Int64): AnsiString;
 var s: AnsiString; neg: Boolean; d: Int64;
 begin
@@ -3330,7 +3519,7 @@ function TryStrToInt(const s: AnsiString; var value: Integer): Boolean;
 var v: Int64;
 begin
   Result := ParseIntPrefixed(s, v);
-  if Result then value := Integer(v);
+  if Result then value := Integer(v) else value := 0;   { see TryStrToInt64 }
 end;
 
 { pat matches src at 1-based pos (no allocation, unlike Copy(src,pos,plen)=pat). }
@@ -3387,15 +3576,25 @@ begin
     end;
 end;
 
-function QuotedStr(const s: AnsiString): AnsiString;
+{ The general form: quote with any character, doubling that character inside.
+  QuotedStr is now written as the ' case of THIS rather than carrying its own
+  copy of the doubling loop — two spellings of one rule is how they drift
+  (devdocs/dev/normalise-dont-special-case.md).
+  bug-b-sysutils-string-gaps-found-by-differential }
+function AnsiQuotedStr(const s: AnsiString; quote: Char): AnsiString;
 var i: Integer; r: AnsiString;
 begin
-  r := '''';
+  r := quote;
   for i := 1 to Length(s) do
   begin
-    if s[i] = '''' then r := r + '''''' else r := r + s[i];
+    if s[i] = quote then r := r + quote + quote else r := r + s[i];
   end;
-  Result := r + '''';
+  Result := r + quote;
+end;
+
+function QuotedStr(const s: AnsiString): AnsiString;
+begin
+  Result := AnsiQuotedStr(s, '''');
 end;
 
 function IsPathSep(c: Char): Boolean;
@@ -3898,10 +4097,26 @@ begin
 
     piece := '';
     case c of
-      'd', 'u':
+      'd':
         begin
           if argIdx < Length(args) then
             piece := FmtIntPrec(IntToStr(FmtArgInt(args[argIdx])), hasPrec, prec);
+          Inc(argIdx);
+        end;
+      'u':
+        begin
+          { NOT a synonym for 'd': it shared that arm, so '%u' of any negative
+            bit pattern printed the signed value. Width is recovered from the
+            variant tag exactly as '%x' below does it -- FmtArgInt sign-extends
+            a 32-bit argument on the way in, and '%u' of Integer(-1) is
+            4294967295, not the 64-bit two's complement.
+            ([[bug-b-format-percent-u-prints-a-signed-value]]) }
+          if argIdx < Length(args) then
+          begin
+            iv := FmtArgInt(args[argIdx]);
+            if FmtArgIs32(args[argIdx]) then iv := Int64(LongWord(iv));
+            piece := FmtIntPrec(UIntToStr(QWord(iv)), hasPrec, prec);
+          end;
           Inc(argIdx);
         end;
       'x', 'X':

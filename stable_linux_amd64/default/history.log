@@ -386,3 +386,4 @@
 2026-08-27T16:49:34Z  v386  22690b507548f42d1571311132409af6ce46d7868f107f07639c00339b1f602f  d826a543801a7dfbd827a750e137ddef4824f352  fix(nilpy): no builtin type name is a parameterless call any more
 2026-08-27T17:51:45Z  v387  a1776c8e96c23739a33699c0c70ae9aba5a6c3df6342fd1c09a3ae3d82f2ef2d  2932d11543e9786970fcebe9825fe8af94132756  docs(progress): record the shas the resolves landed as
 2026-08-27T18:30:53Z  v388  e8b72f8afeb692b45edf536e06554adb6c02aa55e848aa0b9fd6dcc5fbc4032c  20664a1576d3ac6f9398051a6626102e86f63357  docs(progress): record the shas the resolves landed as
+2026-08-27T21:37:46Z  v389  325b4479070ab3c958b7e67ac1c4c9c397baaaecd996145d3d8b9a37cbdabb22  83468c5462d40294a7e7a5885a61fbac20077285  fix(P): a nested type may name a field after an enclosing type parameter

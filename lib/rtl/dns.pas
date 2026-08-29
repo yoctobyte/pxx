@@ -61,6 +61,14 @@ function DnsResolveHostEx(const hostsText: string; nsHost: LongWord; nsPort: Int
   An IPv4 literal short-circuits without network (as an IPv6 literal does in
   DnsResolveHost6). Returns DNS_ERR_NOCONFIG if nothing in hosts matches and no
   nameserver is configured. }
+{ True for `localhost`, any name under `.localhost`, with or without the
+  trailing root dot, case-insensitively (RFC 6761 section 6.3). Exported because
+  it is the part that can regress: end-to-end resolution cannot gate this on a
+  box whose own resolver is RFC-compliant — systemd-resolved synthesises the
+  whole localhost subtree, so the wrong code path returns the right answer and
+  differs only in that it emitted 20 DNS queries to get it. }
+function DnsIsLocalhostName(const name: string): Boolean;
+
 function DnsResolveHost(const name: string; var ips: TDnsIpv4Array; var count: Integer): Integer;
 
 { Resolve A records for one exact query name through the nameserver list,
@@ -460,6 +468,41 @@ end;
   function this unit exports is a wire building block and is unaffected, so the
   facade's API is identical whichever backend is chosen. }
 
+function DnsLowerCh(c: Char): Char;
+begin
+  if (c >= 'A') and (c <= 'Z') then DnsLowerCh := Chr(Ord(c) + 32)
+  else DnsLowerCh := c;
+end;
+
+{ RFC 6761 section 6.3: name resolution APIs "SHOULD recognize localhost names
+  as special and SHOULD always return the IP loopback address for address
+  queries". That covers `localhost` itself and any name under `.localhost`, with
+  or without the trailing root dot, case-insensitively.
+
+  Do NOT generalise this from `.invalid`, which section 6.4 gives the OPPOSITE
+  prescription (immediate negative responses). The two are both reserved and
+  behave differently; conflating them is how this bug survived. }
+function DnsIsLocalhostName(const name: string): Boolean;
+const
+  LH = 'localhost';
+var
+  len, i, off: Integer;
+  ok: Boolean;
+begin
+  DnsIsLocalhostName := False;
+  len := Length(name);
+  if (len > 0) and (name[len] = '.') then Dec(len);   { the root dot is optional }
+  if len < 9 then Exit;
+  off := len - 9;
+  ok := True;
+  for i := 1 to 9 do
+    if DnsLowerCh(name[off + i]) <> LH[i] then ok := False;
+  if not ok then Exit;
+  { the whole name, or a label boundary before it -- so `notlocalhost` does not
+    match while `foo.localhost` does }
+  DnsIsLocalhostName := (off = 0) or (name[off] = '.');
+end;
+
 function DnsWireResolveHost(const name: string; var ips: TDnsIpv4Array; var count: Integer): Integer;
 var
   hostsText, resolvText: string;
@@ -493,6 +536,22 @@ begin
   if DnsLookupHosts(hostsText, name, hostIp) then
   begin
     ips[0] := hostIp;
+    count := 1;
+    DnsWireResolveHost := 0;
+    Exit;
+  end;
+
+  { RFC 6761 6.3 -- see DnsIsLocalhostName. Placed AFTER "files" so an explicit
+    /etc/hosts entry still wins, which is what every real implementation does;
+    the operative property is that the name never reaches a nameserver. Without
+    this, a box whose hosts file lacks the conventional line (or any AAAA query,
+    since Debian/Ubuntu spell the v6 loopback `ip6-localhost`) sent `localhost`
+    to the wire through the search list and used whatever came back -- so a
+    wildcard, misconfigured or hostile resolver could answer `localhost` with a
+    non-loopback address. }
+  if DnsIsLocalhostName(name) then
+  begin
+    ips[0] := $7F000001;
     count := 1;
     DnsWireResolveHost := 0;
     Exit;
@@ -563,6 +622,18 @@ begin
   if DnsLookupHosts6(hostsText, name, lit6) then
   begin
     for j := 0 to 15 do ips[0][j] := lit6[j];
+    count := 1;
+    DnsWireResolveHost6 := 0;
+    Exit;
+  end;
+
+  { RFC 6761 6.3, the AAAA half -- and the one that actually bit: `localhost`
+    has no `::1` line in a stock Debian/Ubuntu /etc/hosts, so this path fell
+    through to the wire on every such box. }
+  if DnsIsLocalhostName(name) then
+  begin
+    for j := 0 to 15 do ips[0][j] := 0;
+    ips[0][15] := 1;
     count := 1;
     DnsWireResolveHost6 := 0;
     Exit;

@@ -22,41 +22,31 @@ before assuming the workaround is still needed.
 | `lib/rtl/aesgcm.pas` (`BlkCopy`, used in `EncryptBlk`, `GfMul`, `AesCtr`, `GcmSetup`, `GcmTag`) | whole static-array `:=` replaced by element-copy loops | [[bug-fixed-array-assignment-no-copy]] — **fixed generally (v72)**, but a full revert of *this unit* still segfaults at the GCM path (residual, NOT minimally reproducible — every isolated `array :=` pattern passes on v72). **Keep `BlkCopy` here** until the residual is understood. | (do not revert yet) |
 | `lib/pcl/mimic_reportlab_pdfgen.pas` (`Canvas.Create`) | TWO constructors — a one-arg form forwarding an EXPLICIT `0` — instead of one with `pagesize: Variant = 0` | [[bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory]] — a constructor with a defaulted Variant parameter smashes the stack when the caller omits it; deterministic from Pascal (25/25), intermittent through NilPy, and it surfaces as a crash in unrelated code | the single `pagesize: Variant = 0` default |
 | `lib/rtl/ed25519.pas` (EC points) | a point's 4 field coords are **4 separate standalone TGf vars**, never an `array of TGf` or a record of TGf | [[bug-aggregate-member-array-as-var-param]] — passing an aggregate-member array by ref segfaults | a `TPoint = array[0..3] of TGf` / record |
-| `lib/rtl/mimic_xml_sax_xmlreader.py` (`AttributesImpl.copy`, `AttributesNSImpl.copy`) | the class named explicitly where CPython writes `self.__class__(...)` | **FIXED 2026-08-27** — [[bug-n-self-class-cannot-be-called-as-a-constructor]] is in `done/`; `self.__class__(...)` constructs the RUNTIME class, gated by `test/test_nilpy_self_class_constructs.npy`. **REVERTABLE by Track B after the next pin.** | `self.__class__(...)` — and it is not cosmetic: only that form gives a SUBCLASS an instance of itself, which is exactly what `copy()` on `AttributesNSImpl` needs |
 | `lib/rtl/math.pas` (`SinCosFast`, `FastTrigReduce`) | sin/cos returned in a `TSinCos` **record** by reference, and the reduction in a `TDd`, instead of `var sn, cs: Double` out-parameters | [[bug-a-i386-var-float-parameter-faults-on-first-access]] — ANY access through a by-reference float parameter segfaults on i386 (read, write, `out`, `Single`, every `-O` level); a record by reference is fine. Without this, the default-mode `Sin`/`Cos`/`Tan` crash on i386 | plain `var sn, cs: Double` — *but only if it reads better, which it does not:* the record mirrors `SinCosDd` and is the shape to keep |
-> **REVERTABLE as of 2026-08-26 (`ec5ecd88b`, plus `79148ec99`).** Three of the
-> four `mimic_collections_abc.py` rows below are fixed and the workarounds should
-> now be removed by Track B, verifying each against `$(PXX_STABLE)` **after the
-> next pin** — the dunder-retain half of the fix is in `compiler/builtin/pylib.pas`,
-> which a pin freezes, so B/E do not have it yet.
-> - `for k in self` inside a base method now reaches a subclass override, so the
->   `self.keys()` detour and the dead `return iter([])` are both unnecessary. Note
->   the mixin ticket was **half a misdiagnosis**: `for x in self` was already
->   correct (the for-header builds its own virtual call); what was broken was
->   every *other* dunder on `self`.
-> - `self[k]` / `self[k] = v` now dispatch, so the explicit
->   `self.__getitem__(k)` spellings can go.
-> - `hasattr(other, "keys")` now answers the receiver, so `update()` can lead with
->   CPython's own test instead of the narrower `isinstance` pair.
->
-> The fourth row (`isinstance(x, cabc.Mapping)`) is **still open** and stays.
-
-| `lib/rtl/mimic_collections_abc.py` (every `Mapping`/`MutableMapping` mixin) | mixins walk `self.keys()` instead of `for k in self`, and each abstract method carries a dead `return iter([])` after its `raise` | [[bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides]] — `for k in self` inside a base method binds to the BASE `__iter__`, so a subclass override is never reached and the runtime reports `iter() returned non-iterator of type 'Sub'` | `for k in self`, and a bare `raise` with no trailing return |
-| `lib/rtl/mimic_collections_abc.py` (`items`, `values`, `get`, `pop`, `setdefault`, `update`) | every internal subscript spelled `self.__getitem__(k)` / `self.__setitem__(k, v)` | [[bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override]] — the `[]` operator inside a base class binds statically to that class's own dunder; the explicit method call dispatches correctly | `self[k]` / `self[k] = v` |
-| `lib/rtl/mimic_collections_abc.py` (`MutableMapping.update`) | mapping-vs-pairs discriminated by `isinstance(other, dict) or isinstance(other, Mapping)` | [[bug-n-hasattr-through-an-untyped-parameter-is-always-false]] — CPython leads with `hasattr(other, "keys")`, which answers False for *everything* reached through an untyped parameter, so a dict silently takes the pairs branch and `pair[0]` indexes a one-character string | the `hasattr(other, "keys")` test — and note the workaround is NARROWER than CPython: a duck-typed object with `keys()` and no `dict`/`Mapping` relation still lands in the pairs branch |
-| `test/lib_mimic_collections_abc.npy` | `Mapping = cabc.Mapping` rebound at module top, then `isinstance(x, Mapping)` | [[bug-n-isinstance-does-not-accept-a-qualified-class-name]] — `isinstance(x, cabc.Mapping)` is a compile error (`unknown type in isinstance: cabc`) | `isinstance(x, cabc.Mapping)` — though the bare-name spelling is also what the corpus writes, so this one is close to cosmetic |
+| `lib/rtl/mimic_collections_abc.py` (`MutableMapping.update`) | mapping-vs-pairs discriminated by `isinstance(other, dict) or isinstance(other, Mapping)` | **BLOCKER CHANGED 2026-08-27** — the original one ([[bug-n-hasattr-through-an-untyped-parameter-is-always-false]]) is fixed and verified on v389: `hasattr(other, "keys")` now answers True for a dict and False for a list through an untyped parameter. The workaround stays for [[bug-n-keys-through-an-untyped-receiver-is-not-dispatched-cross-module]] instead — the branch that fixed test would select calls `other.keys()`, which segfaults from inside an imported module. The `isinstance` form is safe *because* both its branches iterate `other` directly and neither calls `keys()`. | CPython's three branches: `isinstance(other, Mapping)` → `elif hasattr(other, "keys")` → pairs. Still NARROWER than CPython until then: a duck-typed object with `keys()` and no `dict`/`Mapping` relation lands in the pairs branch |
 
 ### Coding-pattern landmines (no single site — avoid in new Track B code)
 
 - **A user class's `keys()` / `items()` / `values()` through a dynamically-typed
   receiver** (an unannotated parameter) segfaults, or answers a garbage list when
-  the result is consumed — the call is dispatched as a dict view instead of the
-  method ([[bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view]]).
-  Exactly those three names; `get`/`append`/`insert`/`remove`/`clear`/`find`/`set`/
-  `extend`/`pop` all dispatch correctly, and a *statically* typed receiver is fine.
-  So a shim may still DEFINE them (`mimic_xml_etree_elementtree.Element` does) —
-  do not CALL them through an untyped parameter. In library and test code reach the
-  dict directly (`node.attrib.items()`), which is what html5lib does anyway.
+  the result is consumed — the call is resolved at the call site instead of
+  dispatching on the receiver
+  ([[bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view]], closed
+  for the single-module case; **reopened across a module edge** as
+  [[bug-n-keys-through-an-untyped-receiver-is-not-dispatched-cross-module]],
+  measured on v389). Exactly those three names;
+  `get`/`append`/`insert`/`remove`/`clear`/`find`/`set`/`extend`/`pop` all dispatch
+  correctly, and a *statically* typed receiver is fine. So a shim may still DEFINE
+  them (`mimic_xml_etree_elementtree.Element` does) — do not CALL them through an
+  untyped parameter. In library and test code reach the dict directly
+  (`node.attrib.items()`), which is what html5lib does anyway.
+
+  **The trap in re-testing this one:** whether it bites depends on what the
+  CALLING module declares, not on the call. A module that declares any simple
+  `keys()` of its own dispatches correctly; one that declares none, or declares a
+  `keys()` that iterates `self`, segfaults. So a probe written in a file that
+  happens to contain a `keys()` passes and proves nothing — which is how the
+  single-module close happened.
 
 - **`list(obj)` over an object with `__len__`/`__getitem__` and no `__iter__`
   returns `[]`**, silently, and `for x in obj` is a compile error naming an
@@ -123,6 +113,47 @@ now in `done/`, so the workaround can be removed and the idiomatic form restored
   **chess slice 2** (search + eval through `EvalTerms[i](pos)`); the demo was left
   blocked, not worked around, so nothing to revert — just resumable when chess is
   picked back up.
+
+## Reverted 2026-08-27 (pin v389 `325b4479070a`, verified against `$(PXX_STABLE)`)
+
+Three of the four rows the 2026-08-26 note flagged as revertible are gone; the
+fourth's blocker changed rather than closing.
+
+- [[bug-n-self-class-cannot-be-called-as-a-constructor]] **fixed** —
+  `lib/rtl/mimic_xml_sax_xmlreader.py`'s `AttributesImpl.copy` and
+  `AttributesNSImpl.copy` are back to CPython's `self.__class__(...)`. Re-tested
+  against CPython: a **subclass** now copies as itself (`MyAttrs.copy()` returns a
+  `MyAttrs`), which is the property the workaround could not provide and the
+  reason the row said it was not cosmetic.
+- [[bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides]]
+  **fixed** — the dead `return` after each abstract `raise` in
+  `mimic_collections_abc.py` is removed (five of them). The `self.keys()` detour
+  the row also named was already gone; the row was half a misdiagnosis, as its own
+  note said.
+- [[bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override]] **fixed** —
+  every `self.__getitem__(k)` / `self.__setitem__(k, v)` in the mixins is back to
+  `self[k]` / `self[k] = v`.
+- [[bug-n-isinstance-does-not-accept-a-qualified-class-name]] **fixed** —
+  `test/lib_mimic_collections_abc.npy` keeps its `Mapping = cabc.Mapping` rebinding
+  (it has an independent reason: it is what the corpus's classes look like) but the
+  comment no longer claims the qualified spelling is a compile error, and two rows
+  now assert `isinstance(m, cabc.Mapping)` directly so the restored capability is
+  gated rather than merely unblocked.
+- `MutableMapping.update()` **stays** — see the table. Its blocker
+  ([[bug-n-hasattr-through-an-untyped-parameter-is-always-false]]) is genuinely
+  fixed, and reverting it uncovered a different live bug underneath, filed as
+  [[bug-n-keys-through-an-untyped-receiver-is-not-dispatched-cross-module]].
+
+`test/lib_mimic_collections_abc.npy` 49/49 and byte-identical to CPython;
+`make lib-test` green.
+
+**The lesson this batch adds to the 2026-08-17 one below.** That entry established
+that a row is revertible when the **pin** carries the fix, not when the bug is
+fixed. This one adds: a row is revertible when the pin carries the fix **and the
+idiomatic form it unblocks actually runs**. `update()`'s stated blocker was fixed
+and its stated revert still could not be made; the crash was one call deeper, in a
+bug whose own ticket was closed. Reverting is a measurement, not a bookkeeping
+step — run the reverted code before dropping the row.
 
 ## Reverted 2026-08-17
 

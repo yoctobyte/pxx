@@ -57,6 +57,12 @@ ALLOWED = {
     # JUST CREATED under tempfile, so there is no live watcher tree to be stale
     # about. A devtest that could not build its own tstate fixture could not
     # test the readers at all.
+    "twatch_job_history_devtest.py":
+        "same fixture case: repo_with() makes a tempfile.mkdtemp() and joins "
+        "TSTATE_REL onto THAT to write the runs-<host>.ndjson and state file "
+        "the query is tested against. It never opens the repo's own tstate — "
+        "which matters here more than usual, since the whole subject of the "
+        "test is a query returning the wrong answer from the right file",
     "devtest_pin_shadow.py":
         "joins TSTATE_REL onto the throwaway root it makes at line 46",
     "devtest_pin_verify.py":
@@ -69,6 +75,16 @@ ALLOWED = {
         "joins TSTATE_REL onto a tempfile.mkdtemp() it just made, so "
         "write_report_md has a reports/ dir to write into; it never touches "
         "the repo's tstate",
+    "twatch_covering_devtest.py":
+        "builds a whole throwaway git repo under tempfile and writes a "
+        "runs-box.ndjson fixture into its tstate; it asserts on that fixture "
+        "and never opens the checkout's own archive — deliberately, since the "
+        "live one grows every few minutes and an assertion about its contents "
+        "would pass or fail on its own",
+    "twatch_verify_request_devtest.py":
+        "builds a throwaway git repo under tempfile and writes both the "
+        "request queue and a runs-box.ndjson fixture into ITS tstate; it "
+        "asserts on that fixture and never opens the checkout's own",
     "autotriage.py":
         "reads tstate off the REF by default (git show origin/master:...) — the "
         "path join remains only for the explicit `--rev ''` worktree opt-in, "

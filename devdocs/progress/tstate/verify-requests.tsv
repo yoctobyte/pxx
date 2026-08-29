@@ -1,0 +1,14 @@
+# Targeted verdict queue — one request per line:
+#   <40-char sha>	<tier>	<who>	<why>
+# The watcher drains these FIRST among its idle phases. A request is satisfied
+# when that sha has a verdict at that tier, so lines need no deletion and a
+# repeat is a no-op. Stale lines cost one archive lookup per cycle; tidy at
+# will, but nothing breaks if you never do.
+# STRUCK 2026-08-28 by frank-coordinator, unserved: the ab51855df full request.
+# It asked for the pin COMMIT; the question was about the pin TREE 83468c5462d4,
+# which verify_pin answered on its own at 2026-08-27T23:25:33Z (RED, 0 new).
+# The request was never read — the resident daemon predated the draining code —
+# so serving it now would spend a 3202-job full tier, on the box that is the
+# binding constraint, at a sha 20+ testable commits stale, to re-answer an
+# answered question. Always --covering first, and check whether an existing
+# phase already produces the verdict before queueing.

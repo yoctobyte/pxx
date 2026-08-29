@@ -4373,6 +4373,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     asmGfK: Integer; asmGfFound: Boolean;
     searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil, pNotDouble, pDone: Integer;
     pUnsNeg, pUnsDone, pAppendDone: Integer;
+    w1RightReg: Integer;   { -O3 W1: 0 = the normal rcx contract, else r12..r15 }
     pAnsiAlloc, pAnsiShared, pAnsiTooSmall, pAnsiNoZeroGrow, pAnsiFastDone: Integer;
     pAnsiUseNeededNil, pAnsiUseNeededSmall, pAnsiMinDone, pAnsiCapDone: Integer;
     pDynZero, pDynNoOld, pDynKeepCopy, pDynNoRetain, pDynNoRetainCount: Integer;
@@ -5130,6 +5131,16 @@ begin
         end
         else
         begin
+          { -O3 W2: `x := x <op> y` with x register-resident does the ALU on the
+            resident register itself, deleting the two reg-reg moves that
+            bracket it -- and that bracket is the loop-carried recurrence when x
+            is an accumulator. See W2InPlaceEligible in symtab.inc for why rax
+            may be left dead here and why the frame slot stays authoritative. }
+          if (OptLevel >= 3) and (not InLValueWrite) and W2InPlaceEligible(node) then
+          begin
+            EmitW2InPlace(node);
+            Exit;
+          end;
           IREmitNode(IRB[node]);
           { {$Q+}: integer arithmetic runs at 64-bit register width by design,
             so a Q-tagged binop's own flags check is exact and never fires for
@@ -5749,6 +5760,10 @@ begin
         left := IRA[node];
         right := IRB[node];
         op := IntToTokenKind(IRC[node]);
+        { W1 slice 4 state, per BINOP and per recursion level (IREmitNode is
+          recursive, so a local cannot leak into a nested binop). 0 = the right
+          operand is in rcx, which is every path but the one below. }
+        w1RightReg := 0;
 
         { -O3 in-tree XMM fusion: a call-free float arithmetic tree evaluates
           straight into xmm2..xmm6 and bridges to the rax value model once. }
@@ -5759,14 +5774,14 @@ begin
           Exit;
         end;
 
-        { -O3 cmp-immediate, value-producing form. The branch form is folded in
+        { -O2 cmp-immediate, value-producing form. The branch form is folded in
           IREmitMachineCode's IR_JUMP_IF_FALSE arm; this is the same fold for a
           comparison whose result is a VALUE — which is where a short-circuit
           `and`/`or` puts every operand, so `if (c >= 'A') and (c <= 'Z')` paid
           `mov rcx, imm32` twice per character with the branch fold alone.
           CmpFusible is the shared predicate: it is exactly the set that lowers
           to a bare `cmp` + setcc. }
-        if (OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) and
+        if (OptLevel >= 2) and (IRKind[right] = IR_CONST_INT) and
            (IRIVal[right] >= -2147483648) and (IRIVal[right] <= 2147483647) and
            CmpFusible(node) then
         begin
@@ -5794,10 +5809,10 @@ begin
           Exit;
         end;
 
-        { -O3 narrowing-cast fold: the three-binop, three-constant shape a
+        { -O2 narrowing-cast fold: the three-binop, three-constant shape a
           narrowing ordinal cast lowers to collapses to one movsx/movzx.
           See NarrowCastFold for the shapes and why they are value-identical. }
-        if (OptLevel >= 3) and
+        if (OptLevel >= 2) and
            (not TypeIsFloat(IntToTypeKind(IRTk[node]))) and
            NarrowCastFold(node, ncSrc, ncBytes, ncSigned) then
         begin
@@ -5823,7 +5838,7 @@ begin
           Exit;
         end;
 
-        { -O3 constant-divisor strength reduction: `x div 2^k` / `x mod 2^k`
+        { -O2 constant-divisor strength reduction: `x div 2^k` / `x mod 2^k`
           become shifts and masks instead of a ~25-40 cycle idiv preceded by a
           zero-check on a constant that is provably non-zero.
 
@@ -5845,7 +5860,7 @@ begin
           Operands arrive sign/zero-extended to the full 64-bit register (the
           same contract the idiv path relies on), so 64-bit shifts are correct
           for every narrower type and the store narrows the result as before. }
-        if (OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) and
+        if (OptLevel >= 2) and (IRKind[right] = IR_CONST_INT) and
            ((op = tkDiv) or (op = tkMod)) and
            (not TypeIsFloat(IntToTypeKind(IRTk[node]))) and
            (IntToTypeKind(IRTk[node]) <> tyAnsiString) and
@@ -5944,7 +5959,21 @@ begin
             left is order-safe; loading directly into rcx (not rax then mov)
             avoids clobbering the left value in rax. }
           IREmitNode(left);
-          EmitLoadVarRcx(IRA[right]);
+          { -O3 W1 slice 4: if that right operand is REGISTER-RESIDENT, the load
+            EmitLoadVarRcx would emit is `mov rcx, r12..r15` — a move whose only
+            purpose is to satisfy the rcx contract. The ALU can read r12..r15
+            directly, so skip the move and tell the op arm which register to
+            encode. This is the move DELETED, not a value recomputed: the
+            resident register and the frame slot hold the same value by the
+            residency contract, which is the same fact EmitLoadVarRcx's own
+            resident arm relies on.
+            Gated to the plain integer ops that read rcx as `<op> rax, rcx` and
+            nothing else — the string/set/float arms below run their own
+            multi-register sequences and keep the normal contract. }
+          if (OptLevel >= 3) and W1AluRightEligible(node, left, right) then
+            w1RightReg := ResidentRegOf(IRA[right])
+          else
+            EmitLoadVarRcx(IRA[right]);
         end
         else if (OptLevel >= 2) and (not InLValueWrite) and
                 ((IRKind[left] = IR_CONST_INT) or
@@ -6241,7 +6270,7 @@ begin
           case op of
           tkPlus:
             begin
-              EmitB($48); EmitB($01); EmitB($C8);                    { add rax, rcx }
+              EmitAluRaxRight($01, w1RightReg);                      { add rax, rcx|r12..r15 }
               if IRIVal[node] = 1 then                               { {$Q+}: trap a wrapped result }
               begin
                 { sub-64-bit result: the 64-bit flags never fire for a narrow
@@ -6254,7 +6283,7 @@ begin
             end;
           tkMinus:
             begin
-              EmitB($48); EmitB($29); EmitB($C8);                    { sub rax, rcx }
+              EmitAluRaxRight($29, w1RightReg);                      { sub rax, rcx|r12..r15 }
               if IRIVal[node] = 1 then
               begin
                 if TypeSize(IntToTypeKind(IRTk[node])) < 8 then
@@ -6295,13 +6324,13 @@ begin
               end;
             end;
           
-          { -O3: a divisor that is a non-zero CONSTANT cannot be zero, so the
+          { -O2: a divisor that is a non-zero CONSTANT cannot be zero, so the
             two-instruction pre-divide guard is dead code at every such site
             (`div 10` in every number formatter, `div 3`, ...). The power-of-two
             case never reaches here — it was strength-reduced above. }
           tkDiv:
             begin
-              if not ((OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) and
+              if not ((OptLevel >= 2) and (IRKind[right] = IR_CONST_INT) and
                       (IRIVal[right] <> 0)) then
                 EmitDivZeroCheckX64;
               if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then
@@ -6311,7 +6340,7 @@ begin
             end;
           tkMod:
             begin
-              if not ((OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) and
+              if not ((OptLevel >= 2) and (IRKind[right] = IR_CONST_INT) and
                       (IRIVal[right] <> 0)) then
                 EmitDivZeroCheckX64;
               if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then
@@ -6320,9 +6349,9 @@ begin
                 begin EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9); end;
               EmitB($48); EmitB($89); EmitB($D0); { mov rax, rdx }
             end;
-          tkAnd:   begin EmitB($48); EmitB($21); EmitB($C8); end; { and rax, rcx }
-          tkOr:    begin EmitB($48); EmitB($09); EmitB($C8); end; { or rax, rcx }
-          tkXor:   begin EmitB($48); EmitB($31); EmitB($C8); end; { xor rax, rcx }
+          tkAnd:   EmitAluRaxRight($21, w1RightReg);   { and rax, rcx|r12..r15 }
+          tkOr:    EmitAluRaxRight($09, w1RightReg);   { or  rax, rcx|r12..r15 }
+          tkXor:   EmitAluRaxRight($31, w1RightReg);   { xor rax, rcx|r12..r15 }
           { Logical `shr` on a <=32-bit operand: the value is sign-extended in rax,
             so a 64-bit shr leaks the sign bits down (bug-shr-signed-integer-width:
             Integer(-8) shr 1 gave a 64-bit result). Zero-extend the operand to 32
@@ -8841,9 +8870,20 @@ end;
     * ordinal or pointer ONLY — a record / set / class / variant destination
       takes one of IR_STORE_SYM's earlier arms, which do not end with rax
       holding the stored value;
-    * NOT register-resident — EmitStoreVar's resident dual-write goes through
-      RegcallRefreshResident, which reloads via EmitLoadVar and so clobbers rax.
-      (A resident load is a reg-reg move already; there is nothing to win.) }
+    * NOT register-resident. This exclusion once had two reasons and only the
+      second survives, so read it as the second one:
+        (a) STALE since `e7c0d1d2a`: "the resident dual-write refreshes through
+            EmitLoadVar and so clobbers rax". The refresh now re-extends from
+            rax itself, so rax does still hold the stored value. Not a reason.
+        (b) THE reason: a resident load is ALREADY a reg-reg move
+            (`mov %r13,%rax`), so eliminating it removes a register move, not a
+            memory access. Measured 2026-08-28 by dropping this line and
+            rebuilding: on a boolean-heavy loop — the `(c >= 'A') and
+            (c <= 'Z')` shape this pass was aimed at — it removed **6
+            instructions out of 13,483**, every one of them a reg-reg move.
+            The W1 sizing in the same ticket measured that class at ~0 (deleting
+            6 of 17 such moves from a hot loop body moved the clock 1.4%).
+            So this is not "we cannot", it is "there is nothing there". }
 function ReloadElimSym(idx: Integer): Boolean;
 var tk: TTypeKind;
 begin
@@ -9055,6 +9095,12 @@ begin
     IREmitMachineCodeXtensa;
     Exit;
   end;
+  if TargetArch = TARGET_WASM32 then
+    { Registration only. This chain FALLS THROUGH to the x86-64 emitter below,
+      so without this arm a 7th target silently gets x86-64 machine code in a
+      file claiming to be its own — the loudest possible wrong answer, and the
+      quietest possible failure. feature-a-wasm32-target-registration-skeleton }
+    Error('wasm32: code generation not implemented');
   { Clear only the labels this body actually allocated. IRReset zeroes
     IRLabelCount per body and IRNewLabel hands out ids in [0, IRLabelCount),
     so every label id emitted or jumped-to in this body is < IRLabelCount;
@@ -9164,14 +9210,14 @@ begin
               reload in the condition is redundant. }
             cLeft := IRA[condNode];
             cRight := IRB[condNode];
-            { -O3 cmp-immediate: `cmp rax, imm32` exists, so a constant right
+            { -O2 cmp-immediate: `cmp rax, imm32` exists, so a constant right
               operand needs no register at all. The `mov rcx, imm32` this
               replaces sign-extends its immediate to 64 bits exactly as opcode
               3D does, so signed and unsigned comparisons both keep their
               meaning. A compiler compares against a literal constantly -- token
               kinds, character ranges, array bounds -- and CaseEqual's inner
               loop alone paid it four times per character. }
-            cmpImmOk := (OptLevel >= 3) and (IRKind[cRight] = IR_CONST_INT) and
+            cmpImmOk := (OptLevel >= 2) and (IRKind[cRight] = IR_CONST_INT) and
                         (IRIVal[cRight] >= -2147483648) and
                         (IRIVal[cRight] <= 2147483647);
             if cmpImmOk then
@@ -9608,10 +9654,18 @@ var k, j, t, best, bestCnt, lbl, si, nsyms: Integer;
     islot, fslot, nFree, reg, saveOff: Integer;
     FreeGpr: array[0..3] of Integer;
     Counts: array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
+    LCounts: array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
     CSyms:  array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
     seen: Boolean;
 begin
   FrResidentCount := 0;
+  { Before any early exit: the exception landing pad refreshes residents FROM
+    their frame slots, so it is the one slot reader that residency cannot see
+    through. Anything that stops keeping the slot current must refuse a body
+    that has one. Conservative default is True. }
+  RcProcHasExc := False;
+  for k := 0 to IRCount - 1 do
+    if IRKind[k] = IR_EXC_ENTER then begin RcProcHasExc := True; Break; end;
   if OptLevel < 3 then Exit;
   if CurProc < 0 then Exit;
   if RcSuppressAssign then Exit;
@@ -9649,23 +9703,56 @@ begin
           if si < 0 then Continue;
           seen := False;
           for best := 0 to nsyms - 1 do
-            if CSyms[best] = si then begin Inc(Counts[best]); seen := True; Break; end;
+            if CSyms[best] = si then
+            begin
+              Inc(Counts[best]);
+              if IRKind[j] = IR_LOAD_SYM then Inc(LCounts[best]);
+              seen := True; Break;
+            end;
           if (not seen) and (nsyms < MAX_LOOPSYM_SCAN) then
           begin
-            CSyms[nsyms] := si; Counts[nsyms] := 1; Inc(nsyms);
+            CSyms[nsyms] := si; Counts[nsyms] := 1;
+            if IRKind[j] = IR_LOAD_SYM then LCounts[nsyms] := 1
+            else LCounts[nsyms] := 0;
+            Inc(nsyms);
           end;
         end;
     end;
   if nsyms = 0 then Exit;
-  { Ranked selection: repeatedly take the hottest remaining eligible sym whose
-    class still has a free register. Within a class the descending-count order
-    fills the lowest register first (r12 before r13, xmm8 before xmm9). }
+  { PXXDBG=a.resid — the tally this pass ranks on, before any pick is made.
+    The eligibility thresholds below are the whole subject of the -O3
+    register-pressure work, and they are invisible in the emitted bytes: a
+    local that just missed the cut and one that was never a candidate emit
+    identical frame traffic. Print the counts rather than inferring them from
+    a disassembly. }
+  if PxxDbgEnabled('a.resid') then
+    for k := 0 to nsyms - 1 do
+    begin
+      si := CSyms[k];
+      Write('PXXDBG a.resid TALLY proc=', Procs[CurProc].Name,
+            ' sym=', Syms[si].Name, ' count=', Counts[k],
+            ' loads=', LCounts[k],
+            ' type=', Syms[si].TypeKind, ' kind=', Syms[si].Kind);
+      if Syms[si].IsArray then Write(' array');
+      if SymSlotEscapes(si) then Write(' escapes');
+      WriteLn(' freegpr=', nFree);
+    end;
+  { Ranked selection: repeatedly take the sym with the most loop LOADS whose
+    class still has a free register. Within a class the descending order fills
+    the lowest register first (r12 before r13, xmm8 before xmm9).
+    The rank is LOADS, not accesses, for both classes: residency removes READS,
+    while a store dual-writes through a register move and is close to free. So a
+    store-heavy resident buys almost nothing and a load-heavy one is the whole
+    payoff. Ranking floats on loads was measured against ranking them on total
+    accesses (mandelbrot, whose kernel is entirely float): indistinguishable, so
+    this takes the simpler rule rather than a per-class split no measurement
+    asks for. }
   islot := 0; fslot := 0;
   while (islot < nFree) or (fslot < FR_RESIDENT_MAX) do
   begin
     best := -1; bestCnt := 0;
     for k := 0 to nsyms - 1 do
-      if Counts[k] > bestCnt then
+      if LCounts[k] > bestCnt then
       begin
         si := CSyms[k];
         if Syms[si].IsArray then Continue;
@@ -9678,17 +9765,28 @@ begin
         else
         begin
           if islot >= nFree then Continue;
-          if Counts[k] <= 3 then Continue;      { int threshold: > 3 loop accesses }
+          { Admission is by LOADS, and one is enough. Residency removes READS —
+            EmitStoreVar dual-writes, so the frame slot stays authoritative and
+            a store costs one extra register move, which is free (it is
+            eliminated at rename). The old test was `Counts[k] <= 3` over loads
+            AND stores, which ranked a store-heavy local above a load-bearing
+            one and, on the ticket's own three-local benchmark, excluded the
+            accumulator at exactly 3 accesses while THREE registers sat idle.
+            A loop-carried accumulator must never sit in the frame while a GPR
+            is free. Measured 1.63x for that one local, 3.10x for the body.
+            The bound that remains is the register pool, not a threshold. }
+          if LCounts[k] < 1 then Continue;      { int: at least one loop LOAD }
           if not RegcallScalarType(Syms[si].TypeKind) then Continue;
           if ResidentRegOf(si) <> 0 then Continue;
           if RcResidentCount >= RC_RESIDENT_SLOTS then Continue;   { the TABLE bound }
         end;
         if SymSlotEscapes(si) then Continue;
-        best := k; bestCnt := Counts[k];
+        best := k; bestCnt := LCounts[k];   { same scale the loop above tests }
       end;
     if best < 0 then Break;
     si := CSyms[best];
     Counts[best] := 0;
+    LCounts[best] := 0;
     FrameSize := AlignTo(FrameSize + 8, 8);
     saveOff := -FrameSize;
     if Syms[si].TypeKind = tyDouble then
@@ -9704,6 +9802,9 @@ begin
       EmitB($F2); EmitB($44); EmitB($0F); EmitB($10);
       EmitB($85 or (fslot shl 3)); EmitI32(Syms[si].Offset);  { movsd xmm(8+fslot), [rbp+off] }
       FrResidentSym[fslot] := si;
+      if PxxDbgEnabled('a.resid') then
+        WriteLn('PXXDBG a.resid ASSIGN proc=', Procs[CurProc].Name,
+                ' sym=', Syms[si].Name, ' reg=xmm', 8 + fslot, ' loads=', bestCnt);
       Inc(fslot);
       FrResidentCount := fslot;
     end
@@ -9718,6 +9819,9 @@ begin
       RcResidentSaveOff[RcResidentCount] := saveOff;
       Inc(RcResidentCount);
       Inc(islot);
+      if PxxDbgEnabled('a.resid') then
+        WriteLn('PXXDBG a.resid ASSIGN proc=', Procs[CurProc].Name,
+                ' sym=', Syms[si].Name, ' reg=r', reg, ' loads=', bestCnt);
     end;
   end;
 end;

@@ -106,3 +106,94 @@ more frontends become cheap → more parallel work can start → each new fronte
 exercises the IR and surfaces the next gap. The better the core, the more "funny
 parallel works" (new languages, new targets) can run at once without touching
 each other. Invest there first.
+
+## `IRTk` is a hint, not a guarantee — and nothing noticed until wasm32
+
+Recorded 2026-08-28 by the wasm32 lane, descriptively: this is a fact about the
+IR as it stands, not a proposal to change it.
+
+`IRTk[node]` records a node's type, and it is not reliably populated. A
+for-loop's bound comparison arrives with an `IR_LOAD_SYM` whose `IRTk` is
+`tyUnknown` while the symbol it loads is plainly an `Integer`.
+
+**Six backends never noticed, and could not have.** A register backend decides
+an instruction from a register width, not from a type: an `Integer` added to an
+`Int64` is already sitting in the low half of a 64-bit register, `IRTk` is
+never consulted to pick the opcode, and an unpopulated one is therefore
+unobservable. By this repo's own rule — an observable no compiling program can
+reach is not a defect — "IRTk is sometimes tyUnknown" was not a bug anyone
+could point at a wrong program for.
+
+**wasm32 is the first type-DIRECTED consumer.** wasm has four value types, no
+sub-registers, and separate instructions for each width, so the backend must
+name a type before it can emit anything. Reading `IRTk` to do it refused every
+`for` loop in the compiler with a message that was a true statement about
+`IRTk` and a false one about the program.
+
+What that backend does instead, in case a future one wants it: **one pure
+function answers what a node produces**, and it takes the answer from the thing
+that actually determines the value — the SYMBOL for a load, the unified operand
+width for a binop, the CALLEE's declared result for a call — with `IRTk` as the
+fallback only for nodes whose type is nothing but what the IR recorded
+(constants, loads through a pointer). Every emitter's declared result is that
+same function, so the planner and the emitter cannot disagree and an emitter
+cannot report a type it did not produce.
+
+That is worth generalising past the one field. The `IRTk` slip was preceded by
+the rule being written down in the same file, at the emitter — *where IRTk and
+what was emitted disagree, believe what was emitted* — and then broken three
+functions later in the planner, because the planner runs before anything is
+emitted and `IRTk` was the only thing available. **A rule you have to remember
+at each site gets broken at the site where following it is inconvenient, which
+is exactly the site where it matters.** The fix was not a better comment; it
+was making the two sites call the same function.
+
+Making `IRTk` a guarantee is a decision with a cost, not a repair, and nothing
+needs it today. But a second type-directed frontend or backend will meet this,
+and it should meet it here rather than rediscovering it from a refused `for`
+loop.
+
+## A body's identity is a range of bytes, and that is a target's property
+
+Same category as the `IRTk` note above, found the same way and worth reading
+beside it: an invariant the IR relies on which is true only because of an
+incidental layout property of every backend that existed when it was written.
+
+A frontend emits top-level code by calling the per-body entry point with
+`CurProc = -1`, and it does so **more than once**. Every typed constant that is
+built by startup code rather than stored in the blob — a record, an array of
+records — emits its stores as another such call. Nothing announces that the
+pieces belong together.
+
+**On a register target they do not need to.** A body is a range of bytes in
+`Code[]`; consecutive emissions land one after another; `Procs[].BodyAddr` is
+simply overwritten by the last one, and the pieces genuinely ARE one function,
+with no seam and nothing to reconcile. Six backends have relied on that, and
+none of them could have noticed it was a *contract* rather than a fact, because
+in a byte-stream it is not expressible any other way.
+
+**wasm32 is the first target where a function is a closed structure**, with its
+own locals vector, its own type, and its own terminating `end`. The same
+sequence of calls produces N functions rather than one, and the pieces have no
+relationship the emitter can see. That backend got N functions all named `main`,
+none of them called.
+
+The failure mode is the part worth carrying, because it is the shape this file
+keeps documenting. It surfaced as `duplicate export "main"` — a complaint about
+a *name collision*, which is a symptom of the symptom — and making the names
+unique makes the module validate. **The actual defect is that every global those
+chunks initialise reads zero**, and nothing says so: the module is well-formed,
+every function is present, and the program is silently missing its
+initialisation. A validator has no opinion about a function nobody calls.
+
+That backend's answer, for the next non-linear target: each chunk keeps its own
+slot and the entry point is **synthesised** as a call to each in order.
+Concatenation and sequential calls are equivalent as long as a chunk balances
+its own stack pointer — it allocates a frame, does its work, frees it — so there
+is nothing to carry across the seam. What made the fix easy is exactly what made
+the bug invisible: the pieces really were independent, and the register targets
+were joining them by accident rather than by design.
+
+Nothing needs changing today. But "the frontend may emit one logical body in
+several calls" is a fact about the IR's interface that was recorded nowhere, and
+the next backend to meet it should meet it here.

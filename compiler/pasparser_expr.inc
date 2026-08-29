@@ -389,6 +389,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     rndRawArg: Integer;      { round(x, n): the argument node before the float unbox }
     bcN: Integer;            { element count of a `[..]` open-array constructor operand }
     copyElemRec: Integer;    { element rec of a dynamic-array Copy's source, for a `[i]` suffix }
+    mrefNode: Integer;       { a `@`-less method reference inside a method-pointer cast, or -1 }
     intBaseArg, atRecv, atFld, atDflt, atProp: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     supPi: Integer;   { __pxxGetInterface, for the three-argument Supports }
@@ -1119,7 +1120,8 @@ begin
                 Inc(mai);
               end;
               ExpectCallRParen(mpi);
-            end;
+            end
+            else CheckMethodCallArity(mpi);
             node := mcallNode;
           end
           else if mmi >= 0 then
@@ -1209,7 +1211,8 @@ begin
                 ASTRight[ASTLeft[mcallNode]] := margSeq;
               end;
               ExpectCallRParen(mpi);
-            end;
+            end
+            else CheckMethodCallArity(mpi);
             { result type for chaining (e.g. (o as T).GetChild.M) }
             if (Procs[mpi].RetType = tyClass) or (Procs[mpi].RetType = tyRecord) then
               ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
@@ -6432,7 +6435,24 @@ begin
         begin
           Next; { consume alias type name }
           Expect(tkLParen, '(');
-          ParseExpr;
+          { A cast to a METHOD-POINTER type supplies the context that makes a
+            bare `obj.M` a reference rather than a call -- the same context an
+            assignment to a method-pointer variable supplies, asked through the
+            one helper both now share. Gated on the alias being a method pointer
+            (AliasProcSig >= 0 AND tyRecord, the 16-byte {Code, Data} form the
+            call arm below already distinguishes from the pointer form), so no
+            other cast flavour changes how its operand is read.
+            bug-p-a-class-method-cast-to-a-method-pointer-inline-segfaults }
+          mrefNode := -1;
+          if (AliasProcSig[aliasIdx] >= 0) and (AliasTk[aliasIdx] = Ord(tyRecord)) then
+            mrefNode := TryParseParenlessMethodRef;
+          if mrefNode >= 0 then
+          begin
+            CurASTNode := mrefNode;
+            LastExprTk := tyRecord;
+          end
+          else
+            ParseExpr;
           Expect(tkRParen, ')');
           { `TFn(p)(args)` -- CALL straight through a procedural-type cast, the
             natural way to dispatch through a hand-built VMT (rtl-generics

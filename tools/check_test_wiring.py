@@ -62,7 +62,7 @@ def read_exemptions():
     return out, bad
 
 
-def wired_paths():
+def wired_paths(prov=None):
     """Every test/ path mentioned by the Makefile or by a tools/ script.
 
     One pass over each file, collecting `test/...` tokens. Deliberately textual:
@@ -71,6 +71,25 @@ def wired_paths():
     """
     seen = set()
     pat = re.compile(r"test/[A-Za-z0-9_./+-]+")
+    # A COMMENT IS NOT WIRING. The scan below is textual on purpose (a
+    # reference is a reference regardless of which variable expands around
+    # it), but it read a mention inside a comment as a build rule, and the
+    # failure direction is the bad one: a commented-out mention makes an
+    # orphan look WIRED, so the checker reports nothing and the gap it exists
+    # to surface stays invisible. Measured on csqlite_file_probe.c, whose only
+    # two mentions in the tree are "same shape as csqlite_file_probe.c" in a
+    # Makefile comment and the same sentence in a C comment -- enough to mark
+    # it wired, and then to report its (correct) exemption as STALE, which is
+    # the same defect twice: once hiding a gap, once inviting someone to
+    # delete the exemption that was covering it.
+    #
+    # APERTURE: full-line comments only -- a line whose first non-blank
+    # character is `#`, which covers Makefile comments, `#`-led shell and
+    # Python lines, and a `#` comment inside a recipe body. A TRAILING comment
+    # is deliberately NOT stripped: `#` is legal inside a recipe's shell
+    # quoting, so cutting at one would drop real references, and dropping a
+    # real reference is the worse direction here. Prose inside a Python
+    # docstring is likewise still counted as a reference.
     files = [os.path.join(ROOT, "Makefile")]
     tools = os.path.join(ROOT, "tools")
     for fn in sorted(os.listdir(tools)):
@@ -82,7 +101,14 @@ def wired_paths():
                 text = f.read()
         except OSError:
             continue
-        seen.update(pat.findall(text))
+        for n, line in enumerate(text.splitlines(), 1):
+            if line.lstrip().startswith("#"):
+                continue
+            for tok in pat.findall(line):
+                seen.add(tok)
+                if prov is not None:
+                    prov.setdefault(tok, []).append(
+                        (os.path.relpath(path, ROOT), n))
     return seen
 
 
@@ -179,7 +205,8 @@ def main():
               "this check exists to remove. Give each one a reason.")
         return 1
 
-    wired = wired_paths()
+    prov = {}
+    wired = wired_paths(prov)
     subs = subjects()
     reached = consumed_by(wired, subs)
     unwired = [p for p in subs
@@ -187,10 +214,37 @@ def main():
 
     # An exemption for a file that IS wired (or no longer exists) is stale, and
     # a stale exemption silently widens the check's blind spot over time.
-    stale = [p for p in exempt
-             if p in wired or not os.path.exists(os.path.join(ROOT, p))]
+    #
+    # BUT A STALE REPORT INVITES A DELETION, and deleting a CORRECT exemption
+    # re-opens the very gap it was covering -- so the claim needs evidence
+    # proportional to what acting on it costs. Two strengths, because they are
+    # not equally sure:
+    #
+    #   hard      the file is gone, or the Makefile names it in a live line.
+    #             Acting on this is safe.
+    #   advisory  the only reference is a tools/ script NAMING the path. That
+    #             is not proof anything RUNS it: a devtest that lists test
+    #             files as DATA mentions them exactly like a runner that
+    #             executes them. Measured -- csqlite_file_probe.c was reported
+    #             stale on the strength of a `("test/csqlite_file_probe.c",
+    #             "/tmp/...")` tuple in testmgr_hardcoded_tmp_devtest.py, which
+    #             asserts about the file's CONTENT and never builds it. Its
+    #             exemption is correct and deleting it would have been a real
+    #             loss.
+    #
+    # Deliberately not resolved by a heuristic ("does this script look like it
+    # runs the file"): that is a signature list wearing a different hat, it
+    # goes stale silently, and the honest move is to hand the reader the
+    # citation and let them judge.
+    def _mk_backed(path):
+        return any(f == "Makefile" for f, _ in prov.get(path, []))
 
-    if not unwired and not stale:
+    gone = [p for p in exempt if not os.path.exists(os.path.join(ROOT, p))]
+    stale = [p for p in exempt if p in wired and _mk_backed(p)] + gone
+    advisory = [p for p in exempt
+                if p in wired and p not in stale and not _mk_backed(p)]
+
+    if not unwired and not stale and not advisory:
         print("check-test-wiring: OK — %d test subject(s), all referenced by a "
               "rule or explained in %s"
               % (len(subjects()), os.path.relpath(EXEMPT, ROOT)))
@@ -209,7 +263,14 @@ def main():
               "entry now only hides future gaps:" % len(stale))
         for p in stale:
             print("  %s" % p)
-    return 1
+    if advisory:
+        print("check-test-wiring: %d exemption(s) whose only reference is a "
+              "tools/ script NAMING the path — a mention is not proof anything "
+              "runs it, so verify before deleting:" % len(advisory))
+        for p in advisory:
+            where = ", ".join("%s:%d" % fl for fl in prov.get(p, [])[:3])
+            print("  %-46s named by %s" % (p, where))
+    return 1 if (unwired or stale) else 0
 
 
 if __name__ == "__main__":
