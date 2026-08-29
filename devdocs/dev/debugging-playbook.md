@@ -1378,6 +1378,57 @@ enough to resolve it, and **is the effect larger than one tick of the timer?**
 The last question is the cheapest of the three to ask and the easiest to skip,
 because the number already looks like a measurement.
 
+## When the box is busy, stop timing and start COUNTING
+
+All three corrections above make a wall-clock delta trustworthy. None of them
+help when the box itself is the problem — this fleet routinely runs nine agents
+and seven concurrent self-host builds, at load 9-19 on 12 cores. At that point a
+wall-clock A/B is not measuring your change, and no amount of interleaving fixes
+it.
+
+**Count retired instructions instead. The count is load-invariant by
+construction, not by assumption.**
+
+`perf stat` is the obvious tool and is **unavailable here**: this workstation runs
+`kernel.perf_event_paranoid = 4`, which denies unprivileged access to every event,
+hardware and software alike. Raising it is a root sysctl on the owner's machine.
+
+So use qemu's execution trace, which is better anyway (frank-optimize-b4,
+2026-08-29):
+
+```
+qemu-x86_64 -one-insn-per-tb -d exec ./bench 2>&1 | wc -l
+```
+
+One log line per instruction **executed** — exact and deterministic rather than
+sampled, with no multiplexing and no skid. It costs ~100x slowdown, and you pay
+for that by **shrinking `n` instead of enduring it**: a straight-line loop with one
+back-edge has a constant per-iteration cost, so the count scales exactly and small
+`n` proves the same thing. Measured on the W1 shift slice:
+
+| n | BASE | HEAD | delta | delta/n |
+| --- | --- | --- | --- | --- |
+| 2 000 | 44 211 | 42 211 | 2 000 | 1.000 |
+| 20 000 | 440 227 | 420 227 | 20 000 | 1.000 |
+| 50 000 | 1 100 235 | 1 050 235 | 50 000 | 1.000 |
+
+**Delta exactly `n` at all three sizes, no residue** — one instruction per
+iteration, proven rather than argued. Load was 9.51 during the run and 16.44
+shortly before; recorded, and *irrelevant*, which is the whole point.
+
+**It also corrects the denominator, which eyeballing the emitted code will not.**
+b4 had counted the hot loop as 18 instructions from the straight-line body. The
+execution trace showed 18 addresses hit exactly `n` times **and 3 hit `n−1` times**
+— the increment tail, skipped on the last iteration. The real body is 22, so the
+win was 4.55%, not 5.6%. **Reading the emitted code tells you what was emitted;
+only running it tells you what retires**, and loop control is the part a human
+reading a listing reliably forgets.
+
+Wall clock is still owed for anything claiming a *time* improvement — instruction
+count cannot see cache behaviour, port pressure or branch prediction. Take it when
+the box is quiet, and stamp both numbers with the binary sha **and** the load
+average.
+
 ## A capability that exists and cannot be asked for costs you at the worst moment
 
 `compiler/asmtext_wasm.inc` could write a `.wat` — the text form of a wasm
