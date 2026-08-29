@@ -2862,3 +2862,94 @@ Still genuinely open, and larger than any of the three landed slices: the
 reloaded from the frame every iteration. Note the ticket's own earlier warning
 before touching the latter — making the limit a constant measured *slower*
 (0.87 vs 0.79), so it is not the obvious win it looks like.
+
+---
+
+## 2026-08-29 — the AN_FOR init temp is elided at -O3 when both bounds are re-emittable
+
+Follow-up to `8b35e88fa`, which fixed a real correctness bug (both for-loop
+bounds must be evaluated before the control variable is assigned) and paid for
+it by capturing the initial bound into a hidden temp. That capture is what this
+removes, for the subset where it is provably unnecessary.
+
+**Priced before building, per standing rule 2.** The cost is **exactly 2
+instructions per loop ENTRY** — not per iteration — measured by exact
+instruction count on a shape built to maximise it (inner loop entered 20 000
+times, running twice): 500 198 → 540 198, i.e. **8%** of that program. Statically,
+per procedure, pre- vs post-`8b35e88fa`: mandelbrot **+301 B over 23 procs**,
+jsondemo **+863 B over 60**, and **every changed procedure grew, none shrank** —
+the signature of a fixed per-entry cost rather than anything data-dependent.
+
+**The condition.** The capture exists because `initValNode` is a value node the
+backend re-emits at the store, so leaving it uncaptured moves the initial
+expression's side effects after the limit's. It is unnecessary when re-emitting
+the initial bound later cannot observe anything different — true for a literal, a
+plain scalar variable, or pure arithmetic over those. **Both** bounds must pass:
+the initial one so there is nothing to reorder, the limit so it cannot write what
+the initial one reads.
+
+`ForBoundReEmittable` is a **closed allow-list defaulting to false**, which is the
+opposite default from `CASTLValueHasSideEffect` a few thousand lines up. That is
+deliberate and worth stating: a wrong "no side effect" there merely misses an
+optimisation, while a wrong one here **silently restores a wrong iteration
+count** — the bug this lowering was fixed for two hours earlier. `AN_INDEX` and
+`AN_FIELD` are excluded as a judgement call, not an oversight: they are reads
+that a pure limit cannot disturb, but they can **fault**, and fault ordering is
+not something to reason about casually in a lowering this recently broken.
+
+### The census over-promised AGAIN — same shape as slice 5, second instance
+
+`PXXDBG=a.forinit` (new) reports the AST kinds of both bounds for every loop that
+pays for the temp. compiler.pas, top shapes of ~250:
+
+| init | limit | count | elided? |
+| --- | --- | --- | --- |
+| ident | binop | **87** | only if the binop is call-free |
+| binop | literal | 55 | only if the binop is call-free |
+| field | binop | 28 | no |
+| binop | binop | 25 | only if both are call-free |
+| index | binop | 18 | no |
+| ident | literal | 13 | **yes** |
+| ident | ident | 11 | **yes** |
+
+Reading that table, widening from "plain ident or literal" to "pure arithmetic"
+should have reached most of the population. **It recovers 14 B on mandelbrot and
+28 B on jsondemo.** The blocker is invisible in the table: those binops mostly
+*contain calls* — `Length(s) - 1` is an `AN_BINOP` whose child is an `AN_CALL`.
+The census classified by the ROOT node kind, and the disqualifying node was a
+child. **A census is only as good as the granularity it classifies at**, which is
+a sharper version of the same rule slice 5 produced.
+
+**What reaching the big bucket would require, and why it is not attempted.** A
+call-bearing *limit* is fine if the *initial* bound is a local that no call can
+write. That is an aliasing question, and the tree has an address-taken flag for
+**params only** (`ProcBodyAddrTakenParam`) — nothing for locals. Building that
+analysis inside a lowering fixed two hours ago, to recover 2 instructions per
+loop entry, is the wrong trade tonight. Banked, not filed: the probe and this
+table are the starting point.
+
+**So the honest result:** a real win for tight loops with simple bounds — exactly
+the shape this campaign targets, and the worst-case inner loop returns to its
+**exact** pre-`8b35e88fa` instruction count — and close to nothing for the RTL's
+string-processing loops, whose bounds are calls.
+
+**Verification:** `-O0`/`-O1`/`-O2` byte-identical on four programs; `-O3`
+smaller; `8b35e88fa`'s own `test_for_bounds_before_control_var` passes all 13
+rows at all four levels; self-host fixedpoint `b3434e287096`, 1 round.
+
+### The new test's control was VACUOUS, and only the vacuity check found it
+
+Worth recording as a method failure rather than a footnote. The test carries a
+call-bearing row precisely so that an accidental widening to calls would be
+caught. Breaking the elision on purpose — eliding unconditionally, ignoring
+purity — **left that row passing**. Eliding a call-bearing bound swaps the two
+calls, and both orders make the same number of calls and produce the same
+iteration count, so the call *counter* and the count are both blind to it.
+`8b35e88fa`'s test failed one row; mine failed none.
+
+The row now logs call **order** (`iL` correct, `Li` broken) and the deliberate
+break moves it. **A counter cannot assert an ordering**, and "I added a control
+for this" is not the same claim as "I watched this control fail" — which is
+standing rule 1's last clause, met here by the rule catching its own author.
+
+Landed `a2711f2ea`. `-O2` promotion not taken — coordinator's call, after soak.
