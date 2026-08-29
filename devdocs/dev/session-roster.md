@@ -15642,3 +15642,52 @@ the reason — and the story was plausible enough that nothing in it invited a c
 > limit that says nothing about anyone's judgement.
 
 Only the owner could correct this one; no instrument I have could see it.
+
+## 2026-08-29 — SEVEN TAKES TRACK T (owner), and dispatch turns to throughput
+
+Owner, this afternoon: *"i'm still configuring seven, so hang on for that. meanwhile
+set our workers to work so we can fix tickets.. on my note, seven will take the task
+for track T"*
+
+Two standing facts from that:
+
+1. **Track T is seven's lane once it is up.** Not a lane to invest another session
+   in long-term. pxx-a5 keeps T *for now* — it has the context and the queue is
+   deep — but told to prefer **finishable units over campaigns** and to keep the
+   handoff clean, because a half-built tooling change is the worst thing to hand a
+   new box.
+2. **The ask is ticket THROUGHPUT.** Tonight ran heavy on tooling and method
+   findings — good ones, but the instruction is to fix tickets. Dispatch weights
+   bugs and features over meta-work until told otherwise.
+
+### N holds seven of the top seventeen — and I am still not staffing it
+
+The global ranked queue now heads **p85 / p75 / p72 [N]**, plus four **[N] p70**
+regressions — **seven of the top seventeen slots.** The standing rule is
+unchanged and I am following it rather than the ranking: **P/C/plain-A over N until
+the owner says N is back.** A queue position is not an authorisation, and *"set our
+workers to work"* is a throughput instruction, not a lane grant.
+
+> **The ranker does not know about a reservation.** It will keep putting N at the
+> top every tick, and every tick that looks like a new argument for staffing it.
+> It is the same fact re-presented, not accumulating evidence.
+
+Surfaced to the owner as **information, once**: the block is now seven items rather
+than three, and three of those are regressions with a culprit already identified
+(`19dc5586e384`, 1 in range each — likely one root cause). Not re-asking.
+
+### Dispatch — four lanes live, weighted to fixes
+
+- **frankA → `feature-pascal-corpus-generics` [P p65]**, rung 3, reducing the new
+  `:3341` error class.
+- **frankwasm → open-array + `Length of Pointer`**, resumed, wasm branch.
+- **pxx-a5 → Track T**, its own pick, now with seven's arrival as the boundary.
+- **frankB → offered the fourth slot**, pointed at Track P's unclaimed p70s
+  (`feature-p-delphi-string-helpers`, `feature-pascal-typed-and-untyped-files`) —
+  neither collides with frankA on the generics rung. Declining remains a real
+  answer; four is the untested session-limit edge.
+
+**Note for whoever holds A next:** `bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero`
+[A p70] is unclaimed and sits on the **HeapMmap** ground that is **UNGRANTED** to
+frankwasm. It is a legitimate Track A ticket at p70 and taking it is not a wasm
+grant; the two-halves rule (never the RTL arm alone) still binds whoever picks it up.
