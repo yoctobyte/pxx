@@ -193,16 +193,40 @@ function IRNodeOwnsManagedStr(n: Integer): Boolean; forward;
   They answer before any source file is required — `pxx --where` with no
   arguments is exactly the case someone reaches for when units are not found. }
 
+procedure DeriveTargetPlatform;
+{ Settle TargetPlatform from the target, unless --platform= set it explicitly.
+
+  Shared by the real compile path and by `pxx --where` for the same reason
+  AddDefaultPasUnitDirs itself was extracted: --where must report the list a
+  real compile builds, and the way that promise breaks is a second copy of the
+  rule. --where answers from INSIDE the argument loop (it Halts there), so
+  without this call it saw the pre-derivation default POSIX and reported the
+  posix PAL for `--target=xtensa`, which really compiles against the esp one.
+
+  Idempotent: PlatformExplicit gates it, and re-deriving yields the same value.
+
+  bug-a-the-posix-pal-dir-is-added-on-esp-platform-targets }
+begin
+  if PlatformExplicit then Exit;
+  { riscv32 is dual-role: bare ESP32-C3 (--esp-profile=bare) OR hosted linux
+    (qemu-user) -- only the bare profile is esp. xtensa has no hosted leg. }
+  if EspBareBoot or (TargetArch = TARGET_XTENSA) then
+    TargetPlatform := PLATFORM_ESP
+  else
+    TargetPlatform := PLATFORM_POSIX;
+end;
+
 procedure AddDefaultPasUnitDirs;
 { The PAL search roots the default RTL needs (platform_backend lives under
   lib/rtl/platform/<pal>/), appended AFTER any user -Fu so an explicit override
-  still wins. ESP targets pick their own backend and are excluded.
+  still wins. BARE ESP targets have no RTL at all and are excluded; every other
+  platform gets the PAL its TargetPlatform names -- see the `pal` note below.
 
   Extracted from the main body so `pxx --where` reports the same list a real
   compile builds — a diagnostic that re-derives the search path is a diagnostic
   that goes stale silently (feature-toolchain-cli-ux). Idempotent enough for
   --where's purposes: it is called once per process either way. }
-var libpath, one, home: AnsiString;
+var libpath, one, home, pal: AnsiString;
     i: Integer;
 begin
   { Tier 2a: PXX_LIBPATH — colon-separated extra unit roots. Added HERE, which
@@ -235,6 +259,24 @@ begin
 
   if NoDefaultRtl or TargetIsEspClass then Exit;
 
+  { WHICH PAL this platform wants. The axis is TargetPlatform; it is NOT
+    TargetIsEspClass, which has meant "bare metal, no RTL" since cbfdb5de8.
+    The two agree everywhere except the non-bare ESP profile -- xtensa under
+    IDF, riscv32 --platform=esp -- which wants the esp backend and was
+    silently handed the posix one, whose raw Linux syscalls under FreeRTOS are
+    the failure bug-esp-idf-heap-linux-mmap-ecall already recorded once.
+
+    Selected once into `pal` rather than branched at each of the four
+    spellings below: the four are the same decision, and the way this stays
+    correct is that there is one place to change, not four that can drift
+    (devdocs/dev/normalise-dont-special-case.md).
+
+    Bare ESP never reaches here -- it took the Exit above -- so this is only
+    ever choosing between a hosted-POSIX and an ESP-platform build.
+
+    bug-a-the-posix-pal-dir-is-added-on-esp-platform-targets }
+  if TargetPlatform = PLATFORM_ESP then pal := 'esp/' else pal := 'posix/';
+
   { Tier 2b: PXX_HOME's PAL dir, matching ResolveToolchainDirs' override. Same
     all-or-nothing rule — when PXX_HOME is set, the exe-dir guesses below are
     not appended as a silent second chance. }
@@ -243,7 +285,7 @@ begin
   if Length(home) > 0 then
   begin
     if home[Length(home)] <> '/' then home := home + '/';
-    AddPasUnitDir(home + 'lib/rtl/platform/posix/');
+    AddPasUnitDir(home + 'lib/rtl/platform/' + pal);
     Exit;
   end;
 
@@ -253,16 +295,16 @@ begin
     with CWD at the repo root, so ExeDir-relative ('/tmp/../lib/...') misses. }
   if ExeDir <> '' then
   begin
-    AddPasUnitDir(ExeDir + '../lib/rtl/platform/posix/');
+    AddPasUnitDir(ExeDir + '../lib/rtl/platform/' + pal);
     { The STABLE binary lives at <root>/stable_linux_amd64/<profile>/, two
       levels down, so its '../lib' misses. Add the two-levels-up spelling as
       well rather than probe: an extra non-existent search dir costs one
       failed open, and getting this wrong made `uses SysUtils` resolve and
       then die on its own `uses platform_backend`
       (bug-a-uses-sysutils-silently-no-ops-when-the-rtl-is-not-on-the-search-path). }
-    AddPasUnitDir(ExeDir + '../../lib/rtl/platform/posix/');
+    AddPasUnitDir(ExeDir + '../../lib/rtl/platform/' + pal);
   end;
-  AddPasUnitDir('lib/rtl/platform/posix/');
+  AddPasUnitDir('lib/rtl/platform/' + pal);
 end;
 
 procedure PrintVersionInfo;
@@ -402,6 +444,10 @@ begin
   ShowWhereDir(cdir, '[compiler-local units]');
   WriteLn;
 
+  { Settle the platform first: --where runs from inside the argument loop,
+    before the main body's derivation, so without this it reports the PAL
+    of a pre-derivation default rather than the one a compile would use. }
+  DeriveTargetPlatform;
   AddDefaultPasUnitDirs;
   WriteLn('Pascal unit search roots, in order (-Fu goes in FRONT of these):');
   if PasUnitDirCount = 0 then
@@ -1546,15 +1592,7 @@ begin
     esp targets (xtensa/riscv32) and bare-metal profiles are esp; all else is
     posix. The platform axis stays independent: an explicit --platform overrides
     this (e.g. a hosted RTOS on xtensa later). }
-  if not PlatformExplicit then
-  begin
-    { riscv32 is dual-role: bare ESP32-C3 (--esp-profile=bare) OR hosted linux
-      (qemu-user) — only the bare profile is esp. xtensa has no hosted leg. }
-    if EspBareBoot or (TargetArch = TARGET_XTENSA) then
-      TargetPlatform := PLATFORM_ESP
-    else
-      TargetPlatform := PLATFORM_POSIX;
-  end;
+  DeriveTargetPlatform;
   PasApplyTargetDefines;
   PasApplyPlatformDefines;
   { AFTER PasApplyTargetDefines and after the target is settled: the compiler
@@ -1675,7 +1713,8 @@ begin
     platform_backend from the PAL dir. Anchor the POSIX backend dir to the
     compiler binary so a plain `pxx foo.pas` finds it with no -Fu. Appended
     last, so an explicit user -Fu (e.g. a per-platform override) still wins.
-    ESP targets select their own backend and are excluded from default RTL. }
+    BARE ESP targets have no RTL and are excluded; a non-bare ESP platform
+    gets the esp PAL rather than this one. }
   AddDefaultPasUnitDirs;
   { lib/asmcore resolution (asmcore_base/asmcore_x64, both for the compiler's
     own .asm frontend / inline-asm branches and for any user program) is now a
