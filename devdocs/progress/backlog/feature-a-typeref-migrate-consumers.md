@@ -1,6 +1,6 @@
 ---
 track: A
-owner: frankA
+owner: ""
 prio: 62
 type: feature
 status: working
