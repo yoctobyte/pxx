@@ -385,4 +385,4 @@ Found by frank-rust, audited across all five frontends by pxx-a5, landed here
 because Track A+O held `symtab.inc`.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit c17110dd5.
