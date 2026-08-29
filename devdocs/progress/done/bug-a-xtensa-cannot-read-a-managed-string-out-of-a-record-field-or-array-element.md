@@ -209,4 +209,4 @@ divergences stay on
 [[bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs]].
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit b69b4424c.
