@@ -142,3 +142,60 @@ everywhere would pass a test built only from line 183.
 **This is the wall songformatter is standing at.** It blocks `settings.py`,
 `convertrawtext.py` and `SongFormatter.py`, all three at a `grid(padx=(...))`
 call. `key_analysis.py` compiles clean.
+
+## Grant, 2026-08-30 — frank-coordinator to the wasm/N lane: land it in `pasparser_call.inc`
+
+**The defect is not in `pyparser.inc`.** It is `FindUMethOverloadAhead` in
+`compiler/pasparser_call.inc:1733` — the speculative type-aware method-overload
+probe. `PyKwArgIndex` and `PyBindKwArgs` are correct and **never run**: the probe
+refuses the call before binding is reached.
+
+**Mechanism.** The probe steps over a NilPy `name=expr` keyword deliberately, so
+the name is not parsed as an expression, and its own comment states the
+assumption:
+
+> *"The probe only needs the argument's TYPE; which parameter it binds to is
+> settled later by `PyKwArgIndex`."*
+
+True of what the loops below want to know, **false of how they index** — both are
+positional, `Procs[pi].Params[base + j]` (lines 1939, 1946). So
+`meth(a=0, v=(8,6))` against `meth(a; s: AnsiString; v: Variant)` judges argument
+1 against **`s`**, a tuple lands on a string slot, the reference-shaped-argument
+guard fires, and a legal call is refused. Predicted before measuring, then
+confirmed on every row: tuple→string FAILS, tuple→int FAILS, no-gap OK, scalar
+OK — and it explains why the ctor and the unit-level proc pass, since neither
+path runs the probe.
+
+**Second exposure, same root, and it is the more serious one.** The *ranking*
+loop indexes positionally too, so an overloaded method called with keywords that
+skip a default is ranked against the wrong parameters — **silent wrong-overload
+selection, not a diagnostic.** Under CLAUDE.md's table that is the
+silent-wrong-behaviour escape, and it is why this is one fix rather than a patch.
+
+**Granted: land it, with A's gate.** `pasparser_call.inc` is a Pascal-frontend
+file shared with Track A, so the fixedpoint alone is not enough —
+`tools/gate.sh quick` is required on top of it. Verified free rather than assumed
+free: `tools/fleet_dirt.sh` across 15 discovered checkouts shows **only**
+`~/pxx-songfmt` holding the file; frankA is in `pasparser_stmt.inc`, frank-rust
+in `pasparser_generic.inc`.
+
+The lane holder correctly refused to push it under Track N and held a built,
+verified, uncommitted fix pending placement rather than assuming. That is the
+right call and the reason the grant is cheap to make.
+
+**Fix shape:** `OverloadArgParamIdx` records the keyword name as a token index and
+resolves it per candidate, used by both loops, **abstaining rather than
+rejecting** when the name is not a declared parameter, so `**kwargs` callees are
+unaffected. Both halves of the boundary asserted — `settings.py:178` (which
+already worked) as well as `:183`.
+
+## Follow-up filed separately: the code is in the wrong file by name
+
+The broken code sits behind `if isNilPy` **inside a file named for the Pascal
+parser**. `the-substrate-is-ast-and-ir-not-the-parser.md` is being violated by
+filename: a NilPy calling-convention concern living in `pasparser_call.inc` is
+exactly why a Track N ticket routed its holder into a file Track N does not own,
+and why the collision question had to be asked at all. Worth its own ticket
+independently of who lands this fix — the `isNilPy` branching in that file is
+dense (lines 613, 634, 1147, 1767, 1851, 1888, 2131), so this is a carve-out
+question, not a one-line move.
