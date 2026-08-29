@@ -4,7 +4,7 @@ title: "Six GUI test files that nothing runs, revealed once check_test_wiring st
 track: B
 type: chore
 prio: 30
-status: working
+status: done
 found: 2026-08-29
 found-by: pxx-a5 (Track T)
 owner: pxx-b
@@ -73,3 +73,6 @@ Maintenance paid in full on files that cannot report anything.
 The existing framing for an unwired test is "it does not catch its bug". These
 are the other half: **an unwired test still bills you for upkeep**, and that
 half is the one that keeps being paid without anyone deciding to.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
