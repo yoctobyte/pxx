@@ -927,8 +927,11 @@ test-nilpy: $(COMPILER)
 	# existing UMthIsStatic dispatch already fills. Both parser passes must agree.
 	./$(COMPILER) test/test_nilpy_staticmethod.npy $(TESTTMP)/test_nilpy_staticm26
 	$(TESTTMP)/test_nilpy_staticm26 | diff -u test/test_nilpy_staticmethod.expected -
-	# ...and @classmethod must keep REFUSING itself by name, not parse as a static.
-	! ./$(COMPILER) test/test_nilpy_classmethod_fail.npy $(TESTTMP)/test_nilpy_cmfail26 2>&1 | grep -q 'ok:'
+	# ...and @classmethod, whose refusal test this replaces: `cls` must be the
+	# class the call was made ON (Derived.make() builds a Derived), through all
+	# four receiver forms, since they take different frontend paths.
+	./$(COMPILER) test/test_nilpy_classmethod.npy $(TESTTMP)/test_nilpy_classm26
+	$(TESTTMP)/test_nilpy_classm26 | diff -u test/test_nilpy_classmethod.expected -
 	# every iterable-taking builtin agrees about a bare genexpr arg; set() did not.
 	./$(COMPILER) test/test_nilpy_genexpr_arg_callees.npy $(TESTTMP)/test_nilpy_gexarg26
 	$(TESTTMP)/test_nilpy_gexarg26 | diff -u test/test_nilpy_genexpr_arg_callees.expected -
