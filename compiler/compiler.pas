@@ -1622,6 +1622,28 @@ begin
   IsPascalFrontend := not (isC or isBasic or isNilPy or isAsm or isRust or isAda
                            or isZig or isLol or isWs or isF90 or isAlgol or isErl);
 
+  { NilPy string model: a NilPy `""` must be a real zero-length block, not nil,
+    so `is None` can tell None from the empty string
+    (bug-nilpy-empty-str-and-none-are-the-same-value; representation decided in
+    decide-nilpy-none-str-representation). builtinheap's two collapse sites
+    read this define.
+
+    Whole-compilation, not per-callsite, because the producers are not only
+    NilPy user code: pylib's ~260 `: AnsiString` functions return their empties
+    as an ordinary Pascal `Result := ''`, which is the SAME empty-literal path,
+    so scoping this to "source the NilPy user wrote" would leave every
+    `.replace()` / `.join()` / slice result still answering `is None` True.
+    A Pascal compilation never defines it, so Pascal's AnsiString keeps
+    collapsing exactly as FPC does and the self-host binary is untouched BY
+    CONSTRUCTION rather than by audit.
+
+    Emitted HERE and not in PasApplyTargetDefines, which is where the other
+    frontend-independent defines live: that runs at line ~1558, fifty lines
+    BEFORE isNilPy is computed from the input file's extension, so a define
+    placed there is always false and silently does nothing. }
+  if isNilPy then
+    PasDefine('PXX_NILPY_STR');
+
   { The MAIN input must EXIST. LoadFile answers "" for an unopenable path, which
     is indistinguishable from a genuinely empty file — and an empty NilPy source
     is a perfectly valid (empty) program, so `pxx typo.py out` reported `ok`,
