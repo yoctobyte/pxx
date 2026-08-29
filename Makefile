@@ -5829,6 +5829,14 @@ test-core: $(COMPILER)
 	# what shows this is general machinery and not an Option special case.
 	./$(COMPILER) test/test_rust_option.rs $(TESTTMP)/test_rust_option26
 	test "$$($(TESTTMP)/test_rust_option26)" = "$$(printf 'a some 42\nb none\nn 84\nn -7\na is_some\nb is_none\nunwrap 42\nc 200\nd 9\ne wild\nf 15\ng none\ndescribe 15 -1\nh 40\ni none\nj 27\nk none\nl 21\nm none\nor 15 -9\ncircle 6\nrect 15\nnothing')"
+	# Fixed-array STRUCT FIELDS (feature-rust-corpus-chess, the rung after
+	# Option): scalar and narrow-int elements, a RECORD element with
+	# field[i].member, several array fields laid out around a scalar, and the
+	# array reaching a fn through the record ABI. checksum = sum of i*i over
+	# 0..63 = 85344, which is what catches a stride or offset that is close
+	# but wrong.
+	./$(COMPILER) test/test_rust_struct_array_field.rs $(TESTTMP)/test_rust_saf26
+	test "$$($(TESTTMP)/test_rust_saf26)" = "$$(printf 'sq 0 49 3969\nflags 200 207\nside 1\npieces 5 1 9 2\nchecksum 85344')"
 	./$(COMPILER) test/test_rust_tuple_struct.rs $(TESTTMP)/test_rust_tuple26
 	test "$$($(TESTTMP)/test_rust_tuple26)" = "$$(printf 'a 300 b 44 s 7')"
 	# Rust associated fns + Self (Type::fn / Self::fn call paths, mixed with methods)

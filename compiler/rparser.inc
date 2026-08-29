@@ -333,6 +333,16 @@ begin
   Result := (recId >= REC_UCLASS_BASE) and ROptionCi[recId - REC_UCLASS_BASE];
 end;
 
+{ Is `recId`'s field `name` a fixed array (`squares: [i64; 64]`)? }
+function RFieldIsArray(recId: Integer; const name: AnsiString): Boolean;
+var fi: Integer;
+begin
+  Result := False;
+  if recId < REC_UCLASS_BASE then Exit;
+  fi := FindUField(recId - REC_UCLASS_BASE, name);
+  Result := (fi >= 0) and UFldIsArray[fi];
+end;
+
 function RIsSliceSym(symIdx: Integer): Boolean;
 begin
   Result := (Syms[symIdx].TypeKind = tyRecord) and
@@ -913,8 +923,43 @@ begin
         ASTSOffset[fieldNode] := Tokens[fTokIdx].SOffset;
         ASTSLen[fieldNode] := Tokens[fTokIdx].SLen;
         ASTTk[fieldNode] := Ord(RecFieldType(Syms[symIdx].RecName, CurTok.SVal));
+        methodName := CurTok.SVal;
         node := fieldNode;
         Next;
+        { `s.arr[i]` — indexing a fixed-array FIELD. AN_INDEX over the
+          AN_FIELD, the same node pair Pascal's `r.arr[i]` builds; read or
+          write (AN_INDEX is already an accepted assign target). }
+        if (CurTok.Kind = tkLBrack) and RFieldIsArray(Syms[symIdx].RecName, methodName) then
+        begin
+          Next;
+          argNode := RParseExpr;
+          Expect(tkRBrack, ']');
+          ci := RecFieldRecId(Syms[symIdx].RecName, methodName);
+          fieldNode := AllocNode(AN_INDEX);
+          ASTLeft[fieldNode] := node;
+          ASTRight[fieldNode] := argNode;
+          ASTTk[fieldNode] := ASTTk[node];
+          node := fieldNode;
+          { `s.arr[i].field` — an array field whose ELEMENT is a record.
+            ResolveNodeRec's AN_INDEX/AN_FIELD arm already answers the element
+            record from UFldRec_, so this is one more AN_FIELD and no shared
+            change. Named fields and tuple-struct `.0` digits both. }
+          if (ci >= REC_UCLASS_BASE) and (CurTok.Kind = tkDot) and
+             ((Tokens[TokPos].Kind = tkIdent) or (Tokens[TokPos].Kind = tkInteger)) then
+          begin
+            Next;
+            if CurTok.Kind = tkInteger then name := RIntToStr(CurTok.IVal)
+            else name := CurTok.SVal;
+            fTokIdx := TokPos - 1;
+            Next;
+            fieldNode := AllocNode(AN_FIELD);
+            ASTLeft[fieldNode] := node;
+            ASTSOffset[fieldNode] := Tokens[fTokIdx].SOffset;
+            ASTSLen[fieldNode] := Tokens[fTokIdx].SLen;
+            ASTTk[fieldNode] := Ord(RecFieldType(ci, name));
+            node := fieldNode;
+          end;
+        end;
       end;
       Result := node;
     end;
@@ -2322,7 +2367,7 @@ begin
 end;
 
 procedure RRegisterStructFields;
-var i, j, ci, curOff, sz, align, nameTokIdx, k: Integer; tk: TTypeKind;
+var i, j, ci, curOff, sz, align, nameTokIdx, k, arrLen: Integer; tk: TTypeKind;
     mangled: AnsiString;
 begin
   i := 0;
@@ -2365,13 +2410,46 @@ begin
         nameTokIdx := j; Inc(j);
         if Tokens[j].Kind <> tkColon then Error('Rust: expected : after field name');
         Inc(j);
-        if Tokens[j].Kind <> tkIdent then Error('Rust: expected field type');
-        tk := RTypeKindFromName(GetTokenStr(j), True);
-        Inc(j);
-        sz := TypeSize(tk);
+        { `field: [T; N]` — a fixed array FIELD. The shared UClass machinery
+          has always modelled one (UFldIsArray/UFldArrLen, what Pascal's
+          `arr: array[0..N-1] of T` and C's `int a[N];` both land on); the
+          Rust frontend just refused the syntax. chess.rs's Board is a
+          mailbox array, so this is the rung it was blocking. }
+        arrLen := 0;
+        if Tokens[j].Kind = tkLBrack then
+        begin
+          Inc(j);
+          if Tokens[j].Kind <> tkIdent then Error('Rust: expected element type in [T; N] field');
+          tk := RTypeKindFromName(RTypeNameAt(j), True);
+          if Tokens[j].Kind <> tkSemicolon then Error('Rust: expected ; in [T; N] field');
+          Inc(j);
+          if Tokens[j].Kind <> tkInteger then Error('Rust: [T; N] field length must be an integer literal');
+          arrLen := Tokens[j].IVal;
+          if arrLen <= 0 then Error('Rust: [T; N] field length must be positive');
+          Inc(j);
+          if Tokens[j].Kind <> tkRBrack then Error('Rust: expected ] in [T; N] field');
+          Inc(j);
+        end
+        else
+        begin
+          if Tokens[j].Kind <> tkIdent then Error('Rust: expected field type');
+          tk := RTypeKindFromName(RTypeNameAt(j), True);
+        end;
+        if (tk = tyRecord) and (LastTypeRecId >= REC_UCLASS_BASE) then
+          sz := RecSize(LastTypeRecId)
+        else
+          sz := TypeSize(tk);
         if TypeAlign(tk) > align then align := TypeAlign(tk);
         curOff := AlignTo(curOff, TypeAlign(tk));
         AddUField(ci, Tokens[nameTokIdx].SOffset, Tokens[nameTokIdx].SLen, curOff, Ord(tk), LastTypeRecId);
+        if arrLen > 0 then
+        begin
+          UFldIsArray[UFldCount - 1] := True;
+          UFldArrLen[UFldCount - 1] := arrLen;
+          UFldDynDepth[UFldCount - 1] := 0;
+          UFldArrDimLo[(UFldCount - 1) * MAX_ARR_DIMS] := 0;
+          sz := sz * arrLen;
+        end;
         Inc(curOff, sz);
         if Tokens[j].Kind = tkComma then Inc(j);
       end;
