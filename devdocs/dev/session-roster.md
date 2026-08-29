@@ -17197,3 +17197,54 @@ working on its first night.**
 **Product feedback drafted (queued locally, NOT sent):** killed background command
 reported as `completed (exit code 0)`; long background commands terminated mid-run
 with OOM ruled out. Two sessions, one hour, independent.
+
+## 2026-08-29 ~23:15 — Halt fixed as ONE arm; faces 58 + a sharpening of 55
+
+**`Halt(n)` FIXED (b4), and fixed as an abstraction rather than two constants.**
+`EmitExitReg` added beside `EmitExit` sharing its reasoning; every backend's
+`AN_HALT` arm reduced to "evaluate the code, then call it". Emitted diff IS the
+prediction: x86-64 8 bytes all `0x3C`→`0xE7`, arm32 8 bytes all `0x01`→`0xF8`,
+**i386/aarch64/riscv32 byte-identical** — a five-into-one refactor changing exactly
+the two arms that were wrong is the strongest evidence it preserved the three that
+were right. Scheduler workaround **reverted and measured both ways**: reverted
+source + fixed compiler = 216 10/10; + pre-fix compiler = 0 10/10. The blindfold is
+off.
+
+**b4 flagged a hazard I had not passed on:** the scheduler comment recorded that
+`Halt`'s exit path JOINS the workers and that serialising the fatal HUNG (124 at
+4/8/20 workers), so the revert could have traded a wrong status for a hang. It did
+not — the hang came from serialising — but b4 established that by running it, and
+kept the still-true half of the comment.
+
+**FACE 58 — a comment naming the gap, inside the fifth copy of the thing the gap
+caused.** riscv32's arm was CORRECT and its comment reads *"EmitExit's own
+encodings only cover a constant"*. b4: *"That sentence is what a missing
+abstraction looks like from inside the fifth copy of itself. Someone saw the shape,
+wrote it down, and added a copy anyway."* The general point: **a silent copy might
+be an oversight someone notices; a DOCUMENTED copy reads as considered**, and the
+note that would justify fixing the abstraction becomes the artefact making the copy
+look deliberate. Three of five arms carried an `exit_group` comment — *a comment is
+what you write when the rule has nowhere to live.*
+
+**FACE 55 SHARPENED BY b4, and its version replaced mine.** Mine: minimisation
+destroys the defect, trace the messy case. b4: **tracing the messy case still leaves
+you sampling a race** — which is how the 3-sample table became a rule that was not
+there. The move: **find the question whose answer is not a race.** Not "what status
+do we get" but "does the process die at all". Reasoning lives in
+`test_halt_from_worker_thread`'s header so nobody tidies it into a joined repro and
+disarms it.
+
+**b4's `OTHER` census closed a question and was filed as NOTHING** — the remainder
+is *structurally uncollapsible*: nested binop/call (2659 of 3915) need x0 as their
+own working register, so **the stack round trip is what makes them correct, not
+slow.** 1.0% survives, needing an addressing analysis that does not exist. Right
+disposal: table in the umbrella, no ticket. A ticket justified by a remaining number
+sits at low prio forever.
+
+**b4 crossed into `lib/rtl/scheduler.pas` (B's file) under the ticket's own
+instruction and ANNOUNCED it** — the norm working again, second time tonight.
+
+**Dispatched:** b4 → `feature-opt-bulk-copy-is-byte-at-a-time` [O p65]
+(`builtinheap.pas` free; benchmark approved with the sha + contention conditions).
+Told it the umbrella at p70 sits behind its own fresh-session rule and that it is
+the one who can judge whether that binds. All six lanes working. U queue **20**.
