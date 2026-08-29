@@ -2027,6 +2027,21 @@ def diagnostic_lines(body):
     return "\n".join(hits)
 
 
+# How much of a red job's recorded reason a cascade stub prints next to its
+# name. Bounded because a stub is a signal, not a log: 18 jobs x 200 chars is
+# ~3.6 KB, and the untruncated text is in `tstate/<host>.json` and the per-job
+# report either way.
+CASCADE_REASON_MAX = 200
+
+
+def stub_reason(text):
+    """One line of WHY, to sit under a job name in a cascade stub. -> str."""
+    one = " ".join((text or "").split())
+    if len(one) > CASCADE_REASON_MAX:
+        one = one[:CASCADE_REASON_MAX - 1].rstrip() + "\u2026"
+    return one
+
+
 def ticket_suppression(had_baseline, n_new_red, n_jobs):
     """Why this run's regression tickets are suppressed, or None to file them.
 
@@ -3919,7 +3934,21 @@ def file_cascade_ticket(clone, host, st, sha, new_red, report, parent=None):
         return
     roots = [j for j in new_red
              if any(j.startswith(r) for r in CASCADE_ROOT_JOBS)]
-    joblist = "\n".join("- `%s`" % j for j in sorted(new_red))
+    # WHY, on the same screen as the name. Without this the stub carries the
+    # incriminating half of the evidence and omits the exculpating half: the
+    # Range section is machine-derived and authoritative in tone, and on
+    # regression-cascade-154d1aa3fba6 it named twelve innocent Track R commits
+    # while `qemu-i386: Could not open '/lib/ld-linux.so.2'` sat in the JSON one
+    # fetch away. Two fields of one report disagreed and the layout gave no hint
+    # that the lower-status field was the right one; a reader who trusted the
+    # range would have spent an afternoon bisecting for a missing loader.
+    #
+    # A cascade whose reasons are visible is triaged by READING. One whose
+    # reasons are a fetch away is triaged by bisection.
+    why = {job_key(j): stub_reason(j.get("reason")) for j in report["jobs"]}
+    joblist = "\n".join(
+        ("- `%s`\n  - %s" % (j, why[j])) if why.get(j) else "- `%s`" % j
+        for j in sorted(new_red))
     # The ledger entry this filing corresponds to — it is the only thing that
     # carries good/range, and the cascade branch in test_sha appended it just
     # above. Looked up rather than passed so the signature (shared with
@@ -3970,6 +3999,12 @@ there — even when the Range section says it cannot be the CAUSE. Reproducing
 and blaming are different questions and this line answers the first.)
 
 ## Newly red jobs
+> Each job's own recorded failure REASON is printed under its name. **When the
+> reasons and the Range section disagree, the reasons win.** The range is
+> computed from what CHANGED, not from what the job can SEE — a missing guest
+> loader, an absent dev package or a job that has never once passed on this box
+> all produce a red that no commit in the range caused.
+
 %s
 
 *Cascade stub: one signal for one event. Track T agent (face 2) or the owning
