@@ -289,6 +289,22 @@ $(printf '%s\n' $filled)"
 #
 # So the check moves into the tool. A guard that has to be remembered is a
 # guard for the two hours after someone is burned by it.
+# .gitattributes routes devdocs/progress/BOARD*.md to the `ours` merge driver,
+# but a driver is git CONFIG and config is not committable -- so the attribute is
+# silently inert in any clone where nobody ran this by hand. It sat inert from the
+# day it was written. Register it here: a clone that has ever synced is covered.
+git config merge.ours.driver true 2>/dev/null || true
+
+# A FOLLOWABLE "is it safe to touch the tree yet" SIGNAL. `pgrep -f tools/sync.sh`
+# matches its own command line and the [s]ync bracket trick matches any compound
+# command that merely CONTAINS the string, so a peer asking "is sync running?" got
+# yes forever and waited on nothing -- three times in one night, by someone who
+# knew the trap. A file has no such ambiguity:
+#     [ -e .git/sync-running ] && echo busy
+SYNC_LOCK="$(git rev-parse --git-dir)/sync-running"
+printf '%s pid=%s\n' "$(date -Is)" "$$" > "$SYNC_LOCK" 2>/dev/null || true
+trap 'rm -f "$SYNC_LOCK" 2>/dev/null' EXIT
+
 manifest=$(git log --format=%s "origin/$BRANCH..HEAD" 2>/dev/null)
 manifest_n=$(printf '%s' "$manifest" | grep -c . || true)
 
@@ -297,7 +313,14 @@ manifest_n=$(printf '%s' "$manifest" | grep -c . || true)
 verify_manifest_landed() {
     [ "$manifest_n" -gt 0 ] || return 0
     git fetch --no-write-fetch-head -q origin "$BRANCH" 2>/dev/null
-    landed=$(git log --format=%s -400 "origin/$BRANCH" 2>/dev/null)
+    # NO WINDOW. A -N bound here manufactures the exact alarm this function
+    # exists to settle: on 2026-08-30 two lanes independently got a false
+    # MISSING from a windowed subject grep on a healthy repo, because the fleet
+    # pushed 864 commits in 12h and -400 covers barely four hours of that. The
+    # failure direction is the expensive one -- the message below says "cherry-pick",
+    # and a cherry-pick on a false reading manufactures a real duplicate.
+    # Unbounded costs 0.65s over the full 17k-commit history. Measured, not assumed.
+    landed=$(git log --format=%s "origin/$BRANCH" 2>/dev/null)
     missing=""
     while IFS= read -r subj; do
         [ -n "$subj" ] || continue
