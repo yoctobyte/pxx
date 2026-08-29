@@ -50,7 +50,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
 
-## backlog (294)
+## backlog (293)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -130,7 +130,6 @@ _none_
 | bug-p-the-address-of-a-virtual-class-method-cannot-be-lowered | P | 55 | bug | The address of a virtual class method cannot be lowered (`AN_CLASS_VIRTUAL_CALL`, kind 88) | — |
 | bug-p-two-different-nested-specializations-of-one-template-collide | P | 65 | bug | Two different nested specializations of ONE template, in one generic, collide | — |
 | bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence | T | 40 | bug | file_cascade_ticket's Root-cause-suspects line falls back to 'likely a broken build or harness event' whenever no CASCADE_ROOT_JOBS entry is in the red set. That is a conclusion drawn from the absence of one narrow signal, printed with no hedge, and it is now directly contradicted by the Range section shipped in 8ec77190c — which on the live incident named the actual cause. Same defect class the Range work fixed for the sha: an auto-filed ticket asserting something it has no evidence for. | — |
-| bug-t-a-pin-verifys-reds-carry-no-reasons | T | 40 | bug | A pin verify's reds carry no reasons | — |
 | bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing | T | 45 | bug | 2461 Makefile assertions are a bare `test \"$$(...)\" = \"...\"`, which prints NOTHING when it fails. job_reason() is the log tail by deliberate design, so for those jobs the reason it records is whatever the recipe printed just before — and for the 480 cross-target ones that is two compile summaries with different code sizes, which reads exactly like a codegen divergence. It misled a Track T session for hours. The repo already uses `diff -u` in 362 places; the good pattern exists and is not reached. Fix edits Makefile, which is Track A's file-lane. | — |
 | bug-t-fpc-seed-canary-red-cited-lines-that-cannot-contain-the-identifier | T | 30 | bug | One gate.sh quick run reported the FPC seed canary RED with 'symtab.inc(5934,30) Identifier not found ByRefArgNeedsLvalue' — but line 5934 of that file contains an unrelated loop, and the real call sites are at 6185/6186, AFTER the definition at 6099. Not reproducible: fpc compiled the identical tree rc=0 twice by hand and the next gate.sh run was GREEN. Evidence points at the canary reading a stale/other tree state, the same class the fixedpoint step already defends against; a false RED costs an agent a full investigation. | — |
 | bug-t-twatch-web-lists-a-target-that-cannot-be-built | T | 15 | bug | tools/twatch_web.py lists riscv64 in CROSS_TARGETS, but no compiler backend can produce a riscv64 binary and the test manager never mentions the target. The dashboard therefore carries a column that is structurally empty, and an empty column reads as 'no news' rather than 'impossible'. | — |
@@ -590,9 +589,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2575)
+## done (2576)
 
-2575 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2576 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (46)
 
@@ -797,7 +796,6 @@ _none_
 - [p 40] [N] bug-nilpy-shared-nonlocal-frame-cell-is-never-freed [parked — re-claim, do not duplicate]
 - [p 40] [P] bug-p-a-variant-cannot-hold-an-interface
 - [p 40] [T] bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence
-- [p 40] [T] bug-t-a-pin-verifys-reds-carry-no-reasons
 - [p 40] [T] chore-t-the-tier-ladder-ratio-is-stale-by-its-own-criterion
 - [p 40] [U] decide-c-crtl-rand-max-is-conforming-but-breaks-real-code
 - [p 40] [A] feature-a-emit-obj-record-class-abi-mode
