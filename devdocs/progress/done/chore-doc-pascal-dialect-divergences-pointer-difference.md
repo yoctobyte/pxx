@@ -63,7 +63,7 @@ Prose only. Track D: `devdocs/dev/pascal-dialect-divergences.md`. No
 `$(PXX_STABLE)` rather than transcribing them from the decision tickets.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 2809268b5.
 
 ---
 
