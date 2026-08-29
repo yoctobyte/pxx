@@ -25,9 +25,8 @@ blocked on value-flow features the adapted branch sidesteps — in priority orde
 as the real modules hit them: ~~`Option<T>` (chess.rs wall, stage 2)~~ **DONE
 2026-08-29**, ~~array-typed STRUCT FIELDS (`squares: [Piece; 64]`)~~ **DONE
 2026-08-29**, ~~array-typed return values (`fn -> [T; N]`, attacks.rs)~~ **DONE
-2026-08-29**, `if` as an EXPRESSION (`let x = if c { a } else { b };` — not on
-the original list, and now the first wall: real Rust uses it constantly and
-attacks.rs's delta tables are written with it), the unity build for data
+2026-08-29**, ~~`if` as an EXPRESSION (`let x = if c { a } else { b };` — not on
+the original list)~~ **DONE 2026-08-29**, the unity build for data
 modules (tables.rs, stage 3), then `Result`/`?`, `String`/`format!`,
 derives/traits.
 Do NOT claim the real source compiles — only the adapted branch does.
@@ -285,4 +284,10 @@ pure swallowing/trivia, cheap and high-leverage.
   **New first wall, not on the original gap list:** `if` as an EXPRESSION
   (`let df: i64 = if k < 4 { 1 } else { 2 };`). Real Rust uses it constantly
   and the rung-8 probe had to be rewritten around it.
+
+- 2026-08-29 — rung 9: `if` as an EXPRESSION, both the `let x = if ...` form
+  and the tail form, lowered to the shared AN_TERNARY. Fifth consecutive rung
+  needing no Track A change. The wall it named a few hours earlier is closed;
+  **stage 3 (the unity build for data modules) is now the next item on the
+  original gap list.**
 
