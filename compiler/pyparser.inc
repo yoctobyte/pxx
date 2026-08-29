@@ -11886,8 +11886,13 @@ begin
     if (not Result) and anyAttr then Result := True;
   end
   else if base = 'os' then
-    { os.SEEK_SET/CUR/END — the whence CONSTANTS, bare values not calls. }
-    Result := (nm = 'seek_set') or (nm = 'seek_cur') or (nm = 'seek_end');
+    { os.SEEK_SET/CUR/END — the whence CONSTANTS, bare values not calls — and
+      os.sep / os.linesep, which are the same kind of thing: an ATTRIBUTE, not
+      a call, which is why they were missing while every os.path.* CALL worked
+      and why the error read `undefined variable (os)` rather than a missing
+      member. feature-nilpy-stdlib-coverage-gaps-measured }
+    Result := (nm = 'seek_set') or (nm = 'seek_cur') or (nm = 'seek_end') or
+              (nm = 'sep') or (nm = 'linesep');
 end;
 
 function PyIsSysStreamAhead: Boolean;
@@ -11911,19 +11916,51 @@ begin
 end;
 
 function PyParseSysStream: Integer;
-var nm: AnsiString; procIdx: Integer;
+var nm, base: AnsiString; procIdx: Integer;
 begin
   { Either spelling arrives here: the dotted one spends three tokens, the bare
-    one (a from-imported name) spends one and takes its base from the alias. }
+    one (a from-imported name) spends one and takes its base from the alias.
+
+    The BASE is carried, not just the member. PyIsStdlibMemberValue gates by
+    base and this did not, so every arm below answered for `sys.X` and `os.X`
+    alike: `sys.SEEK_SET` was 0 where CPython raises AttributeError. That is
+    not the harmless direction — the `sys._MEIPASS` note below exists BECAUSE
+    applications guard an absent sys attribute with try/except AttributeError,
+    and an arm that answers a value instead sends them down the wrong branch. }
   if (TokPos >= 1) and (PyStdAliasLookup(GetTokenStr(TokPos - 1), nm) <> '') and
      ((TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot)) then
-    Next                         { the bare name; nm is its MEMBER }
+  begin
+    base := LowerCase(PyStdAliasLookup(GetTokenStr(TokPos - 1), nm));
+    Next;                        { the bare name; nm is its MEMBER }
+  end
   else
   begin
+    base := LowerCase(GetTokenStr(TokPos - 1));
     nm := LowerCase(GetTokenStr(TokPos + 1));
     Next; Next; Next;            { base, '.', the member name }
   end;
-  if (nm = 'seek_set') or (nm = 'seek_cur') or (nm = 'seek_end') then
+  if (base = 'os') and ((nm = 'sep') or (nm = 'linesep')) then
+  begin
+    { os.sep / os.linesep. Constants, like sys.platform above and with the same
+      caveat: these follow the HOST today and must follow the TARGET once pxx
+      emits for Windows, where they are '\\' and #13#10. }
+    Result := AllocNode(AN_STR_LIT);
+    if nm = 'sep' then
+    begin
+      ASTSOffset[Result] := PyStoredName('/');
+      ASTSLen[Result] := 1;
+    end
+    else
+    begin
+      ASTSOffset[Result] := PyStoredName(#10);
+      ASTSLen[Result] := 1;
+    end;
+    ASTTk[Result] := Ord(tyString);
+    LastExprTk := tyString;
+    Exit;
+  end;
+  if (base = 'os') and
+     ((nm = 'seek_set') or (nm = 'seek_cur') or (nm = 'seek_end')) then
   begin
     Result := AllocNode(AN_INT_LIT);
     if nm = 'seek_cur' then ASTIVal[Result] := 1

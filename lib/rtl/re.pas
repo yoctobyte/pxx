@@ -57,6 +57,7 @@ type
     function group: AnsiString; overload;      { group() == group(0) }
     function start(n: Integer): Integer;
     function stop(n: Integer): Integer;        { CPython's m.end(n) }
+    function &end(n: Integer): Integer;        { CPython's own spelling of it }
     function groupCount: Integer;
   end;
 
@@ -69,7 +70,12 @@ type
     function search(const s: AnsiString): TMatch;
     function fullmatch(const s: AnsiString): TMatch;
     function findall(const s: AnsiString): TPyList;
+    function finditer(const s: AnsiString): TPyList;
+    function split(const s: AnsiString): TPyList;
+    function split(const s: AnsiString; maxsplit: Integer): TPyList; overload;
     function sub(const repl, s: AnsiString): AnsiString;
+    function subn(const repl, s: AnsiString): TPyList;
+    function subn(const repl, s: AnsiString; count: Integer): TPyList; overload;
     function ok: Boolean;
     function error: AnsiString;
   end;
@@ -105,6 +111,27 @@ function findall(const pattern, s: AnsiString; flags: Integer): TPyList; overloa
 function findall(p: TPattern; const s: AnsiString): TPyList; overload;
 
 { re.escape(string) — quote every character that is special in a pattern. }
+{ Every non-overlapping match as a MATCH OBJECT, so .group(n)/.start()/.end()
+  are reachable -- findall answers text, this answers matches. CPython hands
+  back a lazy callable_iterator; this is a list, which is the same thing to
+  `for m in ...` and to list(), and differs only for next() on the iterator. }
+function finditer(const pattern, s: AnsiString): TPyList;
+function finditer(const pattern, s: AnsiString; flags: Integer): TPyList; overload;
+function finditer(p: TPattern; const s: AnsiString): TPyList; overload;
+
+{ Split on each match. A pattern with GROUPS interleaves them into the result,
+  and a group that did not participate contributes None -- both of which CPython
+  does and neither of which falls out of a plain scan. `maxsplit` follows the
+  count convention documented at ReLimit. }
+function split(const pattern, s: AnsiString): TPyList;
+function split(const pattern, s: AnsiString; maxsplit: Integer): TPyList; overload;
+function split(p: TPattern; const s: AnsiString): TPyList; overload;
+
+{ sub(), plus how many replacements were made, as a (string, count) TUPLE. }
+function subn(const pattern, repl, s: AnsiString): TPyList;
+function subn(const pattern, repl, s: AnsiString; count: Integer): TPyList; overload;
+function subn(p: TPattern; const repl, s: AnsiString): TPyList; overload;
+
 function escape(const s: AnsiString): AnsiString;
 
 implementation
@@ -135,6 +162,15 @@ end;
 function TMatch.stop(n: Integer): Integer;
 begin
   stop := m.stops[n] - 1;
+end;
+
+{ CPython spells this `end`, which is a Pascal keyword -- hence `stop` as the
+  native name and this &-escaped alias beside it. Working CPython code says
+  m.end(), so without this the module is not upward compatible, which is the
+  one direction NilPy promises. }
+function TMatch.&end(n: Integer): Integer;
+begin
+  &end := m.stops[n] - 1;
 end;
 
 function TMatch.groupCount: Integer;
@@ -217,6 +253,81 @@ begin
     end;
   end;
   findall := out_;
+end;
+
+{ CPython's count/maxsplit convention is NOT the engine's, and they disagree on
+  exactly one input. CPython: 0 means "no limit", a NEGATIVE value means "do
+  NOTHING" -- re.sub('a','X','banana',-1) answers 'banana'. ReReplace spells
+  "no limit" as -1 and reads EVERY negative that way, so passing a Python count
+  straight through turns "replace nothing" into "replace everything". That is a
+  wrong VALUE with no error, which is why it is normalised in one place here
+  rather than at each call site. }
+function ReLimit(n: Integer): Integer;
+begin
+  if n = 0 then ReLimit := -1          { Python: no limit }
+  else if n < 0 then ReLimit := 0      { Python: none at all }
+  else ReLimit := n;
+end;
+
+function TPattern.finditer(const s: AnsiString): TPyList;
+var ms: array of TReMatch; n, i: Integer; out_: TPyList;
+begin
+  SetLength(ms, RE_FINDALL_MAX);
+  n := ReFindAll(compiled, s, ms, RE_FINDALL_MAX);
+  out_ := TPyList.Create;
+  for i := 0 to n - 1 do
+    out_ := out_.append_self(MakeMatch(ms[i], s));
+  finditer := out_;
+end;
+
+function TPattern.split(const s: AnsiString): TPyList;
+begin
+  split := split(s, 0);
+end;
+
+function TPattern.split(const s: AnsiString; maxsplit: Integer): TPyList;
+var ms: array of TReMatch; n, i, g, lim, pos: Integer; out_: TPyList;
+begin
+  SetLength(ms, RE_FINDALL_MAX);
+  n := ReFindAll(compiled, s, ms, RE_FINDALL_MAX);
+  lim := ReLimit(maxsplit);
+  out_ := TPyList.Create;
+  pos := 1;
+  for i := 0 to n - 1 do
+  begin
+    if (lim >= 0) and (i >= lim) then Break;
+    out_ := out_.append_self(Copy(s, pos, ms[i].starts[0] - pos));
+    { Groups are part of the RESULT, not just of the match: re.split(r'(\d)',
+      'a1b') is ['a','1','b']. A group that did not participate is None and not
+      '' -- ReGroup cannot tell those apart (it answers '' for both), so the
+      start sentinel is read directly. }
+    for g := 1 to compiled.groupCount - 1 do
+      if ms[i].starts[g] <= 0 then out_ := out_.append_self(pynone)
+      else out_ := out_.append_self(ReGroup(ms[i], s, g));
+    pos := ms[i].stops[0];
+  end;
+  { The tail always exists, including when it is empty: splitting '' on ','
+    is [''] and not [], and a trailing separator leaves a final ''. }
+  out_ := out_.append_self(Copy(s, pos, Length(s) - pos + 1));
+  split := out_;
+end;
+
+function TPattern.subn(const repl, s: AnsiString): TPyList;
+begin
+  subn := subn(repl, s, 0);
+end;
+
+function TPattern.subn(const repl, s: AnsiString; count: Integer): TPyList;
+var ms: array of TReMatch; n, lim: Integer;
+begin
+  lim := ReLimit(count);
+  SetLength(ms, RE_FINDALL_MAX);
+  n := ReFindAll(compiled, s, ms, RE_FINDALL_MAX);
+  if (lim >= 0) and (n > lim) then n := lim;
+  Result := TPyList.Create;
+  Result.FKind := PYSEQ_TUPLE;
+  Result.append(ReReplace(compiled, s, repl, lim));
+  Result.append(Int64(n));
 end;
 
 { ---- module level -------------------------------------------------------- }
@@ -308,8 +419,10 @@ function sub(const pattern, repl, s: AnsiString; count: Integer): AnsiString;
 var p: TPattern; lim: Integer;
 begin
   p := MakePattern(pattern, RE_NONE);
-  lim := count;
-  if lim = 0 then lim := -1;   { CPython: 0 means replace every match }
+  { was `if lim = 0 then lim := -1` -- which handled CPython's 0 but passed a
+    NEGATIVE count straight through, where the engine reads it as "every match".
+    re.sub('a','X','banana',-1) answered 'bXnXnX'; CPython answers 'banana'. }
+  lim := ReLimit(count);
   sub := ReReplace(p.compiled, s, repl, lim);
 end;
 
@@ -336,6 +449,52 @@ function findall(p: TPattern; const s: AnsiString): TPyList;
 begin
   findall := p.findall(s);
 end;
+
+function finditer(const pattern, s: AnsiString): TPyList;
+begin
+  finditer := MakePattern(pattern, RE_NONE).finditer(s);
+end;
+
+function finditer(const pattern, s: AnsiString; flags: Integer): TPyList;
+begin
+  finditer := MakePattern(pattern, flags).finditer(s);
+end;
+
+function finditer(p: TPattern; const s: AnsiString): TPyList;
+begin
+  finditer := p.finditer(s);
+end;
+
+function split(const pattern, s: AnsiString): TPyList;
+begin
+  split := MakePattern(pattern, RE_NONE).split(s, 0);
+end;
+
+function split(const pattern, s: AnsiString; maxsplit: Integer): TPyList;
+begin
+  split := MakePattern(pattern, RE_NONE).split(s, maxsplit);
+end;
+
+function split(p: TPattern; const s: AnsiString): TPyList;
+begin
+  split := p.split(s, 0);
+end;
+
+function subn(const pattern, repl, s: AnsiString): TPyList;
+begin
+  subn := MakePattern(pattern, RE_NONE).subn(repl, s, 0);
+end;
+
+function subn(const pattern, repl, s: AnsiString; count: Integer): TPyList;
+begin
+  subn := MakePattern(pattern, RE_NONE).subn(repl, s, count);
+end;
+
+function subn(p: TPattern; const repl, s: AnsiString): TPyList;
+begin
+  subn := p.subn(repl, s, 0);
+end;
+
 
 function escape(const s: AnsiString): AnsiString;
 var i: Integer; c: Char; r: AnsiString;

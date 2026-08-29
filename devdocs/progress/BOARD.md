@@ -8,11 +8,12 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-cross-bootstrap-aarch64-overflows-max-code | A | 60 | bug | MEASURED — it is DENSITY, raise the cap. aarch64 codegen runs 2.295x x86-64 across four unrelated programs (spread 2.27-2.34); the compiler needs only 1.80x to breach MAX_CODE, so predicted aarch64 size is 20.4 MB against a 16 MB cap. Runaway ruled out. ~21 MB floor, 32 MB gives headroom, A's call. Originally: `make cross-bootstrap` for aarch64 fails at HEAD with `code overflow: emitted code exceeds MAX_CODE` in compiler/pyparser.inc. Same pinned stable, same source, only the target differs — x86-64 emits 9,343,257 B (56% of the 16 MiB cap) while aarch64 exceeds it, so that backend needs >1.8x the code density for identical input. The error's own suggested remedy does not apply: default and -O2 overflow identically. Unseen because cross-bootstrap runs ONLY on a manual tag dispatch in release.yml, never per-commit, so it can rot at HEAD indefinitely — while the website advertises aarch64 as a supported target. | — |
+| feature-opt-emitloadvara64-needs-a-destination-register-parameter | A+O | 55 | feature | EmitLoadVarA64 hardcodes x0 behind residency, dyn-array-handle and sign-extension special cases, so the aarch64 leaf-operand collapse could only be done for the CONST half. The LEAFSYM half needs the right operand in x1 while the left sits in x0; a load-to-x1 twin would duplicate every one of those special cases. Honest fix is a destination-register parameter. Unlocks a further 12-16% of all binops on aarch64. | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
 
 ## unfinished (21)
@@ -51,7 +52,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (304)
+## backlog (306)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -86,6 +87,7 @@ _none_
 | bug-n-a-keyword-argument-through-a-class-value-is-refused-at-runtime | N | 55 | bug | `cls(x, b=99)` — a keyword argument to a class reached as a VALUE — raises TypeError at run time saying such a callable 'still carries no parameter names'. It does: RTTI_METH_FLAG's paramKinds block has carried param NAMES since the reflection work, and PyClassRefNew does not read them. The static spelling `P(x, b=99)` is correct, so this is one construction path disagreeing with the other. | — |
 | bug-n-a-keyword-argument-through-a-procedural-field-needs-a-plain-receiver | N | 55 | bug | `H().fn(1, b=2)` and `hs[0].fn(1, b=2)` are `error: undefined variable (b)` where `h.fn(1, b=2)` and `g().fn(1, b=2)` answer correctly — a KEYWORD argument to a callable FIELD, only when the receiver is a constructor call or a subscript. The keyword name parses as an expression, the same symptom the statically-unknown-callee ticket had. | — |
 | bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart | N | 45 | bug | `hasattr([1], 'add')` and `hasattr([1], 'update')` are True: list and set are both TPyList at run time, so every `is`-test-based introspection answers set questions about a list. `type(x).__name__` DOES tell them apart, so the discriminator exists and the predicate is not using it. | — |
+| bug-n-a-module-alias-does-not-resolve-for-attribute-lookup | N | 55 | bug | A module alias resolves for calls but not for attributes | — |
 | bug-n-a-nilpy-test-writes-a-fixed-tmp-path-so-concurrent-runs-race | N | 45 | bug | test_nilpy_class_named_like_an_rtl_record.npy opens, reads and os.remove()s /tmp/pxx_nilpy_rtlrec_probe.txt -- a fixed path chosen at RUNTIME, so the Makefile sweep cannot privatize it and testmgr cannot rewrite it. This box routinely runs several clones' testmgr at once, so one run can delete or overwrite another's probe file mid-test. Caught by tools/testmgr_hardcoded_tmp_devtest.py, which is RED on master today. Introduced by f3422cd14. Filed by Track T; T owns the tool, never the bug. | — |
 | bug-n-a-staticmethod-read-through-an-instance-binds-a-receiver | N | 25 | bug | bug(N): a @staticmethod read through an INSTANCE binds a receiver, so `type(k.stat).__name__` says 'method' | — |
 | bug-n-a-subpackage-directory-does-not-resolve-as-a-module | N | 55 | bug | `from .inner import X` (RELATIVE) where `inner` is a subpackage directory fails with `no unit named inner`, while the absolute `from pkg.inner import X` works — so directory-as-module resolution exists and the relative form just hands the resolver a bare name instead of the package-qualified one. html5lib has three real subpackages (_trie, treebuilders, treewalkers), so this is its next rung. | bug-a-a-python-module-s-identity-is-its-name-not-its-file |
@@ -168,10 +170,12 @@ _none_
 | decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal | U | 40→60 | decide | 24 of wasm32's 52 remaining compiler.pas refusals are the sys* intrinsics (tkSysOpen 15, tkSyswrite 6, tkArgStr 3), and they collapse to ONE blocked primitive: opening a file under WASI. That needs preopen resolution, rights computation and errno mapping, which exist once in lib/rtl/platform/wasi/platform_backend.pas -- a unit compiler.pas deliberately does not link, because the compiler bootstraps on intrinsics to avoid an RTL dependency. Three ways out, each with a real cost: duplicate the capability model into builtinheap.pas, link the PAL into the compiler, or factor the WASI helpers into a shared include. The choice spans Track A and Track B files, so it is not the wasm lane's to make. | — |
 | decide-install-qemu-system-and-a-freebsd-image-on-plexus | U | 55 | decide | The FreeBSD port needs a bootable FreeBSD kernel and plexus has none — qemu-user is installed, qemu-system is not, and no VM image exists anywhere on the box. Installing a system emulator and fetching a multi-GB OS image is a change to the owner's workstation, so it is the owner's call. One-line answer unblocks feature-t-freebsd-image-and-runner and, behind it, feature-port-freebsd-native. | — |
 | decide-is-real-a-double-or-fpcs-80-bit-extended | U | 30 | decide | `writeln(3.14159)` prints ` 3.1415899999999999E+000` in pxx and ` 3.14158999999999999993E+0000` in FPC, because pxx's Real is a 64-bit Double and FPC's is the x87 80-bit Extended. Making them agree means implementing an 80-bit float type; keeping them apart means declaring the difference permanent. Both are defensible and neither is a bug. | — |
+| decide-nilpy-deepcopy-over-the-container-subset | U | 40 | decide | `copy.deepcopy`: implement over the subset, or keep the loud absence? | — |
 | decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample | U | 55 | decide | A fourth-corpus probe (reportlab 4.2.5, 421 .py) at pin v389 found that NONE of its 30 distinct first walls is a wall the webencodings/html5lib/tinycss2 family produced — because 89% of its failures are missing library surface and it never reaches the mechanism layer. The family's mechanism walls are not wrong, they are CONDITIONAL: they are what a corpus hits once its import surface is already covered. The three corpora that generated the whole 55-70 ranking are self-contained web parsers with almost no stdlib footprint. On a corpus with an ordinary footprint, landing the entire mechanism cluster would move compile count by ~zero. prio: is the human's field, so the re-ranking call is the owner's. | — |
 | decide-nilpy-what-version-does-sys-version-info-claim | U | 62 | decide | sys.version_info is absent, and providing it is a product claim, not an implementation detail: real code branches on it to select code paths, so any number we answer silently steers third-party libraries. Decide what version a NilPy build reports — and whether it reports a CPython version at all. | — |
 | decide-release-signing-key-custody | U | 25 | decide | feature-release-checksums-repro sits at the head of Track A's queue and cannot be finished by an agent: signing a release needs a PRIVATE KEY the user generates and holds, and a public key committed to the repo. Which tool (minisign vs GPG vs sigstore), who holds the secret, and where the public half is published are all human calls. The checksum and reproducible-build halves are agent-work and are listed below as what to do once this is answered. | — |
 | decide-settextbuf-needs-buffered-text-io-or-stays-missing | U | 55 | decide | SetTextBuf's contract is 'use this caller-supplied buffer for this handle', and lib/rtl/textfile.pas has no buffering at all — it reads one byte per PalRead syscall. So the fork is: build buffered Text I/O (a real win beyond this routine) and make SetTextBuf mean something, or leave it missing so the compile error stays honest. Stubbing it is already ruled out. | — |
+| decide-should-forwardlint-join-the-mandatory-per-fix-loop | U | 50 | decide | Decision: does `tools/forwardlint.py` join the mandatory per-fix loop? | — |
 | decide-should-the-fpc-seed-canary-be-in-the-mandatory-loop | U | 55 | decide | make compiler/pascal26 compiles with pxx, which accepts a call to a routine defined later in the same include; FPC rejects it, and FPC bootstraps this compiler. So an edit that adds a call above its definition breaks the seed while every commit stays green on the documented per-fix loop. Measured 2026-08-28: a branch was red for days across several commits, caught only by the FPC seed canary at tools/gate.sh:219, which is in the gate and not in the loop. CLAUDE.md's gating section is the owner's file, so whether the canary moves into the mandatory path is the owner's call. | — |
 | decide-should-the-rust-topic-branch-be-retired-onto-master | U | 45 | decide | The 2026-08-27 per-topic tree topology puts ~/frank-rust on branch `rust` because topic branches carry 'destabilizing' work. frank-rust argues, with evidence, that its work has not been destabilizing: 8 commits, compiler/rparser.inc + tests + 38 Makefile lines, no shared internals, self-host byte-identical each time, gated suite. Cost of the branch: Track T sweeps origin/master only, so those 8 commits have never met the matrix, and origin/rust is already 57 behind. Decision: retire the topic branch and put Track R on master, or keep it and adopt a merge-in cadence. | — |
 | decide-should-writeableconst-off-be-honoured | U | 20 | decide | `{$WRITEABLECONST}` is not implemented at all — the compiler contains no reference to it. Typed constants are now unconditionally writable, which is FPC's DEFAULT; the question is whether pxx should honour the OFF form and refuse the store, or document typed consts as always writable. A dialect call, not a bug fix. | — |
@@ -267,10 +271,9 @@ _none_
 | feature-nilpy-walrus-operator | N | 35 | feature | `:=` (walrus) — the assignment expression is not parsed | — |
 | feature-opt-alloc-intent-hint | A+O | 10 | feature | Allocation-intent hint: tell the RTL growth policy how a buffer will be used | — |
 | feature-opt-arch-level-and-dispatch | A+O | 25 | feature | What x86-64 feature level does pxx emit for? Referenced as 'if raised' by two existing tickets and never filed; raised by the user 2026-08-15 when FMA came up. MEASURED: our own gate box plexus is a Xeon E5-2620 v2 (Ivy Bridge, 2013) with AVX but NO FMA and no AVX2 — x86-64-v2, not v3. So a v2 bump is safe and FMA would SIGILL on the machine that gates every push. Includes the answer to the 'dispatch defeats inlining' objection: multiversion whole FUNCTIONS, not instructions. | — |
-| feature-opt-bulk-copy-is-byte-at-a-time | O | 65 | feature | The runtime's bulk-copy primitives move ONE BYTE per iteration. Copy() on a 64-element array is ~23x slower than FPC's (2.54s vs 0.11s over 3M copies). A word-at-a-time loop -- ~10 lines, portable, no backend work -- was prototyped and measured at 3.3x of that back. | — |
+| feature-opt-bulk-copy-is-byte-at-a-time | O | 65 | feature | STALE HEADLINE -- re-priced 2026-08-29 at 1fd403b28: BOTH proposed fixes already landed (PXXBlockCopy word loop; the __pxxblockmove/rep-movsb intrinsic, 0f6a04644 + 2b85f8c8f), so the 23x and the 3.3x describe a compiler that no longer exists and must not be re-quoted. What remains is 8 open-coded byte loops in 5 routines (the ticket said 4 sites and missed PXXStrSetLen, the hottest), each now a one-line call to the already-landed PXXBlockCopy/PXXMemZero. Re-measure Copy() vs FPC before trusting prio 65. Also recorded: PXXMemMove is forward-only on every target and corrupts overlapping dst>src -- latent, no caller reaches it. | — |
 | feature-opt-dynarray-grows-in-place | A+O | 40 | feature | A growing dynamic array leaves its whole geometric series behind as garbage | — |
 | feature-opt-emitasmx64-reparses-fixed-strings | A+O | 60 | feature | `EmitAsmX64` re-parses the same hardcoded assembly strings on every compile — ~12% of a NilPy compile | — |
-| feature-opt-emitloadvara64-needs-a-destination-register-parameter | A+O | 55 | feature | EmitLoadVarA64 hardcodes x0 behind residency, dyn-array-handle and sign-extension special cases, so the aarch64 leaf-operand collapse could only be done for the CONST half. The LEAFSYM half needs the right operand in x1 while the left sits in x0; a load-to-x1 twin would duplicate every one of those special cases. Honest fix is a destination-register parameter. Unlocks a further 12-16% of all binops on aarch64. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-opt-inline-float-and-record-returning-leaves | A+O | 45 | feature | The inliner takes only int/ordinal leaves — it rejects any function returning a float or a record. Measured on lib/rtl/math.pas's double-double kernels: hand-inlining the exact same arithmetic took a sin kernel from 7.96 us to 2.11 us, BIT-IDENTICAL, so ~74% of that path's cost was call overhead the inliner already knows how to remove for integers. | — |
 | feature-opt-o3-register-pressure | A+O | 70 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
@@ -719,6 +722,7 @@ _none_
 - [p 55] [N] bug-n-a-field-assigned-from-a-module-global-expression-is-refused
 - [p 55] [N] bug-n-a-keyword-argument-through-a-class-value-is-refused-at-runtime
 - [p 55] [N] bug-n-a-keyword-argument-through-a-procedural-field-needs-a-plain-receiver
+- [p 55] [N] bug-n-a-module-alias-does-not-resolve-for-attribute-lookup
 - [p 55] [N] bug-n-a-subpackage-directory-does-not-resolve-as-a-module
 - [p 55] [N] bug-n-a-tuple-unpacking-assignment-does-not-box-a-callable-value
 - [p 55] [N] bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence
@@ -741,7 +745,6 @@ _none_
 - [p 55] [N] feature-nilpy-lambda-compiled-closure
 - [p 55] [N] feature-nilpy-no-type-inference-switch
 - [p 55] [N] feature-nilpy-str-format-named-keyword-fields
-- [p 55] [A+O] feature-opt-emitloadvara64-needs-a-destination-register-parameter
 - [p 55] [P] feature-p-assertions-directive-and-position
 - [p 55] [P] feature-p-tmethod-record-for-method-pointers
 - [p 55] [P] feature-p-uses-a-unit-in-an-explicit-file
@@ -760,6 +763,7 @@ _none_
 - [p 50] [N] bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base
 - [p 50] [T] bug-t-the-deploy-recipe-builds-a-box-that-reports-but-cannot-measure
 - [p 50] [U] decide-does-the-legacy-gtk-alias-still-point-at-gtk-2
+- [p 50] [U] decide-should-forwardlint-join-the-mandatory-per-fix-loop
 - [p 50] [D] docs-devnotes-ai-assisted-build [parked — re-claim, do not duplicate]
 - [p 50] [C] feature-c-import-a-pascal-unit-under-a-mangled-name [parked — re-claim, do not duplicate]
 - [p 50] [A] feature-nested-routine-fixed-array-capture
@@ -822,6 +826,7 @@ _none_
 - [p 40] [A] chore-a-grant-wasm32-lane-holds-ir-inc-for-the-11207-mistyping
 - [p 40] [T] chore-t-the-tier-ladder-ratio-is-stale-by-its-own-criterion
 - [p 40] [U] decide-c-crtl-rand-max-is-conforming-but-breaks-real-code
+- [p 40] [U] decide-nilpy-deepcopy-over-the-container-subset
 - [p 40] [A] feature-a-emit-obj-record-class-abi-mode
 - [p 40] [A] feature-a-io-lock-owner-from-tls-not-gettid
 - [p 40] [A] feature-a-merge-the-wasm-branch-the-shared-file-arms

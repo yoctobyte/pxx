@@ -2124,6 +2124,16 @@ test-nilpy: $(COMPILER)
 	# the surplus args were emitted anyway). CPython renders them as a tuple.
 	./$(COMPILER) test/test_nilpy_exception_multi_arg.npy $(TESTTMP)/test_nilpy_excmulti26
 	$(TESTTMP)/test_nilpy_excmulti26 | diff -u test/test_nilpy_exception_multi_arg.expected -
+	# os.sep / os.linesep are ATTRIBUTES, not calls -- and the value builder
+	# behind them now checks WHICH module was asked, so sys.SEEK_SET raises
+	# AttributeError instead of answering 0.
+	./$(COMPILER) test/test_nilpy_os_sep_and_sys_attr_gate.npy $(TESTTMP)/test_nilpy_ossep26
+	$(TESTTMP)/test_nilpy_ossep26 | diff -u test/test_nilpy_os_sep_and_sys_attr_gate.expected -
+	# re.split / re.subn / re.finditer, m.end(), and the count convention: a
+	# NEGATIVE count means "do nothing" where 0 means "no limit" -- the inverse
+	# of the engine's own, which is how re.sub(p,r,s,-1) replaced everything.
+	./$(COMPILER) test/test_nilpy_re_split_subn_finditer.npy $(TESTTMP)/test_nilpy_resplit26
+	$(TESTTMP)/test_nilpy_resplit26 | diff -u test/test_nilpy_re_split_subn_finditer.expected -
 	# os.path.split / normpath / getsize / expanduser
 	./$(COMPILER) test/test_nilpy_os_path_more.npy $(TESTTMP)/test_nilpy_ospathmore26
 	$(TESTTMP)/test_nilpy_ospathmore26 | diff -u test/test_nilpy_os_path_more.expected -

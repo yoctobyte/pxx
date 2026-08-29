@@ -119,3 +119,32 @@ self-host fixedpoint as the gate after each — **not** for leaving 36k-line fil
 
 **How to apply, going forward:** when adding a genuinely new area to a large `.inc`,
 create the file. The judgement it costs you is the judgement the design needs.
+
+---
+
+## Live instance, 2026-08-29 — `LowerCase` now spans the Pascal and C parsers
+
+Recorded here rather than as a ticket, deliberately: it is not a defect today, and
+a prio-10 ticket nobody will act on sits in the ranker's scan forever at zero
+value. This is a note for whoever next touches case folding.
+
+`7aba316be` added a single `forward;` for `LowerCase` in `frontend_forwards.inc`
+(include position 120), covering eight call sites — five in `pasparser_expr.inc`
+and **three in `cparser.inc`**. The forward was the right fix for its own ticket:
+it removed a resolution that differed between the FPC seed build and the
+self-hosted build. But its effect is that one case-folding helper is now shared
+between two frontends' parsers.
+
+That is the shape this document argues against. Nothing is wrong while both
+languages want the same thing — ASCII-only, byte-at-a-time folding — and both do
+today. **The cost lands the day one language's needs change**: Pascal's
+case-insensitivity is a language rule about identifiers, and C's uses are about
+preprocessor and keyword handling. Those are different specs that currently agree
+by coincidence, which is the same kind of coincidence the forward was landed to
+stop relying on, one level up.
+
+**If you are here because you need locale-aware or non-ASCII folding in one of
+them: split it first.** Two per-frontend copies, not a parameter on a shared
+helper — a shared parser helper couples two specs and is wrong in both. Raised by
+frank-optimize-b4 while landing the forward, and correctly kept out of that
+ticket.

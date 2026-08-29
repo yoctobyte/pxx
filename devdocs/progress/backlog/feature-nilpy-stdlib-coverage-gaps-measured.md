@@ -154,3 +154,70 @@ comprehensions of all four kinds, closures with `nonlocal`/`global`, `*args`/
 is the slice/`dict(d)` that already works, so the module is mostly a naming
 shim, and `deepcopy` is the one that needs a real recursive walk over the
 variant container tags.
+
+## 2026-08-29 — re.split/subn/finditer done, and a count that meant its opposite
+
+Re-measured every row before touching anything, because a ranked queue says a
+ticket is unblocked, not that it still has work in it. **The 2026-08-15 sweep
+above was wrong on two of its three "now present" claims:**
+
+| 2026-08-15 said | actually, at HEAD |
+| --- | --- |
+| `os` present and exact | `os.path.*` yes; `os.sep` / `os.linesep` / `os.listdir` still `undefined variable (os)` |
+| `time` present and exact | `time.time()` still `no overload of time matches these arguments` |
+| `math.fabs` present | correct |
+
+New since that sweep: `copy.copy` works now, `copy.deepcopy` does not.
+
+### Done here
+
+`re.split`, `re.subn`, `re.finditer` — all in `lib/rtl/re.pas`, no frontend
+change. 22 lines byte-identical to CPython, pinned by
+`test/test_nilpy_re_split_subn_finditer.{npy,expected}`.
+
+**And a real bug found on the way, which is the part worth reading.** CPython's
+count/maxsplit convention is not the engine's, and they disagree on exactly one
+input:
+
+    CPython:    0 = no limit,   NEGATIVE = do nothing
+    ReReplace: -1 = no limit,   every negative reads as "no limit"
+
+`sub` mapped 0 -> -1 and passed a negative straight through, so a count meaning
+"replace nothing" replaced everything:
+
+    re.sub("a", "X", "banana", -1)    pxx: bXnXnX    CPython: banana
+
+A wrong VALUE with no error, present since the module landed — the silent-wrong
+kind, not the compile-time kind this ticket's own summary says these gaps all
+are. Normalised once in `ReLimit()`; split and subn use it too.
+
+`split` is not a scan, and the cases that make it not one are all pinned: groups
+interleave into the RESULT; a non-participating group is `None` and not `''`
+(ReGroup answers `''` for both, so the start sentinel is read directly); an
+empty match still splits; the tail piece exists even when empty.
+
+`m.end()` — CPython's spelling — added as `&end`, an escaped identifier the
+dialect already supports. Working CPython code says `m.end()`, so its absence
+was an upward-compat gap. Rejected the alternative of mapping `end` -> `stop` in
+`PyMethodName`: that is a global rename and would hit every user class with an
+ordinary method called `end`.
+
+Two divergences recorded in `devdocs/dev/nilpy-semantics-divergences.md` rather
+than filed as defects: `finditer` answers a list where CPython answers a lazy
+iterator (identical for `for`/`list()`, `len()` works here and raises there —
+the accepting-more direction), and `m.end`/`m.stop` being one method with two
+names.
+
+### Still open in this ticket, measured at HEAD
+
+| name | why it is not a one-liner |
+| --- | --- |
+| `os.sep`, `os.linesep` | ATTRIBUTES, not calls — the dotted table only intercepts call forms, which is why the error is `undefined variable (os)` rather than a missing member. Needs the hook `sys.X` already has (it reaches a runtime module object and raises AttributeError, so the mechanism exists). |
+| `os.listdir` | needs `getdents64` in the PAL, per-target, plus the buffer walk — the job described under "Still missing" above, unchanged |
+| `time.time()` | needs `clock_gettime`/`gettimeofday` in the PAL, per-target; and `time` collides with sysutils' `TDateTime`-returning `Time` |
+| `copy.deepcopy` | a recursive walk over the variant container tags; `copy.copy` now works |
+| `re` | nothing left — `split`/`subn`/`finditer` were the last three |
+
+The `os.sep` route is the cheapest of these and is the one I would take next:
+the `sys` module already resolves attributes at runtime, so it is wiring an
+existing mechanism rather than adding a syscall to six const blocks.

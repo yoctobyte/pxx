@@ -16905,3 +16905,80 @@ it cannot be. A test needing a 24-core host rots exactly the way this one did.
 
 **Standing corrections to me tonight, all accepted:** the rdrand exclusion was
 already shipped when I listed it open; my `NOT RANKED` was a wrong query.
+
+## 2026-08-29 ~21:00 — T's debt was a defect not throughput; a near-collision I caused
+
+**Two corrections to me in one hour, both accepted.**
+
+**1. I diagnosed Track T's breadth debt as throughput. It was a defect in
+`twatch`.** T's arithmetic refutes my reading: 115 commits/hour, 36 buildable,
+full tier ~959s ≈ 16 min, ≈10 buildable commits per run — back-to-back that is a
+verdict every ~16 min running ~10 behind, inside what CLAUDE.md's async model
+assumes. **A 71-commit debt is not what that cadence produces**, so the gap
+between the debt and the arithmetic *was* the finding. Cause: `verify_pin` had no
+commitment point (`make_preempted()` with no `commit_after`), so it could be
+entered and never finish — **7 attempts, 7 preemptions, 0 completions**, each
+eating the idle slot breadth needed. Fixed `5a5c7bc92`. Had T accepted my framing
+it would have tuned tier composition against a cause that was not there.
+
+**2. THE HANDLE I ASKED T TO BUILD ALREADY EXISTED.** I asked for a way to read
+T's queue depth. `devdocs/progress/tstate/<host>.json` has carried it all along —
+verified on master, not taken on trust: `seven.json` has
+`idle_yield: {"aborts": 2, "phase": "pin-verify", "target": "4d1613c1…"}`, and
+`last_breadth_try` vs `last_full` (attempted vs completed) are on seven and
+plexus. **`idle_yield` names the phase T is starving on.** I was reading
+`--status` staleness and inferring. *Grep for the incumbent before building* is a
+rule I enforce on other lanes and did not apply to my own request.
+**ADD TO THE TICK: read `idle_yield` before dispatching to T** — the failure it
+catches is not "T is busy", it is "T is burning slots on a phase that cannot
+complete", which reads as staleness from outside.
+
+**A NEAR-COLLISION I CAUSED, and the honest diagnosis is NOT a tooling gap.**
+I recommended `feature-opt-bulk-copy-is-byte-at-a-time` [O p65] to b4 on rank and
+reachability **without checking which file it touches** — its only file is
+`builtinheap.pas`, which frankA is in. b4 asked instead of inferring; I confirmed
+from frankA's own message and told it to park and take `EmitLoadVarA64`. Nothing
+was edited concurrently.
+
+My first instinct was to file "a `working/` lock names the TICKET, not the FILE"
+as a tooling defect. **That is not what happened.** frankA's lock was the MAX_CODE
+ticket; the ticket that put it in `builtinheap.pas` — `bug-nilpy-empty-str-and-none-are-the-same-value`
+— **was never moved to `working/` at all.** The lock mechanism was not
+insufficient, it was not used. Before building a `whoholds <path>` tool, note that
+**every agent commits as `yoctobyte`**, so git authorship cannot attribute a file
+to an agent — the only sources are the lock and message traffic. Any tool here
+depends on tickets being claimed, which is the thing that actually failed. **Fix
+the discipline before building the instrument.**
+
+**Faces 45-47 landed** (index now 47): 45 a phase that can be entered but never
+finish consumes the resource it protects and reads as slowness — with the
+corollary that `IDLE_YIELD_AFTER` worked as designed and thereby made the
+starvation *survivable and permanent*; 46 a fix is inert until both halves happen
+— T's clone is detached at the sha under test so `git pull` fails by construction
+and **the restart succeeds while serving old code**; 47 the summary sentence a
+fix invites you to write can be false while the fix is right — b4's LowerCase
+forward **recorded** a convergence rather than causing it (seed-without,
+seed-with, and self-hosted are all `9396c6dbb646f90d`).
+
+**LowerCase closed** (`7aba316be`): eight sites, not one — `forwardlint` reports
+only the earliest, same shape as frankA's arm32 finding. One forward in
+`frontend_forwards.inc` covers all. **`forwardlint` is now silent on a clean
+tree**, which was the precondition for it joining the mandatory loop → filed
+`decide-should-forwardlint-join-the-mandatory-per-fix-loop` [U p50]. **The answer
+edits CLAUDE.md, so it is the owner's** — I recommended yes-narrowly and wrote the
+argument against my own recommendation into the ticket.
+
+**Cross-frontend `LowerCase`** (now spans `pasparser_expr.inc` and `cparser.inc`)
+noted as a live instance on `devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md`
+rather than filed — a prio-10 ticket nobody will do clogs the ranker forever, which
+CLAUDE.md names explicitly as the backlog leak.
+
+**Benchmark permission granted to b4** (~1 min of one core, twice) with two
+conditions: name the binary's sha, and note that this box is contended — if
+before and after straddle a contention change, the ratio measures the box.
+
+**Live:** frankA `builtinheap.pas` + aarch64 stage-2. frankwasm `ir.inc` (widened
+grant). pxx-a5 N p72. frankB reactor slot-0 (12-core box, cannot reproduce).
+b4 `EmitLoadVarA64`. T: breadth first, heap-debug queued at named sha
+`a38e76336aad368e` (fixedpoint converged 2 rounds, sha256 `43be165be817…` ≠
+pinned `867207f2b418…`). U queue **19**.
