@@ -15929,3 +15929,92 @@ Its judgement on `feature-pascal-typed-and-untyped-files` also stands unoverridd
 it gates on the `string[N]` record-layout question, and shipping without that bakes
 a **silent format incompatibility** the ticket itself calls worse than not having
 the feature. A real blocker, not a scoping preference.
+
+### "BUILDS" WAS STANDING IN FOR "PASSES" — a triage wrong in the flattering direction
+
+`b194ef7ec` (expect_same, its own ticket, parent now a clean Track A dispatch of
+480 mechanical Makefile conversions against a helper that exists and is guarded)
+plus the orphan-test p45, closed — **and the triage inside it was wrong.**
+
+The 2026-08-17 pass bucketed orphan tests by whether they **BUILD** and reported
+*"61 builds today, trivially wireable"*. pxx-a5 re-ran the 21 survivors by
+**RUNNING them and reading the exit code**:
+
+| discriminator | ready to wire | broken |
+| --- | ---: | ---: |
+| **builds** | 19 | 2 |
+| **runs** | **9** | **12** |
+
+**Thirteen of nineteen "buildable" tests fail when run.** Wiring on the build
+signal would have added twelve reds and a segfault to the suite **and called it
+coverage.**
+
+> **A proxy that is cheaper to measure drifts toward being the thing measured.**
+> "Builds" is not a proxy for "passes" — and it fails in the *flattering*
+> direction, which is why nobody re-derived it for twelve days.
+
+pxx-a5 made the same error one level up while finding it: its triage script took
+`$?` from a **pipeline**, recording `head`'s status, and reported twelve failing
+tests as `rc=0`. That is `devtest_report.py`'s own recorded lesson, hit **while
+acting on it.**
+
+### The finding underneath: a live API with zero users and zero running tests
+
+**Verified here, independently:** exactly **12** `test_pyeval_*.pas`, and outside
+the implementation (`compiler/builtin/pyeval.pas`, `pasparser_expr.inc`,
+`pyparser.inc`) they are the **only** callers of `EvalPyStmts`/`EvalPyExpr`.
+
+All twelve fail at HEAD with `host call push but "push" not in globals`. **Not
+rot, and not a regression:** `ff439149e` deliberately changed the `exec()`
+host-call contract, shipped a new `.npy` test for the *new* contract, wired that,
+and left the twelve encoding the *old* one.
+
+> **A correct, deliberate change reached in and invalidated twelve tests, and the
+> only thing that would have said so was a build rule that did not exist.** The
+> Pascal-side entry point now has zero live users and zero running tests — it is
+> kept alive entirely by tests that do not run.
+
+Filed `bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed`
+[N p45] and `chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring`
+[A p40, blocked on the N one]. **Both carry their measurements, so neither needs
+pxx-a5.**
+
+### FOR SEVEN: DO NOT TRIAGE AGAINST THE PIN
+
+`v389` is **59 testable commits behind** HEAD and disagrees with it on **3 of 21**
+— one SIGSEGV and two compile errors, **all fixed at HEAD.** Triaging against it
+would have filed **three phantom bugs, the segfault most convincingly of all.**
+
+Not wasted, and this is the sharper half: **a wired `test_class_method_to_method_pointer`
+WOULD have caught a real segfault at v389.** The wiring ticket's thesis with a
+corpse attached.
+
+### Two bugs in its own checker, both about what counts as evidence
+
+- **A comment counted as wiring.** A Makefile *comment* mentioning a file marked it
+  covered — so the checker **printed nothing, and there was no output to notice.**
+  Zero live instances, said plainly rather than dressed up as a bug caught.
+- **A mention counted as PROOF.** A file was reported STALE on the strength of a
+  data tuple in a devtest that asserts about its *content* and never builds it —
+  **and a STALE report invites a deletion that re-opens the gap it was covering.**
+  Staleness now needs evidence **proportional to what acting on it costs**.
+  Deliberately **not** a heuristic for "does this script look like a runner": *a
+  devtest listing test files as data mentions them exactly like a runner that
+  executes them.*
+
+**Measured reach, recorded rather than guessed:** 12 files are marked wired only by
+a devtest mention, some of which genuinely run their subject — so the true unwired
+count is **somewhere in 21..33 and the checker cannot yet say where.**
+
+> **A mutation run means nothing until you have confirmed the mutation APPLIED.**
+> Two of four had to be re-run: a `sed` failed with *"unknown option to `s'"*, left
+> the file unchanged, the suite went green, and the mutation read as **a guard
+> catching nothing** — the same false conclusion as two days ago, in a different
+> costume.
+
+### The reservation is now blocking another lane
+
+`chore-a-wire-the-nine-passing-orphan-tests` [A p40] is **blocked on an N ticket**,
+and N is unstaffed by the owner's reserved call. That is the first time the N
+reservation has held up work in a *different* lane rather than only N's own queue.
+**Surfaced to the owner as a fact, alongside the standing question; not re-asked.**
