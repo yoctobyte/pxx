@@ -1,12 +1,19 @@
 // feature-rust-corpus-chess, engine milestone: a faithful struct-based branch
 // of the nextlevel engine, mirroring its real data model — a `Move` struct
-// { from, to, flags } held in a `[Move; 256]` list (the pxx stand-in for
-// ArrayVec<Move, 256>), rather than the packed-i64 encoding of the perft/search
-// ports. Exercises the fixed-array-of-structs enabler (arr[i].field) under a
-// full workload: legal movegen, make/unmake, material-eval negamax, and UCI
-// best-move formatting via char casts. Documented deviations from the real
-// source: signed-i64 mailbox (vs u8), Square as a plain i64 (vs Square(u8)),
-// no Option/Result/String (best move printed with println! + `as char`).
+// { from, to, flags } held in a `MoveList` -- a fixed-capacity vector of 256
+// with a `len`, i.e. the same shape as the real source's ArrayVec<Move, 256>,
+// rather than the packed-i64 encoding of the perft/search ports. Exercises the
+// fixed-array-of-structs enabler (arr[i].field) under a full workload: legal
+// movegen, make/unmake, material-eval negamax, and UCI best-move formatting via
+// char casts. Documented deviations from the real source: signed-i64 mailbox
+// (vs u8), Square as a plain i64 (vs Square(u8)), no Option/Result/String (best
+// move printed with println! + `as char`).
+//
+// This file compiles as written under rustc: the earlier revision opened each
+// search node with an UNINITIALISED `let mut mv: [Move; 256];`, which pxx
+// accepts (it does not enforce definite-init) and rustc rejects. MoveList::new()
+// replaces it with `[Move { .. }; 256]`, the evaluate-once/copy-the-rest repeat
+// form, which is what the real ArrayVec-backed source does too.
 //
 // Verifies two things end to end:
 //   perft(4) = 197281   (movegen correctness with the struct move list)
@@ -74,15 +81,38 @@ fn king_sq(b: &[i64], side: i64) -> i64 {
 }
 
 // Append a move to the struct list at index n; returns the new count.
-fn add(ms: &[Move], n: i64, from: i64, to: i64, flags: i64) -> i64 {
-    ms[n].from = from;
-    ms[n].to = to;
-    ms[n].flags = flags;
-    return n + 1;
+// ArrayVec<Move, 256>: a fixed 256-slot buffer plus a live length. Movegen
+// pushes; the search loops over 0..len and reads slots back by value.
+struct MoveList {
+    data: [Move; 256],
+    len: i64,
 }
 
-fn gen_moves(b: &[i64], side: i64, ep: i64, castle: i64, ms: &[Move]) -> i64 {
-    let mut n = 0;
+impl MoveList {
+    fn new() -> MoveList {
+        MoveList {
+            data: [Move { from: -1, to: -1, flags: 0 }; 256],
+            len: 0,
+        }
+    }
+
+    fn push(&mut self, from: i64, to: i64, flags: i64) {
+        self.data[self.len].from = from;
+        self.data[self.len].to = to;
+        self.data[self.len].flags = flags;
+        self.len += 1;
+    }
+
+    fn get(&self, i: i64) -> Move {
+        self.data[i]
+    }
+
+    fn len(&self) -> i64 {
+        self.len
+    }
+}
+
+fn gen_moves(b: &[i64], side: i64, ep: i64, castle: i64, ml: &mut MoveList) {
     for from in 0..64 {
         let p = b[from] * side;
         if p > 0 {
@@ -95,13 +125,13 @@ fn gen_moves(b: &[i64], side: i64, ep: i64, castle: i64, ms: &[Move]) -> i64 {
                 if b[r1 * 8 + f] == 0 {
                     let to = r1 * 8 + f;
                     if r1 == last {
-                        for pf in 4..8 { n = add(ms, n, from, to, pf); }
+                        for pf in 4..8 { ml.push(from, to, pf); }
                     } else {
-                        n = add(ms, n, from, to, 0);
+                        ml.push(from, to, 0);
                         let start = (7 - 5 * side) / 2;
                         if r == start {
                             let r2 = r + side + side;
-                            if b[r2 * 8 + f] == 0 { n = add(ms, n, from, r2 * 8 + f, 1); }
+                            if b[r2 * 8 + f] == 0 { ml.push(from, r2 * 8 + f, 1); }
                         }
                     }
                 }
@@ -112,10 +142,10 @@ fn gen_moves(b: &[i64], side: i64, ep: i64, castle: i64, ms: &[Move]) -> i64 {
                         let to = r1 * 8 + cf;
                         if b[to] * side < 0 {
                             if r1 == last {
-                                for pf in 4..8 { n = add(ms, n, from, to, pf); }
-                            } else { n = add(ms, n, from, to, 0); }
+                                for pf in 4..8 { ml.push(from, to, pf); }
+                            } else { ml.push(from, to, 0); }
                         }
-                        if to == ep && ep >= 0 { n = add(ms, n, from, to, 3); }
+                        if to == ep && ep >= 0 { ml.push(from, to, 3); }
                     }
                     dfi += 1;
                 }
@@ -127,7 +157,7 @@ fn gen_moves(b: &[i64], side: i64, ep: i64, castle: i64, ms: &[Move]) -> i64 {
             for i in 0..8 {
                 let nf = f + df[base + i]; let nr = r + dr[base + i];
                 if nf >= 0 && nf < 8 && nr >= 0 && nr < 8 {
-                    if b[nr * 8 + nf] * side <= 0 { n = add(ms, n, from, nr * 8 + nf, 0); }
+                    if b[nr * 8 + nf] * side <= 0 { ml.push(from, nr * 8 + nf, 0); }
                 }
             }
             if p == 6 {
@@ -138,7 +168,7 @@ fn gen_moves(b: &[i64], side: i64, ep: i64, castle: i64, ms: &[Move]) -> i64 {
                         if is_attacked(b, home, 0 - side) == 0 &&
                            is_attacked(b, home + 1, 0 - side) == 0 &&
                            is_attacked(b, home + 2, 0 - side) == 0 {
-                            n = add(ms, n, home, home + 2, 2);
+                            ml.push(home, home + 2, 2);
                         }
                     }
                 }
@@ -147,7 +177,7 @@ fn gen_moves(b: &[i64], side: i64, ep: i64, castle: i64, ms: &[Move]) -> i64 {
                         if is_attacked(b, home, 0 - side) == 0 &&
                            is_attacked(b, home - 1, 0 - side) == 0 &&
                            is_attacked(b, home - 2, 0 - side) == 0 {
-                            n = add(ms, n, home, home - 2, 2);
+                            ml.push(home, home - 2, 2);
                         }
                     }
                 }
@@ -164,7 +194,7 @@ fn gen_moves(b: &[i64], side: i64, ep: i64, castle: i64, ms: &[Move]) -> i64 {
                     let t = b[nr * 8 + nf] * side;
                     if t > 0 { nf = -100; }
                     else {
-                        n = add(ms, n, from, nr * 8 + nf, 0);
+                        ml.push(from, nr * 8 + nf, 0);
                         if t < 0 { nf = -100; }
                         else { nf += df[d]; nr += dr[d]; }
                     }
@@ -173,7 +203,6 @@ fn gen_moves(b: &[i64], side: i64, ep: i64, castle: i64, ms: &[Move]) -> i64 {
         }
         }
     }
-    return n;
 }
 
 fn upd_castle(castle: i64, sq: i64) -> i64 {
@@ -191,14 +220,15 @@ fn upd_castle(castle: i64, sq: i64) -> i64 {
 // Special squares are handled by the caller via the flags it already holds.
 fn perft(b: &[i64], side: i64, ep: i64, castle: i64, depth: i64) -> i64 {
     if depth == 0 { return 1; }
-    let mut mv: [Move; 256];
-    let ms = &mv[0..256];
-    let n = gen_moves(b, side, ep, castle, ms);
+    let mut ml: MoveList = MoveList::new();
+    gen_moves(b, side, ep, castle, &mut ml);
+    let n = ml.len();
     let mut nodes = 0;
     for i in 0..n {
-        let from = ms[i].from;
-        let to = ms[i].to;
-        let flags = ms[i].flags;
+        let m: Move = ml.get(i);
+        let from = m.from;
+        let to = m.to;
+        let flags = m.flags;
         let moved = b[from];
         let captured = b[to];
         b[to] = moved;
@@ -247,15 +277,16 @@ fn eval(b: &[i64]) -> i64 {
 
 fn negamax(b: &[i64], side: i64, ep: i64, castle: i64, depth: i64, ply: i64) -> i64 {
     if depth == 0 { return eval(b) * side; }
-    let mut mv: [Move; 256];
-    let ms = &mv[0..256];
-    let n = gen_moves(b, side, ep, castle, ms);
+    let mut ml: MoveList = MoveList::new();
+    gen_moves(b, side, ep, castle, &mut ml);
+    let n = ml.len();
     let mut best = -2000000;
     let mut legal = 0;
     for i in 0..n {
-        let from = ms[i].from;
-        let to = ms[i].to;
-        let flags = ms[i].flags;
+        let m: Move = ml.get(i);
+        let from = m.from;
+        let to = m.to;
+        let flags = m.flags;
         let moved = b[from];
         let captured = b[to];
         b[to] = moved;
@@ -308,16 +339,17 @@ fn print_move(from: i64, to: i64) {
 
 // Root search: pick the highest-scoring legal move and print it in UCI.
 fn best_move(b: &[i64], side: i64, ep: i64, castle: i64, depth: i64) {
-    let mut mv: [Move; 256];
-    let ms = &mv[0..256];
-    let n = gen_moves(b, side, ep, castle, ms);
+    let mut ml: MoveList = MoveList::new();
+    gen_moves(b, side, ep, castle, &mut ml);
+    let n = ml.len();
     let mut best = -2000000;
     let mut bf = 0;
     let mut bt = 0;
     for i in 0..n {
-        let from = ms[i].from;
-        let to = ms[i].to;
-        let flags = ms[i].flags;
+        let m: Move = ml.get(i);
+        let from = m.from;
+        let to = m.to;
+        let flags = m.flags;
         let moved = b[from];
         let captured = b[to];
         b[to] = moved;
