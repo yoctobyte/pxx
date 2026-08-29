@@ -1897,3 +1897,106 @@ Two more from the same rung, both worth their own line:
   A content-based scan would have pulled 60KB of runtime into all 18 existing
   tests; the position-based one kept every one of them byte-for-byte identical in
   code size, which is how the gate was verified rather than asserted.
+
+### 45. A PHASE THAT CAN BE ENTERED BUT NEVER FINISH CONSUMES THE RESOURCE IT EXISTS TO PROTECT — and reads from outside as slowness
+
+Track T, 2026-08-29, `twatch`'s `verify_pin`.
+
+`twatch` has three long-run phases and three different treatments of preemption:
+
+| phase | commitment point |
+| --- | --- |
+| reserved breadth | `commit_after=0` — commits at once |
+| requested verdict | `commit_after=full_commit_secs` |
+| **`verify_pin`** | **none — abortable at every moment** |
+
+Measured on `seven`: **7 pin-verify attempts, 7 preemptions, 0 completions**, all
+on the same pin. Every attempt consumed an idle slot and produced nothing — and
+the slot it consumed is the one breadth needed. So the pin stayed unjudged **and**
+the ladder kept paying for it.
+
+**From outside, this is indistinguishable from a slow box.** The coordinator read
+"full tier 104 testable commits behind" and diagnosed throughput, which would have
+led to tuning tier composition against a cause that was not there. The arithmetic
+refutes it: 115 commits/hour of which 36 buildable, a full tier at ~959s ≈ 16 min,
+≈10 buildable commits per run — back-to-back that is a verdict every ~16 minutes
+running ~10 behind. **A 71-commit debt is not what that cadence produces, so the
+number was evidence of something other than speed.** When a queue is further behind
+than the throughput arithmetic allows, the gap is the finding — do not tune the
+throughput.
+
+**And the defect is inside the mechanism built to prevent it.** `verify_pin`
+exists because *"18 of the last 25 pins never received a full run"*. It reproduced
+that failure one level down, in itself. The requested-verdict branch already
+carries the fix **and documents this precise failure in its own comment** —
+`verify_pin` is the sibling arm missed when that one was repaired. Textbook
+`normalise-dont-special-case`: three phases serving one concept, each restating
+its own preemption policy. Fixed in `5a5c7bc92`.
+
+**Corollary — yielding a slot is not the same as ever completing.** `IDLE_YIELD_AFTER`
+bounded the damage to phases *behind* the starving one, so the guard worked
+exactly as designed and the starvation continued. A backpressure mechanism that
+limits blast radius can make an unfinishable phase survivable, and therefore
+permanent.
+
+### 46. A FIX IS INERT UNTIL BOTH HALVES HAPPEN — and the restart alone looks like it worked
+
+Same incident. `5a5c7bc92` landed and the watcher kept running the old code.
+
+`trackt status` showed `code : STALE`, and the first restart **did not clear it**.
+The watcher clone is **detached at the sha under test**, so `git pull` there fails
+*by construction* — that is not a misconfiguration, it is what a bisecting clone
+is — and a restart reloads `twatch.py` from the clone, not from origin. Correct
+sequence is stop → fetch → `checkout master` → start.
+
+**The failure mode is that the restart succeeds.** The daemon comes up, reports
+healthy, publishes tstate, and serves the old binary's behaviour. Nothing in the
+success path is false; the only tell is a `code : STALE` line that a healthy-looking
+restart invites you to read as leftover.
+
+Direct sibling of face 31 (a fresh tree's `make compiler/pascal26` is a silent
+no-op when the seed was copied in) and of the pin-boundary rule *"the fix is in
+HEAD" ≠ "the fix is in the binary I ran"*. Same shape in a third place: **an
+artefact whose provenance is assumed rather than checked, where the assuming step
+emits a success message.** For a lane whose whole output is verdicts, shipping a
+fix and not restarting onto it means every subsequent verdict carries the old
+code's bugs under the new commit's name.
+
+### 47. THE SUMMARY SENTENCE A FIX INVITES YOU TO WRITE CAN BE FALSE WHILE THE FIX IS RIGHT
+
+frank-optimize-b4, 2026-08-29, the `LowerCase` forward (`7aba316be`).
+
+The natural write-up — *"the seed and self-hosted builds now agree"* — **is false.**
+Measured by stash/rebuild isolation:
+
+    seed-built, WITHOUT the forward:  9396c6dbb646f90d
+    seed-built, WITH the forward:     9396c6dbb646f90d
+    self-hosted:                      9396c6dbb646f90d
+
+**They agreed before.** The forward did not cause the convergence, it **recorded**
+it. What changed is that the agreement is now *stated* rather than coincidental —
+which is precisely the defect the ticket described, so the fix is right and the
+obvious summary of it is wrong.
+
+**This is how a correct fix acquires a false rationale.** The title implies a
+behaviour change; the value is entirely in removing a coincidence. Anyone reading
+the summary later concludes the builds used to diverge, and will "know" a
+divergence that never happened — the durable kind of wrong, because nothing
+downstream ever contradicts it. Same family as face 32 (a derived number standing
+in for a measured one) with the direction reversed: here the *measurement* was
+taken and the *prose* was still going to be wrong.
+
+Two more from the same fix:
+
+- **Two methods that fail differently, agreeing.** Track T swept the input domain
+  (0 differing over 256 bytes, 65 536 ordered pairs, 256 contextual cases) proving
+  the two *routines* agree; b4's stash/rebuild proves the whole *artefact* is
+  unchanged whichever routine bound. Neither shares an upstream with the other,
+  which is what makes the pair a control rather than a repetition — see the
+  standing rule about agreement between arms with a common upstream.
+- **`forwardlint` reports only the EARLIEST site.** The ticket named one; there
+  are **eight** (`pasparser_expr.inc:1927, :2881, :8383, :8386, :8389` and
+  `cparser.inc:337, :395, :510`), all covered by one forward in
+  `frontend_forwards.inc`. Exactly face 41's shape in a linter rather than a build:
+  **the instrument names whichever instance it reached first, and the ticket
+  inherits that as if it were the population.**
