@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:21 blocked:5 backlog:314 backlog_new:7 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2606 rejected:51`
+`working:1 unfinished:20 blocked:5 backlog:315 backlog_new:7 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2608 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
-## unfinished (21) — parked mid-flight; re-claim, do not duplicate
+## unfinished (20) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -29,7 +29,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-pascal-corpus-generics` [P]
 - `feature-pascal-type-helpers` [A]
 - `feature-port-rtl-over-libc` [A]
-- `feature-real-dynlib-loader` [B] — blocked-by: bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream
 - `feature-signal-siginfo-ucontext` [A]
 - `feature-target-wasm` [A+B]
 - `feature-threadsafe-heap-optimize` [A]
@@ -49,7 +48,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [P]` bug-p-a-delphi-mode-generic-from-a-used-unit-cannot-be-specialized
 - `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
-- `[p 70] [N]` feature-nilpy-staticmethod-and-classmethod
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 70] [T]` regression-cascade-154d1aa3fba6
@@ -75,5 +73,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
+- `[p 62] [N]` feature-nilpy-enum-class
 
 _296 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

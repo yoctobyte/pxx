@@ -2086,6 +2086,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-six-and-warnings-shims | B | 45 | feature | `mimic_six` and `mimic_warnings` — the biggest lever for the library campaign | — |
 | feature-nilpy-star-args-kwargs | N | 50 | feature | nilpy: *args / **kwargs in a def signature | — |
 | feature-nilpy-starred-and-nested-unpacking | N | 40 | feature | Starred and NESTED unpacking targets | — |
+| feature-nilpy-staticmethod-and-classmethod | N | 70 | feature | `@staticmethod` and `@classmethod` are rejected | — |
 | feature-nilpy-stdlib-coverage-gaps-measured | N | 72 | feature | Measured stdlib coverage: json and re are solid; os, time and math.fabs are absent | — |
 | feature-nilpy-str-format-multiarg | N | 40 | feature | `str.format` with more than one argument | — |
 | feature-nilpy-str-methods | N | 55 | feature | NilPy: string methods (.upper/.lower/.strip/.split/.join/.startswith...) | — |
@@ -2180,6 +2181,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-pyeval-power-operator | N | 30 | feature | pyeval: `**` is not in the expression grammar — `2 ** 70` is a parse error inside exec() | — |
 | feature-range-checks-nd-bases | A | 25 | feature | {$R+} follow-up: N-D static-array bases — per-dimension index checks (a[i,j] checks i and j against their own lo..hi) | — |
 | feature-real-cross-target-consistency | A | 50 | feature | Verify `real`/Double bit-consistency across targets (x87 divergence?) | — |
+| feature-real-dynlib-loader | B | 45 | feature | Real dlopen loader: DONE on x86-64 (PAL primitives, opt-in -dPXX_DYNLIB_LIBC, truthful PalHasDynlib, OpenSSL 3 loaded and answering). Two items open: (b) an arm32/aarch64 RUN, blocked on this host having no cross ld-linux/libc, and (d) Synapse SSL end-to-end, now past the connect wall and stopped in SSLDoConnect. | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
 | feature-relative-path-units | A | 50 | feature | Relative/absolute path support in `uses`/`includes` | — |
 | feature-release-packaging | B | 50 | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
 | feature-require-forward-strict-mode | A | 60 | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |

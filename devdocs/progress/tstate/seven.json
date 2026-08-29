@@ -10490,5 +10490,36 @@
    "tools-devtest#00"
   ],
   "would_pin": false
+ },
+ "pin_verify": {
+  "date": "2026-08-29T19:24:51Z",
+  "red": [
+   "lib-test#src:tools/crtl_reachability.py",
+   "lib-test#src:test/lib_synapse.pas",
+   "test-core#src:test/test_nilpy_str_ascii_cache.npy",
+   "test-nilpy#src:test/test_nilpy_str_ascii_cache.npy",
+   "test-nilpy#src:test/test_nilpy_relative_import_in_package.npy",
+   "test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy",
+   "test-nilpy#src:test/test_nilpy_startswith_tuple.npy",
+   "test-aarch64#src:test/test_parallel_reduction.pas",
+   "test-sqlite-threads-aarch64#src:compiler/.pascal26.fixedpoint",
+   "tools-devtest#00"
+  ],
+  "sha": "f4654ba1e3cdf2a5b9738bca6f401a0c408269fd",
+  "tier": "full",
+  "ver": "v391",
+  "verdict": "RED",
+  "why": {
+   "lib-test#src:test/lib_synapse.pas": "pascal26:270: error: expected implementation section | in: stable_linux_amd64/default/../../lib/rtl/dns_cache.pas | near: n  end  end  >>>",
+   "lib-test#src:tools/crtl_reachability.py": "File \"/home/seven/trackt-watch/tools/reportlab_diff.py\", line 82, in run_case | subprocess.run([sys.executable, ref_py], check=True, env=env) | File \"/usr/lib/python3.12/subprocess.py\", line 571, in r",
+   "test-aarch64#src:test/test_parallel_reduction.pas": "ok: $TMP  [code=312720B  data=3656B  bss=842456B  procs=290]",
+   "test-core#src:test/test_nilpy_str_ascii_cache.npy": "5 x True | -3 \u00e9 False | +6 \ufffd True | ['a', 'b', 'c', 'd', 'e', 'f'] ['h', '\u00e9', 'l', 'l', 'o'] | 500 50 | 100 25 \u00e9 \u00e9",
+   "test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy": "+++ -\t2026-08-29 19:08:54.607038890 +0000 | @@ -1,4 +1,2 @@ | E:A A | F:B B | -C G:C | -H:G:C",
+   "test-nilpy#src:test/test_nilpy_relative_import_in_package.npy": "pascal26:10: error: undefined variable (RENAMED) | near: A   U  RENAMED >>>",
+   "test-nilpy#src:test/test_nilpy_startswith_tuple.npy": "@@ -4,5 +4,3 @@ | plain      True True | window     True True | winmiss    False | -param      True False | -platform   False True",
+   "test-nilpy#src:test/test_nilpy_str_ascii_cache.npy": "5 x True | -3 \u00e9 False | +6 \ufffd True | ['a', 'b', 'c', 'd', 'e', 'f'] ['h', '\u00e9', 'l', 'l', 'o'] | 500 50 | 100 25 \u00e9 \u00e9",
+   "test-sqlite-threads-aarch64#src:compiler/.pascal26.fixedpoint": "self-host fixedpoint: verified \u2014 1 round(s), 06e61e8b3f38 | test-sqlite-threads: building threadsafe sqlite (aarch64) ... | ok: $TMP  [code=6932604B  data=47112B  bss=113752B  procs=4343] | test-sqlit",
+   "tools-devtest#00": "tools-devtest: tools/devtest_slow_tier.py | tools-devtest: tools/devtest_status_drift.py | tools-devtest: tools/devtest_stub_lifecycle.py | tools-devtest: tools/devtest_wedge_on_own_writes.py | tools-"
+  }
  }
 }

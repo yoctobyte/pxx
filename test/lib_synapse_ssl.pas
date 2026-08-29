@@ -16,11 +16,28 @@ program lib_synapse_ssl;
     proven end-to-end against a third-party .so we do not control, which is what
     that ticket exists for -- not a stub returning plausible zeros.
 
-  Deliberately NOT a handshake. A TLS connect against a local server currently
-  segfaults inside X509_verify_cert under pxx while the byte-identical program
-  built with FPC completes it, and that is filed as a compiler bug. Asserting
-  only what is TRUE today keeps this green and keeps the gap visible in its own
-  ticket rather than as a mystery red here.
+  Still NOT a handshake here -- but the reason has changed, and the old reason
+  was left in place long enough to be worth correcting explicitly. It used to
+  read "a TLS connect against a local server currently segfaults inside
+  X509_verify_cert under pxx"; that was true, it was a compiler bug
+  (bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert),
+  and it was FIXED in 2ee660831 on 2026-08-17. A stale reason is worse than no
+  reason: read today it says the compiler is broken when it is not, and it tells
+  the next person the gap is someone else's to close.
+
+  Measured 2026-08-29 against pinned v391, x86-64, OpenSSL 3.5.5,
+  -dPXX_DYNLIB_LIBC, with `openssl s_server` on a self-signed localhost cert:
+  `connect=0 ssl=0`, five runs out of five, and the FPC oracle built from the
+  same source gives the identical `connect=0 ssl=0`. The handshake works.
+
+  It is absent from this program for a purely mechanical reason: a TLS handshake
+  is a CONVERSATION, so a hermetic loopback needs both sides live at once, and
+  this suite is single-process with no fork primitive. Doing it properly means a
+  self-exec harness (the test re-runs its own binary as the server, cert via
+  TSSLOpenSSL.CreateSelfSignedCert), which is real test infrastructure and is
+  filed as feature-b-a-hermetic-tls-loopback-for-the-ssl-suite rather than
+  bolted in here as a flaky openssl-CLI dependency inside Track B's gate.
+  The 30-second manual repro is recorded in feature-real-dynlib-loader.
 
   Needs -dPXX_DYNLIB_LIBC (the opt-in libc-linked loader) and external/synapse. }
 
