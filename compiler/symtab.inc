@@ -4490,6 +4490,13 @@ begin
   SymBlockId[SymCount] := CurBlockId;
   Syms[SymCount].ElemType := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;
+  { RecName is meaningless for an array -- its record id is ElemRecName above --
+    but slots are RECYCLED, so leaving it alone inherits the previous occupant's
+    id (an AllocParam'd `struct B` by value is the reproducer). The reset rule
+    these allocators follow says "every parallel array"; RecName is a field of
+    the record rather than a parallel array, which is exactly why it was missed.
+    bug-a-allocarray-leaves-recname-stale-on-a-recycled-symbol-slot }
+  Syms[SymCount].RecName := REC_NONE;
   Syms[SymCount].IsRef    := False;
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
@@ -4619,6 +4626,13 @@ begin
   SymBlockId[SymCount] := CurBlockId;
   Syms[SymCount].ElemType    := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;
+  { RecName is meaningless for an array -- its record id is ElemRecName above --
+    but slots are RECYCLED, so leaving it alone inherits the previous occupant's
+    id (an AllocParam'd `struct B` by value is the reproducer). The reset rule
+    these allocators follow says "every parallel array"; RecName is a field of
+    the record rather than a parallel array, which is exactly why it was missed.
+    bug-a-allocarray-leaves-recname-stale-on-a-recycled-symbol-slot }
+  Syms[SymCount].RecName := REC_NONE;
   Syms[SymCount].IsRef       := False;
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
