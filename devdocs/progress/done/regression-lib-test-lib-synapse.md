@@ -141,4 +141,4 @@ different claims**, and only the second one is evidence.
 
 Resolved citing `614ec6017`. Re-run the gated job after the next pin, and if it
 is red *then*, it is a second cause.
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 3dbdc6b63.
