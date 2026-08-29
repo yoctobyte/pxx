@@ -1,5 +1,5 @@
 ---
-track: A
+track: B
 prio: 75
 type: bug
 blocked-by: []
@@ -109,3 +109,52 @@ Filing rather than fixing: `lib/rtl/**` is a file-lane this session does not
 hold. Found and reduced by the Track T agent on `seven` under the provenance
 rule — my box's run produced it, so the reduction is mine and the fix is the
 lane's.
+
+---
+
+## ROUTING, 2026-08-29 — retracked **A → B**. Same priority, different lane.
+
+`lib/rtl/scheduler.pas` is **Track B** ground: CLAUDE.md puts `lib/rtl` (Pascal)
+in Track B, libraries. Track A is `compiler/**` — AST, IR, symtab, backends, ABI,
+ELF. The `bug-a-` slug stays (renaming breaks the `resolve` citations that key
+off it); the **frontmatter is what the ranker reads**, and it now says B.
+
+This matters for who can take it, not for how it is fixed. B builds with
+`$(PXX_STABLE)` and never rebuilds the compiler, so this needs **no pin and no
+self-host gate** — `make lib-test` plus the reproduction below is the whole
+verification. Filed as A it would have queued behind the shared-file lane and
+waited on an A holder it does not need.
+
+**The fix order in the ticket stands and is the important part:** guard the
+exhaustion first, mirroring the `MAX_CO` arm forty lines below, *then* consider
+raising the ceiling. Raising it alone relocates the cliff to a wider box, which
+is precisely how this survived to be found on the first machine with more than
+16 hardware threads.
+
+## The general finding — a PASS that is a statement about the host
+
+`plexus.json` reads **`pass`** for this job, and that green says nothing about the
+runtime: **every box that has ever run this suite has had ≤16 hardware threads.**
+Below `MAX_REACTORS` the fallthrough is unreachable and the code is genuinely
+correct, so the job would have stayed green on that hardware forever. No amount
+of reading the green harder could reach it; it took different hardware.
+
+This is the exact **inverse of the host-red case** triaged this morning, and the
+pair is worth holding together:
+
+| | reads as | actually says |
+| --- | --- | --- |
+| host **RED** (the 18-job cascade) | a regression in the range | this box lacks a loader |
+| host **GREEN** (this bug) | the code is correct | this box is too small to reach the bug |
+
+The red one is noisy, gets triaged, and wastes an afternoon. **The green one is
+silent and waits years.** A green job is a claim bounded by the machine that ran
+it, and nothing in a report states those bounds — the instrument's scope is
+invisible in its own output, one more time.
+
+**Operational form:** when a suite has only ever run on one class of hardware,
+its passes are untested in every dimension that hardware holds constant — core
+count, page size, cache line, endianness, pointer width, clock granularity.
+Track T's cross-host comparison is what made this cheap: *three of seven's native
+reds read `pass` on plexus, which is the shape that says suspect host coupling* —
+and for two of the three that was right. This was the third, and it inverted.

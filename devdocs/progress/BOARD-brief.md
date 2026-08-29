@@ -47,7 +47,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 ## Ready — top 30 of 314, ranked
 
 - `[p 85] [N]` bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
-- `[p 75] [A]` bug-a-the-17th-thread-silently-aliases-reactor-slot-0
+- `[p 75] [B]` bug-a-the-17th-thread-silently-aliases-reactor-slot-0
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
