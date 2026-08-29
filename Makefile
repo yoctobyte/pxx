@@ -3902,7 +3902,7 @@ test-asm: $(COMPILER)
 	./$(COMPILER) -Fucompiler test/test_x64enc.pas $(TESTTMP)/sweep_x64enc26
 	tools/expect_same.sh sweep_x64enc26 "$$($(TESTTMP)/sweep_x64enc26 | tail -1)" "ALL ENCODER TESTS PASSED."
 	./$(COMPILER) test/test_asm_mvp.asm $(TESTTMP)/test_asm_mvp26
-	$(TESTTMP)/test_asm_mvp26; test "$$?" = "42"
+	$(TESTTMP)/test_asm_mvp26; tools/expect_same.sh test_asm_mvp26-rc "$$?" "42"
 	./$(COMPILER) test/test_asmcore_x64.pas $(TESTTMP)/test_asmcore_x64_26
 	$(TESTTMP)/test_asmcore_x64_26 | tail -1 | grep -q "all asmcore_x64 checks passed"
 	./$(COMPILER) test/test_asmcore_aarch64.pas $(TESTTMP)/test_asmcore_aarch64_26
@@ -3916,7 +3916,7 @@ test-asm: $(COMPILER)
 	./$(COMPILER) test/test_asmcore_xtensa.pas $(TESTTMP)/test_asmcore_xtensa_26
 	$(TESTTMP)/test_asmcore_xtensa_26 | tail -1 | grep -q "all asmcore_xtensa checks passed"
 	./$(COMPILER) test/test_asm_loop.asm $(TESTTMP)/test_asm_loop26
-	$(TESTTMP)/test_asm_loop26; test "$$?" = "45"
+	$(TESTTMP)/test_asm_loop26; tools/expect_same.sh test_asm_loop26-rc "$$?" "45"
 	# scalar SSE from a Pascal inline asm block (feature-inline-asm-xmm-operands
 	# phase 1). Runs the arithmetic rather than pinning bytes: a correct opcode
 	# with a wrong ModRM still encodes, and only execution catches that.
@@ -3942,7 +3942,7 @@ test-asm: $(COMPILER)
 	./$(COMPILER) test/test_asm_hello.asm $(TESTTMP)/test_asm_hello26
 	tools/expect_same.sh test_asm_hello26 "$$($(TESTTMP)/test_asm_hello26)" "Hello, asm world!"
 	./$(COMPILER) test/test_asm_entry_global.asm $(TESTTMP)/test_asm_entry_global26
-	$(TESTTMP)/test_asm_entry_global26; test "$$?" = "42"
+	$(TESTTMP)/test_asm_entry_global26; tools/expect_same.sh test_asm_entry_global26-rc "$$?" "42"
 	./$(COMPILER) test/test_asm_extern.asm $(TESTTMP)/test_asm_extern26
 	tools/expect_same.sh test_asm_extern26 "$$($(TESTTMP)/test_asm_extern26)" "Hello from extern printf!"
 	./$(COMPILER) test/test_asm_obj.asm $(TESTTMP)/test_asm_obj26.o
@@ -3955,7 +3955,7 @@ test-asm: $(COMPILER)
 	readelf -r $(TESTTMP)/test_asm_obj26.o | grep -q 'puts - 4'
 	@if command -v gcc >/dev/null 2>&1; then \
 	  gcc -nostartfiles -e asm_obj_start $(TESTTMP)/test_asm_obj26.o -o $(TESTTMP)/test_asm_obj26_exe 2>/dev/null && \
-	  test "$$($(TESTTMP)/test_asm_obj26_exe)" = "asm object file test" && echo "test-asm: .o links+runs via ld/gcc ok" || { echo "test-asm: .o link/run FAILED"; exit 1; }; \
+	  tools/expect_same.sh test_asm_obj26_exe "$$($(TESTTMP)/test_asm_obj26_exe)" "asm object file test" && echo "test-asm: .o links+runs via ld/gcc ok" || { echo "test-asm: .o link/run FAILED"; exit 1; }; \
 	  printf 'extern int asm_obj_add(int,int);\nint main(){ return asm_obj_add(19,23) == 42 ? 0 : 1; }\n' > $(TESTTMP)/test_asm_obj26_caller.c; \
 	  gcc -c $(TESTTMP)/test_asm_obj26_caller.c -o $(TESTTMP)/test_asm_obj26_caller.o && \
 	  gcc $(TESTTMP)/test_asm_obj26_caller.o $(TESTTMP)/test_asm_obj26.o -o $(TESTTMP)/test_asm_obj26_caller_exe 2>/dev/null && \
@@ -3968,7 +3968,7 @@ test-asm: $(COMPILER)
 	@if command -v gcc >/dev/null 2>&1; then \
 	  printf '#include <stdio.h>\n#include <dlfcn.h>\nint main(int c,char**v){void*h=dlopen(v[1],RTLD_NOW);if(!h){fprintf(stderr,"dlopen: %%s\\n",dlerror());return 1;}int(*a)(int,int)=dlsym(h,"so_add");void(*g)(void)=dlsym(h,"so_greet");if(!a||!g){fprintf(stderr,"dlsym: %%s\\n",dlerror());return 1;}if(a(19,23)!=42){fprintf(stderr,"so_add wrong\\n");return 1;}g();return 0;}\n' > $(TESTTMP)/test_asm_so26_dlopen.c; \
 	  gcc $(TESTTMP)/test_asm_so26_dlopen.c -o $(TESTTMP)/test_asm_so26_dlopen -ldl 2>/dev/null && \
-	  test "$$($(TESTTMP)/test_asm_so26_dlopen $(TESTTMP)/test_asm_so26.so)" = "hello from shared lib" && \
+	  tools/expect_same.sh test_asm_so26_dlopen "$$($(TESTTMP)/test_asm_so26_dlopen $(TESTTMP)/test_asm_so26.so)" "hello from shared lib" && \
 	  echo "test-asm: .so dlopen/dlsym round-trip (incl. extern-call GOT) ok" || { echo "test-asm: .so dlopen round-trip FAILED"; exit 1; }; \
 	else echo "test-asm: gcc not installed; .so dlopen check skipped"; fi
 	./$(COMPILER) -S test/hello.pas $(TESTTMP)/test_asm_dis_hello26
@@ -4320,7 +4320,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) -Fulib/rtl test/test_signal_handler_callback_b336.pas $(TESTTMP)/test_sig_cb_b33626
 	tools/expect_same.sh test_sig_cb_b33626 "$$($(TESTTMP)/test_sig_cb_b33626)" "$$(printf 'hits=2\nresumed after handler')"
 	./$(COMPILER) -Fulib/rtl test/test_signal_default_revert_b336.pas $(TESTTMP)/test_sig_dfl_b33626
-	$(TESTTMP)/test_sig_dfl_b33626 >/dev/null 2>&1; test "$$?" = "143"
+	$(TESTTMP)/test_sig_dfl_b33626 >/dev/null 2>&1; tools/expect_same.sh test_sig_dfl_b33626-rc "$$?" "143"
 	# initialised STRING vars, global (kind-1 pending init) and local
 	./$(COMPILER) test/test_var_string_initializer_b335.pas $(TESTTMP)/test_var_strinit_b33526
 	tools/expect_same.sh test_var_strinit_b33526 "$$($(TESTTMP)/test_var_strinit_b33526)" "$$(printf 'global/local 42\nmut/local 42')"
@@ -4441,7 +4441,7 @@ test-core: $(COMPILER)
 	# round, and CROSS-template nesting (TList over TPair) needs the earlier
 	# templates re-swept once the later one has collapsed the inner group.
 	./$(COMPILER) test/test_generic_nested_inline_specialize.pas $(TESTTMP)/test_generic_nested_spec26
-	@test "$$($(TESTTMP)/test_generic_nested_spec26)" = "$$(printf 'var:   7\nfield: 4\nparam: 7\nresult:5\nlocal: 9\ncross: 3/three n=1')" \
+	@tools/expect_same.sh test_generic_nested_spec26 "$$($(TESTTMP)/test_generic_nested_spec26)" "$$(printf 'var:   7\nfield: 4\nparam: 7\nresult:5\nlocal: 9\ncross: 3/three n=1')" \
 	  || { echo "test_generic_nested_inline_specialize: FAIL"; $(TESTTMP)/test_generic_nested_spec26; exit 1; }
 	# `not` over a UNARY MINUS: bitwise, not boolean. `not -1` printed TRUE --
 	# an integer expression answering a Boolean -- because the authoritative-
@@ -4449,7 +4449,7 @@ test-core: $(COMPILER)
 	# reported shape and AN_NEG was never one of them. Boolean rows are here so
 	# a regression the other way shows too.
 	./$(COMPILER) test/test_not_of_negated_operand.pas $(TESTTMP)/test_not_of_negated26
-	@test "$$($(TESTTMP)/test_not_of_negated26)" = "$$(printf 'lit  = 0\npar  = 0\nsp   = 0\nneg2 = 1\nvar  = 4\nvarp = 4\ni64  = 4\np1   = -2\np0   = -1\npv   = -6\nbin  = 0\nadd  = -3\nbool = TRUE\ncmp  = FALSE')" \
+	@tools/expect_same.sh test_not_of_negated26 "$$($(TESTTMP)/test_not_of_negated26)" "$$(printf 'lit  = 0\npar  = 0\nsp   = 0\nneg2 = 1\nvar  = 4\nvarp = 4\ni64  = 4\np1   = -2\np0   = -1\npv   = -6\nbin  = 0\nadd  = -3\nbool = TRUE\ncmp  = FALSE')" \
 	  || { echo "test_not_of_negated_operand: FAIL"; $(TESTTMP)/test_not_of_negated26; exit 1; }
 	# An interface NAME used as a value means its GUID and nothing else. It used
 	# to fall through to the metaclass path, so `g := IHello` copied 16 bytes of
@@ -4461,7 +4461,7 @@ test-core: $(COMPILER)
 	# eight good bytes and eight zeros), Supports' three-argument form, and the
 	# out-parameter rule that a FAILED query CLEARS the interface variable.
 	./$(COMPILER) test/test_interface_guid_and_supports.pas $(TESTTMP)/test_intf_guid_supports26
-	@test "$$($(TESTTMP)/test_intf_guid_supports26)" = "$$(printf '11111111222233334444555555555555\n99999999888877776666555544443333\ndistinct=True\nstable=True\nasarg=11111111222233334444555555555555\ngetintf=True True\nhit=True call=hello\nmiss=False nil=True\ncleared=False True\nnilinst=False True\ntwo=TrueFalse\niff=hello')" \
+	@tools/expect_same.sh test_intf_guid_supports26 "$$($(TESTTMP)/test_intf_guid_supports26)" "$$(printf '11111111222233334444555555555555\n99999999888877776666555544443333\ndistinct=True\nstable=True\nasarg=11111111222233334444555555555555\ngetintf=True True\nhit=True call=hello\nmiss=False nil=True\ncleared=False True\nnilinst=False True\ntwo=TrueFalse\niff=hello')" \
 	  || { echo "test_interface_guid_and_supports: FAIL"; $(TESTTMP)/test_intf_guid_supports26; exit 1; }
 	# ClassParent -- the fourth class-reference operation, beside ClassName /
 	# ClassType / InheritsFrom, which already shared one resolver. It answers a
@@ -4470,7 +4470,7 @@ test-core: $(COMPILER)
 	# cover the instance, metaclass-value, TClass-variable and static-class-name
 	# receivers, nil at the root, and a same-named MEMBER still outranking it.
 	./$(COMPILER) test/test_classparent.pas $(TESTTMP)/test_classparent26
-	@test "$$($(TESTTMP)/test_classparent26)" = "$$(printf 'TC\nTB\nTA\nTrue\nTrue\nTB\nTB True\nTB\nshadowed')" \
+	@tools/expect_same.sh test_classparent26 "$$($(TESTTMP)/test_classparent26)" "$$(printf 'TC\nTB\nTA\nTrue\nTrue\nTB\nTB True\nTB\nshadowed')" \
 	  || { echo "test_classparent: FAIL"; $(TESTTMP)/test_classparent26; exit 1; }
 	# `classRef.Create` when the hierarchy declares NO constructor -- the implicit
 	# TObject.Create. The static `TFoo.Create` spelling always accepted it; both
@@ -4479,7 +4479,7 @@ test-core: $(COMPILER)
 	# only for classes that happened to declare a ctor of their own. Rows for the
 	# declared-virtual-ctor arm are here too, so a regression either way shows.
 	./$(COMPILER) test/test_metaclass_implicit_create.pas $(TESTTMP)/test_metaclass_impl_create26
-	@test "$$($(TESTTMP)/test_metaclass_impl_create26)" = "$$(printf 'B\nC\nA\ncast:B\nQ30\nP3\nloop0:B:TB\nloop1:C:TC')" \
+	@tools/expect_same.sh test_metaclass_impl_create26 "$$($(TESTTMP)/test_metaclass_impl_create26)" "$$(printf 'B\nC\nA\ncast:B\nQ30\nP3\nloop0:B:TB\nloop1:C:TC')" \
 	  || { echo "test_metaclass_implicit_create: FAIL"; $(TESTTMP)/test_metaclass_impl_create26; exit 1; }
 	# ExceptObject = the exception OBJECT in flight, ExceptAddr's twin: the same
 	# BSS slot `on E: T do` binds from, reached through __pxxExceptObject. The
@@ -4487,7 +4487,7 @@ test-core: $(COMPILER)
 	# what pre-`on` FPC code uses -- plus reading the object from a routine the
 	# handler CALLS. Byte-identical to fpc 3.2.2, nil-when-idle row included.
 	./$(COMPILER) test/test_exceptobject_intrinsic.pas $(TESTTMP)/test_exceptobject26
-	@test "$$($(TESTTMP)/test_exceptobject26)" = "$$(printf 'idle: nil\nbare: EConvertError/m1\nbound: EMy/m2\nsame: True\nreport: EMy/m3\nin: EConvertError/inner\nout: EMy/outer\nend')" \
+	@tools/expect_same.sh test_exceptobject26 "$$($(TESTTMP)/test_exceptobject26)" "$$(printf 'idle: nil\nbare: EConvertError/m1\nbound: EMy/m2\nsame: True\nreport: EMy/m3\nin: EConvertError/inner\nout: EMy/outer\nend')" \
 	  || { echo "test_exceptobject_intrinsic: FAIL"; $(TESTTMP)/test_exceptobject26; exit 1; }
 	# WideChar values in STRING contexts (assign, +concat, string param) convert to
 	# UTF-8 via builtin helpers; surrogate PAIR -> one 4-byte code point (fpjson \uXXXX);
@@ -4660,7 +4660,7 @@ test-core: $(COMPILER)
 	# a FAILING assert reports and halts with 227 (FPC's assertion runtime error)
 	printf 'program a; begin Assert(1=2, "boom"); end.\n' | tr '"' "'" > $(TESTTMP)/assert_fail_b264.pas
 	./$(COMPILER) $(TESTTMP)/assert_fail_b264.pas $(TESTTMP)/assert_fail_b26426
-	! $(TESTTMP)/assert_fail_b26426 > $(TESTTMP)/assert_fail_b264.out 2>&1; test "$$?" = "0"
+	! $(TESTTMP)/assert_fail_b26426 > $(TESTTMP)/assert_fail_b264.out 2>&1; tools/expect_same.sh assert_fail_b26426-rc "$$?" "0"
 	tools/expect_same.sh assert_fail_b264.out "$$(cat $(TESTTMP)/assert_fail_b264.out)" "Assertion failed: boom"
 	# `const` / `class const` sections inside a class body; qualified TFoo.K access
 	./$(COMPILER) test/test_class_const_b263.pas $(TESTTMP)/test_class_const_b26326
@@ -5774,19 +5774,19 @@ test-core: $(COMPILER)
 	# flag must still print Inf and exit 0: that is the default this feature
 	# exists NOT to change.
 	./$(COMPILER) --fpc-float-errors test/test_fpc_float_errors.pas $(TESTTMP)/test_fpc_ferr26
-	$(TESTTMP)/test_fpc_ferr26; test "$$?" = "0"
-	$(TESTTMP)/test_fpc_ferr26 div; test "$$?" = "208"
-	$(TESTTMP)/test_fpc_ferr26 ovf; test "$$?" = "205"
-	$(TESTTMP)/test_fpc_ferr26 inv; test "$$?" = "207"
+	$(TESTTMP)/test_fpc_ferr26; tools/expect_same.sh test_fpc_ferr26-rc "$$?" "0"
+	$(TESTTMP)/test_fpc_ferr26 div; tools/expect_same.sh test_fpc_ferr26-rc.2 "$$?" "208"
+	$(TESTTMP)/test_fpc_ferr26 ovf; tools/expect_same.sh test_fpc_ferr26-rc.3 "$$?" "205"
+	$(TESTTMP)/test_fpc_ferr26 inv; tools/expect_same.sh test_fpc_ferr26-rc.4 "$$?" "207"
 	tools/expect_same.sh test_fpc_ferr26 "$$($(TESTTMP)/test_fpc_ferr26 div)" "Runtime error 208 (division by zero)"
 	./$(COMPILER) test/test_fpc_float_errors.pas $(TESTTMP)/test_fpc_ferr_off26
 	tools/expect_same.sh test_fpc_ferr_off26 "$$($(TESTTMP)/test_fpc_ferr_off26 div)" "no trap, r= Inf"
 	# rust frontend else-if self-host miscompile regression (bug-selfhost-multifn-ifelse-miscompile):
 	# 3-fn program, one if/else-if/else-return chain + call; classify(1)=20 -> exit 20. Also under --strict-ir (0 IR_UNSUPPORTED).
 	./$(COMPILER) test/test_rust_else_if.rs $(TESTTMP)/test_rust_else_if26
-	$(TESTTMP)/test_rust_else_if26; test "$$?" = "20"
+	$(TESTTMP)/test_rust_else_if26; tools/expect_same.sh test_rust_else_if26-rc "$$?" "20"
 	./$(COMPILER) --strict-ir test/test_rust_else_if.rs $(TESTTMP)/test_rust_else_if_si26
-	$(TESTTMP)/test_rust_else_if_si26; test "$$?" = "20"
+	$(TESTTMP)/test_rust_else_if_si26; tools/expect_same.sh test_rust_else_if_si26-rc "$$?" "20"
 	# Rust frontend ports-back pass: println!/print! (format splitter), [T; N]
 	# arrays (repeat/list literals, indexing, .len()), borrowed slices &a[lo..hi]
 	# (s[i] rw, s.len()), for-in ranges (../..=) -- existing IR only.
@@ -6482,7 +6482,7 @@ test-core: $(COMPILER)
 	elif [ -f /usr/share/fpcsrc/3.2.2/rtl/objpas/fgl.pp ]; then fglsrc=/usr/share/fpcsrc/3.2.2/rtl/objpas; fi; \
 	if [ -n "$$fglsrc" ]; then \
 	  ./$(COMPILER) --mimic-fpc -Fu$$fglsrc test/test_fgl_use.pas $(TESTTMP)/test_fgl_use26 >/dev/null && \
-	  test "$$($(TESTTMP)/test_fgl_use26 | tail -1)" = "map count=3 m[5]=50 m[2]=20" && echo "fgl(real FPC source): OK"; \
+	  tools/expect_same.sh test_fgl_use26 "$$($(TESTTMP)/test_fgl_use26 | tail -1)" "map count=3 m[5]=50 m[2]=20" && echo "fgl(real FPC source): OK"; \
 	else echo "fgl(real FPC source): SKIP (no FPC RTL source -- tools/install_lib_candidates.sh fpc-rtl)"; fi
 	# implicit (sloppy) locals: --auto-locals infers int/string/for-counter/for-in from first assignment; default OFF still errors
 	./$(COMPILER) --auto-locals test/test_auto_locals.pas $(TESTTMP)/test_auto_locals26
@@ -6583,7 +6583,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_cross_setlen_varparam.pas $(TESTTMP)/test_setlen_varparam26
 	tools/expect_same.sh test_setlen_varparam26 "$$($(TESTTMP)/test_setlen_varparam26)" "$$(printf 'grow len=5\n11\n22\n33\n0\n0\nshrink len=2\n11\n22\ns len=2\nhello\nworld')"
 	./$(COMPILER) test/test_managed_exception_cleanup.pas $(TESTTMP)/test_managed_exception_cleanup26
-	ulimit -v 800000; test "$$($(TESTTMP)/test_managed_exception_cleanup26)" = "1"
+	ulimit -v 800000; tools/expect_same.sh test_managed_exception_cleanup26 "$$($(TESTTMP)/test_managed_exception_cleanup26)" "1"
 	./$(COMPILER) test/test_default_keyword.pas $(TESTTMP)/test_default_keyword26
 	tools/expect_same.sh test_default_keyword26 "$$($(TESTTMP)/test_default_keyword26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_op_record_result.pas $(TESTTMP)/test_op_record_result26
@@ -6800,150 +6800,150 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/cparams_17_32_b150.c $(TESTTMP)/cparams_17_32_26
 	tools/expect_same.sh cparams_17_32_26 "$$($(TESTTMP)/cparams_17_32_26)" "$$(printf 's=153\nt=528')"
 	./$(COMPILER) test/cexpr_b.c $(TESTTMP)/cexpr_b26
-	$(TESTTMP)/cexpr_b26; test "$$?" = "89"
+	$(TESTTMP)/cexpr_b26; tools/expect_same.sh cexpr_b26-rc "$$?" "89"
 	./$(COMPILER) test/cstmt_c.c $(TESTTMP)/cstmt_c26
-	$(TESTTMP)/cstmt_c26; test "$$?" = "82"
+	$(TESTTMP)/cstmt_c26; tools/expect_same.sh cstmt_c26-rc "$$?" "82"
 	./$(COMPILER) test/cmulti_d.c $(TESTTMP)/cmulti_d26
-	$(TESTTMP)/cmulti_d26; test "$$?" = "104"
+	$(TESTTMP)/cmulti_d26; tools/expect_same.sh cmulti_d26-rc "$$?" "104"
 	./$(COMPILER) test/cptr_b2.c $(TESTTMP)/cptr_b226
-	$(TESTTMP)/cptr_b226; test "$$?" = "122"
+	$(TESTTMP)/cptr_b226; tools/expect_same.sh cptr_b226-rc "$$?" "122"
 	./$(COMPILER) test/cstruct_b3.c $(TESTTMP)/cstruct_b326
-	$(TESTTMP)/cstruct_b326; test "$$?" = "62"
+	$(TESTTMP)/cstruct_b326; tools/expect_same.sh cstruct_b326-rc "$$?" "62"
 	./$(COMPILER) test/ccast_b4.c $(TESTTMP)/ccast_b426
-	$(TESTTMP)/ccast_b426; test "$$?" = "102"
+	$(TESTTMP)/ccast_b426; tools/expect_same.sh ccast_b426-rc "$$?" "102"
 	# cast expression as a call argument (vararg + plain) — bug-c-cast-as-call-arg-parse-error
 	./$(COMPILER) test/ccast_call_arg.c $(TESTTMP)/ccast_call_arg26
 	tools/expect_same.sh ccast_call_arg26 "$$($(TESTTMP)/ccast_call_arg26)" "v=20 s=22"
 	./$(COMPILER) test/cloop_b5.c $(TESTTMP)/cloop_b526
-	$(TESTTMP)/cloop_b526; test "$$?" = "28"
+	$(TESTTMP)/cloop_b526; tools/expect_same.sh cloop_b526-rc "$$?" "28"
 	./$(COMPILER) test/cfnptr_b6.c $(TESTTMP)/cfnptr_b626
-	$(TESTTMP)/cfnptr_b626; test "$$?" = "91"
+	$(TESTTMP)/cfnptr_b626; tools/expect_same.sh cfnptr_b626-rc "$$?" "91"
 	./$(COMPILER) test/cfnptr_call_via_ptr_cast_b236.c $(TESTTMP)/cfnptr_call_via_ptr_cast_b23626
-	$(TESTTMP)/cfnptr_call_via_ptr_cast_b23626; test "$$?" = "42"
+	$(TESTTMP)/cfnptr_call_via_ptr_cast_b23626; tools/expect_same.sh cfnptr_call_via_ptr_cast_b23626-rc "$$?" "42"
 	./$(COMPILER) test/ctypedef_struct_b7.c $(TESTTMP)/ctypedef_struct_b726
-	$(TESTTMP)/ctypedef_struct_b726; test "$$?" = "51"
+	$(TESTTMP)/ctypedef_struct_b726; tools/expect_same.sh ctypedef_struct_b726-rc "$$?" "51"
 	./$(COMPILER) test/cstruct_fwd_interleave_b8.c $(TESTTMP)/cstruct_fwd_interleave_b826
-	$(TESTTMP)/cstruct_fwd_interleave_b826; test "$$?" = "42"
+	$(TESTTMP)/cstruct_fwd_interleave_b826; tools/expect_same.sh cstruct_fwd_interleave_b826-rc "$$?" "42"
 	./$(COMPILER) test/cternary_b9.c $(TESTTMP)/cternary_b926
-	$(TESTTMP)/cternary_b926; test "$$?" = "37"
+	$(TESTTMP)/cternary_b926; tools/expect_same.sh cternary_b926-rc "$$?" "37"
 	./$(COMPILER) test/cint_suffix_b10.c $(TESTTMP)/cint_suffix_b1026
-	$(TESTTMP)/cint_suffix_b1026; test "$$?" = "42"
+	$(TESTTMP)/cint_suffix_b1026; tools/expect_same.sh cint_suffix_b1026-rc "$$?" "42"
 	./$(COMPILER) test/cbitnot_b11.c $(TESTTMP)/cbitnot_b1126
-	$(TESTTMP)/cbitnot_b1126; test "$$?" = "6"
+	$(TESTTMP)/cbitnot_b1126; tools/expect_same.sh cbitnot_b1126-rc "$$?" "6"
 	./$(COMPILER) test/cparen_name_b12.c $(TESTTMP)/cparen_name_b1226
-	$(TESTTMP)/cparen_name_b1226; test "$$?" = "30"
+	$(TESTTMP)/cparen_name_b1226; tools/expect_same.sh cparen_name_b1226-rc "$$?" "30"
 	./$(COMPILER) test/cswitch_b13.c $(TESTTMP)/cswitch_b1326
-	$(TESTTMP)/cswitch_b1326; test "$$?" = "3"
+	$(TESTTMP)/cswitch_b1326; tools/expect_same.sh cswitch_b1326-rc "$$?" "3"
 	./$(COMPILER) test/cbuiltin_expect_b14.c $(TESTTMP)/cbuiltin_expect_b1426
-	$(TESTTMP)/cbuiltin_expect_b1426; test "$$?" = "5"
+	$(TESTTMP)/cbuiltin_expect_b1426; tools/expect_same.sh cbuiltin_expect_b1426-rc "$$?" "5"
 	./$(COMPILER) test/cfnptr_deref_call_b15.c $(TESTTMP)/cfnptr_deref_call_b1526
-	$(TESTTMP)/cfnptr_deref_call_b1526; test "$$?" = "42"
+	$(TESTTMP)/cfnptr_deref_call_b1526; tools/expect_same.sh cfnptr_deref_call_b1526-rc "$$?" "42"
 	./$(COMPILER) test/caddr_array_field_b16.c $(TESTTMP)/caddr_array_field_b1626
-	$(TESTTMP)/caddr_array_field_b1626; test "$$?" = "42"
+	$(TESTTMP)/caddr_array_field_b1626; tools/expect_same.sh caddr_array_field_b1626-rc "$$?" "42"
 	./$(COMPILER) test/cpp_if_chain_b17.c $(TESTTMP)/cpp_if_chain_b1726
-	$(TESTTMP)/cpp_if_chain_b1726; test "$$?" = "42"
+	$(TESTTMP)/cpp_if_chain_b1726; tools/expect_same.sh cpp_if_chain_b1726-rc "$$?" "42"
 	./$(COMPILER) test/cstr_concat_b18.c $(TESTTMP)/cstr_concat_b1826
-	$(TESTTMP)/cstr_concat_b1826; test "$$?" = "42"
+	$(TESTTMP)/cstr_concat_b1826; tools/expect_same.sh cstr_concat_b1826-rc "$$?" "42"
 	./$(COMPILER) test/cstr_to_ptr_b19.c $(TESTTMP)/cstr_to_ptr_b1926
-	$(TESTTMP)/cstr_to_ptr_b1926; test "$$?" = "42"
+	$(TESTTMP)/cstr_to_ptr_b1926; tools/expect_same.sh cstr_to_ptr_b1926-rc "$$?" "42"
 	./$(COMPILER) test/csizeof_constexpr_b20.c $(TESTTMP)/csizeof_constexpr_b2026
-	$(TESTTMP)/csizeof_constexpr_b2026; test "$$?" = "42"
+	$(TESTTMP)/csizeof_constexpr_b2026; tools/expect_same.sh csizeof_constexpr_b2026-rc "$$?" "42"
 	./$(COMPILER) test/caddr_func_b21.c $(TESTTMP)/caddr_func_b2126
-	$(TESTTMP)/caddr_func_b2126; test "$$?" = "42"
+	$(TESTTMP)/caddr_func_b2126; tools/expect_same.sh caddr_func_b2126-rc "$$?" "42"
 	./$(COMPILER) test/ccomma_expr_b22.c $(TESTTMP)/ccomma_expr_b2226
-	$(TESTTMP)/ccomma_expr_b2226; test "$$?" = "42"
+	$(TESTTMP)/ccomma_expr_b2226; tools/expect_same.sh ccomma_expr_b2226-rc "$$?" "42"
 	./$(COMPILER) test/cstruct_array_stride_b23.c $(TESTTMP)/cstruct_array_stride_b2326
-	$(TESTTMP)/cstruct_array_stride_b2326; test "$$?" = "42"
+	$(TESTTMP)/cstruct_array_stride_b2326; tools/expect_same.sh cstruct_array_stride_b2326-rc "$$?" "42"
 	./$(COMPILER) test/cfield_ptr_arith_b24.c $(TESTTMP)/cfield_ptr_arith_b2426
-	$(TESTTMP)/cfield_ptr_arith_b2426; test "$$?" = "42"
+	$(TESTTMP)/cfield_ptr_arith_b2426; tools/expect_same.sh cfield_ptr_arith_b2426-rc "$$?" "42"
 	./$(COMPILER) test/cmacro_nested_self_b25.c $(TESTTMP)/cmacro_nested_self_b2526
-	$(TESTTMP)/cmacro_nested_self_b2526; test "$$?" = "42"
+	$(TESTTMP)/cmacro_nested_self_b2526; tools/expect_same.sh cmacro_nested_self_b2526-rc "$$?" "42"
 	./$(COMPILER) test/cmacro_multiline_b26.c $(TESTTMP)/cmacro_multiline_b2626
-	$(TESTTMP)/cmacro_multiline_b2626; test "$$?" = "42"
+	$(TESTTMP)/cmacro_multiline_b2626; tools/expect_same.sh cmacro_multiline_b2626-rc "$$?" "42"
 	./$(COMPILER) test/cincdec_value_b27.c $(TESTTMP)/cincdec_value_b2726
-	$(TESTTMP)/cincdec_value_b2726; test "$$?" = "42"
+	$(TESTTMP)/cincdec_value_b2726; tools/expect_same.sh cincdec_value_b2726-rc "$$?" "42"
 	./$(COMPILER) test/cglobal_array_init_b28.c $(TESTTMP)/cglobal_array_init_b2826
-	$(TESTTMP)/cglobal_array_init_b2826; test "$$?" = "42"
+	$(TESTTMP)/cglobal_array_init_b2826; tools/expect_same.sh cglobal_array_init_b2826-rc "$$?" "42"
 	./$(COMPILER) test/cglobal_char_array_str_init_b128.c $(TESTTMP)/cglobal_char_array_str_init_b12826
-	$(TESTTMP)/cglobal_char_array_str_init_b12826; test "$$?" = "0"
+	$(TESTTMP)/cglobal_char_array_str_init_b12826; tools/expect_same.sh cglobal_char_array_str_init_b12826-rc "$$?" "0"
 	./$(COMPILER) test/cinline_struct_ptr_field_b129.c $(TESTTMP)/cinline_struct_ptr_field_b12926
-	$(TESTTMP)/cinline_struct_ptr_field_b12926; test "$$?" = "42"
+	$(TESTTMP)/cinline_struct_ptr_field_b12926; tools/expect_same.sh cinline_struct_ptr_field_b12926-rc "$$?" "42"
 	./$(COMPILER) test/cstruct_over256_fields.c $(TESTTMP)/cstruct_over256_fields26
-	$(TESTTMP)/cstruct_over256_fields26; test "$$?" = "42"
+	$(TESTTMP)/cstruct_over256_fields26; tools/expect_same.sh cstruct_over256_fields26-rc "$$?" "42"
 	./$(COMPILER) test/cpartial_multidim_index.c $(TESTTMP)/cpartial_multidim_index26
-	$(TESTTMP)/cpartial_multidim_index26; test "$$?" = "42"
+	$(TESTTMP)/cpartial_multidim_index26; tools/expect_same.sh cpartial_multidim_index26-rc "$$?" "42"
 	./$(COMPILER) test/cmultidim_row_decay.c $(TESTTMP)/cmultidim_row_decay26
-	$(TESTTMP)/cmultidim_row_decay26; test "$$?" = "42"
+	$(TESTTMP)/cmultidim_row_decay26; tools/expect_same.sh cmultidim_row_decay26-rc "$$?" "42"
 	./$(COMPILER) test/csizeof_array_type.c $(TESTTMP)/csizeof_array_type26
-	$(TESTTMP)/csizeof_array_type26; test "$$?" = "42"
+	$(TESTTMP)/csizeof_array_type26; tools/expect_same.sh csizeof_array_type26-rc "$$?" "42"
 	./$(COMPILER) test/cptr_to_multidim_array.c $(TESTTMP)/cptr_to_multidim_array26
-	$(TESTTMP)/cptr_to_multidim_array26; test "$$?" = "42"
+	$(TESTTMP)/cptr_to_multidim_array26; tools/expect_same.sh cptr_to_multidim_array26-rc "$$?" "42"
 	./$(COMPILER) test/cptr_to_array_param.c $(TESTTMP)/cptr_to_array_param26
-	$(TESTTMP)/cptr_to_array_param26; test "$$?" = "42"
+	$(TESTTMP)/cptr_to_array_param26; tools/expect_same.sh cptr_to_array_param26-rc "$$?" "42"
 	./$(COMPILER) test/cmultidim_row_address.c $(TESTTMP)/cmultidim_row_address26
-	$(TESTTMP)/cmultidim_row_address26; test "$$?" = "42"
+	$(TESTTMP)/cmultidim_row_address26; tools/expect_same.sh cmultidim_row_address26-rc "$$?" "42"
 	./$(COMPILER) test/clocal_fnptr_array.c $(TESTTMP)/clocal_fnptr_array26
-	$(TESTTMP)/clocal_fnptr_array26; test "$$?" = "42"
+	$(TESTTMP)/clocal_fnptr_array26; tools/expect_same.sh clocal_fnptr_array26-rc "$$?" "42"
 	./$(COMPILER) test/csigned_unsigned_compare64.c $(TESTTMP)/csigned_unsigned_compare6426
-	$(TESTTMP)/csigned_unsigned_compare6426; test "$$?" = "42"
+	$(TESTTMP)/csigned_unsigned_compare6426; tools/expect_same.sh csigned_unsigned_compare6426-rc "$$?" "42"
 	./$(COMPILER) test/cglobal_ptr_to_struct_array_elem.c $(TESTTMP)/cglobal_ptr_to_struct_array_elem26
-	$(TESTTMP)/cglobal_ptr_to_struct_array_elem26; test "$$?" = "42"
+	$(TESTTMP)/cglobal_ptr_to_struct_array_elem26; tools/expect_same.sh cglobal_ptr_to_struct_array_elem26-rc "$$?" "42"
 	./$(COMPILER) test/csubint_compare_promote.c $(TESTTMP)/csubint_compare_promote26
-	$(TESTTMP)/csubint_compare_promote26; test "$$?" = "42"
+	$(TESTTMP)/csubint_compare_promote26; tools/expect_same.sh csubint_compare_promote26-rc "$$?" "42"
 	./$(COMPILER) test/cmultidim_nested_index_subscript.c $(TESTTMP)/cmultidim_nested_index_subscript26
-	$(TESTTMP)/cmultidim_nested_index_subscript26; test "$$?" = "42"
+	$(TESTTMP)/cmultidim_nested_index_subscript26; tools/expect_same.sh cmultidim_nested_index_subscript26-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/src test/crtl_string_leaf_b130.c $(TESTTMP)/crtl_string_leaf_b13026
-	$(TESTTMP)/crtl_string_leaf_b13026; test "$$?" = "42"
+	$(TESTTMP)/crtl_string_leaf_b13026; tools/expect_same.sh crtl_string_leaf_b13026-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_lfs64_aliases_b234.c $(TESTTMP)/crtl_lfs64_aliases_b23426
-	$(TESTTMP)/crtl_lfs64_aliases_b23426; test "$$?" = "42"
+	$(TESTTMP)/crtl_lfs64_aliases_b23426; tools/expect_same.sh crtl_lfs64_aliases_b23426-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_stat_errno_enoent_b235.c $(TESTTMP)/crtl_stat_errno_enoent_b23526
-	$(TESTTMP)/crtl_stat_errno_enoent_b23526; test "$$?" = "42"
+	$(TESTTMP)/crtl_stat_errno_enoent_b23526; tools/expect_same.sh crtl_stat_errno_enoent_b23526-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_posix_io_leaf_b238.c $(TESTTMP)/crtl_posix_io_leaf_b23826
-	$(TESTTMP)/crtl_posix_io_leaf_b23826; test "$$?" = "42"
+	$(TESTTMP)/crtl_posix_io_leaf_b23826; tools/expect_same.sh crtl_posix_io_leaf_b23826-rc "$$?" "42"
 	./$(COMPILER) -DGUARD=42 -DON -DOFFME -UOFFME test/cdefine_flag_b239.c $(TESTTMP)/cdefine_flag_b23926
-	$(TESTTMP)/cdefine_flag_b23926; test "$$?" = "42"
+	$(TESTTMP)/cdefine_flag_b23926; tools/expect_same.sh cdefine_flag_b23926-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sqrt_correctly_rounded_b240.c $(TESTTMP)/cmath_sqrt_b24026
-	$(TESTTMP)/cmath_sqrt_b24026; test "$$?" = "42"
+	$(TESTTMP)/cmath_sqrt_b24026; tools/expect_same.sh cmath_sqrt_b24026-rc "$$?" "42"
 	./$(COMPILER) test/cfnptr_deref_call_b241.c $(TESTTMP)/cfnptr_deref_call_b24126
-	$(TESTTMP)/cfnptr_deref_call_b24126; test "$$?" = "42"
+	$(TESTTMP)/cfnptr_deref_call_b24126; tools/expect_same.sh cfnptr_deref_call_b24126-rc "$$?" "42"
 	./$(COMPILER) test/c_lua_tvalue_int_b131.c $(TESTTMP)/c_lua_tvalue_int_b13126
-	$(TESTTMP)/c_lua_tvalue_int_b13126; test "$$?" = "42"
+	$(TESTTMP)/c_lua_tvalue_int_b13126; tools/expect_same.sh c_lua_tvalue_int_b13126-rc "$$?" "42"
 	./$(COMPILER) test/c_lua_opcode_decode_b132.c $(TESTTMP)/c_lua_opcode_decode_b13226
-	$(TESTTMP)/c_lua_opcode_decode_b13226; test "$$?" = "42"
+	$(TESTTMP)/c_lua_opcode_decode_b13226; tools/expect_same.sh c_lua_opcode_decode_b13226-rc "$$?" "42"
 	./$(COMPILER) test/cglobal_array_elem_addr_b133.c $(TESTTMP)/cglobal_array_elem_addr_b13326
-	$(TESTTMP)/cglobal_array_elem_addr_b13326; test "$$?" = "42"
+	$(TESTTMP)/cglobal_array_elem_addr_b13326; tools/expect_same.sh cglobal_array_elem_addr_b13326-rc "$$?" "42"
 	./$(COMPILER) test/cstruct_layout_stress_b134.c $(TESTTMP)/cstruct_layout_stress_b13426
-	$(TESTTMP)/cstruct_layout_stress_b13426; test "$$?" = "42"
+	$(TESTTMP)/cstruct_layout_stress_b13426; tools/expect_same.sh cstruct_layout_stress_b13426-rc "$$?" "42"
 	./$(COMPILER) test/csizeof_paren_index_b29.c $(TESTTMP)/csizeof_paren_index_b2926
-	$(TESTTMP)/csizeof_paren_index_b2926; test "$$?" = "42"
+	$(TESTTMP)/csizeof_paren_index_b2926; tools/expect_same.sh csizeof_paren_index_b2926-rc "$$?" "42"
 	./$(COMPILER) test/cmulti_decl_ptr_b30.c $(TESTTMP)/cmulti_decl_ptr_b3026
-	$(TESTTMP)/cmulti_decl_ptr_b3026; test "$$?" = "42"
+	$(TESTTMP)/cmulti_decl_ptr_b3026; tools/expect_same.sh cmulti_decl_ptr_b3026-rc "$$?" "42"
 	./$(COMPILER) test/ccall_field_b31.c $(TESTTMP)/ccall_field_b3126
-	$(TESTTMP)/ccall_field_b3126; test "$$?" = "42"
+	$(TESTTMP)/ccall_field_b3126; tools/expect_same.sh ccall_field_b3126-rc "$$?" "42"
 	./$(COMPILER) test/cmacro_paste_b32.c $(TESTTMP)/cmacro_paste_b3226
-	$(TESTTMP)/cmacro_paste_b3226; test "$$?" = "42"
+	$(TESTTMP)/cmacro_paste_b3226; tools/expect_same.sh cmacro_paste_b3226-rc "$$?" "42"
 	./$(COMPILER) test/cgoto_label_b33.c $(TESTTMP)/cgoto_label_b3326
-	$(TESTTMP)/cgoto_label_b3326; test "$$?" = "42"
+	$(TESTTMP)/cgoto_label_b3326; tools/expect_same.sh cgoto_label_b3326-rc "$$?" "42"
 	./$(COMPILER) test/cfloat_literal_b34.c $(TESTTMP)/cfloat_literal_b3426
-	$(TESTTMP)/cfloat_literal_b3426; test "$$?" = "42"
+	$(TESTTMP)/cfloat_literal_b3426; tools/expect_same.sh cfloat_literal_b3426-rc "$$?" "42"
 	./$(COMPILER) test/cconst_divmod_b35.c $(TESTTMP)/cconst_divmod_b3526
-	$(TESTTMP)/cconst_divmod_b3526; test "$$?" = "42"
+	$(TESTTMP)/cconst_divmod_b3526; tools/expect_same.sh cconst_divmod_b3526-rc "$$?" "42"
 	./$(COMPILER) test/ccomma_cond_b36.c $(TESTTMP)/ccomma_cond_b3626
-	$(TESTTMP)/ccomma_cond_b3626; test "$$?" = "42"
+	$(TESTTMP)/ccomma_cond_b3626; tools/expect_same.sh ccomma_cond_b3626-rc "$$?" "42"
 	./$(COMPILER) test/carray_param_b37.c $(TESTTMP)/carray_param_b3726
-	$(TESTTMP)/carray_param_b3726; test "$$?" = "42"
+	$(TESTTMP)/carray_param_b3726; tools/expect_same.sh carray_param_b3726-rc "$$?" "42"
 	./$(COMPILER) test/cmacro_obj_alias_b38.c $(TESTTMP)/cmacro_obj_alias_b3826
-	$(TESTTMP)/cmacro_obj_alias_b3826; test "$$?" = "42"
+	$(TESTTMP)/cmacro_obj_alias_b3826; tools/expect_same.sh cmacro_obj_alias_b3826-rc "$$?" "42"
 	./$(COMPILER) test/cconst_cast_b39.c $(TESTTMP)/cconst_cast_b3926
-	$(TESTTMP)/cconst_cast_b3926; test "$$?" = "42"
+	$(TESTTMP)/cconst_cast_b3926; tools/expect_same.sh cconst_cast_b3926-rc "$$?" "42"
 	./$(COMPILER) test/cmacro_stringize_b40.c $(TESTTMP)/cmacro_stringize_b4026
-	$(TESTTMP)/cmacro_stringize_b4026; test "$$?" = "42"
+	$(TESTTMP)/cmacro_stringize_b4026; tools/expect_same.sh cmacro_stringize_b4026-rc "$$?" "42"
 	./$(COMPILER) test/cagg_init_local_b41.c $(TESTTMP)/cagg_init_local_b4126
-	$(TESTTMP)/cagg_init_local_b4126; test "$$?" = "42"
+	$(TESTTMP)/cagg_init_local_b4126; tools/expect_same.sh cagg_init_local_b4126-rc "$$?" "42"
 	./$(COMPILER) test/cptr_diff_b42.c $(TESTTMP)/cptr_diff_b4226
-	$(TESTTMP)/cptr_diff_b4226; test "$$?" = "42"
+	$(TESTTMP)/cptr_diff_b4226; tools/expect_same.sh cptr_diff_b4226-rc "$$?" "42"
 	./$(COMPILER) test/cassign_value_b43.c $(TESTTMP)/cassign_value_b4326
-	$(TESTTMP)/cassign_value_b4326; test "$$?" = "42"
+	$(TESTTMP)/cassign_value_b4326; tools/expect_same.sh cassign_value_b4326-rc "$$?" "42"
 	# The AGGREGATE half of the same rule: a STRUCT assignment used as a value
 	# must run its RHS exactly once. It ran twice (1 + one per chained assign) --
 	# values right, side effects doubled, which is why only a csmith checksum saw it.
@@ -6977,167 +6977,167 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/cassign_compound_lvalue_once.c $(TESTTMP)/cassign_compound26
 	tools/expect_same.sh cassign_compound26 "$$($(TESTTMP)/cassign_compound26)" "ok"
 	./$(COMPILER) test/cnested_union_b44.c $(TESTTMP)/cnested_union_b4426
-	$(TESTTMP)/cnested_union_b4426; test "$$?" = "42"
+	$(TESTTMP)/cnested_union_b4426; tools/expect_same.sh cnested_union_b4426-rc "$$?" "42"
 	./$(COMPILER) test/canon_agg_global_b45.c $(TESTTMP)/canon_agg_global_b4526
-	$(TESTTMP)/canon_agg_global_b4526; test "$$?" = "42"
+	$(TESTTMP)/canon_agg_global_b4526; tools/expect_same.sh canon_agg_global_b4526-rc "$$?" "42"
 	./$(COMPILER) test/cunion_global_init_b46.c $(TESTTMP)/cunion_global_init_b4626
-	$(TESTTMP)/cunion_global_init_b4626; test "$$?" = "42"
+	$(TESTTMP)/cunion_global_init_b4626; tools/expect_same.sh cunion_global_init_b4626-rc "$$?" "42"
 	./$(COMPILER) test/cglobal_scalar_init_b47.c $(TESTTMP)/cglobal_scalar_init_b4726
-	$(TESTTMP)/cglobal_scalar_init_b4726; test "$$?" = "42"
+	$(TESTTMP)/cglobal_scalar_init_b4726; tools/expect_same.sh cglobal_scalar_init_b4726-rc "$$?" "42"
 	./$(COMPILER) test/cstruct_global_init_b48.c $(TESTTMP)/cstruct_global_init_b4826
-	$(TESTTMP)/cstruct_global_init_b4826; test "$$?" = "42"
+	$(TESTTMP)/cstruct_global_init_b4826; tools/expect_same.sh cstruct_global_init_b4826-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include test/cvarargs_int_b49.c $(TESTTMP)/cvarargs_int_b4926
-	$(TESTTMP)/cvarargs_int_b4926; test "$$?" = "42"
+	$(TESTTMP)/cvarargs_int_b4926; tools/expect_same.sh cvarargs_int_b4926-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include test/crecord_byval_param_b50.c $(TESTTMP)/crecord_byval_param_b5026
-	$(TESTTMP)/crecord_byval_param_b5026; test "$$?" = "42"
+	$(TESTTMP)/crecord_byval_param_b5026; tools/expect_same.sh crecord_byval_param_b5026-rc "$$?" "42"
 	./$(COMPILER) test/cstatic_ptr_array_b51.c $(TESTTMP)/cstatic_ptr_array_b5126
-	$(TESTTMP)/cstatic_ptr_array_b5126; test "$$?" = "42"
+	$(TESTTMP)/cstatic_ptr_array_b5126; tools/expect_same.sh cstatic_ptr_array_b5126-rc "$$?" "42"
 	./$(COMPILER) test/cfield_ptr_array_b52.c $(TESTTMP)/cfield_ptr_array_b5226
-	$(TESTTMP)/cfield_ptr_array_b5226; test "$$?" = "42"
+	$(TESTTMP)/cfield_ptr_array_b5226; tools/expect_same.sh cfield_ptr_array_b5226-rc "$$?" "42"
 	./$(COMPILER) test/cunion_ptr_chain_b53.c $(TESTTMP)/cunion_ptr_chain_b5326
-	$(TESTTMP)/cunion_ptr_chain_b5326; test "$$?" = "42"
+	$(TESTTMP)/cunion_ptr_chain_b5326; tools/expect_same.sh cunion_ptr_chain_b5326-rc "$$?" "42"
 	./$(COMPILER) test/cptrptr_clear_chain_b54.c $(TESTTMP)/cptrptr_clear_chain_b5426
-	$(TESTTMP)/cptrptr_clear_chain_b5426; test "$$?" = "42"
+	$(TESTTMP)/cptrptr_clear_chain_b5426; tools/expect_same.sh cptrptr_clear_chain_b5426-rc "$$?" "42"
 	./$(COMPILER) test/coffsetof_array_field_b55.c $(TESTTMP)/coffsetof_array_field_b5526
-	$(TESTTMP)/coffsetof_array_field_b5526; test "$$?" = "42"
+	$(TESTTMP)/coffsetof_array_field_b5526; tools/expect_same.sh coffsetof_array_field_b5526-rc "$$?" "42"
 	./$(COMPILER) test/cfnptr_four_args_b56.c $(TESTTMP)/cfnptr_four_args_b5626
-	$(TESTTMP)/cfnptr_four_args_b5626; test "$$?" = "42"
+	$(TESTTMP)/cfnptr_four_args_b5626; tools/expect_same.sh cfnptr_four_args_b5626-rc "$$?" "42"
 	./$(COMPILER) test/cunion_field_offsets_b57.c $(TESTTMP)/cunion_field_offsets_b5726
-	$(TESTTMP)/cunion_field_offsets_b5726; test "$$?" = "42"
+	$(TESTTMP)/cunion_field_offsets_b5726; tools/expect_same.sh cunion_field_offsets_b5726-rc "$$?" "42"
 	./$(COMPILER) test/cfield_ptr_null_store_b58.c $(TESTTMP)/cfield_ptr_null_store_b5826
-	$(TESTTMP)/cfield_ptr_null_store_b5826; test "$$?" = "42"
+	$(TESTTMP)/cfield_ptr_null_store_b5826; tools/expect_same.sh cfield_ptr_null_store_b5826-rc "$$?" "42"
 	./$(COMPILER) test/cfixed_seven_args_b59.c $(TESTTMP)/cfixed_seven_args_b5926
-	$(TESTTMP)/cfixed_seven_args_b5926; test "$$?" = "42"
+	$(TESTTMP)/cfixed_seven_args_b5926; tools/expect_same.sh cfixed_seven_args_b5926-rc "$$?" "42"
 	./$(COMPILER) test/cfn_ret_ptrptr_b60.c $(TESTTMP)/cfn_ret_ptrptr_b6026
-	$(TESTTMP)/cfn_ret_ptrptr_b6026; test "$$?" = "42"
+	$(TESTTMP)/cfn_ret_ptrptr_b6026; tools/expect_same.sh cfn_ret_ptrptr_b6026-rc "$$?" "42"
 	./$(COMPILER) test/cptr_array_decay_stride_b61.c $(TESTTMP)/cptr_array_decay_stride_b6126
-	$(TESTTMP)/cptr_array_decay_stride_b6126; test "$$?" = "42"
+	$(TESTTMP)/cptr_array_decay_stride_b6126; tools/expect_same.sh cptr_array_decay_stride_b6126-rc "$$?" "42"
 	./$(COMPILER) test/cfloat_array_decay_addr_b378.c $(TESTTMP)/cfloat_array_decay_addr_b37826
-	$(TESTTMP)/cfloat_array_decay_addr_b37826; test "$$?" = "42"
+	$(TESTTMP)/cfloat_array_decay_addr_b37826; tools/expect_same.sh cfloat_array_decay_addr_b37826-rc "$$?" "42"
 	./$(COMPILER) test/cfinalizers_on_main_return_b379.c $(TESTTMP)/cfinalizers_main_b37926
-	$(TESTTMP)/cfinalizers_main_b37926; test "$$?" = "42"
+	$(TESTTMP)/cfinalizers_main_b37926; tools/expect_same.sh cfinalizers_main_b37926-rc "$$?" "42"
 	./$(COMPILER) test/c_environ_prefilled_b380.c $(TESTTMP)/c_environ_prefilled_b38026
-	$(TESTTMP)/c_environ_prefilled_b38026; test "$$?" = "42"
+	$(TESTTMP)/c_environ_prefilled_b38026; tools/expect_same.sh c_environ_prefilled_b38026-rc "$$?" "42"
 	./$(COMPILER) test/cfield_2d_row_decay_b62.c $(TESTTMP)/cfield_2d_row_decay_b6226
-	$(TESTTMP)/cfield_2d_row_decay_b6226; test "$$?" = "42"
+	$(TESTTMP)/cfield_2d_row_decay_b6226; tools/expect_same.sh cfield_2d_row_decay_b6226-rc "$$?" "42"
 	./$(COMPILER) test/ctypedef_shadow_local_b151.c $(TESTTMP)/ctypedef_shadow_local_b15126
-	$(TESTTMP)/ctypedef_shadow_local_b15126; test "$$?" = "42"
+	$(TESTTMP)/ctypedef_shadow_local_b15126; tools/expect_same.sh ctypedef_shadow_local_b15126-rc "$$?" "42"
 	./$(COMPILER) test/cinit_struct_designator_b152.c $(TESTTMP)/cinit_struct_designator_b15226
-	$(TESTTMP)/cinit_struct_designator_b15226; test "$$?" = "42"
+	$(TESTTMP)/cinit_struct_designator_b15226; tools/expect_same.sh cinit_struct_designator_b15226-rc "$$?" "42"
 	./$(COMPILER) test/cinit_array_designator_b153.c $(TESTTMP)/cinit_array_designator_b15326
-	$(TESTTMP)/cinit_array_designator_b15326; test "$$?" = "42"
+	$(TESTTMP)/cinit_array_designator_b15326; tools/expect_same.sh cinit_array_designator_b15326-rc "$$?" "42"
 	./$(COMPILER) test/csizeof_no_parens_b154.c $(TESTTMP)/csizeof_no_parens_b15426
-	$(TESTTMP)/csizeof_no_parens_b15426; test "$$?" = "42"
+	$(TESTTMP)/csizeof_no_parens_b15426; tools/expect_same.sh csizeof_no_parens_b15426-rc "$$?" "42"
 	./$(COMPILER) test/cblock_scope_func_decl_b155.c $(TESTTMP)/cblock_scope_func_decl_b15526
-	$(TESTTMP)/cblock_scope_func_decl_b15526; test "$$?" = "42"
+	$(TESTTMP)/cblock_scope_func_decl_b15526; tools/expect_same.sh cblock_scope_func_decl_b15526-rc "$$?" "42"
 	./$(COMPILER) test/cpragma_push_pop_macro_b156.c $(TESTTMP)/cpragma_push_pop_macro_b15626
-	$(TESTTMP)/cpragma_push_pop_macro_b15626; test "$$?" = "42"
+	$(TESTTMP)/cpragma_push_pop_macro_b15626; tools/expect_same.sh cpragma_push_pop_macro_b15626-rc "$$?" "42"
 	./$(COMPILER) test/cvariadic_macro_b157.c $(TESTTMP)/cvariadic_macro_b15726
-	$(TESTTMP)/cvariadic_macro_b15726; test "$$?" = "42"
+	$(TESTTMP)/cvariadic_macro_b15726; tools/expect_same.sh cvariadic_macro_b15726-rc "$$?" "42"
 	./$(COMPILER) test/cenum_typed_decl_b158.c $(TESTTMP)/cenum_typed_decl_b15826
-	$(TESTTMP)/cenum_typed_decl_b15826; test "$$?" = "42"
+	$(TESTTMP)/cenum_typed_decl_b15826; tools/expect_same.sh cenum_typed_decl_b15826-rc "$$?" "42"
 	./$(COMPILER) test/cstatic_init_cast_intdouble_b159.c $(TESTTMP)/cstatic_init_cast_intdouble_b15926
-	$(TESTTMP)/cstatic_init_cast_intdouble_b15926; test "$$?" = "42"
+	$(TESTTMP)/cstatic_init_cast_intdouble_b15926; tools/expect_same.sh cstatic_init_cast_intdouble_b15926-rc "$$?" "42"
 	./$(COMPILER) test/csizeof_expr_result_b160.c $(TESTTMP)/csizeof_expr_result_b16026
-	$(TESTTMP)/csizeof_expr_result_b16026; test "$$?" = "42"
+	$(TESTTMP)/csizeof_expr_result_b16026; tools/expect_same.sh csizeof_expr_result_b16026-rc "$$?" "42"
 	./$(COMPILER) test/cglobal_fnptr_addressof_b161.c $(TESTTMP)/cglobal_fnptr_addressof_b16126
-	$(TESTTMP)/cglobal_fnptr_addressof_b16126; test "$$?" = "42"
+	$(TESTTMP)/cglobal_fnptr_addressof_b16126; tools/expect_same.sh cglobal_fnptr_addressof_b16126-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ccrtl_hand_declared_proto_b162.c $(TESTTMP)/ccrtl_hand_declared_proto_b16226
-	$(TESTTMP)/ccrtl_hand_declared_proto_b16226; test "$$?" = "42"
+	$(TESTTMP)/ccrtl_hand_declared_proto_b16226; tools/expect_same.sh ccrtl_hand_declared_proto_b16226-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cpredefined_macros_b166.c $(TESTTMP)/cpredefined_macros_b16626
-	$(TESTTMP)/cpredefined_macros_b16626; test "$$?" = "42"
+	$(TESTTMP)/cpredefined_macros_b16626; tools/expect_same.sh cpredefined_macros_b16626-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cstr_literal_binop_b163.c $(TESTTMP)/cstr_literal_binop_b16326
-	$(TESTTMP)/cstr_literal_binop_b16326; test "$$?" = "42"
+	$(TESTTMP)/cstr_literal_binop_b16326; tools/expect_same.sh cstr_literal_binop_b16326-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cconst_logical_ternary_b164.c $(TESTTMP)/cconst_logical_ternary_b16426
-	$(TESTTMP)/cconst_logical_ternary_b16426; test "$$?" = "42"
+	$(TESTTMP)/cconst_logical_ternary_b16426; tools/expect_same.sh cconst_logical_ternary_b16426-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/canon_struct_union_members_b165.c $(TESTTMP)/canon_struct_union_members_b16526
-	$(TESTTMP)/canon_struct_union_members_b16526; test "$$?" = "42"
+	$(TESTTMP)/canon_struct_union_members_b16526; tools/expect_same.sh canon_struct_union_members_b16526-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfnptr_typedef_global_b166.c $(TESTTMP)/cfnptr_typedef_global_b16626
-	$(TESTTMP)/cfnptr_typedef_global_b16626; test "$$?" = "42"
+	$(TESTTMP)/cfnptr_typedef_global_b16626; tools/expect_same.sh cfnptr_typedef_global_b16626-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfnptr_call_result_b167.c $(TESTTMP)/cfnptr_call_result_b16726
-	$(TESTTMP)/cfnptr_call_result_b16726; test "$$?" = "42"
+	$(TESTTMP)/cfnptr_call_result_b16726; tools/expect_same.sh cfnptr_call_result_b16726-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cstruct_fnptr_field_addressof_b168.c $(TESTTMP)/cstruct_fnptr_field_addressof_b16826
-	$(TESTTMP)/cstruct_fnptr_field_addressof_b16826; test "$$?" = "42"
+	$(TESTTMP)/cstruct_fnptr_field_addressof_b16826; tools/expect_same.sh cstruct_fnptr_field_addressof_b16826-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfnptr_string_arg_b169.c $(TESTTMP)/cfnptr_string_arg_b16926
-	$(TESTTMP)/cfnptr_string_arg_b16926; test "$$?" = "42"
+	$(TESTTMP)/cfnptr_string_arg_b16926; tools/expect_same.sh cfnptr_string_arg_b16926-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfnptr_variadic_call_b170.c $(TESTTMP)/cfnptr_variadic_call_b17026
-	$(TESTTMP)/cfnptr_variadic_call_b17026; test "$$?" = "42"
+	$(TESTTMP)/cfnptr_variadic_call_b17026; tools/expect_same.sh cfnptr_variadic_call_b17026-rc "$$?" "42"
 	./$(COMPILER) test/cparen_fnname_call_b171.c $(TESTTMP)/cparen_fnname_call_b17126
-	$(TESTTMP)/cparen_fnname_call_b17126; test "$$?" = "42"
+	$(TESTTMP)/cparen_fnname_call_b17126; tools/expect_same.sh cparen_fnname_call_b17126-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src -Itest/creinc_b172 test/creinc_proto_reinclude_b172.c $(TESTTMP)/creinc_proto_reinclude_b17226
-	$(TESTTMP)/creinc_proto_reinclude_b17226; test "$$?" = "42"
+	$(TESTTMP)/creinc_proto_reinclude_b17226; tools/expect_same.sh creinc_proto_reinclude_b17226-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/creturn_strlit_b173.c $(TESTTMP)/creturn_strlit_b17326
-	$(TESTTMP)/creturn_strlit_b17326; test "$$?" = "42"
+	$(TESTTMP)/creturn_strlit_b17326; tools/expect_same.sh creturn_strlit_b17326-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cstrlit_index_b174.c $(TESTTMP)/cstrlit_index_b17426
-	$(TESTTMP)/cstrlit_index_b17426; test "$$?" = "42"
+	$(TESTTMP)/cstrlit_index_b17426; tools/expect_same.sh cstrlit_index_b17426-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cptrdiff_addr_elem_b175.c $(TESTTMP)/cptrdiff_addr_elem_b17526
-	$(TESTTMP)/cptrdiff_addr_elem_b17526; test "$$?" = "42"
+	$(TESTTMP)/cptrdiff_addr_elem_b17526; tools/expect_same.sh cptrdiff_addr_elem_b17526-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cptrdiff_vararg_b.c $(TESTTMP)/cptrdiff_vararg_b26
-	$(TESTTMP)/cptrdiff_vararg_b26; test "$$?" = "42"
+	$(TESTTMP)/cptrdiff_vararg_b26; tools/expect_same.sh cptrdiff_vararg_b26-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cbool_normalise_b.c $(TESTTMP)/cbool_normalise_b26
-	$(TESTTMP)/cbool_normalise_b26; test "$$?" = "42"
+	$(TESTTMP)/cbool_normalise_b26; tools/expect_same.sh cbool_normalise_b26-rc "$$?" "42"
 	./$(COMPILER) --threadsafe -Ilib/crtl/include -Ilib/crtl/src test/cpthread_needs_threadsafe_b.c $(TESTTMP)/cpthread_needs_threadsafe_b26
-	$(TESTTMP)/cpthread_needs_threadsafe_b26; test "$$?" = "42"
+	$(TESTTMP)/cpthread_needs_threadsafe_b26; tools/expect_same.sh cpthread_needs_threadsafe_b26-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfloat_conv_b176.c $(TESTTMP)/cfloat_conv_b17626
-	$(TESTTMP)/cfloat_conv_b17626; test "$$?" = "42"
+	$(TESTTMP)/cfloat_conv_b17626; tools/expect_same.sh cfloat_conv_b17626-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/csizeof_deref_field_b177.c $(TESTTMP)/csizeof_deref_field_b17726
-	$(TESTTMP)/csizeof_deref_field_b17726; test "$$?" = "42"
+	$(TESTTMP)/csizeof_deref_field_b17726; tools/expect_same.sh csizeof_deref_field_b17726-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cbuiltin_va_copy_b178.c $(TESTTMP)/cbuiltin_va_copy_b17826
-	$(TESTTMP)/cbuiltin_va_copy_b17826; test "$$?" = "42"
+	$(TESTTMP)/cbuiltin_va_copy_b17826; tools/expect_same.sh cbuiltin_va_copy_b17826-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/csizeof_unparen_field_b179.c $(TESTTMP)/csizeof_unparen_field_b17926
-	$(TESTTMP)/csizeof_unparen_field_b17926; test "$$?" = "42"
+	$(TESTTMP)/csizeof_unparen_field_b17926; tools/expect_same.sh csizeof_unparen_field_b17926-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cglobal_multi_declarator_b180.c $(TESTTMP)/cglobal_multi_declarator_b18026
-	$(TESTTMP)/cglobal_multi_declarator_b18026; test "$$?" = "42"
+	$(TESTTMP)/cglobal_multi_declarator_b18026; tools/expect_same.sh cglobal_multi_declarator_b18026-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cstrtok_b181.c $(TESTTMP)/cstrtok_b18126
-	$(TESTTMP)/cstrtok_b18126; test "$$?" = "42"
+	$(TESTTMP)/cstrtok_b18126; tools/expect_same.sh cstrtok_b18126-rc "$$?" "42"
 	./$(COMPILER) test/cpaste_rescan_call_b182.c $(TESTTMP)/cpaste_rescan_call_b18226
-	$(TESTTMP)/cpaste_rescan_call_b18226; test "$$?" = "42"
+	$(TESTTMP)/cpaste_rescan_call_b18226; tools/expect_same.sh cpaste_rescan_call_b18226-rc "$$?" "42"
 	./$(COMPILER) test/cpaste_empty_arg_b183.c $(TESTTMP)/cpaste_empty_arg_b18326
-	$(TESTTMP)/cpaste_empty_arg_b18326; test "$$?" = "42"
+	$(TESTTMP)/cpaste_empty_arg_b18326; tools/expect_same.sh cpaste_empty_arg_b18326-rc "$$?" "42"
 	./$(COMPILER) test/ctcc_parse_batch_b184.c $(TESTTMP)/ctcc_parse_batch_b18426
-	$(TESTTMP)/ctcc_parse_batch_b18426; test "$$?" = "42"
+	$(TESTTMP)/ctcc_parse_batch_b18426; tools/expect_same.sh ctcc_parse_batch_b18426-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ctcc_batch2_b185.c $(TESTTMP)/ctcc_batch2_b18526
-	$(TESTTMP)/ctcc_batch2_b18526 > /dev/null; test "$$?" = "42"
+	$(TESTTMP)/ctcc_batch2_b18526 > /dev/null; tools/expect_same.sh ctcc_batch2_b18526-rc "$$?" "42"
 	# QuickJS bring-up prerequisites (feature-c-corpus-quickjs): gcc bit-scan
 	# builtins (cfront rename -> crtl helpers), C99 math additions, and
 	# pthread_once + condvars (palsync bridge; --threadsafe pulls palpthread).
 	./$(COMPILER) --threadsafe -Ilib/crtl/include -Ilib/crtl/src test/cquickjs_prereq.c $(TESTTMP)/cquickjs_prereq26
-	$(TESTTMP)/cquickjs_prereq26; test "$$?" = "42"
+	$(TESTTMP)/cquickjs_prereq26; tools/expect_same.sh cquickjs_prereq26-rc "$$?" "42"
 	./$(COMPILER) test/cblock_scope_b186.c $(TESTTMP)/cblock_scope_b18626
-	$(TESTTMP)/cblock_scope_b18626; test "$$?" = "42"
+	$(TESTTMP)/cblock_scope_b18626; tools/expect_same.sh cblock_scope_b18626-rc "$$?" "42"
 	./$(COMPILER) test/cptr_deref_stride_b187.c $(TESTTMP)/cptr_deref_stride_b18726
-	$(TESTTMP)/cptr_deref_stride_b18726; test "$$?" = "42"
+	$(TESTTMP)/cptr_deref_stride_b18726; tools/expect_same.sh cptr_deref_stride_b18726-rc "$$?" "42"
 	./$(COMPILER) test/csizeof_string_noparen_b188.c $(TESTTMP)/csizeof_string_noparen_b18826
-	$(TESTTMP)/csizeof_string_noparen_b18826; test "$$?" = "42"
+	$(TESTTMP)/csizeof_string_noparen_b18826; tools/expect_same.sh csizeof_string_noparen_b18826-rc "$$?" "42"
 	# b189-b192 (feature-c-corpus-tcc self-compile arc): {0} zero-fill,
 	# &floatField as pointer arg, `int nb, *lv;` declarator, narrow-cast extend
 	./$(COMPILER) test/czeroinit_partial_b189.c $(TESTTMP)/czeroinit_partial_b18926
-	$(TESTTMP)/czeroinit_partial_b18926; test "$$?" = "42"
+	$(TESTTMP)/czeroinit_partial_b18926; tools/expect_same.sh czeroinit_partial_b18926-rc "$$?" "42"
 	./$(COMPILER) test/caddr_float_field_b190.c $(TESTTMP)/caddr_float_field_b19026
-	$(TESTTMP)/caddr_float_field_b19026; test "$$?" = "42"
+	$(TESTTMP)/caddr_float_field_b19026; tools/expect_same.sh caddr_float_field_b19026-rc "$$?" "42"
 	./$(COMPILER) test/ccomma_star_declarator_b191.c $(TESTTMP)/ccomma_star_declarator_b19126
-	$(TESTTMP)/ccomma_star_declarator_b19126; test "$$?" = "42"
+	$(TESTTMP)/ccomma_star_declarator_b19126; tools/expect_same.sh ccomma_star_declarator_b19126-rc "$$?" "42"
 	./$(COMPILER) test/cnarrow_cast_extend_b192.c $(TESTTMP)/cnarrow_cast_extend_b19226
-	$(TESTTMP)/cnarrow_cast_extend_b19226; test "$$?" = "42"
+	$(TESTTMP)/cnarrow_cast_extend_b19226; tools/expect_same.sh cnarrow_cast_extend_b19226-rc "$$?" "42"
 	# b193-b194 (bug-c-init-brace-elision-nested): recursive global aggregate
 	# init walker (elision/nested/anon-union/designators), sizeof(arr->field)
 	./$(COMPILER) test/cinit_elision_nested_b193.c $(TESTTMP)/cinit_elision_nested_b19326
-	$(TESTTMP)/cinit_elision_nested_b19326; test "$$?" = "42"
+	$(TESTTMP)/cinit_elision_nested_b19326; tools/expect_same.sh cinit_elision_nested_b19326-rc "$$?" "42"
 	./$(COMPILER) test/csizeof_arrow_array_field_b194.c $(TESTTMP)/csizeof_arrow_array_field_b19426
-	$(TESTTMP)/csizeof_arrow_array_field_b19426; test "$$?" = "42"
+	$(TESTTMP)/csizeof_arrow_array_field_b19426; tools/expect_same.sh csizeof_arrow_array_field_b19426-rc "$$?" "42"
 	./$(COMPILER) test/csizeof_member_chain_through_pointer.c $(TESTTMP)/csizeof_member_chain26
-	$(TESTTMP)/csizeof_member_chain26; test "$$?" = "42"
+	$(TESTTMP)/csizeof_member_chain26; tools/expect_same.sh csizeof_member_chain26-rc "$$?" "42"
 	./$(COMPILER) test/cstatic_init_cast.c $(TESTTMP)/cstatic_init_cast26
-	$(TESTTMP)/cstatic_init_cast26; test "$$?" = "42"
+	$(TESTTMP)/cstatic_init_cast26; tools/expect_same.sh cstatic_init_cast26-rc "$$?" "42"
 	./$(COMPILER) test/cchar_plain_signedness.c $(TESTTMP)/cchar_plain_signedness26
-	$(TESTTMP)/cchar_plain_signedness26; test "$$?" = "42"
+	$(TESTTMP)/cchar_plain_signedness26; tools/expect_same.sh cchar_plain_signedness26-rc "$$?" "42"
 	./$(COMPILER) test/cchar_promotion_contexts.c $(TESTTMP)/cchar_promotion_contexts26
-	$(TESTTMP)/cchar_promotion_contexts26; test "$$?" = "42"
+	$(TESTTMP)/cchar_promotion_contexts26; tools/expect_same.sh cchar_promotion_contexts26-rc "$$?" "42"
 	# bug-cfront-error-directive-silently-ignored: #error stops a LIVE branch,
 	# stays silent in a not-taken one (the half with the regression risk — the
 	# corpora hold 1200+ #errors, essentially all behind untaken guards).
 	./$(COMPILER) test/cerror_directive.c $(TESTTMP)/cerror_directive26
-	$(TESTTMP)/cerror_directive26; test "$$?" = "42"
+	$(TESTTMP)/cerror_directive26; tools/expect_same.sh cerror_directive26-rc "$$?" "42"
 	@./$(COMPILER) test/cerror_directive_fail.c $(TESTTMP)/cerror_directive_fail26 2>&1 \
 	  | grep -q 'configuration is unsupported' \
 	  || { echo 'cerror_directive_fail: FAIL - #error in a live branch must stop the compile and name its text'; exit 1; }
@@ -7145,46 +7145,46 @@ test-core: $(COMPILER)
 	# unary-expression, so the whole postfix chain applies — `sizeof a[0]` (and
 	# the ARRAY_SIZE idiom built on it) used to be a parse error. gcc-differential.
 	./$(COMPILER) test/csizeof_postfix_unparen.c $(TESTTMP)/csizeof_postfix_unparen26
-	$(TESTTMP)/csizeof_postfix_unparen26; test "$$?" = "42"
+	$(TESTTMP)/csizeof_postfix_unparen26; tools/expect_same.sh csizeof_postfix_unparen26-rc "$$?" "42"
 	# bug-cfront-undeclared-type-in-cast-treated-as-zero: a cast to an undeclared
 	# type name is an ERROR with a did-you-mean (it used to degrade to the value
 	# 0 — a NULL fn pointer crashing far from the cast); value position keeps its
 	# degrade-to-0 leniency, which is what the corpora rely on.
 	./$(COMPILER) test/cundeclared_type_value_pos.c $(TESTTMP)/cundeclared_type_value_pos26
-	$(TESTTMP)/cundeclared_type_value_pos26; test "$$?" = "42"
+	$(TESTTMP)/cundeclared_type_value_pos26; tools/expect_same.sh cundeclared_type_value_pos26-rc "$$?" "42"
 	@./$(COMPILER) test/cundeclared_type_cast_fail.c $(TESTTMP)/cundeclared_type_cast_fail26 2>&1 \
 	  | grep -q "unknown type name '_PyCFunctionFastWithKeywords' in cast; did you mean 'PyCFunctionFastWithKeywords'" \
 	  || { echo 'cundeclared_type_cast_fail: FAIL - a cast to an undeclared type must error and suggest the near miss'; exit 1; }
 	# #if `?:`, #line renumbering, and __LINE__ inside #if — three evaluator gaps
 	# that only became visible once #error above stopped being a no-op.
 	./$(COMPILER) test/cpreproc_cond_line.c $(TESTTMP)/cpreproc_cond_line26
-	$(TESTTMP)/cpreproc_cond_line26; test "$$?" = "42"
+	$(TESTTMP)/cpreproc_cond_line26; tools/expect_same.sh cpreproc_cond_line26-rc "$$?" "42"
 	./$(COMPILER) test/carch_predefines.c $(TESTTMP)/carch_predefines26
-	$(TESTTMP)/carch_predefines26; test "$$?" = "42"
+	$(TESTTMP)/carch_predefines26; tools/expect_same.sh carch_predefines26-rc "$$?" "42"
 	# b195 (bug-c-printf-without-stdio-include-varargs): implicit printf binds crtl
 	./$(COMPILER) test/cimplicit_printf_varargs_b195.c $(TESTTMP)/cimplicit_printf_varargs_b19526
 	tools/expect_same.sh cimplicit_printf_varargs_b19526 "$$($(TESTTMP)/cimplicit_printf_varargs_b19526; test $$? = 42 && echo RC42)" "$$(printf 'x=42 y=ok\nRC42')"
 	# b196 (bug-crtl-strtod-precision-cjson-floats): exact strtod + %g round-trip
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ccrtl_strtod_g_roundtrip_b196.c $(TESTTMP)/ccrtl_strtod_g_roundtrip_b19626
-	$(TESTTMP)/ccrtl_strtod_g_roundtrip_b19626; test "$$?" = "42"
+	$(TESTTMP)/ccrtl_strtod_g_roundtrip_b19626; tools/expect_same.sh ccrtl_strtod_g_roundtrip_b19626-rc "$$?" "42"
 	# crtl arpa/inet.h IPv4 conversion (feature-game-library-candidate-suite / ENet surface)
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/gamelib/crtl_inet_smoke.c $(TESTTMP)/crtl_inet_smoke26
-	$(TESTTMP)/crtl_inet_smoke26; test "$$?" = "42"
+	$(TESTTMP)/crtl_inet_smoke26; tools/expect_same.sh crtl_inet_smoke26-rc "$$?" "42"
 	# b197 (bug-c-float-single-return-zero): cdecl float(single) return ABI
 	./$(COMPILER) test/cfloat_single_return_b197.c $(TESTTMP)/cfloat_single_return_b19726
-	$(TESTTMP)/cfloat_single_return_b19726; test "$$?" = "42"
+	$(TESTTMP)/cfloat_single_return_b19726; tools/expect_same.sh cfloat_single_return_b19726-rc "$$?" "42"
 	# crtl single-precision <math.h> f-family (feature-game-library-candidate-suite / cglm surface)
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/gamelib/crtl_mathf_smoke.c $(TESTTMP)/crtl_mathf_smoke26
-	$(TESTTMP)/crtl_mathf_smoke26; test "$$?" = "42"
+	$(TESTTMP)/crtl_mathf_smoke26; tools/expect_same.sh crtl_mathf_smoke26-rc "$$?" "42"
 	# b198 (bug-c-inline-fnptr-param-call): function-TYPE typedef call idiom
 	./$(COMPILER) test/cfntype_typedef_call_b198.c $(TESTTMP)/cfntype_typedef_call_b19826
-	$(TESTTMP)/cfntype_typedef_call_b19826; test "$$?" = "42"
+	$(TESTTMP)/cfntype_typedef_call_b19826; tools/expect_same.sh cfntype_typedef_call_b19826-rc "$$?" "42"
 	# b199 (bug-c-local-nested-aggregate-init): local recursive brace-elision walker
 	./$(COMPILER) test/clocal_nested_aggregate_init_b199.c $(TESTTMP)/clocal_nested_aggregate_init_b19926
-	$(TESTTMP)/clocal_nested_aggregate_init_b19926; test "$$?" = "42"
+	$(TESTTMP)/clocal_nested_aggregate_init_b19926; tools/expect_same.sh clocal_nested_aggregate_init_b19926-rc "$$?" "42"
 	# b200 (bug-c-expr-result-type-model / 00104): hex/octal constant unsigned type ladder
 	./$(COMPILER) test/chex_constant_unsigned_type_b200.c $(TESTTMP)/chex_constant_unsigned_type_b20026
-	$(TESTTMP)/chex_constant_unsigned_type_b20026; test "$$?" = "42"
+	$(TESTTMP)/chex_constant_unsigned_type_b20026; tools/expect_same.sh chex_constant_unsigned_type_b20026-rc "$$?" "42"
 	# csmith seed 79: a SUFFIX re-runs the constant ladder, it does not widen the
 	# rung the unsuffixed ladder picked. 0x9745DC78L fits a signed long, so it is
 	# a positive long -- typed unsigned long it converted the negative int32 it is
@@ -7194,106 +7194,106 @@ test-core: $(COMPILER)
 	tools/expect_same.sh chex_long_suffix26 "$$($(TESTTMP)/chex_long_suffix26)" "$$(printf 'hexL   1\nhex    1\ndecL   1\nhexLL  1\nhexU   0\nplain  1')"
 	# b201 (bug-crtl-printf-g-double-roundtrip): va_arg(T*) pointee width (scanf float)
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cva_arg_pointer_pointee_b201.c $(TESTTMP)/cva_arg_pointer_pointee_b20126
-	$(TESTTMP)/cva_arg_pointer_pointee_b20126; test "$$?" = "42"
+	$(TESTTMP)/cva_arg_pointer_pointee_b20126; tools/expect_same.sh cva_arg_pointer_pointee_b20126-rc "$$?" "42"
 	# b202 (bug-c-tag-redef-misfiles-field-selfref-segv): struct-tag redefinition no crash
 	./$(COMPILER) test/ctag_redef_no_selfref_crash_b202.c $(TESTTMP)/ctag_redef_no_selfref_crash_b20226
-	$(TESTTMP)/ctag_redef_no_selfref_crash_b20226; test "$$?" = "42"
+	$(TESTTMP)/ctag_redef_no_selfref_crash_b20226; tools/expect_same.sh ctag_redef_no_selfref_crash_b20226-rc "$$?" "42"
 	# crtl networking header surface (bug-c-crtl-missing-net-headers-enet / ENet)
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/gamelib/crtl_net_headers_smoke.c $(TESTTMP)/crtl_net_headers_smoke26
-	$(TESTTMP)/crtl_net_headers_smoke26; test "$$?" = "42"
+	$(TESTTMP)/crtl_net_headers_smoke26; tools/expect_same.sh crtl_net_headers_smoke26-rc "$$?" "42"
 	# external crtl int returned negative, used inline in a signed compare
 	# (bug-c-crtl-pulled-fn-inline-signed-compare): sign-extend the 32-bit result
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ccrtl_external_int_signed_compare.c $(TESTTMP)/ccrtl_external_int_signed_compare26
-	$(TESTTMP)/ccrtl_external_int_signed_compare26; test "$$?" = "42"
+	$(TESTTMP)/ccrtl_external_int_signed_compare26; tools/expect_same.sh ccrtl_external_int_signed_compare26-rc "$$?" "42"
 	# array typedef `typedef float vec4[4]` folds its dim into a decl
 	# (bug-c-typedef-array-element-init): vec4 v -> float[4], vec4 arr[N] -> [N][4]
 	./$(COMPILER) test/carray_typedef_element_init.c $(TESTTMP)/carray_typedef_element_init26
-	$(TESTTMP)/carray_typedef_element_init26; test "$$?" = "42"
+	$(TESTTMP)/carray_typedef_element_init26; tools/expect_same.sh carray_typedef_element_init26-rc "$$?" "42"
 	# wide string literals L"..." decode UTF-8 -> wchar_t codepoints
 	# (feature-c-wide-string-literals, c-testsuite 00220)
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cwide_string_literal.c $(TESTTMP)/cwide_string_literal26
-	$(TESTTMP)/cwide_string_literal26; test "$$?" = "42"
+	$(TESTTMP)/cwide_string_literal26; tools/expect_same.sh cwide_string_literal26-rc "$$?" "42"
 	# b203 (bug-c-multidim-ordinal-global-init): multidim ordinal global array init
 	./$(COMPILER) test/cmultidim_ordinal_global_b203.c $(TESTTMP)/cmultidim_ordinal_global_b20326
-	$(TESTTMP)/cmultidim_ordinal_global_b20326; test "$$?" = "42"
+	$(TESTTMP)/cmultidim_ordinal_global_b20326; tools/expect_same.sh cmultidim_ordinal_global_b20326-rc "$$?" "42"
 	# b205 (bug-c-multidim-float-brace-init): multidim FLOAT/DOUBLE global brace init
 	./$(COMPILER) test/cmultidim_float_global_b205.c $(TESTTMP)/cmultidim_float_global_b20526
-	$(TESTTMP)/cmultidim_float_global_b20526; test "$$?" = "42"
+	$(TESTTMP)/cmultidim_float_global_b20526; tools/expect_same.sh cmultidim_float_global_b20526-rc "$$?" "42"
 	# b206 (bug-c-pointer-to-array-declarator): `char (*p)[4]` pointer-to-array + p[i][j]
 	./$(COMPILER) test/cptr_to_array_declarator_b206.c $(TESTTMP)/cptr_to_array_declarator_b20626
-	$(TESTTMP)/cptr_to_array_declarator_b20626; test "$$?" = "42"
+	$(TESTTMP)/cptr_to_array_declarator_b20626; tools/expect_same.sh cptr_to_array_declarator_b20626-rc "$$?" "42"
 	# b207 (bug-c-switch-nonblock-and-duffs-device): non-compound switch body + Duff's device
 	./$(COMPILER) test/cswitch_noncompound_duff_b207.c $(TESTTMP)/cswitch_noncompound_duff_b20726
-	$(TESTTMP)/cswitch_noncompound_duff_b20726; test "$$?" = "42"
+	$(TESTTMP)/cswitch_noncompound_duff_b20726; tools/expect_same.sh cswitch_noncompound_duff_b20726-rc "$$?" "42"
 	# stb_sprintf callback engine (feature-game-library-candidate-suite): integer
 	# subset. Skips when the gitignored stb tree is absent (install_lib_candidates.sh stb).
-	@if [ -f library_candidates/stb/stb_sprintf.h ]; then 	  ./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src -Ilibrary_candidates/stb test/gamelib/stb_sprintf_probe.c $(TESTTMP)/stb_sprintf_probe26 >/dev/null && 	  $(TESTTMP)/stb_sprintf_probe26; test "$$?" = "42" && echo "stb_sprintf_probe: OK"; 	else echo "stb_sprintf_probe: SKIP (no library_candidates/stb)"; fi
+	@if [ -f library_candidates/stb/stb_sprintf.h ]; then 	  ./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src -Ilibrary_candidates/stb test/gamelib/stb_sprintf_probe.c $(TESTTMP)/stb_sprintf_probe26 >/dev/null && 	  $(TESTTMP)/stb_sprintf_probe26; tools/expect_same.sh stb_sprintf_probe26-rc "$$?" "42" && echo "stb_sprintf_probe: OK"; 	else echo "stb_sprintf_probe: SKIP (no library_candidates/stb)"; fi
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c $(TESTTMP)/ctypedef_ptr_stride_b6326
-	$(TESTTMP)/ctypedef_ptr_stride_b6326; test "$$?" = "42"
+	$(TESTTMP)/ctypedef_ptr_stride_b6326; tools/expect_same.sh ctypedef_ptr_stride_b6326-rc "$$?" "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c $(TESTTMP)/cternary_ptr_null_b6426
-	$(TESTTMP)/cternary_ptr_null_b6426; test "$$?" = "42"
+	$(TESTTMP)/cternary_ptr_null_b6426; tools/expect_same.sh cternary_ptr_null_b6426-rc "$$?" "42"
 	./$(COMPILER) test/cchar_ptr_arith_deref_b65.c $(TESTTMP)/cchar_ptr_arith_deref_b6526
-	$(TESTTMP)/cchar_ptr_arith_deref_b6526; test "$$?" = "42"
+	$(TESTTMP)/cchar_ptr_arith_deref_b6526; tools/expect_same.sh cchar_ptr_arith_deref_b6526-rc "$$?" "42"
 	./$(COMPILER) test/cstruct_field_constexpr_array_b66.c $(TESTTMP)/cstruct_field_constexpr_array_b6626
-	$(TESTTMP)/cstruct_field_constexpr_array_b6626; test "$$?" = "42"
+	$(TESTTMP)/cstruct_field_constexpr_array_b6626; tools/expect_same.sh cstruct_field_constexpr_array_b6626-rc "$$?" "42"
 	./$(COMPILER) test/cunion_ptr_field_expr_b67.c $(TESTTMP)/cunion_ptr_field_expr_b6726
-	$(TESTTMP)/cunion_ptr_field_expr_b6726; test "$$?" = "42"
+	$(TESTTMP)/cunion_ptr_field_expr_b6726; tools/expect_same.sh cunion_ptr_field_expr_b6726-rc "$$?" "42"
 	./$(COMPILER) test/cglobal_uchar_array_init_b68.c $(TESTTMP)/cglobal_uchar_array_init_b6826
-	$(TESTTMP)/cglobal_uchar_array_init_b6826; test "$$?" = "42"
+	$(TESTTMP)/cglobal_uchar_array_init_b6826; tools/expect_same.sh cglobal_uchar_array_init_b6826-rc "$$?" "42"
 	./$(COMPILER) test/cglobal_nested_struct_init_b69.c $(TESTTMP)/cglobal_nested_struct_init_b6926
-	$(TESTTMP)/cglobal_nested_struct_init_b6926; test "$$?" = "42"
+	$(TESTTMP)/cglobal_nested_struct_init_b6926; tools/expect_same.sh cglobal_nested_struct_init_b6926-rc "$$?" "42"
 	./$(COMPILER) test/cuchar_struct_field_load_b70.c $(TESTTMP)/cuchar_struct_field_load_b7026
-	$(TESTTMP)/cuchar_struct_field_load_b7026; test "$$?" = "42"
+	$(TESTTMP)/cuchar_struct_field_load_b7026; tools/expect_same.sh cuchar_struct_field_load_b7026-rc "$$?" "42"
 	./$(COMPILER) test/cternary_int_promotion_b71.c $(TESTTMP)/cternary_int_promotion_b7126
-	$(TESTTMP)/cternary_int_promotion_b7126; test "$$?" = "42"
+	$(TESTTMP)/cternary_int_promotion_b7126; tools/expect_same.sh cternary_int_promotion_b7126-rc "$$?" "42"
 	./$(COMPILER) test/cglobal_reg_array_init_b72.c $(TESTTMP)/cglobal_reg_array_init_b7226
-	$(TESTTMP)/cglobal_reg_array_init_b7226; test "$$?" = "42"
+	$(TESTTMP)/cglobal_reg_array_init_b7226; tools/expect_same.sh cglobal_reg_array_init_b7226-rc "$$?" "42"
 	./$(COMPILER) test/cglobal_strptr_array_decay_b73.c $(TESTTMP)/cglobal_strptr_array_decay_b7326
-	$(TESTTMP)/cglobal_strptr_array_decay_b7326; test "$$?" = "42"
+	$(TESTTMP)/cglobal_strptr_array_decay_b7326; tools/expect_same.sh cglobal_strptr_array_decay_b7326-rc "$$?" "42"
 	./$(COMPILER) test/cvoid_cast_call_stmt_b74.c $(TESTTMP)/cvoid_cast_call_stmt_b7426
-	$(TESTTMP)/cvoid_cast_call_stmt_b7426; test "$$?" = "42"
+	$(TESTTMP)/cvoid_cast_call_stmt_b7426; tools/expect_same.sh cvoid_cast_call_stmt_b7426-rc "$$?" "42"
 	./$(COMPILER) test/cglobal_scalar_strptr_b75.c $(TESTTMP)/cglobal_scalar_strptr_b7526
-	$(TESTTMP)/cglobal_scalar_strptr_b7526; test "$$?" = "42"
+	$(TESTTMP)/cglobal_scalar_strptr_b7526; tools/expect_same.sh cglobal_scalar_strptr_b7526-rc "$$?" "42"
 	./$(COMPILER) test/cderef_arrow_field_b76.c $(TESTTMP)/cderef_arrow_field_b7626
-	$(TESTTMP)/cderef_arrow_field_b7626; test "$$?" = "42"
+	$(TESTTMP)/cderef_arrow_field_b7626; tools/expect_same.sh cderef_arrow_field_b7626-rc "$$?" "42"
 	./$(COMPILER) test/cglobal_constexpr_array_init_b77.c $(TESTTMP)/cglobal_constexpr_array_init_b7726
-	$(TESTTMP)/cglobal_constexpr_array_init_b7726; test "$$?" = "42"
+	$(TESTTMP)/cglobal_constexpr_array_init_b7726; tools/expect_same.sh cglobal_constexpr_array_init_b7726-rc "$$?" "42"
 	./$(COMPILER) test/cchar_escapes_b78.c $(TESTTMP)/cchar_escapes_b7826
-	$(TESTTMP)/cchar_escapes_b7826; test "$$?" = "42"
+	$(TESTTMP)/cchar_escapes_b7826; tools/expect_same.sh cchar_escapes_b7826-rc "$$?" "42"
 	./$(COMPILER) test/csizeof_deref_ptr_b79.c $(TESTTMP)/csizeof_deref_ptr_b7926
-	$(TESTTMP)/csizeof_deref_ptr_b7926; test "$$?" = "42"
+	$(TESTTMP)/csizeof_deref_ptr_b7926; tools/expect_same.sh csizeof_deref_ptr_b7926-rc "$$?" "42"
 	./$(COMPILER) test/cunsigned_arith_compare_b80.c $(TESTTMP)/cunsigned_arith_compare_b8026
-	$(TESTTMP)/cunsigned_arith_compare_b8026; test "$$?" = "42"
+	$(TESTTMP)/cunsigned_arith_compare_b8026; tools/expect_same.sh cunsigned_arith_compare_b8026-rc "$$?" "42"
 	./$(COMPILER) test/cptrcast_deref_double_b81.c $(TESTTMP)/cptrcast_deref_double_b8126
-	$(TESTTMP)/cptrcast_deref_double_b8126; test "$$?" = "42"
+	$(TESTTMP)/cptrcast_deref_double_b8126; tools/expect_same.sh cptrcast_deref_double_b8126-rc "$$?" "42"
 	./$(COMPILER) test/caggregate_double_return_b82.c $(TESTTMP)/caggregate_double_return_b8226
-	$(TESTTMP)/caggregate_double_return_b8226; test "$$?" = "42"
+	$(TESTTMP)/caggregate_double_return_b8226; tools/expect_same.sh caggregate_double_return_b8226-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cvararg_double_b83.c $(TESTTMP)/cvararg_double_b8326
-	$(TESTTMP)/cvararg_double_b8326; test "$$?" = "42"
+	$(TESTTMP)/cvararg_double_b8326; tools/expect_same.sh cvararg_double_b8326-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cderef_addr_local_store_b84.c $(TESTTMP)/cderef_addr_local_store_b8426
-	$(TESTTMP)/cderef_addr_local_store_b8426; test "$$?" = "42"
+	$(TESTTMP)/cderef_addr_local_store_b8426; tools/expect_same.sh cderef_addr_local_store_b8426-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfloat_pascal_bridge_b85.c $(TESTTMP)/cfloat_pascal_bridge_b8526
-	$(TESTTMP)/cfloat_pascal_bridge_b8526; test "$$?" = "42"
+	$(TESTTMP)/cfloat_pascal_bridge_b8526; tools/expect_same.sh cfloat_pascal_bridge_b8526-rc "$$?" "42"
 	./$(COMPILER) test/csizeof_string_literal_b86.c $(TESTTMP)/csizeof_string_literal_b8626
-	$(TESTTMP)/csizeof_string_literal_b8626; test "$$?" = "42"
+	$(TESTTMP)/csizeof_string_literal_b8626; tools/expect_same.sh csizeof_string_literal_b8626-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfile_stdio_b87.c $(TESTTMP)/cfile_stdio_b8726
-	$(TESTTMP)/cfile_stdio_b8726; test "$$?" = "42"
+	$(TESTTMP)/cfile_stdio_b8726; tools/expect_same.sh cfile_stdio_b8726-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/csocket_loopback_b88.c $(TESTTMP)/csocket_loopback_b8826
-	$(TESTTMP)/csocket_loopback_b8826; test "$$?" = "42"
+	$(TESTTMP)/csocket_loopback_b8826; tools/expect_same.sh csocket_loopback_b8826-rc "$$?" "42"
 	./$(COMPILER) test/ctypedef_alias_fnptr_field_b89.c $(TESTTMP)/ctypedef_alias_fnptr_field_b8926
-	$(TESTTMP)/ctypedef_alias_fnptr_field_b8926; test "$$?" = "42"
+	$(TESTTMP)/ctypedef_alias_fnptr_field_b8926; tools/expect_same.sh ctypedef_alias_fnptr_field_b8926-rc "$$?" "42"
 	./$(COMPILER) test/cmain_argv_b90.c $(TESTTMP)/cmain_argv_b9026
-	$(TESTTMP)/cmain_argv_b9026 ab xyz; test "$$?" = "42"
+	$(TESTTMP)/cmain_argv_b9026 ab xyz; tools/expect_same.sh cmain_argv_b9026-rc "$$?" "42"
 	./$(COMPILER) test/cglobal_float_init_b91.c $(TESTTMP)/cglobal_float_init_b9126
-	$(TESTTMP)/cglobal_float_init_b9126; test "$$?" = "42"
+	$(TESTTMP)/cglobal_float_init_b9126; tools/expect_same.sh cglobal_float_init_b9126-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include test/ctypedef_sys_ssize_b92.c $(TESTTMP)/ctypedef_sys_ssize_b9226
-	$(TESTTMP)/ctypedef_sys_ssize_b9226; test "$$?" = "42"
+	$(TESTTMP)/ctypedef_sys_ssize_b9226; tools/expect_same.sh ctypedef_sys_ssize_b9226-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cvararg_overflow_b93.c $(TESTTMP)/cvararg_overflow_b9326
 	out="$$($(TESTTMP)/cvararg_overflow_b9326)"; status="$$?"; test "$$out" = "$$(printf '1 2 3 4 5 6\n7 8')"; test "$$status" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cvararg_many_args_b135.c $(TESTTMP)/cvararg_many_args_b13526
 	out="$$($(TESTTMP)/cvararg_many_args_b13526)"; status="$$?"; test "$$out" = "$$(printf '300 78 110\n1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18')"; test "$$status" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cvariadic_struct_b208.c $(TESTTMP)/cvariadic_struct_b20826
-	$(TESTTMP)/cvariadic_struct_b20826; test "$$?" = "42"
+	$(TESTTMP)/cvariadic_struct_b20826; tools/expect_same.sh cvariadic_struct_b20826-rc "$$?" "42"
 	# a file-scope `static` in two different crtl MODULES is legal C (internal
 	# linkage), and must NOT warn -- crtl's fcntl.c and unistd.c both define
 	# `static sysret`, and stdarg.h's six statics get re-expanded by the crtl
@@ -7309,91 +7309,91 @@ test-core: $(COMPILER)
 	tools/expect_same.sh cstatic_same_module.log "$$(grep -c 'duplicate definition' $(TESTTMP)/cstatic_same_module.log)" "1"
 	tools/expect_same.sh cstatic_same_module26 "$$($(TESTTMP)/cstatic_same_module26)" "2 11"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cgeneric_selection_b209.c $(TESTTMP)/cgeneric_selection_b20926
-	$(TESTTMP)/cgeneric_selection_b20926; test "$$?" = "42"
+	$(TESTTMP)/cgeneric_selection_b20926; tools/expect_same.sh cgeneric_selection_b20926-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/crange_designator_b210.c $(TESTTMP)/crange_designator_b21026
-	$(TESTTMP)/crange_designator_b21026; test "$$?" = "42"
+	$(TESTTMP)/crange_designator_b21026; tools/expect_same.sh crange_designator_b21026-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/carray_designated_init_b211.c $(TESTTMP)/carray_designated_init_b21126
-	$(TESTTMP)/carray_designated_init_b21126; test "$$?" = "42"
+	$(TESTTMP)/carray_designated_init_b21126; tools/expect_same.sh carray_designated_init_b21126-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cglobal_array_range_b212.c $(TESTTMP)/cglobal_array_range_b21226
-	$(TESTTMP)/cglobal_array_range_b21226; test "$$?" = "42"
+	$(TESTTMP)/cglobal_array_range_b21226; tools/expect_same.sh cglobal_array_range_b21226-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cnested_designator_b213.c $(TESTTMP)/cnested_designator_b21326
-	$(TESTTMP)/cnested_designator_b21326; test "$$?" = "42"
+	$(TESTTMP)/cnested_designator_b21326; tools/expect_same.sh cnested_designator_b21326-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfnptr_typedef_array_b214.c $(TESTTMP)/cfnptr_typedef_array_b21426
-	$(TESTTMP)/cfnptr_typedef_array_b21426; test "$$?" = "42"
+	$(TESTTMP)/cfnptr_typedef_array_b21426; tools/expect_same.sh cfnptr_typedef_array_b21426-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfnptr_range_table_b215.c $(TESTTMP)/cfnptr_range_table_b21526
-	$(TESTTMP)/cfnptr_range_table_b21526; test "$$?" = "42"
+	$(TESTTMP)/cfnptr_range_table_b21526; tools/expect_same.sh cfnptr_range_table_b21526-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ccompound_literal_b216.c $(TESTTMP)/ccompound_literal_b21626
-	$(TESTTMP)/ccompound_literal_b21626; test "$$?" = "42"
+	$(TESTTMP)/ccompound_literal_b21626; tools/expect_same.sh ccompound_literal_b21626-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ccompound_literal_addrof.c $(TESTTMP)/ccompound_literal_addrof26
-	$(TESTTMP)/ccompound_literal_addrof26; test "$$?" = "42"
+	$(TESTTMP)/ccompound_literal_addrof26; tools/expect_same.sh ccompound_literal_addrof26-rc "$$?" "42"
 	./$(COMPILER) test/csubnormal_literal.c $(TESTTMP)/csubnormal_literal26
-	$(TESTTMP)/csubnormal_literal26; test "$$?" = "42"
+	$(TESTTMP)/csubnormal_literal26; tools/expect_same.sh csubnormal_literal26-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ccompound_literal_postfix_b217.c $(TESTTMP)/ccompound_literal_postfix_b21726
-	$(TESTTMP)/ccompound_literal_postfix_b21726; test "$$?" = "42"
+	$(TESTTMP)/ccompound_literal_postfix_b21726; tools/expect_same.sh ccompound_literal_postfix_b21726-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ccompound_literal_nested_b218.c $(TESTTMP)/ccompound_literal_nested_b21826
-	$(TESTTMP)/ccompound_literal_nested_b21826; test "$$?" = "42"
+	$(TESTTMP)/ccompound_literal_nested_b21826; tools/expect_same.sh ccompound_literal_nested_b21826-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ccompound_literal_global_array_b219.c $(TESTTMP)/ccompound_literal_global_array_b21926
-	$(TESTTMP)/ccompound_literal_global_array_b21926; test "$$?" = "42"
+	$(TESTTMP)/ccompound_literal_global_array_b21926; tools/expect_same.sh ccompound_literal_global_array_b21926-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cformfeed_whitespace_b220.c $(TESTTMP)/cformfeed_whitespace_b22026
-	$(TESTTMP)/cformfeed_whitespace_b22026; test "$$?" = "42"
+	$(TESTTMP)/cformfeed_whitespace_b22026; tools/expect_same.sh cformfeed_whitespace_b22026-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/canon_member_designated_init_b221.c $(TESTTMP)/canon_member_designated_init_b22126
-	$(TESTTMP)/canon_member_designated_init_b22126; test "$$?" = "42"
+	$(TESTTMP)/canon_member_designated_init_b22126; tools/expect_same.sh canon_member_designated_init_b22126-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cstruct_identity_cast_b222.c $(TESTTMP)/cstruct_identity_cast_b22226
-	$(TESTTMP)/cstruct_identity_cast_b22226; test "$$?" = "42"
+	$(TESTTMP)/cstruct_identity_cast_b22226; tools/expect_same.sh cstruct_identity_cast_b22226-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfnptr_range_array_len_b223.c $(TESTTMP)/cfnptr_range_array_len_b22326
-	$(TESTTMP)/cfnptr_range_array_len_b22326; test "$$?" = "42"
+	$(TESTTMP)/cfnptr_range_array_len_b22326; tools/expect_same.sh cfnptr_range_array_len_b22326-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cflex_array_member_sizeof_b224.c $(TESTTMP)/cflex_array_member_sizeof_b22426
-	$(TESTTMP)/cflex_array_member_sizeof_b22426; test "$$?" = "42"
+	$(TESTTMP)/cflex_array_member_sizeof_b22426; tools/expect_same.sh cflex_array_member_sizeof_b22426-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cglobal_compound_literal_init_b225.c $(TESTTMP)/cglobal_compound_literal_init_b22526
-	$(TESTTMP)/cglobal_compound_literal_init_b22526; test "$$?" = "42"
+	$(TESTTMP)/cglobal_compound_literal_init_b22526; tools/expect_same.sh cglobal_compound_literal_init_b22526-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/carray_compound_literal_b226.c $(TESTTMP)/carray_compound_literal_b22626
-	$(TESTTMP)/carray_compound_literal_b22626; test "$$?" = "42"
+	$(TESTTMP)/carray_compound_literal_b22626; tools/expect_same.sh carray_compound_literal_b22626-rc "$$?" "42"
 	./$(COMPILER) test/cpreproc_macro_arg_string_paren_b227.c $(TESTTMP)/cpreproc_macro_arg_string_paren_b22726
-	$(TESTTMP)/cpreproc_macro_arg_string_paren_b22726; test "$$?" = "42"
+	$(TESTTMP)/cpreproc_macro_arg_string_paren_b22726; tools/expect_same.sh cpreproc_macro_arg_string_paren_b22726-rc "$$?" "42"
 	./$(COMPILER) test/cpreproc_stdc_version_predefine_b228.c $(TESTTMP)/cpreproc_stdc_version_predefine_b22826
-	$(TESTTMP)/cpreproc_stdc_version_predefine_b22826; test "$$?" = "42"
+	$(TESTTMP)/cpreproc_stdc_version_predefine_b22826; tools/expect_same.sh cpreproc_stdc_version_predefine_b22826-rc "$$?" "42"
 	./$(COMPILER) test/cpreproc_hex_octal_if_b237.c $(TESTTMP)/cpreproc_hex_octal_if_b23726
-	$(TESTTMP)/cpreproc_hex_octal_if_b23726; test "$$?" = "42"
+	$(TESTTMP)/cpreproc_hex_octal_if_b23726; tools/expect_same.sh cpreproc_hex_octal_if_b23726-rc "$$?" "42"
 	./$(COMPILER) test/cpreproc_macro_comment_continuation_b229.c $(TESTTMP)/cpreproc_macro_comment_continuation_b22926
-	$(TESTTMP)/cpreproc_macro_comment_continuation_b22926; test "$$?" = "42"
+	$(TESTTMP)/cpreproc_macro_comment_continuation_b22926; tools/expect_same.sh cpreproc_macro_comment_continuation_b22926-rc "$$?" "42"
 	./$(COMPILER) test/cfield_ptrcast_index_b230.c $(TESTTMP)/cfield_ptrcast_index_b23026
-	$(TESTTMP)/cfield_ptrcast_index_b23026; test "$$?" = "42"
+	$(TESTTMP)/cfield_ptrcast_index_b23026; tools/expect_same.sh cfield_ptrcast_index_b23026-rc "$$?" "42"
 	./$(COMPILER) test/ccompound_literal_scalar_b368.c $(TESTTMP)/ccompound_literal_scalar_b36826
-	$(TESTTMP)/ccompound_literal_scalar_b36826; test "$$?" = "42"
+	$(TESTTMP)/ccompound_literal_scalar_b36826; tools/expect_same.sh ccompound_literal_scalar_b36826-rc "$$?" "42"
 	./$(COMPILER) test/cindirect_call_stackargs_b369.c $(TESTTMP)/cindirect_call_stackargs_b36926
-	$(TESTTMP)/cindirect_call_stackargs_b36926; test "$$?" = "42"
+	$(TESTTMP)/cindirect_call_stackargs_b36926; tools/expect_same.sh cindirect_call_stackargs_b36926-rc "$$?" "42"
 	./$(COMPILER) test/cpreproc_paste_no_arg_expand_b370.c $(TESTTMP)/cpreproc_paste_no_arg_expand_b37026
-	$(TESTTMP)/cpreproc_paste_no_arg_expand_b37026; test "$$?" = "42"
+	$(TESTTMP)/cpreproc_paste_no_arg_expand_b37026; tools/expect_same.sh cpreproc_paste_no_arg_expand_b37026-rc "$$?" "42"
 	./$(COMPILER) test/cpreproc_body_string_param_b371.c $(TESTTMP)/cpreproc_body_string_param_b37126
-	$(TESTTMP)/cpreproc_body_string_param_b37126; test "$$?" = "42"
+	$(TESTTMP)/cpreproc_body_string_param_b37126; tools/expect_same.sh cpreproc_body_string_param_b37126-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_rint_lrint_b372.c $(TESTTMP)/cmath_rint_lrint_b37226
-	$(TESTTMP)/cmath_rint_lrint_b37226; test "$$?" = "42"
+	$(TESTTMP)/cmath_rint_lrint_b37226; tools/expect_same.sh cmath_rint_lrint_b37226-rc "$$?" "42"
 	./$(COMPILER) test/cbitfield_mixed_type_pack_b373.c $(TESTTMP)/cbitfield_mixed_type_pack_b37326
-	$(TESTTMP)/cbitfield_mixed_type_pack_b37326; test "$$?" = "42"
+	$(TESTTMP)/cbitfield_mixed_type_pack_b37326; tools/expect_same.sh cbitfield_mixed_type_pack_b37326-rc "$$?" "42"
 	./$(COMPILER) test/cswitch_unsigned_negative_case_b374.c $(TESTTMP)/cswitch_unsigned_negative_case_b37426
-	$(TESTTMP)/cswitch_unsigned_negative_case_b37426; test "$$?" = "42"
+	$(TESTTMP)/cswitch_unsigned_negative_case_b37426; tools/expect_same.sh cswitch_unsigned_negative_case_b37426-rc "$$?" "42"
 	./$(COMPILER) test/cdesignated_enum_index_unsized_b375.c $(TESTTMP)/cdesignated_enum_index_unsized_b37526
-	$(TESTTMP)/cdesignated_enum_index_unsized_b37526; test "$$?" = "42"
+	$(TESTTMP)/cdesignated_enum_index_unsized_b37526; tools/expect_same.sh cdesignated_enum_index_unsized_b37526-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cprintf_exact_digits_b376.c $(TESTTMP)/cprintf_exact_digits_b37626
-	$(TESTTMP)/cprintf_exact_digits_b37626; test "$$?" = "42"
+	$(TESTTMP)/cprintf_exact_digits_b37626; tools/expect_same.sh cprintf_exact_digits_b37626-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_exp_correct_round_b377.c $(TESTTMP)/cmath_exp_correct_round_b37726
-	$(TESTTMP)/cmath_exp_correct_round_b37726; test "$$?" = "42"
+	$(TESTTMP)/cmath_exp_correct_round_b37726; tools/expect_same.sh cmath_exp_correct_round_b37726-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_log_correct_round_b378.c $(TESTTMP)/cmath_log_correct_round_b37826
-	$(TESTTMP)/cmath_log_correct_round_b37826; test "$$?" = "42"
+	$(TESTTMP)/cmath_log_correct_round_b37826; tools/expect_same.sh cmath_log_correct_round_b37826-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_cbrt_correct_round_b379.c $(TESTTMP)/cmath_cbrt_correct_round_b37926
-	$(TESTTMP)/cmath_cbrt_correct_round_b37926; test "$$?" = "42"
+	$(TESTTMP)/cmath_cbrt_correct_round_b37926; tools/expect_same.sh cmath_cbrt_correct_round_b37926-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_pow_correct_round_b380.c $(TESTTMP)/cmath_pow_correct_round_b38026
-	$(TESTTMP)/cmath_pow_correct_round_b38026; test "$$?" = "42"
+	$(TESTTMP)/cmath_pow_correct_round_b38026; tools/expect_same.sh cmath_pow_correct_round_b38026-rc "$$?" "42"
 	./$(COMPILER) test/cfloat_cast_narrow_b381.c $(TESTTMP)/cfloat_cast_narrow_b38126
-	$(TESTTMP)/cfloat_cast_narrow_b38126; test "$$?" = "42"
+	$(TESTTMP)/cfloat_cast_narrow_b38126; tools/expect_same.sh cfloat_cast_narrow_b38126-rc "$$?" "42"
 	./$(COMPILER) test/cfloat_cast_int_narrow.c $(TESTTMP)/cfloat_cast_int_narrow26
-	$(TESTTMP)/cfloat_cast_int_narrow26; test "$$?" = "42"
+	$(TESTTMP)/cfloat_cast_int_narrow26; tools/expect_same.sh cfloat_cast_int_narrow26-rc "$$?" "42"
 	./$(COMPILER) test/cstr_table_2d_rows.c $(TESTTMP)/cstr_table_2d_rows26
-	$(TESTTMP)/cstr_table_2d_rows26; test "$$?" = "42"
+	$(TESTTMP)/cstr_table_2d_rows26; tools/expect_same.sh cstr_table_2d_rows26-rc "$$?" "42"
 	./$(COMPILER) test/carr2d_param_row_length.c $(TESTTMP)/carr2d_param_row_length26
-	$(TESTTMP)/carr2d_param_row_length26; test "$$?" = "42"
+	$(TESTTMP)/carr2d_param_row_length26; tools/expect_same.sh carr2d_param_row_length26-rc "$$?" "42"
 	./$(COMPILER) test/carr2d_decay_stride.c $(TESTTMP)/carr2d_decay_stride26
-	$(TESTTMP)/carr2d_decay_stride26; test "$$?" = "42"
+	$(TESTTMP)/carr2d_decay_stride26; tools/expect_same.sh carr2d_decay_stride26-rc "$$?" "42"
 	# ...and the OTHER reading of the same tag. An AN_IDENT for `long long a[8]`
 	# carries tyInt64 -- its element kind -- and the pointer-base test bailed on
 	# tyInt64 outright, so a signed 64-bit array was never a pointer base: `a + 1`
@@ -7401,65 +7401,65 @@ test-core: $(COMPILER)
 	# right. A sign bit decided a stride. Indexing scales itself, so `a[1]` was
 	# always correct and only the decayed form was wrong.
 	./$(COMPILER) test/cptrdiff_elem_types.c $(TESTTMP)/cptrdiff_elem_types26
-	$(TESTTMP)/cptrdiff_elem_types26; test "$$?" = "42"
+	$(TESTTMP)/cptrdiff_elem_types26; tools/expect_same.sh cptrdiff_elem_types26-rc "$$?" "42"
 	./$(COMPILER) test/csizeof_compound_literal.c $(TESTTMP)/csizeof_compound_literal26
-	$(TESTTMP)/csizeof_compound_literal26; test "$$?" = "42"
+	$(TESTTMP)/csizeof_compound_literal26; tools/expect_same.sh csizeof_compound_literal26-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_log2_expm1_family_b382.c $(TESTTMP)/cmath_log2_expm1_family_b38226
-	$(TESTTMP)/cmath_log2_expm1_family_b38226; test "$$?" = "42"
+	$(TESTTMP)/cmath_log2_expm1_family_b38226; tools/expect_same.sh cmath_log2_expm1_family_b38226-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_hyperbolic_family_b383.c $(TESTTMP)/cmath_hyperbolic_family_b38326
-	$(TESTTMP)/cmath_hyperbolic_family_b38326; test "$$?" = "42"
+	$(TESTTMP)/cmath_hyperbolic_family_b38326; tools/expect_same.sh cmath_hyperbolic_family_b38326-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_hypot_correct_round_b384.c $(TESTTMP)/cmath_hypot_correct_round_b38426
-	$(TESTTMP)/cmath_hypot_correct_round_b38426; test "$$?" = "42"
+	$(TESTTMP)/cmath_hypot_correct_round_b38426; tools/expect_same.sh cmath_hypot_correct_round_b38426-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_trig_family_b385.c $(TESTTMP)/cmath_trig_family_b38526
-	$(TESTTMP)/cmath_trig_family_b38526; test "$$?" = "42"
+	$(TESTTMP)/cmath_trig_family_b38526; tools/expect_same.sh cmath_trig_family_b38526-rc "$$?" "42"
 	./$(COMPILER) test/cstruct_field_case_sensitive_b231.c $(TESTTMP)/cstruct_field_case_sensitive_b23126
-	$(TESTTMP)/cstruct_field_case_sensitive_b23126; test "$$?" = "42"
+	$(TESTTMP)/cstruct_field_case_sensitive_b23126; tools/expect_same.sh cstruct_field_case_sensitive_b23126-rc "$$?" "42"
 	./$(COMPILER) test/cfloat_nan_compare_b232.c $(TESTTMP)/cfloat_nan_compare_b23226
-	$(TESTTMP)/cfloat_nan_compare_b23226; test "$$?" = "42"
+	$(TESTTMP)/cfloat_nan_compare_b23226; tools/expect_same.sh cfloat_nan_compare_b23226-rc "$$?" "42"
 	./$(COMPILER) test/cmath_domain_nan_b233.c $(TESTTMP)/cmath_domain_nan_b23326
-	$(TESTTMP)/cmath_domain_nan_b23326; test "$$?" = "42"
+	$(TESTTMP)/cmath_domain_nan_b23326; tools/expect_same.sh cmath_domain_nan_b23326-rc "$$?" "42"
 	# _Generic must tell long from int (ILP32) and long long from long (LP64) —
 	# same width, different C type (bug-c-generic-long-vs-int-ilp32). Also run as
 	# a 32-bit binary, which is where long collapsed onto int.
 	./$(COMPILER) test/cgeneric_long_rank_b250.c $(TESTTMP)/cgeneric_long_rank_b25026
-	$(TESTTMP)/cgeneric_long_rank_b25026; test "$$?" = "42"
+	$(TESTTMP)/cgeneric_long_rank_b25026; tools/expect_same.sh cgeneric_long_rank_b25026-rc "$$?" "42"
 	./$(COMPILER) --target=i386 test/cgeneric_long_rank_b250.c $(TESTTMP)/cgeneric_long_rank_b250_386
-	$(TESTTMP)/cgeneric_long_rank_b250_386; test "$$?" = "42"
+	$(TESTTMP)/cgeneric_long_rank_b250_386; tools/expect_same.sh cgeneric_long_rank_b250_386-rc "$$?" "42"
 	# a 64-bit value is a register PAIR on ILP32: `if (v)` must test BOTH halves
 	# (bug-32bit-truthiness-high-half). The 32-bit run is the one that matters.
 	./$(COMPILER) test/ctruthy_int64_b251.c $(TESTTMP)/ctruthy_int64_b25126
-	$(TESTTMP)/ctruthy_int64_b25126; test "$$?" = "42"
+	$(TESTTMP)/ctruthy_int64_b25126; tools/expect_same.sh ctruthy_int64_b25126-rc "$$?" "42"
 	./$(COMPILER) --target=i386 test/ctruthy_int64_b251.c $(TESTTMP)/ctruthy_int64_b251_386
-	$(TESTTMP)/ctruthy_int64_b251_386; test "$$?" = "42"
+	$(TESTTMP)/ctruthy_int64_b251_386; tools/expect_same.sh ctruthy_int64_b251_386-rc "$$?" "42"
 	# crtl printf must honour `ll`, not just count it (bug-crtl-printf-ll-ilp32)
 	./$(COMPILER) test/cprintf_ll_b252.c $(TESTTMP)/cprintf_ll_b25226
-	$(TESTTMP)/cprintf_ll_b25226; test "$$?" = "42"
+	$(TESTTMP)/cprintf_ll_b25226; tools/expect_same.sh cprintf_ll_b25226-rc "$$?" "42"
 	./$(COMPILER) --target=i386 test/cprintf_ll_b252.c $(TESTTMP)/cprintf_ll_b252_386
-	$(TESTTMP)/cprintf_ll_b252_386; test "$$?" = "42"
+	$(TESTTMP)/cprintf_ll_b252_386; tools/expect_same.sh cprintf_ll_b252_386-rc "$$?" "42"
 	# unary minus applies the integer promotions: -(unsigned short) is a SIGNED int
 	# (bug-c-unary-minus-no-integer-promotion)
 	./$(COMPILER) test/cunary_minus_promote_b253.c $(TESTTMP)/cunary_minus_promote_b25326
-	$(TESTTMP)/cunary_minus_promote_b25326; test "$$?" = "42"
+	$(TESTTMP)/cunary_minus_promote_b25326; tools/expect_same.sh cunary_minus_promote_b25326-rc "$$?" "42"
 	# sizeof(us + 0) is 4, not 2 — the symbol fast path must not swallow a whole
 	# expression (bug-c-binary-op-no-integer-promotion-sizeof)
 	./$(COMPILER) test/csizeof_promoted_expr_b255.c $(TESTTMP)/csizeof_promoted_expr_b25526
-	$(TESTTMP)/csizeof_promoted_expr_b25526; test "$$?" = "42"
+	$(TESTTMP)/csizeof_promoted_expr_b25526; tools/expect_same.sh csizeof_promoted_expr_b25526-rc "$$?" "42"
 	./$(COMPILER) --target=i386 test/csizeof_promoted_expr_b255.c $(TESTTMP)/csizeof_promoted_expr_b255_386
-	$(TESTTMP)/csizeof_promoted_expr_b255_386; test "$$?" = "42"
+	$(TESTTMP)/csizeof_promoted_expr_b255_386; tools/expect_same.sh csizeof_promoted_expr_b255_386-rc "$$?" "42"
 	./$(COMPILER) test/carrow_on_array_call_rhs_b136.c $(TESTTMP)/carrow_on_array_call_rhs_b13626
-	$(TESTTMP)/carrow_on_array_call_rhs_b13626; test "$$?" = "42"
+	$(TESTTMP)/carrow_on_array_call_rhs_b13626; tools/expect_same.sh carrow_on_array_call_rhs_b13626-rc "$$?" "42"
 	./$(COMPILER) test/csigned_arith_shift_right_b137.c $(TESTTMP)/csigned_arith_shift_right_b13726
-	$(TESTTMP)/csigned_arith_shift_right_b13726; test "$$?" = "42"
+	$(TESTTMP)/csigned_arith_shift_right_b13726; tools/expect_same.sh csigned_arith_shift_right_b13726-rc "$$?" "42"
 	./$(COMPILER) test/cunsigned_semantics_sweep_b138.c $(TESTTMP)/cunsigned_semantics_sweep_b13826
-	$(TESTTMP)/cunsigned_semantics_sweep_b13826; test "$$?" = "42"
+	$(TESTTMP)/cunsigned_semantics_sweep_b13826; tools/expect_same.sh cunsigned_semantics_sweep_b13826-rc "$$?" "42"
 	./$(COMPILER) test/cstatic_local_init_once_b139.c $(TESTTMP)/cstatic_local_init_once_b13926
-	$(TESTTMP)/cstatic_local_init_once_b13926; test "$$?" = "42"
+	$(TESTTMP)/cstatic_local_init_once_b13926; tools/expect_same.sh cstatic_local_init_once_b13926-rc "$$?" "42"
 	./$(COMPILER) test/cmath_round_trunc_b140.c $(TESTTMP)/cmath_round_trunc_b14026
-	$(TESTTMP)/cmath_round_trunc_b14026; test "$$?" = "42"
+	$(TESTTMP)/cmath_round_trunc_b14026; tools/expect_same.sh cmath_round_trunc_b14026-rc "$$?" "42"
 	./$(COMPILER) test/cternary_struct_value_b141.c $(TESTTMP)/cternary_struct_value_b14126
-	$(TESTTMP)/cternary_struct_value_b14126; test "$$?" = "42"
+	$(TESTTMP)/cternary_struct_value_b14126; tools/expect_same.sh cternary_struct_value_b14126-rc "$$?" "42"
 	./$(COMPILER) test/cfloat_literal_precise_b142.c $(TESTTMP)/cfloat_literal_precise_b14226
-	$(TESTTMP)/cfloat_literal_precise_b14226; test "$$?" = "42"
+	$(TESTTMP)/cfloat_literal_precise_b14226; tools/expect_same.sh cfloat_literal_precise_b14226-rc "$$?" "42"
 	# bug-c-comment-terminator-greedy: stray tokens after a comment that ends at
 	# its first `*/` must be rejected at top level (gcc parity), not silently skipped.
 	! ./$(COMPILER) test/cstray_toplevel_reject_b193.c $(TESTTMP)/cstray_toplevel_reject_b19326 > $(TESTTMP)/cstray_toplevel_reject_b193.log 2>&1
@@ -7472,67 +7472,67 @@ test-core: $(COMPILER)
 	# bug-c-anon-struct-nested-enum-global: inline `enum {...}` in type position
 	# (struct member / typedef / global) is consumed and its enumerators registered.
 	./$(COMPILER) test/cenum_in_struct_b194.c $(TESTTMP)/cenum_in_struct_b19426
-	$(TESTTMP)/cenum_in_struct_b19426; test "$$?" = "42"
+	$(TESTTMP)/cenum_in_struct_b19426; tools/expect_same.sh cenum_in_struct_b19426-rc "$$?" "42"
 	# bug-c-sqlite-suite-runtime-segfault: address of a single/double lvalue is an
 	# IR_LEA (pointer value); C float->int truncation must not corrupt it.
 	./$(COMPILER) test/cfloat_lea_ptr_b195.c $(TESTTMP)/cfloat_lea_ptr_b19526
-	$(TESTTMP)/cfloat_lea_ptr_b19526; test "$$?" = "142"
+	$(TESTTMP)/cfloat_lea_ptr_b19526; tools/expect_same.sh cfloat_lea_ptr_b19526-rc "$$?" "142"
 	# bug-c-double-ptr-deref-narrow-to-single: (float)*doubleptr / (double)*floatptr
 	# must convert, not reinterpret the load width.
 	./$(COMPILER) test/cfloat_cast_deref_b196.c $(TESTTMP)/cfloat_cast_deref_b19626
-	$(TESTTMP)/cfloat_cast_deref_b19626; test "$$?" = "42"
+	$(TESTTMP)/cfloat_cast_deref_b19626; tools/expect_same.sh cfloat_cast_deref_b19626-rc "$$?" "42"
 	# bug-c-stb-sprintf-float-empty: file-scope float/double array initializers
 	# must emit their element values (were skipped -> read as zero).
 	./$(COMPILER) test/cfloat_global_array_init_b197.c $(TESTTMP)/cfloat_global_array_init_b19726
-	$(TESTTMP)/cfloat_global_array_init_b19726; test "$$?" = "42"
+	$(TESTTMP)/cfloat_global_array_init_b19726; tools/expect_same.sh cfloat_global_array_init_b19726-rc "$$?" "42"
 	# bug-c-shift-result-type-battery-00200: shift result type = promoted LEFT
 	# operand (C99 6.5.7p3); a wide/unsigned count must not change the signedness.
 	./$(COMPILER) test/cshift_result_type_b198.c $(TESTTMP)/cshift_result_type_b19826
-	$(TESTTMP)/cshift_result_type_b19826; test "$$?" = "42"
+	$(TESTTMP)/cshift_result_type_b19826; tools/expect_same.sh cshift_result_type_b19826-rc "$$?" "42"
 	# bug-c-sizeof-widening-cast-expr: sizeof of a general expr must use the
 	# operand's own type size (long->8, char->1), not a flat 4.
 	./$(COMPILER) test/csizeof_cast_expr_b199.c $(TESTTMP)/csizeof_cast_expr_b19926
-	$(TESTTMP)/csizeof_cast_expr_b19926; test "$$?" = "42"
+	$(TESTTMP)/csizeof_cast_expr_b19926; tools/expect_same.sh csizeof_cast_expr_b19926-rc "$$?" "42"
 	./$(COMPILER) test/cnested_pointer_b94.c $(TESTTMP)/cnested_pointer_b9426
-	$(TESTTMP)/cnested_pointer_b9426 ab xyz; test "$$?" = "42"
+	$(TESTTMP)/cnested_pointer_b9426 ab xyz; tools/expect_same.sh cnested_pointer_b9426-rc "$$?" "42"
 	./$(COMPILER) test/cfnptr_struct_member.c $(TESTTMP)/cfnptr_struct_member26
-	$(TESTTMP)/cfnptr_struct_member26; test "$$?" = "42"
+	$(TESTTMP)/cfnptr_struct_member26; tools/expect_same.sh cfnptr_struct_member26-rc "$$?" "42"
 	./$(COMPILER) test/cfnptr_local_b95.c $(TESTTMP)/cfnptr_local_b9526
-	$(TESTTMP)/cfnptr_local_b9526; test "$$?" = "42"
+	$(TESTTMP)/cfnptr_local_b9526; tools/expect_same.sh cfnptr_local_b9526-rc "$$?" "42"
 	./$(COMPILER) test/cstruct_bitfield_b96.c $(TESTTMP)/cstruct_bitfield_b9626
-	$(TESTTMP)/cstruct_bitfield_b9626; test "$$?" = "42"
+	$(TESTTMP)/cstruct_bitfield_b9626; tools/expect_same.sh cstruct_bitfield_b9626-rc "$$?" "42"
 	./$(COMPILER) test/cfnptr_cast_call_b97.c $(TESTTMP)/cfnptr_cast_call_b9726
-	$(TESTTMP)/cfnptr_cast_call_b9726; test "$$?" = "42"
+	$(TESTTMP)/cfnptr_cast_call_b9726; tools/expect_same.sh cfnptr_cast_call_b9726-rc "$$?" "42"
 	./$(COMPILER) test/cglobal_struct_array_fnptr_cast_b98.c $(TESTTMP)/cglobal_struct_array_fnptr_cast_b9826
-	$(TESTTMP)/cglobal_struct_array_fnptr_cast_b9826; test "$$?" = "42"
+	$(TESTTMP)/cglobal_struct_array_fnptr_cast_b9826; tools/expect_same.sh cglobal_struct_array_fnptr_cast_b9826-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include test/crtl_unistd_fsync_b99.c $(TESTTMP)/crtl_unistd_fsync_b9926
-	$(TESTTMP)/crtl_unistd_fsync_b9926; test "$$?" = "42"
+	$(TESTTMP)/crtl_unistd_fsync_b9926; tools/expect_same.sh crtl_unistd_fsync_b9926-rc "$$?" "42"
 	./$(COMPILER) test/cpreproc_defined_directive_join_b100.c $(TESTTMP)/cpreproc_defined_directive_join_b10026
-	$(TESTTMP)/cpreproc_defined_directive_join_b10026; test "$$?" = "42"
+	$(TESTTMP)/cpreproc_defined_directive_join_b10026; tools/expect_same.sh cpreproc_defined_directive_join_b10026-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include test/crtl_unistd_getpid_b101.c $(TESTTMP)/crtl_unistd_getpid_b10126
-	$(TESTTMP)/crtl_unistd_getpid_b10126; test "$$?" = "42"
+	$(TESTTMP)/crtl_unistd_getpid_b10126; tools/expect_same.sh crtl_unistd_getpid_b10126-rc "$$?" "42"
 	./$(COMPILER) test/cternary_middle_comma_b102.c $(TESTTMP)/cternary_middle_comma_b10226
-	$(TESTTMP)/cternary_middle_comma_b10226; test "$$?" = "42"
+	$(TESTTMP)/cternary_middle_comma_b10226; tools/expect_same.sh cternary_middle_comma_b10226-rc "$$?" "42"
 	./$(COMPILER) test/cternary_pointer_array_index_b103.c $(TESTTMP)/cternary_pointer_array_index_b10326
-	$(TESTTMP)/cternary_pointer_array_index_b10326; test "$$?" = "42"
+	$(TESTTMP)/cternary_pointer_array_index_b10326; tools/expect_same.sh cternary_pointer_array_index_b10326-rc "$$?" "42"
 	./$(COMPILER) test/coffsetof_constexpr_array_b104.c $(TESTTMP)/coffsetof_constexpr_array_b10426
-	$(TESTTMP)/coffsetof_constexpr_array_b10426; test "$$?" = "42"
+	$(TESTTMP)/coffsetof_constexpr_array_b10426; tools/expect_same.sh coffsetof_constexpr_array_b10426-rc "$$?" "42"
 	./$(COMPILER) test/cfn_return_fnptr_b105.c $(TESTTMP)/cfn_return_fnptr_b10526
-	$(TESTTMP)/cfn_return_fnptr_b10526; test "$$?" = "42"
+	$(TESTTMP)/cfn_return_fnptr_b10526; tools/expect_same.sh cfn_return_fnptr_b10526-rc "$$?" "42"
 	./$(COMPILER) test/cexternal_func_addr_b106.c $(TESTTMP)/cexternal_func_addr_b10626
-	$(TESTTMP)/cexternal_func_addr_b10626; test "$$?" = "42"
+	$(TESTTMP)/cexternal_func_addr_b10626; tools/expect_same.sh cexternal_func_addr_b10626-rc "$$?" "42"
 	./$(COMPILER) test/clocal_static_const_2d_init_b107.c $(TESTTMP)/clocal_static_const_2d_init_b10726
-	$(TESTTMP)/clocal_static_const_2d_init_b10726; test "$$?" = "42"
+	$(TESTTMP)/clocal_static_const_2d_init_b10726; tools/expect_same.sh clocal_static_const_2d_init_b10726-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include test/cva_arg_local_fnptr_typedef_b108.c $(TESTTMP)/cva_arg_local_fnptr_typedef_b10826
-	$(TESTTMP)/cva_arg_local_fnptr_typedef_b10826; test "$$?" = "42"
+	$(TESTTMP)/cva_arg_local_fnptr_typedef_b10826; tools/expect_same.sh cva_arg_local_fnptr_typedef_b10826-rc "$$?" "42"
 	./$(COMPILER) test/cglobal_fnptr_array_b109.c $(TESTTMP)/cglobal_fnptr_array_b10926
-	$(TESTTMP)/cglobal_fnptr_array_b10926; test "$$?" = "42"
+	$(TESTTMP)/cglobal_fnptr_array_b10926; tools/expect_same.sh cglobal_fnptr_array_b10926-rc "$$?" "42"
 	./$(COMPILER) test/cpreproc_if_arith_b110.c $(TESTTMP)/cpreproc_if_arith_b11026
-	$(TESTTMP)/cpreproc_if_arith_b11026; test "$$?" = "42"
+	$(TESTTMP)/cpreproc_if_arith_b11026; tools/expect_same.sh cpreproc_if_arith_b11026-rc "$$?" "42"
 	./$(COMPILER) test/cauto_pull_crtl_math_b111.c $(TESTTMP)/cauto_pull_crtl_math_b11126
-	$(TESTTMP)/cauto_pull_crtl_math_b11126; test "$$?" = "42"
+	$(TESTTMP)/cauto_pull_crtl_math_b11126; tools/expect_same.sh cauto_pull_crtl_math_b11126-rc "$$?" "42"
 	./$(COMPILER) --system-libs=m test/csystem_libs_granular_math_b112.c $(TESTTMP)/csystem_libs_granular_math_b11226
-	$(TESTTMP)/csystem_libs_granular_math_b11226; test "$$?" = "39"
+	$(TESTTMP)/csystem_libs_granular_math_b11226; tools/expect_same.sh csystem_libs_granular_math_b11226-rc "$$?" "39"
 	@if command -v readelf >/dev/null 2>&1; then \
 	  readelf -d $(TESTTMP)/csystem_libs_granular_math_b11226 | grep -q "Shared library: \\[libm.so.6\\]"; \
 	  ! readelf -d $(TESTTMP)/csystem_libs_granular_math_b11226 | grep -q "Shared library: \\[libc.so.6\\]"; \
@@ -7543,50 +7543,50 @@ test-core: $(COMPILER)
 	  ! readelf -d $(TESTTMP)/csystem_libs_granular_libc_b11326 | grep -q "Shared library: \\[libm.so.6\\]"; \
 	fi
 	./$(COMPILER) test/clocal_record_fnptr_init_b114.c $(TESTTMP)/clocal_record_fnptr_init_b11426
-	$(TESTTMP)/clocal_record_fnptr_init_b11426; test "$$?" = "42"
+	$(TESTTMP)/clocal_record_fnptr_init_b11426; tools/expect_same.sh clocal_record_fnptr_init_b11426-rc "$$?" "42"
 	./$(COMPILER) test/clocal_static_record_array_b115.c $(TESTTMP)/clocal_static_record_array_b11526
-	$(TESTTMP)/clocal_static_record_array_b11526; test "$$?" = "42"
+	$(TESTTMP)/clocal_static_record_array_b11526; tools/expect_same.sh clocal_static_record_array_b11526-rc "$$?" "42"
 	./$(COMPILER) test/cptr_return_text_b116.c $(TESTTMP)/cptr_return_text_b11626
-	$(TESTTMP)/cptr_return_text_b11626; test "$$?" = "42"
+	$(TESTTMP)/cptr_return_text_b11626; tools/expect_same.sh cptr_return_text_b11626-rc "$$?" "42"
 	./$(COMPILER) test/cternary_string_ptr_b118.c $(TESTTMP)/cternary_string_ptr_b11826
-	$(TESTTMP)/cternary_string_ptr_b11826; test "$$?" = "42"
+	$(TESTTMP)/cternary_string_ptr_b11826; tools/expect_same.sh cternary_string_ptr_b11826-rc "$$?" "42"
 	./$(COMPILER) test/csizeof_array_field_b119.c $(TESTTMP)/csizeof_array_field_b11926
-	$(TESTTMP)/csizeof_array_field_b11926; test "$$?" = "42"
+	$(TESTTMP)/csizeof_array_field_b11926; tools/expect_same.sh csizeof_array_field_b11926-rc "$$?" "42"
 	./$(COMPILER) test/carray_field_decay_nested_item_b120.c $(TESTTMP)/carray_field_decay_nested_item_b12026
-	$(TESTTMP)/carray_field_decay_nested_item_b12026; test "$$?" = "42"
+	$(TESTTMP)/carray_field_decay_nested_item_b12026; tools/expect_same.sh carray_field_decay_nested_item_b12026-rc "$$?" "42"
 	# Swept in by chore-a-sweep-the-unwired-tests-into-the-suite: repro tests
 	# added by their fix commits and never wired. Each ASSERTS ITS OWN result
 	# (exit 42 on success, a distinct code per failed check) and each was
 	# confirmed against gcc before wiring -- the expectation is the file's, not
 	# a recording of what pxx happens to print today.
 	./$(COMPILER) test/carray_field_decay_ptr_b120.c $(TESTTMP)/carray_field_decay_ptr_b12026
-	$(TESTTMP)/carray_field_decay_ptr_b12026; test "$$?" = "42"
+	$(TESTTMP)/carray_field_decay_ptr_b12026; tools/expect_same.sh carray_field_decay_ptr_b12026-rc "$$?" "42"
 	./$(COMPILER) test/cbitfield_longlong_b359.c $(TESTTMP)/cbitfield_longlong_b35926
-	$(TESTTMP)/cbitfield_longlong_b35926; test "$$?" = "42"
+	$(TESTTMP)/cbitfield_longlong_b35926; tools/expect_same.sh cbitfield_longlong_b35926-rc "$$?" "42"
 	./$(COMPILER) test/cbitfield_promotion_b358.c $(TESTTMP)/cbitfield_promotion_b35826
-	$(TESTTMP)/cbitfield_promotion_b35826; test "$$?" = "42"
+	$(TESTTMP)/cbitfield_promotion_b35826; tools/expect_same.sh cbitfield_promotion_b35826-rc "$$?" "42"
 	./$(COMPILER) test/cfloat_global_array_implicit_len_b386.c $(TESTTMP)/cfloat_global_array_implicit_len_b38626
-	$(TESTTMP)/cfloat_global_array_implicit_len_b38626; test "$$?" = "42"
+	$(TESTTMP)/cfloat_global_array_implicit_len_b38626; tools/expect_same.sh cfloat_global_array_implicit_len_b38626-rc "$$?" "42"
 	./$(COMPILER) test/cglobal_double_init_arith_b353.c $(TESTTMP)/cglobal_double_init_arith_b35326
-	$(TESTTMP)/cglobal_double_init_arith_b35326; test "$$?" = "42"
+	$(TESTTMP)/cglobal_double_init_arith_b35326; tools/expect_same.sh cglobal_double_init_arith_b35326-rc "$$?" "42"
 	./$(COMPILER) test/cint_mod_unsigned_b360.c $(TESTTMP)/cint_mod_unsigned_b36026
-	$(TESTTMP)/cint_mod_unsigned_b36026; test "$$?" = "42"
+	$(TESTTMP)/cint_mod_unsigned_b36026; tools/expect_same.sh cint_mod_unsigned_b36026-rc "$$?" "42"
 	./$(COMPILER) test/cnested_struct_deep_redef_b354.c $(TESTTMP)/cnested_struct_deep_redef_b35426
-	$(TESTTMP)/cnested_struct_deep_redef_b35426; test "$$?" = "42"
+	$(TESTTMP)/cnested_struct_deep_redef_b35426; tools/expect_same.sh cnested_struct_deep_redef_b35426-rc "$$?" "42"
 	./$(COMPILER) test/cptr_field_index_stride_b121.c $(TESTTMP)/cptr_field_index_stride_b12126
-	$(TESTTMP)/cptr_field_index_stride_b12126; test "$$?" = "42"
+	$(TESTTMP)/cptr_field_index_stride_b12126; tools/expect_same.sh cptr_field_index_stride_b12126-rc "$$?" "42"
 	./$(COMPILER) test/cptr_field_typedef_forward_stride_b121.c $(TESTTMP)/cptr_field_typedef_forward_stride_b12126
-	$(TESTTMP)/cptr_field_typedef_forward_stride_b12126; test "$$?" = "42"
+	$(TESTTMP)/cptr_field_typedef_forward_stride_b12126; tools/expect_same.sh cptr_field_typedef_forward_stride_b12126-rc "$$?" "42"
 	./$(COMPILER) test/csizeof_ptr_field_index_b122.c $(TESTTMP)/csizeof_ptr_field_index_b12226
-	$(TESTTMP)/csizeof_ptr_field_index_b12226; test "$$?" = "42"
+	$(TESTTMP)/csizeof_ptr_field_index_b12226; tools/expect_same.sh csizeof_ptr_field_index_b12226-rc "$$?" "42"
 	./$(COMPILER) test/cswitch_nested_case_block_b127.c $(TESTTMP)/cswitch_nested_case_block_b12726
-	$(TESTTMP)/cswitch_nested_case_block_b12726; test "$$?" = "42"
+	$(TESTTMP)/cswitch_nested_case_block_b12726; tools/expect_same.sh cswitch_nested_case_block_b12726-rc "$$?" "42"
 	./$(COMPILER) test/cunsigned_int_arith_b121.c $(TESTTMP)/cunsigned_int_arith_b12126
-	$(TESTTMP)/cunsigned_int_arith_b12126; test "$$?" = "42"
+	$(TESTTMP)/cunsigned_int_arith_b12126; tools/expect_same.sh cunsigned_int_arith_b12126-rc "$$?" "42"
 	./$(COMPILER) test/cunsigned_div_mod_b123.c $(TESTTMP)/cunsigned_div_mod_b12326
-	$(TESTTMP)/cunsigned_div_mod_b12326; test "$$?" = "42"
+	$(TESTTMP)/cunsigned_div_mod_b12326; tools/expect_same.sh cunsigned_div_mod_b12326-rc "$$?" "42"
 	./$(COMPILER) test/cvararg_named_fp.c $(TESTTMP)/cvararg_named_fp26
-	$(TESTTMP)/cvararg_named_fp26; test "$$?" = "42"
+	$(TESTTMP)/cvararg_named_fp26; tools/expect_same.sh cvararg_named_fp26-rc "$$?" "42"
 	# stack-spilled named params (7th+ GP / 9th+ FP) + overflow_arg_area anchor + capped va seeds (gcc-verified oracle)
 	./$(COMPILER) test/cvararg_stack_spill.c $(TESTTMP)/cvararg_stack_spill26
 	tools/expect_same.sh cvararg_stack_spill26 "$$($(TESTTMP)/cvararg_stack_spill26)" "$$(printf '7060\n950.25\n7807800.75')"
@@ -7617,13 +7617,13 @@ test-core: $(COMPILER)
 	./$(COMPILER) -Futest/unitpath/esp test/test_unitpath.pas $(TESTTMP)/test_unitpath_esp26
 	tools/expect_same.sh test_unitpath_esp26 "$$($(TESTTMP)/test_unitpath_esp26)" "esp"
 	./$(COMPILER) test/test_asm.pas $(TESTTMP)/test_asm26
-	$(TESTTMP)/test_asm26; test "$$?" = "42"
+	$(TESTTMP)/test_asm26; tools/expect_same.sh test_asm26-rc "$$?" "42"
 	./$(COMPILER) test/test_asm_func.pas $(TESTTMP)/test_asm_func26
 	tools/expect_same.sh test_asm_func26 "$$($(TESTTMP)/test_asm_func26)" "14"
 	./$(COMPILER) test/test_asm_swap.pas $(TESTTMP)/test_asm_swap26
 	tools/expect_same.sh test_asm_swap26 "$$($(TESTTMP)/test_asm_swap26)" "$$(printf '42\n-7\n-7\n42')"
 	./$(COMPILER) test/test_asm_branch.pas $(TESTTMP)/test_asm_branch26
-	$(TESTTMP)/test_asm_branch26; test "$$?" = "45"
+	$(TESTTMP)/test_asm_branch26; tools/expect_same.sh test_asm_branch26-rc "$$?" "45"
 	./$(COMPILER) test/test_asm_keywords.pas $(TESTTMP)/test_asm_keywords26
 	tools/expect_same.sh test_asm_keywords26 "$$($(TESTTMP)/test_asm_keywords26)" "4"
 	./$(COMPILER) test/test_asm_global.pas $(TESTTMP)/test_asm_global26
@@ -7806,7 +7806,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_sysutils_datetime.pas $(TESTTMP)/test_sysutils_datetime26
 	tools/expect_same.sh test_sysutils_datetime26 "$$($(TESTTMP)/test_sysutils_datetime26)" "$$(printf '2026-7-2\n2000-2-29\n1900-2-28\n1899-12-30 0.0\n1899-12-29 -1.0\n1969-12-31\n1800-1-1\n2026-7-2 14:30:15.500\n1899-12-30 18:0:0.0')"
 	./$(COMPILER) -Futest/case_units test/test_case_unit_lookup.pas $(TESTTMP)/test_case_unit_lookup26
-	$(TESTTMP)/test_case_unit_lookup26; test "$$?" = "42"
+	$(TESTTMP)/test_case_unit_lookup26; tools/expect_same.sh test_case_unit_lookup26-rc "$$?" "42"
 	./$(COMPILER) -Futest/units_defscope test/test_pascal_define_unit_scope_order1.pas $(TESTTMP)/test_pascal_define_unit_scope_order126
 	tools/expect_same.sh test_pascal_define_unit_scope_order126 "$$($(TESTTMP)/test_pascal_define_unit_scope_order126)" "$$(printf 'ua\nub does not see it')"
 	./$(COMPILER) -Futest/units_defscope test/test_pascal_define_unit_scope_order2.pas $(TESTTMP)/test_pascal_define_unit_scope_order226
@@ -8941,7 +8941,7 @@ test-core: $(COMPILER)
 	   && test ! -e $(TESTTMP)/test_scalarmisuse26 \
 	  || { echo "test_scalar_misuse_is_refused_fail: FAIL - rc=$$rc (want rc=1, eight diagnostics on lines 44-51, no binary)"; printf '%s\n' "$$out"; exit 1; }
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
-	$(TESTTMP)/cmath_sign_bits26; test "$$?" = "42"
+	$(TESTTMP)/cmath_sign_bits26; tools/expect_same.sh cmath_sign_bits26-rc "$$?" "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26
 	tools/expect_same.sh test_ptr_untyped_deref26 "$$($(TESTTMP)/test_ptr_untyped_deref26)" "$$(printf 'move=TRUE\nfill=TRUE')"
 	./$(COMPILER) -Fulib/rtl test/test_on_binderless.pas $(TESTTMP)/test_on_binderless26
@@ -9095,7 +9095,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_ptr_deref_vararg.pas $(TESTTMP)/test_ptr_deref_vararg26
 	tools/expect_same.sh test_ptr_deref_vararg26 "$$($(TESTTMP)/test_ptr_deref_vararg26)" "$$(printf '5\n7\n7')"
 	./$(COMPILER) test/test_pointer_deref_depth.pas $(TESTTMP)/test_pointer_deref_depth26
-	$(TESTTMP)/test_pointer_deref_depth26; test "$$?" = "42"
+	$(TESTTMP)/test_pointer_deref_depth26; tools/expect_same.sh test_pointer_deref_depth26-rc "$$?" "42"
 	./$(COMPILER) test/test_ptr_cast.pas $(TESTTMP)/test_ptr_cast26
 	tools/expect_same.sh test_ptr_cast26 "$$($(TESTTMP)/test_ptr_cast26)" "$$(printf '12345\n99999\n77\n88\n42\n1111\n7\n99\n100\n200\nbuiltin_cast: int64 ok\n100')"
 	./$(COMPILER) test/test_ptr_arithmetic.pas $(TESTTMP)/test_ptr_arithmetic26
@@ -11040,7 +11040,7 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 -Fulib/rtl test/test_signal_handler_callback_b336.pas $(TESTTMP)/test_i386_sigcb
 	tools/expect_same.sh i386/test_i386_sigcb "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sigcb)" "$$(printf 'hits=2\nresumed after handler')"
 	./$(COMPILER) --target=i386 -Fulib/rtl test/test_signal_default_revert_b336.pas $(TESTTMP)/test_i386_sigdfl
-	tools/run_target.sh i386 $(TESTTMP)/test_i386_sigdfl > /dev/null 2>&1; test "$$?" = "143"
+	tools/run_target.sh i386 $(TESTTMP)/test_i386_sigdfl > /dev/null 2>&1; tools/expect_same.sh i386/test_i386_sigdfl-rc "$$?" "143"
 	# SA_SIGINFO: si_code/si_addr/ucontext* reach Pascal. si_addr is asserted
 	# against the address the program itself faulted on (union at 12 on ILP32,
 	# not 16), and the negative SI_TKILL is the sign canary. The callback test
@@ -11088,11 +11088,11 @@ test-i386: $(COMPILER)
 	./$(COMPILER) test/test_extern_c_float.pas $(TESTTMP)/test_i386_extern_float_x64
 	tools/expect_same.sh i386/test_i386_extern_float "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_extern_float)" "$$($(TESTTMP)/test_i386_extern_float_x64)"
 	./$(COMPILER) --target=i386 test/ccross_entry.c $(TESTTMP)/test_i386_centry
-	tools/run_target.sh i386 $(TESTTMP)/test_i386_centry; test "$$?" = "42"
+	tools/run_target.sh i386 $(TESTTMP)/test_i386_centry; tools/expect_same.sh i386/test_i386_centry-rc "$$?" "42"
 	./$(COMPILER) --target=i386 test/ccross_args.c $(TESTTMP)/test_i386_cargs
-	tools/run_target.sh i386 $(TESTTMP)/test_i386_cargs; test "$$?" = "42"
+	tools/run_target.sh i386 $(TESTTMP)/test_i386_cargs; tools/expect_same.sh i386/test_i386_cargs-rc "$$?" "42"
 	./$(COMPILER) --target=i386 test/ccross_double_to_int.c $(TESTTMP)/test_i386_cd2i
-	tools/run_target.sh i386 $(TESTTMP)/test_i386_cd2i; test "$$?" = "42"
+	tools/run_target.sh i386 $(TESTTMP)/test_i386_cd2i; tools/expect_same.sh i386/test_i386_cd2i-rc "$$?" "42"
 	./$(COMPILER) --target=i386 test/test_readln.pas $(TESTTMP)/test_i386_readln
 	./$(COMPILER) test/test_readln.pas $(TESTTMP)/test_i386_readln_x64
 	tools/expect_same.sh i386/test_i386_readln "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh i386 $(TESTTMP)/test_i386_readln)" "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_i386_readln_x64)"
@@ -11100,17 +11100,17 @@ test-i386: $(COMPILER)
 	./$(COMPILER) test/test_eof_stdin.pas $(TESTTMP)/test_i386_eof_x64
 	tools/expect_same.sh i386/test_i386_eof "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh i386 $(TESTTMP)/test_i386_eof)" "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_i386_eof_x64)"
 	./$(COMPILER) --target=i386 test/cunsigned_int_arith_b121.c $(TESTTMP)/test_i386_cuarith
-	tools/run_target.sh i386 $(TESTTMP)/test_i386_cuarith; test "$$?" = "42"
+	tools/run_target.sh i386 $(TESTTMP)/test_i386_cuarith; tools/expect_same.sh i386/test_i386_cuarith-rc "$$?" "42"
 	./$(COMPILER) --target=i386 test/cunsigned_semantics_sweep_b138.c $(TESTTMP)/test_i386_cusweep
-	tools/run_target.sh i386 $(TESTTMP)/test_i386_cusweep; test "$$?" = "42"
+	tools/run_target.sh i386 $(TESTTMP)/test_i386_cusweep; tools/expect_same.sh i386/test_i386_cusweep-rc "$$?" "42"
 	./$(COMPILER) --target=i386 test/cunsigned_div_mod_b123.c $(TESTTMP)/test_i386_cudiv
-	tools/run_target.sh i386 $(TESTTMP)/test_i386_cudiv; test "$$?" = "42"
+	tools/run_target.sh i386 $(TESTTMP)/test_i386_cudiv; tools/expect_same.sh i386/test_i386_cudiv-rc "$$?" "42"
 	# inline asm on i386: locals/params via [ebp±off] substitution, labels+jcc, mov/@glob global access
 	./$(COMPILER) --target=i386 test/test_asm_386.pas $(TESTTMP)/test_i386_asm
 	tools/expect_same.sh i386/test_i386_asm "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_asm)" "$$(printf '42\n55\n42')"
 	# .asm source frontend on i386: labels/branches + global entry override, exit code = ebx
 	./$(COMPILER) --target=i386 test/test_asm_386_sum.asm $(TESTTMP)/test_i386_asmfront
-	tools/run_target.sh i386 $(TESTTMP)/test_i386_asmfront; test "$$?" = "55"
+	tools/run_target.sh i386 $(TESTTMP)/test_i386_asmfront; tools/expect_same.sh i386/test_i386_asmfront-rc "$$?" "55"
 	# parallel for + full capture (scalar/array/record/string) — data-parallel loop on i386
 	./$(COMPILER) --threadsafe --target=i386 test/test_parallel_for_lang.pas $(TESTTMP)/test_i386_parfor
 	tools/expect_same.sh i386/test_i386_parfor "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_parfor | tail -n 1)" "PARFORLANG OK"
@@ -11448,7 +11448,7 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 -Fulib/rtl test/test_signal_handler_callback_b336.pas $(TESTTMP)/test_aarch64_sigcb
 	tools/expect_same.sh aarch64/test_aarch64_sigcb "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sigcb)" "$$(printf 'hits=2\nresumed after handler')"
 	./$(COMPILER) --target=aarch64 -Fulib/rtl test/test_signal_default_revert_b336.pas $(TESTTMP)/test_aarch64_sigdfl
-	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sigdfl > /dev/null 2>&1; test "$$?" = "143"
+	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sigdfl > /dev/null 2>&1; tools/expect_same.sh aarch64/test_aarch64_sigdfl-rc "$$?" "143"
 	# SA_SIGINFO: si_code/si_addr/ucontext* reach Pascal. si_addr is asserted
 	# against the address the program itself faulted on, so a wrong union offset
 	# (16 here, 12 on ILP32) cannot pass; the negative SI_TKILL is the sign canary.
@@ -11496,11 +11496,11 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) test/test_extern_c_float.pas $(TESTTMP)/test_aarch64_extern_float_x64
 	tools/expect_same.sh aarch64/test_aarch64_extern_float "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_extern_float)" "$$($(TESTTMP)/test_aarch64_extern_float_x64)"
 	./$(COMPILER) --target=aarch64 test/ccross_entry.c $(TESTTMP)/test_aarch64_centry
-	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_centry; test "$$?" = "42"
+	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_centry; tools/expect_same.sh aarch64/test_aarch64_centry-rc "$$?" "42"
 	./$(COMPILER) --target=aarch64 test/ccross_args.c $(TESTTMP)/test_aarch64_cargs
-	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cargs; test "$$?" = "42"
+	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cargs; tools/expect_same.sh aarch64/test_aarch64_cargs-rc "$$?" "42"
 	./$(COMPILER) --target=aarch64 test/ccross_double_to_int.c $(TESTTMP)/test_aarch64_cd2i
-	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cd2i; test "$$?" = "42"
+	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cd2i; tools/expect_same.sh aarch64/test_aarch64_cd2i-rc "$$?" "42"
 	./$(COMPILER) --target=aarch64 test/test_readln.pas $(TESTTMP)/test_aarch64_readln
 	./$(COMPILER) test/test_readln.pas $(TESTTMP)/test_aarch64_readln_x64
 	tools/expect_same.sh aarch64/test_aarch64_readln "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_readln)" "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_aarch64_readln_x64)"
@@ -11508,11 +11508,11 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) test/test_eof_stdin.pas $(TESTTMP)/test_aarch64_eof_x64
 	tools/expect_same.sh aarch64/test_aarch64_eof "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_eof)" "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_aarch64_eof_x64)"
 	./$(COMPILER) --target=aarch64 test/cunsigned_int_arith_b121.c $(TESTTMP)/test_aarch64_cuarith
-	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cuarith; test "$$?" = "42"
+	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cuarith; tools/expect_same.sh aarch64/test_aarch64_cuarith-rc "$$?" "42"
 	./$(COMPILER) --target=aarch64 test/cunsigned_semantics_sweep_b138.c $(TESTTMP)/test_aarch64_cusweep
-	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cusweep; test "$$?" = "42"
+	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cusweep; tools/expect_same.sh aarch64/test_aarch64_cusweep-rc "$$?" "42"
 	./$(COMPILER) --target=aarch64 test/cunsigned_div_mod_b123.c $(TESTTMP)/test_aarch64_cudiv
-	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cudiv; test "$$?" = "42"
+	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cudiv; tools/expect_same.sh aarch64/test_aarch64_cudiv-rc "$$?" "42"
 	# inline asm on aarch64: locals/params via [x29,off] substitution, labels+branches, ldr/@glob global access
 	./$(COMPILER) --target=aarch64 test/test_asm_a64.pas $(TESTTMP)/test_aarch64_asm
 	tools/expect_same.sh aarch64/test_aarch64_asm "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_asm)" "$$(printf '42\n55\n42')"
@@ -11521,7 +11521,7 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_aarch64_asmifdef "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_asmifdef)" "42"
 	# .asm source frontend on aarch64: labels/branches + global entry override, exit code = x0
 	./$(COMPILER) --target=aarch64 test/test_asm_a64_sum.asm $(TESTTMP)/test_aarch64_asmfront
-	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_asmfront; test "$$?" = "55"
+	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_asmfront; tools/expect_same.sh aarch64/test_aarch64_asmfront-rc "$$?" "55"
 	# parallel for + capture on aarch64. Multi-aggregate capture bus-errored until
 	# bug-a-parallel-for-aarch64-multi-capture: BSS base was not 8-aligned, so the
 	# --threadsafe I/O lock's 64-bit ldaxr SIGBUS'd for some CodeLen parities.
@@ -11573,17 +11573,17 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_overflow_qplus_narrow.pas $(TESTTMP)/test_riscv32_qplus_narrow
 	tools/expect_same.sh riscv32/test_riscv32_qplus_narrow "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_qplus_narrow)" "$$(printf 'caught=5 clean=4 wrap=-294967296')"
 	./$(COMPILER) --target=riscv32 test/ccross_entry.c $(TESTTMP)/test_riscv32_centry
-	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_centry; test "$$?" = "42"
+	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_centry; tools/expect_same.sh riscv32/test_riscv32_centry-rc "$$?" "42"
 	./$(COMPILER) --target=riscv32 test/ccross_args.c $(TESTTMP)/test_riscv32_cargs
-	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cargs; test "$$?" = "42"
+	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cargs; tools/expect_same.sh riscv32/test_riscv32_cargs-rc "$$?" "42"
 	./$(COMPILER) --target=riscv32 test/ccross_double_to_int.c $(TESTTMP)/test_riscv32_cd2i
-	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cd2i; test "$$?" = "42"
+	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cd2i; tools/expect_same.sh riscv32/test_riscv32_cd2i-rc "$$?" "42"
 	./$(COMPILER) --target=riscv32 test/cunsigned_int_arith_b121.c $(TESTTMP)/test_riscv32_cuarith
-	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cuarith; test "$$?" = "42"
+	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cuarith; tools/expect_same.sh riscv32/test_riscv32_cuarith-rc "$$?" "42"
 	./$(COMPILER) --target=riscv32 test/cunsigned_semantics_sweep_b138.c $(TESTTMP)/test_riscv32_cusweep
-	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cusweep; test "$$?" = "42"
+	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cusweep; tools/expect_same.sh riscv32/test_riscv32_cusweep-rc "$$?" "42"
 	./$(COMPILER) --target=riscv32 test/cunsigned_div_mod_b123.c $(TESTTMP)/test_riscv32_cudiv
-	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cudiv; test "$$?" = "42"
+	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cudiv; tools/expect_same.sh riscv32/test_riscv32_cudiv-rc "$$?" "42"
 	./$(COMPILER) --target=riscv32 test/hello.pas $(TESTTMP)/test_riscv32_hello
 	tools/expect_same.sh riscv32/test_riscv32_hello "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_hello)" "Hello, World!"
 	# inline expansion (feature-inline-routines): -O2 == -O0 on this cross target.
@@ -11619,7 +11619,7 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/test_riscv32_asm "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_asm)" "$$(printf '42\n55\n42')"
 	# .asm source frontend on riscv32: labels/branches + global entry override, exit code = a0
 	./$(COMPILER) --target=riscv32 test/test_asm_rv32_sum.asm $(TESTTMP)/test_riscv32_asmfront
-	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_asmfront; test "$$?" = "55"
+	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_asmfront; tools/expect_same.sh riscv32/test_riscv32_asmfront-rc "$$?" "55"
 	# ifdef-guarded multi-arch asm source, riscv32 leg
 	./$(COMPILER) --target=riscv32 test/test_asm_ifdef_multiarch.pas $(TESTTMP)/test_riscv32_asmifdef
 	tools/expect_same.sh riscv32/test_riscv32_asmifdef "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_asmifdef)" "42"
@@ -11628,7 +11628,7 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 -Fulib/rtl test/test_signal_handler_callback_b336.pas $(TESTTMP)/test_riscv32_sigcb
 	tools/expect_same.sh riscv32/test_riscv32_sigcb "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_sigcb)" "$$(printf 'hits=2\nresumed after handler')"
 	./$(COMPILER) --target=riscv32 -Fulib/rtl test/test_signal_default_revert_b336.pas $(TESTTMP)/test_riscv32_sigdfl
-	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_sigdfl > /dev/null 2>&1; test "$$?" = "143"
+	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_sigdfl > /dev/null 2>&1; tools/expect_same.sh riscv32/test_riscv32_sigdfl-rc "$$?" "143"
 	# SA_SIGINFO: si_code/si_addr/ucontext* reach Pascal. si_addr is asserted
 	# against the address the program itself faulted on — on ILP32 the siginfo
 	# preamble is NOT padded, so the union starts at 12, not 16; this is what
@@ -11956,11 +11956,11 @@ test-riscv32: $(COMPILER)
 	# SKIP test/test_extern_c.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	# SKIP test/test_extern_c_float.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	./$(COMPILER) --target=riscv32 test/ccross_entry.c $(TESTTMP)/test_rv32x_centry
-	tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_centry; test "$$?" = "42"
+	tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_centry; tools/expect_same.sh riscv32/test_rv32x_centry-rc "$$?" "42"
 	./$(COMPILER) --target=riscv32 test/ccross_args.c $(TESTTMP)/test_rv32x_cargs
-	tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_cargs; test "$$?" = "42"
+	tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_cargs; tools/expect_same.sh riscv32/test_rv32x_cargs-rc "$$?" "42"
 	./$(COMPILER) --target=riscv32 test/ccross_double_to_int.c $(TESTTMP)/test_rv32x_cd2i
-	tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_cd2i; test "$$?" = "42"
+	tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_cd2i; tools/expect_same.sh riscv32/test_rv32x_cd2i-rc "$$?" "42"
 	./$(COMPILER) --target=riscv32 test/test_readln.pas $(TESTTMP)/test_rv32x_readln
 	./$(COMPILER) test/test_readln.pas $(TESTTMP)/test_rv32x_readln_x64
 	tools/expect_same.sh riscv32/test_rv32x_readln "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_readln)" "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_rv32x_readln_x64)"
@@ -11968,9 +11968,9 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) test/test_eof_stdin.pas $(TESTTMP)/test_rv32x_eof_x64
 	tools/expect_same.sh riscv32/test_rv32x_eof "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_eof)" "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_rv32x_eof_x64)"
 	./$(COMPILER) --target=riscv32 test/cunsigned_int_arith_b121.c $(TESTTMP)/test_rv32x_cuarith
-	tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_cuarith; test "$$?" = "42"
+	tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_cuarith; tools/expect_same.sh riscv32/test_rv32x_cuarith-rc "$$?" "42"
 	./$(COMPILER) --target=riscv32 test/cunsigned_semantics_sweep_b138.c $(TESTTMP)/test_rv32x_cusweep
-	tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_cusweep; test "$$?" = "42"
+	tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_cusweep; tools/expect_same.sh riscv32/test_rv32x_cusweep-rc "$$?" "42"
 	# SKIP test/cunsigned_div_mod_b123.c on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	@echo "riscv32 c-entry + c-args + c-double-to-int + c-unsigned-arith + c-unsigned-div + hello + stackless-generator + readln + eof-stdin + exception + args + typed-const + global-init + set-param + inline-asm + record-byval-wide + bignum-ops + shared-pascal-battery ok"
 
@@ -12315,7 +12315,7 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 -Fulib/rtl test/test_signal_handler_callback_b336.pas $(TESTTMP)/test_arm32_sigcb
 	tools/expect_same.sh arm32/test_arm32_sigcb "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sigcb)" "$$(printf 'hits=2\nresumed after handler')"
 	./$(COMPILER) --target=arm32 -Fulib/rtl test/test_signal_default_revert_b336.pas $(TESTTMP)/test_arm32_sigdfl
-	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sigdfl > /dev/null 2>&1; test "$$?" = "143"
+	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sigdfl > /dev/null 2>&1; tools/expect_same.sh arm32/test_arm32_sigdfl-rc "$$?" "143"
 	# SA_SIGINFO: si_code/si_addr/ucontext* reach Pascal. si_addr is asserted
 	# against the address the program itself faulted on (union at 12 on ILP32,
 	# not 16), and the negative SI_TKILL is the sign canary. The callback test
@@ -12362,11 +12362,11 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) test/test_extern_c_float.pas $(TESTTMP)/test_arm32_extern_float_x64
 	tools/expect_same.sh arm32/test_arm32_extern_float "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_extern_float)" "$$($(TESTTMP)/test_arm32_extern_float_x64)"
 	./$(COMPILER) --target=arm32 test/ccross_entry.c $(TESTTMP)/test_arm32_centry
-	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_centry; test "$$?" = "42"
+	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_centry; tools/expect_same.sh arm32/test_arm32_centry-rc "$$?" "42"
 	./$(COMPILER) --target=arm32 test/ccross_args.c $(TESTTMP)/test_arm32_cargs
-	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cargs; test "$$?" = "42"
+	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cargs; tools/expect_same.sh arm32/test_arm32_cargs-rc "$$?" "42"
 	./$(COMPILER) --target=arm32 test/ccross_double_to_int.c $(TESTTMP)/test_arm32_cd2i
-	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cd2i; test "$$?" = "42"
+	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cd2i; tools/expect_same.sh arm32/test_arm32_cd2i-rc "$$?" "42"
 	./$(COMPILER) --target=arm32 test/test_readln.pas $(TESTTMP)/test_arm32_readln
 	./$(COMPILER) test/test_readln.pas $(TESTTMP)/test_arm32_readln_x64
 	tools/expect_same.sh arm32/test_arm32_readln "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh arm32 $(TESTTMP)/test_arm32_readln)" "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_arm32_readln_x64)"
@@ -12374,17 +12374,17 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) test/test_eof_stdin.pas $(TESTTMP)/test_arm32_eof_x64
 	tools/expect_same.sh arm32/test_arm32_eof "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh arm32 $(TESTTMP)/test_arm32_eof)" "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_arm32_eof_x64)"
 	./$(COMPILER) --target=arm32 test/cunsigned_int_arith_b121.c $(TESTTMP)/test_arm32_cuarith
-	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cuarith; test "$$?" = "42"
+	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cuarith; tools/expect_same.sh arm32/test_arm32_cuarith-rc "$$?" "42"
 	./$(COMPILER) --target=arm32 test/cunsigned_semantics_sweep_b138.c $(TESTTMP)/test_arm32_cusweep
-	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cusweep; test "$$?" = "42"
+	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cusweep; tools/expect_same.sh arm32/test_arm32_cusweep-rc "$$?" "42"
 	./$(COMPILER) --target=arm32 test/cunsigned_div_mod_b123.c $(TESTTMP)/test_arm32_cudiv
-	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cudiv; test "$$?" = "42"
+	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cudiv; tools/expect_same.sh arm32/test_arm32_cudiv-rc "$$?" "42"
 	# inline asm on arm32: locals/params via [fp,off] substitution, labels+cond-suffixed branches, ldr/@glob global access
 	./$(COMPILER) --target=arm32 test/test_asm_arm32.pas $(TESTTMP)/test_arm32_asm
 	tools/expect_same.sh arm32/test_arm32_asm "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_asm)" "$$(printf '42\n55\n42')"
 	# .asm source frontend on arm32: labels/branches + global entry override, exit code = r0
 	./$(COMPILER) --target=arm32 test/test_asm_arm32_sum.asm $(TESTTMP)/test_arm32_asmfront
-	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_asmfront; test "$$?" = "55"
+	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_asmfront; tools/expect_same.sh arm32/test_arm32_asmfront-rc "$$?" "55"
 	# parallel for + full capture (scalar/array/record/string) — data-parallel loop on arm32
 	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_for_lang.pas $(TESTTMP)/test_arm32_parfor
 	tools/expect_same.sh arm32/test_arm32_parfor "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_parfor | tail -n 1)" "PARFORLANG OK"
@@ -13459,7 +13459,7 @@ test-quick: $(COMPILER)
 	# to leak -- Track T's native sweep found them hours later. udeep1/2/3 is a
 	# three-unit chain covering all six name tables and both uses sections.
 	./$(COMPILER) -Futest/usesdepth test/quick_canary_uses.pas $(TESTTMP)/qc_uses26
-	test "$$($(TESTTMP)/qc_uses26)" = "uses depth ok 180"   # FPC 3.2.2 agrees
+	tools/expect_same.sh qc_uses26 "$$($(TESTTMP)/qc_uses26)" "uses depth ok 180"   # FPC 3.2.2 agrees
 	# ...and the leak itself must NOT compile. A regression that re-opens it
 	# keeps the file above green; only this half catches it.
 	! ./$(COMPILER) -Futest/usesdepth test/quick_canary_uses_fail.pas $(TESTTMP)/qc_usesf26 > $(TESTTMP)/qc_usesf.log 2>&1
@@ -14266,7 +14266,7 @@ lib-test: pxx-stable-check
 	# printf-free on purpose — a wrong length modifier is a varargs bug, so a
 	# printf-based check would be testing the bug with the bug.
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_inttypes.c $(TESTTMP)/crtl_inttypes
-	$(TESTTMP)/crtl_inttypes; test "$$?" = "42"
+	$(TESTTMP)/crtl_inttypes; tools/expect_same.sh crtl_inttypes-rc "$$?" "42"
 	# clock(): plausible CPU microseconds with a NON-NEGATIVE delta between
 	# readings — the property the __pxx_clock Int64-cast workaround protected.
 	# The rounding CONTRACT: Pascal ties-to-even, C half-away-from-zero, and the
@@ -14279,9 +14279,9 @@ lib-test: pxx-stable-check
 	# anonymous mmap gives REAL pages and mprotect really flips them executable —
 	# the JIT shape tcc -run needs. Both used to be no-op stubs.
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/src test/cmman_jit_exec_pages.c $(TESTTMP)/cmman_jit_exec_pages
-	$(TESTTMP)/cmman_jit_exec_pages; test "$$?" = "42"
+	$(TESTTMP)/cmman_jit_exec_pages; tools/expect_same.sh cmman_jit_exec_pages-rc "$$?" "42"
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/src test/crtl_longjmp_as_value.c $(TESTTMP)/crtl_longjmp_as_value
-	$(TESTTMP)/crtl_longjmp_as_value; test "$$?" = "42"
+	$(TESTTMP)/crtl_longjmp_as_value; tools/expect_same.sh crtl_longjmp_as_value-rc "$$?" "42"
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/src test/cmath_lround.c $(TESTTMP)/cmath_lround
 	tools/expect_same.sh cmath_lround "$$($(TESTTMP)/cmath_lround)" "$$(printf '0.5 lround=1 llround=1 lrint=0\n1.5 lround=2 llround=2 lrint=2\n2.5 lround=3 llround=3 lrint=2\n3.5 lround=4 llround=4 lrint=4\n-0.5 lround=-1 llround=-1 lrint=0\n-1.5 lround=-2 llround=-2 lrint=-2\n-2.5 lround=-3 llround=-3 lrint=-2\n2.7 lround=3 llround=3 lrint=3\n-2.7 lround=-3 llround=-3 lrint=-3\n0.0 lround=0 llround=0 lrint=0')"
 	# The integral-part family at the signed-zero and 2^52 boundaries. The
@@ -14290,7 +14290,7 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/src test/cmath_integral_family.c $(TESTTMP)/cmath_integral_family
 	tools/expect_same.sh cmath_integral_family "$$($(TESTTMP)/cmath_integral_family)" "$$(printf 'fabs(-0)=+0\ntrunc(-0.5)=-0\nround(-0)=-0\nrint(-0.5)=-0\nfrexp(-0)=-0 e=0\nmodf(-1) fr=-0 ip=-1\ntrunc(1e300)=+1e+300\nround(-1e300)=-1e+300\nmodf(1e300) fr=+0 ip=+1e+300\nround(0.49999999999999994)=+0\nfrexp(inf)=+inf')"
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_clock_monotonic.c $(TESTTMP)/crtl_clock_monotonic
-	$(TESTTMP)/crtl_clock_monotonic; test "$$?" = "42"
+	$(TESTTMP)/crtl_clock_monotonic; tools/expect_same.sh crtl_clock_monotonic-rc "$$?" "42"
 	# poll() over a SET (not a loop over a per-handle poll), and the LINKAGE that
 	# a declared-but-unimplemented crtl function silently gave away: a body-less
 	# declaration binds to libc.so.6 and still prints the right answers.
@@ -14306,12 +14306,12 @@ lib-test: pxx-stable-check
 	# crtl's exit(), so a handler list kept on the C side would pass the exit()
 	# row here and silently skip the row above it.
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_atexit.c $(TESTTMP)/crtl_atexit
-	test "$$($(TESTTMP)/crtl_atexit)"   = "$$(printf 'main-returns\nh3\nh2\nh1')"
-	$(TESTTMP)/crtl_atexit; test "$$?" = "0"
+	tools/expect_same.sh crtl_atexit "$$($(TESTTMP)/crtl_atexit)" "$$(printf 'main-returns\nh3\nh2\nh1')"
+	$(TESTTMP)/crtl_atexit; tools/expect_same.sh crtl_atexit-rc "$$?" "0"
 	tools/expect_same.sh crtl_atexit.1 "$$($(TESTTMP)/crtl_atexit e)" "$$(printf 'via-exit\nchild-exit')"
-	$(TESTTMP)/crtl_atexit e; test "$$?" = "4"
+	$(TESTTMP)/crtl_atexit e; tools/expect_same.sh crtl_atexit-rc.2 "$$?" "4"
 	tools/expect_same.sh crtl_atexit.2 "$$($(TESTTMP)/crtl_atexit x)" "via-_Exit"
-	$(TESTTMP)/crtl_atexit x; test "$$?" = "5"
+	$(TESTTMP)/crtl_atexit x; tools/expect_same.sh crtl_atexit-rc.3 "$$?" "5"
 	tools/expect_same.sh crtl_atexit.3 "$$($(TESTTMP)/crtl_atexit n)" "registered ok=100 bad=0"
 	@if command -v readelf >/dev/null 2>&1; then \
 	  n=$$(readelf -d $(TESTTMP)/crtl_atexit 2>/dev/null | grep -c NEEDED); \
@@ -14327,21 +14327,21 @@ lib-test: pxx-stable-check
 	# Payne-Hanek huge-argument trig: sin/cos/tan past 1e8, expected values are
 	# the correctly-rounded doubles judged against 400-digit references.
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_trig_huge.c $(TESTTMP)/crtl_trig_huge
-	$(TESTTMP)/crtl_trig_huge; test "$$?" = "42"
+	$(TESTTMP)/crtl_trig_huge; tools/expect_same.sh crtl_trig_huge-rc "$$?" "42"
 	# exp2 was declared in math.h and never defined — linked, then died at runtime
 	$(PXX_STABLE) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_exp2.c $(TESTTMP)/crtl_exp2
-	$(TESTTMP)/crtl_exp2; test "$$?" = "42"
+	$(TESTTMP)/crtl_exp2; tools/expect_same.sh crtl_exp2-rc "$$?" "42"
 	@if command -v xvfb-run >/dev/null 2>&1 && [ -e /usr/lib/$$(uname -m)-linux-gnu/libtk8.6.so.0 ]; then \
 	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/hello.npy $(TESTTMP)/lib_tk_hello >/dev/null && \
-	  test "$$(xvfb-run -a $(TESTTMP)/lib_tk_hello)" = "ok: nilpy tk window shown and closed" && \
+	  tools/expect_same.sh lib_tk_hello "$$(xvfb-run -a $(TESTTMP)/lib_tk_hello)" "ok: nilpy tk window shown and closed" && \
 	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/widgets.npy $(TESTTMP)/lib_tk_widgets >/dev/null && \
-	  test "$$(xvfb-run -a $(TESTTMP)/lib_tk_widgets | tail -n 4)" = "$$(printf 'entry = typed into an entry\ntext  = and into a text widget\nlabel = widgets, one TkEval each\nok: nilpy tk widgets shown and closed')" && \
+	  tools/expect_same.sh lib_tk_widgets "$$(xvfb-run -a $(TESTTMP)/lib_tk_widgets | tail -n 4)" "$$(printf 'entry = typed into an entry\ntext  = and into a text widget\nlabel = widgets, one TkEval each\nok: nilpy tk widgets shown and closed')" && \
 	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/kwargs.npy $(TESTTMP)/lib_tk_kwargs >/dev/null && \
-	  test "$$(xvfb-run -a $(TESTTMP)/lib_tk_kwargs | tr -d '\n')" = "get HELLOafter-delete LOvar bkwargs ok" && \
+	  tools/expect_same.sh lib_tk_kwargs "$$(xvfb-run -a $(TESTTMP)/lib_tk_kwargs | tr -d '\n')" "get HELLOafter-delete LOvar bkwargs ok" && \
 	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/callbacks.npy $(TESTTMP)/lib_tk_callbacks >/dev/null && \
-	  test "$$(xvfb-run -a $(TESTTMP)/lib_tk_callbacks | tail -n 6)" = "$$(printf 'trace fired\nstr trace fired\nbbox [1, 1, 10, 10]\nhits 1\nscroll ok True True\nlambda scroll ok True True')" && \
+	  tools/expect_same.sh lib_tk_callbacks "$$(xvfb-run -a $(TESTTMP)/lib_tk_callbacks | tail -n 6)" "$$(printf 'trace fired\nstr trace fired\nbbox [1, 1, 10, 10]\nhits 1\nscroll ok True True\nlambda scroll ok True True')" && \
 	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix examples/tk/htmlview.npy $(TESTTMP)/lib_tk_htmlview >/dev/null && \
-	  test "$$(xvfb-run -a $(TESTTMP)/lib_tk_htmlview)" = "$$(printf 'title True\ninline True\nbullet True\nentity True\npre True\nquote True\nlink True\nreplaced x\nlabel plain & small\nok: tkhtmlview rendered')" && \
+	  tools/expect_same.sh lib_tk_htmlview "$$(xvfb-run -a $(TESTTMP)/lib_tk_htmlview)" "$$(printf 'title True\ninline True\nbullet True\nentity True\npre True\nquote True\nlink True\nreplaced x\nlabel plain & small\nok: tkhtmlview rendered')" && \
 	  echo "  tk-nilpy: ok"; \
 	else \
 	  echo "  tk-nilpy: SKIP (no xvfb-run or no libtk8.6)"; \
@@ -14393,7 +14393,7 @@ lib-test: pxx-stable-check
 	  test -n "$$uport" \
 	    || { echo "FAIL: urllib test server did not report its port"; cat $(TESTTMP)/lib_urllib_srv.log; exit 1; }; \
 	  $(TESTTMP)/lib_urllib_client $$uport $(TESTTMP)/lib_urllib_pxx.bin > $(TESTTMP)/lib_urllib_pxx.txt 2>&1; \
-	  test "$$(tail -n 1 $(TESTTMP)/lib_urllib_pxx.txt)" = "MIMIC-URLLIB-REQUEST OK" \
+	  tools/expect_same.sh lib_urllib_pxx.txt "$$(tail -n 1 $(TESTTMP)/lib_urllib_pxx.txt)" "MIMIC-URLLIB-REQUEST OK" \
 	    || { echo "FAIL: mimic_urllib_request client did not finish"; tail -20 $(TESTTMP)/lib_urllib_pxx.txt; exit 1; }; \
 	  if command -v python3 >/dev/null 2>&1; then \
 	    python3 test/lib_mimic_urllib_request.npy $$uport $(TESTTMP)/lib_urllib_cpy.bin > $(TESTTMP)/lib_urllib_cpy.txt 2>&1; \
@@ -14538,7 +14538,7 @@ endif
 	  echo "  dynlib $$arch: interpreter + libc import ok (static)"; \
 	done
 	@if command -v qemu-i386 >/dev/null 2>&1; then \
-	  test "$$(qemu-i386 $(TESTTMP)/lib_dynlib_i386)" = "$$(printf 'strlen: 5\nunloaded: TRUE')" \
+	  tools/expect_same.sh lib_dynlib_i386 "$$(qemu-i386 $(TESTTMP)/lib_dynlib_i386)" "$$(printf 'strlen: 5\nunloaded: TRUE')" \
 	    && echo "  dynlib i386: dlopen/dlsym/dlclose RUN ok under qemu" \
 	    || { echo "dynlib i386 run FAIL"; exit 1; }; \
 	else echo "  dynlib i386: qemu-i386 absent, run not verified"; fi
@@ -14956,11 +14956,11 @@ endif
 	# run you needed. The assertion is unchanged -- only the diagnostic survives now.
 	$(PXX_STABLE) -Fulib/rtl test/lib_dns_libc.pas $(TESTTMP)/lib_dns_libc_default
 	@out=$$($(TESTTMP)/lib_dns_libc_default 2>&1); \
-	  test "$$(printf '%s\n' "$$out" | tail -1)" = "DNSLIBC OK" \
+	  tools/expect_same.sh assert "$$(printf '%s\n' "$$out" | tail -1)" "DNSLIBC OK" \
 	  || { echo "FAIL: lib_dns_libc_default output was:"; printf '%s\n' "$$out"; exit 1; }
 	$(PXX_STABLE) -dPXX_DNS_LIBC -dPXX_DYNLIB_LIBC -Fulib/rtl -Fulib/rtl/platform/posix test/lib_dns_libc.pas $(TESTTMP)/lib_dns_libc
 	@out=$$($(TESTTMP)/lib_dns_libc 2>&1); \
-	  test "$$(printf '%s\n' "$$out" | tail -1)" = "DNSLIBC OK" \
+	  tools/expect_same.sh assert.2 "$$(printf '%s\n' "$$out" | tail -1)" "DNSLIBC OK" \
 	  || { echo "FAIL: lib_dns_libc output was:"; printf '%s\n' "$$out"; exit 1; }
 	# RFC 6761 6.3: localhost always means loopback and must never reach a
 	# nameserver. The PREDICATE rows are the gate, not the resolution rows --
@@ -14970,7 +14970,7 @@ endif
 	# would therefore be testing systemd-resolved rather than us.
 	$(PXX_STABLE) -Fulib/rtl test/lib_dns_localhost_rfc6761.pas $(TESTTMP)/lib_dns_localhost
 	@out=$$($(TESTTMP)/lib_dns_localhost 2>&1); \
-	  test "$$(printf '%s\n' "$$out" | tail -1)" = "DNSLOCALHOST OK" \
+	  tools/expect_same.sh assert.3 "$$(printf '%s\n' "$$out" | tail -1)" "DNSLOCALHOST OK" \
 	  || { echo "FAIL: lib_dns_localhost output was:"; printf '%s\n' "$$out"; exit 1; }
 	# A spawned child inherits the parent's environment (every spawn site used
 	# to hard-code an empty envp, i.e. handed each child `env -i`).
