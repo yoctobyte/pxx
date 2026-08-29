@@ -275,4 +275,4 @@ the other class functions, and `Chars`/`Empty`. They are additive and nothing in
 tree needs them; a later batch can add them against the same oracle harness.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 0b9bc7642.

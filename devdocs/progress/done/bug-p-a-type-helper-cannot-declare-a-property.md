@@ -142,4 +142,4 @@ string-helpers ticket: all six receiver forms work today, verified on the
 pinned binary, so the fix was not mine and the recorded table was stale.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 0b9bc7642.
