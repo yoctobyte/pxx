@@ -22,7 +22,7 @@ owner: frankA
 > 1's NilPy pre-pass must trial-parse, so the landmine is aimed at the very work
 > this ticket exists to enable.
 >
-> `ProcRollbackTo` landed 2026-08-29 (`8abf3782d`), additively and with no
+> `ProcRollbackTo` landed 2026-08-29 (`db7dfec69`), additively and with no
 > callers. Wiring it into the two rewind sites is measured and green but held:
 > `compiler/pyparser.inc` is another agent's declared file.
 
