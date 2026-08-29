@@ -5,7 +5,7 @@ prio: 30
 # ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt"
 
 - **Type:** feature (library / Track B)
-- **Status:** working
+- **Status:** done
 - **Owner:** pxx-b
 - **Opened:** 2026-06-21 (out of the ISR layering discussion; see
   `feature-esp32-isr-iram` for why the `interrupt;` *keyword* is NOT this)
@@ -319,3 +319,4 @@ way. Reasoning from the GPIO result is the move this ticket keeps punishing.
 
 State of the ticket: slice 1 done and executed; slices 2 and 3 blocked on
 hardware, one measured and one unknown.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

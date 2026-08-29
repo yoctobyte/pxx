@@ -1971,6 +1971,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-esp-float | S | 50 | feature | ESP float wiring (xtensa + riscv32 float value model) | — |
 | feature-esp-int64-arith | S | 50 | feature | 64-bit integer arithmetic for the ESP backends (riscv32 + xtensa) | — |
 | feature-esp-isa-baseline-softfallback | S | 50 | feature | ESP ISA baseline + software fallbacks for older parts | — |
+| feature-esp-peripheral-callback-api | B+S | 30 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-esp32-bare-boot | S | 50 | feature | ESP32 bare-metal boot profile (no IDF) | — |
 | feature-esp32-idf-riscv32 | S | 50 | feature | ESP-IDF integration: riscv32 (ESP32-C3) end-to-end | feature-elf-rel-writer |
 | feature-esp32-idf-xtensa | S | 50 | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |

@@ -57,7 +57,31 @@ regression: either QEMU gained a GPIO model, or you are on real hardware — whe
 `edges>0` is the right answer and slice 2 just became acceptable. Read the diff
 before updating the expectation.
 
-## What is NOT known
+## ADC (slice 3): measured too, and it fails DIFFERENTLY
 
-Whether ADC (slice 3) is modelled. Not measured — do not assume it follows from
-this. Probe it the same way rather than reasoning from the GPIO result.
+Probed rather than inferred from the GPIO result, because "the GPIO peripheral
+is unmodelled, so the ADC probably is too" is the kind of reasoning this ticket
+family keeps punishing. It is not the same failure.
+
+`adc_oneshot_new_unit` **never returns** under QEMU on esp32c3. The image does
+not reach `app_main` at all: boot proceeds normally and stops at
+
+```
+W (408) eFuse: calibration efuse version does not match, set default version to 0
+```
+
+with no further output. Not a wrong value, not an error code — a hang inside the
+first ADC call, before any of the probe's own output.
+
+**Control:** the same project with `esp_adc` still in `REQUIRES` (so linked) but
+the GPIO probe body running instead reaches `app_main` and completes normally.
+So merely linking `esp_adc` is harmless; the hang is in the call. Without that
+arm "the ADC image hangs" would have been indistinguishable from "adding the
+esp_adc component breaks the build", which is a different bug with a different
+owner.
+
+Likely related to the ADC calibration fuses, which are burned on real parts and
+absent from QEMU's default efuse blob — but that is a hypothesis, not something
+this probe established, and it should not be written down as a cause.
+
+So slice 3 is blocked on hardware as well, for its own measured reason.
