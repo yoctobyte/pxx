@@ -4,6 +4,8 @@ prio: 45
 type: feature
 blocked-by: []
 summary: "A file in test/ is not a test until a build rule runs it. Two confirmed cases of a test that existed, passed, and was referenced by nothing — one ungated for two weeks. Proposed: a check (progress.sh check or testmgr) that fails when a test/*.expected or test/*.npy has no rule referencing it, converting the class from 'someone notices' to 'CI notices'."
+status: working
+owner: pxx-a5
 ---
 
 # Fail when a test file is wired into no build rule
