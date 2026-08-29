@@ -250,4 +250,4 @@ the native build still leaks. That assertion is now false and will fail — whic
 is the signal the ticket predicted, not a regression.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 0d91dc88f.
