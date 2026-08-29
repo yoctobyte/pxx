@@ -1,0 +1,13 @@
+up        5
+up-minus  4
+down      3
+init-var  3
+once      3 calls=1
+order     SL 3
+scratch   4
+const     10
+plainvar  4
+sl-up     5
+sl-down   3
+co-up     5
+co-down   3

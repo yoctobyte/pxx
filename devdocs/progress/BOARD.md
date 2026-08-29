@@ -52,18 +52,17 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (311)
+## backlog (313)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | audit-a-builtinheap-invariants-x86-64-inlines-past | A | 60 | audit | A helper's comment is a claim about every caller, written where one caller cannot see it | — |
 | audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol | A | 45 | audit | `TypeKind = tyRecord` is not a guard, and 20 reads use it as one | — |
-| bug-a-a-c-headers-variadic-tail-is-dropped-on-import | A | 45 | bug | A C prototype's `...` is discarded when the header is imported into Pascal, so every variadic C function is callable only with its FIXED prefix. printf imports as printf(Pointer). C mode itself calls varargs correctly, so the machinery exists and only the import discards it. | — |
+| bug-a-a-c-headers-variadic-tail-is-dropped-on-import | A | 45 | bug | A variadic C function imported into Pascal is callable only with its FIXED prefix: printf imports as printf(Pointer). The `...` is NOT lost -- ProcVariadic[] records it and codegen honours it -- the Pascal-side overload matcher simply never consults it. One clause in ProcArityMatches plus bounding the type-match loops. | — |
 | bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted | A | 25 | bug |  | — |
 | bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce | A | 30 | bug | Raised out of decide-how-much-string-machinery-the-basic-frontend-gets, decided 2026-08-25. That decision accepted ~100 KB BASIC binaries on the grounds that binary size is a GENERAL problem with a general answer (reachability-gated emission), not a per-frontend one. But feature-emission-size-dce is marked done while a Pascal hello-world is still 63,760 bytes -- so either the pass is not reaching this, or the done ticket's scope was narrower than its title. | — |
 | bug-a-aarch64-cannot-build-programs-with-an-aggregate-result-past-8-params | A | 55 | bug | jsondemo and life do not build for aarch64 at all -- 'aggregate result with more than 8 params not supported', raised from builtin/pylib.pas, so it fires for any program pulling that unit in. The sharp part is not the two programs: it silently narrows the corpus available for BEHAVIOURAL verification on aarch64, while census tables built from target-independent IR keep listing those same programs as aarch64 data points. Two purposes, one list, only one of them ever checked. | — |
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
-| bug-a-for-loop-limit-is-evaluated-after-the-control-variable-is-assigned | A | 70 | bug | `for n := 1 to n do` runs ONE iteration where FPC runs five, and `for n := 1 to n - 1` runs ZERO where FPC runs four; downto is wrong the same way (9 vs 3). Pascal evaluates the initial AND final expressions BEFORE assigning the control variable; ir.inc:12130 stores the control variable first and lowers the limit after, so a limit that reads the control variable sees the new value. Silent wrong iteration count -- no diagnostic, no crash. ROOT CAUSE LOCATED: three statements in the wrong order, plus one ordering subtlety noted below. | — |
 | bug-a-function-result-assignment-does-not-narrow-to-the-result-type | A | 40 | bug | `function F(a: Int64): Integer; begin F := a; end` returns the full 64-bit value: F(4294967299) prints 4294967299 where FPC prints 3. The same assignment to a variable, to a var parameter, or through a cast all narrow correctly. One arm of a double case, and the broken arm is the one with no diagnostic — the caller reads a value the declared result type cannot hold. | — |
 | bug-a-irtoplevelstmt-parameter-is-a-node-index-named-k | A | 20 | bug | ir_codegen.inc:8813 declares IRTopLevelStmt(k: Integer) and its body is `case IRKind[k] of`, so the parameter is a node index. The name reads as a kind, and passing IRKind[i] compiles cleanly and indexes the IR array with an opcode number — a silently-wrong-value trap with no diagnostic, in a function every backend author will call. Rename plus a one-line comment closes the class. | — |
 | bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa | A | 25 | bug | A proc's managed locals (AnsiString, interfaces, dynamic arrays) are released by a proc CLEANUP FRAME that five targets have and two do not. wasm32 and xtensa both fall outside TargetHasProcCleanupFrame, so an exception unwinding THROUGH a frame leaks everything that frame owned. Silent by construction: an unwind leak prints nothing. | — |
@@ -90,6 +89,7 @@ _none_
 | bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart | N | 45 | bug | `hasattr([1], 'add')` and `hasattr([1], 'update')` are True: list and set are both TPyList at run time, so every `is`-test-based introspection answers set questions about a list. `type(x).__name__` DOES tell them apart, so the discriminator exists and the predicate is not using it. | — |
 | bug-n-a-module-alias-does-not-resolve-for-attribute-lookup | N | 55 | bug | A module alias resolves for calls but not for attributes | — |
 | bug-n-a-nilpy-test-writes-a-fixed-tmp-path-so-concurrent-runs-race | N | 45 | bug | test_nilpy_class_named_like_an_rtl_record.npy opens, reads and os.remove()s /tmp/pxx_nilpy_rtlrec_probe.txt -- a fixed path chosen at RUNTIME, so the Makefile sweep cannot privatize it and testmgr cannot rewrite it. This box routinely runs several clones' testmgr at once, so one run can delete or overwrite another's probe file mid-test. Caught by tools/testmgr_hardcoded_tmp_devtest.py, which is RED on master today. Introduced by f3422cd14. Filed by Track T; T owns the tool, never the bug. | — |
+| bug-n-a-range-loop-whose-bound-reads-the-loop-variable-never-terminates | N | 75 | bug | `for n in range(3, n - 8, -1)` HANGS FOREVER in NilPy where CPython yields 2 items. The bound is re-evaluated every iteration, so with a negative step it recedes exactly as fast as the loop variable falls and the test never fails. Not a wrong count -- a non-terminating program, from code CPython accepts and runs. Pre-existing: reproduces on pinned and on every build tested. | — |
 | bug-n-a-staticmethod-read-through-an-instance-binds-a-receiver | N | 25 | bug | bug(N): a @staticmethod read through an INSTANCE binds a receiver, so `type(k.stat).__name__` says 'method' | — |
 | bug-n-a-subpackage-directory-does-not-resolve-as-a-module | N | 55 | bug | `from .inner import X` (RELATIVE) where `inner` is a subpackage directory fails with `no unit named inner`, while the absolute `from pkg.inner import X` works — so directory-as-module resolution exists and the relative form just hands the resolver a bare name instead of the package-qualified one. html5lib has three real subpackages (_trie, treebuilders, treewalkers), so this is its next rung. | bug-a-a-python-module-s-identity-is-its-name-not-its-file |
 | bug-n-a-tuple-unpacking-assignment-does-not-box-a-callable-value | N | 55 | bug | `a, b = lambda x: x + 1, lambda x: x + 2` compiles and then `a(1)` raises TypeError: object is not callable. The single-target spellings (`a = lambda ...`, `return lambda ...`) box the callable so the name is a variant; the tuple-UNPACK targets do not, so each name holds a raw pointer the dynamic-call path does not recognise. | — |
@@ -217,6 +217,7 @@ _none_
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 20 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
 | feature-b-a-hermetic-tls-loopback-for-the-ssl-suite | B | 30 | feature | lib_synapse_ssl proves the dlopen'd libssl resolves real symbols, but not that a handshake completes — the handshake is verified only by a manual probe against `openssl s_server`. A TLS handshake needs both sides live at once and the suite is single-process with no fork, so automating it means a self-exec harness: the test re-runs its own binary as the server, cert from TSSLOpenSSL.CreateSelfSignedCert, port over the pipe. | — |
 | feature-b-a-real-minidom-is-an-implementation-not-a-shim | B | 20 | feature | Question 2 of the xml.dom row, re-filed on its own as that ticket said it should be. html5lib/treebuilders/dom.py wants a document you can build and mutate — ~25 DOM methods, getDOMImplementation().createDocument(), weakref.proxy(), and a reach into minidom's PRIVATE _child_node_types. That is a DOM implementation, not a compatibility alias. It unblocks exactly one corpus file and should be ranked as an implementation project, not alongside shims. | — |
+| feature-b-pcl-should-assert-its-gtk-version-rather-than-rely-on-an-accident | B | 30 | feature | lib/pcl now includes the stock <gtk/gtk.h>, which resolves to GTK2 unless GTK3_INC puts the gtk-3.0 root first. Forgetting the flag fails loudly today only because PCL happens to call a GTK3-only function -- an accident, not a guard. The binding should assert its version. | — |
 | feature-b-posix-and-fpc-named-socket-facades | B | 25 | feature | The Posix.* / FPC-named (BaseUnix, Sockets, UnixType) socket compat facades over the PAL substrate, with a selectable syscall-or-libc backend. Fully designed inside feature-networking and never built; split out when that umbrella closed so the design survives its container. | — |
 | feature-c-csmith-differential-fuzzing | C | 40 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-diagnostics-name-the-module-they-are-in | C | 40 | feature | A Pascal diagnostic now prints `in: <path>` when the error is in an include or a `uses`d unit. The C frontend has the same information already — CModRange* is populated in every build, not just under -g — and prints nothing, so an error in a crtl module or an included header still reports a bare line number. | — |
@@ -360,6 +361,7 @@ _none_
 | regression-cascade-154d1aa3fba6 | T | 70 | regression | regression CASCADE: 18 jobs newly red in e417731e9..154d1aa3f (12 commits) — auto-filed by twatch | — |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
+| regression-test-core-test-mgmt-operators | P | 70 | regression | regression: test-core#src:test/test_mgmt_operators.pas red at 47277dd0e52b (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-relative-import-in-package | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_relative_import_in_package.npy red at ee62e6dc0582 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-startswith-tuple | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_startswith_tuple.npy red at b898d0543fc8 (auto-filed by twatch) | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
@@ -611,9 +613,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2631)
+## done (2632)
 
-2631 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2632 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (51)
 
@@ -673,9 +675,9 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 75] [N] bug-n-a-range-loop-whose-bound-reads-the-loop-variable-never-terminates
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [P] feature-pascal-corpus-oop
-- [p 70] [A] bug-a-for-loop-limit-is-evaluated-after-the-control-variable-is-assigned
 - [p 70] [P] bug-p-a-cast-through-an-ordinal-type-alias-does-not-truncate
 - [p 70] [P] bug-p-a-delphi-mode-generic-from-a-used-unit-cannot-be-specialized
 - [p 70] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
@@ -683,6 +685,7 @@ _none_
 - [p 70] [P] feature-pascal-typed-and-untyped-files
 - [p 70] [T] regression-cascade-154d1aa3fba6
 - [p 70] [P] regression-cascade-4e27dc2be114
+- [p 70] [P] regression-test-core-test-mgmt-operators [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-nilpy-relative-import-in-package [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-nilpy-startswith-tuple [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 68] [E] feature-demo-songformatter-pxx-target
@@ -899,6 +902,7 @@ _none_
 - [p 30] [A] feature-a-finalize-for-bare-dynarray-and-variant
 - [p 30] [A] feature-a-unreferenced-class-rtti-keeps-every-method-alive
 - [p 30] [B] feature-b-a-hermetic-tls-loopback-for-the-ssl-suite
+- [p 30] [B] feature-b-pcl-should-assert-its-gtk-version-rather-than-rely-on-an-accident
 - [p 30] [E] feature-demo-nilpy-ide
 - [p 30] [B+S] feature-esp-peripheral-callback-api
 - [p 30] [N] feature-nilpy-a-genexpr-is-lazy-not-materialised

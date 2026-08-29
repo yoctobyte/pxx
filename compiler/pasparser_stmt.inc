@@ -1913,8 +1913,8 @@ end;
 function SLLowerFor(node, selfSym, retSym: Integer): Integer;
 var pair1, pair2, forVarNode, varSym: Integer;
     initN, limitN, isDown, body: Integer;
-    limSym, topLbl, endLbl, incLbl: Integer;
-    setVar, setLim, test, bodyLo, incN, cmpOp: Integer;
+    limSym, initSym, topLbl, endLbl, incLbl: Integer;
+    setVar, setInit, setLim, test, bodyLo, incN, cmpOp: Integer;
     vTk: TTypeKind;
 begin
   forVarNode := ASTLeft[node];
@@ -1932,8 +1932,24 @@ begin
   endLbl := NewSyntheticLabel;
   incLbl := NewSyntheticLabel;           { continue target: run the increment }
 
-  setVar := GenMakeAssign(GenMakeIdent(varSym, vTk), initN);
+  { BOTH BOUNDS BEFORE THE CONTROL VARIABLE -- the same rule, and the same bug,
+    as the AN_FOR arm in ir.inc. This sequenced setVar before setLim, so a limit
+    mentioning the control variable read the value just assigned and a flattened
+    `for n := 1 to n do yield n` ran ONE iteration where the plain form runs
+    five. One language rule, two lowerings: fixing only the one the ticket named
+    would have left the generator arm wrong, which is the double-case trap
+    normalise-dont-special-case.md is about.
+
+    The initial value goes through its own slot for the reason the IR arm needs
+    a temp: assigning the control variable last must NOT move the initial
+    expression's side effects after the limit's. Pascal's order is
+    initial-then-final, and both are full statements here, so swapping the two
+    assignments alone would swap their evaluation.
+    bug-a-for-loop-limit-is-evaluated-after-the-control-variable-is-assigned }
+  initSym := SLNewSlotVar(vTk);
+  setInit := GenMakeAssign(GenMakeIdent(initSym, vTk), initN);
   setLim := GenMakeAssign(GenMakeIdent(limSym, tyInt64), limitN);
+  setVar := GenMakeAssign(GenMakeIdent(varSym, vTk), GenMakeIdent(initSym, vTk));
 
   if isDown <> 0 then cmpOp := Ord(tkLt) else cmpOp := Ord(tkGt);
   { ascending: exit when var > limit; descending: exit when var < limit }
@@ -1951,15 +1967,16 @@ begin
     incN := GenMakeAssign(GenMakeIdent(varSym, vTk),
               GenMakeArith(Ord(tkPlus), GenMakeIdent(varSym, vTk), GenMakeIntLit(1)));
 
-  Result := GenMakeSeq(setVar,
+  Result := GenMakeSeq(setInit,
             GenMakeSeq(setLim,
+            GenMakeSeq(setVar,
             GenMakeSeq(GenMakeLabel(topLbl),
             GenMakeSeq(test,
             chainSeq(bodyLo,
             GenMakeSeq(GenMakeLabel(incLbl),
             GenMakeSeq(incN,
             GenMakeSeq(GenMakeGoto(topLbl),
-            GenMakeSeq(GenMakeLabel(endLbl), -1)))))))));
+            GenMakeSeq(GenMakeLabel(endLbl), -1))))))))));
 end;
 
 { case with a yield in a branch: flatten to the same test/goto shape the IR

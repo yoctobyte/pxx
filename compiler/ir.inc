@@ -5954,6 +5954,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     down: Boolean;
     varIdx, varIdx2: Integer;
     forLimTmp: Integer;   { AN_FOR: hidden temp holding the once-evaluated limit }
+    forInitTmp: Integer;  { AN_FOR: hidden temp holding the once-evaluated initial value }
     initValNode, storeNode, limitValNode, cmpNode, condJmpNode, bodyIRNode: Integer;
     loadVarNode2, constOneNode, stepNode, storeStepNode, jmpNode: Integer;
     hiddenArgSym: Integer; argIsManagedTemp: Boolean;
@@ -12126,8 +12127,48 @@ begin
       down := ASTIVal[isDownNode] = 1;
       varIdx := ASTIVal[lhsNode];
       
+      { EVALUATE BOTH BOUNDS BEFORE ASSIGNING THE CONTROL VARIABLE.
+
+        ISO Pascal, Delphi and FPC all evaluate the initial AND the final
+        expression first, and only then assign the control variable. This used
+        to store the control variable HERE and lower the limit below, so a limit
+        that MENTIONS the control variable read the value just stored:
+        `n := 5; for n := 1 to n do` ran ONE iteration where FPC runs five,
+        `to n - 1` ran ZERO where FPC runs four, and `downto` was wrong the same
+        way (9 against FPC's 3).
+
+        Silent: no diagnostic, no crash, just a wrong iteration count. It was
+        found only because the wrong count happened to index out of bounds and
+        segfault -- a version that merely looped the wrong number of times would
+        have produced a plausible wrong answer and been believed. And nobody
+        writes `for n := 1 to n` deliberately; it arrives from a computed bound
+        reusing a scratch variable, `n := min(i, j); for n := 1 to n do`, which
+        is ordinary code.
+
+        Note this is the SAME window as the once-only comment below, at its other
+        end. That fix materialised the limit so the loop could not re-read it
+        while running; this one materialises the bounds so the loop cannot
+        mis-read them while STARTING. Fixing the first did not close the second.
+
+        The initial value must be materialised too, and that is the part that is
+        not a two-line reorder: `initValNode` is a value NODE, and the backend
+        re-emits that subtree at its use -- the store. Moving the store after the
+        limit without a temp would therefore move the initial expression's SIDE
+        EFFECTS after the limit's, and Pascal's order is initial-then-final. With
+        both bounds as calls, `for i := Start to Lim do`, the call order would
+        silently swap.
+
+        Same IR_CONST_INT exemption as the limit: a constant is free to re-emit,
+        so the ordinary `for i := 1 to 10` allocates nothing and emits exactly
+        what it did before.
+        bug-a-for-loop-limit-is-evaluated-after-the-control-variable-is-assigned }
       initValNode := IRLowerAST(initNode);
-      storeNode := IRAppend(IR_STORE_SYM, varIdx, initValNode, -1, 0, ASTTk[lhsNode]);
+      if IRKind[initValNode] <> IR_CONST_INT then
+      begin
+        forInitTmp := AllocVar('', IntToTypeKind(IRTk[initValNode]));
+        IRAppend(IR_STORE_SYM, forInitTmp, initValNode, -1, 0, IRTk[initValNode]);
+        initValNode := IRAppend(IR_LOAD_SYM, forInitTmp, -1, -1, 0, IRTk[initValNode]);
+      end;
 
       limitValNode := IRLowerAST(limitNode);
 
@@ -12147,6 +12188,9 @@ begin
         IRAppend(IR_STORE_SYM, forLimTmp, limitValNode, -1, 0, IRTk[limitValNode]);
         limitValNode := IRAppend(IR_LOAD_SYM, forLimTmp, -1, -1, 0, IRTk[limitValNode]);
       end;
+
+      { ...and only NOW is the control variable assigned. }
+      storeNode := IRAppend(IR_STORE_SYM, varIdx, initValNode, -1, 0, ASTTk[lhsNode]);
 
       startLabel := IRNewLabel;
       endLabel := IRNewLabel;
