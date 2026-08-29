@@ -10,6 +10,23 @@ summary: "Five defects in one day share one greppable shape: a construct has two
 
 # A comment asserting an invariant is a claim about a SIBLING ARM, and nobody checks it
 
+> ## The rule this audit produced
+>
+> **A comment containing a count, a target list, or the words "only" / "every" /
+> "always" is asserting something a command can check — so write the command in
+> the comment, or write a sentence carrying no number.**
+
+*Added after four sweep passes, 2026-08-29. It is not the rule this ticket was
+filed with.* The founding shape — two arms, one commented, the sibling unchecked
+— is real but turned out to be the **minority**: seven of the eight instances
+found in one evening were a sentence stating a **boundary that something later
+moved** (a count, a target list, a scope, a "one place"), and every one of those
+is falsifiable by a single command. One of them cost a wrong `<` on an entire
+target for as long as that target has existed. `HeapMmap`'s missing `CPU_XTENSA`
+arm is the same defect expressed in code rather than prose — seven arms and a
+silent default where an eighth belongs — which is why the rule is about
+*checkability*, not about comments.
+
 - **Type:** chore (audit) — **Track A** file-ownership by default; each finding
   is filed into whichever lane owns the arm.
 - **Proposed:** 2026-08-29 by frankA, after hitting the shape three times in one
