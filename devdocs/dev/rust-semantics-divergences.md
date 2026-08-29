@@ -147,3 +147,49 @@ One consequence is visible: `println!` renders a float and `format!` refuses
 one, because the write path has a float renderer and the value path would need
 StrFloat and a decision about digits -- which is Track F's question, and low
 prio by that letter's charter.
+
+## `impl fmt::Display` is rerouted to a String method, not dispatched
+
+*Rung 15.*
+
+`fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result` is registered as
+`fn fmt(&self) -> String`. `write!(f, ..)` appends to that String, `write!`'s
+`?` is consumed, and `Ok(())` is a no-op. `{}` on the type calls the method,
+and so does `.to_string()`.
+
+The Formatter and the fmt::Result are the trait's plumbing for a writer this
+frontend does not have. What a Display impl *says* is "here is my text", and a
+String says that with no trait objects, no vtable and no dispatch. The corpus
+ticket predicted this would be the cheaper half of the trait stage and it was.
+
+**What an accepting program can observe, and it is not nothing.** A Display
+impl that writes conditionally and returns `Err` cannot signal the error --
+there is no fmt::Result left to carry it. Real Display impls do not fail (the
+only failure a Formatter reports is the underlying writer's, and there is no
+underlying writer here), but this is a narrower guarantee than the const-array
+and one-string-type entries, whose divergences no compiling program can reach
+at all. If a corpus program ever returns `Err` from a `fmt`, this becomes a
+bug ticket rather than an entry here.
+
+Also: `Formatter` state -- width, fill, alignment, `f.alternate()` -- does not
+exist. A `{:#?}` or a `{:>8}` is refused at the placeholder rather than
+silently ignored, so this is a missing feature with a message and not a wrong
+string.
+
+## `{:?}` is derived Debug; `{}` on a plain struct is an error
+
+*Rung 15.*
+
+`{:?}` renders a struct field-wise as `Name { field: value }`, matching rustc's
+derived Debug, and quotes strings and chars where Display leaves them bare.
+
+`{}` on a record with no `impl fmt::Display` is REFUSED. rustc refuses it too
+-- Display is not derivable -- so this is agreement, not strictness. It is
+recorded here because the previous behaviour was to print the record's FIRST
+FIELD, and anyone reading old output should know it was never meaningful.
+
+Two forms are refused rather than half-rendered: `{:?}` on an ENUM (Rust prints
+the variant NAME, a runtime switch on the tag rather than a static item list)
+and on a struct with an ARRAY field (needs a loop). Both are gaps to fill, not
+decisions -- listed here only because refusing is deliberate where
+half-rendering would have looked like a value.

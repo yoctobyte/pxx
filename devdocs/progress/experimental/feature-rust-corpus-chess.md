@@ -387,3 +387,36 @@ pure swallowing/trivia, cheap and high-leverage.
 
   Remaining: derives/traits, and the ArrayVec replacement (corpus work).
 
+- 2026-08-29 - rung 15: **STAGE 5, derives and traits.** Three pushed units.
+
+  **What measuring found that the ticket did not.** The stage was written as
+  "PartialEq/Clone/Copy derives (field-wise synthesis)". `derive(Copy)` needs
+  nothing -- a whole-record assignment already copies. `derive(PartialEq)`
+  needs nothing -- the shared record compare already answers field-wise, and a
+  test written two rungs earlier already proved it. What was actually missing
+  was older and unrelated to derives: an enum VARIANT could not appear in an
+  EXPRESSION at all, so `c == Color::White` and `flip(Color::Black)` were parse
+  errors while `let c: Color = Color::White` worked. Aggregates have no
+  expression form here (a literal is N stores into a NAMED slot), so a variant
+  now materializes into a hoisted temp on the channel `?` built last rung.
+
+  **`{:?}` printed the struct's FIRST FIELD.** Fourth plausible wrong value
+  this window. It now renders `Pos { f: 1, r: 2 }` like rustc's derive, and
+  `{}` on a record with no Display is refused -- rustc refuses it too, so
+  printing field zero was silent garbage for a program rustc would not compile.
+
+  **`impl Trait for Type` had NEVER RUN.** Both the prescan and the body parser
+  detected the form by comparing `GetTokenStr(j+1)` to `'for'`, and the lexer
+  classifies `for` as tkFor, whose name slice is empty -- so the test compared
+  '' to 'for' and every trait impl was read as `impl <Trait>`. The RImpls table
+  has always been empty. Dead code that looked live; only trying to EXTEND the
+  path surfaced it.
+
+  **Display is rerouted, exactly as this ticket predicted.** `fn fmt(&self, f:
+  &mut Formatter) -> Result` registers as `fn fmt(&self) -> String`, `write!`
+  appends to it, `{}` and `.to_string()` call it. No Formatter, no trait
+  objects, no vtable -- "cheaper rerouted through println!-style intrinsics
+  than through real trait dispatch" was the right call.
+
+  Remaining: the ArrayVec replacement (corpus work, not frontend work).
+

@@ -422,3 +422,13 @@ signatures, not from the ladder's list — and both are ahead of it now:
   defect NilPy had, fixed by calling the same shared helper. Char literals now
   carry `char` in the integer-suffix channel, so `println!("{}", 'x')` stops
   printing 120. `test_rust_string.rs`.
+- 2026-08-29 - rung 15 landed in three pushed units: (1) enum values in
+  EXPRESSION position (`c == Color::White` was a parse error while the `let`
+  form worked) plus derived clone -- derive(Copy)/derive(PartialEq) turned out
+  to need NOTHING, which measuring found and reading the ticket would not;
+  (2) `{:?}` renders a struct field-wise and `{}` on one is refused -- it used
+  to print the FIRST FIELD, the fourth plausible wrong value this window;
+  (3) `impl Trait for Type`, which **had never run at all** (both parsers
+  compared a tkFor token against the string 'for' through GetTokenStr, which is
+  empty for a keyword), plus `impl fmt::Display` rerouted to a String method
+  with `write!` appending to it. `test_rust_derive.rs`, `test_rust_traits.rs`.
