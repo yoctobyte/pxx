@@ -3506,3 +3506,74 @@ corrected by a lane whose correction was itself wrong, on a point the corrector
 had measured. **Nobody in the chain was careless; three of the four claims came
 with evidence.** What separated the true ones from the false was solely whether
 the probe could have produced a different answer.
+
+### 84. A SUBSET measured as if it were the whole — and "does not reproduce" is the most expensive way to be wrong
+
+pxx-a5, 2026-08-30, correcting a measurement the **coordinator** had written into
+`regression-test-core-test-mgmt-operators` and dispatched on.
+
+The coordinator's section said the red *"does NOT reproduce here"*, and offered
+three hypotheses for the discrepancy: host-specific, non-deterministic, or fixed
+by a later commit. All three were answering a question that had not earned
+asking.
+
+**`test-core#src:test/test_mgmt_operators.pas` is not one assertion.** The target
+compiles the positive program and diffs it against `.expected`, **and then runs
+three NEGATIVE rows** that each compile a program which must be *refused* and
+fail if the compile succeeds. The watcher's log tail is one of those strings
+verbatim.
+
+| row | at HEAD |
+| --- | --- |
+| positive vs `.expected` | PASS |
+| `..._array_refused.pas` | **COMPILED — must be refused** |
+| field / copy refused | refused |
+
+*"Compiles clean, runs, matches `.expected` byte for byte"* was true, is still
+true, and **is about a different assertion.** `.expected` could not have absorbed
+the failure, because the failure is not in that program at all.
+
+**This is face 72 one level up:** not a control that could not discriminate, but
+a **subset measured as if it were the whole**. And the failure mode is worse than
+a wrong answer, because *"does not reproduce"* **redirects everyone else** — it
+converts a live bug into a puzzle about test infrastructure, and the puzzle is
+more interesting than the bug, so that is where the effort goes. Three
+hypotheses were generated to explain a discrepancy that did not exist.
+
+**The first move on a red job is to run the job, not to explain the difference
+between two runs.**
+
+### 85. A guard can read a field that was never about the thing it is guarding, and pass for years on RECYCLED memory
+
+Same ticket, and the mechanism is the reason face 84 mattered.
+
+`WrapManagementOpsRange` guarded on `SymTR[i].RecId`, set from
+`Syms[i].RecName` — and **`RecName` is meaningless for an array symbol**: only
+`AllocVar`/`AllocParam` write it, and an array's record id is `ElemRecName`. The
+refusal was reading a field that was never about the element type, **and it
+fired anyway, because slots are recycled and the stale value happened to be the
+right record.**
+
+`4a3c88532` — *"AllocArray/AllocDynArray must clear RecName on a recycled slot"*
+— cleared it. The guard saw `REC_NONE`, the whole `if` was skipped, and an array
+of a managed record started compiling with an `Initialize` that never runs.
+
+**So the mechanistically-adjacent commit was adjacent in the opposite direction
+from the obvious one: it did not introduce the bug, it removed the accident the
+bug was standing on.** A correctness fix that makes a latent defect observable
+looks exactly like a regression, and bisect points at it either way.
+
+That commit **named this class in its own message** — *"the audit found 20 more
+`RecName` reads guarded only by `TypeKind = tyRecord`, which is not a guard at
+all for an array symbol; that is a separate ticket"*. This is one of the twenty,
+reached from the other side: **not a read that returns the wrong record, a read
+that returned the right one by luck.** First of that population to surface on its
+own, and it surfaced as a **silently missing diagnostic** rather than a wrong
+answer — which is why no test caught it.
+
+**And the honest negative in the fix is worth as much as the fix.** pxx-a5
+expected globals to be the shape the accident could not have covered, measured
+both arms against the reverted build, and **found they were refused there too**
+— so the new global arm is breadth across two code paths, **not** the witness it
+was predicted to be. Recorded that way, *"because the reverse would have been
+the better story and is not what the measurement showed."*
