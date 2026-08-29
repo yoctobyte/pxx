@@ -53,7 +53,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream |
 
-## backlog (301)
+## backlog (300)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -153,7 +153,6 @@ _none_
 | chore-t-a-wikilink-to-a-ticket-that-does-not-exist-is-never-detected | T | 30 | chore | 52 distinct ticket-convention [[wikilinks]] across devdocs/progress resolve to no ticket (71 references; 13 cited by live, non-done tickets). Some are renames leaving a dead trail; some appear never to have been filed, which is work hidden behind a link that looks like a citation. Nothing checks. | — |
 | chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile | T | 20 | chore | The second, weaker half of the split_jobs lint: flag any job that RUNS a /tmp binary no line in that job produces. Prototyped and deliberately NOT shipped — it yields 5-7 candidates depending on how recipe lines are segmented, and every one needs individual adjudication. Shipping it half-tuned would produce exactly the noisy guard that gets muted. | — |
 | chore-t-split-lib-test-into-jobs-that-name-what-failed | T | 45 | chore | One lib-test job bundles several sources, so its tstate key names only the FIRST of them: `lib-test#src:test/crtl_exp2.c` is really `crtl_exp2.c examples/tk/hello.npy +5`, and a timeout in the tk step reads as a C-math regression. Split it so a job names what failed. Do it while lib-test is green — the baseline is recorded here. | — |
-| chore-t-teach-testmgr-the-testtmp-value-before-anyone-changes-it | T | 50→55 | chore | Teach testmgr the `TESTTMP` value | — |
 | chore-t-test-binaries-hardcode-unsweepable-tmp-paths | T | 35 | chore | 60 /tmp paths are hardcoded in 37 COMPILED TEST SOURCES and written by the test binary at runtime, so no Makefile sweep can reach them and testmgr does not privatize them either. Two concurrent runs still share those files EVEN UNDER testmgr. Split out of chore-makefile-testtmp-parameterize, which closed the recipe half. | — |
 | chore-t-the-breadth-line-omits-its-zero-instead-of-printing-it | T | 25 | chore |  | — |
 | chore-t-the-tier-ladder-ratio-is-stale-by-its-own-criterion | T | 40 | chore | chore(T): re-measure the tier ladder ratio — the matrix grew 37% and the default's own trigger has fired | — |
@@ -599,9 +598,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2578)
+## done (2579)
 
-2578 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2579 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (46)
 
@@ -707,11 +706,11 @@ _none_
 - [p 58] [N] feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep
 - [p 58] [P] feature-p-packrecords-c-directive
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3) [parked — re-claim, do not duplicate]
-- [p 55] [T] chore-t-teach-testmgr-the-testtmp-value-before-anyone-changes-it (unblocks 1)
 - [p 55] [U] decide-install-qemu-system-and-a-freebsd-image-on-plexus (unblocks 1)
 - [p 55] [A] feature-nilpy-object-reclamation (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 55] [A] bug-a-emitzeroframeslot-has-no-wasm32-arm
 - [p 55] [A] bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice
+- [p 55] [A+T] bug-a-testtmp-defaults-to-a-path-every-checkout-shares
 - [p 55] [A] bug-a-three-pxxsys-primitives-return-a-plausible-fd-on-wasm32
 - [p 55] [N] bug-n-a-field-assigned-from-a-module-global-expression-is-refused
 - [p 55] [N] bug-n-a-keyword-argument-through-a-class-value-is-refused-at-runtime
@@ -979,7 +978,6 @@ _none_
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed
 - **1** — bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching
-- **1** — chore-t-teach-testmgr-the-testtmp-value-before-anyone-changes-it
 - **1** — decide-does-nilpy-random-seed-itself-at-import
 - **1** — decide-how-a-compiled-def-carries-its-signature-when-boxed
 - **1** — decide-how-much-string-machinery-the-basic-frontend-gets

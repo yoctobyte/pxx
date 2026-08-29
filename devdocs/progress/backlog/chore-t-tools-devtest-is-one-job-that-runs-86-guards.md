@@ -109,8 +109,8 @@ join before renaming anything.
 
 Claimed, then released without implementing. The ticket's own first step is
 *"measure per-file process overhead on an idle box"*, and the box is at **load
-17.33** (six cores) — worse than the load 12 that deferred it when filed. A
-per-file timing distribution measured under 3x oversubscription is not a
+17.33** (twelve cores) — worse than the load 12 that deferred it when filed. A
+per-file timing distribution measured under ~1.4x oversubscription is not a
 distribution anyone should act on, and the whole point of the measurement is to
 choose between per-file jobs and a bucketed tail.
 
@@ -148,3 +148,22 @@ actually runs on. It is also the smaller change, and it is not load-sensitive.
 Track N). Three full runs today, each ~4 minutes wall.
 
 The count in this ticket's title is already stale, which is its own argument.
+
+
+### Correction, 2026-08-29 (same day): the box has TWELVE cores, not six
+
+I wrote "six cores" above from the watcher's `--max-cores 6`, which is its own
+budget, not the machine's. `nproc` is **12**. So load 17.33 was ~1.4x
+oversubscription, not 3x — still loaded, and still the wrong condition for this
+measurement, but I overstated it and the numbers are corrected in place.
+
+**And the constraint has since moved.** The owner had plexus's watcher daemon
+stopped this evening; load fell to **4.30** on those 12 cores (5-min 8.84,
+15-min 10.71 — the trend is the daemon leaving). The box's largest continuous
+consumer is gone.
+
+That does NOT make this measurable right now: plexus is still the owner's
+workstation, six sessions are live, and load 4.30 is not idle. But the reason
+this ticket has been deferred twice is materially weaker than it was this
+morning, and it is the first time that has been true. Whoever picks it up
+should re-read the load rather than inherit "blocked on a busy box" from here.
