@@ -218,4 +218,4 @@ shapes, not just handle-vs-handle — the equality arm handles three operand
 shapes and the ordered arm will need the same three.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 0b11cb283.
