@@ -1,8 +1,16 @@
 ---
-prio: 30
-track: R
+prio: 55
+track: A
 ---
-# A fn with a slice param and >=2 params erases `main`'s record-array element type
+# `AllocArray` leaves `RecName` stale on a recycled symbol slot
+
+**Retitled and moved to Track A on 2026-08-29**, after measuring it. It was
+filed as a Track R oddity ("a fn with a slice param and >= 2 params erases
+`main`'s record-array element type"); the mechanism is one line in
+`compiler/symtab.inc` and every frontend that allocates a fixed array is
+exposed to it, so the Rust spelling below is a symptom, not the subject. Prio
+raised from 30 to 55 for the same reason: the ROOT is shared machinery and one
+of its two symptoms is silent.
 
 Found on 2026-08-29 while probing the `[Name { .. }; N]` rung (rung 16 of the
 Track R ladder). **Pre-existing** — it has nothing to do with that rung: the
@@ -94,9 +102,59 @@ unaffected. The engine's move list is a `MoveList` STRUCT local, not a record
 array in `main`. The bug is one `let mut a: [Move; 4];` in `main` away at all
 times.
 
-## Next step
+## ROOT CAUSE (measured 2026-08-29, probes in the compiler, not reasoning)
 
-Measure, do not reason: dump `Syms[]` for `a` (ElemType / ElemRecName) in the
-broken and working orderings rather than continuing to guess at the mechanism.
-The probe matrix above is the artifact worth keeping; the mechanism is still
-unknown and none of the plausible stories survives both bullet points.
+`AllocArray` (`compiler/symtab.inc:4411`) writes `Name`, `TypeKind`, `ConstVal`,
+`IsArray`, `ArrLen`, `SymDynDepth`, `ElemRecName` and the rest of the element
+shape into `Syms[SymCount]` — and **never touches `RecName`**. The symbol table
+recycles slots, so the new array symbol inherits whatever record id the previous
+occupant of that slot left behind.
+
+Probed at the `a[` dispatch in `RParsePrimary`, same program, one parameter
+added to an unrelated fn:
+
+```
+one param:  PROBE brk sym=5 name=a tk=5 rec=0  isarr=1 isslice=0 base=16
+two params: PROBE brk sym=5 name=a tk=5 rec=19 isarr=1 isslice=1 base=16
+```
+
+`rec=19` is `REC_UCLASS_BASE + 3` — the auto-registered `&[i64]` slice class,
+left in that slot by the slice PARAMETER of the fn declared above. `RIsSliceSym`
+tests exactly `TypeKind = tyRecord` and `RSliceCi[RecName - REC_UCLASS_BASE]`,
+and an array-of-record symbol has `TypeKind = tyRecord` (the ELEMENT kind), so
+the stale `RecName` alone flips the answer. `a[0]` is then routed to the
+slice-index arm — `AN_DEREF(__ptr + i*stride)` over an array that has no header
+— instead of the plain fixed-array arm, and `.field` never gets a chance to
+parse.
+
+That is why every strange fact in the matrix above is a fact about **slot
+arithmetic**, not about classes: the fn must precede `main` (so its params are
+allocated first), it needs arity >= 2 (so a param lands on the slot `main`'s
+array will reuse), and it is specific to `main` (a fn parsed earlier reuses
+different slots). None of the "the slice UClass shifts an index" stories were
+close.
+
+Confirmed by fixing it: resetting the field immediately after the `AllocArray`
+call makes the repro print 7 instead of failing to parse. That one-line probe
+was applied in `rparser.inc`, verified, and **reverted** — the fix does not
+belong there.
+
+## Fix (Track A, one line, NOT applied)
+
+```pascal
+  Syms[SymCount].RecName := REC_NONE;     { in AllocArray, beside ElemRecName }
+```
+
+An array symbol's record identity lives in `ElemRecName` by design —
+`ResolveNodeRec` says so in its own comment ("Array symbols store their ELEMENT
+record in ElemRecName, not RecName ... a recurring landmine throughout this
+codebase") — so `RecName` on an array symbol is meaningless and must be cleared,
+not merely ignored. `AllocVar` sets it; `AllocArray` is the odd one out.
+
+Left for Track A deliberately: `symtab.inc` is shared core, Track R does not
+edit it, and the blast radius is every frontend that allocates a fixed array
+(C, NilPy, Pascal and Zig all call `AllocArray`). Whoever takes it should check
+whether the other frontends have latent instances rather than only re-running the
+Rust repro — a stale `RecName` is readable by anything that asks a record
+question about an array symbol, and it fails silently wherever the answer is not
+a parse decision.
