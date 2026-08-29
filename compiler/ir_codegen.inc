@@ -9383,8 +9383,29 @@ begin
               refreshed from their authoritative frame slots right after).
               rax is dead at the handler label (IR_EXC_MATCH reloads it). }
             EmitB($0F); EmitB($84); excSkip := CodeLen; EmitI32(0);   { jz over the refresh (normal path) }
-            for f := 0 to RcResidentCount - 1 do
-              RegcallRefreshResident(RcResidentSym[f]);
+            { PXXDBG=a.noexcrefresh -- DISCRIMINATOR, diagnostic only. Suppresses
+              this refresh so that the three mechanisms which could explain "a
+              resident's frame slot is read on the unwind path" produce three
+              DIFFERENT values in the handler, instead of one correct one:
+
+                handler sees the LATEST value    -> the registers survived the
+                  raise; the refresh is dead code and the exception gate on
+                  ResidentSlotIsDead can be deleted outright
+                handler sees the TRY-ENTRY value -> ExcLongJmp rolled the
+                  register back from the jmp_buf; the refresh is load-bearing
+                  and the slot must stay current for anything written inside
+                  the protected region
+                handler sees $5EEDADAD           -> combined with a.poisonslot:
+                  some OTHER reader of the slot exists, and it is not this loop
+
+              Written down because a correctness suite cannot tell "the slot is
+              never read" from "the slot is read and happens to hold the right
+              value" -- which is why item 3 needed poisoning rather than tests.
+              A characterisation that names the reader but not the discriminator
+              gets re-derived wrongly by the next holder. }
+            if not PxxDbgEnabled('a.noexcrefresh') then
+              for f := 0 to RcResidentCount - 1 do
+                RegcallRefreshResident(RcResidentSym[f]);
             FloatPoolRestore;
             FloatResidencyRefreshAll;
             if LabelPositions[lblId] <> -1 then
@@ -9649,6 +9670,61 @@ end;
   Mutually exclusive with the W1 r12/r13 callee scratch: CalleeScratchAssign
   bails when residency claimed the registers (int picks fill lowest-first, so
   any int resident occupies r12). }
+{ Is `idx` written anywhere inside a try-protected span of this body?
+
+  This is the axis the -O3 item-3 gate actually turns on, and it is finer than
+  the RcProcHasExc gate that stands today. A raise longjmps back to the try's
+  ExcSetJmp, which restores r12-r15 (aarch64 x19-x28) from the jmp_buf — so a
+  resident register is ROLLED BACK to its value at try-entry. If the symbol was
+  written inside the protected region, that rolled-back register is stale and
+  the frame slot is the only surviving copy: the slot must stay current and the
+  landing-pad refresh is load-bearing. If it was written only OUTSIDE, the
+  try-entry value IS the current value, the register is already right, and the
+  refresh is a no-op. Measured, not argued — PXXDBG=a.noexcrefresh moves exactly
+  the written-inside symbols and leaves the written-outside ones alone, within a
+  single body (see test_o3_resident_exc's MIX case).
+
+  The span runs from IR_EXC_ENTER to the IR_LABEL it names as its handler, NOT
+  to the IR_EXC_LEAVE that closes the protected block. That looks like slop and
+  is load-bearing in two places:
+
+    - try/finally lowers its finally body TWICE, once on the normal path after
+      IR_EXC_LEAVE and once after the handler label. Ending the span at the
+      LEAVE would cover neither copy, and the second copy runs after the
+      rollback has already happened.
+    - a nested try's whole ENTER..LABEL span lies inside its parent's, so an
+      inner HANDLER's stores are correctly seen as inside the outer region.
+
+  Over-approximating is the safe direction: it keeps a dual-write that was not
+  strictly needed. Under-approximating loses a value silently, on the unwind
+  path, which no test that does not raise can see. Do not "tighten" this to the
+  IR_EXC_LEAVE.
+
+  Index ranges work because IRAppend is called in lowering order: the ENTER is
+  appended before the protected body is lowered and the handler label after, so
+  every node created while lowering that body falls in between. }
+function SymWrittenInProtectedSpan(idx: Integer): Boolean;
+var e, h, k, lbl: Integer;
+begin
+  SymWrittenInProtectedSpan := False;
+  for e := 0 to IRCount - 1 do
+    if IRKind[e] = IR_EXC_ENTER then
+    begin
+      lbl := IRA[e];
+      h := IRCount;                          { unterminated span -> to end of body }
+      for k := e + 1 to IRCount - 1 do
+        if (IRKind[k] = IR_LABEL) and (Integer(IRIVal[k]) = lbl) then
+        begin h := k; Break; end;
+      for k := e + 1 to h - 1 do
+        if ((IRKind[k] = IR_STORE_SYM) or (IRKind[k] = IR_ZERO_SYM) or
+            (IRKind[k] = IR_EXC_STORE)) and (IRA[k] = idx) then
+        begin
+          SymWrittenInProtectedSpan := True;
+          Exit;
+        end;
+    end;
+end;
+
 procedure UnifiedResidencyAssign;
 var k, j, t, best, bestCnt, lbl, si, nsyms: Integer;
     islot, fslot, nFree, reg, saveOff: Integer;
@@ -9821,7 +9897,9 @@ begin
       Inc(islot);
       if PxxDbgEnabled('a.resid') then
         WriteLn('PXXDBG a.resid ASSIGN proc=', Procs[CurProc].Name,
-                ' sym=', Syms[si].Name, ' reg=r', reg, ' loads=', bestCnt);
+                ' sym=', Syms[si].Name, ' reg=r', reg, ' loads=', bestCnt,
+                ' exc=', Ord(RcProcHasExc),
+                ' excwr=', Ord(SymWrittenInProtectedSpan(si)));
     end;
   end;
 end;

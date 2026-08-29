@@ -1296,6 +1296,28 @@ def covered_tiers(tier):
     return {tier}                     # opt (and any future disjoint tier)
 
 
+def breadth_full_run(st):
+    """The newest COMPLETE `full` tier run on this host, or {}. -> dict.
+
+    `last_full` is the last REPLACING run (full=True), NOT the last `full`
+    TIER -- a historical name. Under the shipped default (mid_tier ==
+    deep_tier == full) the two coincide, which is the only reason the breadth
+    banner reading `last_full` has been correct.
+
+    They diverge the moment mid_tier is set to `limited`: that run replaces,
+    so it refreshes `last_full`, and it covers no cross target at all. The
+    banner would reset its clock on it and vouch for coverage that never ran.
+
+    The fallback exists for state published before `last_by_tier` did, and
+    only fires when `last_full` SAYS it was a full tier -- so it can promote a
+    true full run that predates the map, and can never promote a `limited` one.
+    """
+    rec = last_run_at_tier(st, "full")
+    if not rec and (st.get("last_full") or {}).get("tier") == "full":
+        rec = st["last_full"]
+    return rec or {}
+
+
 def last_run_at_tier(st, tier):
     """Newest COMPLETE run at EXACTLY `tier`, or {}.
 
@@ -1671,6 +1693,36 @@ def diff_jobs(prev_jobs, report):
 # How many red jobs may carry a reason. tstate is committed to git, so this is
 # a repo-size bound, not a memory one: a mass red must not commit a novel.
 JOB_REASON_CAP = 60
+
+# A pin verify stores reasons for its NEW reds only, each truncated to this
+# many characters, at most this many entries. Both numbers are the bound the
+# ticket asked to be stated and measured: 20 x 200 = 4 KB worst case against a
+# 737 KB plexus.json (0.54%), and the realistic case is far smaller -- reasons
+# run ~147 characters at the median and the measured worst incident (v367 at
+# d47acfee770c, 2026-08-19) had 11 new reds, so ~1.6 KB.
+PIN_VERIFY_REASON_MAX = 200
+PIN_VERIFY_REASON_CAP = 20
+
+
+def pin_verify_why(report, base_reds, reds):
+    """Reasons to store on a pin verify, bounded. -> (why, new_red).
+
+    NEW reds only. A red already in `pin_baseline.reds` was failing before this
+    pin and is not what anyone is triaging; spending shared-file bytes on it
+    buys nothing and dilutes the entries that matter.
+
+    A job whose run recovered no log contributes NO entry rather than an empty
+    one. An empty reason next to a job name reads as "there was no reason",
+    which is a claim; absence reads as "not recorded", which is the truth.
+
+    Truncation is per entry so one pathological log cannot crowd out nineteen
+    useful ones -- the failure mode of a single shared byte budget.
+    """
+    fresh = {job_key(j): (j.get("reason") or "") for j in report["jobs"]}
+    new_red = [k for k in reds if k not in base_reds]
+    why = {k: fresh[k][:PIN_VERIFY_REASON_MAX]
+           for k in new_red[:PIN_VERIFY_REASON_CAP] if fresh.get(k)}
+    return why, new_red
 
 
 def update_job_reasons(st, report, jobs):
@@ -3165,6 +3217,44 @@ QUIET_HOST_SECS = 2 * 86400
 CASCADE_ROOT_JOBS = ("fpc-bootstrap", "selfhost-fixedpoint")
 
 
+def cascade_suspects_line(roots):
+    """The Root-cause suspects line of an auto-filed cascade ticket. -> str.
+
+    SAY WHAT WAS CHECKED AND STOP. The empty case used to read
+
+        none of the known root jobs — likely a broken build or harness event
+
+    whose first clause is a fact about the red set and whose second clause is
+    invented: nothing in the filing path looks at the build, the harness, the
+    box or the range before writing it. It converted the absence of ONE narrow
+    signal into a positive claim about the cause.
+
+    That got worse when the Range section landed (8ec77190c), because the two
+    sections then sat adjacent and disagreed. On the live incident
+    (regression-cascade-4e27dc2be114) this line said "likely a harness event"
+    while the Range section four lines below named
+    `e1109d7bcbf9 feat(A,N): a bare NilPy import resolves to Python, not a
+    Pascal unit` -- which was the actual cause. A ticket containing its own
+    refutation, with nothing telling a reader which half to prefer, is worse
+    than one that never guessed: the reader who trusts the first line stops
+    looking.
+
+    Face 1 publishes SIGNAL, NOT JUDGMENT (this file's own header). A guess at
+    a cause is judgment, and it is the one thing an auto-filer must not emit --
+    it is read by someone who was not there and has no way to discount it.
+
+    The known-root list is spelled out rather than named, because a reader of
+    the filed ticket cannot see the constant.
+    """
+    if roots:
+        return ", ".join("`%s`" % r for r in roots)
+    return ("none of the known root jobs (%s). That is the ONLY heuristic "
+            "applied here — it does not imply a harness event, and nothing "
+            "in this filing looked at the build, the box or the range. See "
+            "the Range section below for commits worth checking."
+            % ", ".join("`%s`" % j for j in CASCADE_ROOT_JOBS))
+
+
 def revert_of_range(clone, sha, parent):
     """Has anything in (parent, sha] already been REVERTED on the watched branch?
 
@@ -3806,8 +3896,7 @@ and blaming are different questions and this line answers the first.)
 dev track triages the root; individual tickets only for whatever remains red
 after the root is fixed.*
 """ % (len(new_red), span, host, len(new_red), utcnow(),
-            ", ".join("`%s`" % r for r in roots) if roots
-            else "none of the known root jobs — likely a broken build or harness event",
+            cascade_suspects_line(roots),
             cascade_range_note(clone, reg, pin_jobs),
             report["tier"], sha, joblist))
     write_ticket(os.path.join(clone.path, rel), body)
@@ -5319,9 +5408,47 @@ def verify_pin(clone, host, st, ver, sha, tier, abort_check=None):
     reds = [job_key(j) for j in report["jobs"]
             if j["status"] not in ("pass", "skip")]
     st = load_state(clone, host)
+    # WHY the new reds are red, stored HERE rather than left to `job_reason`.
+    #
+    # `job_reason` is the current red set from the NEWEST run -- set-or-clear,
+    # which is correct and is exactly why it cannot answer this question. The
+    # two diverge precisely when it matters: at the v367 verify
+    # (d47acfee770c, 2026-08-19) 20 reds were listed and `job_reason` held 9,
+    # and those 9 were the INHERITED reds still failing at HEAD. The 11 a
+    # reader actually had to triage -- the new ones, the ones a `make revert`
+    # fires on -- were the 11 with no reason recorded anywhere, because they
+    # were green again by the time the newest run wrote the map.
+    #
+    # STORED, not pointed at. The ticket left that fork open: a pointer (run
+    # id + host) into the verify's own report JSON is cheaper here and carries
+    # every reason. Two things settle it for storing:
+    #
+    #   * a pointer resolves only while that box is up and its log unreaped,
+    #     and the moment you need a pin verify's reason is a moment when
+    #     things are already broken. `report_job()` already drops `log` for
+    #     this reason -- a path does not survive the box.
+    #   * a SECOND box is arriving. tstate is the shared file every host and
+    #     every track reads; a pointer keyed to host + run id is unresolvable
+    #     from the other box by construction, so the pointer design gets worse
+    #     exactly as the fleet grows. That fact post-dates the ticket.
+    #
+    # Bounded three ways, because this file is fetched by every track: new
+    # reds only (a red already in the baseline is not what anyone is
+    # triaging), a per-entry character cap, and an entry-count cap that SAYS
+    # what it dropped -- a cap that trims silently turns "we kept 20 of 40"
+    # into "there were 20".
+    base_reds = set((st.get("pin_baseline") or {}).get("reds") or [])
+    why, new_red = pin_verify_why(report, base_reds, reds)
+    if len(new_red) > PIN_VERIFY_REASON_CAP:
+        print("twatch: pin verify has %d new red(s); storing reasons for the "
+              "first %d, %d without one"
+              % (len(new_red), PIN_VERIFY_REASON_CAP,
+                 len(new_red) - PIN_VERIFY_REASON_CAP), flush=True)
     st["pin_verify"] = {"ver": ver, "sha": sha, "tier": tier,
                         "verdict": verdict, "date": utcnow(),
                         "red": reds[:20]}
+    if why:
+        st["pin_verify"]["why"] = why
     save_state(clone, host, st)
     with open(os.path.join(clone.path, TSTATE_REL,
                            "runs-%s.ndjson" % host), "a") as f:
@@ -6555,9 +6682,28 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
         # hours behind — and the cross targets run nowhere else. Always printed
         # when the host has ever run one, because the age is the boundary of the
         # claim and a boundary nobody can see is not checked.
-        if lf.get("date") and not quiet:
-            age = secs_since(lf["date"], now)
-            behind = testable_behind(repo, lf.get("sha", ""), ref)
+        # WHICH RUN VOUCHES FOR THE CROSS TARGETS -- and it is not `last_full`.
+        #
+        # `last_full` is the last REPLACING run (full=True), NOT the last
+        # `full` TIER; the name is a historical accident. Under the shipped
+        # default (mid_tier == deep_tier == full) the two coincide, which is
+        # the only reason reading it here has been correct.
+        #
+        # Configure mid_tier to `limited` -- exactly what
+        # chore-t-the-tier-ladder-ratio-is-stale-by-its-own-criterion
+        # contemplates doing -- and they diverge: a `limited` run refreshes
+        # `last_full`, covers NO cross target, and would silently reset this
+        # banner's clock. The line would then vouch for coverage that never
+        # ran, and its whole job is to say when nothing vouches. That is the
+        # failure direction with no output to notice, so it is fixed BEFORE
+        # the experiment rather than after.
+        #
+        # last_run_at_tier() answers the question exactly: the newest COMPLETE
+        # run at that tier, exact match, never covered_tiers.
+        lf_full = breadth_full_run(st)
+        if lf_full.get("date") and not quiet:
+            age = secs_since(lf_full["date"], now)
+            behind = testable_behind(repo, lf_full.get("sha", ""), ref)
             stale = age is not None and age > BREADTH_STALE_SECS
             print("tstate:   breadth — newest full tier is %s old%s%s"
                   % (fmt_age(age) if age is not None else "?",
@@ -6566,6 +6712,14 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
                      "  [STALE — no cross-target verdict on this tree; native "
                      "GREEN does NOT cover i386/arm32/riscv32/aarch64]"
                      if stale else ""))
+        elif lf.get("date") and not quiet:
+            # The host has run SOMETHING to completion, but never a `full`
+            # tier. Silence here would read as "breadth is fine"; the absence
+            # of a full tier is precisely the thing this line exists to report.
+            print("tstate:   breadth — NO `full` tier recorded on %s (newest "
+                  "complete run is `%s`): nothing here vouches for "
+                  "i386/arm32/riscv32/aarch64"
+                  % (st.get("host", "?"), lf.get("tier", "?")))
         # PIN VERIFY — a different question from every line above it, which are
         # all about `last_full`: the newest tier on the newest tree. "Is the
         # binary every track is currently BUILDING on sound?" is answered by
@@ -6595,8 +6749,12 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
             # most reassuring possible way to be wrong.
             if base.get("reds") is not None and base.get("pin") == pv.get("ver"):
                 fresh = [j for j in pv_red if j not in set(base["reds"])]
-                vs = ", %d new vs the %s baseline" % (len(fresh), pv["ver"])
+                n_new = len(fresh)
+                vs = ", %d new vs the %s baseline" % (n_new, pv["ver"])
             else:
+                # None, not 0. "no new reds" and "cannot tell" are different
+                # states and the reason lines below branch on the difference.
+                n_new = None
                 vs = ", no baseline recorded for %s (new-vs-inherited unknown)" \
                      % pv.get("ver", "?")
             print("tstate:   pin verify — %s at %s %s (%s, %s old)%s%s"
@@ -6653,6 +6811,32 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
                           "single run"
                           % (co["sha"][:12], fmt_age(co["gap"]), co["n"],
                              adj(co["what"])))
+            # WHY each new red is red. Printed last in this block on purpose:
+            # it is the question a reader asks AFTER the corroboration line
+            # tells them which of the reds are real. Before that line, a reason
+            # invites triage of a flake.
+            #
+            # `job_reason` cannot answer this -- it holds the CURRENT red set
+            # from the newest run, so the inherited reds still failing at HEAD
+            # keep their reasons and the new ones, already green again, have
+            # none. That is set-or-clear working correctly, and it is why the
+            # reasons are stored on the verify itself.
+            why = pv.get("why") or {}
+            if why:
+                shown = [j for j in pv_red if j in why]
+                print("tstate:            ...why (%d of %s new red(s) carry a "
+                      "stored reason, from the verify run itself):"
+                      % (len(shown), n_new if n_new is not None else "?"))
+                for j in shown:
+                    print("tstate:              %s: %s" % (j, why[j]))
+            elif n_new is None or n_new > 0:
+                # Absence is a fact too, and an unexplained one reads as "no
+                # reason existed". Say which it is: a verify predating the
+                # stored-reason field carries none and never will.
+                print("tstate:            ...no stored reasons (this verify "
+                      "predates them, or the run recovered no log) — the "
+                      "reasons in `job_reason` belong to the NEWEST run, not "
+                      "to this verify, so do not read them as these")
         nskip = sum(1 for s in (st.get("jobs") or {}).values() if s == "skip")
         if nskip:
             print("tstate:   coverage — %d job(s) SKIPPED on %s (absent corpus "

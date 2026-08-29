@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:22 blocked:6 backlog:294 backlog_new:6 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2572 rejected:46`
+`working:1 unfinished:22 blocked:6 backlog:298 backlog_new:5 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2578 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `feature-opt-o3-register-pressure` [O] — owner: frank-optimize-b4
 
 ## unfinished (22) — parked mid-flight; re-claim, do not duplicate
 
@@ -45,7 +45,7 @@ _none — no lane is locked._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `regression-lib-test-lib-synapse` [B] — blocked-by: bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream
 
-## Ready — top 30 of 306, ranked
+## Ready — top 30 of 308, ranked
 
 - `[p 85] [N]` bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
@@ -58,8 +58,6 @@ _none — no lane is locked._
 - `[p 70] [P]` bug-p-a-call-chained-onto-a-class-method-result-is-dropped
 - `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - `[p 70] [N]` feature-nilpy-staticmethod-and-classmethod
-- `[p 70] [O]` feature-opt-o3-register-pressure
-- `[p 70] [P]` feature-p-delphi-string-helpers
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 70] [P]` regression-cascade-4e27dc2be114
 - `[p 70] [A+S]` regression-test-emit-obj-cxtensa-obj
@@ -77,5 +75,7 @@ _none — no lane is locked._
 - `[p 65] [O]` feature-opt-bulk-copy-is-byte-at-a-time
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
+- `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
+- `[p 62] [A]` feature-a-typeref-migrate-consumers
 
-_276 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_278 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

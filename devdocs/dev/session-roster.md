@@ -15929,3 +15929,453 @@ Its judgement on `feature-pascal-typed-and-untyped-files` also stands unoverridd
 it gates on the `string[N]` record-layout question, and shipping without that bakes
 a **silent format incompatibility** the ticket itself calls worse than not having
 the feature. A real blocker, not a scoping preference.
+
+### "BUILDS" WAS STANDING IN FOR "PASSES" — a triage wrong in the flattering direction
+
+`b194ef7ec` (expect_same, its own ticket, parent now a clean Track A dispatch of
+480 mechanical Makefile conversions against a helper that exists and is guarded)
+plus the orphan-test p45, closed — **and the triage inside it was wrong.**
+
+The 2026-08-17 pass bucketed orphan tests by whether they **BUILD** and reported
+*"61 builds today, trivially wireable"*. pxx-a5 re-ran the 21 survivors by
+**RUNNING them and reading the exit code**:
+
+| discriminator | ready to wire | broken |
+| --- | ---: | ---: |
+| **builds** | 19 | 2 |
+| **runs** | **9** | **12** |
+
+**Thirteen of nineteen "buildable" tests fail when run.** Wiring on the build
+signal would have added twelve reds and a segfault to the suite **and called it
+coverage.**
+
+> **A proxy that is cheaper to measure drifts toward being the thing measured.**
+> "Builds" is not a proxy for "passes" — and it fails in the *flattering*
+> direction, which is why nobody re-derived it for twelve days.
+
+pxx-a5 made the same error one level up while finding it: its triage script took
+`$?` from a **pipeline**, recording `head`'s status, and reported twelve failing
+tests as `rc=0`. That is `devtest_report.py`'s own recorded lesson, hit **while
+acting on it.**
+
+### The finding underneath: a live API with zero users and zero running tests
+
+**Verified here, independently:** exactly **12** `test_pyeval_*.pas`, and outside
+the implementation (`compiler/builtin/pyeval.pas`, `pasparser_expr.inc`,
+`pyparser.inc`) they are the **only** callers of `EvalPyStmts`/`EvalPyExpr`.
+
+All twelve fail at HEAD with `host call push but "push" not in globals`. **Not
+rot, and not a regression:** `ff439149e` deliberately changed the `exec()`
+host-call contract, shipped a new `.npy` test for the *new* contract, wired that,
+and left the twelve encoding the *old* one.
+
+> **A correct, deliberate change reached in and invalidated twelve tests, and the
+> only thing that would have said so was a build rule that did not exist.** The
+> Pascal-side entry point now has zero live users and zero running tests — it is
+> kept alive entirely by tests that do not run.
+
+Filed `bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed`
+[N p45] and `chore-a-wire-the-nine-passing-orphan-tests-and-gate-check-test-wiring`
+[A p40, blocked on the N one]. **Both carry their measurements, so neither needs
+pxx-a5.**
+
+### FOR SEVEN: DO NOT TRIAGE AGAINST THE PIN
+
+`v389` is **59 testable commits behind** HEAD and disagrees with it on **3 of 21**
+— one SIGSEGV and two compile errors, **all fixed at HEAD.** Triaging against it
+would have filed **three phantom bugs, the segfault most convincingly of all.**
+
+Not wasted, and this is the sharper half: **a wired `test_class_method_to_method_pointer`
+WOULD have caught a real segfault at v389.** The wiring ticket's thesis with a
+corpse attached.
+
+### Two bugs in its own checker, both about what counts as evidence
+
+- **A comment counted as wiring.** A Makefile *comment* mentioning a file marked it
+  covered — so the checker **printed nothing, and there was no output to notice.**
+  Zero live instances, said plainly rather than dressed up as a bug caught.
+- **A mention counted as PROOF.** A file was reported STALE on the strength of a
+  data tuple in a devtest that asserts about its *content* and never builds it —
+  **and a STALE report invites a deletion that re-opens the gap it was covering.**
+  Staleness now needs evidence **proportional to what acting on it costs**.
+  Deliberately **not** a heuristic for "does this script look like a runner": *a
+  devtest listing test files as data mentions them exactly like a runner that
+  executes them.*
+
+**Measured reach, recorded rather than guessed:** 12 files are marked wired only by
+a devtest mention, some of which genuinely run their subject — so the true unwired
+count is **somewhere in 21..33 and the checker cannot yet say where.**
+
+> **A mutation run means nothing until you have confirmed the mutation APPLIED.**
+> Two of four had to be re-run: a `sed` failed with *"unknown option to `s'"*, left
+> the file unchanged, the suite went green, and the mutation read as **a guard
+> catching nothing** — the same false conclusion as two days ago, in a different
+> costume.
+
+### The reservation is now blocking another lane
+
+`chore-a-wire-the-nine-passing-orphan-tests` [A p40] is **blocked on an N ticket**,
+and N is unstaffed by the owner's reserved call. That is the first time the N
+reservation has held up work in a *different* lane rather than only N's own queue.
+**Surfaced to the owner as a fact, alongside the standing question; not re-asked.**
+
+## 2026-08-29 ~18:0x — PIN v390 (`867207f2b418`, commit `41caa9c82`)
+
+**Ran the pin myself** — the coordinator holds this because a pin takes the
+repo-wide lock. frankB stopped short and asked, correctly: *"closing my own row is
+not a good enough reason to stop everyone."* That is a scheduling call, the answer
+was yes, and the lock cost about **two minutes**.
+
+**Why it was needed, and the general fact worth keeping:** frankB landed
+`TStringHelper` (`51fa2e62a`) and the type-helper PROPERTY fix (`cb87cac15`).
+`lib-test` builds with `$(PXX_STABLE)`, and the pin predated the fix, so the
+`s.Length` row **would have redded Track B's gate on a CORRECT compiler.**
+
+> **Track B's gate can only ever assert what the PIN can do.** A library feature
+> riding an *unpinned* compiler fix is **ungatable** there until the pin moves —
+> a structural property of the stable-binary boundary, not a quirk of this ticket.
+
+**Checked before taking the lock**, since a pin blesses a binary for every lane:
+five open regressions, **identical** to the set two hours earlier — no new red;
+breadth **2 minutes** fresh (it was 17h stale this morning). Then the required
+quick gate → `stabilize-fast` → `pin` → commit.
+
+### The gate reported its own aperture — the counter-example to today's whole collection
+
+My first `gate.sh quick` went **RED** on the self-host fixedpoint. It then
+**diagnosed itself**:
+
+> *"That is a STALE BINARY, not a miscompile — a sibling landed a compiler change
+> and this checkout has not rebuilt"* — naming `cb87cac15`.
+
+**Two conditions that produce one reading** — a genuine miscompile and a stale
+local binary — **and it distinguished them**, by checking its own binary's mtime
+against the last commit touching `compiler/`. Rebuilt (`867207f2b418`, converged
+in 1 round), re-gated, **GREEN**.
+
+> Every instance collected today was an instrument that **could not** report its
+> own scope. This one **does**, and it does it by measuring a fact about itself
+> rather than about its subject. It is the existence proof that the fix is
+> available, and it was already in the tooling.
+
+Note the shape it guards against is real and current: with six sessions landing
+compiler changes, **any lane's local binary can be stale at any moment**, and a
+stale binary fails the fixedpoint in a way that reads exactly like a miscompile.
+
+### frankB's P-side work — two items, one existed
+
+`cb87cac15` + three. **The property gap was real and the fix is three lines that
+add no path:** the type-helper block already handed the receiver to
+`ParseClassRecordSelectors` — the same machinery advanced records use, which has
+resolved properties all along — and the guard in front asked `FindUMeth` and
+nothing else, so a property-named member fell through to *"a string has no members
+here"*. Widening to `or FindUProp(...)` is **normalise-dont-special-case in its
+cheapest form: the property arm was never missing, it was never reached.**
+
+`s.Length` prints 5 where fpc prints 5, **through this morning's sysutils
+declaration with no edit to the library** — the platonic declaration meant the fix
+had a consumer waiting, so the no-appeasement rule **paid out** rather than merely
+being observed.
+
+Its two-armed control is load-bearing and it said why: **the defect was the
+intersection of two WORKING features**, so a one-armed test would let this be
+rewritten later as a helper special case. It also checked for **over**-widening
+rather than assuming — both scalar-member negatives still refused, record control
+still 42.
+
+**The receiver generalisation was already fixed — a stale LIMIT.** All five
+spellings the ticket's table records as refused work today. It **attributed before
+claiming**: all six work on the PINNED binary too, so someone fixed this between
+08-25 and now and nothing it did caused it.
+
+> **Second stale premise in one ticket in one day** — a stale *directive* this
+> morning, a stale *limit* this evening. And attribution-before-claiming is what
+> turns *"I fixed six things"* into *"these were already fixed"*. Only running them
+> could have caught either.
+
+Scope stated rather than implied: the Char-receiver overloads, `IndexOfAny`/
+`LastIndexOfAny`, the `*Unquoted` family, `TStringSplitOptions` and quote-aware
+`Split`, `Compare`/`CompareText`, `Chars`/`Empty` are absent **by choice** —
+additive, nothing in tree needs them, harness takes a later batch unchanged.
+
+### CORRECTION: I released a live lock on an inference, and the inference was WRONG
+
+frank-optimize-b4: *"I was mid-work when you released the umbrella lock in
+`d053c8fb4`, not parked."* It landed `0b4805f8e` (W2 ported to aarch64, behind
+`-O3`) and `d707ce2e9` — **entirely inside `compiler/ir_codegen_aarch64.inc`,
+`symtab.inc` untouched.** So it stayed inside the boundary and nothing broke.
+
+**But the reasoning that released the lock was wrong, and it is worth being exact
+about which part.** I had three observations — no commits since `cf70cb5be`, status
+`waiting`, no reply to my question — and read them as *parked*. **Every one of
+them is equally consistent with mid-work**: a session between pushes, at a prompt,
+not yet drained of my message. I wrote *"the next unit was offered and never
+confirmed"* as though silence were an answer.
+
+> **Silence is not a park line, and I have a rule saying `waiting` is ambiguous —
+> which I then used as evidence anyway.** The tick step exists precisely because
+> these states are indistinguishable, and I treated the indistinguishable state as
+> the one I needed it to be. The check I skipped was the cheap one: **I had already
+> asked, and I acted before the answer.**
+
+**What saved it was not my judgement — it was the file boundary.** I wrote the
+`symtab.inc` / backends split into the ticket at the same time, so the wrong
+inference could not become a wrong outcome. That is the argument for stating
+allocations even when you believe a lane is idle: **a boundary is what makes being
+wrong about occupancy survivable.**
+
+Lock is not being reclaimed; frank-optimize-b4 says explicitly it is mine to hold
+or reassign.
+
+### The x86 assumption wearing target-independent clothes
+
+`W2InPlaceEligible` in `symtab.inc` admits **all five ops** (`+ - and or xor`) with
+a constant right operand. That is true **for x86-64**, where all five encode as
+`81 /digit imm32`. **aarch64 has plain `imm12` for add/sub only**; `and`/`orr`/`eor`
+need the bitmask-immediate encoding this pass does not compute.
+
+> **A shared predicate that is really one target's encoding rule, and its name does
+> not warn anyone.** Wrapped downstream as `W2InPlaceEligibleA64` rather than
+> split — the narrowing genuinely is a property of the aarch64 encoding, so the
+> backend is where it belongs *even once `symtab.inc` unlocks.*
+
+**It bit before it was fixed:** the restriction lived in a **comment in the
+emitter** and not in the admission check, so `a := a and $00FFFFFF` emitted
+`add xR,xR,#(low 12 bits)` — **a wrong answer.** Caught by
+`test_o3_resident_inplace` at `-O3`, *the program written for exactly that shape*.
+**The generic corpus would not have found it** — which is the argument for that
+program being in the corpus, made by the program itself.
+
+Verified this sha: differential 13 programs × -O0/-O2/-O3 vs the pre-W2 aarch64
+compiler fail=0; `a.poisonslot` fail=0; the stress test fires **381 times**; all 6
+targets at default `-O` **48/48 byte-identical**; fixedpoint converged
+`914994960b99`. Timing **1.506 / 1.509 / 1.407×** — *"the biggest single step in
+the campaign and the one I trust least in magnitude"*, because qemu does not model
+the store-to-load-forwarding stall W2 removes. **Direction solid, size a proxy
+artifact.** Four passes now unswept by the opt tier; **no promotion candidates**,
+all behind `-O3`.
+
+## A hung compile sat unnoticed for forty hours, and nothing in this fleet was watching
+
+Found 2026-08-29 by frankB, by accident, running `ps` while diagnosing something
+else: a `pxx` process from its own checkout, **state R, 100% of a core, elapsed
+1 day 16:47**, compiling a five-line file. No timeout fired, no watchdog, no log
+line. It was burning a full core on the box whose core contention every lane has
+been calling the binding constraint on the test matrix — for most of two days,
+invisibly.
+
+frankB killed it, reproduced it bounded first (`timeout 60` → rc 124 — a
+*bounded* reproduction before the evidence is destroyed, which is the part worth
+copying), and filed `bug-n-compiling-html5lib-trie-never-terminates` [N p55].
+
+I swept the whole box immediately after: nothing older than seven seconds, no
+`make` or compile over an hour, load average 8.50 / 10.40 / 11.93 on 12 cores.
+So it was **one** process and not a population. The fleet fact survives that
+anyway, and it is the more valuable half of the report: **if one hung compile can
+sit for forty hours unnoticed, the fleet has no instrument that would notice a
+second one.** A hang is worse than a segfault for an automated driver — a crash
+returns and a hang holds a core forever.
+
+**The sweep is now part of the coordinator tick**, not a filed ticket. It costs
+one `ps` and a ticket would sit in a queue behind p70s; a check nobody is
+assigned to run is not a check. What it looks for is a `pascal26`/`make` process
+older than an hour — for a compiler whose whole self-host build is ~12s, an hour
+is four orders of magnitude past normal and needs no tuning to be unambiguous.
+
+Note what made this findable at all: frankB was looking at something else. The
+generator-family signature applies to the fleet's own health — "no hang report"
+and "no instrument that could produce a hang report" read identically from
+inside.
+
+## Two `make lib-test` runs died to SIGTERM, and the line numbers are the diagnosis
+
+> **FALSIFIED the same hour, on the discriminator named below — 2026-08-29.**
+> frankB measured it: lt4 ran several minutes to line 352, lt5 ran **~54
+> seconds** to line 103. The durations differ by about the same factor as the
+> line counts, which is the opposite of the predicted signature, and neither is
+> near 120s or 600s. **And the refutation that matters more: all three runs were
+> already backgrounded, so the clock I blamed was never running on any of them.**
+> I supplied a cause and a remedy without asking how the runs were being
+> executed. The section is kept as written — see the correction that follows it.
+
+
+Same session, and I think this one is the harness rather than the box. frankB's
+runs were killed at **line 352** and **line 103** of ~1198, `make: *** Terminated`,
+no exit line, 44G free, nothing in dmesg. It correctly refused to assert a cause.
+
+The discriminator is which axis the two kills agree on. **A resource limit kills
+you at a resource threshold, so it lands near the same PLACE each time. A
+wall-clock limit kills you at the same TIME, which lands at a different place
+every run, depending on load.** 352 versus 103 is a factor of three in
+throughput — exactly the spread six agents plus twatch's clone against 12 cores
+produces, and consistent with the load averages measured minutes later.
+
+The wall clock that fits is the **Bash tool's own**: 120s default, 600s maximum,
+and it SIGTERMs the process group on expiry. That also explains the two negative
+findings — no dmesg entry and no OOM — because the kernel was never involved.
+
+**Filed as a hypothesis with a falsifier, not a finding**, and the falsifier is
+cheap: if it is the timeout, the two runs' WALL TIMES are nearly identical while
+their line counts differ 3x. If the wall times differ as much as the line numbers
+do, the story is wrong. frankB was asked to check that before believing me —
+a mechanism that explains every observation is exactly the kind that gets adopted
+without being tested, and I have shipped a wrong causal story behind a correct
+measurement once already this week.
+
+**The remedy is `run_in_background`, not a larger timeout.** Raising the ceiling
+picks a number that six agents' load will invalidate; backgrounding removes the
+clock. And explicitly NOT splitting the run into pieces that each fit under the
+wall — that is the workaround shape, and it would have hidden the cause while
+looking like a fix.
+
+## A queue head its own lane cannot work is worse than an empty queue
+
+pxx-a5 flagged that `next --track T` headed with
+`bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing`, whose
+remaining half is 480 conversions in `Makefile` — Track A's file-lane. It
+declined to retrack it, on the grounds that retracking IS the dispatch call and
+that call is mine. Correct, and the restraint is worth more than the flag.
+
+Retracked `T` → **`A+T`** (`88e7c97af`): A is the file-lane, T is the work-tag,
+per the two-axes model. Dropping T would have lost what the ticket is *about*;
+leaving it as T alone left it in a queue whose agents cannot act on it.
+
+The ranker still shows it under `--track T`, which is right — it genuinely is a
+T-subject ticket needing an A file-holder — but now it is **labelled `[A+T]`**, and
+the label is the actual fix. **An unworkable head occupies the ranker's top slot
+and every `next --track T` re-offers it, so the lane reads as busy while nothing
+is takeable.** That is strictly worse than a dry queue, which at least reports
+itself honestly.
+
+## Occupancy cannot be read from the repo — only from the session
+
+frank-optimize-b4 wanted `compiler/symtab.inc` for -O3 item 3's exception-frame
+gate, and offered three pieces of evidence that it was free: the metaclass ticket
+in `done/`, the fix landed as `72dbc9ba0`, `working/` empty. It stopped and asked
+anyway. Right call, and I answered the same way: **all three are statements about
+what has been COMMITTED, and none of them can see an uncommitted edit in a
+session's tree — which is precisely the state a lock exists to protect.**
+`ListAgents` cannot see it either; frankA read `idle` throughout, and treating
+exactly that reading as a park line is the mistake I made the day before.
+
+So the question went to frankA, which is the only source that can answer it.
+Generalised: **the repo can prove a lane BUSY and can never prove one FREE.**
+
+Dispatched frankA to `bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream`
+[A p70, unblocks 2] partly for that reason — it is lexer-stack machinery, so it
+keeps `symtab.inc` clear whichever way the answer goes. Its variance table (ten
+measured orderings; the same failure reported against two *different* files, one
+of them a line past EOF of a 269-line file) is what makes it settleable by
+reduction rather than resemblance: the failing and passing cases differ by an
+ordering, not by a construct.
+
+## The remedy I prescribed was already in force, and the green would have confirmed it
+
+The correction to the section above, and the general lesson is worth more than
+the dead hypothesis.
+
+My prescribed fix for frankB's killed suite runs was `run_in_background`. **It
+was already what it was doing.** So the next run going green — which is exactly
+what happened, lt6 exit 0 — would have read as my fix working. I would have
+taken it. I had a story that predicted that green.
+
+**A remedy already in force is indistinguishable from a remedy that worked, and
+the confirming evidence arrives on schedule either way.** This is the generator
+signature applied to an INTERVENTION rather than to an observation, and it is
+nastier than the usual case for one reason: the reading is *success*, and nobody
+audits a success. A wrong diagnosis that predicts a red gets retested when the
+red persists. A wrong diagnosis that predicts a green is retired by the green.
+
+Filed as **face twenty** on `feature-a-a-refusal-is-a-claim-with-a-date-on-it`.
+
+The cheap guard is one question I did not ask: **before proposing a remedy,
+establish that it is not already in place.** Not "would this help" — "is this
+currently true?" A remedy's value is entirely in the delta, and I never
+measured the starting state.
+
+Two further notes on how this went, both frankB's credit:
+
+- **It refused to hand me a replacement cause.** It has a plausible candidate
+  (two concurrent makes sharing `TESTTMP`), named it, flagged that it would be
+  its own error if true, and stopped because it has not reproduced it. The kills
+  stopped when it stopped running two makes at once — **correlation with one's
+  own action is the most persuasive kind and the least tested.** Cause remains
+  unknown and is recorded as unknown.
+- **I checked the candidate's premise anyway**, because that is cheap and needs
+  no cause: `Makefile:49` is `TESTTMP ?= /tmp`, a fixed path shared by all six
+  agent trees and the watcher clone. Filed as
+  `bug-a-testtmp-defaults-to-a-path-every-checkout-shares` [A+T p55], explicitly
+  **not** as the cause of the kills. A collision makes one run execute another
+  tree's binary and report a verdict about it, so a collision-red and a real red
+  read identically. The isolation mechanism is documented on line 48; the
+  default on line 49 does not use it.
+
+## A count in a ticket ages into a fact, and I re-quoted one without deriving it
+
+I dispatched frankB against "480 mechanical conversions" because the ticket said
+480. Its census of the actual file: **547** `run_target.sh` recipe lines in
+**nine** distinct shapes — 444 clean output-compares, 30 with extra content
+inside the substitution, 37 exit-status checks, 35 piped-stdin, 13 in-loop, 9
+other, 9 with no assertion at all. 474 match one regex with zero duplicate
+labels; that is batch 1 and nothing else.
+
+Two things I would not have got right from the ticket:
+
+- **The 37 exit-status checks are not convertible at all.** `test "$?" = "143"`
+  asserts a signal; the helper compares two strings. Converting them would be a
+  semantic change wearing a mechanical diff's clothes — and it would land inside
+  a 474-hunk review where nobody could see it. They stay, and they are
+  **documented as unconvertible**, because a silently skipped case reads as an
+  oversight to the next reader and gets "fixed".
+- **The shapes must not be forced under one regex.** Stretching it to swallow
+  the piped-stdin and in-loop cases is how a mechanical change stops being
+  mechanical.
+
+The rule: **a number in a ticket is a measurement someone took once, and it
+decays like any other.** I passed it on with the coordinator's authority
+attached, which is how a stale count becomes the scope everyone plans against.
+Re-derive a count before you dispatch against it, or say plainly that you did
+not.
+
+## Two lanes were not on master, and I had never checked
+
+Added to the coordinator tick 2026-08-29, after frank-rust mentioned pushing to
+`origin/rust` in passing. Measured across every fleet tree:
+
+| tree | branch | ahead of master | behind master |
+| --- | --- | --- | --- |
+| frank-coordinator, frankA, frankB, frank-optimize, pxx, trackt-watch | master | 0-2 | 0 |
+| **frank-rust** | `rust` | 7 | **0** (local; `origin/rust` is 41 behind) |
+| **frankwasm** | `wasm` | 76 | **288** |
+
+CLAUDE.md puts every track on `master`, and `frank.sh` already documents a tree
+launched on a stale branch as a known trap — it is what produced four tickets
+filed to the dead `dev` branch on 2026-08-27. Neither agent chose this; the trees
+were checked out that way, which is exactly why nobody noticed.
+
+**What it costs, and it is not merge hygiene.** Track T sweeps `origin/master`
+and nothing else, so 76 commits of Phase 9 and 6-7 of Rust work have never been
+near the matrix — no cross-target jobs, no corpus. A per-commit self-host
+fixedpoint is still real, but it proves reproducibility, not that the lane's
+green tests are green on i386 or aarch64.
+
+**The sharper cost, and the reason this is a coordinator problem rather than a
+worker's:** at 288 behind, *every finding that lane files describes the codebase
+as it stood 288 commits ago.* A bug fixed on master in that span still reproduces
+there and gets filed as live — and I have been relaying those findings to other
+lanes as facts about the current tree.
+
+So I verified frankwasm's newest one against master before relaying it again:
+`PXXSysOpenRO`, `PXXSysClose` and `PXXSysLseek` each have exactly four arms with
+`Result :=` only inside them and no terminal else, at HEAD. **The finding holds.**
+But that it happened to hold is not the point — I had no basis for the previous
+ones, and asserted them anyway.
+
+**Standing rules from this:** the tick now prints every tree's branch and drift.
+A finding from an off-master lane must **state its branch and drift the way a
+measurement states its sha**. And a branch move is a repo-wide event, so it is
+scheduled here, not absorbed by a worker mid-rung — frank-rust is cheap to move
+at 7-and-0 and was told so; frankwasm at 76-and-288 is not, and was told that too.
+
+Branch permission is still not merge permission. Nothing on `origin/wasm` or
+`origin/rust` is pre-approved.

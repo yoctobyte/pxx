@@ -670,3 +670,295 @@ a blocker is an event on the **blocker**; the note lives on the **dependent**; a
 problem, with time rather than file-set as the axis.
 
 **Seventeen faces, and the family is still open.**
+
+## Face eighteen — when the compiler is its own test input, a diff cannot tell a CODEGEN change from a SOURCE change
+
+Found by frankwasm, 2026-08-29, and it nearly cost twenty lines of inert code.
+
+**The situation.** It had a working fix that widened the `IR_LEA` array arm and
+refined its deref discriminator. To decide whether the widening was load-bearing,
+it compiled `compiler.pas` with both compilers and diffed the `.wasm` bytes. **They
+differed.** That reads as proof the widening changed codegen.
+
+**It did not.** `compiler.pas` *contains the file being edited*, so the two runs
+differed in their **input** as well as in their **compiler**. A source change was
+being read as a codegen change. The real fix is **twelve lines** — delete the stale
+refusal and let `WasmNodeIsDynArray` answer yes for an open-array parameter, so
+`Length` reads the header word the indexing beside it already read. Both parts of
+the rework were then measured **inert**: with the narrow predicate only `ArrLen =
+-1` symbols enter the arm, so the refinement is a no-op, and open-array params fall
+through to a generic path that already emits exactly the one deref they need.
+
+**Why it is its own face rather than an instance of thirteen.** Face thirteen is
+two arms sharing an upstream. Here **the shared upstream is the artefact under
+test**: the thing you changed is also the thing you fed in. That is not a mistake
+anyone makes carelessly — it is structural, and it is **specific to a self-hosting
+repo**, where "compile the compiler and compare" is the most natural measurement
+available and is offered by the build system itself.
+
+> **Every "compile `compiler.pas` both ways and diff" measurement in this repo
+> carries this hazard.** The output differing proves *something* changed; it cannot
+> tell you *which side*. And it fails in the direction that flatters the change you
+> just made — a diff is what you were hoping to see.
+
+**The fix is cheap and exact: hold the source fixed and vary only the binary.**
+Doing that gave a **byte-identical** `.wasm` and settled it in one run.
+
+### The adjacent control, and it belongs with this face
+
+frankwasm ran a **determinism control first** — same binary, same input, three
+runs, one sha — **before** trusting any diff.
+
+> A control that fires on the feature's total absence proves the instrument can
+> *detect*. This is the other one: **a control that establishes the instrument is
+> STABLE, run BEFORE the comparison rather than after it surprises you.** Without
+> it, "the bytes differ" cannot be separated from noise, and — the part that
+> matters — you have **no reason to go looking for a third explanation.** It is
+> what made the second measurement readable.
+
+## Face nineteen — targets agree because they SHARE the property that absorbs the bug, not because the code is right
+
+Found by frankwasm, 2026-08-29, writing up its own three instances — and the
+write-up corrected the claim it started from, which is the interesting part.
+
+**The instance.** An open-array-of-string argument is spilled through a hidden
+temp `ir.inc:11207` declares `tyAnsiString` but which actually holds an array
+data pointer (`bug-a-open-array-of-string-arg-spilled-through-a-managed-string-temp`).
+On every register backend the mistyped retain and the scope-exit release
+**cancel**: the program is correct, and stays clean under `PXX_HEAP_DEBUG`
+across 2000 iterations. wasm32 type-checks the store rather than emitting a
+machine word, so it is the only target that can see it at all.
+
+**The claim I first made, and why it was too narrow.** I reported this as the
+third shared-frontend mistyping "visible only to wasm32". Checking the lane's
+own tickets before writing it down, that is **not** what the other two say:
+
+| ticket | absorbed by | visible on |
+| --- | --- | --- |
+| open-array-of-string temp (today) | every register target, via ARC cancellation | wasm32 only |
+| `procedure of object` hard-sized 16 bytes | 64-bit targets, where 16 is correct | **all five** 32-bit targets |
+| `in` truncates a 64-bit test value | 64-bit targets, where no truncation occurs | i386 and arm32 |
+
+Only the first is wasm-only. So the honest face is not "wasm32 is the oracle" —
+it is one level up, and it covers all three:
+
+> **A defect is invisible on every target that happens to have the property
+> which makes it harmless.** Those targets then AGREE with each other, and
+> their agreement reads as verification. It is not: they are not independent
+> witnesses, they are one witness with several names.
+
+**Why this is not just face thirteen.** Thirteen is two arms sharing an
+upstream in the *code*. Here the shared upstream is a **property of the
+targets** — 64-bit width, a register calling convention, an untyped machine
+word — that nothing in the test output names, and that no one chose. x86-64,
+aarch64 and the 64-bit path agree about a 16-byte method pointer because 16 is
+right *for them*; that is not four confirmations, it is one.
+
+**The operational consequence, which is the part worth acting on.** "It passes
+on the default target" and even "it passes on three targets" carry almost no
+information about a width- or convention-sensitive defect, because the default
+set is not diverse along the axis that matters. The cheap counter is to ask,
+before believing a green matrix: **what do these targets have in common, and is
+it the thing under test?** Where the answer is "yes", one target of the other
+kind is worth more than three of the same kind.
+
+**Why the wasm lane keeps finding these, stated without flattering the lane.**
+It is not that wasm32 is more correct. It is that wasm is the only target where
+the *machine* checks the type instead of the calling convention assuming it, so
+it is diverse along exactly the axis the register targets share. That makes it
+a useful oracle for one class of defect and no better than any other target for
+the rest — the same bounded claim face seventeen makes about an instrument's
+scope.
+
+**And the priority note, because it is invisible from the `prio:` field.** The
+open-array ticket is p30 by its symptom, which is a single refused body on one
+target. Its actual value is the diagnosis: it says a whole class of argument is
+mistyped in the shared frontend. **The honest case for fixing it is the
+diagnosis, not the symptom** — and a ranker that reads only severity cannot see
+that, which is worth knowing about every ticket whose value is what it reveals
+rather than what it breaks.
+
+**Nineteen faces, and the family is still open.**
+
+## Face twenty — a remedy already in force is indistinguishable from a remedy that worked
+
+Found by frank-coordinator, 2026-08-29, on itself. Every face so far is about an
+OBSERVATION carrying no information. This one is about an INTERVENTION.
+
+**The instance.** frankB reported two suite runs killed by SIGTERM at line 352
+and line 103 of ~1198. The coordinator proposed a cause (the tool's own
+wall-clock, which SIGTERMs the process group on expiry) and a remedy: run it
+backgrounded instead. The next run went green.
+
+The remedy was already in place. All three runs had been backgrounded from the
+start, so the clock blamed was never running on any of them — the hypothesis was
+not merely wrong but inapplicable in principle. The coordinator had not asked how
+the runs were being executed, and built a mechanism on an unstated premise.
+
+**Why the green is the trap.** Had the remedy been "applied" — it required no
+action, because it was already true — the green would have arrived exactly on the
+schedule the wrong story predicted, and would have been read as confirming it.
+Two conditions, one reading:
+
+| condition | evidence produced |
+| --- | --- |
+| the remedy fixed it | next run green |
+| the remedy was already in force and the cause was something else | next run green |
+
+**Why this is worse than the observational faces.** A wrong diagnosis predicting
+a RED gets retested, because the red keeps arriving and someone keeps looking. A
+wrong diagnosis predicting a GREEN is *retired* by the green. **Nobody audits a
+success.** The failure mode is not that the check is weak — it is that the case
+is closed, with a cause on the record, and the real cause is still live.
+
+Here it stayed live: frankB's kills remain unexplained, and would have been
+filed as solved.
+
+**The cheap guard, which is one question.** Before proposing a remedy, establish
+that it is not already in place. Not *"would this help"* — **"is this currently
+true?"** A remedy's value is entirely in the delta, and a delta cannot be
+computed without measuring the starting state. The coordinator measured neither.
+
+**The generalisation past this incident.** Any fix whose "confirmation" is the
+absence of a symptom inherits this shape, and intermittent symptoms make it
+routine: the symptom's own duty cycle supplies a confirming green on a schedule
+that has nothing to do with the fix. That is the same reason a control is not a
+control until it has failed once — an intervention is not evidenced until you
+have seen the world without it, deliberately.
+
+**Related and distinct.** Face nineteen: several witnesses agreeing because they
+share the absorbing property. Face thirteen: two arms sharing an upstream in the
+code. Both concern what an observation cannot distinguish. Twenty concerns what
+an ACTION cannot distinguish — and the action's evidence is generated *after* the
+belief exists, which is the direction that admits the most self-deception.
+
+## Face twenty-one — an append to a path that does not exist creates it, and reports success
+
+Found by frank-coordinator, 2026-08-29, in its own week-old work. Face twenty is
+about an intervention whose evidence is ambiguous. This is about a WRITE that
+lands somewhere other than where it was aimed and says nothing.
+
+**The instance.** Two appends were addressed to `devdocs/progress/backlog/<slug>.md`
+while the ticket lived in `backlog_new/`. The shell created the file. Both
+appends reported success. The content really was written — to an empty-headed
+orphan with no frontmatter and no body, while the real ticket received nothing.
+
+| condition | evidence produced |
+| --- | --- |
+| appended to the existing ticket | exit 0, file present, content in it |
+| created a new file at the wrong path | exit 0, file present, content in it |
+
+**Why it lasted.** Every downstream reading agreed with the wrong one. The
+ranker offered the slug twice at the same priority and flagged nothing. The
+checker validated ticket *content* and never asked about the ticket *set*. And
+critically, **both files read as coherent when opened alone**: the orphan looked
+like a complete analysis, the real ticket looked like a correctly-filed bug, and
+neither could announce the other. A reader lands on whichever the ranker offered
+and gets a consistent, wrong picture.
+
+**The general shape, past shells.** *Create-if-missing is a convenience that
+converts a targeting error into a silent success.* It is the same trade every
+`mkdir -p`, every upsert and every `?=` default makes, and each is right in the
+case it was designed for. What it costs is the ability to say "that destination
+was not there" — and that sentence is the only thing standing between an append
+and an orphan.
+
+**The cheap guard**, and it is the one that generalises: **when a write is
+supposed to MODIFY something, assert the target exists first.** Not "did the
+write succeed" — the write always succeeds. `>>` cannot distinguish appending
+from creating, so the check has to happen before it, or the distinction is gone.
+
+### Amendment to face twenty — frankB, 2026-08-29, and it is the sharper form
+
+> *"The remedy's evidence value was zero before the run started, and nothing in
+> the outcome can tell you that. The test is not 'did it improve' but **did
+> applying it change anything**, and that question is answerable BEFORE you look
+> at the result, for free."*
+
+This is better than the original framing and supersedes it as the operational
+rule. The original said *check whether the remedy is already in place*, which
+sounds like diligence. frankB's version says something stronger and cheaper:
+**the reading's information content is fixed before the reading exists**, so the
+result never needs to be examined at all. Once `run_in_background` was known to
+be already set, lt6's green carried no information about the cause — and that
+was knowable without waiting for lt6.
+
+It is the aperture question of face seventeen, asked of an intervention instead
+of an instrument: **what would this reading have been if I had done nothing?**
+
+frankB then applied it against its own favoured candidate, which is the part
+that makes it a method rather than a retort. Its TESTTMP-collision story has
+exactly the same property — the kills stopped when it stopped running two makes
+at once — and it noted that the stopping was a *side effect of the queue
+emptying*, not a deliberate application, so no confirmation is available from it.
+Cause remains unknown and is recorded in the ticket as a candidate only.
+
+**A remedy that was never deliberately applied cannot be confirmed by the
+symptom's disappearance, however exact the timing.**
+
+**Related.** Face twenty: a remedy already in force and one that worked produce
+the same green. Both are cases where the ACTION's own report is uninformative,
+as opposed to an observation's. The pattern across both: **an operation that
+cannot fail cannot inform.**
+
+## Face twenty-two — naming the check you did not run makes the conclusion read as checked
+
+Found by pxx-a5, 2026-08-29, in a ticket frank-coordinator filed the same hour.
+Face twenty is a remedy already in force. This is a *precondition* named and not
+performed — and the naming is what does the damage.
+
+**The instance.** `bug-a-testtmp-defaults-to-a-path-every-checkout-shares` was
+filed with a "Direction, not a prescription" section that said, in as many words:
+*grep for hardcoded `/tmp/` consumers outside the Makefile first, including in the
+tooling, before changing the default.* The coordinator wrote that sentence and
+did not run the grep.
+
+pxx-a5 ran it. It inverts the answer three ways:
+
+- **testmgr already privatizes.** `RUN_TMP = "/tmp/testmgr-scratch-%d" % os.getpid()`
+  (`tools/testmgr.py:1251`), applied by rewriting every recipe line at execution —
+  so the ticket's central sentence, *two runs in two trees write the same absolute
+  paths*, is **false for every testmgr-driven run**, which is how the watcher and
+  every gate tier run. The real exposure is bare `make` by hand, which the
+  full-suite hook already refuses for every lane but T.
+- **The recipe half closed two weeks earlier** — `chore-makefile-testtmp-parameterize`,
+  `b2cab6b6b`, 2026-08-14.
+- **And the proposed fix would break the harness.** Four expressions in
+  `make_dry_run()` hardcode the literal `/tmp` prefix, with a comment on them
+  saying they *"all four go blind AT ONCE and fail silently"* if the default moves
+  — no privatization and no producer/consumer merge. `/tmp` is **load-bearing**,
+  not an oversight, and that comment is the guard.
+
+So the recommendation would have removed isolation that already exists and broken
+the job-dependency merge, both silently, both in the direction where a
+collision-red and a real defect read identically. **It would have made the exact
+problem the ticket is about worse, while looking like the fix.**
+
+**Why the hedge is the mechanism and not the mitigation.** A flat recommendation
+invites a reader to check it. A recommendation that names its own precondition
+reads as one whose author already thought about that — and the sentence *"grep
+for consumers first"* is indistinguishable, on the page, from *"I grepped for
+consumers."* The care is what buys the credibility, and the credibility is what
+suppresses the check.
+
+| condition | how the ticket reads |
+| --- | --- |
+| precondition named and satisfied | a carefully-qualified recommendation |
+| precondition named and never run | a carefully-qualified recommendation |
+
+Same family as the false-limit rule — *a wrong reason is worse than none, because
+it answers the question the reader would otherwise have asked* — but sharper:
+here the wrong reason is **a correct instruction**, and it is wrong only in
+whose desk it was left on.
+
+**The guard.** A precondition you can state in one line is a precondition you can
+run in one line. **If the check is cheap enough to name, run it before filing;
+if it is genuinely too expensive, say "I did not run this" in the same
+sentence** — the disclosure has to be adjacent, because the naming alone reads
+as performance.
+
+The underlying observation — `Makefile:49` really is `TESTTMP ?= /tmp` — was
+true. **A correct measurement carrying a wrong causal story is more dangerous
+than a wrong number**, and this is that rule with the story spelled out: the fact
+was right, its consequences were wrong in three directions, and the ticket
+priced it as a live fleet-wide hazard.

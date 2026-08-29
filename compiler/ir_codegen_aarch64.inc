@@ -1083,6 +1083,138 @@ begin
   else EmitI32($F9000121);              { str  x1, [x9] }
 end;
 
+{ -O3 W2 on aarch64 -- in-place ALU on a register-resident destination.
+
+  Shares x86-64's predicate exactly (W2InPlaceEligible in symtab.inc, which is
+  target-agnostic because ResidentRegOf is), and only the ENCODING differs. That
+  is deliberate: one predicate means one definition of what is safe, and the
+  aarch64 poison experiment then validates the same set the x86-64 one did.
+
+  The win is LARGER here than on x86-64, for a reason that is worth recording
+  because it is not about W2 at all: the aarch64 integer binop has no operand
+  scheduling. It still emits the full push/eval/mov/pop dance --
+
+      IREmitNodeAarch64(left) / str x0,[sp,#-16]! / IREmitNodeAarch64(right)
+      / mov x1,x0 / ldr x0,[sp],#16 / add x0,x0,x1
+
+  -- which x86-64 stopped doing at -O1 years ago (LeafSymRcxLoadable). So
+  `s := s + j` with both operands resident costs about eight instructions
+  including a stack round trip, and W2 replaces the whole staging with two:
+
+      add x20, x20, x21 / sxtw x20, w20
+
+  W2 does not FIX that gap, it bypasses it for the shapes it covers. Porting
+  -O1's leaf-operand direct load to aarch64 is the real repair and is a separate,
+  wider-blast-radius item (it would move -O1 and -O2 output): filed as its own
+  work, not smuggled in here.
+
+  Immediate form is restricted to tkPlus/tkMinus with a 12-bit magnitude, which
+  is what `add/sub xd, xn, #imm12` encodes directly. AND/ORR/EOR immediates use
+  aarch64's bitmask encoding, which is not a simple field, so those fall through
+  to the general path rather than being approximated. }
+{ aarch64 narrowing of the shared W2 predicate, and it exists because the first
+  version of this port did NOT have it and was wrong.
+
+  W2InPlaceEligible admits all five ops with a constant right operand, because
+  x86-64 encodes every one of them as `81 /digit imm32`. aarch64 does not: only
+  add/sub have a plain 12-bit immediate field, while and/orr/eor use the bitmask
+  encoding, which is not a simple field. Emitting the shared predicate's verdict
+  through this encoding turned `a := a and $00FFFFFF` into
+  `add x20, x20, #(low 12 bits)` -- wrong operation AND a truncated operand.
+
+  Caught by test_o3_resident_inplace at -O3, which is the program written for
+  exactly this and the reason it covers all five ops rather than the two the
+  benchmark exercises. The comment above claimed the restriction; nothing
+  enforced it. A shared predicate is only shared where the two targets can
+  actually express the same set -- narrow it on the side that cannot. }
+function W2InPlaceEligibleA64(node: Integer): Boolean;
+var v, rt, iv: Integer; op: TTokenKind;
+begin
+  W2InPlaceEligibleA64 := False;
+  if not W2InPlaceEligible(node) then Exit;
+  v := IRB[node];
+  rt := IRB[v];
+  if IRKind[rt] = IR_CONST_INT then
+  begin
+    op := IntToTokenKind(IRC[v]);
+    if not ((op = tkPlus) or (op = tkMinus)) then Exit;
+    iv := Integer(IRIVal[rt]);
+    if (iv < -4095) or (iv > 4095) then Exit;
+  end;
+  W2InPlaceEligibleA64 := True;
+end;
+
+procedure EmitW2InPlaceA64(node: Integer);
+var d, v, rt, r, q, sz, opc, iv: Integer; op: TTokenKind; sgn: Boolean;
+begin
+  d := IRA[node];
+  v := IRB[node];
+  rt := IRB[v];
+  r := ResidentRegOf(d);
+  op := IntToTokenKind(IRC[v]);
+
+  if IRKind[rt] = IR_CONST_INT then
+  begin
+    iv := Integer(IRIVal[rt]);
+    { A negative immediate is the same instruction with the opposite mnemonic;
+      doing it here rather than refusing keeps `i := i - 1` on the fast path. }
+    if ((op = tkPlus) and (iv < 0)) or ((op = tkMinus) and (iv > 0)) then
+      EmitI32($D1000000 or (Abs(iv) shl 10) or (r shl 5) or r)   { sub xr, xr, #imm }
+    else
+      EmitI32($91000000 or (Abs(iv) shl 10) or (r shl 5) or r);  { add xr, xr, #imm }
+  end
+  else
+  begin
+    q := ResidentRegOf(IRA[rt]);
+    opc := $CA000000;                                     { eor }
+    if op = tkPlus then opc := $8B000000                  { add }
+    else if op = tkMinus then opc := $CB000000            { sub }
+    else if op = tkAnd then opc := $8A000000              { and }
+    else if op = tkOr then opc := $AA000000;              { orr }
+    EmitI32(opc or (q shl 16) or (r shl 5) or r);         { <op> xr, xr, xq }
+  end;
+
+  { Dual-write, unless item 3 has established that nothing can read the slot. }
+  sz := TypeSize(Syms[d].TypeKind);
+  sgn := TypeSigned(Syms[d].TypeKind);
+  if not ResidentSlotIsDead(d) then
+  begin
+    EmitLoadImmA64(9, Syms[d].Offset);
+    EmitI32($8B0903A9);                                   { add x9, x29, x9 }
+    if sz = 1 then EmitI32($39000120 or r)                { strb wr, [x9] }
+    else if sz = 2 then EmitI32($79000120 or r)           { strh wr, [x9] }
+    else if sz = 4 then EmitI32($B9000120 or r)           { str  wr, [x9] }
+    else EmitI32($F9000120 or r);                         { str  xr, [x9] }
+  end;
+
+  { Re-extend in place -- the identical size/sign rule the refresh applies. }
+  if sz = 1 then
+  begin
+    if sgn then EmitI32($93401C00 or (r shl 5) or r)      { sxtb xr, wr }
+    else EmitI32($53001C00 or (r shl 5) or r);            { uxtb wr, wr }
+  end
+  else if sz = 2 then
+  begin
+    if sgn then EmitI32($93403C00 or (r shl 5) or r)      { sxth xr, wr }
+    else EmitI32($53003C00 or (r shl 5) or r);            { uxth wr, wr }
+  end
+  else if sz = 4 then
+  begin
+    if sgn then EmitI32($93407C00 or (r shl 5) or r)      { sxtw xr, wr }
+    else EmitI32($2A0003E0 or (r shl 16) or r);           { mov wr, wr (zero-extends) }
+  end;
+
+  { PXXDBG=a.w2 -- did it FIRE? There is no aarch64 disassembler on a typical dev
+    box, and a pass that silently stops firing is invisible to every correctness
+    check we own (this campaign's own central lesson: W2's first x86-64 build
+    refused `i := i + 1` with every test still green). Without this line there is
+    no instrument that can answer the question on this target. }
+  if PxxDbgEnabled('a.w2') then
+    WriteLn('PXXDBG a.w2 FIRE proc=', Procs[CurProc].Name,
+            ' sym=', Syms[d].Name, ' op=', Ord(op),
+            ' reg=x', r, ' slotdead=', ResidentSlotIsDead(d));
+end;
+
 procedure EmitStoreVarA64(idx: Integer);
 var tk: TTypeKind; sz: Integer;
 begin
@@ -1418,6 +1550,14 @@ begin
             EmitI32($910020C6);                    { add x6, x6, #8 }
             EmitA64CopyBytes(4, 5, 6);
           end;
+          Exit;
+        end;
+        { -O3 W2: `x := x <op> y` with x resident does the ALU on the resident
+          register itself, which on aarch64 also bypasses the binop's push/pop
+          operand staging entirely. Same predicate as x86-64. }
+        if (OptLevel >= 3) and (not InLValueWrite) and W2InPlaceEligibleA64(node) then
+        begin
+          EmitW2InPlaceA64(node);
           Exit;
         end;
         IREmitNodeAarch64(IRB[node]);
@@ -3947,8 +4087,14 @@ begin
               resident from its authoritative frame slot. x0 is dead at the
               handler label (IR_EXC_MATCH reloads it). }
             excSkip := CodeLen; EmitI32($B4000000);                   { cbz x0, .normal (patched) }
-            for f := 0 to RcResidentCount - 1 do
-              RegcallRefreshResidentA64(RcResidentSym[f]);
+            { PXXDBG=a.noexcrefresh -- the aarch64 half of the discriminator
+              documented at the x86-64 IR_EXC_ENTER arm. Same three-way reading:
+              latest value = registers survived, try-entry value = ExcLongJmp
+              rolled x19..x24 back from the jmp_buf, $5EEDADAD (with
+              a.poisonslot) = a reader other than this loop. }
+            if not PxxDbgEnabled('a.noexcrefresh') then
+              for f := 0 to RcResidentCount - 1 do
+                RegcallRefreshResidentA64(RcResidentSym[f]);
             FloatPoolRestoreA64;
             FloatResidencyRefreshAllA64;
             if LabelPositions[lblId] <> -1 then

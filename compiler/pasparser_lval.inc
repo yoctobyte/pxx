@@ -286,7 +286,16 @@ begin
      (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) then
   begin
     mci := FindHelperForType(Syms[idx].TypeKind, Syms[idx].RecName);
-    if (mci >= 0) and (FindUMeth(mci, GetTokenStr(TokPos)) >= 0) then
+    { A PROPERTY counts as a member here too, not just a method. FPC declares
+      TStringHelper.Length as `property Length: SizeInt read GetLength` over a
+      PRIVATE accessor, so a method-only guard makes the single most-used member
+      of that surface unreachable while every sibling works —
+      bug-p-a-type-helper-cannot-declare-a-property. ParseClassRecordSelectors
+      below already resolves properties (it is the same machinery advanced
+      records use), so this widens the GUARD rather than adding a second path:
+      the property arm was never missing, it was merely never reached. }
+    if (mci >= 0) and ((FindUMeth(mci, GetTokenStr(TokPos)) >= 0) or
+                       (FindUProp(mci, GetTokenStr(TokPos)) >= 0)) then
     begin
       node := AllocNode(AN_IDENT);
       ASTIVal[node] := idx;
