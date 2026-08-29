@@ -14046,6 +14046,19 @@ lib-test: pxx-stable-check
 	# empty field, where they differ. Measured against FPC.
 	$(PXX_STABLE) -Fulib/rtl test/lib_strutils_words.pas $(TESTTMP)/lib_strutils_words
 	test "$$($(TESTTMP)/lib_strutils_words | tail -n 1)" = "STRUTILSWORDS OK"
+	# Delphi's TStringHelper surface on AnsiString. The .expected file is fpc
+	# 3.2.2's own stdout for THIS SOURCE, regenerate with:
+	#   fpc -viwn test/lib_string_helpers.pas && ./lib_string_helpers
+	# Indexing is 0-based there and 1-based here, so the rows that matter are
+	# the boundaries: absent needle is -1 not 0, Substring past the end is '',
+	# a negative start clamps, PadLeft never truncates, ''.Split is ONE element.
+	# Diffed rather than tail-matched on a sentinel: a sentinel would go green
+	# with every value above it wrong.
+	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_string_helpers.pas $(TESTTMP)/lib_string_helpers
+	@$(TESTTMP)/lib_string_helpers > $(TESTTMP)/lib_string_helpers.out 2>&1; \
+	  diff -u test/lib_string_helpers.expected $(TESTTMP)/lib_string_helpers.out \
+	  || { echo "FAIL: lib_string_helpers differs from the fpc 3.2.2 oracle (left=expected, right=ours)"; exit 1; }
+	@echo "  lib-test: TStringHelper — 34 rows byte-identical to fpc 3.2.2"
 	# SysUtils directory manipulation, DateToStr/TimeToStr/DateTimeToStr,
 	# GetTickCount64 and TextToFloat. CreateDir on an existing directory is
 	# FALSE and DateTimeToStr drops the time half at midnight — both measured,
