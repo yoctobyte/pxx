@@ -3,6 +3,8 @@ track: O
 prio: 65
 type: feature
 summary: "STALE HEADLINE -- re-priced 2026-08-29 at 1fd403b28: BOTH proposed fixes already landed (PXXBlockCopy word loop; the __pxxblockmove/rep-movsb intrinsic, 0f6a04644 + 2b85f8c8f), so the 23x and the 3.3x describe a compiler that no longer exists and must not be re-quoted. What remains is 8 open-coded byte loops in 5 routines (the ticket said 4 sites and missed PXXStrSetLen, the hottest), each now a one-line call to the already-landed PXXBlockCopy/PXXMemZero. Re-measure Copy() vs FPC before trusting prio 65. Also recorded: PXXMemMove is forward-only on every target and corrupts overlapping dst>src -- latent, no caller reaches it."
+status: working
+owner: frank-optimize
 ---
 
 # The runtime's bulk copy is one byte per iteration
