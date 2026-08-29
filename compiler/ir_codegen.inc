@@ -4459,6 +4459,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     pUnsNeg, pUnsDone, pAppendDone: Integer;
     w1RightReg: Integer;   { -O3 W1: 0 = the normal rcx contract, else r12..r15 }
     shiftImmCnt: Integer;  { -O1 W1: >= 0 = a constant shift count NOT materialised into rcx }
+    w1LeftReg: Integer;    { -O3 W1 slice 5: 0 = left is in rax, else r12..r15 read in place }
     strCmpRel: Boolean;    { this comparison releases an owned string operand }
     pAnsiAlloc, pAnsiShared, pAnsiTooSmall, pAnsiNoZeroGrow, pAnsiFastDone: Integer;
     pAnsiUseNeededNil, pAnsiUseNeededSmall, pAnsiMinDone, pAnsiCapDone: Integer;
@@ -5852,6 +5853,42 @@ begin
           operand is in rcx, which is every path but the one below. }
         w1RightReg := 0;
         shiftImmCnt := -1;
+        w1LeftReg := 0;
+
+        { PXXDBG=a.w1left -- REPORT ONLY, prices the LEFT half of the operand
+          funnel. W1 slice 4 killed `mov rcx, rN` on the RIGHT; the left still
+          funnels through rax (`mov rax, rN` before every use) because the ALU
+          forms write their result to rax, so a resident left operand cannot
+          simply stay put. The exception is an op with NO destination -- a
+          compare -- which can read the home register directly. Classify the
+          population by op before writing any arm, because "the funnel is 1.21%"
+          does not say which arms could actually drop the move.
+
+          Buckets are what is ACTIONABLE, not what is syntactic:
+            CMP     -- no destination, so the home register can be read in
+                       place: `cmp rN, rcx`. The move is deletable outright.
+            MULIMM  -- `imul rax, rN, imm` is a three-operand form, so this one
+                       is deletable too, by encoding rather than by omission.
+            ALU     -- add/sub/and/or/xor write rax, so a resident left CANNOT
+                       stay put; `lea` could serve the commutative subset but
+                       does not set flags. Counted to price that separately.
+            SHIFT   -- the count is the moving part, already done in slice 1. }
+        if PxxDbgEnabled('a.w1left') and (IRKind[left] = IR_LOAD_SYM) and
+           (ResidentRegOf(IRA[left]) <> 0) then
+        begin
+          if (op = tkEq) or (op = tkNeq) or (op = tkLt) or
+             (op = tkLe) or (op = tkGt) or (op = tkGe) then
+            WriteLn('PXXDBG a.w1left CMP')
+          else if (op = tkStar) and (IRKind[right] = IR_CONST_INT) then
+            WriteLn('PXXDBG a.w1left MULIMM')
+          else if (op = tkPlus) or (op = tkMinus) or (op = tkAnd) or
+                  (op = tkOr) or (op = tkXor) then
+            WriteLn('PXXDBG a.w1left ALU')
+          else if (op = tkIdent) or (op = tkShr) or (op = tkShl) then
+            WriteLn('PXXDBG a.w1left SHIFT')
+          else
+            WriteLn('PXXDBG a.w1left OTHER');
+        end;
 
         { -O3 in-tree XMM fusion: a call-free float arithmetic tree evaluates
           straight into xmm2..xmm6 and bridges to the rax value model once. }
@@ -5873,8 +5910,16 @@ begin
            (IRIVal[right] >= -2147483648) and (IRIVal[right] <= 2147483647) and
            CmpFusible(node) then
         begin
-          IREmitNode(left);
-          EmitB($48); EmitB($3D); EmitI32(Integer(IRIVal[right]));   { cmp rax, imm32 }
+          { -O3 W1 slice 5: a RESIDENT left operand needs no `mov rax, rN` here
+            either. CmpFusible has already excluded float/string/variant and the
+            right is a constant, so this arm lowers to a bare cmp + setcc with
+            NO alternative path below it -- which is why the eligibility test is
+            just "left is a resident leaf sym" and needs no type whitelist of
+            its own, unlike the register form further down. }
+          if (OptLevel >= 3) and (IRKind[left] = IR_LOAD_SYM) then
+            w1LeftReg := ResidentRegOf(IRA[left]);
+          if w1LeftReg = 0 then IREmitNode(left);
+          EmitCmpLeftImm32(w1LeftReg, Integer(IRIVal[right]));       { cmp rax|rN, imm32 }
           if TypeCompareUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then
             case op of
               tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end;  { sete   al }
@@ -6027,7 +6072,18 @@ begin
             reg shuffle per constant operand) collapses to one mov. Register
             contract downstream is IDENTICAL: rax = left value, rcx = right
             value; the constant's evaluation has no side effects. }
-          IREmitNode(left);
+          { -O3 W1 slice 5: a RESIDENT left operand feeding a COMPARE does not
+            need `mov rax, rN` at all -- cmp has no destination, so the op arm
+            can read the home register in place. Skipping the load here is what
+            deletes the move; W1CmpLeftEligible is a WHITELIST of operand types,
+            so a compare that could reach one of the string/char arms below (all
+            of which expect rax loaded) is never eligible. The right operand in
+            both of these arms is a constant or a plain load, so nothing between
+            here and the cmp can mutate the left symbol out from under us. }
+          if (OptLevel >= 3) and W1CmpLeftEligible(node, left, right) then
+            w1LeftReg := ResidentRegOf(IRA[left])
+          else
+            IREmitNode(left);
           { A SHIFT by a constant count does not want the count in rcx at all —
             x86 has an immediate form. The imm-fold arm above deliberately
             excludes shifts because they carry width fixups it does not
@@ -6065,7 +6121,18 @@ begin
             right. A plain load has no side effects, so evaluating it after the
             left is order-safe; loading directly into rcx (not rax then mov)
             avoids clobbering the left value in rax. }
-          IREmitNode(left);
+          { -O3 W1 slice 5: a RESIDENT left operand feeding a COMPARE does not
+            need `mov rax, rN` at all -- cmp has no destination, so the op arm
+            can read the home register in place. Skipping the load here is what
+            deletes the move; W1CmpLeftEligible is a WHITELIST of operand types,
+            so a compare that could reach one of the string/char arms below (all
+            of which expect rax loaded) is never eligible. The right operand in
+            both of these arms is a constant or a plain load, so nothing between
+            here and the cmp can mutate the left symbol out from under us. }
+          if (OptLevel >= 3) and W1CmpLeftEligible(node, left, right) then
+            w1LeftReg := ResidentRegOf(IRA[left])
+          else
+            IREmitNode(left);
           { -O3 W1 slice 4: if that right operand is REGISTER-RESIDENT, the load
             EmitLoadVarRcx would emit is `mov rcx, r12..r15` — a move whose only
             purpose is to satisfy the rcx contract. The ALU can read r12..r15
@@ -6699,7 +6766,7 @@ begin
               end
               else
               begin
-                EmitB($48); EmitB($3B); EmitB($C1); { cmp rax, rcx }
+                EmitCmpLeftRcx(w1LeftReg);          { cmp rax|r12..r15, rcx }
                 if cmpUnsigned then
                 begin
                   case op of
@@ -9221,6 +9288,7 @@ var i, lblId, pos, targetOffset, f, procIdx, excSkip: Integer;
     condNode, cLeft, cRight: Integer;
     cOp: TTokenKind;
     cmpUns, fused, cmpImmOk: Boolean;
+    w1JccLeftReg: Integer;   { -O3 W1 slice 5: 0 = cLeft is in rax, else r12..r15 }
 begin
   CurWriteFd := STDOUT;   { default write target; IR_WRITE/IR_WRITELN override per-statement (fd 2 for StdErr) }
   { DWARF -g: per-body line-row state, reset before any backend runs (each backend
@@ -9383,8 +9451,20 @@ begin
             cmpImmOk := (OptLevel >= 2) and (IRKind[cRight] = IR_CONST_INT) and
                         (IRIVal[cRight] >= -2147483648) and
                         (IRIVal[cRight] <= 2147483647);
+            { -O3 W1 slice 5, branch twin of the value form above. Same guard
+              (CmpFusible on condNode), same reasoning: this whole block lowers
+              to a bare cmp + jcc, so a resident left can be read in place. Set
+              only for the two arms that reach the cmp with the left still
+              untouched -- the push/pop arm below evaluates cRight between, and
+              cRight there may contain calls that mutate the left symbol. }
+            w1JccLeftReg := 0;
+            if (OptLevel >= 3) and (IRKind[cLeft] = IR_LOAD_SYM) and
+               (cmpImmOk or LeafSymRcxLoadable(cRight)) then
+              w1JccLeftReg := ResidentRegOf(IRA[cLeft]);
             if cmpImmOk then
-              IREmitNode(cLeft)
+            begin
+              if w1JccLeftReg = 0 then IREmitNode(cLeft);
+            end
             else if IRKind[cRight] = IR_CONST_INT then
             begin
               IREmitNode(cLeft);
@@ -9395,7 +9475,7 @@ begin
             end
             else if LeafSymRcxLoadable(cRight) then
             begin
-              IREmitNode(cLeft);
+              if w1JccLeftReg = 0 then IREmitNode(cLeft);
               EmitLoadVarRcx(IRA[cRight]);
             end
             else if (OptLevel >= 2) and (not InLValueWrite) and
@@ -9454,9 +9534,9 @@ begin
               IREmitNode(cRight); EmitB($48); EmitB($89); EmitB($C1); EmitB($58); { mov rcx,rax; pop rax }
             end;
             if cmpImmOk then
-              begin EmitB($48); EmitB($3D); EmitI32(Integer(IRIVal[cRight])); end  { cmp rax, imm32 }
+              EmitCmpLeftImm32(w1JccLeftReg, Integer(IRIVal[cRight]))  { cmp rax|rN, imm32 }
             else
-              begin EmitB($48); EmitB($3B); EmitB($C1); end;                       { cmp rax, rcx }
+              EmitCmpLeftRcx(w1JccLeftReg);                            { cmp rax|rN, rcx }
             cmpUns := TypeCompareUnsigned(IntToTypeKind(IRTk[cLeft]), IntToTypeKind(IRTk[cRight]));
             cOp := IntToTokenKind(IRC[condNode]);
             EmitB($0F);   { two-byte jcc, inverted (jump when comparison is FALSE) }

@@ -5105,6 +5105,96 @@ begin
   W1AluRightEligible := True;
 end;
 
+{ -O3 W1 slice 5: a RESIDENT LEFT operand feeding a COMPARE.
+
+  Slice 4 killed `mov rcx, rN` on the right. The left still funnels through rax
+  -- `mov rax, rN` before every use -- and for add/sub/and/or/xor it has to,
+  because those write their result to rax and a resident left cannot stay put.
+  A compare is the exception: it has NO destination, so the home register can be
+  read in place and the move is deletable outright rather than re-encoded.
+
+  Census before writing the arm (PXXDBG=a.w1left, static emit sites at -O3),
+  resident-left binops by what they feed:
+
+    program      CMP    ALU  MULIMM  SHIFT  OTHER   deletable
+    compiler    2891   2649     422    285    110   52%
+    jsondemo     794    806      91    105    113   46%
+    mandelbrot   234    462      31     59     55   32%
+    lispdemo     237    451      27     59     52   32%
+    sieve        226    451      27     59     58   31%
+
+  CMP is the largest bucket everywhere and is the half that needs no encoding
+  trick. MULIMM (`imul rax, rN, imm` is a three-operand form) is the other
+  deletable one and is NOT done here -- separate slice, separate proof.
+
+  Soundness rests on EmitLoadVar's own resident arm, which emits the move and
+  nothing else: "a correctly size/sign-extended value was loaded into it at body
+  entry, and every store re-extends it". So rN and rax hold the same 64-bit
+  value and `cmp rN, rcx` is equivalent instruction-for-instruction. }
+function W1CmpLeftEligible(node, left, right: Integer): Boolean;
+var op: TTokenKind; lt, rt: TTypeKind;
+begin
+  W1CmpLeftEligible := False;
+  if IRKind[left] <> IR_LOAD_SYM then Exit;
+  if ResidentRegOf(IRA[left]) = 0 then Exit;
+  op := IntToTokenKind(IRC[node]);
+  if not ((op = tkEq) or (op = tkNeq) or (op = tkLt) or
+          (op = tkLe) or (op = tkGt) or (op = tkGe)) then Exit;
+  lt := IntToTypeKind(IRTk[left]);
+  rt := IntToTypeKind(IRTk[right]);
+  { A WHITELIST, deliberately, not a copy of the conditions guarding the string
+    and char arms above the plain `cmp rax, rcx`. Every one of those arms is
+    reached through tyAnsiString, tyString or tyChar, so excluding exactly those
+    three would be sound TODAY and would stop being sound, silently, the day a
+    fourth is added -- the caller skips the left load on this predicate's word,
+    and a string arm reached with rax unloaded compares a stale register. Naming
+    what is ALLOWED fails closed instead: a new type is ineligible until someone
+    adds it here on purpose. }
+  if TypeIsFloat(lt) or TypeIsFloat(rt) then Exit;
+  if (lt = tyString) or (lt = tyAnsiString) or (lt = tyChar) then Exit;
+  if (rt = tyString) or (rt = tyAnsiString) or (rt = tyChar) then Exit;
+  if TypeIsFrozenString(lt) or TypeIsFrozenString(rt) then Exit;
+  if not (TypeIsOrdinal(lt) or (lt = tyPointer)) then Exit;
+  if not (TypeIsOrdinal(rt) or (rt = tyPointer)) then Exit;
+  W1CmpLeftEligible := True;
+end;
+
+{ `cmp <left>, rcx`. reg = 0 keeps the rax contract (`48 3B C1`); reg = 12..15
+  encodes the resident register as the REG operand instead, which needs REX.R
+  and shifts the reg field -- so the two forms differ only in REX and one ModRM
+  field, the same way EmitAluRaxRight's two forms do. One emitter rather than a
+  second hand-written encoding beside the first. }
+{ `cmp <left>, imm32`. reg = 0 keeps the rax contract (`48 3D id`, the short
+  accumulator form); reg = 12..15 needs the general form (`81 /7 id`) because
+  only rax has a short encoding. That costs 2 bytes on the cmp itself and saves
+  the whole 3-byte `mov rax, rN` in front of it -- net 1 byte and, the point of
+  the exercise, one instruction. Both forms sign-extend imm32 to 64 bits, so
+  signed and unsigned comparisons keep their meaning either way -- the same
+  property the cmp-immediate fold itself relies on. }
+procedure EmitCmpLeftImm32(reg: Integer; imm: Integer);
+begin
+  if reg = 0 then
+  begin
+    EmitB($48); EmitB($3D); EmitI32(imm);
+  end
+  else
+  begin
+    EmitB($49); EmitB($81); EmitB($F8 or (reg - 8)); EmitI32(imm);
+  end;
+end;
+
+procedure EmitCmpLeftRcx(reg: Integer);
+begin
+  if reg = 0 then
+  begin
+    EmitB($48); EmitB($3B); EmitB($C1);
+  end
+  else
+  begin
+    EmitB($4C); EmitB($3B); EmitB($C1 or ((reg - 8) shl 3));
+  end;
+end;
+
 { `<op> rax, <right>` for the five ALU forms whose right operand is rcx by
   contract. reg = 0 keeps that contract (REX.W, ModRM /r with reg=rcx);
   reg = 12..15 encodes the resident register directly (REX.W+REX.R, reg=N-8).

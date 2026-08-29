@@ -3805,6 +3805,24 @@ test-threads: $(COMPILER)
 	# clears bit 31. feature-opt-o3-register-pressure W1
 	./$(COMPILER) -O3 test/test_shift_const_count.pas $(TESTTMP)/test_shiftconst26
 	tools/expect_same.sh test_shiftconst26 "$$($(TESTTMP)/test_shiftconst26 | tail -1)" "SHIFTS OK"
+	# a register-RESIDENT left operand feeding a compare is read in place at -O3:
+	# `cmp r12, rcx` and `cmp r12, imm32` instead of `mov rax, r12` first. Both
+	# encodings are new and neither is the rax form with a register swapped --
+	# the reg form adds REX.R and moves the ModRM reg field, and the imm form is
+	# a DIFFERENT OPCODE, because rax has a short accumulator encoding (48 3D)
+	# that r12..r15 do not. A wrong REX or ModRM compares the wrong register, so
+	# every variable holds a distinct value and none is 0 or 1.
+	# Run at BOTH -O0 and -O3 against ONE expectation: the pass is -O3-gated, so
+	# -O0 is a control that provably cannot use either encoding. Verified against
+	# FPC 3.2.2. Checked non-vacuous by breaking the ModRM field on purpose --
+	# -O3 then printed acc=0 while -O0 stayed correct, and note the compiler still
+	# self-hosted byte-identically while broken, because it builds at the default
+	# -O level: the fixedpoint gate cannot see an -O3-only defect.
+	# feature-opt-o3-register-pressure W1 slice 5
+	./$(COMPILER) -O3 test/test_cmp_resident_left.pas $(TESTTMP)/test_cmpresid326
+	tools/expect_same.sh test_cmpresid326 "$$($(TESTTMP)/test_cmpresid326)" "$$(printf 'acc=393213\none=131071\ndone')"
+	./$(COMPILER) -O0 test/test_cmp_resident_left.pas $(TESTTMP)/test_cmpresid026
+	tools/expect_same.sh test_cmpresid026 "$$($(TESTTMP)/test_cmpresid026)" "$$(printf 'acc=393213\none=131071\ndone')"
 	# The bulk-copy helpers' BYTE TAIL, at every length 0..17: string SetLength
 	# (grow and shrink), dyn-array SetLength, Copy() at every offset and count,
 	# aliasing-vs-Copy, and concat. Every expectation diffed against FPC 3.2.2.

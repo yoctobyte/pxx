@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:21 blocked:6 backlog:312 backlog_new:8 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2633 rejected:51`
+`working:2 unfinished:21 blocked:6 backlog:313 backlog_new:8 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2633 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
@@ -50,11 +50,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [N]` bug-n-a-range-loop-whose-bound-reads-the-loop-variable-never-terminates
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
+- `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - `[p 70] [P]` bug-p-a-cast-through-an-ordinal-type-alias-does-not-truncate
 - `[p 70] [P]` bug-p-a-delphi-mode-generic-from-a-used-unit-cannot-be-specialized
 - `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
-- `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 70] [T]` regression-cascade-154d1aa3fba6
 - `[p 70] [P]` regression-cascade-4e27dc2be114
 - `[p 70] [P]` regression-test-core-test-mgmt-operators
