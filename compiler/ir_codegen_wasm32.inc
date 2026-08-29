@@ -133,6 +133,11 @@ var
   share slots and only LEVELS need distinct ones. Lazily allocated, so a body
   that never nests pays for one level. }
   WasmStrPool       : array[0..15, 0..7] of Integer;
+  { recId -> the Data[] offset of its descriptor cell; see
+    WasmRecDescCellFor. Module-lifetime, not per body. }
+  WasmRecDescRec    : array[0..511] of Integer;
+  WasmRecDescCell   : array[0..511] of Integer;
+  WasmRecDescCount  : Integer;
 
 { Mark the body being emitted as not-yet-lowerable. Deliberately NOT Error:
   Error aborts the compile, and one unimplemented op in a builtin would then
@@ -402,6 +407,9 @@ const
     level; depth here is what explicit parentheses buy. Exceeding it is
     refused by name, never silently reused. }
   WASM_STR_DEPTH   = 16;
+  { Distinct records reachable by an ARC copy in one module. One cell per
+    record TYPE, not per copy site, so this counts declared types and not code. }
+  WASM_MAX_RECDESC = 512;
   WASM_STR_SLOTS   = 8;
   WASM_STACK_BYTES = 65536;
   WASM_PAGE        = 65536;
@@ -486,6 +494,7 @@ begin
     WasmProcImpIdx[i] := -1;
   end;
   WasmHostImpCount := 0;
+  WasmRecDescCount := 0;
   WasmGSp := WasmAddGlobal('sp', WT_I32, True, 65536);
   WasmAddExport('sp', WEK_GLOBAL, WasmGSp);
   { Immutable, and its initialiser is back-filled by WasmFinishMemory once
@@ -3458,6 +3467,69 @@ begin
   WasmCall(WasmSlotForProc(hp), Procs[hp].Name);
 end;
 
+{ ===== record-RTTI descriptor cells =====
+
+  A record's ARC walk is one RTL call — PXXRecordRetain(recAddr, desc) — and
+  `desc` is the address of the record's RTTI blob. Every register backend spells
+  that with a code->data relocation (`mov rsi, @data, -(RECORD_RTTI_DATAREF_BASE
+  + ...)`), resolved in compiler.pas against UClsRTTIOff after EmitRTTI.
+
+  This backend cannot: it has no code->data fixups at all, because it emits
+  every address inline as a constant, and the blob's offset does not EXIST while
+  bodies are being emitted — EmitRTTI runs after the whole codegen pass.
+
+  So the descriptor is reached through one INDIRECTION instead of one
+  relocation: an 8-byte cell in Data[], loaded at the use site. The cell is
+  filled by the mechanism that already fills every other data->data pointer in
+  this module — AddDataPtrFix, resolved by WasmFillData — so there is no second
+  relocation scheme here, only a second CUSTOMER of the existing one. The fix is
+  registered in WasmFinishMemory, which is the first point where UClsRTTIOff is
+  populated and still before WasmFillData runs.
+
+  One cell per recId, not per site: the memo is what keeps a record copied in
+  forty places from reserving forty identical cells. }
+function WasmRecDescCellFor(recId: Integer): Integer;
+var i: Integer;
+begin
+  WasmRecDescCellFor := -1;
+  for i := 0 to WasmRecDescCount - 1 do
+    if WasmRecDescRec[i] = recId then
+    begin
+      WasmRecDescCellFor := WasmRecDescCell[i];
+      Exit;
+    end;
+  if WasmRecDescCount >= WASM_MAX_RECDESC then
+  begin
+    WasmUnsupported('too many distinct records copied with ARC in one module'
+                    + ' (the descriptor-cell table holds '
+                    + WasmIntStr(WASM_MAX_RECDESC) + ')');
+    Exit;
+  end;
+  { 8 bytes, matching the RTTI blobs' pointer slots: WasmFillData writes the
+    address into the LOW dword and leaves the high one zero, which is the same
+    shape a 32-bit ELF target uses and what an i32 load at +0 reads. }
+  WasmRecDescCell[WasmRecDescCount] := DataLen;
+  for i := 0 to 7 do
+  begin
+    if DataLen >= MAX_DATA then Error('data overflow');
+    Data[DataLen] := 0;
+    Inc(DataLen);
+  end;
+  WasmRecDescRec[WasmRecDescCount] := recId;
+  WasmRecDescCellFor := WasmRecDescCell[WasmRecDescCount];
+  Inc(WasmRecDescCount);
+end;
+
+{ Put the record's descriptor address on the operand stack. }
+procedure WasmRecDescAddr(recId: Integer);
+var cell: Integer;
+begin
+  cell := WasmRecDescCellFor(recId);
+  if cell < 0 then Exit;
+  WasmDataAddr(cell);
+  WasmMemOp($28, 'i32.load', 2, 0);
+end;
+
 { Whole-record copy: PXXMemMove(dest, src, count) — the same RTL routine every
   other backend calls, and here without any of the register juggling, because
   wasm evaluates arguments straight onto the operand stack in order.
@@ -3476,6 +3548,91 @@ begin
   WasmWriteConstArg(mv, 2, IRIVal[node]);         { count }
   if WasmBodyBroken then Exit;
   WasmCall(WasmSlotForProc(mv), 'PXXMemMove');
+end;
+
+{ ARC-correct whole-record copy — IRA = dest address, IRB = src address,
+  IRC = recId, IRIVal = byte count. The managed sibling of WasmEmitCopyRec
+  above, and the reason that one refuses a managed record by name.
+
+  THE ORDER IS THE CORRECTNESS. Retain the SOURCE's managed fields before
+  releasing the DESTINATION's, so `a := a` and two records sharing a field net
+  zero instead of destroying the value. Then the bulk copy last, over
+  destination fields whose references have already been dropped.
+
+  Interface members walk FIRST and SEPARATELY, matching every other backend:
+  PXXIntfRelease runs a destructor chain and a self-locking FreeMem, which is
+  why the register backends emit that half with the heap lock NOT held
+  (bug-a-a-record-copy-does-not-retain-an-interface-field). This target holds no
+  lock at any point — it is single-threaded and has no atomics in its RTL path —
+  so the split buys nothing HERE and is kept anyway: the four helpers exist as
+  two pairs because the RTL splits them, and collapsing the pairs on one target
+  would make this arm the odd one out for a reason that is not about wasm.
+
+  Both addresses are parked in locals first. x86-64 pushes them for the stated
+  reason that the helpers may clobber freely; this target has no clobber
+  problem, but it has a worse one — IRA and IRB would otherwise be EMITTED
+  five times between them, and a node is not guaranteed to be free of side
+  effects just because it usually is. Evaluate once, use five times.
+
+  The nesting is the string pool's, not a second mechanism: one depth level so
+  a record copy appearing inside a string expression cannot reuse live slots. }
+procedure WasmEmitCopyRecManaged(node: Integer);
+var recId, dstL, srcL, mv: Integer; hasIntf, hasMgd: Boolean;
+begin
+  recId := IRC[node];
+  if recId < REC_UCLASS_BASE then
+  begin
+    WasmUnsupported('ARC record copy with no record id');
+    Exit;
+  end;
+  hasIntf := RecordHasComIntfFields(recId);
+  hasMgd  := RecordHasManagedFields(recId);
+
+  if WasmStrDepth >= WASM_STR_DEPTH then
+  begin
+    WasmUnsupported('record copies nested more than '
+                    + WasmIntStr(WASM_STR_DEPTH) + ' deep');
+    Exit;
+  end;
+  Inc(WasmStrDepth);
+  dstL := WasmStrSlot(0);
+  srcL := WasmStrSlot(1);
+
+  WasmEmitValueAs(IRA[node], WT_I32, 'ARC record copy destination');
+  WasmLocalSet(dstL);
+  WasmEmitValueAs(IRB[node], WT_I32, 'ARC record copy source');
+  WasmLocalSet(srcL);
+
+  if not WasmBodyBroken and hasIntf then
+  begin
+    WasmLocalGet(srcL);  WasmRecDescAddr(recId);
+    if not WasmBodyBroken then WasmCallRtl('PXXRecordRetainIntf');
+    WasmLocalGet(dstL);  WasmRecDescAddr(recId);
+    if not WasmBodyBroken then WasmCallRtl('PXXRecordReleaseIntf');
+  end;
+
+  if not WasmBodyBroken and hasMgd then
+  begin
+    WasmLocalGet(srcL);  WasmRecDescAddr(recId);
+    if not WasmBodyBroken then WasmCallRtl('PXXRecordRetain');
+    WasmLocalGet(dstL);  WasmRecDescAddr(recId);
+    if not WasmBodyBroken then WasmCallRtl('PXXRecordRelease');
+  end;
+
+  if not WasmBodyBroken then
+  begin
+    mv := WasmWriteHelper('PXXMemMove');
+    if mv >= 0 then
+    begin
+      WasmLocalGet(dstL);
+      WasmLocalGet(srcL);
+      WasmI32Const(IRIVal[node]);
+      if not WasmBodyBroken then
+        WasmCall(WasmSlotForProc(mv), 'PXXMemMove');
+    end;
+  end;
+
+  Dec(WasmStrDepth);
 end;
 
 { Copy a whole set: dest address in IRA, src address in IRB. The byte count is
@@ -3939,6 +4096,7 @@ begin
     IR_STORE_MEM     : WasmEmitStoreMem(node);
     IR_WRITE, IR_WRITELN : WasmEmitWrite(node);
     IR_COPY_REC      : WasmEmitCopyRec(node);
+    IR_COPY_REC_MANAGED : WasmEmitCopyRecManaged(node);
     IR_SET_COPY      : WasmEmitSetCopy(node);
     IR_SETLEN_DYN    : WasmEmitSetLenDyn(node);
     IR_DEFAULT_MEM   : WasmEmitDefaultMem(node);
@@ -4863,10 +5021,32 @@ begin
   for i := 0 to DataLen - 1 do WasmDataSegByte(Data[i]);
 end;
 
+{ Resolve the record-descriptor cells, and do it HERE because this is the only
+  window: UClsRTTIOff is not populated until EmitRTTI has run (after the whole
+  codegen pass, so not while bodies are emitted), and WasmFillData below is what
+  turns a DataPtrFix into bytes. One point in the program satisfies both. }
+procedure WasmResolveRecDescCells;
+var i, j: Integer;
+begin
+  for i := 0 to WasmRecDescCount - 1 do
+  begin
+    j := WasmRecDescRec[i] - REC_UCLASS_BASE;
+    if (j >= 0) and (j < UClsCount) and (UClsRTTIOff[j] >= 0) then
+      AddDataPtrFix(WasmRecDescCell[i], UClsRTTIOff[j])
+    else
+      { The cell stays zero, and PXXRecordRetain/Release take a nil desc as
+        "nothing to walk" — so this would be a SILENT missed retain rather than
+        a fault, which is this repo's expensive failure shape. Loud instead. }
+      WasmFail('wasm32: a record copied with ARC has no RTTI blob (record id '
+               + WasmIntStr(WasmRecDescRec[i]) + ')');
+  end;
+end;
+
 procedure WasmFinishMemory;
 var top: Integer;
 begin
   if WasmGSp < 0 then Exit;
+  WasmResolveRecDescCells;
   WasmDataBase := ((WASM_BSS_BASE + BSSSize + 15) div 16) * 16;
   WasmGlobInit[WasmGData] := WasmDataBase;
   WasmFillData;
