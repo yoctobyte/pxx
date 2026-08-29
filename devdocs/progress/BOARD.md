@@ -8,12 +8,13 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-an-array-constructor-in-argument-position-leaks-its-dynamic-array | A | 60 | bug | `Take([...])` — an array CONSTRUCTOR passed to an open-array parameter — heap-allocates a dyn-array temp per call and never releases it. 64 bytes leaked per `Format('%d-%s', [i, 'x'])`; 2M Format calls reach 125 MB RSS. Element type is irrelevant (128 B/call for strings, 40 B/call for integers). The sibling arm — a fixed-array VARIABLE passed to the same parameter — was fixed in 2026-06 (bug-open-array-copy-temp-leak, 692db33) by replacing the heap temp with a frame buffer; the constructor arm still allocates. Same concept, two paths, fix landed on one. | — |
 | bug-a-the-fpc-seed-canary-skips-a-break-already-on-master | A | 50→80 | bug |  | — |
+| feature-esp-peripheral-callback-api | B+S | 30 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
 | refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs | C | 75 | refactor | Four C readers ask what a decayed array steps by, and all four are written as an AN_IDENT branch beside an AN_FIELD branch. Three field branches were never finished: five ordinary expressions SEGFAULT (`**a.s`, `*(*(a.m+1)+2)`, `strcmp(*(a.s+1),\"cd\")`), one loads four bytes of a char row. Three of the pairs were repaired one at a time on 2026-08-29; this replaces the shape with one reader so there is no fifth pass. | — |
 
@@ -56,7 +57,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (312)
+## backlog (311)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -242,7 +243,6 @@ _none_
 | feature-embed-dwscript-rtti | P | 40 | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching |
 | feature-embed-pascal-script | P | 45 | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
 | feature-esp-hardware-flash-validation | S | 25 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
-| feature-esp-peripheral-callback-api | B+S | 30 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-inline-nonleaf-and-branch-locals | O | 40 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
 | feature-lib-mimic-string-template | B | 12 | feature | string.Template — the $-placeholder class (substitute, safe_substitute) — is the one member of Python's string module still missing, and it is what logging/__init__.py uses. Deliberately NOT urgent: `import logging` does not resolve at all today, so nothing can reach Template until a logging shim exists. Split out of feature-lib-mimic-string, which shipped every constant and both capwords forms. | — |
 | feature-n-a-kwargs-collecting-callee-through-a-callable-value | N | 55 | feature | A callee that collects `**kwargs` cannot be called through a callable value at all — every shape raises TypeError, including `def f(a, **kw)` called as `zz(1)` with no defaults anywhere. The dynamic bridge has no way to synthesize the empty dict the body expects in the collector slot, so the collector is deliberately left counted in ReqN to make the call REFUSE loudly rather than dispatch at an arity the body does not have. Split out of the *args fix; that half is done and CPython-exact. | — |
@@ -924,7 +924,6 @@ _none_
 - [p 30] [A] feature-a-finalize-for-bare-dynarray-and-variant
 - [p 30] [A] feature-a-unreferenced-class-rtti-keeps-every-method-alive
 - [p 30] [E] feature-demo-nilpy-ide
-- [p 30] [B+S] feature-esp-peripheral-callback-api
 - [p 30] [N] feature-nilpy-a-genexpr-is-lazy-not-materialised
 - [p 30] [A] feature-nilpy-collections-and-string-methods
 - [p 30] [N] feature-nilpy-cpyext-cycle-collector

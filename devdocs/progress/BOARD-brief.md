@@ -5,12 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:22 blocked:7 backlog:312 backlog_new:14 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2671 rejected:55`
+`working:5 unfinished:22 blocked:7 backlog:311 backlog_new:14 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2671 rejected:55`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-an-array-constructor-in-argument-position-leaks-its-dynamic-array` [A] — owner: frankA
 - `bug-a-the-fpc-seed-canary-skips-a-break-already-on-master` [A] — owner: unrecorded
+- `feature-esp-peripheral-callback-api` [B+S] — owner: pxx-b
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 - `refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs` [C] — owner: frankC
 
@@ -49,7 +50,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 331, ranked
+## Ready — top 30 of 330, ranked
 
 - `[p 80] [C]` bug-c-sizeof-a-partial-index-answers-the-element-not-the-row
 - `[p 75] [P]` feature-pascal-corpus-expansion
@@ -82,4 +83,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - `[p 60] [P]` bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
 
-_301 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_300 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
