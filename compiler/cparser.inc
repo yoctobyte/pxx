@@ -2049,7 +2049,8 @@ end;
 { Pointed-at / element TTypeKind ordinal of a pointer or array node, used to tag
   AN_DEREF / AN_INDEX results. Defaults to Integer for shapes not yet modelled. }
 function CNodePointeeTk(node: Integer): Integer;
-var recId, inner, depth, baseTk: Integer; fieldName: AnsiString;
+var recId, inner, depth, baseTk, elemSz, elemRec: Integer;
+    fieldName: AnsiString; elemTk: TTypeKind;
 begin
   Result := Ord(tyInteger);
   if node < 0 then Exit;
@@ -2078,11 +2079,16 @@ begin
   begin
     inner := node;
     while (inner >= 0) and (ASTKind[inner] = AN_BINOP) do inner := ASTLeft[inner];
-    if (inner >= 0) and (ASTKind[inner] = AN_IDENT) and
-       Syms[ASTIVal[inner]].IsArray and (Syms[ASTIVal[inner]].ArrLen <> -1) and
-       (SymArrNDims[ASTIVal[inner]] > 1) then
+    { every spelling of the array, not just a bare ident: `a.s` decays the
+      same way `s` does, and the AN_IDENT-only test here is why `*a.s[1]` on
+      a `char s[3][8]` field came back 25699 — a four-byte load of a row whose
+      elements are bytes. The rank > 1 test is kept explicit rather than left
+      to CNodeArrayShape's incumbent: only a MULTI-dim array has a row to
+      decay to, and a 1-D array's `*a` is an ordinary load.
+      refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs }
+    if CNodeArrayShape(inner, elemSz, elemRec, elemTk) and (NDInfoNDims > 1) then
     begin
-      Result := Ord(Syms[ASTIVal[inner]].ElemType);
+      Result := Ord(elemTk);
       Exit;
     end;
   end;
@@ -3033,6 +3039,64 @@ begin
   ASTLeft[Result] := node; ASTTk[Result] := Ord(tk);
 end;
 
+{ THE array-shape reader. Answers one question — "is `node` a fixed-extent
+  array object, and what is one element?" — for every spelling of one, so a
+  caller never has to grow its own AN_IDENT/AN_FIELD pair.
+
+  That pair is the defect this closes. Four readers ask this question:
+  CSizeofDescriptorWalk, CDerefDecayStride, CNodePointeeTk and the decay path
+  in CNodeDecaysToPointer. Each grew an AN_IDENT arm first, because a bare
+  `a` is what every test writes; the AN_FIELD arm was then added by whoever
+  next hit a struct field, or never. A grep for the duplicated logic finds the
+  arms that diverged and is structurally blind to the ones that are MISSING —
+  so the missing ones stayed missing, one bug at a time:
+    bug-c-a-struct-field-partial-index-uses-the-outer-row-stride
+    bug-c-a-multidim-array-field-decays-with-the-element-stride
+    bug-c-sizeof-a-partial-index-answers-the-element-not-the-row
+
+  It is a thin wrapper over NodeArrNDInfo (pasparser_call.inc), which already
+  walks IDENT, FIELD and deref-of-pointer-to-array and fills NDInfoNDims /
+  NDInfoLo[] / NDInfoSpan[]. What it does NOT yield is the element triple —
+  size, record id, type kind — which is exactly what every caller here needs
+  and what each was hand-rolling. Two gaps in the incumbent are filed as
+  Track P tickets rather than patched here: it fires only for rank >= 2, and
+  it yields spans but no element. Both are P's file.
+
+  Returns False for a dynamic array (ArrLen = -1 / DynDepth <> 0), for a
+  non-array, and for a zero-size element — every caller treats that as "not
+  an array object" and keeps its existing fallback.
+  refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs }
+function CNodeArrayShape(node: Integer; var elemSz, elemRec: Integer;
+                         var elemTk: TTypeKind): Boolean;
+var recId: Integer; fname: AnsiString;
+begin
+  Result := False;
+  elemSz := 0; elemRec := REC_NONE; elemTk := tyUnknown;
+  if node < 0 then Exit;
+  if not NodeArrNDInfo(node) then Exit;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    if not Syms[ASTIVal[node]].IsArray then Exit;
+    if Syms[ASTIVal[node]].ArrLen = -1 then Exit;
+    elemTk := Syms[ASTIVal[node]].ElemType;
+    elemRec := Syms[ASTIVal[node]].ElemRecName;
+  end
+  else if ASTKind[node] = AN_FIELD then
+  begin
+    recId := ResolveNodeRec(ASTLeft[node]);
+    fname := GetASTIdentName(node);
+    if not RecFieldIsArray(recId, fname) then Exit;
+    if RecFieldDynDepth(recId, fname) <> 0 then Exit;
+    elemTk := RecFieldType(recId, fname);
+    elemRec := RecFieldRecId(recId, fname);
+  end
+  else
+    Exit;      { a deref of a pointer-to-array keeps its own path below }
+  if elemTk = tyRecord then elemSz := RecSize(elemRec)
+  else elemSz := TypeSize(elemTk);
+  Result := elemSz > 0;
+end;
+
 { `*x` where x is a POINTER-TO-ARRAY: what the result steps by, or 0 when this
   is an ordinary dereference. C says dereferencing a pointer-to-array yields
   the array, which decays straight back to the same address — a no-op, not a
@@ -3047,7 +3111,8 @@ end;
   scan bails. That is what keeps `*(m[1]+1)` reading an int.
   bug-c-deref-of-a-pointer-to-array-loads-instead-of-decaying }
 function CDerefDecayStride(node: Integer): Integer;
-var base, si, k, lvl, stamp, elemSz, suffK, suffNext, d: Integer;
+var base, si, k, lvl, stamp, elemSz, elemRec, suffK, suffNext, d, nd: Integer;
+    elemTk: TTypeKind;
 begin
   Result := 0;
   base := node;
@@ -3059,13 +3124,18 @@ begin
     if (ASTSLen[base] > 0) and (stamp = 0) then stamp := ASTSLen[base];
     base := ASTLeft[base];
   end;
-  if (base < 0) or (ASTKind[base] <> AN_IDENT) then Exit;
-  si := ASTIVal[base];
-  if Syms[si].IsArray and (Syms[si].ArrLen <> -1) then
+  if base < 0 then Exit;
+  { The array arm reads its shape through CNodeArrayShape, so `a.m` is the
+    same object as `m` here. The AN_IDENT-only guard this replaces did not
+    give a wrong stride for a field — it gave none, so the decay never
+    happened and the deref stayed a load OF AN ELEMENT AS AN ADDRESS: `**a.s`,
+    `*(*(a.m+1)+2)` and `strcmp(*(a.s+1),"cd")` all SIGSEGV'd where the ident
+    spellings were right.
+    refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs }
+  if CNodeArrayShape(base, elemSz, elemRec, elemTk) then
   begin
-    if SymArrNDims[si] < 2 then Exit;    { a 1-D array's `*a` IS a load }
-    if Syms[si].ElemType = tyRecord then elemSz := RecSize(Syms[si].ElemRecName)
-    else elemSz := TypeSize(Syms[si].ElemType);
+    nd := NDInfoNDims;
+    if nd < 2 then Exit;    { a 1-D array's `*a` IS a load }
     { The stride AT LEVEL k is elemSz * the product of the dims below k. Level
       0 is the whole array; level nDims-1 points at elements, and dereferencing
       THAT is a real load. Find the level from the stamp, then answer the next
@@ -3074,22 +3144,23 @@ begin
     if stamp > 0 then
     begin
       suffK := elemSz;
-      for k := SymArrNDims[si] - 1 downto 0 do
+      for k := nd - 1 downto 0 do
       begin
         if suffK = stamp then begin lvl := k; Break; end;
-        d := SymArrDimSpan[si * MAX_ARR_DIMS + k];
+        d := NDInfoSpan[k];
         if d > 0 then suffK := suffK * d;
       end;
       if lvl = 0 then Exit;      { the stamp matched nothing — leave the load }
     end;
-    if lvl >= SymArrNDims[si] - 1 then Exit;   { pointing at elements: a load }
+    if lvl >= nd - 1 then Exit;   { pointing at elements: a load }
     suffNext := elemSz;
-    for k := lvl + 2 to SymArrNDims[si] - 1 do
-      if SymArrDimSpan[si * MAX_ARR_DIMS + k] > 0 then
-        suffNext := suffNext * SymArrDimSpan[si * MAX_ARR_DIMS + k];
+    for k := lvl + 2 to nd - 1 do
+      if NDInfoSpan[k] > 0 then suffNext := suffNext * NDInfoSpan[k];
     Result := suffNext;
     Exit;
   end;
+  if ASTKind[base] <> AN_IDENT then Exit;
+  si := ASTIVal[base];
   { `int (*r)[4]` — the pointee is an array, so *r is a pointer to its first
     element (and one dimension further in for a multi-dim pointee). Arithmetic
     over the pointer stays at that level, exactly as it does for an array, so

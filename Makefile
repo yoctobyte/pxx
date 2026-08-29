@@ -7330,6 +7330,13 @@ test-core: $(COMPILER)
 	# bug-c-sizeof-a-partial-index-answers-the-element-not-the-row
 	./$(COMPILER) test/csizeof_partial_index_row.c $(TESTTMP)/csizeof_partial_index_row26
 	$(TESTTMP)/csizeof_partial_index_row26; tools/expect_same.sh csizeof_partial_index_row26-rc "$$?" "42"
+	# The same array reached through a STRUCT FIELD must decay exactly as the
+	# bare identifier does. Five of these SIGSEGV'd and `*a.s[1]` silently read
+	# four bytes of a char row; every line is paired with its already-correct
+	# global spelling, because the pairing is the invariant.
+	# refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs
+	./$(COMPILER) test/cderef_decay_through_a_field.c $(TESTTMP)/cderef_decay_through_a_field26
+	$(TESTTMP)/cderef_decay_through_a_field26; tools/expect_same.sh cderef_decay_through_a_field26-rc "$$?" "42"
 	./$(COMPILER) test/cmulti_decl_ptr_b30.c $(TESTTMP)/cmulti_decl_ptr_b3026
 	$(TESTTMP)/cmulti_decl_ptr_b3026; tools/expect_same.sh cmulti_decl_ptr_b3026-rc "$$?" "42"
 	./$(COMPILER) test/ccall_field_b31.c $(TESTTMP)/ccall_field_b3126
