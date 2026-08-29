@@ -261,3 +261,65 @@ run's reds against the last.
 What remains is **480 mechanical conversions in `Makefile`**, against a helper that
 exists and is guarded, **nothing blocked**. The gate constraint stands: it must not
 land concurrently with other Track A edits to `Makefile`.
+
+## 2026-08-29 — batch 1 landed: 474 converted. And the "480" was never 480.
+
+Dispatched to Track A+T. Before converting anything I censused the recipe lines
+rather than trusting the figure this ticket has carried since 2026-08-26, because
+the figure is what sets the scope. It has drifted, and more importantly it was
+always a **single number over six different shapes**:
+
+| shape | count | convertible? |
+| --- | --- | --- |
+| clean output-compare, `test "$$(run_target ARCH $(TESTTMP)/BIN)" = "EXP"` | **474** | yes — **converted, this commit** |
+| exit-status check, `test "$$?" = "143"` | 37 | **no — see below** |
+| piped-stdin compare, `printf … \| tools/run_target.sh …` | 35 | yes, different regex — batch 2 |
+| in-loop (trailing `\` inside `for arch in …`) | 13 | yes, different shape — batch 3 |
+| other test shapes | 9 | case by case |
+| bare run, no assertion at all | 9 | nothing to convert |
+| **total `run_target.sh` recipe lines** | **547** | |
+
+**The 37 exit-status checks are not convertible and must not be made to look
+converted.** `expect_same.sh` compares two strings; `test "$$?" = "143"` asserts a
+*signal*. Wrapping it would be a semantic change wearing a mechanical diff's
+clothes — precisely the failure this ticket is about, since the result would read
+as covered while asserting something else. They keep their silence and are listed
+here so the next reader knows it was a decision, not an oversight.
+
+### What batch 1 actually did
+
+One line changed per hunk; nothing else in any recipe was touched, so the diff is
+474 independent 1↔1 hunks and stays reviewable.
+
+```make
+-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_hello)" = "Hello"
++	tools/expect_same.sh i386/test_i386_hello "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_hello)" "Hello"
+```
+
+Label is `ARCH/BIN`. Across all 474 that is **unique — zero collisions** — which
+is what makes the label worth having: a tstate reason line now names the job.
+
+### Verified by count and by construction, not by the suite going green
+
+The suite going green would prove nothing here: these assertions *already* pass.
+A conversion that silently dropped an assertion would also be green. So:
+
+- 474 lines changed, file length unchanged (15424 → 15424).
+- Every diff hunk changes exactly one line (checked with `git diff -U0` on the
+  hunk headers; zero hunks with a count ≠ 1).
+- For all 474: leading tab/`@`/`-` prefix, the **actual** operand, and the
+  **expected** operand are byte-identical to the originals, and the label equals
+  `ARCH/BIN` from that same line. Zero drift.
+- All 474 rewritten lines parse as shell (`bash -n` over the extracted set, with
+  `$$`→`$` and `$(TESTTMP)`→`/tmp`), and `make` parses the Makefile.
+- `expect_same.sh` exercised live on both arms: silent exit 0 on match, exit 1
+  with a `diff -u` naming the label on mismatch.
+
+The first check is the one that matters: it is the difference between "the
+transformation applied" and "the file still builds".
+
+### Remaining
+
+Batches 2 (35 piped-stdin) and 3 (13 in-loop) are still bare `test`. They are
+different regexes and land separately, for the same reason batch 1 kept one
+assertion per hunk.
