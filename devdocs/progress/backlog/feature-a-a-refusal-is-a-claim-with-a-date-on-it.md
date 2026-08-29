@@ -3955,3 +3955,179 @@ comment's blocker depended on, `decide-typeref-gains-a-pointer-depth-field`, had
 **been resolved since 2026-08-25 (`28c19f214`) and nobody noticed.** A resolved
 Track U ticket does not notify the work that was waiting on it. **Prio
 propagates down dependency edges; *resolution* does not propagate at all.**
+
+### 96. A search for DUPLICATED logic cannot find the place where the logic is MISSING
+
+frankS, 2026-08-30, tracing why `ir_codegen_xtensa.inc` was the one backend
+that never adopted `ABIParamSlotHoldsValueAddr`. Verified in-tree by the
+coordinator before relaying: `d68ff8d16` converted five backends and does not
+list `_xtensa`; xtensa codegen predates it by two months (`bd49a5953`).
+
+The sweep's own safety check is what hid it. Its commit message says, honestly
+and **correctly**:
+
+> *"an `IsRef or` chain inside `ir_codegen*.inc` now means someone grew a ninth
+> copy. grep finds none."*
+
+Measured at that commit's parent: each converted backend had exactly one such
+chain. Xtensa had **zero** — not because it was correct, but because it had
+**never implemented the rule at all**, open-coding a single row spelled
+`(Kind = skParam) and (TypeKind = tyVariant)`, containing neither `IsRef` nor
+an `or`. (Counted: `IsRef\s+or` xtensa 0, aarch64 1. The file's thirteen bare
+`IsRef` mentions are an unrelated form, which is *why* the chain grep slid
+past.)
+
+**This is the exact inverse of this repo's own grep-for-the-sibling rule.**
+That rule finds *divergent copies* and is structurally blind to *absent* ones.
+Two failure modes, opposite searches, and the second wears the first one's
+clothes — a check that a correct implementation and an absent implementation
+both pass is not a check, and nothing in its output says so. **The file that
+most needed converting is precisely the one that satisfied the invariant.**
+
+Operational form: **for a sweep converting N sites onto a shared helper,
+enumerate the sites that SHOULD call it and verify each does — do not search
+for the pattern being replaced. The first list is closed and countable; the
+second is defined by what already exists, which is the thing in question.**
+
+Corollary that arrived with it: the same commit verified against x86-64,
+aarch64, arm32 and riscv32 — **xtensa absent, because xtensa could not be
+executed at all until 2026-08-29.** Both of the sweep's safety nets had a hole,
+for unrelated reasons, pointing the same way. The oracle argument from a fourth
+direction: the target with no oracle keeps the bug a conscientious sweep was
+built to prevent.
+
+### 97. The act of RELEASING a ticket is what made it look held
+
+`c583c33c7` parked `feature-a-typeref-migrate-consumers`: moved it
+`working/` → `backlog/` and cleared `owner:`. Correct, deliberate, one line —
+and it left `status: working` behind in the ticket's own frontmatter.
+
+Every agent here is told to **open a ticket at HEAD before claiming it**. So the
+header reading `working` is read as *someone has this*, and the ticket is
+skipped — **by careful readers especially, since a careless one never opened
+it.** It ranked THIRD of 111 in `ready --track A` the whole time. The ranker was
+right every single time it was asked.
+
+**A ticket that looks TAKEN is more durable than one that is missing**, because
+nothing ever re-checks a lock someone else appears to hold. Fixed at the
+producer: `move_ticket` now syncs the self-described status, both spellings,
+updating only fields that already exist.
+
+Note the near-miss in the diagnosis, which is face 84's shape: this was first
+written up as *"resolution does not propagate down dependency edges"*. It does
+not — but that was never the mechanism here. **The ticket carries no
+`blocked-by` edge and never has**; the dependency was stated in prose. A
+notification feature built on that theory would have fixed nothing, and would
+have looked like a fix.
+
+### 98. One malformed byte in one record took the shared index down for every reader
+
+`progress.py` read every ticket with a strict UTF-8 decode. One ticket pasted a
+diverging program's **raw output** into a markdown table — exactly the evidence
+that ticket should carry — and `ready`, `next`, `check` and `board-md` died for
+**every lane at once**. The traceback named the codec and a byte offset and
+never the file, so the blast radius was the whole fleet and the diagnosis was a
+manual bisect.
+
+**A shared reader must degrade per-record, not fail closed.** A ticket is prose
+plus evidence, evidence arrives as bytes from a failing program, so this
+recurs by construction. Now: replacement decode plus an `ENCODING` warning, so
+the damage is reported without blocking a dispatch.
+
+The general shape: **the record most worth keeping is the one most likely to be
+malformed**, because it is the one carrying the raw artefact. Sanitising it to
+`?` destroys the evidence; `\xNN` preserves it. Both fixes were attempted
+concurrently by two lanes and the escaping one was kept.
+
+`errors="replace"` was already the house pattern one function away, at
+`progress.py:1399`. **The strict read was the outlier, not the hardening** —
+worth checking before writing a new convention.
+
+### 99. A DERIVED sentence rots with the number it was derived from, and carries no provenance
+
+frankD, 2026-08-30. `docs/targets/esp32.md` published ~26 KB/~21 KB code and
+~70 KB bss; measured at pin v393: **50,528/43,428 and 103,692**. But the table
+was the cheap half. Underneath it:
+
+> *"an ESP32-C3 has roughly 400 KB of usable SRAM; a minimal PXX image plus
+> stack uses well under a quarter of it"*
+
+**False at 104 KB of 400 KB before the stack is counted.** frankD's reading is
+the finding: *a reader checking the table sees "about right, ish"; a reader
+trusting the sentence sizes a project wrong.* A number invites re-measurement.
+**A conclusion drawn from it does not carry the number's provenance, so nothing
+invites anyone to re-check it** — and it is the conclusion people act on.
+
+Same family: *"peaked at 79 tickets"*, where the word **peaked** was doing the
+lying rather than the number (N's queue is 84 today). An ordering claim is
+silently falsified by growth and reads as a fact about the past.
+
+And underneath both: **nothing watched that number.** It moved 2x over months
+with no test failing, caught only because a docs page quoted it and someone
+re-measured. A size canary turns a four-month drift found by prose into a
+one-line red on the causing commit.
+
+### 100. An instrument that agreed with everything you could check was not TESTED
+
+frankD, unprompted, about the tool built for the job it had just done:
+
+> *"`factsheet.sh` agreed with everything I could count directly this pass, so
+> it did not get tested hard. Its numbers were not the ones that mattered here —
+> the rotted figures were footprint measurements and queue orderings, neither of
+> which it prints. The sweep it motivated found its worst case outside its own
+> coverage."*
+
+**Agreement with an unexercised instrument is not evidence the instrument
+works**, and it is the single easiest thing to write up as a validation. It
+would have been reported as one had frankD not said this. Same family as
+face 83b and the objdump-on-section-less-ELF null: *a null result and a null
+instrument are indistinguishable downstream, and only the instrument can tell
+you which you have.*
+
+### 101. Asserting the exit status of a program written to be WATCHED
+
+frankB, 2026-08-30, declining the obvious wiring for six orphan GUI tests.
+`run_gui_test` asserts `rc`. All six print their result as prose on stdout:
+`test_gtk_signals` exits 0 whether or not `clicked` was ever delivered;
+`test_pcl_helloworld` exits 0 with `clicks=0` when the streamer fails to wire
+`Button1`.
+
+Wiring them rc-only satisfies "these tests are now wired" **in letter while
+producing exactly the green-because-it-asserts-nothing rows the ticket
+existed to prevent** — the warning defeated one level in, by the fix.
+
+Two things made the alternative trustworthy rather than merely different: the
+replacement checker was **seen to fail** (readable want/got diff on wrong
+output) before being shipped, and `test_gtk_signals` was given a synthesised
+click — *nothing had ever pressed that button, so the callback the file exists
+to describe was asserted by nothing*, and wiring it without replacing the human
+would have preserved the file and lost its purpose.
+
+Its recorded limit is the model for how to state one: with `DISPLAY` and
+`WAYLAND_DISPLAY` **both unset**, `gtk_init_check` still returns 1,
+`gtk_window_new` still returns non-nil, and the test still prints *"window
+shown, exiting"*. **That line is not a witness** — measured, not reasoned, and
+written into the file rather than left for the name to imply.
+
+### 102. A line that only prints when the probe found something can never report finding NOTHING
+
+pxx-a5, 2026-08-30, on `calibrate()`. The scale line is now printed on **every**
+run, with both components, and says out loud when the floor is the answer:
+
+> `budgets x1.00 (native probe 0.58, emulated probe 0.89) — at the floor, so
+> neither probe raised it`
+
+**"The floor is the answer" is what went unnoticed for the life of the
+function.** Silence on a no-op is indistinguishable from silence on a
+never-ran, and the second is what it turned out to be. Same shape as face 33
+(a capability nothing invokes is quieter than no check) and as the fresh-tree
+`make compiler/pascal26` no-op that prints a success message in the wrong
+dialect: **the absence of a line is not a signal, because nothing distinguishes
+it from the absence of the code that prints it.**
+
+Companion from the same message, on enrolling `test-xtensa` in `full`: the tier
+comment **states the population** — 55 of 142 jobs, 21 measured divergences with
+the ticket cited, 66 not compiling — and says explicitly that enrolment must not
+be read as *"xtensa is covered"*. Face 8's remedy applied at filing time: a
+survey that names its own scope, written by the person who knows the scope,
+rather than by the person who later needs it.
