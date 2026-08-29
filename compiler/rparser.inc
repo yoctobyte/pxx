@@ -1271,6 +1271,72 @@ begin
   Result := acc;
 end;
 
+{ ===== derives: aggregates in expression position =====
+
+  `#[derive(Clone, Copy, PartialEq)]` needs almost nothing from the frontend,
+  which is the point of measuring before building: `Copy` is what a whole-record
+  assignment already does, and `PartialEq` is what the shared record comparison
+  already does, both proven by a test written before this rung. What was
+  actually missing is dumber and older -- an enum VARIANT could not appear in
+  an expression at all, so `c == Color::White` and `flip(Color::Black)` were
+  parse errors while `let c: Color = Color::White` worked.
+
+  The reason is structural, and it is stated on RParseAggregateIntoNode: no AST
+  node carries a whole aggregate VALUE, so a literal is always N stores into a
+  named slot. The expression form is therefore the same trick `?` uses --
+  allocate a hidden local, hoist the stores into RPendingPreSeq (flushed at the
+  single point in RParseStatement), and yield a read of the temp. }
+
+{ RPeekAggregateCi narrowed to the forms that are unambiguous with no expected
+  type. Two exclusions, both deliberate:
+
+  - the BRACE literal `Name { .. }`. rustc forbids a struct literal in the
+    condition of an `if`/`while`/`match` for exactly this reason: `if a == Sq
+    { .. }` cannot be told from a comparison followed by the block. rustc wants
+    parens there; so does this, and refusing agrees with the reference
+    implementation rather than inventing a rule.
+
+  - a BARE `Some` / `None` / `Ok` / `Err`. Every monomorphized instantiation
+    spells its variants the same way, so with no expectation the global table
+    answers with whichever class was registered FIRST -- a different layout,
+    silently. `let` and `return` positions have an expected type and resolve it
+    properly; an expression position does not, so this refuses rather than
+    guesses. A wrong class here would be a plausible wrong value, which is the
+    failure mode this frontend has already paid for three times. }
+function RPeekExprAggregateCi: Integer;
+var ci, vi: Integer;
+begin
+  Result := -1;
+  if CurTok.Kind <> tkIdent then Exit;
+  ci := FindUClass(CurTok.SVal);
+  if ci >= 0 then
+  begin
+    if REnumCi[ci] and (Tokens[TokPos].Kind = tkPathSep) and
+       (Tokens[TokPos + 1].Kind = tkIdent) and
+       (RFindVariantInEnum(ci, GetTokenStr(TokPos + 1)) >= 0) then
+      Result := ci;
+    Exit;
+  end;
+  vi := RFindVariantBare(CurTok.SVal);
+  if vi < 0 then Exit;
+  ci := REnumVariants[vi].EnumCi;
+  if RIsOptionRec(REC_UCLASS_BASE + ci) or RIsResultRec(REC_UCLASS_BASE + ci) then Exit;
+  Result := ci;
+end;
+
+function RParseAggregateIntoNode(targetNode, ci: Integer): Integer; forward;
+
+function RMaterializeAggregate(ci: Integer): Integer;
+var tempSym, storeSeq: Integer; tempName: AnsiString;
+begin
+  LastTypeRecId := REC_UCLASS_BASE + ci;
+  tempName := '__agg' + RIntToStr(RTempSerial); Inc(RTempSerial);
+  tempSym := AllocVar(tempName, tyRecord);
+  storeSeq := RParseAggregateIntoNode(RMakeIdent(tempSym), ci);
+  RPendingPreSeq := RSeqAppend(RPendingPreSeq, storeSeq);
+  Result := RMakeIdent(tempSym);
+end;
+
 function RParsePrimary: Integer;
 var node, fieldNode, symIdx, procIdx, argNode, lastArg, fTokIdx, gfi, ci: Integer;
     name, methodName, fullName: AnsiString;
@@ -1331,6 +1397,17 @@ begin
          (Tokens[TokPos + 1].Kind = tkLParen) then
       begin
         Result := RParseFormat;
+        Exit;
+      end;
+      { `Color::White` / `Piece::Pawn(x)` / a bare unit variant, anywhere an
+        expression is allowed -- see RPeekExprAggregateCi. Checked before the
+        associated-fn path below because `Enum::name` is spelled identically
+        either way; the peek only answers for a name that really is a VARIANT
+        of that enum, so `Enum::assoc_fn(..)` still falls through. }
+      ci := RPeekExprAggregateCi;
+      if ci >= 0 then
+      begin
+        Result := RMaterializeAggregate(ci);
         Exit;
       end;
       name := CurTok.SVal; Next;
@@ -1602,6 +1679,20 @@ begin
           ci := Syms[symIdx].RecName - REC_UCLASS_BASE;
           fullName := RTypeNameOf(ci) + '::' + methodName;
           procIdx := FindProc(fullName);
+          { `#[derive(Clone)]` on a record: a derived clone is a field-wise
+            copy, and a whole-record assignment is already exactly that, so
+            `a.clone()` yields `a` itself and the copy happens where the
+            result lands. Only when the type has no clone of its OWN -- a
+            hand-written `fn clone(&self)` resolves above and wins, because a
+            user's clone may do more than the derive would. }
+          if (procIdx < 0) and (methodName = 'clone') and
+             (Tokens[TokPos + 1].Kind = tkRParen) then
+          begin
+            Next; Next;                   { clone, ( }
+            Expect(tkRParen, ')');
+            Result := node;
+            Exit;
+          end;
           if procIdx < 0 then Error('Rust: ' + RTypeNameOf(ci) + ' has no method ' + methodName);
           Next; Next; { method name, ( }
           fieldNode := AllocNode(AN_CALL);
@@ -2364,11 +2455,17 @@ begin
   Next; { while }
   node := AllocNode(AN_WHILE);
   ASTLeft[node] := RParseExpr;
-  { A `?` in the CONDITION would hoist its operand out of the loop and
-    evaluate it once -- silently, and wrongly. Refused rather than mis-lowered.
-    `if` is fine and is not guarded: its condition really is evaluated once. }
+  { Anything the condition HOISTED -- a `?` operand, an enum literal's
+    materialization -- would be evaluated once, outside the loop, silently and
+    wrongly. Refused rather than mis-lowered. `if` is fine and is deliberately
+    not guarded: its condition really is evaluated once.
+
+    The message names both constructs rather than just `?` because the second
+    one arrived later (rung 15) and a message naming only the first sends the
+    reader looking for a `?` that is not there. }
   if RPendingPreSeq >= 0 then
-    Error('Rust: `?` is not supported in a `while` condition (it would be hoisted out of the loop)');
+    Error('Rust: this `while` condition needs a hoisted temporary (a `?`, or an enum literal) ' +
+          'and would evaluate it once outside the loop -- bind it to a `let` above the loop instead');
   Expect(tkBegin, '{');
   ASTRight[node] := RParseBlock;
   Expect(tkEnd, '}');

@@ -5971,6 +5971,17 @@ test-core: $(COMPILER)
 	# checkable, which is the whole point after two plausible-wrong-value bugs.
 	./$(COMPILER) test/test_rust_string.rs $(TESTTMP)/test_rust_string26
 	tools/expect_same.sh test_rust_string26 "$$($(TESTTMP)/test_rust_string26)" "$$(printf 'empty [] len 0 isempty true\ncat abcde len 5 isempty false\neq true ne false lit 3\nacc [uci: go] len 7\nsq a1 h8 d4\nuci e2e4\nhello, world!\nfmt i=42 n=-7 b=true s=mid c=x\ndegen [] [just text]\nchain 3 1234\nbig a1-h899 len 7')"
+	@echo '--- rust: derives, and enum values in expression position ---'
+	# derive(Copy)/derive(PartialEq) needed NOTHING -- assignment already
+	# copies a record and the shared compare already answers field-wise.
+	# What was missing was older: an enum variant could not appear in an
+	# expression at all, so `c == Color::White` was a parse error while
+	# `let c: Color = Color::White` worked. Aggregates have no expression
+	# form here, so a variant now materializes into a hoisted temp -- the
+	# same channel `?` uses. `arr`/`knights`/`nest` pin the places that
+	# hoist has to survive: an array literal, a loop body, a nested call.
+	./$(COMPILER) test/test_rust_derive.rs $(TESTTMP)/test_rust_derive26
+	tools/expect_same.sh test_rust_derive26 "$$($(TESTTMP)/test_rust_derive26)" "$$(printf 'val 1 3 0\ntag 0 7\nflip 3 1\nclone 1 2 eq true ne false\narr 1 3 0\nknights 1\nnest 1')"
 	# Ada frontend skeleton (feature-esoteric-ada): for-range accumulate, if/elsif/else,
 	# while, bare loop + exit-when, Put_Line -- all lowering onto existing shared IR.
 	./$(COMPILER) test/test_ada_skeleton.adb $(TESTTMP)/test_ada_skeleton26
