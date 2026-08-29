@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:21 blocked:5 backlog:315 backlog_new:8 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2623 rejected:51`
+`working:2 unfinished:21 blocked:5 backlog:313 backlog_new:8 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2624 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
@@ -44,7 +44,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 328, ranked
+## Ready — top 30 of 326, ranked
 
 - `[p 85] [R]` bug-r-a-duplicate-forward-in-rparser-breaks-the-fpc-seed-build
 - `[p 75] [P]` feature-pascal-corpus-expansion
@@ -59,7 +59,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [B]` regression-lib-test-crtl-reachability-3
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-relative-import-in-package
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-startswith-tuple
-- `[p 70] [P]` regression-test-threads-test-sched-reactor-exhaustion-4
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [P]` bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching (unblocks 1)
@@ -76,5 +75,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
 - `[p 62] [A]` feature-unicodestring-model
+- `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 
-_298 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_296 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
