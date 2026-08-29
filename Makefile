@@ -2873,6 +2873,11 @@ test-nilpy: $(COMPILER)
 	@# different arity, methods, and rebind-to-value already worked)
 	./$(COMPILER) test/test_nilpy_redefine_def.npy $(TESTTMP)/test_nilpy_redefdef26
 	tools/expect_same.sh test_nilpy_redefdef26 "$$($(TESTTMP)/test_nilpy_redefdef26)" "$$(printf '2\n3\n2\n5')"
+	@# an import alias binds to the ORIGINAL name, never to a same-named member
+	@# of the source module; and a module-level assignment rebinds an IMPORTED
+	@# name (row 3 is the ordering control: the rebinding has not run yet)
+	./$(COMPILER) test/test_nilpy_import_alias_collides.npy $(TESTTMP)/test_nilpy_aliascoll26
+	tools/expect_same.sh test_nilpy_aliascoll26 "$$($(TESTTMP)/test_nilpy_aliascoll26)" "$$(printf '7\n5\n2\n99\n7')"
 	@# %e/%E/%g/%G no longer collapse onto %f
 	./$(COMPILER) test/test_nilpy_percent_e_g_format.npy $(TESTTMP)/test_nilpy_pctformat26
 	tools/expect_same.sh test_nilpy_pctformat26 "$$($(TESTTMP)/test_nilpy_pctformat26)" "$$(printf '1.500000e+03\n1.500000E+03\n1.23e+03\n1.5e+06\n0.0001\n100\n0\n0.000000e+00\n-1.500000e+03\n1.23457e+08\n3.141592654\n1\n1.500000\n1.50')"

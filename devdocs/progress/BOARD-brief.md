@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:22 blocked:5 backlog:307 backlog_new:5 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2592 rejected:48`
+`working:2 unfinished:22 blocked:5 backlog:306 backlog_new:5 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2593 rejected:48`
 
 ## Held now (working/ — do not touch these files)
 
@@ -47,7 +47,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 ## Ready — top 30 of 318, ranked
 
-- `[p 85] [N]` bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
 - `[p 75] [B]` bug-a-the-17th-thread-silently-aliases-reactor-slot-0
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
 - `[p 75] [P]` feature-pascal-corpus-expansion
@@ -77,5 +76,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
 - `[p 62] [N]` feature-nilpy-enum-class
+- `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
 
 _288 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

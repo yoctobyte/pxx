@@ -36084,7 +36084,7 @@ var impName, impAlias, impRoot, impReal: AnsiString; isCount: Boolean;
       unit arm read it after the pull and bound nothing. }
     impDotted: AnsiString;
     aStrIdx, realStrIdx, optSym, impLevel: Integer;
-    aliasSym, aliasCi, aliasRealSym, aliasRealProc: Integer;
+    aliasSym, aliasCi, aliasRealSym, aliasRealProc, aliasPi: Integer;
     aliasUnitTarget: Integer;   { the unit a from-imported SUBMODULE name really names }
     aliasSelfIdx: Integer;      { scans the pending alias queue, so a source
                                   name is not captured by an alias this same
@@ -36310,6 +36310,35 @@ begin
                 else
                   PyImpAliasSrc[PyImpAliasCount] := -(aliasRealProc + 1);
                 Inc(PyImpAliasCount);
+                { The ALIAS NAME may itself be a proc — `from M import f as g`
+                  where M also has its own `g`. Flat unit scope makes that `g`
+                  visible by bare name, so a later call resolved to it and the
+                  alias silently did nothing:
+
+                      from mmod import f as g
+                      print(g(1))        # CPython 7, pxx 16 = mmod.g(1)
+
+                  The binding above is real (PyFlushImportAliases emits `g = f`),
+                  but it is SYNTHESISED and so has no `g =` tokens for the
+                  rebinding scan to find. Stamp it instead, at the import's own
+                  token, which is before every statement of the module — so the
+                  ordering test in PyDefRebound still holds and a call written
+                  ABOVE the import is unaffected.
+
+                  Only for a genuine rename: `from M import g` (impAlias =
+                  impReal) binds the name to the very proc it already meant, and
+                  stamping that would unbind a name nothing rebound.
+                  bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module }
+                if impAlias <> impReal then
+                begin
+                  aliasPi := ProcChainHead(impAlias);
+                  while aliasPi >= 0 do
+                  begin
+                    if Procs[aliasPi].Name = impAlias then
+                      ProcPyAliasRebindTok[aliasPi] := TokPos;
+                    aliasPi := ProcHashNext[aliasPi];
+                  end;
+                end;
               end;
               { Neither a symbol nor a proc: the real name is something this
                 frontend does not know. Left alone — the alias stays undefined
