@@ -531,4 +531,4 @@ whether to allocate one. The kind word remains available and unstamped for
 block* and so can use it.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 8be3c6d06.
