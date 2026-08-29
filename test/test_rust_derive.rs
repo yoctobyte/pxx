@@ -18,8 +18,11 @@ enum Piece { Pawn, Knight, King }
 #[derive(Clone, Copy, PartialEq)]
 enum Slot { Empty, Occ(i64) }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 struct Pos { f: i64, r: i64 }
+
+#[derive(Clone, Copy, Debug)]
+struct Line { a: Pos, b: Pos, w: i64 }
 
 fn val(p: Piece) -> i64 {
     if p == Piece::Pawn { return 1; }
@@ -73,4 +76,18 @@ fn main() {
 
     // an enum value built inside a nested call chain
     println!("nest {}", val(flip(flip(Piece::Pawn))));
+
+    // #[derive(Debug)]: `{:?}` renders a struct field-wise, the way rustc's
+    // derive does. Before this, `println!("{:?}", p)` printed `1` -- the
+    // write path was handed a record and wrote its FIRST FIELD, silently.
+    println!("dbg {:?}", a);
+    let l: Line = Line { a: Pos { f: 1, r: 2 }, b: Pos { f: 3, r: 4 }, w: 9 };
+    println!("deep {:?}", l);
+
+    // Debug quotes what Display leaves bare, and every other scalar is the
+    // same under both.
+    println!("scal {:?} {:?} {:?} {:?}", 5, "hi", true, 'q');
+
+    // and the value path renders the identical text
+    println!("via {}", format!("{:?}", a));
 }

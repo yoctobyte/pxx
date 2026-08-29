@@ -79,6 +79,11 @@ function RExprRecId(node: Integer): Integer; forward;
   source-order rule as RExprRecId right above. }
 function RParseTryOp(valNode: Integer): Integer; forward;
 function RSpecializeGenericFn(gfi: Integer; const concreteTypeName: AnsiString): Integer; forward;
+{ Both are used by RParseFormat, which sits above them because format! is an
+  expression and the Debug expander is written next to println!. Same
+  source-order rule as RExprRecId above. }
+function RSpecIsDebug(fmtOff, start, len: Integer): Boolean; forward;
+procedure RDebugExpand(recvNode, recId: Integer; const prefix: AnsiString); forward;
 
 const
   RVAR_UNIT   = 0;
@@ -122,6 +127,17 @@ var
     with `__` followed by our digits by accident, and there is no block
     scoping to roll back into anyway. }
   RTempSerial: Integer;
+  { `{:?}` over a record, flattened to an alternating list: item i is the
+    literal text RDbgText[i] followed by the field read RDbgNode[i] (-1 when
+    the item is text only). A LIST, and not a rendered result, because the two
+    consumers render differently and neither should learn the other's form:
+    println! turns each item into a write, format! concatenates them. Global
+    rather than a var parameter because both scanners parse every argument
+    BEFORE they walk the format string, so there is no reentrancy to worry
+    about -- a nested format! inside an argument is already finished. }
+  RDbgText: array[0..255] of AnsiString;
+  RDbgNode: array[0..255] of Integer;
+  RDbgCount: Integer;
   ROptionCi: array[0..MAX_UCLASS-1] of Boolean;
   ROptionElemTk: array[0..MAX_UCLASS-1] of TTypeKind;
   ROptionElemRec: array[0..MAX_UCLASS-1] of Integer;
@@ -1033,6 +1049,15 @@ end;
   must be used wherever "is this a string" is asked -- checking tyAnsiString
   alone silently drops every literal. }
 
+{ A literal string as an AST node. Three callers wanted their own copy of
+  these four lines before it was lifted. }
+function RStrLit(const t: AnsiString): Integer;
+begin
+  Result := AllocNode(AN_STR_LIT);
+  ASTSOffset[Result] := RStoredName(t); ASTSLen[Result] := Length(t);
+  ASTTk[Result] := Ord(tyString);
+end;
+
 function RIsStrMethodName(const m: AnsiString): Boolean;
 begin
   Result := (m = 'len') or (m = 'is_empty') or (m = 'push_str') or
@@ -1128,16 +1153,6 @@ function RStrOf(node: Integer): Integer;
 var tk: TTypeKind; callNode, argNode, widthNode, pairNode, tNode, fNode: Integer;
     procIdx: Integer;
 
-  { named RStrOfLit, not `Lit`: tools/forwardlint.py flattens nested
-    functions into one namespace, so a short generic name here reads as a
-    use-before-declaration against an unrelated `lit` in pylexer.inc. }
-  function RStrOfLit(const t: AnsiString): Integer;
-  begin
-    RStrOfLit := AllocNode(AN_STR_LIT);
-    ASTSOffset[RStrOfLit] := RStoredName(t); ASTSLen[RStrOfLit] := Length(t);
-    ASTTk[RStrOfLit] := Ord(tyString);
-  end;
-
 begin
   tk := IntToTypeKind(ASTTk[node]);
   if RIsStrTk(tk) then begin Result := node; Exit; end;
@@ -1148,8 +1163,8 @@ begin
     and is the smaller lowering. }
   if tk = tyBoolean then
   begin
-    tNode := RStrOfLit('true');
-    fNode := RStrOfLit('false');
+    tNode := RStrLit('true');
+    fNode := RStrLit('false');
     pairNode := AllocNode(AN_PAIR);
     ASTLeft[pairNode] := tNode; ASTRight[pairNode] := fNode;
     Result := AllocNode(AN_TERNARY);
@@ -1165,7 +1180,7 @@ begin
     the AN_STR_FROM_CHAR temp-and-yield desugar a second time. }
   if tk = tyChar then
   begin
-    Result := RBinOp(tkPlus, RStrOfLit(''), node, tyAnsiString);
+    Result := RBinOp(tkPlus, RStrLit(''), node, tyAnsiString);
     Exit;
   end;
 
@@ -1196,9 +1211,10 @@ end;
   wants in that form. Duplicating ~20 lines of brace scanning is cheaper than
   the abstraction that couples an output path to an expression path. }
 function RParseFormat: Integer;
-var fmtOff, fmtLen, i, segStart, argCount, argUsed: Integer;
+var fmtOff, fmtLen, i, segStart, specStart, argCount, argUsed: Integer;
     argExprs: array[0..7] of Integer;
-    acc, piece: Integer;
+    acc: Integer;
+    isDbg: Boolean;
 
   procedure Append(part: Integer);
   begin
@@ -1215,6 +1231,48 @@ var fmtOff, fmtLen, i, segStart, argCount, argUsed: Integer;
     ASTSLen[litNode] := len;
     ASTTk[litNode] := Ord(tyString);
     Append(litNode);
+  end;
+
+  procedure AddText(const t: AnsiString);
+  begin
+    if t = '' then Exit;
+    Append(RStrLit(t));
+  end;
+
+  { The value twin of println!'s AddFormatted, over the SAME item list from
+    RDebugExpand. The two consumers differ only in what they do with an item
+    -- a write there, a concatenation here -- which is exactly why the
+    expander hands back a list instead of rendered output. }
+  procedure AddFormatted(exprNode: Integer; dbg: Boolean);
+  var recId, k: Integer;
+  begin
+    recId := RExprRecId(exprNode);
+    if (IntToTypeKind(ASTTk[exprNode]) = tyRecord) and (recId >= REC_UCLASS_BASE) then
+    begin
+      if not dbg then
+        Error('Rust: `{}` needs Display and this type has none -- use `{:?}`, ' +
+              'or format the fields');
+      RDbgCount := 0;
+      RDebugExpand(exprNode, recId, '');
+      for k := 0 to RDbgCount - 1 do
+      begin
+        AddText(RDbgText[k]);
+        if RDbgNode[k] >= 0 then Append(RStrOf(RDbgNode[k]));
+      end;
+      Exit;
+    end;
+    { see the twin in RParsePrintln }
+    if dbg and RIsStrTk(IntToTypeKind(ASTTk[exprNode])) then
+    begin
+      AddText('"'); Append(RStrOf(exprNode)); AddText('"');
+      Exit;
+    end;
+    if dbg and (IntToTypeKind(ASTTk[exprNode]) = tyChar) then
+    begin
+      AddText(''''); Append(RStrOf(exprNode)); AddText('''');
+      Exit;
+    end;
+    Append(RStrOf(exprNode));
   end;
 
 begin
@@ -1244,13 +1302,14 @@ begin
     if TokChars[fmtOff + i] = '{' then
     begin
       AddSegment(fmtOff + segStart, i - segStart);
+      specStart := i + 1;
       while (i < fmtLen) and (TokChars[fmtOff + i] <> '}') do Inc(i);
       if i >= fmtLen then Error('Rust: unterminated {} placeholder in format string');
+      isDbg := RSpecIsDebug(fmtOff, specStart, i - specStart);
       Inc(i);
       segStart := i;
       if argUsed >= argCount then Error('Rust: more {} placeholders than arguments');
-      piece := RStrOf(argExprs[argUsed]);
-      Append(piece);
+      AddFormatted(argExprs[argUsed], isDbg);
       Inc(argUsed);
     end
     else
@@ -3396,6 +3455,121 @@ begin
   Result := RSeqAppend(RSeqAppend(-1, initNode), whileNode);
 end;
 
+{ Flatten `{:?}` over a record into RDbgText/RDbgNode. Rust's derived Debug
+  for a struct is `Name { field: value, field: value }`, and that is exactly
+  what this builds -- literal, field, literal, field.
+
+  WHY THIS EXISTS AT ALL: before it, `println!("{:?}", pos)` printed `1`. The
+  scanner treated `{:?}` as an ordinary placeholder and the write path,
+  handed a record, wrote its FIRST FIELD. A derived-Debug struct rendered as a
+  single integer, silently, in real output -- the fourth plausible wrong value
+  this frontend has produced and the same shape as the other three.
+
+  A nested record field recurses. A STRING field is quoted, because Debug
+  quotes where Display does not. An ENUM is refused: Rust's Debug for one
+  prints the VARIANT NAME, which is a runtime switch on __tag rather than a
+  static item list, and printing a wrong-but-plausible tag number instead is
+  precisely the failure this routine was written to end. An ARRAY field is
+  refused for the same reason -- rendering it needs a loop, and half-rendering
+  it would look like a value. }
+{ TokSliceStr does exactly this, but it lives in rtti_emit.inc, which FPC's
+  include stream reaches AFTER this file -- so calling it here compiles under
+  pxx and breaks the seed build. Six lines beats a forward into a later unit.
+  bug-r-rexprrecid-breaks-the-fpc-bootstrap-seed }
+function RCharSlice(off, len: Integer): AnsiString;
+var s: AnsiString; i: Integer;
+begin
+  s := '';
+  i := 0;
+  while i < len do begin AppendChar(s, TokChars[off + i]); Inc(i); end;
+  RCharSlice := s;
+end;
+
+{ Is this placeholder's spec the Debug one? `{}` / `{:?}` are the two forms
+  this frontend understands; anything else (`{:x}`, `{:>8}`, `{:.3}`) is
+  REFUSED rather than silently rendered as `{}`, because a width or a radix
+  that is quietly ignored produces output that looks right and is not. }
+function RSpecIsDebug(fmtOff, start, len: Integer): Boolean;
+var spec: AnsiString;
+begin
+  spec := RCharSlice(fmtOff + start, len);
+  if spec = '' then begin Result := False; Exit; end;
+  if spec = ':?' then begin Result := True; Exit; end;
+  Error('Rust: format spec `{' + spec + '}` is not supported (only `{}` and `{:?}`)');
+  Result := False;
+end;
+
+procedure RDebugExpand(recvNode, recId: Integer; const prefix: AnsiString);
+var ci, base, cnt, k, fi, fieldNode: Integer;
+    fname: AnsiString; ftk: TTypeKind; frec: Integer;
+begin
+  ci := recId - REC_UCLASS_BASE;
+  if REnumCi[ci] then
+    Error('Rust: `{:?}` of an enum is not supported yet (Debug prints the variant name, ' +
+          'which needs a runtime switch on the tag) -- match on it and print the arm');
+  base := UClsFBase[ci];
+  cnt := UClsFCount[ci];
+  if RDbgCount + 2 * cnt + 2 >= 255 then Error('Rust: `{:?}` value is too deeply nested');
+
+  RDbgText[RDbgCount] := prefix + RTypeNameOf(ci) + ' { ';
+  RDbgNode[RDbgCount] := -1;
+  Inc(RDbgCount);
+
+  for k := 0 to cnt - 1 do
+  begin
+    fi := base + k;
+    fname := RCharSlice(UFldNOff[fi], UFldNLen[fi]);
+    ftk := IntToTypeKind(UFldTk[fi]);
+    frec := UFldRec_[fi];
+
+    fieldNode := AllocNode(AN_FIELD);
+    ASTLeft[fieldNode] := recvNode;
+    ASTSOffset[fieldNode] := UFldNOff[fi];
+    ASTSLen[fieldNode] := UFldNLen[fi];
+    ASTTk[fieldNode] := Ord(ftk);
+
+    if (ftk = tyRecord) and (frec >= REC_UCLASS_BASE) then
+    begin
+      RDebugExpand(fieldNode, frec, fname + ': ');
+      { the separator belongs to the item AFTER a nested record, so append it
+        as text-only rather than folding it into a field item }
+      if k < cnt - 1 then
+      begin
+        RDbgText[RDbgCount] := ', ';
+        RDbgNode[RDbgCount] := -1;
+        Inc(RDbgCount);
+      end;
+      Continue;
+    end;
+
+    if RIsStrTk(ftk) then
+    begin
+      RDbgText[RDbgCount] := fname + ': "';
+      RDbgNode[RDbgCount] := fieldNode;
+      Inc(RDbgCount);
+      RDbgText[RDbgCount] := '"';
+      RDbgNode[RDbgCount] := -1;
+      if k < cnt - 1 then RDbgText[RDbgCount] := '", ';
+      Inc(RDbgCount);
+      Continue;
+    end;
+
+    RDbgText[RDbgCount] := fname + ': ';
+    RDbgNode[RDbgCount] := fieldNode;
+    Inc(RDbgCount);
+    if k < cnt - 1 then
+    begin
+      RDbgText[RDbgCount] := ', ';
+      RDbgNode[RDbgCount] := -1;
+      Inc(RDbgCount);
+    end;
+  end;
+
+  RDbgText[RDbgCount] := ' }';
+  RDbgNode[RDbgCount] := -1;
+  Inc(RDbgCount);
+end;
+
 { `println!("fmt {} ...", args);` / `print!(...)` — the Zig frontend's
   std.debug.print splitter ported back (feature-rust-misc-semantics #9 +
   feature-rust-rtl-macros-io #12, the format-output subset): literal fmt
@@ -3404,18 +3578,17 @@ end;
   consumes the next argument, everything chains as one AN_ARG list under
   a single AN_WRITE / AN_WRITELN. {{ }} escapes are not handled. }
 function RParsePrintln(isLn: Boolean): Integer;
-var fmtOff, fmtLen, i, segStart: Integer;
+var fmtOff, fmtLen, i, segStart, specStart: Integer;
     node, lastArg, argNode, litNode, seq, emitted: Integer;
     argExprs: array[0..7] of Integer;
     argCount, argUsed: Integer;
+    isDbg: Boolean;
 
   { A string literal as a one-argument write node. }
   function WriteLit(const t: AnsiString): Integer;
   var w, a2, l2: Integer;
   begin
-    l2 := AllocNode(AN_STR_LIT);
-    ASTSOffset[l2] := RStoredName(t); ASTSLen[l2] := Length(t);
-    ASTTk[l2] := Ord(tyString);
+    l2 := RStrLit(t);
     a2 := AllocNode(AN_ARG);
     ASTLeft[a2] := l2; ASTRight[a2] := -1;
     w := AllocNode(AN_WRITE);
@@ -3497,6 +3670,55 @@ var fmtOff, fmtLen, i, segStart: Integer;
     AddArg(litNode);
   end;
 
+  procedure AddText(const t: AnsiString);
+  begin
+    if t = '' then Exit;
+    AddArg(RStrLit(t));
+  end;
+
+  { One placeholder's worth of output. `{}` is Display and `{:?}` is Debug,
+    and the difference MATTERS in three places: a record has no Display at all
+    (rustc refuses it, and so does this -- writing its first field is what the
+    old code did), a string is quoted under Debug and bare under Display, and
+    everything else renders the same either way.
+
+    A record's Debug is expanded into literal/field items and each item
+    becomes an ordinary write, so this path needs no string runtime at all --
+    which is why a `{:?}` on a struct does not drag in 60KB the way building
+    the same text as a VALUE would. }
+  procedure AddFormatted(exprNode: Integer; dbg: Boolean);
+  var recId, k: Integer;
+  begin
+    recId := RExprRecId(exprNode);
+    if (IntToTypeKind(ASTTk[exprNode]) = tyRecord) and (recId >= REC_UCLASS_BASE) then
+    begin
+      if not dbg then
+        Error('Rust: `{}` needs Display and this type has none -- use `{:?}`, ' +
+              'or print the fields');
+      RDbgCount := 0;
+      RDebugExpand(exprNode, recId, '');
+      for k := 0 to RDbgCount - 1 do
+      begin
+        AddText(RDbgText[k]);
+        if RDbgNode[k] >= 0 then AddArg(RDbgNode[k]);
+      end;
+      Exit;
+    end;
+    { Debug quotes what Display leaves bare: a string in double quotes, a
+      char in single ones. Every other scalar renders identically either way. }
+    if dbg and RIsStrTk(IntToTypeKind(ASTTk[exprNode])) then
+    begin
+      AddText('"'); AddArg(exprNode); AddText('"');
+      Exit;
+    end;
+    if dbg and (IntToTypeKind(ASTTk[exprNode]) = tyChar) then
+    begin
+      AddText(''''); AddArg(exprNode); AddText('''');
+      Exit;
+    end;
+    AddArg(exprNode);
+  end;
+
 begin
   Next; { println / print }
   Next; { ! }
@@ -3528,12 +3750,14 @@ begin
     if TokChars[fmtOff + i] = '{' then
     begin
       AddSegment(fmtOff + segStart, i - segStart);
+      specStart := i + 1;
       while (i < fmtLen) and (TokChars[fmtOff + i] <> '}') do Inc(i);
       if i >= fmtLen then Error('Rust: unterminated {} placeholder in format string');
+      isDbg := RSpecIsDebug(fmtOff, specStart, i - specStart);
       Inc(i); { step past the closing brace }
       segStart := i;
       if argUsed >= argCount then Error('Rust: more {} placeholders than arguments');
-      AddArg(argExprs[argUsed]);
+      AddFormatted(argExprs[argUsed], isDbg);
       Inc(argUsed);
     end
     else
