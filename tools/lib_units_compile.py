@@ -15,6 +15,7 @@ compile of the file, not an interface-only parse.
 Exit 1 on any unit that fails outside the documented expectations below.
 """
 
+import re
 import concurrent.futures
 import os
 import pathlib
@@ -93,6 +94,33 @@ def compile_one(pxx, unit, src_path, tmpdir):
     return unit, p.returncode, (p.stdout + p.stderr)
 
 
+# A failing unit's first three lines are usually its least informative three.
+# Every GTK unit emits host-header warnings before its `{$ERROR ...}` fires, so
+# a flat head-3 kept three warnings and discarded the one line naming the lane
+# -- which mis-tracked the same job three times (see the crtl-reachability
+# tickets). Rank error-bearing lines first, and never truncate silently.
+DIAG_RE = re.compile(
+    r"\berror\b|\bfatal\b|\{\$error|#error|\bundefined\b|\bcannot\b",
+    re.I,
+)
+
+
+def failure_excerpt(out, limit=3):
+    """Up to `limit` lines, error-bearing ones first, plus a dropped-count."""
+    lines = [ln for ln in out.strip().splitlines() if ln.strip()]
+    if not lines:
+        return ["(no output)"]
+    ranked = [ln for ln in lines if DIAG_RE.search(ln)]
+    ranked += [ln for ln in lines if ln not in ranked]
+    kept = ranked[:limit]
+    # Restore source order so the excerpt still reads like the log it came from.
+    kept.sort(key=lines.index)
+    dropped = len(lines) - len(kept)
+    if dropped > 0:
+        kept.append(f"... {dropped} more line(s) not shown")
+    return kept
+
+
 def main():
     pxx = os.environ.get("PXX_STABLE") or str(
         ROOT / "stable_linux_amd64" / "default" / "pinned"
@@ -122,7 +150,7 @@ def main():
 
     for unit, out in sorted(failures):
         print(f"lib-units: FAIL {unit}")
-        for line in out.strip().splitlines()[:3]:
+        for line in failure_excerpt(out):
             print(f"    {line}")
     for unit in sorted(unexpected_passes):
         print(
