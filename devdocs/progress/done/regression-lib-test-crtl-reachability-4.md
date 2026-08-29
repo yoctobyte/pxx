@@ -224,4 +224,4 @@ flag, because it is not one.
 
 I had this wrong first, in the opposite direction, and the correction is
 recorded in `410cb71a8`.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit ff7939ffe.
