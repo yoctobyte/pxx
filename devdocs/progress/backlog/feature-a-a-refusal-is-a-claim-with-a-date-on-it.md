@@ -3882,3 +3882,76 @@ where they must differ is a free, permanent detector for exactly this class.
 `var string` parameter is handing back the handle. **The oracle's first run
 surfaced another instance of the class its own construction had just
 uncovered.**
+
+### 93. A zero needs a denominator — otherwise "converted" and "no such sites exist" are the same number
+
+frankA, 2026-08-30, re-measuring a stale blocker claim in `symtab.inc`.
+
+```
+Syms[..].PtrElemTk :=  outside symtab.inc :   0
+SymPtrDepth[..]    :=  outside symtab.inc :   0
+SetSymPointerType/To call sites outside it :  21
+```
+
+**The 21 is what makes the two zeros mean *converted*.** Without it, a bare zero
+is equally consistent with *the migration is complete* and *this construct was
+never used here*, and the two readings license opposite next steps.
+
+Generalises to every absence claim in this repo: **report the population
+alongside the count, or the count is unfalsifiable.** Same family as *an
+existence claim survives one grep; a non-existence claim does not* — this is the
+cheap fix for it.
+
+### 94. A literal grep for a flag misses every site that passes it by VARIABLE — which is most of the sites that matter
+
+frankB, same day, sweeping the repo for `-I` exposure.
+
+Its first pass grepped for a literal `-I` and **missed every variable-form
+site** — `$(GTK3_INC)`, `$GTK3_INC`, and `gui_suite.sh`'s constructed `$src`.
+**Those were most of what actually needed fixing:** 14 sites hardened, six
+Makefile recipes and eight `gui_suite.sh` invocations.
+
+The reason it matters more than a normal miss: **a flag is passed by variable
+precisely when it is passed from several places** — i.e. exactly at the sites
+with the widest blast radius. A literal grep is therefore biased *against* the
+important cases, not merely incomplete.
+
+**And the negative was validated before being trusted**, which is what makes
+"no live capture anywhere" a result rather than an assurance: a **positive
+control at the pin** — `uses math` with `-Ilib/crtl/include` first fails loudly
+(`undefined variable (Floor)`), while `-Fu` first and no-`-I` both build and
+print 3. *The differential is provably sensitive*, so the clean rows are real
+negatives rather than two indistinguishable arms (face 74, which this lane had
+been caught by twice that evening).
+
+Method note also worth keeping: the first cross-product was run through `comm`,
+which emitted *"file 2 is not in sorted order"* — **unusable output, correctly
+discarded rather than squinted at**, and redone as a Python set intersection.
+Collation is a dependency; a set is not.
+
+### 95. Three stale present-tense claims in one night, all written by someone who was RIGHT at the time
+
+frankA's synthesis, and it is the humane reading of face 80.
+
+Tonight's three: a ticket's `symtab.inc` ownership clause; a sentence carried
+forward by another lane; and `SetSymPointerType`'s comment stating — **present
+tense** — that twelve symbols carry an immediate pointee, *"and it is why
+`feature-a-typeref-migrate-consumers` cannot re-point `TTypeRef.PtrBaseTk` at
+the real base yet."* **That was the stated reason a migration could not
+proceed.** It was written 2026-08-24, when 12 of 21 sites were unconverted; step
+1 finished afterwards.
+
+> *"All three were written by someone who was right when they wrote it. The
+> pattern is not carelessness, it is that a comment or ticket body has no
+> mechanism to notice the world moved — which is an argument for measuring the
+> claim rather than for distrusting the authors."*
+
+Corrected **in place with the old text kept as history**, because it is a true
+record of 2026-08-24 and a false one about today — the same treatment frankD
+gave its superseded provenance lines.
+
+**And the second-order finding is the expensive one:** the decision that
+comment's blocker depended on, `decide-typeref-gains-a-pointer-depth-field`, had
+**been resolved since 2026-08-25 (`28c19f214`) and nobody noticed.** A resolved
+Track U ticket does not notify the work that was waiting on it. **Prio
+propagates down dependency edges; *resolution* does not propagate at all.**
