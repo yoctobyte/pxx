@@ -17060,3 +17060,68 @@ decision. pxx-a5 on `pypal.pas` (granted; 84 NR_ entries across 6 targets — a 
 number is invisible on 5 of 6). frankB on the concurrent-Halt bug. b4 finished
 `EmitLoadVarA64` (5/5 exact prediction), `builtinheap.pas` now free for bulk-copy.
 U queue **20**.
+
+## 2026-08-29 ~22:40 — faces 53-55, a cross-frontend sweep, all six dispatched
+
+**FACE 53 — a guard that has never once been TRUE.** frank-rust: `impl Trait for
+Type` had never once run in the Rust frontend. Both the prescan and the body
+parser tested `GetTokenStr(j+1) = 'for'`, and the lexer classifies `for` as
+`tkFor` whose name slice is empty — `''` vs `'for'`, never true, so `RImpls` was
+empty for the frontend's entire life. **Defeats each technique for a different
+reason:** coverage sees the line reached (condition evaluated, always false);
+review sees correct code (defect is in the lexer's contract one file away); and
+**no test could exist, because you cannot test a syntax the parser rejects — the
+missing test is caused by the bug.** Found only by trying to EXTEND it.
+
+**I RAN THE CROSS-FRONTEND SWEEP** — the coordinator multiplier: one lane's
+finding checked against lanes that cannot see each other. `GetTokenStr(...) =
+'<keyword>'` → **17 candidates: `rparser.inc` 11, `pyparser.inc` 4, `zparser.inc`
+2.** Filed as `bug-a-audit-token-text-compared-against-a-keyword-the-lexer-never-leaves-as-text`
+[R p55], **explicitly candidates NOT findings** — `self` in `pyparser.inc` is
+probably CORRECT (`self` is an ordinary Python identifier). Face 52's lesson
+applied in advance for once. Each frontend fixes its own arm.
+
+**FACE 54 — `make compiler/pascal26` DOES NOT COMPILE `pylib.pas`.** pxx-a5 broke
+pylib's interface section and **the whole self-host fixedpoint passed green**; it
+failed only on compiling a `.npy`. Third member of one family: the gate is blind
+to FPC-only breakage (compiles with pxx), blind to everything in a seeded tree
+(`cp` stamps the seed newer, make no-ops, exit 0), and blind to `pylib.pas` (the
+compiler does not link the NilPy runtime). **In all three the gate is real, its
+name implies more than it covers, and the success message is identical either
+way.** Also: `PyStdlibCallAhead`'s whitelist and `PyStdlibCallProc`'s table are
+one concept in two places — a table entry alone is silently dead code.
+
+**FACE 55 — a minimal repro can DESTROY the bug.** frankB's `Halt` diagnosis. Six
+threads with explicit `PalThreadJoin` make main last *by construction*, so the tidy
+repro removed the race; 6/6 green was **evidence for the wrong proposition**. Root
+cause: `Halt(n)` emits `exit` (thread exit) not `exit_group` on **x86-64** and
+arm32; i386/aarch64/riscv32 are correct and three arms name `exit_group` in a
+comment. The correct answer sat one line below the bug (`EmitExit`'s comment).
+Process status belongs to whichever thread exits LAST. **Trap for the fixer:**
+`scheduler.pas` now works around it via `__pxxrawsyscall`, so
+`test_sched_reactor_exhaustion` would pass with the bug present — revert that as
+part of the fix. **A workaround installed while a bug is open becomes a blindfold
+the moment it is closed.**
+
+**PAL work (pxx-a5) did exactly what the condition asked.** Executed on x86-64;
+transcribed-not-run for i386/aarch64/riscv32; arm32 `getdents64` left **-1**
+deliberately. The derivation trap was live: i386 and arm32 sit +27 apart on FIVE
+syscalls, so an offset looks like a rule — and `getdents64` is 220 vs 217, so the
+offset predicts 247, a different call. *"Fairly confident is exactly what produces
+a five-of-six invisible error."* Two tickets filed off it (arm32 hole, ppoll
+64-bit timespec on 32-bit targets).
+
+**DISPATCHED, none idle:** b4 → the Halt `exit_group` fix [A p60, outranks
+bulk-copy]. pxx-a5 → `feature-nilpy-staticmethod-and-classmethod` [N p70].
+frank-rust → the never-true-guard audit [R p55] (it holds the lexer contract; told
+to report a mostly-clean result AS a result). frankB → `lib-test` against v391 with
+`external/synapse` in place. frankA → aarch64 stage-2 under qemu. frankwasm →
+`wasm` merged (`8aee2572c`), blocked on the sys-intrinsics U decision.
+
+**frankB retracted its own ranker proposal** after I measured it: *"I inferred the
+rule from a sample of one"* — same error as its `Halt` table, same evening. Its
+`working/`-lock hazard report was still the reason the fix exists.
+
+**frank-rust asked for its lock to stay** — `feature-rust-option-type` is the live
+log for the whole Track R window. **Not renaming it mid-flight**; renaming a lock
+breaks a citation someone else may hold. Rename at close if it still matters.
