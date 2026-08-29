@@ -238,4 +238,4 @@ on my own authority. This is a Python guard with no compiled artifact; what it
 touches is covered by the devtests above.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 27c7465c4.
