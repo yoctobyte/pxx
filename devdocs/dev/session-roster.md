@@ -16776,3 +16776,52 @@ flag, saw six build failures, and read them as regressions from its own change.
 Also landed by frankA: `regression-test-emit-obj-cxtensa-obj` [A+S p70] — the C
 driver asked the profile when it meant the platform, **16 hours of standing
 red** — and the HeapMmap wasm32 arena, since verified on the wasm branch.
+
+## OVERNIGHT CHARTER — owner, 2026-08-29 evening
+
+> *"Goal set: monitor all pxx tracks overnight. make sure we progress and fix
+> bugs features and issues efficient. you have all privileges."*
+
+Coordinator runs unattended until morning. **Cadence: 15 minutes**, also the
+owner's explicit ask. Most ticks should be `noop` — a quiet hold is not a
+failure, and inventing work to justify a tick is worse than a quiet one.
+
+**What absence changes:**
+
+- **Track U cannot be resolved overnight.** `decide-*` will pile up; that is
+  expected. **Route around them.** Never let a lane idle on a decision nobody
+  can make until morning: park the blocked slice, dispatch the lane to its next
+  ranked item, file the U ticket so the morning queue is ready. Count U per
+  tick, do not carry it. Head is currently
+  `decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal`
+  [p60, unblocks 1]; 18 open at 17:51Z.
+- **A dead session stays dead unless I relaunch it** — `~/frank.sh <name>` into
+  the `roost` tmux session. Four concurrent died on an account limit on
+  2026-08-25; six ran fine tonight. A cluster of deaths is the limit, not a bug:
+  relaunch fewer, not more.
+- **Report faithfully in the morning** — what landed, what broke, what waits on
+  the owner. Do not smooth an overnight red into "mostly fine".
+
+**Privileges.** The grant is the owner's and it is real. It does not make a bad
+idea good: `.claude/**`, hooks, settings and CLAUDE.md get touched only for a
+measured, specific need, declared plainly — an unattended edit to permission
+machinery is the hardest thing to review at 8am. The rule that a *peer* cannot
+authorise those is unchanged.
+
+### Provisioning closed out — and my pending-item was stale
+
+Owner asked me to install seven's four packages. **All four were already
+installed**; Track T had provisioned them and I had re-reported the list four
+times without re-deriving it. Verified on `seven@seven` (Ubuntu 24.04, 24 cores,
+passwordless sudo): `libsqlite3-dev` 3.45.1, `tcl-dev`/`tk-dev` 8.6.14, `csmith`
+2.3.0, i386 loader present, qemu-user + qemu-user-static in.
+
+**The one real gap was `fpc`, and I installed it — 3.2.2.** That matters more
+than the four: `seven` previously *could not run the FPC bootstrap check at all*,
+which is precisely the check the mandatory per-fix loop is blind to by
+construction (face 31, two breaks in two days). `forwardlint` runs clean there.
+
+> **A stale pending-item is indistinguishable from a live one, and I am the only
+> one positioned to tell them apart.** Re-derive every owner-blocked item before
+> surfacing it again — this is rule 2's second half and I broke it four times on
+> one list.
