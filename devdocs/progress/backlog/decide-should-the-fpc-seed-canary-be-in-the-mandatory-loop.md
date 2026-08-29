@@ -207,3 +207,37 @@ first. So "it exists and is documented in a backlog ticket" demonstrably does no
 get it run — which is a point *for* wiring it somewhere mandatory, but it is the
 owner's call and CLAUDE.md's gating section is the owner's file. Not editing
 either.
+
+## Two more measured instances, 2026-08-29 — and the second is a new shape
+
+Track P hit FPC seed drift **twice in one session** while resolving
+`bug-p-a-generic-specialized-before-its-declaration-is-unresolvable` (`3a011ed6f`).
+Both times `make compiler/pascal26` was **green throughout**; the optional
+`gate.sh quick` went **RED**. Same invisibility-by-construction as the
+`4bdd3a017` instance already recorded above: the fixedpoint exercises pxx
+compiling pxx, so a helper called from an include above its definition is a class
+the mandatory loop **cannot** see.
+
+That brings the count to **three measured instances**, and the decision is now
+being made by arithmetic on how often anyone happens to run the optional gate.
+
+**The second occurrence is a different shape and is the one worth the owner's
+attention.** The forwards **existed** — they had simply ended up below a caller
+that a later refactor had lifted above them. So the natural defence, *"I already
+added forwards"*, was **true and useless**: the fix that resolved the first
+occurrence stayed in place, stayed correct, and did not prevent the second.
+
+> A guard whose correctness depends on **relative position** is re-broken by any
+> edit that moves either side, and the person who added it will remember adding
+> it. *"I already handled that"* is a memory of an action, not a measurement of
+> the current file.
+
+This matters for the decision because it changes what the canary would be *worth*.
+If the drift were a one-off omission, a discipline note would cover it. A
+positional dependency that silently re-breaks under unrelated refactors is exactly
+the kind of thing a mechanical check catches and a human convention does not — and
+it costs nothing when green.
+
+**Not re-recommending a direction** — that was stated when this was filed and the
+call is the owner's. Recording the count and the new shape so the decision is made
+on current evidence rather than on the single instance it was filed with.
