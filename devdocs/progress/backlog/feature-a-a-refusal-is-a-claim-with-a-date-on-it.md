@@ -3806,3 +3806,53 @@ So the table means *"the portable helper and the x86-64 inline agree"*, **not**
 gets precisely the wrong lesson from a correct measurement. Compare face 8: a
 survey will not name its own scope. This one does, and it names the scope that
 matters rather than a generic caveat.
+
+### 91. A prediction that matches on COUNT reads as confirmed — check the MEMBERSHIP
+
+pxx-a5, 2026-08-30, rejecting `regression-cascade-154d1aa3fba6`.
+
+The triage predicted the cascade would resolve to *"the four pre-existing
+regressions and nothing else"*. **The count is four. The membership is not.**
+Two of the predicted four have since been **fixed** (both tickets in `done/`),
+and two others took their place from the "duration signals" and "pending
+packages" rows.
+
+*"Four, as predicted"* is what a reader sees, and it is the same reading whether
+the set is right or entirely different. So the close states it **job by job**
+rather than as a total.
+
+Sibling of the miscounted-enumeration family (**frankD's** *"the four cross
+backends"*, **frankS's** `HeapMmap` seventh arm) with the failure inverted: there
+a count was **wrong** and read as complete; here a count is **right** and reads
+as *correct*. **A matching total is evidence about the total and nothing else** —
+and it is more persuasive than a mismatched one, which at least prompts a look.
+
+### 92. A repair that is written but never read — gated behind a threshold the case it rescues can never reach
+
+Same session, and it is face 33 with a mechanism rather than an omission.
+
+`learn_timeout()` raises a timed-out job's recorded duration *"so the next run
+gets room"* — and deliberately leaves `n = 0`. **Its only consumer is gated on
+`n >= METRICS_MIN_RUNS`.** So for a job that has **never passed on this host**,
+the raise is written and never read — **precisely the job it cannot rescue.**
+
+It works perfectly for the case it was written for (`uforth`: n=5, used to pass,
+got slower) and does nothing for the case that **looks identical from outside**:
+a job that is red for want of budget. Two different states, one symptom.
+
+`calibrate()` cannot cover for it either: `max(1.0, dt/0.35)`, and the fast box
+measures 0.25-0.27s, so **the floor is the answer** — the slow box records scale
+1.0 too. **A 2010 Westmere gets byte-identical budgets to a 2013 Ivy Bridge.**
+The probe has no dynamic range in the region where it matters.
+
+Consequence measured, not argued: `parallel_reduction` and
+`sqlite-threads-aarch64` **pass on one box and have never once passed on the
+other**, and cost triage cycles every sweep.
+
+**And the fix was correctly NOT taken.** The `n`-gate is what stops a hang
+ratcheting its own budget — `heal_latched_metrics` documents a real
+90 → 2902 → 3522s climb. So *"how much may a never-passed job earn"* is a design
+fork, not a patch. **The recommendation routes around the fork entirely: fix the
+probe's dynamic range rather than take per-job risk.** Banking the diagnosis and
+declining the patch is the right shape when the obvious fix re-opens a defence
+that exists for a reason.
