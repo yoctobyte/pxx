@@ -5,14 +5,14 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:21 blocked:6 backlog:309 backlog_new:8 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2641 rejected:51`
+`working:2 unfinished:22 blocked:6 backlog:308 backlog_new:8 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2641 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-the-fpc-seed-canary-skips-a-break-already-on-master` [A] — owner: unrecorded
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
-## unfinished (21) — parked mid-flight; re-claim, do not duplicate
+## unfinished (22) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -20,6 +20,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A]
+- `feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle` [A+S]
 - `feature-c-gtk3-header-final-wiring` [C] — blocked-by: decide-which-gtk-a-bare-gtk-gtk-h-means
 - `feature-c-import-a-pascal-unit-under-a-mangled-name` [C]
 - `feature-dynamic-compiler-tables` [A]

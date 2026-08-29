@@ -4,8 +4,9 @@ track: A+S
 prio: 25
 type: feature
 blocked-by: []
-status: backlog
+status: working
 summary: "xtensa is the one target whose output nothing here can RUN, so every xtensa ticket ends in 'do not land this on inspection'. Stock `qemu-xtensa` (user mode) IS installed, but xtensa has no IR_SYSCALL arm and TargetIsEspClass hardcodes it as bare-metal ALWAYS. Installing ESP-IDF (its qemu fork) is the CHEAPER first move and is worth doing regardless — but it does NOT make the blocked tickets' gates reachable, because those tests need the builtin unit, which no ESP-class target gets."
+owner: frankS
 ---
 
 # A hosted xtensa profile, so qemu-xtensa can be an oracle
@@ -211,3 +212,110 @@ sign-extend into the high word). Two concrete notes for whoever does it:
 
 The other obstacle this ticket names — `TargetIsEspClass` hardcoding xtensa as
 bare-metal always — is untouched and remains the substantive work here.
+
+## Progress 2026-08-29 (frankS) — step 1 LANDED and verified under qemu; two walls remain
+
+**Nothing is half-applied.** The change below is complete, self-contained and
+green (`gate.sh quick` GREEN, self-host fixedpoint `7ecdc96edbe8`). This ticket
+is parked because its *goal* is not met, not because the tree is mid-edit.
+
+### Both walls this ticket names are already down — neither for the reason given
+
+Re-measured before doing anything:
+
+- **Wall 1, "no `IR_SYSCALL` arm":** landed tonight as `cf72dd641`, but
+  bare-only, returning `-ENOSYS`. Now profile-gated (below).
+- **Wall 2, "`TargetIsEspClass` hardcodes xtensa as bare-metal, always":**
+  **already fixed on 2026-08-27** (`cbfdb5de8`), which rewrote that predicate to
+  be PROFILE, not ISA. Measured: `--target=xtensa --platform=posix` already
+  builds a hosted ELF today — `code=212700B / 168 procs`, against riscv32's
+  `241824B / 165`. `file` reports *ELF 32-bit LSB executable, Tensilica Xtensa,
+  statically linked*. The 68-site audit this ticket budgets for is **not
+  needed**; someone else's re-scoping already did it.
+
+### The real blockers are two the ticket never names
+
+qemu ran the hosted ELF and it **hung**. Traced with `-d in_asm`, it ends at
+`0x0806a721: j 0x806a721` — a self-loop.
+
+1. **`EmitExit` parks xtensa in a self-loop** (`compiler/emit.inc:372`):
+   `{ Bare-metal: no exit syscall — park in a self-loop. } xtensa_j(0)`, keyed
+   on `TargetArch = TARGET_XTENSA` with no profile test. riscv32 five lines
+   below is already the dual-role template to copy.
+2. **`IR_WRITE` is an unconditional no-op on xtensa**
+   (`ir_codegen_xtensa.inc`): `{ Bare-metal: write/writeln does nothing. }`, no
+   profile test either. This is the same gap recorded in
+   [[bug-a-xtensa-codegen-has-no-variant-support]] — a value cannot be observed
+   through `writeln` on this backend — and it is why `-strace` showed *zero*
+   syscalls for a hosted `WriteLn` while the riscv32 control showed the usual
+   `sigaltstack`/`rt_sigaction` startup traffic.
+
+Both are the identical shape to the syscall arm: a bare-metal decision made
+before xtensa had a hosted role, keyed on the ISA instead of the profile.
+
+### What landed: `IR_SYSCALL` gated on profile, hosted arm verified
+
+`ir_codegen_xtensa.inc` now picks by `TargetPlatform`: ESP keeps `-ENOSYS`,
+hosted emits a real trap. `xtensa_syscall` added to `xtensaenc.inc`
+(`00 50 00`), which nothing had.
+
+**The register map was confirmed by the oracle, not by reading `entry.S`** —
+which is what this ticket exists to make possible:
+
+```
+nr -> a2,  arg0 -> a6, arg1 -> a3, arg2 -> a4,
+           arg3 -> a5, arg4 -> a8, arg5 -> a9,   result -> a2
+```
+
+`a6` leads, then `a3..a5`, then `a8/a9`. Guessing `a2..a7` in order would put
+arg0 in `a3`, so every `write(2)` would take the wrong fd — it would look like
+it nearly worked.
+
+### The xtensa syscall numbers, measured — they exist nowhere else in the tree
+
+No xtensa syscall table exists in `lib/rtl` or anywhere in the repo, because
+xtensa was never hosted. Measured against `qemu-xtensa` 10.2.1:
+
+| syscall | number | how it was established |
+| --- | --- | --- |
+| `write` | **13** | wrote `X` to fd 1 — one number per run, so a `close` could not poison the scan |
+| `exit` | **118** | process terminated with the exact code passed (7 -> 7) |
+| `exit_group` | **119** | same, code 9 -> 9 |
+
+`write=13` pins the table as xtensa's own `unistd.h` (open 8, close 9, dup 10,
+dup2 11, read 12, write 13) — **not** the generic numbering riscv32 uses, where
+write is 64. **Bound:** 118 and 119 were both verified to terminate with the
+passed code; that 119 is specifically the *thread-group* variant is read off
+the table's ordering and was **not** verified — nothing here was multithreaded.
+`EmitExit` wants `exit_group`, so confirm that before relying on it.
+
+Method worth reusing: once `write` was known, a single program printed each
+candidate number before trying it, so the last line printed names the syscall
+that terminated the process. One compile instead of 350.
+
+### Verified
+
+- Encoding proven: qemu disassembles the emitted bytes as `syscall` at
+  `0x0807bf83`, executes it, no exception.
+- Convention proven end-to-end: `__pxxrawsyscall(13, 1, @buf, 2)` prints from a
+  hosted xtensa binary under qemu.
+- **ESP profile unchanged** — the `-ENOSYS` pair is still emitted; the
+  `random.pas` repro from
+  [[bug-a-xtensa-refuses-to-lower-an-unreachable-syscall]] still builds; all
+  esp32 examples still build (`hello-s3` 186899, `timer-s3` 262783, `hello-c3`
+  237720); `test_cross_variant` still compiles on xtensa.
+- `gate.sh quick` GREEN including the FPC seed canary.
+
+### Next, in order — and one is not mine to take
+
+1. `EmitExit`: hosted xtensa arm, syscall 119. **`compiler/emit.inc` is
+   contended** — commit `35cea50e4`, 87 minutes before this note, restructured
+   exactly this routine ("there is now one arm, not six"). Not edited; needs a
+   grant or a hand-off.
+2. `IR_WRITE`: profile-gate it and route the hosted arm through the same
+   `PXXWrite*` helpers riscv32 uses. `ir_codegen_xtensa.inc`, so mine to do.
+3. Then the ticket's own gate becomes reachable: `run_target.sh` xtensa arm, and
+   promoting a cross differential.
+
+Steps 1-2 are small and specific now that the numbers and the register map are
+known; that was the genuinely uncertain part and it is done.

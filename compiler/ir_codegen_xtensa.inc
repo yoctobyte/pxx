@@ -2237,11 +2237,16 @@ begin
     IR_SYSCALL:
       begin
         { A raw Linux syscall cannot be serviced on ANY xtensa configuration.
-          riscv32 is dual-role -- bare ESP32-C3 or HOSTED Linux -- so its ecall
-          is real in the hosted role; xtensa's two roles are bare metal and
-          IDF/FreeRTOS-linked, and neither has a Linux kernel under it. There is
-          no xtensa spelling of this op that could ever succeed, which is why
-          the asymmetry with riscv32 is principled and not a gap.
+          Two arms, chosen by PROFILE -- exactly the dual-role shape riscv32
+          already has. Under --platform=esp (bare or IDF/FreeRTOS) there is no
+          kernel, so the op cannot succeed and answers -ENOSYS. Under a hosted
+          posix profile there IS one (qemu-xtensa user mode), and the op is a
+          real trap.
+
+          The ESP arm came first (cf72dd641) and was written when xtensa had no
+          hosted role at all; the header then said no xtensa spelling of this op
+          could ever succeed. Adding the hosted profile falsified that, which is
+          why it is a profile test now and not an architecture fact.
 
           So answer the way a kernel answers a syscall number it does not
           implement: -ENOSYS. That is PAL_ERR_UNSUPPORTED (-38, lib/rtl/
@@ -2267,16 +2272,70 @@ begin
           expressions and may have side effects.
 
           bug-a-xtensa-refuses-to-lower-an-unreachable-syscall }
-        argNode := IRA[node];
-        while argNode <> -1 do
+        if TargetPlatform = PLATFORM_ESP then
         begin
-          IREmitNodeXtensa(IRA[argNode]);
-          argNode := IRB[argNode];
-        end;
-        if Is64BitXtensa(IntToTypeKind(IRTk[node])) then
-          EmitLoadConst64Xtensa(-38)
+          { ESP profile: no kernel under it, so answer -ENOSYS. Args are still
+            emitted -- they are arbitrary expressions and may have side effects
+            -- and their values discarded. }
+          argNode := IRA[node];
+          while argNode <> -1 do
+          begin
+            IREmitNodeXtensa(IRA[argNode]);
+            argNode := IRB[argNode];
+          end;
+          if Is64BitXtensa(IntToTypeKind(IRTk[node])) then
+            EmitLoadConst64Xtensa(-38)
+          else
+            EmitLoadConstXtensa(reg_xtensa_a2, -38);
+        end
         else
-          EmitLoadConstXtensa(reg_xtensa_a2, -38);
+        begin
+          { HOSTED (qemu-xtensa user mode): a real Linux syscall.
+
+            The register map is NOT "the argument registers in order", and this
+            is the one detail worth reading arch/xtensa/kernel/entry.S for
+            rather than guessing:
+
+              nr -> a2,  arg0 -> a6, arg1 -> a3, arg2 -> a4,
+                         arg3 -> a5, arg4 -> a8, arg5 -> a9,   result -> a2
+
+            a6 leading, then a3..a5, then a8/a9. Guessing a2..a7 in order puts
+            arg0 in a3 and every syscall takes the wrong first argument -- which
+            for write(2) is the fd, so it would look like it nearly worked.
+
+            Args reach the registers via the expression stack rather than being
+            loaded at computed offsets: XtensaPushA2/XtensaPopA2 are the one
+            spelling correct under BOTH ABIs (windowed keeps sp fixed and walks
+            XtSpillDepth; Call0 moves sp), so popping in reverse avoids
+            open-coding two different offset schemes. }
+          argNode := IRA[node]; nArgs := 0;
+          while argNode <> -1 do
+          begin
+            IREmitNodeXtensa(IRA[argNode]);
+            XtensaPushA2;
+            Inc(nArgs);
+            argNode := IRB[argNode];
+          end;
+          { Popped in reverse: last pushed is the highest-numbered argument.
+            Nothing maps to a2, so the running pop register is never a target. }
+          for i := nArgs - 2 downto 0 do
+          begin
+            XtensaPopA2;
+            case i of
+              0: xtensa_mov(reg_xtensa_a6, reg_xtensa_a2);
+              1: xtensa_mov(reg_xtensa_a3, reg_xtensa_a2);
+              2: xtensa_mov(reg_xtensa_a4, reg_xtensa_a2);
+              3: xtensa_mov(reg_xtensa_a5, reg_xtensa_a2);
+              4: xtensa_mov(reg_xtensa_a8, reg_xtensa_a2);
+              5: xtensa_mov(reg_xtensa_a9, reg_xtensa_a2);
+            end;
+          end;
+          XtensaPopA2;                                 { a2 = syscall number }
+          xtensa_syscall;
+          { the intrinsic is typed Int64 (a2:a3) -- sign-extend the 32-bit
+            result, the same shape EmitNode64Xtensa uses. }
+          EmitAsmXtensa(['movi a3, 0', 'bge a2, a3, .scp', 'movi a3, -1', '.scp:']);
+        end;
       end;
 
     IR_ATOMIC:

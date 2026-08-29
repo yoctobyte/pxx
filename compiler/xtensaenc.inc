@@ -151,6 +151,19 @@ begin
   EmitB($C0); EmitB($20); EmitB($00);
 end;
 
+procedure xtensa_syscall;
+{ `syscall` = 00 50 00. RRR with op0=0 (QRST), op1=0 (RST0), op2=0 (ST0) and
+  r=5, s=0, t=0, laid out little-endian as byte0=(t shl 4) or op0,
+  byte1=(r shl 4) or s, byte2=(op2 shl 4) or op1.
+
+  Raises the Syscall exception. On a bare or IDF part that is a fault with no
+  handler, which is why the ESP profile does not emit this; under qemu-xtensa
+  user mode it is the Linux syscall trap.
+  feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle }
+begin
+  EmitB($00); EmitB($50); EmitB($00);
+end;
+
 procedure xtensa_l8ui(t, s, offset: Integer);
 begin
   EmitB((t shl 4) or 2);

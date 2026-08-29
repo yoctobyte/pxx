@@ -15,7 +15,7 @@ _none_
 | bug-a-the-fpc-seed-canary-skips-a-break-already-on-master | A | 50→80 | bug |  | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
 
-## unfinished (21)
+## unfinished (22)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -25,6 +25,7 @@ _none_
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets | A | 55 | feature | Build-time selection of frontends and targets, so `only-pascal` + `only-esp-riscv` yields a small Pascal-for-ESP compiler instead of the megalith. The umbrella build stays the default. Filed with a measurement: C is nearly separable already (16 references in shared files), NilPy is NOT (1281) — so this doubles as a falsifiable test of the frontend-separation design, and NilPy already fails it. | — |
+| feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle | A+S | 25 | feature | xtensa is the one target whose output nothing here can RUN, so every xtensa ticket ends in 'do not land this on inspection'. Stock `qemu-xtensa` (user mode) IS installed, but xtensa has no IR_SYSCALL arm and TargetIsEspClass hardcodes it as bare-metal ALWAYS. Installing ESP-IDF (its qemu fork) is the CHEAPER first move and is worth doing regardless — but it does NOT make the blocked tickets' gates reachable, because those tests need the builtin unit, which no ESP-class target gets. | — |
 | feature-c-gtk3-header-final-wiring | C | 55 | feature | Stock GTK3 headers import, link to libgtk-3.so.0 and run a real window — done and gated by test_c_gtk3_stock. The 2026-06-29 probe failure was a wrong include root, not an importer limit. Parked: dropping the explicit -I needs decide-which-gtk-a-bare-gtk-gtk-h-means, and the PCL migration is a Track B ticket. | decide-which-gtk-a-bare-gtk-gtk-h-means |
 | feature-c-import-a-pascal-unit-under-a-mangled-name | C | 50 | feature | Give C an explicit import site for a Pascal unit: `#include \"math.pas\"` declares its routines under mangled C identifiers (`math_pas_Sqrt`), case preserved from the Pascal declaration, path-qualified on collision. Overloads resolve by the declared C signature. AnsiString-bearing signatures are refused by name. Design settled by the user 2026-08-19; this ticket is a SPEC, not a discussion. | — |
 | feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
@@ -52,7 +53,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (309)
+## backlog (308)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -202,7 +203,6 @@ _none_
 | feature-a-error-does-not-halt-so-a-parse-can-be-speculative | A | 70 | feature | `Error()` calls `Halt` directly, so nothing in the compiler can trial-parse and back out. That blocks NilPy's type inference (which needs to read an as-yet-unseen name speculatively), and it is also why the compiler stops at the FIRST error. Make the error path recoverable; several unrelated wants fall out of the same change. | — |
 | feature-a-finalize-for-bare-dynarray-and-variant | A | 30 | feature | The VARIANT half landed 2026-08-24 (PXXVarClear through the slot address, FPC-identical on four targets); what remains is the DYNAMIC ARRAY only. A bare dyn-array lvalue still gets a clear compile error, because the release helper needs a per-symbol element descriptor that has no IR-level dataref sentinel (SYM_RTTI_DATAREF_BASE is declared but has no fixup branch). A record CONTAINING one is fully handled, and `a := nil` is the one-line workaround, so the gap is narrow. | — |
 | feature-a-getinterface-refcounting | A | 45 | feature | __pxxGetInterface stores the instance pointer into the caller's interface variable without an AddRef, so the slot holds a borrowed reference while the compiler treats the variable as managed and releases it at scope exit. Every Supports/GetInterface hit is therefore one release the object never got a retain for. Nothing observed to crash yet, which is why it is a ticket and not an urgent bug — but the asymmetry is real and worth settling deliberately. | — |
-| feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle | A+S | 25 | feature | xtensa is the one target whose output nothing here can RUN, so every xtensa ticket ends in 'do not land this on inspection'. Stock `qemu-xtensa` (user mode) IS installed, but xtensa has no IR_SYSCALL arm and TargetIsEspClass hardcodes it as bare-metal ALWAYS. Installing ESP-IDF (its qemu fork) is the CHEAPER first move and is worth doing regardless — but it does NOT make the blocked tickets' gates reachable, because those tests need the builtin unit, which no ESP-class target gets. | — |
 | feature-a-io-lock-owner-from-tls-not-gettid | A | 40 | feature | The --threadsafe I/O lock issues a gettid SYSCALL on every I/O statement (measured: 43% overhead, one syscall per Writeln; caching it in TLS removed the whole penalty). The naive version is WRONG -- foreign threads (glibc pthread_create) inherit the creator's block and would answer 'lock already mine', silently losing mutual exclusion. Needs the stack-bounds validation design recorded in the ticket. | — |
 | feature-a-merge-the-wasm-branch-the-shared-file-arms | A | 40 | feature | Branch `wasm` modifies four existing files: compiler.pas (5 edits), exception_emit.inc (1 arm), ir_codegen.inc (1 arm), and lib/rtl/platform.pas (1 additive constant). The last is Track B and carries B's gate, so the merge review spans two lanes, not one. Nothing on the branch is pre-approved. This ticket is the ledger; the branch's own CHARTER table is not visible from master and was stale. | — |
 | feature-a-promoint-variant-esp-targets | A+S | 20 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
@@ -930,7 +930,7 @@ _none_
 - [p 25] [P] compat-pascal-distinct-type-declaration
 - [p 25] [U] decide-release-signing-key-custody
 - [p 25] [U] decide-t-should-a-skip-close-an-open-regression
-- [p 25] [A+S] feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle
+- [p 25] [A+S] feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle [parked — re-claim, do not duplicate]
 - [p 25] [B] feature-b-posix-and-fpc-named-socket-facades
 - [p 25] [S] feature-esp-hardware-flash-validation
 - [p 25] [A] feature-nilpy-arc-cross-parity
