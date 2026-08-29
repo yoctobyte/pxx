@@ -2,8 +2,8 @@
 track: O
 prio: 65
 type: feature
-summary: "STALE HEADLINE -- re-priced 2026-08-29 at 1fd403b28: BOTH proposed fixes already landed (PXXBlockCopy word loop; the __pxxblockmove/rep-movsb intrinsic, 0f6a04644 + 2b85f8c8f), so the 23x and the 3.3x describe a compiler that no longer exists and must not be re-quoted. What remains is 8 open-coded byte loops in 5 routines (the ticket said 4 sites and missed PXXStrSetLen, the hottest), each now a one-line call to the already-landed PXXBlockCopy/PXXMemZero. Re-measure Copy() vs FPC before trusting prio 65. Also recorded: PXXMemMove is forward-only on every target and corrupts overlapping dst>src -- latent, no caller reaches it."
-status: working
+summary: "DONE 2026-08-29. Eight byte loops in five routines became PXXBlockCopy/PXXMemZero calls: SetLength 3.0x and Copy() 1.9x on aarch64, 1.4x arm32, and EXACTLY ZERO on x86-64 -- which open-codes all of it (inline rep stosb, __pxxblockmove), so this ticket benchmarked the one target the work cannot help and priced itself from that. The old 23x is 3.6x at HEAD and 77% of what remains is the ALLOCATOR, not any copy -- successor is an allocator ticket. Two method traps banked: a pinned-vs-HEAD compiler A/B does not test an RTL change (both read builtinheap from the working tree), and the correctness test PASSES on x86-64 with PXXBlockCopy's byte tail deleted while giving 415 failures on aarch64. Filed on the way: bug-a-for-loop-limit-is-evaluated-after-the-control-variable-is-assigned."
+status: done
 owner: frank-optimize
 ---
 
@@ -205,3 +205,129 @@ not from the table at the top.
 The remaining eight loops may or may not still be worth prio 65 now that the two
 big ones are gone, and the only honest way to know is a number from a binary
 whose sha you name.
+
+---
+
+## RESOLVED 2026-08-29 — done, but almost nothing about this ticket was still true
+
+Re-measured at HEAD before touching anything, per the note above. The headline,
+the cause, the site list, the fix shape and the target were each wrong in a
+different way. Recording all five, because the pattern is more useful than the
+patch.
+
+### 1. The 23x is now 3.6x, and the landed work did that
+
+`Copy(a)` on a 64-element array, 3M iterations, **binary `061099b514c0`**,
+FPC 3.2.2, both sides alternated in one window on a contended box:
+
+| | time | vs FPC |
+| --- | --- | --- |
+| FPC | 0.25 s | 1.0x |
+| pxx | 0.91 s | **3.6x** |
+
+The ticket's 23x described a compiler that no longer exists —
+`PXXBlockCopy` and the `__pxxblockmove` intrinsic closed most of it. Nobody
+re-measured, so the ticket kept advertising 23x at prio 65 for three weeks.
+
+### 2. The benchmark was wrong twice before it was right, and the second one is the interesting one
+
+- `k: Integer` — **FPC's default `Integer` is 16 bits**, so `3000000` did not fit
+  and it would not compile. Obvious, caught by the compiler.
+- Fixed by making the array `array of Integer` -> and **FPC's element was then 2
+  bytes while pxx's was 4**. The benchmark compiled, ran, and printed *the same
+  sum on both sides* — because the values were small enough not to differ. **The
+  two programs were copying 128 and 256 bytes and agreeing anyway.** Caught only
+  because a second benchmark with larger values disagreed (`105884512` vs
+  `4500001500000`).
+
+  A cross-compiler benchmark whose two sides agree on the answer can still be
+  measuring different amounts of work. Agreement on the OUTPUT is not agreement
+  on the WORKLOAD. `array of LongInt` on both sides is the fix.
+
+### 3. The remaining gap is the allocator, not any copy
+
+Same 3M iterations with the copy removed and only the allocate/zero/free churn
+left:
+
+| | Copy() | alloc-only |
+| --- | --- | --- |
+| FPC | 0.25 s | 0.29 s |
+| pxx | 0.91 s | **0.70 s** |
+
+**77% of pxx's `Copy()` time is allocation.** The copy itself is ~0.21s against
+FPC's ~0. The ticket's *first* hypothesis (allocation) was retracted in favour of
+the byte loop; the retraction was right for the 23x and is wrong for what is left
+today. Successor work is an allocator ticket, not a copy ticket.
+
+### 4. The site list was short, and the fix landed anyway
+
+Eight open-coded byte loops in five routines, not "at least four more places":
+`PXXDynSetLen` (hosted **and** ESP-lean, zero-fill and carry-over),
+`PXXDynArrayUnique`, **`PXXStrSetLen`** — missed entirely by the original list
+and on every target — and the cstring→managed-string payload copy. Each is now
+one call to `PXXBlockCopy` or `PXXMemZero`. Several of the loops recomputed
+`newLen * elSize` **in their own loop condition**, so every byte cost a multiply
+too.
+
+### 5. The target was wrong — and this is the finding that matters
+
+| measurement (isolated) | before | after | |
+| --- | --- | --- | --- |
+| `SetLength(a,64)` x300k, aarch64 | 5.50 s | 1.80 s | **3.0x** |
+| `Copy(a)` x200k, aarch64 | 6.60 s | 3.50 s | **1.9x** |
+| `Copy(a)` x200k, arm32 | 9.10 s | 6.40 s | **1.4x** |
+| everything, x86-64 | — | — | **no change** |
+
+x86-64 open-codes all of it: `IR_SETLEN_DYN` is inline `rep stosb` and
+`PXXMemCopy` is `__pxxblockmove`. So **this ticket measured the one target the
+work cannot help, and priced itself from that number.** The win is 1.4-3.0x on
+the other four hosted targets and exactly zero on the one it benchmarked.
+
+## Two method traps, both caught, both worth more than the patch
+
+### A `pinned` vs `HEAD` comparison does not A/B an RTL change
+
+`builtinheap.pas` is read from `PXX_HOME` **at compile time**, so two different
+compiler binaries still use the **working tree's** copy of it. My first aarch64
+A/B read 1.74 vs 1.76 — a flat line produced by measuring the same RTL twice.
+Isolating properly (one compiler binary, two RTL sources) turned that into
+5.50 vs 1.80. **A compiler-binary A/B silently tests nothing when the change is
+in a runtime source the compiler reads.**
+
+### The correctness test is nearly vacuous on x86-64
+
+`test_bulk_copy_tails` covers every length 0..17 across string `SetLength`,
+dyn-array `SetLength`, `Copy()` at every offset and count, aliasing-vs-`Copy`,
+and concat, all diffed against FPC 3.2.2. Then it was checked the only way a
+test's value can be checked: **`PXXBlockCopy`'s byte tail was deleted outright**
+— precisely the failure a word loop invites — and
+
+- on **x86-64** the test still **PASSED**
+- under `--target=aarch64` the same break gave **415 failures**
+
+For the same reason as the perf result: x86-64 barely executes these routines. A
+green natively is close to no evidence here, and the note is in the Makefile
+beside the recipe so a future reader does not draw the wrong conclusion from it.
+Green on x86_64/i386/aarch64/arm32/riscv32 with the tail intact.
+
+## Found while doing it — filed, not fixed
+
+- [[bug-a-for-loop-limit-is-evaluated-after-the-control-variable-is-assigned]]
+  **(A, p70).** The correctness test **segfaulted**, and it was the compiler:
+  `for n := 1 to n do` runs 1 iteration where FPC runs 5, `to n - 1` runs 0 where
+  FPC runs 4, `downto` is wrong the same way. `ir.inc`'s `AN_FOR` arm stores the
+  control variable *before* lowering the limit. Root cause located, including why
+  it is not a two-line reorder. The idiom is not contrived — it arrives from a
+  computed bound reusing a scratch variable, which is exactly how it arrived
+  here.
+- **`PXXMemMove` is forward-only on every target** (recorded in the earlier
+  re-pricing section above, unchanged). Latent: no current caller overlaps.
+
+## Not done
+
+The allocator (item 3) — that is the remaining 3.6x and it wants its own ticket
+and its own benchmark. Alignment handling (the ticket's step 3) was never
+measured and is now moot: `PXXBlockCopy` already carries the alignment guard.
+
+## Log
+- 2026-08-29 — resolved, commit PENDING-COMMIT.

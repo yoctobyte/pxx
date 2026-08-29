@@ -5,11 +5,10 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:20 blocked:5 backlog:315 backlog_new:7 experimental:22 rainy-day:45 float:21 done-followup:3 decided:116 done:2611 rejected:51`
+`working:1 unfinished:20 blocked:5 backlog:315 backlog_new:7 experimental:22 rainy-day:45 float:21 done-followup:3 decided:116 done:2612 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
-- `feature-opt-bulk-copy-is-byte-at-a-time` [O] — owner: frank-optimize
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
 ## unfinished (20) — parked mid-flight; re-claim, do not duplicate
