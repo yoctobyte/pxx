@@ -3796,6 +3796,15 @@ test-threads: $(COMPILER)
 	set +e; $(TESTTMP)/test_halt_worker26 > $(TESTTMP)/halt_worker.log 2>&1; rc=$$?; set -e; \
 	  tools/expect_same.sh test_halt_worker26-rc "$$rc" "216"; \
 	  tools/expect_same.sh test_halt_worker26-msg "$$(head -n 1 $(TESTTMP)/halt_worker.log)" "worker: calling Halt(216)"
+	# a CONSTANT shift count uses the immediate form at -O3 (no `mov rcx,k`).
+	# Every operand width and signedness, counts 0/1/3/5/7/9/31/32/63, and each
+	# constant count paired with a VARIABLE-count twin in the same program — the
+	# twin keeps the old `shr rax,cl` path, so a wrong immediate encoding shows up
+	# as the two disagreeing rather than as a value nobody has an oracle for.
+	# Count 0 is the one that can expose a sign-extension mistake; any count >= 1
+	# clears bit 31. feature-opt-o3-register-pressure W1
+	./$(COMPILER) -O3 test/test_shift_const_count.pas $(TESTTMP)/test_shiftconst26
+	tools/expect_same.sh test_shiftconst26 "$$($(TESTTMP)/test_shiftconst26 | tail -1)" "SHIFTS OK"
 	# The bulk-copy helpers' BYTE TAIL, at every length 0..17: string SetLength
 	# (grow and shrink), dyn-array SetLength, Copy() at every offset and count,
 	# aliasing-vs-Copy, and concat. Every expectation diffed against FPC 3.2.2.
