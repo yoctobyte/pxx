@@ -57,7 +57,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (314)
+## backlog (315)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -206,6 +206,7 @@ _none_
 | decide-t-refuse-unscoped-pattern-kills-in-a-hook | U | 45 | decide | Layer 2 of the pattern-pkill ticket is a PreToolUse hook refusing `pkill -f <toolname>` / `killall` with a bare pattern. It is a .claude/ config change binding every agent on this box, so it is the owner's call, not a track agent's or a peer's. Layers 1 and 3 landed without it; this is the only part left. | — |
 | decide-t-should-a-skip-close-an-open-regression | U | 25 | decide | reg_open counts red -> skip as FIXED, so a regression closes when a box merely STOPS RUNNING the job — the mirror of the skip-as-last-good bug, pointing the other way. It is a deliberate existing trade (the alternative pins a regression open forever on a box that cannot run the job), so it is a policy call, not a defect. Split out of 0dec0194a rather than bundled, because a policy change smuggled in behind a bug fix is how the trade would have been lost without anyone deciding it. | — |
 | decide-two-devdocs-directories-make-a-wrong-grep-look-like-a-refutation | U | 30 | decide | devdocs/dev/ (50 files) and devdocs/developer/ (58 files) both hold internal developer docs. A grep in the wrong one returns silence, which reads like a refuted citation rather than a mislocated file. Decide whether to consolidate, and if so which name wins, given 631 citations point at dev/ and 40 at developer/. | — |
+| decide-two-threading-docs-disagreed-for-seven-weeks | U | 40 | decide | Two threading docs, one subject: consolidate, or make the split explicit? | — |
 | decide-where-a-persistent-fpc-trunk-oracle-lives | U | 30 | decide | The FPC trunk oracle works but has nowhere to live: a trunk build is ~4 min and ~1GB, it must sit OUTSIDE the repo, and installing into ~ needs the owner's say-so. Three options with different refresh obligations. Filed because closing feature-t-fpc-probe-needs-a-trunk-oracle with item 3 undone would otherwise lose it. | — |
 | decide-which-gtk-a-bare-gtk-gtk-h-means | U | 55 | decide | GTK2 and GTK3 both answer to `#include <gtk/gtk.h>` and are told apart only by include root. /usr/include/gtk-2.0 is a default system include root and gtk-3.0 is not, so GTK3 needs an explicit -I today. Adding gtk-3.0 to the defaults decides the GTK version for every C consumer at once — including the GTK2 macro-soup regression guard. | — |
 | feature-a-a-refusal-is-a-claim-with-a-date-on-it | A | 35 | feature |  | — |
@@ -861,6 +862,7 @@ _none_
 - [p 40] [T] chore-t-the-tier-ladder-ratio-is-stale-by-its-own-criterion
 - [p 40] [U] decide-c-crtl-rand-max-is-conforming-but-breaks-real-code
 - [p 40] [U] decide-nilpy-deepcopy-over-the-container-subset
+- [p 40] [U] decide-two-threading-docs-disagreed-for-seven-weeks
 - [p 40] [A] feature-a-emit-obj-record-class-abi-mode
 - [p 40] [A] feature-a-io-lock-owner-from-tls-not-gettid
 - [p 40] [A] feature-a-merge-the-wasm-branch-the-shared-file-arms

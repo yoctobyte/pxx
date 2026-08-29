@@ -4459,3 +4459,89 @@ think the work is done: the existing `-O2` mirror **swaps operands** and needs
 commutativity; the filed item swaps **evaluation order** with operand roles
 fixed. Different transformation, different legality condition, and only the
 second covers `-`, `shr`, `div`, `mod`.
+
+### 113 — a stated limit whose MECHANISM is still true and whose CONSEQUENCE moved
+
+*frank-optimize-b4 and frankD, 2026-08-30, converging independently on the same
+shape within an hour; five instances between them in one night.*
+
+Face 109 says a limit with a mechanism attached is the highest-yield thing to
+grep, because it supplies its own defence. This is **why that class rots
+invisibly**, and it is the sharper half.
+
+Such a claim has two halves under one tense:
+
+> *"`--threadsafe` is x86-64 only — `builtinheap.pas:1555` states the refcount
+> blob is non-atomic on other targets, so any parallel story is single-target."*
+> *"Validated: 505 programs at -O0/-O1/-O2/-O3, plus a cross-target inline gate."*
+
+A reader who doubts one of these spot-checks the **mechanism** — is the refcount
+blob really non-atomic? did the validation really run? — finds it true, and stops.
+But the mechanism was never the perishable half. **The consequence is what moved**:
+aarch64 grew a residency pass, so "x86-64 only" became false while "the blob is
+non-atomic" stayed true. The 505-program run really happened and is now a
+historical measurement, while the neighbouring cross-target clause beside it under
+the same "Validated" is a standing gate. One sentence, two lifetimes, one tense.
+
+So the check that feels responsible — verify the *because* — is precisely the one
+that cannot fail. Four of frank-optimize-b4's audited claims split this way: one
+false, one rotted, one true-but-now-incomplete (written before the `-O3` tier and
+silent about 24 later gates), one whose "byte-identical" had **no object at all**
+and survived in an internal doc because internally everyone knew what was meant.
+
+**The tell is a limit and its justification sharing a tense.** Ask which half
+would change if the world changed, and date *that* half, not the sentence.
+
+**Corollary, and the reason this outranks a docs nit:** the same false limit costs
+differently by where it sits. A stale comment only a compiler engineer reads is a
+nuisance; **the identical claim in a live doc is what a lane plans around** —
+`threading-model.md` told readers the parallel story was single-target for seven
+weeks, and one of its three sites was filed as an *Open question* (*"hard limit or
+unfinished work? nobody has asked"*) that had been answered seven weeks earlier in
+`07fee0844`. A question parked as open when it is answered is a decision that
+cannot be made. Price the comment by the docs it feeds, not by who reads it.
+
+**And two docs on one subject are a DOUBLE CASE** — the sibling rule applies to
+prose. `threading.md` and `threading-model.md` disagreed for seven weeks because
+nothing about "the threading doc" suggests there are two of them, so a reader who
+finds one has no reason to look for the other. Fixing one arm and closing is the
+same defect the parser rule names.
+
+### 114 — a CITED limit looks already-checked, and the citation is the part that rots
+
+*frankD, 2026-08-30, same sweep — the escalation of 113 and the worse case.*
+
+A bare claim invites a check. An explained claim supplies its own defence (109).
+A claim citing **a file and line number** looks like the check has already been
+done by someone with the file open — and it is the *most* likely of the three to
+be wrong, because a line number is the only part of the claim that decays without
+anyone touching the claim.
+
+Measured, both directions, in one night:
+
+- A doc cited `builtinheap.pas:1555` for "the refcount blob is non-atomic on other
+  targets". **Line 1555 today is string-append capacity doubling** and says nothing
+  on the subject. Chain: stale comment → doc cites the comment as evidence → doc
+  states a false limit → a whole parallel story declared single-target. Every link
+  looked like diligence.
+- Then frankD turned the finding on **its own ticket**, which reports comment rot,
+  and four of its six cited lines had drifted **within two days** —
+  `builtinheap.pas:2039`→2066, `ir.inc:12730`→12521, xtensa `322`→359. Line 2039
+  today is the middle of `PXXStrLoadFile`: real Pascal, plausible, unrelated.
+
+That is the failure mode. A drifted line number does not dangle or 404 — **it
+lands on other real code**, and there is no signal to the reader that anything is
+wrong. Compare face 110, where embedding a directory in a citation breaks it when
+the work *succeeds*: same family, different clock.
+
+**Cite by grep, not by line.** A pattern that survives drift is worth more than a
+number that was exact once. This applies to tickets with the same force as to
+docs — a ticket citing line numbers rots exactly the way the comments it reports
+rot, and a ticket *about* rot that rots is the defect one level up.
+
+**Calibration note worth keeping, from the sweep that found these:** 15 scoped
+candidates across 41 live docs, of which 3 were live defects and 2 more were
+confirmed *correct* limits worth knowing are correct. frankD's own standard for
+the grep: *"a pattern that finds 15 and confirms 3 is worth running; one that
+found 15 and confirmed 15 would mean I had written the grep to match what I
+already knew."*
