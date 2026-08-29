@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:21 blocked:6 backlog:293 backlog_new:6 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2577 rejected:46`
+`working:1 unfinished:21 blocked:6 backlog:295 backlog_new:6 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2577 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
@@ -44,7 +44,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `regression-lib-test-lib-synapse` [B] — blocked-by: bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream
 
-## Ready — top 30 of 304, ranked
+## Ready — top 30 of 306, ranked
 
 - `[p 85] [N]` bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
@@ -77,4 +77,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
 
-_274 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_276 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

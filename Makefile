@@ -9108,7 +9108,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_const_record_method_prebody.pas $(TESTTMP)/test_const_record_method_prebody26
 	test "$$($(TESTTMP)/test_const_record_method_prebody26 | tail -1)" = "OK"
 	./$(COMPILER) --target=i386 test/test_const_record_method_prebody.pas $(TESTTMP)/test_i386_crmp
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_crmp | tail -1)" = "OK"
+	tools/expect_same.sh i386/test_i386_crmp "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_crmp | tail -1)" "OK"
 	# metaclass descendant enforcement: class-of assignment is descendant-checked
 	./$(COMPILER) test/test_metaclass_descendant.pas $(TESTTMP)/test_metaclass_descendant26
 	test "$$($(TESTTMP)/test_metaclass_descendant26 | tail -1)" = "OK"
@@ -10649,349 +10649,349 @@ progress-check:
 # joins 'make test' when the op coverage is broad enough to matter.
 test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/hello.pas $(TESTTMP)/test_i386_hello
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_hello)" = "Hello, World!"
+	tools/expect_same.sh i386/test_i386_hello "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_hello)" "Hello, World!"
 	# The open-array parameter slot is a HANDLE, not its element -- the bug was
 	# i386-only, so this is where it has to be caught
 	# (bug-a-an-open-array-of-double-segfaults-on-i386).
 	./$(COMPILER) --target=i386 test/test_open_array_param_slot_is_a_handle.pas $(TESTTMP)/test_i386_oaslot
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_oaslot)" = "$$(cat test/test_open_array_param_slot_is_a_handle.expected)"
+	tools/expect_same.sh i386/test_i386_oaslot "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_oaslot)" "$$(cat test/test_open_array_param_slot_is_a_handle.expected)"
 	./$(COMPILER) --target=i386 test/test_call_result_as_open_array_argument.pas $(TESTTMP)/test_i386_calloa
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_calloa)" = "$$(cat test/test_call_result_as_open_array_argument.expected)"
+	tools/expect_same.sh i386/test_i386_calloa "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_calloa)" "$$(cat test/test_call_result_as_open_array_argument.expected)"
 	# a Variant holding a CLASS, and the unbox back to a scalar: both halves
 	# were x86-64-only gaps, so every target must print the same line
 	./$(COMPILER) --target=i386 test/test_variant_class_cross.pas $(TESTTMP)/test_i386_varcls
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_varcls)" = "end 7 100"
+	tools/expect_same.sh i386/test_i386_varcls "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_varcls)" "end 7 100"
 	# inline expansion is target-independent (AST/IR level): -O2 output must match
 	# -O0 on every cross target (feature-inline-routines).
 	./$(COMPILER) --target=i386 test/test_inline_expand.pas $(TESTTMP)/test_i386_inl_o0
 	./$(COMPILER) --target=i386 -O2 test/test_inline_expand.pas $(TESTTMP)/test_i386_inl_o2
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_inl_o0)" = "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_inl_o2)"
+	tools/expect_same.sh i386/test_i386_inl_o0 "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_inl_o0)" "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_inl_o2)"
 	# net lib cross matrix: httpdemo builds on i386 (feature-net-lib-cross-target)
 	./$(COMPILER) --target=i386 -Fulib/rtl/platform/posix examples/net/httpdemo.pas $(TESTTMP)/test_i386_httpdemo
 	# 32-bit atomic intrinsics on i386 (vs x86-64 golden)
 	./$(COMPILER) --target=i386 test/test_atomic_i386.pas $(TESTTMP)/test_i386_atomic
 	./$(COMPILER) test/test_atomic_i386.pas $(TESTTMP)/test_i386_atomic_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_atomic)" = "$$($(TESTTMP)/test_i386_atomic_x64)"
+	tools/expect_same.sh i386/test_i386_atomic "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_atomic)" "$$($(TESTTMP)/test_i386_atomic_x64)"
 	# i386 --threadsafe: clone trampoline + softlock heap/ARC + TThread (feature-i386-threadsafe-locks)
 	./$(COMPILER) --threadsafe --target=i386 test/test_palthread.pas $(TESTTMP)/test_i386_palthread
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_palthread | tail -1)" = "PALTHREAD OK"
+	tools/expect_same.sh i386/test_i386_palthread "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_palthread | tail -1)" "PALTHREAD OK"
 	./$(COMPILER) --threadsafe --target=i386 test/test_mutex.pas $(TESTTMP)/test_i386_mutex
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_mutex | tail -1)" = "MUTEX OK"
+	tools/expect_same.sh i386/test_i386_mutex "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_mutex | tail -1)" "MUTEX OK"
 	./$(COMPILER) --threadsafe --target=i386 test/test_atomic_counter.pas $(TESTTMP)/test_i386_atomiccnt
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_atomiccnt | tail -1)" = "ATOMIC OK"
+	tools/expect_same.sh i386/test_i386_atomiccnt "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_atomiccnt | tail -1)" "ATOMIC OK"
 	./$(COMPILER) --threadsafe --target=i386 test/test_tthread.pas $(TESTTMP)/test_i386_tthread
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_tthread | tail -1)" = "TTHREAD OK"
+	tools/expect_same.sh i386/test_i386_tthread "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_tthread | tail -1)" "TTHREAD OK"
 	./$(COMPILER) --threadsafe --target=i386 test/test_tthread_sync.pas $(TESTTMP)/test_i386_tthread_sync
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_tthread_sync | tail -1)" = "TTHREAD SYNC OK"
+	tools/expect_same.sh i386/test_i386_tthread_sync "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_tthread_sync | tail -1)" "TTHREAD SYNC OK"
 	./$(COMPILER) --threadsafe --target=i386 test/test_threadsafe_i386_stress.pas $(TESTTMP)/test_i386_tsstress
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_tsstress | tail -1)" = "HEAPSTRESS386 OK"
+	tools/expect_same.sh i386/test_i386_tsstress "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_tsstress | tail -1)" "HEAPSTRESS386 OK"
 	./$(COMPILER) --target=i386 test/test_i386_arith.pas $(TESTTMP)/test_i386_arith
 	./$(COMPILER) test/test_i386_arith.pas $(TESTTMP)/test_i386_arith_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_arith)" = "$$($(TESTTMP)/test_i386_arith_x64)"
+	tools/expect_same.sh i386/test_i386_arith "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_arith)" "$$($(TESTTMP)/test_i386_arith_x64)"
 	./$(COMPILER) --target=i386 test/test_i386_procs.pas $(TESTTMP)/test_i386_procs
 	./$(COMPILER) test/test_i386_procs.pas $(TESTTMP)/test_i386_procs_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_procs)" = "$$($(TESTTMP)/test_i386_procs_x64)"
+	tools/expect_same.sh i386/test_i386_procs "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_procs)" "$$($(TESTTMP)/test_i386_procs_x64)"
 	./$(COMPILER) --target=i386 test/test_i386_loops.pas $(TESTTMP)/test_i386_loops
 	./$(COMPILER) test/test_i386_loops.pas $(TESTTMP)/test_i386_loops_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_loops)" = "$$($(TESTTMP)/test_i386_loops_x64)"
+	tools/expect_same.sh i386/test_i386_loops "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_loops)" "$$($(TESTTMP)/test_i386_loops_x64)"
 	./$(COMPILER) --target=i386 test/test_i386_write.pas $(TESTTMP)/test_i386_write
 	./$(COMPILER) test/test_i386_write.pas $(TESTTMP)/test_i386_write_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_write)" = "$$($(TESTTMP)/test_i386_write_x64)"
+	tools/expect_same.sh i386/test_i386_write "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_write)" "$$($(TESTTMP)/test_i386_write_x64)"
 	./$(COMPILER) --target=i386 test/test_i386_varparam.pas $(TESTTMP)/test_i386_varparam
 	./$(COMPILER) test/test_i386_varparam.pas $(TESTTMP)/test_i386_varparam_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_varparam)" = "$$($(TESTTMP)/test_i386_varparam_x64)"
+	tools/expect_same.sh i386/test_i386_varparam "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_varparam)" "$$($(TESTTMP)/test_i386_varparam_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_trunc_round_saturate.pas $(TESTTMP)/test_i386_trsat
 	./$(COMPILER) test/test_cross_trunc_round_saturate.pas $(TESTTMP)/test_i386_trsat_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_trsat)" = "$$($(TESTTMP)/test_i386_trsat_x64)"
+	tools/expect_same.sh i386/test_i386_trsat "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_trsat)" "$$($(TESTTMP)/test_i386_trsat_x64)"
 	./$(COMPILER) --target=i386 test/test_i386_int64.pas $(TESTTMP)/test_i386_int64
 	./$(COMPILER) test/test_i386_int64.pas $(TESTTMP)/test_i386_int64_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_int64)" = "$$($(TESTTMP)/test_i386_int64_x64)"
+	tools/expect_same.sh i386/test_i386_int64 "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_int64)" "$$($(TESTTMP)/test_i386_int64_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_syscall.pas $(TESTTMP)/test_i386_syscall
 	./$(COMPILER) test/test_cross_syscall.pas $(TESTTMP)/test_i386_syscall_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_syscall)" = "$$($(TESTTMP)/test_i386_syscall_x64)"
+	tools/expect_same.sh i386/test_i386_syscall "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_syscall)" "$$($(TESTTMP)/test_i386_syscall_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_heap.pas $(TESTTMP)/test_i386_heap
 	./$(COMPILER) test/test_cross_heap.pas $(TESTTMP)/test_i386_heap_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_heap)" = "$$($(TESTTMP)/test_i386_heap_x64)"
+	tools/expect_same.sh i386/test_i386_heap "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_heap)" "$$($(TESTTMP)/test_i386_heap_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_string.pas $(TESTTMP)/test_i386_string
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string.pas $(TESTTMP)/test_i386_string_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_string)" = "$$($(TESTTMP)/test_i386_string_x64)"
+	tools/expect_same.sh i386/test_i386_string "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_string)" "$$($(TESTTMP)/test_i386_string_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_record.pas $(TESTTMP)/test_i386_record
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record.pas $(TESTTMP)/test_i386_record_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_record)" = "$$($(TESTTMP)/test_i386_record_x64)"
+	tools/expect_same.sh i386/test_i386_record "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_record)" "$$($(TESTTMP)/test_i386_record_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_dynarray.pas $(TESTTMP)/test_i386_dynarray
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_dynarray.pas $(TESTTMP)/test_i386_dynarray_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_dynarray)" = "$$($(TESTTMP)/test_i386_dynarray_x64)"
+	tools/expect_same.sh i386/test_i386_dynarray "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_dynarray)" "$$($(TESTTMP)/test_i386_dynarray_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_nested_dynarray_setlen.pas $(TESTTMP)/test_i386_nestdynsetlen
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_nested_dynarray_setlen.pas $(TESTTMP)/test_i386_nestdynsetlen_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_nestdynsetlen)" = "$$($(TESTTMP)/test_i386_nestdynsetlen_x64)"
+	tools/expect_same.sh i386/test_i386_nestdynsetlen "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_nestdynsetlen)" "$$($(TESTTMP)/test_i386_nestdynsetlen_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_exception.pas $(TESTTMP)/test_i386_exception
 	./$(COMPILER) test/test_cross_exception.pas $(TESTTMP)/test_i386_exception_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_exception)" = "$$($(TESTTMP)/test_i386_exception_x64)"
+	tools/expect_same.sh i386/test_i386_exception "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_exception)" "$$($(TESTTMP)/test_i386_exception_x64)"
 	./$(COMPILER) --target=i386 test/test_ctor_string_literal_arg.pas $(TESTTMP)/test_i386_ctorstrlit
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_ctorstrlit)" = "$$(printf 'field:hello\nc1\nafter1\nc2\nafter2\nc3\nc4\nafter3\nmsg:hello\nafter4')"
+	tools/expect_same.sh i386/test_i386_ctorstrlit "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_ctorstrlit)" "$$(printf 'field:hello\nc1\nafter1\nc2\nafter2\nc3\nc4\nafter3\nmsg:hello\nafter4')"
 	./$(COMPILER) --target=i386 test/test_cross_float.pas $(TESTTMP)/test_i386_float
 	./$(COMPILER) test/test_cross_float.pas $(TESTTMP)/test_i386_float_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_float)" = "$$($(TESTTMP)/test_i386_float_x64)"
+	tools/expect_same.sh i386/test_i386_float "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_float)" "$$($(TESTTMP)/test_i386_float_x64)"
 	./$(COMPILER) --target=i386 test/test_i386_float_params.pas $(TESTTMP)/test_i386_float_params
 	./$(COMPILER) test/test_i386_float_params.pas $(TESTTMP)/test_i386_float_params_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_float_params)" = "$$($(TESTTMP)/test_i386_float_params_x64)"
+	tools/expect_same.sh i386/test_i386_float_params "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_float_params)" "$$($(TESTTMP)/test_i386_float_params_x64)"
 	./$(COMPILER) --target=i386 test/test_i386_byvalue_set_param.pas $(TESTTMP)/test_i386_byvalue_set_param
 	./$(COMPILER) test/test_i386_byvalue_set_param.pas $(TESTTMP)/test_i386_byvalue_set_param_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_byvalue_set_param)" = "$$($(TESTTMP)/test_i386_byvalue_set_param_x64)"
+	tools/expect_same.sh i386/test_i386_byvalue_set_param "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_byvalue_set_param)" "$$($(TESTTMP)/test_i386_byvalue_set_param_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_float_return.pas $(TESTTMP)/test_i386_fret
 	./$(COMPILER) test/test_cross_float_return.pas $(TESTTMP)/test_i386_fret_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fret)" = "$$($(TESTTMP)/test_i386_fret_x64)"
+	tools/expect_same.sh i386/test_i386_fret "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fret)" "$$($(TESTTMP)/test_i386_fret_x64)"
 	# `v := v` must leave the variant alone — it emptied it and leaked the
 	# payload on every target until the clear-vs-release split.
 	# bug-a-a-variant-assigned-to-itself-becomes-empty
 	./$(COMPILER) -Fulib/rtl --target=i386 test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_i386_varselfassign
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_varselfassign | tail -1)" = "ALL OK"
+	tools/expect_same.sh i386/test_i386_varselfassign "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_varselfassign | tail -1)" "ALL OK"
 	./$(COMPILER) --target=i386 test/test_cross_variant.pas $(TESTTMP)/test_i386_variant
 	./$(COMPILER) test/test_cross_variant.pas $(TESTTMP)/test_i386_variant_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_variant)" = "$$($(TESTTMP)/test_i386_variant_x64)"
+	tools/expect_same.sh i386/test_i386_variant "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_variant)" "$$($(TESTTMP)/test_i386_variant_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_variant_single.pas $(TESTTMP)/test_i386_variant_single
 	./$(COMPILER) test/test_cross_variant_single.pas $(TESTTMP)/test_i386_variant_single_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_variant_single)" = "$$($(TESTTMP)/test_i386_variant_single_x64)"
+	tools/expect_same.sh i386/test_i386_variant_single "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_variant_single)" "$$($(TESTTMP)/test_i386_variant_single_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_byref_params.pas $(TESTTMP)/test_i386_byref
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_byref_params.pas $(TESTTMP)/test_i386_byref_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_byref)" = "$$($(TESTTMP)/test_i386_byref_x64)"
+	tools/expect_same.sh i386/test_i386_byref "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_byref)" "$$($(TESTTMP)/test_i386_byref_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_setlen_str.pas $(TESTTMP)/test_i386_setlen_str
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_setlen_str.pas $(TESTTMP)/test_i386_setlen_str_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_setlen_str)" = "$$($(TESTTMP)/test_i386_setlen_str_x64)"
+	tools/expect_same.sh i386/test_i386_setlen_str "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_setlen_str)" "$$($(TESTTMP)/test_i386_setlen_str_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_setlen_varparam.pas $(TESTTMP)/test_i386_setlen_vp
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_setlen_varparam.pas $(TESTTMP)/test_i386_setlen_vp_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_setlen_vp)" = "$$($(TESTTMP)/test_i386_setlen_vp_x64)"
+	tools/expect_same.sh i386/test_i386_setlen_vp "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_setlen_vp)" "$$($(TESTTMP)/test_i386_setlen_vp_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_in_operator.pas $(TESTTMP)/test_i386_in
 	./$(COMPILER) test/test_cross_in_operator.pas $(TESTTMP)/test_i386_in_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_in)" = "$$($(TESTTMP)/test_i386_in_x64)"
+	tools/expect_same.sh i386/test_i386_in "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_in)" "$$($(TESTTMP)/test_i386_in_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_loadfile.pas $(TESTTMP)/test_i386_loadfile
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_loadfile.pas $(TESTTMP)/test_i386_loadfile_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_loadfile)" = "$$($(TESTTMP)/test_i386_loadfile_x64)"
+	tools/expect_same.sh i386/test_i386_loadfile "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_loadfile)" "$$($(TESTTMP)/test_i386_loadfile_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_sysopen_family.pas $(TESTTMP)/test_i386_sysopen_family
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_sysopen_family.pas $(TESTTMP)/test_i386_sysopen_family_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sysopen_family)" = "$$($(TESTTMP)/test_i386_sysopen_family_x64)"
+	tools/expect_same.sh i386/test_i386_sysopen_family "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sysopen_family)" "$$($(TESTTMP)/test_i386_sysopen_family_x64)"
 	./$(COMPILER) --target=i386 test/test_arm32_arg_runtime.pas $(TESTTMP)/test_i386_args
 	./$(COMPILER) test/test_arm32_arg_runtime.pas $(TESTTMP)/test_i386_args_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_args alpha beta)" = "$$($(TESTTMP)/test_i386_args_x64 alpha beta)"
+	tools/expect_same.sh i386/test_i386_args "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_args alpha beta)" "$$($(TESTTMP)/test_i386_args_x64 alpha beta)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_string_cow.pas $(TESTTMP)/test_i386_string_cow
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string_cow.pas $(TESTTMP)/test_i386_string_cow_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_string_cow)" = "$$($(TESTTMP)/test_i386_string_cow_x64)"
+	tools/expect_same.sh i386/test_i386_string_cow "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_string_cow)" "$$($(TESTTMP)/test_i386_string_cow_x64)"
 	./$(COMPILER) -uPXX_MANAGED_STRING --target=i386 test/test_cross_frozen_strlen_deref.pas $(TESTTMP)/test_i386_frozen_strlen
 	./$(COMPILER) -uPXX_MANAGED_STRING test/test_cross_frozen_strlen_deref.pas $(TESTTMP)/test_i386_frozen_strlen_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_frozen_strlen)" = "$$($(TESTTMP)/test_i386_frozen_strlen_x64)"
+	tools/expect_same.sh i386/test_i386_frozen_strlen "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_frozen_strlen)" "$$($(TESTTMP)/test_i386_frozen_strlen_x64)"
 	# string[N] truncation incl. a heap record holding a shortstring field reached
 	# through a pointer (bug-cross-pointer-store-record-with-shortstring-field)
 	./$(COMPILER) --target=i386 test/test_shortstring_trunc.pas $(TESTTMP)/test_i386_sstrunc
 	./$(COMPILER) test/test_shortstring_trunc.pas $(TESTTMP)/test_i386_sstrunc_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sstrunc)" = "$$($(TESTTMP)/test_i386_sstrunc_x64)"
+	tools/expect_same.sh i386/test_i386_sstrunc "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sstrunc)" "$$($(TESTTMP)/test_i386_sstrunc_x64)"
 	# Int64/QWord -> Double at full 64-bit width incl. unsigned top-bit values
 	# (bug-cross-32bit-int64-to-double-low-word / bug-pascal-qword-to-double-signed)
 	./$(COMPILER) --target=i386 test/test_u64_to_double.pas $(TESTTMP)/test_i386_u64d
 	./$(COMPILER) test/test_u64_to_double.pas $(TESTTMP)/test_i386_u64d_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_u64d)" = "$$($(TESTTMP)/test_i386_u64d_x64)"
+	tools/expect_same.sh i386/test_i386_u64d "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_u64d)" "$$($(TESTTMP)/test_i386_u64d_x64)"
 	# {$$Q+} add/sub/unsigned-mul raise catchable EIntOverflow (signed checked
 	# MUL stays deferred on 32-bit pairs — feature-overflow-checks-cross-and-intrinsics)
 	./$(COMPILER) --target=i386 test/test_overflow_checks_qplus.pas $(TESTTMP)/test_i386_qplus
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_qplus)" = "$$(printf 'wrapped 0\ncaught=4')"
+	tools/expect_same.sh i386/test_i386_qplus "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_qplus)" "$$(printf 'wrapped 0\ncaught=4')"
 	./$(COMPILER) --target=i386 test/test_overflow_qplus_narrow.pas $(TESTTMP)/test_i386_qplus_narrow
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_qplus_narrow)" = "$$(printf 'caught=5 clean=4 wrap=-294967296')"
+	tools/expect_same.sh i386/test_i386_qplus_narrow "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_qplus_narrow)" "$$(printf 'caught=5 clean=4 wrap=-294967296')"
 	./$(COMPILER) --target=i386 test/test_managed_strlen_deref.pas $(TESTTMP)/test_i386_managed_strlen
 	./$(COMPILER) test/test_managed_strlen_deref.pas $(TESTTMP)/test_i386_managed_strlen_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_managed_strlen)" = "$$($(TESTTMP)/test_i386_managed_strlen_x64)"
+	tools/expect_same.sh i386/test_i386_managed_strlen "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_managed_strlen)" "$$($(TESTTMP)/test_i386_managed_strlen_x64)"
 	test "$$($(TESTTMP)/test_i386_managed_strlen_x64)" = "$$(printf '5\n5\n5\n2\n2\nOK')"
 	./$(COMPILER) --target=i386 test/test_not_int64_expr.pas $(TESTTMP)/test_i386_not64
 	./$(COMPILER) test/test_not_int64_expr.pas $(TESTTMP)/test_i386_not64_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_not64)" = "$$($(TESTTMP)/test_i386_not64_x64)"
+	tools/expect_same.sh i386/test_i386_not64 "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_not64)" "$$($(TESTTMP)/test_i386_not64_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_record_array_store.pas $(TESTTMP)/test_i386_rec_arr_store
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record_array_store.pas $(TESTTMP)/test_i386_rec_arr_store_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_rec_arr_store)" = "$$($(TESTTMP)/test_i386_rec_arr_store_x64)"
+	tools/expect_same.sh i386/test_i386_rec_arr_store "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_rec_arr_store)" "$$($(TESTTMP)/test_i386_rec_arr_store_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_array_of_const_types.pas $(TESTTMP)/test_i386_aoc_types
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_array_of_const_types.pas $(TESTTMP)/test_i386_aoc_types_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_aoc_types)" = "$$($(TESTTMP)/test_i386_aoc_types_x64)"
+	tools/expect_same.sh i386/test_i386_aoc_types "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_aoc_types)" "$$($(TESTTMP)/test_i386_aoc_types_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_write_pchar.pas $(TESTTMP)/test_i386_write_pchar
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_write_pchar.pas $(TESTTMP)/test_i386_write_pchar_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_write_pchar)" = "$$($(TESTTMP)/test_i386_write_pchar_x64)"
+	tools/expect_same.sh i386/test_i386_write_pchar "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_write_pchar)" "$$($(TESTTMP)/test_i386_write_pchar_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_static_open_array.pas $(TESTTMP)/test_i386_static_open
 	./$(COMPILER) test/test_cross_static_open_array.pas $(TESTTMP)/test_i386_static_open_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_static_open)" = "$$($(TESTTMP)/test_i386_static_open_x64)"
+	tools/expect_same.sh i386/test_i386_static_open "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_static_open)" "$$($(TESTTMP)/test_i386_static_open_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_many_params.pas $(TESTTMP)/test_i386_many_params
 	./$(COMPILER) test/test_cross_many_params.pas $(TESTTMP)/test_i386_many_params_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_many_params)" = "$$($(TESTTMP)/test_i386_many_params_x64)"
+	tools/expect_same.sh i386/test_i386_many_params "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_many_params)" "$$($(TESTTMP)/test_i386_many_params_x64)"
 	./$(COMPILER) --target=i386 test/test_conformance_2.pas $(TESTTMP)/test_i386_conf2
 	./$(COMPILER) test/test_conformance_2.pas $(TESTTMP)/test_i386_conf2_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_conf2)" = "$$($(TESTTMP)/test_i386_conf2_x64)"
+	tools/expect_same.sh i386/test_i386_conf2 "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_conf2)" "$$($(TESTTMP)/test_i386_conf2_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_shortcircuit.pas $(TESTTMP)/test_i386_scx
 	./$(COMPILER) test/test_cross_shortcircuit.pas $(TESTTMP)/test_i386_scx_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_scx)" = "$$($(TESTTMP)/test_i386_scx_x64)"
+	tools/expect_same.sh i386/test_i386_scx "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_scx)" "$$($(TESTTMP)/test_i386_scx_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_ptr_arith.pas $(TESTTMP)/test_i386_pa
 	./$(COMPILER) test/test_cross_ptr_arith.pas $(TESTTMP)/test_i386_pa_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_pa)" = "$$($(TESTTMP)/test_i386_pa_x64)"
+	tools/expect_same.sh i386/test_i386_pa "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_pa)" "$$($(TESTTMP)/test_i386_pa_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_case_range.pas $(TESTTMP)/test_i386_cr
 	./$(COMPILER) test/test_cross_case_range.pas $(TESTTMP)/test_i386_cr_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_cr)" = "$$($(TESTTMP)/test_i386_cr_x64)"
+	tools/expect_same.sh i386/test_i386_cr "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_cr)" "$$($(TESTTMP)/test_i386_cr_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_global_init.pas $(TESTTMP)/test_i386_gi
 	./$(COMPILER) test/test_cross_global_init.pas $(TESTTMP)/test_i386_gi_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_gi)" = "$$($(TESTTMP)/test_i386_gi_x64)"
+	tools/expect_same.sh i386/test_i386_gi "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_gi)" "$$($(TESTTMP)/test_i386_gi_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_typed_const.pas $(TESTTMP)/test_i386_tc
 	./$(COMPILER) test/test_cross_typed_const.pas $(TESTTMP)/test_i386_tc_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_tc)" = "$$($(TESTTMP)/test_i386_tc_x64)"
+	tools/expect_same.sh i386/test_i386_tc "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_tc)" "$$($(TESTTMP)/test_i386_tc_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_multidim.pas $(TESTTMP)/test_i386_md
 	./$(COMPILER) test/test_cross_multidim.pas $(TESTTMP)/test_i386_md_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_md)" = "$$($(TESTTMP)/test_i386_md_x64)"
+	tools/expect_same.sh i386/test_i386_md "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_md)" "$$($(TESTTMP)/test_i386_md_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_named_array.pas $(TESTTMP)/test_i386_na
 	./$(COMPILER) test/test_cross_named_array.pas $(TESTTMP)/test_i386_na_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_na)" = "$$($(TESTTMP)/test_i386_na_x64)"
+	tools/expect_same.sh i386/test_i386_na "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_na)" "$$($(TESTTMP)/test_i386_na_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_record_2darray.pas $(TESTTMP)/test_i386_r2
 	./$(COMPILER) test/test_cross_record_2darray.pas $(TESTTMP)/test_i386_r2_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_r2)" = "$$($(TESTTMP)/test_i386_r2_x64)"
+	tools/expect_same.sh i386/test_i386_r2 "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_r2)" "$$($(TESTTMP)/test_i386_r2_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_param_2darray.pas $(TESTTMP)/test_i386_pa2
 	./$(COMPILER) test/test_cross_param_2darray.pas $(TESTTMP)/test_i386_pa2_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_pa2)" = "$$($(TESTTMP)/test_i386_pa2_x64)"
+	tools/expect_same.sh i386/test_i386_pa2 "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_pa2)" "$$($(TESTTMP)/test_i386_pa2_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_multidim3d.pas $(TESTTMP)/test_i386_d3
 	./$(COMPILER) test/test_cross_multidim3d.pas $(TESTTMP)/test_i386_d3_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_d3)" = "$$($(TESTTMP)/test_i386_d3_x64)"
+	tools/expect_same.sh i386/test_i386_d3 "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_d3)" "$$($(TESTTMP)/test_i386_d3_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_const_alias.pas $(TESTTMP)/test_i386_ca
 	./$(COMPILER) test/test_cross_const_alias.pas $(TESTTMP)/test_i386_ca_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_ca)" = "$$($(TESTTMP)/test_i386_ca_x64)"
+	tools/expect_same.sh i386/test_i386_ca "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_ca)" "$$($(TESTTMP)/test_i386_ca_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_float_const.pas $(TESTTMP)/test_i386_fc
 	./$(COMPILER) test/test_cross_float_const.pas $(TESTTMP)/test_i386_fc_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fc)" = "$$($(TESTTMP)/test_i386_fc_x64)"
+	tools/expect_same.sh i386/test_i386_fc "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fc)" "$$($(TESTTMP)/test_i386_fc_x64)"
 	./$(COMPILER) --target=i386 test/test_stackless_gen.pas $(TESTTMP)/test_i386_slg
 	./$(COMPILER) test/test_stackless_gen.pas $(TESTTMP)/test_i386_slg_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_slg)" = "$$($(TESTTMP)/test_i386_slg_x64)"
+	tools/expect_same.sh i386/test_i386_slg "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_slg)" "$$($(TESTTMP)/test_i386_slg_x64)"
 	./$(COMPILER) --target=i386 test/test_async_sl.pas $(TESTTMP)/test_i386_asl
 	./$(COMPILER) test/test_async_sl.pas $(TESTTMP)/test_i386_asl_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_asl)" = "$$($(TESTTMP)/test_i386_asl_x64)"
+	tools/expect_same.sh i386/test_i386_asl "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_asl)" "$$($(TESTTMP)/test_i386_asl_x64)"
 	./$(COMPILER) --target=i386 test/test_proctype.pas $(TESTTMP)/test_i386_proctype
 	./$(COMPILER) test/test_proctype.pas $(TESTTMP)/test_i386_proctype_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_proctype)" = "$$($(TESTTMP)/test_i386_proctype_x64)"
+	tools/expect_same.sh i386/test_i386_proctype "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_proctype)" "$$($(TESTTMP)/test_i386_proctype_x64)"
 	./$(COMPILER) --target=i386 test/test_scheduler.pas $(TESTTMP)/test_i386_sched
 	./$(COMPILER) test/test_scheduler.pas $(TESTTMP)/test_i386_sched_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sched)" = "$$($(TESTTMP)/test_i386_sched_x64)"
+	tools/expect_same.sh i386/test_i386_sched "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sched)" "$$($(TESTTMP)/test_i386_sched_x64)"
 	./$(COMPILER) --target=i386 test/test_scheduler_exc.pas $(TESTTMP)/test_i386_sexc
 	./$(COMPILER) test/test_scheduler_exc.pas $(TESTTMP)/test_i386_sexc_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sexc)" = "$$($(TESTTMP)/test_i386_sexc_x64)"
+	tools/expect_same.sh i386/test_i386_sexc "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sexc)" "$$($(TESTTMP)/test_i386_sexc_x64)"
 	./$(COMPILER) --target=i386 test/test_channel.pas $(TESTTMP)/test_i386_chan
 	./$(COMPILER) test/test_channel.pas $(TESTTMP)/test_i386_chan_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_chan)" = "$$($(TESTTMP)/test_i386_chan_x64)"
+	tools/expect_same.sh i386/test_i386_chan "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_chan)" "$$($(TESTTMP)/test_i386_chan_x64)"
 	./$(COMPILER) --target=i386 test/test_methodptr.pas $(TESTTMP)/test_i386_mptr
 	./$(COMPILER) test/test_methodptr.pas $(TESTTMP)/test_i386_mptr_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_mptr)" = "$$($(TESTTMP)/test_i386_mptr_x64)"
+	tools/expect_same.sh i386/test_i386_mptr "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_mptr)" "$$($(TESTTMP)/test_i386_mptr_x64)"
 	./$(COMPILER) --target=i386 test/test_methcall.pas $(TESTTMP)/test_i386_mcall
 	./$(COMPILER) test/test_methcall.pas $(TESTTMP)/test_i386_mcall_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_mcall)" = "$$($(TESTTMP)/test_i386_mcall_x64)"
+	tools/expect_same.sh i386/test_i386_mcall "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_mcall)" "$$($(TESTTMP)/test_i386_mcall_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_sets.pas $(TESTTMP)/test_i386_sets
 	./$(COMPILER) test/test_cross_sets.pas $(TESTTMP)/test_i386_sets_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sets)" = "$$($(TESTTMP)/test_i386_sets_x64)"
+	tools/expect_same.sh i386/test_i386_sets "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sets)" "$$($(TESTTMP)/test_i386_sets_x64)"
 	./$(COMPILER) --target=i386 test/test_classref.pas $(TESTTMP)/test_i386_classref
 	./$(COMPILER) test/test_classref.pas $(TESTTMP)/test_i386_classref_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_classref)" = "$$($(TESTTMP)/test_i386_classref_x64)"
+	tools/expect_same.sh i386/test_i386_classref "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_classref)" "$$($(TESTTMP)/test_i386_classref_x64)"
 	./$(COMPILER) --target=i386 test/test_class_of.pas $(TESTTMP)/test_i386_classof
 	./$(COMPILER) test/test_class_of.pas $(TESTTMP)/test_i386_classof_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_classof)" = "$$($(TESTTMP)/test_i386_classof_x64)"
+	tools/expect_same.sh i386/test_i386_classof "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_classof)" "$$($(TESTTMP)/test_i386_classof_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_rtti.pas $(TESTTMP)/test_i386_rtti
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_rtti.pas $(TESTTMP)/test_i386_rtti_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_rtti | grep -vE 'pointer:|RTTI value:|InstanceSize:')" = "$$($(TESTTMP)/test_i386_rtti_x64 | grep -vE 'pointer:|RTTI value:|InstanceSize:')"
+	tools/expect_same.sh i386/test_i386_rtti "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_rtti | grep -vE 'pointer:|RTTI value:|InstanceSize:')" "$$($(TESTTMP)/test_i386_rtti_x64 | grep -vE 'pointer:|RTTI value:|InstanceSize:')"
 	./$(COMPILER) --target=i386 test/test_streaming.pas $(TESTTMP)/test_i386_streaming
 	./$(COMPILER) test/test_streaming.pas $(TESTTMP)/test_i386_streaming_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_streaming)" = "$$($(TESTTMP)/test_i386_streaming_x64)"
+	tools/expect_same.sh i386/test_i386_streaming "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_streaming)" "$$($(TESTTMP)/test_i386_streaming_x64)"
 	./$(COMPILER) --target=i386 test/test_streaming_enumset.pas $(TESTTMP)/test_i386_streaming_enumset
 	./$(COMPILER) test/test_streaming_enumset.pas $(TESTTMP)/test_i386_streaming_enumset_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_streaming_enumset)" = "$$($(TESTTMP)/test_i386_streaming_enumset_x64)"
+	tools/expect_same.sh i386/test_i386_streaming_enumset "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_streaming_enumset)" "$$($(TESTTMP)/test_i386_streaming_enumset_x64)"
 	./$(COMPILER) --target=i386 test/test_lfm.pas $(TESTTMP)/test_i386_lfm
 	./$(COMPILER) test/test_lfm.pas $(TESTTMP)/test_i386_lfm_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_lfm)" = "$$($(TESTTMP)/test_i386_lfm_x64)"
+	tools/expect_same.sh i386/test_i386_lfm "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_lfm)" "$$($(TESTTMP)/test_i386_lfm_x64)"
 	./$(COMPILER) --target=i386 test/test_interfaces.pas $(TESTTMP)/test_i386_iface
 	./$(COMPILER) test/test_interfaces.pas $(TESTTMP)/test_i386_iface_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_iface)" = "$$($(TESTTMP)/test_i386_iface_x64)"
+	tools/expect_same.sh i386/test_i386_iface "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_iface)" "$$($(TESTTMP)/test_i386_iface_x64)"
 	./$(COMPILER) --target=i386 test/test_interface_arc.pas $(TESTTMP)/test_i386_iarc
 	./$(COMPILER) test/test_interface_arc.pas $(TESTTMP)/test_i386_iarc_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_iarc)" = "$$($(TESTTMP)/test_i386_iarc_x64)"
+	tools/expect_same.sh i386/test_i386_iarc "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_iarc)" "$$($(TESTTMP)/test_i386_iarc_x64)"
 	./$(COMPILER) --target=i386 test/test_managed_local_release_reuse.pas $(TESTTMP)/test_i386_mlrr
 	./$(COMPILER) test/test_managed_local_release_reuse.pas $(TESTTMP)/test_i386_mlrr_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_mlrr)" = "$$($(TESTTMP)/test_i386_mlrr_x64)"
+	tools/expect_same.sh i386/test_i386_mlrr "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_mlrr)" "$$($(TESTTMP)/test_i386_mlrr_x64)"
 	./$(COMPILER) --target=i386 test/test_uint64_ops.pas $(TESTTMP)/test_i386_u64
 	./$(COMPILER) test/test_uint64_ops.pas $(TESTTMP)/test_i386_u64_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_u64)" = "$$($(TESTTMP)/test_i386_u64_x64)"
+	tools/expect_same.sh i386/test_i386_u64 "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_u64)" "$$($(TESTTMP)/test_i386_u64_x64)"
 	./$(COMPILER) --target=i386 test/test_interfaces_is.pas $(TESTTMP)/test_i386_iface_is
 	./$(COMPILER) test/test_interfaces_is.pas $(TESTTMP)/test_i386_iface_is_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_iface_is)" = "$$($(TESTTMP)/test_i386_iface_is_x64)"
+	tools/expect_same.sh i386/test_i386_iface_is "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_iface_is)" "$$($(TESTTMP)/test_i386_iface_is_x64)"
 	./$(COMPILER) --target=i386 test/test_interfaces_as.pas $(TESTTMP)/test_i386_iface_as
 	./$(COMPILER) test/test_interfaces_as.pas $(TESTTMP)/test_i386_iface_as_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_iface_as)" = "$$($(TESTTMP)/test_i386_iface_as_x64)"
+	tools/expect_same.sh i386/test_i386_iface_as "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_iface_as)" "$$($(TESTTMP)/test_i386_iface_as_x64)"
 	./$(COMPILER) --target=i386 test/test_interfaces_param.pas $(TESTTMP)/test_i386_iface_param
 	./$(COMPILER) test/test_interfaces_param.pas $(TESTTMP)/test_i386_iface_param_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_iface_param)" = "$$($(TESTTMP)/test_i386_iface_param_x64)"
+	tools/expect_same.sh i386/test_i386_iface_param "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_iface_param)" "$$($(TESTTMP)/test_i386_iface_param_x64)"
 	./$(COMPILER) --target=i386 test/test_interfaces_inherit.pas $(TESTTMP)/test_i386_iface_inh
 	./$(COMPILER) test/test_interfaces_inherit.pas $(TESTTMP)/test_i386_iface_inh_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_iface_inh)" = "$$($(TESTTMP)/test_i386_iface_inh_x64)"
+	tools/expect_same.sh i386/test_i386_iface_inh "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_iface_inh)" "$$($(TESTTMP)/test_i386_iface_inh_x64)"
 	./$(COMPILER) --target=i386 test/test_interfaces_multi_secondary.pas $(TESTTMP)/test_i386_iface_multi
 	./$(COMPILER) test/test_interfaces_multi_secondary.pas $(TESTTMP)/test_i386_iface_multi_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_iface_multi)" = "$$($(TESTTMP)/test_i386_iface_multi_x64)"
+	tools/expect_same.sh i386/test_i386_iface_multi "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_iface_multi)" "$$($(TESTTMP)/test_i386_iface_multi_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_aggregate_return.pas $(TESTTMP)/test_i386_aggret
 	./$(COMPILER) test/test_cross_aggregate_return.pas $(TESTTMP)/test_i386_aggret_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_aggret)" = "$$($(TESTTMP)/test_i386_aggret_x64)"
+	tools/expect_same.sh i386/test_i386_aggret "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_aggret)" "$$($(TESTTMP)/test_i386_aggret_x64)"
 	# aggregate / frozen-string result via a VIRTUAL and an INDIRECT call
 	# (feature-cross-virtual-indirect-hidden-dest)
 	./$(COMPILER) --target=i386 test/test_cross_virtual_indirect_aggret.pas $(TESTTMP)/test_i386_vindaggret
 	./$(COMPILER) test/test_cross_virtual_indirect_aggret.pas $(TESTTMP)/test_i386_vindaggret_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_vindaggret)" = "$$($(TESTTMP)/test_i386_vindaggret_x64)"
+	tools/expect_same.sh i386/test_i386_vindaggret "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_vindaggret)" "$$($(TESTTMP)/test_i386_vindaggret_x64)"
 	./$(COMPILER) --target=i386 test/test_inheritance_dispatch.pas $(TESTTMP)/test_i386_cls
 	./$(COMPILER) test/test_inheritance_dispatch.pas $(TESTTMP)/test_i386_cls_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_cls)" = "$$($(TESTTMP)/test_i386_cls_x64)"
+	tools/expect_same.sh i386/test_i386_cls "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_cls)" "$$($(TESTTMP)/test_i386_cls_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_dynarray_field.pas $(TESTTMP)/test_i386_dynfield
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_field.pas $(TESTTMP)/test_i386_dynfield_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_dynfield)" = "$$($(TESTTMP)/test_i386_dynfield_x64)"
+	tools/expect_same.sh i386/test_i386_dynfield "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_dynfield)" "$$($(TESTTMP)/test_i386_dynfield_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_method_implicit_field.pas $(TESTTMP)/test_i386_mif
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_method_implicit_field.pas $(TESTTMP)/test_i386_mif_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_mif)" = "$$($(TESTTMP)/test_i386_mif_x64)"
+	tools/expect_same.sh i386/test_i386_mif "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_mif)" "$$($(TESTTMP)/test_i386_mif_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_forin_implicit_field.pas $(TESTTMP)/test_i386_fif
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_forin_implicit_field.pas $(TESTTMP)/test_i386_fif_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fif)" = "$$($(TESTTMP)/test_i386_fif_x64)"
+	tools/expect_same.sh i386/test_i386_fif "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fif)" "$$($(TESTTMP)/test_i386_fif_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_dynarray_global_after_method.pas $(TESTTMP)/test_i386_dgam
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_global_after_method.pas $(TESTTMP)/test_i386_dgam_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_dgam)" = "$$($(TESTTMP)/test_i386_dgam_x64)"
+	tools/expect_same.sh i386/test_i386_dgam "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_dgam)" "$$($(TESTTMP)/test_i386_dgam_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_forin_member_access.pas $(TESTTMP)/test_i386_fima
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_forin_member_access.pas $(TESTTMP)/test_i386_fima_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fima)" = "$$($(TESTTMP)/test_i386_fima_x64)"
+	tools/expect_same.sh i386/test_i386_fima "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fima)" "$$($(TESTTMP)/test_i386_fima_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_i386_fimz
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_i386_fimz_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fimz)" = "$$($(TESTTMP)/test_i386_fimz_x64)"
+	tools/expect_same.sh i386/test_i386_fimz "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fimz)" "$$($(TESTTMP)/test_i386_fimz_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_hidden_dynarray_temp_zeroinit.pas $(TESTTMP)/test_i386_hdtz
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_hidden_dynarray_temp_zeroinit.pas $(TESTTMP)/test_i386_hdtz_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_hdtz)" = "$$($(TESTTMP)/test_i386_hdtz_x64)"
+	tools/expect_same.sh i386/test_i386_hdtz "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_hdtz)" "$$($(TESTTMP)/test_i386_hdtz_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_call_result_member.pas $(TESTTMP)/test_i386_crm
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_call_result_member.pas $(TESTTMP)/test_i386_crm_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_crm)" = "$$($(TESTTMP)/test_i386_crm_x64)"
+	tools/expect_same.sh i386/test_i386_crm "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_crm)" "$$($(TESTTMP)/test_i386_crm_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_collections.pas $(TESTTMP)/test_i386_collections
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_collections.pas $(TESTTMP)/test_i386_collections_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_collections)" = "$$($(TESTTMP)/test_i386_collections_x64)"
+	tools/expect_same.sh i386/test_i386_collections "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_collections)" "$$($(TESTTMP)/test_i386_collections_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_const_record_temp.pas $(TESTTMP)/test_i386_constrectemp
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_const_record_temp.pas $(TESTTMP)/test_i386_constrectemp_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_constrectemp)" = "$$($(TESTTMP)/test_i386_constrectemp_x64)"
+	tools/expect_same.sh i386/test_i386_constrectemp "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_constrectemp)" "$$($(TESTTMP)/test_i386_constrectemp_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_const_record_temp_managed.pas $(TESTTMP)/test_i386_constrectemp_managed
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_const_record_temp_managed.pas $(TESTTMP)/test_i386_constrectemp_managed_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_constrectemp_managed)" = "$$($(TESTTMP)/test_i386_constrectemp_managed_x64)"
+	tools/expect_same.sh i386/test_i386_constrectemp_managed "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_constrectemp_managed)" "$$($(TESTTMP)/test_i386_constrectemp_managed_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_set_runtime.pas $(TESTTMP)/test_i386_setrt
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_set_runtime.pas $(TESTTMP)/test_i386_setrt_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_setrt)" = "$$($(TESTTMP)/test_i386_setrt_x64)"
+	tools/expect_same.sh i386/test_i386_setrt "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_setrt)" "$$($(TESTTMP)/test_i386_setrt_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_managed_record_temp_init.pas $(TESTTMP)/test_i386_mrti
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_managed_record_temp_init.pas $(TESTTMP)/test_i386_mrti_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_mrti)" = "$$($(TESTTMP)/test_i386_mrti_x64)"
+	tools/expect_same.sh i386/test_i386_mrti "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_mrti)" "$$($(TESTTMP)/test_i386_mrti_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_dynarray_copy.pas $(TESTTMP)/test_i386_dyncopy
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_copy.pas $(TESTTMP)/test_i386_dyncopy_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_dyncopy)" = "$$($(TESTTMP)/test_i386_dyncopy_x64)"
+	tools/expect_same.sh i386/test_i386_dyncopy "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_dyncopy)" "$$($(TESTTMP)/test_i386_dyncopy_x64)"
 	./$(COMPILER) --target=i386 test/test_timer.pas $(TESTTMP)/test_i386_timer
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_timer)" = "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
+	tools/expect_same.sh i386/test_i386_timer "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_timer)" "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
 	./$(COMPILER) --target=i386 test/test_reactor.pas $(TESTTMP)/test_i386_reactor
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_reactor)" = "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
+	tools/expect_same.sh i386/test_i386_reactor "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_reactor)" "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
 	./$(COMPILER) --target=i386 -Fulib/rtl/platform/posix test/test_asyncecho.pas $(TESTTMP)/test_i386_asyncecho
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_asyncecho)" = "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
+	tools/expect_same.sh i386/test_i386_asyncecho "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_asyncecho)" "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
 	# cdecl indirect call (dlsym'd C fn through a cdecl proc-type value) — b362
 	# libc-free signal handlers on i386 (b371): hook fires + program RESUMES;
 	# no hook = revert to SIG_DFL + re-raise (dies 143).
 	./$(COMPILER) --target=i386 -Fulib/rtl test/test_signal_handler_callback_b336.pas $(TESTTMP)/test_i386_sigcb
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sigcb)" = "$$(printf 'hits=2\nresumed after handler')"
+	tools/expect_same.sh i386/test_i386_sigcb "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sigcb)" "$$(printf 'hits=2\nresumed after handler')"
 	./$(COMPILER) --target=i386 -Fulib/rtl test/test_signal_default_revert_b336.pas $(TESTTMP)/test_i386_sigdfl
 	tools/run_target.sh i386 $(TESTTMP)/test_i386_sigdfl > /dev/null 2>&1; test "$$?" = "143"
 	# SA_SIGINFO: si_code/si_addr/ucontext* reach Pascal. si_addr is asserted
@@ -11002,14 +11002,14 @@ test-i386: $(COMPILER)
 	# the restorer's TWO coupled changes (119->173, and dropping the plain
 	# frame's `pop eax`) both landed with it.
 	./$(COMPILER) --target=i386 test/test_signal_siginfo.pas $(TESTTMP)/test_i386_siginfo
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_siginfo)" = "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
+	tools/expect_same.sh i386/test_i386_siginfo "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_siginfo)" "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
 	# PC rewrite: the handler points the saved ucontext PC at a Pascal proc
 	# that raises, and the fault is caught by the try/except the faulting
 	# code was already inside. The pc-is-the-fault line is the exact check
 	# of the per-arch PC offset -- rewriting the wrong ucontext word would
 	# clobber an unrelated register instead.
 	./$(COMPILER) --target=i386 test/test_signal_pc_rewrite.pas $(TESTTMP)/test_i386_pcrw
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_pcrw)" = "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
+	tools/expect_same.sh i386/test_i386_pcrw "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_pcrw)" "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
 	# ... and the SP half. The per-arch ucontext SP offset is a five-entry
 	# table where one wrong entry silently clobbers an unrelated register,
 	# so every target checks that the resumed proc really landed on the
@@ -11023,23 +11023,23 @@ test-i386: $(COMPILER)
 	# the difference between a redirect that took and an endless fault loop on
 	# the guard page. Depth is not printed: it depends on RLIMIT_STACK.
 	./$(COMPILER) --target=i386 test/test_stack_overflow_raise.pas $(TESTTMP)/test_i386_sovf
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sovf)" = "$$(printf 'recursing\ncaught a stack overflow, hits=1\nand execution continued, after=1000')"
+	tools/expect_same.sh i386/test_i386_sovf "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sovf)" "$$(printf 'recursing\ncaught a stack overflow, hits=1\nand execution continued, after=1000')"
 	# Nested-array Copy on this target too — the stride is TypeSize(tyPointer),
 	# so the ILP32 targets are the ones that catch a hardcoded 8.
 	./$(COMPILER) --target=i386 test/test_dynarray_copy_nested.pas $(TESTTMP)/test_i386_dyncopyn
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_dyncopyn)" = "$$(printf 'lenh=2 h00=1 h11=4\none-level-detach g00=99\ninner=4\nafter-copy-scope g11=4 g22=6\nt3 len=2 u111=7 u010=2\nstr v00=row v11=end\nsource-survives s11=end')"
+	tools/expect_same.sh i386/test_i386_dyncopyn "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_dyncopyn)" "$$(printf 'lenh=2 h00=1 h11=4\none-level-detach g00=99\ninner=4\nafter-copy-scope g11=4 g22=6\nt3 len=2 u111=7 u010=2\nstr v00=row v11=end\nsource-survives s11=end')"
 	./$(COMPILER) --target=i386 test/test_halt_exit_code.pas $(TESTTMP)/test_i386_halt
 	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_halt; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) --target=i386 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_i386_sprw
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sprw)" = "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
+	tools/expect_same.sh i386/test_i386_sprw "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sprw)" "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
 	./$(COMPILER) --target=i386 test/test_cdecl_indirect.pas $(TESTTMP)/test_i386_cdeclind
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_cdeclind)" = "$$(printf '4.0\n1024.0\n12.0')"
+	tools/expect_same.sh i386/test_i386_cdeclind "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_cdeclind)" "$$(printf '4.0\n1024.0\n12.0')"
 	./$(COMPILER) --target=i386 test/test_extern_c.pas $(TESTTMP)/test_i386_extern
 	./$(COMPILER) test/test_extern_c.pas $(TESTTMP)/test_i386_extern_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_extern)" = "$$($(TESTTMP)/test_i386_extern_x64)"
+	tools/expect_same.sh i386/test_i386_extern "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_extern)" "$$($(TESTTMP)/test_i386_extern_x64)"
 	./$(COMPILER) --target=i386 test/test_extern_c_float.pas $(TESTTMP)/test_i386_extern_float
 	./$(COMPILER) test/test_extern_c_float.pas $(TESTTMP)/test_i386_extern_float_x64
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_extern_float)" = "$$($(TESTTMP)/test_i386_extern_float_x64)"
+	tools/expect_same.sh i386/test_i386_extern_float "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_extern_float)" "$$($(TESTTMP)/test_i386_extern_float_x64)"
 	./$(COMPILER) --target=i386 test/ccross_entry.c $(TESTTMP)/test_i386_centry
 	tools/run_target.sh i386 $(TESTTMP)/test_i386_centry; test "$$?" = "42"
 	./$(COMPILER) --target=i386 test/ccross_args.c $(TESTTMP)/test_i386_cargs
@@ -11060,26 +11060,26 @@ test-i386: $(COMPILER)
 	tools/run_target.sh i386 $(TESTTMP)/test_i386_cudiv; test "$$?" = "42"
 	# inline asm on i386: locals/params via [ebp±off] substitution, labels+jcc, mov/@glob global access
 	./$(COMPILER) --target=i386 test/test_asm_386.pas $(TESTTMP)/test_i386_asm
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_asm)" = "$$(printf '42\n55\n42')"
+	tools/expect_same.sh i386/test_i386_asm "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_asm)" "$$(printf '42\n55\n42')"
 	# .asm source frontend on i386: labels/branches + global entry override, exit code = ebx
 	./$(COMPILER) --target=i386 test/test_asm_386_sum.asm $(TESTTMP)/test_i386_asmfront
 	tools/run_target.sh i386 $(TESTTMP)/test_i386_asmfront; test "$$?" = "55"
 	# parallel for + full capture (scalar/array/record/string) — data-parallel loop on i386
 	./$(COMPILER) --threadsafe --target=i386 test/test_parallel_for_lang.pas $(TESTTMP)/test_i386_parfor
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_parfor | tail -n 1)" = "PARFORLANG OK"
+	tools/expect_same.sh i386/test_i386_parfor "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_parfor | tail -n 1)" "PARFORLANG OK"
 	./$(COMPILER) --threadsafe --target=i386 test/test_parallel_for_capture_aggr.pas $(TESTTMP)/test_i386_parcap
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_parcap | tail -n 1)" = "PARFORAGGR OK"
+	tools/expect_same.sh i386/test_i386_parcap "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_parcap | tail -n 1)" "PARFORAGGR OK"
 	./$(COMPILER) --threadsafe --target=i386 test/test_parallel_for_capture_string.pas $(TESTTMP)/test_i386_parstr
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_parstr | tail -n 1)" = "PARFORSTR OK"
+	tools/expect_same.sh i386/test_i386_parstr "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_parstr | tail -n 1)" "PARFORSTR OK"
 	# scheduling policy + reduction + named-arg clause on i386 (Track T cross gate)
 	./$(COMPILER) --threadsafe --target=i386 test/test_parallel_policy.pas $(TESTTMP)/test_i386_parpol
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_parpol)" = "PARPOL OK"
+	tools/expect_same.sh i386/test_i386_parpol "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_parpol)" "PARPOL OK"
 	./$(COMPILER) --threadsafe --target=i386 test/test_parallel_policy_lang.pas $(TESTTMP)/test_i386_parpollang
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_parpollang)" = "PARPOLLANG OK"
+	tools/expect_same.sh i386/test_i386_parpollang "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_parpollang)" "PARPOLLANG OK"
 	./$(COMPILER) --threadsafe --target=i386 test/test_parallel_reduction.pas $(TESTTMP)/test_i386_parred
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_parred)" = "PARRED OK"
+	tools/expect_same.sh i386/test_i386_parred "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_parred)" "PARRED OK"
 	./$(COMPILER) --threadsafe --target=i386 test/test_parallel_policy_named.pas $(TESTTMP)/test_i386_parnamed
-	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_parnamed)" = "PARNAMED OK"
+	tools/expect_same.sh i386/test_i386_parnamed "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_parnamed)" "PARNAMED OK"
 	./$(COMPILER) --threadsafe --target=i386 test/test_parallel_writeln_atomic.pas $(TESTTMP)/test_i386_pwa
 	tools/run_target.sh i386 $(TESTTMP)/test_i386_pwa > $(TESTTMP)/test_i386_pwa.out
 	test "$$(tail -n1 $(TESTTMP)/test_i386_pwa.out)" = "PARWROK"
@@ -11089,331 +11089,331 @@ test-i386: $(COMPILER)
 
 test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/hello.pas $(TESTTMP)/test_aarch64_hello
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_hello)" = "Hello, World!"
+	tools/expect_same.sh aarch64/test_aarch64_hello "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_hello)" "Hello, World!"
 	# a Variant holding a CLASS, and the unbox back to a scalar: both halves
 	# were x86-64-only gaps, so every target must print the same line
 	./$(COMPILER) --target=aarch64 test/test_variant_class_cross.pas $(TESTTMP)/test_aarch64_varcls
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_varcls)" = "end 7 100"
+	tools/expect_same.sh aarch64/test_aarch64_varcls "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_varcls)" "end 7 100"
 	# inline expansion (feature-inline-routines): -O2 == -O0 on this cross target.
 	./$(COMPILER) --target=aarch64 test/test_inline_expand.pas $(TESTTMP)/test_aarch64_inl_o0
 	./$(COMPILER) --target=aarch64 -O2 test/test_inline_expand.pas $(TESTTMP)/test_aarch64_inl_o2
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_inl_o0)" = "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_inl_o2)"
+	tools/expect_same.sh aarch64/test_aarch64_inl_o0 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_inl_o0)" "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_inl_o2)"
 	./$(COMPILER) --target=aarch64 test/test_record_temp_byval_arg.pas $(TESTTMP)/test_aarch64_rectemp
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_rectemp)" = "$$(printf '18\n46')"
+	tools/expect_same.sh aarch64/test_aarch64_rectemp "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_rectemp)" "$$(printf '18\n46')"
 	./$(COMPILER) --target=aarch64 test/test_ctor_string_literal_arg.pas $(TESTTMP)/test_aarch64_ctorstrlit
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_ctorstrlit)" = "$$(printf 'field:hello\nc1\nafter1\nc2\nafter2\nc3\nc4\nafter3\nmsg:hello\nafter4')"
+	tools/expect_same.sh aarch64/test_aarch64_ctorstrlit "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_ctorstrlit)" "$$(printf 'field:hello\nc1\nafter1\nc2\nafter2\nc3\nc4\nafter3\nmsg:hello\nafter4')"
 	./$(COMPILER) --target=aarch64 test/test_arm32_record_byval_wide.pas $(TESTTMP)/test_aarch64_recwide
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_recwide)" = "$$(printf '1 2\n1 2\n111 222\n1 7 8 2\n1 2 3 4 7 8\n1 2 3 7 8\n1 2 3 4 5 7 8\n200 7\ndone')"
+	tools/expect_same.sh aarch64/test_aarch64_recwide "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_recwide)" "$$(printf '1 2\n1 2\n111 222\n1 7 8 2\n1 2 3 4 7 8\n1 2 3 7 8\n1 2 3 4 5 7 8\n200 7\ndone')"
 	./$(COMPILER) --target=aarch64 test/test_single_in_aggregate.pas $(TESTTMP)/test_aarch64_singleagg
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_singleagg)" = "$$(printf '1.5 2.5 3.5\n9.500 8.250 7.125\n2.0 4.0 6.0\n10.0')"
+	tools/expect_same.sh aarch64/test_aarch64_singleagg "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_singleagg)" "$$(printf '1.5 2.5 3.5\n9.500 8.250 7.125\n2.0 4.0 6.0\n10.0')"
 	./$(COMPILER) --target=aarch64 test/test_i386_arith.pas $(TESTTMP)/test_aarch64_arith
 	./$(COMPILER) test/test_i386_arith.pas $(TESTTMP)/test_aarch64_arith_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_arith)" = "$$($(TESTTMP)/test_aarch64_arith_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_arith "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_arith)" "$$($(TESTTMP)/test_aarch64_arith_x64)"
 	./$(COMPILER) --target=aarch64 test/test_i386_procs.pas $(TESTTMP)/test_aarch64_procs
 	./$(COMPILER) test/test_i386_procs.pas $(TESTTMP)/test_aarch64_procs_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_procs)" = "$$($(TESTTMP)/test_aarch64_procs_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_procs "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_procs)" "$$($(TESTTMP)/test_aarch64_procs_x64)"
 	./$(COMPILER) --target=aarch64 test/test_i386_loops.pas $(TESTTMP)/test_aarch64_loops
 	./$(COMPILER) test/test_i386_loops.pas $(TESTTMP)/test_aarch64_loops_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_loops)" = "$$($(TESTTMP)/test_aarch64_loops_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_loops "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_loops)" "$$($(TESTTMP)/test_aarch64_loops_x64)"
 	./$(COMPILER) --target=aarch64 test/test_i386_write.pas $(TESTTMP)/test_aarch64_write
 	./$(COMPILER) test/test_i386_write.pas $(TESTTMP)/test_aarch64_write_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_write)" = "$$($(TESTTMP)/test_aarch64_write_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_write "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_write)" "$$($(TESTTMP)/test_aarch64_write_x64)"
 	./$(COMPILER) --target=aarch64 test/test_i386_varparam.pas $(TESTTMP)/test_aarch64_varparam
 	./$(COMPILER) test/test_i386_varparam.pas $(TESTTMP)/test_aarch64_varparam_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_varparam)" = "$$($(TESTTMP)/test_aarch64_varparam_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_varparam "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_varparam)" "$$($(TESTTMP)/test_aarch64_varparam_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_syscall.pas $(TESTTMP)/test_aarch64_syscall
 	./$(COMPILER) test/test_cross_syscall.pas $(TESTTMP)/test_aarch64_syscall_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_syscall)" = "$$($(TESTTMP)/test_aarch64_syscall_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_syscall "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_syscall)" "$$($(TESTTMP)/test_aarch64_syscall_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_trunc_round_saturate.pas $(TESTTMP)/test_aarch64_trsat
 	./$(COMPILER) test/test_cross_trunc_round_saturate.pas $(TESTTMP)/test_aarch64_trsat_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_trsat)" = "$$($(TESTTMP)/test_aarch64_trsat_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_trsat "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_trsat)" "$$($(TESTTMP)/test_aarch64_trsat_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_int64.pas $(TESTTMP)/test_aarch64_int64
 	./$(COMPILER) test/test_cross_int64.pas $(TESTTMP)/test_aarch64_int64_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_int64)" = "$$($(TESTTMP)/test_aarch64_int64_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_int64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_int64)" "$$($(TESTTMP)/test_aarch64_int64_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_heap.pas $(TESTTMP)/test_aarch64_heap
 	./$(COMPILER) test/test_cross_heap.pas $(TESTTMP)/test_aarch64_heap_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_heap)" = "$$($(TESTTMP)/test_aarch64_heap_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_heap "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_heap)" "$$($(TESTTMP)/test_aarch64_heap_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_managed_a64.pas $(TESTTMP)/test_aarch64_managed
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_managed_a64.pas $(TESTTMP)/test_aarch64_managed_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_managed)" = "$$($(TESTTMP)/test_aarch64_managed_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_managed "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_managed)" "$$($(TESTTMP)/test_aarch64_managed_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_exception.pas $(TESTTMP)/test_aarch64_exception
 	./$(COMPILER) test/test_cross_exception.pas $(TESTTMP)/test_aarch64_exception_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_exception)" = "$$($(TESTTMP)/test_aarch64_exception_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_exception "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_exception)" "$$($(TESTTMP)/test_aarch64_exception_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_float.pas $(TESTTMP)/test_aarch64_float
 	./$(COMPILER) test/test_cross_float.pas $(TESTTMP)/test_aarch64_float_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_float)" = "$$($(TESTTMP)/test_aarch64_float_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_float "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_float)" "$$($(TESTTMP)/test_aarch64_float_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_float_return.pas $(TESTTMP)/test_aarch64_fret
 	./$(COMPILER) test/test_cross_float_return.pas $(TESTTMP)/test_aarch64_fret_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_fret)" = "$$($(TESTTMP)/test_aarch64_fret_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_fret "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_fret)" "$$($(TESTTMP)/test_aarch64_fret_x64)"
 	# `v := v` must leave the variant alone — it emptied it and leaked the
 	# payload on every target until the clear-vs-release split.
 	# bug-a-a-variant-assigned-to-itself-becomes-empty
 	./$(COMPILER) -Fulib/rtl --target=aarch64 test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_aarch64_varselfassign
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_varselfassign | tail -1)" = "ALL OK"
+	tools/expect_same.sh aarch64/test_aarch64_varselfassign "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_varselfassign | tail -1)" "ALL OK"
 	./$(COMPILER) --target=aarch64 test/test_cross_variant.pas $(TESTTMP)/test_aarch64_variant
 	./$(COMPILER) test/test_cross_variant.pas $(TESTTMP)/test_aarch64_variant_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_variant)" = "$$($(TESTTMP)/test_aarch64_variant_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_variant "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_variant)" "$$($(TESTTMP)/test_aarch64_variant_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_variant_single.pas $(TESTTMP)/test_aarch64_variant_single
 	./$(COMPILER) test/test_cross_variant_single.pas $(TESTTMP)/test_aarch64_variant_single_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_variant_single)" = "$$($(TESTTMP)/test_aarch64_variant_single_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_variant_single "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_variant_single)" "$$($(TESTTMP)/test_aarch64_variant_single_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_setlen_str.pas $(TESTTMP)/test_aarch64_setlen_str
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_setlen_str.pas $(TESTTMP)/test_aarch64_setlen_str_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_setlen_str)" = "$$($(TESTTMP)/test_aarch64_setlen_str_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_setlen_str "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_setlen_str)" "$$($(TESTTMP)/test_aarch64_setlen_str_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_setlen_varparam.pas $(TESTTMP)/test_aarch64_setlen_vp
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_setlen_varparam.pas $(TESTTMP)/test_aarch64_setlen_vp_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_setlen_vp)" = "$$($(TESTTMP)/test_aarch64_setlen_vp_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_setlen_vp "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_setlen_vp)" "$$($(TESTTMP)/test_aarch64_setlen_vp_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_str_length_index.pas $(TESTTMP)/test_aarch64_str_length_index
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_str_length_index.pas $(TESTTMP)/test_aarch64_str_length_index_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_str_length_index)" = "$$($(TESTTMP)/test_aarch64_str_length_index_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_str_length_index "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_str_length_index)" "$$($(TESTTMP)/test_aarch64_str_length_index_x64)"
 	./$(COMPILER) --target=aarch64 test/test_managed_strlen_deref.pas $(TESTTMP)/test_aarch64_managed_strlen
 	./$(COMPILER) test/test_managed_strlen_deref.pas $(TESTTMP)/test_aarch64_managed_strlen_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_managed_strlen)" = "$$($(TESTTMP)/test_aarch64_managed_strlen_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_managed_strlen "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_managed_strlen)" "$$($(TESTTMP)/test_aarch64_managed_strlen_x64)"
 	./$(COMPILER) --target=aarch64 test/test_not_int64_expr.pas $(TESTTMP)/test_aarch64_not64
 	./$(COMPILER) test/test_not_int64_expr.pas $(TESTTMP)/test_aarch64_not64_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_not64)" = "$$($(TESTTMP)/test_aarch64_not64_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_not64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_not64)" "$$($(TESTTMP)/test_aarch64_not64_x64)"
 	./$(COMPILER) -uPXX_MANAGED_STRING --target=aarch64 test/test_cross_frozen_strlen_deref.pas $(TESTTMP)/test_aarch64_frozen_strlen
 	./$(COMPILER) -uPXX_MANAGED_STRING test/test_cross_frozen_strlen_deref.pas $(TESTTMP)/test_aarch64_frozen_strlen_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_frozen_strlen)" = "$$($(TESTTMP)/test_aarch64_frozen_strlen_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_frozen_strlen "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_frozen_strlen)" "$$($(TESTTMP)/test_aarch64_frozen_strlen_x64)"
 	# string[N] truncation incl. a heap record holding a shortstring field reached
 	# through a pointer (bug-cross-pointer-store-record-with-shortstring-field)
 	./$(COMPILER) --target=aarch64 test/test_shortstring_trunc.pas $(TESTTMP)/test_aarch64_sstrunc
 	./$(COMPILER) test/test_shortstring_trunc.pas $(TESTTMP)/test_aarch64_sstrunc_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sstrunc)" = "$$($(TESTTMP)/test_aarch64_sstrunc_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_sstrunc "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sstrunc)" "$$($(TESTTMP)/test_aarch64_sstrunc_x64)"
 	# Int64/QWord -> Double at full 64-bit width incl. unsigned top-bit values
 	# (bug-cross-32bit-int64-to-double-low-word / bug-pascal-qword-to-double-signed)
 	./$(COMPILER) --target=aarch64 test/test_u64_to_double.pas $(TESTTMP)/test_aarch64_u64d
 	./$(COMPILER) test/test_u64_to_double.pas $(TESTTMP)/test_aarch64_u64d_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_u64d)" = "$$($(TESTTMP)/test_aarch64_u64d_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_u64d "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_u64d)" "$$($(TESTTMP)/test_aarch64_u64d_x64)"
 	# {$$Q+} overflow-checked arithmetic raises catchable EIntOverflow (aarch64 leg)
 	./$(COMPILER) --target=aarch64 test/test_overflow_checks_qplus.pas $(TESTTMP)/test_aarch64_qplus
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_qplus)" = "$$(printf 'wrapped 0\ncaught=4')"
+	tools/expect_same.sh aarch64/test_aarch64_qplus "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_qplus)" "$$(printf 'wrapped 0\ncaught=4')"
 	./$(COMPILER) --target=aarch64 test/test_overflow_qplus_narrow.pas $(TESTTMP)/test_aarch64_qplus_narrow
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_qplus_narrow)" = "$$(printf 'caught=5 clean=4 wrap=-294967296')"
+	tools/expect_same.sh aarch64/test_aarch64_qplus_narrow "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_qplus_narrow)" "$$(printf 'caught=5 clean=4 wrap=-294967296')"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_record_array_store.pas $(TESTTMP)/test_aarch64_rec_arr_store
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record_array_store.pas $(TESTTMP)/test_aarch64_rec_arr_store_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_rec_arr_store)" = "$$($(TESTTMP)/test_aarch64_rec_arr_store_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_rec_arr_store "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_rec_arr_store)" "$$($(TESTTMP)/test_aarch64_rec_arr_store_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_in_operator.pas $(TESTTMP)/test_aarch64_in
 	./$(COMPILER) test/test_cross_in_operator.pas $(TESTTMP)/test_aarch64_in_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_in)" = "$$($(TESTTMP)/test_aarch64_in_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_in "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_in)" "$$($(TESTTMP)/test_aarch64_in_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_loadfile.pas $(TESTTMP)/test_aarch64_loadfile
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_loadfile.pas $(TESTTMP)/test_aarch64_loadfile_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_loadfile)" = "$$($(TESTTMP)/test_aarch64_loadfile_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_loadfile "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_loadfile)" "$$($(TESTTMP)/test_aarch64_loadfile_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_sysopen_family.pas $(TESTTMP)/test_aarch64_sysopen_family
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_sysopen_family.pas $(TESTTMP)/test_aarch64_sysopen_family_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sysopen_family)" = "$$($(TESTTMP)/test_aarch64_sysopen_family_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_sysopen_family "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sysopen_family)" "$$($(TESTTMP)/test_aarch64_sysopen_family_x64)"
 	./$(COMPILER) --target=aarch64 test/test_arm32_arg_runtime.pas $(TESTTMP)/test_aarch64_args
 	./$(COMPILER) test/test_arm32_arg_runtime.pas $(TESTTMP)/test_aarch64_args_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_args alpha beta)" = "$$($(TESTTMP)/test_aarch64_args_x64 alpha beta)"
+	tools/expect_same.sh aarch64/test_aarch64_args "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_args alpha beta)" "$$($(TESTTMP)/test_aarch64_args_x64 alpha beta)"
 	./$(COMPILER) --target=aarch64 test/test_cross_open_array_params.pas $(TESTTMP)/test_aarch64_open_array_params
 	./$(COMPILER) test/test_cross_open_array_params.pas $(TESTTMP)/test_aarch64_open_array_params_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_open_array_params)" = "$$($(TESTTMP)/test_aarch64_open_array_params_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_open_array_params "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_open_array_params)" "$$($(TESTTMP)/test_aarch64_open_array_params_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_string_cow.pas $(TESTTMP)/test_aarch64_string_cow
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string_cow.pas $(TESTTMP)/test_aarch64_string_cow_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_string_cow)" = "$$($(TESTTMP)/test_aarch64_string_cow_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_string_cow "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_string_cow)" "$$($(TESTTMP)/test_aarch64_string_cow_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_huge_frame.pas $(TESTTMP)/test_aarch64_huge_frame
 	./$(COMPILER) test/test_cross_huge_frame.pas $(TESTTMP)/test_aarch64_huge_frame_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_huge_frame)" = "$$($(TESTTMP)/test_aarch64_huge_frame_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_huge_frame "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_huge_frame)" "$$($(TESTTMP)/test_aarch64_huge_frame_x64)"
 	./$(COMPILER) --target=aarch64 test/test_varrec_alloc_after.pas $(TESTTMP)/test_aarch64_varrec_alloc
 	./$(COMPILER) test/test_varrec_alloc_after.pas $(TESTTMP)/test_aarch64_varrec_alloc_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_varrec_alloc)" = "$$($(TESTTMP)/test_aarch64_varrec_alloc_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_varrec_alloc "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_varrec_alloc)" "$$($(TESTTMP)/test_aarch64_varrec_alloc_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_array_of_const_types.pas $(TESTTMP)/test_aarch64_aoc_types
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_array_of_const_types.pas $(TESTTMP)/test_aarch64_aoc_types_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_aoc_types)" = "$$($(TESTTMP)/test_aarch64_aoc_types_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_aoc_types "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_aoc_types)" "$$($(TESTTMP)/test_aarch64_aoc_types_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_write_pchar.pas $(TESTTMP)/test_aarch64_write_pchar
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_write_pchar.pas $(TESTTMP)/test_aarch64_write_pchar_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_write_pchar)" = "$$($(TESTTMP)/test_aarch64_write_pchar_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_write_pchar "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_write_pchar)" "$$($(TESTTMP)/test_aarch64_write_pchar_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_static_open_array.pas $(TESTTMP)/test_aarch64_static_open
 	./$(COMPILER) test/test_cross_static_open_array.pas $(TESTTMP)/test_aarch64_static_open_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_static_open)" = "$$($(TESTTMP)/test_aarch64_static_open_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_static_open "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_static_open)" "$$($(TESTTMP)/test_aarch64_static_open_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_many_params.pas $(TESTTMP)/test_aarch64_many_params
 	./$(COMPILER) test/test_cross_many_params.pas $(TESTTMP)/test_aarch64_many_params_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_many_params)" = "$$($(TESTTMP)/test_aarch64_many_params_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_many_params "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_many_params)" "$$($(TESTTMP)/test_aarch64_many_params_x64)"
 	./$(COMPILER) --target=aarch64 test/test_conformance_2.pas $(TESTTMP)/test_aarch64_conf2
 	./$(COMPILER) test/test_conformance_2.pas $(TESTTMP)/test_aarch64_conf2_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_conf2)" = "$$($(TESTTMP)/test_aarch64_conf2_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_conf2 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_conf2)" "$$($(TESTTMP)/test_aarch64_conf2_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_shortcircuit.pas $(TESTTMP)/test_aarch64_scx
 	./$(COMPILER) test/test_cross_shortcircuit.pas $(TESTTMP)/test_aarch64_scx_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_scx)" = "$$($(TESTTMP)/test_aarch64_scx_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_scx "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_scx)" "$$($(TESTTMP)/test_aarch64_scx_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_ptr_arith.pas $(TESTTMP)/test_aarch64_pa
 	./$(COMPILER) test/test_cross_ptr_arith.pas $(TESTTMP)/test_aarch64_pa_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_pa)" = "$$($(TESTTMP)/test_aarch64_pa_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_pa "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_pa)" "$$($(TESTTMP)/test_aarch64_pa_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_case_range.pas $(TESTTMP)/test_aarch64_cr
 	./$(COMPILER) test/test_cross_case_range.pas $(TESTTMP)/test_aarch64_cr_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cr)" = "$$($(TESTTMP)/test_aarch64_cr_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_cr "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cr)" "$$($(TESTTMP)/test_aarch64_cr_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_global_init.pas $(TESTTMP)/test_aarch64_gi
 	./$(COMPILER) test/test_cross_global_init.pas $(TESTTMP)/test_aarch64_gi_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_gi)" = "$$($(TESTTMP)/test_aarch64_gi_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_gi "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_gi)" "$$($(TESTTMP)/test_aarch64_gi_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_typed_const.pas $(TESTTMP)/test_aarch64_tc
 	./$(COMPILER) test/test_cross_typed_const.pas $(TESTTMP)/test_aarch64_tc_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_tc)" = "$$($(TESTTMP)/test_aarch64_tc_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_tc "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_tc)" "$$($(TESTTMP)/test_aarch64_tc_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_multidim.pas $(TESTTMP)/test_aarch64_md
 	./$(COMPILER) test/test_cross_multidim.pas $(TESTTMP)/test_aarch64_md_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_md)" = "$$($(TESTTMP)/test_aarch64_md_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_md "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_md)" "$$($(TESTTMP)/test_aarch64_md_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_named_array.pas $(TESTTMP)/test_aarch64_na
 	./$(COMPILER) test/test_cross_named_array.pas $(TESTTMP)/test_aarch64_na_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_na)" = "$$($(TESTTMP)/test_aarch64_na_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_na "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_na)" "$$($(TESTTMP)/test_aarch64_na_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_record_2darray.pas $(TESTTMP)/test_aarch64_r2
 	./$(COMPILER) test/test_cross_record_2darray.pas $(TESTTMP)/test_aarch64_r2_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_r2)" = "$$($(TESTTMP)/test_aarch64_r2_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_r2 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_r2)" "$$($(TESTTMP)/test_aarch64_r2_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_param_2darray.pas $(TESTTMP)/test_aarch64_pa2
 	./$(COMPILER) test/test_cross_param_2darray.pas $(TESTTMP)/test_aarch64_pa2_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_pa2)" = "$$($(TESTTMP)/test_aarch64_pa2_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_pa2 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_pa2)" "$$($(TESTTMP)/test_aarch64_pa2_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_multidim3d.pas $(TESTTMP)/test_aarch64_d3
 	./$(COMPILER) test/test_cross_multidim3d.pas $(TESTTMP)/test_aarch64_d3_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_d3)" = "$$($(TESTTMP)/test_aarch64_d3_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_d3 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_d3)" "$$($(TESTTMP)/test_aarch64_d3_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_const_alias.pas $(TESTTMP)/test_aarch64_ca
 	./$(COMPILER) test/test_cross_const_alias.pas $(TESTTMP)/test_aarch64_ca_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_ca)" = "$$($(TESTTMP)/test_aarch64_ca_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_ca "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_ca)" "$$($(TESTTMP)/test_aarch64_ca_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_float_const.pas $(TESTTMP)/test_aarch64_fc
 	./$(COMPILER) test/test_cross_float_const.pas $(TESTTMP)/test_aarch64_fc_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_fc)" = "$$($(TESTTMP)/test_aarch64_fc_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_fc "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_fc)" "$$($(TESTTMP)/test_aarch64_fc_x64)"
 	./$(COMPILER) --target=aarch64 test/test_scheduler.pas $(TESTTMP)/test_aarch64_sched
 	./$(COMPILER) test/test_scheduler.pas $(TESTTMP)/test_aarch64_sched_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sched)" = "$$($(TESTTMP)/test_aarch64_sched_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_sched "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sched)" "$$($(TESTTMP)/test_aarch64_sched_x64)"
 	./$(COMPILER) --target=aarch64 test/test_scheduler_exc.pas $(TESTTMP)/test_aarch64_sexc
 	./$(COMPILER) test/test_scheduler_exc.pas $(TESTTMP)/test_aarch64_sexc_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sexc)" = "$$($(TESTTMP)/test_aarch64_sexc_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_sexc "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sexc)" "$$($(TESTTMP)/test_aarch64_sexc_x64)"
 	./$(COMPILER) --target=aarch64 test/test_channel.pas $(TESTTMP)/test_aarch64_chan
 	./$(COMPILER) test/test_channel.pas $(TESTTMP)/test_aarch64_chan_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_chan)" = "$$($(TESTTMP)/test_aarch64_chan_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_chan "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_chan)" "$$($(TESTTMP)/test_aarch64_chan_x64)"
 	./$(COMPILER) --target=aarch64 test/test_async_sl.pas $(TESTTMP)/test_aarch64_asl
 	./$(COMPILER) test/test_async_sl.pas $(TESTTMP)/test_aarch64_asl_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_asl)" = "$$($(TESTTMP)/test_aarch64_asl_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_asl "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_asl)" "$$($(TESTTMP)/test_aarch64_asl_x64)"
 	./$(COMPILER) --target=aarch64 test/test_methodptr.pas $(TESTTMP)/test_aarch64_mptr
 	./$(COMPILER) test/test_methodptr.pas $(TESTTMP)/test_aarch64_mptr_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_mptr)" = "$$($(TESTTMP)/test_aarch64_mptr_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_mptr "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_mptr)" "$$($(TESTTMP)/test_aarch64_mptr_x64)"
 	./$(COMPILER) --target=aarch64 test/test_methcall.pas $(TESTTMP)/test_aarch64_mcall
 	./$(COMPILER) test/test_methcall.pas $(TESTTMP)/test_aarch64_mcall_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_mcall)" = "$$($(TESTTMP)/test_aarch64_mcall_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_mcall "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_mcall)" "$$($(TESTTMP)/test_aarch64_mcall_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_sets.pas $(TESTTMP)/test_aarch64_sets
 	./$(COMPILER) test/test_cross_sets.pas $(TESTTMP)/test_aarch64_sets_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sets)" = "$$($(TESTTMP)/test_aarch64_sets_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_sets "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sets)" "$$($(TESTTMP)/test_aarch64_sets_x64)"
 	./$(COMPILER) --target=aarch64 test/test_classref.pas $(TESTTMP)/test_aarch64_classref
 	./$(COMPILER) test/test_classref.pas $(TESTTMP)/test_aarch64_classref_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_classref)" = "$$($(TESTTMP)/test_aarch64_classref_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_classref "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_classref)" "$$($(TESTTMP)/test_aarch64_classref_x64)"
 	./$(COMPILER) --target=aarch64 test/test_class_of.pas $(TESTTMP)/test_aarch64_classof
 	./$(COMPILER) test/test_class_of.pas $(TESTTMP)/test_aarch64_classof_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_classof)" = "$$($(TESTTMP)/test_aarch64_classof_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_classof "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_classof)" "$$($(TESTTMP)/test_aarch64_classof_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_rtti.pas $(TESTTMP)/test_aarch64_rtti
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_rtti.pas $(TESTTMP)/test_aarch64_rtti_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_rtti | grep -vE 'pointer:|RTTI value:|InstanceSize:')" = "$$($(TESTTMP)/test_aarch64_rtti_x64 | grep -vE 'pointer:|RTTI value:|InstanceSize:')"
+	tools/expect_same.sh aarch64/test_aarch64_rtti "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_rtti | grep -vE 'pointer:|RTTI value:|InstanceSize:')" "$$($(TESTTMP)/test_aarch64_rtti_x64 | grep -vE 'pointer:|RTTI value:|InstanceSize:')"
 	./$(COMPILER) --target=aarch64 test/test_streaming.pas $(TESTTMP)/test_aarch64_streaming
 	./$(COMPILER) test/test_streaming.pas $(TESTTMP)/test_aarch64_streaming_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_streaming)" = "$$($(TESTTMP)/test_aarch64_streaming_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_streaming "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_streaming)" "$$($(TESTTMP)/test_aarch64_streaming_x64)"
 	./$(COMPILER) --target=aarch64 test/test_streaming_enumset.pas $(TESTTMP)/test_aarch64_streaming_enumset
 	./$(COMPILER) test/test_streaming_enumset.pas $(TESTTMP)/test_aarch64_streaming_enumset_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_streaming_enumset)" = "$$($(TESTTMP)/test_aarch64_streaming_enumset_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_streaming_enumset "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_streaming_enumset)" "$$($(TESTTMP)/test_aarch64_streaming_enumset_x64)"
 	./$(COMPILER) --target=aarch64 test/test_lfm.pas $(TESTTMP)/test_aarch64_lfm
 	./$(COMPILER) test/test_lfm.pas $(TESTTMP)/test_aarch64_lfm_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_lfm)" = "$$($(TESTTMP)/test_aarch64_lfm_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_lfm "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_lfm)" "$$($(TESTTMP)/test_aarch64_lfm_x64)"
 	./$(COMPILER) --target=aarch64 test/test_interfaces.pas $(TESTTMP)/test_aarch64_iface
 	./$(COMPILER) test/test_interfaces.pas $(TESTTMP)/test_aarch64_iface_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_iface)" = "$$($(TESTTMP)/test_aarch64_iface_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_iface "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_iface)" "$$($(TESTTMP)/test_aarch64_iface_x64)"
 	./$(COMPILER) --target=aarch64 test/test_interface_arc.pas $(TESTTMP)/test_aarch64_iarc
 	./$(COMPILER) test/test_interface_arc.pas $(TESTTMP)/test_aarch64_iarc_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_iarc)" = "$$($(TESTTMP)/test_aarch64_iarc_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_iarc "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_iarc)" "$$($(TESTTMP)/test_aarch64_iarc_x64)"
 	./$(COMPILER) --target=aarch64 test/test_managed_local_release_reuse.pas $(TESTTMP)/test_aarch64_mlrr
 	./$(COMPILER) test/test_managed_local_release_reuse.pas $(TESTTMP)/test_aarch64_mlrr_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_mlrr)" = "$$($(TESTTMP)/test_aarch64_mlrr_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_mlrr "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_mlrr)" "$$($(TESTTMP)/test_aarch64_mlrr_x64)"
 	./$(COMPILER) --target=aarch64 test/test_uint64_ops.pas $(TESTTMP)/test_aarch64_u64
 	./$(COMPILER) test/test_uint64_ops.pas $(TESTTMP)/test_aarch64_u64_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_u64)" = "$$($(TESTTMP)/test_aarch64_u64_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_u64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_u64)" "$$($(TESTTMP)/test_aarch64_u64_x64)"
 	./$(COMPILER) --target=aarch64 test/test_interfaces_is.pas $(TESTTMP)/test_aarch64_iface_is
 	./$(COMPILER) test/test_interfaces_is.pas $(TESTTMP)/test_aarch64_iface_is_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_iface_is)" = "$$($(TESTTMP)/test_aarch64_iface_is_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_iface_is "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_iface_is)" "$$($(TESTTMP)/test_aarch64_iface_is_x64)"
 	./$(COMPILER) --target=aarch64 test/test_interfaces_as.pas $(TESTTMP)/test_aarch64_iface_as
 	./$(COMPILER) test/test_interfaces_as.pas $(TESTTMP)/test_aarch64_iface_as_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_iface_as)" = "$$($(TESTTMP)/test_aarch64_iface_as_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_iface_as "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_iface_as)" "$$($(TESTTMP)/test_aarch64_iface_as_x64)"
 	./$(COMPILER) --target=aarch64 test/test_interfaces_param.pas $(TESTTMP)/test_aarch64_iface_param
 	./$(COMPILER) test/test_interfaces_param.pas $(TESTTMP)/test_aarch64_iface_param_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_iface_param)" = "$$($(TESTTMP)/test_aarch64_iface_param_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_iface_param "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_iface_param)" "$$($(TESTTMP)/test_aarch64_iface_param_x64)"
 	./$(COMPILER) --target=aarch64 test/test_interfaces_inherit.pas $(TESTTMP)/test_aarch64_iface_inh
 	./$(COMPILER) test/test_interfaces_inherit.pas $(TESTTMP)/test_aarch64_iface_inh_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_iface_inh)" = "$$($(TESTTMP)/test_aarch64_iface_inh_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_iface_inh "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_iface_inh)" "$$($(TESTTMP)/test_aarch64_iface_inh_x64)"
 	./$(COMPILER) --target=aarch64 test/test_interfaces_multi_secondary.pas $(TESTTMP)/test_aarch64_iface_multi
 	./$(COMPILER) test/test_interfaces_multi_secondary.pas $(TESTTMP)/test_aarch64_iface_multi_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_iface_multi)" = "$$($(TESTTMP)/test_aarch64_iface_multi_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_iface_multi "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_iface_multi)" "$$($(TESTTMP)/test_aarch64_iface_multi_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_aggregate_return.pas $(TESTTMP)/test_aarch64_aggret
 	./$(COMPILER) test/test_cross_aggregate_return.pas $(TESTTMP)/test_aarch64_aggret_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_aggret)" = "$$($(TESTTMP)/test_aarch64_aggret_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_aggret "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_aggret)" "$$($(TESTTMP)/test_aarch64_aggret_x64)"
 	# aggregate / frozen-string result via a VIRTUAL and an INDIRECT call
 	# (feature-cross-virtual-indirect-hidden-dest)
 	./$(COMPILER) --target=aarch64 test/test_cross_virtual_indirect_aggret.pas $(TESTTMP)/test_aarch64_vindaggret
 	./$(COMPILER) test/test_cross_virtual_indirect_aggret.pas $(TESTTMP)/test_aarch64_vindaggret_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_vindaggret)" = "$$($(TESTTMP)/test_aarch64_vindaggret_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_vindaggret "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_vindaggret)" "$$($(TESTTMP)/test_aarch64_vindaggret_x64)"
 	./$(COMPILER) --target=aarch64 test/test_inheritance_dispatch.pas $(TESTTMP)/test_aarch64_cls
 	./$(COMPILER) test/test_inheritance_dispatch.pas $(TESTTMP)/test_aarch64_cls_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cls)" = "$$($(TESTTMP)/test_aarch64_cls_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_cls "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cls)" "$$($(TESTTMP)/test_aarch64_cls_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_dynarray_field.pas $(TESTTMP)/test_aarch64_dynfield
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_field.pas $(TESTTMP)/test_aarch64_dynfield_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_dynfield)" = "$$($(TESTTMP)/test_aarch64_dynfield_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_dynfield "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_dynfield)" "$$($(TESTTMP)/test_aarch64_dynfield_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_method_implicit_field.pas $(TESTTMP)/test_aarch64_mif
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_method_implicit_field.pas $(TESTTMP)/test_aarch64_mif_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_mif)" = "$$($(TESTTMP)/test_aarch64_mif_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_mif "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_mif)" "$$($(TESTTMP)/test_aarch64_mif_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_forin_implicit_field.pas $(TESTTMP)/test_aarch64_fif
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_forin_implicit_field.pas $(TESTTMP)/test_aarch64_fif_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_fif)" = "$$($(TESTTMP)/test_aarch64_fif_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_fif "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_fif)" "$$($(TESTTMP)/test_aarch64_fif_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_dynarray_global_after_method.pas $(TESTTMP)/test_aarch64_dgam
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_global_after_method.pas $(TESTTMP)/test_aarch64_dgam_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_dgam)" = "$$($(TESTTMP)/test_aarch64_dgam_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_dgam "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_dgam)" "$$($(TESTTMP)/test_aarch64_dgam_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_forin_member_access.pas $(TESTTMP)/test_aarch64_fima
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_forin_member_access.pas $(TESTTMP)/test_aarch64_fima_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_fima)" = "$$($(TESTTMP)/test_aarch64_fima_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_fima "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_fima)" "$$($(TESTTMP)/test_aarch64_fima_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_aarch64_fimz
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_aarch64_fimz_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_fimz)" = "$$($(TESTTMP)/test_aarch64_fimz_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_fimz "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_fimz)" "$$($(TESTTMP)/test_aarch64_fimz_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_hidden_dynarray_temp_zeroinit.pas $(TESTTMP)/test_aarch64_hdtz
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_hidden_dynarray_temp_zeroinit.pas $(TESTTMP)/test_aarch64_hdtz_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_hdtz)" = "$$($(TESTTMP)/test_aarch64_hdtz_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_hdtz "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_hdtz)" "$$($(TESTTMP)/test_aarch64_hdtz_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_call_result_member.pas $(TESTTMP)/test_aarch64_crm
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_call_result_member.pas $(TESTTMP)/test_aarch64_crm_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_crm)" = "$$($(TESTTMP)/test_aarch64_crm_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_crm "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_crm)" "$$($(TESTTMP)/test_aarch64_crm_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_collections.pas $(TESTTMP)/test_aarch64_collections
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_collections.pas $(TESTTMP)/test_aarch64_collections_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_collections)" = "$$($(TESTTMP)/test_aarch64_collections_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_collections "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_collections)" "$$($(TESTTMP)/test_aarch64_collections_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_const_record_temp.pas $(TESTTMP)/test_aarch64_constrectemp
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_const_record_temp.pas $(TESTTMP)/test_aarch64_constrectemp_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_constrectemp)" = "$$($(TESTTMP)/test_aarch64_constrectemp_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_constrectemp "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_constrectemp)" "$$($(TESTTMP)/test_aarch64_constrectemp_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_const_record_temp_managed.pas $(TESTTMP)/test_aarch64_constrectemp_managed
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_const_record_temp_managed.pas $(TESTTMP)/test_aarch64_constrectemp_managed_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_constrectemp_managed)" = "$$($(TESTTMP)/test_aarch64_constrectemp_managed_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_constrectemp_managed "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_constrectemp_managed)" "$$($(TESTTMP)/test_aarch64_constrectemp_managed_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_set_runtime.pas $(TESTTMP)/test_aarch64_setrt
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_set_runtime.pas $(TESTTMP)/test_aarch64_setrt_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_setrt)" = "$$($(TESTTMP)/test_aarch64_setrt_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_setrt "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_setrt)" "$$($(TESTTMP)/test_aarch64_setrt_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_managed_record_temp_init.pas $(TESTTMP)/test_aarch64_mrti
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_managed_record_temp_init.pas $(TESTTMP)/test_aarch64_mrti_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_mrti)" = "$$($(TESTTMP)/test_aarch64_mrti_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_mrti "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_mrti)" "$$($(TESTTMP)/test_aarch64_mrti_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_dynarray_copy.pas $(TESTTMP)/test_aarch64_dyncopy
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_copy.pas $(TESTTMP)/test_aarch64_dyncopy_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_dyncopy)" = "$$($(TESTTMP)/test_aarch64_dyncopy_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_dyncopy "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_dyncopy)" "$$($(TESTTMP)/test_aarch64_dyncopy_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_nested_dynarray_setlen.pas $(TESTTMP)/test_aarch64_nestdynsetlen
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_nested_dynarray_setlen.pas $(TESTTMP)/test_aarch64_nestdynsetlen_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_nestdynsetlen)" = "$$($(TESTTMP)/test_aarch64_nestdynsetlen_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_nestdynsetlen "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_nestdynsetlen)" "$$($(TESTTMP)/test_aarch64_nestdynsetlen_x64)"
 	./$(COMPILER) --target=aarch64 test/test_timer.pas $(TESTTMP)/test_aarch64_timer
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_timer)" = "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
+	tools/expect_same.sh aarch64/test_aarch64_timer "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_timer)" "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
 	./$(COMPILER) --target=aarch64 test/test_reactor.pas $(TESTTMP)/test_aarch64_reactor
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_reactor)" = "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
+	tools/expect_same.sh aarch64/test_aarch64_reactor "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_reactor)" "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
 	./$(COMPILER) --target=aarch64 -Fulib/rtl/platform/posix test/test_asyncecho.pas $(TESTTMP)/test_aarch64_asyncecho
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_asyncecho)" = "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
+	tools/expect_same.sh aarch64/test_aarch64_asyncecho "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_asyncecho)" "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
 	# libc-free signal handlers on aarch64 (b370): hook fires + program RESUMES;
 	# no hook = revert to SIG_DFL + re-raise (dies 143). arm64 has NO sa_restorer
 	# and puts sa_mask at offset 16 — its own port, not a copy of the x86-64 one.
 	./$(COMPILER) --target=aarch64 -Fulib/rtl test/test_signal_handler_callback_b336.pas $(TESTTMP)/test_aarch64_sigcb
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sigcb)" = "$$(printf 'hits=2\nresumed after handler')"
+	tools/expect_same.sh aarch64/test_aarch64_sigcb "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sigcb)" "$$(printf 'hits=2\nresumed after handler')"
 	./$(COMPILER) --target=aarch64 -Fulib/rtl test/test_signal_default_revert_b336.pas $(TESTTMP)/test_aarch64_sigdfl
 	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sigdfl > /dev/null 2>&1; test "$$?" = "143"
 	# SA_SIGINFO: si_code/si_addr/ucontext* reach Pascal. si_addr is asserted
 	# against the address the program itself faulted on, so a wrong union offset
 	# (16 here, 12 on ILP32) cannot pass; the negative SI_TKILL is the sign canary.
 	./$(COMPILER) --target=aarch64 test/test_signal_siginfo.pas $(TESTTMP)/test_aarch64_siginfo
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_siginfo)" = "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
+	tools/expect_same.sh aarch64/test_aarch64_siginfo "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_siginfo)" "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
 	# PC rewrite: the handler points the saved ucontext PC at a Pascal proc
 	# that raises, and the fault is caught by the try/except the faulting
 	# code was already inside. The pc-is-the-fault line is the exact check
 	# of the per-arch PC offset -- rewriting the wrong ucontext word would
 	# clobber an unrelated register instead.
 	./$(COMPILER) --target=aarch64 test/test_signal_pc_rewrite.pas $(TESTTMP)/test_aarch64_pcrw
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_pcrw)" = "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
+	tools/expect_same.sh aarch64/test_aarch64_pcrw "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_pcrw)" "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
 	# ... and the SP half. The per-arch ucontext SP offset is a five-entry
 	# table where one wrong entry silently clobbers an unrelated register,
 	# so every target checks that the resumed proc really landed on the
@@ -11427,27 +11427,27 @@ test-aarch64: $(COMPILER)
 	# the difference between a redirect that took and an endless fault loop on
 	# the guard page. Depth is not printed: it depends on RLIMIT_STACK.
 	./$(COMPILER) --target=aarch64 test/test_stack_overflow_raise.pas $(TESTTMP)/test_aarch64_sovf
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sovf)" = "$$(printf 'recursing\ncaught a stack overflow, hits=1\nand execution continued, after=1000')"
+	tools/expect_same.sh aarch64/test_aarch64_sovf "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sovf)" "$$(printf 'recursing\ncaught a stack overflow, hits=1\nand execution continued, after=1000')"
 	# ... and the CPU half of the profile follows --target, not the host.
 	./$(COMPILER) --target=aarch64 --mimic-fpc-compiler test/test_mimic_fpc_compiler_profile.pas $(TESTTMP)/test_aarch64_mimicfpcc
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_mimicfpcc)" = "$$(printf 'fpc=yes\nunix=yes\ncpu=aarch64\nend')"
+	tools/expect_same.sh aarch64/test_aarch64_mimicfpcc "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_mimicfpcc)" "$$(printf 'fpc=yes\nunix=yes\ncpu=aarch64\nend')"
 	# Nested-array Copy on this target too — the stride is TypeSize(tyPointer),
 	# so the ILP32 targets are the ones that catch a hardcoded 8.
 	./$(COMPILER) --target=aarch64 test/test_dynarray_copy_nested.pas $(TESTTMP)/test_aarch64_dyncopyn
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_dyncopyn)" = "$$(printf 'lenh=2 h00=1 h11=4\none-level-detach g00=99\ninner=4\nafter-copy-scope g11=4 g22=6\nt3 len=2 u111=7 u010=2\nstr v00=row v11=end\nsource-survives s11=end')"
+	tools/expect_same.sh aarch64/test_aarch64_dyncopyn "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_dyncopyn)" "$$(printf 'lenh=2 h00=1 h11=4\none-level-detach g00=99\ninner=4\nafter-copy-scope g11=4 g22=6\nt3 len=2 u111=7 u010=2\nstr v00=row v11=end\nsource-survives s11=end')"
 	./$(COMPILER) --target=aarch64 test/test_halt_exit_code.pas $(TESTTMP)/test_aarch64_halt
 	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_halt; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) --target=aarch64 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_aarch64_sprw
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sprw)" = "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
+	tools/expect_same.sh aarch64/test_aarch64_sprw "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sprw)" "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
 	# cdecl indirect call (dlsym'd C fn through a cdecl proc-type value) — b362
 	./$(COMPILER) --target=aarch64 test/test_cdecl_indirect.pas $(TESTTMP)/test_aarch64_cdeclind
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cdeclind)" = "$$(printf '4.0\n1024.0\n12.0')"
+	tools/expect_same.sh aarch64/test_aarch64_cdeclind "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cdeclind)" "$$(printf '4.0\n1024.0\n12.0')"
 	./$(COMPILER) --target=aarch64 test/test_extern_c.pas $(TESTTMP)/test_aarch64_extern
 	./$(COMPILER) test/test_extern_c.pas $(TESTTMP)/test_aarch64_extern_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_extern)" = "$$($(TESTTMP)/test_aarch64_extern_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_extern "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_extern)" "$$($(TESTTMP)/test_aarch64_extern_x64)"
 	./$(COMPILER) --target=aarch64 test/test_extern_c_float.pas $(TESTTMP)/test_aarch64_extern_float
 	./$(COMPILER) test/test_extern_c_float.pas $(TESTTMP)/test_aarch64_extern_float_x64
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_extern_float)" = "$$($(TESTTMP)/test_aarch64_extern_float_x64)"
+	tools/expect_same.sh aarch64/test_aarch64_extern_float "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_extern_float)" "$$($(TESTTMP)/test_aarch64_extern_float_x64)"
 	./$(COMPILER) --target=aarch64 test/ccross_entry.c $(TESTTMP)/test_aarch64_centry
 	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_centry; test "$$?" = "42"
 	./$(COMPILER) --target=aarch64 test/ccross_args.c $(TESTTMP)/test_aarch64_cargs
@@ -11468,10 +11468,10 @@ test-aarch64: $(COMPILER)
 	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cudiv; test "$$?" = "42"
 	# inline asm on aarch64: locals/params via [x29,off] substitution, labels+branches, ldr/@glob global access
 	./$(COMPILER) --target=aarch64 test/test_asm_a64.pas $(TESTTMP)/test_aarch64_asm
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_asm)" = "$$(printf '42\n55\n42')"
+	tools/expect_same.sh aarch64/test_aarch64_asm "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_asm)" "$$(printf '42\n55\n42')"
 	# ifdef-guarded multi-arch asm source, aarch64 leg
 	./$(COMPILER) --target=aarch64 test/test_asm_ifdef_multiarch.pas $(TESTTMP)/test_aarch64_asmifdef
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_asmifdef)" = "42"
+	tools/expect_same.sh aarch64/test_aarch64_asmifdef "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_asmifdef)" "42"
 	# .asm source frontend on aarch64: labels/branches + global entry override, exit code = x0
 	./$(COMPILER) --target=aarch64 test/test_asm_a64_sum.asm $(TESTTMP)/test_aarch64_asmfront
 	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_asmfront; test "$$?" = "55"
@@ -11479,22 +11479,22 @@ test-aarch64: $(COMPILER)
 	# bug-a-parallel-for-aarch64-multi-capture: BSS base was not 8-aligned, so the
 	# --threadsafe I/O lock's 64-bit ldaxr SIGBUS'd for some CodeLen parities.
 	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_for_lang.pas $(TESTTMP)/test_aarch64_parfor
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parfor | tail -n 1)" = "PARFORLANG OK"
+	tools/expect_same.sh aarch64/test_aarch64_parfor "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parfor | tail -n 1)" "PARFORLANG OK"
 	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_for_capture.pas $(TESTTMP)/test_aarch64_parcap
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parcap | tail -n 1)" = "PARFORCAP OK"
+	tools/expect_same.sh aarch64/test_aarch64_parcap "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parcap | tail -n 1)" "PARFORCAP OK"
 	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_for_capture_aggr.pas $(TESTTMP)/test_aarch64_parcapaggr
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parcapaggr | tail -n 1)" = "PARFORAGGR OK"
+	tools/expect_same.sh aarch64/test_aarch64_parcapaggr "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parcapaggr | tail -n 1)" "PARFORAGGR OK"
 	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_for_capture_string.pas $(TESTTMP)/test_aarch64_parcapstr
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parcapstr | tail -n 1)" = "PARFORSTR OK"
+	tools/expect_same.sh aarch64/test_aarch64_parcapstr "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parcapstr | tail -n 1)" "PARFORSTR OK"
 	# scheduling policy + reduction + named-arg clause on aarch64 (Track T cross gate)
 	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_policy.pas $(TESTTMP)/test_aarch64_parpol
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parpol)" = "PARPOL OK"
+	tools/expect_same.sh aarch64/test_aarch64_parpol "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parpol)" "PARPOL OK"
 	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_policy_lang.pas $(TESTTMP)/test_aarch64_parpollang
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parpollang)" = "PARPOLLANG OK"
+	tools/expect_same.sh aarch64/test_aarch64_parpollang "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parpollang)" "PARPOLLANG OK"
 	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_reduction.pas $(TESTTMP)/test_aarch64_parred
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parred)" = "PARRED OK"
+	tools/expect_same.sh aarch64/test_aarch64_parred "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parred)" "PARRED OK"
 	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_policy_named.pas $(TESTTMP)/test_aarch64_parnamed
-	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parnamed)" = "PARNAMED OK"
+	tools/expect_same.sh aarch64/test_aarch64_parnamed "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parnamed)" "PARNAMED OK"
 	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_writeln_atomic.pas $(TESTTMP)/test_aarch64_pwa
 	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_pwa > $(TESTTMP)/test_aarch64_pwa.out
 	test "$$(tail -n1 $(TESTTMP)/test_aarch64_pwa.out)" = "PARWROK"
@@ -11513,18 +11513,18 @@ test-riscv32: $(COMPILER)
 	# through a pointer (bug-cross-pointer-store-record-with-shortstring-field)
 	./$(COMPILER) --target=riscv32 test/test_shortstring_trunc.pas $(TESTTMP)/test_riscv32_sstrunc
 	./$(COMPILER) test/test_shortstring_trunc.pas $(TESTTMP)/test_riscv32_sstrunc_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_sstrunc)" = "$$($(TESTTMP)/test_riscv32_sstrunc_x64)"
+	tools/expect_same.sh riscv32/test_riscv32_sstrunc "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_sstrunc)" "$$($(TESTTMP)/test_riscv32_sstrunc_x64)"
 	# Int64/QWord -> Double at full 64-bit width incl. unsigned top-bit values
 	# (bug-cross-32bit-int64-to-double-low-word / bug-pascal-qword-to-double-signed)
 	./$(COMPILER) --target=riscv32 test/test_u64_to_double.pas $(TESTTMP)/test_riscv32_u64d
 	./$(COMPILER) test/test_u64_to_double.pas $(TESTTMP)/test_riscv32_u64d_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_u64d)" = "$$($(TESTTMP)/test_riscv32_u64d_x64)"
+	tools/expect_same.sh riscv32/test_riscv32_u64d "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_u64d)" "$$($(TESTTMP)/test_riscv32_u64d_x64)"
 	# {$$Q+} add/sub/unsigned-mul raise catchable EIntOverflow (riscv32 full for
 	# the unsigned rows; signed checked MUL stays deferred on 32-bit pairs)
 	./$(COMPILER) --target=riscv32 test/test_overflow_checks_qplus.pas $(TESTTMP)/test_riscv32_qplus
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_qplus)" = "$$(printf 'wrapped 0\ncaught=4')"
+	tools/expect_same.sh riscv32/test_riscv32_qplus "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_qplus)" "$$(printf 'wrapped 0\ncaught=4')"
 	./$(COMPILER) --target=riscv32 test/test_overflow_qplus_narrow.pas $(TESTTMP)/test_riscv32_qplus_narrow
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_qplus_narrow)" = "$$(printf 'caught=5 clean=4 wrap=-294967296')"
+	tools/expect_same.sh riscv32/test_riscv32_qplus_narrow "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_qplus_narrow)" "$$(printf 'caught=5 clean=4 wrap=-294967296')"
 	./$(COMPILER) --target=riscv32 test/ccross_entry.c $(TESTTMP)/test_riscv32_centry
 	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_centry; test "$$?" = "42"
 	./$(COMPILER) --target=riscv32 test/ccross_args.c $(TESTTMP)/test_riscv32_cargs
@@ -11538,14 +11538,14 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/cunsigned_div_mod_b123.c $(TESTTMP)/test_riscv32_cudiv
 	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cudiv; test "$$?" = "42"
 	./$(COMPILER) --target=riscv32 test/hello.pas $(TESTTMP)/test_riscv32_hello
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_hello)" = "Hello, World!"
+	tools/expect_same.sh riscv32/test_riscv32_hello "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_hello)" "Hello, World!"
 	# inline expansion (feature-inline-routines): -O2 == -O0 on this cross target.
 	./$(COMPILER) --target=riscv32 test/test_inline_expand.pas $(TESTTMP)/test_riscv32_inl_o0
 	./$(COMPILER) --target=riscv32 -O2 test/test_inline_expand.pas $(TESTTMP)/test_riscv32_inl_o2
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_inl_o0)" = "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_inl_o2)"
+	tools/expect_same.sh riscv32/test_riscv32_inl_o0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_inl_o0)" "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_inl_o2)"
 	./$(COMPILER) --target=riscv32 test/test_stackless_gen.pas $(TESTTMP)/test_riscv32_slg
 	./$(COMPILER) test/test_stackless_gen.pas $(TESTTMP)/test_riscv32_slg_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_slg)" = "$$($(TESTTMP)/test_riscv32_slg_x64)"
+	tools/expect_same.sh riscv32/test_riscv32_slg "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_slg)" "$$($(TESTTMP)/test_riscv32_slg_x64)"
 	./$(COMPILER) --target=riscv32 test/test_readln.pas $(TESTTMP)/test_riscv32_readln
 	./$(COMPILER) test/test_readln.pas $(TESTTMP)/test_riscv32_readln_x64
 	test "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_readln)" = "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_riscv32_readln_x64)"
@@ -11554,32 +11554,32 @@ test-riscv32: $(COMPILER)
 	test "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_eof)" = "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_riscv32_eof_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_exception.pas $(TESTTMP)/test_riscv32_exc
 	./$(COMPILER) test/test_cross_exception.pas $(TESTTMP)/test_riscv32_exc_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_exc)" = "$$($(TESTTMP)/test_riscv32_exc_x64)"
+	tools/expect_same.sh riscv32/test_riscv32_exc "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_exc)" "$$($(TESTTMP)/test_riscv32_exc_x64)"
 	./$(COMPILER) --target=riscv32 test/test_arm32_arg_runtime.pas $(TESTTMP)/test_riscv32_pargs
 	./$(COMPILER) test/test_arm32_arg_runtime.pas $(TESTTMP)/test_riscv32_pargs_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_pargs alpha beta)" = "$$($(TESTTMP)/test_riscv32_pargs_x64 alpha beta)"
+	tools/expect_same.sh riscv32/test_riscv32_pargs "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_pargs alpha beta)" "$$($(TESTTMP)/test_riscv32_pargs_x64 alpha beta)"
 	./$(COMPILER) --target=riscv32 test/test_cross_typed_const.pas $(TESTTMP)/test_riscv32_tc
 	./$(COMPILER) test/test_cross_typed_const.pas $(TESTTMP)/test_riscv32_tc_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_tc)" = "$$($(TESTTMP)/test_riscv32_tc_x64)"
+	tools/expect_same.sh riscv32/test_riscv32_tc "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_tc)" "$$($(TESTTMP)/test_riscv32_tc_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_global_init.pas $(TESTTMP)/test_riscv32_gi
 	./$(COMPILER) test/test_cross_global_init.pas $(TESTTMP)/test_riscv32_gi_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_gi)" = "$$($(TESTTMP)/test_riscv32_gi_x64)"
+	tools/expect_same.sh riscv32/test_riscv32_gi "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_gi)" "$$($(TESTTMP)/test_riscv32_gi_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_set_param.pas $(TESTTMP)/test_riscv32_setp
 	./$(COMPILER) test/test_cross_set_param.pas $(TESTTMP)/test_riscv32_setp_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_setp)" = "$$($(TESTTMP)/test_riscv32_setp_x64)"
+	tools/expect_same.sh riscv32/test_riscv32_setp "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_setp)" "$$($(TESTTMP)/test_riscv32_setp_x64)"
 	# inline asm on riscv32: locals/params via s0-substitution, labels+branches, la/@glob global access
 	./$(COMPILER) --target=riscv32 test/test_asm_rv32.pas $(TESTTMP)/test_riscv32_asm
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_asm)" = "$$(printf '42\n55\n42')"
+	tools/expect_same.sh riscv32/test_riscv32_asm "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_asm)" "$$(printf '42\n55\n42')"
 	# .asm source frontend on riscv32: labels/branches + global entry override, exit code = a0
 	./$(COMPILER) --target=riscv32 test/test_asm_rv32_sum.asm $(TESTTMP)/test_riscv32_asmfront
 	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_asmfront; test "$$?" = "55"
 	# ifdef-guarded multi-arch asm source, riscv32 leg
 	./$(COMPILER) --target=riscv32 test/test_asm_ifdef_multiarch.pas $(TESTTMP)/test_riscv32_asmifdef
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_asmifdef)" = "42"
+	tools/expect_same.sh riscv32/test_riscv32_asmifdef "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_asmifdef)" "42"
 	# libc-free signal handlers on riscv32 (b371): hook fires + program RESUMES;
 	# no hook = revert to SIG_DFL + re-raise (dies 143).
 	./$(COMPILER) --target=riscv32 -Fulib/rtl test/test_signal_handler_callback_b336.pas $(TESTTMP)/test_riscv32_sigcb
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_sigcb)" = "$$(printf 'hits=2\nresumed after handler')"
+	tools/expect_same.sh riscv32/test_riscv32_sigcb "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_sigcb)" "$$(printf 'hits=2\nresumed after handler')"
 	./$(COMPILER) --target=riscv32 -Fulib/rtl test/test_signal_default_revert_b336.pas $(TESTTMP)/test_riscv32_sigdfl
 	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_sigdfl > /dev/null 2>&1; test "$$?" = "143"
 	# SA_SIGINFO: si_code/si_addr/ucontext* reach Pascal. si_addr is asserted
@@ -11587,14 +11587,14 @@ test-riscv32: $(COMPILER)
 	# preamble is NOT padded, so the union starts at 12, not 16; this is what
 	# measured that. The negative SI_TKILL is the sign canary.
 	./$(COMPILER) --target=riscv32 test/test_signal_siginfo.pas $(TESTTMP)/test_riscv32_siginfo
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_siginfo)" = "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
+	tools/expect_same.sh riscv32/test_riscv32_siginfo "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_siginfo)" "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
 	# PC rewrite: the handler points the saved ucontext PC at a Pascal proc
 	# that raises, and the fault is caught by the try/except the faulting
 	# code was already inside. The pc-is-the-fault line is the exact check
 	# of the per-arch PC offset -- rewriting the wrong ucontext word would
 	# clobber an unrelated register instead.
 	./$(COMPILER) --target=riscv32 test/test_signal_pc_rewrite.pas $(TESTTMP)/test_riscv32_pcrw
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_pcrw)" = "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
+	tools/expect_same.sh riscv32/test_riscv32_pcrw "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_pcrw)" "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
 	# ... and the SP half. The per-arch ucontext SP offset is a five-entry
 	# table where one wrong entry silently clobbers an unrelated register,
 	# so every target checks that the resumed proc really landed on the
@@ -11604,15 +11604,15 @@ test-riscv32: $(COMPILER)
 	# Nested-array Copy on this target too — the stride is TypeSize(tyPointer),
 	# so the ILP32 targets are the ones that catch a hardcoded 8.
 	./$(COMPILER) --target=riscv32 test/test_dynarray_copy_nested.pas $(TESTTMP)/test_riscv32_dyncopyn
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_dyncopyn)" = "$$(printf 'lenh=2 h00=1 h11=4\none-level-detach g00=99\ninner=4\nafter-copy-scope g11=4 g22=6\nt3 len=2 u111=7 u010=2\nstr v00=row v11=end\nsource-survives s11=end')"
+	tools/expect_same.sh riscv32/test_riscv32_dyncopyn "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_dyncopyn)" "$$(printf 'lenh=2 h00=1 h11=4\none-level-detach g00=99\ninner=4\nafter-copy-scope g11=4 g22=6\nt3 len=2 u111=7 u010=2\nstr v00=row v11=end\nsource-survives s11=end')"
 	./$(COMPILER) --target=riscv32 test/test_halt_exit_code.pas $(TESTTMP)/test_riscv32_halt
 	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_halt; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) --target=riscv32 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_riscv32_sprw
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_sprw)" = "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
+	tools/expect_same.sh riscv32/test_riscv32_sprw "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_sprw)" "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
 	# by-value record params over 4 bytes (up to 8): both words must cross
 	# (they silently truncated to word 1 -- bug-riscv32-byval-record-param-one-word)
 	./$(COMPILER) --target=riscv32 test/test_arm32_record_byval_wide.pas $(TESTTMP)/test_riscv32_recwide
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_recwide)" = "$$(printf '1 2\n1 2\n111 222\n1 7 8 2\n1 2 3 4 7 8\n1 2 3 7 8\n1 2 3 4 5 7 8\n200 7\ndone')"
+	tools/expect_same.sh riscv32/test_riscv32_recwide "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_recwide)" "$$(printf '1 2\n1 2\n111 222\n1 7 8 2\n1 2 3 4 7 8\n1 2 3 7 8\n1 2 3 4 5 7 8\n200 7\ndone')"
 	# managed-record operator chain (TBigInt: Boolean + dynarray = 8 bytes byval)
 	./$(COMPILER) --target=riscv32 -Fulib/rtl test/lib_bignum_ops.pas $(TESTTMP)/test_riscv32_bignum
 	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_bignum > $(TESTTMP)/test_riscv32_bignum.out
@@ -11622,60 +11622,60 @@ test-riscv32: $(COMPILER)
 	# ---- shared Pascal cross battery (mirrors test-arm32; bug-test-riscv32-thin-coverage).
 	#      SKIP lines are explicit feature gaps, not silent omissions.
 	./$(COMPILER) --target=riscv32 test/hello.pas $(TESTTMP)/test_rv32x_hello
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_hello)" = "Hello, World!"
+	tools/expect_same.sh riscv32/test_rv32x_hello "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_hello)" "Hello, World!"
 	# inline expansion (feature-inline-routines): -O2 == -O0 on this cross target.
 	./$(COMPILER) --target=riscv32 test/test_inline_expand.pas $(TESTTMP)/test_rv32x_inl_o0
 	./$(COMPILER) --target=riscv32 -O2 test/test_inline_expand.pas $(TESTTMP)/test_rv32x_inl_o2
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_inl_o0)" = "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_inl_o2)"
+	tools/expect_same.sh riscv32/test_rv32x_inl_o0 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_inl_o0)" "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_inl_o2)"
 	./$(COMPILER) --target=riscv32 test/test_record_temp_byval_arg.pas $(TESTTMP)/test_rv32x_rectemp
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_rectemp)" = "$$(printf '18\n46')"
+	tools/expect_same.sh riscv32/test_rv32x_rectemp "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_rectemp)" "$$(printf '18\n46')"
 	./$(COMPILER) --target=riscv32 test/test_ctor_string_literal_arg.pas $(TESTTMP)/test_rv32x_ctorstrlit
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_ctorstrlit)" = "$$(printf 'field:hello\nc1\nafter1\nc2\nafter2\nc3\nc4\nafter3\nmsg:hello\nafter4')"
+	tools/expect_same.sh riscv32/test_rv32x_ctorstrlit "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_ctorstrlit)" "$$(printf 'field:hello\nc1\nafter1\nc2\nafter2\nc3\nc4\nafter3\nmsg:hello\nafter4')"
 	# SKIP test/test_arm32_virtual_wide.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	./$(COMPILER) --target=riscv32 test/test_single_in_aggregate.pas $(TESTTMP)/test_rv32x_singleagg
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_singleagg)" = "$$(printf '1.5 2.5 3.5\n9.500 8.250 7.125\n2.0 4.0 6.0\n10.0')"
+	tools/expect_same.sh riscv32/test_rv32x_singleagg "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_singleagg)" "$$(printf '1.5 2.5 3.5\n9.500 8.250 7.125\n2.0 4.0 6.0\n10.0')"
 	./$(COMPILER) --target=riscv32 test/test_i386_arith.pas $(TESTTMP)/test_rv32x_arith
 	./$(COMPILER) test/test_i386_arith.pas $(TESTTMP)/test_rv32x_arith_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_arith)" = "$$($(TESTTMP)/test_rv32x_arith_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_arith "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_arith)" "$$($(TESTTMP)/test_rv32x_arith_x64)"
 	./$(COMPILER) --target=riscv32 test/test_i386_procs.pas $(TESTTMP)/test_rv32x_procs
 	./$(COMPILER) test/test_i386_procs.pas $(TESTTMP)/test_rv32x_procs_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_procs)" = "$$($(TESTTMP)/test_rv32x_procs_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_procs "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_procs)" "$$($(TESTTMP)/test_rv32x_procs_x64)"
 	./$(COMPILER) --target=riscv32 test/test_i386_loops.pas $(TESTTMP)/test_rv32x_loops
 	./$(COMPILER) test/test_i386_loops.pas $(TESTTMP)/test_rv32x_loops_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_loops)" = "$$($(TESTTMP)/test_rv32x_loops_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_loops "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_loops)" "$$($(TESTTMP)/test_rv32x_loops_x64)"
 	./$(COMPILER) --target=riscv32 test/test_i386_write.pas $(TESTTMP)/test_rv32x_write
 	./$(COMPILER) test/test_i386_write.pas $(TESTTMP)/test_rv32x_write_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_write)" = "$$($(TESTTMP)/test_rv32x_write_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_write "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_write)" "$$($(TESTTMP)/test_rv32x_write_x64)"
 	./$(COMPILER) --target=riscv32 test/test_i386_varparam.pas $(TESTTMP)/test_rv32x_varparam
 	./$(COMPILER) test/test_i386_varparam.pas $(TESTTMP)/test_rv32x_varparam_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_varparam)" = "$$($(TESTTMP)/test_rv32x_varparam_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_varparam "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_varparam)" "$$($(TESTTMP)/test_rv32x_varparam_x64)"
 	# SKIP test/test_cross_syscall.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	./$(COMPILER) --target=riscv32 test/test_cross_heap.pas $(TESTTMP)/test_rv32x_heap
 	./$(COMPILER) test/test_cross_heap.pas $(TESTTMP)/test_rv32x_heap_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_heap)" = "$$($(TESTTMP)/test_rv32x_heap_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_heap "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_heap)" "$$($(TESTTMP)/test_rv32x_heap_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_string.pas $(TESTTMP)/test_rv32x_string
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string.pas $(TESTTMP)/test_rv32x_string_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_string)" = "$$($(TESTTMP)/test_rv32x_string_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_string "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_string)" "$$($(TESTTMP)/test_rv32x_string_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_record.pas $(TESTTMP)/test_rv32x_record
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record.pas $(TESTTMP)/test_rv32x_record_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_record)" = "$$($(TESTTMP)/test_rv32x_record_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_record "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_record)" "$$($(TESTTMP)/test_rv32x_record_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_dynarray.pas $(TESTTMP)/test_rv32x_dynarray
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_dynarray.pas $(TESTTMP)/test_rv32x_dynarray_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_dynarray)" = "$$($(TESTTMP)/test_rv32x_dynarray_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_dynarray "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_dynarray)" "$$($(TESTTMP)/test_rv32x_dynarray_x64)"
 	# UN-SKIPPED 2026-08-07: the gap was IR_SETLEN_DYN handing PXXDynSetLen the
 	# array's HANDLE instead of its slot address, so SetLength on a nested array
 	# silently did nothing (bug-a-riscv32-nested-dynamic-array-element-write-segfaults).
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_nested_dynarray_setlen.pas $(TESTTMP)/test_rv32x_nestsetlen
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_nested_dynarray_setlen.pas $(TESTTMP)/test_rv32x_nestsetlen_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_nestsetlen)" = "$$($(TESTTMP)/test_rv32x_nestsetlen_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_nestsetlen "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_nestsetlen)" "$$($(TESTTMP)/test_rv32x_nestsetlen_x64)"
 	@# ...and the whole-array assignment battery, whose AliasesNested case is the
 	@# same shape; deliberately not wired before, because it landed red on the above.
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_dynarray_whole_assign.pas $(TESTTMP)/test_rv32x_dynwhole
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_whole_assign.pas $(TESTTMP)/test_rv32x_dynwhole_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_dynwhole)" = "$$($(TESTTMP)/test_rv32x_dynwhole_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_dynwhole "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_dynwhole)" "$$($(TESTTMP)/test_rv32x_dynwhole_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_exception.pas $(TESTTMP)/test_rv32x_exception
 	./$(COMPILER) test/test_cross_exception.pas $(TESTTMP)/test_rv32x_exception_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_exception)" = "$$($(TESTTMP)/test_rv32x_exception_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_exception "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_exception)" "$$($(TESTTMP)/test_rv32x_exception_x64)"
 	# NOT compared against x86-64's output, unlike its neighbours: riscv32
 	# reduces float depth from the target, so a Single-typed expression renders
 	# in the 10-significant-digit / 2-digit-exponent Single form here and in the
@@ -11691,10 +11691,10 @@ test-riscv32: $(COMPILER)
 	tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_float | diff -u test/test_cross_float.riscv32.expected -
 	./$(COMPILER) --target=riscv32 test/test_cross_float_return.pas $(TESTTMP)/test_rv32x_fret
 	./$(COMPILER) test/test_cross_float_return.pas $(TESTTMP)/test_rv32x_fret_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_fret)" = "$$($(TESTTMP)/test_rv32x_fret_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_fret "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_fret)" "$$($(TESTTMP)/test_rv32x_fret_x64)"
 	./$(COMPILER) --target=riscv32 test/test_arm32_arg_runtime.pas $(TESTTMP)/test_rv32x_args
 	./$(COMPILER) test/test_arm32_arg_runtime.pas $(TESTTMP)/test_rv32x_args_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_args alpha beta)" = "$$($(TESTTMP)/test_rv32x_args_x64 alpha beta)"
+	tools/expect_same.sh riscv32/test_rv32x_args "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_args alpha beta)" "$$($(TESTTMP)/test_rv32x_args_x64 alpha beta)"
 	# UN-SKIPPED 2026-08-27. The "backend feature gap" these two named was that
 	# riscv32 had no IR_VAR_STORE / IR_VAR_BOX / IR_VAR_BINOP arm at ALL, so
 	# `var v: Variant; v := 1;` did not compile for this target -- and any
@@ -11702,15 +11702,15 @@ test-riscv32: $(COMPILER)
 	# path nothing could reach. bug-a-riscv32-codegen-has-no-variant-support
 	./$(COMPILER) --target=riscv32 test/test_cross_variant.pas $(TESTTMP)/test_rv32x_variant
 	./$(COMPILER) test/test_cross_variant.pas $(TESTTMP)/test_rv32x_variant_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_variant)" = "$$($(TESTTMP)/test_rv32x_variant_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_variant "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_variant)" "$$($(TESTTMP)/test_rv32x_variant_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_variant_single.pas $(TESTTMP)/test_rv32x_variant_single
 	./$(COMPILER) test/test_cross_variant_single.pas $(TESTTMP)/test_rv32x_variant_single_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_variant_single)" = "$$($(TESTTMP)/test_rv32x_variant_single_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_variant_single "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_variant_single)" "$$($(TESTTMP)/test_rv32x_variant_single_x64)"
 	# ...and the differential this bug's own gate names: the stringy-operand
 	# coercion rule, which the other four targets already agree on. It is the
 	# row that proves PXXVarBinOpPas is now genuinely REACHED here.
 	./$(COMPILER) -Fulib/rtl --target=riscv32 test/test_variant_comparison_coerces_a_stringy_operand.pas $(TESTTMP)/test_rv32x_varcmpcoerce
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_varcmpcoerce | tail -1)" = "ALL OK"
+	tools/expect_same.sh riscv32/test_rv32x_varcmpcoerce "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_varcmpcoerce | tail -1)" "ALL OK"
 	# The payload hazards a 32-bit variant slot has and a 64-bit one does not:
 	# an Int64 must reach the 8-byte payload WHOLE, a signed 4-byte payload must
 	# sign-extend into the high word and an unsigned one must zero-fill (the
@@ -11721,36 +11721,36 @@ test-riscv32: $(COMPILER)
 	# arms, so riscv32 needs to say so too.
 	# bug-a-a-variant-assigned-to-itself-becomes-empty
 	./$(COMPILER) -Fulib/rtl --target=riscv32 test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_rv32x_varselfassign
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_varselfassign | tail -1)" = "ALL OK"
+	tools/expect_same.sh riscv32/test_rv32x_varselfassign "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_varselfassign | tail -1)" "ALL OK"
 	./$(COMPILER) -Fulib/rtl --target=riscv32 test/test_cross_variant_payload_widths.pas $(TESTTMP)/test_rv32x_varpay
 	./$(COMPILER) -Fulib/rtl test/test_cross_variant_payload_widths.pas $(TESTTMP)/test_rv32x_varpay_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_varpay)" = "$$($(TESTTMP)/test_rv32x_varpay_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_varpay "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_varpay)" "$$($(TESTTMP)/test_rv32x_varpay_x64)"
 	test "$$($(TESTTMP)/test_rv32x_varpay_x64 | tail -1)" = "ALL OK"
 	./$(COMPILER) --target=riscv32 test/test_cross_strresult.pas $(TESTTMP)/test_rv32x_strresult
 	./$(COMPILER) test/test_cross_strresult.pas $(TESTTMP)/test_rv32x_strresult_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_strresult)" = "$$($(TESTTMP)/test_rv32x_strresult_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_strresult "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_strresult)" "$$($(TESTTMP)/test_rv32x_strresult_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_setlen_str.pas $(TESTTMP)/test_rv32x_setlen_str
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_setlen_str.pas $(TESTTMP)/test_rv32x_setlen_str_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_setlen_str)" = "$$($(TESTTMP)/test_rv32x_setlen_str_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_setlen_str "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_setlen_str)" "$$($(TESTTMP)/test_rv32x_setlen_str_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_setlen_varparam.pas $(TESTTMP)/test_rv32x_setlen_vp
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_setlen_varparam.pas $(TESTTMP)/test_rv32x_setlen_vp_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_setlen_vp)" = "$$($(TESTTMP)/test_rv32x_setlen_vp_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_setlen_vp "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_setlen_vp)" "$$($(TESTTMP)/test_rv32x_setlen_vp_x64)"
 	# SKIP test/test_cross_frozen_strlen_deref.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	./$(COMPILER) --target=riscv32 test/test_managed_strlen_deref.pas $(TESTTMP)/test_rv32x_managed_strlen
 	./$(COMPILER) test/test_managed_strlen_deref.pas $(TESTTMP)/test_rv32x_managed_strlen_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_managed_strlen)" = "$$($(TESTTMP)/test_rv32x_managed_strlen_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_managed_strlen "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_managed_strlen)" "$$($(TESTTMP)/test_rv32x_managed_strlen_x64)"
 	./$(COMPILER) --target=riscv32 test/test_not_int64_expr.pas $(TESTTMP)/test_rv32x_not64
 	./$(COMPILER) test/test_not_int64_expr.pas $(TESTTMP)/test_rv32x_not64_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_not64)" = "$$($(TESTTMP)/test_rv32x_not64_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_not64 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_not64)" "$$($(TESTTMP)/test_rv32x_not64_x64)"
 	./$(COMPILER) --target=riscv32 test/test_uint32_write.pas $(TESTTMP)/test_rv32x_u32w
 	./$(COMPILER) test/test_uint32_write.pas $(TESTTMP)/test_rv32x_u32w_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_u32w)" = "$$($(TESTTMP)/test_rv32x_u32w_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_u32w "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_u32w)" "$$($(TESTTMP)/test_rv32x_u32w_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_record_array_store.pas $(TESTTMP)/test_rv32x_rec_arr_store
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record_array_store.pas $(TESTTMP)/test_rv32x_rec_arr_store_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_rec_arr_store)" = "$$($(TESTTMP)/test_rv32x_rec_arr_store_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_rec_arr_store "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_rec_arr_store)" "$$($(TESTTMP)/test_rv32x_rec_arr_store_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_str_length_index.pas $(TESTTMP)/test_rv32x_str_li
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_str_length_index.pas $(TESTTMP)/test_rv32x_str_li_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_str_li)" = "$$($(TESTTMP)/test_rv32x_str_li_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_str_li "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_str_li)" "$$($(TESTTMP)/test_rv32x_str_li_x64)"
 	# SKIP test/test_cross_in_operator.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	# SKIP test/test_cross_managed_aggregate_locals.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	# SKIP test/test_cross_loadfile.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
@@ -11759,85 +11759,85 @@ test-riscv32: $(COMPILER)
 	# SKIP test/test_cross_var_string_param.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_openarray_string.pas $(TESTTMP)/test_rv32x_openarray_string
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_openarray_string.pas $(TESTTMP)/test_rv32x_openarray_string_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_openarray_string)" = "$$($(TESTTMP)/test_rv32x_openarray_string_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_openarray_string "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_openarray_string)" "$$($(TESTTMP)/test_rv32x_openarray_string_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_stack_params.pas $(TESTTMP)/test_rv32x_stack_params
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_stack_params.pas $(TESTTMP)/test_rv32x_stack_params_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_stack_params)" = "$$($(TESTTMP)/test_rv32x_stack_params_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_stack_params "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_stack_params)" "$$($(TESTTMP)/test_rv32x_stack_params_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_trunc_round_saturate.pas $(TESTTMP)/test_rv32x_trsat
 	./$(COMPILER) test/test_cross_trunc_round_saturate.pas $(TESTTMP)/test_rv32x_trsat_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_trsat)" = "$$($(TESTTMP)/test_rv32x_trsat_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_trsat "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_trsat)" "$$($(TESTTMP)/test_rv32x_trsat_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_int64.pas $(TESTTMP)/test_rv32x_int64
 	./$(COMPILER) test/test_cross_int64.pas $(TESTTMP)/test_rv32x_int64_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_int64)" = "$$($(TESTTMP)/test_rv32x_int64_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_int64 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_int64)" "$$($(TESTTMP)/test_rv32x_int64_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_int64_byref.pas $(TESTTMP)/test_rv32x_int64_byref
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_int64_byref.pas $(TESTTMP)/test_rv32x_int64_byref_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_int64_byref)" = "$$($(TESTTMP)/test_rv32x_int64_byref_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_int64_byref "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_int64_byref)" "$$($(TESTTMP)/test_rv32x_int64_byref_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_array_of_const_types.pas $(TESTTMP)/test_rv32x_aoc_types
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_array_of_const_types.pas $(TESTTMP)/test_rv32x_aoc_types_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_aoc_types)" = "$$($(TESTTMP)/test_rv32x_aoc_types_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_aoc_types "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_aoc_types)" "$$($(TESTTMP)/test_rv32x_aoc_types_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_write_pchar.pas $(TESTTMP)/test_rv32x_write_pchar
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_write_pchar.pas $(TESTTMP)/test_rv32x_write_pchar_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_write_pchar)" = "$$($(TESTTMP)/test_rv32x_write_pchar_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_write_pchar "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_write_pchar)" "$$($(TESTTMP)/test_rv32x_write_pchar_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_static_open_array.pas $(TESTTMP)/test_rv32x_static_open
 	./$(COMPILER) test/test_cross_static_open_array.pas $(TESTTMP)/test_rv32x_static_open_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_static_open)" = "$$($(TESTTMP)/test_rv32x_static_open_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_static_open "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_static_open)" "$$($(TESTTMP)/test_rv32x_static_open_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_many_params.pas $(TESTTMP)/test_rv32x_many_params
 	./$(COMPILER) test/test_cross_many_params.pas $(TESTTMP)/test_rv32x_many_params_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_many_params)" = "$$($(TESTTMP)/test_rv32x_many_params_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_many_params "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_many_params)" "$$($(TESTTMP)/test_rv32x_many_params_x64)"
 	./$(COMPILER) --target=riscv32 test/test_conformance_2.pas $(TESTTMP)/test_rv32x_conf2
 	./$(COMPILER) test/test_conformance_2.pas $(TESTTMP)/test_rv32x_conf2_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_conf2)" = "$$($(TESTTMP)/test_rv32x_conf2_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_conf2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_conf2)" "$$($(TESTTMP)/test_rv32x_conf2_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_shortcircuit.pas $(TESTTMP)/test_rv32x_scx
 	./$(COMPILER) test/test_cross_shortcircuit.pas $(TESTTMP)/test_rv32x_scx_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_scx)" = "$$($(TESTTMP)/test_rv32x_scx_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_scx "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_scx)" "$$($(TESTTMP)/test_rv32x_scx_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_ptr_arith.pas $(TESTTMP)/test_rv32x_pa
 	./$(COMPILER) test/test_cross_ptr_arith.pas $(TESTTMP)/test_rv32x_pa_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_pa)" = "$$($(TESTTMP)/test_rv32x_pa_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_pa "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_pa)" "$$($(TESTTMP)/test_rv32x_pa_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_case_range.pas $(TESTTMP)/test_rv32x_cr
 	./$(COMPILER) test/test_cross_case_range.pas $(TESTTMP)/test_rv32x_cr_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_cr)" = "$$($(TESTTMP)/test_rv32x_cr_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_cr "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_cr)" "$$($(TESTTMP)/test_rv32x_cr_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_global_init.pas $(TESTTMP)/test_rv32x_gi
 	./$(COMPILER) test/test_cross_global_init.pas $(TESTTMP)/test_rv32x_gi_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_gi)" = "$$($(TESTTMP)/test_rv32x_gi_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_gi "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_gi)" "$$($(TESTTMP)/test_rv32x_gi_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_typed_const.pas $(TESTTMP)/test_rv32x_tc
 	./$(COMPILER) test/test_cross_typed_const.pas $(TESTTMP)/test_rv32x_tc_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_tc)" = "$$($(TESTTMP)/test_rv32x_tc_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_tc "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_tc)" "$$($(TESTTMP)/test_rv32x_tc_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_multidim.pas $(TESTTMP)/test_rv32x_md
 	./$(COMPILER) test/test_cross_multidim.pas $(TESTTMP)/test_rv32x_md_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_md)" = "$$($(TESTTMP)/test_rv32x_md_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_md "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_md)" "$$($(TESTTMP)/test_rv32x_md_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_named_array.pas $(TESTTMP)/test_rv32x_na
 	./$(COMPILER) test/test_cross_named_array.pas $(TESTTMP)/test_rv32x_na_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_na)" = "$$($(TESTTMP)/test_rv32x_na_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_na "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_na)" "$$($(TESTTMP)/test_rv32x_na_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_record_2darray.pas $(TESTTMP)/test_rv32x_r2
 	./$(COMPILER) test/test_cross_record_2darray.pas $(TESTTMP)/test_rv32x_r2_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_r2)" = "$$($(TESTTMP)/test_rv32x_r2_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_r2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_r2)" "$$($(TESTTMP)/test_rv32x_r2_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_param_2darray.pas $(TESTTMP)/test_rv32x_pa2
 	./$(COMPILER) test/test_cross_param_2darray.pas $(TESTTMP)/test_rv32x_pa2_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_pa2)" = "$$($(TESTTMP)/test_rv32x_pa2_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_pa2 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_pa2)" "$$($(TESTTMP)/test_rv32x_pa2_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_multidim3d.pas $(TESTTMP)/test_rv32x_d3
 	./$(COMPILER) test/test_cross_multidim3d.pas $(TESTTMP)/test_rv32x_d3_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_d3)" = "$$($(TESTTMP)/test_rv32x_d3_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_d3 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_d3)" "$$($(TESTTMP)/test_rv32x_d3_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_const_alias.pas $(TESTTMP)/test_rv32x_ca
 	./$(COMPILER) test/test_cross_const_alias.pas $(TESTTMP)/test_rv32x_ca_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_ca)" = "$$($(TESTTMP)/test_rv32x_ca_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_ca "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_ca)" "$$($(TESTTMP)/test_rv32x_ca_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_float_const.pas $(TESTTMP)/test_rv32x_fc
 	./$(COMPILER) test/test_cross_float_const.pas $(TESTTMP)/test_rv32x_fc_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_fc)" = "$$($(TESTTMP)/test_rv32x_fc_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_fc "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_fc)" "$$($(TESTTMP)/test_rv32x_fc_x64)"
 	# SKIP test/test_scheduler.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	# SKIP test/test_scheduler_exc.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	./$(COMPILER) --target=riscv32 test/test_async_sl.pas $(TESTTMP)/test_rv32x_asl
 	./$(COMPILER) test/test_async_sl.pas $(TESTTMP)/test_rv32x_asl_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_asl)" = "$$($(TESTTMP)/test_rv32x_asl_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_asl "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_asl)" "$$($(TESTTMP)/test_rv32x_asl_x64)"
 	# SKIP test/test_channel.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	./$(COMPILER) --target=riscv32 test/test_methodptr.pas $(TESTTMP)/test_rv32x_mptr
 	./$(COMPILER) test/test_methodptr.pas $(TESTTMP)/test_rv32x_mptr_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_mptr)" = "$$($(TESTTMP)/test_rv32x_mptr_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_mptr "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_mptr)" "$$($(TESTTMP)/test_rv32x_mptr_x64)"
 	./$(COMPILER) --target=riscv32 test/test_methcall.pas $(TESTTMP)/test_rv32x_mcall
 	./$(COMPILER) test/test_methcall.pas $(TESTTMP)/test_rv32x_mcall_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_mcall)" = "$$($(TESTTMP)/test_rv32x_mcall_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_mcall "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_mcall)" "$$($(TESTTMP)/test_rv32x_mcall_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_sets.pas $(TESTTMP)/test_rv32x_sets
 	./$(COMPILER) test/test_cross_sets.pas $(TESTTMP)/test_rv32x_sets_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_sets)" = "$$($(TESTTMP)/test_rv32x_sets_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_sets "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_sets)" "$$($(TESTTMP)/test_rv32x_sets_x64)"
 	# SKIP test/test_classref.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	# SKIP test/test_class_of.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	# SKIP test/test_rtti.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
@@ -11846,63 +11846,63 @@ test-riscv32: $(COMPILER)
 	# SKIP test/test_lfm.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	./$(COMPILER) --target=riscv32 test/test_interfaces.pas $(TESTTMP)/test_rv32x_iface
 	./$(COMPILER) test/test_interfaces.pas $(TESTTMP)/test_rv32x_iface_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_iface)" = "$$($(TESTTMP)/test_rv32x_iface_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_iface "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_iface)" "$$($(TESTTMP)/test_rv32x_iface_x64)"
 	# SKIP test/test_interface_arc.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	./$(COMPILER) --target=riscv32 test/test_uint64_ops.pas $(TESTTMP)/test_rv32x_u64
 	./$(COMPILER) test/test_uint64_ops.pas $(TESTTMP)/test_rv32x_u64_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_u64)" = "$$($(TESTTMP)/test_rv32x_u64_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_u64 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_u64)" "$$($(TESTTMP)/test_rv32x_u64_x64)"
 	# SKIP test/test_interfaces_is.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	# SKIP test/test_interfaces_as.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	# SKIP test/test_interfaces_param.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	# SKIP test/test_interfaces_inherit.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	./$(COMPILER) --target=riscv32 test/test_interfaces_multi_secondary.pas $(TESTTMP)/test_rv32x_iface_multi
 	./$(COMPILER) test/test_interfaces_multi_secondary.pas $(TESTTMP)/test_rv32x_iface_multi_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_iface_multi)" = "$$($(TESTTMP)/test_rv32x_iface_multi_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_iface_multi "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_iface_multi)" "$$($(TESTTMP)/test_rv32x_iface_multi_x64)"
 	# SKIP test/test_cross_aggregate_return.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	./$(COMPILER) --target=riscv32 test/test_cross_aggregate_stackargs.pas $(TESTTMP)/test_rv32x_aggstk
 	./$(COMPILER) test/test_cross_aggregate_stackargs.pas $(TESTTMP)/test_rv32x_aggstk_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_aggstk)" = "$$($(TESTTMP)/test_rv32x_aggstk_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_aggstk "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_aggstk)" "$$($(TESTTMP)/test_rv32x_aggstk_x64)"
 	./$(COMPILER) --target=riscv32 test/test_inheritance_dispatch.pas $(TESTTMP)/test_rv32x_cls
 	./$(COMPILER) test/test_inheritance_dispatch.pas $(TESTTMP)/test_rv32x_cls_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_cls)" = "$$($(TESTTMP)/test_rv32x_cls_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_cls "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_cls)" "$$($(TESTTMP)/test_rv32x_cls_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_dynarray_field.pas $(TESTTMP)/test_rv32x_dynfield
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_field.pas $(TESTTMP)/test_rv32x_dynfield_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_dynfield)" = "$$($(TESTTMP)/test_rv32x_dynfield_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_dynfield "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_dynfield)" "$$($(TESTTMP)/test_rv32x_dynfield_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_method_implicit_field.pas $(TESTTMP)/test_rv32x_mif
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_method_implicit_field.pas $(TESTTMP)/test_rv32x_mif_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_mif)" = "$$($(TESTTMP)/test_rv32x_mif_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_mif "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_mif)" "$$($(TESTTMP)/test_rv32x_mif_x64)"
 	# SKIP test/test_forin_implicit_field.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_dynarray_global_after_method.pas $(TESTTMP)/test_rv32x_dgam
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_global_after_method.pas $(TESTTMP)/test_rv32x_dgam_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_dgam)" = "$$($(TESTTMP)/test_rv32x_dgam_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_dgam "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_dgam)" "$$($(TESTTMP)/test_rv32x_dgam_x64)"
 	# SKIP test/test_forin_member_access.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_rv32x_fimz
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_rv32x_fimz_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_fimz)" = "$$($(TESTTMP)/test_rv32x_fimz_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_fimz "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_fimz)" "$$($(TESTTMP)/test_rv32x_fimz_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_hidden_dynarray_temp_zeroinit.pas $(TESTTMP)/test_rv32x_hdtz
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_hidden_dynarray_temp_zeroinit.pas $(TESTTMP)/test_rv32x_hdtz_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_hdtz)" = "$$($(TESTTMP)/test_rv32x_hdtz_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_hdtz "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_hdtz)" "$$($(TESTTMP)/test_rv32x_hdtz_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_call_result_member.pas $(TESTTMP)/test_rv32x_crm
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_call_result_member.pas $(TESTTMP)/test_rv32x_crm_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_crm)" = "$$($(TESTTMP)/test_rv32x_crm_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_crm "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_crm)" "$$($(TESTTMP)/test_rv32x_crm_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_collections.pas $(TESTTMP)/test_rv32x_collections
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_collections.pas $(TESTTMP)/test_rv32x_collections_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_collections)" = "$$($(TESTTMP)/test_rv32x_collections_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_collections "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_collections)" "$$($(TESTTMP)/test_rv32x_collections_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_const_record_temp.pas $(TESTTMP)/test_rv32x_constrectemp
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_const_record_temp.pas $(TESTTMP)/test_rv32x_constrectemp_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_constrectemp)" = "$$($(TESTTMP)/test_rv32x_constrectemp_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_constrectemp "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_constrectemp)" "$$($(TESTTMP)/test_rv32x_constrectemp_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_const_record_temp_managed.pas $(TESTTMP)/test_rv32x_constrectemp_managed
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_const_record_temp_managed.pas $(TESTTMP)/test_rv32x_constrectemp_managed_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_constrectemp_managed)" = "$$($(TESTTMP)/test_rv32x_constrectemp_managed_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_constrectemp_managed "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_constrectemp_managed)" "$$($(TESTTMP)/test_rv32x_constrectemp_managed_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_set_runtime.pas $(TESTTMP)/test_rv32x_setrt
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_set_runtime.pas $(TESTTMP)/test_rv32x_setrt_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_setrt)" = "$$($(TESTTMP)/test_rv32x_setrt_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_setrt "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_setrt)" "$$($(TESTTMP)/test_rv32x_setrt_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_managed_record_temp_init.pas $(TESTTMP)/test_rv32x_mrti
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_managed_record_temp_init.pas $(TESTTMP)/test_rv32x_mrti_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_mrti)" = "$$($(TESTTMP)/test_rv32x_mrti_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_mrti "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_mrti)" "$$($(TESTTMP)/test_rv32x_mrti_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_dynarray_copy.pas $(TESTTMP)/test_rv32x_dyncopy
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_copy.pas $(TESTTMP)/test_rv32x_dyncopy_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_dyncopy)" = "$$($(TESTTMP)/test_rv32x_dyncopy_x64)"
+	tools/expect_same.sh riscv32/test_rv32x_dyncopy "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_dyncopy)" "$$($(TESTTMP)/test_rv32x_dyncopy_x64)"
 	# SKIP test/test_timer.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	# SKIP test/test_reactor.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	# SKIP test/test_asyncecho.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
@@ -11929,344 +11929,344 @@ test-riscv32: $(COMPILER)
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_hello)" = "Hello, World!"
+	tools/expect_same.sh arm32/test_arm32_hello "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_hello)" "Hello, World!"
 	# a Variant holding a CLASS, and the unbox back to a scalar: both halves
 	# were x86-64-only gaps, so every target must print the same line
 	./$(COMPILER) --target=arm32 test/test_variant_class_cross.pas $(TESTTMP)/test_arm32_varcls
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_varcls)" = "end 7 100"
+	tools/expect_same.sh arm32/test_arm32_varcls "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_varcls)" "end 7 100"
 	# inline expansion (feature-inline-routines): -O2 == -O0 on this cross target.
 	./$(COMPILER) --target=arm32 test/test_inline_expand.pas $(TESTTMP)/test_arm32_inl_o0
 	./$(COMPILER) --target=arm32 -O2 test/test_inline_expand.pas $(TESTTMP)/test_arm32_inl_o2
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_inl_o0)" = "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_inl_o2)"
+	tools/expect_same.sh arm32/test_arm32_inl_o0 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_inl_o0)" "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_inl_o2)"
 	./$(COMPILER) --target=arm32 test/test_record_temp_byval_arg.pas $(TESTTMP)/test_arm32_rectemp
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_rectemp)" = "$$(printf '18\n46')"
+	tools/expect_same.sh arm32/test_arm32_rectemp "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_rectemp)" "$$(printf '18\n46')"
 	./$(COMPILER) --target=arm32 test/test_ctor_string_literal_arg.pas $(TESTTMP)/test_arm32_ctorstrlit
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_ctorstrlit)" = "$$(printf 'field:hello\nc1\nafter1\nc2\nafter2\nc3\nc4\nafter3\nmsg:hello\nafter4')"
+	tools/expect_same.sh arm32/test_arm32_ctorstrlit "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_ctorstrlit)" "$$(printf 'field:hello\nc1\nafter1\nc2\nafter2\nc3\nc4\nafter3\nmsg:hello\nafter4')"
 	./$(COMPILER) --target=arm32 test/test_arm32_virtual_wide.pas $(TESTTMP)/test_arm32_virtwide
 	./$(COMPILER) test/test_arm32_virtual_wide.pas $(TESTTMP)/test_arm32_virtwide_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_virtwide)" = "$$($(TESTTMP)/test_arm32_virtwide_x64)"
+	tools/expect_same.sh arm32/test_arm32_virtwide "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_virtwide)" "$$($(TESTTMP)/test_arm32_virtwide_x64)"
 	# net lib cross matrix: httpdemo builds on arm32 (feature-net-lib-cross-target)
 	./$(COMPILER) --target=arm32 -Fulib/rtl/platform/posix examples/net/httpdemo.pas $(TESTTMP)/test_arm32_httpdemo
 	./$(COMPILER) --target=arm32 test/test_arm32_record_byval_wide.pas $(TESTTMP)/test_arm32_recwide
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_recwide)" = "$$(printf '1 2\n1 2\n111 222\n1 7 8 2\n1 2 3 4 7 8\n1 2 3 7 8\n1 2 3 4 5 7 8\n200 7\ndone')"
+	tools/expect_same.sh arm32/test_arm32_recwide "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_recwide)" "$$(printf '1 2\n1 2\n111 222\n1 7 8 2\n1 2 3 4 7 8\n1 2 3 7 8\n1 2 3 4 5 7 8\n200 7\ndone')"
 	./$(COMPILER) --target=arm32 test/test_single_in_aggregate.pas $(TESTTMP)/test_arm32_singleagg
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_singleagg)" = "$$(printf '1.5 2.5 3.5\n9.500 8.250 7.125\n2.0 4.0 6.0\n10.0')"
+	tools/expect_same.sh arm32/test_arm32_singleagg "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_singleagg)" "$$(printf '1.5 2.5 3.5\n9.500 8.250 7.125\n2.0 4.0 6.0\n10.0')"
 	./$(COMPILER) --target=arm32 test/test_i386_arith.pas $(TESTTMP)/test_arm32_arith
 	./$(COMPILER) test/test_i386_arith.pas $(TESTTMP)/test_arm32_arith_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_arith)" = "$$($(TESTTMP)/test_arm32_arith_x64)"
+	tools/expect_same.sh arm32/test_arm32_arith "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_arith)" "$$($(TESTTMP)/test_arm32_arith_x64)"
 	./$(COMPILER) --target=arm32 test/test_i386_procs.pas $(TESTTMP)/test_arm32_procs
 	./$(COMPILER) test/test_i386_procs.pas $(TESTTMP)/test_arm32_procs_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_procs)" = "$$($(TESTTMP)/test_arm32_procs_x64)"
+	tools/expect_same.sh arm32/test_arm32_procs "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_procs)" "$$($(TESTTMP)/test_arm32_procs_x64)"
 	./$(COMPILER) --target=arm32 test/test_i386_loops.pas $(TESTTMP)/test_arm32_loops
 	./$(COMPILER) test/test_i386_loops.pas $(TESTTMP)/test_arm32_loops_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_loops)" = "$$($(TESTTMP)/test_arm32_loops_x64)"
+	tools/expect_same.sh arm32/test_arm32_loops "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_loops)" "$$($(TESTTMP)/test_arm32_loops_x64)"
 	./$(COMPILER) --target=arm32 test/test_i386_write.pas $(TESTTMP)/test_arm32_write
 	./$(COMPILER) test/test_i386_write.pas $(TESTTMP)/test_arm32_write_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_write)" = "$$($(TESTTMP)/test_arm32_write_x64)"
+	tools/expect_same.sh arm32/test_arm32_write "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_write)" "$$($(TESTTMP)/test_arm32_write_x64)"
 	./$(COMPILER) --target=arm32 test/test_i386_varparam.pas $(TESTTMP)/test_arm32_varparam
 	./$(COMPILER) test/test_i386_varparam.pas $(TESTTMP)/test_arm32_varparam_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_varparam)" = "$$($(TESTTMP)/test_arm32_varparam_x64)"
+	tools/expect_same.sh arm32/test_arm32_varparam "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_varparam)" "$$($(TESTTMP)/test_arm32_varparam_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_syscall.pas $(TESTTMP)/test_arm32_syscall
 	./$(COMPILER) test/test_cross_syscall.pas $(TESTTMP)/test_arm32_syscall_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_syscall)" = "$$($(TESTTMP)/test_arm32_syscall_x64)"
+	tools/expect_same.sh arm32/test_arm32_syscall "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_syscall)" "$$($(TESTTMP)/test_arm32_syscall_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_heap.pas $(TESTTMP)/test_arm32_heap
 	./$(COMPILER) test/test_cross_heap.pas $(TESTTMP)/test_arm32_heap_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_heap)" = "$$($(TESTTMP)/test_arm32_heap_x64)"
+	tools/expect_same.sh arm32/test_arm32_heap "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_heap)" "$$($(TESTTMP)/test_arm32_heap_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_string.pas $(TESTTMP)/test_arm32_string
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string.pas $(TESTTMP)/test_arm32_string_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_string)" = "$$($(TESTTMP)/test_arm32_string_x64)"
+	tools/expect_same.sh arm32/test_arm32_string "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_string)" "$$($(TESTTMP)/test_arm32_string_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_record.pas $(TESTTMP)/test_arm32_record
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record.pas $(TESTTMP)/test_arm32_record_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_record)" = "$$($(TESTTMP)/test_arm32_record_x64)"
+	tools/expect_same.sh arm32/test_arm32_record "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_record)" "$$($(TESTTMP)/test_arm32_record_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_dynarray.pas $(TESTTMP)/test_arm32_dynarray
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_dynarray.pas $(TESTTMP)/test_arm32_dynarray_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_dynarray)" = "$$($(TESTTMP)/test_arm32_dynarray_x64)"
+	tools/expect_same.sh arm32/test_arm32_dynarray "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_dynarray)" "$$($(TESTTMP)/test_arm32_dynarray_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_nested_dynarray_setlen.pas $(TESTTMP)/test_arm32_nestdynsetlen
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_nested_dynarray_setlen.pas $(TESTTMP)/test_arm32_nestdynsetlen_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_nestdynsetlen)" = "$$($(TESTTMP)/test_arm32_nestdynsetlen_x64)"
+	tools/expect_same.sh arm32/test_arm32_nestdynsetlen "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_nestdynsetlen)" "$$($(TESTTMP)/test_arm32_nestdynsetlen_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_exception.pas $(TESTTMP)/test_arm32_exception
 	./$(COMPILER) test/test_cross_exception.pas $(TESTTMP)/test_arm32_exception_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_exception)" = "$$($(TESTTMP)/test_arm32_exception_x64)"
+	tools/expect_same.sh arm32/test_arm32_exception "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_exception)" "$$($(TESTTMP)/test_arm32_exception_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_float.pas $(TESTTMP)/test_arm32_float
 	./$(COMPILER) test/test_cross_float.pas $(TESTTMP)/test_arm32_float_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_float)" = "$$($(TESTTMP)/test_arm32_float_x64)"
+	tools/expect_same.sh arm32/test_arm32_float "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_float)" "$$($(TESTTMP)/test_arm32_float_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_float_return.pas $(TESTTMP)/test_arm32_fret
 	./$(COMPILER) test/test_cross_float_return.pas $(TESTTMP)/test_arm32_fret_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_fret)" = "$$($(TESTTMP)/test_arm32_fret_x64)"
+	tools/expect_same.sh arm32/test_arm32_fret "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_fret)" "$$($(TESTTMP)/test_arm32_fret_x64)"
 	./$(COMPILER) --target=arm32 test/test_arm32_arg_runtime.pas $(TESTTMP)/test_arm32_args
 	./$(COMPILER) test/test_arm32_arg_runtime.pas $(TESTTMP)/test_arm32_args_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_args alpha beta)" = "$$($(TESTTMP)/test_arm32_args_x64 alpha beta)"
+	tools/expect_same.sh arm32/test_arm32_args "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_args alpha beta)" "$$($(TESTTMP)/test_arm32_args_x64 alpha beta)"
 	# `v := v` must leave the variant alone — it emptied it and leaked the
 	# payload on every target until the clear-vs-release split.
 	# bug-a-a-variant-assigned-to-itself-becomes-empty
 	./$(COMPILER) -Fulib/rtl --target=arm32 test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_arm32_varselfassign
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_varselfassign | tail -1)" = "ALL OK"
+	tools/expect_same.sh arm32/test_arm32_varselfassign "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_varselfassign | tail -1)" "ALL OK"
 	./$(COMPILER) --target=arm32 test/test_cross_variant.pas $(TESTTMP)/test_arm32_variant
 	./$(COMPILER) test/test_cross_variant.pas $(TESTTMP)/test_arm32_variant_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_variant)" = "$$($(TESTTMP)/test_arm32_variant_x64)"
+	tools/expect_same.sh arm32/test_arm32_variant "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_variant)" "$$($(TESTTMP)/test_arm32_variant_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_variant_single.pas $(TESTTMP)/test_arm32_variant_single
 	./$(COMPILER) test/test_cross_variant_single.pas $(TESTTMP)/test_arm32_variant_single_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_variant_single)" = "$$($(TESTTMP)/test_arm32_variant_single_x64)"
+	tools/expect_same.sh arm32/test_arm32_variant_single "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_variant_single)" "$$($(TESTTMP)/test_arm32_variant_single_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_strresult.pas $(TESTTMP)/test_arm32_strresult
 	./$(COMPILER) test/test_cross_strresult.pas $(TESTTMP)/test_arm32_strresult_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_strresult)" = "$$($(TESTTMP)/test_arm32_strresult_x64)"
+	tools/expect_same.sh arm32/test_arm32_strresult "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_strresult)" "$$($(TESTTMP)/test_arm32_strresult_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_setlen_str.pas $(TESTTMP)/test_arm32_setlen_str
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_setlen_str.pas $(TESTTMP)/test_arm32_setlen_str_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_setlen_str)" = "$$($(TESTTMP)/test_arm32_setlen_str_x64)"
+	tools/expect_same.sh arm32/test_arm32_setlen_str "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_setlen_str)" "$$($(TESTTMP)/test_arm32_setlen_str_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_setlen_varparam.pas $(TESTTMP)/test_arm32_setlen_vp
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_setlen_varparam.pas $(TESTTMP)/test_arm32_setlen_vp_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_setlen_vp)" = "$$($(TESTTMP)/test_arm32_setlen_vp_x64)"
+	tools/expect_same.sh arm32/test_arm32_setlen_vp "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_setlen_vp)" "$$($(TESTTMP)/test_arm32_setlen_vp_x64)"
 	./$(COMPILER) -uPXX_MANAGED_STRING --target=arm32 test/test_cross_frozen_strlen_deref.pas $(TESTTMP)/test_arm32_frozen_strlen
 	./$(COMPILER) -uPXX_MANAGED_STRING test/test_cross_frozen_strlen_deref.pas $(TESTTMP)/test_arm32_frozen_strlen_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_frozen_strlen)" = "$$($(TESTTMP)/test_arm32_frozen_strlen_x64)"
+	tools/expect_same.sh arm32/test_arm32_frozen_strlen "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_frozen_strlen)" "$$($(TESTTMP)/test_arm32_frozen_strlen_x64)"
 	# string[N] truncation incl. a heap record holding a shortstring field reached
 	# through a pointer (bug-cross-pointer-store-record-with-shortstring-field)
 	./$(COMPILER) --target=arm32 test/test_shortstring_trunc.pas $(TESTTMP)/test_arm32_sstrunc
 	./$(COMPILER) test/test_shortstring_trunc.pas $(TESTTMP)/test_arm32_sstrunc_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sstrunc)" = "$$($(TESTTMP)/test_arm32_sstrunc_x64)"
+	tools/expect_same.sh arm32/test_arm32_sstrunc "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sstrunc)" "$$($(TESTTMP)/test_arm32_sstrunc_x64)"
 	# Int64/QWord -> Double at full 64-bit width incl. unsigned top-bit values
 	# (bug-cross-32bit-int64-to-double-low-word / bug-pascal-qword-to-double-signed)
 	./$(COMPILER) --target=arm32 test/test_u64_to_double.pas $(TESTTMP)/test_arm32_u64d
 	./$(COMPILER) test/test_u64_to_double.pas $(TESTTMP)/test_arm32_u64d_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_u64d)" = "$$($(TESTTMP)/test_arm32_u64d_x64)"
+	tools/expect_same.sh arm32/test_arm32_u64d "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_u64d)" "$$($(TESTTMP)/test_arm32_u64d_x64)"
 	# {$$Q+} add/sub/unsigned-mul raise catchable EIntOverflow (signed checked
 	# MUL stays deferred on 32-bit pairs — feature-overflow-checks-cross-and-intrinsics)
 	./$(COMPILER) --target=arm32 test/test_overflow_checks_qplus.pas $(TESTTMP)/test_arm32_qplus
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_qplus)" = "$$(printf 'wrapped 0\ncaught=4')"
+	tools/expect_same.sh arm32/test_arm32_qplus "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_qplus)" "$$(printf 'wrapped 0\ncaught=4')"
 	./$(COMPILER) --target=arm32 test/test_overflow_qplus_narrow.pas $(TESTTMP)/test_arm32_qplus_narrow
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_qplus_narrow)" = "$$(printf 'caught=5 clean=4 wrap=-294967296')"
+	tools/expect_same.sh arm32/test_arm32_qplus_narrow "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_qplus_narrow)" "$$(printf 'caught=5 clean=4 wrap=-294967296')"
 	./$(COMPILER) --target=arm32 test/test_managed_strlen_deref.pas $(TESTTMP)/test_arm32_managed_strlen
 	./$(COMPILER) test/test_managed_strlen_deref.pas $(TESTTMP)/test_arm32_managed_strlen_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_managed_strlen)" = "$$($(TESTTMP)/test_arm32_managed_strlen_x64)"
+	tools/expect_same.sh arm32/test_arm32_managed_strlen "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_managed_strlen)" "$$($(TESTTMP)/test_arm32_managed_strlen_x64)"
 	./$(COMPILER) --target=arm32 test/test_not_int64_expr.pas $(TESTTMP)/test_arm32_not64
 	./$(COMPILER) test/test_not_int64_expr.pas $(TESTTMP)/test_arm32_not64_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_not64)" = "$$($(TESTTMP)/test_arm32_not64_x64)"
+	tools/expect_same.sh arm32/test_arm32_not64 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_not64)" "$$($(TESTTMP)/test_arm32_not64_x64)"
 	./$(COMPILER) --target=arm32 test/test_uint32_write.pas $(TESTTMP)/test_arm32_u32w
 	./$(COMPILER) test/test_uint32_write.pas $(TESTTMP)/test_arm32_u32w_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_u32w)" = "$$($(TESTTMP)/test_arm32_u32w_x64)"
+	tools/expect_same.sh arm32/test_arm32_u32w "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_u32w)" "$$($(TESTTMP)/test_arm32_u32w_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_record_array_store.pas $(TESTTMP)/test_arm32_rec_arr_store
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record_array_store.pas $(TESTTMP)/test_arm32_rec_arr_store_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_rec_arr_store)" = "$$($(TESTTMP)/test_arm32_rec_arr_store_x64)"
+	tools/expect_same.sh arm32/test_arm32_rec_arr_store "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_rec_arr_store)" "$$($(TESTTMP)/test_arm32_rec_arr_store_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_str_length_index.pas $(TESTTMP)/test_arm32_str_li
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_str_length_index.pas $(TESTTMP)/test_arm32_str_li_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_str_li)" = "$$($(TESTTMP)/test_arm32_str_li_x64)"
+	tools/expect_same.sh arm32/test_arm32_str_li "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_str_li)" "$$($(TESTTMP)/test_arm32_str_li_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_in_operator.pas $(TESTTMP)/test_arm32_in
 	./$(COMPILER) test/test_cross_in_operator.pas $(TESTTMP)/test_arm32_in_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_in)" = "$$($(TESTTMP)/test_arm32_in_x64)"
+	tools/expect_same.sh arm32/test_arm32_in "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_in)" "$$($(TESTTMP)/test_arm32_in_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_managed_aggregate_locals.pas $(TESTTMP)/test_arm32_mal
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_managed_aggregate_locals.pas $(TESTTMP)/test_arm32_mal_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_mal)" = "$$($(TESTTMP)/test_arm32_mal_x64)"
+	tools/expect_same.sh arm32/test_arm32_mal "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_mal)" "$$($(TESTTMP)/test_arm32_mal_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_loadfile.pas $(TESTTMP)/test_arm32_loadfile
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_loadfile.pas $(TESTTMP)/test_arm32_loadfile_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_loadfile)" = "$$($(TESTTMP)/test_arm32_loadfile_x64)"
+	tools/expect_same.sh arm32/test_arm32_loadfile "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_loadfile)" "$$($(TESTTMP)/test_arm32_loadfile_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_sysopen_family.pas $(TESTTMP)/test_arm32_sysopen_family
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_sysopen_family.pas $(TESTTMP)/test_arm32_sysopen_family_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sysopen_family)" = "$$($(TESTTMP)/test_arm32_sysopen_family_x64)"
+	tools/expect_same.sh arm32/test_arm32_sysopen_family "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sysopen_family)" "$$($(TESTTMP)/test_arm32_sysopen_family_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_string_cow.pas $(TESTTMP)/test_arm32_string_cow
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string_cow.pas $(TESTTMP)/test_arm32_string_cow_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_string_cow)" = "$$($(TESTTMP)/test_arm32_string_cow_x64)"
+	tools/expect_same.sh arm32/test_arm32_string_cow "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_string_cow)" "$$($(TESTTMP)/test_arm32_string_cow_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_var_string_param.pas $(TESTTMP)/test_arm32_var_string_param
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_var_string_param.pas $(TESTTMP)/test_arm32_var_string_param_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_var_string_param)" = "$$($(TESTTMP)/test_arm32_var_string_param_x64)"
+	tools/expect_same.sh arm32/test_arm32_var_string_param "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_var_string_param)" "$$($(TESTTMP)/test_arm32_var_string_param_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_openarray_string.pas $(TESTTMP)/test_arm32_openarray_string
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_openarray_string.pas $(TESTTMP)/test_arm32_openarray_string_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_openarray_string)" = "$$($(TESTTMP)/test_arm32_openarray_string_x64)"
+	tools/expect_same.sh arm32/test_arm32_openarray_string "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_openarray_string)" "$$($(TESTTMP)/test_arm32_openarray_string_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_stack_params.pas $(TESTTMP)/test_arm32_stack_params
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_stack_params.pas $(TESTTMP)/test_arm32_stack_params_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_stack_params)" = "$$($(TESTTMP)/test_arm32_stack_params_x64)"
+	tools/expect_same.sh arm32/test_arm32_stack_params "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_stack_params)" "$$($(TESTTMP)/test_arm32_stack_params_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_trunc_round_saturate.pas $(TESTTMP)/test_arm32_trsat
 	./$(COMPILER) test/test_cross_trunc_round_saturate.pas $(TESTTMP)/test_arm32_trsat_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_trsat)" = "$$($(TESTTMP)/test_arm32_trsat_x64)"
+	tools/expect_same.sh arm32/test_arm32_trsat "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_trsat)" "$$($(TESTTMP)/test_arm32_trsat_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_int64.pas $(TESTTMP)/test_arm32_int64
 	./$(COMPILER) test/test_cross_int64.pas $(TESTTMP)/test_arm32_int64_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_int64)" = "$$($(TESTTMP)/test_arm32_int64_x64)"
+	tools/expect_same.sh arm32/test_arm32_int64 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_int64)" "$$($(TESTTMP)/test_arm32_int64_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_int64_byref.pas $(TESTTMP)/test_arm32_int64_byref
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_int64_byref.pas $(TESTTMP)/test_arm32_int64_byref_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_int64_byref)" = "$$($(TESTTMP)/test_arm32_int64_byref_x64)"
+	tools/expect_same.sh arm32/test_arm32_int64_byref "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_int64_byref)" "$$($(TESTTMP)/test_arm32_int64_byref_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_array_of_const_types.pas $(TESTTMP)/test_arm32_aoc_types
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_array_of_const_types.pas $(TESTTMP)/test_arm32_aoc_types_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_aoc_types)" = "$$($(TESTTMP)/test_arm32_aoc_types_x64)"
+	tools/expect_same.sh arm32/test_arm32_aoc_types "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_aoc_types)" "$$($(TESTTMP)/test_arm32_aoc_types_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_write_pchar.pas $(TESTTMP)/test_arm32_write_pchar
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_write_pchar.pas $(TESTTMP)/test_arm32_write_pchar_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_write_pchar)" = "$$($(TESTTMP)/test_arm32_write_pchar_x64)"
+	tools/expect_same.sh arm32/test_arm32_write_pchar "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_write_pchar)" "$$($(TESTTMP)/test_arm32_write_pchar_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_static_open_array.pas $(TESTTMP)/test_arm32_static_open
 	./$(COMPILER) test/test_cross_static_open_array.pas $(TESTTMP)/test_arm32_static_open_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_static_open)" = "$$($(TESTTMP)/test_arm32_static_open_x64)"
+	tools/expect_same.sh arm32/test_arm32_static_open "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_static_open)" "$$($(TESTTMP)/test_arm32_static_open_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_many_params.pas $(TESTTMP)/test_arm32_many_params
 	./$(COMPILER) test/test_cross_many_params.pas $(TESTTMP)/test_arm32_many_params_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_many_params)" = "$$($(TESTTMP)/test_arm32_many_params_x64)"
+	tools/expect_same.sh arm32/test_arm32_many_params "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_many_params)" "$$($(TESTTMP)/test_arm32_many_params_x64)"
 	./$(COMPILER) --target=arm32 test/test_conformance_2.pas $(TESTTMP)/test_arm32_conf2
 	./$(COMPILER) test/test_conformance_2.pas $(TESTTMP)/test_arm32_conf2_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_conf2)" = "$$($(TESTTMP)/test_arm32_conf2_x64)"
+	tools/expect_same.sh arm32/test_arm32_conf2 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_conf2)" "$$($(TESTTMP)/test_arm32_conf2_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_shortcircuit.pas $(TESTTMP)/test_arm32_scx
 	./$(COMPILER) test/test_cross_shortcircuit.pas $(TESTTMP)/test_arm32_scx_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_scx)" = "$$($(TESTTMP)/test_arm32_scx_x64)"
+	tools/expect_same.sh arm32/test_arm32_scx "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_scx)" "$$($(TESTTMP)/test_arm32_scx_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_ptr_arith.pas $(TESTTMP)/test_arm32_pa
 	./$(COMPILER) test/test_cross_ptr_arith.pas $(TESTTMP)/test_arm32_pa_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_pa)" = "$$($(TESTTMP)/test_arm32_pa_x64)"
+	tools/expect_same.sh arm32/test_arm32_pa "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_pa)" "$$($(TESTTMP)/test_arm32_pa_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_case_range.pas $(TESTTMP)/test_arm32_cr
 	./$(COMPILER) test/test_cross_case_range.pas $(TESTTMP)/test_arm32_cr_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cr)" = "$$($(TESTTMP)/test_arm32_cr_x64)"
+	tools/expect_same.sh arm32/test_arm32_cr "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cr)" "$$($(TESTTMP)/test_arm32_cr_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_global_init.pas $(TESTTMP)/test_arm32_gi
 	./$(COMPILER) test/test_cross_global_init.pas $(TESTTMP)/test_arm32_gi_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_gi)" = "$$($(TESTTMP)/test_arm32_gi_x64)"
+	tools/expect_same.sh arm32/test_arm32_gi "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_gi)" "$$($(TESTTMP)/test_arm32_gi_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_typed_const.pas $(TESTTMP)/test_arm32_tc
 	./$(COMPILER) test/test_cross_typed_const.pas $(TESTTMP)/test_arm32_tc_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_tc)" = "$$($(TESTTMP)/test_arm32_tc_x64)"
+	tools/expect_same.sh arm32/test_arm32_tc "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_tc)" "$$($(TESTTMP)/test_arm32_tc_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_multidim.pas $(TESTTMP)/test_arm32_md
 	./$(COMPILER) test/test_cross_multidim.pas $(TESTTMP)/test_arm32_md_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_md)" = "$$($(TESTTMP)/test_arm32_md_x64)"
+	tools/expect_same.sh arm32/test_arm32_md "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_md)" "$$($(TESTTMP)/test_arm32_md_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_named_array.pas $(TESTTMP)/test_arm32_na
 	./$(COMPILER) test/test_cross_named_array.pas $(TESTTMP)/test_arm32_na_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_na)" = "$$($(TESTTMP)/test_arm32_na_x64)"
+	tools/expect_same.sh arm32/test_arm32_na "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_na)" "$$($(TESTTMP)/test_arm32_na_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_record_2darray.pas $(TESTTMP)/test_arm32_r2
 	./$(COMPILER) test/test_cross_record_2darray.pas $(TESTTMP)/test_arm32_r2_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_r2)" = "$$($(TESTTMP)/test_arm32_r2_x64)"
+	tools/expect_same.sh arm32/test_arm32_r2 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_r2)" "$$($(TESTTMP)/test_arm32_r2_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_param_2darray.pas $(TESTTMP)/test_arm32_pa2
 	./$(COMPILER) test/test_cross_param_2darray.pas $(TESTTMP)/test_arm32_pa2_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_pa2)" = "$$($(TESTTMP)/test_arm32_pa2_x64)"
+	tools/expect_same.sh arm32/test_arm32_pa2 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_pa2)" "$$($(TESTTMP)/test_arm32_pa2_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_multidim3d.pas $(TESTTMP)/test_arm32_d3
 	./$(COMPILER) test/test_cross_multidim3d.pas $(TESTTMP)/test_arm32_d3_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_d3)" = "$$($(TESTTMP)/test_arm32_d3_x64)"
+	tools/expect_same.sh arm32/test_arm32_d3 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_d3)" "$$($(TESTTMP)/test_arm32_d3_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_const_alias.pas $(TESTTMP)/test_arm32_ca
 	./$(COMPILER) test/test_cross_const_alias.pas $(TESTTMP)/test_arm32_ca_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_ca)" = "$$($(TESTTMP)/test_arm32_ca_x64)"
+	tools/expect_same.sh arm32/test_arm32_ca "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_ca)" "$$($(TESTTMP)/test_arm32_ca_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_float_const.pas $(TESTTMP)/test_arm32_fc
 	./$(COMPILER) test/test_cross_float_const.pas $(TESTTMP)/test_arm32_fc_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_fc)" = "$$($(TESTTMP)/test_arm32_fc_x64)"
+	tools/expect_same.sh arm32/test_arm32_fc "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_fc)" "$$($(TESTTMP)/test_arm32_fc_x64)"
 	./$(COMPILER) --target=arm32 test/test_scheduler.pas $(TESTTMP)/test_arm32_sched
 	./$(COMPILER) test/test_scheduler.pas $(TESTTMP)/test_arm32_sched_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sched)" = "$$($(TESTTMP)/test_arm32_sched_x64)"
+	tools/expect_same.sh arm32/test_arm32_sched "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sched)" "$$($(TESTTMP)/test_arm32_sched_x64)"
 	./$(COMPILER) --target=arm32 test/test_scheduler_exc.pas $(TESTTMP)/test_arm32_sexc
 	./$(COMPILER) test/test_scheduler_exc.pas $(TESTTMP)/test_arm32_sexc_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sexc)" = "$$($(TESTTMP)/test_arm32_sexc_x64)"
+	tools/expect_same.sh arm32/test_arm32_sexc "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sexc)" "$$($(TESTTMP)/test_arm32_sexc_x64)"
 	./$(COMPILER) --target=arm32 test/test_async_sl.pas $(TESTTMP)/test_arm32_asl
 	./$(COMPILER) test/test_async_sl.pas $(TESTTMP)/test_arm32_asl_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_asl)" = "$$($(TESTTMP)/test_arm32_asl_x64)"
+	tools/expect_same.sh arm32/test_arm32_asl "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_asl)" "$$($(TESTTMP)/test_arm32_asl_x64)"
 	./$(COMPILER) --target=arm32 test/test_channel.pas $(TESTTMP)/test_arm32_chan
 	./$(COMPILER) test/test_channel.pas $(TESTTMP)/test_arm32_chan_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_chan)" = "$$($(TESTTMP)/test_arm32_chan_x64)"
+	tools/expect_same.sh arm32/test_arm32_chan "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_chan)" "$$($(TESTTMP)/test_arm32_chan_x64)"
 	./$(COMPILER) --target=arm32 test/test_methodptr.pas $(TESTTMP)/test_arm32_mptr
 	./$(COMPILER) test/test_methodptr.pas $(TESTTMP)/test_arm32_mptr_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_mptr)" = "$$($(TESTTMP)/test_arm32_mptr_x64)"
+	tools/expect_same.sh arm32/test_arm32_mptr "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_mptr)" "$$($(TESTTMP)/test_arm32_mptr_x64)"
 	./$(COMPILER) --target=arm32 test/test_methcall.pas $(TESTTMP)/test_arm32_mcall
 	./$(COMPILER) test/test_methcall.pas $(TESTTMP)/test_arm32_mcall_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_mcall)" = "$$($(TESTTMP)/test_arm32_mcall_x64)"
+	tools/expect_same.sh arm32/test_arm32_mcall "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_mcall)" "$$($(TESTTMP)/test_arm32_mcall_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_sets.pas $(TESTTMP)/test_arm32_sets
 	./$(COMPILER) test/test_cross_sets.pas $(TESTTMP)/test_arm32_sets_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sets)" = "$$($(TESTTMP)/test_arm32_sets_x64)"
+	tools/expect_same.sh arm32/test_arm32_sets "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sets)" "$$($(TESTTMP)/test_arm32_sets_x64)"
 	./$(COMPILER) --target=arm32 test/test_classref.pas $(TESTTMP)/test_arm32_classref
 	./$(COMPILER) test/test_classref.pas $(TESTTMP)/test_arm32_classref_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_classref)" = "$$($(TESTTMP)/test_arm32_classref_x64)"
+	tools/expect_same.sh arm32/test_arm32_classref "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_classref)" "$$($(TESTTMP)/test_arm32_classref_x64)"
 	./$(COMPILER) --target=arm32 test/test_class_of.pas $(TESTTMP)/test_arm32_classof
 	./$(COMPILER) test/test_class_of.pas $(TESTTMP)/test_arm32_classof_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_classof)" = "$$($(TESTTMP)/test_arm32_classof_x64)"
+	tools/expect_same.sh arm32/test_arm32_classof "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_classof)" "$$($(TESTTMP)/test_arm32_classof_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_rtti.pas $(TESTTMP)/test_arm32_rtti
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_rtti.pas $(TESTTMP)/test_arm32_rtti_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_rtti | grep -vE 'pointer:|RTTI value:|InstanceSize:')" = "$$($(TESTTMP)/test_arm32_rtti_x64 | grep -vE 'pointer:|RTTI value:|InstanceSize:')"
+	tools/expect_same.sh arm32/test_arm32_rtti "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_rtti | grep -vE 'pointer:|RTTI value:|InstanceSize:')" "$$($(TESTTMP)/test_arm32_rtti_x64 | grep -vE 'pointer:|RTTI value:|InstanceSize:')"
 	./$(COMPILER) --target=arm32 test/test_streaming.pas $(TESTTMP)/test_arm32_streaming
 	./$(COMPILER) test/test_streaming.pas $(TESTTMP)/test_arm32_streaming_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_streaming)" = "$$($(TESTTMP)/test_arm32_streaming_x64)"
+	tools/expect_same.sh arm32/test_arm32_streaming "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_streaming)" "$$($(TESTTMP)/test_arm32_streaming_x64)"
 	./$(COMPILER) --target=arm32 test/test_streaming_enumset.pas $(TESTTMP)/test_arm32_streaming_enumset
 	./$(COMPILER) test/test_streaming_enumset.pas $(TESTTMP)/test_arm32_streaming_enumset_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_streaming_enumset)" = "$$($(TESTTMP)/test_arm32_streaming_enumset_x64)"
+	tools/expect_same.sh arm32/test_arm32_streaming_enumset "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_streaming_enumset)" "$$($(TESTTMP)/test_arm32_streaming_enumset_x64)"
 	./$(COMPILER) --target=arm32 test/test_lfm.pas $(TESTTMP)/test_arm32_lfm
 	./$(COMPILER) test/test_lfm.pas $(TESTTMP)/test_arm32_lfm_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_lfm)" = "$$($(TESTTMP)/test_arm32_lfm_x64)"
+	tools/expect_same.sh arm32/test_arm32_lfm "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_lfm)" "$$($(TESTTMP)/test_arm32_lfm_x64)"
 	./$(COMPILER) --target=arm32 test/test_interfaces.pas $(TESTTMP)/test_arm32_iface
 	./$(COMPILER) test/test_interfaces.pas $(TESTTMP)/test_arm32_iface_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_iface)" = "$$($(TESTTMP)/test_arm32_iface_x64)"
+	tools/expect_same.sh arm32/test_arm32_iface "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_iface)" "$$($(TESTTMP)/test_arm32_iface_x64)"
 	./$(COMPILER) --target=arm32 test/test_interface_arc.pas $(TESTTMP)/test_arm32_iarc
 	./$(COMPILER) test/test_interface_arc.pas $(TESTTMP)/test_arm32_iarc_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_iarc)" = "$$($(TESTTMP)/test_arm32_iarc_x64)"
+	tools/expect_same.sh arm32/test_arm32_iarc "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_iarc)" "$$($(TESTTMP)/test_arm32_iarc_x64)"
 	./$(COMPILER) --target=arm32 test/test_managed_local_release_reuse.pas $(TESTTMP)/test_arm32_mlrr
 	./$(COMPILER) test/test_managed_local_release_reuse.pas $(TESTTMP)/test_arm32_mlrr_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_mlrr)" = "$$($(TESTTMP)/test_arm32_mlrr_x64)"
+	tools/expect_same.sh arm32/test_arm32_mlrr "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_mlrr)" "$$($(TESTTMP)/test_arm32_mlrr_x64)"
 	./$(COMPILER) --target=arm32 test/test_uint64_ops.pas $(TESTTMP)/test_arm32_u64
 	./$(COMPILER) test/test_uint64_ops.pas $(TESTTMP)/test_arm32_u64_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_u64)" = "$$($(TESTTMP)/test_arm32_u64_x64)"
+	tools/expect_same.sh arm32/test_arm32_u64 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_u64)" "$$($(TESTTMP)/test_arm32_u64_x64)"
 	./$(COMPILER) --target=arm32 test/test_interfaces_is.pas $(TESTTMP)/test_arm32_iface_is
 	./$(COMPILER) test/test_interfaces_is.pas $(TESTTMP)/test_arm32_iface_is_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_iface_is)" = "$$($(TESTTMP)/test_arm32_iface_is_x64)"
+	tools/expect_same.sh arm32/test_arm32_iface_is "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_iface_is)" "$$($(TESTTMP)/test_arm32_iface_is_x64)"
 	./$(COMPILER) --target=arm32 test/test_interfaces_as.pas $(TESTTMP)/test_arm32_iface_as
 	./$(COMPILER) test/test_interfaces_as.pas $(TESTTMP)/test_arm32_iface_as_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_iface_as)" = "$$($(TESTTMP)/test_arm32_iface_as_x64)"
+	tools/expect_same.sh arm32/test_arm32_iface_as "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_iface_as)" "$$($(TESTTMP)/test_arm32_iface_as_x64)"
 	./$(COMPILER) --target=arm32 test/test_interfaces_param.pas $(TESTTMP)/test_arm32_iface_param
 	./$(COMPILER) test/test_interfaces_param.pas $(TESTTMP)/test_arm32_iface_param_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_iface_param)" = "$$($(TESTTMP)/test_arm32_iface_param_x64)"
+	tools/expect_same.sh arm32/test_arm32_iface_param "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_iface_param)" "$$($(TESTTMP)/test_arm32_iface_param_x64)"
 	./$(COMPILER) --target=arm32 test/test_interfaces_inherit.pas $(TESTTMP)/test_arm32_iface_inh
 	./$(COMPILER) test/test_interfaces_inherit.pas $(TESTTMP)/test_arm32_iface_inh_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_iface_inh)" = "$$($(TESTTMP)/test_arm32_iface_inh_x64)"
+	tools/expect_same.sh arm32/test_arm32_iface_inh "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_iface_inh)" "$$($(TESTTMP)/test_arm32_iface_inh_x64)"
 	./$(COMPILER) --target=arm32 test/test_interfaces_multi_secondary.pas $(TESTTMP)/test_arm32_iface_multi
 	./$(COMPILER) test/test_interfaces_multi_secondary.pas $(TESTTMP)/test_arm32_iface_multi_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_iface_multi)" = "$$($(TESTTMP)/test_arm32_iface_multi_x64)"
+	tools/expect_same.sh arm32/test_arm32_iface_multi "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_iface_multi)" "$$($(TESTTMP)/test_arm32_iface_multi_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_aggregate_return.pas $(TESTTMP)/test_arm32_aggret
 	./$(COMPILER) test/test_cross_aggregate_return.pas $(TESTTMP)/test_arm32_aggret_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_aggret)" = "$$($(TESTTMP)/test_arm32_aggret_x64)"
+	tools/expect_same.sh arm32/test_arm32_aggret "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_aggret)" "$$($(TESTTMP)/test_arm32_aggret_x64)"
 	# aggregate / frozen-string result via a VIRTUAL and an INDIRECT call
 	# (feature-cross-virtual-indirect-hidden-dest)
 	./$(COMPILER) --target=arm32 test/test_cross_virtual_indirect_aggret.pas $(TESTTMP)/test_arm32_vindaggret
 	./$(COMPILER) test/test_cross_virtual_indirect_aggret.pas $(TESTTMP)/test_arm32_vindaggret_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_vindaggret)" = "$$($(TESTTMP)/test_arm32_vindaggret_x64)"
+	tools/expect_same.sh arm32/test_arm32_vindaggret "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_vindaggret)" "$$($(TESTTMP)/test_arm32_vindaggret_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_aggregate_stackargs.pas $(TESTTMP)/test_arm32_aggstk
 	./$(COMPILER) test/test_cross_aggregate_stackargs.pas $(TESTTMP)/test_arm32_aggstk_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_aggstk)" = "$$($(TESTTMP)/test_arm32_aggstk_x64)"
+	tools/expect_same.sh arm32/test_arm32_aggstk "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_aggstk)" "$$($(TESTTMP)/test_arm32_aggstk_x64)"
 	./$(COMPILER) --target=arm32 test/test_inheritance_dispatch.pas $(TESTTMP)/test_arm32_cls
 	./$(COMPILER) test/test_inheritance_dispatch.pas $(TESTTMP)/test_arm32_cls_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cls)" = "$$($(TESTTMP)/test_arm32_cls_x64)"
+	tools/expect_same.sh arm32/test_arm32_cls "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cls)" "$$($(TESTTMP)/test_arm32_cls_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_dynarray_field.pas $(TESTTMP)/test_arm32_dynfield
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_field.pas $(TESTTMP)/test_arm32_dynfield_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_dynfield)" = "$$($(TESTTMP)/test_arm32_dynfield_x64)"
+	tools/expect_same.sh arm32/test_arm32_dynfield "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_dynfield)" "$$($(TESTTMP)/test_arm32_dynfield_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_method_implicit_field.pas $(TESTTMP)/test_arm32_mif
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_method_implicit_field.pas $(TESTTMP)/test_arm32_mif_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_mif)" = "$$($(TESTTMP)/test_arm32_mif_x64)"
+	tools/expect_same.sh arm32/test_arm32_mif "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_mif)" "$$($(TESTTMP)/test_arm32_mif_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_forin_implicit_field.pas $(TESTTMP)/test_arm32_fif
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_forin_implicit_field.pas $(TESTTMP)/test_arm32_fif_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_fif)" = "$$($(TESTTMP)/test_arm32_fif_x64)"
+	tools/expect_same.sh arm32/test_arm32_fif "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_fif)" "$$($(TESTTMP)/test_arm32_fif_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_dynarray_global_after_method.pas $(TESTTMP)/test_arm32_dgam
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_global_after_method.pas $(TESTTMP)/test_arm32_dgam_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_dgam)" = "$$($(TESTTMP)/test_arm32_dgam_x64)"
+	tools/expect_same.sh arm32/test_arm32_dgam "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_dgam)" "$$($(TESTTMP)/test_arm32_dgam_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_forin_member_access.pas $(TESTTMP)/test_arm32_fima
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_forin_member_access.pas $(TESTTMP)/test_arm32_fima_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_fima)" = "$$($(TESTTMP)/test_arm32_fima_x64)"
+	tools/expect_same.sh arm32/test_arm32_fima "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_fima)" "$$($(TESTTMP)/test_arm32_fima_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_arm32_fimz
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_arm32_fimz_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_fimz)" = "$$($(TESTTMP)/test_arm32_fimz_x64)"
+	tools/expect_same.sh arm32/test_arm32_fimz "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_fimz)" "$$($(TESTTMP)/test_arm32_fimz_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_hidden_dynarray_temp_zeroinit.pas $(TESTTMP)/test_arm32_hdtz
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_hidden_dynarray_temp_zeroinit.pas $(TESTTMP)/test_arm32_hdtz_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_hdtz)" = "$$($(TESTTMP)/test_arm32_hdtz_x64)"
+	tools/expect_same.sh arm32/test_arm32_hdtz "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_hdtz)" "$$($(TESTTMP)/test_arm32_hdtz_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_call_result_member.pas $(TESTTMP)/test_arm32_crm
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_call_result_member.pas $(TESTTMP)/test_arm32_crm_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_crm)" = "$$($(TESTTMP)/test_arm32_crm_x64)"
+	tools/expect_same.sh arm32/test_arm32_crm "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_crm)" "$$($(TESTTMP)/test_arm32_crm_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_collections.pas $(TESTTMP)/test_arm32_collections
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_collections.pas $(TESTTMP)/test_arm32_collections_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_collections)" = "$$($(TESTTMP)/test_arm32_collections_x64)"
+	tools/expect_same.sh arm32/test_arm32_collections "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_collections)" "$$($(TESTTMP)/test_arm32_collections_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_const_record_temp.pas $(TESTTMP)/test_arm32_constrectemp
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_const_record_temp.pas $(TESTTMP)/test_arm32_constrectemp_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_constrectemp)" = "$$($(TESTTMP)/test_arm32_constrectemp_x64)"
+	tools/expect_same.sh arm32/test_arm32_constrectemp "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_constrectemp)" "$$($(TESTTMP)/test_arm32_constrectemp_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_const_record_temp_managed.pas $(TESTTMP)/test_arm32_constrectemp_managed
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_const_record_temp_managed.pas $(TESTTMP)/test_arm32_constrectemp_managed_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_constrectemp_managed)" = "$$($(TESTTMP)/test_arm32_constrectemp_managed_x64)"
+	tools/expect_same.sh arm32/test_arm32_constrectemp_managed "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_constrectemp_managed)" "$$($(TESTTMP)/test_arm32_constrectemp_managed_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_set_runtime.pas $(TESTTMP)/test_arm32_setrt
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_set_runtime.pas $(TESTTMP)/test_arm32_setrt_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_setrt)" = "$$($(TESTTMP)/test_arm32_setrt_x64)"
+	tools/expect_same.sh arm32/test_arm32_setrt "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_setrt)" "$$($(TESTTMP)/test_arm32_setrt_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_managed_record_temp_init.pas $(TESTTMP)/test_arm32_mrti
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_managed_record_temp_init.pas $(TESTTMP)/test_arm32_mrti_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_mrti)" = "$$($(TESTTMP)/test_arm32_mrti_x64)"
+	tools/expect_same.sh arm32/test_arm32_mrti "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_mrti)" "$$($(TESTTMP)/test_arm32_mrti_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_dynarray_copy.pas $(TESTTMP)/test_arm32_dyncopy
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_copy.pas $(TESTTMP)/test_arm32_dyncopy_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_dyncopy)" = "$$($(TESTTMP)/test_arm32_dyncopy_x64)"
+	tools/expect_same.sh arm32/test_arm32_dyncopy "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_dyncopy)" "$$($(TESTTMP)/test_arm32_dyncopy_x64)"
 	./$(COMPILER) --target=arm32 test/test_timer.pas $(TESTTMP)/test_arm32_timer
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_timer)" = "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
+	tools/expect_same.sh arm32/test_arm32_timer "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_timer)" "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
 	./$(COMPILER) --target=arm32 test/test_reactor.pas $(TESTTMP)/test_arm32_reactor
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_reactor)" = "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
+	tools/expect_same.sh arm32/test_arm32_reactor "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_reactor)" "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
 	./$(COMPILER) --target=arm32 -Fulib/rtl/platform/posix test/test_asyncecho.pas $(TESTTMP)/test_arm32_asyncecho
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_asyncecho)" = "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
+	tools/expect_same.sh arm32/test_arm32_asyncecho "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_asyncecho)" "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
 	# cdecl indirect call (dlsym'd C fn through a cdecl proc-type value) — b362
 	# libc-free signal handlers on arm32 (b371): hook fires + program RESUMES;
 	# no hook = revert to SIG_DFL + re-raise (dies 143).
 	./$(COMPILER) --target=arm32 -Fulib/rtl test/test_signal_handler_callback_b336.pas $(TESTTMP)/test_arm32_sigcb
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sigcb)" = "$$(printf 'hits=2\nresumed after handler')"
+	tools/expect_same.sh arm32/test_arm32_sigcb "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sigcb)" "$$(printf 'hits=2\nresumed after handler')"
 	./$(COMPILER) --target=arm32 -Fulib/rtl test/test_signal_default_revert_b336.pas $(TESTTMP)/test_arm32_sigdfl
 	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sigdfl > /dev/null 2>&1; test "$$?" = "143"
 	# SA_SIGINFO: si_code/si_addr/ucontext* reach Pascal. si_addr is asserted
@@ -12276,14 +12276,14 @@ test-arm32: $(COMPILER)
 	# arm32's frame shape, so a program that still resumes after its hook proves
 	# the restorer's sigreturn->rt_sigreturn flip landed with it.
 	./$(COMPILER) --target=arm32 test/test_signal_siginfo.pas $(TESTTMP)/test_arm32_siginfo
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_siginfo)" = "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
+	tools/expect_same.sh arm32/test_arm32_siginfo "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_siginfo)" "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
 	# PC rewrite: the handler points the saved ucontext PC at a Pascal proc
 	# that raises, and the fault is caught by the try/except the faulting
 	# code was already inside. The pc-is-the-fault line is the exact check
 	# of the per-arch PC offset -- rewriting the wrong ucontext word would
 	# clobber an unrelated register instead.
 	./$(COMPILER) --target=arm32 test/test_signal_pc_rewrite.pas $(TESTTMP)/test_arm32_pcrw
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_pcrw)" = "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
+	tools/expect_same.sh arm32/test_arm32_pcrw "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_pcrw)" "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
 	# ... and the SP half. The per-arch ucontext SP offset is a five-entry
 	# table where one wrong entry silently clobbers an unrelated register,
 	# so every target checks that the resumed proc really landed on the
@@ -12297,23 +12297,23 @@ test-arm32: $(COMPILER)
 	# the difference between a redirect that took and an endless fault loop on
 	# the guard page. Depth is not printed: it depends on RLIMIT_STACK.
 	./$(COMPILER) --target=arm32 test/test_stack_overflow_raise.pas $(TESTTMP)/test_arm32_sovf
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sovf)" = "$$(printf 'recursing\ncaught a stack overflow, hits=1\nand execution continued, after=1000')"
+	tools/expect_same.sh arm32/test_arm32_sovf "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sovf)" "$$(printf 'recursing\ncaught a stack overflow, hits=1\nand execution continued, after=1000')"
 	# Nested-array Copy on this target too — the stride is TypeSize(tyPointer),
 	# so the ILP32 targets are the ones that catch a hardcoded 8.
 	./$(COMPILER) --target=arm32 test/test_dynarray_copy_nested.pas $(TESTTMP)/test_arm32_dyncopyn
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_dyncopyn)" = "$$(printf 'lenh=2 h00=1 h11=4\none-level-detach g00=99\ninner=4\nafter-copy-scope g11=4 g22=6\nt3 len=2 u111=7 u010=2\nstr v00=row v11=end\nsource-survives s11=end')"
+	tools/expect_same.sh arm32/test_arm32_dyncopyn "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_dyncopyn)" "$$(printf 'lenh=2 h00=1 h11=4\none-level-detach g00=99\ninner=4\nafter-copy-scope g11=4 g22=6\nt3 len=2 u111=7 u010=2\nstr v00=row v11=end\nsource-survives s11=end')"
 	./$(COMPILER) --target=arm32 test/test_halt_exit_code.pas $(TESTTMP)/test_arm32_halt
 	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_halt; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) --target=arm32 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_arm32_sprw
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sprw)" = "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
+	tools/expect_same.sh arm32/test_arm32_sprw "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sprw)" "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
 	./$(COMPILER) --target=arm32 test/test_cdecl_indirect.pas $(TESTTMP)/test_arm32_cdeclind
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cdeclind)" = "$$(printf '4.0\n1024.0\n12.0')"
+	tools/expect_same.sh arm32/test_arm32_cdeclind "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cdeclind)" "$$(printf '4.0\n1024.0\n12.0')"
 	./$(COMPILER) --target=arm32 test/test_extern_c.pas $(TESTTMP)/test_arm32_extern
 	./$(COMPILER) test/test_extern_c.pas $(TESTTMP)/test_arm32_extern_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_extern)" = "$$($(TESTTMP)/test_arm32_extern_x64)"
+	tools/expect_same.sh arm32/test_arm32_extern "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_extern)" "$$($(TESTTMP)/test_arm32_extern_x64)"
 	./$(COMPILER) --target=arm32 test/test_extern_c_float.pas $(TESTTMP)/test_arm32_extern_float
 	./$(COMPILER) test/test_extern_c_float.pas $(TESTTMP)/test_arm32_extern_float_x64
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_extern_float)" = "$$($(TESTTMP)/test_arm32_extern_float_x64)"
+	tools/expect_same.sh arm32/test_arm32_extern_float "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_extern_float)" "$$($(TESTTMP)/test_arm32_extern_float_x64)"
 	./$(COMPILER) --target=arm32 test/ccross_entry.c $(TESTTMP)/test_arm32_centry
 	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_centry; test "$$?" = "42"
 	./$(COMPILER) --target=arm32 test/ccross_args.c $(TESTTMP)/test_arm32_cargs
@@ -12334,26 +12334,26 @@ test-arm32: $(COMPILER)
 	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cudiv; test "$$?" = "42"
 	# inline asm on arm32: locals/params via [fp,off] substitution, labels+cond-suffixed branches, ldr/@glob global access
 	./$(COMPILER) --target=arm32 test/test_asm_arm32.pas $(TESTTMP)/test_arm32_asm
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_asm)" = "$$(printf '42\n55\n42')"
+	tools/expect_same.sh arm32/test_arm32_asm "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_asm)" "$$(printf '42\n55\n42')"
 	# .asm source frontend on arm32: labels/branches + global entry override, exit code = r0
 	./$(COMPILER) --target=arm32 test/test_asm_arm32_sum.asm $(TESTTMP)/test_arm32_asmfront
 	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_asmfront; test "$$?" = "55"
 	# parallel for + full capture (scalar/array/record/string) — data-parallel loop on arm32
 	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_for_lang.pas $(TESTTMP)/test_arm32_parfor
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_parfor | tail -n 1)" = "PARFORLANG OK"
+	tools/expect_same.sh arm32/test_arm32_parfor "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_parfor | tail -n 1)" "PARFORLANG OK"
 	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_for_capture_aggr.pas $(TESTTMP)/test_arm32_parcap
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_parcap | tail -n 1)" = "PARFORAGGR OK"
+	tools/expect_same.sh arm32/test_arm32_parcap "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_parcap | tail -n 1)" "PARFORAGGR OK"
 	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_for_capture_string.pas $(TESTTMP)/test_arm32_parstr
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_parstr | tail -n 1)" = "PARFORSTR OK"
+	tools/expect_same.sh arm32/test_arm32_parstr "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_parstr | tail -n 1)" "PARFORSTR OK"
 	# scheduling policy + reduction + named-arg clause on arm32 (Track T cross gate)
 	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_policy.pas $(TESTTMP)/test_arm32_parpol
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_parpol)" = "PARPOL OK"
+	tools/expect_same.sh arm32/test_arm32_parpol "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_parpol)" "PARPOL OK"
 	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_policy_lang.pas $(TESTTMP)/test_arm32_parpollang
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_parpollang)" = "PARPOLLANG OK"
+	tools/expect_same.sh arm32/test_arm32_parpollang "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_parpollang)" "PARPOLLANG OK"
 	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_reduction.pas $(TESTTMP)/test_arm32_parred
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_parred)" = "PARRED OK"
+	tools/expect_same.sh arm32/test_arm32_parred "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_parred)" "PARRED OK"
 	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_policy_named.pas $(TESTTMP)/test_arm32_parnamed
-	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_parnamed)" = "PARNAMED OK"
+	tools/expect_same.sh arm32/test_arm32_parnamed "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_parnamed)" "PARNAMED OK"
 	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_writeln_atomic.pas $(TESTTMP)/test_arm32_pwa
 	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_pwa > $(TESTTMP)/test_arm32_pwa.out
 	test "$$(tail -n1 $(TESTTMP)/test_arm32_pwa.out)" = "PARWROK"
@@ -13365,7 +13365,7 @@ test-esp-softfloat: $(COMPILER)
 # (an installed emulator can still be broken; --version proves nothing).
 qemu-env-check: $(COMPILER)
 	./$(COMPILER) test/hello.pas $(TESTTMP)/qemu_env_hello
-	test "$$(tools/run_target.sh x86_64 $(TESTTMP)/qemu_env_hello)" = "Hello, World!"
+	tools/expect_same.sh x86_64/qemu_env_hello "$$(tools/run_target.sh x86_64 $(TESTTMP)/qemu_env_hello)" "Hello, World!"
 	@echo "runner ok (native x86_64 path)"
 	@fail=0; for a in i386 aarch64 arm32; do \
 	  python3 tools/gen_arch_probe.py $$a $(TESTTMP)/qemu_probe_$$a; \
