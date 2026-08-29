@@ -15749,3 +15749,65 @@ The structural fact worth carrying into the handoff:
 > the resident image.** So *"the watcher needs restarting for tooling changes"* is
 > true of about half the tooling and false of the rest — and guessing wrong in the
 > "safe" direction costs a needless restart into a breadth run.
+
+## Tick 2026-08-29 ~17:2x — a real file collision, and the lock I had to undo myself
+
+**frankA was idle and had NOT claimed rung 3 — and that was correct.** It drove the
+rung, hit the `:3341` wall, reduced it, found the cause is **Track A's**, filed
+`bug-a-nodemetaclassci-does-not-know-a-virtual-class-method-call` [A p65], and
+edged rung 3 on it. Idle-without-a-claim looked like a stalled dispatch and was
+the opposite. **Checking what a session DID before concluding it did nothing** cost
+one command and would have produced a wrong nudge otherwise.
+
+Its ticket is the best-shaped one filed today: reduced to **30 lines**, FPC-oracled
+so both arms are known, and the mechanism named rather than guessed —
+`NodeMetaclassCi` recognises a metaclass-valued function result only as `AN_CALL`,
+while `GenMakeStaticMethodCall` rewrites the kind to `AN_CLASS_VIRTUAL_CALL` when
+the class method is **virtual**, so the node falls past the metaclass branch. It
+also quotes the predicate's own comment saying it exists *so the next spelling is
+added once* — the file naming where its own fix belongs.
+
+### The collision was REAL, and the letters are not what allocate the file
+
+The O umbrella sat in `working/` under a lock **I created** on frank-optimize-b4's
+behalf. That umbrella's file-ownership is Track A and it edits **`symtab.inc`
+specifically** — `W2InPlaceEligible` / `EmitW2InPlace` live there. frankA's fix is
+**also in `symtab.inc`**. Two sessions, one file: exactly what the track letters
+exist to prevent, and it would have been invisible if I had reasoned from letters
+(*"O is O, A is A"*) instead of opening both tickets.
+
+> **A track letter is a lane, not a file allocation.** Two tickets under different
+> letters can name the same file, and the umbrella's own header says so in its
+> second line. Read the files, not the letter.
+
+**Released the lock** (`d053c8fb4`) — the work it covered **landed** as `cf70cb5be`,
+and the next unit was offered and never confirmed. A lock over completed work reads
+as *"someone is on it"*, the more expensive of the two lock failures. **This was my
+own action to undo, not a peer's claim to override**, and I told that session it is
+restorable on one word.
+
+**Allocation recorded in the ticket itself**, so it survives this session:
+`symtab.inc` → frankA until it parks; `ir_codegen_aarch64.inc` and the other
+backends → the O campaign. A backend-only aarch64 W2 port may proceed
+concurrently; one needing `symtab.inc` coordinates first. Both sessions told, in
+the same terms, and **filed in the same push as the grant** per my own rule.
+
+### Cautions passed to frankA, both from tonight's pattern
+
+- `NodeMetaclassCi`'s five spellings are **a table that looks complete** and it is
+  adding a sixth. If `AN_CALL` was the only spelling the rewriter can rewrite, say
+  so; if it can rewrite others, this is *one of several* missing rows, not *the*
+  missing row.
+- **Grep for the sibling before closing** — a virtual class function returning a
+  metaclass has an obvious twin returning an instance.
+- And a bigger-finding test: if adding the spelling needs anything beyond extending
+  that enumeration, **the comment's premise is wrong**, which is worth more than
+  the bug.
+
+### State
+
+`working/` **empty**; frankwasm and pxx-a5 **busy** (wasm open-array; T's
+wired-into-no-build-rule check plus the helper as its own unit). frankA dispatched
+to its own A ticket. frank-optimize-b4 and frankB **have not answered** — both show
+`waiting`, which is ambiguous and is **not** a park line; no mechanical expiry set
+because neither holds anything now. U queue **counted: 15.**
