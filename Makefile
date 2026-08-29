@@ -9857,6 +9857,11 @@ test-core: $(COMPILER)
 	# the META word: the ASCII flag, and the reserved low-32 budget
 	./$(COMPILER) test/test_managed_block_meta.pas $(TESTTMP)/test_managed_block_meta26
 	tools/expect_same.sh test_managed_block_meta26 "$$($(TESTTMP)/test_managed_block_meta26)" "managed block meta ok"
+	# a cast through a user type ALIAS narrows exactly as the builtin spelling
+	# does. The .expected file is FPC 3.2.2's own output, not a transcript of
+	# what pxx prints (bug-p-a-cast-through-an-ordinal-type-alias-does-not-truncate).
+	./$(COMPILER) test/test_pascal_type_alias_cast.pas $(TESTTMP)/test_pascal_type_alias_cast26
+	tools/expect_same.sh test_pascal_type_alias_cast26 "$$($(TESTTMP)/test_pascal_type_alias_cast26)" "$$(cat test/test_pascal_type_alias_cast.expected)"
 	# UCS4Char: FPC-parity type surface, plus the UTF-8 conversion (a pxx extension)
 	./$(COMPILER) test/test_ucs4char.pas $(TESTTMP)/test_ucs4char26
 	tools/expect_same.sh test_ucs4char26 "$$($(TESTTMP)/test_ucs4char26)" "ucs4char ok"

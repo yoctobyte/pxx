@@ -6523,6 +6523,88 @@ begin
             LastTypeRecId := AliasElemRec[aliasIdx];
             Exit;
           end;
+          { ORDINAL-typed alias cast — `type TaByte = byte; TaByte(c)`. Without
+            this the alias fell into the POINTER fall-through below, which
+            reinterprets at pointer width and never narrows: with c = $12345678,
+            `Byte(c)` gave 120 and `TaByte(c)` gave 305419896. Same for word,
+            shortint, smallint, longword, integer — every narrowing spelling —
+            and `TaChar(65)` SEGFAULTED, because a pointer-typed cast of an
+            ordinal is not a thing any consumer downstream expects.
+
+            The alias is not exotic: FPC's own idiom for a compile-time-selected
+            mask is `type ToByte = byte`, and rtl-generics' hash mixer indexes
+            `crc32ctab[0, ToByte(crc)]` with it. Unnarrowed that index reached
+            ~4.3e9 into a [0..3, byte] table, so `uses Generics.Hashes` died in
+            its unit initialization with nothing reporting anything
+            (bug-p-a-cast-through-an-ordinal-type-alias-does-not-truncate).
+
+            The node built here is the SAME one every other spelling of an
+            ordinal cast builds — AN_PTR_CAST with ASTIVal = -1, the
+            width-truncating value cast — so this arm adds a spelling, not a
+            mechanism. tyPointer is excluded explicitly because TypeIsOrdinal
+            INCLUDES it (the trap IRLowerCallArg's promo arms document), and a
+            pointer alias must keep the reinterpret below. }
+          if TypeIsOrdinal(IntToTypeKind(AliasTk[aliasIdx])) and
+             (IntToTypeKind(AliasTk[aliasIdx]) <> tyPointer) then
+          begin
+            { demote a promotable operand BEFORE narrowing, or the cast
+              truncates the SLOT ADDRESS — see PromoDemoteToInt64, and the
+              identical line at every sibling cast site. }
+            CurASTNode := PromoDemoteToInt64(CurASTNode);
+            { a VARIANT operand converts rather than reinterpreting its record,
+              exactly as the builtin-named spellings do. See VariantCastToTemp. }
+            vcNode := VariantCastToTemp(CurASTNode, IntToTypeKind(AliasTk[aliasIdx]));
+            if vcNode >= 0 then CurASTNode := vcNode;
+            node := AllocNode(AN_PTR_CAST);
+            ASTLeft[node] := CurASTNode;
+            ASTIVal[node] := -1;
+            ASTTk[node]   := AliasTk[aliasIdx];
+            { an alias OF AN ENUM keeps the enum identity, or WriteLn prints the
+              ordinal — the same line the builtin-cast arm carries. }
+            if IntToTypeKind(AliasTk[aliasIdx]) = tyInteger then
+              ASTEnumId[node] := FindEnumType(name);
+            CurASTNode := node;
+            LastExprTk := IntToTypeKind(AliasTk[aliasIdx]);
+            Exit;
+          end;
+          { FLOAT-typed alias cast — `type TaD = double; TaD(d)`. The sibling of
+            the ordinal arm above, and it was broken the same way and found by
+            looking rather than by a second report: the pointer fall-through
+            yielded the operand's raw IEEE bits, so `TaD(3.75)` printed
+            4615626668101337088.
+
+            NOT Track F. The subject is the CAST mechanism, and the fact that
+            the target is a float is incidental — "rank the mechanism, never the
+            datatype" (CLAUDE.md). A float alias cast that answers a bit pattern
+            is the same defect as an ordinal one that answers an unnarrowed int.
+
+            A float cast is a real CONVERSION rather than a reinterpret
+            (int->float, or double->single narrowing), so this mirrors the
+            `Single(expr)`/`Double(expr)` keyword arm exactly: a hidden temp of
+            the CAST's type, the ordinary store into it (which coerces), and the
+            temp read as the value. Building it any other way reintroduces
+            bug-p-a-typecast-of-a-variant-reinterprets-it-instead-of-converting,
+            which is why the temp's kind comes from the alias table and never
+            from LastExprTk. }
+          if TypeIsFloat(IntToTypeKind(AliasTk[aliasIdx])) then
+          begin
+            castTk := IntToTypeKind(AliasTk[aliasIdx]);
+            op := AllocVar('', castTk);
+            node := AllocNode(AN_STR_FROM_CHAR);
+            argSeq := AllocNode(AN_IDENT);             { store LHS = the temp }
+            ASTIVal[argSeq] := op; ASTTk[argSeq] := Ord(Syms[op].TypeKind);
+            left := AllocNode(AN_ASSIGN);
+            ASTLeft[left] := argSeq; ASTRight[left] := CurASTNode;
+            ASTTk[left] := Ord(Syms[op].TypeKind);
+            ASTLeft[node] := left;
+            identNode := AllocNode(AN_IDENT);          { yielded value = the temp }
+            ASTIVal[identNode] := op; ASTTk[identNode] := Ord(Syms[op].TypeKind);
+            ASTRight[node] := identNode;
+            ASTTk[node] := Ord(Syms[op].TypeKind);
+            CurASTNode := node;
+            LastExprTk := castTk;
+            Exit;
+          end;
           node := AllocNode(AN_PTR_CAST);
           ASTLeft[node] := CurASTNode;
           { A custom alias to ^Char/^AnsiChar (e.g. `type PC = ^Char; PC(s)`)

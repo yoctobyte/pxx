@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:21 blocked:6 backlog:313 backlog_new:8 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2633 rejected:51`
+`working:2 unfinished:21 blocked:6 backlog:313 backlog_new:8 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2634 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
@@ -51,7 +51,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
-- `[p 70] [P]` bug-p-a-cast-through-an-ordinal-type-alias-does-not-truncate
 - `[p 70] [P]` bug-p-a-delphi-mode-generic-from-a-used-unit-cannot-be-specialized
 - `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
@@ -77,5 +76,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-nilpy-list-sort-inplace-key-reverse
 - `[p 62] [A]` feature-unicodestring-model
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
+- `[p 60] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 1)
 
 _295 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
