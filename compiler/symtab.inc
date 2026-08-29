@@ -7311,7 +7311,27 @@ begin
   i := ProcChainHead(name);
   while i >= 0 do
   begin
-    if (ProcUnitIdx[i] = CurrentUnitIdx) and (Procs[i].Name = name) then
+    { CaseEqual, not just `=`, for a case-INSENSITIVE routine. Pascal is
+      case-insensitive, so `function Bar; forward;` and its body written
+      `function bar;` are ONE routine — FPC binds them. This compare was exact
+      only, so the body registered a SECOND proc and the forward one stayed
+      bodiless. The failure is far from the cause and depends on how the name is
+      later reached: a direct call says `unresolved forward: Bar`, while
+      `@Bar` in a typed const captures the bodiless entry and dies at LINK with
+      "the address of a routine with no body was taken" — pointing at the
+      address-of, which is not the defect.
+      rtl-generics hits it as `TEquals.&Class` (declared) vs `TEquals.&class`
+      (implemented); the `&` escape is incidental, plain `Bar`/`bar` does it too.
+      The chain already folds case (NameFoldHash), so both spellings were always
+      in this bucket and only this compare rejected them — which is why the
+      guard belongs here and not in the hash.
+      ProcCaseSensitive is what keeps NilPy and C unaffected: their routines set
+      it True, so `foo` and `Foo` stay two routines there, as those languages
+      require. Same pair-shaped test as FindProcArity/FindProcSig — this was the
+      one lookup carrying only the exact half. }
+    if (ProcUnitIdx[i] = CurrentUnitIdx) and
+       ((Procs[i].Name = name) or
+        ((not ProcCaseSensitive[i]) and CaseEqual(Procs[i].Name, name))) then
     begin
       if Procs[i].ParamCount = nParams then
       begin

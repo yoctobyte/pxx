@@ -8088,6 +8088,11 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_local_tc26 "$$($(TESTTMP)/test_local_tc26)" "$$(printf '100\na\nb\nc\n42\n100')"
 	./$(COMPILER) test/test_typed_const_record.pas $(TESTTMP)/test_tc_record26
 	tools/expect_same.sh test_tc_record26 "$$($(TESTTMP)/test_tc_record26)" "$$(printf '7\n10 Z 20\n300\n300')"
+	# Pascal is case-insensitive: a forward decl and a differently-cased body are
+	# ONE routine. Sits beside the typed-const tests because the shape that
+	# survived to LINK is `@Bar` captured in a typed const.
+	./$(COMPILER) test/test_forward_decl_case_insensitive.pas $(TESTTMP)/test_fwd_case26
+	$(TESTTMP)/test_fwd_case26 | diff -u test/test_forward_decl_case_insensitive.expected -
 	./$(COMPILER) test/test_multidim_const_array.pas $(TESTTMP)/test_md_const26
 	tools/expect_same.sh test_md_const26 "$$($(TESTTMP)/test_md_const26)" "$$(printf '1 2 3 4\n10 30 40 60\n1 4 5 8\n7 8 9 10\n7 8 9 10')"
 	./$(COMPILER) test/test_const_set.pas $(TESTTMP)/test_const_set26

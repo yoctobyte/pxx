@@ -7,7 +7,7 @@ prio: 75
 - **Type:** feature — umbrella (frontend stress corpus)
 - **Track:** P (Pascal frontend; shares `lexer.inc`/`parser.inc` with A, so bugs
   found land as Track P — A-gated — or Track A core)
-- **Status:** unfinished (parked)
+- **Status:** working
   neglected by comparison — user call).
 - **Owner:** frankA
 
@@ -691,3 +691,66 @@ list as a work estimate.
 weakened to make the corpus advance — the fix adds a *second* run of the same
 scan at a later time; both original scans stay, and `test_generic_cycle_fail`
 still correctly refuses.
+
+---
+
+## 2026-08-29 (frankA) — rung 6 CLEARED: `generics.defaults.pas` compiles end to end
+
+**First: the park note at the top of this ticket is STALE and should be read
+with this section.** It lists three open items; two were already closed before
+this session started:
+
+| park note said | actual state on 2026-08-29 |
+| --- | --- |
+| wall 6 Delphi half, `bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body` — open in `unfinished/` | **done** |
+| wall 7, `bug-p-a-resourcestring-is-not-addressable` (p55) | **done**, `c9cf8c457` |
+| `bug-p-two-different-nested-specializations-of-one-template-collide` (p65) | still open, in `backlog/` |
+
+A park note is a snapshot of the moment it was written and the tickets it names
+keep moving without it. **Re-measure before reading it as a plan** — that is what
+this session did, and the corpus had advanced past everything the note describes.
+
+### The new wall, found and closed
+
+Re-running the compile put `generics.defaults.pas` at a wall the note does not
+mention:
+
+```
+error: @TEquals.Class: the address of a routine with no body was taken
+```
+
+That is [[bug-p-a-forward-declaration-does-not-bind-a-differently-cased-body]],
+filed and **fixed** this session: Pascal is case-insensitive, so
+`TEquals.&Class` (declared, `:186`) and `TEquals.&class` (implemented, `:1566`)
+are one routine, and `FindProcOverloadRec` compared names exactly — so the body
+registered a second proc and the declared one stayed bodiless.
+
+**The `&` escape is a red herring** and was the first hypothesis: it is refuted
+by the pair of controls — escaped-with-matching-case works, unescaped-with-
+mismatched-case fails. A plain `function Bar; forward;` + `function bar;`
+reproduces it with no class and no escape, and says `unresolved forward: Bar`,
+which names the defect outright. The minimal repro was worth more than every
+hypothesis formed from the corpus error.
+
+### Rung 6 result
+
+| unit | lines | before | after |
+| --- | --- | --- | --- |
+| `generics.defaults.pas` | 3,358 | blocked in the VMT const block | **compiles end to end** |
+| `generics.collections.pas` | — | never independently assessed | reaches a NEW wall |
+
+`generics.collections.pas`'s wall is **`unknown type: TKey`** at
+`generics.defaults.pas:790` — a generic type parameter not in scope at the point
+the specialization is materialised. Independent of everything above and of the
+one remaining park item; it is the next rung's subject.
+
+### Wall table, updated
+
+| # | wall | owner | status |
+| --- | --- | --- | --- |
+| 6 | generic class specialized by the enclosing generic's type parameter | P | **DONE** |
+| 7 | `@SArgumentOutOfRange` — resourcestring not addressable | P | **DONE** `c9cf8c457` |
+| 8 | forward decl does not bind a differently-cased body | P | **DONE** (this session) |
+| 9 | `unknown type: TKey` — generic type param out of scope in a materialised specialization | P | **open, new** |
+
+Still open and untouched: [[bug-p-two-different-nested-specializations-of-one-template-collide]].
