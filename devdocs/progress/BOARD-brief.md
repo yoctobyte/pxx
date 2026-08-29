@@ -5,10 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:20 blocked:5 backlog:315 backlog_new:7 experimental:22 rainy-day:45 float:21 done-followup:3 decided:116 done:2611 rejected:51`
+`working:2 unfinished:20 blocked:5 backlog:315 backlog_new:7 experimental:22 rainy-day:45 float:21 done-followup:3 decided:116 done:2611 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
+- `feature-opt-bulk-copy-is-byte-at-a-time` [O] — owner: frank-optimize
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
 ## unfinished (20) — parked mid-flight; re-claim, do not duplicate
@@ -47,6 +48,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 85] [R]` bug-r-a-duplicate-forward-in-rparser-breaks-the-fpc-seed-build
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
+- `[p 70] [A]` bug-a-for-loop-limit-is-evaluated-after-the-control-variable-is-assigned
 - `[p 70] [P]` bug-p-a-delphi-mode-generic-from-a-used-unit-cannot-be-specialized
 - `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
@@ -68,7 +70,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [N]` feature-nilpy-iter-and-next-over-a-container
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
-- `[p 65] [O]` feature-opt-bulk-copy-is-byte-at-a-time
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
