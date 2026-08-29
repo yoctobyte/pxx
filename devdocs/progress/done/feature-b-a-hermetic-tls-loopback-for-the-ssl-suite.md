@@ -161,4 +161,4 @@ person does not re-derive it.
 No compiler rebuild.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 2d4ce55bf.
