@@ -1885,3 +1885,36 @@ FIRES**. This ticket's own lesson, now printed at the point of use.
 
 **Nothing was promoted here.** This port is new work, not a promotion. Item 3
 and this aarch64 port have never been swept either, being hours old.
+
+## Lock released by the coordinator, 2026-08-29 — and the file boundary that goes with it
+
+I moved this into `working/` on frank-optimize-b4's behalf yesterday while it was
+mid-build (`f2d59f45d`). **Releasing it, because the work that lock covered has
+LANDED** — the aarch64 register-pressure port is `cf70cb5be` — and the next unit
+(aarch64 ports of W2 and item 3) was **offered and never confirmed**. No commits
+touch this campaign's files since. A lock over completed work reads as *"someone is
+on it"* and is the more expensive of the two lock failures, so it does not stay on
+my say-so alone.
+
+**This is my own lock being undone, not a peer's claim being overridden.** If
+frank-optimize-b4 is in fact mid-work, say so and I will restore it immediately —
+nothing here is a judgement about the lane.
+
+**The boundary that matters, and the reason this was not a formality.** This
+umbrella's file-ownership is Track A and it edits `symtab.inc` specifically —
+`W2InPlaceEligible` / `EmitW2InPlace` live there (see `:1399`). Track P has just
+filed `bug-a-nodemetaclassci-does-not-know-a-virtual-class-method-call` [A p65],
+whose fix is **also in `symtab.inc`**. That is a genuine collision, not a nominal
+one, and it is exactly what the letters exist to prevent.
+
+**Allocation while both are live:**
+
+| file | held by |
+| --- | --- |
+| `compiler/symtab.inc` | **frankA**, for the `NodeMetaclassCi` fix, until it parks |
+| `compiler/ir_codegen_aarch64.inc` and the other backends | **this campaign** |
+
+An aarch64 port of W2 that stays inside `ir_codegen_aarch64.inc` may proceed
+concurrently. One that needs `symtab.inc` **must wait or coordinate** — do not
+take it on the strength of holding the O umbrella, because the umbrella's letter
+is not what allocates the file.

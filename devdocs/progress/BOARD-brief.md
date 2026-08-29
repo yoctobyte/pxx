@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:21 blocked:6 backlog:294 backlog_new:6 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2570 rejected:46`
+`unfinished:22 blocked:6 backlog:294 backlog_new:6 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2570 rejected:46`
 
 ## Held now (working/ — do not touch these files)
 
-- `feature-opt-o3-register-pressure` [O] — owner: frank-optimize-b4
+_none — no lane is locked._
 
-## unfinished (21) — parked mid-flight; re-claim, do not duplicate
+## unfinished (22) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -24,6 +24,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
+- `feature-opt-o3-register-pressure` [O]
 - `feature-pascal-corpus-expansion` [P]
 - `feature-pascal-corpus-fpc-testsuite` [P]
 - `feature-pascal-corpus-generics` [P] — blocked-by: bug-a-nodemetaclassci-does-not-know-a-virtual-class-method-call
@@ -44,7 +45,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `regression-lib-test-lib-synapse` [B] — blocked-by: bug-a-a-deep-unit-dependency-parses-with-a-spliced-token-stream
 
-## Ready — top 30 of 305, ranked
+## Ready — top 30 of 306, ranked
 
 - `[p 85] [N]` bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
@@ -57,6 +58,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` bug-p-a-call-chained-onto-a-class-method-result-is-dropped
 - `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - `[p 70] [N]` feature-nilpy-staticmethod-and-classmethod
+- `[p 70] [O]` feature-opt-o3-register-pressure
 - `[p 70] [P]` feature-p-delphi-string-helpers
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 70] [P]` regression-cascade-4e27dc2be114
@@ -75,6 +77,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [O]` feature-opt-bulk-copy-is-byte-at-a-time
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
-- `[p 62] [U]` decide-nilpy-what-version-does-sys-version-info-claim
 
-_275 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_276 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
