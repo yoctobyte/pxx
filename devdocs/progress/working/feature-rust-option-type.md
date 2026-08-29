@@ -81,6 +81,13 @@ when there is none, against the payload expression's own type.
 - A non-variable scrutinee must be a call or a plain variable: `RExprRecId`
   answers for `AN_CALL` and `AN_IDENT`, so `match self.some_field` (a
   record-typed FIELD) is not resolvable yet and says so.
+- Option accessors (`is_some`/`unwrap`/`unwrap_or`) want a plain VARIABLE,
+  not an arbitrary expression: `maybe(4).unwrap_or(-1)` is refused, `let m =
+  maybe(4); m.unwrap_or(-1)` works. Same shape as the old match-scrutinee
+  narrowing, and the same fix would lift it (materialize into a temp).
+- `println!` evaluates each argument as it reaches that placeholder, so a
+  side-effecting argument interleaves with the format text — Rust evaluates
+  all arguments first. Noticed while writing the tail-return test.
 - Compound assignment on a field/index target names the target subtree on
   both sides, so a side-effecting subscript (`a[f()] += 1`) evaluates that
   subscript twice. A narrowing, not a wrong answer.
@@ -114,6 +121,17 @@ signatures, not from the ladder's list — and both are ahead of it now:
    "always alias" fix would have broken, and the half the test pins.
    Compound assignment on a field/index target (`self.n += 1`) rode along; it
    is how real code spells this mutation. `test/test_rust_refs.rs`.
+6. **DONE** — value positions: a whole struct/enum RETURNED, and Rust's
+   implicit TAIL return. `let` carried three near-copies of "parse an
+   aggregate literal and store it into a slot" (enum variant, tuple struct,
+   named-field); they are now ONE implementation
+   (`RPeekAggregateCi` + `RParseAggregateInto`) that the `return` path uses
+   too, so `return Square(i)` / `Point { .. }` / `Circle(r)` / `Some(x)` all
+   work and the Option-specific return branch is gone. The tail return applies
+   to a fn BODY and deliberately not to any inner block — an inner block's
+   trailing expression is a block VALUE, and treating one as a return would
+   turn `if c { f() }` into an early exit; `test_rust_value_positions.rs`
+   pins that anti-case. `test/test_rust_value_positions.rs`.
 
 ## Log
 - 2026-08-29 — unit 1 landed (see the ladder ticket's log for the detail).
@@ -123,3 +141,5 @@ signatures, not from the ladder's list — and both are ahead of it now:
 - 2026-08-29 — rung 4 landed: fixed-array struct fields.
 - 2026-08-29 — rung 5 landed: `&`/`&mut` params alias; `&mut self` parses;
   compound assignment on a field/index target.
+- 2026-08-29 — rung 6 landed: aggregate literals in return position (one
+  shared implementation with `let`), and implicit tail returns.

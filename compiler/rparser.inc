@@ -430,6 +430,12 @@ end;
   of any nested block, so the leniency does not leak into `{ ... }` bodies. }
 var RInMatchArm: Boolean;
 
+{ Set only for the statements of a fn BODY, so Rust's implicit tail return
+  applies there and ONLY there. An inner block's trailing expression is a
+  BLOCK VALUE, which this frontend does not model -- treating one as a return
+  would silently turn `if c { f() }` into an early exit from the function. }
+var RTailOK: Boolean;
+
 procedure RExpectStmtEnd;
 begin
   if RInMatchArm and (CurTok.Kind <> tkSemicolon) then Exit;
@@ -1473,6 +1479,163 @@ begin
   Result := seq;
 end;
 
+{ The class an AGGREGATE LITERAL at the cursor builds, or -1 when the cursor
+  is not at one. Does not consume. `expectCi` is the class the context knows
+  the value must have (a `let` annotation, or the enclosing fn's return
+  record); it is what resolves a BARE variant name, which cannot name its own
+  class -- and for a monomorphized Option<T> it is the only thing that can,
+  since every instantiation spells its variants `Some`/`None`. Pass -1 when
+  there is no expectation. }
+function RPeekAggregateCi(expectCi: Integer): Integer;
+var ci, vi: Integer;
+begin
+  Result := -1;
+  if CurTok.Kind <> tkIdent then Exit;
+  ci := FindUClass(CurTok.SVal);
+  if ci >= 0 then
+  begin
+    { `Enum::Variant ...` }
+    if REnumCi[ci] and (Tokens[TokPos].Kind = tkPathSep) then Result := ci
+    { `Name(..)` tuple-struct / `Name { .. }` named-field literal. An enum's
+      own name followed by neither is not a literal, and `Type::assoc(..)` is
+      a call, so both fall through to the expression path. }
+    else if (not REnumCi[ci]) and
+            ((Tokens[TokPos].Kind = tkLParen) or (Tokens[TokPos].Kind = tkBegin)) then
+      Result := ci;
+    Exit;
+  end;
+  { a bare variant name: the expected class first, the global table second }
+  if (expectCi >= 0) and REnumCi[expectCi] and
+     (RFindVariantInEnum(expectCi, CurTok.SVal) >= 0) then
+  begin
+    Result := expectCi;
+    Exit;
+  end;
+  vi := RFindVariantBare(CurTok.SVal);
+  if vi >= 0 then Result := REnumVariants[vi].EnumCi;
+end;
+
+{ Parses the aggregate literal at the cursor into the ALREADY-ALLOCATED
+  target symbol and returns the chain of field stores. A literal is the only
+  way a whole struct/enum value comes into existence here -- no AST node
+  carries one through an expression -- so it is always N stores into a named
+  slot, and every context that can name a slot (a `let`'s fresh local, a
+  record-returning fn's Result) uses this one implementation. }
+function RParseAggregateInto(targetSym, ci: Integer): Integer;
+var vi, k, tagNode, fieldNode, valNode, assignNode, seq, fTokIdx: Integer;
+    variantName, fname, mangled: AnsiString;
+begin
+  seq := -1;
+  if REnumCi[ci] then
+  begin
+    if (FindUClass(CurTok.SVal) = ci) and (Tokens[TokPos].Kind = tkPathSep) then
+    begin
+      Next; Next; { EnumName :: }
+      if CurTok.Kind <> tkIdent then Error('Rust: expected variant name after ::');
+    end;
+    vi := RFindVariantInEnum(ci, CurTok.SVal);
+    if vi < 0 then Error('Rust: unknown variant ' + CurTok.SVal);
+    variantName := REnumVariants[vi].Name;
+    Next;
+    fieldNode := AllocNode(AN_FIELD);
+    ASTLeft[fieldNode] := RMakeIdent(targetSym);
+    ASTSOffset[fieldNode] := RStoredName('__tag'); ASTSLen[fieldNode] := 5;
+    ASTTk[fieldNode] := Ord(tyInt64);
+    tagNode := AllocNode(AN_INT_LIT);
+    ASTIVal[tagNode] := REnumVariants[vi].Tag; ASTTk[tagNode] := Ord(tyInt64);
+    assignNode := AllocNode(AN_ASSIGN);
+    ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := tagNode;
+    seq := RSeqAppend(seq, assignNode);
+    case REnumVariants[vi].Kind of
+      RVAR_TUPLE:
+      begin
+        Expect(tkLParen, '(');
+        k := 0;
+        if CurTok.Kind <> tkRParen then
+          repeat
+            valNode := RParseExpr;
+            mangled := variantName + '.' + RIntToStr(k);
+            fieldNode := AllocNode(AN_FIELD);
+            ASTLeft[fieldNode] := RMakeIdent(targetSym);
+            ASTSOffset[fieldNode] := RStoredName(mangled); ASTSLen[fieldNode] := Length(mangled);
+            ASTTk[fieldNode] := Ord(RecFieldType(REC_UCLASS_BASE + ci, mangled));
+            assignNode := AllocNode(AN_ASSIGN);
+            ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := valNode;
+            seq := RSeqAppend(seq, assignNode);
+            Inc(k);
+          until not Eat(tkComma);
+        Expect(tkRParen, ')');
+      end;
+      RVAR_STRUCT:
+      begin
+        Expect(tkBegin, '{');
+        while CurTok.Kind <> tkEnd do
+        begin
+          if CurTok.Kind <> tkIdent then Error('Rust: expected field name in variant literal');
+          fname := CurTok.SVal; Next;
+          Expect(tkColon, ':');
+          valNode := RParseExpr;
+          mangled := variantName + '.' + fname;
+          fieldNode := AllocNode(AN_FIELD);
+          ASTLeft[fieldNode] := RMakeIdent(targetSym);
+          ASTSOffset[fieldNode] := RStoredName(mangled); ASTSLen[fieldNode] := Length(mangled);
+          ASTTk[fieldNode] := Ord(RecFieldType(REC_UCLASS_BASE + ci, mangled));
+          assignNode := AllocNode(AN_ASSIGN);
+          ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := valNode;
+          seq := RSeqAppend(seq, assignNode);
+          if not Eat(tkComma) then Break;
+        end;
+        Expect(tkEnd, '}');
+      end;
+    end; { RVAR_UNIT: no payload }
+    Result := seq;
+    Exit;
+  end;
+  Next; { the struct name }
+  if CurTok.Kind = tkLParen then
+  begin
+    { tuple struct `Name(a, b)` — fields are named "0", "1", ... }
+    Next;
+    k := 0;
+    if CurTok.Kind <> tkRParen then
+      repeat
+        valNode := RParseExpr;
+        mangled := RIntToStr(k);
+        fieldNode := AllocNode(AN_FIELD);
+        ASTLeft[fieldNode] := RMakeIdent(targetSym);
+        ASTSOffset[fieldNode] := RStoredName(mangled); ASTSLen[fieldNode] := Length(mangled);
+        ASTTk[fieldNode] := Ord(RecFieldType(REC_UCLASS_BASE + ci, mangled));
+        assignNode := AllocNode(AN_ASSIGN);
+        ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := valNode;
+        seq := RSeqAppend(seq, assignNode);
+        Inc(k);
+      until not Eat(tkComma);
+    Expect(tkRParen, ')');
+    Result := seq;
+    Exit;
+  end;
+  Expect(tkBegin, '{');
+  while CurTok.Kind <> tkEnd do
+  begin
+    if CurTok.Kind <> tkIdent then Error('Rust: expected field name in struct literal');
+    fTokIdx := TokPos - 1;
+    Next;
+    Expect(tkColon, ':');
+    valNode := RParseExpr;
+    fieldNode := AllocNode(AN_FIELD);
+    ASTLeft[fieldNode] := RMakeIdent(targetSym);
+    ASTSOffset[fieldNode] := Tokens[fTokIdx].SOffset;
+    ASTSLen[fieldNode] := Tokens[fTokIdx].SLen;
+    ASTTk[fieldNode] := Ord(RecFieldType(REC_UCLASS_BASE + ci, GetTokenStr(fTokIdx)));
+    assignNode := AllocNode(AN_ASSIGN);
+    ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := valNode;
+    seq := RSeqAppend(seq, assignNode);
+    if not Eat(tkComma) then Break;
+  end;
+  Expect(tkEnd, '}');
+  Result := seq;
+end;
+
 { `let [mut] name [: Type] [= expr];` — mut is accepted and ignored (no
   borrow/mutability enforcement, per the umbrella's non-goal list). Two RHS
   shapes: a plain scalar expression, or a struct literal `Type { f: v, ... }`
@@ -1700,148 +1863,16 @@ begin
     Result := ROptionStoreInto(symIdx, optCi, isSome, valNode);
     Exit;
   end;
-  { enum literal RHS: bare `Variant(...)`/`Variant { .. }`/`Variant`, or
-    qualified `Enum::Variant(...)`. Checked before the plain-struct-literal
-    branch below since both start with a tkIdent. }
-  ci2 := -1; vi := -1; qualified := False;
-  if CurTok.Kind = tkIdent then
+  { every other aggregate literal -- an enum variant (bare or
+    `Enum::Variant`), a tuple struct `Name(a, b)`, a named-field
+    `Name { f: v }` -- goes through the one shared implementation, which the
+    `return` path uses too. }
+  ci := RPeekAggregateCi(structCi);
+  if ci >= 0 then
   begin
-    ci2 := FindUClass(CurTok.SVal);
-    if (ci2 >= 0) and REnumCi[ci2] and (Tokens[TokPos].Kind = tkPathSep) then
-      qualified := True
-    else if ci2 < 0 then
-      vi := RFindVariantBare(CurTok.SVal);
-  end;
-  if qualified or (vi >= 0) then
-  begin
-    if qualified then
-    begin
-      Next; Next; { EnumName :: }
-      if CurTok.Kind <> tkIdent then Error('Rust: expected variant name after ::');
-      vi := RFindVariantInEnum(ci2, CurTok.SVal);
-      if vi < 0 then Error('Rust: unknown variant ' + CurTok.SVal);
-    end;
-    variantName := REnumVariants[vi].Name;
-    Next; { variant name }
-    ci := REnumVariants[vi].EnumCi;
     LastTypeRecId := REC_UCLASS_BASE + ci;
     symIdx := AllocVar(name, tyRecord);
-    identNode := RMakeIdent(symIdx);
-    seq := -1;
-    tagOff := RStoredName('__tag');
-    fieldNode := AllocNode(AN_FIELD);
-    ASTLeft[fieldNode] := identNode; ASTSOffset[fieldNode] := tagOff; ASTSLen[fieldNode] := 5;
-    ASTTk[fieldNode] := Ord(tyInt64);
-    tagNode := AllocNode(AN_INT_LIT); ASTIVal[tagNode] := REnumVariants[vi].Tag; ASTTk[tagNode] := Ord(tyInt64);
-    tagAssign := AllocNode(AN_ASSIGN); ASTLeft[tagAssign] := fieldNode; ASTRight[tagAssign] := tagNode;
-    seq := RSeqAppend(seq, tagAssign);
-    case REnumVariants[vi].Kind of
-      RVAR_TUPLE:
-      begin
-        Expect(tkLParen, '(');
-        k := 0;
-        if CurTok.Kind <> tkRParen then
-          repeat
-            valNode := RParseExpr;
-            mangled := variantName + '.' + RIntToStr(k);
-            fieldNode := AllocNode(AN_FIELD);
-            ASTLeft[fieldNode] := identNode;
-            ASTSOffset[fieldNode] := RStoredName(mangled); ASTSLen[fieldNode] := Length(mangled);
-            ASTTk[fieldNode] := Ord(RecFieldType(REC_UCLASS_BASE + ci, mangled));
-            assignNode := AllocNode(AN_ASSIGN);
-            ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := valNode;
-            seq := RSeqAppend(seq, assignNode);
-            Inc(k);
-          until not Eat(tkComma);
-        Expect(tkRParen, ')');
-      end;
-      RVAR_STRUCT:
-      begin
-        Expect(tkBegin, '{');
-        while CurTok.Kind <> tkEnd do
-        begin
-          if CurTok.Kind <> tkIdent then Error('Rust: expected field name in variant literal');
-          fname := CurTok.SVal; Next;
-          Expect(tkColon, ':');
-          valNode := RParseExpr;
-          mangled := variantName + '.' + fname;
-          fieldNode := AllocNode(AN_FIELD);
-          ASTLeft[fieldNode] := identNode;
-          ASTSOffset[fieldNode] := RStoredName(mangled); ASTSLen[fieldNode] := Length(mangled);
-          ASTTk[fieldNode] := Ord(RecFieldType(REC_UCLASS_BASE + ci, mangled));
-          assignNode := AllocNode(AN_ASSIGN);
-          ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := valNode;
-          seq := RSeqAppend(seq, assignNode);
-          if not Eat(tkComma) then Break;
-        end;
-        Expect(tkEnd, '}');
-      end;
-    end; { RVAR_UNIT: no payload }
-    Result := seq;
-    Exit;
-  end;
-  { tuple-struct literal RHS: `Name(expr, ...)` — per-field stores, same
-    no-construct-node shape as the named-field literal below }
-  if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkLParen) and
-     (FindUClass(CurTok.SVal) >= 0) then
-  begin
-    ci := FindUClass(CurTok.SVal);
-    if not REnumCi[ci] then
-    begin
-      Next;
-      Expect(tkLParen, '(');
-      LastTypeRecId := REC_UCLASS_BASE + ci;
-      symIdx := AllocVar(name, tyRecord);
-      identNode := RMakeIdent(symIdx);
-      seq := -1; k := 0;
-      repeat
-        valNode := RParseExpr;
-        mangled := RIntToStr(k);
-        fieldNode := AllocNode(AN_FIELD);
-        ASTLeft[fieldNode] := identNode;
-        ASTSOffset[fieldNode] := RStoredName(mangled);
-        ASTSLen[fieldNode] := Length(mangled);
-        ASTTk[fieldNode] := Ord(RecFieldType(REC_UCLASS_BASE + ci, mangled));
-        assignNode := AllocNode(AN_ASSIGN);
-        ASTLeft[assignNode] := fieldNode;
-        ASTRight[assignNode] := valNode;
-        seq := RSeqAppend(seq, assignNode);
-        Inc(k);
-      until not Eat(tkComma);
-      Expect(tkRParen, ')');
-      Result := seq;
-      Exit;
-    end;
-  end;
-  { struct literal RHS: `Type { field: expr, ... }` }
-  if (CurTok.Kind = tkIdent) and (FindUClass(CurTok.SVal) >= 0) and (Tokens[TokPos].Kind = tkBegin) then
-  begin
-    ci := FindUClass(CurTok.SVal);
-    Next; Expect(tkBegin, '{');
-    LastTypeRecId := REC_UCLASS_BASE + ci;
-    symIdx := AllocVar(name, tyRecord);
-    identNode := RMakeIdent(symIdx);
-    seq := -1;
-    while CurTok.Kind <> tkEnd do
-    begin
-      if CurTok.Kind <> tkIdent then Error('Rust: expected field name in struct literal');
-      fTokIdx := TokPos - 1;
-      Next;
-      Expect(tkColon, ':');
-      valNode := RParseExpr;
-      fieldNode := AllocNode(AN_FIELD);
-      ASTLeft[fieldNode] := identNode;
-      ASTSOffset[fieldNode] := Tokens[fTokIdx].SOffset;
-      ASTSLen[fieldNode] := Tokens[fTokIdx].SLen;
-      ASTTk[fieldNode] := Ord(RecFieldType(REC_UCLASS_BASE + ci, GetTokenStr(fTokIdx)));
-      assignNode := AllocNode(AN_ASSIGN);
-      ASTLeft[assignNode] := fieldNode;
-      ASTRight[assignNode] := valNode;
-      seq := RSeqAppend(seq, assignNode);
-      if not Eat(tkComma) then Break;
-    end;
-    Expect(tkEnd, '}');
-    Result := seq;
+    Result := RParseAggregateInto(symIdx, ci);
     Exit;
   end;
   { plain initializer — scalar, or a record-valued expression (today: a call
@@ -2213,32 +2244,27 @@ begin
     tkExit:
     begin
       Next;
-      { `return Some(e);` / `return None;` from an Option-returning fn: the
-        value is materialized into the Result slot by field stores and then a
-        plain valueless return -- the same shape `let` uses, for the same
-        reason (no AST node carries a whole enum value through an
-        expression). }
-      if (CurProc >= 0) and RIsOptionRec(ProcRetRecId[CurProc]) and
-         (CurTok.Kind = tkIdent) and
-         ((CurTok.SVal = 'Some') or (CurTok.SVal = 'None')) and
-         (FindUClass(CurTok.SVal) < 0) then
+      { `return <aggregate literal>;` from a record-returning fn -- `Some(e)`,
+        `None`, `Square(i)`, `Board { .. }`, `Enum::Variant(..)`. The value is
+        materialized into the Result slot by field stores and then a plain
+        valueless return: the same shape `let` uses, through the same
+        RParseAggregateInto, for the same reason (no AST node carries a whole
+        struct or enum value through an expression). The enclosing fn's return
+        record is the expected class, which is what lets a BARE `Some`/`None`
+        resolve at all. }
+      if (CurProc >= 0) and (Procs[CurProc].RetType = tyRecord) and
+         (ProcRetRecId[CurProc] >= REC_UCLASS_BASE) then
       begin
-        isSome := CurTok.SVal = 'Some';
-        Next;
-        rhsNode := -1;
-        if isSome then
+        symIdx := RPeekAggregateCi(ProcRetRecId[CurProc] - REC_UCLASS_BASE);
+        if symIdx >= 0 then
         begin
-          Expect(tkLParen, '(');
-          rhsNode := RParseExpr;
-          Expect(tkRParen, ')');
+          node := RSeqAppend(
+            RParseAggregateInto(Procs[CurProc].RetSymIdx, symIdx),
+            AllocNode(AN_EXIT));
+          RExpectStmtEnd;
+          Result := node;
+          Exit;
         end;
-        node := RSeqAppend(
-          ROptionStoreInto(Procs[CurProc].RetSymIdx,
-                           ProcRetRecId[CurProc] - REC_UCLASS_BASE, isSome, rhsNode),
-          AllocNode(AN_EXIT));
-        RExpectStmtEnd;
-        Result := node;
-        Exit;
       end;
       node := AllocNode(AN_EXIT);
       if CurTok.Kind <> tkSemicolon then ASTLeft[node] := RParseExpr;
@@ -2331,6 +2357,18 @@ begin
     indexed-field stores parse as an expression followed by `=` (AN_INDEX,
     slice AN_DEREF, and AN_FIELD over an indexed record are all valid assign
     targets). }
+  { Rust's implicit tail return: the last expression of a fn BODY, with no
+    trailing `;`, IS the return value. `fn file(self) -> u8 { self.0 % 8 }` is
+    how real source spells a one-line accessor; an explicit `return` is the
+    exception there, not the rule. RTailOK is what confines this to a fn body
+    -- see RParseFnBody. }
+  if RTailOK and (CurTok.Kind = tkEnd) then
+  begin
+    node := AllocNode(AN_EXIT);
+    ASTLeft[node] := Result;
+    Result := node;
+    Exit;
+  end;
   if ((CurTok.Kind = tkAssign) or (CurTok.Kind in
         [tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq,
          tkAmpEq, tkPipeEq, tkXorEq, tkShlEq, tkShrEq])) and
@@ -2377,12 +2415,14 @@ begin
 end;
 
 function RParseBlock: Integer;
-var stmt: Integer; savedArm: Boolean;
+var stmt: Integer; savedArm, savedTail: Boolean;
 begin
   Result := -1;
   { a braced body is ordinary code again, even when it is a match arm's -- so
-    the bare-arm semicolon leniency stops at the brace, it does not leak in. }
+    the bare-arm semicolon leniency stops at the brace, it does not leak in.
+    Same for the tail-return rule: it belongs to a fn body, not to any block. }
   savedArm := RInMatchArm; RInMatchArm := False;
+  savedTail := RTailOK; RTailOK := False;
   while CurTok.Kind <> tkEnd do
   begin
     if CurTok.Kind = tkEOF then Error('Rust: unterminated block (missing })');
@@ -2390,6 +2430,27 @@ begin
     Result := RSeqAppend(Result, stmt);
   end;
   RInMatchArm := savedArm;
+  RTailOK := savedTail;
+end;
+
+{ A fn BODY, as distinct from an ordinary block: only here does a trailing
+  expression with no `;` mean `return <it>` (Rust's implicit tail return). The
+  flag is set per statement rather than by looking ahead for the last one,
+  which comes to the same thing -- only the final statement of a body can be
+  terminated by the closing brace instead of a semicolon. }
+function RParseFnBody: Integer;
+var stmt: Integer; savedTail: Boolean;
+begin
+  Result := -1;
+  savedTail := RTailOK;
+  while CurTok.Kind <> tkEnd do
+  begin
+    if CurTok.Kind = tkEOF then Error('Rust: unterminated function body (missing })');
+    RTailOK := True;
+    stmt := RParseStatement;
+    Result := RSeqAppend(Result, stmt);
+  end;
+  RTailOK := savedTail;
 end;
 
 { ===== Top-level: struct/fn signature prescan, then body compilation ===== }
@@ -3155,7 +3216,7 @@ begin
     EmitParamSpillsForTarget(procIdx, nparams + selfBase);
 
     Expect(tkBegin, '{');
-    bodyNode := RParseBlock;
+    bodyNode := RParseFnBody;
     Expect(tkEnd, '}');
 
     CompileAST(bodyNode);
@@ -3276,7 +3337,7 @@ begin
   EmitParamSpillsForTarget(procIdx, nparams);
 
   Expect(tkBegin, '{');
-  bodyNode := RParseBlock;
+  bodyNode := RParseFnBody;
   Expect(tkEnd, '}');
 
   CompileAST(bodyNode);

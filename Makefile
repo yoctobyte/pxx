@@ -5845,6 +5845,14 @@ test-core: $(COMPILER)
 	# copy, which is the half a blanket "always alias" fix would break.
 	./$(COMPILER) test/test_rust_refs.rs $(TESTTMP)/test_rust_refs26
 	test "$$($(TESTTMP)/test_rust_refs26)" = "$$(printf 'bump 5 8 13\npeek 5\nmeth 18 18\nbyval 999 caller 18\nown 555 caller 18')"
+	# Value positions the skeleton did not model (feature-rust-corpus-chess):
+	# a whole struct/enum RETURNED (`return Square(i)` / `Point { .. }` /
+	# `Circle(r)` / `Some(x)`) and Rust's implicit TAIL return. `pick` is the
+	# anti-case for the tail rule: its if/else arms hold calls, and the fn must
+	# run past them to its own tail -- a tail rule applied to any block would
+	# return from inside the if.
+	./$(COMPILER) test/test_rust_value_positions.rs $(TESTTMP)/test_rust_vpos26
+	test "$$($(TESTTMP)/test_rust_vpos26)" = "$$(printf 'sq 19 file 3 rank 2\npt 3 4\ncircle 5\nrect 6 2\nnothing\nopt 40 -1\ndouble 42\npos\nneg\npick 4 -2')"
 	./$(COMPILER) test/test_rust_tuple_struct.rs $(TESTTMP)/test_rust_tuple26
 	test "$$($(TESTTMP)/test_rust_tuple26)" = "$$(printf 'a 300 b 44 s 7')"
 	# Rust associated fns + Self (Type::fn / Self::fn call paths, mixed with methods)
