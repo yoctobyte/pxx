@@ -100,17 +100,52 @@ rebase_onto_origin() {
 # with "fetch first" and the caller has to run sync.sh again by hand (observed
 # 2026-08-03 landing the ticket below). Rebase and retry is exactly what that
 # rerun does, minus the human.
+# SYNC_PUSH_TRIES: 3 was too few once the fleet grew. On 2026-08-29, with nine
+# writers live and the watcher publishing tstate continuously, this exhausted its
+# budget TWICE IN A ROW on one resolve — and a tight fetch/rebase/push loop landed
+# it first try immediately after, so it was retry budget, not a real conflict.
+SYNC_PUSH_TRIES="${SYNC_PUSH_TRIES:-6}"
+
 push_with_retry() {
     tries=0
-    while [ "$tries" -lt 3 ]; do
+    while [ "$tries" -lt "$SYNC_PUSH_TRIES" ]; do
         if git push -q origin "$BRANCH" 2>/dev/null; then
             return 0
         fi
         tries=$((tries + 1))
-        echo "sync: push raced another writer — rebasing and retrying ($tries/3)" >&2
+        echo "sync: push raced another writer — rebasing and retrying ($tries/$SYNC_PUSH_TRIES)" >&2
+        # Brief, growing pause. Without it every racing writer retries in
+        # lockstep and they keep colliding; the whole budget can burn inside a
+        # couple of seconds against one slow push from someone else.
+        sleep "$tries"
         rebase_onto_origin
     done
-    git push origin "$BRANCH"       # let the real error out
+    git push origin "$BRANCH"       # let the real error out (non-zero propagates)
+}
+
+# Fail loudly. push_with_retry already returned the real status; what was missing
+# was anyone LOOKING at it. The old caller was:
+#
+#     push_with_retry
+#     echo "sync: pushed — ..."
+#
+# so the failing status was replaced by the echo's, sync.sh exited 0, and the
+# commit sat unpushed while the resolve line still read PENDING-COMMIT. Found by
+# frankD 2026-08-29, who caught it only because it verified with
+# `git merge-base --is-ancestor` instead of trusting the exit code.
+#
+# This is the same shape as the gate.sh confusion the same evening: ANY trailing
+# command replaces the status — `| tail`, `; echo`, `&& cp`, a cleanup line. Here
+# it was inside the tool rather than at a call site, which is worse: every caller
+# inherited it and none could see it.
+push_or_die() {
+    if push_with_retry; then
+        return 0
+    fi
+    echo "sync: PUSH FAILED after $SYNC_PUSH_TRIES attempts — YOUR WORK IS NOT ON ORIGIN." >&2
+    echo "sync: the commit is local only; Track T cannot see it and no ticket citation is" >&2
+    echo "sync: valid yet. Re-run tools/sync.sh, or raise SYNC_PUSH_TRIES." >&2
+    exit 1
 }
 
 # Fill in the commit citation of every ticket resolved without one.
@@ -169,14 +204,14 @@ EOF
 
 $(printf '%s\n' $filled)"
     rebase_onto_origin
-    push_with_retry
+    push_or_die
     echo "sync: filled PENDING-COMMIT —$filled"
 }
 
 rebase_onto_origin
 
 if [ "$PUSH" = "1" ]; then
-    push_with_retry
+    push_or_die
     echo "sync: pushed — $(git log --oneline -1)"
     fill_pending_commits
 else
