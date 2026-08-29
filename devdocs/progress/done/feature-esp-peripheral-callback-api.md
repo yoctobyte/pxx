@@ -319,4 +319,4 @@ way. Reasoning from the GPIO result is the move this ticket keeps punishing.
 
 State of the ticket: slice 1 done and executed; slices 2 and 3 blocked on
 hardware, one measured and one unknown.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit df9f8ef0e.
