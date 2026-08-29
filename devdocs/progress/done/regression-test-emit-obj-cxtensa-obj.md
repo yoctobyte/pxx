@@ -197,4 +197,4 @@ fixedpoint verified at `e469b947f167`. `tools/gate.sh quick` green.
 Cross matters here; Track T sweeps the matrix against the pushed sha.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit ed3ef3c90.
