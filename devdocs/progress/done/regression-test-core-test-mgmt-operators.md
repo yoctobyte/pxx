@@ -182,4 +182,4 @@ recycled id. That audit is
 [[audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol]]; this
 regression is the first of them to surface on its own, and it did so as a
 silently-missing diagnostic rather than as a wrong answer.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 25e8e87a2.
