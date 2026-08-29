@@ -3,6 +3,7 @@ summary: "`file of T` and untyped `file` are refused outright — only TextFile 
 type: feature
 prio: 70
 track: P
+blocked-by: [compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees]
 ---
 
 # `file of T` and untyped `file` are not supported
@@ -46,8 +47,14 @@ over records, which have no TextFile equivalent.
 `file of TRec` writes `SizeOf(TRec)` bytes per element, so its on-disk format is
 exactly the record layout. If the record holds a `string[N]`, pxx's layout is
 not FPC's
-([[compat-pascal-a-string-n-field-makes-a-record-a-different-size-than-fpc]]:
-24 bytes where FPC says 11), and a file written by one would not be readable by
+([[compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees]]:
+24 bytes where FPC says 11 — **re-measured 2026-08-29 against pinned v392 and
+FPC 3.2.2, still exactly 24 vs 11.** The link here previously named
+`compat-pascal-a-string-n-field-makes-a-record-a-different-size-than-fpc`,
+which resolves to no ticket: it was folded into the four-type-sizes ticket and
+the citation was left behind. A dead `[[link]]` reads exactly like a live one
+and nothing checks — see
+[[chore-t-a-wikilink-to-a-ticket-that-does-not-exist-is-never-detected]]), and a file written by one would not be readable by
 the other. Land that first, or the feature ships with a silent incompatibility
 baked into its file format — which is worse than not having it.
 
