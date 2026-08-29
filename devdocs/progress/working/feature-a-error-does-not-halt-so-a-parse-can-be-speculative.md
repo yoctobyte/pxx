@@ -556,3 +556,91 @@ reading the holder's working tree (`M compiler/ir.inc` only) rather than by
 asking. Left visible rather than deleted, because the failure mode is worth
 seeing: a stale present-tense claim in a ticket reads as live to every later
 session, and this one had already stopped one session from starting.
+
+## MEASURED 2026-08-29 (frankA) — the trial parses DO leak, and the leak is safe by ACCIDENT
+
+The previous section recommended landing `ProcRollbackTo` first, and framed the
+open question as a fork: *do the existing trial parses actually leak procs, or is
+`ProcHashInsert`'s assertion that rollback "cannot be needed" currently true?*
+
+Measured, and the answer is **neither branch**. They leak, the assertion is
+still literally true, and the reason those two facts coexist is the finding.
+
+### The measurement
+
+`PXXDBG=n.caps` prints one line per lambda **parse**, so it counts re-parses
+without patching anything. Controlled pair — the same lambda and the same list
+literal, with only the trial-parse boundary moved:
+
+```python
+# A — lambda OUTSIDE len()'s argument        # B — same lambda, INSIDE it
+xs = [(lambda a: a + 1)(1), 2]               print(len([(lambda a: a + 1)(1), 2]))
+print(len(xs))
+```
+
+| | lambda parses | procs | code |
+| --- | ---: | ---: | ---: |
+| **A** (outside the trial region) | 1 | 1860 | 1,252,804 B |
+| **B** (inside it) | **2** | **1861** | **1,253,135 B** |
+| **D** (two lambdas, outside) | 2 | 1861 | 1,253,423 B |
+| **C** (two lambdas, inside) | **4** | **1863** | **1,254,149 B** |
+
+Linear: **one orphaned proc and ~350 B of dead code per lambda inside a
+trial-parsed region.** Both intercepts do it — `len()` and the f-string hole
+(`pystr_of`), which is the same rewind in two places. Every program above still
+prints what CPython prints, so nothing is wrong today; this is waste and a
+landmine, not a wrong answer.
+
+### Why it leaks
+
+The intercepts roll back exactly **two** things — `TokPos` and the hoist queue
+(`PyHoistPark`/`Restore`). A lambda is an *expression*, and parsing one runs
+`Inc(PyLamSeq)`, `RegisterProc('$pylam' + N)` and `Inc(PyPendLamCount)`
+(`pyparser.inc:9549-9568`). The rewind undoes none of that, and
+`pyparser.inc:30125` later compiles **every** pending lambda's body — so the
+abandoned attempt's body is emitted.
+
+`pasparser_expr.inc:2036` is the precedent, in this same file, for this same
+class of defect: *"a parse has SIDE EFFECTS… the discarded parse's copy stayed
+in the queue and was emitted"*, which made `len(f.read().upper())` read the file
+twice. One side effect was found and fixed. This is a second one of the same
+shape, and `normalise-dont-special-case.md`'s "grep for the sibling" is exactly
+what would have caught it.
+
+### The finding: safe by accident of a naming scheme
+
+`ProcHashInsert`'s comment — *"proc names are immutable after registration, so
+the index never goes stale"* — is **true, and it is not the reason nothing has
+broken.** The re-parse does not reuse or corrupt the orphan's index; it takes a
+*fresh* one, because `PyLamSeq` is monotonic and mints `$pylam2` where the
+abandoned attempt made `$pylam1`. So the leak is a **growth** leak, never a
+corruption leak.
+
+That is a property of the *name generator*, not of the trial-parse design.
+Any speculative parse over a construct whose registered name is derived from
+the SOURCE rather than from a counter — a `def`, a class, a method, which is
+precisely what item 1's NilPy pre-pass must trial-parse — re-registers the
+**same name** on the retry and gets the duplicate the counter has been hiding.
+The assertion is a coincidence with a short remaining life.
+
+### What this changes about the plan
+
+The previous section's recommendation stands, but its own ranking caveat does
+not. It said item 1's *"only known consumer (NilPy typing) is deferred, so the
+ranking argument for doing it now is weak."* **There is a live consumer already
+in the tree** — the two rewind sites above — and it comes with a gate that is a
+single integer:
+
+> **B's proc count must equal A's**, with both still matching CPython.
+
+That is a bounded, measurable first commit that needs no new speculation
+machinery and no decision about which errors are fatal.
+
+### One table the previous section's list does not have
+
+It enumerated the counters a rollback must handle (`SymCount`, `ProcCount`,
+`UClsCount`, `StrCount`, …). **`PyPendLam*` is not among them**, and it is the
+one a trial parse measurably dirties *today* — five parallel arrays plus
+`PyPendLamCount`, consumed by a `while PyPendLamCount > mark` loop that already
+takes a **mark**. That loop's existing mark discipline is the shape the rollback
+should follow, not a new invention.
