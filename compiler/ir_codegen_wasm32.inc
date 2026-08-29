@@ -773,6 +773,19 @@ begin
     or virtual call to one is a convention this target does not thread yet and
     must keep refusing rather than quietly yield whatever is on the stack. }
   if WasmNodeIsAggRetCall(node) and (want = WT_I32) then Exit;
+  { IR_DYNUNIQUE is the third of the same family, and the most clear-cut: the
+    node's whole content is "a dynamic-array level", its value is that level's
+    DATA POINTER, and its type kind describes the ELEMENT — so an
+    `array of TRecord` gives a record-typed node whose value has always been an
+    i32. Unlike the two arms above this needs no narrowing clause: there is no
+    shape of IR_DYNUNIQUE whose value is not a pointer.
+
+    Without it, `list.Items[i].Field := x` on an array of records refused as
+    `value of type record in array base` while the identical statement on an
+    array of Integer worked — the type kind being read as the node's when it
+    describes what the node points AT. Same misreading the Length arm's
+    `Length of Pointer` was, one level along. }
+  if (node >= 0) and (IRKind[node] = IR_DYNUNIQUE) and (want = WT_I32) then Exit;
   if not WasmScalarType(got, gvt) then
   begin
     WasmUnsupported('value of type ' + WasmTypeKindName(got) + ' in ' + ctx);
