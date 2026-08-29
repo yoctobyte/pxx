@@ -70,3 +70,6 @@ frozen builtin RTL: stable_linux_amd64/default/builtin/ (8 src) -- isolates trac
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-29 — auto-closed by the seven watcher: `demos#00` passes at 64758a5c233e (tier full); it was red at b26e7ed366f3. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
