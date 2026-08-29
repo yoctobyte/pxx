@@ -16018,3 +16018,82 @@ count is **somewhere in 21..33 and the checker cannot yet say where.**
 and N is unstaffed by the owner's reserved call. That is the first time the N
 reservation has held up work in a *different* lane rather than only N's own queue.
 **Surfaced to the owner as a fact, alongside the standing question; not re-asked.**
+
+## 2026-08-29 ~18:0x — PIN v390 (`867207f2b418`, commit `41caa9c82`)
+
+**Ran the pin myself** — the coordinator holds this because a pin takes the
+repo-wide lock. frankB stopped short and asked, correctly: *"closing my own row is
+not a good enough reason to stop everyone."* That is a scheduling call, the answer
+was yes, and the lock cost about **two minutes**.
+
+**Why it was needed, and the general fact worth keeping:** frankB landed
+`TStringHelper` (`51fa2e62a`) and the type-helper PROPERTY fix (`cb87cac15`).
+`lib-test` builds with `$(PXX_STABLE)`, and the pin predated the fix, so the
+`s.Length` row **would have redded Track B's gate on a CORRECT compiler.**
+
+> **Track B's gate can only ever assert what the PIN can do.** A library feature
+> riding an *unpinned* compiler fix is **ungatable** there until the pin moves —
+> a structural property of the stable-binary boundary, not a quirk of this ticket.
+
+**Checked before taking the lock**, since a pin blesses a binary for every lane:
+five open regressions, **identical** to the set two hours earlier — no new red;
+breadth **2 minutes** fresh (it was 17h stale this morning). Then the required
+quick gate → `stabilize-fast` → `pin` → commit.
+
+### The gate reported its own aperture — the counter-example to today's whole collection
+
+My first `gate.sh quick` went **RED** on the self-host fixedpoint. It then
+**diagnosed itself**:
+
+> *"That is a STALE BINARY, not a miscompile — a sibling landed a compiler change
+> and this checkout has not rebuilt"* — naming `cb87cac15`.
+
+**Two conditions that produce one reading** — a genuine miscompile and a stale
+local binary — **and it distinguished them**, by checking its own binary's mtime
+against the last commit touching `compiler/`. Rebuilt (`867207f2b418`, converged
+in 1 round), re-gated, **GREEN**.
+
+> Every instance collected today was an instrument that **could not** report its
+> own scope. This one **does**, and it does it by measuring a fact about itself
+> rather than about its subject. It is the existence proof that the fix is
+> available, and it was already in the tooling.
+
+Note the shape it guards against is real and current: with six sessions landing
+compiler changes, **any lane's local binary can be stale at any moment**, and a
+stale binary fails the fixedpoint in a way that reads exactly like a miscompile.
+
+### frankB's P-side work — two items, one existed
+
+`cb87cac15` + three. **The property gap was real and the fix is three lines that
+add no path:** the type-helper block already handed the receiver to
+`ParseClassRecordSelectors` — the same machinery advanced records use, which has
+resolved properties all along — and the guard in front asked `FindUMeth` and
+nothing else, so a property-named member fell through to *"a string has no members
+here"*. Widening to `or FindUProp(...)` is **normalise-dont-special-case in its
+cheapest form: the property arm was never missing, it was never reached.**
+
+`s.Length` prints 5 where fpc prints 5, **through this morning's sysutils
+declaration with no edit to the library** — the platonic declaration meant the fix
+had a consumer waiting, so the no-appeasement rule **paid out** rather than merely
+being observed.
+
+Its two-armed control is load-bearing and it said why: **the defect was the
+intersection of two WORKING features**, so a one-armed test would let this be
+rewritten later as a helper special case. It also checked for **over**-widening
+rather than assuming — both scalar-member negatives still refused, record control
+still 42.
+
+**The receiver generalisation was already fixed — a stale LIMIT.** All five
+spellings the ticket's table records as refused work today. It **attributed before
+claiming**: all six work on the PINNED binary too, so someone fixed this between
+08-25 and now and nothing it did caused it.
+
+> **Second stale premise in one ticket in one day** — a stale *directive* this
+> morning, a stale *limit* this evening. And attribution-before-claiming is what
+> turns *"I fixed six things"* into *"these were already fixed"*. Only running them
+> could have caught either.
+
+Scope stated rather than implied: the Char-receiver overloads, `IndexOfAny`/
+`LastIndexOfAny`, the `*Unquoted` family, `TStringSplitOptions` and quote-aware
+`Split`, `Compare`/`CompareText`, `Chars`/`Empty` are absent **by choice** —
+additive, nothing in tree needs them, harness takes a later batch unchanged.
