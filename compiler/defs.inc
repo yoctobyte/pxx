@@ -1072,6 +1072,18 @@ const
     (feature-nilpy-object-reclamation). }
   PXX_OBJ_MAGIC_TAG = $505942F1;
 
+  { The cached-ASCII bits of the managed-block meta word — MUST match
+    PXX_FLAG_ASCII ($0400) and PXX_FLAG_ASCII_KNOWN ($1000) in
+    compiler/builtin/builtinheap.pas. Meta sits at [handle-24] (PXX_HDR_META = 0
+    from the block base, PXX_HDR_SIZE = 24).
+
+    The compiler needs them because x86-64 does not CALL the two Pascal helpers
+    that keep the cache sound — it inlines both PXXStrUnique (the byte-mutation
+    choke point) and the symbol-target SetLength — so the emitted code has to
+    forget the cache itself. Every other backend routes through the helpers and
+    needs nothing here. }
+  PXX_ASCII_CACHE_BITS = $1400;
+
   { PROMOTABLE INT tag block (feature-a-promotable-int). The whole family claims
     a CONTIGUOUS block up front, while it is free, rather than being scattered
     into whatever gaps exist when each class lands.

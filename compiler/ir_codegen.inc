@@ -2311,7 +2311,7 @@ end;
 procedure EmitAnsiStringRuntime;
 var pNilUnique, pNilUnique2, pDone, pDone2,
     pConcatNil, pConcatDone, pFail, pLfDone: Integer;
-    pRelNil, pRelLive: Integer;
+    pRelNil, pRelLive, pAsciiSkip: Integer;
 begin
   EmitAnsiStrFromLiteral;
 
@@ -2408,6 +2408,29 @@ begin
   { done }
   Patch8(pDone, CodeLen - (pDone + 1));
   Patch8(pDone2, CodeLen - (pDone2 + 1));
+  { FORGET the cached ASCII answer, exactly as the Pascal PXXStrUnique does at
+    both of its exits. The caller is about to WRITE bytes through the handle we
+    are returning, so a stamped answer stops being true — and the clone path is
+    no better, because AnsiStrFromLiteral stamps the flag from the OLD bytes.
+
+    PXXStrUnique's own comment calls itself "the single choke point for byte
+    mutation, which is what makes the cache sound". It is that on i386 / arm32 /
+    aarch64 / riscv32 / xtensa, which all `FindProc('PXXStrUnique')`. It was
+    never that on x86-64, which reaches this hand-emitted blob instead and for
+    two months returned a writable buffer still advertising the old verdict. So
+    `s := 'abc'; s[1] := Chr(200)` left the block claiming ASCII, and NilPy then
+    indexed a multi-byte string at BYTE offsets and answered a broken character
+    (regression-test-core-test-nilpy-str-ascii-cache).
+
+    rax is the handle at every exit including done_nil, where it is 0 — hence
+    the test. Meta is at [handle-24] (PXX_HDR_META = 0 from the block base, and
+    PXX_HDR_SIZE = 24); PXX_ASCII_CACHE_BITS clears ASCII and ASCII_KNOWN
+    and, being sign-extended, leaves the reserved upper half alone. }
+  EmitAsmX64(['test rax, rax']);
+  EmitB($74); pAsciiSkip := CodeLen; EmitB(0);    { jz skip }
+  EmitB($48); EmitB($81); EmitB($60); EmitB($E8); { and qword [rax-24], imm32 }
+  EmitI32(not PXX_ASCII_CACHE_BITS);
+  Patch8(pAsciiSkip, CodeLen - (pAsciiSkip + 1));
   EmitAsmX64(['pop rdi', 'pop rsi', 'pop rdx', 'pop rcx', 'pop rbx', 'ret']);
 
   { rsi/lhs data, rdi/lhs length, rdx/rhs data, rcx/rhs length -> rax/string }

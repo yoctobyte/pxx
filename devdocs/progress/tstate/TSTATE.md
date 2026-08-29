@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `c513c0190421` | 2026-08-29T19:27:55Z | RED (native) | 334.4s | `49bd043061c1` RED |
+| plexus | `2b33ab009963` | 2026-08-29T19:36:25Z | RED (native) | 339.3s | `49bd043061c1` RED |
 | seven | `70f761137a8d` | 2026-08-29T19:35:19Z | GREEN (native) | 104.0s | `ee62e6dc0582` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
@@ -14,7 +14,7 @@
 - **test-nilpy#src:test/test_nilpy_startswith_tuple.npy** — test/test_nilpy_startswith_tuple.npy test/test_nilpy_startswith_tuple.expected (plexus): bad `19dc5586e384`, last good `8b2cc332791e`, 1 commit(s) in range
 - **lib-test#src:test/lib_synapse.pas** — test/lib_synapse.pas (plexus): bad `c52fc389fd97`, last good `aca7f699288e`, 9 commit(s) in range
 - **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (plexus): bad `c513c0190421`, last good `1bffdc06510a`, 120 commit(s) in range
-- **test-core#src:test/test_nilpy_str_ascii_cache.npy** — test/test_nilpy_str_ascii_cache.npy tools/expect_same.sh +1 (plexus): bad `c513c0190421`, last good `1bffdc06510a`, 120 commit(s) in range
+- **test-threads#src:test/test_sched_reactor_exhaustion.pas** — test/test_sched_reactor_exhaustion.pas tools/expect_same.sh (plexus): bad `2b33ab009963`, last good `c513c0190421`, 6 commit(s) in range
 - **CASCADE 18 jobs** (seven): bad `154d1aa3fba6`, last good `e417731e9007`, 12 commit(s) in range
   <details><summary>jobs</summary>
 
