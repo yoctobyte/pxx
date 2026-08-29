@@ -16645,3 +16645,35 @@ U queue **17**. Owner items: five packages for `seven`; `via` still needs a tmux
 session for D+W. Track T UP on `seven`. b4's timing run deferred on a loud box —
 its own prediction is "possibly indistinguishable from noise", so a null taken
 under contention would be worth less than the stated prediction.
+
+
+## 2026-08-29, 22:xx — the GTK relay I got wrong, and the owner caught it
+
+**Do not provision GTK 2 anywhere on my say-so.** I relayed Track T's conclusion
+that `seven` "needs GTK 2, not GTK 3" as an owner action item, **without checking
+it**. The owner challenged it — *"we have been targeting gtk3 all along"* — and
+was right.
+
+**Measured:** `pasparser_proc.inc:2477` has **two** stems — `gtk3_c` → `gtk-3`
+and `gtk` → `gtk-x11-2.0`. `lib/pcl/gtk3.pas`, `gtk3widgets.pas`, `gtk3gl.pas`
+all bind `libgtk-3.so.0`. The four `test_c_gtk*.pas` say `uses gtk`, so they take
+the **legacy GTK 2** branch, which is why GTK 2 turns them green and GTK 3 does
+not. They are Track C macro/attribute tests against `test/my_gtk.h`, a local
+stub — the GTK 2 dependency is **incidental to what they test.**
+
+Filed `decide-does-the-legacy-gtk-alias-still-point-at-gtk-2` [U p50], with the
+recommendation to point the four tests at `gtk3_c` if the alias is wanted. Same
+two lines also hardcode `x86_64-linux-gnu`, so they are wrong on aarch64.
+
+> **A fix that turns a job green tells you what the job DEPENDS ON, not what the
+> project INTENDS.** Provisioning a host to satisfy a stale alias is the
+> infrastructure form of a compiler-appeasement workaround — it removes the
+> symptom and the question in one move, and leaves the alias unexamined forever.
+
+**The relay failure is the one my own rule 2 names**, and it was cheap to check:
+one grep. The profile again — *plausible, load-bearing, adjacent to something the
+claimant genuinely knows.* Track T **had** measured something real (GTK 2 makes
+them pass); only the conclusion drawn from it was wrong. **Verify the
+CONCLUSION, not just the observation** — a correct measurement carrying a wrong
+causal story is the dangerous shape, and I have now written that sentence three
+times and been caught by it twice.
