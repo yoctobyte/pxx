@@ -1552,3 +1552,52 @@ also the **key the fix dispatches on**, the message is a signpost pointing at th
 solution and reads as a wall. **When a diagnostic names a cause, ask whether it
 is naming the discriminator** — and prefer refusals that say what *shape* was
 seen over ones that say what *type* was found.
+
+### 35. A warning placed where the reader who needs it will not be
+
+`compiler/symtab.inc:2817` — `TypeSize`'s record arm:
+
+```pascal
+    5: Result := 8;  { tyRecord — caller must use RecSize() for full record size }
+```
+
+Correct, precise, and **on the callee's return-value line**, which a caller
+writing `TypeSize(tk)` in another file never reads. The one person who needs the
+warning is the one place it is not.
+
+Cost: `Option<T>`'s payload was 8 bytes wide regardless of T for eleven rungs —
+SIGSEGV on a four-`i64` record, and a silently wrong `4 0` on `Result<Pos,i64>`.
+
+Distinct from face 25 (a comment that *justifies* rather than warns) and face 34
+(a *diagnostic* that names a cause and misdirects). Here the content is right and
+the **address** is wrong. A comment cannot warn across a call boundary, because
+comments are read by whoever is editing the file they sit in.
+
+**Remedy: make it unrepresentable rather than documented.** A name is read at
+every call site; a comment is read at none. `TypeSizeWord` needs no comment.
+This is `a-documented-trap-is-not-a-guard` with the location made explicit — the
+trap was documented **at the trapdoor, facing inward.**
+
+### 36. The bug that survives is the one whose wrong value is PLAUSIBLE
+
+frank-rust, twice in one window, and it named the pattern itself:
+
+- rung 8: a knight-attack table came back **48 of 64** squares occupied — a
+  plausible number. The correct answer is 64.
+- rung 12: `Pos { file: 4, rank: 2 }` read back as **`4 0`** — `file` right,
+  `rank` landed outside the value.
+
+Both latent, both found only while building the *next* feature. Its own reading:
+*"I do not think that is coincidence so much as the only kind of bug that
+survives to be found later — the loud ones are already gone."*
+
+That is a selection effect, and it inverts the intuition about where to look. A
+crash has a location and is the cheap case. **What survives to be found late is,
+by construction, what looked reasonable** — which is why an expectation captured
+from a running binary is so dangerous: it locks in a plausible wrong value as
+green, forever, and every later change is measured against it.
+
+**Operational form, and it is the one worth stealing:** *write the next feature's
+test against the previous feature's edge, not just its own.* And hand-compute the
+oracle wherever the right answer is independently knowable — 64 was knowable, and
+knowing it is the entire reason the bug did not ship.
