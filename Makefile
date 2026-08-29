@@ -12603,11 +12603,12 @@ test-riscv32: $(COMPILER)
 # strings, Copy and dynarray SetLength —
 # bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength.
 #
-# The list is what was MEASURED to match, not what ought to. 55 of the 142
-# sources test-riscv32 uses; the 21 that diverge are filed as
+# The list is what was MEASURED to match, not what ought to. 57 of the 142
+# sources test-riscv32 uses; the 19 that diverge are filed as
 # bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs and are
 # deliberately NOT listed here — a differential that skips its own failures
-# silently is how xtensa got into this state.
+# silently is how xtensa got into this state. (55/21 at the first sweep; the
+# shared-ABI-predicate fix below took two of them green without regressing any.)
 test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/hello.pas $(TESTTMP)/test_xtensa_hello
 	./$(COMPILER) test/hello.pas $(TESTTMP)/test_xtensa_hello_x64
@@ -12774,7 +12775,13 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_xtensa_test_variant_self_assign_is_a_no_op
 	./$(COMPILER) test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_xtensa_test_variant_self_assign_is_a_no_op_x64
 	tools/expect_same.sh xtensa/test_variant_self_assign_is_a_no_op "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_variant_self_assign_is_a_no_op)" "$$($(TESTTMP)/test_xtensa_test_variant_self_assign_is_a_no_op_x64)"
-	@echo "hosted xtensa: 55 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_multidim3d.pas $(TESTTMP)/test_xtensa_test_cross_multidim3d
+	./$(COMPILER) test/test_cross_multidim3d.pas $(TESTTMP)/test_xtensa_test_cross_multidim3d_x64
+	tools/expect_same.sh xtensa/test_cross_multidim3d "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_multidim3d)" "$$($(TESTTMP)/test_xtensa_test_cross_multidim3d_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_param_2darray.pas $(TESTTMP)/test_xtensa_test_cross_param_2darray
+	./$(COMPILER) test/test_cross_param_2darray.pas $(TESTTMP)/test_xtensa_test_cross_param_2darray_x64
+	tools/expect_same.sh xtensa/test_cross_param_2darray "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_param_2darray)" "$$($(TESTTMP)/test_xtensa_test_cross_param_2darray_x64)"
+	@echo "hosted xtensa: 57 programs, output identical to x86-64 (Call0, --xtensa-soft-mulhigh)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello

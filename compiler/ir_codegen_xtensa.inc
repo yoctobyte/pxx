@@ -1429,10 +1429,24 @@ begin
         else if (Syms[si].Kind = skParam) and Syms[si].IsRef and
                 not Syms[si].IsArray and (Syms[si].TypeKind <> tyAnsiString) then
           xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0)
-        { By-VALUE Variant param: the slot is pointer-sized and holds the
-          address of the caller's 16-byte variant temp, never the value itself
-          (bug-pascal-byvalue-variant-param). Mirrors the x86-64/i386 catch-all. }
-        else if (Syms[si].Kind = skParam) and (Syms[si].TypeKind = tyVariant) then
+        { THE SHARED CATCH-ALL: a param whose slot holds the ADDRESS of the
+          value rather than the value — by-ref anything, a by-ref fixed array,
+          a frozen-string param, a by-value Variant (the slot points at the
+          caller's 16-byte temp, bug-pascal-byvalue-variant-param).
+
+          `ABIParamSlotHoldsValueAddr` lives in abi.inc precisely so the six
+          backends answer this identically, and it was used by x86-64, i386,
+          aarch64, arm32 and riscv32 — FIVE of six. Xtensa open-coded only the
+          by-value-Variant row of it, so a by-ref ANSISTRING param was left one
+          deref short: `Length(var s)` returned a live heap address rendered as
+          a decimal number (`varlen=545267744` against the oracle's `5`), and
+          `s[1]` indexed through the parameter slot itself.
+
+          The open-coded row is deleted rather than kept beside the call: the
+          predicate subsumes it (tyVariant is one of its clauses), and a
+          hand-written copy of one row of a shared predicate is exactly what
+          makes the missing rows invisible. }
+        else if ABIParamSlotHoldsValueAddr(si) then
           xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
       end;
 
@@ -2036,6 +2050,26 @@ begin
           { Length(arr) / Length(managed): a2 = handle; count at [handle-8],
             nil handle -> 0. (l32i has no negative offset, so addi first.) }
           IREmitNodeXtensa(IRA[argNode]);       { a2 = handle (or 0) }
+          { A record/class FIELD, an array ELEMENT, or a BY-REF managed string
+            param yields the SLOT ADDRESS, not the handle — deref once first,
+            else the count is read from [slotaddr-8].
+
+            This step existed on riscv32 and aarch64 and was MISSING here, so
+            `Length(var s)` returned the handle itself: `varlen=545267744`, a
+            live heap address rendered as a decimal number, against the oracle's
+            `varlen=5`. Not a crash and not a zero — a plausible large integer,
+            which is the expensive shape. Found by the first differential sweep
+            hosted xtensa has ever had (test_cross_var_string_param), whose own
+            header documents the identical bug being fixed on arm32.
+
+            Third instance this week of one backend being skipped while its
+            siblings were visited (cf. PXXStrCmp3's "four cross backends", and
+            HeapMmap's seven arms with no CPU_XTENSA). }
+          if (IRKind[valNode] = IR_INDEX) or (IRKind[valNode] = IR_FIELD) or
+             ((IRKind[valNode] = IR_LEA) and (Syms[IRA[valNode]].Kind = skParam) and
+              Syms[IRA[valNode]].IsRef and (Syms[IRA[valNode]].TypeKind = tyAnsiString) and
+              not Syms[IRA[valNode]].IsArray) then
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
           EmitAsmXtensa(['movi a4, 0', 'beq a2, a4, .lzero',
                          'addi a2, a2, -8', 'l32i a2, a2, 0', '.lzero:']);
           Exit;
