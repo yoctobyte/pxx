@@ -2602,6 +2602,13 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_generic_forward_template_reference.pas $(TESTTMP)/test_gen_fwd26
 	@$(TESTTMP)/test_gen_fwd26 | diff -u test/test_generic_forward_template_reference.expected - \
 	  || { echo 'test_generic_forward_template_reference: FAIL - declaration order matters again'; exit 1; }
+	@# a CLASS method's result must carry the RETURN type's record, not the
+	@# receiver's: f.MakeC.Tag looked Tag up on f's class. Where both classes had
+	@# a member of that name it silently called the WRONG one on the wrong object.
+	@# bug-p-a-class-method-call-keeps-the-receivers-class
+	@./$(COMPILER) test/test_class_method_result_type.pas $(TESTTMP)/test_clsmeth_ret26
+	@$(TESTTMP)/test_clsmeth_ret26 | diff -u test/test_class_method_result_type.expected - \
+	  || { echo 'test_class_method_result_type: FAIL - a class method result lost its type'; exit 1; }
 	@# a SECOND class of the same name in one unit must be refused, naming it
 	@./$(COMPILER) test/test_pascal_duplicate_class_fail.pas $(TESTTMP)/test_pascal_dup_class26 2>&1 \
 	  | grep -q 'duplicate class name TFoo' \

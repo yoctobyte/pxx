@@ -2582,6 +2582,15 @@ begin
           mcallNode := GenMakeStaticMethodCall(mpi, mselfArg);
           node := mcallNode;
           tk := Procs[mpi].RetType;
+          { The RESULT's record, not the receiver's -- the instance-METHOD arm
+            below sets this on the same three lines and this one did not, so the
+            receiver's class survived into the next selector: `f.GetObjC.M`
+            resolved M against f's class instead of the returned one. Where the
+            two classes both had M that CALLED THE WRONG METHOD on the wrong
+            object silently (fpc: "identifier idents no member").
+            bug-p-a-class-method-call-keeps-the-receivers-class }
+          recName := ProcRetRecId[mpi];
+          if (tk <> tyClass) and (tk <> tyRecord) then recName := REC_NONE;
           Continue;
         end
         else

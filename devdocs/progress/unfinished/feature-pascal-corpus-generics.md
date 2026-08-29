@@ -2,7 +2,7 @@
 track: P
 prio: 65
 owner: unassigned
-blocked-by: []
+blocked-by: [bug-a-nodemetaclassci-does-not-know-a-virtual-class-method-call]
 status: unfinished
 type: feature
 ---
@@ -1023,3 +1023,41 @@ kind, and it is not — a narrow override returning `-7` reads back as `-7`
 through a `TObject`-typed variable, so it is sign-extended rather than
 truncated. By CLAUDE.md's table that is *we accept a form FPC rejects* → not a
 defect, a line for the divergences doc.
+
+## Recon 2026-08-29 (frankA) — the 3341 wall reduced; three defects, one of them Track A
+
+The wall reached by the previous entry's fix is
+`AFactory.GetHashService.LookupEqualityComparer(ATypeInfo, ASize)` at
+`generics.defaults.pas:3341`, in `_LookupVtableInfoEx` — a **plain, non-generic,
+unit-level function**. First time this rung's frontier has not been generics
+machinery at all, which is the useful news: the next walls here are probably not
+more of the same.
+
+Reduced from 9,550 lines to 30, fpc-oracled. The sweep found **three distinct
+defects**, separated one variable at a time rather than folded into one:
+
+| # | defect | lane | state |
+| --- | --- | --- | --- |
+| 1 | `NodeMetaclassCi` doesn't know `AN_CLASS_VIRTUAL_CALL` | **A** (`symtab.inc`) | filed — [[bug-a-nodemetaclassci-does-not-know-a-virtual-class-method-call]]; **this is the 3341 wall** |
+| 2 | a class-method call keeps the RECEIVER's class | P | **fixed** — [[bug-p-a-class-method-call-keeps-the-receivers-class]] |
+| 3 | a call chained onto a class-method result via a class NAME is dropped | P | filed — [[bug-p-a-call-chained-onto-a-class-method-result-is-dropped]] |
+
+**#2 is the one worth reading even though it is not the wall.** It compiled
+`f.GetObjC.OnlyOnFactory(14)` — a member of the *receiver's* class, resolved
+against the *returned* object — and printed the receiver method's answer. FPC
+rejects the program. A silent wrong-dispatch, one missing `recName :=` line, and
+it was three hundred lines from a sibling arm that had it and documented why.
+
+**Parked here, blocked on #1**, which is Track A's file and not mine to edit.
+
+### Do not re-walk these
+
+- The obvious cause of #3 — the `Exit` in `ParseLValueAST`'s class-name arm where
+  both instance arms `Continue` — is **refuted**. Patching it left
+  `PXXDBG=a.ast` byte-identical; those tokens are consumed elsewhere. Reverted
+  rather than kept as a plausible no-op. Details in the ticket.
+- `virtual` is the entire variable for #1: non-virtual leaves the node `AN_CALL`
+  (8) and works, virtual rewrites it to `AN_CLASS_VIRTUAL_CALL` (88) and fails.
+- The stage dir is gone between sessions; `tools/install_lib_candidates.sh
+  rtl-generics` + symlinking `packages/rtl-generics/src/*.pas` and `inc/` into a
+  scratch dir with a `uses generics.defaults` driver reproduces in under a minute.
