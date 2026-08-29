@@ -625,6 +625,17 @@ test-nilpy: $(COMPILER)
 	tools/expect_same.sh test_nilpy_subbase26.1 "$$($(TESTTMP)/test_nilpy_subbase26)" "$$(printf 'override: KeepCase\ninherited: keepcase')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy $(TESTTMP)/test_nilpy_aoc26
 	tools/expect_same.sh test_nilpy_aoc26.1 "$$($(TESTTMP)/test_nilpy_aoc26)" "x:2"
+	# Importing a unit that declares `Text = class` must not change what `Text`
+	# means in a DIFFERENT unit that never names it. It did, silently, decided by
+	# import ORDER: ParsingClassBodyCi's "no class scope open" sentinel (-1) was
+	# initialised only in ParseProgram, so every non-Pascal frontend started at
+	# the BSS default 0 -- a valid class index -- and every imported unit's
+	# top-level classes were registered as nested types of it. Both orders, since
+	# only one of them was ever wrong.
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_import_order_does_not_rebind_a_type.npy $(TESTTMP)/test_nilpy_impord26
+	$(TESTTMP)/test_nilpy_impord26 | diff -u test/test_nilpy_import_order_does_not_rebind_a_type.expected -
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_import_order_does_not_rebind_a_type_rev.npy $(TESTTMP)/test_nilpy_impordrev26
+	$(TESTTMP)/test_nilpy_impordrev26 | diff -u test/test_nilpy_import_order_does_not_rebind_a_type.expected -
 	# float's own methods: is_integer/hex/as_integer_ratio/conjugate. A float used
 	# to carry NONE of them, and the call COMPILED and raised "object is not
 	# callable" at run time. Expected output is CPython 3's on the same source.

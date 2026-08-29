@@ -1,0 +1,8 @@
+# The other import order of test_nilpy_import_order_does_not_rebind_a_type.npy.
+# Only ONE order was ever wrong, so pinning just the broken one would let a
+# future change fix it by breaking the other and still look green.
+# bug-nilpy-import-order-leaks-a-class-name-into-a-later-compiled-rtl-unit
+import 'importordertextuse.pas'
+import 'importordertextcls.pas'
+
+ShowTextSize()

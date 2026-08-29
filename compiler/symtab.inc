@@ -6943,6 +6943,34 @@ begin
   Result := Integer(h and LongWord(PROC_HASH_SIZE - 1));
 end;
 
+{ The declaration-scope sentinels EVERY frontend depends on and only one used
+  to set. Both mean "no class scope is open", both spell that -1, and both live
+  in BSS -- where the default is 0, which is a VALID UCls index (class 0, TGuid).
+  So a frontend that never ran this read as "we are inside TGuid's body" for the
+  whole compilation.
+
+  That is not hypothetical: it is measured, and it is why a NilPy program that
+  imported two unrelated units in the wrong order silently bound `Text` to a
+  class instead of the RTL file record (SizeOf 8 vs 4128) and still COMPILED.
+  AddClassLikeType registers a class-like type as a NESTED type of
+  ParsingClassBodyCi whenever it is >= 0, so every top-level class in every
+  imported unit became a nested type of TGuid; ParseTypeKind consults
+  FindNestedType BEFORE IsClassType, and class-scope lookup is deliberately not
+  visibility-gated -- correctly, which is why nothing in the visibility layer
+  looked broken while the wrong type came out.
+
+  Called before the frontend dispatch so it covers every driver, exactly as
+  EmitTlsMainInstall is called once rather than per driver for the same reason
+  (bug-a-threadsafe-segfaults-on-every-nilpy-program). ParseProgram also calls
+  it, so the Pascal per-parse reset keeps its old meaning without a second copy
+  of the literals -- the copy is what stays broken.
+  bug-nilpy-import-order-leaks-a-class-name-into-a-later-compiled-rtl-unit }
+procedure ResetDeclScopeSentinels;
+begin
+  ParsingClassConstCi := -1;
+  ParsingClassBodyCi  := -1;
+end;
+
 procedure ProcHashReset;
 var i: Integer;
 begin

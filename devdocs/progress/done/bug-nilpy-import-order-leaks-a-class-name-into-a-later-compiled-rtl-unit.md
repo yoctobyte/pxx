@@ -4,7 +4,7 @@ prio: 65
 type: bug
 blocked-by: []
 summary: "A NilPy program that imports unit A (declaring `Text = class`) before unit B SILENTLY REBINDS `Text` inside B — an ordinary Pascal unit that never names A: SizeOf goes 4128 (the RTL file record) -> 8 (a class pointer), and it COMPILES. `import tkinter` then `import configparser` is the arm where it happens to hit an overload check. TRIAGED 2026-08-29: the cause stated below is WRONG — NilPy DID inherit the visibility fix and the class lookup returns the correct row; an earlier arm of ParseTypeRef claims the name and IsClassType is never reached. Three-file repro, no tkinter needed. Handed off to A/N (pasparser_decl.inc / symtab.inc)."
-status: working
+status: done
 owner: frankA
 ---
 
@@ -236,3 +236,113 @@ configparser.
 (`decide-gate-line-convention`, 2026-08-01) and was not run. The gate for
 whoever fixes this is `make compiler/pascal26` plus the §1 table in all four
 rows plus the two Pascal control rows; Track T sweeps the breadth.
+
+---
+
+## RESOLVED 2026-08-29 (frankA) — an init only one frontend ran, and a sentinel whose default is a valid index
+
+frankC's lead A was right (`IsClassType` is never reached) and its lead B was
+wrong (the ungated alias tails are not involved). The arm that claims the name
+is `nestCi`, one above `IsClassType` — but the *reason* it fires is one level
+below where anyone was looking, and it is not the unbalanced restore that was
+predicted.
+
+### The root cause
+
+`ParsingClassBodyCi` means "no class scope is open" when it is `-1`. It is
+initialised in **exactly one place**: `pasparser_prog.inc:569`, inside
+**`ParseProgram`** — the *Pascal* entry point. Every other frontend enters
+through its own `Parse*Program` and never runs it, so the global keeps its **BSS
+default of 0** — and 0 is not a sentinel, it is a **valid `UCls` index**. Class 0
+is `TGuid`. So a NilPy compile believed it was inside `TGuid`'s class body from
+the first token to the last.
+
+From there the chain is all pre-existing, correct code doing its job:
+
+1. `AddClassLikeType` (`pasparser_class.inc:383`) registers a class-like type as
+   a **nested type of `ParsingClassBodyCi`** whenever it is `>= 0`. So every
+   top-level class in every imported unit became a nested type of `TGuid` —
+   `textfile`'s `Text` **record** and `zcls2`'s `Text` **class** alike.
+2. `ParseTypeKind` consults `FindNestedType` **before** `IsClassType`.
+3. Class-scope lookup is deliberately **not** visibility-gated — correctly, since
+   a nested type is reachable by its bare name inside its owner's body.
+
+So `var f: Text` resolved to whichever `Text` won the nested-type lookup, decided
+by import order.
+
+**This is why the triage's puzzle resolved the way it did.** frankC measured the
+visibility layer returning the *correct* verdict (`vis=FALSE` for `zcls2`) while
+the wrong type still came out, and that is exactly right: nothing in the
+visibility layer is broken, and it is simply **not the layer that answered**.
+`ci` (from `FindUClass`) was 101 — the record, correct — in *both* NilPy runs;
+`nestCi` overrode it.
+
+### Measured, `lo=Text`, all three drivers
+
+| driver | `ParsingClassBodyCi` | `nestCi` | `ci` | `SizeOf` |
+| --- | --- | --- | --- | ---: |
+| Pascal `uses zcls2, zuser5` | **−1** | −1 → final else | 9 | 4128 ✓ |
+| NilPy, good order | **0 (`TGuid`)** | 101 = textfile *record* | 101 | 4128 ✓ |
+| NilPy, bad order | **0 (`TGuid`)** | 74×101, **1×108 = `zcls2`'s class** | 101 | **8** ✗ |
+
+Every restore in the NilPy run returned to **0**, *including the first* — so
+`savedPCB` was already 0 before any class body opened. **Not a leaked restore:
+the save/restore pairs are balanced and neither range contains an `Exit`.** The
+predicted "unbalanced restore" shape would have been fixed by balancing a
+restore, which would have changed nothing here. The hole is an *absence*, not a
+leak.
+
+### The fix, and the sibling it also closes
+
+`ResetDeclScopeSentinels` (`symtab.inc`), called **before the frontend
+dispatch** in `compiler.pas` — so it covers every driver, which is the same call
+made three lines above it for `EmitTlsMainInstall` (*"one call site rather than
+one per driver"*, `bug-a-threadsafe-segfaults-on-every-nilpy-program`).
+`ParseProgram` calls the same routine instead of keeping its own copy of the
+literals, so there is one definition rather than two — the copy is what stays
+broken.
+
+It also initialises **`ParsingClassConstCi`**, the sibling sentinel sitting on
+the adjacent line of the same block, with the same `-1`-vs-BSS-0 problem and the
+same single init. Latent, unreported, and the next instance. **ALGOL, Erlang,
+Rust, Zig, C and asm all had the identical hole** — this was never a NilPy bug,
+it was a Pascal-entry-only init that only NilPy had grown enough class-declaring
+imports to expose.
+
+`PyLoopElseFlag := -1; { no enclosing loop yet; 0 is a real Syms index }` sits
+four lines from the new call site — the same bug class, recognised once for one
+variable and not generalised.
+
+### Gate
+
+| | baseline | fixed |
+| --- | --- | --- |
+| `import tkinter` / `import configparser` (the filed repro) | `no overload of Assign … (class, AnsiString)` | **compiles, prints ok** |
+| reverse order | compiles | compiles |
+| §1 `SizeOf` table, bad order | **8** | **4128** |
+| §1 table, other three rows | 4128 | 4128 |
+| Pascal controls both orders (`8c8a95a69`) | green | **green** |
+
+**frankwasm's reconciliation is confirmed: one capture, two manifestations, one
+fix** — loud where the captured type meets overload resolution, silent where
+only size is read. The baseline column was re-measured on this tree with the fix
+stashed, not taken from the pin.
+
+Self-host fixedpoint 1 round `a7716528fa25` (identical across a stash/restore
+cycle); `tools/gate.sh quick` GREEN.
+
+New gated test `test_nilpy_import_order_does_not_rebind_a_type` (+ `_rev`, +2
+helper units in `test/nilpy_units/`). **Both orders are pinned**, because only
+one of them was ever wrong and pinning just that one would let a later change
+fix it by breaking the other and still look green. Verified to FAIL on the
+stashed baseline (`WRONG: rebound to something 8 bytes`).
+
+### Correcting this ticket's own record
+
+The summary said *"NilPy's import path never inherited the Pascal-side
+visibility fix"*. It had. The visibility fix (`8c8a95a69`) works on both paths
+and is untouched here. The divergence was upstream of it and had nothing to do
+with `uses` transitivity.
+
+## Log
+- 2026-08-29 — resolved, commit PENDING-COMMIT.

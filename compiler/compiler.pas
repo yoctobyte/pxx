@@ -1823,6 +1823,10 @@ begin
     (AsmEntryOff). x86-64 only, inside the emitter. }
   if not isAsm then EmitTlsMainInstall;
 
+  { Before ANY frontend runs -- see ResetDeclScopeSentinels. Only ParseProgram
+    set these, so every non-Pascal driver started inside class 0's body. }
+  ResetDeclScopeSentinels;
+
   if isNilPy then
   begin
     PyLoopElseFlag := -1;   { no enclosing loop yet; 0 is a real Syms index }

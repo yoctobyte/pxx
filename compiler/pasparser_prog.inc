@@ -565,8 +565,7 @@ begin
   StrConstCount := 0;
   SetConstCount := 0;
   ClassConstCount := 0;
-  ParsingClassConstCi  := -1;
-  ParsingClassBodyCi   := -1;
+  ResetDeclScopeSentinels;
   NestedTypeCount      := 0;
   ParsingClassConstVis := 0;
   { Decl-order gating defaults: no body active (a high sentinel means "see all"

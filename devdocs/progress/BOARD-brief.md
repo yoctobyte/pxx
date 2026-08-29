@@ -5,13 +5,12 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:23 blocked:8 backlog:316 backlog_new:15 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2649 rejected:51`
+`working:3 unfinished:23 blocked:8 backlog:316 backlog_new:15 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2650 rejected:51`
 
 ## Held now (working/ — do not touch these files)
 
 - `audit-a-a-comment-asserting-an-invariant-is-a-claim-about-a-sibling-arm-nobody-checked` [A] — owner: frankD
 - `bug-a-the-fpc-seed-canary-skips-a-break-already-on-master` [A] — owner: unrecorded
-- `bug-nilpy-import-order-leaks-a-class-name-into-a-later-compiled-rtl-unit` [N] — owner: frankA
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 
 ## unfinished (23) — parked mid-flight; re-claim, do not duplicate
