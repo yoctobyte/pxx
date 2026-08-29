@@ -547,6 +547,12 @@ smaller question.
 **Held back on the coordinator's request** (2026-08-29): frank-rust hit exactly
 this wall on rung 9 of the Rust frontend and routed around it with a token scan,
 so there is fresh evidence about what this would actually buy that should be
-weighed before anyone starts. **And the work lands squarely in
-`compiler/symtab.inc`, which another agent is in right now** — the file the
-whole double-dispatch episode of the same day ran through.
+weighed before anyone starts. ~~And the work lands squarely in
+`compiler/symtab.inc`, which another agent is in right now~~ — **STRUCK
+2026-08-29 (frankA).** That clause was a file-ownership fact written in the
+PRESENT TENSE into a ticket body, where nothing ever updates it. It was true for
+about an hour. `compiler/symtab.inc` was released the same day, confirmed by
+reading the holder's working tree (`M compiler/ir.inc` only) rather than by
+asking. Left visible rather than deleted, because the failure mode is worth
+seeing: a stale present-tense claim in a ticket reads as live to every later
+session, and this one had already stopped one session from starting.
