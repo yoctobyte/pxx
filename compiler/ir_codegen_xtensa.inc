@@ -2095,6 +2095,51 @@ begin
         EmitCallProc(procIdx);
       end;
 
+    IR_SYSCALL:
+      begin
+        { A raw Linux syscall cannot be serviced on ANY xtensa configuration.
+          riscv32 is dual-role -- bare ESP32-C3 or HOSTED Linux -- so its ecall
+          is real in the hosted role; xtensa's two roles are bare metal and
+          IDF/FreeRTOS-linked, and neither has a Linux kernel under it. There is
+          no xtensa spelling of this op that could ever succeed, which is why
+          the asymmetry with riscv32 is principled and not a gap.
+
+          So answer the way a kernel answers a syscall number it does not
+          implement: -ENOSYS. That is PAL_ERR_UNSUPPORTED (-38, lib/rtl/
+          platform.pas: "Linux ENOSYS, used as the portable 'not here'"), the
+          same value the ESP PAL returns from its 33 refused entry points -- so
+          this follows the PAL's precedent rather than inventing a convention,
+          and -38 is independently the right answer because it IS the errno for
+          "no such syscall".
+
+          Erroring at codegen instead took a whole portable unit out of the
+          target over a call that is statically unreachable there (lib/rtl/
+          random.pas guards its tier 2 on SysGetRandom returning -1, so the
+          call is dead on xtensa). Refusing at RUNTIME keeps genuinely
+          reachable misuse detectable while letting unreachable calls compile
+          away.
+
+          This is NOT the IR_FRAME precedent (defs.inc:816), where xtensa Errors
+          at lowering rather than lie with a plausible-looking pointer: there is
+          no honest frame pointer to hand back on a windowed-register machine,
+          whereas -ENOSYS is the honest answer here.
+
+          The args are emitted and their values discarded -- they are arbitrary
+          expressions and may have side effects.
+
+          bug-a-xtensa-refuses-to-lower-an-unreachable-syscall }
+        argNode := IRA[node];
+        while argNode <> -1 do
+        begin
+          IREmitNodeXtensa(IRA[argNode]);
+          argNode := IRB[argNode];
+        end;
+        if Is64BitXtensa(IntToTypeKind(IRTk[node])) then
+          EmitLoadConst64Xtensa(-38)
+        else
+          EmitLoadConstXtensa(reg_xtensa_a2, -38);
+      end;
+
     IR_ATOMIC:
       begin
         { Atomic read-modify-write on addr^, answering the OLD value.
