@@ -347,4 +347,4 @@ next measurement, and check the program's output and not only its RSS — a
 program that fails to run reports a beautifully flat number.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 204fec49a.
