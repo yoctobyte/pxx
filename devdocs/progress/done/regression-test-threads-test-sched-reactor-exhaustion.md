@@ -37,3 +37,6 @@ expect_same: MISMATCH [test_sched_exhaust26-msg]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-29 — auto-closed by the seven watcher: `test-threads#src:test/test_sched_reactor_exhaustion.pas` passes at d47454937cd4 (tier native); it was red at a6698ac28e8b. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
