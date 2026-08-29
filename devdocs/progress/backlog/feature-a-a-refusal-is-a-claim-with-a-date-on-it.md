@@ -2000,3 +2000,61 @@ Two more from the same fix:
   `frontend_forwards.inc`. Exactly face 41's shape in a linter rather than a build:
   **the instrument names whichever instance it reached first, and the ticket
   inherits that as if it were the population.**
+
+### 48. A CAPABILITY SWEEP THAT REPORTS "PRESENT" WITHOUT RECORDING THE SPELLING IT TRIED IS NOT A MEASUREMENT
+
+pxx-a5, 2026-08-29, re-measuring `feature-nilpy-stdlib-coverage-gaps-measured`.
+
+The ticket carried its own sweep from 2026-08-15 concluding *"os, time and
+math.fabs are all present and exact now."* Re-measured at HEAD, it was **wrong on
+two of three rows**:
+
+| row | 08-15 sweep said | actually |
+| --- | --- | --- |
+| `math.fabs` | present | present |
+| `os` | present | `os.path.*` worked; **`os.sep` / `linesep` / `listdir` did not** |
+| `time` | present | **`time.time()` absent** |
+
+Plus drift the sweep could not have known: `copy.copy` works now, `copy.deepcopy`
+does not.
+
+**The failure is not carelessness, it is granularity.** "`os` is present" is a
+claim about a *module*; every probe is necessarily a claim about a *name*. The
+sweep tried `os.path.basename`, concluded the module was reachable, and wrote
+down the module. Nothing in the record said which spelling was executed, so
+nobody could tell the claim was narrower than its wording — and a later reader
+(including the same author) inherits a module-level "present" backed by one
+name's worth of evidence.
+
+**The structural cause here made it worse, and is worth knowing on its own:** the
+dotted table only intercepts **call** forms. So every `os.path.*()` call worked
+while `os.sep` failed as *"undefined variable (os)"* — an error that reads like
+the module is unbound when in fact only the non-call spelling has no route. The
+diagnostic pointed at the module; the defect was in the attribute path. Face 34's
+shape (a correct diagnostic pointing away from the fix), and it is exactly what
+turned one probe into a module-wide conclusion.
+
+**Same family as face 41 and the `forwardlint` finding, one level up:** there the
+instrument reported whichever instance it reached first and the ticket inherited
+it as the population; here the instrument reported whichever *spelling* it reached
+first and the ticket inherited it as the module. **Record the probe, not the
+verdict** — a coverage claim should be readable as the list of names actually
+executed, so its scope is visible without rerunning it.
+
+Two silent wrong-value bugs surfaced in the same pass, both worth their shape:
+
+- **`re.sub`'s count convention disagreed with CPython on exactly one input.**
+  CPython reads `0` as "no limit" and **negative as "do nothing"**; the engine
+  reads `-1` as "no limit" and treats every negative alike. `sub()` mapped 0→-1
+  and passed negatives through, so a count meaning *replace nothing* replaced
+  everything: `re.sub("a","X","banana",-1)` → `bXnXnX` where CPython gives
+  `banana`. **Two conventions that agree everywhere except one value is the
+  hardest kind to spot**, because every ordinary test passes. Normalised in one
+  place (`ReLimit`) rather than at three call sites.
+- **`PyParseSysStream` built the value without checking WHICH module was asked.**
+  `PyIsStdlibMemberValue` gated on the base; the builder did not. So
+  `sys.SEEK_SET` answered `0` where CPython raises `AttributeError` — **and that
+  is not the harmless direction.** The `sys._MEIPASS` comment directly below it
+  exists precisely *because* applications guard an absent `sys` attribute with
+  `try/except AttributeError`; an arm that answers a value walks them down the
+  wrong branch silently. A gate applied on one of two paths is not a gate.
