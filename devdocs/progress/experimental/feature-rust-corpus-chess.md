@@ -23,10 +23,13 @@ slice-of-record (`&[Move]`, `slice[i].field`).
 **NOT done: the UNMODIFIED `~/nextlevel/engine/src` sources.** Those remain
 blocked on value-flow features the adapted branch sidesteps — in priority order
 as the real modules hit them: ~~`Option<T>` (chess.rs wall, stage 2)~~ **DONE
-2026-08-29**, array-typed STRUCT FIELDS (`squares: [Piece; 64]` — chess.rs's
-Board is a mailbox, and this is now the first wall), array-typed return values
-(`fn -> [T; N]`, attacks.rs), the unity build for data modules (tables.rs,
-stage 3), then `Result`/`?`, `String`/`format!`, derives/traits.
+2026-08-29**, ~~array-typed STRUCT FIELDS (`squares: [Piece; 64]`)~~ **DONE
+2026-08-29**, ~~array-typed return values (`fn -> [T; N]`, attacks.rs)~~ **DONE
+2026-08-29**, `if` as an EXPRESSION (`let x = if c { a } else { b };` — not on
+the original list, and now the first wall: real Rust uses it constantly and
+attacks.rs's delta tables are written with it), the unity build for data
+modules (tables.rs, stage 3), then `Result`/`?`, `String`/`format!`,
+derives/traits.
 Do NOT claim the real source compiles — only the adapted branch does.
 
 **Note on where the engine sources live:** they are NOT on the `frank-rust`
@@ -255,3 +258,31 @@ pure swallowing/trivia, cheap and high-leverage.
   type`. chess.rs's Board is a mailbox array, so that is the wall now, ahead
   of array-typed returns. Ticket: [[feature-rust-option-type]] carries the
   narrowings.
+
+- 2026-08-29 — **stage-2 successors: rungs 4-8, all landed on `master`
+  (`b3fd1c760` and after).** Array-typed struct fields (rung 4), `&`/`&mut`
+  params that actually alias (rung 5 — the frontend was dropping the sigil, so
+  `self.side = v` in a method silently did not reach the caller), aggregate
+  literals in return position (rung 6), the engine's own idioms end to end
+  (rung 7, `test_rust_engine_shapes.rs`), and **array-typed RETURN values plus
+  `&[T; N]` params** (rung 8, `test_rust_array_return.rs`).
+
+  **No Track A ticket was needed for any of the five.** Four times the shared
+  machinery already had the mechanism and the Rust frontend had simply never
+  reached for it — the NRVO hidden destination for record returns,
+  `ProcParamExplicitByRef` for aliasing, `ProcRetFixedArrBytes` for array
+  returns, and `IR_COPY_REC` from a call at the caller. That is the ladder
+  earning its keep: driving from what the engine uses keeps finding gaps in the
+  FRONTEND, where they are cheap, instead of in the IR.
+
+  Rung 8 also surfaced a silent wrong-value bug that had nothing to do with
+  arrays: **integer-literal suffixes were lexed and discarded**, so every
+  literal was i32 and `1u64 << 44` evaluated to 0. It was found because a
+  knight-attack table came back with 48 of 64 squares occupied — a plausible
+  number. A bitboard engine is made of that expression, so this would have
+  poisoned every table in attacks.rs.
+
+  **New first wall, not on the original gap list:** `if` as an EXPRESSION
+  (`let df: i64 = if k < 4 { 1 } else { 2 };`). Real Rust uses it constantly
+  and the rung-8 probe had to be rewritten around it.
+

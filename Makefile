@@ -5876,6 +5876,20 @@ test-core: $(COMPILER)
 	# Rust associated fns + Self (Type::fn / Self::fn call paths, mixed with methods)
 	./$(COMPILER) test/test_rust_assoc_fns.rs $(TESTTMP)/test_rust_assoc26
 	tools/expect_same.sh test_rust_assoc26 "$$($(TESTTMP)/test_rust_assoc26)" "$$(printf 'v 42 comb 75')"
+	# Rust FIXED-ARRAY RETURNS (`fn f() -> [T; N]`), the attacks.rs rung of
+	# feature-rust-corpus-chess. The ABI is Pascal's own and unchanged --
+	# ProcRetFixedArrBytes carries the aggregate size the RetType kind cannot
+	# show -- so what is pinned is the FRONTEND REACHING FOR IT, in every shape
+	# whose failure mode was a silent partial copy: explicit and tail returns,
+	# annotated and unannotated lets, a method return resolved through the
+	# receiver's class, narrow and RECORD elements, `&[T; N]` (an array
+	# REFERENCE, not a slice), and a whole-array copy from an lvalue.
+	# Plus integer-literal SUFFIXES, which were lexed and discarded: `1u64 << 44`
+	# evaluated to 0 and `1u64 << 31` to 0xFFFFFFFF80000000, both silently. The
+	# knight table is the oracle for that -- hand-checked, not recorded from a
+	# run: knight(0) = {10,17} = 132096, knight(27) = {10,12,17,21,33,37,42,44}.
+	./$(COMPILER) test/test_rust_array_return.rs $(TESTTMP)/test_rust_aret26
+	tools/expect_same.sh test_rust_aret26 "$$($(TESTTMP)/test_rust_aret26)" "$$(printf 'kt0 132096\nkt27 22136263676928\nnonzero 64\nnb 200 7 255 1\ncs 3 4 7 7\nrs 5 10 15 20\ncopy 200 1\nsh 2147483648 4294967296 17592186044416\nbig 4294967296')"
 	# Ada frontend skeleton (feature-esoteric-ada): for-range accumulate, if/elsif/else,
 	# while, bare loop + exit-when, Put_Line -- all lowering onto existing shared IR.
 	./$(COMPILER) test/test_ada_skeleton.adb $(TESTTMP)/test_ada_skeleton26

@@ -145,6 +145,58 @@ signatures, not from the ladder's list — and both are ahead of it now:
    `test/test_rust_engine_shapes.rs` is the acceptance shape: every construct
    in it was refused at the start of this window.
 
+8. **DONE** — fixed-array RETURN VALUES (`fn f() -> [T; N]`), the ladder's
+   attacks.rs rung, plus the integer-literal suffix bug it surfaced.
+
+   The ABI needed nothing: `ProcRetFixedArrBytes` + `ABIRetViaHiddenDestProc`
+   have carried Pascal's `function F: TArr` since
+   `bug-a-set-and-array-function-results-come-back-empty`, and the caller side
+   (whole-array `IR_COPY_REC` from a call) was already in `ir.inc`. **Fourth
+   rung running where the shared machinery had the mechanism and the Rust
+   frontend had simply never reached for it.** What the frontend needed: parse
+   `-> [T; N]` (one `RRetTypeAt`/`RRetTypeCur` pair replacing four hand-written
+   return-type reads), record the shape at SIGNATURE time rather than body time
+   (a call site is lowered while the CALLER's body is parsed, which can precede
+   the callee's), allocate `Result` AS an array, and lower a value in return
+   position through `RReturnValue`.
+
+   That last one is where the measurement mattered. `return a;` lowered as
+   AN_EXIT-with-a-value, which is a SCALAR store into Result: `PXXDBG=a.ir`
+   showed `store_sym Result := lea(a)` where a 32-byte copy belongs. The caller
+   then copied its 32 bytes perfectly faithfully, so `[0,1,4,9]` printed as a
+   stack address and three zeros with no fault anywhere. Reasoning about it
+   would have blamed the caller.
+
+   Also landed here because the same test needed it: `&[T; N]` params (an array
+   REFERENCE, which Rust distinguishes from the `&[T]` slice that shares the
+   parse site) and unannotated `let t = f();` resolved from the callee's
+   registered return shape, for a plain call and for a method through the
+   receiver's class.
+
+   **The integer-literal suffix was a silent wrong-value bug, not a gap.** The
+   lexer consumed `u64`/`i64`/... and discarded it, so every literal was i32:
+   `1u64 << 44` evaluated to **0** and `1u64 << 31` to `0xFFFFFFFF80000000`,
+   neither with a diagnostic. Found because a knight-attack table came back
+   with 48 of 64 squares empty — a plausible number, which is exactly the shape
+   of bug this repo's debugging playbook is written about. Fixed by carrying
+   the suffix on the raw token's `SOffset`/`SLen` (shared `Next` already
+   surfaces that as `CurTok.SVal`, so no shared-struct change) and typing the
+   literal through the existing name→kind mapper, a suffix being spelled
+   exactly like the type name. An unsuffixed literal too big for i32 now widens
+   to i64 rather than truncating.
+
+   **Narrowings, deliberate and recorded rather than worked around:**
+   - `let x = if c { a } else { b };` — `if` as an EXPRESSION is not parsed.
+     Real Rust uses it constantly; it is the strongest candidate for the next
+     rung.
+   - `[Sq { .. }; N]` — an array literal whose element is a struct literal.
+     Uninitialised `let mut c: [Sq; 2];` is the workaround in the test.
+   - impl-method params take neither `&[T]` slices nor `&[T; N]` arrays; only
+     free fns do. The impl registration path never had slices either, so this
+     is a pre-existing symmetry gap, not one introduced here.
+   - indexing a call result directly (`f()[0]`) is not parsed; Pascal has
+     `ProcRetArrAi` for exactly that and the Rust side does not populate it.
+
 ## Log
 - 2026-08-29 — unit 1 landed (see the ladder ticket's log for the detail).
 - 2026-08-29 — unit 2 landed: Option (and records generally) through fn
@@ -162,3 +214,9 @@ signatures, not from the ladder's list — and both are ahead of it now:
   boundary (the cadence the coordinator asked for), and converted this
   ticket's five Makefile assertions to `tools/expect_same.sh` so they are not
   new instances of the defect Track B spent the day removing.
+- 2026-08-29 — merged `rust` into `master` at `b3fd1c760` (window opened by the
+  coordinator; merged, not rebased, so the eight commits keep their shas).
+- 2026-08-29 — rung 8 landed: fixed-array returns, `&[T; N]` params, and the
+  integer-literal suffix fix. `test_rust_array_return.rs` is the acceptance
+  shape; its knight-table oracle is hand-checked rather than recorded from a
+  run, because the bug it pins produced *plausible* numbers.
