@@ -75,4 +75,4 @@ are the other half: **an unwired test still bills you for upkeep**, and that
 half is the one that keeps being paid without anyone deciding to.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit c8c469b51.
