@@ -245,4 +245,4 @@ remainder is a successor ticket rather than a parked one.
   the row on the shared behaviour.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 1d01554e3.
