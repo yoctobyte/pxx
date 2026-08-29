@@ -1,7 +1,7 @@
 ---
 prio: 35
 track: R
-resolved: PENDING-COMMIT
+resolved: 9d3217913
 ---
 # `f(&arr)` — borrowing a whole array as a `&[T]` argument — compiles and segfaults
 

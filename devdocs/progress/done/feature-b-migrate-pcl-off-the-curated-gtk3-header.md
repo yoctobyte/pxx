@@ -3,7 +3,7 @@ track: B
 prio: 45
 type: feature
 blocked-by: []
-resolved: PENDING-COMMIT
+resolved: 9396b32c7
 summary: "lib/pcl/gtk3_c.h hand-redeclares 135 GTK3/cairo functions with simplified types. All 135 exist in the stock headers (gcc-verified), so the migration is bounded: 3 variadic call sites and a PGtkWidget typedef used in 4 test files. Consumers are the PCL widget stack, 11 GUI tests and 5 examples."
 ---
 
