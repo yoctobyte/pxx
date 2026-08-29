@@ -94,3 +94,65 @@ them, and a second `sync.sh` running concurrently. Not deterministic.
 ## Related
 - [[bug-c-a-multidim-array-field-decays-with-the-element-stride]] — the ticket whose commit message this ate
 - [[bug-t-resolve-cites-a-sha-the-rebase-then-rewrites]] — same file, same contention, different symptom
+
+## Second loss, two hours later, DIFFERENT signature: a commit dropped entirely
+
+2026-08-30. Not a squash. `sync.sh` **dropped a whole commit and pushed another
+lane's instead**, reporting success.
+
+```
+55b08dc7f HEAD@{8}: commit: fix(C): sizeof of a partial index ...
+fe90725fc HEAD@{7}: rebase (start): checkout origin/master
+fe90725fc HEAD@{6}: rebase (finish): returning to refs/heads/master
+```
+
+Four consecutive `rebase(start)`/`rebase(finish)` pairs, each landing on origin's
+tip, **never replaying the local commit**, leaving the branch pointing at origin.
+Then `sync: pushed — <another lane's subject>`.
+
+**Every available signal said success:** `git rev-list --count
+origin/master..HEAD` = 0, exit code 0, clean tree. Recovered by cherry-pick out
+of the reflog; without a by-hand content check the work would have survived only
+until the reflog expired.
+
+### Two mechanisms, deliberately not merged
+
+The C lane reported its own share honestly and refused to blur them:
+
+1. **Caller error, owned and avoidable:** it edited `compiler/cparser.inc` while
+   a **backgrounded** `sync.sh` was running. The tree was clean when sync
+   started, so nothing refused, and the rebase then checked out over a live
+   working tree. **This explains the lost WORKING TREE.**
+2. **Unexplained:** it does **not** explain the lost COMMIT, which existed
+   before sync started and which a rebase should have replayed.
+
+*"A cause that explains most of the evidence"* is the dangerous kind, because it
+retires the investigation. Half a diagnosis presented whole would have shipped a
+"do not edit during sync" warning as the fix with the drop mechanism still live.
+
+### Landed: a net, not a cure
+
+`sync.sh` now captures a **manifest of commit subjects before the first rebase**
+and, after the push, fetches and confirms every one is on origin — naming what is
+missing, stating the work is in the reflog, printing the cherry-pick recipe,
+saying **not** to `reset --hard`, and exiting non-zero.
+
+**By SUBJECT.** Checking by sha manufactures false alarms: an ordinary rebase
+rewrites every sha, so a missing sha is the *normal* result. The coordinator
+nearly filed one against itself doing exactly that. Exit code, ahead-count and
+tree state catch **neither** loss, because all three are what a healthy push also
+leaves behind.
+
+It also **stops printing `HEAD` as the success line** — HEAD after a rebase is
+frequently another lane's commit, and printing it is *how* the drop read as a
+success.
+
+### Third symptom of the same contention, filed separately at the time
+
+The retry budget exhausting (6 → raised to 12). Reported as a knob and treated as
+one; in hindsight it was the same busy-tree contention as both losses. **Three
+failures of one tool in one night, all in the push/rebase path, none reproducible
+before eight lanes were live.**
+
+The proposed `BOARD*.md` merge driver remains the better fix than any of this: it
+removes the conflict class rather than one failure path.

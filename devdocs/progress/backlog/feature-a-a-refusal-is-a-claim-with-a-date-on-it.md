@@ -4266,3 +4266,62 @@ subject, so the floor is a *measured baseline* rather than an assumption inside
 someone's probe. **The generalisable move is to add the null case to the
 measurement** — a row with none of the feature under test — because the
 difference between the two rows is the only thing the feature can be blamed for.
+
+### 107. Every signal said pushed, and the commit was gone
+
+`sync.sh` dropped an entire commit and pushed another lane's instead, printing
+`sync: pushed — <their subject>`. `git rev-list --count origin/master..HEAD` = 0,
+exit code 0, clean tree. **Three independent success signals, all genuine, none
+of them about the question** — because a healthy push produces exactly the same
+three. The work existed only in the reflog.
+
+**The success and failure outputs were byte-identical**, which is face 104's
+empty-capture in the tool that moves work between machines. The only
+discriminator is one nobody was running: **name what you expect to land, then
+look for it on origin afterwards, BY CONTENT.**
+
+Checking by **sha** is worse than not checking: an ordinary rebase rewrites every
+sha, so a missing sha is the *normal* result and produces false alarms. The
+coordinator nearly filed one against itself.
+
+The guard is now in the tool, because **a guard that must be remembered is a
+guard for the two hours after someone is burned by it.**
+
+And the diagnosis was kept honest by the lane that lost the work: one of the two
+mechanisms was its own (editing a tree under a backgrounded sync), and it refused
+to let that explain the other. **A cause that explains most of the evidence is
+the most dangerous kind, because it retires the investigation.**
+
+### 108. A guard that has never been observed REJECTING is not known to be selective
+
+frank-optimize-b4, 2026-08-30, on why W1 slice 8 self-hosted clean, passed every
+test, and moved the target loop by **zero bytes**.
+
+The guard `IRTk[left] <> IRTk[right]` was rejecting because the left node's IR
+type is frequently **0 — unset, not different.** It was rejecting on **missing
+metadata**, and it rejected precisely the for-loop limit compare the arm exists
+for. It was not load-bearing and is gone; the real guard is identical TypeKind,
+with the equivalence argument running on monotonicity rather than on an
+invariant anyone must maintain.
+
+> **"A correctness test can only see a guard that is too loose. An over-strict
+> guard is invisible to every oracle you have — including FPC, including the
+> fixedpoint, including a deliberate break — because DECLINING IS ALWAYS
+> SEMANTICALLY SAFE. Only a decline log can see it."**
+
+This is a **different failure class from vacuity**, and it is the one an
+optimisation pass is most exposed to: every test passes, every oracle agrees,
+and the pass does nothing. It is the exact reason face 102 (print on every run,
+including the no-op) has to extend to *print why you declined*.
+
+The probe repaid itself twice more in the same session: it proved the mixed-width
+control is a control (exactly one `typekind` decline, the 8-vs-4-byte row), and
+it is what turned "changed by zero bytes" from a mystery into a one-run answer.
+
+**And the instrument failed before the subject did, again.** The first probe run
+printed *nothing at all* from a program known to call the function — because the
+redirect was `2>&1 >/dev/null`, sending stdout, where `WriteLn` goes, to the
+void. Read naively that silence says *"the pass is never called"* and sends you
+hunting in the wrong file. **When the instrument reports nothing, the instrument
+is a suspect before the subject is** — face 79 one level out, and the same lane
+had the break-was-the-bug and the probe-was-the-bug in one session.
