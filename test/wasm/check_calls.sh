@@ -117,11 +117,16 @@ fi
 # correct until roughly 1 KB, and then overwrites BSS.
 #
 # This is asserted rather than commented, and it is asserted as the CURRENT
-# state: the check fails if the heap silently starts working, because that means
-# the ticket landed and this block is stale. Green here means "the known
-# limitation is still exactly this one", which is the only honest thing a test
-# can say about a defect it cannot fix.
-#   bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero
+# state: it asserted the DEFECT — that allocation still began below 1024 — and
+# was written to fail the day the fix landed, so this paragraph could not
+# outlive its cause. It fired on 2026-08-29 and this is the rewrite.
+#
+# The assertion is now the opposite one, and it is a PROPERTY rather than a new
+# fact about the arena: every dispatch result above was read off an object that
+# sits clear of the null guard. Nothing here names the arena's address or its
+# size — check_managed.sh owns those — because what this check needs from the
+# heap is only that it is a real one.
+#   bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero, landed
 cat > "$work/heap.pas" <<'PAS'
 program HeapProbe;
 type TA = class Code: Integer; end;
@@ -141,17 +146,15 @@ process.stdout.write(String(inst.exports.Addr1()) + '\n');
 JS
 addr=$(node "$work/heap.js" "$work/heap.wasm")
 if [ "$addr" -lt 1024 ]; then
-  echo "ok  KNOWN LIMITATION unchanged: first allocation at $addr, below the"
-  echo "..  1024-byte guard — the heap has no arena and bumps from 0."
-  echo "..  bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero"
-  echo "..  Everything above passed ON THAT HEAP. It is correct under ~1 KB and"
-  echo "..  overwrites BSS after."
-else
-  echo "FAIL the heap now allocates at $addr — above the guard."
-  echo "     That means the HeapMmap ticket landed. Delete this block, and turn"
-  echo "     the assertion into a real one: allocations must clear BSS entirely."
+  echo "FAIL an object was constructed at $addr, inside the 1024-byte null"
+  echo "     guard. Address 0 is a legal wasm address that reads as zero, so"
+  echo "     this does not fault — the object works, and then the next kilobyte"
+  echo "     of allocation silently overwrites BSS."
+  echo "     bug-a-heapmmap-has-no-wasm32-arm... regressed."
   exit 1
 fi
+echo "ok  the object above was constructed at $addr, clear of the null guard —"
+echo "..  so every dispatch result in this check was read off a real heap"
 
 # A POSITIVE sentinel, last line, reachable only after every check above
 # passed: `set -e` kills the script before here on any failure. check_all.sh

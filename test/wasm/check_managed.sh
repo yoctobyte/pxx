@@ -46,16 +46,31 @@
 # output. That is a stronger guard than the refusal list ever was, because it
 # fails on the mechanism rather than on the mechanism's absence elsewhere.
 #
-# HONEST SCOPE, and it expires mechanically. The wasm32 heap arena still starts
-# at address 0 — bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero,
-# open — so allocation overlaps the null guard, BSS and the shadow stack, and
-# runs off the end of a 128 KB memory at about 128 KB. This slice passes
-# because its live set is a handful of short strings that the free list
-# recycles inside the first kilobyte. A green tick here means the publish
-# sequence is right; it does NOT mean managed strings work at scale. The last
-# check below asserts the heap is still broken, so that the day the ticket
-# lands this script fails and this paragraph has to be rewritten rather than
-# quietly outliving its cause.
+# SCOPE — and this paragraph is the SECOND one, because the first expired on
+# schedule. It said the wasm32 heap started at address 0, that this slice passed
+# only because its live set recycled inside the first kilobyte, and that a green
+# tick did not mean managed strings worked at scale. That was true while
+# bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero was open.
+# It landed on 2026-08-29 (a 1 MiB static arena in BSS), the check below fired
+# by design, and the note was rewritten rather than left to outlive its cause.
+#
+# What replaces it is not a smaller claim, it is a different KIND of claim. The
+# old check asserted a DEFECT ("the base is still below 1024"), which is the
+# form that goes stale the moment the defect is fixed and fails in the direction
+# that reads as a regression — the same trap check_strop's leak figure fell into
+# on the same day. The three checks below assert PROPERTIES instead: the base is
+# above the null guard, the arena really holds about a megabyte and every byte
+# of it is writable, and the module's globals are still intact afterwards. Those
+# stay true for as long as the arm is correct and say nothing about how it is
+# implemented, so a memory.grow arm replacing the static one leaves them alone.
+#
+# STILL OUT OF SCOPE, and named rather than implied: the arena has a fixed
+# CEILING. A program whose live heap passes 1 MiB dies, where the host could
+# trivially have granted more — memory.grow is legal on these modules already
+# (they declare no maximum) and there is simply no way to reach the instruction
+# from Pascal yet. That is a limitation, not a defect, and it is recorded in
+# PLAN.md rather than asserted here, because asserting it would recreate exactly
+# the defect-shaped check this paragraph exists to describe.
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
@@ -165,26 +180,79 @@ fi
 echo "ok  reading a managed string does not clone it — the write-side call is"
 echo "..  absent from every body here (check_index.sh owns the positive half)"
 
-# The scope note above, made falsifiable. When the heap ticket lands this
-# fails, and the note has to be rewritten rather than outliving its cause.
+# --- the heap the slice runs on, asserted as three properties -----------------
+# Deliberately NOT "the base equals N". The arena's address is an implementation
+# detail of where BSS happens to place it, and pinning it would make this fail
+# on any unrelated change to BSS layout — a check that cries wolf, which trains
+# people to ignore it. What matters is that the base is out of the null guard,
+# that the arena is really about the size it claims and is really writable end
+# to end, and that using it does not walk over the module's globals. That last
+# one is the actual bug this replaced: allocation from address 0 read back
+# correctly for the first kilobyte and then silently overwrote BSS.
 cat > "$work/heap.pas" <<'EOF'
-program HeapBase;
-var p: Pointer;
+program HeapProps;
+var
+  guard: array[0..3] of Integer;
+  gs: string;
+  i, n: Integer;
+  p, first, last: Pointer;
 begin
-  p := PXXAlloc(64, 8);
-  writeln(NativeInt(p));
+  guard[0] := 111; guard[1] := 222; guard[2] := 333; guard[3] := 444;
+  gs := 'guard';
+  first := PXXAlloc(4096, 8);
+  last := first;
+  n := 1;
+  { ~960 KB in 4 KB chunks, every byte of every chunk written }
+  for i := 2 to 240 do
+  begin
+    p := PXXAlloc(4096, 8);
+    if p = nil then Break;
+    FillChar(p^, 4096, Byte(i and 255));
+    last := p;
+    n := i;
+  end;
+  writeln(NativeInt(first));
+  writeln(n);
+  writeln(NativeInt(last) - NativeInt(first));
+  writeln(guard[0], ' ', guard[1], ' ', guard[2], ' ', guard[3], ' ', gs);
 end.
 EOF
 "$root/compiler/pascal26" --target=wasm32 "$work/heap.pas" "$work/h.wasm" \
     > /dev/null 2>&1
-base=$(node "$work/run.js" "$work/h.wasm")
-if [ "$base" -ge 1024 ]; then
-  echo "ok  the heap arena now starts at $base, above the null guard —"
-  echo "    bug-a-heapmmap-has-no-wasm32-arm... has landed. REWRITE this"
-  echo "    script's scope note and re-measure the slice at scale."
+node "$work/run.js" "$work/h.wasm" > "$work/heap.txt"
+base=$(sed -n 1p "$work/heap.txt")
+blocks=$(sed -n 2p "$work/heap.txt")
+spread=$(sed -n 3p "$work/heap.txt")
+guard=$(sed -n 4p "$work/heap.txt")
+if [ "$base" -lt 1024 ]; then
+  echo "FAIL the heap arena starts at $base, inside the null guard. Address 0"
+  echo "     is a legal wasm address that reads as zero, so this does not fault"
+  echo "     — it corrupts. bug-a-heapmmap-has-no-wasm32-arm... regressed."
   exit 1
 fi
-echo "ok  heap arena still at $base (< 1024): the scope note above still holds"
+if [ "$blocks" -lt 240 ]; then
+  echo "FAIL only $blocks of 240 4 KB blocks could be allocated and written, so"
+  echo "     the arena is smaller than the megabyte HEAP_ARENA claims. Check"
+  echo "     that HEAP_ARENA and WasmArena's byte size still agree — they are"
+  echo "     equal by inspection only, and a HEAP_ARENA larger than the buffer"
+  echo "     puts HeapEnd past its end and bumps straight through it."
+  exit 1
+fi
+if [ "$spread" -lt 900000 ]; then
+  echo "FAIL 240 blocks span only $spread bytes, so they are not laid out across"
+  echo "     the arena the way a bump allocator would — something is recycling"
+  echo "     or overlapping."
+  exit 1
+fi
+if [ "$guard" != "111 222 333 444 guard" ]; then
+  echo "FAIL the module's globals did not survive filling the arena: expected"
+  echo "     '111 222 333 444 guard', got '$guard'. The heap is overlapping BSS."
+  exit 1
+fi
+echo "ok  the heap arena starts at $base (above the 1024-byte null guard),"
+echo "..  holds 240 writable 4 KB blocks spanning $spread bytes, and the"
+echo "..  module's globals are intact afterwards — the three properties the"
+echo "..  address-zero heap failed, asserted without naming its address"
 
 # --- the retain, witnessed WITHOUT relying on copy-on-write ------------------
 # The diff above already catches a missing retain, because a string's refcount
