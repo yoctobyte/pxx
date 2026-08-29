@@ -5,14 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:23 blocked:8 backlog:314 backlog_new:14 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2660 rejected:51`
+`working:3 unfinished:22 blocked:8 backlog:311 backlog_new:14 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2665 rejected:52`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-the-fpc-seed-canary-skips-a-break-already-on-master` [A] — owner: unrecorded
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
+- `refactor-a-the-pointer-suffix-walk-has-six-copies-in-the-pascal-frontend` [A] — owner: frankA
 
-## unfinished (23) — parked mid-flight; re-claim, do not duplicate
+## unfinished (22) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -21,7 +22,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument` [P] — blocked-by: bug-p-a-qualified-type-name-cannot-be-a-generic-argument
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A]
-- `feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle` [A+S]
 - `feature-c-gtk3-header-final-wiring` [C] — blocked-by: decide-which-gtk-a-bare-gtk-gtk-h-means
 - `feature-c-import-a-pascal-unit-under-a-mangled-name` [C]
 - `feature-dynamic-compiler-tables` [A]
@@ -49,16 +49,13 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 334, ranked
+## Ready — top 30 of 330, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
-- `[p 70] [T]` regression-cascade-154d1aa3fba6
 - `[p 70] [P]` regression-cascade-4e27dc2be114
-- `[p 70] [N]` regression-test-nilpy-test-nilpy-relative-import-in-package-2
-- `[p 70] [N]` regression-test-nilpy-test-nilpy-startswith-tuple
 - `[p 70] [T]` regression-test-pascal-conformance-shard0-6-2
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
@@ -81,5 +78,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - `[p 60] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 1)
 - `[p 60] [A]` bug-a-an-array-constructor-in-argument-position-leaks-its-dynamic-array
+- `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
+- `[p 60] [N]` bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
+- `[p 60] [P]` bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
 
-_304 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_300 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

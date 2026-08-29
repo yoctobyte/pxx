@@ -1722,6 +1722,48 @@ pre code{background:none;padding:0}
                 f"(check does not rewrite prose)"
             )
 
+        # The SAME contradiction one aperture over. The scan above reads a
+        # PROSE `- **Status:**` bullet; this one reads the FRONTMATTER
+        # `status:` field. They are different text in different places and the
+        # prose scan cannot see the field, so a ticket can pass it while
+        # announcing a lock in its own header.
+        #
+        # Measured 2026-08-30 over 3277 tickets: 1443 carry a frontmatter
+        # `status:`, 85 disagree with their folder, and 82 of those are the
+        # vocabulary rather than a defect — `open` in backlog/ and `new` in
+        # backlog_new/ are what people write and mean no harm. Flagging all 85
+        # would bury the 3 that matter, which is the exact mistake the prose
+        # scan above already learned. So LOCKISH only, and the equivalences are
+        # named rather than inferred.
+        #
+        # Why the 3 are worth failing over: the whole fleet is told to OPEN THE
+        # TICKET AT HEAD before dispatching, so a header reading
+        # `status: working` is read by a careful agent as "someone holds this"
+        # and skipped. `feature-a-typeref-migrate-consumers` sat that way for
+        # five days at p62 while ranking THIRD of 111 in `ready --track A` --
+        # not hidden by the ranker, which listed it correctly every time, but
+        # declined by every reader who obeyed the rule and opened it. A ticket
+        # that looks taken is more durable than one that is missing, because
+        # nothing ever re-checks a lock someone else appears to hold.
+        VOCAB = {"backlog": {"open"}, "backlog_new": {"new"}}
+        for t in self.tickets:
+            if t.status in archive:
+                continue
+            claimed = str(t.fm.get("status", "")).strip().strip('"').lower()
+            if not claimed or claimed == t.status:
+                continue
+            if claimed in VOCAB.get(t.status, set()):
+                continue
+            if claimed not in LOCKISH and t.status not in LOCKISH:
+                continue
+            problems = 1
+            lines.append(
+                f"FM-STATUS-DRIFT: {t.slug} [{t.track} p{t.prio}] is in "
+                f"{t.status}/ but its FRONTMATTER says 'status: {claimed}' — "
+                f"the folder is the lock, and a header claiming a lock makes "
+                f"the ticket look taken to everyone who opens it"
+            )
+
         pending, dead, bookkeeping = self._audit_citations()
         for slug in pending:
             warning_count += 1

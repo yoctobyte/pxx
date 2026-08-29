@@ -8,14 +8,15 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-the-fpc-seed-canary-skips-a-break-already-on-master | A | 50→80 | bug |  | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
+| refactor-a-the-pointer-suffix-walk-has-six-copies-in-the-pascal-frontend | A | 55 | refactor | The pointer/field/index suffix walk is duplicated SIX times in the Pascal frontend (not four, as the parent ticket says -- listed, not counted). Each copy stamps a different subset of the node tags the rest of the compiler reads, which is why four separate tickets have now ended 'the metadata was there, the reader was missing'. None can be deleted without the others agreeing on the tags, so this is one refactor, not six fixes. | — |
 
-## unfinished (23)
+## unfinished (22)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -26,7 +27,6 @@ _none_
 | bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument | P | 65 | bug | `TEnum<TPair>` where TPair is a type nested INSIDE the enclosing template is minted eagerly as `TEnum$TPair`, giving `unknown type: TPair` at TEnum's own line. Same shape as bug-p-a-generic-argument-that-is-another-templates-parameter-is-minted-as-a-concrete-type, which is fixed — that one catches PARAMETER names via a token-level scan, and a nested type name is not a parameter, so it slips through. 23-line repro, FPC prints 4. This is the current stop for `uses Generics.Collections` (generics.collections.pas:120, TEnumerator<TDictionaryPair>). Two mechanisms for one concept: read the whitelist analysis below before adding a third. | bug-p-a-qualified-type-name-cannot-be-a-generic-argument |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets | A | 55 | feature | Build-time selection of frontends and targets, so `only-pascal` + `only-esp-riscv` yields a small Pascal-for-ESP compiler instead of the megalith. The umbrella build stays the default. Filed with a measurement: C is nearly separable already (16 references in shared files), NilPy is NOT (1281) — so this doubles as a falsifiable test of the frontend-separation design, and NilPy already fails it. | — |
-| feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle | A+S | 25 | feature | xtensa is the one target whose output nothing here can RUN, so every xtensa ticket ends in 'do not land this on inspection'. Stock `qemu-xtensa` (user mode) IS installed, but xtensa has no IR_SYSCALL arm and TargetIsEspClass hardcodes it as bare-metal ALWAYS. Installing ESP-IDF (its qemu fork) is the CHEAPER first move and is worth doing regardless — but it does NOT make the blocked tickets' gates reachable, because those tests need the builtin unit, which no ESP-class target gets. | — |
 | feature-c-gtk3-header-final-wiring | C | 55 | feature | Stock GTK3 headers import, link to libgtk-3.so.0 and run a real window — done and gated by test_c_gtk3_stock. The 2026-06-29 probe failure was a wrong include root, not an importer limit. Parked: dropping the explicit -I needs decide-which-gtk-a-bare-gtk-gtk-h-means, and the PCL migration is a Track B ticket. | decide-which-gtk-a-bare-gtk-gtk-h-means |
 | feature-c-import-a-pascal-unit-under-a-mangled-name | C | 50 | feature | Give C an explicit import site for a Pascal unit: `#include \"math.pas\"` declares its routines under mangled C identifiers (`math_pas_Sqrt`), case preserved from the Pascal declaration, path-qualified on collision. Overloads resolve by the declared C signature. AnsiString-bearing signatures are refused by name. Design settled by the user 2026-08-19; this ticket is a SPEC, not a discussion. | — |
 | feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
@@ -56,7 +56,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (314)
+## backlog (311)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -67,6 +67,7 @@ _none_
 | bug-a-aarch64-cannot-build-programs-with-an-aggregate-result-past-8-params | A | 55 | bug | jsondemo and life do not build for aarch64 at all -- 'aggregate result with more than 8 params not supported', raised from builtin/pylib.pas, so it fires for any program pulling that unit in. The sharp part is not the two programs: it silently narrows the corpus available for BEHAVIOURAL verification on aarch64, while census tables built from target-independent IR keep listing those same programs as aarch64 data points. Two purposes, one list, only one of them ever checked. | — |
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
 | bug-a-function-result-assignment-does-not-narrow-to-the-result-type | A | 40 | bug | `function F(a: Int64): Integer; begin F := a; end` returns the full 64-bit value: F(4294967299) prints 4294967299 where FPC prints 3. The same assignment to a variable, to a var parameter, or through a cast all narrow correctly. One arm of a double case, and the broken arm is the one with no diagnostic — the caller reads a value the declared result type cannot hold. | — |
+| bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs | A+S | 40 | bug | Hosted xtensa diverges from the x86-64 oracle on 21 of 142 cross programs | — |
 | bug-a-irtoplevelstmt-parameter-is-a-node-index-named-k | A | 20 | bug | ir_codegen.inc:8813 declares IRTopLevelStmt(k: Integer) and its body is `case IRKind[k] of`, so the parameter is a node index. The name reads as a kind, and passing IRKind[i] compiles cleanly and indexes the IR array with an opcode number — a silently-wrong-value trap with no diagnostic, in a function every backend author will call. Rename plus a one-line comment closes the class. | — |
 | bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa | A | 25 | bug | A proc's managed locals (AnsiString, interfaces, dynamic arrays) are released by a proc CLEANUP FRAME that five targets have and two do not. wasm32 and xtensa both fall outside TargetHasProcCleanupFrame, so an exception unwinding THROUGH a frame leaks everything that frame owned. Silent by construction: an unwind leak prints nothing. | — |
 | bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice | A | 55 | bug | ManagedLocalZeroBytes is a chain of per-kind arms, each of which has to remember to ask IsArray. Two arms have already shipped without it — interfaces (2026) and Variants (2026-08-27, a5 memory-corruption fix). Two more arms explicitly say `not IsArray` and nothing says whether that is a decision or the same omission a third time. | — |
@@ -83,8 +84,6 @@ _none_
 | bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture | A | 40 | bug | Five Makefile guards check the pinned stable with `test -x`, which tests the executable BIT — a property of the file, not of whether this CPU can run it. On a non-x86-64 host every guard reports healthy and the recipe then dies at exec with `Exec format error`, after printing a message saying there is no pinned stable at a path where one demonstrably is. Found on `via` (aarch64), where the repo ships only `stable_linux_amd64`. A reader would reasonably conclude the checkout is broken. | — |
 | bug-a-testtmp-defaults-to-a-path-every-checkout-shares | A+T | 55 | bug | Makefile:49 is `TESTTMP ?= /tmp` — a fixed path, not per-checkout and not per-PID. Every agent's suite writes its test binaries to the same names in the same directory, so two concurrent runs on one box overwrite each other's artefacts. The failure mode is a wrong verdict, not a crash. CORRECTED 2026-08-29 (see body): testmgr ALREADY privatizes recipe /tmp paths per PID, so this is true only of bare `make`; the recipe half closed in b2cab6b6b; and the proposed fix would blind four testmgr expressions at once — blocked on the prerequisite. | chore-t-teach-testmgr-the-testtmp-value-before-anyone-changes-it |
 | bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire | A | 45 | bug |  | — |
-| bug-a-the-ascii-cache-consumer-still-says-byte-mutation-has-one-place | A | 20 | bug | pylib.pas:3361 justifies trusting the ASCII cache with 'PXXStrUnique forgets it whenever bytes are about to change, which is the one place they can'. There are four such places. All four handle it correctly today, so no defect — but this is the same false-choke-point sentence that cost two months as instance #4, still asserted in the CONSUMER that depends on it, after the fix. | — |
-| bug-a-the-comment-that-caused-three-bugs-survived-all-three-fixes | A | 30 | bug | builtinheap.pas:2625-2631 is the sentence that produced instances 1, 2 and 3 of the builtinheap-twins ticket. All three were fixed on 2026-08-29. The comment was written 2026-08-14 and has not been touched since — it still says PXXStrUnique is 'the single choke point for byte mutation, which is what makes the cache sound' and that 'PXXStrSetLen needs no such call'. Refuted three times in one day, still standing, still load-bearing. | — |
 | bug-a-the-div-by-zero-check-is-still-missing-on-xtensa | A+S | 25 | bug | The last target without a pre-divide zero check. The other five landed 2026-08-23; xtensa was left out because it cannot be RUN on this box (bare profile emits an ESP image, not a Linux ELF), its branches carry only an 8-bit displacement, its windowed ABI rotates the register window on a call, and its divide is two shapes depending on XtensaSoftDivide. | — |
 | bug-a-the-ir-frame-op-doc-asserts-a-frame-layout-riscv32-does-not-use | A | 25 | bug | defs.inc:816 documents IR_FRAME with 'the saved-fp chain IS walkable: [fp] = the caller's fp, [fp + PtrSize] = the return address' — stated as universal. It is false on riscv32, where s0 points at the BOTTOM of the frame and the links sit at +8/+12. ir.inc:4977 knows this and says assuming the common layout 'would have silently walked into the locals'. The lowering is correct (it asks FramePrevFpOffset/FrameRetAddrOffset); the DOC a backend implementer reads is not. | — |
 | bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july | A | 25 | bug | --threadsafe has accepted x86-64/i386/aarch64/arm32 since 07fee0844 (2026-07-06), but five comments across four files still say it is x86-64-only. One of them sits ONE LINE above the four-target condition the same commit edited. No live defect; the code is right everywhere. A new audit sub-shape: a SCOPE WIDENING invalidates every comment that stated the old scope, and there is no sibling arm to grep. | — |
@@ -146,6 +145,7 @@ _none_
 | bug-p-sysopen-intrinsic-shadows-a-user-function-name | P | 15 | bug | sysopen/syswrite/sysclose/sysfchmod are compiler INTRINSICS with dedicated tokens (tkSysOpen &c), so the lexer never produces an identifier for them and a user program cannot declare a function with one of those names. The diagnostic is `expected name`, which does not mention the reservation. Real but nearly unreachable: prio 15. | — |
 | bug-p-the-address-of-a-virtual-class-method-cannot-be-lowered | P | 55 | bug | The address of a virtual class method cannot be lowered (`AN_CLASS_VIRTUAL_CALL`, kind 88) | — |
 | bug-p-two-different-nested-specializations-of-one-template-collide | P | 65 | bug | Two different nested specializations of ONE template, in one generic, collide | — |
+| bug-t-a-job-that-never-passed-on-this-box-can-never-earn-a-bigger-budget | T | 55 | bug | learn_timeout() raises a timed-out job's expected duration so 'the next run gets room', but deliberately leaves n=0, and the only consumer of that duration is gated on n >= METRICS_MIN_RUNS. So the raise is written and never read for a job that has NEVER PASSED on this host -- which is precisely the job it cannot rescue. calibrate() cannot cover for it either: it returns max(1.0, dt/0.35) and plexus measures 0.26s, so the floor is the answer on every box measured so far, and a 2010 Westmere gets the same budgets as a 2013 Ivy Bridge. | — |
 | bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing | A+T | 45 | bug | 2461 Makefile assertions are a bare `test \"$$(...)\" = \"...\"`, which prints NOTHING when it fails. job_reason() is the log tail by deliberate design, so for those jobs the reason it records is whatever the recipe printed just before — and for the 480 cross-target ones that is two compile summaries with different code sizes, which reads exactly like a codegen divergence. It misled a Track T session for hours. The repo already uses `diff -u` in 362 places; the good pattern exists and is not reached. Fix edits Makefile, which is Track A's file-lane. | — |
 | bug-t-a-test-targets-timeout-class-is-decided-by-a-substring-and-is-right-by-accident | T | 45 | bug | testmgr's classify() picks a job's timeout class by substring-matching the make -n recipe text. test-nilpy gets corpus/1200s because its recipe happens to contain 'sqlite', 'lua' and 'uforth' -- nothing about NilPy. Delete one test file and the whole suite silently drops to unit/90s, turning every slow-but-passing run into a false RED. uforth already fell through this exact hole. | — |
 | bug-t-auto-close-on-one-green-is-sound-for-a-deterministic-test-and-unsound-for-a-racy-one | T | 50 | bug | The watcher auto-closes a regression ticket on a single green. For a ~12%-failure race that is the EXPECTED outcome with the defect fully present -- and it happened: the reactor-exhaustion ticket was auto-closed while the bug was live. Nothing in the ticket stub tells the closer whether it is holding a deterministic test or a racy one. | — |
@@ -365,12 +365,9 @@ _none_
 | refactor-p-the-field-declaration-parser-exists-twice | P | 45 | refactor | `ParseRecordFields` (pasparser_decl.inc ~3199) and the class-body field arm inside `ParseTypeSection` (~4824) parse the same grammar — comma-separated names, inline fixed/dynamic array, named array alias, scalar — with the same locals under different names and the same AddUField tail. Every field-level feature has to be written twice, and the second copy is the one that stays broken. | — |
 | refactor-p-the-overload-probe-cannot-see-the-argument-match-channels | P | 45 | refactor | The speculative overload probe in FindUMethOverloadAhead has only argument KINDS, while the free-call path has five side channels (MatchArgArray/ArrayElemTk/Nil/Rec/Scalar) filled in pasparser_lval.inc. So the probe cannot run the free path's own compatibility check — measured, a gate built on kinds alone refuses four classes of legal call. Lift the population into a helper both callers share. | — |
 | refactor-p-three-hand-rolled-postfix-loops | P | 55 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
-| regression-cascade-154d1aa3fba6 | T | 70 | regression | regression CASCADE: 18 jobs newly red in e417731e9..154d1aa3f (12 commits) — auto-filed by twatch | — |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 | regression-demos-00-2 | T | 40 | regression | advisory: demos#00 red at b26e7ed366f3 (auto-filed by twatch) | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
-| regression-test-nilpy-test-nilpy-relative-import-in-package-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_relative_import_in_package.npy red at edfcdcaf3a5c (auto-filed by twatch) | — |
-| regression-test-nilpy-test-nilpy-startswith-tuple | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_startswith_tuple.npy red at b898d0543fc8 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard0-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard0/6 red at 30c06db1ae4e (auto-filed by twatch) | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
@@ -624,11 +621,11 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2660)
+## done (2665)
 
-2660 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2665 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
-## rejected (51)
+## rejected (52)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -676,6 +673,7 @@ _none_
 | feature-t-gcc-torture-runner | T | 20 | feature | gcc c-torture: ONE-TIME harvest of the ~50-80 runtime-fail miscompile candidates — NOT a permanent runner (dropped: mostly dialect-gap skip-list busywork) | — |
 | refactor-a-the-greenfield-frontends-share-each-others-parser-helpers | A | 18 | refactor | DUPLICATE of refactor-a-seven-frontends-borrow-rust-parser-helpers. Tombstone kept so citations resolve; the 123-places-in-zparser measurement and the substrate-doc framing were merged into the survivor. | — |
 | regression-cascade-110774a14648 | T | 70 | regression | regression CASCADE: 17 jobs newly red at 110774a14648 (auto-filed by twatch) | — |
+| regression-cascade-154d1aa3fba6 | T | 70 | regression | regression CASCADE: 18 jobs newly red in e417731e9..154d1aa3f (12 commits) — auto-filed by twatch | — |
 | regression-cascade-2026-07-18-mass-autofile-false-positive | T | 0 | regression | regression CASCADE: 1414 stub tickets auto-filed on 2026-07-18 — all false positives | — |
 | regression-cascade-3d46e52fc733 | T | 70 | regression | regression CASCADE: 1471 jobs newly red at 3d46e52fc733 (auto-filed by twatch) | — |
 | regression-cascade-6906a3416548 | T | 70 | regression | regression CASCADE: 18 jobs newly red at 6906a3416548 (auto-filed by twatch) | — |
@@ -690,10 +688,7 @@ _none_
 - [p 75] [P] feature-pascal-corpus-oop
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - [p 70] [A+O] feature-opt-o3-register-pressure
-- [p 70] [T] regression-cascade-154d1aa3fba6
 - [p 70] [P] regression-cascade-4e27dc2be114
-- [p 70] [N] regression-test-nilpy-test-nilpy-relative-import-in-package-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [N] regression-test-nilpy-test-nilpy-startswith-tuple [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-pascal-conformance-shard0-6-2
 - [p 68] [E] feature-demo-songformatter-pxx-target
 - [p 68] [N] feature-nilpy-user-defined-decorators
@@ -761,6 +756,7 @@ _none_
 - [p 55] [N] bug-nilpy-render-backend-py-compile-does-not-terminate
 - [p 55] [P] bug-p-qword-div-by-a-literal-above-2-63-is-signed
 - [p 55] [P] bug-p-the-address-of-a-virtual-class-method-cannot-be-lowered
+- [p 55] [T] bug-t-a-job-that-never-passed-on-this-box-can-never-earn-a-bigger-budget
 - [p 55] [T] bug-t-the-hardcoded-tmp-guard-recommends-a-variable-testmgr-strips
 - [p 55] [A] chore-a-the-range-checked-fpc-seed-cannot-be-built
 - [p 55] [U] decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample
@@ -841,6 +837,7 @@ _none_
 - [p 42] [P] feature-pascal-builtin-tobject-class
 - [p 40] [B] chore-t-six-orphan-gui-tests-the-blanket-was-hiding (unblocks 1)
 - [p 40] [A] bug-a-function-result-assignment-does-not-narrow-to-the-result-type
+- [p 40] [A+S] bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs
 - [p 40] [A] bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse
 - [p 40] [A] bug-a-nilpy-on-cross-targets-four-remaining-walls [parked — re-claim, do not duplicate]
 - [p 40] [A] bug-a-shr-on-a-32-bit-operand-is-evaluated-at-64-bits
@@ -908,7 +905,6 @@ _none_
 - [p 30] [S] feature-pal-esp-posix-fd-semantics (unblocks 1)
 - [p 30] [A] bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce
 - [p 30] [A] bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body
-- [p 30] [A] bug-a-the-comment-that-caused-three-bugs-survived-all-three-fixes
 - [p 30] [N] bug-n-nilpy-carries-its-own-copies-of-the-float-type-table
 - [p 30] [N] bug-n-pypal-arm32-getdents64-is-unfilled
 - [p 30] [N] bug-nilpy-an-extended-slice-cannot-be-assigned
@@ -956,7 +952,6 @@ _none_
 - [p 25] [P] compat-pascal-distinct-type-declaration
 - [p 25] [U] decide-release-signing-key-custody
 - [p 25] [U] decide-t-should-a-skip-close-an-open-regression
-- [p 25] [A+S] feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle [parked — re-claim, do not duplicate]
 - [p 25] [B] feature-b-posix-and-fpc-named-socket-facades
 - [p 25] [S] feature-esp-hardware-flash-validation
 - [p 25] [A] feature-nilpy-arc-cross-parity
@@ -973,7 +968,6 @@ _none_
 - [p 20] [A] bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets
 - [p 20] [A] bug-a-shr-reaches-the-ir-spelled-as-tkident
 - [p 20] [A] bug-a-target-enumerations-in-comments-are-stale-and-one-of-them-hid-a-live-bug
-- [p 20] [A] bug-a-the-ascii-cache-consumer-still-says-byte-mutation-has-one-place
 - [p 20] [N] bug-n-exec-ignores-a-caller-supplied-builtins-mapping
 - [p 20] [N] bug-n-name-on-a-builtin-type-is-unimplemented
 - [p 20] [A] chore-a-sweep-the-unwired-tests-into-the-suite
