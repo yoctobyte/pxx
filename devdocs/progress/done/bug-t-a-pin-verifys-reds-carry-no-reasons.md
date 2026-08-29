@@ -139,4 +139,4 @@ untested, and saying so is cheaper than someone later assuming otherwise.
 
 ## Log
 - 2026-08-29 — resolved.
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 4508af516.
