@@ -167,4 +167,4 @@ inspects the slot directly, or the hosted-xtensa oracle in
 [[feature-a-hosted-xtensa-so-qemu-xtensa-can-be-an-oracle]].
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 29e8ee52a.
