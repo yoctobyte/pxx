@@ -59,6 +59,7 @@ measured instance for that decision).
 
 ---
 
+<<<<<<<< HEAD:devdocs/progress/done/bug-r-rexprrecid-breaks-the-fpc-bootstrap-seed.md
 ## DUPLICATE — same bug as `bug-r-rparser-calls-rexprrecid-before-declaring-it-so-the-fpc-bootstrap-seed-does-not-compile`
 
 Two independent filings minutes apart, both p80, both Track R, both correct.
@@ -73,4 +74,19 @@ different shas — which is itself worth preserving.
 **Resolve both, citing the same sha.**
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 9d14b759d.
+========
+**REJECTED as a duplicate, 2026-08-29 (frankA — its own filer).** Same defect,
+same file, same one-line fix as
+[[bug-r-rparser-calls-rexprrecid-before-declaring-it-so-the-fpc-bootstrap-seed-does-not-compile]],
+filed by frankwasm within hours of this one and pushed as `81a343358`. That
+ticket is the survivor: it names the landing commit `68dac6d2a` and the five
+existing forwards at `rparser.inc:63-67`. The two facts unique to this one — the
+forwardlint/canary pair, and why the canary's single-identifier message is a
+trap — have been appended there, so nothing is lost by rejecting this.
+
+**Not a bad file, a coordination miss:** two lanes hit the same broken seed
+within hours because the FPC canary is not in the mandatory per-fix loop, so
+each discovered it independently the moment it ran a wider gate. That is the
+argument the decision ticket is already weighing.
+>>>>>>>> 90ba74a14 (docs(progress): fold the duplicate RExprRecId seed ticket into frankwasm's):devdocs/progress/rejected/bug-r-rexprrecid-breaks-the-fpc-bootstrap-seed.md

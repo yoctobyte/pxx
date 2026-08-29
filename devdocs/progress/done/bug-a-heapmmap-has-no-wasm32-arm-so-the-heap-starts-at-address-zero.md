@@ -4,8 +4,8 @@ prio: 70
 type: bug
 blocked-by: []
 summary: "HeapMmap in compiler/builtin/builtinheap.pas is a chain of per-target {$ifdef}s with no wasm32 arm, so on wasm32 it assigns Result nothing and returns 0. PXXAlloc does not check the result (on Linux a failed mmap returns a negative errno that faults on access), so the heap bump pointer starts at 0 and hands out addresses 8, 32, 56... Measured: two objects at 8 and 32, both readable and correct. It works until roughly 1 KB has been allocated and then silently overwrites BSS, because address 0 is a legal wasm address with no page protection. Fix is one additive arm, exactly the shape the PXX_ESP static arena already has."
-status: new
-owner: ""
+status: done
+owner: frankA
 ---
 
 # `HeapMmap` has no wasm32 arm, so the heap starts at address zero
@@ -240,3 +240,120 @@ the refutation in plain prose the whole time.
 every program on every target; a terminal directive there refuses every unported
 build, including programs that never allocate. See the correction appended to
 `bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open`.
+
+---
+
+## LANDED 2026-08-29 (frankA, Track A) — arena arm + exhaustive chain
+
+Written fresh on `master` under the grant above. No wasm-branch code merged.
+
+### What landed
+
+1. **`HeapMmap` is now one exhaustive `{$if}/{$elseif}/{$else}` chain** instead of
+   a run of independent `{$ifdef}` blocks — the same restructure `1ea3bdb85`
+   applied to the five `PXXSys*` chains, applied to the instance with the largest
+   blast radius. `PXX_ESP` is tested **first** because bare riscv32 defines both
+   `PXX_ESP` and `CPU_RISCV32` and wants the arena arm.
+2. **A `CPU_WASM32` arm**: a 1 MiB BSS arena (`WasmArena`, `Int64` cells so the
+   base is 8-aligned), handed out once.
+3. **`HEAP_ARENA` gets a wasm32 arm of exactly 1 MiB.** *This is load-bearing and
+   was nearly missed:* `PXXAlloc` rounds every request up to `HEAP_ARENA` and then
+   sets `HeapEnd := HeapPtr + arena`. Left at the 256 MiB default, `HeapEnd` would
+   have pointed 255 MiB past a 1 MiB buffer and the bump pointer would have walked
+   straight out of it — reintroducing the corruption this arm removes, from a
+   constant three hundred lines away from the arm.
+4. **A terminal `{$else} Result := -1`.**
+
+### Two deliberate differences from the `PXX_ESP` shape
+
+Both are the reason the arm exists, so both are commented in place:
+
+- **No zeroing on hand-out.** wasm linear memory is zero at instantiation, so
+  `PXXAlloc`'s zero-init contract is free. ESP cannot assume that; we can.
+- **Exhaustion returns `-1`, not `0`.** ESP returns 0 because 0 faults there and
+  reports OOM for free. On wasm that idiom *is the bug*: 0 is legal, reads as
+  zero, has no page protection. `-1` is out of bounds on first touch.
+
+### Terminal arm: NOT `{$error}` — measured, not preferred
+
+pxx-a5 and the coordinator both raised `{$error}` as arguable here, on the
+reasonable ground that a program allocating nothing is close to hypothetical.
+It is still wrong, for a reason that is a property of the file rather than a
+judgement call:
+
+**`HeapMmap` is compiled unconditionally — it is not inside `{$ifndef
+PXX_ESP_IDF}` — while the ESP-IDF profile redefines `PXXAlloc` to use
+`calloc`/`free` and never calls it** (`builtinheap.pas`, the `PXX_ESP_IDF`
+block). A compile-time refusal would therefore break every xtensa and riscv32
+IDF build over a function those builds do not use, and Track S is live.
+
+The general rule, same as the syscall chains: **terminal arms are chosen by
+reachability.** `{$error}` where a missing arm cannot be reached at run time; a
+defined failure value where the routine is compiled into everything and called
+by almost nothing.
+
+### Non-regression — this file compiles into every program on every target
+
+An A/B of the same source through a compiler built with and without the change:
+
+| target | OLD vs NEW output |
+| --- | --- |
+| x86-64 / aarch64 / arm32 / i386 / riscv32 | **byte-identical** |
+| xtensa `--esp-profile=bare`, riscv32 `--esp-profile=bare` | **byte-identical** |
+| the compiler binary itself (9.3 MB) | **byte-identical**, `b2dff2c3cbf9` |
+
+**With a positive control, because seven identical results prove nothing if the
+code is unreachable.** Perturbing the x86-64 arm (mmap `9` -> `900`) and
+rebuilding **segfaults during the self-host** — `HeapMmap` is reached, is
+load-bearing, and a real change to it does move the artifact. Reverted; the
+restored binary is byte-identical to NEW again.
+
+### NOT VERIFIED, and it is the arm itself
+
+**Master's wasm32 backend is a stub** — `--target=wasm32` on any allocating
+program dies at `builtinheap.pas:467: wasm32: code generation not implemented`,
+well before `HeapMmap`. The working backend is on the unmerged `wasm` branch, and
+merging it is explicitly ungranted. So on master this change is proven to be
+*correct Pascal that changes no other target*, and **the wasm behaviour is
+unproven here**. What is verified: the file parses with `CPU_WASM32` defined, so
+the chain is well-formed and the arm is selectable.
+
+`WasmArena : array[0..131071] of Int64` = 131072 x 8 = 1048576 = `HEAP_ARENA`.
+That equality is the one silent failure mode left; it is asserted only by
+inspection.
+
+**Handing the verification to the wasm32 lane** (frankwasm), which asked to be
+pinged at the commit. The assertion it named is the right one and is stronger
+than "non-zero": `PXXAlloc` must return an address **above** the BSS top
+(`WASM_BSS_BASE + BSSSize`) — the current bug already satisfies non-zero, at
+address 8. `test/wasm/check_managed.sh` asserts the return is *below* 1024 and so
+**fails by design** when this reaches that branch; rewriting its scope note is
+that lane's call.
+
+### Sizing — 1 MiB, on the lane's own measurement
+
+The backend derives the module's declared page count from `BSSSize`
+(`WasmFinishMemory`), so the arena raises `(memory N)` for **every** module with
+no backend change, and BSS is never emitted, so the `.wasm` does not grow — the
+cost is address space committed at instantiation. hello-world is `(memory 2)` =
+128 KiB today; 1 MiB takes it to 18 pages. Multi-MiB would buy headroom nobody is
+using at a price every module pays, and the ceiling stops mattering once the
+`memory.grow` intrinsic lands.
+
+`WasmArenaBase` is a named function rather than `@WasmArena[0]` inlined, so the
+growth arm replaces one expression. Declared **above** its caller: FPC resolves
+in source order and the seed build is the only thing that checks.
+
+`memory.grow` remains **not this ticket**, per the body above. Confirmed by the
+wasm lane: the module is already declared with the no-maximum limits form, so
+growth is legal today and nothing here forecloses it — the missing piece is only
+the intrinsic.
+
+### Gate
+
+`make compiler/pascal26` — `converged after 1 round(s)`, fixedpoint
+`b2dff2c3cbf9`. `tools/forwardlint.py` clean for this change (its only finding is
+the pre-existing `rparser.inc` `RExprRecId` seed break, Track R's, unrelated).
+
+## Log
+- 2026-08-29 — resolved, commit 3a7d75f12.

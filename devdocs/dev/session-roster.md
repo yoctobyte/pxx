@@ -16561,3 +16561,87 @@ host** running four gunicorn apps behind a public tunnel. Route aarch64
 plexus, and **ask about capacity rather than assuming it.** A benchmark that
 needs a quiet box is not obviously compatible with a box serving live traffic,
 and "it has spare cores" is the assumption most likely to be wrong.
+
+## 2026-08-29, late evening — the seed break, and a gate of mine that was wrong
+
+**Fleet:** frankA → HeapMmap arena arm [A p70] (`builtin/builtinheap.pas`).
+frankB → `bug-p-a-call-chained-onto-a-class-method-result-is-dropped` [P p70]
+(`pasparser_*.inc`). frank-rust → **urgent p80 seed break** (`rparser.inc`).
+pxx-a5 → `bug-n-an-import-alias-...` [N p85] (`pyparser.inc`). frank-optimize-b4
+→ parked, item 3 landed `da88ba9d7`, awaiting a quiet box for one timing run.
+frankwasm → merged master into `wasm`, pushed `f83d73ec3`. **Six disjoint file
+sets; `ir_codegen.inc` returned to the pool by b4.** Track T on `seven`.
+
+### MASTER'S FPC BOOTSTRAP SEED DOES NOT COMPILE — and every gate was green
+
+`rparser.inc:1416` calls `RExprRecId`, declared `:1754`, no forward. FPC resolves
+in source order, pxx across the unit. Found by frankwasm against FPC directly.
+
+**Why nothing caught it:** `make compiler/pascal26` compiles `compiler.pas`
+**with pxx**, so the per-fix loop and the self-host fixedpoint are blind to
+FPC-only breakage *by construction*. No testmgr tier covers it either. Face 31.
+
+**`tools/forwardlint.py` already existed, exits 1 correctly, and had exactly ONE
+caller — `test/wasm/check_forwards.sh`, in a directory no other lane runs.**
+First recorded here as "zero callers" and as an incumbent nobody grepped for;
+**frankwasm corrected both — it wrote the tool (`c7690064e`) and placed it in
+`tools/` deliberately**, for the same reason it was later wired to `gate.sh`,
+then wired it only to its own suite. A follow-through failure, not a discovery
+one. Face 33 on master carries the author's own framing.
+
+Second finding from the same run, filed [P p45]: `pasparser_expr.inc:1927` binds
+FPC's **system-unit** `LowerCase` in the seed build and **ours** in the
+self-hosted build. Both build. Two compilers running different code on
+identifier case-folding, invisible to every gate.
+
+### I withdrew my own HeapMmap gate — it was carried by slug, not by reason
+
+frankA asked whether "two halves, never the RTL arm alone" still binds. It does
+not, **and the ticket said so in its own body**: `memory.grow` needs a new
+intrinsic/token/parser change and is explicitly *not* that ticket. The rule came
+from the wasm **merge** ledger, where the hazard is taking half of a branch's
+coupled work, and I carried it across by slug association — then re-justified it
+every restatement, three times in my own prompt, because restating is cheaper
+than re-deriving.
+
+**The arithmetic ran opposite to the gate:** holding the arena back preserved a
+heap that starts at address 0 and silently overwrites BSS at ~1 KB, to avoid
+shipping a heap that cannot grow. **A gate whose original reason is never
+re-checked is indistinguishable from one that is still correct.** Grant filed on
+the ticket (`3da2f53ca`), not left in message traffic.
+
+### The N reservation was lifted in conversation and NOT on master
+
+frankA refused my N dispatch citing the ticket's own tail — *"Track N is NOT
+being dispatched (owner reserved the call, 2026-08-27)"* — and was **right**: a
+paragraph on master outranks a dispatch from me. The owner lifted it 2026-08-29
+(*"track A+C+P+N is highest prio at all times"*), but only to me.
+
+**My failure: the reservation was durable prose, its lifting was message
+traffic.** So the ticket kept refusing every reader and would have refused the
+next one. Struck through in place at `5dbfe3dcd`. **Same shape as rule 5 —
+FILE YOUR OWN GRANTS — one level up: a permission CHANGE is as durable an
+artefact as the permission was.**
+
+### The 18-job cascade was seven's provisioning, not Track R
+
+All 18 accounted for: 9 missing target loader (**empty** actual output on three
+unrelated backends — programs not running, not wrong values), 3 other host, 2
+pending-package (`tcl-dev`/`tk-dev`, `libsqlite3-dev` — on the owner's list), 4
+pre-existing with earlier `bad=` shas. frank-rust reproduced six green at HEAD;
+I confirmed the loader arm from **two sources with no shared upstream**. Triage
+on master (`ee3c5359e`). Track T on xeon reached the same verdict independently.
+
+### Two idle-worker corrections against me, both mine
+
+frankA was **not** idle — I measured from my dispatch, not its last commit
+(5 minutes, mid-work). And `progress check`'s stale-edge scan recovered a **p70
+Track B ticket sitting in `blocked/` with a satisfied edge**, invisible to
+`ready`/`next`; frankB resolved it within the hour. That check has now recovered
+two live defects since it was added.
+
+### Standing, unchanged
+U queue **17**. Owner items: five packages for `seven`; `via` still needs a tmux
+session for D+W. Track T UP on `seven`. b4's timing run deferred on a loud box —
+its own prediction is "possibly indistinguishable from noise", so a null taken
+under contention would be worth less than the stated prediction.
