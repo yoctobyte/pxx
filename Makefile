@@ -8480,6 +8480,20 @@ test-core: $(COMPILER)
 	  rss=$$(grep -oE 'Maximum resident set size .kbytes.: [0-9]+' $(TESTTMP)/oanl.time | grep -oE '[0-9]+$$'); \
 	  if [ -n "$$rss" ] && [ "$$rss" -gt 10000 ]; then echo "open-array temp leak regressed: RSS $${rss}KB (>10MB over 2M calls)"; exit 1; else echo "open-array-no-leak: OK (RSS $${rss}KB)"; fi; \
 	else echo "/usr/bin/time absent; open-array RSS leak guard skipped"; fi
+	# …and the CONSTRUCTOR twin of that leak. `Take([...])` built a heap dyn-array
+	# temp per call and re-nil'd the handle slot on the next call, orphaning the
+	# block AND every managed element the block owned. Row 3's element is 128
+	# chars because the element half of the leak is PROPORTIONAL TO STRING LENGTH:
+	# a fix that released the block and not the elements halves every short-literal
+	# row and still leaks, so a probe built only from 'x' cannot see it.
+	# Pre-fix 367 MB over these 4M calls; post-fix 392 KB.
+	./$(COMPILER) test/test_array_ctor_no_leak.pas $(TESTTMP)/test_array_ctor_no_leak26
+	tools/expect_same.sh test_array_ctor_no_leak26 "$$($(TESTTMP)/test_array_ctor_no_leak26)" "ok 4000000"
+	@if [ -x /usr/bin/time ]; then \
+	  /usr/bin/time -v $(TESTTMP)/test_array_ctor_no_leak26 2>$(TESTTMP)/acnl.time >/dev/null; \
+	  rss=$$(grep -oE 'Maximum resident set size .kbytes.: [0-9]+' $(TESTTMP)/acnl.time | grep -oE '[0-9]+$$'); \
+	  if [ -n "$$rss" ] && [ "$$rss" -gt 10000 ]; then echo "array-ctor temp leak regressed: RSS $${rss}KB (>10MB over 4M calls)"; exit 1; else echo "array-ctor-no-leak: OK (RSS $${rss}KB)"; fi; \
+	else echo "/usr/bin/time absent; array-ctor RSS leak guard skipped"; fi
 	./$(COMPILER) test/test_big_static_array_open_param.pas $(TESTTMP)/test_big_static_array_open_param26
 	tools/expect_same.sh test_big_static_array_open_param26 "$$($(TESTTMP)/test_big_static_array_open_param26)" "$$(printf 'small const sum: 6\nsmall var: 0 1 2\nbig const sum (zeros): 0\nbig var writeback correct: TRUE\nbig const sum (filled): 267386880\nleak-loop total: 13369344000')"
 	./$(COMPILER) --debug test/test_big_static_array_open_param.pas $(TESTTMP)/test_big_static_array_open_param_dbg26 > $(TESTTMP)/big_static_open_array.log 2>&1

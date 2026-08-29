@@ -4,7 +4,7 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "`Take([...])` — an array CONSTRUCTOR passed to an open-array parameter — heap-allocates a dyn-array temp per call and never releases it. 64 bytes leaked per `Format('%d-%s', [i, 'x'])`; 2M Format calls reach 125 MB RSS. Element type is irrelevant (128 B/call for strings, 40 B/call for integers). The sibling arm — a fixed-array VARIABLE passed to the same parameter — was fixed in 2026-06 (bug-open-array-copy-temp-leak, 692db33) by replacing the heap temp with a frame buffer; the constructor arm still allocates. Same concept, two paths, fix landed on one."
-status: working
+status: done
 owner: frankA
 ---
 
@@ -211,3 +211,140 @@ census). Diagnosis, instrument and the element-release decision are done and
 recorded here; the edit itself is short once the file is free. Nothing else in
 the Pascal frontend or codegen is involved — the parser side
 (`pasparser_lval.inc:3285/3407`) only builds the node and needs no change.
+
+## The regression test
+
+`test/test_array_ctor_no_leak.pas`, now wired into the Makefile beside its
+sibling's guard (it was written before the fix and held back so as not to land a
+red gate).
+
+It is not the sibling's test with a different argument. **Row 3 is the point:**
+a 128-character element, because the element leak is proportional to string
+length and a probe built from short literals cannot see it. A fix that released
+the block and not the elements would take row 1 from 80 to ~40 B/call and look
+like a success on every fixed-size row.
+
+Verified to demonstrate the defect at the pre-fix compiler: **367,104 KB** RSS
+over 1M iterations of its four rows (`ok 4000000`). Post-fix it should be a few
+hundred KB, like its sibling's 264 KB.
+
+Row 4 is the control — the same callee and parameter with a named variable
+argument — and must stay flat, per this ticket's own Gate note.
+
+When the fix lands, paste this next to the sibling's block in the Makefile
+(the guard shape is copied from `test_open_array_no_leak`):
+
+```make
+	./$(COMPILER) test/test_array_ctor_no_leak.pas $(TESTTMP)/test_array_ctor_no_leak26
+	test "$$($(TESTTMP)/test_array_ctor_no_leak26)" = "ok 4000000"
+	@if [ -x /usr/bin/time ]; then \
+	  /usr/bin/time -v $(TESTTMP)/test_array_ctor_no_leak26 2>$(TESTTMP)/acnl.time >/dev/null; \
+	  rss=$$(grep -oE 'Maximum resident set size .kbytes.: [0-9]+' $(TESTTMP)/acnl.time | grep -oE '[0-9]+$$'); \
+	  if [ -n "$$rss" ] && [ "$$rss" -gt 10000 ]; then echo "array-ctor temp leak regressed: RSS $${rss}KB (>10MB over 4M calls)"; exit 1; else echo "array-ctor-no-leak: OK (RSS $${rss}KB)"; fi; \
+	else echo "/usr/bin/time absent; array-ctor RSS leak guard skipped"; fi
+```
+
+---
+
+# FIXED, 2026-08-30 — and the remedy is the THIRD arm's, not the second's
+
+## The fix
+
+Delete the per-reach `IR_DEFAULT_MEM` at both constructor lowerings —
+`AN_ARRAY_CTOR` (`compiler/ir.inc:5921`) and `AN_VARREC_ARRAY` (`:6000`). That
+is the whole change: two emissions removed, nothing added.
+
+`SymIsHiddenArgTemp` already causes the slot to be nil-init'd **once** at body
+head (BSS for a main-body `skGlobal`; the codegen-prologue pass at
+`ir_codegen.inc:9461` for an in-proc `skLocal`). So the inline zero was
+redundant on first reach, and on every *later* reach it was the defect: it
+discarded the live handle before `SetLength` could resize the existing array,
+orphaning the block and everything the block owned.
+
+With it gone, the slot still holds the previous trip's array, `SetLength`
+resizes in place, and each element store's release-of-old frees the previous
+trip's element. Both halves of the leak close together, which is what confirms
+they were one root cause.
+
+## This is not the sibling's remedy, and that matters
+
+The ticket proposed the frame-buffer treatment from
+`bug-open-array-copy-temp-leak`. **There is a closer sibling, in this same
+file:** `bug-a-managed-string-arg-temp-leaks-on-loop-reuse`, whose fix is a few
+hundred lines below at `ir.inc:11249` and `:11601`, and whose comment states
+this defect exactly — *"A per-store IR_DEFAULT_MEM here re-zeroed the slot
+before the STORE, dropping (leaking) that handle every iteration."* Same
+mechanism, same remedy, applied to managed-string arg temps and never extended
+to the array-ctor temps.
+
+So there are **three arms of one concept**, not two:
+
+| arm | temp | remedy | when |
+| --- | --- | --- | --- |
+| 1 | materialised managed-string argument | drop the per-reach zero | fixed |
+| 2 | fixed-array → open-array copy | frame `[len][data]` buffer | fixed 2026-06 |
+| 3 | **array constructor in argument position** | **arm 1's** | **this ticket** |
+
+Arm 2's frame buffer is right for arm 2 and wrong here, for the reason the
+diagnosis above measured: arm 2 could call managed handles *"borrowed bytes, no
+per-element ARC"* because it `IR_COPY_REC`'d bytes out of a **caller-owned**
+array. The constructor **creates** the handles through the element-assign path
+with ARC. A frame buffer reusing storage without releasing the previous contents
+would have taken `Take(['x'])` from 80 to ~40 B/call — halving every headline
+number, passing a slope test on short literals, and still leaking one element
+per call in proportion to string length.
+
+## Result — every row flat, including the length-proportional ones
+
+Binary `d4b25a8a72e4` (self-host fixedpoint, 2 rounds). Each program's output
+was checked, not only its RSS.
+
+| loop body | before | after |
+| --- | --- | --- |
+| `Format('%d-%s', [i,'x'])` × 2M | 124 720 KB | **392 KB** |
+| `Take(['x'])` × 2M | 156 160 KB | **392 KB** |
+| `Take(['x','y'])` × 2M | 249 984 KB | **392 KB** |
+| `Take(['x'*128])` × 2M | 406 016 KB | **392 KB** |
+| `TakeI([1,2])` × 2M | 78 080 KB | **392 KB** |
+| the 4-row regression test × 1M | 367 104 KB | **392 KB** |
+
+The length axis is the one that proves the element half closed: `['x'*128]` was
+the worst row and lands on the same 392 KB as the rest.
+
+## Correctness
+
+- **`make compiler/pascal26`** — self-host fixedpoint, converged in 2 rounds
+  (2 because the compiler's own codegen changed; expected).
+- **8-row differential vs `fpc 3.2.2 -Mobjfpc -O2`, all identical.** Chosen for
+  what reuse could break now that the array persists across calls: contents
+  changing per iteration; differing element counts at two sites in one loop; a
+  constructor in a **not-taken** branch then taken (the stale-slot concern the
+  old comment cited as the reason for the inline zero); recursion through a
+  `Format` with a constructor; two constructors live in one call; `Format` with
+  mixed types; long strings into a reused slot.
+- **A/B across `examples/`**: 11 byte-identical, **22 changed codegen** — the 22
+  are exactly the array-constructor users — and **all 22 behave identically**.
+  Three apparent output differences (`mandelbrot_parallel`, `mandelzoom`,
+  `parallel/pow`) were checked against the *before* binary run twice and differ
+  **from themselves**: nondeterministic programs, not this change.
+- `tools/gate.sh quick`.
+
+## A measurement error worth recording, since it nearly became a false report
+
+The first post-fix sweep read **392 KB on all eleven probes**, and eleven
+identical numbers is one measurement, not eleven. It was in fact correct — but
+the next reading, of the regression test, said 367 MB and appeared to refute it.
+Neither number was wrong: `compiler/pascal26` on disk had been **rebuilt from
+the stash as the A/B baseline** and never rebuilt after `git stash pop`, so the
+second measurement used the *unfixed* compiler. The tell was the timestamps —
+probes 01:19, compiler 01:22 — not either number.
+
+This is the provenance trap CLAUDE.md names ("*the compiler binary on disk
+drifts... any result you report must name the sha of the binary it came from*"),
+reached through `git stash` rather than through a gate reseed. **An A/B that
+rebuilds under a stash leaves the wrong binary installed**; rebuild before the
+next measurement, and check the program's output and not only its RSS — a
+program that fails to run reports a beautifully flat number.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

@@ -5952,12 +5952,29 @@ begin
       end;
       vrTmp := AllocDynArray('', vrElemTk, 1 + vrElemDepth);
       { Managed local synthesised after the prologue zero-init pass — flag it for
-        the codegen prologue nil-init and zero the handle slot here so SetLength
-        sees nil (mirrors AN_VARREC_ARRAY). }
+        the codegen prologue nil-init (mirrors AN_VARREC_ARRAY).
+
+        No per-reach IR_DEFAULT_MEM: nil-init happens ONCE at body head (BSS for
+        a main-body skGlobal, the SymIsHiddenArgTemp codegen-prologue pass for an
+        in-proc skLocal), so on every later reach the slot already holds the
+        PREVIOUS array — SetLength then resizes that array instead of publishing
+        a fresh one over the top of it, and each element store's release-of-old
+        frees the previous trip's element. Zeroing here dropped the handle
+        instead, orphaning the block AND every managed element it owned.
+
+        This is the same defect, mechanism and remedy as
+        bug-a-managed-string-arg-temp-leaks-on-loop-reuse, whose fix is a few
+        hundred lines below on the managed-string arg temps; the array-ctor
+        temps were simply never covered by it. It is NOT the frame-buffer remedy
+        of bug-open-array-copy-temp-leak, and that distinction is load-bearing:
+        that arm could call managed handles "borrowed bytes, no per-element ARC"
+        because it copied bytes out of a CALLER-owned fixed array, whereas this
+        arm CREATES the handles through the element-assign path with ARC. A
+        frame buffer reusing storage without releasing the previous contents
+        would have halved the number and kept leaking one element per trip,
+        proportional to string length.
+        bug-a-an-array-constructor-in-argument-position-leaks-its-dynamic-array }
       SymIsHiddenArgTemp[vrTmp] := True;
-      IRAppend(IR_DEFAULT_MEM,
-        IRAppend(IR_SLOTADDR, vrTmp, -1, -1, 0, Ord(tyPointer)),
-        -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyPointer));
 
       { SetLength(tmp, vrCount) }
       vrIdent := AllocNode(AN_IDENT);
@@ -6015,16 +6032,18 @@ begin
 
       { This dyn-array temp is a managed local synthesised during lowering, after
         the parser's prologue zero-init pass, so flag it for the codegen prologue
-        nil-init. The inline DEFAULT_MEM below only zeroes the slot when this
-        literal is actually reached; if the `[...]` sits in a branch that is not
-        taken, the slot would otherwise hold stale stack bytes and the function's
-        managed-local cleanup would free a garbage handle. }
-      SymIsHiddenArgTemp[vrTmp] := True;
+        nil-init.
 
-      { Zero the handle slot (allocated after the prologue) so SetLength sees nil. }
-      IRAppend(IR_DEFAULT_MEM,
-        IRAppend(IR_SLOTADDR, vrTmp, -1, -1, 0, Ord(tyPointer)),
-        -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyPointer));
+        That prologue pass — plus BSS for a main-body skGlobal — is what makes
+        the not-taken-branch case safe, and it is why there is no per-reach
+        IR_DEFAULT_MEM here. The old inline zero ran on every reach, so in a loop
+        it discarded the previous trip's array handle before SetLength could
+        resize it: the block was orphaned once per call (`Format('%d-%s',
+        [i,'x'])` leaked 64 bytes a call, 2M calls reaching 125 MB RSS). Same
+        defect and same remedy as
+        bug-a-managed-string-arg-temp-leaks-on-loop-reuse below.
+        bug-a-an-array-constructor-in-argument-position-leaks-its-dynamic-array }
+      SymIsHiddenArgTemp[vrTmp] := True;
 
       { SetLength(tmp, vrCount): synthesise the dyn-array SetLength (-102) call. }
       vrIdent := AllocNode(AN_IDENT);
