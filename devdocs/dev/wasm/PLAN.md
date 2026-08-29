@@ -1870,6 +1870,67 @@ plain-variable form `r := s` is correctly rejected. FPC rejects both.
 It surfaced through a botched line in this lane's own test that the compiler
 agreed with; **a test whose bad line the compiler catches teaches nothing.**
 
+### Phase 9i — `EmitZeroFrameSlot`: the probe comes out — **DONE, 2026-08-29**
+
+`bug-a-emitzeroframeslot-has-no-wasm32-arm` [A p55]. **`compiler.pas` now
+compiles for wasm32 with no hand-patched compiler.** Every coverage number in
+9b through 9h was measured with a temporary probe in `symtab.inc`, reverted
+before each commit; that probe is gone and the number is the same — 3698 of
+3734, 36 refusals, all blocked.
+
+The ticket asked whoever took it to decide a fork explicitly rather than add an
+arm beside a pass that already did the job. **One of the two readings turns out
+to be impossible**, which is worth more than the choice:
+
+  * `EmitZeroFrameSlot` writes machine code into `Code[]`, which this target
+    never reads; and
+  * both callers run from `CompileAST`, which calls `IREmitMachineCode`
+    **afterwards** — so when the routine runs there is no wasm body being
+    emitted and no cursor to emit into.
+
+Explicit no-op arm, reason at the arm; `WasmEmitManagedLocals` is the owner.
+`EmitManagedLocalCleanupForTarget` gets the same on the release side (already a
+no-op, since its chain just ends — but an unnamed fall-through is
+indistinguishable from an unconsidered one). Three mechanisms for one guarantee
+become one mechanism and two arms that say why they are not it.
+
+**THE GAP AND ITS GUARD WERE THE SAME LINE, and this is the finding.**
+`WasmEmitManagedLocals` zeroed scalar AnsiStrings and dynamic arrays and
+nothing else. Every other managed kind `ManagedLocalZeroBytes` knows about — a
+local record with managed fields, a static array of string, a Variant, a COM
+interface, a promotable int — was **unzeroed on this target**, and unreachable
+*only because the wide chain refused them at compile time*. The loud `Error`
+this ticket was filed against was, accidentally, the protection. Removing the
+refusal and leaving the pass alone would have shipped a use-after-free in the
+same commit that closed a ticket marked harmless. So the zero half now asks the
+shared table instead of restating a list; the release half keeps its own
+narrower predicate, because *what must start nil* and *what this backend knows
+how to release* are different questions and sharing one predicate is what hid
+this in the first place.
+
+**Falsified against a build broken on purpose.** With the zero pass removed,
+the local-record row dies with `memory access out of bounds` — it releases the
+dirty bytes of its unzeroed local as a live string handle. **The plain-string
+row still PASSED in that build**, which is the measurement that justifies the
+wide-extent rows existing separately rather than trusting one managed local to
+stand for all of them. Every row runs after a recursion that writes
+recognisable non-zero words into the shadow stack, because all of this is
+invisible on a clean one, and `check_zeroinit.sh` asserts those words are still
+in the emitted module — a dirtying routine the optimiser folded away would
+leave the whole check passing for free.
+
+**Other targets: emitted output byte-identical** for aarch64, arm32, i386,
+riscv32 and x86-64, **with a positive control** — perturbing the x86-64 narrow
+arm's immediate changes 2 bytes of the same corpus, so five identical results
+are evidence rather than a tautology. (The same perturbation breaks the
+self-host fixedpoint outright: a second, independent proof of reach.) The first
+attempt at that control was itself wrong and is recorded rather than tidied
+away: the perturbed build FAILED, `compiler/pascal26` stayed stale, and the
+comparison printed "CONTROL FAILED — the corpus never reaches it". **A control
+that cannot build is not a negative result**, and reading it as one would have
+inverted the conclusion. Re-run as a single generation from a known-good
+compiler.
+
 ### Three defect-shaped checks expired on the same day
 
 `check_strop.sh` carried the x86-64 string leak's magnitude (401032) as the
