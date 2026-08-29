@@ -6700,6 +6700,16 @@ test-core: $(COMPILER)
 	# two units, same specialization, same alias name, neither using the other
 	./$(COMPILER) -Futest/generic_spec_units test/test_generic_spec_per_unit.pas $(TESTTMP)/test_generic_spec_per_unit26
 	tools/expect_same.sh test_generic_spec_per_unit26 "$$($(TESTTMP)/test_generic_spec_per_unit26 | tail -1)" "total ok 4 / 4"
+	# a mode-Delphi generic declared in a USED UNIT, specialized with the angle-bracket
+	# surface from the program and from a third unit (the desugar used to sweep only
+	# forward from the template, and the program is lexed BEFORE the unit)
+	./$(COMPILER) -Futest/delphi_generic_units test/test_delphi_generic_cross_unit.pas $(TESTTMP)/test_delphi_generic_cross_unit26
+	tools/expect_same.sh test_delphi_generic_cross_unit26 "$$($(TESTTMP)/test_delphi_generic_cross_unit26 | tail -1)" "total ok 4 / 4"
+	# the objfpc arm of the same defect: INLINE `specialize T<X>` in a non-binder
+	# position, cross-unit. The binder form always worked, which is what made this
+	# read as Delphi-only.
+	./$(COMPILER) -Futest/delphi_generic_units test/test_generic_cross_unit_inline_specialize.pas $(TESTTMP)/test_generic_xunit_inline26
+	tools/expect_same.sh test_generic_xunit_inline26 "$$($(TESTTMP)/test_generic_xunit_inline26 | tail -1)" "total ok 1 / 1"
 	# parser gaps: impl-side `static;`/`reintroduce;` on a class function + PChar(expr)[i] indexing
 	./$(COMPILER) test/test_impl_static_and_pchar_index.pas $(TESTTMP)/test_impl_static_and_pchar_index26
 	tools/expect_same.sh test_impl_static_and_pchar_index26 "$$($(TESTTMP)/test_impl_static_and_pchar_index26 | tail -1)" "total ok 5 / 5"

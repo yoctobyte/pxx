@@ -13,6 +13,29 @@ prio: 75
 
 ---
 
+## 2026-08-29 (frankP) — the "two ordering defects, one restructuring" note is STALE
+
+The park note below lists **wall 6's Delphi ordering defect as open**, and the
+rung-9 note near the bottom of this file tells whoever takes
+[[bug-p-a-delphi-mode-generic-from-a-used-unit-cannot-be-specialized]] to *"read
+wall 6's ticket alongside this one and ask whether a single restructuring closes
+both."* Both are out of date, and the second is the expensive one — it sends the
+next holder looking for a shared fix that does not exist.
+
+**Wall 6 is closed** ([[bug-p-a-generic-class-method-call-is-undefined-inside-another-generics-body]],
+now in `done/`, commit `35f485537`, 2026-08-28). It was closed by giving the
+prerequisite scan a THIRD source — this template's not-yet-buffered method impls
+read straight out of `Tokens[]`, bounded by the `GenMethImplSOff` header offsets
+the rewrite recorded — **not** by changing when or where
+`DelphiRewriteGenericUses` emits. So the two defects shared a symptom
+("something ran before the thing it needed existed") and nothing else. The
+rung-9 arm was fixed on its own, from its own end.
+
+The durable fact the two DO share is worth keeping, because it is about the
+mechanism rather than either bug: **`Tokens[]` is one array shared by every unit,
+the main program is lexed first, and units are appended after it.** Everything
+that reads a token INDEX across a unit boundary has to survive that.
+
 ## PARKED 2026-08-28 (frankA) — what the next holder needs
 
 Moved out of `working/` because `working/` is a **live lock**, and a lock held by
@@ -797,9 +820,10 @@ index and is never rewritten. Renamed to
 alias must live and re-widens the surface of the already-recorded
 `bug-a-the-delphi-generic-rewrite-is-not-idempotent`.
 
-**Note for the ladder: this is the SECOND ordering defect in that one rewrite**
-— wall 6's was `GenericMethodCount=0` because the same rewrite emits near the top
-of the token stream before method bodies are buffered. Two ordering defects in
-one mechanism is the smell `root-cause-over-microfix.md` names; the next holder
-should read wall 6's ticket alongside this one and ask whether a single
-restructuring closes both, rather than fixing this arm alone.
+**Note for the ladder — and see the 2026-08-29 correction at the top of this
+file.** This was recorded as the SECOND ordering defect in that one rewrite,
+alongside wall 6's `GenericMethodCount=0`, with the suggestion that one
+restructuring might close both. It does not: wall 6 was closed on 2026-08-28 by
+extending the prerequisite SCAN, leaving this arm untouched, and this arm was
+then closed by moving the SWEEP to the uses clause. The question was worth
+asking; the answer is no.

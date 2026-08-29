@@ -657,6 +657,72 @@ begin
   end;
 end;
 
+{ Desugar Delphi-surface uses of templates that came in through a USES clause.
+  Called once per uses clause, immediately after it is consumed.
+
+  Tokens[] is ONE array shared by every unit, and the main program is lexed
+  FIRST -- units are appended after it. So a template declared in a used unit
+  sits at a token index ABOVE every use of it in the program, and the sweep
+  ParseGenericTemplateNamed runs (anchored at the template's own declaration,
+  rewriting only what follows) can never reach those uses. The name then falls
+  through to ParseTypeKind's recovery arm as `unknown type: TOne`.
+  bug-p-a-delphi-mode-generic-from-a-used-unit-cannot-be-specialized
+
+  The obvious repair -- start that sweep at 0 -- is wrong, and measurably so:
+  every enclosing ParseUsesUnitBody frame has a savedTokPos into a region lexed
+  EARLIER, and neither InsertTokens nor RemoveTokens adjusts it. A unit that
+  itself uses another unit then resumes several tokens off (measured: `program
+  nest / uses ua / ua uses ub` reported "unexpected token in a unit interface
+  section" from ua, three tokens past where it stopped).
+
+  So sweep from HERE instead. Every edit then lands strictly above the live
+  cursor and above every saved one, because a use of an imported template cannot
+  precede the `uses` that imports it. The same procedure does the work with the
+  same minting -- this is a second CALL SITE, not a second implementation.
+
+  The aliases land in the file that uses them, which is also where they belong:
+  DelphiRewriteGenericUses splices bare `X = specialize T<Args>;` and relies on
+  an open type section, and after a uses clause there is none -- hence the `type`
+  token in front, added only when a round actually emitted something. }
+procedure DesugarImportedDelphiGenericUses;
+var
+  at, rounds, before, atBefore, t, resume: Integer;
+  ins: array[0..0] of TRawToken;
+begin
+  if (TemplateCount = 0) or (CurTok.Kind = tkEOF) or (TokPos < 1) then Exit;
+  { CurTok holds Tokens[TokPos-1] -- step back so the splice lands in FRONT of
+    the token already read, and the Next at the end reads the first spliced one.
+    Same idiom as SpecializeInlineGenericFuncUses. }
+  Dec(TokPos);
+  at := TokPos;
+  resume := TokPos;
+  rounds := 0;
+  repeat
+    before := TokCount;
+    atBefore := at;
+    for t := 0 to TemplateCount - 1 do
+      DelphiRewriteGenericUses(t, at, TemplateIsDelphi[t]);
+    Inc(rounds);
+    if rounds > 16 then
+      Error('generic specialization nested deeper than 16 levels (or a rewrite loop)');
+  { An unchanged TokCount is NOT "nothing happened": a round both inserts alias
+    declarations and removes the `<Args>` groups it rewrote, and the two cancel
+    exactly when one tuple is used twice. `at` advances only on an alias, so the
+    pair of them is what "this round was idle" actually means. }
+  until (TokCount = before) and (at = atBefore);
+  { `at` advances by exactly the alias tokens each round emits, so `at > resume`
+    is "something was declared" -- TokCount is NOT, because the same round also
+    REMOVES each rewritten `<Args>` group and the two cancel: one tuple used
+    twice removes 8 tokens and inserts 8, and the type section went missing. }
+  if at > resume then
+  begin
+    ins[0].Kind := tkType; ins[0].IVal := 0; ins[0].Line := Tokens[TokPos].Line;
+    ins[0].SOffset := 0; ins[0].SLen := 0;
+    InsertTokens(TokPos, ins, 1);
+  end;
+  Next;
+end;
+
 procedure ParseGenericTemplate;
 begin
   Next; { consume 'generic' }
@@ -668,7 +734,7 @@ procedure ParseGenericTemplateNamed(const templateNameIn: AnsiString; delphiForm
 var
   templateName, nextStr: AnsiString;
   depth, startTok, cur, finalCur, np, gi, scan: Integer;
-  dgenAt, dgenRounds, dgenBefore, dgenT: Integer;   { the nested-specialize fixed point }
+  dgenAt, dgenRounds, dgenBefore, dgenAtBefore, dgenT: Integer;   { the nested-specialize fixed point }
   pnames: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
   isOpener, doneParams, bodyless: Boolean;
 begin
@@ -887,8 +953,10 @@ begin
     `unknown type: specialize` -- var, local, field, parameter and function
     result alike, all five of which FPC accepts.
 
-    A round that rewrites nothing inserts no alias declaration, so an unchanged
-    TokCount is exactly "nothing left to collapse". The cap is a runaway guard,
+    A round is idle when it neither changed TokCount nor advanced dgenAt -- both,
+    because an alias insertion and the removal of the group it replaced cancel
+    exactly when one tuple is used twice, and TokCount alone then reads "idle" on
+    a round that did work. The cap is a runaway guard,
     not a real limit: depth is the nesting depth of the source expression.
     bug-a-a-nested-inline-specialize-is-refused-outside-a-type-section }
   dgenAt := finalCur;
@@ -901,12 +969,16 @@ begin
       own sweep ran before TPair existed, so it could not have collapsed the
       inner group then. Re-sweeping the earlier templates once TPair's round has
       turned the inner group into a plain ident is what finishes the outer one. }
+    dgenAtBefore := dgenAt;
     for dgenT := 0 to TemplateCount - 1 do
       DelphiRewriteGenericUses(dgenT, dgenAt, TemplateIsDelphi[dgenT]);
     Inc(dgenRounds);
     if dgenRounds > 16 then
       Error('generic specialization nested deeper than 16 levels (or a rewrite loop)');
-  until TokCount = dgenBefore;
+  { …and dgenAt, for the reason spelled out in DesugarImportedDelphiGenericUses:
+    inserted aliases and removed `<Args>` groups cancel in TokCount, so TokCount
+    alone can read "idle" on a round that did work. }
+  until (TokCount = dgenBefore) and (dgenAt = dgenAtBefore);
 
   TokPos := finalCur;
   Next;
