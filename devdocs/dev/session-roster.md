@@ -16424,3 +16424,140 @@ has been executed by a suite**. `make lib-test` covers 221. The other 2255 meet
 their first execution in seven's first sweep. **A wide red against these shas is
 ONE systematic cause, not 2000 regressions** — relayed to seven and to pxx-a5
 before the sweep, because a warning like that is worth nothing after the report.
+
+## The Track T handover closed, and the expiry caught the thing the probe could not
+
+`seven` published its first verdict at 2026-08-29T16:30:49Z: **1646 jobs, 1630
+pass, 15 red, 1 skip, at `e417731e9007`, native tier, 100.7s wall.** Verified
+here independently — `seven.json` on `origin/master`, `twatch --status` now
+reads `UP — commits through e417731e9007 tested`. **Expiry retired; plexus's
+daemon stays stopped.**
+
+**The blocker was never push access, and this is why the expiry existed.** Seven
+proved push access properly — a real remote ref created and deleted, not a
+dry-run, on the reasoning that a dry-run only proves `receive-pack` was granted.
+That proof was valid. The first cycle then ran all 1645 jobs, produced the
+verdict, and **died at `git commit` with exit 128: `Author identity unknown`** —
+no `~/.gitconfig` on the box and the deploy script never set one.
+
+**The measurement succeeded and the publish failed, so the box would have read
+as QUIET rather than DOWN.** Every instrument pointed the right way: the probe
+was valid, the run was green, and tstate would simply have stopped advancing.
+Nothing in the fleet would have reported it. **The forty-minute expiry was the
+only instrument in play that could have caught it, and it fired on a measured
+absence rather than on a judgement about the box.**
+
+The lesson is not "seven was careless" — it was careful, and the careful probe
+was aimed one step short of the failure. **A capability probe proves the
+capability, not the pipeline.** Publishing needs push access *and* an identity
+*and* a commit that succeeds; proving the first says nothing about the rest, and
+the parts that were not probed are exactly the parts that failed.
+
+Fixed per-repo rather than `--global`, matching the identity every existing
+`tstate(` commit carries, so no global state on the owner's box was touched and
+the history stays uniform. The daemon self-recovered on retry.
+
+**And the conversion-defect hypothesis is REFUTED with evidence, not absence.**
+Of the 1630 passing jobs, **1159 executed `tools/expect_same.sh`** (seven's
+measurement, relayed). So most of the 2255 assertions that had never been
+executed by anything have now run, and they assert. Not one of the 15 reds is a
+conversion defect. frankB raised that warning unprompted before any sweep
+existed, which is the only time such a warning is worth anything, and it gets
+the measurement back.
+
+All 15 reds are host coupling — see face twenty-six, which is seven's refusal to
+accept them as a baseline.
+
+## Track T left plexus entirely, and the residue was a dashboard nobody was updating
+
+Owner, 2026-08-29, in two steps. First *"since seven is up doing track T stuff,
+we can kill the watcher daemon on localhost"*; then, after asking why Track T on
+localhost still looked active, *"i launched an agent on seven. it's installing
+stuff. but it's about time to stop running trackT on plexus."*
+
+**Three different things wear the "Track T on localhost" label, and only one of
+them was the daemon.** Worth writing down because I stopped one and reported the
+job done:
+
+1. **`trackt-watcher.service`** — stopped 18:20, `inactive`, unit left `enabled`
+   so a reboot restores a watcher rather than none. Last `tstate(plexus)` row is
+   18:14; the newest rows on master are `tstate(seven)`.
+2. **`twatch_web.py --clone ~/trackt-watch --port 8377`** — **still running, and
+   this is the one the owner caught.** It sweeps nothing and publishes nothing;
+   it serves a page reading `~/trackt-watch`. But **the daemon was the only thing
+   pulling that clone**, so the clone froze at `e7d2dcb8f / 18:14` — the exact
+   moment the daemon stopped — four commits behind origin. It was serving a
+   frozen snapshot that looks live. Stopped; port released.
+3. **pxx-a5**, the T *agent* face, working T's ticket queue. Not a daemon at all,
+   and it survived both of the first two being stopped.
+
+**The generalisable bit is #2.** *A display with no updater is indistinguishable
+from a display with nothing new to show.* Killing the producer left the consumer
+running and confident. I reported "the daemon is stopped" as though that settled
+the question, and it settled one third of it — the owner asked the question that
+found the rest.
+
+**Now: `seven` owns Track T, both faces.** The provenance split agreed two hours
+earlier — pxx-a5 keeps the standing queue, seven triages what its own runs
+produce — is **superseded**. It was a good boundary and it lasted two hours; the
+topology moved under it. `bug-t-the-two-watcher-health-checks-disagree...` [T
+p40] hands over with seven's own handover-window evidence attached.
+
+pxx-a5 re-laned to `compiler/builtin/builtinheap.pas` — the fail-open family,
+which is **two tickets and one fix**: the per-CPU `{$ifdef}` chains and
+frankwasm's three `PXXSys*` primitives are the same defect counted twice, and
+the systemic answer is a terminal `else` that fails loud on every chain rather
+than four more arms.
+
+### File allocation with four sessions in Track A — stated, because a boundary is what makes being wrong survivable
+
+| session | files | note |
+| --- | --- | --- |
+| frankA | unit-graph / PreScanPass machinery | spliced-token-stream, diagnosis banked |
+| frankB | `Makefile` (tranche three) | **vacating `ir_codegen.inc`** — confirmation requested, not inferred |
+| frank-optimize-b4 | residency pass, float store path | `ir_codegen.inc` held until frankB confirms |
+| pxx-a5 | `compiler/builtin/builtinheap.pas` | HeapMmap stays **ungranted** |
+
+`symtab.inc` is free. The one live collision is `ir_codegen.inc`, and
+**frank-optimize-b4 flagged it before I saw it** — *"nine of my nine deleted
+stores are emitted from it, so I think a collision is likely rather than
+possible"* — and proposed doing the probe extension first, which is the part
+least likely to touch frankB's ground. That is the worker seeing the data and
+the coordinator seeing the plan, working the way it is supposed to.
+
+## `via` rebooted; D and W are unstaffed, and its aarch64 capability is still unused
+
+Owner, 2026-08-29: *"host via got a reboot. but it's responsible for track D+W
+work, but i didn't set up an interactive tmux session yet."*
+
+Consistent with the standing fact that **infra restarts itself and agents do
+not** — nothing launches a session at boot on any box. So D and W have been
+unstaffed since the reboot, and neither queue is empty:
+
+- **W** heads with `feature-web-track-w-bootstrap` [p45, **unblocks 2**] — the
+  lane's own bootstrap, which is the correct first thing for a lane returning
+  from nothing. Then machine-readable project metadata [40], blog bootstrap [35],
+  syndication feeds [30].
+- **D** heads with `docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out`
+  [45] (above it, `docs-devnotes-ai-assisted-build` [50] is parked — re-claim,
+  do not duplicate). Then exec/eval and builtins incompatibility [35], CLI
+  flags [35].
+
+**And the capability nobody is using.** `via` is the only place in the fleet
+where a **native aarch64 execution** result can be observed — plexus is x86-64,
+and ianweb runs the pinned stable under `qemu-x86_64`. The O campaign's entire
+aarch64 case is currently recorded as **directional and a lower bound**
+(`feature-opt-o3-register-pressure.md:1850`, `:1978`): *qemu times translated
+instruction throughput and does not model store-to-load forwarding* — which is
+the exact stall W2 removes. Hardware x86-64 measured 1.9-2.1x for the same
+change; qemu-aarch64 reported 1.07-1.13x.
+
+So one native run of an existing benchmark would convert a qualified claim into
+a real one, and nothing else in the fleet can produce it.
+
+**The constraint that must travel with that idea:** `via` is a **production
+host** running four gunicorn apps behind a public tunnel. Route aarch64
+*verification* there — small, bounded, one measurement — keep bulk building on
+plexus, and **ask about capacity rather than assuming it.** A benchmark that
+needs a quiet box is not obviously compatible with a box serving live traffic,
+and "it has spare cores" is the assumption most likely to be wrong.

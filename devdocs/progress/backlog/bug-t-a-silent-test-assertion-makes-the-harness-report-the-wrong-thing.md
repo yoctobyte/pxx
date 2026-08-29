@@ -481,3 +481,159 @@ One native assertion was executed end to end, both arms, to match the
 cross-target proof: `test_wcw26.5` (a `head|tail|tr` pipeline with a `.N` label)
 passes silently and on mismatch prints `expect_same: MISMATCH [test_wcw26.5]`
 with the diff.
+
+---
+
+## CORRECTION 2026-08-29 — "not convertible" is WRONG, and it is the dangerous kind of wrong
+
+**Raised by frank-rust, measured by frank-coordinator.** Every passage above
+saying the 376 exit-status checks (and the 37 cross-target ones) are **not
+convertible** is incorrect. They are convertible **verbatim**. The passages are
+left as written — this correction is appended where a reader meets the claim
+rather than editing a session record, but the conclusion is superseded.
+
+### The argument that was made, and why it does not hold
+
+> *"`expect_same.sh` compares two strings, and `test "$$?" = "143"` is asserting
+> a signal, not an output. Converting those would be a semantic change wearing a
+> mechanical diff's clothes."*
+
+The premise is a category claim and it is false. **`test "X" = "Y"` with `=` IS
+a string comparison in POSIX sh** — it is the same operator the 2476 converted
+lines used. That the string happens to denote an exit status is a fact about
+what the value *means*, not about how it is compared. `expect_same.sh` compares
+two strings; so does the line being replaced.
+
+### Measured, not argued
+
+```
+$ sh -c 'exit 42'; tools/expect_same.sh probe_match "$?" "42"
+  → rc=0, silent
+
+$ sh -c 'exit 7';  tools/expect_same.sh probe_mismatch "$?" "42"
+  expect_same: MISMATCH [probe_mismatch]
+  --- expected
+  +++ actual
+  @@ -1 +1 @@
+  -42
+  +7
+  → rc=1
+
+$ sh -c 'kill -TERM $$' >/dev/null 2>&1; tools/expect_same.sh test_sig_dfl "$?" "143"
+  → rc=0        (the Makefile:4323 shape)
+
+$ sh -c 'exit 7'; test "$?" = "42"
+  → rc=1, PRINTED NOTHING
+```
+
+`$?` is expanded by the shell before the helper is exec'd, so it still carries
+the preceding command's status. Same exit codes, same pass/fail semantics, one
+extra behaviour: it says what it saw.
+
+### These are the lines that need it MOST, not least
+
+Look at what they do:
+
+```make
+$(TESTTMP)/test_sig_dfl_b33626 >/dev/null 2>&1; test "$$?" = "143"
+```
+
+**The subject's own output is discarded.** So when this fails, `job_reason()`'s
+log tail cannot even reach the program under test — it records whatever the
+*previous* recipe line printed. That is the parent defect in its purest form,
+and the 376 are its worst instances, not its exempt ones.
+
+### Why this correction is filed loudly
+
+A **false limit is quieter than a false fix and survives longer.** A wrong
+conversion gets re-tested by the next run; a documented "not convertible,
+by decision" is *believed* — it reads as considered, it names a reason, and it
+answers the question a reader would otherwise have asked. It was recorded four
+times in this ticket, in three tables, as a decision rather than an oversight,
+which is exactly what would have made it permanent.
+
+The **scoping** decision was still right: leaving them out of a mechanical batch
+of 2476 was correct, because they are a different shape and mixing shapes is how
+a mechanical change stops being mechanical. **They are tranche three, not an
+exclusion.** Re-file them that way.
+
+### Still genuinely not convertible
+
+The **6 numeric comparisons** (`-ge`, `-lt`). Those are orderings, not equality,
+and no string compare expresses them. That exclusion stands.
+
+## 2026-08-29 — tranche three: the 376 I had wrongly ruled out, and the campaign closes
+
+**The "not convertible" verdict on the 376 exit-status checks was wrong, and it
+was mine.** Recorded four times in three tables as a decision with a reason
+attached. The reason does not hold:
+
+`test "X" = "Y"` is a **string comparison in POSIX sh** — the same operator the
+other 2476 lines used. That the string denotes an exit status is a fact about
+what the value *means*, not about how it is *compared*. `$?` is expanded by the
+shell before the helper is exec'd, so it still carries the preceding command's
+status. Measured inside a real make recipe, not a bare shell:
+
+```make
+sh -c 'exit 42'; tools/expect_same.sh probe-a-rc "$$?" "42"          → silent, rc 0
+sh -c 'kill -TERM $$$$' >/dev/null 2>&1; … "$$?" "143"               → silent, rc 0
+sh -c 'exit 7';  tools/expect_same.sh probe-c-rc "$$?" "42"          → MISMATCH, -42 +7,
+                                                                       recipe aborts
+```
+
+The error has a name: **ranking the datatype instead of the mechanism** — the
+same failure Track F's charter exists to prevent, where a ticket does not become
+a float ticket by containing a `Double`. An assertion does not become
+inconvertible by comparing a number that denotes a signal. And it was made while
+writing a census whose entire subject was that a shape claim must be measured
+rather than described; the same reflex on both sides of the page.
+
+**These were the lines that needed it most.** `Makefile:4323` is the parent
+defect with nothing left to fall back on:
+
+```make
+$(TESTTMP)/test_sig_dfl_b33626 >/dev/null 2>&1; test "$$?" = "143"
+```
+
+The subject's own output is **discarded**, so on failure `job_reason()`'s log
+tail cannot reach the program under test at all — it records whatever the
+*previous* recipe line printed. Filed as exempt from the very defect they
+exemplify.
+
+### Converted
+
+| batch | count | shape |
+| --- | --- | --- |
+| exit-status | **375** | `cmd; test "$$?" = "N"` → `cmd; tools/expect_same.sh <bin>-rc "$$?" "N"` |
+| stragglers | **22** | 19 continuation lines (trailer preserved), 3 non-leading (`ulimit …; test …`), 2 with a trailing comment, 1 whitespace separator (`"   = "`), 1 `test` inside an `if/then/else` one-liner |
+
+Labels take an `-rc` suffix so the reason line says which *kind* of assertion
+failed, with `.N` on collision. Zero duplicates across all 2879 call sites.
+
+### Terminal state of the whole campaign
+
+| | |
+| --- | --- |
+| `expect_same.sh` call sites | **2879** |
+| remaining bare `test` assertions | **7** |
+| — numeric comparisons (`-ge`) | 6 — **genuinely not convertible** |
+| — a line of prose in a comment | 1 — not an assertion |
+
+The 6 `-ge` exclusions stand and are the only real ones: an ordering is not a
+string equality, and `expect_same.sh` compares two strings. They want a
+different helper, not this one.
+
+### Two instrument notes from this tranche
+
+The ambiguity guard reported `Makefile:14309` as an **ambiguous separator**. It
+was not: the line spells the separator `"   = "` with extra spaces, so the guard
+counted **zero** occurrences and its message conflated *none* with *many*. The
+skip was right and the reason given for it was wrong — which is worse than no
+message, because it names a cause. Same family as everything else in this
+ticket, in the checker again.
+
+And the verification for the stragglers was an **inverse** check rather than a
+re-derivation: rebuild the original line from the rewritten one by dropping the
+label and restoring ` = `, then compare to what was there. A checker that
+re-parses with the same regex that wrote the line cannot fail; one that
+reconstructs the input can.
