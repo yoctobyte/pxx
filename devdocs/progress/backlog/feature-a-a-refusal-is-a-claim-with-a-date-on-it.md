@@ -4591,3 +4591,74 @@ fails the day QEMU grows a GPIO model. The ADC block carries none, because **a
 hang has no natural tripwire**, and frankB declined to invent one rather than
 pretend otherwise. A block with no expiry is worse than one with an expiry, and
 saying so is better than manufacturing a tripwire that does not test anything.
+
+### 116 — a rule enforced only by hardware is not enforced
+
+*frankS, 2026-08-30, root-causing the `Write`-of-a-real SIGBUS to a shared frame
+layout rather than to the xtensa backend.*
+
+`ir.inc` reserves a fixed-array return slot with `AllocArray('', tyUInt8, ...)`.
+Element kind `tyUInt8` → `TypeAlign` = 1 → `symtab.inc:4151`'s
+`AlignTo(FrameSize + sz, align)` rounds to **nothing**. The slot lands wherever
+the frame happened to reach, and the `SymIsHiddenArgTemp` prologue nil-inits it
+with a **four-byte store**. Odd offset, unaligned word store, in **all six
+backends** — proven, not assumed, by disassembling one source for two targets and
+finding identical offsets.
+
+Five backends are never asked to notice. x86-64 and i386 permit unaligned access
+in hardware; `qemu-riscv32` and `qemu-arm` emulate it silently in user mode.
+Xtensa traps. So the alignment invariant was real, was violated everywhere, and
+its **enforcement had been silently outsourced to whichever machine ran the
+code** — which meant it was enforced nowhere until a target that traps could run
+anything at all, which xtensa could not until the day before.
+
+The general shape, and why it is not just an alignment story: **when a rule's only
+consequence is a fault on some subset of platforms, the rule is not part of the
+system — the platforms are.** Ask of any invariant: what artefact fails if this is
+violated, and does that artefact exist on the machines we actually run? If the
+answer is "the strictest target notices", the invariant is a hope with a
+distribution attached.
+
+Note the routing consequence, which is the expensive half. Filed from the symptom
+this is *an xtensa bug*, goes to the xtensa backend, gets fixed there, and the
+other five targets keep the latent defect **plus** a now-divergent backend. It was
+the two-target disassembly that turned it into a shared-layout ticket with the
+right owner. **A defect that only one platform reports is the one most likely to
+be filed against that platform.**
+
+Corollary the lane got right: making the xtensa nil-init store bytes would have
+**hidden** it and looked like a fix. The slot is memcpy'd, field-accessed and
+pointer-read elsewhere, so it must be pointer-*aligned*, not merely writable a
+byte at a time. That is the compiler-appeasement workaround CLAUDE.md forbids,
+wearing the costume of a targeted fix.
+
+### 117 — a stated absence about THIS BOX is a claim about a search, not about the box
+
+*Twice on 2026-08-30, by two lanes, in the same directory tree, from the same
+wrong reflex.*
+
+- frankB recorded that a callback firing on a peripheral was not observable here.
+  **ESP QEMU had been installed the whole time**, and the doc that said so was
+  right; a glob in `tools/esp_run.sh:42` had been finding the emulator since
+  `01c8cf7c1` on 2026-08-02.
+- frankS recorded *"there's no xtensa objdump on this box"*, worked around it, and
+  took a weaker verification for it. `xtensa-esp-elf-objdump` and
+  `xtensa-esp-elf-gdb` were under `~/.espressif/tools/**` — off `PATH` until
+  `export.sh`, which is not the same as absent.
+
+Both were **environment** claims, which is why they slipped past everything. The
+fleet checks code claims against the code and ticket claims against the board;
+nothing checks a claim about the machine, and a claim about the machine feels like
+observation rather than assertion. It is not: it is the output of a search whose
+scope nobody stated, and `which` against an unsourced PATH is a narrow search.
+
+The cost is asymmetric in the usual direction (face: *a false limit is quieter
+than a false fix*). A wrong capability claim in the *positive* direction fails
+immediately when you try to use it. In the negative direction it silently
+downgrades the method — frankS did not get a wrong answer, it got a **weaker one**,
+and nothing in the result says so.
+
+**Operationally:** a toolchain ships binutils for its arch; look inside its tree
+before concluding. And write environment absences the way you would write any
+non-existence claim — name what you searched, so the next reader can see what the
+search could not have found.
