@@ -2328,3 +2328,62 @@ to the table and did nothing at all until `time` reached the whitelist — **a t
 entry alone is silently dead code**, with no error and no warning. Face 33's
 "a capability nothing invokes", and the same normalise-don't-special-case rule:
 two mechanisms serving one concept means one of them will be updated alone.
+
+### 55. REDUCING TO A MINIMAL REPRO CAN DESTROY THE BUG — when the defect IS the disorder, ordering it away is what a clean repro does
+
+frankB, 2026-08-29, `Halt(n)` exiting 0 from a multithreaded program.
+
+The first pass ended at *reproduced, bounded, NOT diagnosed* (face 50) — and the
+reason it stalled is the finding:
+
+> The clean minimal repro **cannot reproduce it**: six `palthread` threads with
+> explicit `PalThreadJoin` make main last *by construction*, so writing a tidy
+> repro removes the race. I read 6/6 at 216 as "concurrency alone is not
+> sufficient" — true, but the useful reading was that my repro had **ordered the
+> thing whose disorder was the bug.**
+
+Minimisation is the standard move and it is usually right. **Here it is the one
+technique guaranteed to fail**, because the reduction step that makes a case
+tidy — join your threads, remove the racing tail, make termination
+deterministic — is precisely the property under test. The clean repro's green is
+not weak evidence; it is *evidence for the wrong proposition*, and it reads as
+"concurrency is not the cause".
+
+The mechanism, once traced on the **messy** case: `Halt(n)` emits `exit` (thread
+exit), not `exit_group`. A worker's `Halt(7)` does set main's exit code — but the
+process status belongs to whichever thread exits **last**, and threads finishing
+normally exit 0. `strace -f` shows the failing runs ending in `exit(0)` from a
+worker that finished after the fatal was announced. **Nothing is overwritten; the
+216 simply was not the last word.**
+
+**Rule:** before minimising, name the property you believe is causal, then check
+whether each reduction preserves it. If the bug is a race, a scheduling artefact,
+or a shutdown-order effect, the minimal case is the *last* thing to trust — trace
+the messy one.
+
+And the root cause is `normalise-dont-special-case` yet again, with the drift
+landing exactly where the family predicts. Five hand-written arms for one concept:
+
+| backend | emits | |
+| --- | --- | --- |
+| **x86-64** | `SYS_EXIT` = 60 | **wrong — and it is the primary target** |
+| i386 | 252 = exit_group, *commented as such* | correct |
+| aarch64 | 94 = exit_group | correct |
+| **arm32** | `mov r7,#1` = exit | **wrong** |
+| riscv32 | 94 = exit_group, *commented as such* | correct |
+
+**The correct answer was written down one line below the bug.** The no-argument
+branch calls `EmitExit`, whose comment reads *"exit_group, not exit: terminate
+every thread. A bare exit (60) only ends the calling thread, so a program that
+started worker threads would leave the process alive after main returns."*
+`Halt` with no argument obeys that comment; `Halt(n)` does not. Three of the five
+arms name `exit_group` in a comment — **the drift landed on the arm nobody
+re-derives, because it is the one that obviously works.** Single-threaded the two
+syscalls are equivalent, which is why it survived.
+
+**And the trap left behind for whoever fixes it:** `lib/rtl/scheduler.pas` now
+calls `exit_group` via `__pxxrawsyscall` to work around this, so
+`test_sched_reactor_exhaustion` **would pass with the bug still present.**
+Reverting that to a plain `Halt(216)` is part of the fix — otherwise the repair
+ships beside a green test guarding nothing. A workaround installed while a bug is
+open becomes a blindfold the moment it is closed.
