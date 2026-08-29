@@ -36,9 +36,22 @@ done
 # a false hit costs one question, a miss costs a collision.
 SHARED='compiler/(ir|symtab|defs|lexer|emit)[a-z0-9_]*\.inc|compiler/compiler\.pas|compiler/pasparser_|compiler/py(lexer|parser)|compiler/c(lexer|parser|preproc)|compiler/builtin/'
 
+# AGE = minutes since the last commit in that tree. It is here because a tree's
+# NAME is not evidence of who works in it, and on 2026-08-30 that cost a
+# verification: ~/frankwasm is on branch `wasm`, 442 behind master, while the
+# session called frankwasm actually works in ~/pxx-songfmt on master. Had a
+# file been granted on the strength of ~/frankwasm looking clean, the survey
+# would have been 442 commits out of date and confidently wrong.
+#
+# The fix is deliberately NOT a name->tree mapping. A mapping is a second
+# sentence that can drift from the thing it describes, which is the failure
+# this whole script exists to avoid. Age is derived from the tree's own
+# history, so a live tree identifies itself and a dormant one cannot pretend.
+# Read it as: minutes, `-` for no commits, and anything over a few hours in a
+# tree you were told is active means you are looking at the wrong tree.
 found=0
-printf '%-24s %-10s %s\n' CHECKOUT BRANCH 'HELD FILES'
-printf '%-24s %-10s %s\n' ------------------------ ---------- -----------
+printf '%-24s %-10s %-7s %s\n' CHECKOUT BRANCH AGE 'HELD FILES'
+printf '%-24s %-10s %-7s %s\n' ------------------------ ---------- ------- -----------
 
 for d in "$ROOT"/*/; do
     [ -e "$d/.git" ] || continue
@@ -46,6 +59,13 @@ for d in "$ROOT"/*/; do
     found=$((found + 1))
     name=$(basename "$d")
     branch=$(git -C "$d" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')
+    ct=$(git -C "$d" log -1 --format=%ct 2>/dev/null)
+    if [ -n "$ct" ]; then
+        age=$(( ( $(date +%s) - ct ) / 60 ))
+        if [ "$age" -lt 1440 ]; then age="${age}m"; else age="$((age / 1440))d"; fi
+    else
+        age='-'
+    fi
     if [ "$ALL" = 1 ]; then
         dirt=$(git -C "$d" status --short 2>/dev/null | awk '{print $NF}')
     else
@@ -53,12 +73,12 @@ for d in "$ROOT"/*/; do
                | grep -E "$SHARED")
     fi
     if [ -n "$dirt" ]; then
-        printf '%-24s %-10s %s\n' "$name" "$branch" "$(echo "$dirt" | head -1)"
+        printf '%-24s %-10s %-7s %s\n' "$name" "$branch" "$age" "$(echo "$dirt" | head -1)"
         echo "$dirt" | tail -n +2 | while read -r f; do
-            printf '%-24s %-10s %s\n' '' '' "$f"
+            printf '%-24s %-10s %-7s %s\n' '' '' '' "$f"
         done
     else
-        printf '%-24s %-10s %s\n' "$name" "$branch" '-'
+        printf '%-24s %-10s %-7s %s\n' "$name" "$branch" "$age" '-'
     fi
 done
 
