@@ -2251,3 +2251,80 @@ ticket saying it was complete.
 indistinguishable once written into prose. "The sites are X and Y" and "the sites I
 found before I stopped looking are X and Y" render identically, and only the second
 is ever true of a first pass.
+
+### 53. A GUARD THAT HAS NEVER ONCE BEEN TRUE IS INVISIBLE TO EVERY TECHNIQUE EXCEPT CHANGING IT
+
+frank-rust, 2026-08-29, `impl Trait for Type` in the Rust frontend.
+
+Not "was broken" — **had never once run.** The prescan and the body parser both
+tested `(Tokens[j+1].Kind = tkIdent) and (GetTokenStr(j+1) = 'for')`, and the
+lexer classifies `for` as `tkFor`, whose name slice is empty. `''` against
+`'for'`, never true. Every `impl Area for Sq` ever written was read as
+`impl <Area>` and died with *"impl for unknown type Area"* — **and the `RImpls`
+table it fills had been empty for the frontend's entire life.**
+
+**This is a different class from face 36 and deserves its own name.** Face 36 is a
+plausible wrong *value*. This is **plausible-looking code that never executes**:
+
+> It reads correctly, it is commented correctly, it sits in the right place, and
+> no test could have caught it because the feature it implements was simply never
+> available to test.
+
+Note what each technique misses. **Coverage sees the line as reached** — the
+condition is evaluated, it is just always false, so a branch-coverage tool at
+best reports one arm untaken among thousands. **Review sees correct code**, because
+the defect is in the lexer's contract one file away, not in the expression.
+**Tests cannot exist**, because you cannot write a test for a syntax the parser
+rejects — the absence of the test is *caused by* the bug. And the diagnostic was
+honest and specific (*"impl for unknown type Area"*), which sends you to the type
+table, face 34 again.
+
+It was found by trying to **extend** the feature. That is the general rule: a
+never-true guard is falsified only by perturbing it, never by observing it.
+
+**The cheap sweep for the class**, and frank-rust supplied it: grep for token text
+compared against a word the lexer turns into its own token kind. Run across all
+frontends here — **17 candidate sites: `rparser.inc` 11, `pyparser.inc` 4,
+`zparser.inc` 2** — filed as
+`bug-a-audit-token-text-compared-against-a-keyword-the-lexer-never-leaves-as-text`.
+**Being on that list is not a defect**: `self` in `pyparser.inc` is very probably
+correct, because `self` is an ordinary Python identifier and `GetTokenStr` is the
+right test for it. The list is candidates, not findings — which is face 52's
+lesson applied in advance, for once.
+
+**Corollary, and it is the expensive half:** when a never-true guard is found, ask
+what *silently never happened*. The fix is one line; the empty `RImpls` table is
+the finding.
+
+### 54. `make compiler/pascal26` DOES NOT COMPILE `pylib.pas` — the gate's scope is narrower than its name
+
+pxx-a5, 2026-08-29, while adding syscalls to NilPy's PAL.
+
+> I broke `pylib`'s interface section and **the entire self-host fixedpoint passed
+> green.** It only failed when I compiled a `.npy`.
+
+`pylib.pas` is linked into NilPy *programs*, not into the compiler, so the
+compiler's own build never parses it. The one mandatory gate in the per-fix loop —
+the thing CLAUDE.md correctly calls the single failure that would poison every
+lane — **cannot see a broken NilPy runtime at all.**
+
+Third member of a family that now clearly is one, all in two days:
+
+| the gate | blind to | because |
+| --- | --- | --- |
+| `make compiler/pascal26` | FPC-only breakage (face 31) | it compiles `compiler.pas` with **pxx**, which resolves across the whole unit |
+| `make compiler/pascal26` in a seeded tree | everything | `cp` stamps the seed newer than the sources, so make no-ops and exits 0 |
+| `make compiler/pascal26` | a broken `pylib.pas` | the compiler does not link the NilPy runtime |
+
+**In every case the gate is real, its name implies more than it covers, and the
+success message is identical either way.** "Self-host fixedpoint converged" is a
+true statement about the compiler reproducing itself and says nothing about the
+runtime a NilPy program will link. A green whose scope nobody states is read at
+the width of its name.
+
+Same session, same shape one layer in: **`PyStdlibCallAhead`'s base whitelist and
+`PyStdlibCallProc`'s table are one concept in two places.** `time.time` was added
+to the table and did nothing at all until `time` reached the whitelist — **a table
+entry alone is silently dead code**, with no error and no warning. Face 33's
+"a capability nothing invokes", and the same normalise-don't-special-case rule:
+two mechanisms serving one concept means one of them will be updated alone.
