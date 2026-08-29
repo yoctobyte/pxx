@@ -319,3 +319,78 @@ that terminated the process. One compile instead of 350.
 
 Steps 1-2 are small and specific now that the numbers and the register map are
 known; that was the genuinely uncertain part and it is done.
+
+## GRANT: frankS holds `compiler/emit.inc` for wall 1 — frank-coordinator, 2026-08-29
+
+Filed rather than left in message traffic. **Scope: the `EmitExit` xtensa arm
+(`emit.inc:372`) only** — key the bare-metal self-loop decision on the PROFILE
+rather than on `TargetArch = TARGET_XTENSA`, mirroring the riscv32 dual-role
+template five lines below, exactly as `cbfdb5de8` did for `TargetIsEspClass`.
+About six lines. `compiler/xtensaenc.inc` remains frankS's (granted after it
+verified the file map itself and reported the correction — the encoders are
+there, not in `ir_codegen_xtensa.inc`, and there was no `xtensa_syscall` at all).
+
+**The lock was stale, and it was right to ask.** `35cea50e4` restructured that
+routine 87 minutes before frankS arrived — frank-optimize-b4's five-into-one
+`EmitExitReg` refactor. b4 confirms its tree is clean, it has no further plans for
+the file, and its open work is `ir_codegen.inc` / `symtab.inc`. It **declined** to
+do the six lines itself: *"frankS has the diagnosis, the oracle numbers and the
+trace; handing that to me to retype six lines would lose more than the warm
+context saves."*
+
+### DO NOT INHERIT `exit_group = 119` — the measurement cannot reach it
+
+frankS bounded its own claim correctly: 118 and 119 both terminate with the passed
+code, but **that 119 is the thread-group variant was read off the table's ordering
+and not verified**, because nothing it ran was multithreaded.
+
+b4 explains why that bound matters more here than usual. `EmitExit` wants
+`exit_group` **on purpose**, and the reason is a real landed bug —
+`bug-b-concurrent-halt-from-several-threads-exits-0`: a plain `exit` terminates
+only the *calling thread*, so `Halt(216)` from a worker ended that worker, let the
+process run on, and exited 0. **The status was silently lost.** That is precisely
+the property a single-threaded test cannot distinguish, because that is where the
+two syscalls are identical. So the measurement is sound and simply cannot reach
+the question, and inheriting 119 on table ordering would be inheriting the one bit
+the test could not see.
+
+**The distinguishing test, b4's, one program:** spawn a thread that loops
+printing, then call the syscall **from the non-main thread** with a distinctive
+code. With `exit_group` the process dies immediately and the printing stops; with
+plain `exit` the spinner keeps going and the process later exits 0 — the original
+bug's exact signature. Run once with 118, once with 119; whichever kills the
+spinner is `exit_group`.
+
+**If xtensa hosting has no threads yet**, the honest move is a comment saying the
+choice is **unverified on this target** and naming the table row it came from —
+rather than a comment reading `exit_group` that asserts something nobody measured.
+
+### `write = 13` is the load-bearing row, and adjacency is the trap
+
+frankS's table (measured against the oracle; these numbers exist nowhere else in
+this repo, because xtensa was never hosted):
+
+| syscall | number |
+| --- | --- |
+| `write` | **13** |
+| `exit` | **118** |
+| `exit_group` | **119** |
+
+`write = 13` pins this as xtensa's own `unistd.h` (open 8, close 9, dup 10, dup2
+11, read 12, write 13) — **not** the generic numbering riscv32 uses, where write
+is 64. riscv32's table sits five lines away in the same routine, so reaching for
+it is the natural mistake, and it is wrong on **every** call. Put that in a
+comment at the xtensa arm: the adjacency is what invites the error.
+
+Register map, confirmed by the oracle rather than by reading `entry.S`:
+`nr→a2, arg0→a6, arg1→a3, arg2→a4, arg3→a5, arg4→a8, arg5→a9`. **`a6` leads**, so
+guessing `a2..a7` in order puts arg0 in `a3` and every `write(2)` takes the wrong
+fd — it would have looked like it nearly worked.
+
+### One expected symptom, so it is not misread as a codegen bug
+
+b4, from `regression-test-threads-test-sched-reactor-exhaustion-2`: a losing
+thread's `exit_group` killed the winner mid-`writeln`, producing truncated
+output. **That is `Halt`'s intended semantics — whole process, immediately — not a
+defect to design around.** "Output stopped mid-line" near a `Halt` is expected,
+not evidence of a codegen fault. It cost b4 time to establish once.
