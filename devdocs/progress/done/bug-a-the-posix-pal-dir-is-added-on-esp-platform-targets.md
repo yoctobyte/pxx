@@ -258,4 +258,4 @@ image. **Someone with S2/S3/C3 hardware or an IDF install should boot
 `examples/esp32/timer-c3` before this is treated as hardware-proven.**
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 1fa340556.
