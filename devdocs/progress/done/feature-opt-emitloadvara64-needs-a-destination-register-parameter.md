@@ -249,4 +249,4 @@ census of what those operands actually are, not from the fact that a number
 remains.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit f802d04b5.
