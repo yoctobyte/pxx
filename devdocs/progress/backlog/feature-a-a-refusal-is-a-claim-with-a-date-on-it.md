@@ -4545,3 +4545,49 @@ confirmed *correct* limits worth knowing are correct. frankD's own standard for
 the grep: *"a pattern that finds 15 and confirms 3 is worth running; one that
 found 15 and confirmed 15 would mean I had written the grep to match what I
 already knew."*
+
+### 115 — a HANG and an INERT SUBJECT produce the same artefact, and the wrong reading is the natural one
+
+*frankB, 2026-08-30, probing ESP ADC under QEMU after establishing GPIO was inert.*
+
+Third appearance in one night of one signature: **a raw capture with none of the
+probe's own output in it.** The two causes are unrelated and want opposite
+responses:
+
+- the subject is **inert** — the calls return, the probe runs, nothing happens;
+- the probe **never ran** — `adc_oneshot_new_unit` does not return, the image
+  stops before `app_main`, and the last line is an unrelated eFuse warning.
+
+The artefact is identical: zero `PROBE:` lines. And the *available context*
+pushes you toward the wrong one — frankB had just proved GPIO inert, so "ADC is
+inert too" was the reading with momentum behind it, and it would have been filed
+that way. What separates them is that an inert subject is a **finding about the
+peripheral** and a hang is a **finding about the call**, which is a different
+bug with a different owner.
+
+**The control arm is the whole method, and it is cheap.** Same project, `esp_adc`
+still in `REQUIRES` so still linked, running the *GPIO* probe body instead: it
+reaches `app_main` and completes. That one run separates "the ADC call hangs"
+from "adding the esp_adc component breaks the build" — indistinguishable from the
+outside, different lane, different owner. Without it the ticket is filed against
+the wrong thing with full confidence.
+
+**Related to 102 and sharper than it.** 102 says a line that only prints on
+success can never report finding nothing. This is the case where the *absence of
+all output* is itself ambiguous between two live hypotheses, so even a
+correctly-designed probe needs a second arm to disambiguate its own silence. An
+empty capture is not a result; it is a question.
+
+**And the hypothesis discipline is the other half.** The calibration eFuses are an
+obvious suspect — burned on real parts, absent from QEMU's default blob — and
+frankB wrote it into the ticket **flagged as a hypothesis, not established, with
+an explicit line saying not to record it as the cause without measuring.** That
+is the correct handling of a plausible story, and this repo's history is that a
+plausible story adjacent to something the author genuinely knows is exactly what
+gets promoted to a finding by the next reader in a hurry.
+
+**Note what has no expiry.** The GPIO block carries one — a `qemu-assert` that
+fails the day QEMU grows a GPIO model. The ADC block carries none, because **a
+hang has no natural tripwire**, and frankB declined to invent one rather than
+pretend otherwise. A block with no expiry is worse than one with an expiry, and
+saying so is better than manufacturing a tripwire that does not test anything.
