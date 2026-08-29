@@ -95,7 +95,6 @@ _none_
 | bug-n-a-tuple-unpacking-assignment-does-not-box-a-callable-value | N | 55 | bug | `a, b = lambda x: x + 1, lambda x: x + 2` compiles and then `a(1)` raises TypeError: object is not callable. The single-target spellings (`a = lambda ...`, `return lambda ...`) box the callable so the name is a variant; the tuple-UNPACK targets do not, so each name holds a raw pointer the dynamic-call path does not recognise. | — |
 | bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence | N | 55 | bug | Six `timeout N` literals are hardcoded inside the test-nilpy and test-uforth recipes. The three uforth ones are the damaging pair of shapes: `wait $pp \|\| true` discards timeout's exit 124, the kill truncates p.out mid-stream, and the truncation is then reported as `DIFF <corpus>` — a pxx-versus-CPython divergence — and counted into `bad`. A machine under load thus manufactures a Nil-Python frontend finding. Filed by Track T, which owns the harness but not the Makefile. | — |
 | bug-n-abs-of-a-complex-raises-typeerror | N | 12 | bug | `abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set. | — |
-| bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module | N | 85 | bug | RE-SCOPED: not about import aliases. A name that names a `def` is resolved to that def at EVERY call site and any later rebinding is ignored — `def a…; def b…; b = a; b(1,5)` answers 18 (the original b) where CPython answers 5, with no import anywhere. The alias spelling is one way to rebind. Blocked: the correct destination is the dynamic call path, which cannot yet carry defaults (see the decision ticket). | decide-how-a-compiled-def-carries-its-signature-when-boxed |
 | bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising | N | 50 | bug | `None.bit_length()` returns 0 where CPython raises AttributeError — the int-method arm on a variant receiver unboxes without checking the tag, and None's payload reads as the integer 0. dict/list/str receivers do raise, so None is the one shape that answers. | — |
 | bug-n-compiling-html5lib-trie-never-terminates | N | 55 | bug | Compiling library_candidates/html5lib/html5lib/_trie/__init__.py — five lines — never terminates. Found as a pxx process that had been in state R for 1 day 16:47 on a six-session box, and reproduced bounded: `timeout 60` returns 124 after emitting only the shim-resolution notes. No diagnostic, no progress, no exit. | — |
 | bug-n-exec-ignores-a-caller-supplied-builtins-mapping | N | 20 | bug | `exec(src, {\"__builtins__\": {}})` — the restricted-exec idiom — raises NameError in CPython and silently resolves builtins anyway in pxx. The caller's explicit instruction to resolve names against THIS mapping is discarded, so working CPython code takes a different path. Upward-compatibility defect, split out of the cosmetic decide-nilpy-exec-injects-a-builtins-key. | — |
@@ -169,7 +168,7 @@ _none_
 | decide-c-crtl-rand-max-is-conforming-but-breaks-real-code | U | 40 | decide | crtl defines RAND_MAX as 32767 and rand() returns [0,32767]. C99 7.20.2.1 only requires RAND_MAX >= 32767, so this is conforming — but every mainstream libc uses 2147483647 and real programs branch on the value. busybox editors/awk.c has an #error for anything else and is the only busybox file still blocked on a non-library gap. Raising it is a behaviour change to a shipped library, not a defect fix, so it is a call to make, not a bug to close. | — |
 | decide-does-nilpy-random-seed-itself-at-import | U | 60 | decide | CPython's `random` seeds from entropy at import; NilPy's starts from a fixed constant, deliberately, so a failing run reproduces. That is a real trade-off and it collides with the upward-compatibility rule. Recommendation: seed by default, keep determinism behind an explicit opt-in. | — |
 | decide-does-the-legacy-gtk-alias-still-point-at-gtk-2 | U | 50 | decide | `uses gtk` maps to stem gtk-x11-2.0 (GTK 2) while everything else in the tree targets GTK 3 — lib/pcl/gtk3.pas, gtk3widgets.pas and gtk3gl.pas all bind libgtk-3.so.0, and `uses gtk3_c` maps to stem gtk-3. The four test_c_gtk*.pas tests use the legacy alias, so a box must install GTK 2 to make them green. Fork: retarget the alias, rename the tests, or keep GTK 2 deliberately. | — |
-| decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal | U | 40 | decide | 24 of wasm32's 52 remaining compiler.pas refusals are the sys* intrinsics (tkSysOpen 15, tkSyswrite 6, tkArgStr 3), and they collapse to ONE blocked primitive: opening a file under WASI. That needs preopen resolution, rights computation and errno mapping, which exist once in lib/rtl/platform/wasi/platform_backend.pas -- a unit compiler.pas deliberately does not link, because the compiler bootstraps on intrinsics to avoid an RTL dependency. Three ways out, each with a real cost: duplicate the capability model into builtinheap.pas, link the PAL into the compiler, or factor the WASI helpers into a shared include. The choice spans Track A and Track B files, so it is not the wasm lane's to make. | — |
+| decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal | U | 40→60 | decide | 24 of wasm32's 52 remaining compiler.pas refusals are the sys* intrinsics (tkSysOpen 15, tkSyswrite 6, tkArgStr 3), and they collapse to ONE blocked primitive: opening a file under WASI. That needs preopen resolution, rights computation and errno mapping, which exist once in lib/rtl/platform/wasi/platform_backend.pas -- a unit compiler.pas deliberately does not link, because the compiler bootstraps on intrinsics to avoid an RTL dependency. Three ways out, each with a real cost: duplicate the capability model into builtinheap.pas, link the PAL into the compiler, or factor the WASI helpers into a shared include. The choice spans Track A and Track B files, so it is not the wasm lane's to make. | — |
 | decide-install-qemu-system-and-a-freebsd-image-on-plexus | U | 55 | decide | The FreeBSD port needs a bootable FreeBSD kernel and plexus has none — qemu-user is installed, qemu-system is not, and no VM image exists anywhere on the box. Installing a system emulator and fetching a multi-GB OS image is a change to the owner's workstation, so it is the owner's call. One-line answer unblocks feature-t-freebsd-image-and-runner and, behind it, feature-port-freebsd-native. | — |
 | decide-is-real-a-double-or-fpcs-80-bit-extended | U | 30 | decide | `writeln(3.14159)` prints ` 3.1415899999999999E+000` in pxx and ` 3.14158999999999999993E+0000` in FPC, because pxx's Real is a 64-bit Double and FPC's is the x87 80-bit Extended. Making them agree means implementing an 80-bit float type; keeping them apart means declaring the difference permanent. Both are defensible and neither is a bug. | — |
 | decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample | U | 55 | decide | A fourth-corpus probe (reportlab 4.2.5, 421 .py) at pin v389 found that NONE of its 30 distinct first walls is a wall the webencodings/html5lib/tinycss2 family produced — because 89% of its failures are missing library surface and it never reaches the mechanism layer. The family's mechanism walls are not wrong, they are CONDITIONAL: they are what a corpus hits once its import surface is already covered. The three corpora that generated the whole 55-70 ranking are self-contained web parsers with almost no stdlib footprint. On a corpus with an ordinary footprint, landing the entire mechanism cluster would move compile count by ~zero. prio: is the human's field, so the re-ranking call is the owner's. | — |
@@ -205,6 +204,7 @@ _none_
 | feature-a-shrink-managed-header-on-32-bit | A | 10 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
 | feature-a-typeref-migrate-consumers | A | 62 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-a-unreferenced-class-rtti-keeps-every-method-alive | A | 30 | feature | An unreferenced class keeps every one of its methods alive | — |
+| feature-a-wasm32-sys-intrinsics-and-ir-syscall-lowering | A | 60 | feature | The last 36 unlowered bodies in compiler.pas on wasm32: 35 sys builtins (writeELF*, writeU8/16/32/64, LoadFile) plus IR_SYSCALL (value op 54), which is the same question wearing a different hat. Blocked on the Track U decision, not on any missing mechanism. Filed so the ranker can SEE that a U item is holding a p60 lane — the edge did not exist, so prio propagation had nothing to work with and the decision sat at 40. | decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 20 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
 | feature-b-a-real-minidom-is-an-implementation-not-a-shim | B | 20 | feature | Question 2 of the xml.dom row, re-filed on its own as that ticket said it should be. html5lib/treebuilders/dom.py wants a document you can build and mutate — ~25 DOM methods, getDOMImplementation().createDocument(), weakref.proxy(), and a reach into minidom's PRIVATE _child_node_types. That is a DOM implementation, not a compatibility alias. It unblocks exactly one corpus file and should be ranked as an implementation project, not alongside shims. | — |
 | feature-b-posix-and-fpc-named-socket-facades | B | 25 | feature | The Posix.* / FPC-named (BaseUnix, Sockets, UnixType) socket compat facades over the PAL substrate, with a selectable syscall-or-libc backend. Fully designed inside feature-networking and never built; split out when that umbrella closed so the design survives its container. | — |
@@ -603,11 +603,11 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2592)
+## done (2593)
 
-2592 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2593 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
-## rejected (48)
+## rejected (49)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -622,6 +622,7 @@ _none_
 | bug-frozen-self-build-unreliable | A | 50 | bug | Frozen-string compiler self-build (`bootstrap-frozen` / `stabilize-frozen`) is unreliable | — |
 | bug-lexer-identifier-ends-with-keyword | A | 50 | bug | Bug — Lexer misidentifies identifiers ending with keyword names (e.g. 'Class') | — |
 | bug-n-a-user-classs-decode-method-is-hijacked-losing-its-own-parameters | N | 70 | bug | DUPLICATE of bug-nilpy-a-callable-in-a-variable-loses-to-a-def-of-the-same-name (frank2, unfinished/), which reproduces the corpus diagnostic character for character. Kept as a record of a disconfirmed premise: filed as a `decode` method-name hijack, measured not to be one. The separate `undefined variable (final)` shape it turned up is filed as bug-n-a-keyword-argument-through-a-callable-value-is-undefined. | — |
+| bug-n-an-import-alias-cannot-shadow-a-class-or-cross-with-another-alias | N | 60 | bug | Two rows of the alias table that the proc-rebinding fix does NOT reach, because each is a different mechanism. (1) `from M import f as C` where M also has a CLASS named C still CONSTRUCTS M's C — the fix stamps the proc chain, and a class is not on it; FindUClass scans the real class table before the alias table, so there is no way to say `C is not a class here`. (2) `from M import f as g, g as f` answers `5 5` where CPython answers `5 18` — crossing aliases must both read the PRE-import bindings, and the second binding sees the first. Both were rows of the parent ticket; split out because neither is a variation of the proc arm. | — |
 | bug-n-the-sequence-protocol-does-not-yield-iteration | N | 48 | bug | SUPERSEDED 2026-08-19 — split and fixed under two other tickets before this one was ever dispatched. A class with `__len__` + `__getitem__` and no `__iter__` is iterable in CPython. In NilPy `for x in obj` is a compile error whose diagnostic names an unrelated internal (`pylib (count) not loaded`), and `list(obj)` compiles and returns an EMPTY list — a silent wrong answer, which is the worse half. | — |
 | bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error | N | 50 | bug | `xs.sort(key=..., reverse=...)` fails with a bare "unexpected token" | — |
 | bug-nilpy-uforth-rc4-corpus-stack-underflow | N | 45 | bug | WITHDRAWN — not a pxx bug. `ERROR: Stack underflow` came from MY harness invoking `INCLUDE testje.for`; uforth's INCLUDE POPS a string, so the correct form is `\"testje.for\" INCLUDE`. With that, all four RC4 corpora are byte-identical to CPython. | — |
@@ -662,7 +663,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 85] [N] bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
 - [p 75] [B] bug-a-the-17th-thread-silently-aliases-reactor-slot-0
 - [p 75] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
@@ -695,6 +695,7 @@ _none_
 - [p 62] [N] feature-nilpy-list-sort-inplace-key-reverse
 - [p 62] [A] feature-unicodestring-model
 - [p 60] [U] decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
+- [p 60] [U] decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 1)
 - [p 60] [A] bug-a-cross-bootstrap-aarch64-overflows-max-code
 - [p 60] [N] bug-n-os-environ-and-os-sep-are-not-values
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
@@ -824,7 +825,6 @@ _none_
 - [p 40] [T] bug-t-the-two-watcher-health-checks-disagree-and-are-treated-as-interchangeable
 - [p 40] [T] chore-t-the-tier-ladder-ratio-is-stale-by-its-own-criterion
 - [p 40] [U] decide-c-crtl-rand-max-is-conforming-but-breaks-real-code
-- [p 40] [U] decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
 - [p 40] [A] feature-a-emit-obj-record-class-abi-mode
 - [p 40] [A] feature-a-io-lock-owner-from-tls-not-gettid
 - [p 40] [A] feature-a-merge-the-wasm-branch-the-shared-file-arms
@@ -991,8 +991,8 @@ _none_
 - **1** — bug-n-the-only-callers-of-evalpystmts-encode-a-contract-that-changed
 - **1** — bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching
 - **1** — decide-does-nilpy-random-seed-itself-at-import
-- **1** — decide-how-a-compiled-def-carries-its-signature-when-boxed
 - **1** — decide-how-much-string-machinery-the-basic-frontend-gets
+- **1** — decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
 - **1** — decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind

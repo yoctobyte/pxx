@@ -4,7 +4,7 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "Two rows of the alias table that the proc-rebinding fix does NOT reach, because each is a different mechanism. (1) `from M import f as C` where M also has a CLASS named C still CONSTRUCTS M's C — the fix stamps the proc chain, and a class is not on it; FindUClass scans the real class table before the alias table, so there is no way to say `C is not a class here`. (2) `from M import f as g, g as f` answers `5 5` where CPython answers `5 18` — crossing aliases must both read the PRE-import bindings, and the second binding sees the first. Both were rows of the parent ticket; split out because neither is a variation of the proc arm."
-status: new
+status: rejected
 owner: ""
 ---
 
@@ -105,3 +105,36 @@ Track N's: `make compiler/pascal26` (byte-identical self-host fixedpoint) plus a
 CPython differential on the two rows above. Add them to
 `test/test_nilpy_import_alias_collides.npy`, whose fixture
 (`test/nilpy_aliasmod.py`) already exists and would need a class added for row 1.
+
+---
+
+## WITHDRAWN THE SAME DAY IT WAS FILED — both rows were already fixed
+
+**Obsolete on arrival, 2026-08-29 (frankA, its own filer).** Filed while another
+agent was fixing this ticket's parent concurrently; neither of us could see the
+other. Both rows below were closed by that agent's work, which landed while mine
+was in rebase.
+
+Re-measured on the COMBINED tree (both fixes present, self-host fixedpoint
+`d1328d1d804b`), against CPython:
+
+| row this ticket filed | result |
+| --- | --- |
+| `from M import f as C` where M has a class `C` | **5** — matches CPython, no construction |
+| `from M import f as g, g as f` | **`5 18`** — matches CPython |
+
+So the analysis in the body is **wrong about the conclusion and right about the
+mechanism**: the constructor path really is a second mechanism that the proc
+stamp cannot reach, and `FindUClass` really does consult the alias table only
+after the real class scan succeeds. The other agent fixed it at
+`PyIsExactCtorName` — the constructor decision itself — rather than by teaching
+`FindUClass` a shadowing concept, which is why the route I said was needed was
+not the route taken. Kept rather than deleted for that reason: the dead end is
+accurate and someone will consider it again.
+
+**The coordination lesson is the useful part.** Two agents fixed one ticket in
+parallel, and the split fell exactly along file ownership: the other agent left
+the one row whose fix lives in `compiler/symtab.inc` (Track A's file, held by
+me), and I split out as out-of-reach precisely the rows they had already done.
+Neither of us was wrong; neither of us could see the other's tree. Nine rows now
+match CPython where the ticket opened with four diverging.
