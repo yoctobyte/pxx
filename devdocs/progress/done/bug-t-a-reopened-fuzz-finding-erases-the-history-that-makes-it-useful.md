@@ -170,6 +170,6 @@ measured 2026-07-14 instance. It did not bite, but only by luck of the clock —
 the same aperture problem as the bug.
 
 ## Log
-- 2026-08-29 — unit 1 (writer) `a3387878e`; unit 2 (announce) PENDING-COMMIT.
+- 2026-08-29 — unit 1 (writer) `a3387878e`; unit 2 (announce) `658666ea8`.
 - 2026-08-29 — resolved.
 - 2026-08-29 — resolved, commit 552eb213d.
