@@ -83,4 +83,4 @@ expected generated from FPC, **confirmed refused on the baseline first** (line
 controls.
 
 ## Log
-- 2026-08-29 — resolved, commit PENDING-COMMIT.
+- 2026-08-29 — resolved, commit 2674dfe45.
