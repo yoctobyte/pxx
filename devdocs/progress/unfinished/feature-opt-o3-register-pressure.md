@@ -135,3 +135,42 @@ recover and only the throughput arm is in play. Prediction on record before
 measuring: small, plausibly under 1.02x, possibly indistinguishable from noise.
 Timing needs a quiet box and the coordinator's go-ahead; the code-size result
 stands on its own either way.
+
+### Timing: NOT MEASURED, deliberately — the prediction stands as the artefact
+
+**Predicted, on record before any run: under 1.02x, possibly indistinguishable
+from noise.** The removed store is off the recurrence (loads already come from
+the xmm register), so unlike int item 3 there is no store-to-load-forwarding
+latency to recover — only the throughput arm, and mandelbrot's inner loop may
+not be store-port-bound at all.
+
+Not run, for a reason worth stating rather than deferring indefinitely: the box
+carries five active sessions, and **a null confirmed under contention is worth
+less than no measurement**, because a flat result there is indistinguishable
+from a flat result *caused* by the contention. If the prediction is right the
+number changes nothing; if it is wrong, a loud box is the worst place to find
+out.
+
+No contention-immune alternative exists here: there is no `valgrind` on this
+box and this `qemu-x86_64` has no TCG plugin support, so deterministic
+dynamic-instruction counting is not available. `perf` is blocked (playbook).
+
+**A stated unmeasured prediction is a better artefact than a number taken under
+contention**, and this is the entry that records it as one. If someone later
+wants the figure: interleaved, 9 reps, three independent runs, pre-emit vs
+post-emit compilers, with an `-O2` control to make the ordering structural.
+
+### What the pass is justified on instead, and it is exact
+
+Measured on the artefact, contention-immune, deterministic:
+
+- **9 of the 14 `IR_STORE_SYM`s in mandelbrot's `EscapeCountLimit` no longer
+  write the frame slot** — `zre` 2, `zim` 2, `zr2` 2, `zi2` 2, `tmp` 1. That is
+  the Mandelbrot iteration itself, and it matches the 9-of-14 figure this item
+  was priced on before it was built.
+- **37 fewer `movsd [rbp+disp32],xmm0` and 296 fewer bytes** of code in the
+  program overall (98337 -> 98041).
+
+A structural result of that shape is a stronger justification than a marginal
+timing figure would have been, because it is exact and it does not decay with
+the machine it was taken on.
