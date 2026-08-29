@@ -45679,10 +45679,25 @@ begin
         place, because NilPy is upward compatible with CPython and that program
         is legal there.
         bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name }
+      { The IMPORTED arm. PyDefRebound answers "is there a module-level
+        assignment after this def's token", and for a proc that came from
+        ANOTHER unit that question cannot be answered here at all: its
+        ProcPyDefTok indexes a token stream this compile no longer holds, so
+        the scan finds nothing and every rebinding of an imported name lost to
+        the import. `from M import f as g` allocates a real module-level VAR
+        for `g` (AllocVar at the alias site) and then `g(1,5)` called M's own
+        `g` anyway — 18 where CPython says 5. So did `from M import f, g` +
+        `g = f`, and `from M import f as C` CONSTRUCTED M's class C.
+        A name this module binds at module level wins over an imported one,
+        which is just Python scoping; the local-def arm above already says so
+        for names defined here. bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module }
       if (qUnit < 0) and (procIdx >= 0) and
          (idx >= 0) and
          ((Syms[idx].Kind in [skLocal, skParam]) or
-          ((Syms[idx].Kind = skGlobal) and PyDefRebound(procIdx))) then
+          ((Syms[idx].Kind = skGlobal) and PyDefRebound(procIdx)) or
+          ((Syms[idx].Kind = skGlobal) and (SymUnitIdx[idx] = CurrentUnitIdx) and
+           (ProcUnitIdx[procIdx] >= 0) and
+           (ProcUnitIdx[procIdx] <> CurrentUnitIdx))) then
         procIdx := -1;
 
       pyLateDefPi := -1;
