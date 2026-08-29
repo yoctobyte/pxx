@@ -4,6 +4,8 @@ prio: 70
 type: bug
 blocked-by: []
 summary: "`for n := 1 to n do` runs ONE iteration where FPC runs five, and `for n := 1 to n - 1` runs ZERO where FPC runs four; downto is wrong the same way (9 vs 3). Pascal evaluates the initial AND final expressions BEFORE assigning the control variable; ir.inc:12130 stores the control variable first and lowers the limit after, so a limit that reads the control variable sees the new value. Silent wrong iteration count -- no diagnostic, no crash. ROOT CAUSE LOCATED: three statements in the wrong order, plus one ordering subtlety noted below."
+status: done
+owner: frankA
 ---
 
 # A `for` limit that reads the control variable sees the wrong value
@@ -119,3 +121,110 @@ pxx accepts `n := n` inside the body of a `for` over `n`; FPC rejects it
 (*"Illegal assignment to for-loop variable"*). Per CLAUDE.md's compat table that
 is *we accept a form FPC rejects* — **not a defect**. Noted so the next person
 does not file it.
+
+---
+
+## Resolved 2026-08-29 — frankA
+
+b4's diagnosis was correct end to end, including the part that made it not a
+reorder. What it could not have known from `ir.inc` alone is that **three
+lowerings implement this one rule**, and a second one had the same defect.
+
+### The fix, in `ir.inc`'s `AN_FOR`
+
+Both bounds are materialised in source order, then the control variable is
+assigned:
+
+1. lower init → store to `forInitTmp` (skipped for `IR_CONST_INT`)
+2. lower limit → store to `forLimTmp` (the existing once-only temp)
+3. `IR_STORE_SYM` the control variable from the init temp
+
+The init temp is what b4 identified: `initValNode` is a value node the backend
+re-emits at its use, so moving the store past the limit without materialising
+would move the initial expression's **side effects** after the limit's, and
+Pascal's order is initial-then-final. `for i := Start to Lim` proves it — the
+test asserts `S` then `L`, and it passed before the change, so it is a control
+that could have broken and did not.
+
+### The sibling: `SLLowerFor`, and why shape was not enough
+
+`pasparser_stmt.inc`'s stackless-generator transform lowers `AN_FOR` a **second
+time**, and sequenced `setVar` before `setLim` — the identical defect. I found
+the shape by grepping, then tested it, and the first test said the opposite:
+a `generator` routine answered correctly. That was the STACKFUL generator,
+which goes through `ir.inc` and had just been fixed. The stackless arm needs
+`; generator; stackless;` and `uses slgen`, and on it:
+
+```
+sl up   1   (plain form = 5)
+sl down 9   (plain form = 3)
+```
+
+— exactly the pre-fix numbers. Fixed the same way, with its own init slot for
+the same side-effect reason. **Had I trusted the first measurement I would have
+closed this with one of two arms still broken**, and had I trusted the shape
+without measuring I would have patched a file on a guess. Both were needed.
+
+### Measured
+
+| shape | before | FPC | after |
+| --- | ---: | ---: | ---: |
+| `n := 5; for n := 1 to n` | 1 | 5 | 5 |
+| `n := 5; for n := 1 to n - 1` | 0 | 4 | 4 |
+| `n := 9; for n := 3 downto n - 8` | 9 | 3 | 3 |
+| `n := 5; for n := n to 7` | 3 | 3 | 3 |
+| `for i := 1 to Bump` (calls) | 3, 1 call | 3, 1 call | 3, 1 call |
+| `for i := Start to Lim` (order) | S then L | S then L | S then L |
+| the `min` scratch idiom | 1 | 4 | 4 |
+| stackless generator, up / down | 1 / 9 | — | 5 / 3 |
+| stackful generator, up / down | 1 / 9 | — | 5 / 3 |
+
+Plain form byte-compared against FPC 3.2.2 on all nine rows: identical.
+
+### The gate line about byte-identity — corrected, not quietly passed
+
+The ticket asks that `for i := 1 to <constant>` and `for i := 1 to <plain
+variable>` emit byte-identical code before and after. **The first holds; the
+second cannot, and should not.** Measured per procedure, disassembled from the
+map file with addresses masked (whole-binary `cmp` is useless here — the RTL is
+full of `for` loops, so every address shifts and everything "differs"):
+
+| loop | -O0 | -O1 | -O2 | -O3 |
+| --- | --- | --- | --- | --- |
+| `for i := 1 to 10` | identical | identical | identical | identical |
+| `for i := 10 downto 1` | identical | identical | identical | identical |
+| `for i := 1 to n` | 4 insns reordered, same count | same | same | 5 reordered, same count |
+| `for i := n to n + 5` | +2 insns | — | +2 insns | +2 insns |
+
+Row 3 is the fix itself: the two stores swap, no instruction added, so
+`for i := 1 to n` costs exactly what it did. Byte-identity there would mean the
+bug was still present.
+
+Row 4 is the real cost and it is worth stating plainly: a **non-constant initial
+bound** now materialises into a temp, +2 instructions at loop ENTRY (once, not
+per iteration). `for i := lo to hi` is common, so this is not nothing — but it
+is correctness, and the alternative is the side-effect swap above.
+
+**Possible follow-up for Track O, deliberately not done here:** the init temp is
+only needed when lowering the LIMIT can change the init's value, i.e. when the
+limit contains a call or an assignment. A side-effect-free limit could keep the
+old shape and make row 4 identical too. That is an IR subtree walk and a new
+conditional — a real analysis that can be wrong — so it does not belong in the
+correctness fix.
+
+### Found on the way, filed separately
+
+`bug-n-a-range-loop-whose-bound-reads-the-loop-variable-never-terminates` —
+NilPy's `for n in range(3, n - 8, -1)` **hangs forever** where CPython yields 2.
+Same family (a bound that reads the loop variable), different lowering, and
+pre-existing: it hangs on `pinned` and on builds either side of this change.
+Not fixed here; it is the NilPy range path, not `AN_FOR`.
+
+Also confirmed the ticket's own "Not this ticket" note: pxx still accepts
+`n := n` inside the body of a `for` over `n`. Unchanged, and correct per
+CLAUDE.md's compat table.
+
+Self-host fixedpoint `df3e10e20b14`, converged in 1 round.
+
+## Log
+- 2026-08-29 — resolved, commit PENDING-COMMIT.

@@ -8063,6 +8063,13 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_math26 "$$($(TESTTMP)/test_math26)" "$$(printf '3.14159265\n1.41421356\n4.00000000\n1.50000000\n2.71828183\n1.00000000\n12.18249396\n0.69314718\n2.30258509\n1.00000000\n0.00000000\n0.84147098\n0.00000000\n1.00000000\n0.54030231\n0.78539816\n0.46364761\n1024.00000000\n1.41421356\n3.50000000\n1.00000000')"
 	./$(COMPILER) examples/sudoku/sudoku.pas $(TESTTMP)/test_sudoku26
 	tools/expect_same.sh test_sudoku26 "$$($(TESTTMP)/test_sudoku26)" "$$(printf '534678912672195348198342567859761423426853791713924856961537284287419635345286179\n987654321246173985351928746128537694634892157795461832519286473472319568863745219\n812753649943682175675491283154237896369845721287169534521974368438526917796318452')"
+	# One language rule -- both bounds evaluated BEFORE the control variable is
+	# assigned -- across all THREE lowerings that implement it: ir.inc's AN_FOR,
+	# the stackless generator state machine, and the stackful generator. Sits
+	# beside the generator tests because two of the three arms are generators,
+	# and the stackless one had the same defect as the IR arm.
+	./$(COMPILER) test/test_for_bounds_before_control_var.pas $(TESTTMP)/test_for_bounds26
+	$(TESTTMP)/test_for_bounds26 | diff -u test/test_for_bounds_before_control_var.expected -
 	./$(COMPILER) test/test_stackless_gen.pas $(TESTTMP)/test_stackless_gen26
 	tools/expect_same.sh test_stackless_gen26 "$$($(TESTTMP)/test_stackless_gen26)" "$$(printf '1 4 9 16 25 \n25\n5 4 3 2 1 \n0 2 4 6 8 \n10 20 30 \n1 2 3 \n99 100 10 101 20 21 102 30 103 30 104 30 105 99 106 \n1 20 300 4 50 600 \n0:10:300 0:10:301 2:30:302 2:30:303 53:40:7 ')"
 	./$(COMPILER) test/test_scheduler.pas $(TESTTMP)/test_scheduler26
