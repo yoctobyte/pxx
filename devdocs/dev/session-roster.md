@@ -18055,3 +18055,74 @@ because nothing about "the threading doc" says there are two.
 **Standing correction to how I read `ListAgents`:** frankB's row said `busy` and
 frank-rust's says `waiting`; neither is a park line. A lane that has explicitly
 parked says so in words. Measure from the last commit, not from my dispatch.
+
+## 2026-08-30 ~02:00 — six faces in one cycle, and three of my own instruments were the bug
+
+**Holdings.** frankS → the xtensa arm of `EmitManagedLocalCleanupForTarget` in
+`ir_codegen.inc` (scoped grant, filed, **incumbent's measured consent** — see below)
++ the 14 missing IR ops in `ir_codegen_xtensa.inc`. frankC → idle→dispatched to
+`bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead`
+[C p55]; released `ir.inc` and `symtab.inc`. frankA → `managedlocalzerobytes`,
+`pasparser_expr.inc`. frankwasm → Track N, landed `05eff4cc9`. frankB → filing the
+`read`/`write` alias fork for A, then parking the ESP PAL ticket. pxx-a5 →
+`bug-t-a-red-compile-job-reports-six-warnings-and-not-the-error`. frank-optimize-b4
+→ W1 slices + `feature-opt-o3-w1-operand-folds-are-x86-64-only-...` [A+O p55].
+frankD → live doc set.
+
+**THREE OF MY OWN INSTRUMENTS WERE THE DEFECT THIS CYCLE.** Recording together
+because the pattern is the point, not the individual slips:
+
+1. The `-40` commit-verification command I broadcast to eight lanes reports false
+   MISSING at 864 commits/12h, and `sync.sh` had the same bug at `-400`, with
+   remedy text saying `cherry-pick`. Fixed, unbounded, 0.65s.
+2. I routed a ticket by inferring authorship from a **commit subject line**, because
+   `%an` is constant fleet-wide. Wrong lane. Then wrote *"authorship is unanswerable
+   from git here"* into the family index — a **false limit within the hour**. frankA
+   supplied the discriminator: the `Claude-Session` trailer, **42 of 200 commits, 21%**.
+   Authoritative when present, nothing when absent; `working/` covers the rest.
+   **Put the trailer on your commits.**
+3. I endorsed a host-side ESP baseline test that **cannot detect what it asserts** —
+   every PAL call returns `-38` on x86-64 because the backend is `{$ifdef}`-ed out,
+   so the assertion is green before *and after* the feature it baselines. frankB
+   measured it instead of writing it.
+
+**A PHANTOM LOCK, four hours old.** `bug-a-the-fpc-seed-canary-...` existed in BOTH
+`working/` and `done/`. The folder IS the lock, so every ownership scan read the
+stray copy as a live Track A claim. Found only because `git mv` refused to
+overwrite. The copies were **complementary, not identical** — 28 lines of resolution
+write-up existed nowhere else — so "delete the duplicate" would have destroyed the
+record of the fix. Concatenated. **`progress check` now has DUPLICATE-SLUG**,
+calibrated both ways: 0 on the live board, fires on a planted copy.
+
+**Faces 115-121 banked** (index at 121 + amendments; COUNT, never write "all N").
+The two with the widest reach:
+- **118** (frankS) *co-location makes drift visible; only an oracle makes it fail.*
+  A commit gathered six per-target arms into one procedure to stop them drifting and
+  said so; two arms then grew inside it, twenty lines from xtensa's one row, four
+  times. **frankC produced a second instance twelve hours later** — `AllocArray`'s
+  five branches, four setting `align := TARGET_PTR_SIZE` outright, one asking
+  `TypeAlign` and getting 1.
+- **121** (frankC) *a self-differential's reference is not an oracle.* `test-xtensa`
+  compares xtensa against the **x86-64 build**, so it can only ever say the targets
+  disagree, never that both are wrong. A third arm (FPC) inverted the verdict: both
+  targets pick `Write` float widths FPC does not, **in opposite directions on
+  different lines**. Property of the whole cross-target suite.
+
+**Tooling landed:** BOARD merge driver actually works now (was inert in every clone —
+the driver is git *config*, not committable; `sync.sh` registers it per run, and
+`.gitattributes` now names `BOARD*.md`, since `BOARD-brief.md` is the busiest and
+was uncovered). `progress.py`'s `inline()` regex literals hoisted (pxx-a5:
+18.66s→12.99s, `BOARD.html` byte-identical). `.git/sync-running` as a followable
+lock signal. pxx-a5 landed the rebase-frequency half: no-op `sync.sh` 27.3s→11.9s.
+
+**Filed on U:** `decide-should-forwardlint-run-in-the-build-not-only-the-gate`
+[U p55] — a lane shipped a break making the FPC seed uncompilable; it sat on origin
+for three commits while `make compiler/pascal26` stayed green, **exactly as face 31
+says it must**. forwardlint exists for it and is wired only into the optional
+`gate.sh`. Measured 4.1s against a 12s build, paid only on rebuild. Also
+`decide-two-threading-docs-disagreed-for-seven-weeks` [U p40].
+
+**Standing:** a stale RED is the normal case, not an alarm — frankwasm reported the
+seed red and frankC had fixed it 13 minutes earlier. **Re-check against HEAD before
+routing.** And frankC's cited sha `f877923cb` is not on the branch: the pre-rebase
+sha trap, live, which is why `resolve` takes no sha.
