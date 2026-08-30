@@ -245,4 +245,4 @@ carried by this ticket any more:
   no agent on it. The remaining numbered items at the end of this ticket are
   real and unstarted. Owner `fable-a-n` left in place: this frees the lock, it
   does not reassign the work — re-claim to resume.
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit e8c32bb8b.
