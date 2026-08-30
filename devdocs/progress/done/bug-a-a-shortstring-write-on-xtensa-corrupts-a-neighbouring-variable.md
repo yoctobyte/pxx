@@ -114,4 +114,4 @@ check would pass on the broken compiler — otherwise the next person simplifyin
 that row reintroduces the blind spot that hid this for the life of the backend.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 6369a8d63.
