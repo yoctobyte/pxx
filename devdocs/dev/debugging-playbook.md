@@ -190,6 +190,14 @@ on `converged after N round(s)` with a fixedpoint sha that **differs from the
 seed you copied in**, or you have measured the current compiler while believing
 you measured history.
 
+**A property you get for free while doing this, and it is stronger than the one
+you were checking:** if the tree is reseeded from `pinned` and rebuilt, and it
+converges to the **same sha** as the build seeded from its own output, that is
+two different starting points reaching one fixedpoint. A single seed cannot
+distinguish a real fixedpoint from a **self-perpetuating miscompile** — a
+compiler that reproduces its own bug reproduces itself perfectly. Two seeds can.
+Costs one rebuild you were probably doing anyway after a probe.
+
 **What it bought beyond a yes/no:** the run failed check 24 and *only* 24, with
 the deliberate variable-form twin (25) passing. That converts a localisation
 *intuition* into a measured property — a future failure now reads as *the literal
