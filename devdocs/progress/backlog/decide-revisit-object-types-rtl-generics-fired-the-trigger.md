@@ -2,7 +2,7 @@
 slug: decide-revisit-object-types-rtl-generics-fired-the-trigger
 title: "The `object`-types revisit trigger has fired: rtl-generics needs exactly one, and it needs none of the expensive machinery"
 track: U
-prio: 40
+prio: 70
 type: decide
 blocked-by: []
 status: backlog
@@ -10,6 +10,29 @@ owner: ""
 created: 2026-08-30
 summary: "decide-old-style-object-types chose option A (do not implement) with an explicit revisit trigger: 'the moment actual source someone wants to build needs it. Not an FPC test — a program.' generics.collections.pas needs it, which blocks rung 6 of feature-pascal-corpus-expansion (prio 75). But the measurement changes the cost case: the corpus contains exactly ONE `= object`, it has no fields, no inheritance, no virtual methods and no constructor, and the equivalent generic record-with-methods compiles and runs on HEAD today. The decision's cost analysis — a second object model with different storage, lifetime, assignment and VMT — does not apply to the thing actually blocking us."
 ---
+
+> **prio 40 → 70 by the coordinator, 2026-08-30, and the mechanism matters more than the
+> number.** This ticket blocks rung 6 of `feature-pascal-corpus-expansion` [P p75] — but the
+> block is stated **in the umbrella's prose and not in its frontmatter**, so the ranker's
+> dependency propagation (a blocker inherits the priority of what it unblocks) **never fired**.
+> A U item sat at 40 in the owner's queue while gating a 75, and nothing in either ticket was
+> wrong: the umbrella's Status line says *"parked 2026-08-30 — rung 6 blocked on
+> decide-revisit-object-types…"* in plain English, one line above a frontmatter block that says
+> only `prio: 75`.
+>
+> **Raised directly rather than by adding the edge**, deliberately. `blocked-by` on the umbrella
+> would remove the whole ladder from `ready`, and only rung 6 is blocked —
+> `bug-p-two-different-nested-specializations-of-one-template-collide` [P p65] is explicitly
+> independent of this decision. So the edge would buy correct ranking for this ticket by hiding
+> several workable rungs, which is a worse trade. **70 rather than 75** because it gates one
+> rung, not the ladder.
+>
+> The general lesson, since this is the third time this umbrella has gone stale on its own prose:
+> **a blocking relationship stated in prose has no owner and nothing re-checks it.** `progress.sh
+> check`'s STALE-PARK aperture exists for exactly this and reads prose in `unfinished/`,
+> `blocked/` and `working/` — it cannot see a prose edge that should have been frontmatter, only
+> a prose edge whose named ticket has since closed.
+
 
 # The `object` revisit trigger fired — with a much smaller bill than the decision priced
 

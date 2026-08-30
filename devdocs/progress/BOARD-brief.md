@@ -61,6 +61,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code (unblocks 1)
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - `[p 70] [A]` bug-a-x86-64-paramstr-expression-smashes-its-frozen-temp
+- `[p 70] [U]` decide-revisit-object-types-rtl-generics-fired-the-trigger
 - `[p 70] [U]` decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop
 - `[p 70] [A+O]` feature-opt-o3-register-pressure
 - `[p 70] [P]` regression-test-asm-test-asm-emit-x64
@@ -85,6 +86,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [A]` feature-unicodestring-model
 - `[p 60] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 2)
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
-- `[p 60] [A+S]` bug-a-riscv32-pc-relative-encoders-silently-truncate-xtensa-already-guards
 
 _347 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
