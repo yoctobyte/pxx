@@ -444,3 +444,69 @@ header at **negative offsets** from `Strs[].Offset` and the entry is 8-aligned
 before that write, so anything that reorders or re-bases **data** emission near
 `_start` must preserve both. The thunk is code, not data, so this should not
 apply — but placement work near program entry is exactly where it would.
+
+## Increment 2 LANDED — `951818104`, one thunk, all 43 sites
+
+Placement question from the entry above is answered: **`compiler.pas`, just
+before the ELF writer dispatch.** All code is emitted, `CodeLen` is final, and
+the writer derives `dataBase` from it — so the thunk can be appended there and
+the recorded rel32 call sites patched with the existing `Patch32`. None of the
+three candidates listed above was right; the finalisation point is better than
+all of them, and it made the "lazy jmp-over" candidate's positional-failure
+hazard moot.
+
+| program | raw | increment 1 | increment 2 |
+| --- | ---: | ---: | ---: |
+| hello-world | 73 | 67 | **9** |
+| file I/O + heap + string + exceptions | 195 | 105 | **9** |
+
+Code size, libc vs raw, `t.pas`: **302,952 vs 302,262 — +690 bytes.** With both
+lowerings live it was +7,050, so collapsing `IR_SYSCALL` back into `EmitSyscall`
+paid for itself an order of magnitude over.
+
+**Verified, and the verdict never rested on the count.** Default raw-mode output
+byte-identical to pinned v394 for both programs; libc-mode output identical to
+raw across 9 programs, including the five that crashed under the inline version;
+`-O0`/`-O1`/`-O2` all correct. The broken inline build ALSO reported 9, which is
+the whole reason each run asserts the program's own output as well.
+
+### Two limits, both loud rather than silent
+
+- **`-O3` is refused with a diagnostic.** `EmitExternalIndirectCall` wraps the
+  call in `FloatPoolSave`/`Restore`, which address `[rbp + FxSaveBase]`, and
+  `FxSaveBase` is **per function**. In a shared thunk `rbp` belongs to whichever
+  caller jumped in, so those stores would land in that caller's frame at another
+  function's offset. Lifting the limit means saving the pool at the call site
+  instead of in the thunk.
+- **The internal branch is rel32, not rel8.** With the float-pool save/restore
+  around both calls the span reaches ~143 bytes — the exact overflow this ticket
+  tripped once already. This is also the shape the fix for
+  [[bug-a-a-rel8-jump-patch-truncates-silently-when-its-span-grows]] should take.
+
+### One fix that works and is NOT explained
+
+Registering the two synthetic imports lazily — at thunk emission, after every
+unit's externals — produced a `DT_NEEDED` naming a **unit** (`builtinheap`)
+rather than `libc.so.6`, and the program failed at **load**, not at run.
+Registering them before the frontend runs fixes it completely.
+
+**The mechanism is not established.** The obvious theory — a parallel array not
+grown alongside `Procs[]` — is **wrong**: `EnsureProcCapacity` does grow
+`ProcLibrary`. Recorded as unexplained rather than given a plausible story,
+because a wrong mechanism in a ticket is worse than an admitted gap. Early
+registration is correct by design regardless (an import should exist before the
+frontend runs, exactly as a source-level `external` would), so the fix is not
+merely empirical even though the failure is unexplained. **If anyone touches
+external registration order, this is a latent trap: it fails at LOAD with a
+plausible-looking library name, not at compile time.**
+
+## Remaining: increment 3, the residual 9
+
+The last 9 kernel-entry instructions are emitters that do not route through
+`EmitSyscall` — the `_start` stub and the per-frontend/thread-runtime sites
+(`thread_emit.inc` ×3, `asmfront.inc`, `cparser/eparser/rparser/zparser`). The
+`_start` half is what the ticket's original scout note already flagged. Track B's
+`InternStr` caution applies to that work specifically: the static managed-string
+header lives at **negative** offsets from `Strs[].Offset` and the entry is
+8-aligned before the write, so anything reordering data emission near `_start`
+must preserve both.
