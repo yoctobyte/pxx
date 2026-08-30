@@ -595,3 +595,94 @@ in place above. The mapping, for anyone holding the old numbers:
 The general lesson is the one CLAUDE.md already states for `resolve`: do not
 write a sha you have not seen on origin. I wrote four, in a ticket AND in
 messages to the coordinator, before the push that renamed them.
+
+## 2026-08-30 (frankwasm) — step 6 is NOT one commit: it needs FIVE durable slots, and two exist
+
+Measured before starting, because the design question "how does `widestring`
+carry its element width out of a function that returns a bare `TTypeKind`" has a
+right answer that is not the obvious one, and a cost that is not the obvious one
+either.
+
+### The transport is a companion global, because that mechanism already exists
+
+`ParseTypeKind` (`pasparser_decl.inc`) has solved this exact problem twice:
+
+    LastTypeStrCap          `string[N]`   — kind is tyFixedString, CAPACITY travels beside it
+    LastTypePointerElemTk   `PWideChar`   — kind is tyPointer,     ELEMENT KIND travels beside it
+
+`LastTypePointerElemTk` is the precise analogue: a kind that cannot express the
+whole type, with the remainder carried in a companion set at the same moment,
+reset per declaration at `pasparser_decl.inc:135`. Per
+`normalise-dont-special-case`, step 6 adds `LastTypeStrElemTk` beside it rather
+than a pair-return or a third name table — and a third name table is *actively*
+contraindicated, because `pasparser_lval.inc:6413` records
+`bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets`, which was two
+parallel name->kind tables drifting until `SizeOf(Real)` answered 8 for a
+variable occupying 4.
+
+### But the global is ONLY a transport, and that is where the cost is
+
+**The companion-global pattern has produced at least three documented silent-wrong-value
+bugs in this compiler, all the same shape:** a consumer distant from the
+declaration read whatever the last unrelated declaration had left in the global.
+
+    bug-pascal-array-of-pointer-deref-loses-the-record-type    LastTypePointerElemRec
+    bug-p-typed-constants-cannot-hold-a-pointer-...            LastTypePointerElemTk
+    bug-a-nd-array-function-result-indexes-the-wrong-slot      LastTypeStrCap
+
+`defs.inc:4612-4635` tells the second one in full: `TAp = array[0..1] of PChar`,
+then `a[0] := 'hey'; WriteLn(a[0])` printed **4304310** — the pointer — because
+every consumer of the alias read whatever the last unrelated pointer declaration
+in the unit had left behind.
+
+**The fix was never to abandon the global. It was to CAPTURE it into a durable
+per-entity slot at definition time.** So the real question for step 6 is not
+"which channel" — it is *how many durable slots must capture it*, and the answer
+is however many the POINTER element kind has, because a wide string reaches
+exactly the same places a typed pointer does.
+
+### The count: five carriers, two written
+
+    entity            pointer element kind      string element kind
+    ---------------   -----------------------   -----------------------------
+    symbol            Syms[].PtrElemTk          Syms[].ElemType     EXISTS
+    record field      UFldPtrElemTk             UFldStrElemTk       step 3
+    type alias        AliasElemTk               --- MISSING ---
+    array-type elem   ArrTypePtrElemTk          --- MISSING ---
+    proc param/ret    ptypesPtrElemTk /         --- MISSING ---
+                      ProcRetPtrElemTk
+
+The denominator here comes from outside the instrument, per the step-4 lesson:
+it is **the set of durable carriers the POINTER element kind already has**, not
+a grep for things that look string-ish. Five entities can hold a type whose kind
+does not describe it fully; two of the five have a string-element slot.
+
+Each missing one is a silent stride-1 index of a UTF-16 string at a use site far
+from the declaration:
+
+    type TW = WideString;  var x: TW;          { alias      }
+    var a: array[0..3] of WideString;          { array elem }
+    procedure P(const w: WideString);          { param      }
+    function F: WideString;                    { return     }
+
+### Consequence for the plan
+
+**Step 6 is not one commit and must not be attempted as one.** It is three more
+slot-migrations of the same shape as steps 2 and 3 — each additive, readers-free
+and inert while the alias still resolves to a byte string — and only then the
+alias break. The ordering argument that put the alias break last applies
+unchanged and with more force: every one of these is undetectable until the
+switch is thrown.
+
+Revised tail of the ordering constraint:
+
+    6a. AliasStrElemTk       (type alias)
+    6b. ArrTypeStrElemTk     (array element)
+    6c. param / return slots
+    ---- only then ----
+    7.  break the alias in pasparser_lval.inc:6322/6424, with sysutils'
+        UTF8Encode/UTF8Decode in the SAME commit
+
+Note this is the "one of six parallel arrays not written" class by name — which
+the deleted `tyWideString` comment was right about even though it was wrong
+about everything else. Recorded here rather than lost with it.
