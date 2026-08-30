@@ -2470,6 +2470,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-lib-test-lib-synapse-2 | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at ee62e6dc0582 (auto-filed by twatch) | — |
 | regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | — |
 | regression-lib-test-lib-tls | T | 70 | regression | regression: lib-test#src:test/lib_tls.pas red at 459e96f985d1 (auto-filed by twatch) | — |
+| regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload | N | 50 | regression | regression: a LITERAL str receiver with `key=` reaches no keyed overload | — |
 | regression-nilpy-dataclass-dict-factory-test-core-red | N | 70 | regression | test-core RED: `test_nilpy_dataclass_dict_factory.npy` | — |
 | regression-op-overload-class-eq-strict-operator | A | 50 | regression | regression: test_op_overload.pas red — b369 made class = / <> rejection unconditional | — |
 | regression-optdiff-o3-stack-frame-intrinsics | O | 70 | regression | -O3 differential: test_stack_frame_intrinsics_b270.pas (optdiff, persistent) | — |
@@ -2692,6 +2693,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-nilpy-test-nilpy-max-min-iterables | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_max_min_iterables.npy red at 0200df7eabcd (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-min-max-key-in-a-variable-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_min_max_key_in_a_variable.npy red at c4fba16e4675 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-min-max-key-in-a-variable | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_min_max_key_in_a_variable.npy red at 0200df7eabcd (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-min-max-key-none | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_min_max_key_none.npy red at 0200df7eabcd (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-operator-dunders | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_operator_dunders.npy red at 6840247771d5 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-parent-call-after-instantiation | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_parent_call_after_instantiation.npy red at b898d0543fc8 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-pascal-unit-keeps-fpc-method-shadowing | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy red at 57b9b7148d32 (auto-filed by twatch) | — |

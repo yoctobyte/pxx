@@ -48681,6 +48681,23 @@ begin
             the method-pointer param, mirroring the assignment path
             (bug-pascal-methodref-arg-to-named-of-object-param-no-match). }
           if ASTKind[exprNode] = AN_METHODREF then argTypes[i] := tyRecord;
+          { A NilPy string LITERAL node is tyString; a str-valued NAME is
+            tyAnsiString. Same value, two match types, and overload resolution
+            ranks against them differently — an inexact tyString receiver lets a
+            catch-all `(Variant, Variant)` sibling outrank the overload that was
+            actually meant. `max("bca", key=f)` bound pylib's two-argument
+            NUMERIC max and compared the string against the key itself
+            ("'>' not supported between instances of 'int' and 'str'"), while
+            `s = "bca"; max(s, key=f)` bound the AnsiString keyed overload and
+            answered correctly. Every non-literal spelling of the same value
+            already worked -- `"bca" + ""`, `str("bca")`, `"bca".upper()` -- which
+            is what shows this is the literal's TYPE and not its value.
+            NilPy has no `string[N]` syntax, so a literal here can only mean the
+            AnsiString the rest of the surface presents: report it as one rather
+            than growing a second ranking path.
+            regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload }
+          if (ASTKind[exprNode] = AN_STR_LIT) and (argTypes[i] = tyString) then
+            argTypes[i] := tyAnsiString;
           currArg := ASTRight[currArg];
         end;
 
@@ -48697,6 +48714,9 @@ begin
           for i := 0 to nArgs - 1 do
           begin
             argTypes[i] := IntToTypeKind(ASTTk[ASTLeft[currArg]]);
+            { same literal normalisation as the first pass above }
+            if (ASTKind[ASTLeft[currArg]] = AN_STR_LIT) and (argTypes[i] = tyString) then
+              argTypes[i] := tyAnsiString;
             currArg := ASTRight[currArg];
           end;
           procIdx := MatchCallDelphiProcAddr(name, qUnit, nArgs, argsHead, argTypes);

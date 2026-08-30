@@ -8,13 +8,12 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (3)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | bug-p-object-value-types-standard-meaning | P | 70 | bug | pxx spends the `object` keyword on a rooted class reference — a stopgap from before builtin TObject existed, now redundant with it and used in 4 lines of its own two tests. Real FPC source that declares `= object` (generics.collections.pas, rung 6 of the corpus expansion at p75) therefore fails to compile. Retire the rooted reference (its tests convert to TObject with byte-identical output), and give `object` its standard meaning: a value type lowered as a record with methods, hard-erroring on inheritance/virtual/constructor/destructor. | — |
-| regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload | N | 50→70 | regression | regression: a LITERAL str receiver with `key=` reaches no keyed overload | — |
 
 ## unfinished (30)
 
@@ -51,7 +50,7 @@ _none_
 | perf-a-cache-the-compiled-nilpy-runtime-unit-image | A | 60 | perf | The structural remainder of perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime, which halved the tax again (5.36s -> 3.06s) by removing two hotspots but still does not remove the WORK: every .npy compile parses and lowers all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. Now that emission is fixed, the residual 2.9s is genuinely parse + AST/IR/symtab construction, so nothing short of caching the compiled unit image will move it. | — |
 | refactor-a-two-dyn-array-depth-functions-that-drift | A | 30 | refactor | Two functions answer 'how many `array of` levels does this expression have': NodeDynDepth (ast_arena.inc) and DynArrayNodeDepth (symtab.inc). They have diverged at least twice and each divergence produced a silent wrong VALUE, not an error. Merge them. | — |
 
-## blocked (8)
+## blocked (7)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -62,7 +61,6 @@ _none_
 | feature-esp-gpio-and-adc-callback-slices | B+S | 30 | feature | ESP peripheral callback API — GPIO (slice 2) and ADC (slice 3) | — |
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
-| regression-test-nilpy-test-nilpy-min-max-key-none | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_min_max_key_none.npy red at 0200df7eabcd (auto-filed by twatch) | regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload |
 
 ## backlog (368)
 
@@ -686,9 +684,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2775)
+## done (2777)
 
-2775 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2777 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (57)
 
@@ -1174,4 +1172,3 @@ _none_
 - **1** — feature-port-freebsd-native
 - **1** — feature-t-freebsd-image-and-runner
 - **1** — feature-tls13-from-scratch
-- **1** — regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload

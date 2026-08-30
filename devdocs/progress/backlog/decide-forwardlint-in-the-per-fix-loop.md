@@ -58,3 +58,33 @@ twice and lost twice.
 
 Filed by frankA rather than acted on: the per-fix loop is CLAUDE.md's single
 source of truth for gating, so widening it is a user decision, not an agent's.
+
+## Update, same day: it broke a SECOND time, in the opposite direction
+
+After the fix above landed, two lanes had fixed the same absence independently
+and both landed, leaving the pair forward-declared twice. FPC rejects a repeated
+forward as hard as a missing one:
+
+```
+pasparser_generic.inc(431,10) Error: Function is already declared Public/Forward
+  "QualArgAliasName(const AnsiString):AnsiString;"
+```
+
+**This is the stronger form of the argument above.** It is not "the seed can
+break". It is: **the seed breaks in two opposite ways — a missing forward and a
+duplicate forward — and pxx tolerates both, so `make compiler/pascal26`
+converges through either.** The self-host loop cannot see this class in either
+direction, by construction.
+
+`forwardlint` detects both, and names the *other* declaration site and the exact
+FPC error text, which is what made the duplicate a two-line fix rather than a
+bisect.
+
+Instance count is now six across six lanes: Track R, frankwasm x2, frankC x2,
+Track P (absence), and Track P again (duplicate).
+
+**One further data point for option 2 (a hook) over option 1 (a documented
+step).** One of the lanes that broke it *did* run `forwardlint` on the change —
+and redirected its output to `/dev/null`, reading the `echo` after it. The tool
+told it, at the right moment, in its own terminal, and the answer was discarded.
+A documented step survives that; a hook that fails the edit does not.

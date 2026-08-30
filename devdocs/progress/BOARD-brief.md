@@ -5,13 +5,12 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:30 blocked:8 backlog:368 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:118 done:2775 rejected:57`
+`working:2 unfinished:30 blocked:7 backlog:368 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:118 done:2777 rejected:57`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O] — owner: frank-optimize-b4
 - `bug-p-object-value-types-standard-meaning` [P] — owner: frank-user
-- `regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload` [N] — owner: frankA
 
 ## unfinished (30) — parked mid-flight; re-claim, do not duplicate
 
@@ -46,7 +45,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `perf-a-cache-the-compiled-nilpy-runtime-unit-image` [A]
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
-## blocked (8) — has an unmet blocker; do not claim
+## blocked (7) — has an unmet blocker; do not claim
 
 - `bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file` [B+S] — blocked-by: feature-pal-esp-posix-fd-semantics
 - `bug-b-nilpy-random-is-never-seeded-and-its-first-draw-is-the-low-bound` [N] — blocked-by: decide-does-nilpy-random-seed-itself-at-import
@@ -55,7 +54,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-esp-gpio-and-adc-callback-slices` [B+S]
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
-- `regression-test-nilpy-test-nilpy-min-max-key-none` [N] — blocked-by: regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload
 
 ## Ready — top 30 of 391, ranked
 

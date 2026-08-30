@@ -1,7 +1,7 @@
 ---
 prio: 50
 track: N
-status: working
+status: done
 owner: frankA
 ---
 
@@ -191,3 +191,81 @@ this shape.
 
 *Not attempted in this session: the fix is in the frontend, and the session's
 remaining budget went to a fleet-wide FPC seed break.*
+
+---
+
+## Resolved — the literal's MATCH TYPE, confirmed against the matcher
+
+**The cause is not what this ticket's title says.** A literal receiver does reach
+the keyed overload set; it is outranked on the way there.
+
+### The discriminating control
+
+`sorted("cab", key=f)` **works** with a literal receiver. `sorted`'s overloads
+are all `key: Pointer` with no competing two-argument numeric sibling. So
+`tyString` matches an `AnsiString` parameter perfectly well, and the literal's
+type is not by itself the defect — that kills the obvious wrong answer.
+
+### Confirmed against the matcher, not inferred from it
+
+Temporarily renamed pylib's `max(const a: Variant; const b: Variant)` out of the
+overload set and re-ran the failing shape:
+
+```
+max("bca", key=f)   with the two-arg Variant catch-all present -> TypeError
+max("bca", key=f)   with it renamed away                       -> c   (correct)
+```
+
+So the keyed `AnsiString` overload was reachable and correct the whole time, and
+the two-argument **numeric** form was winning the rank. That is the matcher
+agreeing, rather than a mechanism that merely explains the rows.
+
+### Why only a LITERAL, and only for min/max
+
+A NilPy string **literal** node carries `ASTTk = tyString`; a str-valued **name**
+carries `tyAnsiString`. Same value, two match types. An inexact `tyString`
+receiver is enough for the catch-all `(Variant, Variant)` sibling to outrank the
+overload that was meant — and `min`/`max` are the only builtins carrying such a
+sibling (`PyStarIsIterableForm`'s note calls them the two-entry exception).
+`sorted` has none, so it never showed the defect.
+
+Every non-literal spelling of the same value already worked, which is what shows
+it is the literal's TYPE and not its value: `"bca" + ""`, `str("bca")`,
+`"bca".upper()` — all correct before this fix.
+
+### Fix
+
+`compiler/pyparser.inc`, both arg-type passes of the free-call path: a string
+literal argument is reported as `tyAnsiString` rather than `tyString`. NilPy has
+no `string[N]` syntax, so a literal can only mean the AnsiString the rest of the
+surface presents — **normalise the two shapes into one rather than grow a second
+ranking path** (`devdocs/dev/normalise-dont-special-case.md`). Conditioned on the
+node shape `AN_STR_LIT`, so a genuine `string[N]` value reaching this path from a
+Pascal unit is untouched.
+
+### Verified
+
+All 22 probe shapes match CPython, including every row of the ticket's own table:
+
+| receiver | `key=None` | `key=k` (var) | `key=f` (named def) | `key=lambda` |
+| --- | --- | --- | --- | --- |
+| literal `"bca"` | ok | ok | ok | ok |
+| named `s` | ok | ok | ok | ok |
+
+`test_nilpy_min_max_key_none` now PASSES end to end — it failed at row 4
+(`min("cab", key=None)`) before this change and at row 2 before the library fix,
+so the two defects are separately demonstrated on separate binaries. Neighbours
+green against the CPython oracle: `sorted_key_dispatch`, `sorted_dict_key`,
+`sorted_sequences`, `sorted_pairs`, `sorted_key_none`, `list_sort_key`,
+`max_min_iterables`, `str_methods`. Self-host fixedpoint converged
+(`9946ebdbf7c6`); `tools/gate.sh quick` GREEN; forwardlint exit 0.
+
+### Still open, and NOT closed by this
+
+`max(("b","a"), key=f)` — a literal **tuple** receiver — still fails to compile
+with *"max has no parameter named 'key' in the overload taking 2 argument(s)"*.
+That is `bug-nilpy-keyword-arg-vs-overload-set`, pre-existing (it fails at
+`7b73a385d^` too, as this ticket already recorded) and untouched here.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

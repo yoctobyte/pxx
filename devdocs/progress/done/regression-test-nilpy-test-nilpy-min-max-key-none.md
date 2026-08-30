@@ -1,9 +1,8 @@
 ---
 prio: 70
 track: N
-status: blocked
+status: done
 owner: frankA
-blocked-by: regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload
 ---
 
 > **Track guessed as N** from the test source. The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -141,3 +140,22 @@ That row is a **literal str receiver**, which is the parked frontend defect
 Blocked rather than closed: the last five rows are still unproven, because a
 baseline run stops at the first hard failure
 (`a-loud-defect-masks-the-quiet-one-behind-it`).
+
+---
+
+## Resolved — both defects fixed, test green end to end
+
+The blocker is fixed (`regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload`):
+a NilPy string literal now presents `tyAnsiString` rather than `tyString` for
+overload matching, so the keyed `AnsiString` overload is no longer outranked by
+min/max's two-argument numeric sibling.
+
+This test needed BOTH fixes, and they are separately demonstrated because a
+baseline run stops at its first hard failure:
+
+| binary | dies at |
+| --- | --- |
+| before the library fix | row 2 — variant receiver |
+| after it, before the frontend fix | row 4 — `min("cab", key=None)`, literal receiver |
+| after both | passes, all 9 rows |
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
