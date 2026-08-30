@@ -6250,3 +6250,65 @@ halves of its residue were genuinely closed.
 **Not every finding should become a ticket.** The filing threshold is whether processing
 the artefact costs less than the waste it prevents, and for "a done thing is still open"
 handed to whoever runs dispatch, it does not.
+
+### 148 — THE INSTRUMENT NEEDS THE SAME ADVERSARIAL PASS AS THE FINDING
+
+*frank-optimize-b4, 2026-08-30, correcting a number it had reported to the coordinator
+twice.*
+
+The per-backend gate count was measured by `grep -c 'OptLevel >= 3'`. **About a fifth of
+the campaign's gates are spelled `if OptLevel < 3 then Exit;`** — the early-return shape
+that slices 7, 8 and 10 all use — and that grep cannot see it. Real ratio **23 : 7**, not
+the 15 : 4 reported.
+
+**The tell was that adding a gate did not move the count: 17 before the slice, 17 after.**
+A measurement that fails to respond to a change you know you made is the cheapest
+available refutation, and it is only visible if you look at the number *after* an action
+whose effect on it you can predict.
+
+> **"Count arms by parsing, not by reading" buys nothing when the parse matches only one
+> of the two ways the arm is written.**
+
+That is 140 and 147a arriving in the tooling: the output was a property of the
+instrument. And the disposal is right — the *conclusion* (x86-64 far ahead of aarch64) is
+unchanged and slightly sharper, so the **slug stays** (slugs are cited by resolved
+commits) and the correction of record goes **inside** the ticket.
+
+### 148a — a measurement instrument that lives in /tmp is not committed
+
+`three.pas`, the benchmark whose loop-instruction count anchored a running "18 → 17 →
+…" chain across a dozen sessions, **was never committed and is gone.** Recreated from the
+umbrella's own prose description, the recreation is **measurably a different program** —
+a 21-instruction loop where the log's last recorded figure was 17.
+
+> **Deltas survive a recreation; absolute counts do not.**
+
+So the chain **stops at slice 9** and was marked stopped rather than silently extended
+with an incomparable number — which would have been the easy move, since the new figure
+still decreases. The recreation is now committed as `bench/w1_three_locals.pas` with that
+history in its header, so the next slice **re-measures a file instead of re-deriving one
+from prose**.
+
+Generalises past benchmarks: any artefact a chain of results is keyed to — a fixture, a
+corpus file, a seed input — is part of the result. If it is not in the repo, the numbers
+are not comparable across the sessions that produced them, and nothing will say so.
+
+### 148b — and I nearly retracked five tickets on a NAME, two ticks after banking 138
+
+Mine. Five auto-filed regressions named `test-c-gtk*` sat at Track **P**, and the tick's
+own new rule says to check auto-filed track guesses. The prefix reads as C; I was one
+command from re-laning all five.
+
+**The bounded fact refutes it: every one of those sources is a Pascal file.** The prefix
+means *C-interop*, not *C-language* — they are Pascal programs binding gtk3 through
+`gtk3_c.h`. The watcher's guess, made from the source extension, was **right**, and my
+correction would have moved five p70 tickets into a queue whose owner cannot fix them.
+
+Two ticks after banking *"retrack on a bounded argument, never on a story"* (138), the
+story was simply wearing different clothes — a filename instead of a truncated log. **The
+rule was not enough; running the check was.** One `ls` of the source paths, and it cost
+nothing.
+
+What the check *did* buy, once run for the right reason: all five share one red sha, one
+last-good, and one 3-commit range holding exactly two code commits — **one defect wearing
+five tickets**, now consolidated, with the confirming build named and not performed.
