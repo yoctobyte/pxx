@@ -296,4 +296,4 @@ the failure mode is a hang and a plain run of a hanging test hangs the suite
 rather than failing it.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit be131e1dc.
