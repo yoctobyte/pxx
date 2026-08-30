@@ -6034,3 +6034,71 @@ Second, on scope: the fix touches `EmitProgramEntryForTarget`, **a different pro
 from the granted one**, so it was filed as a new ticket rather than taken as an
 extension. A grant scoped to a procedure means that procedure, and a lane that widens
 its own grant by one adjacent function is how a scoped grant becomes a file claim.
+
+### 145 — a comment that ASSERTS the invariant its implementation lacks
+
+*pxx-a5, 2026-08-30, root-causing the shard-0 conformance regression (T → P).*
+
+`f12a62815` tells a template **header** from a **use** by one token, and its comment
+states the rule it relies on:
+
+> *"a HEADER is followed by `=`; a use never is."*
+
+A typed constant is `Ident < Ident > =` — **that shape exactly.** So the discriminator
+the comment asserts as a property of the language is not one, and:
+
+```pascal
+type generic TTest<T> = record x: T; end;
+const P: ^specialize TTest<LongInt> = Nil;   { fails }
+var   P: ^specialize TTest<LongInt>;         { compiles }
+```
+
+`LongInt` gets harvested as a template parameter name — **unscoped, every such name in
+the file** — `isParamForm` goes True, the pattern-B rewrite added for this very
+construct is suppressed, and `^specialize` parses as the pointed-to type.
+
+**The comment is the bug's disguise, not its documentation.** This is distinct from *a
+documented trap is not a guard* (106): there the doc correctly describes a hazard nobody
+acts on. Here the doc **states the property that would make the code correct**, in the
+confident register of an invariant — and that is precisely what stops the next reader
+checking whether it holds. A wrong comment asserting a *fact* gets caught when the fact
+is checked; a wrong comment asserting an *invariant* is read as the reason no check is
+needed.
+
+Grep-able shape for a future sweep, and it belongs beside 140's test: **a comment of the
+form "X is always followed by Y" or "a use never is" is a claim about the grammar, and
+the grammar is checkable.** If the comment is load-bearing for a discriminator, it is a
+test, not a sentence.
+
+### 145a — attribution by MECHANISM, with the bisect it did not run named
+
+The honest scoping, stated by the author unprompted:
+
+> *"f12a62815 landed 2026-08-29 and shard0 went red the same day; the other five shards
+> last passed at 0b6f1ffe9419. Nothing else in that range looks implicated, but
+> attribution is by mechanism, not by a build bisect at `f12a62815^` — I did not build
+> the parent."*
+
+Mechanism attribution is *stronger* evidence than a bisect when it explains the
+behaviour — a bisect names a commit, a mechanism names a cause — but it is a different
+claim, and the two are usually conflated in a ticket's Log line. Naming the check **not**
+run is what makes the claim usable: the next holder knows exactly what would upgrade it,
+and knows they are not re-deriving something already done. Compare 108's inverse, where
+an unnamed scope let a survey read as exhaustive.
+
+**And the sharding artefact was rejected by measurement, not by argument:** tgeneric87 is
+entry 337 of 550 → idx 336 → 336 mod 6 = 0 → shard 0, which holds exactly the 92 tests
+the report counts. *The one red shard is the one holding the test.* The plausible
+alternative story — "sharding is flaky" — dies on arithmetic that took a minute.
+
+### 145b — and the successor ticket is the SAME mechanism
+
+`bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument`
+is the same unscoped blacklist. Routing note, and it is `root-cause-over-microfix`
+verbatim: **one repair likely closes both, and taking the microfix here re-splits a
+concept that already has two mechanisms.** Two is a smell, three is a design flaw.
+
+The blacklist was also confirmed **independently of the `=`** — a second template with a
+parameter literally named `LongInt` breaks the `var` form too. That case is the cost
+`f12a62815` *knowingly* accepted; the typed const is not. Separating the accepted cost
+from the unintended one is what makes this a fix rather than a revert.
