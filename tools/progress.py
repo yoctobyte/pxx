@@ -1962,7 +1962,7 @@ pre code{background:none;padding:0}
         # named ticket is still OPEN; a closed one is STALE-PARK's.
         prose_edges = []
         for t in self.tickets:
-            if t.status in ("done", "rejected"):
+            if t.status in ("done", "rejected", "decided"):
                 continue
             if "PROSE EDGES BY DESIGN" in t.text.upper():
                 continue
@@ -1993,7 +1993,20 @@ pre code{background:none;padding:0}
                     if nm == t.slug or nm in t.blockers:
                         continue
                     other = self.by_slug.get(nm)
-                    if other is None or other.status in ("done", "rejected"):
+                    # `decided` IS A CLOSED STATE AND THIS CHECK DID NOT KNOW IT.
+                    # Track U resolves with `decided`, not `done` -- progress.py
+                    # treats the two together everywhere else (RESOLVED_BUCKETS,
+                    # the terminal sets at the archive and cycle checks). This
+                    # check, written later, used the two-element spelling, so a
+                    # prose edge onto a SETTLED decision was reported as blocked
+                    # by a "still-OPEN" ticket. Measured 2026-08-30 on
+                    # feature-pascal-corpus-expansion, whose named blocker
+                    # decide-revisit-object-types-rtl-generics-fired-the-trigger
+                    # had been in decided/ for hours. The blind spot lands
+                    # exactly on Track U, whose entire purpose is unblocking
+                    # chains -- so the check was worst precisely where an edge
+                    # matters most.
+                    if other is None or other.status in ("done", "rejected", "decided"):
                         continue
                     missing.setdefault(nm, other)
             if missing:
