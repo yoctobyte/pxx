@@ -124,7 +124,7 @@ wants its own ticket or a veneer, not a relaxed bound.
   ±4 KiB). Signed-range test, not "did the mask change the value" — the trap the
   ticket warned about. Also checks the low bit, because J/B immediates encode
   bits [20:1] and [12:1] and DROP bit 0 rather than rejecting it.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 714d17213.
 
 ### The prediction was right, and it was measured both ways
 
@@ -152,4 +152,4 @@ PC-relative forms. The 12-bit I-type and S-type immediates (frame offsets on
 loads/stores) mask the same way and are a real sibling of this defect, but they
 are a different failure (a wrong ADDRESS, not a wrong PC) with a much larger
 blast radius if a legitimate large frame trips it. Not widened here.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 714d17213.
