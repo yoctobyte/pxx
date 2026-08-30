@@ -3,7 +3,7 @@ slug: ruling-the-xtensa-signal-exclusion-is-keyed-on-arch-and-the-premise-expire
 track: A+S
 prio: 55
 type: ruling
-status: working
+status: unfinished
 found: 2026-08-30
 owner: frankS
 ---
