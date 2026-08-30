@@ -69,11 +69,25 @@ def quoteattr(data, entities=None):
     `&quot;`. Newlines, tabs and carriage returns are escaped numerically,
     because an unescaped one inside an attribute is normalised away by an XML
     parser and would silently change the value.
+
+    THE MERGE DIRECTION IS THE WHOLE POINT OF THE NEXT TWO LINES, and this had
+    it BACKWARDS until 2026-08-30. CPython writes
+    `{**entities, "\n": "&#10;", "\r": "&#13;", "\t": "&#9;"}` -- the three
+    whitespace entities come LAST, so they OVERRIDE a caller that passes its
+    own replacement for one of them. Seeding the dict with the three and
+    letting the caller overwrite them, which is what this did and what reads
+    as the obvious way round, silently honours `quoteattr(v, {"\n": "NL"})`
+    and emits an attribute a parser will normalise differently. CPython refuses
+    that on purpose: numeric escaping of the three is not a default, it is the
+    invariant that makes the value survive the parser.
     """
-    entities_all = {"\n": "&#10;", "\r": "&#13;", "\t": "&#9;"}
+    entities_all = {}
     if entities:
         for k in entities:
             entities_all[k] = entities[k]
+    entities_all["\n"] = "&#10;"
+    entities_all["\r"] = "&#13;"
+    entities_all["\t"] = "&#9;"
     data = escape(data, entities_all)
     if '"' in data:
         if "'" in data:

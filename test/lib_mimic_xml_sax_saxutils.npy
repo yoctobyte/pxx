@@ -15,6 +15,27 @@ wrong while still producing well-formed XML:
 
 Neither is visible from a single-character test, so both are exercised on text
 that contains an entity of its own.
+
+EXTENDED 2026-08-30 (feature-b-sweep-mimic-shims-against-cpython, phase 2).
+The original 18 checks covered the two properties the shim's header names and
+stopped there, which left the `entities` argument -- the one parameter whose
+whole job is to interact with the mandatory replacements -- almost untested.
+That is where the finding was: `quoteattr` merged the caller's entities OVER
+the three whitespace ones, where CPython merges them UNDER, so
+`quoteattr(v, {"\n": "NL"})` honoured the caller and emitted an attribute an
+XML parser normalises differently. One line, invisible to every check above.
+
+Three behaviours pinned below are CPython quirks rather than niceties, and a
+future reader should not "fix" any of them:
+
+  * `escape(d, {"&": X})` mangles the ampersands the mandatory pass just
+    introduced, because the extras run AFTER: `escape("a&b", {"&": "X"})` is
+    `"aXamp;b"` in both implementations. Ugly, and parity.
+  * `unescape` knows `&lt;` `&gt;` `&amp;` and NOTHING else -- not `&quot;`,
+    not `&apos;`, not numeric references. It is escape's inverse, not an
+    entity decoder.
+  * the three whitespace entities in `quoteattr` are an INVARIANT, not a
+    default: the caller cannot turn them off.
 """
 
 from xml.sax.saxutils import escape, unescape, quoteattr
@@ -60,6 +81,60 @@ check("qa_has_dq", quoteattr('say "hi"'), "'say \"hi\"'")
 check("qa_has_both", quoteattr("both \" and '"), '"both &quot; and \'"')
 check("qa_newline", quoteattr("a\nb"), '"a&#10;b"')
 check("qa_escapes", quoteattr("a<b"), '"a&lt;b"')
+
+# ------------------------------------------------------- empty and passthrough
+check("esc_empty", escape(""), "")
+check("un_empty", unescape(""), "")
+check("qa_empty", quoteattr(""), '""')
+check("esc_only_amp", escape("&"), "&amp;")
+# non-ASCII is character data like any other -- escape must not touch it
+check("esc_nonascii", escape("caf\u00e9 <b>"), "caf\u00e9 &lt;b&gt;")
+check("qa_nonascii", quoteattr("caf\u00e9"), '"caf\u00e9"')
+
+# ---------------------------------------- the `entities` argument, escape side
+# The extras run AFTER the mandatory three, so a caller replacing `&` hits the
+# ampersands escape() just introduced. CPython does this too; it is parity, not
+# a bug to tidy.
+check("esc_ent_amp", escape("a&b", {"&": "X"}), "aXamp;b")
+# ...and replacing `<` finds nothing left to replace, for the same reason
+check("esc_ent_lt", escape("a<b", {"<": "Y"}), "a&lt;b")
+# an empty mapping is falsy and skipped entirely
+check("esc_ent_empty_dict", escape("a&b", {}), "a&amp;b")
+check("esc_ent_multi", escape("a|b~c", {"|": "&#124;", "~": "&#126;"}),
+      "a&#124;b&#126;c")
+
+# -------------------------------------- unescape knows THREE entities, not XML
+# It is escape's inverse, not an entity decoder: everything else is left alone.
+check("un_quot", unescape("&quot;"), "&quot;")
+check("un_apos", unescape("&apos;"), "&apos;")
+check("un_numeric", unescape("&#10;"), "&#10;")
+check("un_unknown", unescape("&nbsp;"), "&nbsp;")
+# a bare ampersand is not an entity and survives untouched
+check("un_bare_amp", unescape("a & b"), "a & b")
+check("un_ent", unescape("a&#124;b", {"&#124;": "|"}), "a|b")
+# the caller's extras run BEFORE `&amp;` is undone -- which is what lets an
+# escaped literal `&#124;` come back as text rather than as the replacement
+check("un_ent_amp_order", unescape("&amp;#124;", {"&#124;": "|"}), "&#124;")
+check("roundtrip_all", unescape(escape("a & b < c > d")), "a & b < c > d")
+
+# ------------------------------------ quoteattr: the whitespace three, and the
+# merge direction that was BACKWARDS until 2026-08-30
+check("qa_tab", quoteattr("a\tb"), '"a&#9;b"')
+check("qa_cr", quoteattr("a\rb"), '"a&#13;b"')
+# CRLF becomes two numeric references, in order
+check("qa_crlf", quoteattr("a\r\nb"), '"a&#13;&#10;b"')
+check("qa_amp", quoteattr("a&b"), '"a&amp;b"')
+# both quote characters AND a newline: single-quote wrapping is not available,
+# so the double quote is escaped and the newline still goes numeric
+check("qa_both_and_nl", quoteattr("x\"y'z\n"), '"x&quot;y\'z&#10;"')
+# a value with ONLY apostrophes still gets double quotes
+check("qa_sq_only", quoteattr("it's"), '"it\'s"')
+check("qa_ent", quoteattr("a|b", {"|": "&#124;"}), '"a&#124;b"')
+# THE FINDING: the caller does NOT get to override the whitespace three. They
+# are the invariant that makes the value survive a parser's attribute-value
+# normalisation, so CPython merges them LAST and the caller's "NL" is dropped.
+check("qa_ent_no_override_nl", quoteattr("a\nb", {"\n": "NL"}), '"a&#10;b"')
+check("qa_ent_no_override_tab", quoteattr("a\tb", {"\t": "TAB"}), '"a&#9;b"')
 
 if fails == 0:
     print("MIMIC-SAXUTILS OK")

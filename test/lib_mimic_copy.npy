@@ -14,6 +14,22 @@ implementations apart.
 The unsupported-object case is deliberately not exercised: it raises here and
 succeeds on CPython, which is the documented difference rather than a bug, and
 a differential file must not contain a line whose two sides disagree.
+
+EXTENDED 2026-08-30 (feature-b-sweep-mimic-shims-against-cpython, phase 2).
+The original 13 checks mutated the COPY and asserted the original intact. The
+other direction was untested -- mutate the ORIGINAL, assert the copy intact --
+and so was every empty container, the nested-DICT sharing (only a nested list
+was covered), and `copy(x) is not x`, which is the direct statement of the
+property the mutation checks reach indirectly.
+
+FROZENSET IS DELIBERATELY NOT ASSERTED, and this is the one absence to read
+before adding a line. `copy.copy(frozenset([1,2]))` returns an EMPTY frozenset
+here -- not because the shim is wrong (its branch is `return frozenset(x)`,
+the platonic line) but because a frozenset returned from any `def` arrives
+empty: bug-n-a-frozenset-returned-from-a-def-arrives-empty. set, list, dict
+and tuple returned from the identical shape are all correct, which is why it
+took a differential to see. Asserting it would make this file fail under one
+interpreter. When that bug closes, add the frozenset rows here.
 """
 
 import copy
@@ -69,6 +85,76 @@ check("shallow_shares_nested", len(n["k"]), 2)
 
 # the module-qualified spelling
 check("qualified", copy.copy([1, 2]), [1, 2])
+
+# ------------------------------------- separation stated directly, not implied
+# A shim that returned its argument passes every equality check above and every
+# `len` check below; these two lines are the property itself.
+check("dict_not_same", shallow(d) is not d, True)
+check("list_not_same", shallow(l) is not l, True)
+check("set_not_same", shallow(s) is not s, True)
+
+# ------------------------------------------------ the OTHER direction of the
+# separation: mutate the ORIGINAL and assert the copy is intact. The checks
+# above only ever mutated the copy, which a copy-on-write shim would pass.
+do = {"a": 1}
+dcopy = shallow(do)
+do["b"] = 2
+check("orig_grew_copy_intact", len(dcopy), 1)
+lo = [1]
+lcopy = shallow(lo)
+lo.append(9)
+check("orig_list_grew_copy_intact", len(lcopy), 1)
+
+# ---------------------------------------------------------- empty containers
+check("empty_dict", shallow({}), {})
+check("empty_list", shallow([]), [])
+check("empty_set_len", len(shallow(set())), 0)
+check("empty_str", shallow(""), "")
+check("empty_tuple", shallow(()), ())
+
+# ------------------------------------------- shallow sharing, the other shapes
+# The check above shares a nested LIST. A nested DICT is the corpus's own case.
+nd = {"k": {"x": 1}}
+ndc = shallow(nd)
+ndc["k"]["y"] = 2
+check("shallow_shares_nested_dict", len(nd["k"]), 2)
+# a list of lists shares its elements...
+ll = [[1]]
+llc = shallow(ll)
+llc[0].append(2)
+check("shallow_shares_list_elem", len(ll[0]), 2)
+# ...but REPLACING an element in the copy does not reach the original, which is
+# the line between "shallow" and "no copy at all"
+llc2 = shallow(ll)
+llc2[0] = ["new"]
+check("replace_elem_isolated", len(ll[0]), 2)
+
+# --------------------------------------------------- the rest of the immutables
+check("bytes", shallow(b"ab"), b"ab")
+check("bool", shallow(True), True)
+check("float", shallow(1.5), 1.5)
+check("int_big", shallow(10 ** 6), 10 ** 6)
+# a tuple comes back as ITSELF, not as an equal tuple -- copying a value nobody
+# can mutate is identity, and that is CPython's answer too
+tup = (1, [2])
+check("tuple_identity", shallow(tup) is tup, True)
+
+# ---------------------------------------------- dicts keep order and key types
+d3 = {"z": 1, "a": 2, 3: "three"}
+check("order_preserved", list(shallow(d3).keys()), ["z", "a", 3])
+check("nonstr_key", shallow(d3)[3], "three")
+
+# ------------------------------------------------------------- copy.Error
+# CPython names this class and callers occasionally catch it; it must be a real
+# exception rather than a bare marker
+from copy import Error
+check("error_is_exception", issubclass(Error, Exception), True)
+raised = "no"
+try:
+    raise Error("x")
+except Exception:
+    raised = "yes"
+check("error_caught_as_exception", raised, "yes")
 
 if fails == 0:
     print("MIMIC-COPY OK")

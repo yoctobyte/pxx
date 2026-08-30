@@ -17178,11 +17178,41 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_colorsys.npy $(TESTTMP)/lib_mimic_colorsys
 	tools/expect_same.sh lib_mimic_colorsys.1 "$$($(TESTTMP)/lib_mimic_colorsys | grep -c '=ok')" "20"
 	tools/expect_same.sh lib_mimic_colorsys.2 "$$($(TESTTMP)/lib_mimic_colorsys | tail -1)" "MIMIC-COLORSYS OK"
+	# copy -- 13 checks became 35 in phase 2 of feature-b-sweep-mimic-shims-
+	# against-cpython. The original set only ever mutated the COPY and asserted
+	# the original intact; the other direction (mutate the ORIGINAL, assert the
+	# copy intact) was untested, as were the empty containers, nested-DICT
+	# sharing, and `copy(x) is not x` -- the direct statement of the property
+	# every mutation check reaches only indirectly.
+	#
+	# FROZENSET IS DELIBERATELY ABSENT and must not be "completed":
+	# copy.copy(frozenset([1,2])) returns an EMPTY frozenset, because a
+	# frozenset returned from any def arrives empty (bug-n-a-frozenset-returned-
+	# from-a-def-arrives-empty). The shim's branch is `return frozenset(x)`,
+	# the platonic line, so the defect is the frontend's and the line stays.
+	# set/list/dict/tuple returned from the identical shape are all correct,
+	# which is why only a differential could see it.
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_copy.npy $(TESTTMP)/lib_mimic_copy
-	tools/expect_same.sh lib_mimic_copy.1 "$$($(TESTTMP)/lib_mimic_copy | grep -c '=ok')" "13"
+	tools/expect_same.sh lib_mimic_copy.1 "$$($(TESTTMP)/lib_mimic_copy | grep -c '=ok')" "35"
 	tools/expect_same.sh lib_mimic_copy.2 "$$($(TESTTMP)/lib_mimic_copy | tail -1)" "MIMIC-COPY OK"
+	# saxutils -- 18 checks became 45 in phase 2 of feature-b-sweep-mimic-shims-
+	# against-cpython. The original set covered the two properties the shim's
+	# own header names (escape leaves quotes alone; & is replaced first) and
+	# stopped, which left the `entities` argument -- the one parameter whose
+	# whole job is to interact with the mandatory replacements -- almost
+	# untested. That is where the finding was: quoteattr merged the caller's
+	# entities OVER the three whitespace ones where CPython merges them UNDER,
+	# so quoteattr(v, {"\n": "NL"}) honoured the caller and emitted an
+	# attribute an XML parser normalises differently.
+	#
+	# Three CPython QUIRKS are now pinned and must not be "fixed": escape's
+	# extras run after the mandatory pass, so escape("a&b", {"&": "X"}) is the
+	# mangled "aXamp;b" in both; unescape knows &lt; &gt; &amp; and nothing
+	# else (not &quot;, not &apos;, not numeric refs) because it is escape's
+	# inverse rather than an entity decoder; and the whitespace three in
+	# quoteattr are an invariant the caller cannot switch off.
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_sax_saxutils.npy $(TESTTMP)/lib_mimic_saxutils
-	tools/expect_same.sh lib_mimic_saxutils.1 "$$($(TESTTMP)/lib_mimic_saxutils | grep -c '=ok')" "18"
+	tools/expect_same.sh lib_mimic_saxutils.1 "$$($(TESTTMP)/lib_mimic_saxutils | grep -c '=ok')" "45"
 	tools/expect_same.sh lib_mimic_saxutils.2 "$$($(TESTTMP)/lib_mimic_saxutils | tail -1)" "MIMIC-SAXUTILS OK"
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_sax_xmlreader.npy $(TESTTMP)/lib_mimic_xmlreader
 	tools/expect_same.sh lib_mimic_xmlreader.1 "$$($(TESTTMP)/lib_mimic_xmlreader | grep -c '=ok')" "25"
