@@ -213,4 +213,4 @@ BMP and JPEG on the success path and the refusals that remain — RGBA, malforme
 files, missing paths — keep saying so.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit db68102cd.
