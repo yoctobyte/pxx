@@ -351,6 +351,66 @@ def localize(src, workdir, oracles, groups):
 
     ta = evaluate(by[a_name], traced, workdir)
     tb = evaluate(by[b_name], traced, workdir)
+    return diff_traces(ta, tb, a_name, b_name, kinds)
+
+
+def sentinel_kind(t):
+    """The symptom name for a non-trace result, or None if `t` is a real trace.
+
+    A crash keeps its rc: an unhandled exception (217) and a segfault (139) are
+    different symptoms, and merging them would be the coarseness this file argues
+    for applied one step too far. Everything else is one bucket per sentinel.
+    """
+    if t == COMPILE_FAIL:
+        return "compile-fail"
+    if t == TIMEOUT:
+        return "timeout"
+    if t.startswith(CRASH):
+        m = re.search(r"rc=(\d+)", t)
+        return "crash-rc%s" % m.group(1) if m else "crash"
+    return None
+
+
+def diff_traces(ta, tb, a_name, b_name, kinds):
+    """Localise a divergence between two traces. Pure: no compiling, no I/O.
+
+    THE BUG THIS EXISTS TO PREVENT. `evaluate()` returns a SENTINEL for a run
+    that crashed, timed out, or failed to compile -- one line, with the program's
+    partial output discarded. Feeding that to a positional trace diff made
+    `min(len(la), len(lb))` equal 1, so the loop compared index 0 only, always
+    differed there, and reported
+
+        first divergence at checkpoint 1 of 1 -- a `assign` statement
+        (everything before it agrees, so the bug is AT that statement)
+
+    for a program with 27 checkpoints that crashed somewhere else entirely. Two
+    separate falsehoods: the named statement is the program's FIRST one rather
+    than the guilty one, and nothing was compared, so "everything before it
+    agrees" is a claim about an empty set stated as evidence.
+
+    It also poisoned the dedup key, which is the expensive half. The signature is
+    `<class>_<kind>`, so one crashing bug split into as many signatures as its
+    seeds had distinct first statements -- `fpc-self_assign`, `fpc-self_case`,
+    `fpc-self_forvarlimit` are three ledger entries, three sets of example seeds,
+    and three recheck costs for what the evidence says is one FPC -O2 defect
+    (rc=217, identical generator args, differing only in seed). That is exactly
+    the "one bug wearing many names" failure the ledger was built to remove,
+    re-entering through the crash path.
+
+    The tell was in the reports all along: `of 1` is `min(len(la), len(lb))`, not
+    the checkpoint count, so a truncated side prints "of 1" for a 27-checkpoint
+    program. Nobody reads a denominator that agrees with its numerator.
+    """
+    for t, who in ((ta, a_name), (tb, b_name)):
+        sk = sentinel_kind(t)
+        if sk:
+            return ("no localisation: %s produced %s, not a trace -- the run has "
+                    "no checkpoints to compare, so the guilty statement is "
+                    "UNKNOWN.\n    %-10s %s\n    %-10s %s\n"
+                    "    (a crashing run discards its partial output, so this is "
+                    "a symptom, not a location)"
+                    % (who, t, a_name, ta.split("\n")[0], b_name,
+                       tb.split("\n")[0]), sk)
     la, lb = ta.split("\n"), tb.split("\n")
     for i in range(min(len(la), len(lb))):
         if la[i] != lb[i]:
