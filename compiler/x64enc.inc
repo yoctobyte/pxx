@@ -162,9 +162,35 @@ begin
 end;
 
 procedure x64_syscall;
+{ Every COMPILER-GENERATED kernel entry on x86-64 funnels here: `EmitAsmX64`
+  spells it as the mnemonic 'syscall' (asmtext.inc), and there are 17 such sites
+  in ir_codegen.inc alone -- the TLS install, the signal/fault runtime, fork,
+  exec, the lot. They are invisible to a grep for the `EmitB($0F); EmitB($05)`
+  byte pair, which is how an earlier pass of --rtl-libc missed them and reported
+  a residual count as if it were the emitter population.
+
+  Only the DIRECT encoding path may be rerouted to the --rtl-libc thunk. In
+  staging mode EncB defers to AsmB, and CodeLen is then not this instruction's
+  address -- the recorded call site would be patched somewhere else entirely,
+  which is the silent-wrong-address failure this feature already produced once.
+  That the staged path is also the one a user's inline `syscall` would arrive on
+  is a second, independent reason to leave it raw: a hand-written syscall keeps
+  its own register contract and must not acquire the thunk's. (Today user asm
+  reaches lib/asmcore's AsmEncodeX64 instead of this encoder, so that half is
+  belt-and-braces rather than load-bearing.)
+
+  EmitSyscall holds the -O3 refusal and the site-count check; routing here
+  rather than duplicating them is the whole point -- one lowering, one place it
+  can be wrong. In the default (non-libc) build EmitSyscall emits the same two
+  bytes through the same EmitB, so emitted code is unchanged byte for byte. }
 begin
-  EncB($0F);
-  EncB($05);
+  if EncToAsmBuffer then
+  begin
+    AsmB($0F);
+    AsmB($05);
+  end
+  else
+    EmitSyscall;
 end;
 
 { --- Register/Register & Register/Immediate Mov --- }

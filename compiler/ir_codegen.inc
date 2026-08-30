@@ -537,7 +537,13 @@ begin
 
   { --- restorer --- }
   SigRestorerAddr := CodeLen;
-  EmitAsmX64(['mov rax, %', 15, 'syscall']);          { rt_sigreturn }
+  { syscall_raw, NOT syscall: rt_sigreturn restores the whole context from the
+    signal frame at a fixed offset from rsp, so it must be the bare instruction
+    even under --rtl-libc, where every other kernel entry becomes a call into
+    the libc thunk. Routing it through the thunk is a SIGSEGV on the first
+    signal delivered, in a build whose hello-world, div0 path and syscall count
+    all look perfect. }
+  EmitAsmX64(['mov rax, %', 15, 'syscall_raw']);      { rt_sigreturn }
 
   { --- dispatch (SA_SIGINFO ABI: edi = sig, rsi = siginfo_t*, rdx = ucontext_t*) --- }
   SigDispatchAddr := CodeLen;
