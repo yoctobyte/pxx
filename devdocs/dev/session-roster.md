@@ -18983,3 +18983,64 @@ first, then read it back, then cite it — or cite the commit *subject*, which
 survives a rebase. And when relaying a peer's sha, verify it with
 `merge-base --is-ancestor` before it goes into a durable file; it costs one
 command and I did not spend it, twice.
+
+## Tick 2026-08-30 ~10:5x — THE ORACLE WAS PARTLY NOT ONE, and it flattered itself only by luck
+
+**Retraction, frankB's own, and the most serious finding of the night.** The FPC
+oracle's unit-path fix passed the test's `-Fu`/`-I` dirs straight through — and
+**`lib/rtl` holds `sysutils.pas`, `math.pas`, `classes.pas`, `strings.pas`,
+`dateutils.pas` and `strutils.pas`, every one shadowing the FPC unit of that
+name.** So any test whose compile line carried `-Fulib/rtl` had **FPC compiling
+OUR RTL instead of its own.**
+
+For such a row, *"FPC reproduces it"* means our implementation built by FPC
+agrees with our implementation built by pxx. **That is circular, and it inflates
+DERIVED — the one direction this audit must never be wrong in, because it
+manufactures confirmations of exactly the claim under test.**
+
+**The keeper is why it was caught.** It happened to *reduce* DERIVED (784 → 763,
+candidates 26 → 55) only because our RTL does not compile cleanly under FPC.
+**Had it compiled, the identical defect would have read as a stronger result and
+been reported up as good news.** The failure mode was self-announcing by luck;
+its silent form is the one that flatters the audit. Restricted to `test/`
+companion dirs (`test/case_units`, `test/units`, `test/delphi_generic_units`),
+where all 14 recoverable sources live, so the recoverable aperture survives and
+independence with it. Same restriction on `--unoracled`'s overlap scan for a
+different reason: scanning a large RTL finds almost any token somewhere and
+drives every hit toward 1.0, destroying the metric rather than widening it.
+
+**`763` and every Pascal number from that run are RETRACTED, not provisional.**
+NilPy 342/353 and C 333-of-362-built stand. Corrected sweep running.
+
+**What caught it was DIRECTION, not content** — *a change that can only ADD unit
+search paths cannot legitimately turn a reproduced row into a differing one.*
+The sign was wrong before the size was interesting, and **a sign is checkable
+without knowing the right answer**, which magnitude is not. This is the second
+time the same structural hazard appeared: the C-side mirror of the same
+"obviously correct" improvement made gcc build **10 fewer** sources, because a
+pxx include dir shadows a system header gcc needs. **Giving an oracle the
+subject's own include paths is the natural-looking improvement that quietly
+turns an independent oracle into a mirror** — and both instances were caught by
+direction, neither by inspection.
+
+**Shas: all five frankB cited to me were dead.** Live, verified with
+`merge-base --is-ancestor`: `840080943` (unit-path in wrong function),
+`9294d363a` (overlap ranking), `1a7a4217a` (FPC oracle unit paths), `a1dc8dab8`
+(faces 228/228a), `496435549` (`--unoracled`), `11a1e65a7` (the restriction).
+frankB's own diagnosis is the sharpest statement of the mechanism anyone has
+given: it verified with `git log --format=%s origin/master | grep -cF
+'<subject>'` — **subject-based, survives the rebase, correct every time** — and
+then quoted the perishable identifier beside the durable one it had just used.
+**The fix is not a better check; it is citing the thing you were already
+checking.**
+
+**Running total of dead shas relayed tonight: 7 of 15 audited.** Every one from a
+lane pushing frequently enough to race.
+
+**frankB's unification of the family, and I think it is right:** *a check whose
+subject is adjacent to the thing that fails.* The assert checked that the old
+text existed in the right region while the edit chose its own region;
+`cat-file -e` checks that an object exists while the question is whether it is
+reachable from origin; verifying by artefact answers "did the content land" while
+the failure is "does the name resolve". **The adjacent check keeps winning
+because it is the one that is easy to write.**
