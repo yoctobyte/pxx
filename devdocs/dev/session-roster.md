@@ -22012,3 +22012,48 @@ half alone, its soft-float return already agreeing with its caller), and the
 out to be **two small arms in an epilogue that already existed**. The repeated
 falsification is what shrank it. A confident first implementation would have built
 the large version of the wrong thing.
+
+## Third instance: "no single X reaches the limit" read as a property of the population
+
+frankS, 2026-08-30, adding to *"stating a sample as the population"* above. Same
+shape, third time in one day, and this one re-scoped a p60.
+
+frankC swept the busybox headers individually and concluded the failure was
+**cumulative depth, not one pathological header** — the right instinct, and it
+correctly eliminated the obvious suspects. `sys/param.h` was not in the set. It
+recurses to whatever the cap is, on its own:
+
+| include cap | busybox fails at |
+| --- | --- |
+| 16 | level 17 |
+| 128 | level 129 |
+
+**The failure depth tracking the cap is the signature of runaway recursion, not
+of genuine nesting** — and it is only visible once you can move the cap, which is
+why raising it was the right experiment even though it was the wrong fix.
+
+**The trap, in frankS's words:** *"no single header reaches the cap" reads
+identically whether the set was exhaustive or not.* A negative result over a
+sample, stated as a property of the population. The report is honest, the
+measurement is sound, and nothing in the output distinguishes a complete sweep
+from an incomplete one.
+
+**The habit that fixes it costs one clause:** say what you swept. "None of these
+seven headers reaches the cap" is a different claim from "no header reaches the
+cap", and the first one invites the question that finds the eighth.
+
+**Consequence:** `feature-c-corpus-busybox-applet` hangs off the new
+`bug-c-the-preprocessor-runs-away-on-sys-param-h-resolved-from-the-host-fallback`
+[C p60], **not** off the include-storage change. That A ticket reverts to what it
+was originally filed as — a `normalise-dont-special-case` cleanup deleting three
+ladders, sixteen names for one datum, and a latent out-of-bounds read. Worth
+landing on those merits; not the busybox blocker.
+
+Five controls made the diagnosis stick rather than a single failing case:
+`-I/usr/include/x86_64-linux-gnu` compiles the identical header fine; each of its
+own includes compiles alone (the `__need_NULL` protocol included); all together
+in its own order compile; a self-including header inside a normal guard
+terminates and matches gcc; an absent header still gives the correct not-found
+diagnostic. `/usr/include/sys/` does not exist on this box, so the suspect is
+host-fallback **resolution** — and the first move recorded in the ticket is to
+*print what the fallback resolves it to*, not to read the header.
