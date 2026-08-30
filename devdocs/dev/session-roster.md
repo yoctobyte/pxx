@@ -22869,3 +22869,42 @@ recording**, and it matters most for these eight because they are hours old and 
 from fix commits landed today. Two files in an earlier batch shipped as the
 regression test for their own fix; transcribing today's output pins whatever the fix
 left behind, bug included.
+
+## A stale summary FREEZES the priority — the ranker is faithful to a description that expired
+
+frankwasm's sharpening, and it is the mechanism behind three of tonight's
+incidents:
+
+> **p20 was not a wrong judgment. It was a correct judgment about a different
+> object.**
+
+`chore-a-sweep-the-unwired-tests-into-the-suite` was priced as *a drain of 15
+deferred files* — and at that description p20 is generous. It is a **leak of ~8/day
+with a full-tier red attached**. Nothing re-prices a ticket when the world moves
+under a summary nobody re-measures, because `prio:` is downstream of the summary and
+both go stale together.
+
+**Three instances tonight, three different folders, one cause:** the grant record in
+`backlog/` still issuing an order for a deleted mechanism; a decided question sitting
+un-actioned; and this. **This is the dispatch failure I own** — I route on `prio:`
+and `ready` output, and both are faithful renderings of a claim with a date on it.
+
+**The countermeasure frankwasm chose is the right one and worth copying: re-price in
+the same commit as the first batch of evidence, never as a bare frontmatter edit**,
+so the number arrives with what justifies it. A lone `prio:` bump is one more
+unsourced claim.
+
+**And its stop rule on the drain is the correct trade:** every expectation must be an
+**oracle, never a recording**, and for these eight it is not a formality — they are
+hours old and came from fix commits landed today, so transcribing current output pins
+whatever those fixes left behind. The failure mode is *a permanently green test
+asserting a bug*. Two files in an earlier batch shipped as the regression test for
+their own fix and had exactly that exposure. **"Six wired and two explained beats
+eight wired and one lying"** — and a file with no constructible oracle is left
+unwired *with a stated reason*, which is the honest form of a skip.
+
+**Independent confirmation is what made the corpus hand-off safe**, and the control
+is the part to copy: 6a `code=671512B procs=1661` is **byte-identical to the figures
+already in the file**, so the change at 6b is the compiler and not the invocation.
+On a corpus whose own ticket warns that diagnostic coordinates are unreliable, a bare
+*"the error changed"* is worth nothing without that.
