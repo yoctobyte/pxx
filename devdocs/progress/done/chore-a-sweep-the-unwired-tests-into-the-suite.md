@@ -604,4 +604,4 @@ The rule that follows, and it is the one to keep: **whether a test executes is
 not a property visible from inside it.** Reading the sources finds every
 property the sources carry and none of the ones they don't.
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 013d9bfd5.
