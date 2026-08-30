@@ -439,3 +439,54 @@ ask what this would be if it were false, and go look at *that*.
 **It got better twice by being wrong in public.** The question is no longer
 "adopt an untested tier for 34%" but "promote one well-scoped pass for 20%, gated
 normally."
+
+---
+
+# WHAT COUNTS AS PROOF — ruled by the owner, 2026-08-30
+
+> *"About optimization: self-host + all tests passed = proof. We have no more
+> proof until we have a counterproof."*
+
+**This closes the ceremony question completely.** A pass that self-hosts and
+passes the full suite is proven, and there is nothing stronger available — so
+stacking an extra benchmark, an extra tier, or an approval step on top of a green
+full gate is not rigour, it is delay. **Promote it.**
+
+The back edge arrives in the same sentence and is what makes the bar affordable:
+**a later regression IS the counterproof**, and it demotes the pass. Promotion is
+reversible. Nobody needs to be certain in advance, which is the assumption that
+made the promotion backlog feel expensive in the first place.
+
+## Who runs "all tests", since the promoting agent cannot
+
+The hook denies `gate.sh full` and `testmgr --tier full|limited` to every lane
+but T, deliberately, and `PXX_ALLOW_FULL_SUITE=1` is the owner's to grant — not
+a coordinator's and not a peer's. frank-optimize's own bound is the honest one:
+a fixedpoint in 2 rounds plus six programs is **evidence, not a gate.**
+
+**So: land the promotion, then ask frankT to sweep that exact sha, full + cross.**
+One pass, not a tier — much smaller than the ask this ticket withdrew, and
+precisely what Track T is for. No new machinery.
+
+**The line that matters is the PIN, not the push** (added here because the ruling
+does not say it and the distinction is load-bearing). Landing an unproven `-O2`
+default is the ordinary land-non-green case this repo already accepts, and the
+counterproof demotes it. **Pinning is what moves every lane's ground.** So a
+promoted pass becomes eligible to pin only once T's sweep of its sha is green.
+That is the entire additional discipline.
+
+If the owner would rather have the sweep *before* the land, the knob is his:
+`PXX_ALLOW_FULL_SUITE=1` for that one run. Nothing here requires it.
+
+## The one boundary — and it is about the instrument, not an extra hurdle
+
+The ruling says a passing suite is all the proof there is. It does not make a
+suite see what it cannot. Where a change leaves the corpus **self-consistent
+before and after**, a green is **no measurement**, not a null — and the C-ABI
+fork is the live case, where the cross suites pass either way by construction.
+There you need a differential oracle, not more suite.
+
+That is not a caveat on the ruling. It is
+[[the-name-is-not-the-thing]] applied to a test result: *"all tests passed"* is
+an identifier, and what it stands for is *"every way this could be wrong was
+exercised"* — which is a different claim, and occasionally a false one.

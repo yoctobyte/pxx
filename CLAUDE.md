@@ -164,18 +164,38 @@ flag or lands incrementally, never on a long-lived branch.
   on CPython must work here. Accepting something CPython rejects is a feature,
   not a defect (`devdocs/dev/nilpy-semantics-divergences.md`).
 - **O — the tiers, ruled by the owner 2026-08-30:** `-O0` debugging, `-O1` **in
-  limbo**, `-O2` the de-facto stable default, `-O3` **experimental by design**.
-  New passes land behind `-O3`, and **anything proven stable and sensible as a
-  default is ALLOWED to move to `-O2` — proof is the only ceremony.** And it is
-  cheap: **one pass is ~71% of the tier** — `EmitStaticLitHandle`
-  (`ir_codegen.inc:3480`, `if OptLevel < 3 then Exit;`) alone is **20%** of the
-  28% gap, min-of-5. So per-pass promotion is the whole job, exactly as the
-  ruling says.
-  **Promote and measure ONE AT A TIME — the batch is not the sum.** Promoting
-  every `-O3` gate at once measured *worse* than promoting that one pass alone
-  (18.06 s vs 16.23 s): the passes interfere. **Do NOT build the dev loop's
-  compiler at `-O3`** — that makes the artifact under test a product of an
-  untested tier.
+  limbo**, `-O2` the de-facto stable default, `-O3` **experimental by design** —
+  where a pass lives while it earns `-O2`, not a staging area that ought to be
+  empty.
+  **What counts as proof is ruled, and it is exhaustive: self-host + all tests
+  passed.** *"We have no more proof until we have a counterproof."* Nothing
+  stronger is obtainable, so an extra benchmark, tier or approval stacked on a
+  green full gate is ceremony, not rigour — **promote it.** The back edge comes
+  with it and is what makes the bar affordable: a later regression IS the
+  counterproof, and it demotes the pass.
+  **Who runs "all tests" — the existing machinery already answers this, add
+  nothing.** The promoting agent cannot: the hook denies it `gate.sh full` and
+  `testmgr --tier full|limited`, deliberately. So **land the promotion, then ask
+  Track T to sweep that exact sha with full + cross** — one pass, which is what T
+  exists for. Its own self-host plus a handful of programs is *evidence, not a
+  gate*.
+  **The line that matters is the PIN, not the push.** Landing an unproven `-O2`
+  default is the ordinary land-non-green case the repo already accepts, and the
+  counterproof demotes it. **Pinning it is what moves every lane's ground** — so
+  a promoted pass is eligible to be pinned only once T's sweep of its sha is
+  green. That is the whole additional discipline; there is no new gate.
+  **Promote and measure ONE AT A TIME — the batch is not the sum.** All `-O3`
+  gates at once measured *worse* than the single best pass alone (18.06 s vs
+  16.23 s); the passes interfere. And that best pass, `EmitStaticLitHandle`
+  (`ir_codegen.inc:3480`), is ~71% of the tier on its own — per-pass promotion is
+  a pass, not a campaign.
+  **Do NOT build the dev loop's compiler at `-O3`**: it makes the artifact under
+  test a product of an untested tier.
+  **The one boundary, and it is about the instrument, not an extra hurdle:** the
+  ruling says a passing suite is all the proof there is; it does not make a suite
+  see what it cannot. Where a change leaves the corpus *self-consistent before and
+  after* — the C-ABI fork is the live case, the cross suites pass either way —
+  green is **no measurement**, not a null, and you need a differential oracle.
   `decided/decide-the-o3-tier-is-34-percent-faster-and-nothing-gates-it`.
 - **D — verify snippets by compiling them.** Don't invent behaviour, don't touch
   `compiler/**` or `lib/**`.
