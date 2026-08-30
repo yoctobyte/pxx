@@ -19146,3 +19146,52 @@ and where a sha is genuinely wanted, take it from `sync.sh`'s own verified outpu
 *after* the push rather than from `git log` before it. frankS's line for it —
 *"I have been discarding the one artifact that was correct by construction and
 quoting the one that was not."*
+
+## Tick 2026-08-30 ~11:3x — the corrected audit, split three ways by provenance
+
+**The shadowing was not a corner case: 98 `$(COMPILER)` lines in the Makefile
+carry `-Fulib/rtl`** (plus 97 `lib/crtl/include`, 88 `lib/crtl/src`, 19
+`lib/rtl/platform/posix`). frankB answered the "which earlier results are
+downstream" question **per result rather than as a unit**, and the split is the
+right one:
+
+| result | status | why |
+| --- | --- | --- |
+| **784 DERIVED** | **survives** | computed before the unit-path change existed — no `-Fu` passed, FPC could not reach our RTL. Stale for other reasons, clean of this one |
+| **763 DERIVED** | **retracted** | the shadowed run |
+| **796 DERIVED** | **current** | corrected sweep: 1279 rows, FPC built 860 of 1214, 368 cannot build, 59 candidates, 44 cross-target, 12 built-but-no-output |
+| 26→23→18 band | **verdicts survive, membership does not** | see below |
+| 366-source reason distribution | **retracted** | same unrestricted dir loop |
+
+**796 moves in a direction the change permits** — up from 784 with cannot-build
+down, which is what adding *test-only* companion paths should do and the opposite
+of what the shadowed run did. The direction check used as an acceptance test, not
+just a detector.
+
+**The band is two provenances inside one result.** The **18 verdicts stand
+unconditionally** — each hand-judged against the test's own source (`add_two(3,4)`,
+`sum7(1..7)`, 4π, `stat -c %s test/hello.pas`), no oracle and no FPC involved.
+**Membership is not clean**: the overlap scan read `lib/rtl` for those 98 rows,
+and finding a token anywhere in a large RTL inflates a row's hit score, pushing it
+**out** of the 0.00 band. So the band may **under-include** and **cannot
+over-include** — nothing judged was wrongly there, but rows that belong may have
+been scored away. A directional bound on an error, which is worth more than an
+estimate of its size.
+
+**The retraction that matters most is the one frankB volunteered against its own
+recommendation:** it had told me to chase the **14 recoverable** sources, and
+those are *exactly* the population the shadowing most likely corrupts, because
+**"it builds now" is the verdict the shadowing manufactures.** The 195/151 split
+is probably close to right — a dialect syntax error or a missing `palparallel`
+does not become buildable by finding our `sysutils` — but "probably" is not a
+basis for quoting it.
+
+**Two rules recorded in code, deliberately twice.** The `test/`-dir restriction
+appears in both instruments with **two different justifications** — independence
+for the oracle, metric preservation for the overlap scan — so that someone
+relaxing one does not read the other as redundant. Same predicate, different
+rule.
+
+**And frankB's mechanism for why the adjacent check survives review:** *"Nobody
+looks at `assert old in blk` and thinks weak. It is a genuinely rigorous check of
+a question nobody asked."*
