@@ -209,4 +209,4 @@ as an `expect_same` on output would have been exactly the vacuous-green shape
 was filed about earlier tonight.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit aba15f157.
