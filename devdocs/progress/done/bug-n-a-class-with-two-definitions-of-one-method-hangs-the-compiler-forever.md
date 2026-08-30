@@ -4,8 +4,8 @@ prio: 65
 type: bug
 blocked-by: []
 summary: "9-line repro: a class defining the same method twice, whose body assigns a parameter to a SAME-NAMED attribute (`self.prefix = prefix`), plus any later scope holding a local of that name, makes the compiler spin at 100% CPU forever. RSS is flat, so it never OOMs and never self-terminates — it hangs until killed. CPython accepts the source (last definition wins). Any lane running a lib gate over such a file hangs with no output."
-status: urgent
-owner: ""
+status: done
+owner: frankA
 ---
 
 # A class with two definitions of one method hangs the compiler forever
@@ -382,3 +382,118 @@ earlier today from the same session. That ticket found four unguarded
 across two different chain structures**, and this one is **not** latent — it is
 the top of the board. The two should be read together, and the guard is probably
 one shared helper rather than eight copies.
+
+---
+
+## Resolved — frankA, 2026-08-30. Track A, `symtab.inc`, as frankD routed it.
+
+**It is a cycle, and frankD's hypothesis was right about the shape while being
+wrong about the cause.** Both halves matter, so both are recorded.
+
+### Measured, not argued
+
+A step counter in `FindSym`'s first walk, bounded by `SymCount` (a chain cannot
+exceed the table), dumping the bucket when it trips:
+
+```
+PROBE: FindSym walk exceeded SymCount for "prefix"
+PROBE:   bucket=20937 SymCount=476 steps=493
+PROBE:   [0] idx=476 prev=476 blk=0 name=$byref.prefix
+PROBE:   [1] idx=476 prev=476 blk=0 name=$byref.prefix
+```
+
+A **one-element self-loop**: `SymHashPrev[476] = 476`. Two things in that dump are
+the whole answer. `SymCount=476`, so **index 476 is past the live table** — a dead
+slot is its bucket's head. And the slot in the bucket for `prefix` is named
+**`$byref.prefix`** — a name that does not hash to the bucket it is sitting in.
+
+### Root cause: a RENAME after the slot was filed — not `SymRollbackTo`'s O(1) assumption
+
+`SymHashInsert` files a slot in the bucket for its name *at that moment*.
+`SymRollbackTo` unlinked with `SymHashHead[SymNameFoldHash(Syms[i].Name)]` —
+recomputing the bucket from the name **as it reads now**. Those differ whenever a
+name changes in between, and NilPy changes one deliberately:
+`pyparser.inc` renames a rebound parameter to `$byref.<name>` to hide it from
+ordinary lookup (bug-nilpy-rebinding-a-list-parameter-aliases-the-callers-list),
+then immediately `AllocVar`s a fresh local under the ORIGINAL name.
+
+```
+1. param `prefix` -> idx N, filed in bucket(prefix), head=N
+2. renamed to `$byref.prefix`  (still linked in bucket(prefix))
+3. AllocVar('prefix') -> idx N+1, head=N+1, prev=N
+4. scope exit: rollback unlinks N+1 correctly, then computes
+   bucket($byref.prefix) for N -- A BUCKET N WAS NEVER IN. bucket(prefix)
+   is left headed by the now-dead slot N.
+5. the SECOND definition re-allocates idx N and inserts:
+   SymHashPrev[N] := SymHashHead[bucket(prefix)] = N   <-- self-loop
+6. any later FindSym('prefix') walks it forever.
+```
+
+That accounts for each of frankB's three ingredients exactly, which is the check
+that it is the real cause and not a plausible one: **two definitions** supply the
+re-allocation of the freed index at step 5; **`self.prefix = prefix`** is what
+makes the parameter count as rebound, so it is renamed at step 2 — break the
+name identity in either direction and no rename happens; and the **later scope's
+local** is the lookup at step 6 that walks the corrupted chain.
+
+`SymRollbackTo`'s "the highest live idx is always its bucket's current head"
+assumption — frankD's suspect — is in fact **sound**: indices increase
+monotonically and each insert pushes to the head, so a descending pop is exactly
+reverse-insertion order. The bug is not the order it pops in, it is the *bucket*
+it pops from.
+
+### Fix
+
+Record the bucket at insert (`SymHashBkt[idx]`, a new parallel array grown in
+lockstep and initialised to -1 because 0 is a valid bucket) and unlink from
+**that**, never from a recomputed name. This makes a rename safe by construction
+rather than forbidden by convention — no rename site has to remember anything, in
+this frontend or a future one, and it needed no edit outside `symtab.inc` /
+`defs.inc`, so no cross-lane change. `cparser.inc:6508` already unlinks by
+walking for the predecessor, so the C frontend is unaffected either way.
+
+### Verification
+
+- the ticket's 9-line repro: **3.48s**, was a 120s timeout. Runs, prints `b`,
+  matching CPython (last definition wins).
+- **the consumer**: `lib/rtl/mimic_xml_dom_minidom.py.parked`, the 494-line file
+  that could not be compiled at all, compiles in 4.01s, and
+  `test/lib_mimic_xml_dom_minidom.npy` matches CPython across all 36 checks.
+  Left parked — that file and
+  [[feature-b-a-real-minidom-is-an-implementation-not-a-shim]] are Track B's.
+- `tools/gate.sh quick` **GREEN** (self-host fixedpoint 114s, testmgr quick 28s),
+  run because this changes the symbol hash for every frontend.
+- new test `test/test_nilpy_duplicate_method_def.npy`, wired into `test-nilpy`
+  with a **timeout around the COMPILE**: the failure emits nothing, so there is no
+  output to diff and the bound *is* the assertion. Confirmed to hang (rc=124) on
+  the pre-fix pinned binary and pass after.
+
+### A fourth ingredient the ticket does not record, found by the test failing to fail
+
+My first version of the test added `return prefix` to the third scope. It
+**compiles pre-fix** — rc=0, no hang. So the local must be BARE; reading it
+silences the bug. I had written the test from my model of the cause instead of
+from the shape measured to hang, and it would have passed on the broken compiler
+forever. The measured constraints are now stated in the test header so the next
+person does not tidy them away.
+
+### A second, quieter defect found in the same shape — filed, not fixed
+
+Calling a duplicated **ordinary** method compiles clean and then **segfaults**,
+identically on the pre-fix binary and on this fix, so it is neither caused nor
+cured here: `bug-nilpy-calling-a-duplicated-ordinary-method-segfaults` [N p55].
+It needs no third scope and produces a binary, which makes it the one that
+survives a suite asserting only on the compiler's exit status. The test file
+names it as deliberately absent.
+
+### Relation to [[bug-a-four-ancestor-chain-walks-in-symtab-have-no-cycle-guard]] [A p45]
+
+That ticket keeps its value and its priority. This fix removes the cause of *this*
+cycle; it adds no guard, so the eight unguarded walks still turn any future cycle
+into a silent hang rather than a diagnosable error. frankD's reading — that the
+same missing guard on two independent chain structures is the file's convention
+rather than a fact about either chain — is the argument for a guard that a new
+walk cannot bypass, and it is next in this `symtab.inc` pass.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

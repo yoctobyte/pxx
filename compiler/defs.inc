@@ -2539,6 +2539,9 @@ var
     never hold dead indices. }
   SymHashHead : array[0..SYM_HASH_SIZE-1] of Integer;
   SymHashPrev : array of Integer;   { next-older same-bucket idx }
+  SymHashBkt  : array of Integer;   { the bucket the slot was FILED in, which
+                                      is not always the one its CURRENT name
+                                      hashes to -- see SymHashInsert }
   ProcOverloadDirective : array of Boolean;
   ProcFlexColumn : array of Boolean; { `flexcolumn` directive: call args accept write-style `:width[:decimals]` modifiers; each value arg expands to three actuals (value, width, decimals; defaults 0 / -1), so the routine declares (v; w, d) triples. }
   ProcCount : Integer;

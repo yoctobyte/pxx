@@ -5,17 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:3 unfinished:28 blocked:8 backlog:365 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2758 rejected:56`
+`working:3 unfinished:28 blocked:8 backlog:366 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2759 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O] — owner: frank-optimize-b4
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 - `feature-target-wasm` [A+B] — owner: frankwasm
-
-## urgent (1) — jump the queue
-
-- `bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever` [N]
 
 ## unfinished (28) — parked mid-flight; re-claim, do not duplicate
 
@@ -59,9 +55,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `regression-tools-devtest-00-3` [T] — blocked-by: bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code
 
-## Ready — top 30 of 387, ranked
+## Ready — top 30 of 388, ranked
 
-- `[p 65] [N]` bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever (unblocks 1)
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 70] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 2)
@@ -91,5 +86,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 62] [A]` feature-unicodestring-model
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
+- `[p 60] [A+S]` bug-a-a-perf-commit-silently-fixed-41-xtensa-windowed-divergences-and-nobody-knows-why
 
-_357 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_358 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

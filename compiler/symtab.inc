@@ -3705,6 +3705,18 @@ procedure SymHashInsert(idx: Integer);
 var b: Integer;
 begin
   b := SymNameFoldHash(Syms[idx].Name);
+  { Remember WHICH bucket, rather than recomputing it from the name at unlink
+    time. A symbol's Name is not immutable: NilPy renames a rebound parameter to
+    `$byref.<name>` to hide it from ordinary lookup
+    (bug-nilpy-rebinding-a-list-parameter-aliases-the-callers-list), and the
+    C frontend rewrites names too. A rename after this point moves nothing --
+    the slot stays linked in the bucket it was filed in -- so a later
+    SymNameFoldHash(Syms[idx].Name) names a DIFFERENT bucket and unlinks the
+    wrong chain, leaving a dead head that the next allocation of this index
+    links to itself. That self-loop hung the compiler forever at 100% CPU with
+    flat RSS and no output:
+    bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever }
+  SymHashBkt[idx] := b;
   SymHashPrev[idx] := SymHashHead[b];
   SymHashHead[b] := idx;
 end;
@@ -3732,7 +3744,11 @@ begin
   keepTo := newCount;
   for i := SymCount - 1 downto newCount do
   begin
-    SymHashHead[SymNameFoldHash(Syms[i].Name)] := SymHashPrev[i];
+    { SymHashBkt, NOT SymNameFoldHash(Syms[i].Name): the name may have been
+      rewritten since the slot was filed, and recomputing here unlinks a bucket
+      this slot was never in while leaving a dead head in the one it was. }
+    if SymHashBkt[i] >= 0 then
+      SymHashHead[SymHashBkt[i]] := SymHashPrev[i];
     if SymStaticLocal[i] and (i >= keepTo) then keepTo := i + 1;
   end;
   SymCount := keepTo;
@@ -3922,7 +3938,7 @@ procedure EnsureSymCapacity(need: Integer);
   bounds. Called at each Alloc* chokepoint; doubling from 16384; capacity never shrinks
   across the per-frontend SymCount reset. ALL parallel arrays grow in lockstep — a
   missed one is a silent out-of-bounds. See feature-dynamic-compiler-tables. }
-var n: Integer;
+var n, i: Integer;
 begin
   if need <= SymCapacity then Exit;
   if SymCapacity = 0 then n := 16384 else n := SymCapacity;
@@ -3940,11 +3956,16 @@ begin
   SetLength(SymRTTIOff, n);        SetLength(SymIsHiddenArgTemp, n); SetLength(SymBlockId, n);
   SetLength(SymStaticLocal, n);   SetLength(SymAbsAliased, n);
   SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
+  SetLength(SymHashBkt, n);
   SetLength(SymCLongRank, n);      SetLength(SymTR, n);
   SetLength(SymCellPtr, n);
   SetLength(SymArrIdxTk, n);      SetLength(SymArrIdxEnumId, n);
   { the two per-DIMENSION tables ride the same index, MAX_ARR_DIMS to a symbol }
   SetLength(SymArrDimLo, n * MAX_ARR_DIMS);   SetLength(SymArrDimSpan, n * MAX_ARR_DIMS);
+  { -1, not SetLength's zero-fill: 0 is a VALID bucket, so an uninserted slot
+    would otherwise claim bucket 0 and a rollback over it would corrupt that
+    chain. SymHashInsert overwrites this the moment the slot becomes visible. }
+  for i := SymCapacity to n - 1 do SymHashBkt[i] := -1;
   SymCapacity := n;
 end;
 

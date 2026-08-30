@@ -2035,6 +2035,18 @@ test-nilpy: $(COMPILER)
 	@# independently; expectation generated from CPython
 	./$(COMPILER) test/test_nilpy_list_sort_key.npy $(TESTTMP)/test_nilpy_sortkey26
 	$(TESTTMP)/test_nilpy_sortkey26 | diff -u test/test_nilpy_list_sort_key.expected -
+	@# a class defining ONE method twice, whose body assigns a parameter to a
+	@# same-named attribute, with a later scope holding a bare local of that name.
+	@# A rebound parameter is renamed to hide it from lookup AFTER it was filed in
+	@# the symbol hash under its original name, so the scope-exit rollback unlinked
+	@# a bucket it was never in and left a dead head; the next allocation of that
+	@# index linked it to itself and FindSym walked a one-element cycle forever.
+	@# THE TIMEOUT IS THE ASSERTION -- the failure was a hang with no output, so
+	@# there is nothing to diff; without the bound a regression hangs this suite
+	@# instead of reporting. 120s against a ~3.5s compile is a 30x margin.
+	@# bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever
+	timeout 120 ./$(COMPILER) test/test_nilpy_duplicate_method_def.npy $(TESTTMP)/test_nilpy_dupmethod26
+	$(TESTTMP)/test_nilpy_dupmethod26 | diff -u test/test_nilpy_duplicate_method_def.expected -
 	@# d[k] = None stores a real None, and a def with no return annotation parses
 	./$(COMPILER) test/test_nilpy_none_variant_residuals.npy $(TESTTMP)/test_nilpy_noneresid26
 	tools/expect_same.sh test_nilpy_noneresid26 "$$($(TESTTMP)/test_nilpy_noneresid26)" "$$(printf 'None\nTrue\nhi')"
