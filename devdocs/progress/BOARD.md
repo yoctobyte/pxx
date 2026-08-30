@@ -8,16 +8,17 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | feature-opt-o3-register-pressure | A+O | 70 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
 | feature-target-wasm | A+B | 60 | feature | NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim. | decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal |
 | perf-a-cache-the-compiled-nilpy-runtime-unit-image | A | 60 | perf | The structural remainder of perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime, which halved the tax again (5.36s -> 3.06s) by removing two hotspots but still does not remove the WORK: every .npy compile parses and lowers all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. Now that emission is fixed, the residual 2.9s is genuinely parse + AST/IR/symtab construction, so nothing short of caching the compiled unit image will move it. | — |
 
-## unfinished (28)
+## unfinished (27)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -27,7 +28,6 @@ _none_
 | bug-n-a-local-named-after-its-own-def-aliases-the-function-result | N | 60 | bug | A NilPy local whose name equals its enclosing def's name aliases the function result instead of being an ordinary local: `def mode(label): tonic, mode = label.split(' '); return tonic, mode` returns ('C', None) where CPython returns ('C', 'minor'). Silent wrong value, no diagnostic. | — |
 | bug-nilpy-render-backend-py-compile-does-not-terminate | N | 55→68 | bug | It loops forever after a known point emitting nothing — not slowness. PXXDBG=all output is byte-identical at 20s and 45s (54,577 lines, cmp-clean) with VmRSS flat at 7,616 kB, so it is a tight non-allocating spin entered right after _text's parameter list (render_backend.py:244); the method-block bisect agrees independently. NOT minimised: seven candidate shapes are recorded as DISPROVED, including the tuple-unpack cycle that was the leading suspect. | — |
 | bug-nilpy-shared-nonlocal-frame-cell-is-never-freed | N | 40 | bug | A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted | — |
-| bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument | P | 65 | bug | `TEnum<TPair>` where TPair is a type nested INSIDE the enclosing template is minted eagerly as `TEnum$TPair`, giving `unknown type: TPair` at TEnum's own line. Same shape as bug-p-a-generic-argument-that-is-another-templates-parameter-is-minted-as-a-concrete-type, which is fixed — that one catches PARAMETER names via a token-level scan, and a nested type name is not a parameter, so it slips through. 23-line repro, FPC prints 4. This is the current stop for `uses Generics.Collections` (generics.collections.pas:120, TEnumerator<TDictionaryPair>). Two mechanisms for one concept: read the whitelist analysis below before adding a third. | bug-p-a-qualified-type-name-cannot-be-a-generic-argument |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets | A | 55 | feature | Build-time selection of frontends and targets, so `only-pascal` + `only-esp-riscv` yields a small Pascal-for-ESP compiler instead of the megalith. The umbrella build stays the default. Filed with a measurement: C is nearly separable already (16 references in shared files), NilPy is NOT (1281) — so this doubles as a falsifiable test of the frontend-separation design, and NilPy already fails it. | — |
@@ -732,7 +732,6 @@ _none_
 - [p 65] [P] bug-p-a-qualified-type-name-cannot-be-a-generic-argument (unblocks 1)
 - [p 65] [U+S] decide-is-the-2026-07-12-esp-park-still-in-force (unblocks 1) [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 65] [A+S] bug-a-a-by-value-wide-record-on-xtensa-renders-a-live-address
-- [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython [parked — re-claim, do not duplicate]
 - [p 65] [P] bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
 - [p 65] [P] bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets
 - [p 65] [P] bug-p-two-different-nested-specializations-of-one-template-collide

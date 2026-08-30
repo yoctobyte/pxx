@@ -69,6 +69,35 @@ const
     Cost is ~24 B/entry of BSS, ~1.4 MB, virtual only — the same cost model as
     MAX_CODE above. bug-a-string-table-cap-refuses-a-14k-line-c-program }
   MAX_STRS    = 65536;
+
+  { ---- the STATIC managed-string block, built at compile time ----------------
+    Mirrors the runtime header in compiler/builtin/builtinheap.pas
+    ([meta:8][rc:8][len:8][data][nul], handle = base + 24). InternStr lays one
+    of these down in front of every pooled literal, so a literal that has to
+    become a managed AnsiString is an ADDRESS, not a call to
+    AnsiStrFromLiteralAddr that allocates and copies the same bytes again on
+    every evaluation (PXXStrFromLit was 9.28% of uforth's profile —
+    bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython).
+
+    These duplicate builtinheap.pas's constants rather than sharing them,
+    because that file is COMPILED by this compiler, not included into it. The
+    two copies are pinned together by test_static_string_literals: it asserts
+    the runtime's view of a compile-time-built block (length, ASCII answer,
+    copy-on-write) rather than the constants themselves, so a drift shows up as
+    a wrong value and not as a silent agreement. }
+  MSTR_HDR_SIZE        = 24;      { handle = block base + this }
+  MSTR_KIND_LEGACY     = $0000;
+  MSTR_FLAG_STATIC     = $0100;   { never freed, never appended in place }
+  MSTR_FLAG_ASCII      = $0400;
+  MSTR_FLAG_ASCII_KNOWN= $1000;
+  { The refcount a static block is born with. It has to satisfy three things at
+    once, and 2^30 is the smallest round number that does:
+      > 1   so PXXStrUnique and the inlined SetLength fast path both take their
+            copy-on-write arm and a literal can never be mutated in place;
+      far from 0 so no amount of PXXStrDecRef ever reaches the free;
+      inside 32 bits so the 32-bit targets, whose refcount word is four bytes,
+            read the same value the 64-bit ones do. }
+  MSTR_STATIC_RC       = $40000000;
   { The compiled-unit ceiling, enforced at `if CompiledUnitCount < 256` in
     ParseUnit. Named here because VisCacheVis is sized by it and USED to be
     sized by MAX_STRS — see the note on that array. }

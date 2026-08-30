@@ -548,8 +548,29 @@ begin
   Inc(KeyCount);
 end;
 
+{ One 8-byte little-endian word into Data[], from a value that fits in 32 bits.
+  The high dword is written as four explicit zero bytes and never as `v shr 32`:
+  the 32-bit self-hosts shift a 32-bit register there and would store garbage,
+  which is the same trap the string-table length prefix below already dodges. }
+procedure EmitDataWord32Zx(v: Int64);
+var j: Integer;
+begin
+  for j := 0 to 3 do
+  begin
+    if DataLen >= MAX_DATA then Error('data overflow');
+    Data[DataLen] := Byte((v shr (j * 8)) and $FF);
+    Inc(DataLen);
+  end;
+  for j := 0 to 3 do
+  begin
+    if DataLen >= MAX_DATA then Error('data overflow');
+    Data[DataLen] := 0;
+    Inc(DataLen);
+  end;
+end;
+
 function InternStr(const s: AnsiString): Integer;
-var i, j: Integer; len: Int64; match: Boolean;
+var i, j: Integer; len, orAll, meta: Int64; match: Boolean;
 begin
   for i := 0 to StrCount-1 do
   begin
@@ -563,6 +584,51 @@ begin
   end;
   if StrCount >= MAX_STRS then Error('string table overflow');
   Strs[StrCount].Text   := s;
+
+  { ---- the static managed-string header, laid down BEFORE Offset is taken ----
+    Three words go in front of the length prefix, so that the char data at
+    Offset+8 is simultaneously a frozen inline string's payload (what every
+    existing consumer of Offset already reads) and a fully formed managed
+    handle: the runtime's [meta][rc][len] sit at handle-24, -16 and -8, and the
+    length prefix this table has always written IS the -8 word. Nothing about
+    the old layout moves, which is why no call site changes.
+
+    Offset is recorded AFTER the header, still pointing at the length prefix.
+    That keeps `Offset` meaning exactly what it meant, and puts the header at
+    negative offsets nobody has to know about unless they want the handle.
+
+    The word before the header is the allocator's size word, which
+    PXXStrAllocSize reads for spare capacity. It is written as an explicit ZERO
+    rather than left to be whatever the previous entry's padding holds: an
+    in-place append needs PXX_FLAG_APPENDABLE as well as room, and a static
+    block never carries it, so this word is unreachable today — but a garbage
+    capacity that only a future flag change could reach is the kind of latent
+    wrong value this runtime has already been bitten by, and eight bytes per
+    literal is not worth arguing about.
+
+    Alignment first: the header is read a word at a time, and the 32-bit
+    targets fault on an unaligned word. The table already ended each entry
+    8-aligned, so this loop is a no-op in practice — it is here so that the
+    property is stated rather than inherited. }
+  while (DataLen mod 8) <> 0 do
+  begin
+    if DataLen >= MAX_DATA then Error('data overflow');
+    Data[DataLen] := 0;
+    Inc(DataLen);
+  end;
+  EmitDataWord32Zx(0);                       { allocator size word: no capacity }
+
+  { The ASCII answer, computed here because the bytes are right here. The
+    runtime pays a per-byte OR inside PXXStrFromLit for exactly this; a literal
+    can have it for free and for good. Same encoding as PXXStrMeta: KNOWN is
+    set either way, because this loop is authoritative. }
+  orAll := 0;
+  for j := 1 to Length(s) do orAll := orAll or Ord(s[j]);
+  meta := MSTR_KIND_LEGACY or MSTR_FLAG_STATIC or MSTR_FLAG_ASCII_KNOWN;
+  if (orAll and $80) = 0 then meta := meta or MSTR_FLAG_ASCII;
+  EmitDataWord32Zx(meta);                    { handle - 24 }
+  EmitDataWord32Zx(MSTR_STATIC_RC);          { handle - 16 }
+
   Strs[StrCount].Offset := DataLen;
   Strs[StrCount].Len    := Length(s);
   

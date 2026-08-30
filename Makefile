@@ -4098,6 +4098,28 @@ test-threads: $(COMPILER)
 	else \
 	  echo "=== test_cmp_both_in_place: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
 	fi
+	# a string LITERAL that has to become a managed AnsiString is an ADDRESS at
+	# -O3, not a call that allocates and copies the same bytes again on every
+	# evaluation: InternStr lays a managed-string header down in front of every
+	# pooled literal, so the block is already one. PXXStrFromLit was 9.28% of
+	# uforth's profile and the allocator around it most of another 19%.
+	# The block is SHARED by every evaluation of that literal and is never
+	# freed, so the whole risk is writes: copy-on-write, in-place append,
+	# in-place SetLength, and a refcount walked to zero by handing the handle
+	# out without the reference the old fresh-block convention implied. Each
+	# row therefore reads the literal AGAIN after doing something to a copy,
+	# and prints both -- a mutated static block shows up as the SECOND read
+	# being wrong, never as a crash.
+	# -O0 is the control: the path is -O3-gated, so it provably cannot be
+	# taken there, and one expectation covers both. Checked non-vacuous by
+	# setting MSTR_STATIC_RC to 0 -- -O3 then printed `b=Zbcdef`, the static
+	# block edited in place, while -O0 stayed correct AND the compiler still
+	# self-hosted byte-identically, because it builds at the default -O level.
+	# bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
+	./$(COMPILER) -O3 test/test_static_string_literals.pas $(TESTTMP)/test_ssl326
+	tools/expect_same.sh test_ssl326 "$$($(TESTTMP)/test_ssl326)" "$$(printf 'cow a=Zbcdef b=abcdef\nappend a=abcdefzzz b=abcdef\nsetlen a=abc b=abcdef len=6\nparam b=abcdef\nempty len=0 eq=TRUE cat=x\nhigh len=5 ord=200 eq=TRUE\nloop a=recycled len=8 b=recycled\nacc=16014958769\ndone')"
+	./$(COMPILER) -O0 test/test_static_string_literals.pas $(TESTTMP)/test_ssl026
+	tools/expect_same.sh test_ssl026 "$$($(TESTTMP)/test_ssl026)" "$$(printf 'cow a=Zbcdef b=abcdef\nappend a=abcdefzzz b=abcdef\nsetlen a=abc b=abcdef len=6\nparam b=abcdef\nempty len=0 eq=TRUE cat=x\nhigh len=5 ord=200 eq=TRUE\nloop a=recycled len=8 b=recycled\nacc=16014958769\ndone')"
 	# the AN_FOR hidden INIT temp is elided at -O3 when both bounds are re-emittable
 	# (literal / plain scalar var / pure arithmetic over those). The temp enforces
 	# "evaluate both bounds before assigning the control variable"; eliding it

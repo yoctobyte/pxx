@@ -3022,6 +3022,77 @@ begin
   IREmitCodeCall(AnsiStrFromLiteralAddr);
 end;
 
+{ ---- static string literals: an address where there used to be a call -------
+  Every pooled literal is now preceded by a ready-made managed-string header
+  (InternStr, emit.inc), so a literal that has to become an AnsiString ALREADY
+  IS one: no PXXStrFromLit, no PXXAlloc, no copy of bytes that are already in
+  the image, and no PXXFree when the last reference dies — the block's refcount
+  is born saturated (MSTR_STATIC_RC) and no PXXStrDecRef can drive it to zero.
+  PXXStrFromLit was 9.28% of uforth's profile and the allocator around it most
+  of another 19%.
+
+  Why one function DECIDES and EMITS, instead of a predicate the caller checks:
+  the caller then cannot mispredict it. A predicate and an emitter are two
+  readers of one condition, and when they disagree here the destination
+  register is simply never loaded — a wrong VALUE, not a crash. This returns
+  False having emitted nothing, and the caller's `else` is the only other path.
+
+  The empty string is the one shape that is not just an address. A Pascal
+  AnsiString collapses '' to nil (PXXStrFromLit's `len <= 0` arm); a NilPy str
+  does not, deliberately (decide-nilpy-none-str-representation). So the Pascal
+  arm loads zero and the NilPy arm loads the real zero-length block — the same
+  split the runtime makes, made here instead.
+
+  Behind -O3 for now. The REPRESENTATION is emitted unconditionally (the header
+  costs 24 bytes per literal either way, and a pool that changed shape with the
+  optimisation level would be two layouts to keep sound); only its USE is
+  gated, so -O2 keeps calling the runtime and stays the proven default until
+  this has been through a full gate.
+  bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython }
+function EmitStaticLitHandle(node: Integer): Boolean;
+var si: Integer;
+begin
+  EmitStaticLitHandle := False;
+  if OptLevel < 3 then Exit;
+  if node < 0 then Exit;
+  if IRKind[node] <> IR_CONST_STR then Exit;
+  si := InternStr(GetTokenStrFromRaw(IRA[node], IRB[node]));
+  if (Strs[si].Len = 0) and (not isNilPy) then
+    EmitAsmX64(['xor eax, eax'])
+  else
+  begin
+    EmitB($48); EmitB($B8); EmitDataRef(Strs[si].Offset + 8);   { the handle: Offset is the length prefix, data follows }
+    { AND TAKE A REFERENCE. Every call site this replaces used to receive a
+      FRESH block at rc=1 and take ownership of it — no retain on the store, a
+      release when the reference dies. Handing back the static block without
+      the increment keeps that release, so each store/overwrite cycle walks the
+      static refcount permanently DOWN by one, and a program that assigns
+      literals in a hot loop reaches zero and frees a .data block. 2^30 sounds
+      out of reach until you price it: this ticket's own subject runs for ~400
+      seconds, and 2.5M literal stores a second is an ordinary rate.
+
+      So restore the convention exactly, in four bytes and no call:
+      `inc qword [rax-16]` (48 FF /0, disp8 -16). The saturated start then does
+      the job it was actually chosen for — keeping PXXStrDecRef's `rc = 0` test
+      false — rather than standing in for an increment nobody makes. }
+    if ThreadSafeMode then EmitB($F0);                       { lock }
+    EmitB($48); EmitB($FF); EmitB($40); EmitB($F0);          { inc qword [rax-16] }
+  end;
+  EmitStaticLitHandle := True;
+end;
+
+procedure EmitAnsiStrFromInlineStringOf(node: Integer);
+{ EmitAnsiStrFromInlineString, but told WHICH node produced the address in rax,
+  so a literal can take its static block and never reach the runtime. The dead
+  `mov rax, imm64` the caller already emitted for the literal is left standing:
+  overwriting it costs one instruction against a call, an allocation and a
+  copy, and restructuring eight call sites to hoist the test above IREmitNode
+  is where a wrong value would come from. }
+begin
+  if EmitStaticLitHandle(node) then Exit;
+  EmitAnsiStrFromInlineString;
+end;
+
 { Is this store the accumulation shape `s := s + x`, where the destination IS
   the concat's left operand? Then the result can be appended into s's own block
   instead of built fresh from both halves — which is the difference between an
@@ -5306,11 +5377,14 @@ begin
           begin
           if IRKind[valueNode] = IR_CONST_STR then
           begin
-            sVal := GetTokenStrFromRaw(IRA[valueNode], IRB[valueNode]);
-            si := InternStr(sVal);
-            EmitB($48); EmitB($BE); EmitDataRef(Strs[si].Offset + 8);
-            EmitB($48); EmitB($BF); EmitI64(Strs[si].Len);
-            IREmitCodeCall(AnsiStrFromLiteralAddr);
+            if not EmitStaticLitHandle(valueNode) then
+            begin
+              sVal := GetTokenStrFromRaw(IRA[valueNode], IRB[valueNode]);
+              si := InternStr(sVal);
+              EmitB($48); EmitB($BE); EmitDataRef(Strs[si].Offset + 8);
+              EmitB($48); EmitB($BF); EmitI64(Strs[si].Len);
+              IREmitCodeCall(AnsiStrFromLiteralAddr);
+            end;
           end
           else
           begin
@@ -5939,11 +6013,14 @@ begin
         begin
           if IRKind[valueNode] = IR_CONST_STR then
           begin
-            sVal := GetTokenStrFromRaw(IRA[valueNode], IRB[valueNode]);
-            si := InternStr(sVal);
-            EmitB($48); EmitB($BE); EmitDataRef(Strs[si].Offset + 8);
-            EmitB($48); EmitB($BF); EmitI64(Strs[si].Len);
-            IREmitCodeCall(AnsiStrFromLiteralAddr);
+            if not EmitStaticLitHandle(valueNode) then
+            begin
+              sVal := GetTokenStrFromRaw(IRA[valueNode], IRB[valueNode]);
+              si := InternStr(sVal);
+              EmitB($48); EmitB($BE); EmitDataRef(Strs[si].Offset + 8);
+              EmitB($48); EmitB($BF); EmitI64(Strs[si].Len);
+              IREmitCodeCall(AnsiStrFromLiteralAddr);
+            end;
           end
           else
           begin
@@ -7604,7 +7681,7 @@ begin
                   if Procs[procIdx].Params[i].TypeKind = tyAnsiString then
                   begin
                     if IntToTypeKind(IRTk[argNodeArr[i]]) = tyString then
-                      EmitAnsiStrFromInlineString
+                      EmitAnsiStrFromInlineStringOf(IRA[argNodeArr[i]])
                     else if IntToTypeKind(IRTk[argNodeArr[i]]) = tyChar then
                     begin
                       EmitB($50);                                     { push rax (char code) }
@@ -7662,7 +7739,7 @@ begin
                 if Procs[procIdx].Params[i].TypeKind = tyAnsiString then
                 begin
                   if IntToTypeKind(IRTk[argNode]) = tyString then
-                    EmitAnsiStrFromInlineString
+                    EmitAnsiStrFromInlineStringOf(IRA[argNode])
                   else if IntToTypeKind(IRTk[argNode]) = tyChar then
                   begin
                     EmitB($50);                                     { push rax (char code) }
@@ -7789,7 +7866,7 @@ begin
                    (Procs[cpi].Params[i].TypeKind = tyAnsiString) then
                 begin
                   if IntToTypeKind(IRTk[argNode]) = tyString then
-                    EmitAnsiStrFromInlineString
+                    EmitAnsiStrFromInlineStringOf(IRA[argNode])
                   else if IntToTypeKind(IRTk[argNode]) = tyChar then
                   begin
                     EmitB($50);                                     { push rax (char code) }
@@ -8669,7 +8746,7 @@ begin
           if IRSrcIsCallable(IRB[node]) then size := VT_CALLABLE_TAG;
           IREmitNode(IRB[node]);                 { rax = scalar value (float: double bits) }
           if tk = tyString then
-            EmitAnsiStrFromInlineString
+            EmitAnsiStrFromInlineStringOf(IRB[node])
           else if tk = tyAnsiString then
           begin
             { An lvalue source shares its handle -> retain. A CALL result or a
@@ -8748,7 +8825,7 @@ begin
         if IRSrcIsCallable(IRB[node]) then size := VT_CALLABLE_TAG;
         IREmitNode(IRB[node]);                 { rax = scalar value }
         if tk = tyString then
-          EmitAnsiStrFromInlineString
+          EmitAnsiStrFromInlineStringOf(IRB[node])
         else if tk = tyAnsiString then
           IREmitCodeCall(AnsiStrRetainAddr)
         else if tk = tyClass then
@@ -9278,7 +9355,7 @@ begin
              (Procs[procIdx].Params[pathIdx].TypeKind = tyAnsiString) then
           begin
             if IntToTypeKind(IRTk[argNode]) = tyString then
-              EmitAnsiStrFromInlineString
+              EmitAnsiStrFromInlineStringOf(IRA[argNode])
             else if IntToTypeKind(IRTk[argNode]) = tyChar then
             begin
               EmitB($50);                                     { push rax (char code) }
