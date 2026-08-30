@@ -370,6 +370,13 @@ trap 'rm -f "$SYNC_LOCK" 2>/dev/null' EXIT
 
 manifest=$(git log --format=%s "origin/$BRANCH..HEAD" 2>/dev/null)
 manifest_n=$(printf '%s' "$manifest" | grep -c . || true)
+# The same range as SHAs, captured at the same moment and for the same reason.
+# The subject match below cannot tell a commit that was DROPPED from one that
+# was FOLDED -- a fold destroys the subject while keeping every line of the
+# content -- and telling those apart needs the commit itself, not its title.
+# These shas survive the rebase as unreferenced objects, which is all the
+# containment test needs.
+manifest_shas=$(git log --format=%H "origin/$BRANCH..HEAD" 2>/dev/null)
 
 # The TICKET files our commits touch, captured at the same moment and for the
 # same reason: the rebase rewrites shas, so ask the question while the range
@@ -414,6 +421,60 @@ verify_manifest_landed() {
 $manifest
 EOF
     [ -n "$missing" ] || return 0
+
+    # A MISSING SUBJECT IS NOT YET MISSING WORK.
+    #
+    # This check matches on subject because a rebase rewrites shas. But a
+    # rebase can also FOLD -- an amend, an autosquash `fixup!` -- and a fold
+    # destroys one subject while keeping every line it contributed. The subject
+    # test cannot see the difference, so it called a healthy push a loss and
+    # then `exit 1` skipped fill_pending_commits, leaving the ticket citing
+    # PENDING-COMMIT for a commit that was on origin (frankS, 2026-08-30).
+    # Both halves of that are this function's doing.
+    #
+    # The expensive part is not the false alarm, it is the ADVICE: the banner
+    # says `git cherry-pick`, which on a fold manufactures a real duplicate of
+    # work that already landed. An instruction to corrupt a correct state,
+    # printed at the moment the state is correct.
+    #
+    # NOT fixed with `merge-base --is-ancestor HEAD origin/$BRANCH`, which is
+    # the obvious guard and a trap: after any SUCCESSFUL push HEAD is always an
+    # ancestor of origin -- including when the rebase genuinely dropped a
+    # commit, since the drop happened before the push. That guard would silence
+    # this check permanently, exactly in the case it exists for.
+    #
+    # So ask about CONTENT instead: does the missing commit's patch already
+    # reverse-apply against the tree we just pushed? If it does, every line of
+    # it is present on origin under another commit -- folded or reworded -- and
+    # nothing was lost. If it does not, alarm as before. A later commit
+    # touching the same lines also fails the reverse-apply, so this errs toward
+    # alarming, which is the safe direction for a check whose false negative is
+    # silent data loss.
+    # `missing` carries a two-space display indent; strip it before matching.
+    missing_raw=$(printf '%s\n' "$missing" | sed 's/^  //' | grep -v '^$' || true)
+    survived=""
+    lost=""
+    for s in $manifest_shas; do
+        subj=$(git log -1 --format=%s "$s" 2>/dev/null)
+        printf '%s\n' "$missing_raw" | grep -qxF "$subj" || continue
+        if git show --binary "$s" 2>/dev/null \
+               | git apply --reverse --check - 2>/dev/null; then
+            survived="$survived
+  $subj"
+        else
+            lost="$lost
+  $subj"
+        fi
+    done
+
+    if [ -z "$lost" ]; then
+        echo "sync: $(printf '%s' "$survived" | grep -c .) commit(s) were FOLDED or REWORDED by the rebase:$survived" >&2
+        echo "sync: their content is present on origin/$BRANCH under another subject —" >&2
+        echo "sync: verified by reverse-applying each patch against the pushed tree." >&2
+        echo "sync: nothing was lost; do NOT cherry-pick, that would duplicate it." >&2
+        return 0
+    fi
+    missing="$lost"
 
     echo "sync: *** $(printf '%s' "$missing" | grep -c .) OF $manifest_n COMMIT(S) DID NOT LAND ***" >&2
     echo "sync: expected on origin/$BRANCH but absent:$missing" >&2
