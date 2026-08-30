@@ -199,4 +199,4 @@ session that found it, and leaving it here would have closed a ticket that still
 contained a live defect.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 7557a127b.
