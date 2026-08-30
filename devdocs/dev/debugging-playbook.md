@@ -1771,9 +1771,18 @@ its own total.** `OptLevel >= 3` with single spaces occurs 29 times;
 `OptLevel>=3` unspaced occurs 2 more. A verification run independently — by
 someone who was *disagreeing carefully and checking before agreeing* — reported
 `< 3` = 14, `>= 3` = 29, any form = 45. Those are three correct measurements and
-**14 + 29 = 43**. The missing 2 are the unspaced spelling, and the inconsistency
-sat in the middle of a message whose whole purpose was to verify. Nobody noticed,
-including the person who produced all three numbers, because each was right.
+**14 + 29 = 43**. The missing 2 are the unspaced spelling: the `>=` grep was
+whitespace-**intolerant** while the `any form` regex was whitespace-**tolerant**,
+in one message, three lines apart. The inconsistency sat in the middle of a
+message whose whole purpose was to verify. Nobody noticed, including the person
+who produced all three numbers, because each was right.
+
+**That is a cleaner instance than either 44, and its author says so: there was no
+filter bug to find — just two greps nobody had asked to agree.** Both 44s needed
+a defect. This needed only two instruments answering slightly different questions
+and never being put in the same sentence as a sum. **The only tell was arithmetic
+nobody had a reason to do**, which is the cheapest check in this whole file and
+the one no process asks for. When you report parts and a total, add them.
 
 So: four axes, and a bare number carries none of them.
 
