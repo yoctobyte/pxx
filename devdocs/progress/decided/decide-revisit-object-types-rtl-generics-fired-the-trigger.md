@@ -5,8 +5,8 @@ track: U
 prio: 70
 type: decide
 blocked-by: []
-status: backlog
-owner: ""
+status: decided
+owner: user
 created: 2026-08-30
 summary: "decide-old-style-object-types chose option A (do not implement) with an explicit revisit trigger: 'the moment actual source someone wants to build needs it. Not an FPC test — a program.' generics.collections.pas needs it, which blocks rung 6 of feature-pascal-corpus-expansion (prio 75). But the measurement changes the cost case: the corpus contains exactly ONE `= object`, it has no fields, no inheritance, no virtual methods and no constructor, and the equivalent generic record-with-methods compiles and runs on HEAD today. The decision's cost analysis — a second object model with different storage, lifetime, assignment and VMT — does not apply to the thing actually blocking us."
 ---
@@ -163,3 +163,90 @@ this ticket asks whether its trigger, now fired, changes the answer.
 - [[feature-p-legacy-value-object-types]] (p15, `gated-by` the above) — the work
   item, whose framing assumes option B's full scope
 - [[feature-pascal-corpus-expansion]] — rung 6, the thing blocked
+
+
+# DECIDED 2026-08-30 — owner
+
+## The answer
+
+**Option C, and the rooted-reference `object` is RETIRED rather than kept
+alongside it.** `object` gets its standard Object Pascal meaning — a value type,
+i.e. a record with callables — with a **hard error** on inheritance, `virtual`,
+`constructor` and `destructor` rather than silent half-support. Refiled as a
+**Track P bug** (`bug-p-object-value-types-standard-meaning`), not a feature:
+per CLAUDE.md's compat table, *"real Pascal source compiles wrong, or not at
+all -> bug, own lane, own prio, not compat"*, and `generics.collections.pas` is
+real Pascal that does not compile.
+
+Option B is rejected for the reason the owner gave: `object` is not `TObject`
+and neither FPC nor Delphi treats it as such. B prices inheritance, VMTs and a
+constructor protocol that the corpus does not use and that nothing has asked
+for. Option A is rejected because standing pat means shipping a dialect that
+rejects ordinary FPC source *because the keyword was spent on something else*.
+
+## Why the keyword was taken — the part neither ticket recorded
+
+Not a sneak, and **not the C frontend** (owner's hypothesis, tested and
+disproved: commit `7859911e3` touched only `Makefile`, `parser.inc`, the two
+tests and docs; `clexer/cparser/cpreproc` contain no reference to `object`; the
+C frontend landed 2026-05-26 and is unrelated). It was a **stopgap that outlived
+its gap**:
+
+```
+2026-06-16   ticket filed: "a lightweight root, like TObject WITHOUT A UNIT"
+2026-06-23   explicit class(TObject) / class(TInterfacedObject) base
+2026-07-03   `object` implemented  (7859911e3)
+2026-07-12   builtin TObject class — var o: TObject + TObject.Create  (c53dd8953)
+```
+
+`RegisterBuiltinTObject` mints the System root at `ParseProgram` start. So the
+justification — "without a unit" — was **true when written** and **false nine
+days later**, and nothing went back to retire the placeholder. Both commits are
+in `parser.inc`.
+
+Three review points let it stand:
+
+1. The ticket's own **Naming caution** asked not to collide with a *future*
+   value-`object` feature. It was closed with *"`object` was never a keyword
+   here (no legacy value-object support), no grammar collision"* — a fact about
+   the present answering a question about the future.
+2. **Nobody revisited it when builtin `TObject` landed** and obsoleted the
+   entire rationale.
+3. The stated consumer never arrived: *"the collections/streams RTL wants
+   this"* — usage is still **4 lines, all inside its own two regression tests**,
+   seven weeks on. Nothing in `lib/`, `examples/` or `compiler/`.
+
+**General lesson, worth more than this ticket:** a workaround has no expiry date
+and nothing re-checks whether the thing it worked around still exists. Same
+shape as the prose-blocker edge in this ticket's own header.
+
+## Why retirement is safe — measured, not argued
+
+Substituting `TObject` for `object` throughout `test/test_object_reference.pas`
+compiles on the **pinned** stable compiler and produces byte-identical output
+and identical code size:
+
+```
+TObject version                        object version
+code=63287B data=4276B bss=42532B      (same test, unmodified)
+Rex: woof / Tom: meow / Rex: woof / Tom: meow / Rex: woof / nil ok / OK   (both)
+```
+
+Every use survives: widening assignment from any class, cast-back with virtual
+dispatch, `array of`, record field, parameter, `nil` compare. `TObject` is
+strictly better — being a real class, it permits `Free`/`ClassName`/`Destroy`
+without a cast, where the bare reference required one.
+
+**Residual risk, stated:** the deletion is safe as far as this repo can see (4
+uses, all in its own tests). Pascal source *outside* this checkout using
+`var x: object` would break. The owner accepted this; the feature is seven weeks
+old and its intended RTL consumers never materialised.
+
+## Consequences
+
+- Rung 6 of [[feature-pascal-corpus-expansion]] (p75) unblocks.
+- [[feature-p-legacy-value-object-types]] (p15) — its framing assumes option B's
+  full scope; it should be rewritten to C's scope or closed in favour of the new
+  P bug.
+- [[decide-old-style-object-types]] stays decided; its revisit trigger fired and
+  this is the revised answer.
