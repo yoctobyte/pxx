@@ -137,6 +137,102 @@ int fchown(int fd, uid_t owner, gid_t group) {
 
 uid_t geteuid(void) { return (uid_t)__pxx_geteuid(); }
 
+/* ---- process termination -------------------------------------------------- */
+
+/* _exit(2) is _Exit's POSIX spelling: terminate WITHOUT running atexit
+   handlers or flushing streams. Not an alias of exit(); the difference is the
+   whole point of the name, and code that reaches for it (busybox after a
+   failed exec) depends on the handlers not firing. */
+extern void __pxx_exit(int code);
+void _exit(int status) { __pxx_exit(status); }
+
+/* ---- fd-relative and tty helpers ------------------------------------------ */
+
+/* fchdir(2) and ttyname_r(3) have no PAL syscall of their own, so both go
+   through /proc/self/fd/N, which is where the kernel already publishes the
+   answer. That is a LINUX-ONLY route and it needs /proc mounted: in a chroot
+   or a container without /proc, both fail with ENOSYS rather than guessing.
+   Documented here rather than discovered later. */
+static int pxx_fd_path(int fd, char *out, size_t outsz)
+{
+  char link[32];
+  char digits[16];
+  unsigned u = (unsigned)fd;
+  int nd = 0, k = 0, i, rc, n;
+  const char *pre = "/proc/self/fd/";
+
+  if (fd < 0) { errno = EBADF; return -1; }
+  do { digits[nd++] = (char)('0' + (u % 10)); u /= 10; } while (u);
+  for (i = 0; pre[i]; i++) link[k++] = pre[i];
+  while (nd > 0) link[k++] = digits[--nd];
+  link[k] = 0;
+
+  rc = __pxx_readlink(link, out, (int)outsz - 1);
+  if (rc < 0) { errno = -rc; return -1; }
+  n = rc;
+  if ((size_t)n >= outsz) { errno = ERANGE; return -1; }
+  out[n] = 0;
+  return n;
+}
+
+int fchdir(int fd)
+{
+  char path[4096];
+  if (pxx_fd_path(fd, path, sizeof(path)) < 0) return -1;
+  { int rc = __pxx_chdir(path);
+    if (rc < 0) { errno = -rc; return -1; } }
+  return 0;
+}
+
+int ttyname_r(int fd, char *buf, size_t buflen)
+{
+  int n;
+  if (!__pxx_isatty(fd)) { errno = ENOTTY; return ENOTTY; }
+  n = pxx_fd_path(fd, buf, buflen);
+  if (n < 0) return errno;
+  return 0;
+}
+
+char *ttyname(int fd)
+{
+  static char pxx_ttyname_buf[4096];
+  if (ttyname_r(fd, pxx_ttyname_buf, sizeof(pxx_ttyname_buf)) != 0) return 0;
+  return pxx_ttyname_buf;
+}
+
+/* ---- link-only stubs: no PAL syscall exists for these --------------------- */
+
+/* Same shape and the same honesty as execvp above. Each of these needs a
+   syscall the PAL does not expose, so rather than fake a success they fail the
+   way a libc on a platform without the call fails: -1 / ENOSYS. That is a
+   defined answer a caller can act on, and it is loud — the alternative, a
+   silent success that did nothing, is the failure mode that costs days.
+
+   They exist at all because REFERENCING them is enough to break a link: real
+   programs carry code paths they never take (busybox's libbb declares the
+   privilege-dropping helpers in a TU whose only used function is a string
+   routine). Providing the symbol lets that program link; taking the path it
+   never takes gets an error, not a lie.
+
+   Add a real implementation here the day the PAL grows the syscall — the
+   signature is already the right one. */
+int chroot(const char *path)   { (void)path; errno = ENOSYS; return -1; }
+int fork(void)                 { errno = ENOSYS; return -1; }
+int vfork(void)                { errno = ENOSYS; return -1; }
+int setuid(uid_t uid)          { (void)uid; errno = ENOSYS; return -1; }
+int setgid(gid_t gid)          { (void)gid; errno = ENOSYS; return -1; }
+int seteuid(uid_t uid)         { (void)uid; errno = ENOSYS; return -1; }
+int setegid(gid_t gid)         { (void)gid; errno = ENOSYS; return -1; }
+int setgroups(size_t n, const gid_t *list) { (void)n; (void)list; errno = ENOSYS; return -1; }
+
+/* wait/waitpid report ECHILD, not ENOSYS: there genuinely are no children to
+   reap (fork above is a stub), and ECHILD is the code POSIX defines for that,
+   so a caller's existing error path handles it instead of meeting a code it
+   has never seen. The W* decode macros in <sys/wait.h> ARE real. */
+int wait(int *status)                        { (void)status; errno = ECHILD; return -1; }
+int waitpid(int pid, int *status, int options)
+{ (void)pid; (void)status; (void)options; errno = ECHILD; return -1; }
+
 ssize_t readlink(const char *path, char *buf, size_t bufsz) {
   int rc = __pxx_readlink(path, buf, (int)bufsz);
   if (rc < 0) { errno = -rc; return -1; }

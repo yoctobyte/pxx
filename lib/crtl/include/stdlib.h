@@ -50,6 +50,14 @@ lldiv_t lldiv(long long num, long long den);
 int rand(void);
 void srand(unsigned int seed);
 
+/* mkstemp/mkdtemp: the trailing XXXXXX is replaced and the name is claimed by
+   an O_EXCL create (or a mkdir), so the exclusion comes from the syscall, not
+   from the quality of the guess. The digits come from the clock and the pid —
+   NOT a CSPRNG, and not claimed to be one. Mode 0600 / 0700, per POSIX. */
+int mkstemp(char *tmpl);
+int mkostemp(char *tmpl, int flags);
+char *mkdtemp(char *tmpl);
+
 char *getenv(const char *name);
 
 /* Environment write side. These mutate the SAME buffer getenv() reads, so a C

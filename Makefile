@@ -11233,6 +11233,10 @@ test-core: $(COMPILER)
 	# `<unit>_pas_<Identifier>`, case-exact, and a C prototype selects the
 	# overload. 42 is Twice(21); 7 is the Integer Max, 9.25 the Double one, and
 	# the two come from ONE Pascal name.
+	./$(COMPILER) test/c_pasunit.c $(TESTTMP)/c_pasunit26
+	tools/expect_same.sh c_pasunit26 "$$($(TESTTMP)/c_pasunit26)" "$$(printf '42\n7')"
+	./$(COMPILER) test/c_pasunit_ovl.c $(TESTTMP)/c_pasunit_ovl26
+	tools/expect_same.sh c_pasunit_ovl26 "$$($(TESTTMP)/c_pasunit_ovl26)" "9.25"
 	# crtl's getopt, against the shapes that separate POSIX from glibc. Every
 	# expected line was taken from a glibc-built binary of the same file.
 	# Row 4 and row 7 are why PERMUTATION is implemented rather than skipped:
@@ -11244,10 +11248,36 @@ test-core: $(COMPILER)
 	# feature-c-corpus-busybox-applet
 	./$(COMPILER) test/c_getopt_glibc_parity.c $(TESTTMP)/c_getopt_parity26
 	tools/expect_same.sh c_getopt_parity26 "$$($(TESTTMP)/c_getopt_parity26)" "$$(printf '1: -a -b o=X | optind=5 rest: f1 f2\n2: -a -b o=Y | optind=3 rest: f\n3: o=X -a | optind=3 rest: f\n4: -a | optind=2 rest: f\n5: ?z | optind=2 rest:\n6: ?o | optind=2 rest:\n7: -a o=X | optind=4 rest: f1 f2 f3\n8: | optind=1 rest: f1 f2 f3\n9: -a | optind=3 rest: -b\n10: | optind=2 rest: -a\n11: | optind=2 rest: f -a\n12: :o | optind=2 rest:\n13: | optind=1 rest: -\n14: -a ?- -b | optind=2 rest:')"
-	./$(COMPILER) test/c_pasunit.c $(TESTTMP)/c_pasunit26
-	tools/expect_same.sh c_pasunit26 "$$($(TESTTMP)/c_pasunit26)" "$$(printf '42\n7')"
-	./$(COMPILER) test/c_pasunit_ovl.c $(TESTTMP)/c_pasunit_ovl26
-	tools/expect_same.sh c_pasunit_ovl26 "$$($(TESTTMP)/c_pasunit_ovl26)" "9.25"
+	# crtl's mkstemp/mkdtemp, the stdio _unlocked family, and fchdir/ttyname_r.
+	# Every expected line was taken from a glibc-built binary of the same file.
+	# The _unlocked spellings are ALIASES, not stubs -- a crtl FILE has no lock
+	# to skip -- and these rows are what says so. fchdir/ttyname_r have no PAL
+	# syscall and resolve the fd through /proc/self/fd/N; the row asserts the
+	# chdir LANDED, not merely that it returned 0.
+	# feature-c-corpus-busybox-applet
+	./$(COMPILER) test/c_crtl_tempfile_and_unlocked.c $(TESTTMP)/c_crtl_tmp26
+	tools/expect_same.sh c_crtl_tmp26 "$$($(TESTTMP)/c_crtl_tmp26)" "$$(printf 'mkstemp fd>=0: 1\nmkstemp name changed: 1\nmkstemp len: 19\nmkstemp write: 5\nmkstemp readback: 5 [hello]\nmkstemp unlink: 0\nmkstemp bad: -1 errno=22\nmkdtemp ok: 1 changed: 1\nfileno_unlocked(stdout): 1\nferror_unlocked(stdout): 0\nfeof_unlocked(stdout): 0\nfputs_unlocked ok\npc\nfwrite_unlocked ok\nftrylockfile: 0\nfchdir: 0\nfchdir landed /tmp: 1\nttyname_r(0) rc class: 1')"
+	# The crtl calls with NO PAL syscall behind them. Each must fail -1/ENOSYS
+	# and never report a success it did not perform -- a silent success here
+	# would make a privilege drop or a chroot look done when nothing happened.
+	# NOT a glibc differential: glibc's fork() succeeds. The oracle is our
+	# documented divergence, so delete a row the day the PAL grows that call.
+	# feature-c-corpus-busybox-applet
+	./$(COMPILER) test/c_crtl_enosys_stubs.c $(TESTTMP)/c_crtl_enosys26
+	tools/expect_same.sh c_crtl_enosys26 "$$($(TESTTMP)/c_crtl_enosys26)" "$$(printf 'fork: -1 1\nvfork: -1 1\nchroot: -1 1\nsetuid: -1 1\nsetgid: -1 1\nseteuid: -1 1\nsetegid: -1 1')"
+	# crtl's GNU string/stdio extensions, against a glibc-built binary of the
+	# same file. strverscmp is the row set worth reading: a digit run with
+	# LEADING ZEROS is a FRACTIONAL part in glibc and sorts BEFORE one without,
+	# so "file.01" < "file.1" -- an implementation that merely compares the two
+	# magnitudes passes the file9/file10 rows and fails those. Only the SIGN is
+	# asserted; the magnitude of a strcmp-family return is not a contract.
+	# asprintf row 3 is 1199 bytes, which is what proves the allocation is
+	# sized from the measuring pass rather than capped at a stack buffer; row 4
+	# goes through a va_list, where a missing va_copy reads garbage on every
+	# ABI whose va_list is an array type.
+	# feature-c-corpus-busybox-applet
+	./$(COMPILER) test/c_crtl_gnu_string.c $(TESTTMP)/c_crtl_gnustr26
+	tools/expect_same.sh c_crtl_gnustr26 "$$($(TESTTMP)/c_crtl_gnustr26)" "$$(printf 'mempcpy: [abc] off=3\nstpncpy fit: off=2 pad=000\nstpncpy trunc: off=4 c3=d\nstrchrnul hit: 2\nstrchrnul miss: 5\nstrchrnul nul: 5\nrawmemchr: 2\nmemmem hit: 2\nmemmem miss: 1\nmemmem empty: 0\nmemmem toolong: 1\nvs 9v10: -1\nvs 10v9: 1\nvs eq: 0\nvs .01v.1: -1\nvs 1v01: 1\nvs plain: -1\nvs pfx: -1\nvs a1bv a1a: 1\nvs 001v01: -1\nasprintf 1: n=16 len=16 [abc--42-03.50-ff]\nasprintf 2: n=0 len=0\nasprintf 3: n=1199 len=1199 tailok=1\nvasprintf 4: n=14 [1 two 3 four 5]')"
 	# the same unit included twice, once spelled with a './': one file, allowed
 	./$(COMPILER) test/c_pasunit_twice.c $(TESTTMP)/c_pasunit_twice26
 	tools/expect_same.sh c_pasunit_twice26 "$$($(TESTTMP)/c_pasunit_twice26)" "42"

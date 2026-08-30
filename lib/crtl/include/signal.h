@@ -76,6 +76,12 @@ int sigdelset(sigset_t *set, int sig);
 int sigismember(const sigset_t *set, int sig);
 int sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
 int sigaction(int sig, const struct sigaction *act, struct sigaction *oact);
+
+/* sigsuspend FAILS with ENOSYS, unlike sigaction/sigprocmask above which
+   return 0. With no rt_sigaction bridge no handler can fire, so a faithful
+   sigsuspend would block forever; failing is the only non-lying answer that
+   also does not hang. */
+int sigsuspend(const sigset_t *mask);
 int sigaltstack(const stack_t *ss, stack_t *oss);
 
 #endif

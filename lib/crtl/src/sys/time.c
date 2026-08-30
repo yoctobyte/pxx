@@ -31,3 +31,14 @@ int utimes(const char *filename, const struct timeval times[2]) {
   if (rc < 0) { errno = -rc; return -1; }
   return 0;
 }
+
+/* No PAL syscall sets the clock, so this fails cleanly rather than pretending.
+   Same contract as the ENOSYS stubs in unistd.c: -1 and ENOSYS, never a silent
+   success. Replace with a real implementation the day the PAL grows the call —
+   the signature is already the right one. */
+int settimeofday(const struct timeval *tv, const struct timezone *tz)
+{
+  (void)tv; (void)tz;
+  errno = ENOSYS;
+  return -1;
+}

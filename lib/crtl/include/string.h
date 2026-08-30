@@ -54,6 +54,19 @@ int strerror_r(int errnum, char *buf, size_t buflen);
    index() and ffs(), and `index` in particular is an extremely common local
    variable name. A strict-ISO translation unit must not have those names
    appear just because it asked for <string.h>. */
+
+/* GNU extensions. Declared unconditionally rather than behind _GNU_SOURCE:
+   busybox and friends reach for them without setting the macro, and crtl has
+   no strict-ISO conformance mode to protect. The names below are all in the
+   implementation's reserved space anyway (unlike <strings.h>'s `index`, which
+   IS gated above for exactly that reason). */
+void *mempcpy(void *dest, const void *src, size_t n);
+char *stpncpy(char *dest, const char *src, size_t n);
+char *strchrnul(const char *s, int c);
+void *rawmemchr(const void *s, int c);
+void *memmem(const void *hay, size_t haylen, const void *ned, size_t nedlen);
+int   strverscmp(const char *a, const char *b);
+
 #if defined(_GNU_SOURCE) || defined(_DEFAULT_SOURCE) || defined(_BSD_SOURCE)
 #include <strings.h>
 #endif

@@ -528,3 +528,91 @@ int strerror_r(int errnum, char *buf, size_t buflen) {
   memcpy(buf, e, n + 1);
   return 0;
 }
+
+/* ---- GNU extensions ------------------------------------------------------- */
+
+/* mempcpy returns the END of the copy (dest + n), which is what makes it worth
+   having: chained appends need no running offset. Same copy semantics as
+   memcpy — the regions must not overlap. */
+void *mempcpy(void *dest, const void *src, size_t n) {
+  memcpy(dest, src, n);
+  return (char *)dest + n;
+}
+
+/* stpncpy: strncpy's return value, fixed. strncpy returns dest (useless);
+   stpncpy returns a pointer to the NUL it wrote, or to dest+n when the source
+   did not fit. Like strncpy it PADS the remainder with NULs. */
+char *stpncpy(char *dest, const char *src, size_t n) {
+  size_t i = 0;
+  while (i < n && src[i]) { dest[i] = src[i]; i++; }
+  { size_t j = i; while (j < n) dest[j++] = 0; }
+  return dest + i;
+}
+
+/* strchrnul: strchr that returns the terminating NUL instead of NULL when the
+   character is absent, so the result is always dereferenceable and the caller
+   needs no branch. Searching for '\0' finds the terminator, as in strchr. */
+char *strchrnul(const char *s, int c) {
+  char ch = (char)c;
+  while (*s && *s != ch) s++;
+  return (char *)s;
+}
+
+/* rawmemchr: memchr with no bound, for when the byte is KNOWN to be present.
+   Undefined if it is not — that is the contract, and the speed is the point. */
+void *rawmemchr(const void *s, int c) {
+  const unsigned char *p = (const unsigned char *)s;
+  unsigned char ch = (unsigned char)c;
+  while (*p != ch) p++;
+  return (void *)p;
+}
+
+/* memmem: the substring search, for bytes rather than strings. An empty needle
+   matches at the start, as in glibc. Naive O(n*m); correctness first. */
+void *memmem(const void *hay, size_t haylen, const void *ned, size_t nedlen) {
+  const unsigned char *h = (const unsigned char *)hay;
+  const unsigned char *n = (const unsigned char *)ned;
+  size_t i, j;
+  if (nedlen == 0) return (void *)h;
+  if (nedlen > haylen) return 0;
+  for (i = 0; i + nedlen <= haylen; i++) {
+    for (j = 0; j < nedlen; j++) if (h[i + j] != n[j]) break;
+    if (j == nedlen) return (void *)(h + i);
+  }
+  return 0;
+}
+
+/* strverscmp: strcmp, except that a run of digits compares as a NUMBER, so
+   "file9" sorts before "file10". glibc's rule, which is subtler than "compare
+   the integers": a digit run with LEADING ZEROS is a fractional part and sorts
+   BEFORE one without, so "file.01" < "file.1". We reproduce that, because the
+   callers that reach for this function are the ones that care about it. */
+static int pxx_isdig(unsigned char c) { return c >= '0' && c <= '9'; }
+
+int strverscmp(const char *a, const char *b) {
+  const unsigned char *p = (const unsigned char *)a;
+  const unsigned char *q = (const unsigned char *)b;
+
+  while (*p && *p == *q) { p++; q++; }
+
+  /* Back up over any digit run we walked INTO, so the comparison sees whole
+     numbers: "file10" vs "file9" diverges at '1' vs '9', mid-number. */
+  if (pxx_isdig(*p) || pxx_isdig(*q)) {
+    const unsigned char *sp = p, *sq = q;
+    while (sp > (const unsigned char *)a && pxx_isdig(sp[-1])) { sp--; sq--; }
+    if (pxx_isdig(*sp) && pxx_isdig(*sq)) {
+      int za = (*sp == '0'), zb = (*sq == '0');
+      if (za || zb) {
+        /* fractional: leading zeros sort first, then plain lexicographic */
+        if (za != zb) return za ? -1 : 1;
+        return (int)*p - (int)*q;
+      }
+      { const unsigned char *ea = sp, *eb = sq;
+        while (pxx_isdig(*ea)) ea++;
+        while (pxx_isdig(*eb)) eb++;
+        if (ea - sp != eb - sq) return (ea - sp) < (eb - sq) ? -1 : 1; }
+      return (int)*p - (int)*q;
+    }
+  }
+  return (int)*p - (int)*q;
+}

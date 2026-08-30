@@ -67,6 +67,30 @@ ssize_t readlink(const char *path, char *buf, size_t bufsz);
 int execvp(const char *file, char *const argv[]);
 long sysconf(int name);
 
+/* _exit(2) — _Exit's POSIX spelling: terminate without running atexit handlers
+   or flushing streams. Deliberately NOT an alias of exit(). */
+void _exit(int status);
+
+/* fchdir/ttyname go through /proc/self/fd/N (no PAL syscall exists for either),
+   so they are LINUX-ONLY and need /proc mounted; without it they fail cleanly
+   rather than guessing. ttyname returns a pointer into a static buffer. */
+int fchdir(int fd);
+int ttyname_r(int fd, char *buf, size_t buflen);
+char *ttyname(int fd);
+
+/* Declared and defined, but every one of them FAILS with ENOSYS: the PAL
+   exposes no syscall for them yet. They exist so that a program carrying a code
+   path it never takes can still LINK — see the note in the sibling unistd.c.
+   A caller that does take the path gets -1/ENOSYS, never a silent no-op. */
+int chroot(const char *path);
+int fork(void);
+int vfork(void);
+int setuid(uid_t uid);
+int setgid(gid_t gid);
+int seteuid(uid_t uid);
+int setegid(gid_t gid);
+int setgroups(size_t n, const gid_t *list);
+
 /* getopt — POSIX 2018 declares it here, and that is where every program that
    uses it without <getopt.h> expects to find it (busybox's getopt32 among
    them). The impl is in the sibling unistd.c, so it arrives with this header
@@ -76,11 +100,12 @@ long sysconf(int name);
    instead. Both spellings are supported, because busybox picks between them at
    compile time on __GLIBC__ and real code in the wild does the same.
 
-   NOT implemented: GNU argument PERMUTATION (`cat file -n` finding `-n`), the
-   leading `+`/`-` optstring modes, and getopt_long. Scanning stops at the
-   first non-option, which is POSIX's own behaviour and what glibc does under
-   POSIXLY_CORRECT. A leading ':' for silent missing-argument reporting IS
-   supported, since that costs nothing and callers rely on it. */
+   GNU argument PERMUTATION IS implemented (`cat file -n` finds the `-n`),
+   using glibc's own deferred-exchange structure, so an option's separate
+   argument is consumed from its ORIGINAL position rather than the permuted
+   one. A leading ':' for silent missing-argument reporting is supported too.
+
+   NOT implemented: the leading `+` / `-` optstring modes, and getopt_long. */
 extern char *optarg;
 extern int optind, opterr, optopt, optreset;
 int getopt(int argc, char *const argv[], const char *optstring);

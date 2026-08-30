@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <limits.h>
+#include <fcntl.h>
 #include <inttypes.h>
 
 extern void *__pxx_malloc(long n);
@@ -58,6 +59,90 @@ int atexit(void (*func)(void)) { return __pxx_atexit(func); }
 void exit(int code)  { __pxx_atexit_run(); __pxx_exit(code); }
 void _Exit(int code) { __pxx_exit(code); }
 void abort(void)     { __pxx_exit(134); }   /* 128 + SIGABRT(6) */
+
+/* ---- temporary files ------------------------------------------------------ */
+
+extern int __pxx_open(const char *path, int flags, int mode);
+extern int __pxx_close(int fd);
+extern int __pxx_getpid(void);
+extern int __pxx_realtime(void *secOut, void *usecOut);
+
+/* mkstemp(3). The template's trailing XXXXXX is replaced and the file created
+   with O_EXCL, so the name is claimed by the CREATE, not by the guess — which
+   is the whole security property, and it holds however weak the guess is. We
+   retry on EEXIST like glibc does.
+
+   The digits come from the clock, the pid and the attempt counter. That is NOT
+   a CSPRNG and is not claimed to be one: it makes collisions unlikely, and
+   O_EXCL makes them harmless when they happen. Mode is 0600, per POSIX. */
+static int pxx_mktemp_open(char *tmpl, int flags, int mode)
+{
+  static const char tab[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  size_t len = strlen(tmpl);
+  char *x;
+  long long sec = 0, usec = 0;
+  unsigned long long v;
+  int attempt, i, fd;
+
+  if (len < 6 || strcmp(tmpl + len - 6, "XXXXXX") != 0) { errno = EINVAL; return -1; }
+  x = tmpl + len - 6;
+
+  __pxx_realtime(&sec, &usec);
+  v = (unsigned long long)sec * 1000000ULL + (unsigned long long)usec;
+  v ^= (unsigned long long)__pxx_getpid() << 20;
+
+  for (attempt = 0; attempt < 4096; attempt++) {
+    unsigned long long r = v + (unsigned long long)attempt * 7777ULL;
+    for (i = 0; i < 6; i++) { x[i] = tab[r % 62]; r /= 62; r += 0x9E3779B97F4A7C15ULL; }
+    fd = __pxx_open(tmpl, flags, mode);
+    if (fd >= 0) return fd;
+    if (fd != -EEXIST) { errno = -fd; return -1; }
+  }
+  errno = EEXIST;
+  return -1;
+}
+
+int mkstemp(char *tmpl)
+{
+  return pxx_mktemp_open(tmpl, O_RDWR | O_CREAT | O_EXCL, 0600);
+}
+
+/* mkostemp adds caller flags (O_CLOEXEC / O_APPEND); the access mode and the
+   O_CREAT|O_EXCL pair are ours and are not negotiable. */
+int mkostemp(char *tmpl, int flags)
+{
+  return pxx_mktemp_open(tmpl, O_RDWR | O_CREAT | O_EXCL | flags, 0600);
+}
+
+/* mkdtemp(3): the same name search, claimed with mkdir instead of open. */
+extern int __pxx_mkdir(const char *path, int mode);
+
+char *mkdtemp(char *tmpl)
+{
+  static const char tab[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  size_t len = strlen(tmpl);
+  char *x;
+  long long sec = 0, usec = 0;
+  unsigned long long v;
+  int attempt, i, rc;
+
+  if (len < 6 || strcmp(tmpl + len - 6, "XXXXXX") != 0) { errno = EINVAL; return 0; }
+  x = tmpl + len - 6;
+
+  __pxx_realtime(&sec, &usec);
+  v = (unsigned long long)sec * 1000000ULL + (unsigned long long)usec;
+  v ^= (unsigned long long)__pxx_getpid() << 20;
+
+  for (attempt = 0; attempt < 4096; attempt++) {
+    unsigned long long r = v + (unsigned long long)attempt * 7777ULL;
+    for (i = 0; i < 6; i++) { x[i] = tab[r % 62]; r /= 62; r += 0x9E3779B97F4A7C15ULL; }
+    rc = __pxx_mkdir(tmpl, 0700);
+    if (rc == 0) return tmpl;
+    if (rc != -EEXIST) { errno = -rc; return 0; }
+  }
+  errno = EEXIST;
+  return 0;
+}
 
 /* ---- environment / conversions -------------------------------------------- */
 

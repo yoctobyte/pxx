@@ -69,6 +69,20 @@ int sigaltstack(const stack_t *ss, stack_t *oss) {
   return 0;
 }
 
+/* sigsuspend: with no rt_sigaction bridge no handler can ever fire, so a
+   faithful sigsuspend would block FOREVER. It fails with ENOSYS instead —
+   the one answer that is neither a lie nor a hang.
+
+   Note the difference from its neighbours above: sigaction and sigprocmask
+   return 0 because "registered, and it never fires" is harmless to a caller
+   that only wanted to install a handler. Waiting on a signal that cannot
+   arrive is not harmless, so this one reports the failure. */
+int sigsuspend(const sigset_t *mask) {
+  (void)mask;
+  errno = ENOSYS;
+  return -1;
+}
+
 /* kill: send a signal. Returns 0 or -1 with errno, like the C contract. */
 int kill(int pid, int sig) {
   int r = __pxx_kill(pid, sig);

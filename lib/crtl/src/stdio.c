@@ -717,6 +717,44 @@ int sprintf(char *s, const char *fmt, ...) {
   return r;
 }
 
+/* asprintf/vasprintf — GNU, not C99, but busybox's libbb and a lot of other
+   real code call them. Measure with a cap of 0 (which __crtl_vformat handles
+   without touching the buffer, so NULL is a legal destination there), then
+   format for real into an exact-fit allocation.
+
+   The ap is consumed by the measuring pass, so the second pass needs a FRESH
+   one: vasprintf's caller owns the original and cannot be asked to reset it,
+   hence the va_copy. Getting this wrong reads garbage on the second pass on
+   every ABI where va_list is an array type.
+
+   On failure *strp is set to NULL and -1 returned, which is glibc's behaviour;
+   the standard leaves it undefined and callers in the wild rely on glibc's. */
+int vasprintf(char **strp, const char *fmt, va_list ap) {
+  va_list ap2;
+  int n;
+  char *buf;
+
+  va_copy(ap2, ap);
+  n = __crtl_vformat(0, 0, fmt, ap);
+  if (n < 0) { va_end(ap2); *strp = 0; return -1; }
+
+  buf = (char *)malloc((size_t)n + 1);
+  if (!buf) { va_end(ap2); *strp = 0; return -1; }
+
+  __crtl_vformat(buf, (size_t)n + 1, fmt, ap2);
+  va_end(ap2);
+  *strp = buf;
+  return n;
+}
+
+int asprintf(char **strp, const char *fmt, ...) {
+  va_list ap; int r;
+  va_start(ap, fmt);
+  r = vasprintf(strp, fmt, ap);
+  va_end(ap);
+  return r;
+}
+
 /* ---- stream output (rides __pxx_write) ------------------------------------ */
 
 /* Render into a fixed stack buffer then push to the fd in one write; a line
@@ -1012,6 +1050,42 @@ int ferror(FILE *stream) { return stream->err; }
 void clearerr(FILE *stream) { stream->err = 0; stream->eof = 0; }
 int setvbuf(FILE *stream, char *buf, int mode, size_t size) { (void)stream; (void)buf; (void)mode; (void)size; return 0; }
 void setbuf(FILE *stream, char *buf) { (void)stream; (void)buf; }
+
+/* ---- the _unlocked family ------------------------------------------------- */
+
+/* These are ALIASES, not stubs. glibc's _unlocked spellings differ from the
+   plain ones only by skipping the per-FILE lock, and crtl's FILE has no lock
+   to skip — so each of these already has the full semantics of the name it
+   forwards to, on a single-threaded stream. Nothing is weakened.
+
+   They are here because real code reaches for them for speed and expects the
+   declaration from <stdio.h>: busybox's libbb uses fputs_unlocked /
+   putchar_unlocked / ferror_unlocked / fileno_unlocked throughout, and a
+   caller that cannot find them falls back to nothing at all. */
+int    fileno_unlocked(FILE *stream)  { return fileno(stream); }
+int    ferror_unlocked(FILE *stream)  { return ferror(stream); }
+int    feof_unlocked(FILE *stream)    { return feof(stream); }
+void   clearerr_unlocked(FILE *stream){ clearerr(stream); }
+int    fflush_unlocked(FILE *stream)  { return fflush(stream); }
+int    fputs_unlocked(const char *s, FILE *stream) { return fputs(s, stream); }
+int    fputc_unlocked(int c, FILE *stream)  { return fputc(c, stream); }
+int    putc_unlocked(int c, FILE *stream)   { return fputc(c, stream); }
+int    putchar_unlocked(int c)              { return putchar(c); }
+int    fgetc_unlocked(FILE *stream)         { return fgetc(stream); }
+int    getc_unlocked(FILE *stream)          { return fgetc(stream); }
+int    getchar_unlocked(void)               { return getchar(); }
+char  *fgets_unlocked(char *s, int n, FILE *stream) { return fgets(s, n, stream); }
+size_t fread_unlocked(void *ptr, size_t size, size_t nmemb, FILE *stream)
+       { return fread(ptr, size, nmemb, stream); }
+size_t fwrite_unlocked(const void *ptr, size_t size, size_t nmemb, FILE *stream)
+       { return fwrite(ptr, size, nmemb, stream); }
+
+/* The lock operations themselves, for the same reason: single-threaded streams
+   make them no-ops with correct semantics, and ftrylockfile succeeding (0) is
+   the truthful answer when there is no contention possible. */
+void flockfile(FILE *stream)    { (void)stream; }
+void funlockfile(FILE *stream)  { (void)stream; }
+int  ftrylockfile(FILE *stream) { (void)stream; return 0; }
 
 /* ---- minimal sscanf ------------------------------------------------------- */
 /* Enough for cJSON's number-roundtrip check (`sscanf(buf, "%lg", &d)`) plus the
