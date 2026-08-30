@@ -21911,3 +21911,60 @@ the ticket's own "what this does not do" section, and the `blocked/` reason
 new. Trust nothing in them; still read them.
 
 frankA kept the correction rather than letting it pass, which is why it is here.
+
+## A clean tree is not evidence about the binary — and `sync.sh` staleness looks exactly like the seeded-tree no-op
+
+frank-optimize, 2026-08-30. Two ways a number gets taken from the wrong compiler,
+neither of which `git status` can see.
+
+**1. The binary drifts while the tree stays clean.** Its first re-measurement of
+the managed-temps 47× ran against a throwaway experimental build from an hour
+earlier — source reverted, binary never rebuilt. `git status --porcelain` was
+empty **because the drift was in the artifact, not the tree.** Caught only because
+it now prints the sha256 beside every number. *The tree being clean is not
+evidence about the binary; the `make` fixedpoint line is.*
+
+**2. A `sync.sh` that pulls `compiler/**` staleness your binary without you
+touching anything.** `compiler/pascal26` stopped reproducing itself in one pass
+while `make` still reported a verified fixedpoint — which reads as a Makefile bug
+and is not one. `tools/sync.sh` had rebased **other lanes'** compiler commits into
+the tree *after* the build, so the binary was a valid fixedpoint of the
+**previous** sources. Both statements were true at once.
+
+**This is a third route into CLAUDE.md's seeded-tree hazard and the resolution is
+different.** The copied-in seed, the same-second mtime and the `pinned` symlink
+all end in *"a success message where a rebuild belonged."* This one ends in a
+success message that is **correct about a tree that no longer exists**. The
+prescription is not "check the sha changed" but: **after any `sync.sh` that pulled
+`compiler/**`, your binary is stale even though nothing you did changed — rebuild
+before you believe any number.**
+
+**Why this bites hardest right now:** the fleet is pushing several compiler
+commits an hour, so every `sync.sh` is likely to pull `compiler/**`, and the
+window between "I built" and "I measured" is where a sibling's commit lands.
+Anyone quoting a measurement should name the binary's sha and confirm it postdates
+their last sync — the discipline CLAUDE.md already states as *hunt async, verify
+against a known sha*, arriving through a door that section does not name.
+
+## `perf` is dead here but PROFILES ARE NOT — gdb SIGINT-sampling works
+
+Correcting my own host note, which told the fleet to plan on A/B timing.
+`perf_event_paranoid` is 4 and `perf` returns a zero-sized capture — but
+frank-optimize produced a 700-sample profile with `gdb`, and the conclusions in
+this session's biggest finding rest on it.
+
+**Three settings are required, and missing any one yields zero samples with no
+error** — the same shape as everything else that went wrong today:
+
+- `set startup-with-shell off` — otherwise the inferior is gdb's *grandchild* and
+  your signals hit the shell. Find the process with `pgrep -x <basename>`, **never
+  `pgrep -P`**.
+- `handle SIGINT stop nopass` — without `nopass`, `continue` re-delivers the
+  signal and the program dies after exactly one sample.
+- alternate `printf "SAMPLE %#lx\n", $pc` with `continue`, signalling the inferior
+  on a timer; attribute by bucketing each `$pc` to the greatest `call 0x...`
+  target below it.
+
+Full recipe in `decide-the-o3-tier-is-34-percent-faster-and-nothing-gates-it`.
+**Do not characterise a cost by timing alone while believing profiling is
+unavailable** — that was my advice and it was wrong.
