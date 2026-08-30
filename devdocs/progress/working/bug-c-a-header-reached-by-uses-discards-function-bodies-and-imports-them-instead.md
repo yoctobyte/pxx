@@ -3,10 +3,11 @@ slug: bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-i
 track: C
 type: bug
 prio: 55
-status: backlog
+status: working
 found: 2026-08-29
 found-by: pxx-a5
 summary: "A `static`/`static inline` function DEFINED in a .h reached through `uses` has its body discarded and becomes an external, so the program links a DT_NEEDED on a lib<header>.so that does not exist and dies at load. The identical function in a .c compiles and runs. Discovered while fixing bug-a-a-c-include-path-captures-a-pascal-uses; it is the OTHER half of that ticket's silent arm and survives its fix."
+owner: frankC
 ---
 
 # `uses <header>` throws away the header's function bodies, then imports them
