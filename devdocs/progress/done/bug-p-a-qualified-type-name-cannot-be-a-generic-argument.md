@@ -205,4 +205,4 @@ un-substituted nested name, verified after this landed.
 above + the existing generic tests named one by one. Track T sweeps the matrix.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 3ee9a672f.
