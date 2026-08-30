@@ -1705,10 +1705,95 @@ pre code{background:none;padding:0}
                     or bool(t.fm.get("owner", "").strip()))
             rows = t.text.splitlines()
             hits: set[str] = set()
+            dangling: set[str] = set()
+            # THE PARK'S CONDITION CAN BE REWRITTEN WHILE IT IS PARKED, and
+            # then counting resolved blockers answers a question the ticket
+            # stopped asking. Found by frankD 2026-08-30 on
+            # feature-pascal-corpus-expansion [P p75]: seven resolved slugs in
+            # the prose, all real, all closed -- and a `Status:` line dated
+            # LATER naming a different, still-open blocker. The seven and the
+            # live block were DISJOINT SETS.
+            #
+            # frankD's rule, and it is what makes this mechanical: a park's
+            # condition needs a date as much as a park does, and the Status
+            # line is the only line that carries one -- which is exactly why it
+            # was the only line in that file still right. So when a dated
+            # Status line names a slug that is STILL OPEN, that is the live
+            # condition and every prose hit is history. Report it as such
+            # rather than as "the resume condition may already be met", which
+            # is what this check said for weeks about a ticket whose condition
+            # had been replaced.
+            #
+            # This also bounds the permanent-false-positive frankD flagged: on
+            # a file whose convention is append-never-edit, prose naming
+            # resolved tickets inside dated snapshots is the COMMON case, not
+            # the rare one, and a check that fires forever trains people to
+            # skim past the one time it is right.
+            # A WIKILINK MAY LEGITIMATELY POINT AT A DOC, NOT A TICKET.
+            # Calibration 2026-08-30 turned up 8 hits, of which one --
+            # [[ir-as-substrate]] in feature-port-freebsd-native -- resolves to
+            # devdocs/dev/ir-as-substrate.md, a real page and a correct
+            # reference. Flagging it would be the check crying wolf on the
+            # repo's own cross-referencing convention, and a check that fires
+            # on correct usage is the one people learn to scroll past. So a
+            # name is dangling only when it is NEITHER a ticket NOR a file
+            # anywhere under devdocs/. The remaining 7 resolve to nothing at
+            # all -- there are ZERO project_* files in the tree, measured.
+            if not hasattr(self, "_doc_basenames"):
+                names = set()
+                try:
+                    for dp, _dn, fns in os.walk(ROOT / "devdocs"):
+                        for fn in fns:
+                            if fn.endswith(".md"):
+                                names.add(fn[:-3])
+                            names.add(fn)
+                except Exception:
+                    pass
+                self._doc_basenames = names
+            live_block = ""
+            for line in rows:
+                if not re.match(r"\s*[-*]?\s*\**Status\**:?", line, re.I):
+                    continue
+                if not PARK_COND.search(line):
+                    continue
+                for m in SLUGISH.finditer(line):
+                    cand = m.group(0)
+                    if cand == t.slug:
+                        continue
+                    o = self.by_slug.get(cand)
+                    if o is not None and o.status not in closed_st:
+                        live_block = cand
+                        break
+                if live_block:
+                    break
+            # SCANNED OVER THE WHOLE BODY, not just near a blocking phrase.
+            # A resolved-slug mention is only signal next to a condition word
+            # -- that bound is what took the wide scan from ~50 noisy hits to
+            # 10 real ones. A DANGLING link needs no such bound: it is wrong
+            # wherever it sits, because it resolves to nothing anywhere, and
+            # the counters that misread it do not check for a condition word
+            # either. Different signal, different aperture.
+            for j in range(len(rows)):
+                for m in re.finditer(r"\[\[([a-z0-9][a-z0-9_-]{6,})\]\]", rows[j]):
+                    cand = m.group(1)
+                    if (cand != t.slug
+                            and self.by_slug.get(cand) is None
+                            and cand not in self._doc_basenames):
+                        dangling.add(cand)
             for i, line in enumerate(rows):
                 if not PARK_COND.search(line):
                     continue
                 for j in range(max(0, i - 2), min(len(rows), i + 3)):
+                    # A DANGLING WIKILINK READS AS AN OPEN DEPENDENCY TO
+                    # ANYTHING THAT COUNTS THEM AND AS A TYPO TO A HUMAN --
+                    # which is why nobody fixes it and every counter is wrong.
+                    # frankD, 2026-08-30: feature-pascal-corpus-fpc-testsuite
+                    # [P p65] showed four not-done links, of which TWO resolved
+                    # to no file at all and one was the umbrella itself. Its
+                    # "four resolved" understated -- it is behind ONE item.
+                    # Only explicit [[...]] links are flagged: the bare-slug
+                    # regex matches too much prose to carry this without noise,
+                    # and a wikilink is unambiguous intent to point at a ticket.
                     for m in SLUGISH.finditer(rows[j]):
                         s = m.group(0)
                         if s == t.slug or s in t.blockers:
@@ -1716,6 +1801,36 @@ pre code{background:none;padding:0}
                         o = self.by_slug.get(s)
                         if o is not None and o.status in closed_st:
                             hits.add(s)
+            if dangling:
+                warning_count += 1
+                dshown = sorted(dangling)[:3]
+                dmore = f" (+{len(dangling) - 3} more)" if len(dangling) > 3 else ""
+                lines.append(
+                    f"DANGLING-LINK: {t.slug} [{t.track} p{t.prio}] names "
+                    f"{len(dangling)} wiki-link(s) near a blocking phrase that "
+                    f"resolve to NO ticket at all ({', '.join(dshown)}{dmore}). "
+                    f"A dangling link reads as an OPEN dependency to anything "
+                    f"counting them and as a typo to a human, so nothing fixes "
+                    f"it and every count is wrong -- a park can look blocked on "
+                    f"four things and be blocked on one. Fix the slug or delete "
+                    f"the link; do not leave it to be re-counted"
+                )
+            if hits and live_block:
+                warning_count += 1
+                shown = sorted(hits)[:4]
+                more = f" (+{len(hits) - 4} more)" if len(hits) > 4 else ""
+                lines.append(
+                    f"PARK-CONDITION-REWRITTEN: {t.slug} [{t.track} p{t.prio}] "
+                    f"names {len(hits)} now-resolved ticket(s) in its prose "
+                    f"({', '.join(shown)}{more}) BUT its Status line names "
+                    f"`{live_block}`, which is still open. The park's condition "
+                    f"was REPLACED while it was parked, so the resolved set and "
+                    f"the live block are disjoint -- counting the resolved ones "
+                    f"answers a question this ticket stopped asking. The Status "
+                    f"line is the only line carrying a date, which is why it is "
+                    f"the one still right. Resume is gated on `{live_block}` alone"
+                )
+                continue
             if hits:
                 warning_count += 1
                 shown = sorted(hits)[:4]
