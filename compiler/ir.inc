@@ -1428,6 +1428,15 @@ begin
     Result := Ord(Syms[ASTIVal[node]].ElemType)
   else if ASTKind[node] = AN_FIELD then
     Result := RecFieldStrElemTk(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
+  { `p^` where p points AT a managed string. The width is the POINTEE's, which
+    is a different fact from the pointer symbol's own SymStrElemTk -- a pointer
+    is not a string -- so it reads SymPtrElemStrTk. Only the AN_IDENT base is
+    resolved here: a deref of a field or an array element needs those entities'
+    own pointee-width carriers, which 6d-1 does not add, and 0 leaves them
+    reading narrow exactly as they do today. feature-unicodestring-model }
+  else if (ASTKind[node] = AN_DEREF) and (ASTLeft[node] >= 0) and
+          (ASTKind[ASTLeft[node]] = AN_IDENT) then
+    Result := SymPtrElemStrTk[ASTIVal[ASTLeft[node]]]
   { The RESULT of a call. A call node has no symbol and no field to ask, so the
     callee's row is the only place the width can live -- the same argument
     ProcRetEnumId makes for an enum-typed result. All three call shapes carry

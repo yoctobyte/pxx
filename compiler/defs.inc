@@ -2499,6 +2499,7 @@ var
   SymSetElemLo : array of Int64;
   SymSetElemHi : array of Int64;
   SymStrCap : array of Integer; { see decl below }
+  SymPtrElemStrTk : array of Integer; { pointer SYMBOL whose pointee is a managed string: the pointee's element width ord; 0 = not one. Distinct from SymStrElemTk, which is the width of the string the symbol IS (or its array's elements); this is the width of the string it POINTS AT. `Length(p^)` and `p^[i]` read it. }
   SymStrElemTk : array of Integer; { managed-STRING element width, as a TTypeKind ordinal; 0 = unset (read as tyChar). Double duty exactly as SymStrCap above, disambiguated by IsArray: for an `array of WideString` it is the ELEMENTS' width, because Syms[].ElemType is occupied by the array's own element kind (tyAnsiString) and cannot also hold the level below it. A scalar wide string keeps its width in Syms[].ElemType, which for a string genuinely IS its element. feature-unicodestring-model }
   SymIsSub : array of Boolean; { symbol declared via a named SUBRANGE type (T = lo..hi): {$R+} checks stores against SymSubLo/Hi. BSS-false default = unchecked (feature-pascal-range-checks-r-plus). }
   SymSubLo : array of Int64;
@@ -2897,6 +2898,7 @@ var
     return value and travels here instead. Obeys the window rule at the head of
     this block — durable captures are Syms[].ElemType, UFldStrElemTk and
     AliasStrElemTk. feature-unicodestring-model }
+  LastTypePointerStrElemTk : Integer; { POINTEE's managed-string element width as a TTypeKind ord (Ord(tyChar)/Ord(tyWideChar)); 0 = the pointee is not a managed string. The pointee-side companion to LastTypeStrElemTk, and a RETURN CHANNEL under the same window rule: valid only between the ParseTypeKind that set it and the next one entering. `p: ^WideString` is the shape that needs it -- the pointee kind is tyAnsiString for both widths, so the kind alone no longer says how wide `p^` is. feature-unicodestring-model }
   LastTypeStrElemTk : TTypeKind;
   LastArrIdxTk     : Integer;  { set by ParseArrayDimBounds on every call: the INDEX type of the dimension it just parsed, as Ord(TTypeKind), or 0 for an ordinary integer range. The one producer of ArrTypeIdxTk/SymArrIdxTk. Valid only immediately after the call -- the next dimension overwrites it, which is why the callers capture it for dimension 0 and drop the rest. }
   LastArrIdxEnumId : Integer;  { its enum type index when LastArrIdxTk is Ord(tyInteger), else -1. }
@@ -4653,6 +4655,7 @@ var
   AliasElemRec : array[0..MAX_TYPEALIAS-1] of Integer;  { pointer element record/class id }
   AliasPtrElemArrAi : array[0..MAX_TYPEALIAS-1] of Integer; { pointer alias whose POINTEE is a named FIXED-array type (`PFixed = ^TFixed`): that ArrType index, else -1. An array alias is not in the scalar alias table, so ParseTypeKind answers its unknown-name default for the pointee; without this the pointer kept a 4-byte stride whatever the real element was. }
   AliasPtrDepth : array[0..MAX_TYPEALIAS-1] of Integer; { pointer alias depth, 0 for non-pointer/unknown }
+  AliasPtrStrElemTk : array[0..MAX_TYPEALIAS-1] of Integer; { `PWStr = ^WideString`: the POINTEE's element width ord, 0 = pointee is not a managed string. Captured at alias registration and handed back on alias USE, exactly as AliasStrElemTk does one level down -- because an alias is where a pointer type is almost always spelled, and the entity that later uses it (var / field / param) sees only the alias name. }
   AliasPtrBaseTk : array[0..MAX_TYPEALIAS-1] of Integer; { pointer alias ultimate base TTypeKind ordinal }
   AliasPtrBaseRec : array[0..MAX_TYPEALIAS-1] of Integer; { pointer alias ultimate base record/class id }
   AliasProcSig : array[0..MAX_TYPEALIAS-1] of Integer;  { procedural-type alias: signature proc index (Procs[] entry, BodyAddr=-1); -1 = not a proc type }

@@ -133,6 +133,7 @@ var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci, tkQUnit: Integer;
 begin
   LastTypeRecId := REC_NONE;
   LastTypePointerElemTk := tyUnknown;
+  LastTypePointerStrElemTk := 0;
   LastTypeStrElemTk := tyUnknown;
   LastTypePointerElemRec := REC_NONE;
   LastTypePointerAlias := -1;
@@ -273,6 +274,21 @@ begin
       childBaseTk := LastTypePointerBaseTk;
       childBaseRec := LastTypePointerBaseRec;
       LastTypePointerElemTk := elemTk;
+      { The pointee's managed-string WIDTH, captured in the ONE window where it
+        is knowable: the ParseTypeKind that produced elemTk has just returned,
+        so LastTypeStrElemTk still describes it. This is the only general `^T`
+        site -- every other arm that sets LastTypePointerElemTk names a BUILTIN
+        pointer type (PChar, PWideChar, PPChar, TClass, TObject), none of which
+        can have a managed-string pointee -- so the width needs capturing here
+        and nowhere else, even though the pointee KIND is set on 29 paths.
+        Normalised like its siblings: 0 means "the pointee is not a managed
+        string", never "narrow". feature-unicodestring-model }
+      LastTypePointerStrElemTk := 0;
+      if elemTk = tyAnsiString then
+      begin
+        if LastTypeStrElemTk = tyWideChar then LastTypePointerStrElemTk := Ord(tyWideChar)
+        else LastTypePointerStrElemTk := Ord(tyChar);
+      end;
       LastTypePointerElemRec := LastTypeRecId;
       if (elemTk = tyPointer) and (childDepth > 0) then
       begin
@@ -642,6 +658,11 @@ begin
                 LastTypePointerDepth := AliasPtrDepth[aliasIdx];
                 LastTypePointerBaseTk := AliasPtrBaseTk[aliasIdx];
                 LastTypePointerBaseRec := AliasPtrBaseRec[aliasIdx];
+                { ...and the pointee's string width, so `var p: PWStr` stamps it
+                  on the symbol and Length(p^) counts characters. An alias is
+                  where a pointer type is almost always spelled, so without this
+                  the capture above reaches nothing. }
+                LastTypePointerStrElemTk := AliasPtrStrElemTk[aliasIdx];
                 LastTypeProcSig := AliasProcSig[aliasIdx];
                 Result := tyPointer;
               end
@@ -5797,6 +5818,32 @@ begin
         end;
         RegisterPtrAlias(tnOff, tnLen, Ord(fTk), LastTypeRecId, targetNOff, targetNLen);
         AliasPtrElemArrAi[AliasCount-1] := aPtrArrAi;
+        { The pointee's managed-string width rides with the alias -- and it comes
+          from LastTypeStrElemTk, NOT LastTypePointerStrElemTk. Both arms above
+          parse the POINTEE directly (`fTk := ParseTypeKind`, or the element of
+          a named fixed-array type), so the live channel here describes the
+          pointee itself; the pointer-side channel belongs to ParseTypeKind's
+          own `^` arm and is 0 on this path. Reading it here would have recorded
+          nothing, silently, for every `PWStr = ^WideString` -- which is the one
+          spelling the whole carrier exists to serve.
+          The two arms differ in WHERE the width lives, so both are handled:
+          a parsed pointee leaves it in the channel, an array-type pointee has
+          it in that type's ArrTypeStrElemTk row (6b's carrier). }
+        AliasPtrStrElemTk[AliasCount-1] := 0;
+        if fTk = tyAnsiString then
+        begin
+          if aPtrArrAi >= 0 then
+          begin
+            if ArrTypeStrElemTk[aPtrArrAi] <> 0 then
+              AliasPtrStrElemTk[AliasCount-1] := ArrTypeStrElemTk[aPtrArrAi]
+            else
+              AliasPtrStrElemTk[AliasCount-1] := Ord(tyChar);
+          end
+          else if LastTypeStrElemTk = tyWideChar then
+            AliasPtrStrElemTk[AliasCount-1] := Ord(tyWideChar)
+          else
+            AliasPtrStrElemTk[AliasCount-1] := Ord(tyChar);
+        end;
         if fTk = tyPointer then
         begin
           AliasPtrDepth[AliasCount-1] := LastTypePointerDepth + 1;

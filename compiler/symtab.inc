@@ -4045,6 +4045,7 @@ begin
   SetLength(SymSetEnumId, n);      SetLength(SymEnumId, n);         SetLength(SymSetElemTk, n);
   SetLength(SymSetElemLo, n);      SetLength(SymSetElemHi, n);
   SetLength(SymElemEnumId, n);
+  SetLength(SymPtrElemStrTk, n);
   SetLength(SymStrElemTk, n);
   SetLength(SymStrCap, n);         SetLength(SymIsSub, n);          SetLength(SymSubLo, n);
   SetLength(SymSubHi, n);          SetLength(SymPtrDepth, n);       SetLength(SymPtrBaseTk, n);
@@ -4184,6 +4185,7 @@ begin
   SymSetElemHi[SymCount] := -1;   { Hi < Lo = no element subrange recorded }
   SymStrCap[SymCount] := 0;
   SymStrElemTk[SymCount] := 0;   { sym slots are RECYCLED — never inherit a previous occupant's width }
+  SymPtrElemStrTk[SymCount] := 0;   { same recycled-slot rule for the POINTEE's width }
   SymIsSub[SymCount] := LastTypeIsSub;
   if LastTypeIsSub then
   begin
@@ -4229,6 +4231,7 @@ begin
   if tk = tyPointer then
   begin
     Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
+    SymPtrElemStrTk[SymCount] := LastTypePointerStrElemTk;
     Syms[SymCount].PtrElemRec := LastTypePointerElemRec;
     SymPtrDepth[SymCount] := LastTypePointerDepth;
     SymPtrBaseTk[SymCount] := LastTypePointerBaseTk;
@@ -4411,6 +4414,7 @@ begin
   SymSetElemHi[SymCount] := -1;   { Hi < Lo = no element subrange recorded }
   SymStrCap[SymCount] := 0;
   SymStrElemTk[SymCount] := 0;   { sym slots are RECYCLED — never inherit a previous occupant's width }
+  SymPtrElemStrTk[SymCount] := 0;   { same recycled-slot rule for the POINTEE's width }
   SymIsSub[SymCount] := LastTypeIsSub;
   if LastTypeIsSub then
   begin
@@ -4440,6 +4444,7 @@ begin
   if tk = tyPointer then
   begin
     Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
+    SymPtrElemStrTk[SymCount] := LastTypePointerStrElemTk;
     Syms[SymCount].PtrElemRec := LastTypePointerElemRec;
     SymPtrDepth[SymCount] := LastTypePointerDepth;
     SymPtrBaseTk[SymCount] := LastTypePointerBaseTk;
@@ -4708,6 +4713,7 @@ begin
   SymSetElemHi[SymCount] := -1;   { Hi < Lo = no element subrange recorded }
   SymStrCap[SymCount] := 0;
   SymStrElemTk[SymCount] := 0;   { sym slots are RECYCLED — never inherit a previous occupant's width }
+  SymPtrElemStrTk[SymCount] := 0;   { same recycled-slot rule for the POINTEE's width }
   SymIsSub[SymCount] := LastTypeIsSub;
   if LastTypeIsSub then
   begin
@@ -4750,6 +4756,7 @@ begin
   if elemType = tyPointer then
   begin
     Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
+    SymPtrElemStrTk[SymCount] := LastTypePointerStrElemTk;
     Syms[SymCount].PtrElemRec := LastTypePointerElemRec;
     SymPtrDepth[SymCount] := LastTypePointerDepth;
     SymPtrBaseTk[SymCount] := LastTypePointerBaseTk;
@@ -4838,6 +4845,7 @@ begin
   SymSetElemHi[SymCount] := -1;   { Hi < Lo = no element subrange recorded }
   SymStrCap[SymCount] := 0;
   SymStrElemTk[SymCount] := 0;   { sym slots are RECYCLED — never inherit a previous occupant's width }
+  SymPtrElemStrTk[SymCount] := 0;   { same recycled-slot rule for the POINTEE's width }
   SymIsSub[SymCount] := LastTypeIsSub;
   if LastTypeIsSub then
   begin
@@ -4892,6 +4900,7 @@ begin
   if elemType = tyPointer then
   begin
     Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
+    SymPtrElemStrTk[SymCount] := LastTypePointerStrElemTk;
     Syms[SymCount].PtrElemRec := LastTypePointerElemRec;
     SymPtrDepth[SymCount] := LastTypePointerDepth;
     SymPtrBaseTk[SymCount] := LastTypePointerBaseTk;
