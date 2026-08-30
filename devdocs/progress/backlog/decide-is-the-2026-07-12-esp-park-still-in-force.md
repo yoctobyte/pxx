@@ -64,6 +64,7 @@ supersession. *Still parked* → I re-price the S rows, stand frankS down, and r
 the ranker can see it this time.
 
 
+
 ## Chronology, added 2026-08-30 — and it sharpens the fork rather than settling it
 
 frankB supplied the ordering; I checked the middle term against a source it did not choose,
@@ -106,3 +107,75 @@ exactly why this is a U ticket.
 Still one word. But if the answer is *still parked*, the follow-on is bigger than re-pricing
 23 rows: work has been landing against a parked campaign for seven weeks, and some of it is
 in `done/`.
+---
+
+## EVIDENCE (frankB, 2026-08-30) — the park was not superseded. One commit deleted it.
+
+Appended by frankB, not the ticket's author. **This is evidence, not a change to the
+recommendation** — the fork above stands and the call is still the owner's. It is here
+because it answers a question the ticket poses as unanswerable, and the owner reads this
+page. Specifically, it addresses the chronology section's closing judgement that the two
+readings are *"indistinguishable from the tree"* — they are distinguishable, and `git log`
+is where the difference is.
+
+I went looking to verify my *own* citation (the 2026-08-02 xtensa ruling), since the
+coordinator relayed it on my word and labelled it unverified. It verifies — the dated user
+attribution appears independently in `done/feature-xtensa-stack-args-over-6-words.md`, both
+in its frontmatter and in a dedicated section. But the search turned up the park's actual
+history, which nobody had looked at.
+
+### The park had a real mechanism, and it was destroyed by a bulk re-price
+
+`git log --follow` on the ticket the park is cited from:
+
+| commit | date | what happened to the park |
+| --- | --- | --- |
+| `ad649f55f` | **2026-07-12** | *"tickets: park ESP family (user: Pascal has prio)"* — applied across **three** tickets, each re-priced with the ruling recorded in the `prio:` comment |
+| `ab584382e` | **2026-08-25** | *"tickets: apply the approved re-triage — prio now spans 3-88"* — `prio: 30  # ESP parked (user 2026-07-12)…` **replaced by bare `prio: 20`**. Comment text deleted. |
+
+So the park was never "recorded in one `done/` ticket". It was applied deliberately to a
+family, with the reason attached to each number, and **a bulk re-triage six weeks later
+stripped it**. The re-triage commit message does not mention ESP; nothing about it was a
+decision to unpark anything.
+
+### Where the ruling survives is the tell
+
+Of the three tickets that carried it:
+
+| ticket | state today | park comment |
+| --- | --- | --- |
+| `bug-esp-emit-obj-proc-fixup-non-iram` | `done/` | **KEPT** |
+| `bug-esp-idf-heap-linux-mmap-ecall` | `done/` | **KEPT** |
+| `feature-pal-esp-posix-fd-semantics` | `unfinished/` — **live** | **DELETED** |
+
+**The park survives in both tickets where it can no longer act, and was deleted from the
+only one where it still could.** Not because anything targeted it: a re-triage re-prices
+*open* tickets, and `done/` tickets are not re-priced. The enforcement was destroyed exactly
+where it was still load-bearing and preserved exactly where it was inert. That is why it
+reads today as a fossil in `done/` — the live copy was removed on 2026-08-25.
+
+### This is the same commit that swept the NilPy hold
+
+`ab584382e` also carries `bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only`:
+`-prio: 20` → `+prio: 55`. **One commit erased two user rulings.** They are not two instances
+of a class discovered on the same night; they are one event with two victims, and the class
+has exactly one known cause: *a user decision whose only enforcement is a number, met by a
+process that rewrites numbers in bulk.*
+
+### What this does and does not settle
+
+It does **not** decide the fork — whether ESP should be worked now is still the owner's call,
+and reading 1 (superseded) can still be the right answer on the merits.
+
+It does remove one of the two readings *as a description of what happened*. The park was not
+superseded by a later decision; no decision touched it. And "nobody ever saw it" is too kind:
+the ruling sat intact in a live ticket's frontmatter from 2026-07-12 to 2026-08-25, which
+includes the 2026-08-02 ESP activity the ticket cites — so ESP work proceeded for six weeks
+*while the park was present and readable*, and then the record of it was deleted mechanically.
+The erosion has two distinct phases, unobserved and then unrecorded, and only the second is
+about the missing mechanism.
+
+**If the ruling is that the park still stands**, the repair is not just re-pricing 23 rows: it
+is that a `prio:` comment is not a mechanism, and `ab584382e` is the proof — the same commit
+would silently undo it again. `NOT DISPATCHABLE` / `gated-by:` survive a re-price because they
+are not prices.

@@ -729,7 +729,7 @@ _none_
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
 - [p 65] [P] bug-p-a-qualified-type-name-cannot-be-a-generic-argument (unblocks 1)
-- [p 65] [U+S] decide-is-the-2026-07-12-esp-park-still-in-force (unblocks 1)
+- [p 65] [U+S] decide-is-the-2026-07-12-esp-park-still-in-force (unblocks 1) [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 65] [A+S] bug-a-a-by-value-wide-record-on-xtensa-renders-a-live-address
 - [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython [parked — re-claim, do not duplicate]
 - [p 65] [P] bug-p-a-cross-unit-specialization-streams-method-bodies-into-the-interface
