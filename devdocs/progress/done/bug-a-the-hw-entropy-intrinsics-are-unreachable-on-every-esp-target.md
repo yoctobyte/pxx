@@ -282,4 +282,4 @@ scope correction nor the original framing should carry weight until the
 configurations are pinned down.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit ba14f5f56.
