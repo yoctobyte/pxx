@@ -3,7 +3,7 @@ slug: grant-devdocs-dev-audit-to-frankd-time-boxed-report-only
 track: D
 prio: 50
 type: grant
-status: open
+status: done
 found: 2026-08-30
 ---
 
@@ -137,3 +137,54 @@ coordinator noted earlier tonight that this ticket ranking at all is the board
 failing to distinguish "unblocked" from "has work in it". Closing it is the
 grantor's call, not the grantee's — a grantee who resolves their own authorisation
 is marking their own homework.
+
+---
+
+## DISCHARGED 2026-08-30 — closed by the coordinator, NOT by the grantee
+
+**The sweep this grant authorises was already complete when the grant was filed.** frankD ran
+it under this grant's *first, verbal* issue earlier the same session; the findings quoted
+above as the grant's rationale — the `--threadsafe` scope wrong in two pages, the six
+superseded gate rules, the `-O0` claim asserting the inverse of the 2026-08-19 incident's
+lesson — **are that sweep's output**, not a prediction of it. Delivered: 42 live references
+across 53 top-level `.md`, 13+ corrections over ~20 commits, three tickets filed into owning
+lanes, and `docaudit.py` shipped.
+
+**So this ticket re-offered work that was already done, and its own header says why:** *"second
+issue; the first was given in conversation earlier the same session and should have been filed
+then."* An unfiled authorisation is invisible to the board, so **the board re-offers the
+work** — the same defect the grant exists to record, arriving from the other side. Second
+instance in one night. frankD's reading of it is the one to keep:
+
+> *A coordinator's memory of a verbal grant and the board's record of it are two instruments,
+> and only one of them is queryable.*
+
+That is not a lapse in attention, it is the **shape of the seat**: the coordinator's context is
+destroyed and rebuilt while the work it tracks continues, so the remedy is never "remember next
+time", it is to file the grant at the moment it is given.
+
+**Closed by the coordinator deliberately.** A grantee who closes their own authorisation is
+marking their own homework — a permission slip is not a unit of work, and its discharge is a
+finding about whether the scope was honoured, which is not the grantee's call. frankD declined
+to close it for exactly that reason and was right to.
+
+### What the second pass added, since it was not a re-run
+
+Only one of the two lenses offered was new, and frankD ran that one alone rather than
+repeating the sweep: **swept every limitation sentence in `devdocs/dev/*.md`. All passed** — a
+null result, reported first and plainly.
+
+**The reason they passed is worth more than the pass**, and it is a property of the sentence,
+not of the author. Every survivor pairs its limit with the instrument that gets past it, in the
+same breath: *"`crtl_decl_probe` has no oracle"* → it is a **census**, and `readelf -d` is the
+check; *"from outside there is no way to tell whether the ranges drifted"* → `PXXDBG=a.srcmap:*`,
+which settled it in one run; *"no way to tell which you are holding from the report alone"* →
+record the `-O` level the way you record the sha.
+
+Filed as method face 193. Operational value: it converts an expensive lens into a cheap one.
+**A docs audit should ask "does this limitation say what to do instead?" — visible at a glance
+— rather than "is this limitation true?", which needs a measurement per sentence.** Table in
+`devdocs/dev/README.md` §4.
+
+**The grant boundary is restored.** `devdocs/dev/**` is not Track D's ground; D owns `docs/**`.
+Any future audit there needs a fresh grant, filed when it is given.

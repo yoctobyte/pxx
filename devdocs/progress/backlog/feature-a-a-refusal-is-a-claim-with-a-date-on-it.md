@@ -9062,3 +9062,62 @@ Companion to 190b: there, re-deriving a constant tells you whether the check is 
 subtracting a total from its rows tells you whether two live measurements agree. Both are
 one command, both run without suspicion, and both were found by workers auditing their own
 evidence rather than their own conclusions.
+
+---
+
+## 193 — A CAVEAT THAT ENDS IN A FULL STOP IS THE ONE TO CHECK
+
+*(frankD, 2026-08-30, sweeping every limitation sentence in `devdocs/dev/*.md` — all passed,
+and the reason they passed is the finding.)*
+
+This index has said repeatedly that **a false limit is quieter than a false fix and survives
+longer**: a wrong instruction gets re-tested by whoever follows it, while a wrong *caveat*
+gets believed, reads as conscientious, and stops anyone re-checking. True, and useless as a
+sweep — verifying a limitation costs a measurement per sentence, so nobody runs it.
+
+frankD found the cheap proxy. Every limitation that survived its sweep **pairs the limit with
+the instrument that gets past it, in the same breath**:
+
+| the limit | the escape route, in the same sentence |
+| --- | --- |
+| *"`crtl_decl_probe` has no oracle"* | it is a **census**; `readelf -d` is the check |
+| *"from outside there is no way to tell whether the ranges drifted"* | `PXXDBG=a.srcmap:*` — settled it in one run |
+| *"no way to tell which you are holding from the report alone"* | record the `-O` level the way you record the sha |
+
+**A bare limit is the dangerous shape; a limit with a named escape route defuses itself** —
+the reader who wants past it is handed the way past instead of being told to stop. So the
+sweepable question is not *"is this limitation true?"* (expensive, one measurement each) but
+**"does this limitation say what to do instead?"** — visible at a glance, greppable, and it
+selects exactly the population worth the expensive check.
+
+> **A caveat that ends in a full stop is the one to check.**
+
+Why the proxy is sound rather than merely convenient: an author who has actually *tried* to
+get past a limit knows what the way past would be, and says so. An author who is reporting a
+limit they inferred rather than hit has nothing to name — so the missing escape route is
+evidence the limit was **reasoned, not measured**, which is the exact provenance that makes a
+caveat wrong. The proxy is not a heuristic about writing style; it is a trace of whether the
+claim came from an experiment.
+
+Companion to 190b and 192a — the third one-command check found in a night, and like both of
+those it was found by a worker auditing its **own evidence** rather than its own conclusions.
+Table in `devdocs/dev/README.md` §4.
+
+### 193a — an unfiled grant makes the board RE-OFFER work that is already done
+
+The discharge of `grant-devdocs-dev-audit-to-frankd-time-boxed-report-only` is the mirror of
+the rule that produced it. The grant was issued verbally, not filed; the sweep ran; the grant
+was *then* filed, citing that sweep's own findings as its rationale — and the board, which
+had never seen the first issue, offered the completed work as a fresh ticket. The coordinator
+dispatched it. **Second instance the same night.**
+
+> *A coordinator's memory of a verbal grant and the board's record of it are two instruments,
+> and only one of them is queryable.* — frankD
+
+Same structure as 192 one level up: two measurements of the same fact, silently diverged. And
+the standing rule about unfiled grants was only half right. It said an unfiled authorisation
+**reads as covered**, because a neighbouring ticket covers the same file — the risk being that
+someone acts unpermitted. This is the other half: it also reads as **not yet done**, so the
+board spends a dispatch re-offering it. **File the grant at the moment it is given**; a
+coordinator's recall is not a record, and this seat's context is destroyed and rebuilt while
+the work it tracks continues.

@@ -2380,6 +2380,7 @@ should not read it to find out what to do. Grep it freely._
 | fix-sat-dpll-needs-parens-after-paramless-flip | B | 50 | fix | sat DPLL: bare paramless recursion needs `DPLL()` after the paramless flip | — |
 | flaky-corpus-runner-shared-tmp-path | C | 55 | flaky | flaky: cJSON / lua corpus runners race on a shared /tmp input path under parallel testing | — |
 | gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo | B | 78 | gap | PTypeData is declared as `= PTypeInfo` with a `same header for now` note, and TTypeInfo carries no OrdType / MinValue / MaxValue / FloatType. Any RTTI-driven code that switches on a type's ordinal width — Generics.Defaults' comparer selection, and the whole TypInfo idiom generally — cannot compile. | feature-typeinfo-ttypedata-payloads |
+| grant-devdocs-dev-audit-to-frankd-time-boxed-report-only | D | 50 | grant | GRANT: `devdocs/dev/*.md` → frankD, audit-only, time-boxed | — |
 | grant-pasparser-lval-to-the-wasm-lane-for-the-nilpy-str-helper-collision | A | 55 | grant | GRANT: `compiler/pasparser_lval.inc` → the wasm lane, for the NilPy str/helper collision | — |
 | grant-progress-py-to-pxx-a5-for-the-uncited-resolve-check | T | 45 | grant | GRANT: `tools/progress.py` → pxx-a5, scoped to the `UNCITED-RESOLVE` check | — |
 | idea-progress-board-md | B | 50 | idea | On-demand `BOARD.md` kanban grid | — |
