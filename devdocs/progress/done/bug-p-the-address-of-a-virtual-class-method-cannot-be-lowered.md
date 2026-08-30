@@ -129,4 +129,4 @@ closing. Filed as
 [[bug-p-a-parenless-method-reference-handles-two-of-four-receiver-spellings]].
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit eddae00f3.
