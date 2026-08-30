@@ -259,3 +259,4 @@
 2026-08-30T17:21:13Z	seven	c1365463723689d7f16d7343c338817f1430f92e	WOULD PIN c13654637236 — 5 red(s), none new, 5 inherited from the current pin, self-host clean, streak 2/2
 2026-08-30T17:33:23Z	seven	06034addd8cd5aa979be0927173bd7b2f1d98367	WOULD PIN 06034addd8cd — 5 red(s), none new, 5 inherited from the current pin, self-host clean, streak 3/2
 2026-08-30T18:12:07Z	seven	fc9e258e1b713b1fc53cfa48d974989586b73525	WOULD PIN fc9e258e1b71 — 5 red(s), none new, 5 inherited from the current pin, self-host clean, streak 4/2
+2026-08-30T18:39:13Z	seven	d24df3f09efbee3a00d3c49f06754bca1a183341	would NOT pin d24df3f09efb — 30 red(s) the current pin does not have, 5 inherited from the current pin: test-core#src:test/test_methodptr_nil_assign.pas, test-core#src:test/test_nil_argument_positions.pas, test-core#src:test/test_nilpy_infer_return.npy, test-core#src:test/test_nilpy_pathlib.npy, test-core#src:test/test_nilpy_str_ascii_cache.npy
