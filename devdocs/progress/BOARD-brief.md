@@ -5,14 +5,14 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:30 blocked:8 backlog:365 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2764 rejected:56`
+`working:2 unfinished:29 blocked:8 backlog:365 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2765 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O] — owner: frank-optimize-b4
 - `feature-target-wasm` [A+B] — owner: frankwasm
 
-## unfinished (30) — parked mid-flight; re-claim, do not duplicate
+## unfinished (29) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -21,7 +21,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-nilpy-render-backend-py-compile-does-not-terminate` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-p-a-nested-type-of-the-enclosing-template-is-minted-as-a-concrete-generic-argument` [P] — blocked-by: bug-p-a-qualified-type-name-cannot-be-a-generic-argument
-- `chore-t-audit-which-test-expectations-were-captured-from-output-rather-than-derived` [T]
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A]
 - `feature-b-a-real-minidom-is-an-implementation-not-a-shim` [B] — blocked-by: bug-n-a-class-with-two-definitions-of-one-method-hangs-the-compiler-forever
@@ -56,7 +55,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `regression-tools-devtest-00-3` [T] — blocked-by: bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code
 
-## Ready — top 30 of 389, ranked
+## Ready — top 30 of 388, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -89,4 +88,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [A+S]` bug-a-a-perf-commit-silently-fixed-41-xtensa-windowed-divergences-and-nobody-knows-why
 - `[p 60] [A+S]` bug-a-the-xtensa-windowed-abi-is-compiled-twice-and-executed-never
 
-_359 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_358 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

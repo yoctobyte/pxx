@@ -4,7 +4,7 @@ prio: 40
 type: chore
 blocked-by: []
 summary: "A test expectation CAPTURED from a program's output records whatever the compiler did that day — bugs included — and then defends that behaviour after the fix, converting a defect into a requirement. Audit the Makefile's expect_same.sh values for which are DERIVABLE from the source independently and which are transcriptions of a run. test_alloca26 is the model of the safe form: 7088718 is reproducible by anyone, in any language, without running our compiler. File ownership is Track B where Makefile expectations are touched."
-status: unfinished
+status: done
 owner: frankB
 ---
 
@@ -659,3 +659,6 @@ row called a difference has at least one diff line.
 
 **342/353 NilPy · 333/395 C · 797/1280 Pascal**, with 58 Pascal candidates read
 and every one a documented dialect divergence.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
