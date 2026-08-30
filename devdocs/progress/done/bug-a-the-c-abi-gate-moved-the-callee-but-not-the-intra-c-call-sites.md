@@ -158,4 +158,4 @@ diff and noticing the guards were untouched — not by running the instrument.
 The subject is worth wiring for that reason alone, and frankC is adding it.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit f388cbfbc.
