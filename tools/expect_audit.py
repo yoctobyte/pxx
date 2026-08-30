@@ -103,7 +103,7 @@ def main():
         for b, h, n, s, e, ln in sel[:limit]:
             print("  Makefile:%-6s %-34s %-38s hit=%.2f  %s" % (ln, n[:34], s[:38], h, e[:60]))
 
-if '--files' not in sys.argv and '--oracle' not in sys.argv:
+if not any(f in sys.argv for f in ('--files','--oracle','--oracle-c')):
     main()
 
 # ---------------------------------------------------------------------------
@@ -221,5 +221,83 @@ def oracle():
     return 0 if ok else 1
 
 
+# ---------------------------------------------------------------------------
+# --oracle-c: the same strong check for the C corpus, with gcc as the oracle.
+#
+# The instrument here is NOT a reimplementation of the comparison. It runs the
+# Makefile's own recipe line, with `tools/expect_same.sh` doing the comparing,
+# against a TESTTMP populated with gcc-built binaries instead of pxx-built ones.
+# That matters: the first version of this DID reimplement it, and reported 321
+# of 362 expectations as disagreeing. They were lines of the shape
+#
+#     $(TESTTMP)/prog; tools/expect_same.sh prog-rc "$$?" "89"
+#
+# where the assertion is the exit code of a binary the reimplementation never
+# ran, so it compared 0 against 89 every time. A 321/362 disagreement rate is
+# not a finding, it is a broken harness -- and running the real recipe line
+# removes the entire class, because there is no second implementation of the
+# semantics to get wrong.
+#
+# Two populations have no native gcc oracle and are counted, not judged:
+# sources gcc rejects (pxx C extensions), and cross-target rows that go through
+# tools/run_target.sh -- qemu correctly refuses a natively-built ELF.
+# ---------------------------------------------------------------------------
+
+def oracle_c(tmp=None):
+    import subprocess, tempfile, collections as _c
+    tmp = tmp or tempfile.mkdtemp(prefix='expect_audit_c_')
+    mk = open(MAKEFILE, errors='replace').read().split('\n')
+    CMAP = re.compile(r'\$\(COMPILER\)[^\n]*?\b(test/[A-Za-z0-9_./-]+\.c)\s+\$\(TESTTMP\)/([A-Za-z0-9_.-]+)')
+    b2s = {}
+    for l in mk:
+        for m in CMAP.finditer(l):
+            b2s.setdefault(m.group(2), m.group(1))
+    E2 = re.compile(r'expect_same\.sh\s+([A-Za-z0-9_./-]+)\s+(".*")\s*$')
+    BIN = re.compile(r'\$\(TESTTMP\)/([A-Za-z0-9_.-]+)')
+    OTHER = re.compile(r'\$\((?!TESTTMP\))[A-Za-z_]+\)')
+    rows = []
+    for i, l in enumerate(mk):
+        if not E2.search(l):
+            continue
+        names = set(BIN.findall(l)) & set(b2s)
+        if len(names) == 1:
+            rows.append((next(iter(names)), E2.search(l).group(1), l, i + 1))
+    built, rej = set(), 0
+    for b in sorted({r[0] for r in rows}):
+        p = subprocess.run(['gcc', '-w', '-I', 'test', '-o', os.path.join(tmp, b), b2s[b]],
+                           capture_output=True, text=True, timeout=90)
+        if p.returncode == 0: built.add(b)
+        else: rej += 1
+    res = _c.Counter(); bad = []
+    for b, name, line, ln in rows:
+        if b not in built:
+            res['no oracle: gcc rejects the source'] += 1; continue
+        recipe = line.lstrip('\t').lstrip()
+        while recipe[:1] in ('@', '-', '+'): recipe = recipe[1:]
+        if 'run_target.sh' in recipe:
+            res['no oracle: cross-target row'] += 1; continue
+        if OTHER.search(recipe):
+            res['skipped: other make variable'] += 1; continue
+        sh = recipe.replace('$$', '$').replace('$(TESTTMP)', '$TESTTMP')
+        try:
+            p = subprocess.run(['bash', '-c', 'export TESTTMP=%s\n%s\n' % (tmp, sh)],
+                               capture_output=True, text=True, timeout=40)
+        except subprocess.TimeoutExpired:
+            res['timeout'] += 1; continue
+        if p.returncode == 0: res['DERIVED (gcc reproduces it)'] += 1
+        else:
+            res['DISAGREES WITH GCC'] += 1
+            bad.append((name, ln, (p.stdout + p.stderr)[:200]))
+    print("C expectations tied to exactly one gcc-buildable binary: %d rows, %d binaries built of %d"
+          % (len(rows), len(built), len(built) + rej))
+    for k, v in res.most_common():
+        print("  %-36s %d" % (k, v))
+    for n, ln, d in bad:
+        print("  DISAGREES: %s (Makefile:%d)\n    %s" % (n, ln, d.replace('\n', '\n    ')[:200]))
+    return 1 if bad else 0
+
+
 if '--oracle' in sys.argv:
     sys.exit(oracle())
+if '--oracle-c' in sys.argv:
+    sys.exit(oracle_c())

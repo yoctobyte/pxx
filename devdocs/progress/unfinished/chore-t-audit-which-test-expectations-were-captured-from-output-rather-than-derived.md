@@ -213,3 +213,65 @@ already ordered.
 Returned to `unfinished/` rather than held in `working/`: one population is
 closed and enforced, the next needs a different oracle, and nothing is
 half-applied.
+
+
+## Progress 2026-08-30, later — the C population is done too, with gcc as the oracle
+
+`tools/expect_audit.py --oracle-c`:
+
+```
+C expectations tied to exactly one gcc-buildable binary: 395 rows, 362 binaries built of 395
+  DERIVED (gcc reproduces it)          333
+  no oracle: gcc rejects the source     33
+  no oracle: cross-target row           29
+  DISAGREES WITH GCC                     0
+```
+
+**Zero disagreements.** Every C expectation that gcc can be made to answer is
+reproduced by gcc, so the same conclusion as the NilPy population holds here:
+these are derived, not captured. The 62 without an oracle are counted rather
+than judged — 33 sources use pxx C extensions gcc rejects, and 29 are
+cross-target rows through `tools/run_target.sh`, where qemu correctly refuses a
+natively-built ELF.
+
+### The instrument does NOT reimplement the comparison, and that was earned
+
+The first version did, and reported **321 of 362 expectations disagreeing**. A
+321/362 disagreement rate is not a finding, it is a broken harness, and it was:
+those rows have the shape
+
+```make
+$(TESTTMP)/prog; tools/expect_same.sh prog-rc "$$?" "89"
+```
+
+where the assertion is the **exit code of a binary the reimplementation never
+ran** — so it compared 0 against 89, every time, and would have "found" 321
+poisoned expectations.
+
+The fix removes the class rather than patching it: run the Makefile's own recipe
+line, with `tools/expect_same.sh` doing the comparing, against a `TESTTMP`
+populated with gcc-built binaries instead of pxx-built ones. There is no second
+implementation of the semantics left to get wrong. Same lesson as the earlier
+association bug in this session, where tying an expectation to a source *by
+proximity* attributed 105 unrelated rows to one file; keying on the binary the
+expectation actually names fixed it.
+
+Worth stating plainly because it is the trap this whole ticket is about: **an
+audit instrument that is wrong produces confident findings, not obvious
+errors.** Both times the tell was a number too large to be true — 321 of 362
+expectations poisoned, one file owning 105 assertions — and not any error
+message.
+
+### Where the audit now stands
+
+| population | oracle | result |
+| --- | --- | --- |
+| NilPy `.npy` + `.expected` | CPython | **342/353 derived**, 11 labelled + enforced |
+| C, native rows | gcc | **333/333 derived**, 0 disagreements |
+| C, no oracle | — | 62 counted (33 gcc-rejects, 29 cross-target) |
+| Pascal | none wired | **open** — ranked by literal-overlap, needs hand-judging |
+
+Two of the three big populations are answered by measurement, and neither
+contains a captured-and-wrong expectation. What remains is Pascal, which has no
+oracle for the dialect-specific majority and is the part that genuinely needs
+reading. The triage ranking is already built for it.
