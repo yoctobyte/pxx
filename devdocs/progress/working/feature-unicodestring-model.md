@@ -802,3 +802,67 @@ second probe to overturn. Any future `Sym*` parallel array needs the same zero.
 `Length` 1. Wrong on `pinned` too. Bounded by four controls: an Integer element
 and a frozen `string[8]` element are both fine through the identical shape, and
 assigning the result to a variable first is fine.
+
+## 2026-08-30 (frankwasm) — the runtime half cost 13 KB of every bare ESP image
+
+A size canary went red and the file set pointed here. **Confirmed by
+measurement, not accepted from inference:** two isolated worktrees at
+`bfe82dd79` and its parent, each seeded and rebuilt with the sources touched
+afterwards so `make` could not no-op (the CLAUDE.md seeded-tree trap — both
+printed `converged after 1 round(s)`, both binaries differ from the seed and
+from each other). Parent passes, child fails with exactly the reported numbers.
+
+    esp32c3-bare  50528 -> 66252   +15724  +31.1%
+    esp32s3/s2/esp32-bare  43452 -> 56684  +13232  +30.5%
+    x86_64-empty  61279 -> 69400    +8121  +13.3%
+
+**The empty-program row is the whole diagnosis.** A codegen change cannot grow a
+program with no code in it, so the growth entered the baseline every binary
+links. 278 lines of correct runtime, in a unit with no dead-code elimination
+([[bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce]]), became a third
+of the flash budget on the target family whose whole campaign is size.
+
+**This ticket did not cause that; it is the first commit to make it expensive.**
+
+### Mitigated now, properly fixed at step 7
+
+`{$ifndef PXX_ESP}` around the four functions restores all four ESP rows to
+their parent's **exact** numbers — an exact restoration, not a reduction, which
+is what says the growth had one cause and all of it is gone. `PXX_ESP` is the
+bare PROFILE, not the ISA, so UTF-16 survives under IDF.
+
+**It does not clear the red:** `x86_64-empty` is still over by 1,994 bytes, and
+that is this ticket's too.
+
+### Step 7 grows a third item, and it is not optional
+
+Step 7 was "break the alias + change sysutils in the same commit". It is now:
+
+    7a. move the four wide functions into compiler/builtin/builtinwide.pas
+        and pull it on demand — ParseUsesUnitAmbient, exactly the mechanism
+        `math` uses to keep 35 KB out of programs that never call sqrt
+    7b. break the alias in pasparser_lval.inc:6322/6424
+    7c. sysutils UTF8Encode/UTF8Decode, SAME COMMIT as 7b
+
+7a belongs here rather than in the DCE campaign because **the trigger site is
+step 7's site** — a program naming `widestring` is exactly when the unit is
+needed, so doing it separately means writing the predicate twice.
+
+**The predicate needs TWO triggers and the second is the one that would be
+missed:** a program NAMING `widestring`/`unicodestring`, *and* a direct call to
+`PXXWideAlloc`/`Concat`/`FromUtf8`/`Utf8FromWide` by name — because
+`test_widestring_transcode.pas` calls them directly and would stop linking. A
+predicate that only catches the type name passes every test that uses the type
+and breaks the one test that tests the runtime.
+
+**Unmeasured risk to settle first, not to design around:** `builtinwide` needs
+builtinheap's header constants and `PU16`, so it must `uses builtinheap`. Whether
+a builtin unit can cleanly depend on another builtin is not verified. If it
+cannot, that changes the split, not the schedule.
+
+### Also settled while measuring
+
+A bare-ESP program merely naming `widestring` compiles and runs today, because
+the alias is still a byte string. There is no ugly diagnostic to fix now — the
+question of what it *should* do becomes live exactly at 7b, which is when 7a
+removes the reason to care.
