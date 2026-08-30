@@ -12750,6 +12750,77 @@ begin
     EmitXtensaLongCall(target);
 end;
 
+{ --- a JUMP inside one body that J cannot reach --------------------------
+  J encodes an 18-bit BYTE offset, so it reaches +-128 KiB -- four times tighter
+  than riscv32's JAL, which the same family of bugs hit first. Measured, the
+  moment the frame wall in front of it was cleared:
+
+    target xtensa: j displacement -169568 is outside the encodable range
+      -131072..131071
+
+  from IREmitMachineCodeXtensa, a body jumping to its own label. Note the
+  DIRECTION: it is BACKWARD, which is the half that can be fixed for free.
+
+  A backward jump knows its target when it is emitted, so the reach test can
+  choose there and nothing is reserved: everything in range still emits the same
+  three bytes, and only a jump that would otherwise have refused to compile pays
+  ~20 bytes. A FORWARD jump reserved its three bytes before the label existed and
+  therefore CANNOT be widened -- the same asymmetry ApplyCallFixups documents for
+  a forward CALL, and it fails there with a named error rather than an encoder
+  message. Closing it too would mean ~20 bytes at every forward jump in every
+  xtensa program, which is a real cost paid by programs that do not need it; on
+  riscv32 that trade was worth taking because the slot was 4 bytes and the wide
+  form 8, and here it is 3 against 20.
+
+  The long form is EmitXtensaLongCall's, ending in JX instead of CALLX -- same
+  call0-as-PC-read anchor, same .text-offset delta in a literal (no relocation in
+  either the linked or the --emit-obj image), and the same register split, which
+  that routine's comment establishes by measurement: a9/a10 under Call0 because
+  a8 carries the hidden aggregate-return destination, a8/a9 under windowed
+  because a10..a15 are the outgoing arguments. A jump site constrains strictly
+  less than a call site, so the pair that is safe there is safe here.
+  bug-a-xtensa-frame-larger-than-32kb-needs-more-than-one-addmi (the wall behind) }
+function XtensaJReaches(pc, target: Integer): Boolean;
+var d: Integer;
+begin
+  { EncodeXtensaJ's own arithmetic, MIRRORED rather than approximated, so the
+    chooser and the encoder cannot disagree at a boundary. }
+  d := (target - pc) - 4;
+  Result := (d >= -131072) and (d <= 131071);
+end;
+
+procedure EmitXtensaLongJump(target: Integer);
+var anchorPc, anchorTgt, rTgt, rTmp: Integer;
+begin
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    rTgt := reg_xtensa_a8; rTmp := reg_xtensa_a9;
+    xtensa_mov(rTmp, reg_xtensa_a0);             { a0 is live under windowed }
+  end
+  else
+    begin rTgt := reg_xtensa_a9; rTmp := reg_xtensa_a10; end;
+  anchorPc := CodeLen + 3;
+  anchorTgt := ((anchorPc + 3) div 4) * 4;
+  xtensa_call0(anchorTgt - CodeLen);
+  while CodeLen < anchorTgt do EmitB(0);
+  xtensa_mov(rTgt, reg_xtensa_a0);               { rTgt := anchor PC }
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+    xtensa_mov(reg_xtensa_a0, rTmp);             { restore it }
+  XtensaEmitLitHeader;
+  EmitI32(target - anchorPc);                    { pure .text-offset delta }
+  xtensa_l32r(rTmp, $FFFF);
+  xtensa_add(rTgt, rTgt, rTmp);
+  xtensa_jx(rTgt);
+end;
+
+procedure EmitXtensaJumpToCode(target: Integer);
+begin
+  if XtensaJReaches(CodeLen, target) then
+    xtensa_j(target - CodeLen)
+  else
+    EmitXtensaLongJump(target);
+end;
+
 procedure EmitCallProc(procIdx: Integer);
 var extIdx, rvHi, rvLo: Integer;
 begin

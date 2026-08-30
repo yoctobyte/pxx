@@ -14844,7 +14844,38 @@ test-xtensa: $(COMPILER)
 	tools/run_target.sh xtensa $(TESTTMP)/xtw_variant > $(TESTTMP)/xtw_variant.out; tools/expect_same.sh xtensa-windowed/test_cross_variant-rc "$$?" "0"
 	$(TESTTMP)/xtw_variant_x64 > $(TESTTMP)/xtw_variant_x64.out
 	tools/expect_same.sh xtensa-windowed/test_cross_variant "$$(cat $(TESTTMP)/xtw_variant.out)" "$$(cat $(TESTTMP)/xtw_variant_x64.out)"
-	@echo "hosted xtensa: 107 programs Call0 + 5 windowed, output identical to x86-64 (--xtensa-soft-mulhigh)"
+	# A BACKWARD JUMP PAST J'S +-128 KiB, both ABIs. J is an 18-bit BYTE offset,
+	# four times tighter than riscv32's JAL, and one body is enough to cross it:
+	# the pre-fix compiler refuses this file with `j displacement -395214 is
+	# outside the encodable range`. A `repeat` is deliberate -- its back-edge is
+	# the long jump, and its exit test stays SHORT, so this row isolates the
+	# backward case, which is the half that can be widened at emit time because
+	# the target is already known. GENERATED: the source has to be ~130 KB.
+	# bug-a-xtensa-frame-larger-than-32kb-needs-more-than-one-addmi (the wall behind)
+	@awk 'BEGIN{print "program backjump;"; print "var n, r: Integer;"; \
+	  print "procedure Loop(x: Integer);"; print "var i, acc: Integer;"; \
+	  print "begin"; print "  acc := 0;"; print "  i := 0;"; \
+	  print "  repeat"; print "    Inc(i);"; \
+	  for(k=0;k<3000;k++) printf "    if x = %d then acc := acc + %d;\n", k, k; \
+	  print "  until i >= 3;"; print "  n := acc;"; print "  r := i;"; print "end;"; \
+	  print "begin"; print "  Loop(7);"; \
+	  print "  Writeln(\"acc=\", n, \" iters=\", r);"; print "end."}' \
+	  | tr '"' "'" > $(TESTTMP)/xt_backjump.pas
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh $(TESTTMP)/xt_backjump.pas $(TESTTMP)/xt_backjump
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed $(TESTTMP)/xt_backjump.pas $(TESTTMP)/xt_backjump_w
+	./$(COMPILER) $(TESTTMP)/xt_backjump.pas $(TESTTMP)/xt_backjump_x64
+	# THE POSITIVE CONTROL, and this row needs one badly: if the body ever falls
+	# back under 128 KiB the long form stops firing and the test goes on passing
+	# while covering nothing. So assert the LONG SEQUENCE IS PRESENT, counted out
+	# of the artifact -- `code=` cannot answer this, it is page-quantised, and a
+	# shell cannot count a byte pattern containing NUL. The two ABIs use
+	# different scratch pairs (a9/a10 Call0, a8/a9 windowed), hence two patterns:
+	# `add a9,a9,a10 ; jx a9` and `add a8,a8,a9 ; jx a8`. Exactly one each.
+	tools/count_bytes.py $(TESTTMP)/xt_backjump   a09980a00900 --expect 1
+	tools/count_bytes.py $(TESTTMP)/xt_backjump_w 908880a00800 --expect 1
+	tools/expect_same.sh xtensa/xt_backjump "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_backjump)" "$$($(TESTTMP)/xt_backjump_x64)"
+	tools/expect_same.sh xtensa-windowed/xt_backjump "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_backjump_w)" "$$($(TESTTMP)/xt_backjump_x64)"
+	@echo "hosted xtensa: 108 programs Call0 + 6 windowed, output identical to x86-64 (--xtensa-soft-mulhigh)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello

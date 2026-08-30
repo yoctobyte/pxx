@@ -4365,8 +4365,43 @@ begin
   end;
 end;
 
+{ --- one place that decides how a body jumps to its own label ---------------
+  Five sites used to spell out `if the label is known then xtensa_j(delta) else
+  record a fixup and reserve three bytes`, and four of them then had to know how
+  many bytes that came to, because a conditional branch skips OVER it. A backward
+  jump can now widen to ~20 bytes (EmitXtensaJumpToCode), so the size is no longer
+  a constant and open-coding it five times would be five chances to leave a skip
+  distance behind.
+
+  So the skip branch is emitted with a placeholder and PATCHED once the jump has
+  been emitted and CodeLen says how long it actually was -- which is exact, and
+  does not require anyone to predict the long form's two alignment pads.
+  bug-a-xtensa-frame-larger-than-32kb-needs-more-than-one-addmi (the wall behind) }
+procedure EmitXtensaJumpToLabel(lblId: Integer; var fixCount: Integer);
+begin
+  if LabelPositions[lblId] <> -1 then
+  begin
+    EmitXtensaJumpToCode(LabelPositions[lblId]);
+    Exit;
+  end;
+  { Forward: three bytes, sized before the label exists, so it cannot be widened
+    later -- the fixup loop names that if it happens. }
+  if fixCount >= MAX_IR then Error('label fixup overflow');
+  LabelFixupPos[fixCount] := CodeLen;
+  LabelFixupTarget[fixCount] := lblId;
+  Inc(fixCount);
+  xtensa_j(4);
+end;
+
+procedure XtensaPatchSkipOver(pos, r, s, t: Integer);
+{ Rewrite the branch at `pos` to skip everything emitted since. r is the branch
+  flavour's own field: 9 = BNE, 1 = BEQ, matching xtensa_bne/xtensa_beq. }
+begin
+  Patch24(pos, EncodeXtensaBranch(r, s, t, CodeLen - pos));
+end;
+
 procedure IREmitMachineCodeXtensa;
-var i, lblId, pos, f, procIdx: Integer;
+var i, lblId, pos, f, procIdx, skipPos: Integer;
     LabelFixupCount: Integer;
 begin
   { Nil-init hidden owning locals synthesised during IR lowering (see the
@@ -4414,19 +4449,7 @@ begin
         end;
 
       IR_JUMP:
-        begin
-          lblId := IRA[i];
-          if LabelPositions[lblId] <> -1 then
-            xtensa_j(LabelPositions[lblId] - CodeLen)
-          else
-          begin
-            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
-            LabelFixupPos[LabelFixupCount] := CodeLen;
-            LabelFixupTarget[LabelFixupCount] := lblId;
-            Inc(LabelFixupCount);
-            xtensa_j(4);
-          end;
-        end;
+        EmitXtensaJumpToLabel(IRA[i], LabelFixupCount);
 
       IR_JUMP_IF_FALSE:
         begin
@@ -4435,17 +4458,10 @@ begin
           { Conditional branch range is only +-127 bytes, so branch over an
             18-bit J: if cond <> 0 skip the J, else J label. }
           xtensa_movi(reg_xtensa_a4, 0);
-          xtensa_bne(reg_xtensa_a2, reg_xtensa_a4, 6);
-          if LabelPositions[lblId] <> -1 then
-            xtensa_j(LabelPositions[lblId] - CodeLen)
-          else
-          begin
-            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
-            LabelFixupPos[LabelFixupCount] := CodeLen;
-            LabelFixupTarget[LabelFixupCount] := lblId;
-            Inc(LabelFixupCount);
-            xtensa_j(4);
-          end;
+          skipPos := CodeLen;
+          xtensa_bne(reg_xtensa_a2, reg_xtensa_a4, 6);      { patched below }
+          EmitXtensaJumpToLabel(lblId, LabelFixupCount);
+          XtensaPatchSkipOver(skipPos, 9, reg_xtensa_a2, reg_xtensa_a4);
         end;
 
       IR_CALL:
@@ -4482,17 +4498,10 @@ begin
           xtensa_addi(reg_xtensa_a2, reg_xtensa_sp, EXC_JMP_OFFSET_XT);
           EmitXtensaCallToCode(ExcSetJmpAddr);
           xtensa_movi(reg_xtensa_a4, 0);
-          xtensa_beq(reg_xtensa_a2, reg_xtensa_a4, 6);   { 0 = normal path: skip }
-          if LabelPositions[lblId] <> -1 then
-            xtensa_j(LabelPositions[lblId] - CodeLen)
-          else
-          begin
-            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
-            LabelFixupPos[LabelFixupCount] := CodeLen;
-            LabelFixupTarget[LabelFixupCount] := lblId;
-            Inc(LabelFixupCount);
-            xtensa_j(4);
-          end;
+          skipPos := CodeLen;
+          xtensa_beq(reg_xtensa_a2, reg_xtensa_a4, 6);   { 0 = normal: skip }
+          EmitXtensaJumpToLabel(lblId, LabelFixupCount);
+          XtensaPatchSkipOver(skipPos, 1, reg_xtensa_a2, reg_xtensa_a4);
         end;
 
       IR_EXC_LEAVE:
@@ -4530,17 +4539,10 @@ begin
           EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_CLS);
           xtensa_l32i(reg_xtensa_a3, reg_xtensa_a3, 0);
           EmitLoadConstXtensa(reg_xtensa_a4, Integer(IRIVal[i]));
-          xtensa_beq(reg_xtensa_a3, reg_xtensa_a4, 6);   { equal: skip the j }
-          if LabelPositions[lblId] <> -1 then
-            xtensa_j(LabelPositions[lblId] - CodeLen)
-          else
-          begin
-            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
-            LabelFixupPos[LabelFixupCount] := CodeLen;
-            LabelFixupTarget[LabelFixupCount] := lblId;
-            Inc(LabelFixupCount);
-            xtensa_j(4);
-          end;
+          skipPos := CodeLen;
+          xtensa_beq(reg_xtensa_a3, reg_xtensa_a4, 6);   { equal: skip the jump }
+          EmitXtensaJumpToLabel(lblId, LabelFixupCount);
+          XtensaPatchSkipOver(skipPos, 1, reg_xtensa_a3, reg_xtensa_a4);
         end;
 
       IR_EXC_MATCH_HIT:
@@ -4550,17 +4552,10 @@ begin
           EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_CLS);
           xtensa_l32i(reg_xtensa_a3, reg_xtensa_a3, 0);
           EmitLoadConstXtensa(reg_xtensa_a4, Integer(IRIVal[i]));
-          xtensa_bne(reg_xtensa_a3, reg_xtensa_a4, 6);   { not equal: skip the j }
-          if LabelPositions[lblId] <> -1 then
-            xtensa_j(LabelPositions[lblId] - CodeLen)
-          else
-          begin
-            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
-            LabelFixupPos[LabelFixupCount] := CodeLen;
-            LabelFixupTarget[LabelFixupCount] := lblId;
-            Inc(LabelFixupCount);
-            xtensa_j(4);
-          end;
+          skipPos := CodeLen;
+          xtensa_bne(reg_xtensa_a3, reg_xtensa_a4, 6);   { not equal: skip it }
+          EmitXtensaJumpToLabel(lblId, LabelFixupCount);
+          XtensaPatchSkipOver(skipPos, 9, reg_xtensa_a3, reg_xtensa_a4);
         end;
 
       IR_EXC_CLEAR:
@@ -4593,6 +4588,17 @@ begin
     pos := LabelFixupPos[f];
     if LabelPositions[lblId] = -1 then
       Error('Unresolved forward jump in Xtensa IR codegen');
+    { Name it before the encoder refuses it. A FORWARD jump is the one shape
+      EmitXtensaJumpToLabel cannot widen -- it reserved three bytes before the
+      label existed -- so this is where that hole is felt, and the bare encoder
+      message says nothing about the direction being what makes it unfixable.
+      Same asymmetry, same wording, as ApplyCallFixups' forward-CALL arm. }
+    if not XtensaJReaches(pos, LabelPositions[lblId]) then
+      Error('target xtensa: the forward jump at code offset ' + AIntToStr(pos) +
+            ' cannot reach its label at ' + AIntToStr(LabelPositions[lblId]) +
+            ' (J reaches +-128 KiB). A BACKWARD jump this far is widened '
+            + 'automatically; a forward one cannot be, because the three-byte '
+            + 'slot was sized before the label existed');
     Patch24(pos, EncodeXtensaJ(LabelPositions[lblId] - pos));
   end;
 end;
