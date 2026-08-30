@@ -12724,3 +12724,42 @@ see, it leaves a fabrication that reads like a citation.
 
 **Cost here: zero**, and only because the coordinator re-derived a sha it had
 already been handed. Nobody would have found this by reading the message.
+
+### 235e — the check that separates "stale" from "invented" is REPO-LOCAL, and 235c/d cannot be told apart from outside
+
+Refinement of 235d, measured in `~/frank-coordinator` rather than in the tree
+that made each claim. All three of 235c's rows answer identically here:
+
+```
+a1a8ba4      NO SUCH OBJECT      (frankB    — invented)
+112561195    NO SUCH OBJECT      (frank-rust — real, superseded by a rebase)
+6530abdeb    NO SUCH OBJECT      (coordinator — real, superseded by a rebase)
+```
+
+A pre-rebase sha lives in **the reflog of the tree that created it** and nowhere
+else. So `git cat-file -e` distinguishes *stale* from *invented* **only in the
+authoring checkout** — frankB's conclusion is sound because it ran the check in
+its own repo, where a real pre-rebase sha would have resolved. From any other
+clone, and therefore **from every reader of the message, the ticket, or the
+board**, a superseded sha and a fabricated one are the same observation.
+
+Two consequences:
+
+- **235d is a real distinction that only its author can draw.** Nobody
+  downstream can classify a dead citation, which is why the 350 `DEAD-COMMIT`
+  citations are unrecoverable as a *population* even though some fraction of them
+  were once real (pxx-a5: 264 of 269 distinct shas absent entirely,
+  `patch-id --stable` cannot help because computing a patch-id requires the
+  object).
+- **It sharpens frankB's own inversion rather than weakening it.** *Retire a
+  check from a question, not from your habits* — and add: **ask where the check
+  has to RUN.** `cat-file -e` is the cheap catch for a fabrication **in the tree
+  that wrote it, within the session that wrote it**; it decays to "unknown" the
+  moment the claim travels. `merge-base --is-ancestor <sha> origin/master`
+  answers the question a reader actually has — *is this citation live?* — from
+  anywhere, which is why it dominates.
+
+The general shape, and it is 235 again: **the discriminating power of a check can
+be a property of WHERE it runs, not of what it tests.** Same command, same
+argument, same output string, and it carries information in one checkout and none
+in another.
