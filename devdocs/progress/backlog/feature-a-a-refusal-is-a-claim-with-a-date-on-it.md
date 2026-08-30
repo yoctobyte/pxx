@@ -5954,3 +5954,83 @@ messages, not from the tree**, so a divergence between what a worker said and wh
 is a defect in *my* state even when the worker's action was better. Worth naming because
 the instinct is to wave it off as harmless — and it is harmless to the work and not to
 the coordination.
+
+### 144 — a diagnostic that cannot name its SUBJECT merges distinct defects into a BUCKET, and a bucket is what nobody picks up
+
+*frankS, 2026-08-30, taking xtensa from 69 to 96 of 129 differential rows.*
+
+The stale message:
+
+```
+target xtensa: builtin calls not supported in bare-metal stage 1
+```
+
+reached under `--platform=posix`, where **there is no bare-metal stage**, naming **no
+builtin**. Fixing it to print the id immediately split **six programs that read as one
+category into five distinct builtins** — `-210` (fixed on the spot, two lines), `-55`,
+`-100`, `-50`, and `-999`, which turns out **not to be an xtensa gap at all**: riscv32
+refuses the same source with `builtin id 999`. Verified by compiling it there, not
+assumed.
+
+**So the cost of an unspecific diagnostic is not one wasted build. It is that six
+defects become one bucket, and a bucket is what nobody picks up** — its size makes it
+look like a project, its uniformity makes it look like one cause, and neither is true.
+One of the five was two lines away; one belonged to a different backend entirely.
+
+Third instance tonight, and the generalisation is the same each time — `IROpName`
+reporting `unsupported node in IR codegen: **unknown**` for seven ops on every target,
+the binop message, and this:
+
+> **A message that says nothing sends you looking. A message that names a cause it no
+> longer has sends you somewhere, and it is wrong.** In all three, the *misdirection*
+> cost more than the *absence* would have.
+
+That inverts the usual instinct to prefer any diagnostic over none. A wrong-but-specific
+message is the worst of the three states, because it is the only one that spends
+someone's time confidently.
+
+### 144a — THE ORACLE DID NOT MAKE THEM FINDABLE; IT MADE THEM FAIL
+
+The count from one night on a backend that had never been executed: the ordered string
+compare, the Call0 expression stack, `HeapMmap`, the ABI predicate, the aggregate string
+stores, the managed-string index, the frame alignment, six of seven scope-exit kinds,
+`Halt(n)`, the whole-array store, the set parameter — **eleven**, and **every one was
+reachable by reading the source at any point in the preceding three months.**
+
+That is the entire case for differential testing in one sentence, and it is not the
+usual one. The oracle did not reveal anything that reading could not have. It **changed
+the cost of not looking** — turning a defect that required someone to suspect it into
+one that announces itself. Availability was never the constraint; *attention* was.
+
+Corollary that explains the whole shape of the backlog: **nothing on xtensa had ever
+called `ParamCount`.** Not one of the eleven was hidden. They were unvisited.
+
+### 144b — naming the two ops NOT done instead of shipping them
+
+`IR_FRAME` and `IR_SET_SIGNAL` were left unimplemented, deliberately, because **no
+program in the 129-source corpus reaches either**:
+
+> *Writing them would be unverifiable code in a backend whose entire problem was
+> unverifiable code — the thing this campaign exists to stop.*
+
+The pull is real: two more ops is a better-looking number, the code would probably be
+right, and nothing would fail. **Unverifiable code that happens to be correct is
+indistinguishable from unverifiable code that is not**, and it is added to the arm whose
+whole defect was that nobody had run it. `IR_FRAME` additionally needs an xtensa frame
+layout that riscv32's one-line `mv a0, s0` does not carry, so the port would have been a
+guess wearing a port's clothes.
+
+### 144c — and a residue item that is not what it looks like
+
+`ParamCount` (`-55`) reads like a same-file port from riscv32. It is not. riscv32's arm
+reads `BSS_INITIAL_RSP`, and **every hosted target's entry stub saves the
+kernel-provided sp there — except xtensa's, which sits in the same procedure and does
+not.** The value the builtin needs is never stored, so no amount of backend work reaches
+it.
+
+Two lessons stacked. First: **a missing consumer hid a missing producer** — the entry
+stub gap is three months old and invisible because nothing on xtensa had ever asked.
+Second, on scope: the fix touches `EmitProgramEntryForTarget`, **a different procedure
+from the granted one**, so it was filed as a new ticket rather than taken as an
+extension. A grant scoped to a procedure means that procedure, and a lane that widens
+its own grant by one adjacent function is how a scoped grant becomes a file claim.
