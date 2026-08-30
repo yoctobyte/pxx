@@ -108,6 +108,13 @@ EXPECTED = {
     "ir_codegen_arm32.inc": 0,
     "ir_codegen_riscv32.inc": 0,
     "ir_codegen_xtensa.inc": 0,
+    # wasm32, and 0 is the SCOPE rather than a to-do. CLAUDE.md's Track O rule is
+    # "per-backend effort (peepholes, register allocator) = x86-64 + aarch64
+    # only" -- 32-bit is perf-irrelevant and ESP's hot paths are hardware
+    # peripherals -- and wasm32 is further out still: it emits no machine code at
+    # all, it builds a module and hands the ENGINE the optimisation problem.
+    # A -O3 gate site here would be pxx second-guessing a JIT.
+    "ir_codegen_wasm32.inc": 0,
 }
 
 TICKET = "feature-opt-o3-w1-operand-folds-are-x86-64-only-aarch64-has-four-of-fifteen"
