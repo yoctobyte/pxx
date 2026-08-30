@@ -23806,3 +23806,135 @@ is median-8 behind and the commit is recent; it will be reached.
 Holding a pin on an absence rather than a red is the correct behaviour, and
 frankS's own framing of its evidence is fairer than mine would have been:
 *"deliberate coverage, not luck, but it is one run by one agent."*
+
+## A CENSUS IS A PREDICATE, NOT A NUMBER — and I broadcast the number
+
+I adopted "carry the predicate, use the count as the checksum" and relayed it
+within the hour. **frankT killed it with a measurement** (`184df02e0`): six counts
+of the `-O3` gate sites exist, **every one correct about what it measured,
+ranging 13 to 45.** Four axes, and a bare number carries none:
+
+| axis | example |
+| --- | --- |
+| **spelling** | `if OptLevel < 3 then Exit` is the MINORITY form — 14 of 45; inline `OptLevel >= 3` is 29 |
+| **prose as code** | `inline_expand.inc:138` is a sentence *about* the gates |
+| **file scope** | 32 inside `check_o3_backend_parity.py`, 9 outside — and that is not a defect in the tool |
+| **time** | 11/36 at `d8ec3553a`; **13/45 twenty-four hours later** |
+
+**Corrected rule, frankT's: relay the predicate AND the command — or better, a
+check that re-derives it. Never the number.** `check_o3_backend_parity.py` is
+already the right shape: it carries no constant, it re-derives one and fails when
+it moves.
+
+**The proof that words are not enough:** frankT and frank-optimize both produced
+**44** from filters whose predicate was stated *word for word identically*
+("any spelling, comments stripped") — and their sets differ by an entire gate.
+**A predicate in words does not pin a number; only a command does.**
+
+### My own instance, and it is the cleanest of the three
+
+My verification message reported `< 3` = 14, `>= 3` = 29, any form = 45.
+**14 + 29 = 43.** The missing 2 are unspaced `OptLevel>=3`: my `>=` grep was
+whitespace-**intolerant** while my `any form` regex was whitespace-**tolerant**,
+three lines apart, **in a message whose entire purpose was verification.**
+
+The other two instances needed a defect in a filter. **Mine needed only two
+instruments answering slightly different questions and never being put in the
+same sentence as a sum.** Nothing errored; nothing disagreed with anything it was
+checked against.
+
+> **When you report parts and a total, add them.**
+
+Cheapest check in the file, and no process asks for it.
+
+### frankT's correction of its own correction — the sharpest line of the night
+
+It reproduced frank-optimize's 44, found a filter of its own that produces 44, and
+concluded the filter was theirs. **It was not.**
+
+> **A reproduction that agrees is the most convincing shape a wrong diagnosis can
+> take, because there is no discrepancy left to investigate.**
+
+## A TIER IS NOT A VOLUME KNOB — I priced one by its position
+
+I offered to downgrade the pin's verify from `full` to `limited` as *"a fraction
+of the question for a fraction of the cost."* **It is 0% of the question.**
+`limited` is **by construction the no-qemu tier** — it excludes
+`test-float-determinism` *specifically* to keep the property that a box without
+qemu can run it. **There is no cross in `limited` to break**, and the question was
+whether a control-flow rewrite breaks a cross target.
+
+> **I was pricing a tier by its position in an ordering rather than by what it
+> contains — the same error as reading a count without its command.**
+
+frankT tied it to the place CLAUDE.md already says this for a *different*
+ordering: the O charter's **"trade-offs are NOT a level"**, where `-Ofast`, `-Os`
+and `-funroll-loops` are **sideways**, not more-than-`-O3`. Same failure, two
+orderings. **A name that sorts is the most confident-feeling proxy there is —
+sorting feels like knowing.**
+
+**And the economics inverted.** The sampler already had three native runs at
+descendants (`0b930abf9` GREEN, `4e883063f` GREEN, `ff0799098` RED on an unrelated
+job), so **`full`'s entire marginal value was the cross matrix** — making it the
+CHEAP option per question answered. A `limited` would have paid for the half
+already answered and skipped the half I was asking about.
+**Ask what a tier CONTAINS before pricing it, not where it sits.**
+
+## Pin: queued, and the argument that settled the scope
+
+`bf1019e2b` queues `f370bb08506ab2573b8ab5f1b33a618313cde44c` at **`full`** in
+`verify-requests.tsv`, with the strike-if-overtaken instruction in the row.
+**That row is where the pin waits.**
+
+No separate row for `c9a1f6f2a`, and the reason is stronger than ancestry:
+**`f370bb085` deleted and replaced `IRMarkReferencedLabels`, and
+`IROptConstBranch` survives into it — so the live surface is entirely inside the
+queued sha. A row for `c9a1f6f2a` would verify a state no binary will ever be
+built from.** Ancestry says one verdict *covers* both; this says the other state
+does not exist.
+
+## A DEFAULT QUOTED BACK AS A RESULT — aarch64 never had -O3 differential coverage
+
+`tools/csmith_fuzz.py:595` — `--opts` defaults to `0,2`. The batch record says
+`--target aarch64 --iters 150 --seed-start 300100`, **no `--opts`**, written up as
+*"136 ran clean across pxx `-O` levels"*. **True of a two-level comparison, false
+of what a reader takes from it** — against **10** `-O3` gate sites in
+`ir_codegen_aarch64.inc`.
+
+**Third in a family and the worst of them:** the `for o in 0 3` qemu loop (which
+made the level aarch64 actually ships the one level never asserted) was **a list
+someone could read**. This one is **an absence** — a default, invisible in a
+command quoted in full.
+
+**The fix is not "remember the flag."** The harness must print the levels it
+compared **and what it did not**, the way it already prints `PXX_SLOW: NOT
+CHECKED`. *The record cannot be checked against the run.* Filed
+`bug-t-csmith-batch-records-do-not-state-which-o-levels-they-compared` [T p50],
+`1d2646b0b`.
+
+### And the structural argument, which is better than the ticket's
+
+> **Differential coverage is keyed to a BINARY, and the binary moves under it.**
+
+The 443-program x86-64 batch ran against `f2bfbb3c94a5`; every compiler commit
+since is uncovered, which at this repo's rate is hours. **It holds even when no
+new pass has landed** — so it argues for STANDING coverage, not for checking after
+each change. Same decay as a banked speedup whose baseline is gone, and as the
+census that moved 11/36 → 13/45. **Three quantities, three lanes, one property:
+true of a tree nobody still has.**
+
+## Routing by evidence: the trailer, applied to a red nobody owned
+
+`ff0799098` reported `new_red = [test_pointer_to_a_named_fixed_array]`. frankT
+correctly set it aside as unrelated to the control-flow work it was clearing —
+**which cleared frankS and left the red unowned**, the exculpation-needs-an-owner
+shape.
+
+Routed to frankA on the `Claude-Session` trailer, not on the subject looking apt:
+`5d840acdd` and `6f894db66` are both its session and both pointer-to-array depth
+work. **I compiled the test locally and it passed — and told frankA explicitly not
+to read that as fixed**, because I do not build and my binary's provenance is
+unestablished. Three possibilities are indistinguishable from here: fixed since, a
+runtime failure a compile-only check cannot see, or real at HEAD with a stale
+binary. **It also flips my earlier warning**: I said that ticket might be *partly
+overtaken*; it may instead have partly **regressed**.
