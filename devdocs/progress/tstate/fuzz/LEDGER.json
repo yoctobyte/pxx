@@ -1050,6 +1050,31 @@
       "status": "ticketed",
       "ticket": "bug-a-o3-alone-computes-a-different-result-for-a-nested-case-statement"
     },
+    "pxx-self_unitrec": {
+      "class": "pxx-self",
+      "examples": [
+        {
+          "args": [
+            "--seed",
+            "92001",
+            "--units",
+            "2"
+          ],
+          "seed": 92001,
+          "sha": "5dd25e789"
+        }
+      ],
+      "first_seed": 92001,
+      "first_sha": "5dd25e789",
+      "hits": 1,
+      "kind": "unitrec",
+      "note": "pxx CONTRADICTS ITSELF across -O levels -- it produces different output; an optimiser bug (Track A/O); FPC not involved",
+      "opened": "2026-08-30T05:22:07Z",
+      "reopened_from_fixed": false,
+      "sig": "pxx-self_unitrec",
+      "status": "ticketed",
+      "ticket": "bug-a-o3-drops-the-first-of-two-chained-qword-multiply-xor-statements"
+    },
     "pxx-vs-fpc_?": {
       "class": "pxx-vs-fpc",
       "examples": [
