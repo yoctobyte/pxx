@@ -50,8 +50,104 @@ both halves:
 | split — hot body free of `TBig` | **0.294 s** | 14.7 ns |
 | inline — `TBig` named in the body | **13.060 s** | 653.0 ns |
 
-**44x.** The branch is never taken in either. Full repro:
-`$SCRATCH/uf/tbig.pas` shape above; it needs no RTL beyond a dynamic array.
+**44x.** The branch is never taken in either.
+
+### Re-measured at HEAD `3bc3b47ce326`, binary `faf762981c3c`, box load 4.20 -> 4.19
+
+| form | time | per call |
+| --- | ---: | ---: |
+| split | **0.28 s** | 14.0 ns |
+| inline | **13.14 / 13.27 s** | ~658 ns |
+
+**47x — still there**, three shas and one pin later. Both halves back to back on
+the same binary; the binary's sha256 was checked against the build's fixedpoint
+line before the run, because the first attempt at this re-measurement was taken
+on a throwaway experimental compiler still sitting in the tree and would have
+been reported as a HEAD number.
+
+### The repro, in full, so it cannot drift
+
+It was previously cited as `$SCRATCH/uf/tbig.pas` — a session-local path that
+outlives nothing. It needs no RTL beyond a dynamic array. Build with
+`pascal26 -O2 tbig.pas tbig`, then run `tbig split` and `tbig inline`; each does
+20M calls. It takes the arm as `ParamStr(1)` rather than timing both halves
+in-process because there is no `GetTickCount64` here — time it with `time`, and
+run the two halves back to back.
+
+```pascal
+program tbig;
+{ Isolated repro of the mechanism: does merely MENTIONING a dynamic-array record
+  in a never-taken branch cost the caller on every call? }
+type
+  TBig = record
+    neg:   Boolean;
+    limbs: array of Int64;
+  end;
+var
+  i, n: Int64;
+  acc: Int64;
+
+function BFromInt(v: Int64): TBig;
+begin
+  SetLength(Result.limbs, 1);
+  Result.limbs[0] := v;
+  Result.neg := v < 0;
+end;
+
+function BAdd(const a, b: TBig): TBig;
+begin
+  SetLength(Result.limbs, 1);
+  Result.limbs[0] := a.limbs[0] + b.limbs[0];
+end;
+
+function BTo(const a: TBig): Int64;
+begin
+  BTo := a.limbs[0];
+end;
+
+{ split form: the hot routine never names TBig }
+function SlowSplit(x, y: Int64): Int64;
+begin
+  SlowSplit := BTo(BAdd(BFromInt(x), BFromInt(y)));
+end;
+
+function AddSplit(x, y: Int64): Int64;
+var r: Int64;
+begin
+  r := x + y;
+  if ((x >= 0) = (y >= 0)) and ((r >= 0) <> (x >= 0)) then
+    AddSplit := SlowSplit(x, y)
+  else
+    AddSplit := r;
+end;
+
+{ inline form: identical semantics, but TBig is mentioned in this body }
+function AddInline(x, y: Int64): Int64;
+var r: Int64;
+begin
+  r := x + y;
+  if ((x >= 0) = (y >= 0)) and ((r >= 0) <> (x >= 0)) then
+    AddInline := BTo(BAdd(BFromInt(x), BFromInt(y)))
+  else
+    AddInline := r;
+end;
+
+begin
+  n := 20000000;
+
+  if ParamStr(1) = 'split' then begin
+  acc := 0; i := 0;
+  while i < n do begin acc := AddSplit(acc, 1); i := i + 1; end;
+
+  writeln('split  -> ', acc); end else begin
+
+
+  acc := 0; i := 0;
+  while i < n do begin acc := AddInline(acc, 1); i := i + 1; end;
+
+  writeln('inline -> ', acc); end;
+end.
+```
 
 ## What the emitted code does
 
@@ -101,6 +197,38 @@ Fallback if that is too large: emit 16-byte clears as two stores rather than
 Then delete the hand-splits in `promocore.pas` and re-measure — if the codegen
 fix is real, `AddInline` and `AddSplit` converge and the `*Slow` routines become
 unnecessary rather than mandatory.
+
+## A second, independent witness for item 2 (2026-08-30, frank-optimize)
+
+Item 2 — the 16-byte clear emitted as `rep stosb` — turns up again on the NilPy
+side, reached from the opposite direction (profiling a Variant call, not a
+managed record). Every NilPy `Variant` local is zeroed **three or four times**
+in the same prologue, by three passes that do not know about each other:
+
+| # | pass | emits, per Variant local |
+| --- | --- | --- |
+| 1 | `PyInitVariantLocals` (pyparser.inc:2074) | 2x `movq $0` — sufficient on its own |
+| 2 | `EmitManagedLocalsZeroInit` -> `EmitZeroFrameSlot` (symtab.inc:11205) | 16-byte `rep stosb` |
+| 3 | the NilPy watermarked pass, `ir_codegen.inc:11239`, seeded at `ScopeBase` | 16-byte `rep stosb` again |
+
+plus a fourth on the result slot from `IR_ZERO_SYM`. Measured on a 1-arg,
+3-local def: 8 `movq` + 9 `rep stosb` in one prologue, and the counts are
+**identical at -O0, -O1, -O2 and -O3** — no pass removes any of them.
+
+Pass 3 is redundant for every local that existed at prologue time, because
+`ManagedLocalZeroBytes` — the table pass 2 uses — already covers `tyClass and
+NilPyUserCode`, `tyAnsiString` and `tyVariant`. Its watermark starts at
+`Procs[CurProc].ScopeBase` when it should start at the `SymCount` the prologue's
+zero-init reached; the pass exists for locals minted *after* the prologue, and
+that is the only set it should cover. Disabling it entirely (measurement only,
+reverted) removes exactly one `rep stosb` per Variant local and nothing else.
+
+**Priced, and small:** ~4% of the call, under the noise floor of a 3-run A/B at
+box load 6.5. Recorded here rather than filed as its own ticket because the
+single change that pays for all of it is this ticket's item 2 plus one watermark
+seed, not a separate campaign. Whoever fixes item 2 should fix the seed in the
+same pass; whoever does not, should not bother with the seed alone.
+
 
 ## Gate
 
