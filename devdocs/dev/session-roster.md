@@ -22764,3 +22764,60 @@ Four lines of probe, one run, settled. Both documented in `debug-switches.md`.
 RTL does not declare. Filed `bug-b-rtl-provides-no-ienumerable-generic-interface`
 [B p55], unclaimed, with a control proving the compiler handles the shape. **A Track
 P wall resolving into a Track B gap is the cross-lane routing the ranker cannot do.**
+
+## A NULL needs its power reported the way a measurement needs its units
+
+frank-optimize, third revision of the `-O3` claim, and the one that resolves it —
+arriving twenty minutes after the owner's ruling was being turned into an operative
+ask built on its predecessor.
+
+**The pass is `EmitStaticLitHandle`, `compiler/ir_codegen.inc:3480`,
+`if OptLevel < 3 then Exit;`** (site verified). The comment directly above it
+already anticipates the promotion: *"only its USE is gated, so -O2 keeps calling
+the runtime and stays the proven default until this has been through a full gate."*
+
+| compiler | min of 5 | vs `-O2` |
+| --- | ---: | ---: |
+| `-O2` baseline | 20.23 s | — |
+| **only `EmitStaticLitHandle` promoted** | **16.23 s** | **20%** |
+| every `-O3` gate promoted | 18.06 s | 11% |
+| `-O3` | 14.54 s | 28% |
+
+**One pass is ~71% of the tier.** So *"no individual pass reproduces the win,
+therefore per-pass promotion may never deliver it"* — **which I called the sharpest
+thing in the ticket and relayed as the reason option 2 had won on evidence** — is
+false. The earlier per-group zeros were min-of-3 under load 6–13, which cannot
+resolve a 20% effect; **zeros from an underpowered instrument were reported as
+results.**
+
+**My failure is one step past the ghost sha and the same shape: I checked that the
+claim was STATED, not that it was SUPPORTED.** I never asked what load the null was
+measured under. A null is a claim about the world only if the instrument could have
+seen the effect — so **report a null's power the way you report a measurement's
+units**, and treat an unqualified null as a request for that number, not as a
+result. It is frank-rust's fresh-probe rule generalised from *new* instruments to
+*underpowered* ones.
+
+**The one row that survived, and why — this is the reusable part.** DCE stands
+because it was settled by a **flag**: `-O2 --dce` flat, `-O3 --no-dce` keeping the
+whole win. **Decided by construction, not by a difference of means.** On a box at
+load 10 a stopwatch resolves nothing, but a switch with a categorical answer still
+reads. *When the box is noisy, look for the experiment with an on/off answer rather
+than a faster one.*
+
+**The disassembly diff is that principle one level down** — `incq -ADDR(%rax)`
+against `add; call`, two instructions apart in a 13k-instruction program, after
+every timing attempt of the night failed. **A code diff has no variance.** Pair it
+with the gdb SIGINT recipe: profile when you can, diff emitted code when you cannot.
+
+**And an exact 1.000 is a CATEGORICAL signal, not a weak one.** `pint.pas` measured
+exactly 1.000 `-O2` vs `-O3`; it was written up as *"the win is many-local pointer
+routines"*. The true reading: **pure integer code has no string literals.**
+Categorical signals want categorical explanations. It retro-explains two findings
+already in the tree — the uforth ticket's `PXXAlloc + PXXStrFromLit + PXXFree` at
+28.5% *"flat rather than a pole"*, and `x = "k"` at 80.3 ns vs 0.0 ns. Three
+independent observations of one pass, two of them predating tonight.
+
+**Durable caution regardless of which option wins: promote and measure ONE PASS AT
+A TIME.** Every gate promoted together is *worse* than this one alone (18.06 vs
+16.23) — the passes interfere, so **the batch is not the sum.**
