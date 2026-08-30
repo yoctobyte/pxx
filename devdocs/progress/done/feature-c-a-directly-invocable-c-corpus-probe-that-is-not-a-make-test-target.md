@@ -103,4 +103,4 @@ same class the SKIP rule guards, met one level up.
 - [[feature-c-cross-lua-sqlite]] — the proven real-program pattern this feeds
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit d9c3a4c7f.
