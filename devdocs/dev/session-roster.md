@@ -23393,3 +23393,114 @@ frankD, frank-rust, frank-user and this session. Only two processes are in
 **A warning that is correct in substance and wrong in every name is worse than no
 warning:** the three told to be careful cannot be affected, and whoever *is* in that
 tree was not told. The hazard itself stands for them.
+
+## "What enumerates this?" — a directory is evidence about where files live, and nothing else
+
+2026-08-30, late. I broadcast a false sentence to five agents inside a true
+finding, and the correction turned out to be worth more than the finding.
+
+frank-rust found that **the self-host fixedpoint cannot see a construct the
+compiler itself never writes**: a duplicated `else if CurTok.Kind = tkProperty
+then` with an empty first arm spun the class-member loop forever, and
+`make compiler/pascal26` printed **"converged after 1 round(s)", twice, cleanly**.
+The step CLAUDE.md calls unskippable did not error. It answered, correctly, about
+a subset.
+
+I verified it and broadcast it — with a supporting sentence of my own: *"the only
+`^\s*property\s` hits under `compiler/**` are four prose lines in comments; the
+compiler declares none."* **False.** `compiler/builtin/pylib.pas` declares five
+real properties and `compiler/builtin/exceptions.pas` three. frank-user caught it.
+
+The finding survives, for a better reason than mine: **the builtins are DATA to
+the fixedpoint build** — parsed only when a user program imports them — which is
+exactly why a NilPy canary caught the hang and the self-host did not. But my
+sentence was **one grep from refutation**, and the refutation would have retired
+a true limit.
+
+**The correct form, and it generalises past the incident:**
+
+> **`compiler/**` is a path, not the set of files the gate compiles.**
+
+frankwasm took it further, with two independent measured instances from the same
+day, neither about the fixedpoint:
+
+- **`test/` is a path, not the set of files the suite runs.** 45 unwired test
+  files; this repo wires tests one explicit Makefile rule at a time and nothing
+  discovers them by pattern. Nine were a campaign's regression tests that had
+  **never executed once**.
+- **`test/wasm/` is a path no runner reaches at all** — 37 slices, 38 `check_*.sh`
+  and a `check_all.sh` sentinel, and the string `test/wasm` appears nowhere in the
+  Makefile, `tools/`, or testmgr. The sentinel exists *because that lane already
+  lost a suite this way*, and it proves the check ran only when someone runs it.
+
+**The separating question is always the same: *what enumerates this?*** For
+`compiler/**` it is the make dependency graph. For `test/**` it is the recipe
+list. For `library_candidates/` it is **nothing**, which is why comparing that
+corpus across checkouts needs a content hash and a commit sha is meaningless.
+
+**And the shape is one I now have four grain sizes of, all mine or adjacent
+tonight:** a sha standing in for a tree state; a count standing in for a
+population; a string standing in for a recipe; **a directory standing in for a
+compilation**. Every one is *an identifier checked against something real — just
+not against the thing it stood for*. I keep verifying the claim and not the
+referent.
+
+Also mine tonight, same class: I reported frankT's positive control as present
+after grepping **`tools/progress.py`**. It lives in **`tools/progress_near_devtest.py`**.
+I confirmed a claim by looking at a name.
+
+### Corollaries banked
+
+- **The optional step is what caught it.** `gate.sh quick` fired, as a **TIMEOUT**
+  on `quick_canary_nilpy.npy`, not an error — *a hang has no error text*. Neither
+  frank-rust nor I turned that into an argument for a wider gate; widening spends
+  frankT's machine, which is the constraint that makes anything catchable.
+- **Timeouts cut both ways.** frankwasm's corpus probe went 75 s → 118 s → **454 s**,
+  rising *every time a wall came down*, because the compiler gets further before
+  stopping. Same instrument that caught frank-rust's hang would kill frankwasm's
+  success. Which failure you get depends on whether the run is slower because it
+  is stuck or because it is working.
+- **frank-optimize's sharpening of the control rule:** *the positive control must
+  run in the same command as the thing it controls, or it rots separately — a
+  control you have to remember to run has the same failure mode as the guard it
+  protects.* It nearly skipped one **because the result was obviously fine**.
+- **`git stash` + rebuild on clean HEAD: 2.5 s against a 120 s timeout**, separating
+  "master is broken" from "my copy is". Trigger: *the moment a failure looks like
+  someone else's fault.* In the playbook via frank-user.
+- **The `near:` window is OUT OF RANGE, not stale.** frankB inserted 32 unrelated
+  tokens into `classes.pas`: the window moved, the error stayed at `4165`.
+  `Tokens[]` is one array shared by every unit, so an index past
+  `generics.collections.pas`'s range renders whatever occupies those slots — as
+  **80%-plausible Pascal in a file that had just been edited**. `classes.pas:315`
+  was a coordinate, not a cause. `4165` = the unit's `end.` is sound and is the
+  signature of an overrun. Open question is A's: *what consumes tokens to EOF in
+  a specialized body?*
+- **There is no proof-grade flag.** frankT said so unprompted; the Track O ruling
+  currently rests on a human reading a tier name. Judged **not load-bearing
+  tonight** (O campaign closed, next pin gated on the revert's shadow), queued
+  behind host-parity, control shipping with it — a `quick` run that MUST classify
+  as not-proof-grade, free and unrottable.
+
+## Rungs 3 and 4 of the owner's kiosk target, delivered — and a measurement deleted rung 3
+
+frankB, `0f9bd5d81`. `tools/mkkiosk.sh` builds a **15 MB** image booting under KVM
+in **~2 s**: busybox userland, a pxx-built kiosk app, pascal26 compiling Pascal
+inside the VM, and with `--selfhost`:
+
+```
+SELF-HOST FIXEDPOINT INSIDE THE VM: stage1 == stage2
+40 s end to end · md5 a90ea54b948d82c4c20202df4fe49d96
+```
+
+**`file compiler/pascal26` → statically linked** was free to check and deleted
+most of the rung-3 design question: no rootfs, no libc, no loader, no distro —
+kernel plus an initramfs of static binaries is a complete system. That is the
+whole reason it is 15 MB and two seconds. Had it been dynamically linked, rung 3
+would have been a rootfs project.
+
+**Claim stated precisely, unprompted:** x86-64 **under KVM** is the native
+architecture on a different kernel and userland — **not** the cross-CPU self-host
+of `bug-a-the-cross-self-host-proof-runs-a-different-configuration-than-the-native-one`.
+`qemu-system-aarch64` without KVM is the strictly stronger claim; dispatched to
+frankB behind `AllocMem`, which unblocks frank-rust's fcl-xml ladder and is
+minutes of Track B work against a queue that tops out at p15.
