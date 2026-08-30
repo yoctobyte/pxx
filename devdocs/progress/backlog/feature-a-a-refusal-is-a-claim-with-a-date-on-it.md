@@ -7153,3 +7153,80 @@ Note the asymmetry that hid it: riscv32's diagnostic is the generic *"standard b
 calls not supported in bare-metal stage 1"* bucket — **face 144 still live on that
 backend** — so the gap was invisible there while xtensa at least failed loudly enough to be
 classified.
+
+### 162 — NINETEEN OF FIFTY CELLS PASSED BY ARITHMETIC, AND A PASS BY ARITHMETIC IS INDISTINGUISHABLE FROM A PASS BY CORRECTNESS
+
+*frankB, 2026-08-30, `c01047d70` — measuring the typed-const alignment defect across ten
+preceding shapes × five targets.*
+
+The ticket said arm32 mis-aligns a typed-const array and named four other targets as
+correct. The grid says **31 of 50 cells are misaligned**, residues 0/1/2/4/5/6, on every
+target — x86-64 9, i386 9, aarch64 7, arm32 5, riscv32 1. With **nothing before it**:
+
+```
+const A: array[0..3] of Int64 = (1,2,3,4);   ->  mod 8 = 1 on x86-64, 4 on i386, 4 on arm32
+```
+
+No `Double` is required. No preceding declaration is required. **Nothing is the trigger** —
+the typed-const data path does not align, ever.
+
+**The nineteen passing cells are the finding.** `Int64 before` on arm32 gives residue 0 —
+correct, and correct *by coincidence*: the preceding bytes happened to land right. Every
+zero in the grid is that kind of zero. Four targets read as correct in the original ticket
+for exactly this reason, and **a green produced by arithmetic accident carries the same
+signature as a green produced by a working alignment path.** There is no field in the
+observation that distinguishes them. This is the "host green is worse than a host red"
+family at its sharpest: the red got the ticket, and the four greens got a per-backend theory
+that sent the investigation to the wrong layer.
+
+**The control is what localises it**, and it is the kind that earns its keep: `var V: array[0..3] of Int64`
+is `mod 8 = 0` in **all fifty cells** — same element type, same size, same program, same
+shapes, same targets. Same everything except typed-const versus `var`. So the var/BSS path
+aligns correctly and the typed-const path does not align at all; the defect is shared
+data-section accounting, not a backend arm. frankS called that early and understated it —
+it is all six, not two.
+
+**And the ticket's per-target table is not reproducible by construction.** Re-run at v393 on
+the ticket's own five-line program: i386 4, riscv32 4, aarch64 4, **arm32 0** — three
+"correct" targets misaligned and the "broken" one clean, with nothing changed but the
+compiler binary. The offset is a function of everything emitted earlier, so any compiler or
+RTL change shifts every number. **A fix must not be validated against those numbers**, and
+that sentence is now in the ticket.
+
+Not-Track-F stands harder than the ticket argued it: the array misaligns with **no `Double`
+in the program at all**, so the mechanism has no float content whatsoever. And `sum of an
+array of Int64` returned the right answer at residues 2, 4, 5 and 6 on every runnable
+target — the silence on five targets is **hardware tolerance, not correctness**, which is
+the same coincidence one level down.
+
+### 162a — TWO LANES REPORTING DIFFERENT NUMBERS FOR ONE OBSERVABLE IS EVIDENCE ABOUT THE OBSERVABLE, NOT ABOUT EITHER LANE
+
+*mine.* frankS and frankB reported different per-target alignment figures. I read that as a
+discrepancy to resolve and routed a confirming build to settle which was right.
+
+**Neither was wrong. The quantity is not stable enough to disagree about** — it is a
+function of every byte emitted before it, so two lanes on two binaries *must* differ, and
+the size of the difference says nothing about either measurement. The disagreement was
+itself the datum, and it was pointing at the instability that dissolves the ticket's whole
+table. I spent a dispatch determining which lane to believe when the answer was *the
+question does not have a lane-shaped answer.*
+
+The tell was available before the build: **the two reports differed on a quantity neither
+lane had claimed was reproducible.** Before adjudicating between two peers, ask whether the
+thing they differ about is one that *could* hold still. When it cannot, the correct
+coordinator action is not a tiebreak — it is to stop treating the number as evidence, for
+both of them at once.
+
+### 162b — THE ABSENT CELL WAS LEFT VISIBLY ABSENT, AND THE ODD RESIDUE IS WHY THAT MATTERED
+
+xtensa does not build in frankB's lane — the plain `writeln` probe hits `target xtensa:
+external (dynamic)`, needing ESP platform flags it is not set up for. It said so rather
+than quietly shipping a 50-cell grid that was really 40 plus assumptions.
+
+That mattered immediately: **`mod 8 = 3` is the only odd residue anywhere in the corpus**,
+it is frankS's, and **nothing in fifty cells reproduces an odd residue on any target.** So
+it may be a *distinct additional effect* on that backend rather than the same defect worse —
+untested either way. A grid that had silently absorbed xtensa would have buried the one
+number that does not fit its own model, and a fix declared complete on the grid alone would
+have left it live. **An anomaly is only visible against a background that admits it is
+incomplete.**
