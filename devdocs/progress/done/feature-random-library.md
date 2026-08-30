@@ -530,4 +530,4 @@ Nothing here was ever wrong when written.
 Gate: `make lib-test`'s two random entries green, unchanged, plus the live
 tier-1 check above. No source changed — this ticket closes on verification, not
 on a fix.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit d56be6647.
