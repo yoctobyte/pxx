@@ -13821,8 +13821,25 @@ begin
       end;
 end;
 
-procedure IRMarkReferencedLabels;
-{ Which label ids are named by a control transfer that still exists.
+procedure IRMarkReachableLabels;
+{ Which label ids are REACHABLE FROM THE PROC ENTRY -- not which ones some jump
+  happens to name. The distinction is the whole content of
+  bug-a-a-loop-in-dead-code-keeps-itself-alive-through-its-own-back-edge, and it
+  is why this replaced a reference count rather than extending one.
+
+  A LOOP IS ITS OWN WITNESS. The predecessor of a loop's top label is the loop's
+  own back-jump, which sits INSIDE the region whose fate the pass is deciding. A
+  reference count therefore always finds a live-looking reference, the label
+  always resurrects the body, and the body always keeps the back-jump alive that
+  justified it. Iterating cannot break that cycle: it is a fixpoint, just the
+  wrong one -- the greatest rather than the least. Measured: `return 0; while(1)
+  { n += NEVER_W(); }` kept a call to a symbol defined nowhere, and the binary
+  failed at LOAD; the same statement without the loop around it was pruned.
+
+  So this walks reachability FORWARD FROM THE ENTRY, and a label enters the set
+  only when something already in the set reaches it -- by falling into it, or
+  through a control transfer that is itself reachable. Iterated to a fixpoint
+  because a FORWARD jump names a label the walk has not passed yet.
 
   The node kinds that can name a label are exactly the five IRVerify validates
   as label operands -- IR_JUMP, IR_JUMP_IF_FALSE and the three exception kinds
@@ -13831,73 +13848,20 @@ procedure IRMarkReferencedLabels;
   landing beside those. Reading the set off the verifier is what keeps this
   honest as the IR grows.
 
-  Conservative in the safe direction: a label referenced only from code that is
-  itself dead still counts as referenced, so this pass under-removes rather than
-  over-removes. One sweep, no fixpoint. }
-var i, lbl: Integer;
+  MARKING ONLY -- it destroys nothing, and that separation is load-bearing. The
+  set grows monotonically (a label is only ever added), so it terminates in at
+  most IRLabelCount rounds and in practice in two. Fusing it with the removal
+  walk would be a real bug and not merely untidy: a round that NOPs a node it
+  believes unreachable cannot un-NOP it when a later round discovers a forward
+  jump into that region. Mark to a fixpoint first, remove once. }
+var i, lbl: Integer; reachable, changed: Boolean;
 begin
   EnsureIRScratch(IRLabelCount);
   for i := 0 to IRLabelCount - 1 do
     IRScratchFlag[i] := False;
-  for i := 0 to IRCount - 1 do
-  begin
-    lbl := -1;
-    case IRKind[i] of
-      IR_JUMP, IR_JUMP_IF_FALSE,
-      IR_EXC_ENTER, IR_EXC_MATCH, IR_EXC_MATCH_HIT: lbl := IRA[i];
-    end;
-    if (lbl >= 0) and (lbl < IRLabelCount) then IRScratchFlag[lbl] := True;
-  end;
-end;
-
-procedure IROptDeadCode;
-{ Pass 1 — unreachable-code elimination. Walk the body tracking reachability.
-  Code between an unconditional transfer and the next IR_LABEL owns no label,
-  so nothing can jump INTO it and the transfer blocks fall-through -> provably
-  unreachable; NOP it. Any IR_LABEL is a potential jump target, so it (and the
-  code after) is reachable again. Labels are never removed. Operand/value nodes
-  sit post-order-adjacent BEFORE their statement root, inside the same
-  reachability region as that root, so a live statement never references a node
-  that lands in a dead region.
-
-  *** CORRECTNESS INVARIANT (why this is provably safe, hence -O1 not -O2) ***
-  This pass is exact — no heuristic, no cost model — but it rests on ONE
-  invariant: EVERY control-transfer landing site is a stream IR_LABEL. It holds
-  today because PXX has NO computed/indirect jumps: `case` lowers to a
-  compare-chain (see AN_CASE guard-rail), exception handlers land on the
-  IR_EXC_ENTER label, goto targets are labels. If a future change introduces a
-  jump TABLE or any computed `jmp reg`/`jmp [mem]` whose target is not a stream
-  IR_LABEL, THIS PASS CAN DELETE A LIVE TARGET — re-gate it (skip bodies with
-  the computed jump) or materialise an IR_LABEL at each such target first. This
-  invariant is the line between -O1 (provably safe) and -O2 (experimental /
-  side-effecting): keep it airtight or move the pass. See
-  devdocs/dev/optimization-architecture.md §2. }
-var i, lbl: Integer; reachable, changed: Boolean;
-begin
-  { A label restores reachability only if something can still JUMP to it. The
-    original rule was "any IR_LABEL is a potential jump target", which is true
-    of the labels a jump names and false of the ones left behind when
-    IROptConstBranch folds the only branch that named them. Without this, an
-    orphaned else-label resurrects the arm it guards: the constant branch is
-    gone, the then-arm ends in a return, and the dead arm is still emitted
-    because a label with no predecessors reset the walk.
-    IRMarkReferencedLabels reads its node-kind set off IRVerify, and errs
-    towards calling a label referenced, so this only ever removes a region the
-    original rule would also have removed had the label not been there.
-    bug-a-a-constant-if-condition-keeps-its-dead-arm-and-the-binary-will-not-start }
-  { ITERATED TO A FIXPOINT, and one round is provably not enough. The
-    then-arm's `jump endLabel` sits AFTER the arm's own `return`, so it is
-    itself dead -- but it is still a live-looking reference when the mark pass
-    reads it, which keeps endLabel alive, which resurrects the arm the label
-    guards. Round 2 sees the jump already NOPed and the label falls with it.
-    Measured on the ticket's repro: round 1 removes the branch and the orphaned
-    else-label, round 2 removes the call. Terminates because every round only
-    ever turns nodes INTO NOPs -- the state is monotone, so `changed` can flip
-    at most IRCount times, and in practice it is two rounds. }
   repeat
     changed := False;
-    IRMarkReferencedLabels;
-    reachable := True;
+    reachable := True;                 { the proc entry }
     for i := 0 to IRCount - 1 do
     begin
       if IRKind[i] = IR_NOP then
@@ -13905,23 +13869,88 @@ begin
       else if IRKind[i] = IR_LABEL then
       begin
         lbl := Integer(IRIVal[i]);
-        if (lbl < 0) or (lbl >= IRLabelCount) or IRScratchFlag[lbl] then
+        if (lbl < 0) or (lbl >= IRLabelCount) then
+          reachable := True            { malformed: stay conservative }
+        else if IRScratchFlag[lbl] then
           reachable := True
-        else if not reachable then
-        begin
-          IRKind[i] := IR_NOP;   { orphaned label inside a dead region }
+        else if reachable then
+        begin                          { fallen into: the label is reachable }
+          IRScratchFlag[lbl] := True;
           changed := True;
         end;
       end
-      else if not reachable then
+      else if reachable then
       begin
-        IRKind[i] := IR_NOP;
-        changed := True;
-      end
-      else if IRIsUncondTransfer(i) then
-        reachable := False;
+        lbl := -1;
+        case IRKind[i] of
+          IR_JUMP, IR_JUMP_IF_FALSE,
+          IR_EXC_ENTER, IR_EXC_MATCH, IR_EXC_MATCH_HIT: lbl := IRA[i];
+        end;
+        if (lbl >= 0) and (lbl < IRLabelCount) and not IRScratchFlag[lbl] then
+        begin
+          IRScratchFlag[lbl] := True;
+          changed := True;
+        end;
+        if IRIsUncondTransfer(i) then reachable := False;
+      end;
     end;
   until not changed;
+end;
+
+procedure IROptDeadCode;
+{ Pass 1 -- unreachable-code elimination. Walk the body tracking reachability.
+  Code between an unconditional transfer and the next REACHABLE IR_LABEL owns no
+  live landing site, so nothing can jump INTO it and the transfer blocks
+  fall-through -> provably unreachable; NOP it. Operand/value nodes sit
+  post-order-adjacent BEFORE their statement root, inside the same reachability
+  region as that root -- no IR_LABEL is ever emitted between an operand and the
+  root that consumes it -- so a live statement never references a node that
+  lands in a dead region.
+
+  ONE WALK, NO FIXPOINT HERE. IRMarkReachableLabels has already run its own to
+  completion, so by the time this loop starts the answer for every label is
+  final; see its note for why the marking and the removal must not be fused.
+  This subsumes both of the passes it replaced -- the reference count and the
+  separate orphaned-label sweep -- and it deletes cases rather than adding them:
+  an orphaned else-label from a folded constant branch and a dead loop's back
+  edge are now the SAME fact (a label nothing reachable reaches), not two.
+
+  *** CORRECTNESS INVARIANT (why this is provably safe, hence -O1 not -O2) ***
+  This pass is exact -- no heuristic, no cost model -- but it rests on ONE
+  invariant: EVERY control-transfer landing site is a stream IR_LABEL. It holds
+  today because PXX has NO computed/indirect jumps: `case` lowers to a
+  compare-chain (see AN_CASE guard-rail), exception handlers land on the
+  IR_EXC_ENTER label, goto targets are labels. If a future change introduces a
+  jump TABLE or any computed `jmp reg`/`jmp [mem]` whose target is not a stream
+  IR_LABEL, THIS PASS CAN DELETE A LIVE TARGET -- re-gate it (skip bodies with
+  the computed jump) or materialise an IR_LABEL at each such target first.
+  Reachability-from-entry makes that invariant load MORE weight than the
+  reference count did: an unreferenced-but-reachable landing site used to be
+  saved by the old "any IR_LABEL resets the walk" rule, and is not any more.
+  This invariant is the line between -O1 (provably safe) and -O2 (experimental /
+  side-effecting): keep it airtight or move the pass. See
+  devdocs/dev/optimization-architecture.md §2. }
+var i, lbl: Integer; reachable: Boolean;
+begin
+  IRMarkReachableLabels;
+  reachable := True;
+  for i := 0 to IRCount - 1 do
+  begin
+    if IRKind[i] = IR_NOP then
+      Continue
+    else if IRKind[i] = IR_LABEL then
+    begin
+      lbl := Integer(IRIVal[i]);
+      if (lbl < 0) or (lbl >= IRLabelCount) or IRScratchFlag[lbl] then
+        reachable := True
+      else if not reachable then
+        IRKind[i] := IR_NOP;           { a label nothing reachable reaches }
+    end
+    else if not reachable then
+      IRKind[i] := IR_NOP
+    else if IRIsUncondTransfer(i) then
+      reachable := False;
+  end;
 end;
 
 procedure IROptRedundantJump;

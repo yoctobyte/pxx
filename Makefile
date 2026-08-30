@@ -11330,6 +11330,19 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_uguard26 "$$($(TESTTMP)/c_uguard26)" "$$(printf '11\n12\n13\n14\n15\n16\n100\n200')"
 	./$(COMPILER) test/test_const_branch_dead_arm.pas $(TESTTMP)/test_constbranch26
 	tools/expect_same.sh test_constbranch26 "$$($(TESTTMP)/test_constbranch26)" "$$(printf '42 42 42\n100 200 400 300\n42 1')"
+	# The SIBLING defect, and it is not the const-branch one: a loop in dead code
+	# kept itself alive through its OWN BACK EDGE, because the only predecessor of
+	# its top label is the back-jump inside the region being decided. No constant
+	# condition is involved -- `return x+1; while(x<3){...}` needs no `if` at all
+	# -- so this predates the const-branch work rather than regressing from it.
+	# Rows 1 of each: both files' d0 is the plain statement after the return, which
+	# ALREADY worked; it sits beside d1 so the difference reads as the loop.
+	# Both files' output is asserted against gcc -O2, which prunes all of it.
+	# bug-a-a-loop-in-dead-code-keeps-itself-alive-through-its-own-back-edge
+	./$(COMPILER) test/c_dead_loop_back_edge.c $(TESTTMP)/c_dlbe26
+	tools/expect_same.sh c_dlbe26 "$$($(TESTTMP)/c_dlbe26)" "$$(printf '42 42 42 42 42 42\n42 5 200 100 113 114')"
+	./$(COMPILER) test/test_dead_loop_back_edge.pas $(TESTTMP)/test_dlbe26
+	tools/expect_same.sh test_dlbe26 "$$($(TESTTMP)/test_dlbe26)" "$$(printf '42 42 42 42 42\n42 5 113 114 1 2')"
 	# The riscv32 arm of this only fails cross-target; see test-c-float-const-cross.
 	# bug-c-the-f-suffix-on-a-float-literal-is-ignored
 	./$(COMPILER) test/c_float_literal_f_suffix.c $(TESTTMP)/c_flit_fsuf26
