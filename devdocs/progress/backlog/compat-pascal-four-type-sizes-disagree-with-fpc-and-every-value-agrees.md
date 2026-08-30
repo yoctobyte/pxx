@@ -307,3 +307,73 @@ probably why both kinds are in `FrozenStrSlotSize` already.
 
 The table above as a test with FPC's column as `.expected`; `gate.sh quick`;
 self-host fixedpoint; cross targets, since the layout is ABI.
+
+---
+
+## Verification 2026-08-30 (frankA) — measurement only, no fix, no claim
+
+Re-measured at HEAD `3309b9ba6609` against `fpc -O- -Mobjfpc` 3.2.2, because
+this repo's tables go stale and this one is from 2026-08-16/20. **It does not:
+every row still holds**, and `lenbyte` is now 5 on both sides — the one row this
+ticket already records as closed.
+
+```
+                    pxx   FPC
+set8                 32     4
+set031               32     4
+setbyte              32    32
+recset               48    12
+small                 4     1
+neg                   4     1
+big                   4     4
+packedrec            12     3
+arr                  16     4
+strN                  8    21
+lenbyte               5     5   <- closed row, agrees
+recstr               24    11
+recstri              24    16
+```
+
+### Asked to route this bug-vs-defer. It is **neither row**, and the reason matters
+
+CLAUDE.md's bug row is *"real Pascal source compiles but runs wrong."* Measured
+against pxx **alone**, with no oracle in the program, nothing runs wrong:
+
+- **`packed` is honoured.** `packed record a: TSmall; b: TNeg; c: 0..255` has
+  field offsets 0/4/8 and `SizeOf` 12, which is exactly the sum of its field
+  sizes — **no padding**. pxx is not failing to pack; its subrange fields are
+  simply 4 bytes wide.
+- **The byte-exact layout is expressible today.** `packed record a: Byte;
+  b: ShortInt; c: Byte` is **3** in pxx, matching FPC. Code that needs a
+  wire-exact or struct-exact layout writes explicit widths — which is what such
+  code already does — and it works.
+- **pxx round-trips its own bytes.** `Move(r, r2, SizeOf(TRec))` on a record
+  with a `string[10]` field preserves both fields.
+
+So the cost is real but it is **memory footprint (4x on subrange arrays, 8x on
+small sets) and cross-toolchain layout**, not a wrong answer. Equally it is
+*not* the defer row — that row is for diagnostics and rendering, and storage
+size is neither. It is an ordinary compat item, and **its filed `prio: 25` is
+right on its own merits.**
+
+### The p70 is borrowed, and the lender is inside the loan
+
+This ticket shows as **P p70** only by propagation: the sole edge is
+[[feature-pascal-typed-and-untyped-files]] [P p70], whose frontmatter carries
+`blocked-by: [compat-pascal-four-type-sizes-...]`.
+
+That matters because **this ticket's strongest argument for mattering is a
+`file of TRec`** — *"a program that writes a record to a file and reads it back
+with FPC gets garbage"* — and `file of T` **does not exist**: it is refused
+outright with *"file types are not supported (use TextFile for text I/O)"*,
+which is precisely what that other ticket is for. Measured, not assumed; it is
+what made the round-trip probe above use `Move`.
+
+So the two tickets hold each other up. Neither is independently urgent, and the
+one that makes the other look urgent is blocked on it. **Not asserting the edge
+is wrong** — sequencing sizes before a typed-file on-disk format is a defensible
+call, since settling layout afterwards would silently invalidate written data.
+Flagging it as the thing to decide, because it is what is putting a prio-25
+compat item at the head of Track P.
+
+No files touched outside this note.
