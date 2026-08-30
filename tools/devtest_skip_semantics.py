@@ -92,6 +92,36 @@ def main():
     print("\nPASSLIKE is the single definition both paths share")
     check(tw.PASSLIKE == ("pass", "skip"), "PASSLIKE", str(tw.PASSLIKE))
 
+    # A coverage hole must be ANSWERABLE from the archive, not only countable.
+    # The report md has always named the holes; the ndjson row carried two bare
+    # integers, so "what silently did not run at sha X" needed a join onto the
+    # report — and 12 of the 156 hole-carrying runs on 2026-08-30 had no report
+    # file at all. Same argument `still_red` was named on.
+    print("\nskip_summary names the coverage holes, not just their count")
+    tmspec = importlib.util.spec_from_file_location(
+        "tm", os.path.join(HERE, "testmgr.py"))
+    tm = importlib.util.module_from_spec(tmspec)
+    tmspec.loader.exec_module(tm)
+
+    class J(object):
+        def __init__(self, name, status, why):
+            self.name, self.status, self.skip_reason = name, status, why
+
+    s = tm.skip_summary([
+        J("test-core#939", "skip", "host capability absent: rdrand — no RDRAND"),
+        J("test-fgl#00", "skip", "corpus absent: fpcsrc is not on this box"),
+        J("test-x#01", "skip", "the author disabled it for now"),
+        J("test-y#02", "pass", None),
+    ])
+    check(s["coverage_holes"] == 2, "two of the three skips are holes",
+          str(s["coverage_holes"]))
+    check(s["hole_jobs"] == ["test-core#939", "test-fgl#00"],
+          "the hole jobs are named and sorted", str(s.get("hole_jobs")))
+    check("test-x#01" not in (s.get("hole_jobs") or []),
+          "a non-hole skip is not listed as a hole",
+          "a deliberate disable is not a coverage hole")
+    check(s["count"] == 3, "every skip still counted", str(s["count"]))
+
     print()
     if fails:
         print("FAILED %d check(s): %s" % (len(fails), ", ".join(fails)))

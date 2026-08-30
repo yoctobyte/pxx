@@ -2116,6 +2116,7 @@ def skip_summary(jobs):
     """
     by = {}
     holes = 0
+    hole_jobs = []
     for j in jobs:
         if j.status != "skip":
             continue
@@ -2123,8 +2124,21 @@ def skip_summary(jobs):
         by.setdefault(why, []).append(j.name)
         if why.startswith(SKIP_HOLE_PREFIXES):
             holes += 1
+            hole_jobs.append(j.name)
     return {"count": sum(len(v) for v in by.values()),
             "coverage_holes": holes,
+            # WHICH jobs did not run, not just how many. The report md has
+            # named them all along; the ndjson archive carried only the two
+            # counts, so answering "what silently did not run at sha X" needed
+            # a join onto the report — and the join is not total: of 156 runs
+            # carrying a hole on 2026-08-30, 12 (7.7%) had no report file, and
+            # for those the count was all that survived.
+            #
+            # The precedent is in the same record. `still_red` was added on the
+            # argument that an archive naming nothing "cannot answer what was
+            # red at this sha without replaying every row before it". A skip
+            # hole has that property exactly, and got the opposite call.
+            "hole_jobs": sorted(hole_jobs),
             "by_reason": {k: sorted(v) for k, v in sorted(by.items())}}
 
 

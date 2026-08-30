@@ -3385,6 +3385,14 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                             "skips": (report.get("skips") or {}).get("count"),
                             "skip_holes": (report.get("skips")
                                            or {}).get("coverage_holes"),
+                            # ...and WHICH ones, for the same reason still_red
+                            # is named rather than counted two fields down: a
+                            # bare `skip_holes: 1` says something did not run
+                            # and cannot say what, and the report md that names
+                            # it is missing for ~8% of runs. Absent on rows
+                            # before 2026-08-30: "not known", never empty.
+                            "skip_hole_jobs": (report.get("skips")
+                                               or {}).get("hole_jobs"),
                             "deadline": report.get("deadline"),
                             "wall": report["wall"], "new_red": new_red,
                             "fixed": fixed,
