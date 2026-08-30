@@ -907,7 +907,7 @@ _none_
 - [p 55] [P] feature-p-uses-a-unit-in-an-explicit-file
 - [p 55] [A] feature-pascal-type-helpers [parked — re-claim, do not duplicate]
 - [p 55] [A] feature-signal-siginfo-ucontext [parked — re-claim, do not duplicate]
-- [p 55] [T] feature-t-a-user-hold-must-survive-a-bulk-re-price [!! DO NOT CLAIM — the ticket says so; read it]
+- [p 55] [T] feature-t-a-user-hold-must-survive-a-bulk-re-price
 - [p 55] [A+O] perf-o-promote-constant-divisor-strength-reduction-to-o2
 - [p 55] [P] refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too
 - [p 55] [P] refactor-p-one-lvalue-path-for-statements-and-expressions
@@ -960,7 +960,7 @@ _none_
 - [p 45] [P] bug-p-a-forward-interface-declaration-is-not-parsed
 - [p 45] [P] bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name
 - [p 45] [T] bug-t-36-ranked-tickets-have-no-track-field-and-their-lane-rests-on-the-filename
-- [p 45] [T] bug-t-a-campaign-umbrella-has-no-safe-status-to-sit-in [!! DO NOT CLAIM — the ticket says so; read it]
+- [p 45] [T] bug-t-a-campaign-umbrella-has-no-safe-status-to-sit-in
 - [p 45] [T] bug-t-a-fuzz-finding-cited-by-seed-alone-cannot-prove-a-fix
 - [p 45] [T] bug-t-a-present-corpus-is-never-checked-against-its-pinned-commit
 - [p 45] [A+T] bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing
@@ -1072,7 +1072,7 @@ _none_
 - [p 35] [A] chore-a-adopt-allocrecvar-at-the-twenty-remaining-record-temp-sites
 - [p 35] [T] chore-t-a-stable-gated-red-should-name-pin-lag-before-flakiness
 - [p 35] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
-- [p 35] [A] feature-a-a-refusal-is-a-claim-with-a-date-on-it [!! DO NOT CLAIM — the ticket says so; read it]
+- [p 35] [A] feature-a-a-refusal-is-a-claim-with-a-date-on-it
 - [p 35] [A+S] feature-a-a-signal-runtime-for-HOSTED-xtensa-the-exclusion-predates-the-profile
 - [p 35] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - [p 35] [A] feature-c-package-namespace-decision
@@ -1211,7 +1211,7 @@ _none_
 - [p 15] [A] chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments
 - [p 15] [N] compat-n-repr-does-not-escape-non-printables-above-u007f
 - [p 15] [P] compat-pascal-the-strict-fpc-flag-family-is-incomplete
-- [p 15] [B+S] feature-dns-esp-wire-nameservers-from-lwip [!! DO NOT CLAIM — the ticket says so; read it]
+- [p 15] [B+S] feature-dns-esp-wire-nameservers-from-lwip
 - [p 15] [A] feature-n-a-quoted-from-import-reaches-another-language
 - [p 15] [P] feature-p-legacy-value-object-types
 - [p 15] [P] feature-p-tobject-api-classparent-instancesize-tostring

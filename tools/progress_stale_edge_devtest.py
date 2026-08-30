@@ -213,7 +213,19 @@ def t_the_aperture_note_is_always_printed():
     # precisely. So it now asserts what must be true of any wording: the note
     # is emitted, it names the aperture it reads, and it disclaims the family.
     # That is not a loosened tolerance -- delete the note and all three fail.
-    assert "NOTE stale-edge" in out, out
+    #
+    # SECOND TIME, 2026-08-30. The rewrite above still keyed the note's
+    # EXISTENCE on its opening words -- `NOTE stale-edge` -- and the opening was
+    # later rewritten to `NOTE a STALE-PARK hit matches SLUGS...`. Red again,
+    # for the same reason, one clause to the left: the two claims were made
+    # wording-independent and the identity was not. A guard that says "do not
+    # key on wording" and then keys on wording is worth more as a lesson than
+    # as a third rewrite, so the identity test is now structural -- SOME line
+    # opens with NOTE, and the note names the aperture it is about. Delete the
+    # note and all four still fail.
+    note = next((ln for ln in out.splitlines() if ln.startswith("NOTE ")), None)
+    assert note is not None, out
+    assert "stale-edge" in note or "STALE-PARK" in note, note
     assert "FRONTMATTER" in out, out
     assert "not the family" in out, out
     return "the scan states its own reach, clean run included"

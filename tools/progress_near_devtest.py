@@ -65,33 +65,92 @@ def main() -> int:
               dup >= 2 * median and dup > 0.15,
               "dup=%.3f median=%.3f" % (dup, median))
 
-    # A filer's TITLE must reach its own ticket. Ticket-length bias is what
-    # containment got wrong; this is the case that caught it.
+    # ---- the two calibration properties, each stated as a NUMBER ----
+    #
+    # Rewritten 2026-08-30 after measuring what the previous pair actually
+    # discriminated. Both were misattributed, and one was vacuous:
+    #
+    #   * "a ticket's own title ranks it first" never scored a TITLE. Zero of
+    #     the 25 probes carry a `title:` field, so the `or` fallback was the
+    #     only branch ever taken and the query was always a slug. It also
+    #     rejected the wrong metric: measured, containment ranks every probe
+    #     FIRST (worst rank 0) and passes it, while the metric in use scores 1
+    #     — the assertion had gone red because a sibling was filed
+    #     (`feature-pascal-corpus-oop` shares three of four slug words with
+    #     `feature-pascal-corpus-expansion` and is a legitimately better match
+    #     for them), not because anything regressed.
+    #
+    #   * "does not saturate against the longest ticket" picked `longest` by
+    #     `len(full[...])` and then scored `heads[longest]` — an 11-token head
+    #     of a 6812-token document. The query shared ZERO tokens with that head,
+    #     so it scored 0.000 under all three metrics including the one it exists
+    #     to reject. A guard that cannot fail is not a guard.
+    #
+    # What the two rejected metrics actually do, measured on this board:
+    #
+    #   metric        min self-score   saturation vs the longest DOC
+    #   Similarity        0.148              0.021
+    #   Jaccard           0.028              0.001     <- fails the floor
+    #   Containment       1.000              1.000     <- fails saturation
+    #
+    # So: a FLOOR on the self-score rejects Jaccard (its collapse on short
+    # queries is the documented failure), and saturation against the full DOC
+    # rejects containment. Neither flips when a sibling ticket is filed, which
+    # is what made the rank test brittle.
     probes = [t for t in board.tickets if t.status in progress.OPEN_STATUSES][:25]
-    worst = None
-    for t in probes:
-        title = t.fm.get("title", "") or t.slug.replace("-", " ")
-        q = progress._tokens(title)
-        if len(q) < 3:
-            continue
-        rows = sorted(((sh.score(q, heads[o.slug]), o.slug) for o in probes), reverse=True)
-        rank = [s for _, s in rows].index(t.slug)
-        if worst is None or rank > worst[0]:
-            worst = (rank, t.slug)
-    check("a ticket's own title ranks it first among its neighbours",
-          worst is not None and worst[0] == 0,
-          "worst rank %s for %s" % (worst if worst else ("n/a", "n/a")))
-
-    # Length bias: a short query must not saturate against a long ticket merely
-    # for sharing common words. Compare a deliberately unrelated title against
-    # the LONGEST open ticket.
     longest = max((t for t in board.tickets if t.status in progress.OPEN_STATUSES),
                   key=lambda t: len(full[t.slug]))
-    q = progress._tokens("a variant shr is arithmetic where the static shr is logical")
-    check("a short unrelated query does not saturate against the longest ticket",
-          sh.score(q, heads[longest.slug]) < 0.5,
-          "%.3f against %s (%d tokens)" % (sh.score(q, heads[longest.slug]),
-                                           longest.slug, len(full[longest.slug])))
+    q_unrelated = progress._tokens(
+        "a variant shr is arithmetic where the static shr is logical")
+
+    def self_floor(index, metric):
+        """Lowest score a probe's own slug gets against its own head."""
+        worst = None
+        for t in probes:
+            q = progress._tokens(t.slug.replace("-", " "))
+            if len(q) < 3:
+                continue
+            sc = metric.score(q, index[t.slug])
+            if worst is None or sc < worst[0]:
+                worst = (sc, t.slug)
+        return worst
+
+    def saturation(metric_full):
+        """A short unrelated query against the longest DOCUMENT — full, not
+        head, or the comparison is against a ticket that is not long."""
+        return metric_full.score(q_unrelated, full[longest.slug])
+
+    floor = self_floor(heads, sh)
+    check("a slug reaches its own ticket with a usable score",
+          floor is not None and floor[0] >= 0.10,
+          "worst %.3f for %s" % floor if floor else "n/a")
+    sat = saturation(sf)
+    check("a short unrelated query does not saturate against the longest doc",
+          sat < 0.5,
+          "%.3f against %s (%d tokens)" % (sat, longest.slug, len(full[longest.slug])))
+
+    # POSITIVE CONTROL. Both properties above are numbers measured on live board
+    # data, so both can drift into being unfailable — which is exactly what
+    # happened to the guard this replaces, silently, for as long as it existed.
+    # Re-running the two REJECTED metrics through the same code proves the
+    # checks still discriminate. If either control stops failing, the guard
+    # above it has stopped guarding, whatever it prints.
+    class _Containment:
+        def __init__(self, index): pass
+        def score(self, q, d): return (len(q & d) / len(q)) if q else 0.0
+
+    class _Jaccard:
+        def __init__(self, index): pass
+        def score(self, q, d): return (len(q & d) / len(q | d)) if (q | d) else 0.0
+
+    j_floor = self_floor(heads, _Jaccard(heads))
+    check("CONTROL: Jaccard still fails the self-score floor",
+          j_floor is not None and j_floor[0] < 0.10,
+          "Jaccard floor %.3f — the floor no longer rejects it" % (j_floor[0] if j_floor else -1))
+    check("CONTROL: containment still fails the saturation check",
+          saturation(_Containment(full)) >= 0.5,
+          "containment saturation %.3f — the check no longer rejects it"
+          % saturation(_Containment(full)))
 
     # Self-similarity is 1 and the metric is symmetric — cheap, and both were
     # briefly false while the denominator was being changed.
