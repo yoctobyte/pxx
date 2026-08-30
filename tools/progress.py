@@ -1965,7 +1965,15 @@ pre code{background:none;padding:0}
         # and its first sub-entry, which is the file's normal shape. Comparing
         # across levels would flag that as a collision and the check would be
         # wrong on its first real run.
-        face_hdr = re.compile(r"^(#{2,4})\s+(?:FACE\s+)?(\d{1,3}[a-z]?)\s*[\u2014\-\u2013]")
+        # SEPARATOR SET WIDENED 2026-08-30. The first version required an
+        # em/en-dash and silently missed 90 headings in an OLDER numbering
+        # style -- `### 30. Two fields of one report disagree` -- which are
+        # numbered faces written with a period. Two lanes counted this file
+        # independently, got 317 both times, and BOTH missed the same 90,
+        # because both greps were written by reading the file's recent tail
+        # where every entry uses a dash. A pattern derived from the current
+        # convention cannot see the convention it replaced.
+        face_hdr = re.compile(r"^(#{2,4})\s+(?:FACE\s+)?(\d{1,3}[a-z]?)\s*[\u2014\-\u2013.]")
         for t in self.tickets:
             seen_faces: dict = {}
             for n, line in enumerate(t.text.splitlines(), 1):
