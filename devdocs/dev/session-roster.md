@@ -21207,3 +21207,47 @@ trip-wire went into `feature-a-a-general-x86-64-relocatable-object-writer` as th
 frankA's observation was a *reading*, so the green table proves the coinciding cases and is
 **silent about the diverging ones by construction**. Whoever extends object emission to
 aarch64 establishes the spill is AAPCS; they do not infer it from those rows.
+
+## A test that both ends of your own system pass proves drift-resistance, not conformance
+
+frankA, 2026-08-30, closing the four-target cdecl campaign — and it turned the
+campaign's own lesson on its own new test rather than waiting for someone else to.
+
+`test_cdecl_bodied_wide.pas` asserts pxx-caller ↔ pxx-callee agreement at ten
+argument words. **It passed BEFORE the riscv32 convention fix too**, because both
+ends shared the descending error. So it is not evidence of psABI conformance;
+disassembly against `riscv32-esp-elf-gcc` is, and nothing else in the tree is.
+
+What the file actually guards is the five sites drifting apart — which is this
+fix's real failure mode, since one convention is now written down in five places
+(`IR_CALL`, `IR_CALL_IND`, `IR_VIRTUAL_CALL`, the Pascal callee spill, the C-mode
+callee spill).
+
+**And that claim was mutation-tested rather than asserted.** Reverting the
+reordering at one site — `IR_CALL_IND`, the shape a C function pointer takes —
+and rebuilding:
+
+```
+FAIL ten words via fnptr:             got 1234567909 want 1234567900
+FAIL ten words via assigned variable: got 1234567909 want 1234567900
+CDECL-WIDE FAILURES=2
+CDECL-NARROW OK checks=12      <- the narrow file does NOT notice
+```
+
+`...909` is words 8 and 9 swapped exactly. The direct shape stayed green because
+`IR_CALL` was not the mutated site, so the three call shapes are independently
+covered — and **the narrow file staying green throughout is what earns the new
+file its place**, rather than the author's say-so.
+
+### The general form, for anyone writing a test for a convention
+
+A differential between two halves of one implementation answers "did these two
+drift?" It cannot answer "is either correct?", and it returns green with maximum
+confidence in exactly the case where both are wrong together. This campaign hit
+that three separate ways — pxx↔pxx agreeing, the nine-word probe where the
+descending and ascending formulas coincide, and a C-mode program printing the
+right answer because its spill and its caller were wrong in the same direction.
+
+So: **state in the test file's header what the test does NOT prove, and name the
+instrument that does.** Then mutate one site and confirm the file notices. A
+guard nobody has broken on purpose is a guard nobody has tested.
