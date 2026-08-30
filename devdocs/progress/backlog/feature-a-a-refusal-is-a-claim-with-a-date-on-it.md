@@ -6102,3 +6102,70 @@ The blacklist was also confirmed **independently of the `=`** — a second templ
 parameter literally named `LongInt` breaks the `var` form too. That case is the cost
 `f12a62815` *knowingly* accepted; the typed const is not. Separating the accepted cost
 from the unintended one is what makes this a fix rather than a revert.
+
+### 146 — a control that BOUNDS the defect, not one that confirms the fix
+
+*frankB, 2026-08-30, widening the tkinter pad retirement test while the ticket stayed
+pin-gated.*
+
+Enumerating the at-risk shape over `lib/pcl` — a **method** with a Variant parameter
+reachable while an earlier default is unbound — found eight declarations and **four**
+failing methods, not one. Four more FAILS is the kind of result that writes its own
+conclusion, and the conclusion would have been too big.
+
+The row that stopped it:
+
+```
+askopenfilename(filetypes=[(...)])   COMPILES   <- control
+```
+
+**Identical parameter shape, object-valued argument, and it compiles TODAY at the
+unfixed pin** — because it is a unit-level *function*, not a method.
+
+That inverts what a control usually does. The familiar one (133) proves a fix works by
+showing something that must still pass. **This one proves the defect stops somewhere.**
+Without it, four extra FAILS were equally consistent with a far broader defect, and the
+scope claim would have been overclaimed with real measurements behind it — the most
+durable kind of wrong, because every row in the table is true.
+
+**So: when you enumerate instances of a defect, the load-bearing row is the one that has
+every property of the failing set and does not fail.** An enumeration without one
+measures how hard you looked, not how far the defect reaches. And note it was already
+available — `askopenfilename` was sitting in the same façade the whole time; what it
+took was asking *what would falsify the scope*, not more searching.
+
+Every failing row also has its own passing row differing **only** in whether the earlier
+defaults are named — same diagnostic, same mechanism. A paired table like that is a
+mechanism claim; a list of failures is an anecdote count.
+
+### 146a — an acceptance test aimed at the REPORTED SYMPTOM closes on the symptom
+
+Third instance of this shape in one night, and now it has a name. frankB, on its own
+earlier test:
+
+> *The retirement test I wrote checked one method. That is an acceptance aimed at the
+> reported symptom, which is precisely how the const-array cell survived its parent
+> ticket.*
+
+- `bug-aggregate-member-array-as-var-param` named four cells, passed three, closed —
+  and the fourth is the one ed25519 needs (142b).
+- The tkinter retirement test checked one of four failing methods.
+- `test-emit-obj` asserted the symbol is undefined and then linked without it (138).
+
+**A ticket reports a symptom; its acceptance test is written from the ticket.** So the
+test inherits the ticket's scope, which is by definition the part someone already noticed
+— and the cells nobody reported are exactly the cells nobody will check. The repair is
+cheap and mechanical: **before writing the acceptance, enumerate the shape rather than
+the report** — every method with this parameter form, every cell of the var/const ×
+row/field grid — and make the ones you are *not* covering explicit.
+
+### 146b — and a lock over work that cannot proceed is a FALSE LOCK
+
+The ticket stayed pin-gated (`v393` at HEAD, four spellings behaving exactly as
+recorded), so it was **left in `unfinished/` and not claimed into `working/`**.
+
+`working/` means an agent is actively on it. Occupying it to signal *interest* in blocked
+work makes the folder's staleness signal unreadable for everyone — the same conflation
+`bug-t-a-campaign-umbrella-has-no-safe-status-to-sit-in` reports from the other end, where
+a live campaign has nowhere to sit. **Both are the status vocabulary answering "is someone
+on this" when the question is "can this move".**
