@@ -18788,7 +18788,9 @@ would be calibrated against an empty set. frankD's sixth flavour stands anyway:
 is self-repairing; a slug alone is not*.
 
 **Box: load 17-21 on 12 cores.** pxx-a5 filed
-`feature-t-a-second-oracle-dimension-section-alignment` [T p35] with an explicit
+`feature-t-a-second-oracle-dimension-section-alignment` [T **p55** — I wrote p35
+here at ~09:1x and had raised it to 55 at 08:44 in `686b5480b`, so this citation
+was stale by half an hour when written, not aged into staleness] with an explicit
 anti-goal (do not answer it by running everything under xtensa, which makes the
 faulting target the oracle for a property all targets share) and the requirement
 that it hold at `-O0`, where the accidental padding does not apply.
@@ -18802,7 +18804,13 @@ overload selection, so it made the `key: Pointer` candidates *viable* for a
 keyword call and newly reachable for receivers that cannot be walked as a list.
 A dict handle bound to `max(l: TPyList; key: Pointer)` and was dereferenced as a
 TPyList. The fix completes the receiver set (TPyDict + AnsiString, which
-`sorted` has carried since `bug-nilpy-sorted-over-a-string-segfaults`) rather
+`sorted` has carried since `bug-nilpy-sorted-over-a-string-segfaults`
+**[DEAD SLUG — resolves to nothing. Only candidate is
+`bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults` in `done/`;
+NOT re-pointed, because matching a dead name to a live one on subject
+similarity is assertion without measurement. frankA wrote this citation and
+also carries it inside `regression-test-nilpy-test-nilpy-max-min-iterables` —
+frankA's to resolve, from the context that produced it]**) rather
 than special-casing the dict. Library only; compiler binary byte-identical.
 
 **THE DURABLE FINDING — BISECTING BACKWARDS IS VOID UNLESS YOU RESEED.** This is
@@ -19044,3 +19052,50 @@ text existed in the right region while the edit chose its own region;
 reachable from origin; verifying by artefact answers "did the content land" while
 the failure is "does the name resolve". **The adjacent check keeps winning
 because it is the one that is easy to write.**
+
+## Structural change 2026-08-30 ~11:0x — TABLE ROWS CARRY NO SHAS, and why
+
+**frankD audited this file's tail (18,258–18,985, eleven sections) and the dead-sha
+rate is not a rate — it is a LOCATION.**
+
+| where | sha citations presented as live | dead |
+| --- | ---: | ---: |
+| **table rows** (live-lock / dispatch grid) | 4 | **3** |
+| prose | 13 | 1 |
+
+Counts, not percentages — 3 of 4 is not "75%" in any useful sense. But the
+concentration is the finding: **table rows are what an agent REPORTED; prose is
+largely what I read myself.** The failure lands about nine-fold in the relayed
+population, exactly as the mechanism predicts. Second cut, sharper: **all three
+table-row deaths were the same agent's shas**, which makes it either one push
+pattern racing or one habit of citing before pushing — a question, not a policy.
+
+**Adopted, effective now: a table row carries the commit SUBJECT, never a sha.**
+A subject survives a rebase; a sha read before a push does not. The sha goes in
+prose, at the point where I verified it with `merge-base --is-ancestor`. This
+removes the entire population where three of four citations were dead and costs
+nothing that was being used.
+
+**frankD's instrument had its own blind spot and reported it.** Its first pass
+said **10** dead; four were not commits at all — `a3f0f9e3325f` and
+`62cfb924053f` are **binary sha256 prefixes** ("fixedpoint…", "swept binary…"),
+as are `e2ea9034a65ea8b6` and `53800fbeb0b66e11` from the pin ledger. **A bare
+hex regex cannot tell a commit from a content hash**, the roster labels each one
+correctly, and the text was right while the reader was wrong.
+`merge-base --is-ancestor` is the right liveness test and **is only as good as
+the tokens fed to it.**
+
+**Everything else audited clean or near it.** Slugs: 35 cited, **1** genuine dead
+trail (annotated above, not re-pointed). Prios: 12 pairs, **1** real error — the
+alignment ticket cited [T p35] at ~09:1x when it had been raised to 55 at 08:44,
+**already stale by half an hour when written**, corrected in place. Lock claims
+correct against `working/`. Face sequence 190–227 complete, zero gaps.
+
+**THE FINDING THAT MATTERS MOST, and it is about the artefact rather than the
+errors.** A tick log's claims age by design; every section is timestamped, so a
+reader can date any claim. The prio was a defect *because it was already wrong at
+write time*. So the real question is not the error rate — it is **whether lanes
+read this tail as a LOG or as STATE.** Reading a log as state is where a
+thirty-minute-stale prio becomes a wrong dispatch, and **writing more carefully
+does not fix it.** Live state belongs in the file's opening section, which is
+overwritten; the tick sections below are history and should be read as history.
