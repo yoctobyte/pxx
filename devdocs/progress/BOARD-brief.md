@@ -5,12 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:28 blocked:7 backlog:337 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2725 rejected:56`
+`working:3 unfinished:28 blocked:7 backlog:337 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:116 done:2726 rejected:56`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-opt-o3-register-pressure` [A+O] — owner: frank-optimize-b4
-- `feature-opt-o3-w1-operand-folds-are-x86-64-only-aarch64-has-four-of-fifteen` [A+O] — owner: frank-optimize-b4
 - `feature-rust-option-type` [R] — owner: Claude (~/frank-rust)
 - `feature-target-wasm` [A+B] — owner: frankwasm
 

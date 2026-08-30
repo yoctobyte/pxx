@@ -2189,6 +2189,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-opt-imm-fold-binop | O | 50 | feature | imm-fold: constant BINOP operand into the instruction immediate (-O1, x86-64) | — |
 | feature-opt-o3-fuse-resident-read-and-widen-into-movsxd | A+O | 60 | feature | -O3: fuse `mov rax, rN` + `cdqe` into a single `movsxd rax, rNd` | — |
 | feature-opt-o3-operand-order-for-non-commutative-binops | A+O | 65 | feature | -O3: evaluate a non-commutative binop's operands right-first when the right is pure | — |
+| feature-opt-o3-w1-operand-folds-are-x86-64-only-aarch64-has-four-of-fifteen | A+O | 55 | feature | -O3: the W1 operand folds are x86-64-only — aarch64 has 4 gate sites to x86-64's 15 | — |
 | feature-opt-pxx-internal-abi-unified-residency | O | 58 | feature | pxx internal calling convention + unified int/float residency allocator | — |
 | feature-opt-store-reload-elimination | A+O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | — |
 | feature-optimization-levels | O | 65 | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |

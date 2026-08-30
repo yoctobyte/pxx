@@ -1,7 +1,7 @@
 ---
 prio: 55
 track: A
-status: working
+status: done
 owner: frank-optimize-b4
 ---
 
@@ -426,3 +426,34 @@ in a register across a binop, should re-open this section.
 
 Nothing else changes it. A bigger benchmark, a hotter loop, or a different
 program cannot conjure an immediate form into the ISA.
+
+
+## Disposition — the W1 family on aarch64 is discharged
+
+| slice | outcome | evidence |
+| --- | --- | --- |
+| 5 + 7 (compare operands in place) | **ported**, as ONE arm | `d1535b899`; lispdemo -3604 bytes |
+| 10's twin (leading widen) | **ported**, both flavours | `df8731b1f`; -24 / -4 bytes |
+| last-argument push/pop collapse | **ported**, all three call sites | `6ef921b4e`; lispdemo -5092 bytes |
+| 8 (narrow 32-bit compare) | **refused** — worth zero | constant 8-byte delta across 3/9/27 rows |
+| 6 (resident left times a constant) | **declined** — no imm form in the ISA | expiry named above |
+
+Per-backend gate count **x86-64 22, aarch64 10**, up from the 6 this ticket
+opened at (and from the 4 it was originally, wrongly, reported as). The delta is
+frozen by `tools/check_o3_backend_parity.py`, wired into `gate.sh quick`, so the
+next one-armed slice has to say so.
+
+Two items spun out with their own control pairs rather than being folded in:
+
+- `feature-opt-o3-a64-fold-a-resident-compare-left-across-a-complex-right` —
+  the arm slices 5+7 excluded, worth 3 instructions done properly.
+- `feature-opt-o3-fuse-the-resident-read-into-the-zero-extend-too-x86-64` —
+  found by porting, because the aarch64 helper needed a two-valued answer where
+  x86-64's needed a boolean.
+
+**What this ticket was actually about is settled:** the scope said aarch64 was in
+scope and nothing checked. It is now checked every gate run, and the number it
+checks is one nobody has to re-derive.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
