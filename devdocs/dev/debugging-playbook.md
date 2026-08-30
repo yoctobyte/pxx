@@ -14,9 +14,22 @@ wrong value far from the cause.** Three from one week:
 | `len(self.evidence)` = `1751084129` | a missing retain; the field pointed at a recycled block | 3 sessions, 2 reverted fixes, a wrong root cause recorded in the ticket |
 | correct-looking key analysis, WRONG keys, no error | `not <object>` was always true | found only by diffing one helper against CPython |
 | SIGSEGV, no diagnostic | a `{Code,Recv}` pair jumped to as code | the cheap one — a crash has a location |
+| `"Kind": no such member`, compiling a clean tree | a type TAG: `+` on `tyAnsiString` is *concatenation*, so address arithmetic emitted a concat of a literal with the integer 8 | caught by the self-host fixedpoint in one build (2026-08-30, `perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call`) |
 
 So: **reach for the tool that makes a wrong VALUE visible, not the one that
 makes a crash easier to locate.** A crash was never the expensive case.
+
+**The last row's distance is worth stating on its own, because it is the largest
+in this table: a whole compiler generation.** The chain was tag address
+arithmetic as a managed string → `+` means concat → the backend concatenates a
+literal with 8 → **round 1 builds cleanly** → the round-1 *compiler* mis-compiles
+member lookups, because a name comparison now runs against a mangled string.
+Nothing between the first and last stage looks like a type-tag error, and no
+test suite catches it, because **the artifact under test is the thing doing the
+testing** — a suite run by the bad compiler is a suite compiled by it. This is
+the case `make compiler/pascal26` exists for, and the reason it is not
+skippable: a compiler that is subtly wrong about strings still builds, still
+passes, and only fails to reproduce *itself*.
 
 ## If you can name the hot spot without measuring, that is evidence it is not the hot spot
 
