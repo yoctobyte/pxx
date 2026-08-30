@@ -102,7 +102,7 @@ finishing. Both are real and independent; this one is simply the first.
 - `str(ImageReader(path))` still yields the path (`__str__` is what drawImage uses)
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 1cf232bef.
 
 ---
 
