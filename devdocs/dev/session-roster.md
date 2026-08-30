@@ -22162,3 +22162,44 @@ signatures, because `Result := s` across a width boundary lowers to the runtime
 transcoders by 7c's own rule. **One transcoder in this compiler, and it is in the
 runtime.** Writing the loop out by hand in the RTL would have been the second
 implementation, and the second one is the one that stays broken.
+
+## Park a held change as a re-appliable EDIT, never as a copy of a shared file
+
+frankS, 2026-08-30. A near-miss that would have been silent, and a genuine
+counterexample to "collisions are loud because git detects them immediately."
+
+frankS parked stage 2 across the pin as **whole-file copies** of `defs.inc` and
+`cpreproc.inc`. Restoring them over the post-pin tree would have reverted
+frankA's `CUnitOfPascalProgram` block and **124 changed lines** of `cpreproc.inc`
+— other lanes' work, deleted with **no conflict and no diagnostic.** Git would
+have shown a clean commit, because a file copy is a snapshot of the whole file
+and has no idea what moved underneath it.
+
+**The rule:** park a held change as an **edit you can re-apply** — a patch, a
+scripted set of anchored edits, a stash — never as a copy of a shared file. Then
+re-apply against current HEAD with every anchor asserted, which is what frankS
+did.
+
+**Why this matters to the bureaucracy question specifically.** The argument for
+relaxing lane rules is that git detects collisions immediately, so they are loud
+and cheap. **This one is neither.** A whole-file restore is not a collision at
+all from git's point of view: it is a well-formed commit that happens to contain
+an older copy of everyone else's work. No rule about *letters* would have caught
+it either — frankS was in its own lane the whole time. It is a hazard of the
+**parking mechanism**, and it is the one place where a longer hold (waiting for a
+pin) converts into silent data loss for other agents.
+
+**How it surfaced, and the discrimination that saved it:** as `undefined variable
+(CUnitOfPascalProgram)`, which reads like a broken master — frankS nearly
+reported it as one. One command separated the readings: **the pinned compiler
+against a clean tree**, which built fine. So the fault was in the copy, not in
+the tree.
+
+Same family as the stale-binary trap (a thing on disk that looks current and
+silently is not), with one difference worth stating: **the stale binary corrupts
+your own verdict; the stale file copy destroys other people's work.**
+
+**Fourth consecutive instance of the day's other shape**, noted by frankS in the
+same message: the C-ABI gate moved the callee's prologue and not the five
+call sites, so a guard that was correct only while an accident held became wrong
+the moment someone moved the accident.
