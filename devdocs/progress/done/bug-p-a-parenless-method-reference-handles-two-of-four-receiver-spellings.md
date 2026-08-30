@@ -211,4 +211,4 @@ in the file header: compile error on `pinned`, SIGSEGV with the receiver arm alo
 matches FPC with both.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 632a76454.
