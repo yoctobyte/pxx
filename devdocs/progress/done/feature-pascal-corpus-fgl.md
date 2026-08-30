@@ -108,4 +108,4 @@ Parent: [[feature-pascal-corpus-expansion]] · mechanism copied from
 [[feature-c-corpus-expansion]] / `tools/run_c_conformance.sh`
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit d5603da23.
