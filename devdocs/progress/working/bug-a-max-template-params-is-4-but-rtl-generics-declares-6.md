@@ -3,8 +3,8 @@ slug: bug-a-max-template-params-is-4-but-rtl-generics-declares-6
 track: A
 prio: 60
 type: bug
-status: backlog
-owner:
+status: working
+owner: frankA
 blocked-by: []
 summary: "MAX_TEMPLATE_PARAMS = 4 (compiler/defs.inc:1818). rtl-generics' TDictionaryEnumerable declares SIX type parameters, so generics.dictionariesh.inc:127 fails with `too many generic parameters (MAX_TEMPLATE_PARAMS)`. This is the CURRENT rtl-generics corpus wall (rung 6b) as of HEAD 4dae78ad9 + the IEnumerable RTL fix -- the whole compile is down to this ONE error. Raising the constant is one line but is NOT free: it is the stride of at least two flat arrays (TemplateParamNames[ti*MAX_TEMPLATE_PARAMS+kk], seenArg[si*MAX_TEMPLATE_PARAMS+k]) plus three locals in pasparser_generic.inc, so measure bss before and after rather than assuming. PRECEDENT: MAX_NESTED_SPECS was raised 24->96 for this same corpus (defs.inc:1832) and its comment is the model -- measured trigger, insufficient-vs-runaway, and the cost stated in the same breath; its cost clause is NSpecArg, sized 96*MAX_TEMPLATE_PARAMS, so this change multiplies against that 96."
 ---
