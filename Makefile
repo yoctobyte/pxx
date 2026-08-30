@@ -4873,6 +4873,32 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== test_cdecl_bodied_cross: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
 	fi
+	# THE NARROW SET: argument block <= 4 machine words, so arm32 (armel
+	# soft-float, no stack argument area on either side of the call) can run it
+	# too. Its discriminating case is `Integer FIRST, Double SECOND`: an 8-byte
+	# by-value param must start at an EVEN word index, so the double lands in
+	# r2:r3 and r1 is SKIPPED. `Double first` already passed before arm32 had an
+	# arm -- soft-float coincides with positional there -- so the other targets'
+	# discriminating case would have reported a false green here. Both orders
+	# are asserted for that reason.
+	# Wired for x86-64 + aarch64 + arm32. i386 fails 3 of 8 today and riscv32
+	# passes all 8; neither is wired until it has an arm, and riscv32's green
+	# means it needs its OWN discriminating case, not that it is done.
+	# bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets
+	./$(COMPILER) -Fucompiler test/test_cdecl_bodied_narrow.pas $(TESTTMP)/test_cdecl_narrow26
+	tools/expect_same.sh test_cdecl_narrow26 "$$($(TESTTMP)/test_cdecl_narrow26)" "CDECL-NARROW OK checks=8"
+	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=aarch64 test/test_cdecl_bodied_narrow.pas $(TESTTMP)/test_cdecl_narrow_a64 && \
+	  tools/expect_same.sh aarch64/test_cdecl_narrow "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_cdecl_narrow_a64)" "CDECL-NARROW OK checks=8"; \
+	else \
+	  echo "=== test_cdecl_bodied_narrow: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
+	fi
+	@if command -v qemu-arm >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=arm32 test/test_cdecl_bodied_narrow.pas $(TESTTMP)/test_cdecl_narrow_a32 && \
+	  tools/expect_same.sh arm32/test_cdecl_narrow "$$(tools/run_target.sh arm32 $(TESTTMP)/test_cdecl_narrow_a32)" "CDECL-NARROW OK checks=8"; \
+	else \
+	  echo "=== test_cdecl_bodied_narrow: qemu-arm absent, arm32 arm NOT verified ==="; \
+	fi
 	# AN AGGREGATE RESULT FROM A FUNCTION WITH MORE THAN 8 PARAMETERS.
 	#
 	# aarch64 refused this outright until the x8 load and the matching stack

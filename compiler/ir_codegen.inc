@@ -1020,6 +1020,7 @@ procedure EmitParamSpillsForTarget(procIdx, nparams: Integer);
   Procs[procIdx].Params[] fields, which the driver mirrors them into. }
 var i, j, k, idx, sz, pw, pnWords, whi, xtInBias, xtVReg, xtVReg2: Integer;
     intIdx, sseIdx, stackOff: Integer;   { SysV arg classification, cdecl arm }
+    isEight: Boolean;                    { AAPCS soft-float 8-byte by-value param }
 begin
   if TargetArch = TARGET_I386 then
   begin
@@ -1259,6 +1260,87 @@ begin
   end
   else if TargetArch = TARGET_ARM32 then
   begin
+    if ProcCdecl[procIdx] then
+    begin
+      { AAPCS soft-float (armel/gnueabi) prologue. THERE IS NO FLOAT BANK HERE
+        -- the cross sysroot is armel, so doubles and singles travel in the CORE
+        registers r0..r3 like everything else. The x86-64 and aarch64 arms split
+        arguments into two independent register banks; that structure simply
+        does not exist on this target, and copying it would be wrong.
+
+        What DOES exist is an alignment rule, and it is the whole difference
+        between this arm and the positional one below: an 8-byte BY-VALUE param
+        (Int64/UInt64/Double/Extended) must start at an 8-byte-aligned offset,
+        i.e. an EVEN word index, so `f(a: Integer; b: Double)` puts a in r0 and
+        b in r2:r3 and SKIPS r1. The positional convention packs b into r1:r2.
+
+        MEASURED, because the obvious test does not find this. `f(a: Double;
+        b: Integer)` already printed the right answer on arm32 before this arm
+        existed -- soft-float placement happens to coincide with positional when
+        the double comes first. It is `f(a: Integer; b: Double)` that diverges,
+        and it printed 7 where 9 was correct, the double arriving as zero. Reusing
+        the aarch64 discriminating case here would have reported a false green.
+        bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets
+
+        A by-REF or open-array param is a POINTER: one word, no alignment
+        demand, whatever its declared type. Sizing it as an 8-byte double is
+        what makes `var d: Double` segfault, and it is the same predicate that
+        was wrong on x86-64 and aarch64
+        (bug-a-a-by-ref-float-param-through-a-cdecl-fnptr-is-classified-sse).
+
+        >4 words is REFUSED, matching ir_codegen_arm32.inc's caller, which
+        refuses a block over 16 bytes. Stack arguments are unimplemented on BOTH
+        sides; an honest refusal on both beats a prologue reading words the
+        caller never wrote. }
+      pnWords := 0;
+      for i := 0 to nparams-1 do
+      begin
+        isEight := ((Procs[procIdx].Params[i].TypeKind = tyInt64) or
+                    (Procs[procIdx].Params[i].TypeKind = tyUInt64) or
+                    (Procs[procIdx].Params[i].TypeKind = tyDouble) or
+                    (Procs[procIdx].Params[i].TypeKind = tyExtended)) and
+                   (not Procs[procIdx].Params[i].IsRef) and
+                   (not Procs[procIdx].Params[i].IsArray);
+        if isEight then
+        begin
+          if (pnWords and 1) <> 0 then Inc(pnWords);   { 8-byte align }
+          Inc(pnWords, 2);
+        end
+        else
+          Inc(pnWords, 1);
+      end;
+      if pnWords > 4 then
+        Error('target arm32: a cdecl routine whose argument block exceeds 4 core '
+            + 'registers is not supported yet (stack arguments are unimplemented '
+            + 'on both sides of the call)');
+      pw := 0;
+      for i := 0 to nparams-1 do
+      begin
+        idx := Procs[procIdx].Params[i].SymIdx;
+        sz := ParamSize(idx);
+        isEight := ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
+                    (Syms[idx].TypeKind = tyDouble) or (Syms[idx].TypeKind = tyExtended)) and
+                   (not Syms[idx].IsRef) and (not Syms[idx].IsArray);
+        if isEight and ((pw and 1) <> 0) then Inc(pw);   { skip the odd word }
+        EmitLoadImmArm32(9, Syms[idx].Offset);
+        EmitI32($E08B9009);                              { add r9, fp, r9 }
+        if isEight then
+        begin
+          EmitI32($E5890000 or (pw shl 12));             { str r[pw],   [r9]     }
+          EmitI32($E5890004 or ((pw + 1) shl 12));       { str r[pw+1], [r9, #4] }
+          Inc(pw, 2);
+        end
+        else
+        begin
+          if sz = 1 then EmitI32($E5C90000 or (pw shl 12))       { strb r[pw], [r9] }
+          else if sz = 2 then EmitI32($E1C900B0 or (pw shl 12))  { strh r[pw], [r9] }
+          else EmitI32($E5890000 or (pw shl 12));                { str  r[pw], [r9] }
+          Inc(pw, 1);
+        end;
+      end;
+    end
+    else
+    begin
     { Word-based spill: each scalar param is one machine word, an Int64/UInt64
       param is two (lo then hi). Word k arrives in r[k] when k<4, else on the
       stack at [fp + 8 + (pnWords-1-k)*4] (the caller pushed words in index
@@ -1324,6 +1406,7 @@ begin
         end;
         Inc(pw, 1);
       end;
+    end;
     end;
   end
   else if TargetArch = TARGET_RISCV32 then

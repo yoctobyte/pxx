@@ -2639,7 +2639,13 @@ begin
           else
             Error('target arm32: builtin/special call not yet supported');
         end;
-        if ProcExternal[procIdx] then
+        { A bodied `cdecl` proc joins this path: it now has a genuine AAPCS
+          soft-float prologue (the ProcCdecl arm of EmitParamSpillsForTarget),
+          so its direct call sites must marshal AAPCS too. Only the CALL
+          INSTRUCTION differs -- an external goes through its GOT slot, a bodied
+          proc through EmitCallProc.
+          bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets }
+        if ProcExternal[procIdx] or ProcCdecl[procIdx] then
         begin
           { External C call (armel / base AAPCS soft-float): the cross sysroot is
             armel (gnueabi, ld-linux.so.3), so FP and 64-bit values pass in the
@@ -2658,6 +2664,13 @@ begin
           for i := 0 to Procs[procIdx].ParamCount - 1 do
           begin
             tk := Procs[procIdx].Params[i].TypeKind;
+            { A by-REF or open-array param is a POINTER: one word, no 8-byte
+              alignment demand, whatever its declared type. Sizing `var d:
+              Double` as an 8-byte double desynchronised every later param and
+              SEGFAULTED. Fourth target, one predicate, four symptoms --
+              bug-a-a-by-ref-float-param-through-a-cdecl-fnptr-is-classified-sse }
+            if Procs[procIdx].Params[i].IsRef or Procs[procIdx].Params[i].IsArray then
+              tk := tyInteger;
             if (tk = tyDouble) or (tk = tyExtended) or (tk = tyInt64) or (tk = tyUInt64) then
             begin
               if (sz and 4) <> 0 then Inc(sz, 4);   { 8-byte align }
@@ -2676,6 +2689,9 @@ begin
           while argNode <> -1 do
           begin
             tk := Procs[procIdx].Params[nArgs].TypeKind;
+            if Procs[procIdx].Params[nArgs].IsRef or
+               Procs[procIdx].Params[nArgs].IsArray then
+              tk := tyInteger;              { by-ref = pointer = one word }
             if (tk = tyDouble) or (tk = tyExtended) then
             begin
               if (j and 4) <> 0 then Inc(j, 4);
@@ -2717,7 +2733,10 @@ begin
             Inc(i);
           end;
           EmitI32($E28DD010);                       { add sp, sp, #16 }
-          EmitExternalCallArm32(RegisterExternal(procIdx));
+          if ProcExternal[procIdx] then
+            EmitExternalCallArm32(RegisterExternal(procIdx))
+          else
+            EmitCallProc(procIdx);   { bodied cdecl proc: no GOT slot }
           if Procs[procIdx].RetType = tySingle then
           begin
             EmitI32($EE000A10);                     { vmov s0, r0 }
@@ -2956,7 +2975,12 @@ begin
           while argNode <> -1 do
           begin
             if nArgs < Procs[procIdx].ParamCount then
-              tk := Procs[procIdx].Params[nArgs].TypeKind
+            begin
+              tk := Procs[procIdx].Params[nArgs].TypeKind;
+              if Procs[procIdx].Params[nArgs].IsRef or
+                 Procs[procIdx].Params[nArgs].IsArray then
+                tk := tyInteger;            { by-ref = pointer = one word }
+            end
             else if TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
               tk := tyDouble                        { variadic float -> double }
             else

@@ -61,7 +61,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (378)
+## backlog (379)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -75,6 +75,7 @@ _none_
 | bug-a-a-static-array-of-promo-ints-releases-only-element-zero | A | 45 | bug | EmitManagedLocalCleanup's promo-int arm calls PXXPromoClear on the slot ADDRESS with no IsArray test, so a `array[0..N] of promoint64` local releases element 0 and leaks the heap-tier payload of elements 1..N. Exactly bug-a-local-static-array-of-string-never-released-at-scope-exit, one type over: that ticket's own comment says the scalar arm 'released element 0 ONLY -- the other N leaked, silently and linearly'. The INIT half of this same missing IsArray is fixed; this is the release half. | — |
 | bug-a-argstr-reads-past-argv-into-the-environment-on-riscv32-and-xtensa | A+S | 45 | bug | ArgStr reads past argv into the environment on riscv32 and xtensa | — |
 | bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets | A | 50 | bug | x86-64's argv->frozen-string copy is now clamped and riscv32/xtensa clamp via PXXCStrToFrozen, but aarch64, arm32 and i386 were never checked — the parent ticket listed them and I did not close that gap. Also: the clamp is duplicated per path rather than shared, so a new target gets a new copy. | — |
+| bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area | A | 45 | bug | arm32 cdecl refuses any argument block over 4 core registers — so arm32 only HALF-joins the cdecl campaign | — |
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
 | bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it | A | 40 | bug | A C diagnostic can now print `in: <the .c module>` (CModRange*, ungated), but an error inside an INCLUDED HEADER prints nothing: the header-accurate per-token file table is DbgRange*, which returns early without -g. Pascal has an ungated twin for exactly this reason (PasMarkTokFile); C does not. | — |
 | bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull | A | 50→55 | bug | CModuleOfTok is STICKY: CMarkTokModule is only called for a path ending in `.c`, so returning from a crtl `.c` pull back into the enclosing `.h` never resets the attribution and every following token still reports that `.c` as its module. Blocks the remaining half of bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead: a bodied static after `#include <stdio.h>` cannot be told apart from one inside crtl's stdio.c. Filed by Track C -- the table lives in dbg_filetable.inc, which is Track A. | — |
@@ -903,6 +904,7 @@ _none_
 - [p 45] [A] bug-a-a-c-headers-variadic-tail-is-dropped-on-import
 - [p 45] [A] bug-a-a-static-array-of-promo-ints-releases-only-element-zero
 - [p 45] [A+S] bug-a-argstr-reads-past-argv-into-the-environment-on-riscv32-and-xtensa
+- [p 45] [A] bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area
 - [p 45] [A] bug-a-iropname-has-no-entry-for-seven-ir-ops-so-a-missing-arm-reports-unknown
 - [p 45] [A] bug-a-q-plus-overflow-checking-has-no-runtime-helper-on-arm32-and-riscv32
 - [p 45] [A] bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire
