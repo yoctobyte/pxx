@@ -148,3 +148,49 @@ habit of quoting a number you can see is.**
 Working rule, same shape as `resolve` taking no sha: **cite a sha only after `git log
 origin/master` shows it**, or cite nothing and let `sync.sh` fill it in. A relayed sha is
 worse than an unrelayed one, because the recipient has no way to know it was read pre-push.
+
+## Amendment 2026-08-30 (late): `pasparser_proc.inc` GRANTED, `ir.inc` LENT OUT
+
+**GRANTED to frankwasm, effective now: `compiler/pasparser_proc.inc`.**
+
+6c-params is *entirely* in that file — every param staging array, both
+Self-insertion shifts and the durable stores — and it was not in the original
+list. frankwasm asked before touching it rather than discovering the collision in
+a rebase.
+
+**It is free to grant:** frankC held it for the p30 diagnostic fix
+(`4794d1251`, threading `diagLine`/`diagSpell` through `ParseUsesUnitBody`), and
+that landed and pushed before this grant. frankC is on `cparser.inc`/`cir.inc`.
+frank-rust holds `pasparser_generic.inc`, which is a different file.
+
+**LENT to frankC, narrowly and temporarily: three regions of `compiler/ir.inc`.**
+
+```
+ir.inc:686     IRLowerBitFieldRead   — signature
+ir.inc:7040    call site
+ir.inc:10117   call site
+```
+
+Nothing else in the file. Bitfield-layout work only
+([[bug-c-a-long-long-bitfield-after-a-smaller-one-puts-later-members-at-the-wrong-offset]]).
+frankwasm read its own working set and confirmed **6c-params does not open
+`ir.inc` at all** — a param inside its own callee body resolves through the
+existing `AN_IDENT` arm, and the caller-side read is in `symtab.inc`'s overload
+matching. Only 6c-**returns** needs the file (~6 lines, one new `AN_CALL` arm in
+`ASTStrElemTkOf` reading `ProcRetStrElemTk`).
+
+**`ir.inc` returns to frankwasm when frankC lands the bitfield.** The rest of the
+grant is unchanged and stays whole.
+
+### The count that was wrong, and it was wrong in both halves
+
+frankwasm reported 6c as "~72 references across two files" and corrected it
+unprompted: **72 was a raw grep over the pointer family including doc comments
+and prose** — `ProcRetPtrElemTk` alone contributes 37 refs, roughly a dozen of
+them commentary. Read-verified, 6c is **~25 real edit sites across FIVE files**.
+
+Both halves of the original number were wrong, and the file-count half is the one
+that mattered: it is what made the missing `pasparser_proc.inc` grant invisible
+to both of us. Same error the coordinator made twice today, in the other
+direction — **inferring a working set from what the change is about instead of
+from where it has to happen.**
