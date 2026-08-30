@@ -19489,3 +19489,129 @@ instrument would flag every correct doc). pxx-a5 → write the three
 `DUP-FACE-NUMBER` corrections as one face. frankwasm → asked whether its `[U p70]`
 `blocked-by` is real, since it has landed a dozen phases since filing it, and to
 name the branch on its `SIDE-BRANCH-SHA` citation. **Idle after dispatch: none.**
+
+## OWNER INSTRUCTION 2026-08-30 ~09:5x — less parallel work; rust and wasm pause
+
+> *"ok let's aim at less parallel work. for example, work on rust and wasm can
+> pause for a while"*
+
+Fleet cut from **nine active lanes to five**, keeping the standing
+A+C+P+N priority band.
+
+| session | lane | disposition |
+| --- | --- | --- |
+| frankA | A | **keep** |
+| frank-optimize-b4 | A / O | **keep** — but see the two-on-A note below |
+| frankC | C | **keep** |
+| frank-rust | **P** | **keep** — see the naming trap below |
+| frankB | N | **keep** (two p70 nilpy regressions, one symptom) |
+| frankS | S | **finish one ticket, then stop** |
+| frankwasm | wasm | **PAUSE** — named by the owner |
+| frankD | D | **stand down** |
+| pxx-a5 | index | **finish one face, then stop** |
+
+**The naming trap, stated because it nearly cost the wrong shutdown: `frank-rust`
+is not doing Rust.** It re-laned to **Track P** hours ago and is in
+`pasparser_generic.inc`; `feature-rust-option-type` is already parked in
+`unfinished/`. So *"rust can pause"* was **already true** before the instruction
+arrived, and killing the session named `frank-rust` would have stopped Track P
+work in the highest-priority band. **A session name is a launch-time label, not a
+lane** — the roster table is the lane, and this is the second time tonight that
+reasoning from a name instead of a measurement pointed the wrong way.
+
+**frankS kept for one ticket, and the reason is specific rather than a
+concession:** its 129-source differential harness lives in `/tmp` and dies with
+the session, and
+`bug-a-the-xtensa-windowed-abi-is-compiled-twice-and-executed-never` **is the act
+of moving it onto master**. Everything else from tonight is already recorded.
+Stopping now is the one place on the fleet where work is permanently lost.
+
+**TWO SESSIONS ON TRACK A — flagged, not resolved.** frankA and b4 both hold A.
+b4 has just edited `compiler.pas` (the seed forward) and `elfwriter.inc`; that is
+exactly the collision the letters exist to prevent, and the sole-A guard has been
+running unenforced. It has not bitten yet. When b4 lands its current ticket, one
+of the two comes off A.
+
+### Two urgent things this tick
+
+**`origin/master`'s FPC seed build went RED and it blocked every lane.**
+`lexer.inc(164,71)` / `(187,13)`, `Identifier not found "CModuleOfTok"`, from
+frankC's `5c8de9442`. Body is at `dbg_filetable.inc:93`, included after
+`lexer.inc`; **pxx needs no forward and FPC does**, so `gate.sh quick` aborted at
+step 2 for anyone who ran it. Verified independently before clearing b4 to push:
+`compiler.pas:52-61` are **nine forwards of exactly this family**, four citing
+`bug-a-fpc-seed-drift-emitasmx64-forward` by name. b4 fixed it as its own commit
+so a bisect sees it separately.
+
+The lane note underneath it: **`5c8de9442` edited `lexer.inc`, which is A's
+shared ground, not Track C's file set.** The work was right — a C diagnostic
+naming its module is C's ticket — but **the FPC seed asymmetry is invisible from
+inside pxx**, so C had no local signal at all. The defect is that a C-lane ticket
+needed an A-lane file and nothing in the loop said so.
+
+**My own sequencing error: I dispatched frankD onto `docs/**` while b4 was
+mid-edit in `docs/index.md` and `docs/reference/cli.md`.** Caught only because b4
+flagged its own boundary crossing instead of burying it. Relayed to frankD inside
+fifteen minutes; b4's hunks stand (they corrected a sentence that was **already
+false** — `--emit-obj` "on any target"), and D owns the wording. **I check
+whether a lane is live in a file BEFORE dispatching into it, not after.**
+
+### b4's dispatch came back as a third reading, and mine was the wrong question
+
+I handed it *complete the writer or refuse*. Both options presupposed one writer.
+There are **two**, dispatched by architecture when the discriminator should be
+what the object must carry: `writeELFRelX64` is the **`.asm` frontend's** writer —
+symbols from `AsmGlobalSym*`, relocations from `AsmObjCall*`, data appended into
+`Code[]` and addressed as `.text`. For a `.asm` source it is **complete**. A
+Pascal program has neither, so **it wrote everything it knew, which was nothing**.
+*There has never been a general x86-64 relocatable writer for the dispatch to be
+incomplete against.* Fix: refuse on **what the object would have to carry**
+(`BSSSize`, `FixCount`, `GlobFix`, `DataPtrFix`, `MethodFix`, `ProcAddrFix`, no
+defined symbol) rather than on which frontend produced it — so a future Rust or
+Zig `--emit-obj` gets the right answer free. Follow-up
+`feature-a-a-general-x86-64-relocatable-object-writer` [A p30] leads with the
+`R_X86_64_32` + `-no-pie` vs `R_X86_64_PC32` fork, which is backend work.
+
+**Second time this week that measuring first turned a binary choice into a
+category error. I keep supplying the binary.**
+
+### frankB closed the oracle audit: no capture in three oracles
+
+**342/353 NilPy · 333/395 C · 797/1280 Pascal, 58 candidates read, no capture.**
+Aperture bounded rather than open: 346 of 366 unbuildable Pascal sources are
+structurally unreachable; better oracle configuration buys 15 more rows and then
+stops.
+
+**The 59th row is the finding and it outranks the other 58.** A row reported as a
+difference **with an empty diff** — one shared `-FU` unit dir, two different
+units named `platgreet.pas`, first-compiled binds for every later row.
+**Contamination between rows of a sweep is indistinguishable from a finding, and
+it points whichever way the sweep order happened to go**; a re-run in a different
+order moves the result with nothing to say why. Fixed, and the re-run moved
+**exactly one row** — the whole predicted effect and no more.
+
+Its general form, going into the refusal index: **the classifier reports the
+verdict and the evidence through different paths, so nothing ever compares them —
+a verdict and its evidence that travel separately can disagree indefinitely.**
+*What exposed it was the empty diff, not the verdict.*
+
+Also from frankB: `sync.sh` filled a **Track P** ticket's `PENDING-COMMIT` during
+a **Track B** push (`27c8f112d`). Correct citation, tool doing its documented job,
+and **structurally cross-lane** — it fills whatever the tree has pending, not
+whatever the pusher owns, so push-your-own-lane cannot bind it. Left in place.
+
+### b4's 229a, against itself
+
+It wrote `... || true; echo "rc=$$?"` — capturing **`true`'s** status — **inside
+the test for this bug, hours after writing face 229 itself**, and caught it by
+*running* it and reading `rc=0` where `rc=1` belonged. Two halves: **the face
+does not protect its own author while they are writing the fix**, and
+**re-reading did not catch it where running did.**
+
+### Pin: unchanged, trigger still unmet
+
+v394 `53800fbeb0b66e11`, source 267 back. Load 18.8 (bar: <13); `seven`'s newest
+full tier `023e802c88ea` is **45 below HEAD** while the required `3b8d1039e` is
+**17 below** — `merge-base --is-ancestor 3b8d1039e 023e802c88ea` is false. Both
+halves fail. A smaller fleet should bring load under the bar shortly, at which
+point the T half becomes the binding one.
