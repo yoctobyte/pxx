@@ -127,4 +127,4 @@ empty.
   is written down somewhere other than in a session that ended.
 
 ## Log
-- 2026-08-30 — built and landed, commit PENDING-COMMIT.
+- 2026-08-30 — built and landed, commit 0f0a5619a.
