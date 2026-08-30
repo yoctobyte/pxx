@@ -239,6 +239,42 @@ around. Track B's `devdocs/dev/track-b-workarounds.md` (library code that
 stays platonic but sidesteps an open bug, tracked with a revert-when-fixed
 lifecycle) is a separate, deliberate pattern and is unaffected.
 
+## Asking the owner is the expensive path (all tracks)
+
+**Only ask a human when you need to** (owner, 2026-08-30): *"otherwise you are
+wasting time. There are more datacenter CPUs than humans — why waste human
+resources."*
+
+**Human attention is the scarcest resource in this system.** Eleven agents, one
+owner. A question does not cost you a minute, it costs the one thing the fleet
+cannot parallelise, and it serialises everyone waiting behind the answer.
+
+**The test is REVERSIBILITY, not importance.** Reversible → do it and report.
+Irreversible or outward-facing → ask first. A big reversible change is yours; a
+small irreversible one is not.
+
+**Ask for exactly three things:**
+1. **Irreversible or outward-facing acts** — `make pin`, a force push, deleting
+   data, anything that leaves this machine.
+2. **Genuine forks of intent** — what to build, what it should mean, a design
+   choice the code cannot settle. That is Track U, and `decide-*` exists for it.
+3. **Authority only he holds** — `PXX_ALLOW_FULL_SUITE=1`, sudo, hardware,
+   money.
+
+**Everything else: act, then report.** Reporting is not asking. State what you
+did and what it cost.
+
+**The worst question is one a MEASUREMENT would have answered**, because it
+spends the scarce resource on something a CPU could have settled for free.
+Measured the same day, and it was mine: I escalated the `no-full-suite.sh` false
+positives to him as a *category*. He answered *"I can't judge without further
+information"* — correctly refusing to do my measurement for me. Reading the hook
+and its three actual cases took two minutes and answered it completely, and the
+answer was "change nothing".
+**Before escalating, ask what you would have to measure for the question to
+disappear.** If that is cheaper than his attention — and it nearly always is —
+go and measure it.
+
 ## Ticket economy — file less, fix more, write shorter (all tracks)
 
 Three rules, one theme: the ticket system is for work needing **coordination,
