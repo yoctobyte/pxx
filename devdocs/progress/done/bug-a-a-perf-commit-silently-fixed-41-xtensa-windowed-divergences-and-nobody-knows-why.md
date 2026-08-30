@@ -318,4 +318,4 @@ demonstrably fails when the property does. The unexplained green this ticket was
 opened about is now an explained and guarded one.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit d3ef2b06d.
