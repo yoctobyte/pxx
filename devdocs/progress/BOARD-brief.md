@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:29 blocked:7 backlog:370 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:118 done:2780 rejected:58`
+`working:1 unfinished:29 blocked:7 backlog:369 backlog_new:12 experimental:20 rainy-day:45 float:21 done-followup:3 decided:118 done:2781 rejected:58`
 
 ## Held now (working/ — do not touch these files)
 
@@ -53,7 +53,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 
-## Ready — top 30 of 392, ranked
+## Ready — top 30 of 391, ranked
 
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
@@ -64,7 +64,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` regression-test-asm-compiler-3
 - `[p 70] [A]` regression-test-asm-test-asm-emit-rv32
 - `[p 70] [A]` regression-test-core-test-opt-store-reload
-- `[p 70] [N]` regression-test-nilpy-test-nilpy-min-max-key-none-2
 - `[p 70] [T]` regression-tools-devtest-00-3
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
@@ -85,5 +84,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
 - `[p 60] [N]` bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - `[p 60] [P]` bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
+- `[p 60] [U]` decide-does-a-withdrawn-pin-leave-a-trace-and-is-its-version-number-reused
 
-_362 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_361 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

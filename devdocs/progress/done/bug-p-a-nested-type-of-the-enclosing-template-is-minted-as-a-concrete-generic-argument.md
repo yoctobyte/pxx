@@ -238,6 +238,48 @@ otherwise.**
    set could collide with an unrelated range at the same index, so the gate is
    opened around the class-body stream only, not left on.
 
+### CORRECTION 2026-08-30, later: the summary's figure was MASKED, not stale
+
+**Un-retracting the retraction below, on my own measurement.** The section that
+follows says the recorded `:120` stop "does not reproduce against either binary".
+That measurement was correct and the *inference* was not: an abort at `:146`
+stood in front of it, and **a probe that cannot reach a line cannot report on
+it**. The honest verdict was **masked** — a third value that is neither
+"reproduces" nor "does not reproduce", and my note collapsed three states into
+two.
+
+The proof arrived when `bug-p-object-value-types-standard-meaning` landed
+(`d23f52948`) and removed the `:146` syntax error. Re-measured, same probe
+(`{$mode delphi}`, `uses Generics.Collections`, `-Fu<rtl-generics/src>`):
+
+| binary | sha | stops at |
+| --- | --- | --- |
+| `pinned` | `53800fbeb0b66e11` (v226) | `:146` — *generic templates must be class, record, interface, array or procedure declarations* |
+| HEAD `ea5a8ef96` | `6319b892f517` | **`:135`** — *unknown type: TArray* |
+
+**The stop moved BACKWARDS, 146 to 135, and that is the ordinary signature of a
+syntax fix rather than a regression** — an abort is removed and the next
+*semantic* error, which was never reachable before, becomes the wall. Anything
+recorded behind an abort is unfalsifiable while the abort stands.
+
+**One discrepancy, recorded rather than resolved.** It was relayed to me that
+HEAD's new wall is `:120` / `unknown type: PT`. I cannot reproduce that: at
+`ea5a8ef96` I get `:135` / `unknown type: TArray`, on
+`function ToArrayImpl(ACount: SizeInt): TArray<T>; overload;` — with
+`TArray<T> = array of T` declared at **line 57 of the same file**, so a generic
+ARRAY template fails to resolve one line after a generic CLASS template
+(`TEnumerator<PT>`, line 133) resolved. Most likely the two probes differ —
+compiling `generics.collections.pas` directly rather than through a `uses` from a
+`{$mode delphi}` program gives a different mode and search path, hence a
+different first wall. **Not written in on report**, because adopting an unverified
+corpus number is the exact error this correction exists to fix, one level up.
+Whoever records the corpus figure should state the probe, the sha AND the binary.
+
+**What is unchanged:** the wall was long-standing rather than a regression from
+this session's generics work; running `pinned` alongside HEAD is what made any of
+this visible; and **this change moved the corpus not at all** — that conclusion
+was never in doubt and is not affected.
+
 **Corpus: NOT advanced, and the figure in this ticket's summary is stale.**
 Measured on this build and on `pinned`, same command
 (`{$mode delphi}` + `uses Generics.Collections`, `-Fu<rtl-generics/src>`):
@@ -249,7 +291,9 @@ Measured on this build and on `pinned`, same command
 
 So the "current stop is line 120, `TEnumerator<TDictionaryPair>`" in the summary
 above does not reproduce against either binary today, and this change moves the
-corpus **not at all**. The next wall is
+corpus **not at all**. *(The first half of that sentence is corrected above: not
+reproducing and not existing are different claims, and `:146` was masking it. The
+second half stands.)* The next wall is
 `TCustomPointersCollection<T, PT> = object` — a generic over an OBJECT type,
 which the frontend rejects outright. That wall already had a ticket and a
 DECISION — `bug-p-object-value-types-standard-meaning` [P p70, `working/`], from
