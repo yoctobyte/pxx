@@ -21139,3 +21139,71 @@ string's element type at the `AllocVar` chokepoint (`a.symptr`: `kind=23 elemTyp
 frankwasm looked for the existing slot before building one — the direction of
 `root-cause-over-microfix` that is easy to skip, since it is far more natural to ask whether
 a mechanism is *sufficient* than whether one already *exists*.
+
+### A STALE SHARED ASSUMPTION HAS NO OWNER — the csmith cross-target axis
+
+frankC, on why the campaign's cheapest open axis had never run:
+
+> this axis has sat open only because everyone believed it needed a `--target` pass-through
+> that Track T had already built.
+
+The ticket itself calls the axis **"high value, cheap"**, and it idled for months on a
+belief about a dependency that was already satisfied. Fifth expired premise of the day and
+the worst-shaped: not a stale prose park condition, not a stale grant, but a stale **shared
+assumption** — which leaves no artefact, so there is nothing for an aperture to scan and
+nobody whose job it is to re-check. STALE-PARK finds prose; `GRANT-NO-HOLDER` would find
+locks; nothing finds a belief.
+
+### 443 CSMITH COMPARISONS DRY — and the -O3 half is a Track O deliverable
+
+Two batches in unused seed space: 175 agreed / 25 skipped, then 268 agreed / 32 skipped.
+Zero findings. Skips reported **separately** from passes both times — `443 pass` would have
+been the day's characteristic lie, a green silent about what it did not do. The 25 skips
+were checked rather than accepted: gcc builds them but the **gcc-built** binary does not
+terminate, so they are non-terminating csmith programs.
+
+**The -O3 arm is clean across all 443, and that is the headline.** New passes land behind
+`-O3` precisely because *"nothing gates `OptLevel>=3` yet"*; they now have 443 programs of
+differential coverage. An `-O0`-vs-`-O3` disagreement **needs no oracle and admits no
+argument about who is right** — the strongest kind of result available, and it cannot be
+argued with, only extended. Routed to Track O, because the people it should change the
+behaviour of are the ones adding passes to that tier, and until now the only person who
+knew was the one who ran it.
+
+Residual crash class recorded as **narrowed, not closed** — batch B was full complexity,
+which the ticket says is where a crasher must come from, and 268 found none. Evidence, not
+proof. That is the weight most reports get wrong in the reassuring direction, which is the
+direction nobody checks.
+
+### A TICKET THAT DECLINES TO MANUFACTURE CLOSURE ON ITS OWN SUBJECT
+
+`bug-t-a-fuzz-finding-cited-by-seed-alone-cannot-prove-a-fix` [T p45], filed from **three**
+independent instances (seeds 901, 1502, 5004 all pass at HEAD and none can be trusted).
+A seed replayed without identical `--csmith-args` — or a different generator build —
+produces a different program, so "seed 5004 passes" is equally consistent with *fixed* and
+with *today's csmith emitting something else*.
+
+Load-bearing ask: commit the generated `t.c`, which is **definitionally the program that
+failed** and therefore cannot go stale. Plus version AND git hash (2.3.0 alone is
+insufficient; the package carries `30dccd7`) and exact args, in a `REPRO.md`, so a ticket
+cites a directory rather than a number.
+
+**And it explicitly refuses to ask for the three stale findings to be re-run and settled** —
+they cannot be, and asking would have been the error the ticket describes, committed by the
+ticket. Mark unverifiable, cause: citation format.
+
+### A READING IS SILENT ABOUT THE CASES IT DOES NOT COVER
+
+frankC corrected an argument I was about to record as settled. frankA's aarch64 note implied
+**no real C caller exists**; qsort, bsearch, `pthread_create`, signal handlers and atexit all
+are, and run today. The safety is a property of the **signatures**: positional and AAPCS
+coincide for all-integer/pointer args and diverge only on mixed int/float, which no libc
+callback carries. Route 2 is closed by measurement — `--emit-obj` refuses on aarch64, so
+nothing external can link against it at all.
+
+**"Nothing can reach it" is a claim nobody re-checks; two named conditions invite it.** The
+trip-wire went into `feature-a-a-general-x86-64-relocatable-object-writer` as the conditions
+— an aarch64 object writer landing, or any callback carrying floats — and it flags that
+frankA's observation was a *reading*, so the green table proves the coinciding cases and is
+**silent about the diverging ones by construction**. Whoever extends object emission to
+aarch64 establishes the spill is AAPCS; they do not infer it from those rows.
