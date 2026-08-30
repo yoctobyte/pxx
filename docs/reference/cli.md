@@ -225,7 +225,6 @@ those only when directed.
 | --- | --- |
 | `--dump-cpp` | Dump the intermediate C++-ish form. |
 | `--proc-map` | Dump the procedure map. |
-| `--selftest` | Run the built-in self-test. |
 | `--measure-inline` / `--measure-regcall` | Emit inline / register-call instrumentation. |
 | `--warn-missed-fold` | Warn on constant-fold opportunities the optimizer missed. |
 | `--warn-self-result` | Warn when a parameterless function's bare own name is read as its `Result`. |

@@ -206,3 +206,99 @@ done | sort -u > /tmp/acc
 stable_linux_amd64/default/pinned --help | grep -oE -- '--[a-z0-9-]+' | sort -u > /tmp/adv
 comm -23 /tmp/acc /tmp/adv | wc -l
 ```
+
+---
+
+## 2026-08-30 (frankD) — the 67 files split into two populations, and the docs are AHEAD of `--help`
+
+The count of "67 markdown files name flags `--help` omits" was mine and it conflated two
+things that need opposite responses: a doc naming a flag the compiler **accepts** is right
+and `--help` is the defect; a doc naming a flag the compiler **rejects** is a documentation
+bug. Sweeping `docs/**` against the accepted set — the parser as oracle, never `--help` —
+splits them.
+
+| | |
+| --- | ---: |
+| distinct `--flags` named in `docs/**` | 67 |
+| of those, **accepted** by the compiler | **52** |
+| of those, accepted but **not** in `--help` — *category 1, evidence for this ticket* | **34** |
+| **rejected** by the compiler — *category 2, a docs bug* | **1** |
+| other programs' flags, correctly documented | 5 |
+| artefacts of my own regex (`--fu` for `-FuDIR`, a prose `--warn-*`, a `--static` inside a sentence saying we have none) | 3 |
+
+**Category 2 is one flag: `--selftest`**, fixed under
+[[bug-d-the-cli-reference-documents-a-flag-the-compiler-rejects]]. Every flag in every
+`docs/reference/cli.md` table was run: **62 of 63 are real.**
+
+### The evidence you actually want: all 34 are in one file
+
+**Every category-1 flag is documented in `docs/reference/cli.md`.** The docs are not lagging
+`--help` — they are *ahead* of it, and by the full 34. That makes this ticket's fix
+checkable rather than open-ended: **`docs/reference/cli.md` is a ready-made oracle for the
+enumeration**, and any generated `--help` can be diffed against it in both directions.
+
+- `--auto-locals`
+- `--experimental-ir-codegen`
+- `--fpc-float-errors`
+- `--lax-decl-order`
+- `--map`
+- `--measure-inline`
+- `--measure-regcall`
+- `--no-auto-var`
+- `--no-default-rtl`
+- `--no-div-check`
+- `--no-lazy-var`
+- `--no-map`
+- `--no-nil-check`
+- `--no-shims`
+- `--no-signals`
+- `--no-strict-ir`
+- `--no-unhandled-handler`
+- `--nostdinc`
+- `--permissive-overload`
+- `--proc-map`
+- `--require-forward`
+- `--strict`
+- `--strict-fpc`
+- `--strict-ir`
+- `--strict-overload-width`
+- `--strict-visibility`
+- `--system-libs`
+- `--warn-ignored-directives`
+- `--warn-missed-fold`
+- `--warn-self-result`
+- `--warn-uses-leak`
+- `--werror`
+- `--xtensa-fpu`
+- `--xtensa-soft-divide`
+
+### And 11 accepted flags are documented NOWHERE
+
+In neither `--help` nor `docs/**`:
+
+- `--compact-classes`
+- `--dce`
+- `--dce-report`
+- `--fpc-mem-errors`
+- `--mimic-fpc-compiler`
+- `--no-compact-classes`
+- `--no-dce`
+- `--no-strict-uses`
+- `--no-warn-self-result`
+- `--strict-uses`
+- `--xtensa-soft-mulhigh`
+
+Note the shape: `--dce` / `--no-dce` / `--dce-report`, `--compact-classes` /
+`--no-compact-classes`, `--strict-uses` / `--no-strict-uses`,
+`--no-warn-self-result` — mostly **inverses whose positive form is documented**. So
+this is not 11 secret features; it is the same "every `--no-*` is hidden" pattern one
+level out, where the negation was never written down at all. Whoever generates `--help`
+gets these for free and closes both gaps at once.
+
+### One thing that must be fixed with this, or the enumeration stays unprobeable
+
+[[bug-a-a-bad-value-for-a-known-option-is-reported-as-an-unknown-option]] — `--target=x`
+answers `unknown option: --target=x`. Any check that enumerates options **by running them**
+cannot tell a nonexistent flag from a live one given a placeholder value, and it produced a
+false finding inside the sweep above. With `--help` incomplete and a bad value reporting
+`unknown option`, both instruments a reader has agree on a wrong answer.
