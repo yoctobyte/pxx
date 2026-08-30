@@ -2,7 +2,8 @@
 prio: 62
 track: A
 blocked-by: []
-status: backlog
+status: working
+owner: frankwasm
 ---
 
 > **DECIDED 2026-08-30: build it, as a fixed-width UTF-16 kind.** The owner ruled
@@ -23,7 +24,7 @@ status: backlog
 # A real UnicodeString / WideChar model (UTF-16), or an honest refusal
 
 - **Type:** feature (string model — Track A/P)
-- **Status:** backlog — opened 2026-07-13.
+- **Status:** working
 - **Blocks:** fcl-json's `jsonparser`/`jsonscanner` (the `\uXXXX` escape path). fpjson itself
   (the DOM, the formatter, every accessor) is DONE and does not need this.
 

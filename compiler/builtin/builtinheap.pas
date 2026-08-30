@@ -133,6 +133,20 @@ function PXXStrAsciiCached(p: Pointer): Int64;
 procedure PXXStrSetAscii(p: Pointer; isAscii: Boolean);
 procedure PXXStrForgetAscii(p: Pointer);
 function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
+{ ---- UTF-16 (WideString/UnicodeString) ----
+  Storage is 2-byte code units and the header length is their BYTE count, which
+  is what lets concat/compare/copy stay the byte-level routines above. The
+  terminator is a 2-byte NUL, not a 1-byte one, so a PWideChar handed to a C
+  API terminates where that API expects.
+
+  These four are the whole runtime half: allocation with the wider terminator,
+  and the two transcoders. Everything else a wide string needs -- refcounting,
+  freeing, in-place append, block copy -- is byte-shaped and already exists.
+  feature-unicodestring-model }
+function PXXWideAlloc(units: NativeInt): Pointer;
+function PXXWideConcat(bytesA: NativeInt; srcA: Pointer; srcB: Pointer; bytesB: NativeInt): Pointer;
+function PXXWideFromUtf8(src: Pointer; byteLen: NativeInt): Pointer;
+function PXXUtf8FromWide(src: Pointer; byteLen: NativeInt): Pointer;
 { APPEND lenB bytes onto the managed string held in strSlot, in place when it
   can be. This is the destination-aware form PXXStrConcat cannot be: concat
   returns a fresh handle and never learns where the result is going, so it must
@@ -199,7 +213,13 @@ const
   PXX_KIND_TEXTSTR = 2;   { NilPy str — public positions count CHARACTERS }
   PXX_KIND_DYNARRAY= 3;
   PXX_KIND_OBJECT  = 4;
-  PXX_KIND_MAX     = 4;
+  { Pascal WideString/UnicodeString -- fixed-width UTF-16. Length in the header
+    stays a BYTE count exactly as for BYTESTR, so every existing memcpy,
+    compare, retain/release and free path works on it unchanged; only the
+    PUBLIC Length() halves it, and that lowers statically from tyWideString
+    rather than by consulting this tag. See feature-unicodestring-model. }
+  PXX_KIND_WIDESTR = 5;
+  PXX_KIND_MAX     = 5;
   PXX_KIND_MASK    = $FF;
 
   { Flags, bits 8-15 }
@@ -452,6 +472,11 @@ type
   PByte = ^Byte;    { byte access at an arbitrary address }
   PInt64 = ^Int64;  { qword access (dyn-array count header at [data-8]) }
   PInt32 = ^Integer; { 32-bit integer access }
+  PU16   = ^Word;   { 2-byte access, for UTF-16 code units. NOT `PWord` -- that
+                      name is taken above and means ^NativeInt (8 bytes on
+                      64-bit), which is the single easiest mistake to make in
+                      this file: `PWord(d)^ := unit` compiles, writes eight
+                      bytes, and silently clobbers the next three code units. }
   TPXXIntfMethod = function(AInst: Pointer): NativeInt;  { COM/ARC interface IMT
                        slot signature: _AddRef/_Release take only the implicit
                        Self in arg0 and return the new refcount. }
@@ -1727,6 +1752,257 @@ begin
   orAll := orAll or PXXBlockCopy(d + lenA, Int64(srcB), lenB);
   PByte(d + total)^ := 0;       { nul terminator }
   PXXHdrSetMeta(base, PXXStrMeta(orAll));
+  Result := Pointer(d);
+end;
+
+{ ---- UTF-16 string runtime (feature-unicodestring-model) ----
+
+  A wide string is the SAME managed block as an AnsiString: 24-byte header,
+  refcount at -16, byte length at -8, handle = block + PXX_HDR_SIZE. Only two
+  things differ, and both are here rather than spread through the ARC paths:
+  the data is 2-byte code units, and the terminator is a 2-byte NUL.
+
+  The header length stays a BYTE count on purpose. It is what makes
+  PXXStrIncRef/DecRef, PXXBlockCopy, the free path and every backend's
+  retain/release blob work on a wide string with no second arm -- the exact
+  "sibling arm" cost the stride objection predicted and that keeping bytes in
+  the header avoids. Length() halving it is a FRONTEND lowering off
+  tyWideString, not a runtime tag lookup.
+
+  No ASCII flag is stamped. PXX_FLAG_ASCII means "no byte >= $80", which for
+  UTF-16 is true of any ASCII text and says nothing useful, while
+  PXXStrAsciiCached's contract is about BYTE positions equalling CHARACTER
+  positions -- false here for every string. Leaving it unset means "unknown",
+  which is the honest answer and the one every consumer already handles. }
+
+{ A fresh wide block of `units` UTF-16 code units, zero-filled, 2-byte NUL
+  terminated. Returns nil for an empty result, matching every other managed
+  string constructor here (an empty managed string IS the nil handle). }
+function PXXWideAlloc(units: NativeInt): Pointer;
+var base, d, i, nbytes: Int64;
+begin
+  if units <= 0 then
+  begin
+    Result := nil;
+    Exit;
+  end;
+  nbytes := Int64(units) * 2;
+  base := Int64(PXXAlloc(nbytes + PXX_HDR_SIZE + 2, 8));   { +2 = wide NUL }
+  PWord(base + PXX_HDR_RC)^  := 1;
+  PWord(base + PXX_HDR_LEN)^ := nbytes;    { BYTES, as everywhere else }
+  d := base + PXX_HDR_SIZE;
+  i := 0;
+  while i < nbytes do
+  begin
+    PByte(d + i)^ := 0;
+    i := i + 1;
+  end;
+  PByte(d + nbytes)^ := 0;
+  PByte(d + nbytes + 1)^ := 0;
+  PXXHdrSetMeta(base, PXX_KIND_WIDESTR);
+  Result := Pointer(d);
+end;
+
+{ Wide concatenation. Byte lengths in, byte lengths out -- this is
+  PXXStrConcat with a wider terminator and no ASCII scan, and it is a separate
+  function only because those two differ. }
+function PXXWideConcat(bytesA: NativeInt; srcA: Pointer; srcB: Pointer; bytesB: NativeInt): Pointer;
+var total, base, d: Int64;
+begin
+  total := Int64(bytesA) + Int64(bytesB);
+  if total <= 0 then
+  begin
+    Result := nil;
+    Exit;
+  end;
+  base := Int64(PXXAlloc(total + PXX_HDR_SIZE + 2, 8));
+  PWord(base + PXX_HDR_RC)^  := 1;
+  PWord(base + PXX_HDR_LEN)^ := total;
+  d := base + PXX_HDR_SIZE;
+  PXXBlockCopy(d, Int64(srcA), bytesA);
+  PXXBlockCopy(d + bytesA, Int64(srcB), bytesB);
+  PByte(d + total)^ := 0;
+  PByte(d + total + 1)^ := 0;
+  PXXHdrSetMeta(base, PXX_KIND_WIDESTR);
+  Result := Pointer(d);
+end;
+
+{ UTF-8 bytes -> UTF-16 code units. A code point above the BMP becomes a
+  SURROGATE PAIR, which is the whole reason this ticket exists: jsonscanner
+  builds one by hand and needs the two halves to be a two-unit STRING.
+
+  Malformed input is passed through as U+FFFD rather than rejected. This
+  transcoder sits under Utf8Decode and under every wide assignment, so raising
+  here would turn a bad byte in a JSON document into a crash in the parser.
+
+  Allocation is worst-case (one unit per input BYTE, which ASCII actually
+  reaches) and the length word is patched down afterwards. Two passes over the
+  input would cost more than the slack. }
+function PXXWideFromUtf8(src: Pointer; byteLen: NativeInt): Pointer;
+var
+  base, d, s, i, units, cp, b, need, k: Int64;
+begin
+  if (src = nil) or (byteLen <= 0) then
+  begin
+    Result := nil;
+    Exit;
+  end;
+  base := Int64(PXXAlloc(Int64(byteLen) * 2 + PXX_HDR_SIZE + 2, 8));
+  PWord(base + PXX_HDR_RC)^ := 1;
+  d := base + PXX_HDR_SIZE;
+  s := Int64(src);
+  i := 0;
+  units := 0;
+  while i < byteLen do
+  begin
+    b := PByte(s + i)^;
+    if b < $80 then
+    begin
+      cp := b; need := 0;
+    end
+    else if (b and $E0) = $C0 then
+    begin
+      cp := b and $1F; need := 1;
+    end
+    else if (b and $F0) = $E0 then
+    begin
+      cp := b and $0F; need := 2;
+    end
+    else if (b and $F8) = $F0 then
+    begin
+      cp := b and $07; need := 3;
+    end
+    else
+    begin
+      cp := $FFFD; need := 0;    { stray continuation or 5/6-byte form }
+    end;
+    i := i + 1;
+    k := 0;
+    while k < need do
+    begin
+      if (i >= byteLen) or ((PByte(s + i)^ and $C0) <> $80) then
+      begin
+        cp := $FFFD;             { truncated -- stop, do not consume the next lead }
+        k := need;
+      end
+      else
+      begin
+        cp := (cp shl 6) or (PByte(s + i)^ and $3F);
+        i := i + 1;
+        k := k + 1;
+      end;
+    end;
+    if cp > $10FFFF then cp := $FFFD;
+    if cp < $10000 then
+    begin
+      PU16(d + units * 2)^ := Word(cp);
+      units := units + 1;
+    end
+    else
+    begin
+      cp := cp - $10000;
+      PU16(d + units * 2)^ := Word($D800 + (cp shr 10));
+      PU16(d + units * 2 + 2)^ := Word($DC00 + (cp and $3FF));
+      units := units + 2;
+    end;
+  end;
+  if units = 0 then
+  begin
+    PXXFree(Pointer(base));
+    Result := nil;
+    Exit;
+  end;
+  PWord(base + PXX_HDR_LEN)^ := units * 2;
+  PByte(d + units * 2)^ := 0;
+  PByte(d + units * 2 + 1)^ := 0;
+  PXXHdrSetMeta(base, PXX_KIND_WIDESTR);
+  Result := Pointer(d);
+end;
+
+{ UTF-16 code units -> UTF-8 bytes. `byteLen` is the wide string's header
+  length, i.e. units * 2. Result is an ordinary BYTESTR-shaped block with a
+  1-byte NUL, because that is what every consumer of the result expects.
+
+  An unpaired surrogate becomes U+FFFD, for the same reason as above: this runs
+  under Utf8Encode on data that came from a file. Worst case is 3 bytes per
+  unit (a BMP code point); a surrogate PAIR is 4 bytes for 2 units, so it is
+  never the worst case. }
+function PXXUtf8FromWide(src: Pointer; byteLen: NativeInt): Pointer;
+var
+  base, d, s, i, units, out_, cp, hi, lo: Int64;
+begin
+  units := Int64(byteLen) div 2;
+  if (src = nil) or (units <= 0) then
+  begin
+    Result := nil;
+    Exit;
+  end;
+  base := Int64(PXXAlloc(units * 3 + PXX_HDR_SIZE + 1, 8));
+  PWord(base + PXX_HDR_RC)^ := 1;
+  d := base + PXX_HDR_SIZE;
+  s := Int64(src);
+  i := 0;
+  out_ := 0;
+  while i < units do
+  begin
+    hi := PU16(s + i * 2)^;
+    i := i + 1;
+    if (hi >= $D800) and (hi <= $DBFF) then
+    begin
+      if i < units then
+      begin
+        lo := PU16(s + i * 2)^;
+        if (lo >= $DC00) and (lo <= $DFFF) then
+        begin
+          cp := $10000 + ((hi - $D800) shl 10) + (lo - $DC00);
+          i := i + 1;
+        end
+        else
+          cp := $FFFD;           { high surrogate not followed by a low one }
+      end
+      else
+        cp := $FFFD;             { high surrogate at end of string }
+    end
+    else if (hi >= $DC00) and (hi <= $DFFF) then
+      cp := $FFFD                { lone low surrogate }
+    else
+      cp := hi;
+    if cp < $80 then
+    begin
+      PByte(d + out_)^ := Byte(cp);
+      out_ := out_ + 1;
+    end
+    else if cp < $800 then
+    begin
+      PByte(d + out_)^ := Byte($C0 or (cp shr 6));
+      PByte(d + out_ + 1)^ := Byte($80 or (cp and $3F));
+      out_ := out_ + 2;
+    end
+    else if cp < $10000 then
+    begin
+      PByte(d + out_)^ := Byte($E0 or (cp shr 12));
+      PByte(d + out_ + 1)^ := Byte($80 or ((cp shr 6) and $3F));
+      PByte(d + out_ + 2)^ := Byte($80 or (cp and $3F));
+      out_ := out_ + 3;
+    end
+    else
+    begin
+      PByte(d + out_)^ := Byte($F0 or (cp shr 18));
+      PByte(d + out_ + 1)^ := Byte($80 or ((cp shr 12) and $3F));
+      PByte(d + out_ + 2)^ := Byte($80 or ((cp shr 6) and $3F));
+      PByte(d + out_ + 3)^ := Byte($80 or (cp and $3F));
+      out_ := out_ + 4;
+    end;
+  end;
+  if out_ = 0 then
+  begin
+    PXXFree(Pointer(base));
+    Result := nil;
+    Exit;
+  end;
+  PWord(base + PXX_HDR_LEN)^ := out_;
+  PByte(d + out_)^ := 0;
+  PXXHdrSetMeta(base, PXX_KIND_BYTESTR);
   Result := Pointer(d);
 end;
 

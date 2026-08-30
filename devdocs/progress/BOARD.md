@@ -8,11 +8,12 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-cdecl-bodied-sysv-prologue | A | 58 | feature | Bodied Pascal `cdecl` procs: genuine SysV prologue (float params, >6 args) | — |
+| feature-unicodestring-model | A | 62 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
 
 ## unfinished (29)
 
@@ -60,7 +61,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (377)
+## backlog (376)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -377,7 +378,6 @@ _none_
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | feature-twatch-full-tier-coverage-age | T | 35 | feature | No signal distinguishes "full tier is lagging" from "full tier never completes" | — |
 | feature-typeinfo-last-categories | A | 20 | feature | The tail of the TypeInfo widening that still has NO consumer: interfaces (14) and metaclasses (28) are refused outright, TypeInfo(PChar) is refused while bare Pointer works, Currency (4) needs a tyCurrency that does not exist, procvar/method types get no TTypeData, and NativeInt reports tkInteger where FPC reports tkInt64 on a 64-bit target. | — |
-| feature-unicodestring-model | A | 62 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
 | feature-web-blog-bootstrap | W | 35 | feature | `/blog/` returns 200 and says `Coming soon.` [[feature-promo-launch-plan]] already decided that VISIBILITY starts now and is ungated — the blog is the surface that decision needs and it does not exist yet. This ticket is the MACHINERY plus two concrete first posts; the strategy, the audience and the one-shot launch guard all live in that ticket and are not relitigated here. | — |
 | feature-web-machine-readable-project-metadata | W | 40 | feature | pxxc.org serves no `/llms.txt` (404) and no JSON-LD structured data. The site is otherwise unusually legible to machines — server-rendered, indexed, and summarised ACCURATELY including the byte-identical discipline holding under compression — so these two files are the remaining gap in a channel that already works, not a rescue job. | — |
 | feature-web-syndication-feeds | W | 30 | feature | The site publishes two things that change continuously — the `Latest resolved` ticket list and (once it exists) the blog — and offers no RSS/Atom feed for either. No `application/rss+xml` or `application/atom+xml` link anywhere in the head. A follower has no way to follow, and the one genuinely novel asset (a live public record of a compiler being built by an agent fleet) is unsubscribable. | — |
@@ -798,7 +798,6 @@ _none_
 - [p 62] [U] decide-adopt-a-second-string-model-or-refuse-utf16-honestly
 - [p 62] [N] feature-n-sys-version-info-implementation-and-the-probe-suite
 - [p 62] [N] feature-nilpy-enum-class [parked — re-claim, do not duplicate]
-- [p 62] [A] feature-unicodestring-model
 - [p 60] [U] decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - [p 60] [N] bug-n-a-local-named-after-its-own-def-aliases-the-function-result [parked — re-claim, do not duplicate]
 - [p 60] [N] bug-n-async-def-and-await-are-not-implemented

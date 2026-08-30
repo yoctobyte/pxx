@@ -1,0 +1,16 @@
+ascii      units=2 0068 0069
+eacute     units=1 00E9
+nihon      units=1 65E5
+emoji      units=2 D83D DE00
+truncated  units=1 FFFD
+stray-cont units=2 FFFD 0041
+bad-lead   units=2 FFFD 0041
+
+ascii      bytes=2 68 69 roundtrips=TRUE
+eacute     bytes=2 C3 A9 roundtrips=TRUE
+nihon      bytes=3 E6 97 A5 roundtrips=TRUE
+emoji      bytes=4 F0 9F 98 80 roundtrips=TRUE
+
+pair       bytes=4 F0 9F 98 80
+lone-high  bytes=4 EF BF BD 41
+lone-low   bytes=4 EF BF BD 41
