@@ -1,0 +1,47 @@
+# feature-nilpy-object-reclamation — the ownership half, and the canary the
+# ticket had listed as "not yet written": a shared instance held by two
+# bindings, plus an instance stored into a VARIANT slot that must outlive
+# 50k constructions churning through the same conduit temp.
+#
+# The bug this guards both directions of: a NilPy construction is lowered
+# through a conduit local (`inst := PXXObjAlloc(size)` / VMT stamp / ctor /
+# LOAD_SYM), so by the time the variant store is decided in CODEGEN the
+# IR_CALL is gone and the arm saw only a load. x86-64 listed the three call
+# kinds, aarch64 listed none, i386 retained unconditionally — every one of
+# them took a second reference a construction had already paid for, and the
+# object leaked. Skipping the retain where it is NOT owed is the other
+# direction, and that one does not leak, it frees a live object: hence
+# `keep.v` and the `a is b` pair, read AFTER the churn.
+#
+# Expectations are CPython's own output.
+
+class Node:
+    def __init__(self, n):
+        self.n = n
+        self.tag = "node-" + str(n)
+
+
+class Box:
+    def __init__(self):
+        self.v = None
+
+
+def main():
+    keep = Box()
+    keep.v = Node(7)
+    shared = Node(9)
+    a = shared
+    b = shared
+    i = 0
+    total = 0
+    while i < 50000:
+        bx = Box()
+        bx.v = Node(i)
+        total = total + bx.v.n + keep.v.n + a.n + b.n
+        i = i + 1
+    print(total)
+    print(keep.v.n, keep.v.tag)
+    print(a.n, b.n, a is b, a.tag)
+
+
+main()

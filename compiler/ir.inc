@@ -11527,6 +11527,16 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         value := IRLowerAST(ASTLeft[ASTLeft[node]]);
         argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyNativeInt));
         mcInstSym := AllocVar('', tyPointer);
+        { The conduit holds the construction's rc=1 for whoever consumes this
+          expression, and never releases it — so a LOAD_SYM of it is an OWNED
+          reference, exactly as the AN_CALL it replaced was. Saying so is what
+          keeps the two levels agreeing: the AST-level arms (a tyClass local, a
+          tyClass field) ask IRNodeYieldsOwnedRef and see AN_CALL, while the
+          variant store is decided in CODEGEN, where the spill has already
+          turned the construction into a load and the arm retained a second
+          time. Measured: 56 B per iteration storing `Inner(i)` into a variant
+          field, flat with the flag. feature-nilpy-object-reclamation }
+        SymIsCtorResultTemp[mcInstSym] := True;
         IRAppend(IR_STORE_SYM, mcInstSym,
                  IRAppendCall(procIdx, argNode, -1, Ord(tyPointer)),
                  -1, 0, Ord(tyPointer));

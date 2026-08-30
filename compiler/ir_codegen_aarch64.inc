@@ -4277,7 +4277,13 @@ begin
           else if tk = tyClass then
           begin
             IREmitNodeAarch64(IRB[node]);   { x0 = instance pointer }
-            EmitObjRetainA64;               { the slot takes its own reference }
+            { the slot takes its own reference — unless the source already OWNS
+              its +1 (a call result, or a NilPy construction, which arrives here
+              as a load of its conduit temp). This arm retained unconditionally,
+              so every `v = f()` and every `o.w = C()` into a variant leaked one
+              object. Same predicate as x86-64's; see IRNodeOwnsManagedObj. }
+            if not IRNodeOwnsManagedObj(IRB[node]) then
+              EmitObjRetainA64;
           end
           else
           begin

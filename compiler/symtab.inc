@@ -4105,7 +4105,7 @@ begin
   SetLength(SymStrCap, n);         SetLength(SymIsSub, n);          SetLength(SymSubLo, n);
   SetLength(SymSubHi, n);          SetLength(SymPtrDepth, n);       SetLength(SymPtrBaseTk, n);
   SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymPtrElemNDims, n);  SetLength(SymPtrElemStrCap, n);  SetLength(SymPtrElemDynDepth, n);  SetLength(SymArrNDims, n);
-  SetLength(SymRTTIOff, n);        SetLength(SymIsHiddenArgTemp, n); SetLength(SymBlockId, n);
+  SetLength(SymRTTIOff, n);        SetLength(SymIsHiddenArgTemp, n); SetLength(SymIsCtorResultTemp, n); SetLength(SymBlockId, n);
   SetLength(SymStaticLocal, n);   SetLength(SymAbsAliased, n);
   SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
   SetLength(SymHashBkt, n);
@@ -4293,6 +4293,7 @@ begin
     SymStrCap[SymCount] := LastTypeStrCap;
   SymRTTIOff[SymCount] := -1;
   SymIsHiddenArgTemp[SymCount] := False;
+  SymIsCtorResultTemp[SymCount] := False;
   SymStaticLocal[SymCount] := AllocStaticLocal;
   SymBlockId[SymCount] := CurBlockId;
   Syms[SymCount].ElemType := tyInteger;
@@ -4840,6 +4841,7 @@ begin
   if elemType = tyAnsiString then
     SymStrElemTk[SymCount] := Ord(LastTypeStrElemTk);
   SymIsHiddenArgTemp[SymCount] := False;
+  SymIsCtorResultTemp[SymCount] := False;
   SymStaticLocal[SymCount] := AllocStaticLocal;
   SymBlockId[SymCount] := CurBlockId;
   Syms[SymCount].ElemType := elemType;
@@ -4969,6 +4971,7 @@ begin
   if elemType = tyAnsiString then
     SymStrElemTk[SymCount] := Ord(LastTypeStrElemTk);
   SymIsHiddenArgTemp[SymCount] := False;
+  SymIsCtorResultTemp[SymCount] := False;
   SymStaticLocal[SymCount] := AllocStaticLocal;
   SymBlockId[SymCount] := CurBlockId;
   Syms[SymCount].ElemType    := elemType;

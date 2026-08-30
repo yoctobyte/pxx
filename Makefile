@@ -3163,6 +3163,18 @@ test-nilpy: $(COMPILER)
 	  rss=$$(grep -oE 'Maximum resident set size .kbytes.: [0-9]+' $(TESTTMP)/cfnoleak.time | grep -oE '[0-9]+$$'); \
 	  if [ -n "$$rss" ] && [ "$$rss" -gt 20000 ]; then echo "class managed-field finalize regressed: RSS $${rss}KB (>20MB over 200k instances; pre-fix was ~410MB, fixed is ~1MB)"; exit 1; else echo "class-field-no-container-no-leak: OK (RSS $${rss}KB)"; fi; \
 	else echo "/usr/bin/time absent; class managed-field RSS leak guard skipped"; fi
+	@# the ownership half: a construction stored into a VARIANT slot is already
+	@# OWNED (its conduit temp never releases), so the store must MOVE. Both
+	@# directions here — the leak it used to be, and the live object a missing
+	@# retain would free: `keep.v` and the `a is b` pair are read after 50k
+	@# constructions have churned through the same conduit.
+	./$(COMPILER) test/test_nilpy_object_in_variant_slot_survives_churn.npy $(TESTTMP)/test_nilpy_objvarchurn26
+	tools/expect_same.sh test_nilpy_objvarchurn26 "$$($(TESTTMP)/test_nilpy_objvarchurn26)" "$$(cat test/test_nilpy_object_in_variant_slot_survives_churn.expected)"
+	@if [ -x /usr/bin/time ]; then \
+	  /usr/bin/time -v $(TESTTMP)/test_nilpy_objvarchurn26 2>$(TESTTMP)/objvarchurn.time >/dev/null; \
+	  rss=$$(grep -oE 'Maximum resident set size .kbytes.: [0-9]+' $(TESTTMP)/objvarchurn.time | grep -oE '[0-9]+$$'); \
+	  if [ -n "$$rss" ] && [ "$$rss" -gt 20000 ]; then echo "object-into-variant ownership regressed: RSS $${rss}KB (>20MB over 50k constructions; fixed is ~1MB)"; exit 1; else echo "object-in-variant-slot-churn: OK (RSS $${rss}KB)"; fi; \
+	else echo "/usr/bin/time absent; object-into-variant RSS leak guard skipped"; fi
 	@# `target[key] op= value` on a dict/list/Counter subscript (found already fixed)
 	./$(COMPILER) test/test_nilpy_augmented_subscript_assign.npy $(TESTTMP)/test_nilpy_augsubassign26
 	tools/expect_same.sh test_nilpy_augsubassign26 "$$($(TESTTMP)/test_nilpy_augsubassign26)" "$$(printf '{'"'"'a'"'"': 2}\n[6, 2]\n2\n14\n[1, 1, 30]')"

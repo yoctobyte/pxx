@@ -166,6 +166,11 @@ function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
   IR_BINOP only, so every `'lit' + F(x)` leaked F's result on all four targets
   (bug-a-a-string-function-result-in-a-concat-leaks-on-every-cross-target). }
 function IRNodeOwnsManagedStr(n: Integer): Boolean; forward;
+{ The object twin, forwarded for the same reason and with a sharper version of
+  the same history: aarch64's variant-store object arm retained unconditionally
+  and i386's did too, so a construction was double-retained on all three
+  backends that have an inline arm. Body in ir_codegen.inc. }
+function IRNodeOwnsManagedObj(n: Integer): Boolean; forward;
 { Same mechanism, same reason: the wasm32 backend needs IRTopLevelStmt to tell
   a statement from a value node, and it is defined in ir_codegen.inc, included
   after the cross backends. Forwarding is what this file already does for that

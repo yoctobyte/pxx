@@ -3443,6 +3443,28 @@ begin
      (IRKind[n] = IR_VIRTUAL_CALL) or (IRKind[n] = IR_CALL_IND));
 end;
 
+{ The object twin of IRNodeOwnsManagedStr, and it needs one case that one does
+  not. A NilPy construction is lowered through a CONDUIT local (`inst :=
+  PXXObjAlloc(size)`, VMT stamp, ctor call, then a LOAD_SYM as the expression's
+  value), so by the time a variant store asks, the IR_CALL is gone and the node
+  in hand is a load. The conduit is flagged at the one place it is minted
+  (SymIsCtorResultTemp, ir.inc), which is why this can answer at all.
+
+  ONE predicate, forwarded in compiler.pas, for the same reason its string twin
+  is: x86-64, aarch64 and i386 each carry an inline object arm in IR_VAR_STORE,
+  and they had three different answers — x86-64 listed the three call kinds,
+  aarch64 listed none of them, i386 retained unconditionally. Every one of them
+  double-retained a construction, and i386 double-retained an ordinary call
+  result too. feature-nilpy-object-reclamation }
+function IRNodeOwnsManagedObj(n: Integer): Boolean;
+begin
+  IRNodeOwnsManagedObj := (n >= 0) and
+    (((IRKind[n] = IR_CALL) and (IRA[n] >= 0)) or
+     (IRKind[n] = IR_VIRTUAL_CALL) or (IRKind[n] = IR_CALL_IND) or
+     ((IRKind[n] = IR_LOAD_SYM) and (IRA[n] >= 0) and
+      (IRA[n] < Length(SymIsCtorResultTemp)) and SymIsCtorResultTemp[IRA[n]]));
+end;
+
 procedure EmitObjRetainRaxGuarded;
 { rax = object pointer (or nil). Retain via the object blob; the Pascal callee
   carries the nil check and the population-tag guard, so a manual-lifetime
@@ -9360,13 +9382,14 @@ begin
           begin
             { Boxing an object: the variant slot takes its own +1 (guarded by
               the [p-8] population tag; unheadered Pascal instances no-op) —
-              UNLESS the source is a call result, which is already OWNED (+1
-              from the callee's return-retain / the construction rc): the same
-              discrimination the tyAnsiString arm above applies
+              UNLESS the source already OWNS its +1, which is the same
+              discrimination the tyAnsiString arm above applies through the same
+              shape of predicate. Asked through IRNodeOwnsManagedObj rather than
+              spelled out here: this arm used to list the three CALL kinds, and
+              a NilPy construction is not any of them by the time it arrives —
+              the conduit spill has turned it into a LOAD_SYM
               (feature-nilpy-object-reclamation slice 4). }
-            if not (((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0)) or
-                    (IRKind[IRB[node]] = IR_VIRTUAL_CALL) or
-                    (IRKind[IRB[node]] = IR_CALL_IND)) then
+            if not IRNodeOwnsManagedObj(IRB[node]) then
               EmitObjRetainRaxGuarded;
           end
           else if (tk = tyInteger) or (tk = tyInt8) or (tk = tyInt16) or (tk = tyInt32) then

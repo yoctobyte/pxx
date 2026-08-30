@@ -4817,12 +4817,19 @@ begin
           begin
             IREmitNode386(IRB[node]);                { eax = instance pointer }
             { the slot takes its own reference; PXXObjRetain no-ops on an
-              instance that carries no refcount header }
-            EmitB($50);                              { push eax (arg0) }
-            procIdx := FindProc('PXXObjRetain');
-            if procIdx < 0 then Error('compiler error: PXXObjRetain not found');
-            EmitCallProc(procIdx);
-            EmitB($58);                              { pop eax }
+              instance that carries no refcount header. NOT when the source
+              already owns its +1 — a call result, or a NilPy construction
+              arriving as a load of its conduit temp: this arm retained
+              unconditionally and leaked one object per such store. Same
+              predicate as x86-64's; see IRNodeOwnsManagedObj. }
+            if not IRNodeOwnsManagedObj(IRB[node]) then
+            begin
+              EmitB($50);                            { push eax (arg0) }
+              procIdx := FindProc('PXXObjRetain');
+              if procIdx < 0 then Error('compiler error: PXXObjRetain not found');
+              EmitCallProc(procIdx);
+              EmitB($58);                            { pop eax }
+            end;
             EmitB($50);                              { push payload }
           end
           else
