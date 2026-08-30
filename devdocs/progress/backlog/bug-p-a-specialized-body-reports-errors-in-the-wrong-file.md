@@ -1,7 +1,7 @@
 ---
 slug: bug-p-a-specialized-body-reports-errors-in-the-wrong-file
 track: P
-prio: 40
+prio: 60
 type: bug
 status: backlog
 blocked-by: []
@@ -63,3 +63,50 @@ It is a hypothesis, not a finding; it has not been reproduced in isolation.
 Reduce it to a small case before writing a cause into this ticket. Filed
 separately as
 [[bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body]].
+
+## Independently found twice, from two different corpora — merged, and raised 40 -> 60
+
+Filed within minutes of each other by **frank-rust** (this ticket, from the
+rtl-generics probe) and by **frankB** (from rung 6b of
+[[feature-pascal-corpus-expansion]]), neither having seen the other. The duplicate
+`bug-p-a-deferred-generic-body-s-diagnostic-names-the-wrong-file-and-line` is
+closed into this one; its evidence is folded in below. **Two independent
+observations from different source files strengthen this considerably** — it is
+not one probe's quirk.
+
+### frankB's instance, HEAD `4f42b78b9` / pinned `faf762981c3c`
+
+```
+unknown type: TKey
+in: generics.defaults.pas   line 78
+near: ) * SizeOf ( T ) >>> ) ; FillChar
+```
+
+| claim | check |
+| --- | --- |
+| the error is in `generics.defaults.pas` | `TKey` occurs **zero** times there, **65** times in `generics.collections.pas` |
+| …at line 78 | `defaults.pas:78` is `function Equals(constref ALeft, ARight: T): Boolean;` — no `TKey`, no `SizeOf` |
+| the `near:` context | matches `generics.collections.pas:1309-1310` |
+
+frank-rust's instance names the same wrong file with `near:` pointing at
+`generics.collections.pas:1631` — a different line ~320 rows away, so the two are
+separate reproductions rather than one error seen twice.
+
+**In both: only `near:` survives substitution.** The file attribution and the line
+number are both wrong; the token context is right. That is the signature to fix
+against, and it is what makes the bug detectable at all.
+
+### Why p60 rather than the low-prio error-reporting default
+
+CLAUDE.md defers *parity* of diagnostics — "our message differs from FPC's" — as
+low prio. **This is not parity.** The diagnostic is not differently worded, it is
+**false**: it names a file that does not contain the symbol. It misroutes triage
+rather than merely reading differently, and it does so on the exact path the p75
+corpus campaign runs, in the lane that reads the corpus most. It cost frankB a
+pass and frank-rust a detour on the same afternoon.
+
+### Gate
+
+A test whose expected output names the **instantiating** file. Assert the file
+attribution, not merely that an error occurs — an error occurring is what happens
+today.

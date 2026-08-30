@@ -68,7 +68,7 @@ lives in git, not in a timestamp._
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (388)
+## backlog (387)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -183,12 +183,11 @@ lives in git, not in a timestamp._
 | bug-nilpy-four-remaining-absent-builtins | N | 12 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
 | bug-p-a-bodiless-generic-class-with-abstract-and-a-generic-parent-is-rejected | P | 50 | bug | `TD<T> = class abstract(TEnumBase<T>);` — a bodiless generic class with the `abstract` modifier and a generic parent — is rejected with `unexpected token in a unit interface section`. All three ingredients are required: dropping `abstract`, or making the parent non-generic, compiles. FPC compiles it. rtl-generics uses this exact shape. | — |
-| bug-p-a-deferred-generic-body-s-diagnostic-names-the-wrong-file-and-line | P | 60 | bug | Compiling generics.collections.pas reports `unknown type: TKey` `in: generics.defaults.pas` at line 78. TKey appears ZERO times in generics.defaults.pas and 65 times in generics.collections.pas; defaults.pas:78 contains no TKey and no SizeOf, while the `near:` context it prints matches collections.pas:1309-1310. Both the file and the line are wrong -- the current-unit pointer appears not to be switched when a deferred generic body is compiled. Sends whoever picks up a generics failure to the wrong file first; cost frankB a pass. | — |
 | bug-p-a-delphi-mode-generic-argument-must-be-declared-before-the-template | P | 55 | bug | In mode Delphi, `TE = TBox<TOuter>;` fails with `unknown type: TOuter` when TOuter is declared AFTER TBox in the same type section — reorder the two declarations and the identical program compiles and runs. FPC accepts both orders. DelphiRewriteGenericUses splices its minted alias declarations immediately behind the TEMPLATE, so they can only name types already declared at that point. objfpc is unaffected (its aliases are emitted at the use). 20-line repro, both orders. | — |
 | bug-p-a-different-specialization-of-the-same-template-inside-its-own-body | P | 35 | bug | `TOuter<T> = class FOther: TOuter<ShortInt>; end;` -- a reference to a DIFFERENT specialization of the SAME template, from inside that template's own body -- does not compile. A different TEMPLATE's specialization in the same position is fine, and same-template-same-args was fixed by bug-p-a-nested-class-naming-its-enclosing-template-is-substituted-twice. Pre-existing: fails identically on pinned. | — |
 | bug-p-a-forward-interface-declaration-is-not-parsed | P | 45 | bug | `IFoo = interface;` (forward) is rejected with `Expected: end, but got: ;` while the CLASS arm of the same double case, `TBar = class;`, parses fine. Pre-existing on pinned and HEAD alike -- not a regression. Costs tgenconstraint37, which is otherwise the only corpus test that exercises specializing against a forward-declared type. | — |
 | bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name | P | 45 | bug | A program declaring `TBox<T>` while also importing a unit that declares `TBox<T>` now parses, but every use resolves to the IMPORTED template: `b.Local` answers `no such member`. FPC takes the local declaration and prints 42. The declaration is parsed and then loses to the import. | — |
-| bug-p-a-specialized-body-reports-errors-in-the-wrong-file | P | 40 | bug | An error inside a replayed (specialized) generic method body reports a file and line that are BOTH wrong — measured on the rtl-generics corpus, where `unknown type: TKey` is attributed to `generics.defaults.pas:78` while its own `near:` context is `generics.collections.pas:1631`, another unit ~1550 lines further down. `TKey` does not occur in the named file at all. Only `near:` survives substitution, so `near:` is currently the only trustworthy field. Not a parity issue with FPC — our own diagnostic points at the wrong source — and it costs real time on every corpus triage, because the first move is always to open the named file. | — |
+| bug-p-a-specialized-body-reports-errors-in-the-wrong-file | P | 60 | bug | An error inside a replayed (specialized) generic method body reports a file and line that are BOTH wrong — measured on the rtl-generics corpus, where `unknown type: TKey` is attributed to `generics.defaults.pas:78` while its own `near:` context is `generics.collections.pas:1631`, another unit ~1550 lines further down. `TKey` does not occur in the named file at all. Only `near:` survives substitution, so `near:` is currently the only trustworthy field. Not a parity issue with FPC — our own diagnostic points at the wrong source — and it costs real time on every corpus triage, because the first move is always to open the named file. | — |
 | bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
 | bug-p-an-unknown-compiler-directive-is-silently-ignored | P | 35 | bug | compiler/lexer.inc's {$...} handler is an if/else chain of 34 CaseEqual(command, ...) arms with no terminal else, so ANY directive outside those 34 is silently ignored — no warning, no note, exit 0. {$FATAL} is one confirmed instance (bug-p-fatal-directive-is-silently-ignored) and the mechanism guarantees there are others. Filed separately from the {$FATAL} ticket on purpose: fixing {$FATAL} closes that ticket and leaves this generator intact. | — |
 | bug-p-fatal-directive-is-silently-ignored | P | 35 | bug | {$FATAL text} and {$MESSAGE FATAL text} are silently ignored: the frontend handles warning/message/error and treats every other directive as a no-op, so a guard block that means 'stop, this configuration is unsupported' compiles clean and produces a binary that should not exist. | — |
@@ -737,7 +736,7 @@ lives in git, not in a timestamp._
 
 2842 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
-## rejected (58)
+## rejected (59)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -757,6 +756,7 @@ lives in git, not in a timestamp._
 | bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error | N | 50 | bug | `xs.sort(key=..., reverse=...)` fails with a bare "unexpected token" | — |
 | bug-nilpy-uforth-rc4-corpus-stack-underflow | N | 45 | bug | WITHDRAWN — not a pxx bug. `ERROR: Stack underflow` came from MY harness invoking `INCLUDE testje.for`; uforth's INCLUDE POPS a string, so the correct form is `\"testje.for\" INCLUDE`. With that, all four RC4 corpora are byte-identical to CPython. | — |
 | bug-nonreproducible-miscompile-2026-06-02 | A | 50 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
+| bug-p-a-deferred-generic-body-s-diagnostic-names-the-wrong-file-and-line | P | 60 | bug | Duplicate. Filed by the coordinator from frankB's rung-6b evidence within minutes of frank-rust filing the same defect from the rtl-generics probe, neither having seen the other. Merged into bug-p-a-specialized-body-reports-errors-in-the-wrong-file, which now carries both instances and is raised to p60. | — |
 | bug-p-a-generic-template-cannot-be-an-object-type | P | 0 | bug | `TCustomPointersCollection<T, PT> = object` is rejected with `generic templates must be class, record, interface, array or procedure declarations`. FPC accepts a generic over an OBJECT type; the frontend's template-kind check simply has no arm for it. This is the CURRENT stop for `uses Generics.Collections` (generics.collections.pas:146) — measured on both HEAD and pinned, so it is not a recent regression. | — |
 | bug-p-lowercase-resolves-to-a-different-implementation-in-the-seed-build | P | 45 | bug | DUPLICATE of bug-a-lowercase-resolves-to-two-different-routines-depending-on-the-seed, filed 2026-08-28. Tombstone kept so citations resolve; the surviving ticket carries this one's analysis. | — |
 | bug-pascal-local-var-not-registered-wrong-sym | P | 0 | bug | REJECTED — "a method's local is not registered" — my evidence was wrong | — |
@@ -842,7 +842,7 @@ lives in git, not in a timestamp._
 - [p 60] [N] bug-n-os-environ-and-os-sep-are-not-values
 - [p 60] [N] bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
-- [p 60] [P] bug-p-a-deferred-generic-body-s-diagnostic-names-the-wrong-file-and-line
+- [p 60] [P] bug-p-a-specialized-body-reports-errors-in-the-wrong-file
 - [p 60] [P] bug-p-a-string-assigned-to-a-record-ARRAY-ELEMENT-is-not-type-checked
 - [p 60] [U] decide-does-a-withdrawn-pin-leave-a-trace-and-is-its-version-number-reused
 - [p 60] [U] decide-does-track-r-work-on-master-like-every-other-lane
@@ -1020,7 +1020,6 @@ lives in git, not in a timestamp._
 - [p 40] [N] bug-n-two-node-consumers-know-an-call-but-not-its-virtual-sibling
 - [p 40] [N] bug-nilpy-shared-nonlocal-frame-cell-is-never-freed [parked — re-claim, do not duplicate]
 - [p 40] [P] bug-p-a-default-value-is-accepted-on-an-open-array-parameter
-- [p 40] [P] bug-p-a-specialized-body-reports-errors-in-the-wrong-file
 - [p 40] [P] bug-p-a-variant-cannot-hold-an-interface
 - [p 40] [T] bug-t-the-two-watcher-health-checks-disagree-and-are-treated-as-interchangeable
 - [p 40] [T] chore-t-board-html-render-is-13s-of-every-ticket-move
