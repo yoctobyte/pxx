@@ -59,4 +59,4 @@ before it is a regression, and `pasparser_proc.inc` is where to check.
 
 Verified at HEAD: assertion .0 = 0 (silent without the flag), .1 = 5, .2 = 1/1.
 No compiler change.
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 969dae43b.
