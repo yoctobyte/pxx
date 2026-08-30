@@ -4,7 +4,7 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `d9f02bdc6240` | 2026-08-30T22:35:21Z | GREEN (native) | 108.0s | `7acd2315e72c` RED |
+| seven | `d9f02bdc6240` | 2026-08-30T22:43:31Z | RED (full) | 474.1s | `d9f02bdc6240` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -42,3 +42,21 @@
 - **test-pascal-conformance#shard4/6** — tools/run_pascal_conformance.sh (seven): bad `f6303d410d78`, last good `90501813d990`, 1 commit(s) in range
 - **test-pascal-conformance#shard5/6** — tools/run_pascal_conformance.sh (seven): bad `f6303d410d78`, last good `90501813d990`, 1 commit(s) in range
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +37 (seven): bad `7227f3e0f1f8`, last good `d24df3f09efb`, 27 commit(s) in range
+- **CASCADE 14 jobs** (seven): bad `d9f02bdc6240`, last good `7acd2315e72c`, 3 commit(s) in range
+  <details><summary>jobs</summary>
+
+  - `test-xtensa#src:test/test_call_result_member.pas`
+  - `test-xtensa#src:test/test_const_record_temp.pas`
+  - `test-xtensa#src:test/test_const_record_temp_managed.pas`
+  - `test-xtensa#src:test/test_cross_aggregate_return.pas`
+  - `test-xtensa#src:test/test_cross_aggregate_stackargs.pas`
+  - `test-xtensa#src:test/test_cross_set_param.pas`
+  - `test-xtensa#src:test/test_interface_arc_exc.pas`
+  - `test-xtensa#src:test/test_interfaces_param.pas`
+  - `test-xtensa#src:test/test_managed_record_temp_init.pas`
+  - `test-xtensa#src:test/test_record_temp_byval_arg.pas`
+  - `test-xtensa#src:test/test_rtti.pas`
+  - `test-xtensa#src:test/test_single_in_aggregate.pas`
+  - `test-xtensa#src:test/test_stackless_gen.pas`
+  - `test-xtensa#src:test/test_streaming.pas`
+  </details>
