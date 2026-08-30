@@ -77,6 +77,9 @@ order to read them in. Route by what you are holding:
   anything under it is unresolved however many pairs agree
 - `## The natural repair action can destroy the diagnostic` -- rebuilding a
   suspicious binary erases the anti-Thompson check
+- `## A DELIBERATELY BROKEN backend self-hosted byte-identically` -- the
+  fixedpoint's coverage is a property of the CONSTRUCT, not of the change's
+  size; `converged after 1 round(s)` reads identically with the backend sabotaged
 - `## A job name is a promise, not a description of what ran` -- two hosts can
   report the same job list, count and verdict and check different things
 - `## A/B the hunk, bisect the window` -- with a named suspect, one build beats
@@ -344,6 +347,64 @@ diagnostic.** What is cheap and decisive: compile two or three `examples/*` plus
 a Rust and a Zig sample as individual commands. Twenty seconds, catches a
 false-reject class the fixedpoint cannot see, and goes nowhere near the
 no-full-suite hook.
+
+### A DELIBERATELY BROKEN backend self-hosted byte-identically
+
+Measured 2026-08-30 by frank-optimize, and it is the sharpest instance of this
+chapter because the sabotage was intentional and the gate still went green.
+
+Landing the x86-64 zero-extend fusion, they broke the new emitter on purpose to
+prove the test fires — dropped `REX.R`, so `r8`–`r15` read `rax` instead. The
+test did fire, in the expensive way rather than the cheap one: `acc=374503906869`
+against `1299819431187`. A plausible wrong number, no crash, exactly the shape
+this playbook's first rule is about. And then:
+
+```
+make compiler/pascal26   ->   converged after 1 round(s), e4a7919b39b4
+```
+
+**The compiler reproduced itself byte-identically while emitting a wrong register
+read.** The anti-Thompson agreement check would not have caught it either — both
+properties are about *reproduction*, and a miscompile that never reaches the
+compiler's own emitted bytes is invisible to both, by construction rather than by
+bad luck.
+
+**CLAUDE.md names two scope limits on the fixedpoint — the optimisation level and
+the language surface. This is a THIRD and it is not either of them.** The language-surface
+limit is about a construct being **absent** from `compiler.pas` (the `property`
+case). This one is about **propagation**: the emitted code can be wrong without
+the wrongness reaching the output that gets compared.
+
+**The one-line form, and it is frank-optimize's: the fixedpoint's coverage is a
+property of the CONSTRUCT, not of the change's size or riskiness.** Retain/release
+around `AnsiString` is a shape `compiler.pas` writes on nearly every line, so for
+that work the fixedpoint is unusually *strong* cover — the coordinator said so the
+same night and was right. A resident zero-extend feeding a shift is *no* cover at
+all. Both halves are true simultaneously, and **`converged after 1 round(s)` reads
+identically in both cases.** There is nothing in the output that tells you which
+one you are in; you have to know it about your own change.
+
+**The residual question, named rather than answered, because I did not measure it
+and neither did they:** two different mechanisms produce this result and they are
+not equally alarming.
+
+1. The pass **never fires** during a self-compile. Then this is the known
+   language-surface limit wearing new clothes, and the interesting fact is only
+   that an optimisation can be absent from the one build everybody trusts.
+2. The pass **fires**, and the wrong register read does not change the bytes.
+   That is the much worse case, because it means the fixedpoint can watch a
+   miscompile execute and still agree with itself.
+
+**The check that separates them is free and nobody has run it:** count the pass's
+firings during one self-compile. Zero means (1). Nonzero with a clean `converged`
+means (2), and that belongs in a ticket rather than in a playbook section. Whoever
+next touches that pass owns this question — recorded here so it has an owner
+rather than a satisfying ending (*"not X" is half a finding*).
+
+They put the finding at the Makefile rows rather than in the commit message,
+which is the right call and worth copying: it lands where someone deciding
+whether to trust a green will actually read it, instead of in a log nobody greps
+before trusting one.
 
 ## Where is the time going — profiling on these boxes
 
