@@ -4,9 +4,29 @@ prio: 60
 type: perf
 blocked-by: []
 summary: "The structural remainder of perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime, which halved the tax again (5.36s -> 3.06s) by removing two hotspots but still does not remove the WORK: every .npy compile parses and lowers all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. Now that emission is fixed, the residual 2.9s is genuinely parse + AST/IR/symtab construction, so nothing short of caching the compiled unit image will move it."
-status: working
+status: unfinished
 owner: frankA
 ---
+
+> **2026-08-30 — moved `working/` → `unfinished/` by the coordinator, lock not released.**
+> frankA surveyed this rather than building it, found the ticket's premise unestablished,
+> measured both routes, and filed
+> [[decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies]] [U p60]. It then
+> prototyped the deferred-bodies arm and **refuted its own recommendation** — the compile
+> decomposes 59% routine bodies / 28% runtime declaration+interface / 13% floor, and the
+> 28% band is exactly what makes the serialiser route unconditional and exactly what
+> defer-bodies cannot see. The U ticket now recommends A-first.
+>
+> **Nothing is half-applied**: no compiler file was touched and `compiler/builtin/**` was
+> restored byte-exact by sha256 against pre-experiment copies. `working/` is a live lock
+> meaning *an agent is actively on it*, and frankA has moved to `feature-port-rtl-over-libc`
+> [A p55]. Parked-pending-a-decision is `unfinished/`, which is what this is.
+>
+> **Unparks when the owner rules on the U ticket**, not before. Re-read frankA's measured
+> decomposition before starting either arm — and note face 182a: the serialiser's hazard is
+> the TENSE, not the count. 176 parallel arrays is not the finding; that every FUTURE array
+> must be added or the cache silently emits stale code is.
+
 
 # Cache the compiled NilPy runtime unit image
 
