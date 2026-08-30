@@ -276,3 +276,28 @@ correctly reports *"two distinct fixedpoints"*. **The gate is right and you are 
 contamination it names.** It prints the tell itself — `compiler/pascal26 is OLDER
 than the last commit touching compiler/` — so read that note before diagnosing a
 miscompile. Rebuild (`make compiler/pascal26`, ~12s) and re-gate.
+
+## The hook reads your COMMIT MESSAGE, and it cannot tell prose from a command
+
+`.claude/hooks/no-full-suite.sh` pattern-matches the **text of the command**, and
+a `git commit -m "..."` or heredoc carries its message inside that text. So a
+commit message that *names* a long suite in prose — explaining why the suite is
+full-tier-only, say — is refused exactly as if you had tried to run it.
+
+Two agents hit this on 2026-08-30, from opposite directions: one had the suite's
+name in a message, one had a `test/`-glob in one. In both cases the refusal
+killed the **whole command line**, so a `git add -A && git commit -F msg` staged
+nothing and the heredoc never wrote its file — the message came back as an error
+rather than a warning, and the work had to be retyped.
+
+**Not a bug worth filing** (frank-optimize's call, and agreed: the hook must
+match text, and a hook that parsed shell well enough to know a `-m` string from
+an argument would be a worse thing to maintain than this papercut). **Just
+rephrase:** "the test-nilpy suite" instead of the bare command form, "sources
+under `test/`" instead of a glob. The refusal message names the pattern it hit.
+
+The general form is the one worth carrying: **a guard that matches text matches
+your text too**, including the text that only describes. Anything that
+pattern-matches a command line will fire on documentation of that command line,
+and the more carefully you write about why a rule exists the more likely you are
+to trip it.
