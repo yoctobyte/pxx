@@ -360,4 +360,4 @@ running here (2 process(es)), load 11.17"*, so the timings in it are 2-3x a
 quiet box's and are not a signal.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit c9699f7e2.
