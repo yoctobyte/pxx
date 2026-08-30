@@ -4222,6 +4222,27 @@ var
     bug-n-math-pow-domain-error-raises-the-wrong-exception }
   ASTPyUser  : array of Boolean;
   ASTIChk    : array of Boolean; { AN_CALL built inside a {$I+} region: a Text-I/O callee gets a PXXIoCheck sequenced after it at IR lowering }
+  { The ELEMENT TypeKind of a managed-string-typed EXPRESSION -- Ord(tyWideChar)
+    for a UTF-16 string, 0 (tyUnknown) for everything else, which reads as the
+    1-byte default. feature-unicodestring-model.
+
+    A SYMBOL needs none of this: AllocVar already records a managed string's
+    element in Syms[].ElemType (symtab.inc, deliberately tyChar for
+    tyAnsiString). This array exists because an EXPRESSION has nowhere else to
+    put it -- no other AST array carries an element type, and the wall this
+    ticket removes, `WideChar(u1) + WideChar(u2)`, is an expression with no
+    declaration to hang a width on.
+
+    Note what the default buys, and it is the whole reason this is not the
+    636-site problem wearing a different hat: 0 means NARROW, which is correct
+    for every string expression that exists today and for every frontend that
+    cannot produce a wide string at all. Sites do not need to be found and
+    updated; only the handful of ways a wide string can be PRODUCED need to set
+    it. A missed producer yields a narrow string, which is wrong -- but wide
+    strings are unreachable until the alias in pasparser_lval breaks, so the
+    producers are enumerable and testable at that point rather than silently
+    live before it. }
+  ASTStrElemTk : array of Integer;
   ASTNodeCount : Integer;
   ASTCapacity : Integer;   { current allocated length of the per-node AST arrays (grown by EnsureASTCapacity) }
 

@@ -1819,7 +1819,16 @@ begin
         so all of it must land first. feature-unicodestring-model }
       strElemTk := tyChar;
       if ASTKind[baseNode] = AN_IDENT then
-        strElemTk := Syms[ASTIVal[baseNode]].ElemType;
+        strElemTk := Syms[ASTIVal[baseNode]].ElemType
+      else if ASTStrElemTk[baseNode] <> 0 then
+        { an EXPRESSION base -- `(a + b)[i]`. No AST node carries an element
+          type generally, so wide-string producers stamp ASTStrElemTk and this
+          reads it; 0 means narrow, which is every string expression that
+          exists before the alias breaks. The AN_FIELD arm is still missing:
+          record fields carry UFldTk/UFldPtrElemTk and nothing for a string's
+          element, so `rec.w[i]` would come out stride 1. That is item 3 of the
+          ordering constraint and must land before the alias, not after. }
+        strElemTk := IntToTypeKind(ASTStrElemTk[baseNode]);
       if strElemTk = tyWideChar then
       begin
         elemSize := 2;
