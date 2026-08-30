@@ -17245,6 +17245,31 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_urllib_parse.npy $(TESTTMP)/lib_mimic_urllib_parse
 	tools/expect_same.sh lib_mimic_urllib_parse.1 "$$($(TESTTMP)/lib_mimic_urllib_parse | grep -c '=ok')" "78"
 	tools/expect_same.sh lib_mimic_urllib_parse.2 "$$($(TESTTMP)/lib_mimic_urllib_parse | tail -1)" "MIMIC-URLLIB-PARSE OK"
+	# codecs -- phase 1 of feature-b-sweep-mimic-shims-against-cpython. 574 lines
+	# that had NO differential, which is how a SIGSEGV in two of three encodings,
+	# a decoder that ignored its own error policy, and BOM constants of the wrong
+	# TYPE all sat in it unnoticed. Encode and decode are covered in ONE pass on
+	# purpose: the segfault was fixed first so this file would not ship testing
+	# one direction and get reported green.
+	#
+	# TWO SPELLING RULES IN THAT FILE ARE LOAD-BEARING; do not "tidy" either.
+	# (1) Strings are compared by CODE POINT and bytes as integer lists, never by
+	# repr() -- repr escapes only below U+0080 here, so a repr assertion fails on
+	# CORRECT values in the C1 and astral ranges (compat-n-repr-does-not-escape-
+	# non-printables-above-u007f). (2) High characters are written chr(233), not
+	# a two-hex-digit escape, because that escape currently stores a RAW BYTE
+	# rather than a code point (bug-n-the-hex-string-escape-emits-a-raw-byte-not-
+	# a-code-point) -- written the other way these rows fail against a CORRECT
+	# codecs and read as a codecs bug, which is literally how that lexer bug was
+	# found.
+	#
+	# The decode block's REPLACEMENT COUNTS are the assertion, not just "does it
+	# reject": CPython emits one U+FFFD for a truncated-but-consistent sequence
+	# and one PER BYTE for a run of nonsense, so a decoder with the right verdict
+	# and the wrong count passes a naive test and corrupts every replace decode.
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_codecs.npy $(TESTTMP)/lib_mimic_codecs
+	tools/expect_same.sh lib_mimic_codecs.1 "$$($(TESTTMP)/lib_mimic_codecs | grep -c '=ok')" "83"
+	tools/expect_same.sh lib_mimic_codecs.2 "$$($(TESTTMP)/lib_mimic_codecs | tail -1)" "MIMIC-CODECS OK"
 	# A real minidom DOM -- Document/Element/Attr/Text/Comment/DocumentFragment/
 	# DocumentType/NamedNodeMap/DOMImplementation, namespace-aware create+set,
 	# deep and shallow cloneNode, normalize (feature-b-a-real-minidom-is-an-

@@ -148,11 +148,28 @@ function decode(input: TPyBytes; const encoding: AnsiString = 'utf-8';
 { CPython exposes the BOM constants from this module and encoding-detection
   code reaches for them by name. }
 const
-  BOM_UTF8: AnsiString = #$EF#$BB#$BF;
-  BOM_UTF16_LE: AnsiString = #$FF#$FE;
-  BOM_UTF16_BE: AnsiString = #$FE#$FF;
-  BOM_UTF32_LE: AnsiString = #$FF#$FE#0#0;
-  BOM_UTF32_BE: AnsiString = #0#0#$FE#$FF;
+{ BYTES, not AnsiString, because that is what they are FOR.
+
+  These were `AnsiString` consts, and the type was the whole bug: a BOM is a
+  byte sequence a caller compares against the head of a byte string, and
+  `data.startswith(codecs.BOM_UTF8)` answered False for data that begins with a
+  BOM -- silently defeating exactly the encoding detection this unit's header
+  says the constants exist for.
+
+  The UTF-8 one was doubly wrong and is a nice illustration: `#$EF#$BB#$BF` is a
+  well-formed UTF-8 encoding of U+FEFF, so as a string it held ONE character and
+  `len()` answered 1 where CPython says 3. It looked right in every way except
+  the one that matters.
+
+  They are `var` + an initialiser in the unit's init block rather than `const`
+  because a TPyBytes has to be constructed; nothing assigns to them after
+  startup. }
+var
+  BOM_UTF8: TPyBytes;
+  BOM_UTF16_LE: TPyBytes;
+  BOM_UTF16_BE: TPyBytes;
+  BOM_UTF32_LE: TPyBytes;
+  BOM_UTF32_BE: TPyBytes;
 
 implementation
 
@@ -413,11 +430,101 @@ begin
   Utf8Encode_ := b;
 end;
 
-function Utf8Decode_(input: TPyBytes): AnsiString;
-var s: AnsiString; i: Integer;
+{ How many bytes at 0-based index `i` form a VALID utf-8 sequence, or -how
+  many form its MAXIMAL SUBPART when it is invalid.
+
+  Positive result = a good sequence of that length. Negative = invalid; negate
+  it for the number of bytes to consume before emitting ONE replacement.
+
+  The ranges are not decoration -- each one rejects a class of sequence that is
+  well-formed by the naive "lead byte says N, then N-1 continuations" rule and
+  is still illegal:
+
+    C0 C1     always invalid: the only 2-byte sequences they could spell are
+              overlong encodings of ASCII
+    E0 A0..BF second byte floor, rejecting overlong 3-byte forms
+    ED 80..9F second byte ceiling, rejecting the UTF-16 SURROGATE range, which
+              is what lets a "valid utf-8" check double as a well-formedness
+              check for the string that comes out
+    F0 90..BF rejecting overlong 4-byte forms
+    F4 80..8F rejecting everything above U+10FFFF
+    F5..FF    always invalid: no code point is that high
+
+  MAXIMAL SUBPART is Unicode's own recommendation and it is why CPython answers
+  ONE replacement for a truncated-but-consistent sequence and one PER BYTE for
+  a run of nonsense: b'\xe2\x82' is a single U+FFFD (two bytes that were still
+  on a valid path when the input ran out), while b'\x80\x80' is two (neither
+  byte can begin anything). Measured against CPython 3.12 rather than derived. }
+function Utf8SeqAt(input: TPyBytes; i: Integer): Integer;
+var n, b0, b1, lo, hi, need, k: Integer;
+begin
+  n := input.count;
+  b0 := input.at(i);
+  if b0 <= $7F then begin Utf8SeqAt := 1; Exit; end;
+  { a continuation byte, or a lead that can never be one: nothing to walk }
+  if (b0 <= $C1) or (b0 >= $F5) then begin Utf8SeqAt := -1; Exit; end;
+
+  if b0 <= $DF then begin need := 1; lo := $80; hi := $BF; end
+  else if b0 = $E0 then begin need := 2; lo := $A0; hi := $BF; end
+  else if b0 = $ED then begin need := 2; lo := $80; hi := $9F; end
+  else if b0 <= $EF then begin need := 2; lo := $80; hi := $BF; end
+  else if b0 = $F0 then begin need := 3; lo := $90; hi := $BF; end
+  else if b0 = $F4 then begin need := 3; lo := $80; hi := $8F; end
+  else begin need := 3; lo := $80; hi := $BF; end;
+
+  { the second byte carries the range restriction; the rest are plain
+    continuations. Running out of input stops the walk with whatever prefix was
+    still consistent -- that prefix IS the maximal subpart. }
+  if i + 1 >= n then begin Utf8SeqAt := -1; Exit; end;
+  b1 := input.at(i + 1);
+  if (b1 < lo) or (b1 > hi) then begin Utf8SeqAt := -1; Exit; end;
+  for k := 2 to need do
+  begin
+    if i + k >= n then begin Utf8SeqAt := -k; Exit; end;
+    b1 := input.at(i + k);
+    if (b1 < $80) or (b1 > $BF) then begin Utf8SeqAt := -k; Exit; end;
+  end;
+  Utf8SeqAt := need + 1;
+end;
+
+{ utf-8 decode WITH the error policy applied.
+
+  This used to be `for i := ... do s := s + Chr(input.at(i))` -- a pure byte
+  copy that consulted neither the input's validity nor `errors`, so all three
+  policies behaved as `replace` (invalid bytes were passed through and rendered
+  as U+FFFD downstream) and `strict` -- CPython's DEFAULT -- never raised. The
+  unit header described "a copy plus a validity walk"; the walk did not exist.
+  bug-b-codecs-strict-decode-does-not-raise-on-invalid-utf-8
+
+  The lenient walker CpAt above is deliberately different and stays that way:
+  its job is to iterate the RTL's own strings without policing them. This is
+  the public codec, whose job IS to police bytes. Two callers, two contracts,
+  one scanner each -- sharing them would make one of the two wrong. }
+function Utf8Decode_(input: TPyBytes; const errors: AnsiString): AnsiString;
+var s: AnsiString; i, L, k: Integer;
 begin
   s := '';
-  for i := 0 to input.count - 1 do s := s + Chr(input.at(i));
+  i := 0;
+  while i < input.count do
+  begin
+    L := Utf8SeqAt(input, i);
+    if L > 0 then
+    begin
+      for k := 0 to L - 1 do s := s + Chr(input.at(i + k));
+      i := i + L;
+    end
+    else
+    begin
+      { 'ignore' drops the whole maximal subpart and appends nothing -- spelled
+        as an explicit no-op rather than an empty `then` branch }
+      if errors = 'replace' then s := s + pychr_s(CP_REPLACEMENT)
+      else if errors <> 'ignore' then
+        raise UnicodeDecodeError.Create(
+        'utf-8: invalid start byte or truncated sequence at position ' +
+        IntToStr(i));
+      i := i - L;   { L is negative: this ADVANCES past the maximal subpart }
+    end;
+  end;
   Utf8Decode_ := s;
 end;
 
@@ -577,7 +684,7 @@ begin
   ci := FindBuiltin(NormaliseName(encoding));
   if ci = nil then raise LookupError.Create('unknown encoding: ' + encoding);
   norm := ci.name;
-  if norm = 'utf-8' then decode := Utf8Decode_(input)
+  if norm = 'utf-8' then decode := Utf8Decode_(input, errors)
   else if norm = 'ascii' then
   begin
     r := charmap_decode(input, errors, AsciiTable);
@@ -590,8 +697,25 @@ begin
   end;
 end;
 
+{ four bytes is the longest BOM, so one shape covers all five }
+function Bom4(n, b0, b1, b2, b3: Integer): TPyBytes;
+var r: TPyBytes;
+begin
+  r := TPyBytes.Create(n);
+  r.put(0, b0);
+  r.put(1, b1);
+  if n > 2 then r.put(2, b2);
+  if n > 3 then r.put(3, b3);
+  Bom4 := r;
+end;
+
 begin
   RegCount := 0;
   SearchCount := 0;
   Seeded := False;
+  BOM_UTF8     := Bom4(3, $EF, $BB, $BF, 0);
+  BOM_UTF16_LE := Bom4(2, $FF, $FE, 0, 0);
+  BOM_UTF16_BE := Bom4(2, $FE, $FF, 0, 0);
+  BOM_UTF32_LE := Bom4(4, $FF, $FE, 0, 0);
+  BOM_UTF32_BE := Bom4(4, 0, 0, $FE, $FF);
 end.

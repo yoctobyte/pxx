@@ -1,0 +1,219 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_codecs.pas against CPython's real `codecs` module.
+
+A DIFFERENTIAL: this file runs unmodified under CPython and every line below
+produces identical output both ways. Run it as
+`python3 test/lib_mimic_codecs.npy` to see that.
+
+Phase 1 of feature-b-sweep-mimic-shims-against-cpython. The shim is 574 lines
+and had NO differential, which is how a SIGSEGV in two of its three encodings
+and a decoder that ignored its own error policy both sat unnoticed
+(bug-b-codecs-encode-segfaults-for-every-encoding-except-utf-8,
+bug-b-codecs-strict-decode-does-not-raise-on-invalid-utf-8). Both halves are
+covered here in ONE pass, deliberately: the crash was fixed first precisely so
+this file would not have to ship testing one direction and be reported green.
+
+STRINGS ARE COMPARED BY CODE POINT, NOT BY repr(). `repr()` here escapes only
+below U+0080 while CPython escapes by Unicode printability, so a repr-based
+assertion would fail on correct values in the C1 and astral ranges — the
+divergence is real but is about rendering, and is filed separately as
+compat-n-repr-does-not-escape-non-printables-above-u007f. Comparing code points
+asserts what the decoder actually produced, which is the stronger assertion in
+any case. Bytes are compared as integer lists for the same reason.
+
+HIGH CHARACTERS ARE WRITTEN chr(233), NOT A BACKSLASH-x ESCAPE, AND THAT IS NOT
+COSMETIC. The two-hex-digit escape currently puts a RAW BYTE in the string
+instead of code point U+00NN, so that spelling of e-acute is a malformed
+one-byte string here
+(bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point). Written that
+way, this file's high-byte rows fail against a CORRECT codecs implementation
+and the failure reads as a codecs bug -- which is exactly how that lexer bug
+was found. chr() and the backslash-u escape are both correct, so the assertions
+below measure the codec rather than the literal. Do NOT "simplify" them back to
+the byte-escape spelling: it would re-hide a live bug in a passing test.
+
+(Those escapes are spelled out in words in this paragraph on purpose -- this
+docstring is not raw, so writing them literally either changes the text or,
+for a truncated one, fails to parse. The BYTES literals in the assertions
+below are unaffected: there the escape is correct and is what is being tested.)
+
+THE MAXIMAL-SUBPART COUNTS ARE THE LOAD-BEARING PART of the decode block. It is
+not enough that invalid input is rejected; CPython emits ONE U+FFFD for a
+truncated-but-consistent sequence and one PER BYTE for a run of nonsense, so
+b'\\xe2\\x82' is one replacement and b'\\x80\\x80' is two. A decoder that got the
+verdict right and the count wrong would pass a naive "does it reject?" test and
+still corrupt every `replace` decode. Those counts were measured off CPython
+3.12, not derived from the spec.
+"""
+
+import codecs
+
+fails = [0]
+
+
+def check(label, got, want):
+    if got == want:
+        print(label + '=ok')
+    else:
+        fails[0] = fails[0] + 1
+        print(label + '=FAIL got=' + repr(got) + ' want=' + repr(want))
+
+
+def cps(s):
+    """A string as its code points -- see the repr note in the docstring."""
+    return '[' + ','.join([str(ord(c)) for c in s]) + ']'
+
+
+def bys(b):
+    """Bytes as integers, so the comparison does not depend on bytes repr."""
+    return '[' + ','.join([str(x) for x in b]) + ']'
+
+
+def enc(s, encoding, errors='strict'):
+    try:
+        return bys(codecs.encode(s, encoding, errors))
+    except UnicodeEncodeError:
+        return '<UnicodeEncodeError>'
+    except LookupError:
+        return '<LookupError>'
+
+
+def dec(b, encoding, errors='strict'):
+    try:
+        return cps(codecs.decode(b, encoding, errors))
+    except UnicodeDecodeError:
+        return '<UnicodeDecodeError>'
+    except LookupError:
+        return '<LookupError>'
+
+
+# ------------------------------------------------------------------- lookup
+check('lookup_utf8', codecs.lookup('utf-8').name, 'utf-8')
+check('lookup_UTF8_upper', codecs.lookup('UTF-8').name, 'utf-8')
+check('lookup_utf_8_underscore', codecs.lookup('utf_8').name, 'utf-8')
+check('lookup_ascii', codecs.lookup('ascii').name, 'ascii')
+check('lookup_us_ascii', codecs.lookup('us-ascii').name, 'ascii')
+try:
+    codecs.lookup('no-such-codec')
+    check('lookup_unknown', 'returned', '<LookupError>')
+except LookupError:
+    check('lookup_unknown', '<LookupError>', '<LookupError>')
+
+# ------------------------------------------------------------------- encode
+check('enc_utf8_empty', enc('', 'utf-8'), '[]')
+check('enc_utf8_ascii_text', enc('abc', 'utf-8'), '[97,98,99]')
+check('enc_utf8_high', enc(chr(233), 'utf-8'), '[195,169]')
+check('enc_ascii_empty', enc('', 'ascii'), '[]')
+check('enc_ascii_text', enc('abc', 'ascii'), '[97,98,99]')
+check('enc_latin1_empty', enc('', 'latin-1'), '[]')
+check('enc_latin1_text', enc('abc', 'latin-1'), '[97,98,99]')
+check('enc_latin1_high', enc(chr(233), 'latin-1'), '[233]')
+check('enc_latin1_max', enc(chr(255), 'latin-1'), '[255]')
+check('enc_unknown_codec', enc('a', 'no-such-codec'), '<LookupError>')
+
+# encode error policies -- unreachable until the segfault was fixed
+check('enc_ascii_high_strict', enc(chr(233), 'ascii'), '<UnicodeEncodeError>')
+check('enc_ascii_high_replace', enc(chr(233), 'ascii', 'replace'), '[63]')
+check('enc_ascii_high_ignore', enc(chr(233), 'ascii', 'ignore'), '[]')
+check('enc_ascii_mixed_replace', enc('a' + chr(233) + 'b', 'ascii', 'replace'), '[97,63,98]')
+check('enc_ascii_mixed_ignore', enc('a' + chr(233) + 'b', 'ascii', 'ignore'), '[97,98]')
+# latin-1 takes everything up to U+00FF and refuses above it
+check('enc_latin1_above_strict', enc('Ā', 'latin-1'), '<UnicodeEncodeError>')
+check('enc_latin1_above_replace', enc('Ā', 'latin-1', 'replace'), '[63]')
+check('enc_latin1_above_ignore', enc('Ā', 'latin-1', 'ignore'), '[]')
+
+# ------------------------------------------------------------------- decode
+check('dec_utf8_empty', dec(b'', 'utf-8'), '[]')
+check('dec_utf8_plain', dec(b'abc', 'utf-8'), '[97,98,99]')
+check('dec_ascii_plain', dec(b'abc', 'ascii'), '[97,98,99]')
+check('dec_latin1_high', dec(b'\xff', 'latin-1'), '[255]')
+check('dec_ascii_high_strict', dec(b'\xff', 'ascii'), '<UnicodeDecodeError>')
+check('dec_ascii_high_replace', dec(b'\xff', 'ascii', 'replace'), '[65533]')
+check('dec_ascii_high_ignore', dec(b'\xff', 'ascii', 'ignore'), '[]')
+check('dec_unknown_codec', dec(b'a', 'no-such-codec'), '<LookupError>')
+
+# --- valid utf-8 at every sequence length and at the range boundaries -------
+check('dec_valid_2byte_min', dec(b'\xc2\x80', 'utf-8'), '[128]')
+check('dec_valid_2byte_max', dec(b'\xdf\xbf', 'utf-8'), '[2047]')
+check('dec_valid_3byte_min', dec(b'\xe0\xa0\x80', 'utf-8'), '[2048]')
+check('dec_valid_eacute', dec(b'\xc3\xa9', 'utf-8'), '[233]')
+check('dec_valid_euro', dec(b'\xe2\x82\xac', 'utf-8'), '[8364]')
+check('dec_valid_emoji', dec(b'\xf0\x9f\x98\x80', 'utf-8'), '[128512]')
+# the two code points either side of the surrogate hole, both legal
+check('dec_last_before_surrogate', dec(b'\xed\x9f\xbf', 'utf-8'), '[55295]')
+check('dec_first_after_surrogate', dec(b'\xee\x80\x80', 'utf-8'), '[57344]')
+check('dec_max_codepoint', dec(b'\xf4\x8f\xbf\xbf', 'utf-8'), '[1114111]')
+check('dec_mixed_valid', dec(b'a\xc3\xa9b', 'utf-8'), '[97,233,98]')
+
+# --- invalid utf-8: strict RAISES (this is the default, and it did not) -----
+check('dec_lone_ff_strict', dec(b'\xff', 'utf-8'), '<UnicodeDecodeError>')
+check('dec_trunc2_strict', dec(b'\xc3', 'utf-8'), '<UnicodeDecodeError>')
+check('dec_trunc3_strict', dec(b'\xe2\x82', 'utf-8'), '<UnicodeDecodeError>')
+check('dec_trunc4_strict', dec(b'\xf0\x9f\x98', 'utf-8'), '<UnicodeDecodeError>')
+check('dec_lone_cont_strict', dec(b'\x80', 'utf-8'), '<UnicodeDecodeError>')
+check('dec_bad_middle_strict', dec(b'a\xffb', 'utf-8'), '<UnicodeDecodeError>')
+check('dec_lead_noncont_strict', dec(b'\xc3\x28', 'utf-8'), '<UnicodeDecodeError>')
+# the four classes that are well-formed by the naive lead-byte rule and still
+# illegal -- overlong 2/3/4-byte forms, the surrogate range, and above U+10FFFF
+check('dec_overlong2_strict', dec(b'\xc0\x80', 'utf-8'), '<UnicodeDecodeError>')
+check('dec_overlong3_strict', dec(b'\xe0\x80\x80', 'utf-8'), '<UnicodeDecodeError>')
+check('dec_overlong4_strict', dec(b'\xf0\x80\x80\x80', 'utf-8'), '<UnicodeDecodeError>')
+check('dec_surrogate_strict', dec(b'\xed\xa0\x80', 'utf-8'), '<UnicodeDecodeError>')
+check('dec_above_max_strict', dec(b'\xf4\x90\x80\x80', 'utf-8'), '<UnicodeDecodeError>')
+check('dec_f5_lead_strict', dec(b'\xf5\x80\x80\x80', 'utf-8'), '<UnicodeDecodeError>')
+
+# --- replace: the COUNT is the assertion, not merely the presence of U+FFFD -
+# one replacement for a truncated-but-consistent sequence...
+check('dec_trunc2_replace', dec(b'\xc3', 'utf-8', 'replace'), '[65533]')
+check('dec_trunc3_replace', dec(b'\xe2\x82', 'utf-8', 'replace'), '[65533]')
+check('dec_trunc4_replace', dec(b'\xf0\x9f\x98', 'utf-8', 'replace'), '[65533]')
+# ...and one PER BYTE for bytes that cannot begin or continue anything
+check('dec_ff_fe_replace', dec(b'\xff\xfe', 'utf-8', 'replace'), '[65533,65533]')
+check('dec_two_cont_replace', dec(b'\x80\x80', 'utf-8', 'replace'), '[65533,65533]')
+check('dec_overlong2_replace', dec(b'\xc0\x80', 'utf-8', 'replace'), '[65533,65533]')
+check('dec_surrogate_replace', dec(b'\xed\xa0\x80', 'utf-8', 'replace'),
+      '[65533,65533,65533]')
+check('dec_above_max_replace', dec(b'\xf4\x90\x80\x80', 'utf-8', 'replace'),
+      '[65533,65533,65533,65533]')
+# valid text around the damage survives, and a non-continuation is NOT eaten
+check('dec_bad_middle_replace', dec(b'a\xffb', 'utf-8', 'replace'), '[97,65533,98]')
+check('dec_lead_noncont_replace', dec(b'\xc3\x28', 'utf-8', 'replace'), '[65533,40]')
+
+# --- ignore: drops the same maximal subparts, emitting nothing --------------
+check('dec_trunc2_ignore', dec(b'\xc3', 'utf-8', 'ignore'), '[]')
+check('dec_ff_fe_ignore', dec(b'\xff\xfe', 'utf-8', 'ignore'), '[]')
+check('dec_bad_middle_ignore', dec(b'a\xffb', 'utf-8', 'ignore'), '[97,98]')
+check('dec_lead_noncont_ignore', dec(b'\xc3\x28', 'utf-8', 'ignore'), '[40]')
+check('dec_surrogate_ignore', dec(b'\xed\xa0\x80', 'utf-8', 'ignore'), '[]')
+
+# ---------------------------------------------------------------- round-trip
+check('rt_utf8_ascii', cps(codecs.decode(codecs.encode('abc', 'utf-8'), 'utf-8')),
+      '[97,98,99]')
+check('rt_utf8_high', cps(codecs.decode(codecs.encode(chr(233), 'utf-8'), 'utf-8')),
+      '[233]')
+check('rt_latin1_high',
+      cps(codecs.decode(codecs.encode(chr(233), 'latin-1'), 'latin-1')), '[233]')
+check('rt_ascii_text',
+      cps(codecs.decode(codecs.encode('abc', 'ascii'), 'ascii')), '[97,98,99]')
+
+# ------------------------------------------------------------ charmap trio
+_tbl = ''.join([chr(i) for i in range(256)])
+_map = codecs.charmap_build(_tbl)
+check('charmap_encode_text', bys(codecs.charmap_encode('abc', 'strict', _map)[0]),
+      '[97,98,99]')
+check('charmap_encode_count', codecs.charmap_encode('abc', 'strict', _map)[1], 3)
+check('charmap_encode_empty', bys(codecs.charmap_encode('', 'strict', _map)[0]), '[]')
+check('charmap_decode_text', cps(codecs.charmap_decode(b'abc', 'strict', _tbl)[0]),
+      '[97,98,99]')
+
+# -------------------------------------------------------------------- BOMs
+check('bom_utf8', bys(codecs.BOM_UTF8), '[239,187,191]')
+check('bom_utf16_le', bys(codecs.BOM_UTF16_LE), '[255,254]')
+check('bom_utf16_be', bys(codecs.BOM_UTF16_BE), '[254,255]')
+check('bom_utf32_le', bys(codecs.BOM_UTF32_LE), '[255,254,0,0]')
+check('bom_utf32_be', bys(codecs.BOM_UTF32_BE), '[0,0,254,255]')
+
+if fails[0] == 0:
+    print('MIMIC-CODECS OK')
+else:
+    print('MIMIC-CODECS FAILED ' + str(fails[0]))
