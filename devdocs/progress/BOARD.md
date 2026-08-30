@@ -62,7 +62,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | regression-tools-devtest-00-3 | T | 70 | regression | regression: tools-devtest#00 red at 0c99981669b7 (auto-filed by twatch) | bug-a-twenty-new-cross-target-rows-compare-stdout-without-the-exit-code |
 
-## backlog (348)
+## backlog (349)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -86,6 +86,7 @@ _none_
 | bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa | A | 25 | bug | A proc's managed locals (AnsiString, interfaces, dynamic arrays) are released by a proc CLEANUP FRAME that five targets have and two do not. wasm32 and xtensa both fall outside TargetHasProcCleanupFrame, so an exception unwinding THROUGH a frame leaks everything that frame owned. Silent by construction: an unwind leak prints nothing. | — |
 | bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets | A | 20 | bug |  | — |
 | bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse | A | 40 | bug | `C(**d)` and `C(*lst)` on a class with an ordinary `__init__` fail with `expected expression` — on the PINNED compiler too, so this is not a regression. The ctor path in pyparser.inc:45097 builds its own AN_ARG chain and never consults the star-forwarding branch that plain calls use. Routing it there needs the receiver prepended, which PyStarForwardCall's signature does not take. | — |
+| bug-a-o3-alone-computes-a-different-result-for-a-nested-case-statement | A+O | 45 | bug | Fuzz finding pxx-self_case: at -O3 the compiler produces a DIFFERENT result than it does at -O0 and -O2 for a nested `case` statement, with no diagnostic. fpc-O0, fpc-O2, pxx-O0 and pxx-O2 all agree on 16452949249337348755; pxx-O3 alone says 16571182087083257235. Four independent implementations against one, so the program's meaning is a fact rather than a judgement call, and -O3 is the one that is wrong. --no-dce does not change it, so it is not the DCE pass. Contained to the -O3 free tier today, but it blocks promoting whichever pass is at fault to -O2. | — |
 | bug-a-paramsize-and-allocparam-disagree-about-a-5-8-byte-byvalue-record | A | 40 | bug | ParamSize and AllocParam disagree about a 5-8 byte by-value record | — |
 | bug-a-proc-map-emits-static-addresses-for-a-dynamic-build | A | 30 | bug | --proc-map computes every address as LOAD_ADDR + CODE_OFFSET + BodyAddr, using the STATIC code offset unconditionally. A dynamic build (-dPXX_LIBC_HEAP, --shared) sits at DYNAMIC_CODE_OFFSET, so every PROC line is 0x70 low -- a constant shift over all routines. Measured on the pinned binary. It does not fail; tools/vgsym.py resolves the shifted address to the PRECEDING routine, so the symbolized stack is wrong rather than absent. compiler.pas's own comment already states the limitation; nothing enforces it. | — |
 | bug-a-promocore-is-not-the-only-place-that-knows-the-promo-slot-layout | A | 25 | bug | ir.inc:9399 says a promotable-int store's two paths 'both go through promocore.pas, the only place that knows the layout'. x86-64's hand-emitted variant-release blob in ir_codegen.inc reads the payload as a literal [rax+8] at three sites, so it knows the layout too. The values agree today so nothing is broken — but this is the same arm, the same shape and the same file as instance #4 of the audit, where an x86-64 hand-emitted twin of a 'single choke point' silently diverged for two months. | — |
@@ -852,6 +853,7 @@ _none_
 - [p 45] [A] bug-a-a-hot-write-to-a-data-page-that-shares-with-code-costs-1600x-under-qemu
 - [p 45] [A] bug-a-a-static-array-of-promo-ints-releases-only-element-zero
 - [p 45] [A] bug-a-iropname-has-no-entry-for-seven-ir-ops-so-a-missing-arm-reports-unknown
+- [p 45] [A+O] bug-a-o3-alone-computes-a-different-result-for-a-nested-case-statement
 - [p 45] [A] bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire
 - [p 45] [A+S] bug-a-xtensa-cannot-build-a-program-over-512-kib-of-code-call0-has-no-veneer
 - [p 45] [A+S] bug-a-xtensa-write-of-any-real-sigbuses-while-str-of-the-same-value-works
