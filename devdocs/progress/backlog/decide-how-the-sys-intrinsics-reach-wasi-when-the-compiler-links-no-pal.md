@@ -152,3 +152,34 @@ changed: the edge and the number are the U lane's call, not this lane's.
 
 Full measurement and the costing: `devdocs/dev/wasm/PLAN.md`, Phase 9j, on
 branch `wasm` (`b564c8f39`). Nothing applied there either.
+
+## The experiment that would settle this, and it is cheap
+
+Added 2026-08-30 so this reads as a question with a named test rather than an
+open one. **argv is the one capability that can be tried in isolation**, because
+`args_sizes_get` / `args_get` need no preopen and no rights (verified above) —
+every other candidate drags the whole capability model in with it and so cannot
+distinguish the options.
+
+- **If (b) — the backend emits the imports itself** — argv is the cheapest place
+  to prove it: `ParamCount` is one import plus eight bytes of scratch, and a
+  working `ParamStr` demonstrates a WASI capability reached with **no PAL
+  linked at all**, which is the property (b) is really being asked about.
+- **If (c) — a shared leaf helper** — argv is the case that shows a leaf helper
+  is not sufficient, and *why*: the problem here is **reachability, not
+  duplication**. A helper in a unit nothing calls is eliminated before the
+  backend can ask for it, so (c) has to say where the helper lives such that a
+  synthesised call can still find it. That is a real constraint on (c)'s design
+  and it is not visible from the option list.
+- **If (a) — duplicate per side** — argv is where the duplication is smallest,
+  so it is the least informative test, which is itself worth knowing.
+
+Whoever answers this can therefore answer it on one small capability first and
+let the rest follow, instead of deciding the whole model up front.
+
+**Blocking relationship now recorded in frontmatter.** `feature-target-wasm`
+[p60] carries `blocked-by:` this ticket as of today — 36 of its 36 remaining
+refusals are this decision. Effective priority propagates down that edge, so
+this now ranks from what it unblocks rather than from its filed `prio: 40`.
+The filed number is untouched and stays the U lane's to set; the edge is a
+measurement.

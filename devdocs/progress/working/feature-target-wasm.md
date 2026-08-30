@@ -4,7 +4,7 @@ title: "wasm32 as a target — 7th backend, WASI PAL, own branch and own gate"
 track: A+B
 prio: 60
 type: feature
-blocked-by: []
+blocked-by: [decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal]
 status: working
 owner: frankwasm
 created: 2026-08-27
@@ -150,3 +150,34 @@ the two classes cannot be tested apart.
 Session result: compiler.pas for wasm32 **56% → 97.6%** of bodies; 52 GB-and-never-finishing →
 595 MB / 26.5 s. Nothing on `origin/wasm` is pre-approved by any of it — the five-arm, two-lane
 merge ledger is unchanged.
+
+## 2026-08-30 — the `blocked-by` edge, and why this ticket stops advertising itself
+
+`blocked-by:` was `[]` until today. It is now the wasi-intrinsics decision, and
+the change is a **measurement, not a judgment**: at
+`compiler.pas` 3719 of 3755 bodies lowered, **36 of the 36 remaining refusals**
+are that one decision — 35 in the builtins block (`writeELF*`, `writeU8/16/32/64`,
+`LoadFile`) and the 36th `IR_SYSCALL`, which is the same question wearing a
+different hat. There is no refusal left this lane can act on unilaterally.
+
+That dependency was real for two days before this line existed. It was stated in
+PROSE, in `devdocs/dev/wasm/PLAN.md`, **on a side branch** — invisible to the
+ranker, invisible to `progress.sh check`, and invisible to anyone who has not
+checked this branch out. The charter's own standing rule says anything other
+agents must act on goes on `master` immediately; a `blocked-by` edge is exactly
+that, and it took a re-measure of somebody else's stale blocker to notice this
+lane had the same defect in a worse place.
+
+**Two consequences, stated so neither reads as a surprise later.**
+
+1. **This ticket drops out of `ready` while the decision is open, and that is
+   accurate** — the remaining work genuinely is blocked. It is NOT abandonment
+   and NOT a re-prioritisation: `prio: 60` is unchanged and the ticket keeps its
+   owner and its `working/` lock. The lane still has unblocked work in front of
+   it (Phase 9j's argv, Phase 7's exceptions); what is blocked is the *last mile*
+   of the Phase 9 anchor.
+2. **The decision's own priority now follows the ranker's rule instead of a
+   human overriding it.** Effective prio propagates down `blocked-by` edges, so
+   the decide inherits from what it unblocks rather than sitting at its filed
+   `prio: 40` while gating a p60 anchor. Nobody edited that number and nobody
+   should: the number is the U lane's call, the *edge* is a fact.

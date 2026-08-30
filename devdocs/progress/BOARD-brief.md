@@ -83,8 +83,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [A]` feature-a-typeref-migrate-consumers
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 62] [A]` feature-unicodestring-model
+- `[p 60] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 2)
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
-- `[p 60] [U]` decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 1)
 - `[p 60] [N]` bug-n-a-local-named-after-its-own-def-aliases-the-function-result
 
 _329 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

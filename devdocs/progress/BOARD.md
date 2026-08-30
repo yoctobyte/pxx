@@ -15,7 +15,7 @@ _none_
 | feature-opt-o3-register-pressure | A+O | 70 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-opt-o3-w1-operand-folds-are-x86-64-only-aarch64-has-four-of-fifteen | A+O | 55 | feature | -O3: the W1 operand folds are x86-64-only — aarch64 has 4 gate sites to x86-64's 15 | — |
 | feature-rust-option-type | R | 0 | feature | Rust frontend: `Option<T>` — the stage-2 rung of the chess ladder | — |
-| feature-target-wasm | A+B | 60 | feature | NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim. | — |
+| feature-target-wasm | A+B | 60 | feature | NOT DISPATCHABLE — held by a standalone checkout on branch `wasm`. Emit wasm32 modules from the shared IR: new backend + module writer + WAT text emitter (Track A, new files), plus lib/rtl/platform/wasi (Track B). Two shared-file escapes: VMT slots hold code addresses (wasm has none — they become table indices) and exceptions are a hand-rolled setjmp/longjmp that does not port. Worked in a STANDALONE checkout (~/frankwasm) on branch `wasm`, self-gated, NOT swept by Track T. Do not claim. | decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal |
 
 ## unfinished (27)
 
@@ -746,8 +746,8 @@ _none_
 - [p 62] [A] feature-a-typeref-migrate-consumers
 - [p 62] [N] feature-nilpy-enum-class [parked — re-claim, do not duplicate]
 - [p 62] [A] feature-unicodestring-model
+- [p 60] [U] decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 2)
 - [p 60] [U] decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
-- [p 60] [U] decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal (unblocks 1)
 - [p 60] [N] bug-n-a-local-named-after-its-own-def-aliases-the-function-result [parked — re-claim, do not duplicate]
 - [p 60] [N] bug-n-os-environ-and-os-sep-are-not-values
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
@@ -1083,6 +1083,7 @@ _none_
 
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
+- **2** — decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
@@ -1091,7 +1092,6 @@ _none_
 - **1** — compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees
 - **1** — decide-does-nilpy-random-seed-itself-at-import
 - **1** — decide-how-much-string-machinery-the-basic-frontend-gets
-- **1** — decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
 - **1** — decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
