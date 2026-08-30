@@ -630,23 +630,53 @@ def recheck(led, oracles, workdir, sha=None):
     notices, unprompted, that it has been fixed. Nobody has to remember to
     re-enable the fuzzer.
 
-    Returns (n_fixed, n_still_open).
+    THREE outcomes, not two. A seed that cannot be REGENERATED has not been
+    measured at all, and printing "still reproduces" for it reports a failure to
+    measure as a measurement -- it reads as "the bug is alive" and is
+    indistinguishable in the output from a genuine reproduction. That case gets
+    its own word here, and it does NOT mark the entry fixed either: unknown is
+    unknown in both directions, so the entry stays open and the throttle stays
+    on, but nobody is told a false verdict.
+
+    Regeneration goes through generate(), which is the single place that knows a
+    unit set needs --outdir rather than -o. Hand-rolling `-o` here is what made
+    every --units finding permanently un-closeable: pasmith REJECTS
+    `--units N -o FILE`, so regeneration failed on every tick forever, the
+    entry could never be marked fixed, and the throttle it fed never let go.
+    Measured 2026-08-30 on pxx-self_unitrec, which had been fixed by 10c869750
+    and was still being reported as reproducing.
+
+    Returns (n_fixed, n_still_open, n_unknown).
     """
-    fixed = still = 0
+    fixed = still = unknown = 0
+    # Own subdirectory: recheck may share a workdir with a live fuzz round, and
+    # generate() names files by seed alone.
+    rdir = os.path.join(workdir, "recheck")
+    os.makedirs(rdir, exist_ok=True)
     for sig, e in sorted(ledger_open(led).items()):
         reproduces = False
-        for ex in e.get("examples", []):
-            src = os.path.join(workdir, "recheck_%d.pas" % ex["seed"])
-            rc, _ = run([sys.executable, PASMITH] + ex["args"] + ["-o", src], 60)
+        why = ""
+        examples = e.get("examples", [])
+        if not examples:
+            # Zero measurements is not evidence of a fix. Never silently pass an
+            # entry that has nothing to run.
+            why = "no example seeds recorded"
+        for ex in examples:
+            rc, out, src = generate(ex["args"], rdir, ex["seed"])
             if rc != 0:
-                reproduces = True      # cannot judge: keep it open, loudly
+                last = ((out or "").strip().splitlines() or [""])[-1][:120]
+                why = "seed %s would not regenerate (rc=%d): %s" % (
+                    ex["seed"], rc, last)
                 break
             res = {o.name: evaluate(o, src, workdir) for o in oracles}
             bad, _, _, cls = classify(res)
             if bad:
                 reproduces = True
                 break
-        if reproduces:
+        if why:
+            unknown += 1
+            print("  %-28s CANNOT JUDGE -- %s" % (sig, why))
+        elif reproduces:
             still += 1
             print("  %-28s still reproduces" % sig)
         else:
@@ -656,7 +686,7 @@ def recheck(led, oracles, workdir, sha=None):
             fixed += 1
             print("  %-28s FIXED (%d example seed(s) now agree)"
                   % (sig, len(e.get("examples", []))))
-    return fixed, still
+    return fixed, still, unknown
 
 
 def ledger_status(led):
@@ -949,12 +979,16 @@ def main():
             return 2
         n = len(ledger_open(led))
         print("pasmith_run: rechecking %d open finding(s) against %s" % (n, PXX))
-        fixed, still = recheck(led, oracles, workdir, a.sha)
+        fixed, still, unknown = recheck(led, oracles, workdir, a.sha)
         save_ledger(led, os.path.join(FINDINGS, "LEDGER.json"))
         if a.ledger_inplace:
             save_ledger(led, a.ledger)
-        print("pasmith_run: %d fixed, %d still open" % (fixed, still))
-        return 0
+        tail = ", %d could not be judged" % unknown if unknown else ""
+        print("pasmith_run: %d fixed, %d still open%s" % (fixed, still, tail))
+        # Non-zero when something could not be measured: a caller that treats a
+        # recheck as a verdict must be able to tell "nothing to close" from
+        # "I did not manage to look".
+        return 3 if unknown else 0
 
     if a.seed is not None:
         seeds = [a.seed]

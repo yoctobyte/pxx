@@ -1041,13 +1041,15 @@
       ],
       "first_seed": 91162,
       "first_sha": "8e39c9ed5",
+      "fixed": "2026-08-30T06:05:03Z",
+      "fixed_sha": "5944ee686",
       "hits": 1,
       "kind": "case",
       "note": "pxx CONTRADICTS ITSELF across -O levels -- it produces different output; an optimiser bug (Track A/O); FPC not involved",
       "opened": "2026-08-30T04:47:23Z",
       "reopened_from_fixed": false,
       "sig": "pxx-self_case",
-      "status": "ticketed",
+      "status": "fixed",
       "ticket": "bug-a-o3-alone-computes-a-different-result-for-a-nested-case-statement"
     },
     "pxx-self_unitrec": {
@@ -1066,13 +1068,15 @@
       ],
       "first_seed": 92001,
       "first_sha": "5dd25e789",
+      "fixed": "2026-08-30T06:11:46Z",
+      "fixed_sha": "5944ee686",
       "hits": 1,
       "kind": "unitrec",
       "note": "pxx CONTRADICTS ITSELF across -O levels -- it produces different output; an optimiser bug (Track A/O); FPC not involved",
       "opened": "2026-08-30T05:22:07Z",
       "reopened_from_fixed": false,
       "sig": "pxx-self_unitrec",
-      "status": "ticketed",
+      "status": "fixed",
       "ticket": "bug-a-o3-drops-the-first-of-two-chained-qword-multiply-xor-statements"
     },
     "pxx-vs-fpc_?": {
