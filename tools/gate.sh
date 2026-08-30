@@ -229,6 +229,39 @@ else
   echo "  SKIP  fpc seed compiles (no forwardlint.py or compiler.pas)"
 fi
 
+# THE UNWIRED-TEST CANARY. Same placement argument as the two blocks above --
+# before the case, so no mode can forget it -- and the same failure it fixes as
+# the forwardlint block: the checker already existed, already exited 1, and was
+# invoked by nothing anyone reads in time.
+#
+# tools/check_test_wiring.py runs in limited+full as part of tools-devtest,
+# which is right for the CENSUS (47 unwired files today, most in deferred lanes,
+# expensive to act on) and useless for the author: frankwasm wrote nine tests on
+# 2026-08-30, the checker named all nine and exited 1 all day, and one of them
+# was a campaign's ACCEPTANCE test -- the fcl-json line the campaign existed for,
+# quoted to three agents -- executed by nothing but its author's hand.
+#
+# This asks the cheap half instead: did THIS push add a file under test/ that no
+# rule references? Scoped to origin/$BRANCH..HEAD, so it names what you just
+# wrote and nobody inherits a backlog. The agent who wrote the file still has
+# the oracle in their head; a sweep three weeks later has to reconstruct it.
+#
+# ~0.7s (measured three runs on plexus: 0.70 / 0.66 / 1.29, ~2-4% of quick's
+# ~30s budget). Re-measure rather than trusting this line -- it scans the
+# Makefile and tools/, so it grows with both.
+#
+# SKIPs loudly without an origin ref rather than passing: a check that reports
+# success by not running is the exact defect check_test_wiring.py exists to
+# remove, and `--since` returns 2 rather than 0 when it cannot scope.
+GATE_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo master)
+if [ -f tools/check_test_wiring.py ] \
+   && git rev-parse --verify -q "origin/$GATE_BRANCH" >/dev/null 2>&1; then
+  step "this push wires the tests it adds" "$LOGDIR/test-wiring.log" \
+       python3 tools/check_test_wiring.py --since "origin/$GATE_BRANCH" || RC=1
+else
+  echo "  SKIP  this push wires the tests it adds (no origin/$GATE_BRANCH ref)"
+fi
+
 case "$MODE" in
   quick|full)
     # QUICK = the native confirm CLAUDE.md actually prescribes: testmgr --tier

@@ -320,6 +320,82 @@ def t_stem_evidence_reaches_direct_children_only():
     return "stem evidence reaches direct children only"
 
 
+# ------------------------------------------- --since: the PER-PUSH question --
+#
+# The census answers "what is unwired in this tree?" and is expensive to act on,
+# so it runs in limited+full. `--since` answers "did THIS push add a test that
+# nothing runs?", which is cheap and lands on the agent who can still fix it in
+# seconds. frankwasm wrote nine tests on 2026-08-30; the census named all nine
+# and exited 1 all day, and one was a campaign's acceptance test run by nothing
+# but its author's hand.
+
+def _committed_tree(makefile, base_tests, new_tests, unwired=""):
+    """A tree with a base COMMIT, then a second commit adding `new_tests`.
+    -> (root, base_sha). Scoped mode needs real history, not just an index."""
+    root = _tree(makefile=makefile, tests=base_tests, unwired=unwired)
+    env = ["-c", "user.email=t@pxx", "-c", "user.name=devtest"]
+    subprocess.run(["git"] + env + ["commit", "-q", "-m", "base"],
+                   cwd=root, capture_output=True)
+    base = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root,
+                          capture_output=True, text=True).stdout.strip()
+    for name in new_tests:
+        full = os.path.join(root, "test", name)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        open(full, "w").write("x\n")
+    subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True)
+    subprocess.run(["git"] + env + ["commit", "-q", "-m", "add tests"],
+                   cwd=root, capture_output=True)
+    return root, base
+
+
+def _run_since(root, rev):
+    m = _mod(root)
+    import io
+    from contextlib import redirect_stdout
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = m.main(["--since", rev])
+    return rc, buf.getvalue()
+
+
+def t_since_names_a_test_THIS_push_added_and_did_not_wire():
+    root, base = _committed_tree("all:\n\techo hi\n", [], ["orphan.pas"])
+    rc, out = _run_since(root, base)
+    assert rc == 1, "an unwired new test must fail the push gate: %s" % out
+    assert "test/orphan.pas" in out, out
+    assert "THIS PUSH ADDS" in out, out
+    return "a test added by this push with no rule fails it"
+
+
+def t_since_ignores_an_orphan_that_was_ALREADY_there():
+    """The whole point of scoping: nobody inherits the backlog."""
+    root, base = _committed_tree("all:\n\techo hi\n", ["old_orphan.pas"],
+                                 ["new_one.pas"])
+    rc, out = _run_since(root, base)
+    assert "test/old_orphan.pas" not in out, \
+        "a pre-existing orphan leaked into the per-push check: %s" % out
+    assert "test/new_one.pas" in out, out
+    return "a pre-existing orphan is the census's problem, not this push's"
+
+
+def t_since_passes_when_the_new_test_IS_wired():
+    root, base = _committed_tree("all:\n\t./run test/wired.pas\n", [],
+                                 ["wired.pas"])
+    rc, out = _run_since(root, base)
+    assert rc == 0, "a properly wired new test must not fail: %s" % out
+    return "wiring the test clears it"
+
+
+def t_since_that_cannot_resolve_its_rev_is_NOT_a_pass():
+    """The third state. A check that reports success by not running is the
+    exact defect this checker exists to remove, so it exits 2, not 0."""
+    root, _ = _committed_tree("all:\n\techo hi\n", [], ["orphan.pas"])
+    rc, out = _run_since(root, "no-such-rev-exists")
+    assert rc == 2, "cannot-scope must not be 0 or 1, got %d: %s" % (rc, out)
+    assert "CANNOT SCOPE" in out and "not a pass" in out, out
+    return "an unresolvable --since says so instead of passing"
+
+
 TESTS = [t_a_commented_mention_does_not_wire_a_file,
          t_a_hash_comment_inside_a_recipe_body_does_not_wire,
          t_a_real_rule_still_wires,
@@ -337,7 +413,11 @@ TESTS = [t_a_commented_mention_does_not_wire_a_file,
          t_a_glob_over_a_directory_still_blankets_it,
          t_a_search_path_flag_still_blankets_its_directory,
          t_the_checker_does_not_scan_its_own_source,
-         t_stem_evidence_reaches_direct_children_only]
+         t_stem_evidence_reaches_direct_children_only,
+         t_since_names_a_test_THIS_push_added_and_did_not_wire,
+         t_since_ignores_an_orphan_that_was_ALREADY_there,
+         t_since_passes_when_the_new_test_IS_wired,
+         t_since_that_cannot_resolve_its_rev_is_NOT_a_pass]
 
 
 def main():

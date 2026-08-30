@@ -309,7 +309,58 @@ def subjects():
     return sorted(keep)
 
 
-def main():
+def added_since(rev):
+    """Test subjects this push ADDED, per git. -> set, or None if git cannot say.
+
+    None is a THIRD state and the caller must not collapse it into "nothing
+    added": a query that could not run and a query that found nothing are the
+    same empty set, and treating them alike is how a check reports success by
+    not running (`--since` on a fresh clone with no origin ref, for one).
+    """
+    try:
+        out = subprocess.run(["git", "-C", ROOT, "log", "--diff-filter=A",
+                              "--format=", "--name-only", "%s..HEAD" % rev,
+                              "--", "test"],
+                             capture_output=True, text=True)
+    except OSError:
+        return None
+    if out.returncode != 0:
+        return None
+    return {ln.strip() for ln in out.stdout.splitlines() if ln.strip()}
+
+
+def main(argv=None):
+    # --since <rev>: ask the PER-PUSH question instead of the census one.
+    #
+    # The census ("what is unwired in this tree?") is expensive to act on -- 47
+    # files today, most in deferred lanes -- so it lives in limited+full where a
+    # sweep can work it. But it answers slowly and addresses nobody: frankwasm
+    # wrote nine tests on 2026-08-30, this checker named all nine and exited 1
+    # all day, and one of them was a campaign's acceptance test that had been
+    # run by nothing but its author's hand.
+    #
+    # "Did THIS push add a test nothing runs?" is the cheap half, and it lands
+    # on someone who can act now -- the agent who just wrote the file still
+    # knows what it should assert and has the oracle in their head, which is
+    # exactly what a sweep three weeks later must reconstruct.
+    #
+    # The census is not replaced and must not be: draining 47 does nothing
+    # about the ~8/day being created. Counted 2026-08-30: 45 at frankwasm's
+    # measurement, 47 hours later, which is the drift its own batch-1 note
+    # called in 2026-08-19 -- "the orphan population grows faster than it
+    # drains, so twenty-one was a snapshot and never a census."
+    since = None
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv and argv[0] == "--since":
+        if len(argv) < 2:
+            print("check-test-wiring: --since needs a revision")
+            return 2
+        since = argv[1]
+    elif argv:
+        print("check-test-wiring: unknown argument %r (only --since <rev>)"
+              % argv[0])
+        return 2
+
     exempt, bad = read_exemptions()
     if bad:
         print("check-test-wiring: %s has %d entr(y/ies) with no REASON:"
@@ -369,6 +420,32 @@ def main():
     # distinguished from a scanner whose scan stopped matching, and the two
     # read identically. Measured 2026-08-30: `tools/test_wiring_gate_devtest.py`
     # passed against a tree containing ZERO test files.
+    if since is not None:
+        added = added_since(since)
+        if added is None:
+            # The third state, said out loud. Never 0 with a success line:
+            # that is the shape this whole checker exists to refuse.
+            print("check-test-wiring: CANNOT SCOPE — `git log %s..HEAD` failed "
+                  "(no such rev?). Nothing was checked; this is not a pass."
+                  % since)
+            return 2
+        scoped = sorted(p for p in unwired if p in added)
+        print("check-test-wiring: %d test file(s) added since %s, %d of them "
+              "wired into nothing" % (len(added), since, len(scoped)))
+        if not scoped:
+            return 0
+        print("check-test-wiring: THIS PUSH ADDS %d TEST FILE(S) THAT NOTHING "
+              "RUNS:" % len(scoped))
+        for p in scoped:
+            print("  %s" % p)
+        print("  A file in test/ is not a test until a rule runs it. Wire each")
+        print("  into a Makefile rule — or, if it is a helper/fixture or is")
+        print("  deliberately staged, add it to %s WITH A REASON."
+              % os.path.relpath(EXEMPT, ROOT))
+        print("  (Do not delete the test to clear this. That is the one")
+        print("   response that loses the work you just did.)")
+        return 1
+
     print("check-test-wiring: scanned %d test subject(s) against %s"
           % (len(subs), os.path.relpath(EXEMPT, ROOT)))
 
