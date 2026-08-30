@@ -2,7 +2,7 @@
 track: A
 prio: 50
 type: bug
-status: working
+status: done
 owner: claude-A
 blocked-by: []
 summary: "`builtin.pas` will not compile on a bare ESP target (xtensa or riscv32, identical): it calls two names — `PXXVarBinOp` (:1148) and `PxxSciDigits17` (:1702) — from UNGUARDED code, while their declarations sit inside `{$ifndef PXX_ESP}` (`builtinheap.pas:407-441`). MEASURED 2026-08-30: exactly those two, of the 17 declarations that block removes; the other 15 have no caller in `builtin.pas` and are cleanly excluded, so the guard is 15/17 correct and this is a two-callsite leak, NOT a root cause behind the 22 `(not TargetIsEspClass)` arms. The ticket's own disproof check fired — see DISPROOF RUN."
@@ -267,3 +267,59 @@ harness. That also avoids editing `builtinheap.pas`, which `feature-unicodestrin
 `1a526a89d` — so the note above about `compiler/builtin` and
 `stable_linux_amd64/default/builtin` line numbers being interchangeable has
 expired.
+
+
+---
+
+## RESOLUTION (2026-08-30): (d) — working-as-intended, and the three dead guards deleted
+
+Settled by the coordinator, not escalated, because proceeding under (d) costs
+nothing and leaves (b) fully available.
+
+**The status quo is correct.** `uses builtin;` is unsupported on bare ESP, and
+the 22 `(not TargetIsEspClass)` arms are the honest documented constraint. The
+entropy stub does not depend on any of this.
+
+**The actual defect was the three guards, and they are gone** (`fccdc4671`):
+`builtin.pas`'s `{$ifndef PXX_ESP}` regions at 62, 436 and 1409 never ran, so
+they read as protection to everyone who grepped them — which is measured, not
+hypothetical: they misled two sessions in one afternoon and produced two wrong
+mechanisms for this ticket before the canary settled it.
+
+The falsifier the coordinator set was byte-identity, on the reasoning that if
+`PXX_ESP` is never defined in that unit then removing the wrapper cannot change
+a token. It held: **17/17 emitted binaries identical** across six targets plus
+both bare-ESP profiles, and the size canary within allowances. Had either moved,
+the deletion would have stopped rather than been adjusted around.
+
+Why the layers were deleted rather than corrected to `PXX_ESP_BARE`: regions 62
+and 1409 nest `PXX_ESP` *inside* `{$ifndef CPURISCV32}{$ifndef CPUXTENSA}`, so
+the ISA guards already do the work and correcting would be a no-op wearing a
+second name. Region 436 was different and its intent was real — filed rather
+than silently dropped.
+
+### Filed out of this ticket
+
+- [[bug-a-a-bare-esp-boot-issues-clock-gettime64-into-nothing]] (A+S, p40) —
+  region 436's unfulfilled intent. Explicitly marks what is measured
+  (compiled in; `Randomize` is the only caller) and what is NOT (what a bare
+  boot actually does when the syscall fires), because that distinction is the
+  difference between p40 and something much higher.
+- [[bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help]]
+  (A, p35) — `uses softfloat, builtin;` fails identically, unit found. Two
+  candidate causes with opposite fixes, deliberately not guessed between.
+- [[feature-bare-esp-supports-uses-builtin]] (A+S, p20) — option (b), preserved
+  as a ranked feature so it survives this closure, with the four measured steps
+  and the probing method recorded so nobody re-derives them.
+
+### The lesson worth carrying out of three wrong mechanisms
+
+Reading a conditional cannot tell you whether it **runs**. All three wrong
+framings came from reading directives — and this file family actively defeats
+that, because a `{ }` comment ends at the first `}`, so directive text inside a
+comment is seen by scanners and *not* by the compiler. A two-state canary
+answers the question directly: plant something that cannot compile inside the
+region, and see whether it does.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.

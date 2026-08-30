@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-builtin-pas-calls-a-declaration-that-esp-compiles-out | A+S | 50 | bug | `builtin.pas` will not compile on a bare ESP target (xtensa or riscv32, identical): it calls two names — `PXXVarBinOp` (:1148) and `PxxSciDigits17` (:1702) — from UNGUARDED code, while their declarations sit inside `{$ifndef PXX_ESP}` (`builtinheap.pas:407-441`). MEASURED 2026-08-30: exactly those two, of the 17 declarations that block removes; the other 15 have no caller in `builtin.pas` and are cleanly excluded, so the guard is 15/17 correct and this is a two-callsite leak, NOT a root cause behind the 22 `(not TargetIsEspClass)` arms. The ticket's own disproof check fired — see DISPROOF RUN. | — |
 | feature-unicodestring-model | A | 62 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
 
 ## unfinished (31)
@@ -63,7 +62,7 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 
-## backlog (383)
+## backlog (386)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -71,6 +70,7 @@ _none_
 | audit-t-verdict-functions-with-fewer-slots-than-outcomes | T | 30 | audit | Five verdicts in one week reported an outcome the mechanism had not decided | — |
 | bug-a-2d-array-row-as-a-const-array-param-still-segfaults | A | 45 | bug | One arm of bug-aggregate-member-array-as-var-param (done) never got fixed: a ROW of a 2D array passed as a CONST array parameter still segfaults, on all five targets. The var form of the same row works, and the record-field form works in both modes, so three of the four cells that ticket's own acceptance named pass and the fourth does not. It is what still blocks reverting lib/rtl/ed25519.pas's 4-standalone-TGf workaround. | — |
 | bug-a-a-bad-value-for-a-known-option-is-reported-as-an-unknown-option | A | 30 | bug | `--target=x` answers `unknown option: --target=x`, but --target is a known option with a bad value. Same for --xtensa-cpu= and --esp-profile=. The message sends the reader to hunt a typo in the FLAG NAME when the flag is right and the VALUE is wrong, and it makes every value-taking option indistinguishable from a nonexistent one to any tool or person probing the CLI. | — |
+| bug-a-a-bare-esp-boot-issues-clock-gettime64-into-nothing | A+S | 40 | bug | A bare ESP boot compiles a raw `clock_gettime64` into `Randomize`, behind a guard that never ran | — |
 | bug-a-a-c-headers-variadic-tail-is-dropped-on-import | A | 45 | bug | A variadic C function imported into Pascal is callable only with its FIXED prefix: printf imports as printf(Pointer). The `...` is NOT lost -- ProcVariadic[] records it and codegen honours it -- the Pascal-side overload matcher simply never consults it. One clause in ProcArityMatches plus bounding the type-match loops. | — |
 | bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted | A | 25 | bug |  | — |
 | bug-a-a-csmith-program-hangs-under-pxx-at-every-o-level-and-runs-under-gcc | A | 55 | bug | A csmith program compiles clean and then HANGS at runtime under pxx at -O0/-O1/-O2/-O3 alike, where a gcc-built binary of the same source runs and prints its checksum. Localized to func_58 by entry instrumentation: gcc enters all 10 generated functions, pxx enters 8 and spins in the 8th. Not an optimizer bug (every level hangs) and not a wrong builtin (all 15 verified equal to gcc individually). Repro preserved verbatim at test/csmith/hang_builtins_700082.c -- found via the --builtins axis, which csmith disables by default and no run in this repo had ever enabled. | — |
@@ -116,6 +116,7 @@ _none_
 | bug-a-the-emit-obj-refusal-names-a-target-set-that-excludes-x86-64 | A | 25 | bug | `--emit-obj` on i386/aarch64/arm32 refuses with `only xtensa/riscv32 targets` -- but x86-64 supports it and is the target most users are on. The message names a set that excludes a working target, so a reader who trusts the diagnostic over the docs concludes the feature is ESP-only. | — |
 | bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss | A+S | 25 | bug | An empty bare-profile ESP32 program was ~26 KB code / ~70 KB bss when docs/targets/esp32.md was written; at pin v393 it is ~50 KB / ~104 KB. Code roughly doubled, bss grew by half, on a part with ~400 KB of SRAM. Found while re-measuring published figures, not by a size gate — nothing watches this number. | — |
 | bug-a-the-ir-frame-op-doc-asserts-a-frame-layout-riscv32-does-not-use | A | 25 | bug | defs.inc:816 documents IR_FRAME with 'the saved-fp chain IS walkable: [fp] = the caller's fp, [fp + PtrSize] = the return address' — stated as universal. It is false on riscv32, where s0 points at the BOTTOM of the frame and the links sit at +8/+12. ir.inc:4977 knows this and says assuming the common layout 'would have silently walked into the locals'. The lowering is correct (it asks FramePrevFpOffset/FrameRetAddrOffset); the DOC a backend implementer reads is not. | — |
+| bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help | A | 35 | bug | The "no FPU" diagnostic tells you to `uses softfloat`, and doing so changes nothing | — |
 | bug-a-threadsafe-is-x86-64-only-is-asserted-in-five-places-and-has-been-false-since-july | A | 25 | bug | --threadsafe has accepted x86-64/i386/aarch64/arm32 since 07fee0844 (2026-07-06), but five comments across four files still say it is x86-64-only. One of them sits ONE LINE above the four-target condition the same commit edited. No live defect; the code is right everywhere. A new audit sub-shape: a SCOPE WIDENING invalidates every comment that stated the old scope, and there is no sibling arm to grep. | — |
 | bug-a-two-copies-of-the-wasi-capability-model-one-in-the-pal-one-in-wasibackend | A | 25 | bug | compiler/builtin/wasibackend.pas copied the preopen-resolution and rights logic out of lib/rtl/platform/wasi/platform_backend.pas on purpose, so its landing commit changed no existing file, and said in its own header that the NEXT commit would make the PAL delegate and delete its copy. That commit was never written and no ticket was ever filed. Both copies work, so nothing fails — which is exactly why a capability model is the wrong thing to duplicate: the two drift into one path opening files the other refuses. The unit's self-reporting comment is what caught it. | — |
 | bug-a-tyunknown-is-both-untyped-pointer-and-i-read-garbage | A | 40 | bug | tyUnknown is simultaneously the legitimate 'untyped Pointer' pointee sentinel and the value every unwritten/recycled slot reads back as. A consumer cannot tell 'this parameter genuinely takes anything' from 'I read a slot that is not mine', and because the permissive answer is the shared one, every such guard fails OPEN. | — |
@@ -288,6 +289,7 @@ _none_
 | feature-a-unreferenced-class-rtti-keeps-every-method-alive | A | 30 | feature | An unreferenced class keeps every one of its methods alive | — |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 20 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
 | feature-b-posix-and-fpc-named-socket-facades | B | 25 | feature | BLOCKED on decide-posix-master-vs-fpc-named-master-for-the-socket-facades: the design says Posix.* is canonical and the FPC-named units wrap it, but the tree shipped the FPC-named units AS the implementation on PAL, and all three of the design's selectable backends already exist one layer down at the PAL. Building as designed would invert a working layer with 15 in-tree consumers plus Synapse, for zero current consumer. Not implementation work until the layering question is re-decided. | decide-posix-master-vs-fpc-named-master-for-the-socket-facades |
+| feature-bare-esp-supports-uses-builtin | A+S | 20 | feature | Make `uses builtin;` compile on a bare ESP boot | — |
 | feature-c-csmith-differential-fuzzing | C | 40 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-esp-conformance-coverage | S | 18 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
 | feature-c-package-namespace-decision | A | 35 | feature | Decide the Pascal-import namespace for C packages (`uses zlib` collision) | — |
@@ -720,9 +722,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2828)
+## done (2829)
 
-2828 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2829 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (58)
 
@@ -984,6 +986,7 @@ _none_
 - [p 45] [T] task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass
 - [p 42] [P] feature-pascal-builtin-tobject-class
 - [p 40] [A] bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it (unblocks 1)
+- [p 40] [A+S] bug-a-a-bare-esp-boot-issues-clock-gettime64-into-nothing
 - [p 40] [A] bug-a-function-result-assignment-does-not-narrow-to-the-result-type
 - [p 40] [A+S] bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs
 - [p 40] [A] bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse
@@ -1038,6 +1041,7 @@ _none_
 - [p 35] [A] bug-a-help-does-not-advertise-flags-the-compiler-accepts
 - [p 35] [A] bug-a-pxx-home-is-advertised-but-not-honoured
 - [p 35] [A] bug-a-the-cross-self-host-proof-runs-a-different-configuration-than-the-native-one
+- [p 35] [A] bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help
 - [p 35] [D] bug-d-docs-scope-claims-about-a-flag-are-invisible-to-a-flag-existence-sweep
 - [p 35] [N] bug-n-pypal-ppoll-passes-a-64-bit-timespec-on-32-bit-targets
 - [p 35] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
@@ -1169,6 +1173,7 @@ _none_
 - [p 20] [A+S] feature-a-promoint-variant-esp-targets
 - [p 20] [A] feature-a-typeinfo-integer-name-under-strict-fpc
 - [p 20] [A] feature-a-why-threadsafe-needs-45pct-more-global-fixups
+- [p 20] [A+S] feature-bare-esp-supports-uses-builtin
 - [p 20] [A] feature-cli-widgetset-flag
 - [p 20] [A] feature-cross-frontend-interop-contract
 - [p 20] [N] feature-n-nilpy-ast-typing-module-scope
