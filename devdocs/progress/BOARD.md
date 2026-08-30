@@ -118,7 +118,7 @@ _none_
 | bug-a-x86-64-paramstr-expression-smashes-its-frozen-temp | A | 70 | bug | `ParamStr(i)` as an EXPRESSION smashes the stack when the argument is longer than 256 bytes (x86-64) | — |
 | bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build | A+S | 40 | bug | The backward half of the CALL0 reach wall is closed (a call to an already-emitted body is widened automatically). A FORWARD call cannot be: EmitCallProc reserved three bytes before the target existed, so ApplyCallFixups can only refuse. Measured on a generated 6.9 MB image: the forward call to __pxx_run_finalizers at code offset 142854 cannot reach its body at 6874588. An RTL routine at the image tail called from early code is structural for any large xtensa program. | — |
 | bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength | A+S | 50 | bug | The xtensa WINDOWED ABI bus-errors on frozen strings, Copy, and dynarray SetLength | — |
-| bug-c-an-unterminated-declaration-still-parses-the-appended-pascal-rtl | C | 40 | bug | The statement half of bug-c-an-unterminated-construct-parses-past-eof is fixed; the DECLARATION half is not. An unterminated `struct`/`enum`/initializer still swallows the appended Pascal RTL and fails with `main function not found` at line 1313 of platform_backend.pas. | — |
+| bug-c-an-unterminated-declaration-still-parses-the-appended-pascal-rtl | C | 50 | bug | The statement half of bug-c-an-unterminated-construct-parses-past-eof is fixed; the DECLARATION half is not. An unterminated `struct`/`enum`/initializer still swallows the appended Pascal RTL and fails with `main function not found` at line 1313 of platform_backend.pas. | — |
 | bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict | N | 40 | bug | pylib treats VT_CHAR and VT_STRING as ONE string type in ordering, repr, concat and text extraction — but `PyVarEq` bails on `p^.VType <> q^.VType` before it ever gets there, and `PyVarHashKey` has no VT_CHAR arm either. So a char-tagged key stores fine and then misses every lookup. No NilPy-reachable repro today (the pystr_ofchar boundary converts at every crossing), but this is the mechanism that turned Counter(str) into a SILENT 0 instead of a loud KeyError. | — |
 | bug-n-a-classmethod-cannot-call-another-through-cls | N | 55 | bug | A classmethod cannot reach another one through its own receiver | — |
 | bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name | N | 45 | bug | `def g(): return 1` followed by `if True: def g(): return 2` still calls the FIRST g. Split out of bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name when that one was fixed: it is a different mechanism — the def side, not the assignment side. A nested def has a position, but PyRegisterDefShells only walks module-level defs at DEPTH 0, so a def inside a branch never gets one. | — |
@@ -857,6 +857,7 @@ _none_
 - [p 50] [U] decide-t-per-assertion-subjects-or-accept-the-file-level-label (unblocks 1)
 - [p 50] [A] bug-a-rtti-reg-and-resources-are-missing-on-riscv32
 - [p 50] [A+S] bug-a-xtensa-windowed-abi-faults-on-frozen-strings-copy-and-dynarray-setlength
+- [p 50] [C] bug-c-an-unterminated-declaration-still-parses-the-appended-pascal-rtl
 - [p 50] [N] bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising
 - [p 50] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 50] [N] bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base
@@ -934,7 +935,6 @@ _none_
 - [p 40] [A] bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture
 - [p 40] [A] bug-a-tyunknown-is-both-untyped-pointer-and-i-read-garbage
 - [p 40] [A+S] bug-a-xtensa-cannot-widen-a-forward-call-so-a-big-image-still-refuses-to-build
-- [p 40] [C] bug-c-an-unterminated-declaration-still-parses-the-appended-pascal-rtl
 - [p 40] [N] bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict
 - [p 40] [N] bug-n-from-package-import-submodule-binds-the-parent-package
 - [p 40] [N] bug-n-the-dunder-subscript-arm-is-duplicated-verbatim-in-two-lvalue-parsers

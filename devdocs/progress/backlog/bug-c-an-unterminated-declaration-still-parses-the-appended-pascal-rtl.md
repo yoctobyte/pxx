@@ -1,7 +1,7 @@
 ---
 slug: bug-c-an-unterminated-declaration-still-parses-the-appended-pascal-rtl
 track: C
-prio: 40
+prio: 50
 type: bug
 blocked-by: []
 summary: "The statement half of bug-c-an-unterminated-construct-parses-past-eof is fixed; the DECLARATION half is not. An unterminated `struct`/`enum`/initializer still swallows the appended Pascal RTL and fails with `main function not found` at line 1313 of platform_backend.pas."
@@ -64,3 +64,30 @@ unterminated-construct error on their own C line, with no `in:` line and no
 Pascal in the `near:` window. `cunterm` / `cunterm_pull` stay green, and so do
 the C corpus tests (an appended crtl region must still be walked). Self-host
 byte-identical.
+
+## Re-priced 40 -> 50, 2026-08-30 (coordinator, on frankC's costing)
+
+Filed at 40 as a default, not as a judgement. frankC costed it after landing
+`bug-c-an-unterminated-construct-parses-past-eof` and the number is 50:
+
+- it deletes **two** guards (`CBlockContinues` and the `ParseCStatementAST`
+  entry) instead of adding a third, and makes `tkEOF` mean what it says in all
+  ~30 loops — a class closed rather than a symptom;
+- half a day if the sentinel goes in cleanly, a full day with the index-shift
+  verification;
+- **entirely inside `clexer.inc` / `cparser.inc`** — no shared files, no grant;
+- and it is the top takeable item in Track C's ready list, so leaving it at a
+  default 40 mis-ranked the lane's own head.
+
+Not higher: nothing is blocked on it, and the remaining symptom is typo-shaped —
+an unterminated `struct` is not a thing that reaches a corpus.
+
+**The risk to plan around is not the sentinel, it is the index shift.** A planted
+token moves every token index, and three tables are index-keyed: `CModRange*`,
+`PasSrcRange*`, `DbgRange*`. `AdjustSrcRanges` exists for exactly this, so the
+machinery is there — but it is three tables plus a `tkEOF` that other frontends'
+code also tests.
+
+**And the part a blind conversion breaks:** two of the fifteen top-level passes
+*deliberately* walk the appended region and must be taught to step over the
+sentinel. Converting them along with the rest fails every C compile.
