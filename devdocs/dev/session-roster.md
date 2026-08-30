@@ -21593,3 +21593,57 @@ comparison. frankwasm's two columns *agreed*, and agreement is what you expect
 when a gate is working — so the null result looked like the finding. It stopped
 and rebuilt instead of reporting, which is the whole reason this is a note rather
 than a retraction.
+
+## `stable_linux_amd64/default/pinned` is a SYMLINK — `git log` on it answers a different question
+
+Found by frankB, 2026-08-30. **Verified independently here before writing it
+down**, because it is fleet-wide guidance and frankB reached it while correcting
+two broken instruments of its own:
+
+```
+$ ls -l stable_linux_amd64/default/pinned
+lrwxrwxrwx  13  pinned -> stable_pinned
+
+$ git log -1 --date=short -- stable_linux_amd64/default/pinned
+ed8616ac3  2026-07-27  chore(stable): pin v226 (NativeUInt cast width + ...)
+
+$ git log -1 --date=short -- stable_linux_amd64/default/stable_pinned
+0d9341089  2026-08-30  chore(stable): pin v397 — faf762981c3c, and the first
+                       pin to carry a new builtin unit
+```
+
+**A five-week gap, no error, both commands plausible.** The symlink is 13 bytes
+and its *content* changes only when the target name changes — which is almost
+never — so its history is nearly frozen while the binary underneath moves every
+pin. An agent checking provenance the obvious way reads July and concludes the
+tree is running a **v226** binary: precisely the staleness trap CLAUDE.md's
+per-fix-loop section warns about, arrived at through a path that section does not
+name.
+
+**Use `stable_pinned` for provenance.** Do **not** try to ask the binary for a
+version string either — it does not carry one (`strings -a | grep 'v[0-9][0-9][0-9]'`
+returns nothing, checked). Provenance is the **sha256** compared against the pin
+commit, which is what `stabilize-fast` and `make pin` record.
+
+**If any session reports the pin as v226 today, this is why.**
+
+### The part frankB got right that is worth more than the trap
+
+It did not catch this by being careful. It caught it by refusing an
+**inconsistency it could not explain**: a fresh HEAD build reported the same sha
+as the pin, which cannot be true if HEAD carries a compiler fix the pin predates.
+It chased the contradiction instead of reporting the tidy conclusion — and the
+tidy conclusion ("my whole measurement used a stale binary") was a false alarm
+that would have invalidated a day of correct work.
+
+**And the second instrument failed in the diagnostic direction:** its `grep -c`
+(no `-a`) returned 0 on *both* binaries, including the fresh build that certainly
+contained the check. **A uniform negative across a control is the tell that the
+instrument is broken rather than the subject** — the same confounded-instrument
+shape as the ESP float arm and frankC's csmith guard, and this time the control
+was already in the frame and answered it immediately.
+
+**Proposed CLAUDE.md amendment, NOT made** (owner's file): name the symlink beside
+the copied-in-seed and same-second-mtime routes in the per-fix-loop section. All
+three are the same failure — a provenance check that returns a confident wrong
+answer with no error — and the section currently names only one of them.
