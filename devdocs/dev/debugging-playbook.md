@@ -156,6 +156,23 @@ measurement — not seniority, not who edited the file first.** Three disagreeme
 were settled this way in one day, each reversing the more confident party. Nobody
 should have to happen to have a measurement handy in order to win.
 
+**A null from two COMPENSATING defects recommends the fix that breaks it**
+(frankA's phrasing, 2026-08-31, for a case measured that day). arm32, riscv32 and
+xtensa take no `PXXObjRetain` when boxing an object into a variant, *and* no cross
+arm of `EmitManagedLocalCleanupForTarget` releases a NilPy `tyClass` local at
+scope exit. Both probes are flat at 20k and 400k iterations, and the churn test
+prints CPython's own answer — a clean bill of health from three instruments,
+which is what a balanced refcount and a pair of errors that cancel look like from
+the outside. The trap is not that the null is wrong; it is that **the natural
+first move makes it worse.** "The epilogue is missing an arm" is the easier gap
+to see, and adding that release alone drops the local's reference while a variant
+slot holds an object it never retained — a bounded leak converted into a
+use-after-free. The other half alone is merely a leak. So: when a null is
+*expected* under your hypothesis and also under "two defects cancel", ask what
+each single-sided fix would do before you make one, and if either direction is a
+UAF, the halves move together or not at all
+(`bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local-and-the-two-must-move-together`).
+
 ## Prefer the version of the question that has an ON/OFF answer
 
 Named by frankwasm 2026-08-30 from two of Track O's results, both of which
