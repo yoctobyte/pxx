@@ -67,7 +67,7 @@ _none_
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | decide-install-qemu-system-and-a-freebsd-image-on-plexus |
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call |
 
-## backlog (386)
+## backlog (385)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -96,7 +96,6 @@ _none_
 | bug-a-irtoplevelstmt-parameter-is-a-node-index-named-k | A | 20 | bug | ir_codegen.inc:8813 declares IRTopLevelStmt(k: Integer) and its body is `case IRKind[k] of`, so the parameter is a node index. The name reads as a kind, and passing IRKind[i] compiles cleanly and indexes the IR array with an opcode number — a silently-wrong-value trap with no diagnostic, in a function every backend author will call. Rename plus a one-line comment closes the class. | — |
 | bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa | A | 25 | bug | A proc's managed locals (AnsiString, interfaces, dynamic arrays) are released by a proc CLEANUP FRAME that five targets have and two do not. wasm32 and xtensa both fall outside TargetHasProcCleanupFrame, so an exception unwinding THROUGH a frame leaks everything that frame owned. Silent by construction: an unwind leak prints nothing. | — |
 | bug-a-managed-string-arg-temp-predicate-is-duplicated-seven-times-and-guarded-nowhere | A | 20 | bug |  | — |
-| bug-a-max-template-params-is-4-but-rtl-generics-declares-6 | A | 60 | bug | MAX_TEMPLATE_PARAMS = 4 (compiler/defs.inc:1818). rtl-generics' TDictionaryEnumerable declares SIX type parameters, so generics.dictionariesh.inc:127 fails with `too many generic parameters (MAX_TEMPLATE_PARAMS)`. This is the CURRENT rtl-generics corpus wall (rung 6b) as of HEAD 4dae78ad9 + the IEnumerable RTL fix -- the whole compile is down to this ONE error. Raising the constant is one line but is NOT free: it is the stride of at least two flat arrays (TemplateParamNames[ti*MAX_TEMPLATE_PARAMS+kk], seenArg[si*MAX_TEMPLATE_PARAMS+k]) plus three locals in pasparser_generic.inc, so measure bss before and after rather than assuming. PRECEDENT: MAX_NESTED_SPECS was raised 24->96 for this same corpus (defs.inc:1832) and its comment is the model -- measured trigger, insufficient-vs-runaway, and the cost stated in the same breath; its cost clause is NSpecArg, sized 96*MAX_TEMPLATE_PARAMS, so this change multiplies against that 96. | — |
 | bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets | A | 20 | bug |  | — |
 | bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse | A | 40 | bug | `C(**d)` and `C(*lst)` on a class with an ordinary `__init__` fail with `expected expression` — on the PINNED compiler too, so this is not a regression. The ctor path in pyparser.inc:45097 builds its own AN_ARG chain and never consults the star-forwarding branch that plain calls use. Routing it there needs the receiver prepended, which PyStarForwardCall's signature does not take. | — |
 | bug-a-paramsize-and-allocparam-disagree-about-a-5-8-byte-byvalue-record | A | 40 | bug | ParamSize and AllocParam disagree about a 5-8 byte by-value record | — |
@@ -732,11 +731,11 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2875)
+## done (2876)
 
-2875 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2876 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
-## rejected (67)
+## rejected (68)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -797,6 +796,7 @@ _none_
 | grant-lexer-writediagsourcefile-to-frankc-and-the-ir-codegen-dual-occupancy | A | 40 | grant | Two shared-file dispositions the coordinator made on 2026-08-30 and is filing rather than leaving in chat: (1) frankC gets `lexer.inc` bounded to WriteDiagSourceFile, for feature-c-diagnostics-name-the-module-they-are-in; (2) ir_codegen.inc is held by frankA and frankS at once, deliberately, because their edits are in disjoint functions. | — |
 | grant-pasparser-lval-and-rtti-emit-to-frankwasm-for-the-alias-break | A+P | 0 | grant | HISTORICAL RECORD — the grant system was cut on 2026-08-30 and nothing in here is an instruction any more. Kept for the correction it contains: symtab.inc makes a type well-formed, pasparser_lval.inc is what makes one EXIST, and a file list that named only the first would have landed an unnameable type. | — |
 | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call | A | 70 | perf | REJECTED 2026-08-30 as SUPERSEDED -- do not re-land. The optimisation was real (849ms -> 84ms, measured correctly at the time) and is now worth NOTHING at the default level, because 440c822e6 promoted EmitStaticLitHandle from -O3 to -O2 THIRTY-SIX MINUTES after this landed and does the same job at codegen. Interleaved min-of-9 at HEAD: -O2 with=48ms without=41ms (no gain, marginally worse); -O1 with=50ms without=517ms (the 10x is real but only at -O1, which the owner has ruled in limbo). It also broke ~28 NilPy jobs and was reverted (72b4c47a7). The 2-line arg-tag change that fixes the NilPy break is NOT a standalone fix -- landed alone it is a FRESH regression (measured: 14 correct rows become one wrong line), because ASTTk[argVal] correctly describes what IRLowerCallArg produces on the unoptimised path. Net: land nothing. | — |
+| refactor-a-one-predicate-for-a-tyrecord-that-is-a-fat-pointer | A | 35 | refactor | REJECTED — already done in d5fd2a6ca, forty minutes before this was filed. frankS extracted RecIsReferenceShaped (symtab.inc:8116, methodptr OR interface) and routed ProcParamIsNilable and BOTH AssignSideKind arms through it. Verified by rebuilding at HEAD and running test_methodptr_nil_assign.pas: it compiles and passes. The ticket was filed off a symtab.inc read at the sha in my checkout, without pulling first. | — |
 | refactor-a-the-greenfield-frontends-share-each-others-parser-helpers | A | 18 | refactor | DUPLICATE of refactor-a-seven-frontends-borrow-rust-parser-helpers. Tombstone kept so citations resolve; the 123-places-in-zparser measurement and the substrate-doc framing were merged into the survivor. | — |
 | regression-cascade-110774a14648 | T | 70 | regression | regression CASCADE: 17 jobs newly red at 110774a14648 (auto-filed by twatch) | — |
 | regression-cascade-154d1aa3fba6 | T | 70 | regression | regression CASCADE: 18 jobs newly red in e417731e9..154d1aa3f (12 commits) — auto-filed by twatch | — |
@@ -840,7 +840,6 @@ _none_
 - [p 62] [N] feature-nilpy-enum-class [parked — re-claim, do not duplicate]
 - [p 60] [U] decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - [p 60] [A] bug-a-an-unused-pointer-to-record-alias-changes-an-unrelated-deref
-- [p 60] [A] bug-a-max-template-params-is-4-but-rtl-generics-declares-6
 - [p 60] [N] bug-n-a-frozenset-returned-from-a-def-arrives-empty
 - [p 60] [N] bug-n-a-lambda-returning-a-captured-heap-value-yields-none
 - [p 60] [N] bug-n-a-local-named-after-its-own-def-aliases-the-function-result [parked — re-claim, do not duplicate]

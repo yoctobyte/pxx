@@ -1815,7 +1815,28 @@ const
   NILCHK_OFF     = 2;
 
   MAX_TEMPLATES = 128;
-  MAX_TEMPLATE_PARAMS = 4;   { type parameters per generic template (<TKey, TData>) }
+  MAX_TEMPLATE_PARAMS = 6;   { was 4 -- MEASURED insufficient: rtl-generics'
+                               TDictionaryEnumerable declares SIX (three of them
+                               through {$DEFINE CUSTOM_DICTIONARY_CONSTRAINTS :=
+                               TKey, TValue, THashFactory}, so the arity is not
+                               visible in the declaration). Not a runaway: at 4
+                               the wall was generics.dictionariesh.inc:127 with a
+                               capacity message; at 6 it is line 4165 of the
+                               4165-line generics.collections.pas with an
+                               unexpected token -- the frontier moved to the end
+                               of the unit and the error changed KIND. If raising
+                               this ever moves the failure to the NEW number,
+                               that is recursion wearing a capacity error's
+                               clothes; look for the loop, not a bigger array.
+                               Cost is a STRIDE, not a slot: TemplateParamNames
+                               (x MAX_TEMPLATES), NSpecArg/NSpecIns (x
+                               MAX_NESTED_SPECS = 96), SpecConcreteNames/Kinds (x
+                               MAX_SPECIALIZATIONS), plus three locals in
+                               pasparser_generic.inc. Measured linear at +20772 B
+                               of bss per slot: 4 -> 100985812, 6 -> 101027356,
+                               8 -> 101068900. Left at the measured requirement
+                               rather than 8: two more slots is a guess about a
+                               corpus that hides its own arity behind a macro. }
   MAX_GEN_METH_IMPL = 8192;  { mode-Delphi `procedure TFoo<T>.M` headers per compilation. See GenMethImplSOff. }
   MAX_TEMPLATE_TOKENS = 65536;  { FPC fgl alone buffers ~14k tokens of generic method bodies }
   MAX_NESTED_TOKENS = 8192;

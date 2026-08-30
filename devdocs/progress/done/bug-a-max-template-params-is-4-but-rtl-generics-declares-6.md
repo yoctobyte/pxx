@@ -3,7 +3,7 @@ slug: bug-a-max-template-params-is-4-but-rtl-generics-declares-6
 track: A
 prio: 60
 type: bug
-status: working
+status: done
 owner: frankA
 blocked-by: []
 summary: "MAX_TEMPLATE_PARAMS = 4 (compiler/defs.inc:1818). rtl-generics' TDictionaryEnumerable declares SIX type parameters, so generics.dictionariesh.inc:127 fails with `too many generic parameters (MAX_TEMPLATE_PARAMS)`. This is the CURRENT rtl-generics corpus wall (rung 6b) as of HEAD 4dae78ad9 + the IEnumerable RTL fix -- the whole compile is down to this ONE error. Raising the constant is one line but is NOT free: it is the stride of at least two flat arrays (TemplateParamNames[ti*MAX_TEMPLATE_PARAMS+kk], seenArg[si*MAX_TEMPLATE_PARAMS+k]) plus three locals in pasparser_generic.inc, so measure bss before and after rather than assuming. PRECEDENT: MAX_NESTED_SPECS was raised 24->96 for this same corpus (defs.inc:1832) and its comment is the model -- measured trigger, insufficient-vs-runaway, and the cost stated in the same breath; its cost clause is NSpecArg, sized 96*MAX_TEMPLATE_PARAMS, so this change multiplies against that 96."
@@ -111,3 +111,75 @@ from Track B rather than fixed there — `compiler/defs.inc` is Track A's.
 
 **Corpus is gitignored**, so "same commit" cannot identify it. Content hash of
 `generics.collections.pas`: `5a3402725ab53181...`.
+
+---
+
+# Resolution — raised to **6**, the measured requirement, and the wall moved
+
+**Done, 2026-08-30 by frankA.** Fixedpoint `414252435fb1` (1 round),
+`tools/gate.sh quick` GREEN.
+
+## Insufficient, not a runaway — the discrimination the precedent demands
+
+| `MAX_TEMPLATE_PARAMS` | wall | error kind | wall clock |
+| --- | --- | --- | --- |
+| 4 | `generics.dictionariesh.inc:127` | `too many generic parameters` | 123 s |
+| 6 | `generics.collections.pas:**4165**` | unexpected token in implementation | 476 s |
+
+`generics.collections.pas` is **4165 lines long**, so the frontier moved from
+line 127 of an *included header* to the **last line of the main unit**, and the
+error changed **kind** — a capacity message became a syntax one. That is
+`MAX_NESTED_SPECS`'s 24→96 outcome, and it is the opposite of the failure mode
+worth fearing here: **if raising a limit moves the failure to exactly the new
+limit, the limit was never the constraint** — it is recursion wearing a capacity
+error's clothes, which is what happened to the C preprocessor's include-nesting
+cap tonight (17 → 128 moved the error from level 17 to level 129; the real cause
+was a self-including header, `1672aeaad`). Neither the line nor the message
+tracked the constant here.
+
+**The longer wall clock is the compile getting further, not a regression**, as
+this ticket warned. 476 s exceeded the 480 s I first allowed by enough to be
+killed once; the run that produced the row above had a 2400 s cap.
+
+## Cost — measured off the `ok:` line, three builds at one sha
+
+```
+   4   bss=100985812   code=9813784
+   6   bss=101027356   code=9813784    +41544 B   +0.041%
+   8   bss=101068900   code=9813784    +83088 B   +0.082%
+```
+
+Exactly linear at **+20772 B of bss per slot**, and `code` is byte-identical
+across all three — the constant is a stride into bss and nothing else.
+Cross-checked at a second HEAD after a pull: 6 still reads `bss=101027356`, so
+the delta is attributable to the constant rather than to whatever else landed.
+
+## Why 6 and not 8
+
+8 was built and costed (above) precisely so the choice is not a preference. It
+is not taken: **6 is measured, 8 is two slots bought on a guess** — and the guess
+is poorly founded, because this corpus hides its arity behind
+`{$DEFINE CUSTOM_DICTIONARY_CONSTRAINTS := TKey, TValue, THashFactory}`, so
+"surely 8 is plenty" is exactly the reasoning that sized 4 for `<TKey, TData>`
+with slack. When something needs 7, it will say so in one line and the next
+person will have this table.
+
+## The next wall names two different files, and whoever reduces it should know
+
+The new error reports `generics.collections.pas:4165` — the unit's `end.` —
+while its `near:` window is `(Index: Integer; const S: string`, which does not
+occur anywhere in the rtl-generics corpus. It is `lib/rtl/classes.pas:315`
+(`procedure Put(Index: Integer; const S: string); virtual; abstract;`), verified
+independently by frank-coordinator. **Reducing from that error text reduces the
+wrong file.** Not filed from here: it is `lib/rtl/classes.pas`, which frankB
+edited tonight, and it may be a recurrence of
+`bug-a-the-near-context-window-is-stale-after-a-token-splice` rather than
+anything new. Relayed to frankB, who can tell.
+
+## Gate
+
+`make compiler/pascal26` fixedpoint `414252435fb1` + `tools/gate.sh quick`
+GREEN + the corpus probe above, re-run at 6.
+
+## Log
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
