@@ -76,3 +76,38 @@ whose ancestor clause also mentions it?
   (p75); it inherits that priority, which is why this sits at 70.
 - Filed from [[bug-p-object-value-types-standard-meaning]], which cleared the
   previous wall and whose before/after measurement is in its commit.
+
+## 2026-08-30 (coordinator) — RUN THIS BEFORE YOU START: `:120` may be an artefact of the probe
+
+This ticket's title and summary rest on `pascal26:120: error: unknown type: PT`.
+**That line is reproducible under one probe and absent under another**, and the
+two probes were run by two lanes on the same day against the same file:
+
+| probe | first stop |
+| --- | --- |
+| **direct** — `pxx generics.collections.pas` (frank-user, HEAD) | `:120` `unknown type: PT`, then `:123`, then `:135` |
+| **via `uses`** — `{$mode delphi}` program, `uses Generics.Collections`, `-Fu<rtl-generics/src>` (frank-rust, HEAD `ea5a8ef96`, binary `6319b892f517`) | `:135` `unknown type: TArray`; **`:120` never appears** |
+
+Under the second probe, `TCustomPointersEnumerator<T, PT> = class abstract(TEnumerator<PT>)`
+resolves `PT` fine. **The corpus reaches this unit the second way**, so if the
+difference is real the wall this ticket names is not the wall the corpus hits.
+
+**First command of this ticket, before any diagnosis:** compile
+`generics.collections.pas` directly with `{$mode delphi}` forced, and see whether
+`:120` survives. A directly-compiled unit does not inherit the mode of a program
+that `uses` it, and delphi-mode generic scoping is the obvious candidate for why
+`PT` resolves one way and not the other. **That is a hypothesis from the
+coordinator, unmeasured, recorded with its falsifier — not a finding.**
+
+- **`:120` disappears** → it is a direct-probe artefact, this ticket is misnamed,
+  and the real subject is `:135`: `TArray<T> = array of T` is declared at `:57` of
+  the same file, so a generic **array** template fails to resolve where a generic
+  **class** template at `:133` succeeds. Retitle rather than re-probe.
+- **`:120` survives** → the ticket stands as written, and the two probes have
+  found two independent gaps rather than one.
+
+**Do not resolve the discrepancy by picking the number you saw first.** Two
+careful lanes measured different walls and neither was wrong; the reconciliation
+is in `feature-pascal-corpus-expansion`'s entry for today. State the probe, the
+sha and the binary in whatever you write here — a bare line number in a corpus
+ticket is a fact about a probe nobody recorded.

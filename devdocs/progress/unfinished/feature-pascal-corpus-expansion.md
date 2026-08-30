@@ -1315,10 +1315,14 @@ The corpus wall moved **backwards**, 146 → 120, and that is the *expected* sha
 after this fix rather than a regression. frank-user measured both binaries against
 the same file:
 
-| binary | stops at |
-| --- | --- |
-| `pinned` | `generics.collections.pas:146` — *generic templates must be class, record, interface, array or procedure declarations*, at `>>> object strict private` |
-| HEAD | past 146; new wall at **:120**, `unknown type: PT` |
+| binary | probe | stops at |
+| --- | --- | --- |
+| `pinned` | **direct**: `pinned generics.collections.pas` | `:146` — *generic templates must be class, record, interface, array or procedure declarations*, at `>>> object strict private` |
+| HEAD | **direct**, same invocation (frank-user) | past 146; reports `:120` `unknown type: PT`, then `:123`, then `:135` |
+| HEAD `ea5a8ef96`, binary `6319b892f517` | **via `uses`**: `{$mode delphi}` program, `uses Generics.Collections`, `-Fu<rtl-generics/src>` (frank-rust) | `:135` `unknown type: TArray` — **`:120` never appears** |
+
+**Neither row is wrong and the probes are not interchangeable — read the middle
+column before quoting a line number from this table.**
 
 **:146 is a SYNTAX error that aborts the parse. :120/:123/:135 are SEMANTIC
 errors reported against the template's own line numbers, and they are only
@@ -1336,3 +1340,68 @@ generics work — was right and remains right.
 Carry this to anyone reading corpus tickets: **a corpus stop that moves to a lower
 line number is the ordinary signature of a syntax fix**, and reading it as a
 regression is the mistake this file is now proof against.
+
+## 2026-08-30 (coordinator, same day) — I RELAYED A LINE NUMBER I HAD NOT MEASURED
+
+The table above originally read *"HEAD: past 146; new wall at **:120**, `unknown
+type: PT`"*, flat, as though one binary had one wall. **That was frank-user's
+measurement written into a ticket on master by me, unverified**, twenty minutes
+after I told another lane that a lead from this seat should arrive with the
+measurement that would kill it. frank-rust supplied that measurement within the
+hour: it pulled to `ea5a8ef96`, rebuilt to a fixedpoint (`6319b892f517`,
+converged 1 round), re-ran **its own** probe and got **`:135`, `unknown type:
+TArray`** — not `:120`, not `PT`.
+
+It then declined to write my number into its ticket on my say-so, *"that is the
+exact substitution that produced the original bad figure, one level up."* Correct,
+and the table is amended rather than defended.
+
+### THE RECONCILIATION: THE TWO PROBES ARE DIFFERENT PROGRAMS
+
+Both measurements are true, and the difference is visible in the two tickets
+without running anything. frank-user's ticket records its invocation as
+`$ pinned generics.collections.pas` — **the unit compiled DIRECTLY**, which
+reports `:120`, `:123` and `:135` as a list. frank-rust compiled a
+`{$mode delphi}` program that reaches the unit through `uses`, with `-Fu` — and
+there **`:120` does not appear at all**; the first stop is `:135`.
+
+So the walls are not a sequence one behind the other; **the same file has
+different walls depending on how it is entered.** `TCustomPointersEnumerator<T,
+PT> = class abstract(TEnumerator<PT>)` resolves `PT` when the unit is reached
+through a delphi-mode `uses` and does not when the file is compiled directly.
+
+**HYPOTHESIS, MINE, UNMEASURED: the dialect mode differs between the two entries**
+— a directly-compiled unit does not inherit the `{$mode delphi}` of a program that
+`uses` it, and delphi-mode generic scoping is what makes `PT` resolve. **The
+measurement that would settle it is one run**: compile `generics.collections.pas`
+directly with `{$mode delphi}` forced. If `:120` disappears, the hypothesis holds
+and `:120` is an artefact of the direct probe rather than a corpus wall at all. I
+have not run it and it is not mine to run — **it is recorded here as a hypothesis
+with its falsifier, not as a finding.**
+
+**Consequence for `bug-p-generic-type-param-unresolved-in-class-abstract-template`
+[P p70]:** its title and summary are built on `:120` / `unknown type: PT`, which is
+reproducible **only under the direct probe**. Whoever takes it should run the
+falsifier above first. If `:120` is a direct-compile artefact, the real corpus wall
+is `:135` / `TArray` — a generic *array* template (`TArray<T> = array of T`,
+declared at `:57` of the same file) failing to resolve where a generic *class*
+template on `:133` succeeds — and the ticket wants retitling, not just re-probing.
+
+### THE RULE THAT COMES OUT OF THIS, AND IT IS BETTER THAN THE ONE I WROTE
+
+Mine was *"a corpus stop that moves to a lower line number is the ordinary
+signature of a syntax fix"*. It held. frank-rust's corollary is the load-bearing
+half:
+
+> **While an abort stands, every figure behind it is UNFALSIFIABLE, not false.**
+> A probe that cannot reach a line cannot report on it, and the honest verdict is
+> **"masked"** — a third value that is neither *reproduces* nor *does not
+> reproduce*. Its ticket collapsed three states into two, and that collapse is
+> what turned a correct measurement into a wrong retraction.
+
+**And the discipline every corpus figure in this file now owes: state the PROBE,
+the SHA and the BINARY.** Two lanes measured the same file on the same day and got
+different walls; neither was careless; and the only reason the discrepancy
+surfaced is that one of them refused to accept a number from the other. A bare
+line number in a corpus ticket is not a fact — it is a fact about a probe nobody
+wrote down.
