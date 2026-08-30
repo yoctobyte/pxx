@@ -1842,7 +1842,29 @@ const
   MAX_NESTED_TOKENS = 8192;
   MAX_LIFTS = 512;
   MAX_LIFT_CAPS = 2048;
-  MAX_GENERIC_METHODS = 512;    { FPC fgl has ~211 generic method bodies }
+  MAX_GENERIC_METHODS = 2048;   { buffered generic method BODIES per compilation.
+                               FPC fgl has ~211. MEASURED insufficient at 512:
+                               rtl-generics' generics.collections + its two
+                               dictionary includes trip `too many generic
+                               methods` at generics.collections.pas:3983, which
+                               is the rung-6b corpus wall behind the try/asm
+                               body-extent fix.
+                               Unlike MAX_TEMPLATE_PARAMS this is a plain SLOT,
+                               not a stride: TGenericMethod is three Integers.
+                               MEASURED linear at 12 B of bss per slot --
+                               512 -> 101076508, 1024 -> 101082652,
+                               2048 -> 101094940, so this bump costs 18432 B and
+                               nothing else. That is why it is set with headroom
+                               rather than at the requirement: the OPPOSITE call
+                               from MAX_TEMPLATE_PARAMS (20772 B per slot, left
+                               at the measured minimum), for the opposite reason,
+                               and deliberately. Rank the cost, not the shape of
+                               the constant.
+                               The exact requirement is NOT measured; it is above
+                               512 and at most 2048. To measure it, print
+                               GenericMethodCount at end of compilation -- the
+                               limit check cannot report it, since it only fires
+                               at the cap. }
   MAX_PENDING_SPECS = 256;
   MAX_SPECIALIZATIONS = 256;
   MAX_GENERIC_FUNCS = 128;

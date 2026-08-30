@@ -321,6 +321,48 @@ and `(to file / relay to frankB)` in another while it was actually **done**.
 > boundaries in the implementation section is in progress; the invariant is that
 > truncating ABOVE the opener compiles and truncating at-or-below it errors.
 >
+> **RUNG 6b: THE WALL IS IDENTIFIED AND FIXED (frankwasm, `ba99a4e81`).**
+> Supersedes the mechanism note below, which was correct and is kept because its
+> instrument findings stand on their own.
+>
+> **`GenericMethodBodyEnd` (pasparser_generic.inc) counted only `begin` and
+> `case` when finding a generic method's body extent.** `try` and `asm` also
+> close with an `end`, so a body containing either ran the depth to zero one
+> `end` EARLY: the buffered body stopped short, the routine's own closing `end`
+> stayed in the token stream, and `ParseUnit`'s silent `else Next` arm ate it —
+> so the unit terminated in the wrong place and the diagnostic came out at EOF.
+> `TEnumerable<T>.ToArrayImpl` at `:1177` is the first instance in the file and
+> is what the truncation bisect was converging on.
+>
+> Both arms measured against the pinned binary, each alone in its own unit.
+> `tkRecord` is deliberately NOT in the fix: a local `record` type compiles
+> correctly pre-fix, because this scanner skips to the first `begin` before it
+> counts and a local type section sits before that. Regression test
+> `test/test_generic_body_end_counting.pas` + `test/generic_bodyend_units/`.
+>
+> **The edge moved to a CAPACITY CONSTANT, which is the healthy kind of wall:**
+>
+> | binary | 6b stops on |
+> | --- | --- |
+> | `414252435fb1` (pre-fix) | parse failure reported at EOF, cause unknown |
+> | `cdf538199122` (fix) | **`too many generic methods` at `:3983` of 4165** |
+> | `759c1ba764bb` (+ `MAX_GENERIC_METHODS` 512→2048) | *measuring* |
+>
+> `MAX_GENERIC_METHODS` is a plain slot, not a stride: measured linear at **12 B
+> of bss per slot** (512 → 101076508, 1024 → 101082652, 2048 → 101094940), so
+> the bump costs 18432 B. Set with headroom rather than at the requirement — the
+> opposite call from `MAX_TEMPLATE_PARAMS` at 20772 B/slot, for the opposite
+> reason.
+>
+> **Two side findings, both filed rather than folded in here:**
+> [[bug-p-a-nested-class-method-called-from-inside-its-generic-outer-is-unresolved]]
+> (20-line repro, FPC prints 9; the boundary is the CALL SITE) and
+> [[bug-p-a-generic-function-cannot-be-declared-in-a-unit]] (which is *why* the
+> generic-function copy of the same counter cannot be given a positive control).
+> [[bug-p-a-stray-end-at-unit-implementation-top-level-is-silently-skipped]] is
+> the arm that absorbed the evidence and made this cost a night instead of an
+> hour.
+
 > **THE MECHANISM, read out of the compiler rather than guessed (frankwasm).**
 > `compiler/pasparser_proc.inc:5247`, the implementation-section loop:
 >
