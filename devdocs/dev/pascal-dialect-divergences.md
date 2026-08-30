@@ -139,8 +139,10 @@ is filed as **[[compat-pascal-the-strict-fpc-flag-family-is-incomplete]]**
 pointer difference and `TypeInfo` name. Until it lands, a port of FPC
 bit-twiddling can pin shift width with the flag but not `Abs`/`Sqr`.
 
-> Corrected 2026-08-30 (frankD): this cited `compat-pascal-strict-fpc-abs-and-sqr-widths`,
-> a slug that exists nowhere in `devdocs/progress/`. The *claim* was right and
+> Corrected 2026-08-30 (frankD): this cited the slug
+> compat-pascal-strict-fpc-abs-and-sqr-widths (written plain, not in backticks,
+> because a dead slug quoted like a live one is indistinguishable from one), and
+> it exists nowhere in `devdocs/progress/`. The *claim* was right and
 > the work *is* filed — only the pointer was dead, which is the worse half:
 > following it finds nothing, and "no such ticket" reads as **unfiled**, so the
 > next reader either drops it or files a duplicate.
@@ -185,7 +187,13 @@ in its header which two do not.
 ## A generic's own type-parameter name, reused as a member/param/local name
 
 **pxx accepts; FPC rejects.** Recorded 2026-08-27 while fixing
-`bug-p-a-nested-type-may-name-a-field-after-an-enclosing-type-parameter`.
+[[bug-p-two-generic-templates-cannot-share-a-nested-type-name]] (`done/`).
+
+> Corrected 2026-08-30 (frankD): this cited
+> `bug-p-a-nested-type-may-name-a-field-after-an-enclosing-type-parameter`, a
+> descriptive slug that has never existed. Third dead ticket pointer in this
+> file; the other two were absorbed into surviving tickets, this one was simply
+> never the name.
 
 Inside `generic TG<T> = class ... end`, the type parameter `T` is in the class's
 scope, so FPC 3.2.2 treats a field, parameter, local or method also named `T` as

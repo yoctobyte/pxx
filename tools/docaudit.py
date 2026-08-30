@@ -4,6 +4,7 @@
 
     tools/docaudit.py              both checks, live docs under devdocs/dev/
     tools/docaudit.py cites        only the citation check (hard findings)
+    tools/docaudit.py slugs        ticket slugs cited by NAME that exist nowhere
     tools/docaudit.py limits       only the stated-limit scan (advisory)
     tools/docaudit.py --dir docs   audit a different tree (e.g. Track D's docs/**)
     tools/docaudit.py targets [--all] compiler/ir.inc ...
@@ -23,6 +24,17 @@ TWO CHECKS, AND THEY ARE NOT THE SAME KIND OF THING
 `cites` is MECHANICAL and its findings are facts: a cited file that does not
 exist, a line number past the end of a file, a ticket cited by a directory it
 has moved out of. Exit 1 when any are found.
+
+`slugs` is the same kind of fact from the other side: a ticket named in prose
+(`[[slug]]` or `` `slug` ``) that exists in no ticket directory at all. Added
+2026-08-30 after this tool MISSED one -- `compat-pascal-strict-fpc-abs-and-sqr-widths`,
+cited in `pascal-dialect-divergences.md`, filed nowhere, while the work it
+describes is filed under a different slug. That is the worse half of a dead
+citation: following it finds nothing, and **"no such ticket" reads as UNFILED**,
+so the next reader drops the gap or files a duplicate. `cites` could not see it
+because it only checked slugs that came with a directory path attached, and this
+one did not -- the same blind spot as a search-and-replace over a bare slug that
+cannot see `.../backlog/slug.md`. **Citation FORMS are sibling arms too.**
 
 `limits` is a HEURISTIC and its findings are candidates. It scans for a stated
 LIMIT with a MECHANISM attached -- the shape that has produced five wrong claims
@@ -438,6 +450,79 @@ def check_targets(paths, show_all=False):
     return len(buckets['subset']) + len(buckets['partial'])
 
 
+def known_slugs():
+    """Every ticket slug in the tree, and the prefixes tickets actually use.
+
+    Both DERIVED, never typed: the prefix list is whatever the corpus contains,
+    so a new ticket family needs no edit here. Typing the list would give this
+    check the defect it exists to find."""
+    slugs, prefixes = set(), {}
+    base = os.path.join(ROOT, 'devdocs/progress')
+    for d in TICKET_DIRS:
+        dd = os.path.join(base, d)
+        if not os.path.isdir(dd):
+            continue
+        for fn in os.listdir(dd):
+            if fn.endswith('.md') and fn != 'README.md':
+                slug = fn[:-3]
+                slugs.add(slug)
+                head = slug.split('-')[0]
+                prefixes[head] = prefixes.get(head, 0) + 1
+    # a prefix only counts as a ticket family if the corpus uses it repeatedly
+    return slugs, {k for k, n in prefixes.items() if n >= 5}
+
+
+def check_slugs(docdir, skip):
+    slugs, prefixes = known_slugs()
+    if not slugs:
+        sys.exit("docaudit slugs: no tickets found under devdocs/progress/")
+    cite = re.compile(r'\[\[([a-z][a-z0-9-]{12,})\]\]|`([a-z][a-z0-9-]{12,})`')
+    # A slug is sometimes named PRECISELY in order to say it is dead -- "absorbed
+    # into X, no longer exists", or a correction note quoting the wrong text it
+    # replaced. By name-matching alone that is indistinguishable from a live
+    # dead pointer, which is the same shape as `targets`' benign superset row
+    # (a target named in order to EXCLUDE it). Unlike that one it has a reliable
+    # textual marker, because saying so is the entire purpose of the mention.
+    # Keep these markers EXPLICIT. A first attempt included `not`, `read` and
+    # `instead of`, which appear constantly in ordinary prose: findings went
+    # 11 -> 1 and five real abbreviated citations vanished with the noise. A
+    # suppression list wide enough to guarantee a clean run is a check tuned to
+    # agree with its author.
+    dead_marker = re.compile(
+        r'(no longer exists?|absorbed|superseded|renamed|was folded|folded into|'
+        r'never existed|has never existed|used to be|formerly|this cited|'
+        r'cite that, not|written plain)', re.I)
+    WINDOW = 140
+    missing = []
+    for fn in live_docs(docdir, skip):
+        text = open(os.path.join(docdir, fn), errors='replace').read()
+        for m in cite.finditer(text):
+            name = m.group(1) or m.group(2)
+            if name.count('-') < 3 or name.split('-')[0] not in prefixes:
+                continue
+            if name in slugs:
+                continue
+            around = text[max(0, m.start() - WINDOW):m.end() + WINDOW]
+            if dead_marker.search(around):
+                continue
+            missing.append((fn, name))
+
+    print("== ticket slug cited by name, filed NOWHERE: %d ==" % len(set(missing)))
+    print("   %d known slugs, families derived from the corpus: %s" %
+          (len(slugs), ', '.join(sorted(prefixes))))
+    print("   Slugs named in order to SAY they are dead are suppressed.")
+    print("   A dead slug reads as UNFILED, so the gap gets dropped or")
+    print("   duplicated. Check for a RENAMED ticket covering the same work")
+    print("   before concluding it was never filed.\n")
+    for fn, name in sorted(set(missing)):
+        stem = '-'.join(name.split('-')[:4])
+        near = sorted(x for x in slugs if x.startswith(stem[:len(stem)]))[:3]
+        print("   %-34s %s" % (fn, name))
+        if near:
+            print("       nearest filed: %s" % ', '.join(near))
+    return len(set(missing))
+
+
 def main():
     argv = sys.argv[1:]
     docdir = os.path.join(ROOT, 'devdocs/dev')
@@ -476,6 +561,10 @@ def main():
     hard = 0
     if what in ('all', 'cites'):
         hard = check_cites(docdir, skip)
+    if what in ('all', 'slugs'):
+        if what == 'all':
+            print()
+        hard += check_slugs(docdir, skip)
     if what in ('all', 'limits'):
         if what == 'all':
             print()
