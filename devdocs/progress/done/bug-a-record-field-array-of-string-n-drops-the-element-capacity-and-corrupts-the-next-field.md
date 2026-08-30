@@ -155,4 +155,4 @@ Gate: `make compiler/pascal26` converged in 1 round (8a9e78fb4555); all four
 differential programs match FPC.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 6e25bdcde.
