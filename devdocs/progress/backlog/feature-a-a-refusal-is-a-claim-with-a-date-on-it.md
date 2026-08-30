@@ -7969,3 +7969,55 @@ literals, which `getaddrinfo` converts locally with no query and no server — *
 why they work under QEMU with no network.* This is the binding and the ABI, **not "DNS works
 on ESP".** A green invites over-reading, and the place to stop that is where someone stands
 before trusting the example.
+
+### 176 — I NOTED THE CONSTRAINT IN THE PROSE OF THE TICKET I WAS FILING, AND IT DID NOTHING
+
+*frankB, 2026-08-30, on its own ticket, hours after being told about the prose/frontmatter gap.*
+
+It filed `feature-dns-esp-wire-nameservers-from-lwip` at p15, **noted the ESP park in the
+ticket's prose**, and the ticket was dispatchable within the hour. It is one of the 23.
+
+> Noting it **in the ticket I was filing** felt like diligence at the time and did nothing at
+> all.
+
+That is the prose/frontmatter failure caught **at the moment of authorship**, by an author who
+knew about the failure class, and it still happened — because writing the caveat *discharges
+the feeling of having handled it*. The ranker never read it. Same night, sixth instance.
+
+The repair frankB then made is the one to copy: `blocked-by:
+decide-is-the-2026-07-12-esp-park-still-in-force`, confirmed to have left `ready --track B`,
+and — the part that makes it safe — **it does not presume the ruling.** It says only *not
+dispatchable until the question is answered*, which holds either way: park lifted, the edge
+clears and it ranks; park stands, it should never have ranked. **A gate keyed on the open
+question rather than on a guess at its answer is correct under both outcomes.**
+
+### 176a — AND IT GATED ONE ROW, NOT TWENTY-THREE
+
+frankB gated **only its own** ticket, deliberately:
+
+> The other 22 aren't mine to gate, and how they get gated is part of what the ruling has to
+> settle — **a coordinator applying markers across four lanes' tickets ahead of the decision
+> would be the same erosion in the opposite direction.**
+
+That is a check on *me*, and it is right. Having found that a user decision was being eroded,
+the reflex is to enforce it immediately and everywhere — which would pre-empt the ruling just
+as thoroughly, in the other direction, and across lanes that never agreed to it. **The
+correct scope of a unilateral repair is the thing you yourself broke.**
+
+### 176b — AND THE PARK HAD BEEN UNOBSERVED SINCE THREE WEEKS AFTER IT WAS WRITTEN
+
+Checking frankB's chronology against files neither of us chose for the purpose: ESP work was
+**actively progressing on 2026-08-02** — `feature-esp-hardware-flash-validation.md` records
+*"Everything except the board is now in place"* and *"The peripheral half is unblocked too"*,
+both dated; `feature-a-promoint-variant-esp-targets.md` carries a dated diagnosis the same day.
+
+So **tonight's staffing is the largest instance, not the first.** The park has been invisible
+to every session since roughly three weeks after it was made. That is consistent with *both*
+readings — superseded, or never seen — and the two are indistinguishable from the tree, which
+is precisely what makes it a decision rather than a lookup.
+
+Note the direction the check ran: frankB cited a *2026-08-02 user correction* recorded in its
+own ticket. I could not independently find that ruling's text, so it is relayed on frankB's
+citation and labelled as such — while the *activity* on that date is corroborated from
+elsewhere. **Verifying a claim against a source the claimant did not choose does not always
+confirm or refute it; sometimes it returns a different, better fact.**

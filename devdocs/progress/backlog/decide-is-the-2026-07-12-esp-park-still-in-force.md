@@ -62,3 +62,47 @@ other 22, and the ranker never reads it.
 One word. *Superseded* → I strike the stale comment, keep the lane, and note the
 supersession. *Still parked* → I re-price the S rows, stand frankS down, and record it where
 the ranker can see it this time.
+
+
+## Chronology, added 2026-08-30 — and it sharpens the fork rather than settling it
+
+frankB supplied the ordering; I checked the middle term against a source it did not choose,
+and found a fourth data point it had not claimed.
+
+| when | what |
+| --- | --- |
+| **2026-07-12** | the park: *"ESP parked (user 2026-07-12): Pascal has prio"* |
+| **2026-08-02** | ESP work actively progressing — see below |
+| later | CLAUDE.md's Track S written as a live lane, *"Primary target is xtensa (the user's S2/S3 hardware); riscv32 (C3) is what works today"* (undated) |
+| **2026-08-29** | the coordinator adds a dedicated `frankS` to `~/frank.sh` |
+
+**frankB's point, and it is the sharpest statement of the ambiguity:**
+
+> a target-priority ruling is not the same as a work-priority ruling, and *"when we do ESP,
+> do xtensa first"* is entirely consistent with *"don't do ESP yet"*.
+
+So the later xtensa ruling does **not** by itself supersede the park. It answers a different
+question. That is the strongest argument that this genuinely needs you rather than a
+coordinator reading.
+
+**Precision on the middle row, because the distinction matters.** frankB cites a *2026-08-02
+user correction that xtensa is the primary ESP target*, recorded in its own ticket — I am
+relaying that on its citation and have **not** independently found the ruling text. What I
+did find, in files neither of us picked for this purpose, is that **ESP work was actively
+progressing on 2026-08-02**: `feature-esp-hardware-flash-validation.md` — *"Everything except
+the board is now in place (2026-08-02)"* and *"The peripheral half is unblocked too
+(2026-08-02, later)"*; `feature-a-promoint-variant-esp-targets.md` carries a dated
+2026-08-02 diagnosis.
+
+**Which is a fourth fact and possibly the most useful one: the park was already not being
+observed three weeks after it was made, by sessions that had nothing to do with tonight.**
+Tonight's staffing is the largest instance, not the first. That is consistent with either
+reading — the park was understood as superseded, or it has been invisible to every session
+since the day it was written — and those two are indistinguishable from the tree, which is
+exactly why this is a U ticket.
+
+## What this does not change
+
+Still one word. But if the answer is *still parked*, the follow-on is bigger than re-pricing
+23 rows: work has been landing against a parked campaign for seven weeks, and some of it is
+in `done/`.
