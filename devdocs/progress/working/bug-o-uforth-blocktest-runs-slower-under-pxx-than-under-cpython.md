@@ -818,6 +818,15 @@ produced two bad rankings from missing instruments in one night. The census is
 a counting instrument, so unlike everything else measured here it is immune to
 the box being busy.
 
+Provenance, because a measurement carries its configuration or it carries
+nothing: taken at HEAD `7dbbab6a2`, compiler sha256 `dfb89430336b`, and
+re-taken there after four intervening compiler builds. **The allocation totals
+reproduced exactly** — 14,482,408 and 8,036,705 both times. The size histogram
+moved by a handful of entries (3 in the 32-byte class, 6 in `live`), so the
+right claim is *reproducible to about 1e-7 and not bit-exact*; some small
+number of allocations depends on the environment the process starts in. That is
+still four orders of magnitude tighter than any timing on this box.
+
 uforth `core.fr`, same driver, `-O2` against `-O3`:
 
 | | allocations | bytes | live | 32-byte class |
