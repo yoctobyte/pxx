@@ -10993,6 +10993,15 @@
   "verdict": "GREEN",
   "wall": 307.0
  },
+ "last_bench": {
+  "conf_rows": 550,
+  "date": "2026-08-30T10:07:21Z",
+  "hw_fp": "d1cb631472c9",
+  "probe_ratio": 1.0,
+  "rc": 1,
+  "rows": 0,
+  "sha": "be6dbd7fba7e8428c6ffb2b64161af755559d910"
+ },
  "last_breadth_try": {
   "date": "2026-08-29T18:39:13Z",
   "sha": "ee62e6dc0582f6a018102c4e1d1d9a083d7e4f32"
