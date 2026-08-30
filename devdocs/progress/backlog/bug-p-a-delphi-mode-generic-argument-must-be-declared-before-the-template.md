@@ -3,11 +3,21 @@ slug: bug-p-a-delphi-mode-generic-argument-must-be-declared-before-the-template
 track: P
 prio: 55
 type: bug
-status: working
+status: backlog
 blocked-by: []
 summary: "In mode Delphi, `TE = TBox<TOuter>;` fails with `unknown type: TOuter` when TOuter is declared AFTER TBox in the same type section — reorder the two declarations and the identical program compiles and runs. FPC accepts both orders. DelphiRewriteGenericUses splices its minted alias declarations immediately behind the TEMPLATE, so they can only name types already declared at that point. objfpc is unaffected (its aliases are emitted at the use). 20-line repro, both orders."
-owner: frankP
+owner: unassigned
 ---
+
+
+> **Lock released 2026-08-30 (frankP), fleet-wide pause before a re-pin — NOT
+> abandoned.** Claimed, the anchor measured, then put back in `backlog/` because
+> `working/` is a live lock and a lock behind a stopped session has to be chased
+> by whoever runs the pin. Everything learned is in this file, not in a session:
+> position **B** is the anchor (table above), the sketch that said otherwise is
+> struck through with its measurement, and the three remaining cases are named.
+> Nothing is half-applied — no compiler source was edited for this ticket.
+
 
 # A mode-Delphi generic argument must be declared before the template
 
