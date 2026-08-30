@@ -333,11 +333,6 @@ and unanswerable from the other — and the unanswerable one **looks complete**.
 absent baseline is exactly as vacuous as a self-baseline, with the evidence of
 its own emptiness removed.
 
-**On the `merge-base` row specifically:** No stale tree, no missing file, no unfetched
-object, no mis-chosen predicate — just two arguments in the wrong order. Both
-orders are legal, both return 0 or 1 with no message, and the answer you get is
-*true* of the question you accidentally asked.
-
 **Its fix generalises past being careful:** ask the question that has no argument
 order. "Was my change in that tree?" is answerable directly —
 `git show <sha>:compiler/symtab.inc | awk '/^function IsNodeArray/,/^end;/'` —
