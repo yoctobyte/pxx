@@ -8,7 +8,7 @@ owner: frankB
 # Random library — HW/OS/software tiered RNG (cross-target capability test)
 
 - **Type:** feature
-- **Status:** working
+- **Status:** done
   remaining work is HW tiers and thread-safe state)
 - **Relation:** a real, reusable RTL library that doubles as a broad
   cross-target test: runtime capability probing, per-target inline asm, a
@@ -480,3 +480,54 @@ ticket. **Each of these was invisible until the one in front of it fell,
 because the compiler stops at the first error** — which is the whole reason a
 `done/` blocker is not evidence that the thing it blocked now works. The only
 check that ever caught it was building the thing.
+
+## 2026-08-30 (frankB) — RESOLVED. The remaining work was already done; verified, not read.
+
+Claimed to do "the HW tiers and thread-safe state" — the words in this ticket's
+own status line. **Both were already complete**, and the status line is what
+was stale. Verified by running at `c781fc84f` / pin v396, because this ticket's
+whole history is of records that were true when written.
+
+| claim | how it was checked | result |
+| --- | --- | --- |
+| software tier, cross-target oracle | `test/lib_random.pas` diffed against `test/lib_random.expected` | **matches** |
+| thread-safe state (slice 7, landed 2026-07-20) | `test/lib_randomstate.pas`, the `lib-test` gate | **RANDOMSTATE OK** |
+| tier 1 wired to the intrinsics | ran it: `HWEntropyAvailable` → TRUE, three `HWEntropy64` draws all distinct, `rdrand` present in `/proc/cpuinfo` | **live, on the AVAILABLE branch** |
+| the four oracle targets still build | `lib_random.pas` compiled for x86-64, i386, aarch64, arm32 | **all four build** |
+
+The tier-1 row is the one that needed *running* rather than compiling: the
+not-available branch returns cleanly and looks identical from outside, so a
+build check would have passed on a machine where the intrinsic never fires.
+
+### Why this closes rather than shrinking
+
+Everything in the API sketch is implemented and gated. What is left is not work
+this ticket can hold:
+
+- **`Random128`** — deliberately absent, unchanged since the sketch: there is
+  no 128-bit integer type to return, and faking it with a record would be a
+  worse answer than not having it. That is a settled decision, not a gap.
+- **Hosted riscv32** — still `atomics need machine-mode CSR access (mstatus),
+  which a hosted user-mode program does not have`, re-confirmed today. No
+  shipping configuration builds hosted riscv32; the C3 ships the ESP profile.
+- **Bare xtensa / riscv32** — split out as [[feature-random-esp-hw-tier]] with a
+  real `blocked-by` edge to
+  [[bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help]].
+
+### The thing this ticket kept teaching, one last time
+
+Three Track A walls fell in front of it (`syscall` lowering, the missing
+intrinsics ticket, the ESP-unreachable intrinsics), each invisible until the
+one ahead of it did — the compiler stops at the first error. Then the work
+behind them turned out to have been finished weeks earlier, and only the
+summary line said otherwise.
+
+**A ticket's status line is a claim with a date on it, and so is its
+"Remaining" section.** This one's remaining list was re-measured on 2026-08-28
+and two of its three entries were already stale then; today the whole list is.
+Nothing here was ever wrong when written.
+
+Gate: `make lib-test`'s two random entries green, unchanged, plus the live
+tier-1 check above. No source changed — this ticket closes on verification, not
+on a fix.
+- 2026-08-30 — resolved, commit PENDING-COMMIT.
