@@ -12714,6 +12714,16 @@ test-core: $(COMPILER)
 	# refactor-a-two-predicates-answer-what-a-caret-yields
 	./$(COMPILER) $(PXXFLAGS) test/test_deref_shape_dynarray_and_double.pas $(TESTTMP)/test_deref_dyndbl26
 	$(TESTTMP)/test_deref_dyndbl26 | diff -u test/test_deref_shape_dynarray_and_double.expected -
+	@echo "=== p^[i] where the ARRAY's element is a pointer ==="
+	# `tk = tyPointer` on a deref means both "the pointee is a pointer" and "the
+	# pointee is an array whose ELEMENT is a pointer", and three readers took the
+	# first for the second. Rows 1-7 are the defect on read AND write; 8-10 are
+	# the controls, and row 10 is the one that fails if `p^` stops being an array.
+	# Non-vacuous per row on pinned (139 / compile error / 139 / 139), measured
+	# individually because this file stops at the first compile error.
+	# bug-a-indexing-through-a-pointer-to-an-array-of-pointers-segfaults
+	./$(COMPILER) $(PXXFLAGS) test/test_ptr_to_array_of_pointers_index.pas $(TESTTMP)/test_ptr_arr_ptr_index26
+	$(TESTTMP)/test_ptr_arr_ptr_index26 | diff -u test/test_ptr_to_array_of_pointers_index.expected -
 	@echo "=== progress board check (non-fatal) ==="
 	@./tools/progress.sh check || echo "WARNING: progress board stale or invalid — run 'tools/progress.sh board-md' (non-fatal)"
 

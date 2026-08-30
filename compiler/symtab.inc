@@ -13466,6 +13466,20 @@ begin
 end;
 
 function IsNodeArray(node: Integer): Boolean;
+{ The AN_DEREF arm is the THIRD site to ask DerefPtrArrayInfo, and the reason is
+  the same at all three: `p^` where `p: ^array[0..3] of T` IS an array, but the
+  caret arm tags the deref node with the ELEMENT's kind, so every consumer that
+  asks "what kind of thing is this?" gets T and is wrong. Without it the array
+  path in IRLowerAddress read isArr=FALSE and, for `array of AnsiString`, took
+  the managed-STRING arm: `p^[1]` loaded p^ as a string handle and indexed it
+  1-based at stride 1, returning a CHAR. Compiles clean, segfaults.
+
+  Three call sites of ONE predicate, not three mechanisms -- the tag is
+  ambiguous everywhere it is read, and DerefPtrArrayInfo is the only thing that
+  knows the real shape. It is narrow (AN_DEREF over a plain identifier whose
+  SymPtrElemArrLen > 0) and pure.
+  bug-a-indexing-through-a-pointer-to-an-array-of-pointers-segfaults }
+var inaCount, inaLo, inaFlat: Integer;
 begin
   Result := False;
   if DynArrayNodeDepth(node) > 0 then
@@ -13473,7 +13487,9 @@ begin
   else if ASTKind[node] = AN_IDENT then
     Result := Syms[ASTIVal[node]].IsArray
   else if ASTKind[node] = AN_FIELD then
-    Result := RecFieldIsArray(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));
+    Result := RecFieldIsArray(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
+  else if ASTKind[node] = AN_DEREF then
+    Result := DerefPtrArrayInfo(node, inaCount, inaLo, inaFlat);
 end;
 
 procedure ResolvePendingPointerAliases;

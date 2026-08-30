@@ -2487,9 +2487,32 @@ function IRNodePointerBase(node: Integer): Boolean;
   `CNodeIsDecayedRow` reads it, and the pointer-arith arms consult that directly
   rather than inferring it from a type. There is nothing left here to
   disambiguate.
+  IT ASKS THE DECLARATION, AND FOR ONE SHAPE THE DECLARATION IS NOT ON THE NODE.
+  `p^` where `p: ^array[0..3] of PChar` is an ARRAY LVALUE, but the caret arm
+  tags the deref node with the ELEMENT's kind -- which for a pointer element is
+  tyPointer -- so this answered TRUE and `p^[1]` was lowered as POINTER
+  ARITHMETIC: an extra load_mem taking element 0's CONTENTS as the base, at
+  stride 1. Compiles clean, segfaults. An Integer or Char element never sets the
+  tag to tyPointer and so never reached it, which is why the ticket's table
+  reads as "pointer-KIND elements" and why TObject (tyClass) escapes.
+  DerefPtrArrayInfo is the predicate that knows the real shape, and IsNodeArray
+  asks the same one for the same reason. The two are disjoint and BOTH are
+  needed, measured by ablation: with only IsNodeArray fixed, a POINTER element
+  still segfaults here; with only this fixed, an ANSISTRING element still takes
+  the managed-string index path and segfaults there. The parser's own `p^[i]`
+  arm was ALSO guarded at first and measured as NO CHANGE on every row --
+  dropped rather than kept, because IsNodeArray is read by the parser too and
+  fixes the typing at its source.
+  bug-a-indexing-through-a-pointer-to-an-array-of-pointers-segfaults,
   refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag,
   bug-c-pointer-difference-on-a-long-long-element-type }
+var pbCount, pbLo, pbFlat: Integer;
 begin
+  if DerefPtrArrayInfo(node, pbCount, pbLo, pbFlat) then
+  begin
+    Result := False;
+    Exit;
+  end;
   Result := IntToTypeKind(ASTTk[node]) = tyPointer;
   if Result or (not CProgramMode) then Exit;
   Result := CNodeDecaysToPointer(node);
@@ -2836,6 +2859,39 @@ begin
        (Syms[symId].ElemType = tyPointer) and
        ((Syms[symId].PtrElemTk = tyChar) or (Syms[symId].PtrElemTk = tyUInt8) or
         (Syms[symId].PtrElemTk = tyInt8)) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+
+  { 6b. The SAME element, reached through a POINTER to the array — `q^[i]`
+       where `q: ^array[..] of PChar`. Arm 6 requires ASTLeft to be an AN_IDENT
+       naming the array; here it is an AN_DEREF, so arm 6 could not answer and
+       WriteLn printed the pointer as a decimal number while `s := q^[i]`
+       through a PChar variable printed the text. Two spellings of one
+       expression disagreeing is the tell.
+
+       Read exactly as arm 7 reads its own case — depth 2 over a char base —
+       with SymPtrElemArrLen > 0 as the marker that the pointee is the ARRAY
+       rather than another pointer. The metadata was already recorded by
+       ParseTypeKind's caret arm; only the reader was missing, which is what
+       arms 6 and 7 each say about themselves.
+       bug-a-indexing-through-a-pointer-to-an-array-of-pointers-segfaults }
+  if (ASTKind[node] = AN_INDEX) and (ASTLeft[node] >= 0) and
+     (ASTKind[ASTLeft[node]] = AN_DEREF) and
+     (ASTLeft[ASTLeft[node]] >= 0) and
+     (ASTKind[ASTLeft[ASTLeft[node]]] = AN_IDENT) then
+  begin
+    symId := ASTIVal[ASTLeft[ASTLeft[node]]];
+    if (symId >= 0) and (symId < SymCount) and
+       (Syms[symId].TypeKind = tyPointer) and
+       (SymPtrElemArrLen[symId] > 0) and
+       (Syms[symId].PtrElemTk = tyPointer) and
+       (SymTR[symId].PtrDepth = 2) and
+       ((SymTR[symId].PtrBaseTk = Ord(tyChar)) or
+        (SymTR[symId].PtrBaseTk = Ord(tyUInt8)) or
+        (SymTR[symId].PtrBaseTk = Ord(tyInt8))) then
     begin
       Result := True;
       Exit;

@@ -1,10 +1,10 @@
 ---
-slug: bug-a-indexing-through-a-pointer-to-an-array-of-pointers-segfaults
+slug: bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds
 track: A
 prio: 60
 type: bug
-status: backlog
-owner:
+status: working
+owner: frankA
 blocked-by: []
 summary: "`p^[i]` where p points to an ARRAY is broken for several element kinds, and the WORST arm is SILENT: `array[0..3] of string[7]` (also string[31], ShortString) yields an EMPTY string where FPC yields `hi`, exit 0, no crash and no diagnostic -- a plausible wrong VALUE, which is the expensive class. Other element kinds (Pointer, PChar, PInteger, AnsiString) segfault; Integer, Int64, Double, Boolean, Char, TObject and a record element are correct. It compiles clean in every case, so a build-only check reports success. DIAGNOSED: the crash is a bad BASE, not a bad index -- `ppa^[1]` emits an extra load_mem with size=1, computing [[ppa]] + 1*1. THE MODEL IS NOT ABOUT POINTERS: the `[` arm chain dispatches on `tk`, and for a pointer-to-array `tk` holds the ARRAY ELEMENT KIND while every arm reads it as the type of the thing being indexed -- collide with an arm above the array fall-through and you break, collide with nothing and you are fine. The crash site is IRLowerAddress AN_INDEX (~40 lines: baseAddr choice and elemSize), NOT the parser -- proven by routing past all five element-kind arms and getting a byte-identical segfault. A second real parser defect makes the string[7] row silently wrong and is separable."
 ---
