@@ -2488,3 +2488,50 @@ destination path is unaffected on every target.
 This is why the diffed slice stops at 200 bytes and the 300-byte case is
 asserted wasm-only. The long argument moves back into the diffed slice when
 that ticket closes — that is the regression test.
+
+### Phase 9k — `Frac` / `Int`, the float intrinsics that stay float — **DONE, 2026-08-30.**
+
+The last two anchor refusals that were **not** the sys-intrinsics question.
+`FloatToStr` refused on `-205` (`Frac`) and `PyNodeIsIntegralConst` on `-206`
+(`Int`) — two bodies, and the only two of the remaining 34 that had nothing to
+do with file, directory or environment I/O.
+
+On wasm both are `f64.trunc`: `Int(x)` is the integer part toward zero and
+`Frac(x)` is `x - Int(x)`. No rounding question, no accuracy question, and
+nothing subtle about halves — unlike `Round` one arm up, where `$9C` vs `$9E`
+is a real trap. Ten lines.
+
+**Not Track F.** The charter's exclusion is explicit: a MISSING routine a
+working program calls is an ordinary defect in the owning lane, not a float
+ticket. Rank the mechanism, never the datatype — and the mechanism here is a
+missing lowering, with `f64.trunc` exact.
+
+What the arm actually has to get right is the edges, and one of them was
+borrowed rather than discovered:
+
+* **The result is not always a double.** A C `(float)x` cast lowers to `Int(x)`
+  with a **tySingle** result, so the node's own type is consulted and the
+  double narrowed with `f32.demote_f64`. riscv32 shipped this the other way and
+  read double bits as a single — `(float)4294967296LL` was 0 there while every
+  other target was right (`ir_codegen_riscv32.inc:2486`). Reading that arm
+  before writing this one is the only reason it is handled here.
+* **A fresh local per SITE for `Frac`**, since `x - trunc(x)` needs the value
+  twice and a nested `Frac` would otherwise clobber the outer one's saved copy
+  — the same rule `WasmEmitGetMem` follows, and the slice nests one to say so.
+* The argument is promoted to f64 unconditionally, matching riscv32;
+  `WasmEmitValueAs` emits the convert for an integer one.
+
+**Milestone: every remaining anchor refusal is now one question.**
+32 refused bodies, and the histogram has exactly one shape left —
+17× `-50`, 8× `-100` (LoadFile), 6× `-52`, 1× `IR op 54` (getdents64). All of
+them are file / directory / environment I/O, i.e. all of them are
+`decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal`.
+There is no longer any anchor work in this lane that the Track U decision does
+not gate.
+
+Test: `test/wasm/check_floatint.sh`, diffed against native. It prints SCALED
+INTEGERS rather than reals, because writing a float is a separate open gap on
+this target — "the RTL writers take a double by address and this arm does not
+spill one yet". That gap is not on the anchor path (`compiler.pas` writes no
+floats) but it is why a float intrinsic cannot be tested by printing its
+result, which is worth knowing before writing the next float slice.

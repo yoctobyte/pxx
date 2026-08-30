@@ -2572,6 +2572,7 @@ end;
 
 function WasmEmitBuiltin(node, p: Integer; isStmt: Boolean): Boolean;
 var argNode: Integer; ctk: TTypeKind; atk: TTypeKind; want: Byte; wide: Boolean;
+    fl: Integer;
 begin
   WasmEmitBuiltin := False;
 
@@ -2775,6 +2776,47 @@ begin
       { Trunc/Round of an integer is identity, widened to the Int64 result. }
       WasmEmitValueAs(IRA[argNode], WT_I64, 'Trunc/Round of an integer');
     end;
+    WasmEmitBuiltin := True;
+    Exit;
+  end;
+
+  { --- Frac (-205) / Int (-206): the float intrinsics that stay FLOAT ---
+
+    The pair above returns an INTEGER; this pair returns a real. `Int(x)` is
+    the integer part as a Real and `Frac(x)` is `x - Int(x)`, both truncating
+    toward zero, which is `f64.trunc` exactly — so there is no rounding
+    question here and nothing to get subtly wrong about halves.
+
+    The argument is promoted to f64 unconditionally, matching riscv32
+    (:2475), and WasmEmitValueAs emits the convert for an integer one.
+
+    THE RESULT IS NOT ALWAYS A DOUBLE. A C `(float)x` cast lowers to `Int(x)`
+    with a tySingle result, so the node's own type has to be consulted and the
+    double narrowed. Not hypothetical and not found here: riscv32 shipped it
+    the other way and read double bits as a single —
+    `(float)4294967296LL` came out 0 there while every other target was right
+    (its comment at :2486). Copied deliberately rather than rediscovered. }
+  if (p = -205) or (p = -206) then
+  begin
+    WasmEmitValueAs(IRA[argNode], WT_F64, 'Frac/Int argument');
+    if WasmBodyBroken then Exit;
+    if p = -206 then
+      WasmOp($9D, 'f64.trunc')
+    else
+    begin
+      { x - trunc(x), so the value is needed twice and a local is the only way
+        to say that on a stack machine. A fresh local per SITE, for the same
+        reason WasmEmitGetMem takes one: the argument of an inner Frac would
+        otherwise clobber the outer one's saved copy. }
+      fl := WasmAddLocal(WT_F64, 'fracarg');
+      WasmLocalSet(fl);
+      WasmLocalGet(fl);
+      WasmLocalGet(fl);
+      WasmOp($9D, 'f64.trunc');
+      WasmOp($A1, 'f64.sub');
+    end;
+    if IntToTypeKind(IRTk[node]) = tySingle then
+      WasmOp($B6, 'f32.demote_f64');
     WasmEmitBuiltin := True;
     Exit;
   end;
