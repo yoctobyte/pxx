@@ -4886,16 +4886,16 @@ test-core: $(COMPILER)
 	# means it needs its OWN discriminating case, not that it is done.
 	# bug-a-the-cdecl-soundness-reject-still-has-its-argument-shaped-door-on-four-targets
 	./$(COMPILER) -Fucompiler test/test_cdecl_bodied_narrow.pas $(TESTTMP)/test_cdecl_narrow26
-	tools/expect_same.sh test_cdecl_narrow26 "$$($(TESTTMP)/test_cdecl_narrow26)" "CDECL-NARROW OK checks=8"
+	tools/expect_same.sh test_cdecl_narrow26 "$$($(TESTTMP)/test_cdecl_narrow26)" "CDECL-NARROW OK checks=9"
 	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
 	  ./$(COMPILER) --target=aarch64 test/test_cdecl_bodied_narrow.pas $(TESTTMP)/test_cdecl_narrow_a64 && \
-	  tools/expect_same.sh aarch64/test_cdecl_narrow "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_cdecl_narrow_a64)" "CDECL-NARROW OK checks=8"; \
+	  tools/expect_same.sh aarch64/test_cdecl_narrow "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_cdecl_narrow_a64)" "CDECL-NARROW OK checks=9"; \
 	else \
 	  echo "=== test_cdecl_bodied_narrow: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
 	fi
 	@if command -v qemu-arm >/dev/null 2>&1; then \
 	  ./$(COMPILER) --target=arm32 test/test_cdecl_bodied_narrow.pas $(TESTTMP)/test_cdecl_narrow_a32 && \
-	  tools/expect_same.sh arm32/test_cdecl_narrow "$$(tools/run_target.sh arm32 $(TESTTMP)/test_cdecl_narrow_a32)" "CDECL-NARROW OK checks=8"; \
+	  tools/expect_same.sh arm32/test_cdecl_narrow "$$(tools/run_target.sh arm32 $(TESTTMP)/test_cdecl_narrow_a32)" "CDECL-NARROW OK checks=9"; \
 	else \
 	  echo "=== test_cdecl_bodied_narrow: qemu-arm absent, arm32 arm NOT verified ==="; \
 	fi

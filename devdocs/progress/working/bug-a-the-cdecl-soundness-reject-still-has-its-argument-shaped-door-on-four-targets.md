@@ -64,3 +64,70 @@ by-value float param and with >6 integer params either produces the correct
 value, or is refused — never a wrong value. The x86-64 rows of
 `test/test_cdecl_bodied_sysv.pas` become cross-target rows if the prologue
 option is taken.
+
+
+---
+
+# PROGRESS (2026-08-30)
+
+| target | arm | left the reject | notes |
+| --- | --- | --- | --- |
+| x86-64 | done | done | `feature-cdecl-bodied-sysv-prologue` |
+| aarch64 | done | done | AAPCS64, independent x0..x7 / d0..d7 banks |
+| arm32 | done | done | AAPCS soft-float; **half-joined**, see below |
+| i386 | — | — | fails 3 of 8 narrow checks today |
+| riscv32 | — | — | passes all 8 narrow checks today, which proves nothing |
+
+**arm32 half-joins.** Its arm is correct for every signature it accepts and it
+refuses any argument block over 4 core registers, because stack arguments are
+unimplemented on both sides of the call there —
+`bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area`. Ordinary Pascal such as
+five integer params is in the refused set. Saying "arm32 is done" without that
+sentence would be false.
+
+## The slicing is also the census, and that is why it is per-target
+
+Sliced per target for bisectability. It turned out to be the only reliable way
+to FIND the instances, which is a stronger argument and the one that should
+survive the next person who wants to do all four at once.
+
+**Each target diverged by a different mechanism, and each needed a
+discriminating case built from its own ABI:**
+
+- x86-64 / aarch64 — independent integer and float register banks. Discriminated
+  by a MIXED signature: `f(i1,d1,i2,d2,i3,d3)`.
+- arm32 — armel is SOFT-FLOAT and has no float bank at all. The mixed case is
+  meaningless there. It diverges on 8-byte ALIGNMENT: `f(a: Integer; b: Double)`
+  must skip r1 and land the double in r2:r3. Measured 7, want 9.
+
+The other targets' discriminating case ALREADY PASSED on arm32 —
+`f(a: Double; b: Integer)` gave the right answer, because soft-float coincides
+with positional when the double is first. **A correct test pointed at the wrong
+ABI reports a false green**, and reusing it would have shipped an arm nothing
+tested. riscv32 passing all 8 narrow checks today is that same reading and must
+be treated as mute, not clean.
+
+## One predicate, four targets, four symptoms, and a census that cannot see it
+
+"A by-ref parameter is a POINTER and classifies as one" is implemented
+independently per backend, and was wrong in every one reached so far:
+
+| target | symptom |
+| --- | --- |
+| x86-64 | pointer passed in xmm — segfault |
+| aarch64 | pointer in the FP bank — segfault |
+| arm32 | sized 8 bytes and 8-aligned instead of one word — block desync, segfault |
+
+**A grep census does not find these.** `TypeIsFloat(Procs[` reports arm32 clean:
+arm32 spells the rule as `tk = tyDouble` / `tk = tyExtended` against a local,
+with no `TypeIsFloat` call near it. arm32 was fixed only because the alignment
+work required reading that file line by line.
+
+The count "4 sites across 4 backends" is *self-consistent* and still wrong — the
+denominator came from the same grep. **An arithmetic cross-check only works when
+the denominator comes from OUTSIDE the instrument** (`ls compiler/ir_codegen*.inc`
+gives 7). Treat any grep count of this predicate as a lower bound.
+
+So: **read i386's and riscv32's classification line by line; do not grep for it.**
+The per-target slicing forces exactly that, which is why the remaining two will
+surface their own instances regardless of who is paying attention.

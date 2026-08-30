@@ -85,6 +85,17 @@ begin
   Expect(fn(d, 7), 9, 'by-ref float via fnptr');
 end;
 
+{ The ASSIGNMENT shape. Refused outright on a target still behind the ir.inc
+  reject, so this half does not COMPILE there -- which is what stops this file
+  being wired for a target before that target is ready. All three targets wired
+  today (x86-64, aarch64, arm32) have their arm AND have left the reject. }
+procedure ViaVariable;
+var f: TFnID;
+begin
+  f := @CbID;
+  Expect(f(7, 2.0), 9, 'int-then-double via assigned variable');
+end;
+
 var dref: Double;
 begin
   TakeDI(@CbDI);
@@ -97,6 +108,7 @@ begin
   Expect(CbSI(1.5, 4), 7, 'single-then-int direct');
   dref := 2.5;
   Expect(CbRef(dref, 7), 9, 'by-ref float direct');
+  ViaVariable;
 
   if failures = 0 then
     writeln('CDECL-NARROW OK checks=', checks)

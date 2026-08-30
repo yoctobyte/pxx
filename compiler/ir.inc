@@ -9309,20 +9309,26 @@ begin
         Reject the unsound binding loudly; external (dlsym/C) values are
         unaffected.
 
-NO LONGER x86-64 (feature-cdecl-bodied-sysv-prologue) and NO LONGER
-        aarch64: on both, a bodied `cdecl` proc now gets a genuine C-convention
-        prologue (the ProcCdecl arm of EmitParamSpillsForTarget) and every
-        direct call site agrees, so the binding is sound and refusing it would
-        refuse working code. Targets leave this list ONE AT A TIME and only
-        AFTER their arm is proven -- narrowing first would let a target ACCEPT a
-        binding it cannot lower, which is worse than an honest refusal.
-        i386, arm32 and riscv32 have no arm yet and still need the wall.
+NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
+        proc now gets a genuine C-convention prologue (the ProcCdecl arm of
+        EmitParamSpillsForTarget) and every direct call site agrees, so the
+        binding is sound and refusing it would refuse working code. Targets
+        leave this list ONE AT A TIME and only AFTER their arm is proven --
+        narrowing first would let a target ACCEPT a binding it cannot lower,
+        which is worse than an honest refusal. i386 and riscv32 have no arm yet
+        and still need the wall.
+
+        arm32 is on the list but only HALF-joined: its AAPCS arm is correct for
+        every signature it ACCEPTS, and it refuses any argument block over 4
+        core registers because stack arguments are unimplemented on both sides
+        of the call there (bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area).
+        That refusal comes from ir_codegen_arm32.inc, not from here.
         THE TWO ERROR MESSAGES BELOW NAME THE SUPPORTED TARGETS. That list is a
         second copy of the condition above and must grow with it -- a message
         that says "works on x86-64" after aarch64 gained an arm is a diagnostic
         lying to the person best placed to act on it.
 
-        AND THE WALL STILL HAS A DOOR IN IT ON THE REMAINING THREE. This is keyed on the
+        AND THE WALL STILL HAS A DOOR IN IT ON THE REMAINING TWO. This is keyed on the
         ASSIGNMENT shape — AN_ASSIGN whose RHS is AN_PROCADDR — so passing the
         same @proc as a call ARGUMENT is a different AST shape and walks past
         it. Measured on aarch64 before its arm: `Take(@MyCb)` printed 0 where 9
@@ -9335,6 +9341,7 @@ NO LONGER x86-64 (feature-cdecl-bodied-sysv-prologue) and NO LONGER
       if (not CProgramMode) and
          (TargetArch <> TARGET_X86_64) and
          (TargetArch <> TARGET_AARCH64) and
+         (TargetArch <> TARGET_ARM32) and
          (ASTKind[ASTRight[node]] = AN_PROCADDR) and
          (ASTKind[ASTLeft[node]] = AN_IDENT) and
          { feature-a-typeref-migrate-consumers lane 1: SymProcSig read via
@@ -9348,12 +9355,12 @@ NO LONGER x86-64 (feature-cdecl-bodied-sysv-prologue) and NO LONGER
         varIdx := ASTIVal[ASTRight[node]];   { the bodied target proc }
         if Procs[varIdx].ParamCount > 6 then
           ErrorAt(ASTLine[node], '@' + Procs[varIdx].Name +
-            ' as a cdecl function pointer: on ' + TargetArchName(TargetArch) + ' a Pascal-bodied proc with more than 6 parameters is not C-callable yet; this works on x86-64 and aarch64 (feature-cdecl-bodied-sysv-prologue)');
+            ' as a cdecl function pointer: on ' + TargetArchName(TargetArch) + ' a Pascal-bodied proc with more than 6 parameters is not C-callable yet; this works on x86-64, aarch64 and arm32 (feature-cdecl-bodied-sysv-prologue)');
         for varIdx2 := 0 to Procs[varIdx].ParamCount - 1 do
           if TypeIsFloat(Procs[varIdx].Params[varIdx2].TypeKind) and
              (not Procs[varIdx].Params[varIdx2].IsRef) then
             ErrorAt(ASTLine[node], '@' + Procs[varIdx].Name +
-              ' as a cdecl function pointer: on ' + TargetArchName(TargetArch) + ' a Pascal-bodied proc with a by-value float parameter is not C-callable yet; this works on x86-64 and aarch64 (feature-cdecl-bodied-sysv-prologue)');
+              ' as a cdecl function pointer: on ' + TargetArchName(TargetArch) + ' a Pascal-bodied proc with a by-value float parameter is not C-callable yet; this works on x86-64, aarch64 and arm32 (feature-cdecl-bodied-sysv-prologue)');
       end;
 
       { PROMOTABLE INT store. Handled before every other assignment shape so no
