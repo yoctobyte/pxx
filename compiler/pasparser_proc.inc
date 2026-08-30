@@ -1070,6 +1070,8 @@ begin
         LastTypePointerElemRec := ArrTypePtrElemRec[retArrAi];
         if (retType = tyFixedString) or (retType = tyShortString) then
           LastTypeStrCap := ArrTypeElemStrCap[retArrAi];
+          if ArrTypeStrElemTk[retArrAi] <> 0 then
+            LastTypeStrElemTk := IntToTypeKind(ArrTypeStrElemTk[retArrAi]);
         Next;   { consume the alias name ParseTypeKind would have eaten }
       end
       else
@@ -2176,6 +2178,8 @@ begin
         frozen-string width from the alias rather than trusting LastTypeStrCap. }
       if (retType = tyFixedString) or (retType = tyShortString) then
         LastTypeStrCap := ArrTypeElemStrCap[retArrAi];
+        if ArrTypeStrElemTk[retArrAi] <> 0 then
+          LastTypeStrElemTk := IntToTypeKind(ArrTypeStrElemTk[retArrAi]);
       idx := AllocArray('Result', retType, ArrTypeLo[retArrAi], ArrTypeHi[retArrAi]);
       Syms[idx].Kind := skLocal;
       if ArrTypeNDims[retArrAi] >= 2 then

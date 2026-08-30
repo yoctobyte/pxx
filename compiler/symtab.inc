@@ -4045,6 +4045,7 @@ begin
   SetLength(SymSetEnumId, n);      SetLength(SymEnumId, n);         SetLength(SymSetElemTk, n);
   SetLength(SymSetElemLo, n);      SetLength(SymSetElemHi, n);
   SetLength(SymElemEnumId, n);
+  SetLength(SymStrElemTk, n);
   SetLength(SymStrCap, n);         SetLength(SymIsSub, n);          SetLength(SymSubLo, n);
   SetLength(SymSubHi, n);          SetLength(SymPtrDepth, n);       SetLength(SymPtrBaseTk, n);
   SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymPtrElemNDims, n);  SetLength(SymPtrElemDynDepth, n);  SetLength(SymArrNDims, n);
@@ -4182,6 +4183,7 @@ begin
   SymSetElemLo[SymCount] := 0;
   SymSetElemHi[SymCount] := -1;   { Hi < Lo = no element subrange recorded }
   SymStrCap[SymCount] := 0;
+  SymStrElemTk[SymCount] := 0;   { sym slots are RECYCLED — never inherit a previous occupant's width }
   SymIsSub[SymCount] := LastTypeIsSub;
   if LastTypeIsSub then
   begin
@@ -4408,6 +4410,7 @@ begin
   SymSetElemLo[SymCount] := 0;
   SymSetElemHi[SymCount] := -1;   { Hi < Lo = no element subrange recorded }
   SymStrCap[SymCount] := 0;
+  SymStrElemTk[SymCount] := 0;   { sym slots are RECYCLED — never inherit a previous occupant's width }
   SymIsSub[SymCount] := LastTypeIsSub;
   if LastTypeIsSub then
   begin
@@ -4704,6 +4707,7 @@ begin
   SymSetElemLo[SymCount] := 0;
   SymSetElemHi[SymCount] := -1;   { Hi < Lo = no element subrange recorded }
   SymStrCap[SymCount] := 0;
+  SymStrElemTk[SymCount] := 0;   { sym slots are RECYCLED — never inherit a previous occupant's width }
   SymIsSub[SymCount] := LastTypeIsSub;
   if LastTypeIsSub then
   begin
@@ -4721,6 +4725,11 @@ begin
   SymDynElemRowLo[SymCount] := 0;
   if (elemType = tyFixedString) or (elemType = tyShortString) then
     SymStrCap[SymCount] := LastTypeStrCap;
+  { …and an array of MANAGED strings carries the ELEMENTS' width, for the same
+    reason and in the same window. feature-unicodestring-model }
+  SymStrElemTk[SymCount] := 0;
+  if elemType = tyAnsiString then
+    SymStrElemTk[SymCount] := Ord(LastTypeStrElemTk);
   SymIsHiddenArgTemp[SymCount] := False;
   SymStaticLocal[SymCount] := AllocStaticLocal;
   SymBlockId[SymCount] := CurBlockId;
@@ -4828,6 +4837,7 @@ begin
   SymSetElemLo[SymCount] := 0;
   SymSetElemHi[SymCount] := -1;   { Hi < Lo = no element subrange recorded }
   SymStrCap[SymCount] := 0;
+  SymStrElemTk[SymCount] := 0;   { sym slots are RECYCLED — never inherit a previous occupant's width }
   SymIsSub[SymCount] := LastTypeIsSub;
   if LastTypeIsSub then
   begin
@@ -4857,6 +4867,11 @@ begin
   LastTypeDynElemRowLo := 0;
   if (elemType = tyFixedString) or (elemType = tyShortString) then
     SymStrCap[SymCount] := LastTypeStrCap;
+  { …and an array of MANAGED strings carries the ELEMENTS' width, for the same
+    reason and in the same window. feature-unicodestring-model }
+  SymStrElemTk[SymCount] := 0;
+  if elemType = tyAnsiString then
+    SymStrElemTk[SymCount] := Ord(LastTypeStrElemTk);
   SymIsHiddenArgTemp[SymCount] := False;
   SymStaticLocal[SymCount] := AllocStaticLocal;
   SymBlockId[SymCount] := CurBlockId;

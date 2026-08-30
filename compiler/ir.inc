@@ -1429,7 +1429,18 @@ begin
   else if ASTKind[node] = AN_FIELD then
     Result := RecFieldStrElemTk(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
   else
+  begin
     Result := ASTStrElemTk[node];
+    { `a[i]` where a is an ARRAY OF managed strings yields one of those strings,
+      so `a[i][j]` indexes at the ELEMENTS' width. The array symbol carries it
+      in SymStrElemTk, because Syms[].ElemType is occupied by the array's own
+      element kind (tyAnsiString) and cannot also hold the level below.
+      Checked only when the node has no width of its own, so an explicitly
+      stamped expression still wins. feature-unicodestring-model }
+    if (Result = 0) and (ASTKind[node] = AN_INDEX) and (ASTLeft[node] >= 0) and
+       (ASTKind[ASTLeft[node]] = AN_IDENT) and Syms[ASTIVal[ASTLeft[node]]].IsArray then
+      Result := SymStrElemTk[ASTIVal[ASTLeft[node]]];
+  end;
 end;
 
 function IRLowerAddress(node: Integer): Integer;

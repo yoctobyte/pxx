@@ -804,6 +804,8 @@ begin
         is whatever the last unrelated `string[N]` anywhere left behind. }
       if (VDElemTk = tyFixedString) or (VDElemTk = tyShortString) then
         LastTypeStrCap := ArrTypeElemStrCap[ai];
+        if ArrTypeStrElemTk[ai] <> 0 then
+          LastTypeStrElemTk := IntToTypeKind(ArrTypeStrElemTk[ai]);
       if ArrTypeIsDyn[ai] then
       begin
         { dynamic-array alias -> AllocDynArray below }
@@ -5909,6 +5911,10 @@ begin
             ArrTypeElemStrCap[ArrTypeCount] := aElemStrCap
           else
             ArrTypeElemStrCap[ArrTypeCount] := 0;
+          if aElemTk = tyAnsiString then
+            ArrTypeStrElemTk[ArrTypeCount] := Ord(LastTypeStrElemTk)
+          else
+            ArrTypeStrElemTk[ArrTypeCount] := 0;
           ArrTypeUnitIdx[ArrTypeCount] := CurrentUnitIdx; Inc(ArrTypeCount);
         end
         else
@@ -5984,6 +5990,10 @@ begin
             ArrTypeElemStrCap[ArrTypeCount] := aElemStrCap
           else
             ArrTypeElemStrCap[ArrTypeCount] := 0;
+          if aElemTk = tyAnsiString then
+            ArrTypeStrElemTk[ArrTypeCount] := Ord(LastTypeStrElemTk)
+          else
+            ArrTypeStrElemTk[ArrTypeCount] := 0;
           ArrTypeElemRec[ArrTypeCount] := LastTypeRecId;
           ArrTypePtrElemRec[ArrTypeCount] := LastTypePointerElemRec;
           ArrTypePtrElemTk[ArrTypeCount]  := Ord(LastTypePointerElemTk);

@@ -2499,6 +2499,7 @@ var
   SymSetElemLo : array of Int64;
   SymSetElemHi : array of Int64;
   SymStrCap : array of Integer; { see decl below }
+  SymStrElemTk : array of Integer; { managed-STRING element width, as a TTypeKind ordinal; 0 = unset (read as tyChar). Double duty exactly as SymStrCap above, disambiguated by IsArray: for an `array of WideString` it is the ELEMENTS' width, because Syms[].ElemType is occupied by the array's own element kind (tyAnsiString) and cannot also hold the level below it. A scalar wide string keeps its width in Syms[].ElemType, which for a string genuinely IS its element. feature-unicodestring-model }
   SymIsSub : array of Boolean; { symbol declared via a named SUBRANGE type (T = lo..hi): {$R+} checks stores against SymSubLo/Hi. BSS-false default = unchecked (feature-pascal-range-checks-r-plus). }
   SymSubLo : array of Int64;
   SymSubHi : array of Int64; { frozen fixed-string capacity (max chars) for tyFixedString/tyShortString slots; 0 = use the kind default (DEFAULT_STR_CAP) }
@@ -4708,6 +4709,7 @@ var
   ArrTypeElemRowLen: array[0..MAX_TYPEALIAS-1] of Integer; { dyn alias whose element is a named FIXED array (`TDA = array of T`): the row's flattened element count; 0 = scalar element }
   ArrTypeElemRowLo : array[0..MAX_TYPEALIAS-1] of Integer; { the row's low bound, paired with ArrTypeElemRowLen }
   ArrTypeElemDynDepth: array[0..MAX_TYPEALIAS-1] of Integer; { FIXED alias whose element is a named DYNAMIC array (`TFD = array[0..1] of TRow`): the element's dyn depth; 0 = element not dynamic. Each slot is pointer-sized. Threaded to SymElemDynDepth via VDElemDynDepth when a var is declared with the alias. }
+  ArrTypeStrElemTk: array[0..MAX_TYPEALIAS-1] of Integer; { `array[..] of WideString`: the ELEMENT string's width as a TTypeKind ordinal, 0 = unset (read as tyChar). ArrTypeElemStrCap's twin one type over — a USE of the array type is far from where the string type was parsed, so LastTypeStrElemTk is stale by then. feature-unicodestring-model }
   ArrTypeElemStrCap: array[0..MAX_TYPEALIAS-1] of Integer; { frozen-string element (`array[..] of string[N]`): N. Nothing else carries it — a USE of the alias is far from where `string[N]` was parsed, so LastTypeStrCap is whatever the last unrelated declaration left behind. bug-a-nd-array-function-result-indexes-the-wrong-slot }
   ArrTypeCount  : Integer;
 

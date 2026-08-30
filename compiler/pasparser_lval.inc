@@ -4996,6 +4996,8 @@ begin
     LastTypePointerElemRec := ArrTypePtrElemRec[arrAi];
     if (tk = tyFixedString) or (tk = tyShortString) then
       LastTypeStrCap := ArrTypeElemStrCap[arrAi];
+      if ArrTypeStrElemTk[arrAi] <> 0 then
+        LastTypeStrElemTk := IntToTypeKind(ArrTypeStrElemTk[arrAi]);
     tmpSym := AllocArray('', tk, ArrTypeLo[arrAi], ArrTypeHi[arrAi]);
     if ArrTypeNDims[arrAi] >= 2 then
     begin
