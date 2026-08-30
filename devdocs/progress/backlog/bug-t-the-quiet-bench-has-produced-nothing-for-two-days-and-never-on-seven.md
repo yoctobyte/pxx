@@ -92,3 +92,56 @@ Two different things were being conflated by "we will have numbers":
 **`-O4` research**. `-O1` is a level users will actually select and should be
 benched with the rest; `-O4` should not ride every run, matching its slower
 sweep cadence. Not urgent — nothing benches today — but it is the same edit.
+
+---
+
+## The archive is smaller than it looks: 17178 rows, 90 on verifiable hardware
+
+Checked when the owner said he would repair borg. **Check this before spending a
+day on it**, because two of the three facts point somewhere other than the name.
+
+**1. There is no hardware record for borg at all.** `meta/hosts.json` records
+`xeon`, `plexus`, `seven` — and no `borg`. Its **11242 rows, 65% of the whole
+archive**, carry `hw_fp: None` because the fingerprint field did not exist when
+it last benched (2026-07-31). We do not know what CPU produced the largest block
+of numbers we have.
+
+**2. `borg.json` says it was already retired INTO plexus** — `retired_at:
+2026-08-12T07:46:31Z`, `retired_into: plexus`, `retired_kind: migration`. `xeon`
+was retired into plexus the same way on 2026-08-07, and plexus's own record says
+`renamed_from: xeon`. **So plexus IS the former xeon, and borg's identity was
+administratively merged into it.** `192.168.1.99`, borg's address in
+`two-box-protocol.md`, does not respond.
+
+If borg is a distinct physical machine sitting somewhere, none of that stops it
+being repaired — but *"restore borg and the baseline continues"* is not true, and
+the tstate record will read as a duplicate identity unless it is un-retired
+deliberately.
+
+**3. The fingerprint over-partitions, and this is the fixable part.** plexus's
+`fp` changed **three times on the same CPU** — `fc0640930141` →
+`9e379b78622c` → `3f2b86ea7416` — and the only differences across those epochs
+are:
+
+| | epoch 1 | epoch 2 | epoch 3 |
+| --- | --- | --- | --- |
+| kernel | 7.0.0-28 | 7.0.0-29 | 7.0.0-30 |
+| mem_total_kb | 63424944 | 63423856 | 63423848 |
+
+**A kernel upgrade and a few KB of reported RAM.** Same CPU, same sockets, cores,
+threads, governor, turbo. Taken strictly, that means **only 90 of plexus's 3747
+rows** are on the current epoch.
+
+So the honest count for the whole archive is: **17178 rows, of which 90 are on a
+hardware fingerprint we can currently verify.** It looks like a longitudinal
+dataset and behaves like a fortnight of one.
+
+**The fix is to split the key, not to loosen it.** `fp` currently conflates
+**hardware identity** (CPU, sockets, cores, threads, memory class) with
+**software environment** (kernel, and whatever else moves on an apt upgrade).
+Partition hard on the first, record the second as a column. A kernel bump should
+annotate a row, not orphan it. Do that and most of plexus's history becomes
+usable again; leave it and every routine upgrade silently discards the baseline.
+
+**A third box that is NOT sweeping remains the right structural fix** for the
+guard problem above — whichever machine it turns out to be.
