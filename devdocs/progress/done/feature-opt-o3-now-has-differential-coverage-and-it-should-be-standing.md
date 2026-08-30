@@ -336,4 +336,4 @@ from reporting "my debug-only probe changed codegen", and the thing that caught
 it was refusing to accept a whole-file `cmp` as an answer about code.
 
 ## Log
-- 2026-08-30 — resolved, commit PENDING-COMMIT.
+- 2026-08-30 — resolved, commit 9b745f37c.
